@@ -488,7 +488,7 @@ test("approved hire auto-opens onboarding in the apply transaction", { skip: !DB
   });
 });
 
-test("hire without a template rolls the apply back with nothing applied", { skip: !DB }, async () => {
+test("hire without a template applies the hire and opens no checklist; the explicit open still refuses", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     await seedApprovalFlow(h.org.orgId, {
       subjectKind: HRM_CHANGE_REQUEST_SUBJECT_KIND,
@@ -520,30 +520,43 @@ test("hire without a template rolls the apply back with nothing applied", { skip
     });
     const gate = (await db.execute<{ id: string; status: string }>(sql`
       select id, status from flow_gates where subject_id = ${draft.id} order by created_at`)).rows[0]!;
-    // No onboarding template exists: the apply must refuse by name, and the
-    // refusal rolls the versions back with it — no partial effect.
-    // The full sentence is asserted, not only its head: the kind and the
-    // remedy must survive the release wrap to reach the operator.
-    await assert.rejects(
-      decideGate({ gateId: gate.id, decision: "approved", userId: h.managerId }),
-      /no active onboarding template covers this employment — create or activate one in Setup that covers this employer subsidiary and department/,
-    );
+    // No onboarding template exists. A checklist is a side effect of the
+    // hire, never a condition on it: the approval applies, the versions and
+    // the change event are recorded, and no process or step is opened — an
+    // org that has configured no checklists can still hire.
+    await decideGate({ gateId: gate.id, decision: "approved", userId: h.managerId });
     const status = (await db.execute<{ status: string }>(sql`
       select status from hrm_employment_change_requests where id = ${draft.id}`)).rows[0]!.status;
-    assert.equal(status, "pending_approval");
+    assert.equal(status, "applied", "the hire applies without a checklist template");
     const versions = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from worker_employment_versions where employment_id = ${employmentId}`)).rows[0]!.n;
-    assert.equal(versions, 0, "the refused apply wrote no versions");
+    assert.ok(versions >= 1, "the applied hire wrote its version");
+    const changes = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from employment_changes where employment_id = ${employmentId}`)).rows[0]!.n;
+    assert.ok(changes >= 1, "the applied hire recorded its change event");
     const processes = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from hrm_processes where employment_id = ${employmentId}`)).rows[0]!.n;
-    assert.equal(processes, 0, "the refused apply opened no process");
+    assert.equal(processes, 0, "nothing was owed, so no process opened");
     const steps = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from hrm_process_steps
        where process_id in (select id from hrm_processes where employment_id = ${employmentId})`)).rows[0]!.n;
-    assert.equal(steps, 0, "the refused apply snapshotted no steps");
-    const changes = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from employment_changes where employment_id = ${employmentId}`)).rows[0]!.n;
-    assert.equal(changes, 0, "the refused apply recorded no employment change event");
+    assert.equal(steps, 0, "no steps were snapshotted");
+    // The EXPLICIT path keeps the refusal: an operator who asks for an
+    // onboarding checklist by name hears that none covers this employment,
+    // with the remedy, and nothing is written.
+    await assert.rejects(
+      openProcess({
+        orgId: h.org.orgId,
+        actorId: h.managerId,
+        employmentId,
+        kind: "onboarding",
+        effectiveDate: "2026-09-14",
+      }),
+      /no active onboarding template covers this employment — create or activate one in Setup that covers this employer subsidiary and department/,
+    );
+    const stillNone = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from hrm_processes where employment_id = ${employmentId}`)).rows[0]!.n;
+    assert.equal(stillNone, 0, "the refused explicit open wrote nothing");
   });
 });
 
