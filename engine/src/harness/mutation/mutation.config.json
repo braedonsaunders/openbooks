@@ -79,6 +79,7 @@
         }
       ],
       "tests": [
+        "engine/src/payments/credit-items.integration.test.ts",
         "engine/src/payments/payments.test.ts",
         "engine/src/payments/direct-debit.test.ts",
         "engine/src/payments/payments.integration.test.ts"
