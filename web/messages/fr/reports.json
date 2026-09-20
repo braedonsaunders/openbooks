@@ -32,7 +32,8 @@
       "ordersDescription": "Devis, commandes client et bons de commande ouverts — nombre, valeur et conversion",
       "cashFlowIndirectTitle": "Flux de trésorerie (indirect)",
       "cashFlowIndirectDescription": "Méthode indirecte — résultat net rapproché des flux opérationnels avec le détail du fonds de roulement",
-      "payrollDescription": "Rapport de paie intégré sur les bulletins — les données de salaire exigent la permission paie."
+      "payrollDescription": "Rapport de paie intégré sur les bulletins — les données de salaire exigent la permission paie.",
+      "hrmDescription": "Rapport intégré sur les effectifs à partir des dossiers d'emploi — nécessite l'autorisation emploi RH."
     },
     "groups": {
       "financial": "États financiers",
@@ -42,7 +43,8 @@
       "custom": "Personnalisés et enregistrés",
       "projects": "Projets",
       "orders": "Ventes et commandes",
-      "payroll": "Paie"
+      "payroll": "Paie",
+      "hrm": "Ressources humaines"
     },
     "customStudio": {
       "title": "Constructeur de rapports",

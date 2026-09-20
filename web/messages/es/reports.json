@@ -32,7 +32,8 @@
       "ordersDescription": "Presupuestos, órdenes de venta y de compra abiertos — cantidad, valor y conversión",
       "cashFlowIndirectTitle": "Flujo de caja (indirecto)",
       "cashFlowIndirectDescription": "Método indirecto — resultado neto conciliado con el efectivo operativo con detalle de capital de trabajo",
-      "payrollDescription": "Informe de nómina integrado sobre recibos: los datos salariales requieren el permiso de nómina."
+      "payrollDescription": "Informe de nómina integrado sobre recibos: los datos salariales requieren el permiso de nómina.",
+      "hrmDescription": "Informe integrado de plantilla sobre los registros de empleo; requiere el permiso de empleo de RR. HH."
     },
     "groups": {
       "financial": "Estados financieros",
@@ -42,7 +43,8 @@
       "custom": "Personalizados y guardados",
       "projects": "Proyectos",
       "orders": "Ventas y pedidos",
-      "payroll": "Nómina"
+      "payroll": "Nómina",
+      "hrm": "Recursos humanos"
     },
     "customStudio": {
       "title": "Constructor de informes",

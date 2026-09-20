@@ -32,7 +32,8 @@
       "ordersDescription": "Orçamentos, pedidos de venda e pedidos de compra em aberto — quantidade, valor e conversão",
       "cashFlowIndirectTitle": "Fluxo de caixa (indireto)",
       "cashFlowIndirectDescription": "Método indireto — lucro líquido reconciliado ao caixa operacional com detalhe do capital de giro",
-      "payrollDescription": "Relatório de folha integrado sobre contracheques — dados salariais exigem a permissão da folha."
+      "payrollDescription": "Relatório de folha integrado sobre contracheques — dados salariais exigem a permissão da folha.",
+      "hrmDescription": "Relatório integrado de força de trabalho sobre registros de emprego — requer a permissão de emprego do RH."
     },
     "groups": {
       "financial": "Demonstrações Financeiras",
@@ -42,7 +43,8 @@
       "custom": "Personalizados e Salvos",
       "projects": "Projetos",
       "orders": "Vendas e pedidos",
-      "payroll": "Folha de pagamento"
+      "payroll": "Folha de pagamento",
+      "hrm": "Recursos humanos"
     },
     "customStudio": {
       "title": "Construtor de relatórios personalizados",

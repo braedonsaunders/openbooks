@@ -32,7 +32,8 @@
       "ordersDescription": "未清报价单、销售订单与采购订单——数量、金额与转化情况",
       "cashFlowIndirectTitle": "现金流量（间接法）",
       "cashFlowIndirectDescription": "间接法 — 净利润调节至经营现金流，附营运资本明细",
-      "payrollDescription": "基于工资条的内置工资报表——工资数据需要工资权限。"
+      "payrollDescription": "基于工资条的内置工资报表——工资数据需要工资权限。",
+      "hrmDescription": "基于雇佣记录的内置人力报表，需要 HRM 雇佣权限。"
     },
     "groups": {
       "financial": "财务报表",
@@ -42,7 +43,8 @@
       "custom": "自定义与已保存",
       "projects": "项目",
       "orders": "销售与订单",
-      "payroll": "工资"
+      "payroll": "工资",
+      "hrm": "人力资源"
     },
     "customStudio": {
       "title": "自定义报表构建器",

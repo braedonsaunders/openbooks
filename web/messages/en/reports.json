@@ -32,7 +32,8 @@
       "ordersDescription": "Open quotes, sales orders and purchase orders — count, value and conversion",
       "cashFlowIndirectTitle": "Cash Flow (Indirect)",
       "cashFlowIndirectDescription": "GAAP indirect method — net income reconciled to operating cash with working-capital detail",
-      "payrollDescription": "Built-in payroll report over pay stubs — wage data needs the payroll permission."
+      "payrollDescription": "Built-in payroll report over pay stubs — wage data needs the payroll permission.",
+      "hrmDescription": "Built-in workforce report over employment records — needs the HRM employment permission."
     },
     "groups": {
       "financial": "Financial Statements",
@@ -42,7 +43,8 @@
       "custom": "Custom & Saved",
       "projects": "Projects",
       "orders": "Sales & orders",
-      "payroll": "Payroll"
+      "payroll": "Payroll",
+      "hrm": "Human resources"
     },
     "customStudio": {
       "title": "Custom report builder",

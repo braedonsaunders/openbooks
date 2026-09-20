@@ -32,7 +32,8 @@
       "ordersDescription": "Offene Angebote, Kundenaufträge und Bestellungen – Anzahl, Wert und Konversion",
       "cashFlowIndirectTitle": "Kapitalfluss (indirekt)",
       "cashFlowIndirectDescription": "Indirekte Methode — Jahresüberschuss zum operativen Cashflow mit Working-Capital-Details",
-      "payrollDescription": "Integrierter Lohnbericht über Abrechnungen — Lohndaten erfordern die Lohnabrechnungs-Berechtigung."
+      "payrollDescription": "Integrierter Lohnbericht über Abrechnungen — Lohndaten erfordern die Lohnabrechnungs-Berechtigung.",
+      "hrmDescription": "Integrierter Personalbericht über Beschäftigungsdatensätze – erfordert die HRM-Beschäftigungsberechtigung."
     },
     "groups": {
       "financial": "Finanzberichte",
@@ -42,7 +43,8 @@
       "custom": "Benutzerdefiniert & Gespeichert",
       "projects": "Projekte",
       "orders": "Vertrieb & Aufträge",
-      "payroll": "Lohnabrechnung"
+      "payroll": "Lohnabrechnung",
+      "hrm": "Personal"
     },
     "customStudio": {
       "title": "Benutzerdefinierter Berichtsgenerator",
