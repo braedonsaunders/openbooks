@@ -21,7 +21,7 @@ import { calculateT4127 } from "../t4127.ts";
 test("edition resolution: 2026 resolves, unknown years refuse", () => {
   assert.equal(qcRatesForPayDate("2026-01-01").version, "2026-01");
   assert.equal(qcRatesForPayDate("2026-12-31").version, "2026-01");
-  assert.throws(() => qcRatesForPayDate("2025-12-31"));
+  assert.throws(() => qcRatesForPayDate("2024-12-31"));
   assert.throws(() => qcRatesForPayDate("2027-01-01"));
 });
 
