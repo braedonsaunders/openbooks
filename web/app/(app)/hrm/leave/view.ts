@@ -3,11 +3,18 @@ import 'server-only'
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import {
+  badge,
+  column,
   grid,
+  field as item,
+  link,
   page,
   pageHeader,
   panel,
   ref,
+  spanRow,
+  table,
+  text,
   widget,
   widgetBlock,
   type PageSpec,
@@ -19,14 +26,15 @@ import { loadLeaveQueue, type LeaveQueueData } from '../../../../lib/hrm/leave'
 /**
  * The org-wide leave queue, split into a loader and a spec.
  *
- * Follows the change-request-queue archetype: ViewSpec composes the grid
- * and the panels; the queue body stays a component shared by the page and
- * the widget registry via ./LeaveQueue so they cannot drift. Segments ride
- * the shared `filter-chips` widget on the `segment` search param
- * (pending approval, upcoming, on leave today, history); the list itself is
- * loader-resolved through the leave read service, newest start first, with
- * subsidiary scope enforced inside it. The department calendar reads
- * through the attendance service on the department/from/to params.
+ * Follows the close-list archetype: the rows render through the shared
+ * `table` block (variant 'app') over loader-resolved display cells, segments
+ * ride the shared `filter-chips` widget on the `segment` search param
+ * (pending approval, upcoming, on leave today, history), and "File leave
+ * request" plus "Record absence" are page-header primary actions opening a
+ * URL-param dialog. The list itself is loader-resolved through the leave
+ * read service, newest start first, with subsidiary scope enforced inside
+ * it. The department calendar reads through the attendance service on the
+ * department/from/to params and stays a component — it is not a list.
  */
 
 const f = ref<LeaveQueueData>()
@@ -43,7 +51,19 @@ export function leaveQueueSpec(data: LeaveQueueData, basePath: string = '/hrm/le
         title: f('title'),
         description: f('description'),
         actionsClassName: 'flex flex-wrap items-center gap-3',
-        actions: [widget('module-home-tabs', { tabs: data.tabs })],
+        actions: [
+          widget(
+            'link-button',
+            { href: f('fileHref'), label: f('fileButton'), iconKey: 'plus' },
+            f('canFile'),
+          ),
+          widget(
+            'link-button',
+            { href: f('recordHref'), label: f('recordButton'), iconKey: 'plus', variant: 'outline' },
+            f('canRecord'),
+          ),
+          widget('module-home-tabs', { tabs: data.tabs }),
+        ],
       }),
     ],
     body: [
@@ -73,22 +93,47 @@ export function leaveQueueSpec(data: LeaveQueueData, basePath: string = '/hrm/le
             bodyClassName: 'min-h-0 overflow-y-auto p-0',
             className: 'min-h-0 flex-1',
             blocks: [
-              widgetBlock('hrm-leave-queue', {
-                rows: data.rows,
-                columns: data.columns,
-                canFile: data.canFile,
-                canRecord: data.canRecord,
-                fileTitle: data.fileTitle,
-                fileButton: data.fileButton,
-                recordTitle: data.recordTitle,
-                recordButton: data.recordButton,
-                emptyTitle: data.emptyTitle,
-                emptyDescription: data.emptyDescription,
-                truncated: data.truncated,
-                truncatedNote: data.truncatedNote,
-                notAvailable: data.queue.notAvailable,
-                openEmployee: data.queue.openEmployee,
+              table({
+                variant: 'app',
+                rows: f('rows'),
+                rowKey: item('id'),
+                columns: [
+                  column(f('columns.employee'), link(item('employeeLabel'), item('employeeHref'))),
+                  column(f('columns.type'), text(item('leaveTypeCode'))),
+                  column(
+                    f('columns.range'),
+                    text(item('rangeLabel'), { className: 'tabular-nums' }),
+                  ),
+                  column(f('columns.hours'), text(item('hours')), {
+                    align: 'right',
+                    className: 'tabular-nums',
+                  }),
+                  column(f('columns.status'), badge(item('statusLabel'), { variant: item('statusVariant') })),
+                  column('', link(item('openLabel'), item('requestHref'))),
+                ],
+                empty: { title: f('emptyTitle'), description: f('emptyDescription') },
+                ...(data.truncated
+                  ? {
+                      trailing: [
+                        spanRow({
+                          label: f('truncatedNote'),
+                          labelColSpan: 6,
+                          labelClassName:
+                            'text-center text-xs text-slate-400 dark:text-slate-500',
+                          cells: [],
+                        }),
+                      ],
+                    }
+                  : {}),
               }),
+              widgetBlock(
+                'hrm-leave-dialog',
+                {
+                  requestId: f('dialogRequestId'),
+                  closeHref: f('dialogCloseHref'),
+                },
+                f('dialogOpen'),
+              ),
             ],
           }),
           panel({

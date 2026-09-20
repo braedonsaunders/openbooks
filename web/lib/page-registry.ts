@@ -1387,11 +1387,11 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/hrm/my-leave': {
     route: '/hrm/my-leave',
     segments: [],
-    searchParams: false,
+    searchParams: true,
     module: async () => {
       const m = await import('../app/(app)/hrm/my-leave/view')
       return {
-        load: () => m.loadMyLeavePage(),
+        load: (input) => m.loadMyLeavePage(input.searchParams ?? {}),
         spec: (data) => m.myLeaveSpec(data as never),
       }
     },

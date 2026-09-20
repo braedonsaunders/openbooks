@@ -3,13 +3,22 @@ import 'server-only'
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import {
+  badge,
+  column,
   grid,
+  field as item,
+  link,
   page,
   pageHeader,
   panel,
   ref,
+  rootRef,
+  spanRow,
+  table,
+  text,
   widget,
   widgetBlock,
+  widgetCell,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
@@ -20,17 +29,40 @@ import { loadChangeRequestQueue, type ChangeRequestQueueData } from '../../../..
  * The org-wide employment change-request queue, split into a loader and a
  * spec.
  *
- * Follows the purchasing-cockpit archetype: ViewSpec composes the grid and
- * the panels; the queue body stays a component shared by the page and the
- * widget registry via ./QueueClient so they cannot drift. Status segments
- * ride the shared `filter-chips` widget on the `status` search param; the
- * list itself is loader-resolved through the existing change-request
- * service, newest first, with subsidiary scope enforced inside it.
+ * Follows the close-list archetype: the rows render through the shared
+ * `table` block (variant 'app') over loader-resolved display cells, status
+ * segments ride the shared `filter-chips` widget on the `status` search
+ * param, and "Propose change" is the page-header primary action opening a
+ * URL-param dialog. The list itself is loader-resolved through the existing
+ * change-request service, newest first, with subsidiary scope enforced
+ * inside it.
  */
 
 const f = ref<ChangeRequestQueueData>()
+const rootF = rootRef<ChangeRequestQueueData>()
 
 export function changeRequestQueueSpec(data: ChangeRequestQueueData): PageSpec {
+  const columns = [
+    column(f('columns.employee'), link(item('employeeLabel'), item('employeeHref'))),
+    column(f('columns.kind'), text(item('kindLabel'))),
+    column(f('columns.effective'), text(item('effectiveWindow'), { className: 'tabular-nums' })),
+    column(f('columns.requester'), text(item('requesterLabel'))),
+    column(f('columns.submitted'), text(item('submittedLabel'), { className: 'tabular-nums' })),
+    column(f('statusHeader'), badge(item('statusLabel'), { variant: item('statusVariant') })),
+  ]
+  if (data.canManage) {
+    columns.push(
+      column(
+        f('actionsHeader'),
+        widgetCell('hrm-change-request-actions', {
+          requestId: item('id'),
+          requestStatus: item('status'),
+          employmentId: item('employmentId'),
+          departmentOptions: rootF('departmentOptions'),
+        }),
+      ),
+    )
+  }
   return page({
     route: '/hrm/change-requests',
     layout: 'list',
@@ -40,7 +72,14 @@ export function changeRequestQueueSpec(data: ChangeRequestQueueData): PageSpec {
         title: f('title'),
         description: f('description'),
         actionsClassName: 'flex flex-wrap items-center gap-3',
-        actions: [widget('module-home-tabs', { tabs: data.tabs })],
+        actions: [
+          widget(
+            'link-button',
+            { href: f('proposeHref'), label: f('proposeButton'), iconKey: 'plus' },
+            f('canManage'),
+          ),
+          widget('module-home-tabs', { tabs: data.tabs }),
+        ],
       }),
     ],
     body: [
@@ -70,25 +109,38 @@ export function changeRequestQueueSpec(data: ChangeRequestQueueData): PageSpec {
             bodyClassName: 'min-h-0 overflow-y-auto p-0',
             className: 'min-h-0 flex-1',
             blocks: [
-              widgetBlock('hrm-change-request-queue', {
-                rows: data.rows,
-                columns: data.columns,
-                canManage: data.canManage,
-                departmentOptions: data.departmentOptions,
-                proposeTitle: data.proposeTitle,
-                proposeButton: data.proposeButton,
-                proposeEmploymentLabel: data.proposeEmploymentLabel,
-                proposeEmploymentPlaceholder: data.proposeEmploymentPlaceholder,
-                proposeEmpty: data.proposeEmpty,
-                proposeFailed: data.proposeFailed,
-                draftBadge: data.queue.draftBadge,
-                openEmployee: data.queue.openEmployee,
-                notAvailable: data.queue.notAvailable,
-                emptyTitle: data.emptyTitle,
-                emptyDescription: data.emptyDescription,
-                truncated: data.truncated,
-                truncatedNote: data.truncatedNote,
+              table({
+                variant: 'app',
+                rows: f('rows'),
+                rowKey: item('id'),
+                columns,
+                empty: { title: f('emptyTitle'), description: f('emptyDescription') },
+                ...(data.truncated
+                  ? {
+                      trailing: [
+                        spanRow({
+                          label: f('truncatedNote'),
+                          labelColSpan: data.canManage ? 7 : 6,
+                          labelClassName:
+                            'text-center text-xs text-slate-400 dark:text-slate-500',
+                          cells: [],
+                        }),
+                      ],
+                    }
+                  : {}),
               }),
+              widgetBlock(
+                'hrm-propose-change-dialog',
+                {
+                  departmentOptions: f('departmentOptions'),
+                  employmentLabel: f('proposeEmploymentLabel'),
+                  employmentPlaceholder: f('proposeEmploymentPlaceholder'),
+                  emptyLabel: f('proposeEmpty'),
+                  requestFailed: f('proposeFailed'),
+                  closeHref: f('dialogCloseHref'),
+                },
+                f('proposeOpen'),
+              ),
             ],
           }),
         ]),

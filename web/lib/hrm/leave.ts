@@ -42,6 +42,14 @@ const QUEUE_LIMIT = 500
 export interface LeaveQueueRow extends LeaveRequestSummary {
   employeeName: string | null
   partyId: string | null
+  /** Display-resolved cells for the shared table block: labels and hrefs, never ids. */
+  employeeLabel: string
+  employeeHref: string | null
+  statusLabel: string
+  statusVariant: 'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
+  requestHref: string
+  openLabel: string
+  rangeLabel: string
 }
 
 export interface LeaveSegment {
@@ -89,12 +97,49 @@ export interface LeaveQueueData {
   calendarEmpty: string
   departmentOptions: { value: string; label: string }[]
   queue: { notAvailable: string; openEmployee: string }
+  openRequest: string
+  fileHref: string
+  recordHref: string
+  dialogOpen: boolean
+  dialogRequestId: string | null
+  dialogCloseHref: string
 }
 
 function segmentOf(row: LeaveRequestSummary, today: string): 'pending' | 'upcoming' | 'today' | 'history' {
   if (row.status === 'submitted') return 'pending'
   if (row.status === 'approved' && row.endsOn >= today) return 'upcoming'
   return 'history'
+}
+
+type LeaveCatalog = {
+  (key: string, params?: Record<string, string | number>): string
+  has: (key: string) => boolean
+}
+
+/** Header/dialog hrefs preserve the active segment; the dialog closes by navigating the param away. */
+function leaveHref(
+  basePath: string,
+  segment: string | undefined,
+  extra: Record<string, string>,
+): string {
+  const params = new URLSearchParams()
+  if (segment) params.set('segment', segment)
+  for (const [key, value] of Object.entries(extra)) params.set(key, value)
+  const query = params.toString()
+  return query ? `${basePath}?${query}` : basePath
+}
+
+function leaveStatusLabel(t: LeaveCatalog, status: string): string {
+  return t.has(`leave.statusNames.${status}`) ? t(`leave.statusNames.${status}`) : status
+}
+
+function leaveStatusVariant(status: string): LeaveQueueRow['statusVariant'] {
+  if (status === 'draft') return 'secondary'
+  if (status === 'submitted') return 'warning'
+  if (status === 'approved') return 'success'
+  if (status === 'rejected') return 'destructive'
+  if (status === 'withdrawn' || status === 'cancelled') return 'outline'
+  return 'default'
 }
 
 export async function loadLeaveQueue(
@@ -137,6 +182,12 @@ export async function loadLeaveQueue(
     calendarEmpty: t('leave.calendarEmpty'),
     queue: { notAvailable: t('queue.notAvailable'), openEmployee: t('queue.openEmployee') },
     currentParams: sp as Record<string, string | string[] | undefined>,
+    openRequest: t('leave.openRequest'),
+    fileHref: leaveHref('/hrm/leave', sp.segment, { file: '1' }),
+    recordHref: leaveHref('/hrm/leave', sp.segment, { record: '1' }),
+    dialogOpen: sp.file !== undefined || sp.record !== undefined || (typeof sp.request === 'string' && sp.request !== ''),
+    dialogRequestId: typeof sp.request === 'string' && sp.request !== '' ? sp.request : null,
+    dialogCloseHref: leaveHref('/hrm/leave', sp.segment, {}),
   }
 
   const segmentParam = sp.segment
@@ -206,7 +257,20 @@ export async function loadLeaveQueue(
   )
   const queueRows: LeaveQueueRow[] = rows.map((row) => {
     const worker = workerByEmployment.get(row.employmentId)
-    return { ...row, employeeName: worker?.name ?? null, partyId: worker?.partyId ?? null }
+    const name = worker?.name ?? null
+    const party = worker?.partyId ?? null
+    return {
+      ...row,
+      employeeName: name,
+      partyId: party,
+      employeeLabel: name ?? t('queue.notAvailable'),
+      employeeHref: party ? `/entities/employees?party=${encodeURIComponent(party)}` : null,
+      statusLabel: leaveStatusLabel(t, row.status),
+      statusVariant: leaveStatusVariant(row.status),
+      requestHref: leaveHref('/hrm/leave', sp.segment, { request: row.id }),
+      openLabel: t('leave.openRequest'),
+      rangeLabel: `${row.startsOn} → ${row.endsOn}`,
+    }
   })
 
   const departments = (await db.execute<{ id: string; name: string }>(sql`
@@ -276,10 +340,18 @@ export interface MyLeaveData {
   fileButton: string
   fileTitle: string
   queue: { notAvailable: string; openEmployee: string }
+  openRequest: string
+  fileHref: string
+  dialogOpen: boolean
+  dialogRequestId: string | null
+  dialogCloseHref: string
 }
 
 /** Self-service inbox: the caller's own requests and balances, nothing else. */
-export async function loadMyLeave(authz: Authz): Promise<MyLeaveData> {
+export async function loadMyLeave(
+  authz: Authz,
+  sp: Record<string, string | undefined> = {},
+): Promise<MyLeaveData> {
   const orgId = authz.user.orgId
   const t = await getTranslations('hrm')
   const base = {
@@ -303,6 +375,11 @@ export async function loadMyLeave(authz: Authz): Promise<MyLeaveData> {
     valueKindLabel: t('myLeave.valueKind'),
     unlimitedLabel: t('myLeave.unlimited'),
     queue: { notAvailable: t('queue.notAvailable'), openEmployee: t('queue.openEmployee') },
+    openRequest: t('leave.openRequest'),
+    fileHref: leaveHref('/hrm/my-leave', undefined, { file: '1' }),
+    dialogOpen: sp.file !== undefined || (typeof sp.request === 'string' && sp.request !== ''),
+    dialogRequestId: typeof sp.request === 'string' && sp.request !== '' ? sp.request : null,
+    dialogCloseHref: '/hrm/my-leave',
   }
   let inbox: LeaveRequestSummary[]
   try {
@@ -318,7 +395,20 @@ export async function loadMyLeave(authz: Authz): Promise<MyLeaveData> {
   )
   const requests: LeaveQueueRow[] = inbox.map((row) => {
     const worker = workerByEmployment.get(row.employmentId)
-    return { ...row, employeeName: worker?.name ?? null, partyId: worker?.partyId ?? null }
+    const name = worker?.name ?? null
+    const party = worker?.partyId ?? null
+    return {
+      ...row,
+      employeeName: name,
+      partyId: party,
+      employeeLabel: name ?? t('queue.notAvailable'),
+      employeeHref: party ? `/entities/employees?party=${encodeURIComponent(party)}` : null,
+      statusLabel: leaveStatusLabel(t, row.status),
+      statusVariant: leaveStatusVariant(row.status),
+      requestHref: leaveHref('/hrm/my-leave', undefined, { request: row.id }),
+      openLabel: t('leave.openRequest'),
+      rangeLabel: `${row.startsOn} → ${row.endsOn}`,
+    }
   })
   const asOf = await businessToday(orgId)
   const balances: MyLeaveBalance[] = []

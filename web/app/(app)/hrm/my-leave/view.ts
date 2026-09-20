@@ -3,11 +3,17 @@ import 'server-only'
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import {
+  badge,
+  column,
   grid,
+  field as item,
+  link,
   page,
   pageHeader,
   panel,
   ref,
+  table,
+  text,
   widget,
   widgetBlock,
   type PageSpec,
@@ -19,10 +25,12 @@ import { loadMyLeave, type MyLeaveData } from '../../../../lib/hrm/leave'
 /**
  * My leave — the employee self-service inbox. Own requests and balances
  * only: the loader scopes every row to the employments behind the login, so
- * there is no employment parameter to forge. Filing opens the same
- * LeaveDrawer; detail reads the self-service path. Renders only when the
- * hrm feature gate is on and the actor holds hrm.leave.request — the view
- * 404s otherwise.
+ * there is no employment parameter to forge. The requests render through the
+ * shared `table` block over loader-resolved display cells exactly like the
+ * org queue; filing opens the same LeaveDrawer through the `file` search
+ * param. Balances stay a component (a labelled list, not a table). Renders
+ * only when the hrm feature gate is on and the actor holds
+ * hrm.leave.request — the view 404s otherwise.
  */
 
 const f = ref<MyLeaveData>()
@@ -37,7 +45,10 @@ export function myLeaveSpec(data: MyLeaveData): PageSpec {
         title: f('title'),
         description: f('description'),
         actionsClassName: 'flex flex-wrap items-center gap-3',
-        actions: [widget('module-home-tabs', { tabs: data.tabs })],
+        actions: [
+          widget('link-button', { href: f('fileHref'), label: f('fileButton'), iconKey: 'plus' }),
+          widget('module-home-tabs', { tabs: data.tabs }),
+        ],
       }),
     ],
     body: [
@@ -71,27 +82,37 @@ export function myLeaveSpec(data: MyLeaveData): PageSpec {
             bodyClassName: 'min-h-0 overflow-y-auto p-0',
             className: 'min-h-0 flex-1',
             blocks: [
-              widgetBlock('hrm-leave-queue', {
-                rows: data.requests,
-                columns: {
-                  employee: data.columns.employee,
-                  type: data.columns.type,
-                  range: data.columns.range,
-                  hours: data.columns.hours,
-                },
-                canFile: true,
-                canRecord: false,
-                fileTitle: data.fileTitle,
-                fileButton: data.fileButton,
-                recordTitle: '',
-                recordButton: '',
-                emptyTitle: data.emptyTitle,
-                emptyDescription: data.emptyDescription,
-                truncated: false,
-                truncatedNote: '',
-                notAvailable: data.queue.notAvailable,
-                openEmployee: data.queue.openEmployee,
+              table({
+                variant: 'app',
+                rows: f('requests'),
+                rowKey: item('id'),
+                columns: [
+                  column(f('columns.employee'), link(item('employeeLabel'), item('employeeHref'))),
+                  column(f('columns.type'), text(item('leaveTypeCode'))),
+                  column(
+                    f('columns.range'),
+                    text(item('rangeLabel'), { className: 'tabular-nums' }),
+                  ),
+                  column(f('columns.hours'), text(item('hours')), {
+                    align: 'right',
+                    className: 'tabular-nums',
+                  }),
+                  column(
+                    f('columns.status'),
+                    badge(item('statusLabel'), { variant: item('statusVariant') }),
+                  ),
+                  column('', link(item('openLabel'), item('requestHref'))),
+                ],
+                empty: { title: f('emptyTitle'), description: f('emptyDescription') },
               }),
+              widgetBlock(
+                'hrm-leave-dialog',
+                {
+                  requestId: f('dialogRequestId'),
+                  closeHref: f('dialogCloseHref'),
+                },
+                f('dialogOpen'),
+              ),
             ],
           }),
         ]),
@@ -101,12 +122,14 @@ export function myLeaveSpec(data: MyLeaveData): PageSpec {
   })
 }
 
-export async function loadMyLeavePage(): Promise<MyLeaveData> {
+export async function loadMyLeavePage(
+  sp: Record<string, string | undefined> = {},
+): Promise<MyLeaveData> {
   // Self-service gate: hrm.leave.request. Managers land on /hrm/leave; this
   // page never lists another worker's rows.
   const authz = await requirePermission('hrm.leave.request')
   if (!(await isFeatureEnabled(authz.user.orgId, 'hrm'))) notFound()
-  return loadMyLeave(authz)
+  return loadMyLeave(authz, sp)
 }
 
 export async function myLeaveTitle(): Promise<string> {
