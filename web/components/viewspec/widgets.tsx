@@ -80,10 +80,10 @@ import {
   HrmReadiness,
   HrmRecentChanges,
   HrmUpcomingChanges,
+  OnboardingPanel,
 } from '../../app/(app)/hrm/sections'
 import { ChangeRequestQueue } from '../../app/(app)/hrm/change-requests/QueueClient'
 import { PositionDrawer, PositionSegments, PositionsTable, VacancyTable } from '../../app/(app)/hrm/positions/sections'
-import { HrmHeadcountTable, OnboardingPanel } from '../../app/(app)/hrm/sections'
 import { ProcessesPanel } from '../../app/(app)/hrm/processes-client'
 import { ListChecks, ShieldCheck, ScrollText } from 'lucide-react'
 import { AnalyticsHub } from '../../app/(app)/analytics/AnalyticsHub'

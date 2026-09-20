@@ -146,7 +146,10 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/hrm/processes-read.ts", "mock:processes-read-service"],
 ]);
 
-type RouteModule = Record<string, ((req: Request, ctx?: never) => Promise<Response>) | undefined>;
+type RouteModule = Record<
+  string,
+  ((req: Request, ctx?: { params: Promise<Record<string, string>> }) => Promise<Response>) | undefined
+>;
 
 async function loadRoute(path: string): Promise<RouteModule> {
   const hooks = registerHooks({

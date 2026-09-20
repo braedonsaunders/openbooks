@@ -35,11 +35,6 @@ export const HRM_FEATURE_KEY = 'hrm'
 const HRM_POSITION_STATUSES = ['planned', 'open', 'filled', 'frozen', 'closed'] as const
 
 const HRM_EMPLOYMENT_STATUSES = ['offered', 'active', 'on_leave', 'suspended', 'terminated'] as const
-const HRM_PROCESS_KINDS = ['onboarding', 'offboarding', 'transfer'] as const
-const HRM_PROCESS_STATUSES = ['open', 'completed', 'cancelled'] as const
-const HRM_STEP_STATUSES = ['pending', 'done', 'skipped'] as const
-const HRM_STEP_OWNERS = ['manager', 'hr', 'employee', 'named_party'] as const
-const HRM_STEP_EVIDENCE = ['none', 'acknowledgement', 'attachment'] as const
 const HRM_REQUEST_STATUSES = [
   'draft',
   'pending_approval',
@@ -49,6 +44,12 @@ const HRM_REQUEST_STATUSES = [
   'applied',
 ] as const
 const HRM_REQUEST_KINDS = ['hire', 'status_change', 'assignment_change', 'termination', 'position_assignment'] as const
+
+const HRM_PROCESS_KINDS = ['onboarding', 'offboarding', 'transfer'] as const
+const HRM_PROCESS_STATUSES = ['open', 'completed', 'cancelled'] as const
+const HRM_STEP_STATUSES = ['pending', 'done', 'skipped'] as const
+const HRM_STEP_OWNERS = ['manager', 'hr', 'employee', 'named_party'] as const
+const HRM_STEP_EVIDENCE = ['none', 'acknowledgement', 'attachment'] as const
 
 export const HRM_REPORT_ENTITIES: ReportEntity[] = [
   {
@@ -268,6 +269,8 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
       { key: 'position_id', label: 'Position (id)', kind: 'uuid', expr: 'p.id' },
     ],
     defaultSort: { column: 'code', direction: 'asc' },
+  },
+  {
     key: 'hrm_processes',
     label: 'Process checklists',
     category: 'hrm',
