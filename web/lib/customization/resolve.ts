@@ -132,9 +132,23 @@ function mergeCustomFieldsIntoLayout(
   return layout;
 }
 
-function rowIsAccessible(row: { allowedRoles: string[] | null }, userRoles: string[]): boolean {
-  if (!row.allowedRoles || row.allowedRoles.length === 0) return true;
-  return row.allowedRoles.some((r) => userRoles.includes(r));
+/**
+ * A stored allowedRoles that is not an array of UUIDs is unusable: the
+ * previous `.some` call threw and resolveFormLayout took every form for
+ * that record type down. Treat the row as inaccessible instead.
+ */
+function storedAllowedRoles(allowedRoles: unknown): string[] | null | "malformed" {
+  if (allowedRoles == null) return null;
+  if (!Array.isArray(allowedRoles)) return "malformed";
+  if (allowedRoles.some((role) => !isUuid(role))) return "malformed";
+  return allowedRoles;
+}
+
+function rowIsAccessible(row: { allowedRoles: unknown }, userRoles: string[]): boolean {
+  const roles = storedAllowedRoles(row.allowedRoles);
+  if (roles === "malformed") return false;
+  if (!roles || roles.length === 0) return true;
+  return roles.some((r) => userRoles.includes(r));
 }
 
 /**
@@ -162,7 +176,12 @@ export const resolveFormLayout = cache(
        order by is_default desc, name
     `));
 
-    const accessible = rows.rows.filter((r) => rowIsAccessible(r, userRoles) || userRoles.includes("admin"));
+    const accessible = rows.rows.filter((r) => {
+      // Admin still sees every well-formed form; a malformed gate is
+      // inaccessible to everyone — that is the value that used to throw.
+      if (storedAllowedRoles(r.allowedRoles) === "malformed") return false;
+      return rowIsAccessible(r, userRoles) || userRoles.includes("admin");
+    });
     const available: FormLayoutRow[] = accessible.map((r) => ({
       id: r.id,
       name: r.name,
