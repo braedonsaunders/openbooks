@@ -45,7 +45,7 @@
     "qs": "6.16.0"
   },
   "scripts": {
-    "worker": "tsx engine/src/worker/index.ts",
+    "worker": "tsx scripts/worker-entry.mts",
     "lint": "node scripts/lint.mjs --max-warnings=0",
     "typecheck:e2e": "tsc --project e2e/tsconfig.json",
     "check:dependencies": "npm audit --omit=dev --audit-level=moderate",
