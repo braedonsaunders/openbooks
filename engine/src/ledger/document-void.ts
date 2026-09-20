@@ -7,7 +7,7 @@ import { assertPeriodModulesOpen, CloseError, closeModuleForDocument } from "../
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
 import { emitStatusChange, runRecordFlows } from "../flows/run.ts";
-import { runTriggerScripts, type ScriptContext } from "../scripting/scripting.ts";
+import { resolveScriptUser, runTriggerScripts, type ScriptContext } from "../scripting/scripting.ts";
 import {
   captureTransactionAuditSnapshot,
   recordTransactionAudit,
@@ -123,6 +123,7 @@ function assertDocumentVoidable(doc: DocumentRow): void {
 async function runBeforeVoidScripts(input: {
   document: DocumentRow;
   orgId: string;
+  actorId: string;
 }): Promise<void> {
   const doc = input.document;
   const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, input.orgId));
@@ -131,11 +132,13 @@ async function runBeforeVoidScripts(input: {
     .from(schema.documentLines)
     .where(and(eq(schema.documentLines.documentId, doc.id), eq(schema.documentLines.orgId, input.orgId)));
   if (!org) throw new DocumentVoidError("organization not found");
+  const user = await resolveScriptUser(input.orgId, input.actorId);
   const scriptCtx: ScriptContext = {
     trigger: "before_void",
     document: doc as unknown as Record<string, unknown>,
     lines: lines as unknown as Record<string, unknown>[],
     org: { id: org.id, name: org.name, baseCurrency: org.baseCurrency },
+    ...(user ? { user } : {}),
   };
   const outcomes = await runTriggerScripts("before_void", scriptCtx, doc.id);
   const bad = outcomes.find((outcome) => outcome.status !== "ok");
@@ -215,7 +218,7 @@ export async function requestDocumentVoid(
       )
     `);
 
-    await runBeforeVoidScripts({ document: doc, orgId: input.orgId });
+    await runBeforeVoidScripts({ document: doc, orgId: input.orgId, actorId: input.actorId });
 
     const flows = await runRecordFlows(
       { kind: "before_void", source: input.source ?? "ui" },

@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db, schema, withOrgTransaction } from "../platform/db.ts";
-import { runTriggerScripts, type ScriptContext } from "../scripting/scripting.ts";
+import { resolveScriptUser, runTriggerScripts, type ScriptContext } from "../scripting/scripting.ts";
 import { assertDocumentMutationRefsOwned } from "../records/mutation-refs.ts";
 import { assertExpenseEmployee, assertExpenseSettlement } from "../records/expense-validation.ts";
 import { runRecordFlows } from "./run.ts";
@@ -97,11 +97,13 @@ async function submitForApprovalLocked(
       .select()
       .from(schema.documentLines)
       .where(and(eq(schema.documentLines.documentId, targetId), eq(schema.documentLines.orgId, doc.orgId)));
+    const user = await resolveScriptUser(doc.orgId, actorId ?? null);
     const scriptCtx: ScriptContext = {
       trigger: "before_submit",
       document: doc as unknown as Record<string, unknown>,
       lines: lines as unknown as Record<string, unknown>[],
       org: { id: org.id, name: org.name, baseCurrency: org.baseCurrency },
+      ...(user ? { user } : {}),
     };
     const outcomes = await runTriggerScripts("before_submit", scriptCtx, doc.id);
     const bad = outcomes.find((o) => o.status !== "ok");
