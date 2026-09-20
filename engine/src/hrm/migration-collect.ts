@@ -30,10 +30,10 @@
  *   Status is terminated when a termination event is recorded, else active.
  *   Activity dated AFTER the recorded termination is a genuine conflict this
  *   module cannot resolve: it is reported with status unknown and a
- *   provenance naming both facts, so no migration is anchored until an
- *   operator asserts the true current state. (Contract note: the frozen
- *   classifier has no post-termination-activity rule; the pipeline refuses
- *   such rows at the executor as missing_current_observation.)
+ *   provenance naming both facts plus a structured conflict, so the
+ *   classifier refuses the row as post_termination_activity with a remedy
+ *   that reconciles the facts (correct the termination date, or void or
+ *   reassign the later activity) — never one that asserts over them.
  * - Subsidiary facts cover every legal subsidiary of the org (eliminations
  *   included, mapped to isEliminated). Historic stub employers are the
  *   distinct schedule subsidiaries behind the person's committed runs.
@@ -474,6 +474,11 @@ function buildRow(input: BuildRowInput): SourcePersonRow {
         provenance:
           `conflicting-employment-evidence terminated_on:${role.terminated_on} ` +
           `vs ${anchorProvenance}`,
+        conflict: {
+          terminatedOn: role.terminated_on,
+          activityAnchor: anchorProvenance,
+          activityDate: anchorDate,
+        },
       };
     } else {
       observation = {

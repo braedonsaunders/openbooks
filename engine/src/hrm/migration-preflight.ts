@@ -158,6 +158,43 @@ export interface ObservationEvidence {
   /** Asserted current-state instant; the observation anchor, never a hire date. */
   readonly observedAt: string | null;
   readonly provenance: string;
+  /**
+   * Present when the collector found activity dated AFTER the recorded
+   * termination: both facts, structured, so the classifier can name them.
+   * The status is then "unknown" — neither fact yields — and the verdict is
+   * post_termination_activity, never a missing observation.
+   */
+  readonly conflict?: PostTerminationConflict | null;
+}
+
+export interface PostTerminationConflict {
+  /** The recorded termination date (employee_roles.terminated_on). */
+  readonly terminatedOn: string;
+  /** The later activity's anchor handle(s), e.g. timesheet_weeks:<id>@<date>. */
+  readonly activityAnchor: string;
+  /** The civil date of that later activity. */
+  readonly activityDate: string;
+}
+
+/**
+ * Evidence collected before the conflict was structured carries it only in
+ * the provenance text ("conflicting-employment-evidence terminated_on:<date>
+ * vs <anchor>@<date>"). Reading that shape keeps already-collected rows
+ * (their evidence hash is recorded) classifying under the same verdict.
+ */
+const PROVENANCE_CONFLICT =
+  /^conflicting-employment-evidence terminated_on:(\d{4}-\d{2}-\d{2}) vs (.+)$/;
+
+export function postTerminationConflictOf(
+  observation: ObservationEvidence,
+): PostTerminationConflict | null {
+  if (observation.conflict) return observation.conflict;
+  const match = PROVENANCE_CONFLICT.exec(observation.provenance);
+  if (match === null) return null;
+  const activityAnchor = match[2]!;
+  const dates = [...activityAnchor.matchAll(/@(\d{4}-\d{2}-\d{2})/g)].map((hit) => hit[1]!).sort();
+  const activityDate = dates.length > 0 ? dates[dates.length - 1]! : "";
+  return { terminatedOn: match[1]!, activityAnchor, activityDate };
 }
 
 export interface ResolutionEvidence {
@@ -570,7 +607,30 @@ function checkObservation(row: SourcePersonRow, ctx: RowContext): boolean {
     });
     return false;
   }
-  if (observation.status === "unknown") return false;
+  if (observation.status === "unknown") {
+    // Unknown because two facts disagree is a verdict of its own. The
+    // observation is PRESENT; calling it missing would send the operator to
+    // assert a state over a payroll-integrity conflict instead of resolving
+    // it. Name both facts and the two honest ways to reconcile them.
+    const conflict = postTerminationConflictOf(observation);
+    if (conflict !== null) {
+      ctx.issues.push({
+        code: "post_termination_activity",
+        level: "requires_review",
+        detail:
+          `activity recorded after the termination date: the role records ` +
+          `terminated_on ${conflict.terminatedOn}, but ${conflict.activityAnchor}` +
+          (conflict.activityDate ? ` is dated ${conflict.activityDate}` : "") +
+          `; neither fact is trusted over the other, so no current status is asserted.`,
+        remedy:
+          "Reconcile the two facts before re-running: correct the termination date " +
+          "if the person kept working, or void or reassign the later activity " +
+          `(${conflict.activityAnchor}) if it was booked to the wrong person or period. ` +
+          "Do not assert a current observation over this conflict.",
+      });
+    }
+    return false;
+  }
   if (!isRecordedInstant(observation.observedAt) || !isNonBlank(observation.provenance)) {
     ctx.issues.push({
       code: "invalid_observation_evidence",
