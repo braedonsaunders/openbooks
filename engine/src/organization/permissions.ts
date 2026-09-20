@@ -134,6 +134,15 @@ export const PERMISSION_CATALOGUE = [
   // hrm.employment.manage, never this key alone.
   "hrm.process.read",
   "hrm.process.manage",
+  // HR-5 leave and attendance — the same confidentiality rule as employment:
+  // read sees leave records; request files for one's own employment only
+  // (the service scopes the subject, never the caller); approve decides;
+  // manage configures types/policies and acts with a reason where others
+  // are refused. Admin-only like the employment keys below.
+  "hrm.leave.read",
+  "hrm.leave.request",
+  "hrm.leave.approve",
+  "hrm.leave.manage",
   // Custom records — user-defined record types + their generated modules
   "records.read",
   "records.create",
@@ -380,6 +389,10 @@ export const PERMISSION_GROUPS: {
       { key: "hrm.position.manage", labelKey: permissionLabelKey("hrm.position.manage") },
       { key: "hrm.process.read", labelKey: permissionLabelKey("hrm.process.read") },
       { key: "hrm.process.manage", labelKey: permissionLabelKey("hrm.process.manage") },
+      { key: "hrm.leave.read", labelKey: permissionLabelKey("hrm.leave.read") },
+      { key: "hrm.leave.request", labelKey: permissionLabelKey("hrm.leave.request") },
+      { key: "hrm.leave.approve", labelKey: permissionLabelKey("hrm.leave.approve") },
+      { key: "hrm.leave.manage", labelKey: permissionLabelKey("hrm.leave.manage") },
     ],
   },
   {

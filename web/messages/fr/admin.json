@@ -833,6 +833,10 @@
   },
   "permissions": {
     "hrm_employment_read": "Consulter les dossiers d'emploi",
+    "hrm_leave_read": "Consulter les dossiers de congé",
+    "hrm_leave_request": "Demander un congé pour son propre emploi",
+    "hrm_leave_approve": "Statuer sur les demandes de congé",
+    "hrm_leave_manage": "Configurer les types et politiques de congé",
     "hrm_employment_manage": "Rédiger des changements d'emploi",
     "hrm_employment_approve": "Décider des changements d'emploi",
     "hrm_position_read": "Consulter les postes et le plan d'effectifs",

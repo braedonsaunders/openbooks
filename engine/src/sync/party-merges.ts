@@ -108,6 +108,14 @@ const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] =
   // The composite tenant FKs keep the re-point inside the org.
   ["hrm_process_template_steps", "owner_party_id"],
   ["hrm_process_steps", "owner_party_id"],
+  // 0194: the pay-run input's employee_party_id is the key the ledger reads,
+  // resolved by HR from the employment at write time. SIMPLE, not GUARDED:
+  // the input uniqueness is (org, request, day) and carries no party column,
+  // so re-pointing the party cannot collide. employment_id columns need no
+  // entry: the employment rows themselves move above, and inputs whose
+  // employment now points at a different party are refused by name at
+  // consume time (never silently absorbed).
+  ["hrm_payroll_inputs", "employee_party_id"],
 ];
 
 /**

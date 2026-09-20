@@ -833,6 +833,10 @@
   },
   "permissions": {
     "hrm_employment_read": "Ver registros de emprego",
+    "hrm_leave_read": "Ver registros de licença",
+    "hrm_leave_request": "Solicitar licença para o próprio emprego",
+    "hrm_leave_approve": "Decidir solicitações de licença",
+    "hrm_leave_manage": "Configurar tipos e políticas de licença",
     "hrm_employment_manage": "Redigir alterações de emprego",
     "hrm_employment_approve": "Decidir alterações de emprego",
     "hrm_position_read": "Ver posições e o plano de headcount",

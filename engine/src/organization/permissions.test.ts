@@ -81,6 +81,7 @@ test("hrm employment permissions are catalogued, grouped, and held by admin only
     "hrm.process.read",
     "hrm.process.manage",
   ];
+  const keys: CataloguePermission[] = ["hrm.employment.read", "hrm.employment.manage", "hrm.employment.approve", "hrm.leave.read", "hrm.leave.request", "hrm.leave.approve", "hrm.leave.manage"];
   for (const perm of keys) {
     assert.ok(
       (PERMISSION_CATALOGUE as readonly string[]).includes(perm),

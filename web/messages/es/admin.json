@@ -833,6 +833,10 @@
   },
   "permissions": {
     "hrm_employment_read": "Ver registros de empleo",
+    "hrm_leave_read": "Ver registros de ausencias",
+    "hrm_leave_request": "Solicitar ausencias para el propio empleo",
+    "hrm_leave_approve": "Decidir solicitudes de ausencias",
+    "hrm_leave_manage": "Configurar tipos y políticas de ausencias",
     "hrm_employment_manage": "Redactar cambios de empleo",
     "hrm_employment_approve": "Decidir cambios de empleo",
     "hrm_position_read": "Ver puestos y el plan de plantilla",

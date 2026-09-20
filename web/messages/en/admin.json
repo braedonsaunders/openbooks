@@ -966,7 +966,11 @@
     "compliance_waive": "Grant compliance exceptions",
     "compliance_file": "Finalize and file information returns",
     "hrm_process_read": "View process checklists",
-    "hrm_process_manage": "Open, complete, and cancel process checklists"
+    "hrm_process_manage": "Open, complete, and cancel process checklists",
+    "hrm_leave_read": "View leave records",
+    "hrm_leave_request": "Request leave for own employment",
+    "hrm_leave_approve": "Decide leave requests",
+    "hrm_leave_manage": "Configure leave types and policies"
   },
   "ai": {
     "metaTitle": "AI providers",

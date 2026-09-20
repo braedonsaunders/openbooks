@@ -833,6 +833,10 @@
   },
   "permissions": {
     "hrm_employment_read": "Beschäftigungsdaten anzeigen",
+    "hrm_leave_read": "Urlaubsdaten anzeigen",
+    "hrm_leave_request": "Urlaub für das eigene Beschäftigungsverhältnis beantragen",
+    "hrm_leave_approve": "Urlaubsanträge entscheiden",
+    "hrm_leave_manage": "Urlaubsarten und -richtlinien konfigurieren",
     "hrm_employment_manage": "Beschäftigungsänderungen erfassen",
     "hrm_employment_approve": "Beschäftigungsänderungen entscheiden",
     "hrm_position_read": "Positionen und Personalplan anzeigen",
