@@ -2769,7 +2769,13 @@
       "leaveTypeId": "休暇種別",
       "minimumNoticeDays": "最小通知日数",
       "accrualRule": "付与ルール (JSON)",
-      "carryoverRule": "繰越ルール (JSON)"
+      "carryoverRule": "繰越ルール (JSON)",
+      "accrualKind": "付与方式",
+      "accrualHours": "付与時間",
+      "accrualPeriodsPerYear": "年間の付与期間数",
+      "carryoverKind": "繰越",
+      "carryoverHours": "繰越上限（時間）",
+      "carryoverExpiresAfterDays": "繰越の失効（日数）"
     },
     "fieldHelp": {
       "gapless": "欠番なしとは、連番のすべての番号が記録され、番号が飛ばないことを意味します。法令または監査要件で途切れない採番が必要な場合にのみ有効にしてください。",
@@ -2825,9 +2831,14 @@
       "hrmProcessAppliesSubsidiary": "空欄はすべての子会社に適用されます。",
       "hrmProcessAppliesDepartment": "空欄はすべての部門に適用されます。",
       "leaveValueCrossing": "承認された休暇日が生じさせる給与計算インプット。「なし」は給与台帳に触れません。支払いと積立は、計算が評価する時間として渡されます。",
-      "leaveAppliesTo": "適用範囲をJSONで指定（例：{\"employer_subsidiary_id\": null, \"department_id\": null}）。nullは組織全体。重複はエンジンが詳細度で解決します。",
-      "leaveAccrualRule": "付与をJSONで指定（例：{\"kind\": \"per_year\", \"hours\": \"120\"}）。種類：none、per_period（hoursとperiods_per_yearが必要）、per_year（hoursが必要）、unlimited。",
-      "leaveCarryoverRule": "繰越をJSONで指定（例：{\"kind\": \"carry_up_to\", \"hours\": \"40\"}）。種類：none、carry_all、carry_up_to（hoursが必要）。expires_after_daysは任意。"
+      "leaveAppliesSubsidiary": "空欄の場合、このポリシーはすべての子会社に適用されます。",
+      "leaveAppliesDepartment": "空欄の場合、このポリシーはすべての部門に適用されます。",
+      "leaveAccrualKind": "時間の付与方法：なし、期間ごと、年ごと、無制限。",
+      "leaveAccrualHours": "期間ごとまたは年ごとに付与される時間（これらの方式では必須）。",
+      "leaveAccrualPeriodsPerYear": "付与年内の期間数（期間ごとの付与では必須）。",
+      "leaveCarryoverKind": "年度末の未使用時間の扱い：なし、全額繰越、上限まで繰越。",
+      "leaveCarryoverHours": "繰り越せる最大時間（「上限まで繰越」では必須）。",
+      "leaveCarryoverExpiresAfterDays": "新年度開始から繰越時間が失効するまでの日数。空欄なら失効しません。"
     },
     "options": {
       "timeClassification": {
@@ -3185,6 +3196,17 @@
         "none": "なし — 無給または給与扱い",
         "payout": "残高からの支払い",
         "bankIn": "代替時間として積立"
+      },
+      "leaveAccrualKind": {
+        "none": "なし",
+        "per_period": "期間ごと",
+        "per_year": "年ごと",
+        "unlimited": "無制限"
+      },
+      "leaveCarryoverKind": {
+        "none": "なし",
+        "carry_all": "全額繰越",
+        "carry_up_to": "上限まで繰越"
       }
     },
     "invoicing": {

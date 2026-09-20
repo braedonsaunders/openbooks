@@ -2701,7 +2701,13 @@
       "leaveTypeId": "Leave type",
       "minimumNoticeDays": "Minimum notice (days)",
       "accrualRule": "Accrual rule (JSON)",
-      "carryoverRule": "Carryover rule (JSON)"
+      "carryoverRule": "Carryover rule (JSON)",
+      "accrualKind": "Accrual",
+      "accrualHours": "Accrual hours",
+      "accrualPeriodsPerYear": "Accrual periods per year",
+      "carryoverKind": "Carryover",
+      "carryoverHours": "Carryover cap (hours)",
+      "carryoverExpiresAfterDays": "Carryover expires after (days)"
     },
     "fieldHelp": {
       "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",
@@ -2757,9 +2763,14 @@
       "hrmProcessAppliesSubsidiary": "Empty means the template applies to every subsidiary.",
       "hrmProcessAppliesDepartment": "Empty means the template applies to every department.",
       "leaveValueCrossing": "Which pay-run input an approved absence day raises. None never touches the payroll ledger; payout and bank_in cross as hours the run prices.",
-      "leaveAppliesTo": "Scope pins as JSON, e.g. {\"employer_subsidiary_id\": null, \"department_id\": null}. Null pins mean org-wide; the engine resolves overlaps by specificity.",
-      "leaveAccrualRule": "Accrual as JSON, e.g. {\"kind\": \"per_year\", \"hours\": \"120\"}. Kinds: none, per_period (needs hours and periods_per_year), per_year (needs hours), unlimited.",
-      "leaveCarryoverRule": "Carryover as JSON, e.g. {\"kind\": \"carry_up_to\", \"hours\": \"40\"}. Kinds: none, carry_all, carry_up_to (needs hours). Optional expires_after_days."
+      "leaveAppliesSubsidiary": "Empty means the policy applies to every subsidiary.",
+      "leaveAppliesDepartment": "Empty means the policy applies to every department.",
+      "leaveAccrualKind": "How time is earned: none, per period, per year, or unlimited.",
+      "leaveAccrualHours": "Hours earned per period or per year (required for those kinds).",
+      "leaveAccrualPeriodsPerYear": "Whole periods in an accrual year (required for per-period accrual).",
+      "leaveCarryoverKind": "What unused time does at year end: nothing, carry all, or carry up to a cap.",
+      "leaveCarryoverHours": "Maximum hours carried forward (required for carry up to).",
+      "leaveCarryoverExpiresAfterDays": "Days after the new year starts before carried hours expire; empty means they do not."
     },
     "options": {
       "payFrequency": {
@@ -3117,6 +3128,17 @@
         "none": "None — unpaid or salary-paid",
         "payout": "Payout from the bank",
         "bankIn": "Bank in lieu"
+      },
+      "leaveAccrualKind": {
+        "none": "None",
+        "per_period": "Per period",
+        "per_year": "Per year",
+        "unlimited": "Unlimited"
+      },
+      "leaveCarryoverKind": {
+        "none": "None",
+        "carry_all": "Carry all",
+        "carry_up_to": "Carry up to a cap"
       }
     },
     "payroll": {

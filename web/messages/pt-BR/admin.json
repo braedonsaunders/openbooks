@@ -2701,7 +2701,13 @@
       "leaveTypeId": "Tipo de licença",
       "minimumNoticeDays": "Antecedência mínima (dias)",
       "accrualRule": "Regra de acúmulo (JSON)",
-      "carryoverRule": "Regra de transferência (JSON)"
+      "carryoverRule": "Regra de transferência (JSON)",
+      "accrualKind": "Acúmulo",
+      "accrualHours": "Horas acumuladas",
+      "accrualPeriodsPerYear": "Períodos de acúmulo por ano",
+      "carryoverKind": "Transferência",
+      "carryoverHours": "Limite de transferência (horas)",
+      "carryoverExpiresAfterDays": "A transferência expira após (dias)"
     },
     "fieldHelp": {
       "gapless": "Sem lacunas significa que todos os números da sequência devem ser contabilizados, sem números pulados. Ative somente quando exigências legais ou de auditoria determinarem uma numeração ininterrupta.",
@@ -2757,9 +2763,14 @@
       "hrmProcessAppliesSubsidiary": "Vazio: o modelo se aplica a todas as subsidiárias.",
       "hrmProcessAppliesDepartment": "Vazio: o modelo se aplica a todos os departamentos.",
       "leaveValueCrossing": "Qual insumo de folha um dia de ausência aprovado gera. Nenhum nunca toca o razão de folha; pagamento e acúmulo cruzam como horas que o cálculo avalia.",
-      "leaveAppliesTo": "Escopo como JSON, ex. {\"employer_subsidiary_id\": null, \"department_id\": null}. Null significa toda a organização; o motor resolve sobreposições por especificidade.",
-      "leaveAccrualRule": "Acúmulo como JSON, ex. {\"kind\": \"per_year\", \"hours\": \"120\"}. Tipos: none, per_period (precisa de hours e periods_per_year), per_year (precisa de hours), unlimited.",
-      "leaveCarryoverRule": "Transferência como JSON, ex. {\"kind\": \"carry_up_to\", \"hours\": \"40\"}. Tipos: none, carry_all, carry_up_to (precisa de hours). expires_after_days opcional."
+      "leaveAppliesSubsidiary": "Vazio significa que a política se aplica a todas as subsidiárias.",
+      "leaveAppliesDepartment": "Vazio significa que a política se aplica a todos os departamentos.",
+      "leaveAccrualKind": "Como o tempo é acumulado: nenhum, por período, por ano ou ilimitado.",
+      "leaveAccrualHours": "Horas acumuladas por período ou por ano (obrigatório para esses tipos).",
+      "leaveAccrualPeriodsPerYear": "Períodos inteiros em um ano de acúmulo (obrigatório para o acúmulo por período).",
+      "leaveCarryoverKind": "O que acontece com o tempo não usado no fim do ano: nada, transferir tudo ou até um limite.",
+      "leaveCarryoverHours": "Máximo de horas transferidas (obrigatório para «até um limite»).",
+      "leaveCarryoverExpiresAfterDays": "Dias após o início do novo ano até as horas transferidas expirarem; vazio significa que não expiram."
     },
     "options": {
       "payFrequency": {
@@ -3117,6 +3128,17 @@
         "none": "Nenhum — não remunerado ou em salário",
         "payout": "Pagamento do banco",
         "bankIn": "Acumular como tempo"
+      },
+      "leaveAccrualKind": {
+        "none": "Nenhum",
+        "per_period": "Por período",
+        "per_year": "Por ano",
+        "unlimited": "Ilimitado"
+      },
+      "leaveCarryoverKind": {
+        "none": "Nenhuma",
+        "carry_all": "Transferir tudo",
+        "carry_up_to": "Transferir até um limite"
       }
     },
     "payroll": {
