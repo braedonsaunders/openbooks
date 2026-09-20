@@ -40,15 +40,19 @@ async function end(client: PoolClient, commit: boolean): Promise<void> {
 
 async function tableSecurity(): Promise<Map<string, { rls: boolean; force: boolean }>> {
   const rows = (await db.execute<{ name: string; rls: boolean; force: boolean }>(sql`
-    select relname as name, relrowsecurity as rls, relforcerowsecurity as force
-      from pg_class
-     where relname in ('positions', 'position_versions', 'position_funding', 'position_changes')`)).rows;
+    select c.relname as name, c.relrowsecurity as rls, c.relforcerowsecurity as force
+      from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'public'
+       and c.relname in ('positions', 'position_versions', 'position_funding', 'position_changes')`)).rows;
   return new Map(rows.map((row) => [row.name, { rls: row.rls, force: row.force }]));
 }
 
 async function hasConstraint(name: string): Promise<boolean> {
   const rows = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from pg_constraint where conname = ${name}`)).rows;
+    select count(*)::int as n from pg_constraint c
+      join pg_namespace n on n.oid = c.connamespace
+     where n.nspname = 'public' and c.conname = ${name}`)).rows;
   return (rows[0]?.n ?? 0) > 0;
 }
 
