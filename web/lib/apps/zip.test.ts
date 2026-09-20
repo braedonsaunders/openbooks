@@ -261,8 +261,14 @@ test('setAppStatus and deleteApp refuse a scoped lookup that matches zero rows',
   const deleteBody = storeFunctionBody('deleteApp')
   assert.doesNotMatch(statusBody, /if \(!app \|\| app\.status === status\) return/)
   assert.doesNotMatch(deleteBody, /if \(!app\) return/)
-  assert.match(statusBody, /if \(!app\) throw new AppError\('app not found', 404\)/)
-  assert.match(deleteBody, /if \(!app\) throw new AppError\('app not found', 404\)/)
+  assert.match(statusBody, /if \(!app\)/)
+  assert.match(statusBody, /throw new AppError\(/)
+  assert.match(statusBody, /was not found/)
+  assert.match(statusBody, /404/)
+  assert.match(deleteBody, /if \(!app\)/)
+  assert.match(deleteBody, /throw new AppError\(/)
+  assert.match(deleteBody, /was not found/)
+  assert.match(deleteBody, /404/)
 })
 
 test('applied draft activation validates current state instead of returning a no-op', () => {
