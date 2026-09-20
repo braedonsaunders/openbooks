@@ -59,8 +59,8 @@ test("createLeaseAgreement persists annualDiscountRatePercent through canonicalD
   const start = source.indexOf("export async function createLeaseAgreement");
   const next = source.indexOf("type LeaseRow");
   const body = source.slice(start, next);
-  assert.match(body, /persistLeaseAnnualDiscountRate\(input\.annualDiscountRatePercent\)/);
-  assert.doesNotMatch(body, /normalizeDecimal\(input\.annualDiscountRatePercent, 10\)/);
+  assert.match(body, /persistLeaseAnnualDiscountRate\(\s*input\.annualDiscountRatePercent\s*,?\s*\)/);
+  assert.doesNotMatch(body, /normalizeDecimal\(\s*input\.annualDiscountRatePercent\s*,\s*10\s*,?\s*\)/);
 });
 
 test("contractual advance and arrears timings are accepted without rewriting the agreement", () => {
