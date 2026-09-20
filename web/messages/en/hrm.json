@@ -240,5 +240,10 @@
         "applied": "Applied"
       }
     }
+  },
+  "directory": {
+    "employmentStatus": "Employment status",
+    "serviceStart": "Service start",
+    "noEmployment": "No employment"
   }
 }
