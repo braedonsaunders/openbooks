@@ -6,6 +6,7 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 import { getAuthz, can } from "../../../../../lib/authz";
 import { parseListView, stripSeededDefaultMark } from "@openbooks/customization";
 import { refuseDisabledRecordType } from "../../../../../lib/customization/gates";
+import { isUuid } from "../../../../../lib/list-params";
 
 export const runtime = "nodejs";
 
@@ -14,6 +15,7 @@ const nameBodySchema = z.looseObject({
 });
 
 async function loadOwn(orgId: string, userId: string, id: string) {
+  if (!isUuid(id)) return null;
   const r = (await db.execute<{ id: string; recordType: string; name: string; scope: string; ownerId: string | null; isDefault: boolean; isActive: boolean; config: unknown }>(sql`
     select id, record_type as "recordType", name, scope, owner_id as "ownerId",
            is_default as "isDefault", is_active as "isActive", config
@@ -31,6 +33,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const authz = await getAuthz();
   if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { id } = await params;
+  if (!isUuid(id)) return NextResponse.json({ error: "invalid id" }, { status: 400 });
   const row = await loadOwn(authz.user.orgId, authz.user.id, id);
   if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
   const refused = await refuseDisabledRecordType(authz.user.orgId, row.recordType);
@@ -44,6 +47,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { user } = authz;
   const { id } = await params;
+  if (!isUuid(id)) return NextResponse.json({ error: "invalid id" }, { status: 400 });
   const existing = await loadOwn(user.orgId, user.id, id);
   if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
   const refused = await refuseDisabledRecordType(user.orgId, existing.recordType);
@@ -143,6 +147,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { user } = authz;
   const { id } = await params;
+  if (!isUuid(id)) return NextResponse.json({ error: "invalid id" }, { status: 400 });
   const existing = await loadOwn(user.orgId, user.id, id);
   if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
   const refused = await refuseDisabledRecordType(user.orgId, existing.recordType);
