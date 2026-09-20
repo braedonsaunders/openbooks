@@ -51,6 +51,8 @@ const { correctPostedDocument } = await import('./application/documents.ts')
 
 const NO_PROFILES = { codes: new Map(), groups: new Map() }
 const DOCUMENTS_SOURCE = readFileSync(new URL('./documents.ts', import.meta.url), 'utf8')
+const DOCUMENT_POLICY_SOURCE = readFileSync(new URL('../../engine/src/records/document-edit-policy.ts', import.meta.url), 'utf8')
+const DOCUMENT_SERVICE_SOURCE = readFileSync(new URL('../../engine/src/records/document-service.ts', import.meta.url), 'utf8')
 
 async function listenProvider(server: Server): Promise<string> {
   await new Promise<void>((resolve, reject) => {
@@ -1326,7 +1328,7 @@ test('load and lock SQL preserve the exact revision token end to end', () => {
   // revision_seq counter, never the display timestamp: the list read,
   // loadDocument's row, loadDocumentEditCurrent's snapshot, the posted-
   // correction lock, and the edit lock.
-  assert.equal(DOCUMENTS_SOURCE.match(/documentRevisionCounterSql\(sql\.raw\('(d\.)?revision_seq'\)\)/g)?.length, 5)
+  assert.equal((DOCUMENTS_SOURCE + DOCUMENT_POLICY_SOURCE + DOCUMENT_SERVICE_SOURCE).match(/documentRevisionCounterSql\(sql\.raw\('(d\.)?revision_seq'\)\)/g)?.length, 5)
   assert.match(DOCUMENTS_SOURCE, /select kind, status,[\s\S]*?documentRevisionCounterSql[\s\S]*?for update/)
   // Draft minting is attributable: the insert stamps the creating user, and
   // on_create flows settle before the writer ever receives a token.
@@ -1339,9 +1341,9 @@ test('load and lock SQL preserve the exact revision token end to end', () => {
     /updated_at = greatest\([\s\S]*?clock_timestamp\(\)[\s\S]*?interval '1 microsecond'/,
   )
   assert.doesNotMatch(
-    DOCUMENTS_SOURCE.slice(
-      DOCUMENTS_SOURCE.indexOf('export function requireDocumentEditRevision'),
-      DOCUMENTS_SOURCE.indexOf('export function assertNoExistingDocumentCorrection'),
+    DOCUMENT_POLICY_SOURCE.slice(
+      DOCUMENT_POLICY_SOURCE.indexOf('export function requireDocumentEditRevision'),
+      DOCUMENT_POLICY_SOURCE.indexOf('export function assertNoExistingDocumentCorrection'),
     ),
     /new Date|getTime\(/,
   )
@@ -1448,8 +1450,7 @@ test("the posted-correction path records its reverses edge through the mandatory
   // Regression pin (source-level): createPostedCorrectionDraft used to insert
   // a bare 'reverses' edge — no reason, requester, or timestamp — which the
   // database's document_links_reversal_evidence CHECK now rejects outright.
-  // The only 'reverses' literal in web/lib/documents.ts must live inside the
-  // evidence builder, and the correction transaction must compose it.
+  // The correction transaction must compose the engine evidence builder.
   const source = readFileSync(new URL('./documents.ts', import.meta.url), 'utf8')
   assert.match(source, /\.\.\.buildReversalLinkEvidence\(/)
   // Inside the correction transaction itself, the edge must be composed from
