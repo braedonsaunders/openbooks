@@ -97,7 +97,7 @@ const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`
 const mockUrls = new Map<string, string>([
   ['@/lib/api/json', mockUrl('json')],
   ['../../../../../../lib/authz', mockUrl('authz')],
-  ['../../../../../../lib/documents', mockUrl('documents')],
+  ['../../../../../../lib/documents.ts', mockUrl('documents')],
   ['../../../../../../lib/pdf-templates/send', mockUrl('send')],
   ['../../../lib', mockUrl('record-scope')],
 ])

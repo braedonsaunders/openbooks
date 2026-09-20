@@ -12,7 +12,7 @@ import {
 import { listEntryRulesInEffect } from '@openbooks/engine/src/allocations/match.ts'
 import type { RuleInEffect } from '@openbooks/engine/src/allocations/types.ts'
 import { assertGeneratedBillingEdit, BillingSourceIntegrityError } from '@openbooks/engine/src/projects/billing-source-integrity.ts'
-import { documentRevisionCounterSql, documentRevisionSql } from '@openbooks/engine/src/records/revision.ts'
+import { documentRevisionCounterSql } from '@openbooks/engine/src/records/revision.ts'
 import { sql } from 'drizzle-orm'
 import { db, schema, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { cmp, normalizeDecimal, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
@@ -35,7 +35,7 @@ import {
   DOCUMENT_EDIT_REVISION_CONFLICT, DocumentEditError, requireDocumentEditRevision, assertNoExistingDocumentCorrection,
   runDocumentVersionedTransaction, buildReversalLinkEvidence,
 } from '@openbooks/engine/src/records/document-edit-policy.ts'
-import type { BillLineInput, DocumentLineInput, DocumentEditInput, DocumentEditCurrent } from '@openbooks/engine/src/ledger/document-input.ts'
+import type { DocumentLineInput, DocumentEditInput, DocumentEditCurrent } from '@openbooks/engine/src/ledger/document-input.ts'
 import { loadDocumentEditCurrent } from '@openbooks/engine/src/ledger/document-service.ts'
 
 /** False when this kind belongs to a Features switch that is off. */

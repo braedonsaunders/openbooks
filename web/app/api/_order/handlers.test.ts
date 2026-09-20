@@ -510,13 +510,6 @@ const mockSources = new Map<string, string>([
     export function loadOrder() { return state.loadOrder() }
     export async function orderTaxProfileMap() { return new Map() }
   `],
-  ['mock:money', `
-    export function cmp(left, right) { return Math.sign(Number(left) - Number(right)) }
-    export function toUnits(value) { return BigInt(Math.round(Number(value) * 100000000)) }
-  `],
-  ['mock:exact-decimal', `
-    export function compareDecimal(left, right) { return Math.sign(Number(left) - Number(right)) }
-  `],
   ['mock:bills', `export async function persistLineTaxComponents() { return undefined }`],
   ['mock:stock-locations', `
     const state = ${stateExpression}
@@ -580,9 +573,7 @@ const resolutionMocks = new Map<string, string>([
   ['../../../lib/authz', 'mock:authz'],
   ['../../../lib/order-cycle', 'mock:order-cycle'],
   ['./lib', 'mock:order-lib'],
-  ['@openbooks/engine/src/money/money.ts', 'mock:money'],
-  ['../../../lib/exact-decimal', 'mock:exact-decimal'],
-  ['../../../lib/bills', 'mock:bills'],
+  ['../../../lib/bills.ts', 'mock:bills'],
   ['../../../lib/stock-locations', 'mock:stock-locations'],
   ['../../../lib/segments', 'mock:segments'],
   ['@openbooks/engine/src/crm/crm.ts', 'mock:crm'],

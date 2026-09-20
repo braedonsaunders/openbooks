@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { fromUnits, isZero, normalizeMoney, sum, toUnits } from "../money/money.ts";
+import { fromUnits, isZero, normalizeMoney, toUnits } from "../money/money.ts";
 import { unitCostPerQuantity } from "./costing.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";

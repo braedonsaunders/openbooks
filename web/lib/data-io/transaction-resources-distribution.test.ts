@@ -116,19 +116,10 @@ const hooks = registerHooks({
     const mockUrl = new Map([
       ['drizzle-orm', 'mock:drizzle'],
       ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-      ['@openbooks/engine/src/ledger/posting-accounts.ts', 'mock:posting'],
-  ['@openbooks/engine/src/ledger/posting-contracts.ts', 'mock:posting'],
-  ['@openbooks/engine/src/ledger/posting-dispatch.ts', 'mock:posting'],
-  ['@openbooks/engine/src/ledger/posting-document.ts', 'mock:posting'],
-  ['@openbooks/engine/src/ledger/posting-invariants.ts', 'mock:posting'],
-  ['@openbooks/engine/src/ledger/posting-projection.ts', 'mock:posting'],
-  ['@openbooks/engine/src/ledger/posting-provider-tax.ts', 'mock:posting'],
-  ['@openbooks/engine/src/ledger/posting-replay.ts', 'mock:posting'],
-  ['@openbooks/engine/src/ledger/posting-rules.ts', 'mock:posting'],
-  ['@openbooks/engine/src/ledger/posting-subsidiaries.ts', 'mock:posting'],
-  ['@openbooks/engine/src/ledger/posting-tax-policy.ts', 'mock:posting'],
+      ['@openbooks/engine/src/ledger/posting-document.ts', 'mock:posting'],
       ['@openbooks/engine/src/allocations/entry.ts', 'mock:entry'],
-      ['../documents', 'mock:documents'],
+      ['../../../engine/src/ledger/document-service.ts', 'mock:documents'],
+      ['../bills.ts', 'mock:documents'],
       ['./resource-core', 'mock:resource-core'],
     ]).get(specifier)
     if (mockUrl) return { url: mockUrl, shortCircuit: true }
