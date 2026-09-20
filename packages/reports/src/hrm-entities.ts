@@ -58,6 +58,16 @@ const HRM_APPLICATION_STATUSES = ['active', 'rejected', 'withdrawn', 'hired'] as
 
 const HRM_PROCESS_KINDS = ['onboarding', 'offboarding', 'transfer'] as const
 const HRM_PROCESS_STATUSES = ['open', 'completed', 'cancelled'] as const
+
+// HR-16 begin: automation + reason-code report entities (0226/0227).
+export const AUTOMATIONS_READ_PERMISSION = 'automations.read'
+export const AUTOMATIONS_FEATURE_KEY = 'automations'
+export const HRM_ACTION_REASONS_FEATURE_KEY = 'hrmActionReasons'
+
+const AUTOMATION_STATUSES = ['draft', 'enabled', 'disabled', 'error'] as const
+const AUTOMATION_TRIGGER_KINDS = ['schedule', 'date_relative', 'field_change', 'event', 'document', 'manual'] as const
+const AUTOMATION_RUN_STATUSES = ['queued', 'running', 'succeeded', 'failed', 'skipped_no_match', 'simulated'] as const
+// HR-16 end
 const HRM_STEP_STATUSES = ['pending', 'done', 'skipped'] as const
 const HRM_STEP_OWNERS = ['manager', 'hr', 'employee', 'named_party'] as const
 const HRM_STEP_EVIDENCE = ['none', 'acknowledgement', 'attachment'] as const
@@ -219,6 +229,10 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
       },
       { key: 'applied_at', label: 'Applied at', kind: 'timestamp', expr: 'r.applied_at' },
       { key: 'reason', label: 'Reason', kind: 'text', expr: 'r.reason' },
+      // HR-16 begin: 0227 classification carried from submit onto the event.
+      { key: 'action', label: 'Action', kind: 'text', expr: 'r.action' },
+      { key: 'reason_code', label: 'Reason code', kind: 'text', expr: 'r.reason_code' },
+      // HR-16 end
       { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'r.created_at' },
       { key: 'id', label: 'Request (id)', kind: 'uuid', expr: 'r.id' },
       { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'r.employment_id' },
@@ -631,4 +645,84 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     ],
     defaultSort: { column: 'effective_from', direction: 'desc' },
   },
+  // HR-16 begin: the automation recipe register (0226) — one row per org
+  // recipe with its trigger kind, status, version, and last run. Recipes
+  // are platform configuration, so no subsidiary scope: visibility rides
+  // the automations.read grant and the automations switch.
+  {
+    key: 'automations',
+    label: 'Automations',
+    category: 'hrm',
+    description:
+      'One row per automation recipe — trigger kind, status, version, and last run. Requires the automations permission.',
+    from: `automations a`,
+    orgColumn: 'a.org_id',
+    requiredPermission: AUTOMATIONS_READ_PERMISSION,
+    featureKey: AUTOMATIONS_FEATURE_KEY,
+    defaultPeriodField: 'created_at',
+    columns: [
+      { key: 'name', label: 'Name', kind: 'text', expr: 'a.name' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'a.status', options: AUTOMATION_STATUSES },
+      { key: 'trigger_kind', label: 'Trigger', kind: 'enum', expr: `(a.trigger ->> 'kind')`, options: AUTOMATION_TRIGGER_KINDS },
+      { key: 'version', label: 'Version', kind: 'number', expr: 'a.version' },
+      { key: 'priority', label: 'Priority', kind: 'number', expr: 'a.priority' },
+      { key: 'last_run_at', label: 'Last run at', kind: 'timestamp', expr: 'a.last_run_at' },
+      { key: 'error_message', label: 'Error', kind: 'text', expr: 'a.error_message' },
+      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'a.created_at' },
+      { key: 'id', label: 'Automation (id)', kind: 'uuid', expr: 'a.id' },
+    ],
+    defaultSort: { column: 'name', direction: 'asc' },
+  },
+  // HR-16 begin: the automation run log (0226) — append-only firing
+  // evidence with the executed version, subject, steps, and error.
+  {
+    key: 'automation_runs',
+    label: 'Automation runs',
+    category: 'hrm',
+    description:
+      'One row per automation firing — executed version, subject, status, steps, and error. Requires the automations permission.',
+    from: `automation_runs r JOIN automations a ON a.id = r.automation_id AND a.org_id = r.org_id`,
+    orgColumn: 'r.org_id',
+    requiredPermission: AUTOMATIONS_READ_PERMISSION,
+    featureKey: AUTOMATIONS_FEATURE_KEY,
+    defaultPeriodField: 'created_at',
+    columns: [
+      { key: 'automation', label: 'Automation', kind: 'text', expr: 'a.name' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'r.status', options: AUTOMATION_RUN_STATUSES },
+      { key: 'version', label: 'Version', kind: 'number', expr: 'r.version' },
+      { key: 'subject_kind', label: 'Subject kind', kind: 'text', expr: 'r.subject_kind' },
+      { key: 'subject_id', label: 'Subject (id)', kind: 'uuid', expr: 'r.subject_id' },
+      { key: 'started_at', label: 'Started at', kind: 'timestamp', expr: 'r.started_at' },
+      { key: 'finished_at', label: 'Finished at', kind: 'timestamp', expr: 'r.finished_at' },
+      { key: 'error', label: 'Error', kind: 'text', expr: `(r.error ->> 'message')` },
+      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'r.created_at' },
+      { key: 'id', label: 'Run (id)', kind: 'uuid', expr: 'r.id' },
+    ],
+    defaultSort: { column: 'created_at', direction: 'desc' },
+  },
+  // HR-16 begin: the action/reason-code vocabulary (0227) — Setup-owned,
+  // read through the employment grant behind the hrmActionReasons switch.
+  {
+    key: 'hrm_action_reasons',
+    label: 'Action reasons',
+    category: 'hrm',
+    description:
+      'One row per reason code per HR action — the vocabulary change requests file under. Requires the HRM employment permission.',
+    from: `hrm_action_reasons r`,
+    orgColumn: 'r.org_id',
+    requiredPermission: HRM_EMPLOYMENT_READ_PERMISSION,
+    featureKey: HRM_ACTION_REASONS_FEATURE_KEY,
+    defaultPeriodField: 'created_at',
+    columns: [
+      { key: 'action', label: 'Action', kind: 'text', expr: 'r.action' },
+      { key: 'reason_code', label: 'Code', kind: 'text', expr: 'r.reason_code' },
+      { key: 'label', label: 'Label', kind: 'text', expr: 'r.label' },
+      { key: 'requires_comment', label: 'Requires comment', kind: 'boolean', expr: 'r.requires_comment' },
+      { key: 'is_active', label: 'Active', kind: 'boolean', expr: 'r.is_active' },
+      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'r.created_at' },
+      { key: 'id', label: 'Reason (id)', kind: 'uuid', expr: 'r.id' },
+    ],
+    defaultSort: { column: 'action', direction: 'asc' },
+  },
+  // HR-16 end
 ]

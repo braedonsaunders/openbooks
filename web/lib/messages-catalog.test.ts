@@ -2995,10 +2995,21 @@ test('admin namespace ships translated in zh and pt-BR', () => {
     'pt-BR:admin.setup.taxBoxes.manual|Manual',
     'pt-BR:admin.setup.taxLibrary.status|Status',
     'pt-BR:admin.users.statusFilter|Status',
+    'pt-BR:admin.automations.list.statusLabel|Status',
+    'pt-BR:admin.automations.list.columnStatus|Status',
+    'pt-BR:admin.automations.triggerKinds.manual|Manual',
+    'pt-BR:admin.automations.builder.cronLabel|Cron',
+    'pt-BR:admin.automations.builder.opLabel|Op',
+    'pt-BR:admin.automations.builder.simulateSubjectPlaceholder|leave_request:<id>',
+    'pt-BR:admin.automations.builder.stepStatus|Status',
+    'pt-BR:admin.automations.builder.runStatus|Status',
+    'zh:admin.automations.builder.cronLabel|Cron',
+    'zh:admin.automations.builder.simulateSubjectPlaceholder|leave_request:<id>',
   ])
   const source = flattenCatalog('en')
   const wanted = [...source.keys()].filter((key) => key.startsWith('admin.'))
   assert.equal(wanted.length, 3564, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  assert.equal(wanted.length, 3685, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3159,6 +3170,23 @@ test('admin copy ships translated in de and ja (i2)', () => {
   // list fails.
   const ADMIN_I2_COGNATES = new Set([
     'de:admin.users.linkPersonLabel',
+    'de:admin.automations.builder.cronLabel',
+    'de:admin.automations.builder.nameTitle',
+    'de:admin.automations.builder.opLabel',
+    'de:admin.automations.builder.rule_positionId',
+    'de:admin.automations.builder.runStatus',
+    'de:admin.automations.builder.runVersion',
+    'de:admin.automations.builder.stepDetail',
+    'de:admin.automations.builder.stepStatus',
+    'de:admin.automations.builder.triggerTitle',
+    'de:admin.automations.list.columnStatus',
+    'de:admin.automations.list.columnTrigger',
+    'de:admin.automations.list.nameLabel',
+    'de:admin.automations.list.statusLabel',
+    'de:admin.automations.list.triggerLabel',
+    'de:admin.features.automationSimulator.title',
+    'ja:admin.automations.builder.cronLabel',
+    'ja:admin.automations.builder.simulateSubjectPlaceholder',
     'de:admin.ai.agents.parameterLabel',
     'de:admin.ai.agents.units.percent',
     'de:admin.apiKeys.table.name',
@@ -3341,6 +3369,8 @@ test('admin copy ships translated in de and ja (i2)', () => {
   ])
   const ADMIN_I2_SOURCE_COUNT = 3564
   const ADMIN_I2_SOURCE_HASH = '5a7287d7cd9ce271ae2be34a62e6180579b61c1eaf80fb6cdabd44061acbbb2a'
+  const ADMIN_I2_SOURCE_COUNT = 3685
+  const ADMIN_I2_SOURCE_HASH = 'ce43d42a03336be0918e80747dd96a6db6d28067cfb001eecfc0b0269bed0dbf'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))
@@ -4411,6 +4441,7 @@ const I14_IDENTICAL_BY_FACT = new Set([
     'de:reports.catalog.columns.hrm_benefit_enrollments.plan|Plan',
     'de:reports.catalog.columns.hrm_benefit_enrollments.status|Status',
     'es:reports.catalog.columns.hrm_benefit_enrollments.plan|Plan',
+    'fr:reports.catalog.columns.hrm_change_requests.action|Action',
   // Spanish 'General' is the reviewed cognate for the payroll General sub-tab.
   'es:parties.drawer.payrollTabs.general|General',
     'de:reports.catalog.columns.hrm_employment_history.person|Person',
@@ -5116,6 +5147,8 @@ const I14_FILE_COUNTS: Record<string, number> = {
   "items": 161,
   "inventory": 159,
   "reports": 1363,
+  "inventory": 104,
+  "reports": 1371,
   "sync": 172,
   "login": 33,
   "accounts": 82,

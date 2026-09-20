@@ -981,7 +981,10 @@
     "hrm_self_read": "Ver o resumo do próprio vínculo",
     "hrm_self_request": "Apresentar alterações do próprio perfil",
     "hrm_team_read": "Ver subordinados diretos hoje",
-    "hrm_team_manage": "Trabalhar etapas atribuídas pelo gestor"
+    "hrm_team_manage": "Trabalhar etapas atribuídas pelo gestor",
+    "automations_read": "Ver receitas de automação e o histórico",
+    "automations_manage": "Criar automações e ajustes de aprovação",
+    "automations_run": "Executar automações agora"
   },
   "ai": {
     "metaTitle": "Configurações de IA",
@@ -2782,7 +2785,10 @@
       "body": "Corpo",
       "audience": "Público",
       "startsOn": "Começa em",
-      "endsOn": "Termina em"
+      "endsOn": "Termina em",
+      "action": "Ação",
+      "reasonCode": "Código de motivo",
+      "requiresComment": "Exige comentário"
     },
     "fieldHelp": {
       "gapless": "Sem lacunas significa que todos os números da sequência devem ser contabilizados, sem números pulados. Ative somente quando exigências legais ou de auditoria determinarem uma numeração ininterrupta.",
@@ -3263,6 +3269,22 @@
         "all": "Todos",
         "managers": "Gestores",
         "employees": "Funcionários"
+      },
+      "hrmAction": {
+        "hire": "Admissão",
+        "rehire": "Readmissão",
+        "transfer": "Transferência",
+        "promotion": "Promoção",
+        "demotion": "Rebaixamento",
+        "pay_change": "Alteração salarial",
+        "manager_change": "Troca de gestor",
+        "location_change": "Troca de unidade",
+        "schedule_change": "Alteração de jornada",
+        "leave_of_absence": "Licença",
+        "return": "Retorno",
+        "termination": "Desligamento",
+        "profile_change": "Alteração de perfil",
+        "other": "Outro"
       }
     },
     "payroll": {
@@ -4508,6 +4530,34 @@
     "allocationsAtPosting": {
       "title": "Rateios na contabilização",
       "description": "Deixe regras de rateio e scripts autorizados contribuírem linhas extras no razão para o lançamento contábil da transação na contabilização."
+    },
+    "automations": {
+      "title": "Automações",
+      "description": "Receitas baseadas em gatilhos sobre Flows — gatilhos de agenda, data, mudança de campo, evento, documento e manuais que executam ações ordenadas."
+    },
+    "automationDateTriggers": {
+      "title": "Gatilhos de data",
+      "description": "Executar receitas em datas relativas da entidade, como dias antes do início."
+    },
+    "automationFieldTriggers": {
+      "title": "Gatilhos de campo",
+      "description": "Executar receitas quando um campo monitorado muda."
+    },
+    "automationWebhooks": {
+      "title": "Ações webhook",
+      "description": "Chamar webhooks assinados declarados pela organização a partir das receitas."
+    },
+    "automationSimulator": {
+      "title": "Simulador",
+      "description": "Testar receitas contra assuntos reais sem gravações."
+    },
+    "hrmActionReasons": {
+      "title": "Códigos de ação e motivo",
+      "description": "Exigir ação de RH e código de motivo em cada solicitação de alteração."
+    },
+    "hrmEventVerbs": {
+      "title": "Verbos de evento de alteração",
+      "description": "Cancelar, rescindir e corrigir alterações de vínculo como eventos anexados."
     }
   },
   "backupsManager": {
@@ -4789,6 +4839,118 @@
       "previewAction": "Só prévia do formulário. Ações de backend rodam após a ativação, usando a versão instalada e suas permissões.",
       "previewRecords": "Prévia do formulário usando a definição de registro proposta. Após a ativação, este workspace usa a lista compartilhada, filtros e painéis laterais.",
       "existingRecordsPreview": "Esta tela referencia um tipo de registro existente. Registros reais ficam disponíveis após a ativação para usuários com acesso."
+    }
+  },
+  "automations": {
+    "title": "Automações",
+    "description": "Receitas baseadas em gatilhos sobre Flows — gatilhos de agenda, data, mudança de campo, evento, documento e manuais que executam ações ordenadas.",
+    "backToFlows": "Voltar aos fluxos",
+    "backToList": "Voltar às automações",
+    "list": {
+      "newButton": "Nova automação",
+      "newTitle": "Nova automação",
+      "nameLabel": "Nome",
+      "namePlaceholder": "ex. Tarefas de boas-vindas antes do início",
+      "nameRequired": "Dê um nome à automação.",
+      "triggerLabel": "Gatilho",
+      "createFailed": "Não foi possível criar a automação.",
+      "create": "Criar",
+      "cancel": "Cancelar",
+      "neverRan": "Nunca executada",
+      "statusLabel": "Status",
+      "emptyTitle": "Sem automações ainda",
+      "emptyDescription": "Automações executam ações ordenadas a partir de gatilhos de agenda, data, mudança de campo, evento, documento ou manuais.",
+      "columnAutomation": "Automação",
+      "columnStatus": "Status",
+      "columnTrigger": "Gatilho",
+      "columnLastRun": "Última execução",
+      "columnError": "Erro",
+      "columnActions": "Ações",
+      "runNow": "Executar agora",
+      "enable": "Ativar",
+      "disable": "Desativar",
+      "actionFailed": "A ação falhou."
+    },
+    "status": {
+      "enabled": "Ativada",
+      "draft": "Rascunho",
+      "disabled": "Desativada",
+      "error": "Erro"
+    },
+    "triggerKinds": {
+      "schedule": "Agenda",
+      "date_relative": "Relativo a data",
+      "field_change": "Mudança de campo",
+      "event": "Evento",
+      "document": "Documento",
+      "manual": "Manual"
+    },
+    "builder": {
+      "pageTitle": "Editor de automação",
+      "description": "Gatilho, quem e quando, ações, simulação e histórico.",
+      "buildTab": "Construir",
+      "runsTab": "Execuções",
+      "saved": "Salvo.",
+      "saveFailed": "Não foi possível salvar.",
+      "nameTitle": "Nome",
+      "saveName": "Salvar nome",
+      "triggerTitle": "Gatilho",
+      "saveTrigger": "Salvar gatilho",
+      "cronLabel": "Cron",
+      "timezoneLabel": "Fuso horário",
+      "entityLabel": "Entidade",
+      "dateFieldLabel": "Campo de data",
+      "offsetLabel": "Deslocamento (dias)",
+      "directionLabel": "Direção",
+      "before": "Antes",
+      "after": "Depois",
+      "atTimeLabel": "Às (HH:MM)",
+      "fieldLabel": "Campo",
+      "changedToLabel": "Mudou para (vazio = qualquer)",
+      "subjectKindLabel": "Tipo de assunto",
+      "eventKindLabel": "Evento",
+      "documentUploaded": "Enviado",
+      "documentSigned": "Assinado",
+      "documentTemplated": "De modelo",
+      "whoWhenTitle": "Quem e quando",
+      "whoWhenHelp": "Filtros de escopo limitam a quem a receita se aplica; a árvore de condições decide quando dispara.",
+      "rule_subsidiaryId": "Filial",
+      "rule_departmentId": "Departamento",
+      "rule_locationId": "Unidade",
+      "rule_workerType": "Tipo de vínculo",
+      "rule_positionId": "Cargo",
+      "ruleBlank": "Vazio = todos",
+      "conditionsMode": "Condições",
+      "conditionsAll": "Todas devem valer",
+      "conditionsAny": "Basta uma",
+      "opLabel": "Op",
+      "valueLabel": "Valor",
+      "remove": "Remover",
+      "addCondition": "Adicionar condição",
+      "saveWhoWhen": "Salvar quem e quando",
+      "actionsTitle": "Ações",
+      "actionKindLabel": "Tipo de ação",
+      "actionJsonLabel": "JSON da ação",
+      "addAction": "Adicionar ação",
+      "saveActions": "Salvar ações",
+      "simulateTitle": "Simular",
+      "simulateHelp": "Teste sem gravações — informe entidade:id ou deixe vazio para amostrar.",
+      "simulateSubjectLabel": "Assunto",
+      "simulateSubjectPlaceholder": "leave_request:<id>",
+      "simulateButton": "Simular",
+      "stepKind": "Etapa",
+      "stepStatus": "Status",
+      "stepDetail": "Detalhe",
+      "runStatus": "Status",
+      "runsEmpty": "Sem execuções.",
+      "runVersion": "Versão",
+      "runSubject": "Assunto",
+      "runCreated": "Criada",
+      "runSteps": "Etapas",
+      "viewSteps": "Etapas",
+      "stepsTitle": "Etapas da execução",
+      "runLoadFailed": "Não foi possível carregar a execução.",
+      "closeSteps": "Fechar"
     }
   }
 }

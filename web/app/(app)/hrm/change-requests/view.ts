@@ -49,6 +49,16 @@ export function changeRequestQueueSpec(data: ChangeRequestQueueData): PageSpec {
     column(f('columns.requester'), text(item('requesterLabel'))),
     column(f('columns.submitted'), text(item('submittedLabel'), { className: 'tabular-nums' })),
     column(f('statusHeader'), badge(item('statusLabel'), { variant: item('statusVariant') })),
+    // HR-16 begin: classification + verb chips (0227). actionDisplay is null
+    // when unclassified (feature off); verbLabel only when not a plain apply.
+    column(f('actionHeader'), text(item('actionDisplay'))),
+    // Verb chips render through a conditional cell (null = no chip), the
+    // same conditional-pair pattern as the flows last-run cell.
+    column(
+      f('verbHeader'),
+      widgetCell('hrm-verb-chip', { label: item('verbLabel') }),
+    ),
+    // HR-16 end
   ]
   if (data.canManage) {
     columns.push(
@@ -58,6 +68,7 @@ export function changeRequestQueueSpec(data: ChangeRequestQueueData): PageSpec {
           requestId: item('id'),
           requestStatus: item('status'),
           employmentId: item('employmentId'),
+          appliedChangeId: item('appliedChangeId'),
           departmentOptions: rootF('departmentOptions'),
         }),
       ),
@@ -78,6 +89,13 @@ export function changeRequestQueueSpec(data: ChangeRequestQueueData): PageSpec {
             { href: f('proposeHref'), label: f('proposeButton'), iconKey: 'plus' },
             f('canManage'),
           ),
+          // HR-16 begin: rehomed reason-code setup beside the queue.
+          widget(
+            'link-button',
+            { href: f('reasonsHref'), label: f('reasonsLabel'), iconKey: 'tag' },
+            f('canEditReasons'),
+          ),
+          // HR-16 end
           widget('module-home-tabs', { tabs: data.tabs }),
         ],
       }),
@@ -120,7 +138,7 @@ export function changeRequestQueueSpec(data: ChangeRequestQueueData): PageSpec {
                       trailing: [
                         spanRow({
                           label: f('truncatedNote'),
-                          labelColSpan: data.canManage ? 7 : 6,
+                          labelColSpan: data.canManage ? 9 : 8,
                           labelClassName:
                             'text-center text-xs text-slate-400 dark:text-slate-500',
                           cells: [],
@@ -146,6 +164,19 @@ export function changeRequestQueueSpec(data: ChangeRequestQueueData): PageSpec {
         ]),
         when: f('hasContent'),
       },
+      // HR-16 begin: the rehomed reason-code setup section (?reasons=1).
+      // Rendered by the generic setup surface over the hrm-action-reasons
+      // registry entity; hidden while the feature is off or the viewer
+      // cannot manage.
+      {
+        ...widgetBlock('setup-section', {
+          entityKey: 'hrm-action-reasons',
+          basePath: '/hrm/change-requests',
+          sp: data.currentParams,
+        }),
+        when: f('showReasons'),
+      },
+      // HR-16 end
     ],
   })
 }

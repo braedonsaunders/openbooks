@@ -160,7 +160,9 @@
       "kind": "变更",
       "effective": "生效",
       "requester": "申请人",
-      "submitted": "已提交"
+      "submitted": "已提交",
+      "action": "操作",
+      "verb": "动词"
     },
     "emptyTitle": "此处没有变更申请",
     "emptyDescription": "该视图为空 — 此分段中尚未提出任何申请。",
@@ -172,7 +174,14 @@
     "proposeFailed": "雇佣列表加载失败。",
     "draftBadge": "操作",
     "openEmployee": "打开员工档案",
-    "notAvailable": "不可用"
+    "notAvailable": "不可用",
+    "reasonsButton": "原因代码",
+    "verbs": {
+      "apply": "应用",
+      "cancel": "取消",
+      "rescind": "撤销",
+      "correct": "更正"
+    }
   },
   "employment": {
     "episodes": {
@@ -290,7 +299,18 @@
       "positionHint": "此任命所占据的拨款编制。任命保留其自身的职务、部门和地点。",
       "positionRequired": "请选择一个职位，或将该任命标记为未任命。",
       "unassignLabel": "解除职位任命",
-      "unassignHint": "记录显式空链接：该槽位保留其内容，但不占据编制。"
+      "unassignHint": "记录显式空链接：该槽位保留其内容，但不占据编制。",
+      "actionLabel": "操作",
+      "actionPlaceholder": "选择操作",
+      "actionRequired": "请选择本次变更的HR操作。",
+      "reasonCodeLabel": "原因",
+      "reasonCodePlaceholder": "选择原因",
+      "rescindAction": "撤销",
+      "correctAction": "更正",
+      "rescindTitle": "撤销变更",
+      "correctTitle": "更正变更",
+      "rescindToast": "已撤销变更。",
+      "correctToast": "已记录更正。"
     },
     "exit": {
       "title": "离职记录",
@@ -1047,6 +1067,24 @@
       "changeReasonPlaceholder": "保障变更的原因",
       "changeSubmit": "保存变更",
       "changeFailed": "无法记录该变更。"
+    }
+  },
+  "options": {
+    "hrmAction": {
+      "hire": "入职",
+      "rehire": "重新入职",
+      "transfer": "调动",
+      "promotion": "晋升",
+      "demotion": "降职",
+      "pay_change": "薪酬变更",
+      "manager_change": "上级变更",
+      "location_change": "地点变更",
+      "schedule_change": "班次变更",
+      "leave_of_absence": "休假",
+      "return": "返岗",
+      "termination": "离职",
+      "profile_change": "档案变更",
+      "other": "其他"
     }
   }
 }

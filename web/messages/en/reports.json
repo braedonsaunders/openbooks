@@ -680,6 +680,18 @@
       "hrm_benefit_enrollments": {
         "label": "Benefit enrolments",
         "description": "One row per benefit election — person, employer, department at election, plan and coverage tier, status, and stored per-period amounts. Requires the HRM benefits permission."
+      },
+      "automations": {
+        "label": "Automations",
+        "description": "One row per automation recipe — trigger kind, status, version, and last run. Requires the automations permission."
+      },
+      "automation_runs": {
+        "label": "Automation runs",
+        "description": "One row per automation firing — executed version, subject, status, steps, and error. Requires the automations permission."
+      },
+      "hrm_action_reasons": {
+        "label": "Action reasons",
+        "description": "One row per reason code per HR action — the vocabulary change requests file under. Requires the HRM employment permission."
       }
     },
     "columns": {
@@ -1245,7 +1257,9 @@
         "reason": "Reason",
         "created_at": "Created at",
         "id": "Request (id)",
-        "employment_id": "Employment (id)"
+        "employment_id": "Employment (id)",
+        "action": "Action",
+        "reason_code": "Reason code"
       },
       "hrm_positions": {
         "code": "Code",

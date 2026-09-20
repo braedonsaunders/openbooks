@@ -680,6 +680,18 @@
       "hrm_benefit_enrollments": {
         "label": "福利厚生加入",
         "description": "加入ごと1行 — 加入者、雇用者、加入時の部門、プランと保障区分、状態、期間ごとの保存金額。福利厚生権限が必要。"
+      },
+      "automations": {
+        "label": "自動化",
+        "description": "自動化レシピごとに1行 — トリガー種別、ステータス、バージョン、最終実行。自動化権限が必要です。"
+      },
+      "automation_runs": {
+        "label": "自動化実行",
+        "description": "自動化の実行ごとに1行 — 実行バージョン、サブジェクト、ステータス、ステップ、エラー。自動化権限が必要です。"
+      },
+      "hrm_action_reasons": {
+        "label": "アクション理由",
+        "description": "HRアクションごとの理由コードに1行 — 変更申請の語彙。HR雇用権限が必要です。"
       }
     },
     "columns": {
@@ -1245,7 +1257,9 @@
         "reason": "理由",
         "created_at": "作成日時",
         "id": "申請（ID）",
-        "employment_id": "雇用（ID）"
+        "employment_id": "雇用（ID）",
+        "action": "アクション",
+        "reason_code": "理由コード"
       },
       "hrm_positions": {
         "code": "コード",

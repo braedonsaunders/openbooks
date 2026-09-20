@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { getAutomationRun } from "@openbooks/engine/src/automations/services.ts";
-import { guardPermission } from "../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../lib/features";
-import { isUuid } from "../../../../lib/list-params";
-import { automationErrorResponse } from "../_lib";
+import { guardPermission } from "../../../../../lib/authz";
+import { isFeatureEnabled } from "../../../../../lib/features";
+import { isUuid } from "../../../../../lib/list-params";
+import { automationErrorResponse } from "../../_lib";
 
 export const runtime = "nodejs";
 

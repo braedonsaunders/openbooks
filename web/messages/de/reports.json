@@ -680,6 +680,18 @@
       "hrm_benefit_enrollments": {
         "label": "Leistungsanmeldungen",
         "description": "Eine Zeile je Leistungsanmeldung — Person, Arbeitgeber, Abteilung bei Anmeldung, Plan und Deckungsstufe, Status und gespeicherte Beträge je Periode. Erfordert die Leistungsberechtigung."
+      },
+      "automations": {
+        "label": "Automatisierungen",
+        "description": "Eine Zeile pro Automatisierungsrezept — Triggerart, Status, Version und letzte Ausführung. Erfordert die Automatisierungsberechtigung."
+      },
+      "automation_runs": {
+        "label": "Automatisierungsläufe",
+        "description": "Eine Zeile pro Automatisierungsauslösung — ausgeführte Version, Subjekt, Status, Schritte und Fehler. Erfordert die Automatisierungsberechtigung."
+      },
+      "hrm_action_reasons": {
+        "label": "Aktionsgründe",
+        "description": "Eine Zeile pro Grundcode und HR-Aktion — das Vokabular der Änderungsanträge. Erfordert die HR-Beschäftigungsberechtigung."
       }
     },
     "columns": {
@@ -1245,7 +1257,9 @@
         "reason": "Begründung",
         "created_at": "Erstellt am",
         "id": "Antrag (ID)",
-        "employment_id": "Beschäftigung (ID)"
+        "employment_id": "Beschäftigung (ID)",
+        "action": "Aktion",
+        "reason_code": "Grundcode"
       },
       "hrm_positions": {
         "code": "Code",

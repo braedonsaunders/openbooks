@@ -27,7 +27,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const { validateSubmitActionReason } = await import(
       "@openbooks/engine/src/automations/action-reasons.ts"
     );
-    const { automationErrorResponse } = await import("../../../automations/_lib");
+    const { automationErrorResponse } = await import("../../../../automations/_lib");
     try {
       await validateSubmitActionReason({
         orgId: gate.user.orgId,

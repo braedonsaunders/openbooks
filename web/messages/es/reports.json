@@ -680,6 +680,18 @@
       "hrm_benefit_enrollments": {
         "label": "Inscripciones de beneficios",
         "description": "Una fila por inscripción de beneficios — persona, empleador, departamento al inscribirse, plan y nivel de cobertura, estado e importes guardados por período. Requiere el permiso de beneficios."
+      },
+      "automations": {
+        "label": "Automatizaciones",
+        "description": "Una fila por receta de automatización: tipo de desencadenante, estado, versión y última ejecución. Requiere el permiso de automatizaciones."
+      },
+      "automation_runs": {
+        "label": "Ejecuciones de automatización",
+        "description": "Una fila por ejecución: versión ejecutada, sujeto, estado, pasos y error. Requiere el permiso de automatizaciones."
+      },
+      "hrm_action_reasons": {
+        "label": "Motivos de acción",
+        "description": "Una fila por código de motivo y acción de RR. HH.: el vocabulario de las solicitudes de cambio. Requiere el permiso de empleo de RR. HH."
       }
     },
     "columns": {
@@ -1245,7 +1257,9 @@
         "reason": "Motivo",
         "created_at": "Creado el",
         "id": "Solicitud (id)",
-        "employment_id": "Empleo (id)"
+        "employment_id": "Empleo (id)",
+        "action": "Acción",
+        "reason_code": "Código de motivo"
       },
       "hrm_positions": {
         "code": "Código",

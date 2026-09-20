@@ -46,6 +46,13 @@ export type EditableChangeRequest = {
 
 const KINDS: ChangeRequestKind[] = ['hire', 'status_change', 'assignment_change', 'termination', 'position_assignment']
 
+/** Generic HR actions (0227) classing every change request while hrmActionReasons is on. */
+const HRM_ACTIONS = [
+  'hire', 'rehire', 'transfer', 'promotion', 'demotion', 'pay_change',
+  'manager_change', 'location_change', 'schedule_change',
+  'leave_of_absence', 'return', 'termination', 'profile_change', 'other',
+]
+
 const HIRE_STATUSES = ['offered', 'active', 'on_leave', 'suspended'] as const
 const ALL_STATUSES = ['offered', 'active', 'on_leave', 'suspended', 'terminated'] as const
 
@@ -117,6 +124,13 @@ export function ChangeRequestDrawer({
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // HR-16 begin: action/reason classification (0227). reasonsOn false = the
+  // hrmActionReasons feature is off: the selects hide and submit ignores
+  // classification entirely.
+  const [action, setAction] = useState('')
+  const [reasonCode, setReasonCode] = useState('')
+  const [reasonsOn, setReasonsOn] = useState(false)
+  const [reasonOptions, setReasonOptions] = useState<{ action: string; reasonCode: string; label: string }[]>([])
   const managerRequestId = useRef(0)
   const locationRequestId = useRef(0)
   const positionRequestId = useRef(0)
@@ -210,6 +224,8 @@ export function ChangeRequestDrawer({
   // same bounded-page, sequence-guarded, pin-first composition as the
   // manager and location pickers. A refusal (no position read grant) lands
   // in the picker status line with its message, never as an empty list.
+  // HR-16: reason codes load once; a 404 means the hrmActionReasons feature
+  // is off and the selects stay hidden (submit then ignores classification).
   useEffect(() => {
     const id = (positionRequestId.current += 1)
     const params = new URLSearchParams()
@@ -249,6 +265,26 @@ export function ChangeRequestDrawer({
         setPositionLoading(false)
       })
   }, [positionQuery, positionId, t])
+
+  useEffect(() => {
+    fetch('/api/hrm/action-reasons', { method: 'GET' })
+      .then(async (res) => {
+        if (!res.ok) return
+        const payload = (await res.json().catch(() => ({}))) as {
+          reasons?: { action?: unknown; reasonCode?: unknown; label?: unknown }[]
+        }
+        const list = Array.isArray(payload.reasons) ? payload.reasons : []
+        const valid = list.filter(
+          (r) => typeof r.action === 'string' && typeof r.reasonCode === 'string' && typeof r.label === 'string',
+        ) as { action: string; reasonCode: string; label: string }[]
+        setReasonOptions(valid)
+        setReasonsOn(true)
+      })
+      .catch(() => {
+        // Unreachable route or network failure: classification stays off
+        // and submit ignores it, never a refusal for a hidden control.
+      })
+  }, [])
 
   const kindLabel = (value: ChangeRequestKind): string =>
     value === 'hire'
@@ -334,10 +370,18 @@ export function ChangeRequestDrawer({
   }
 
   async function submitDraft(requestId: string, submitReason: string): Promise<boolean> {
+    // HR-16: classification rides submit only while the feature is on.
+    if (reasonsOn && !action) {
+      setError(t('employment.changeRequests.actionRequired'))
+      return false
+    }
     const res = await fetch(`/api/hrm/change-requests/${requestId}/submit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reason: submitReason }),
+      body: JSON.stringify({
+        reason: submitReason,
+        ...(reasonsOn && action ? { action, ...(reasonCode ? { reasonCode } : {}) } : {}),
+      }),
     })
     if (!res.ok) {
       const message = await readApiErrorMessage(res, t('employment.changeRequests.requestFailed'))
@@ -759,6 +803,51 @@ export function ChangeRequestDrawer({
           </>
         ) : null}
 
+        {reasonsOn ? (
+          <>
+            <div className="space-y-1.5">
+              <Label htmlFor="cr-action">{t('employment.changeRequests.actionLabel')}</Label>
+              <Select
+                id="cr-action"
+                value={action}
+                disabled={busy}
+                onChange={(event) => {
+                  setAction(event.target.value)
+                  setReasonCode('')
+                  setError(null)
+                }}
+              >
+                <option value="">{t('employment.changeRequests.actionPlaceholder')}</option>
+                {HRM_ACTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {t.has(`options.hrmAction.${option}`) ? t(`options.hrmAction.${option}`) : option}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="cr-reason-code">{t('employment.changeRequests.reasonCodeLabel')}</Label>
+              <Select
+                id="cr-reason-code"
+                value={reasonCode}
+                disabled={busy || !action}
+                onChange={(event) => {
+                  setReasonCode(event.target.value)
+                  setError(null)
+                }}
+              >
+                <option value="">{t('employment.changeRequests.reasonCodePlaceholder')}</option>
+                {reasonOptions
+                  .filter((r) => r.action === action)
+                  .map((r) => (
+                    <option key={r.reasonCode} value={r.reasonCode}>
+                      {r.label}
+                    </option>
+                  ))}
+              </Select>
+            </div>
+          </>
+        ) : null}
         <div className="space-y-1.5">
           <Label htmlFor="cr-reason">{t('employment.changeRequests.reasonLabel')}</Label>
           <Textarea

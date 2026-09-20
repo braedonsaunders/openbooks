@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { automationRecipes } from "@openbooks/engine/src/automations/services.ts";
-import { guardPermission } from "../../../lib/authz";
-import { isFeatureEnabled } from "../../../lib/features";
+import { guardPermission } from "../../../../lib/authz";
+import { isFeatureEnabled } from "../../../../lib/features";
 import { automationErrorResponse } from "../_lib";
 
 export const runtime = "nodejs";

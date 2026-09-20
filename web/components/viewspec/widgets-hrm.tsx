@@ -10,7 +10,7 @@ import {
 } from '../../app/(app)/hrm/sections'
 import { PositionDrawer } from '../../app/(app)/hrm/positions/sections'
 import { RecruitingDrawer } from '../../app/(app)/hrm/recruiting/sections'
-import { ChangeRequestRowActions } from '../../app/(app)/hrm/change-requests/ChangeRequestRowActions'
+import { ChangeRequestRowActions, HrmVerbChip } from '../../app/(app)/hrm/change-requests/ChangeRequestRowActions'
 import { ProposeChangeDialog } from '../../app/(app)/hrm/change-requests/ProposeChangeDialog'
 import { LeaveDialog } from '../../app/(app)/hrm/leave/LeaveDialog'
 import { EnrollmentRowActions } from '../../app/(app)/hrm/benefits/EnrollmentRowActions'
@@ -40,9 +40,14 @@ export const HRM_WIDGETS = {
       requestId={str(props, 'requestId') ?? ''}
       requestStatus={str(props, 'requestStatus') ?? ''}
       employmentId={str(props, 'employmentId') ?? ''}
+      appliedChangeId={str(props, 'appliedChangeId') ?? null}
       departmentOptions={(props.departmentOptions as ComponentProps<typeof ChangeRequestRowActions>['departmentOptions']) ?? []}
     />
   ),
+  /** HR-16 begin: the applied event's verb chip (0227) — renders only when
+   *  the loader resolved a non-apply verb; null rows render nothing. */
+  'hrm-verb-chip': (props) => <HrmVerbChip label={str(props, 'label')} />,
+  // HR-16 end
   /** The propose-change dialog, opened from the page header through the
    *  `propose` search param; closing navigates the param away. */
   'hrm-propose-change-dialog': (props) => (

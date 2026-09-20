@@ -2,8 +2,8 @@ import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { saveApprovalSettings } from "@openbooks/engine/src/automations/services.ts";
 import { loadApprovalSettings } from "@openbooks/engine/src/automations/approvals.ts";
-import { guardPermission } from "../../../lib/authz";
-import { isFeatureEnabled } from "../../../lib/features";
+import { guardPermission } from "../../../../lib/authz";
+import { isFeatureEnabled } from "../../../../lib/features";
 import { approvalSettingsBody } from "../bodies";
 import { automationErrorResponse } from "../_lib";
 

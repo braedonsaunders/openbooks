@@ -148,6 +148,30 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/admin/automations': {
+    route: '/admin/automations',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/admin/automations/view')
+      return {
+        load: (input) => m.loadAutomations(input.searchParams ?? {}),
+        spec: (data) => m.automationsSpec(data as never),
+      }
+    },
+  },
+  '/admin/automations/[id]': {
+    route: '/admin/automations/[id]',
+    segments: ['id'],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/admin/automations/[id]/view')
+      return {
+        load: (input) => m.loadAutomationBuilder(segment(input, 'id')),
+        spec: (data) => m.automationBuilderSpec(data as never),
+      }
+    },
+  },
   '/admin/backups': {
     route: '/admin/backups',
     segments: [],

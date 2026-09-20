@@ -160,7 +160,9 @@
       "kind": "Changement",
       "effective": "Effet",
       "requester": "Demandeur",
-      "submitted": "Soumise"
+      "submitted": "Soumise",
+      "action": "Action",
+      "verb": "Verbe"
     },
     "emptyTitle": "Aucune demande de changement ici",
     "emptyDescription": "Cette vue est vide — rien n'a encore été proposé dans ce segment.",
@@ -172,7 +174,14 @@
     "proposeFailed": "La liste des emplois n'a pas pu être chargée.",
     "draftBadge": "Actions",
     "openEmployee": "Ouvrir le dossier de l'employé",
-    "notAvailable": "Non disponible"
+    "notAvailable": "Non disponible",
+    "reasonsButton": "Codes de motif",
+    "verbs": {
+      "apply": "Appliquer",
+      "cancel": "Annuler",
+      "rescind": "Rescinder",
+      "correct": "Corriger"
+    }
   },
   "employment": {
     "episodes": {
@@ -290,7 +299,18 @@
       "positionHint": "L'effectif financé qu'occupe cette affectation. L'affectation conserve son propre intitulé, service et lieu.",
       "positionRequired": "Choisissez un poste ou marquez l'affectation comme non affectée.",
       "unassignLabel": "Retirer du poste",
-      "unassignHint": "Enregistre un lien nul explicite : l'emplacement conserve son contenu mais n'occupe aucun effectif."
+      "unassignHint": "Enregistre un lien nul explicite : l'emplacement conserve son contenu mais n'occupe aucun effectif.",
+      "actionLabel": "Action",
+      "actionPlaceholder": "Choisir une action",
+      "actionRequired": "Choisissez l'action RH de ce changement.",
+      "reasonCodeLabel": "Motif",
+      "reasonCodePlaceholder": "Choisir un motif",
+      "rescindAction": "Rescinder",
+      "correctAction": "Corriger",
+      "rescindTitle": "Rescinder le changement",
+      "correctTitle": "Corriger le changement",
+      "rescindToast": "Changement rescindé.",
+      "correctToast": "Correction enregistrée."
     },
     "exit": {
       "title": "Fiche de sortie",
@@ -1047,6 +1067,24 @@
       "changeReasonPlaceholder": "Pourquoi la couverture change",
       "changeSubmit": "Enregistrer la modification",
       "changeFailed": "La modification n'a pas pu être enregistrée."
+    }
+  },
+  "options": {
+    "hrmAction": {
+      "hire": "Embauche",
+      "rehire": "Réembauche",
+      "transfer": "Mutation",
+      "promotion": "Promotion",
+      "demotion": "Rétrogradation",
+      "pay_change": "Changement de salaire",
+      "manager_change": "Changement de manager",
+      "location_change": "Changement de site",
+      "schedule_change": "Changement d'horaire",
+      "leave_of_absence": "Congé",
+      "return": "Retour",
+      "termination": "Départ",
+      "profile_change": "Changement de profil",
+      "other": "Autre"
     }
   }
 }

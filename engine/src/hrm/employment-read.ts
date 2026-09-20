@@ -611,6 +611,10 @@ export interface EmploymentChangeRequestDTO {
   readonly expectedEmploymentRevision: number;
   readonly payloadSchemaVersion: string;
   readonly reason: string | null;
+  /** Generic HR action (0227); null when unclassified. */
+  readonly action: string | null;
+  /** Reason code (0227); null when unclassified. */
+  readonly reasonCode: string | null;
   readonly submittedBy: string | null;
   readonly submittedAt: string | null;
   /** Native approval run anchor; null in draft (drafts never carry a run). */
@@ -631,6 +635,8 @@ type ChangeRequestJson = {
   expected_employment_revision: number;
   payload_schema_version: string;
   reason: string | null;
+  action: string | null;
+  reason_code: string | null;
   submitted_by: string | null;
   submitted_at: string | null;
   flow_run_id: string | null;
@@ -662,7 +668,7 @@ export async function loadEmploymentChangeRequests(
   const rows = (await exec.execute<ChangeRequestJson>(sql`
     select r.id::text as id, r.status,
            r.request_revision, r.expected_employment_revision,
-           r.payload_schema_version, r.reason,
+           r.payload_schema_version, r.reason, r.action, r.reason_code,
            r.submitted_by::text as submitted_by,
            to_char(r.submitted_at at time zone 'UTC', ${RECORDED_TEXT}) as submitted_at,
            r.flow_run_id::text as flow_run_id,
@@ -683,6 +689,8 @@ export async function loadEmploymentChangeRequests(
     expectedEmploymentRevision: row.expected_employment_revision,
     payloadSchemaVersion: row.payload_schema_version,
     reason: row.reason,
+    action: row.action,
+    reasonCode: row.reason_code,
     submittedBy: row.submitted_by,
     submittedAt: row.submitted_at,
     flowRunId: row.flow_run_id,
