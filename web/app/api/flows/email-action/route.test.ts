@@ -104,22 +104,30 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    "mock:authz",
-    `
-      export function subsidiaryScopeAllows(scope, subsidiaryId) {
-        if (scope === null) return true
-        if (subsidiaryId === null || subsidiaryId === undefined || subsidiaryId === "") return false
-        return scope.has(subsidiaryId)
-      }
-    `,
-  ],
-  [
     "mock:lib",
     `
       const state = globalThis[Symbol.for('openbooks.email-action-route-test')]
       export async function loadFlowSubjectSubsidiary() {
         return state.summary.subsidiary_id
       }
+    `,
+  ],
+  [
+    "mock:auth-session",
+    `
+      export async function currentUser() { return null }
+    `,
+  ],
+  [
+    "mock:authz-subsidiaries",
+    `
+      export async function allowedSubsidiaryIds() { return null }
+    `,
+  ],
+  [
+    "mock:next-navigation",
+    `
+      export function redirect() { throw new Error('redirect is not used by subsidiaryScopeAllows') }
     `,
   ],
 ]);
@@ -129,18 +137,24 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/flows/index.ts", "mock:flows"],
   ["../../../../lib/features", "mock:features"],
   ["../../../../lib/subsidiaries", "mock:subsidiaries"],
-  ["../../../../lib/authz", "mock:authz"],
   ["../_lib", "mock:lib"],
+  ["next/navigation", "mock:next-navigation"],
 ]);
 
 const hooks = registerHooks({
-  resolve(specifier, _context, nextResolve) {
+  resolve(specifier, context, nextResolve) {
     if (specifier === "server-only") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
     }
+    // Session machinery is unused; the production subsidiaryScopeAllows
+    // helper must load from web/lib/authz.ts so a permissive rewrite fails.
+    if (context.parentURL?.includes("/lib/authz")) {
+      if (specifier === "./auth") return { url: "mock:auth-session", shortCircuit: true };
+      if (specifier === "./subsidiaries") return { url: "mock:authz-subsidiaries", shortCircuit: true };
+    }
     const mocked = mockUrls.get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, _context);
+    return nextResolve(specifier, context);
   },
   load(url, _context, nextLoad) {
     const source = mockSources.get(url);
@@ -153,6 +167,7 @@ const hooks = registerHooks({
 // honoured; kept in a variable so the type checker resolves "./route.ts".
 const routeUrl = "./route.ts?email-action-refusal";
 const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");
+const { subsidiaryScopeAllows } = (await import("../../../../lib/authz.ts")) as typeof import("../../../../lib/authz");
 hooks.deregister();
 
 function reset(allowedSubsidiaryIds: Set<string> | null = null): void {
@@ -236,6 +251,12 @@ test("a completed one-click decision still renders its confirmation", async () =
       comment: null,
     },
   ]);
+});
+
+test("the production subsidiary guard refuses an id outside the allowed set", () => {
+  assert.equal(subsidiaryScopeAllows(new Set([OTHER_SUBSIDIARY]), SUBJECT_SUBSIDIARY), false);
+  assert.equal(subsidiaryScopeAllows(new Set([SUBJECT_SUBSIDIARY]), SUBJECT_SUBSIDIARY), true);
+  assert.equal(subsidiaryScopeAllows(null, SUBJECT_SUBSIDIARY), true);
 });
 
 test("a restricted assignee cannot decide an out-of-scope gate from the email link", async () => {
