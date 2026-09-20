@@ -25,7 +25,7 @@ import Link from 'next/link'
 import { str, type WidgetRenderer } from './widget-props'
 
 /** Banking adapters. Compose native components without changing their props or boundaries. */
-export const BANKING_WIDGETS: Record<string, WidgetRenderer> = {
+export const BANKING_WIDGETS = {
 
   /* --- banking cockpit ------------------------------------------------------- */
   /** A widget, not a slot: the LOADER already did the roster's server work and
@@ -316,4 +316,4 @@ export const BANKING_WIDGETS: Record<string, WidgetRenderer> = {
     if (!drawer) return null
     return <StatementDrawer {...drawer} />
   },
-}
+} satisfies Record<string, WidgetRenderer>

@@ -19,7 +19,7 @@ import { TaxPoolsView } from '../../app/(app)/assets/tax-pools/TaxPoolsView'
 import { str, type WidgetRenderer } from './widget-props'
 
 /** Assets, depreciation and tax adapters. Compose native components without changing their props or boundaries. */
-export const ASSETS_TAX_WIDGETS: Record<string, WidgetRenderer> = {
+export const ASSETS_TAX_WIDGETS = {
 
   /* --- tax provision list ----------------------------------------------------------- */
   /** The empty state lives INSIDE the component: the native empty path keeps
@@ -221,4 +221,4 @@ export const ASSETS_TAX_WIDGETS: Record<string, WidgetRenderer> = {
       defaultTaxYear={typeof props.defaultTaxYear === 'number' ? props.defaultTaxYear : 0}
     />
   ),
-}
+} satisfies Record<string, WidgetRenderer>

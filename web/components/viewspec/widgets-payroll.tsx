@@ -21,7 +21,7 @@ import Link from 'next/link'
 import { str, num, type WidgetRenderer } from './widget-props'
 
 /** Payroll adapters. Compose native components without changing their props or boundaries. */
-export const PAYROLL_WIDGETS: Record<string, WidgetRenderer> = {
+export const PAYROLL_WIDGETS = {
 
   /* --- payroll retro ---------------------------------------------------------------- */
   /** Money stays canonical: the workspace formats client-side in the
@@ -289,4 +289,4 @@ export const PAYROLL_WIDGETS: Record<string, WidgetRenderer> = {
       <ArrowUpRight size={15} />
     </Link>
   ),
-}
+} satisfies Record<string, WidgetRenderer>

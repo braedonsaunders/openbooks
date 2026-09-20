@@ -34,7 +34,7 @@ import { CustomReportActions } from '../../app/(app)/reports/custom/CustomReport
 import { str, num, stringRecord, type WidgetRenderer } from './widget-props'
 
 /** Reporting adapters. Compose native components without changing their props or boundaries. */
-export const REPORTING_WIDGETS: Record<string, WidgetRenderer> = {
+export const REPORTING_WIDGETS = {
   /**
    * The statement matrix. Placed whole rather than decomposed into `table`
    * blocks: it owns variance percentages, scale divisors, hierarchical line
@@ -293,4 +293,4 @@ export const REPORTING_WIDGETS: Record<string, WidgetRenderer> = {
       />
     )
   },
-}
+} satisfies Record<string, WidgetRenderer>
