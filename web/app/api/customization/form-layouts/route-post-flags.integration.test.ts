@@ -4,10 +4,9 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 
 // Live-Postgres regression for POST /api/customization/form-layouts.
-// isDefault is coerced with !!, but isActive rode `${body.isActive ?? true}`
-// straight into the boolean column: a non-boolean JSON value either throws
-// 22P02 (raw 500 through the route's catch-all) or coerces silently — the
-// same unhandled-storage class as the [id] PATCH flags.
+// isDefault and isActive must be real booleans when present. A non-boolean
+// used to coerce isDefault via !! (so the string "false" stole the org
+// default) or ride isActive into the column (22P02 / silent coerce).
 
 const stateKey = Symbol.for("openbooks.form-layout-post-bool-test");
 interface RouteState {
@@ -87,6 +86,77 @@ async function layoutCount(orgId: string): Promise<number> {
     select count(*)::int as c from form_layouts where org_id = ${orgId}`);
   return Number(r.rows[0]?.c ?? 0);
 }
+
+async function defaultNames(orgId: string): Promise<string[]> {
+  const r = await db.execute<{ name: string }>(sql`
+    select name from form_layouts where org_id = ${orgId} and is_default order by name`);
+  return r.rows.map((row) => row.name);
+}
+
+test(
+  "POST refuses a non-boolean isDefault with a 400 and does not steal the org default",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const f = await seed();
+    const prior = await POST(
+      postRequest({
+        recordType: "vendor_bill",
+        name: "Prior default",
+        layout: defaultFormLayout("vendor_bill"),
+        isDefault: true,
+      }),
+    );
+    assert.equal(prior.status, 200);
+    const res = await POST(
+      postRequest({
+        recordType: "vendor_bill",
+        name: "Thief",
+        layout: defaultFormLayout("vendor_bill"),
+        isDefault: "false",
+      }),
+    );
+    assert.equal(res.status, 400);
+    assert.equal((await res.json()).error, "isDefault must be a boolean");
+    assert.equal(await layoutCount(f.orgId), 1, "rejected create must store no row");
+    assert.deepEqual(await defaultNames(f.orgId), ["Prior default"]);
+  },
+);
+
+test(
+  "POST still accepts an omitted or real-boolean isDefault",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const f = await seed();
+    const implicit = await POST(
+      postRequest({
+        recordType: "vendor_bill",
+        name: "Implicit default flag",
+        layout: defaultFormLayout("vendor_bill"),
+      }),
+    );
+    assert.equal(implicit.status, 200);
+    const explicitFalse = await POST(
+      postRequest({
+        recordType: "vendor_bill",
+        name: "Explicit nondefault",
+        layout: defaultFormLayout("vendor_bill"),
+        isDefault: false,
+      }),
+    );
+    assert.equal(explicitFalse.status, 200);
+    const explicitTrue = await POST(
+      postRequest({
+        recordType: "vendor_bill",
+        name: "Explicit default",
+        layout: defaultFormLayout("vendor_bill"),
+        isDefault: true,
+      }),
+    );
+    assert.equal(explicitTrue.status, 200);
+    assert.equal(await layoutCount(f.orgId), 3);
+    assert.deepEqual(await defaultNames(f.orgId), ["Explicit default"]);
+  },
+);
 
 test(
   "POST refuses a non-boolean isActive with a 400, never a storage 500",

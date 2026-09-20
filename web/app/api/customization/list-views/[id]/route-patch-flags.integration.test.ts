@@ -4,12 +4,12 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 
 // Live-Postgres regression for PATCH /api/customization/list-views/:id.
-// Collection POST coerces isDefault with !! (always a real boolean), but the
-// [id] PATCH wrote body.isDefault / body.isActive straight into boolean
-// columns. A non-boolean JSON value reaches PostgreSQL, which either throws
-// 22P02 (raw 500 with a driver message through the route's catch-all) or
-// silently coerces ('yes'::boolean = true) — the same unhandled-storage-error
-// class the api-keys route guards with a strict-boolean check.
+// Collection POST refuses a non-boolean isDefault. The [id] PATCH wrote
+// body.isDefault / body.isActive straight into boolean columns. A non-boolean
+// JSON value reaches PostgreSQL, which either throws 22P02 (raw 500 with a
+// driver message through the route's catch-all) or silently coerces
+// ('yes'::boolean = true) — the same unhandled-storage-error class the
+// api-keys route guards with a strict-boolean check.
 
 const stateKey = Symbol.for("openbooks.list-view-patch-bool-test");
 interface RouteState {
