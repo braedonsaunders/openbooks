@@ -274,8 +274,8 @@ function measurementRemedy(target: string): string {
  *
  * The run must cover exactly all configured targets — no partial selection,
  * no unconfigured extras. Every target must be honestly measured in this
- * run, except a declared `needsDb` target whose baseline self-skipped in a
- * unit-mode run (existing policy, also excused by the floor test). Refused:
+ * run, except a declared `needsDb` target reported unmeasured in a unit-mode
+ * run, with its code-grounded reason (also excused by the floor test). Refused:
  * baseline-failed, no-mutants, any other unmeasured entry, and any measured
  * score below its RATIFIED floor. Targets with no floor entry yet (freshly
  * extracted modules) publish on their real measurement; this gate never
