@@ -119,6 +119,40 @@ test("buyer-only US transfer asks for acquisition facts without seller disposal 
   assert.doesNotMatch(markup, /-disposedUnadjustedBasis"/);
   assert.doesNotMatch(markup, /-statutoryProceeds"/);
   assert.doesNotMatch(markup, /-amountRealizedRule"/);
+  assert.doesNotMatch(markup, /-placedInServiceOn"/);
+  assert.doesNotMatch(markup, /-recoveryPeriodYears"/);
+  assert.doesNotMatch(markup, /-method"/);
+  assert.doesNotMatch(markup, /-convention"/);
+});
+
+test("buyer-only US carryover asks for transferor history without inventing a seller disposition", () => {
+  const markup = render({
+    regime: "us_macrs",
+    sourceOperation: "intercompany_transfer",
+    applicable: "buyer",
+    relationship: "non_arms_length",
+    recognition: "nontaxable",
+    placedInServiceOn: "2023-03-15",
+    recoveryPeriodYears: "5",
+    method: "200_db",
+    convention: "half_year",
+    originalUnadjustedBasis: "10000.0000",
+    carryoverBasis: "6400.0000",
+    excessBasis: "400.0000",
+  });
+  assert.match(markup, /-placedInServiceOn"/);
+  assert.match(markup, /value="2023-03-15"/);
+  assert.match(markup, /-recoveryPeriodYears"/);
+  assert.match(markup, /-method"/);
+  assert.match(markup, /-convention"/);
+  assert.match(markup, /-originalUnadjustedBasis"/);
+  assert.match(markup, /value="10000\.0000"/);
+  assert.match(markup, /-carryoverBasis"/);
+  assert.match(markup, /value="6400\.0000"/);
+  assert.match(markup, /-excessBasis"/);
+  assert.doesNotMatch(markup, /-disposedUnadjustedBasis"/);
+  assert.doesNotMatch(markup, /-remainingUnadjustedBasis"/);
+  assert.doesNotMatch(markup, /-amountRealizedRule"/);
 });
 
 test("both classified parties receive both statutory worksheets with no applicability election", () => {

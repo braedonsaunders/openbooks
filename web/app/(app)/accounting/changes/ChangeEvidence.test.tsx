@@ -45,6 +45,13 @@ test("applied tax results retain each regime, frozen outcome, explicit false and
           ca_cca: { dispositionAmount: "600.0000" },
           us_macrs: {
             buyerSection179Allowed: false,
+            placedInServiceOn: "2023-03-15",
+            method: "200_db",
+            convention: "half_year",
+            buyerPlacedInServiceOn: "2026-07-01",
+            buyerRecoveryPeriodYears: "7",
+            buyerMethod: "150_db",
+            buyerConvention: "mid_quarter",
             evidenceEdition: "IRS_2026_01",
           },
         },
@@ -58,6 +65,17 @@ test("applied tax results retain each regime, frozen outcome, explicit false and
   assert.match(markup, /<span>No<\/span>/);
   assert.match(markup, /FA-42 — Transfer recipient/);
   assert.match(markup, /IRS_2026_01/);
+  assert.match(markup, /2023-03-15/);
+  assert.match(markup, /200% declining balance/);
+  assert.match(markup, /Half-year/);
+  assert.match(markup, /Receiving asset placed-in-service date/);
+  assert.match(markup, /2026-07-01/);
+  assert.match(markup, /Receiving asset recovery period \(years\)/);
+  assert.match(markup, /Receiving asset MACRS method/);
+  assert.match(markup, /150% declining balance/);
+  assert.match(markup, /Receiving asset MACRS convention/);
+  assert.match(markup, /Mid-quarter/);
+  assert.doesNotMatch(markup, /150_db|mid_quarter/);
   assert.match(markup, /workpaper-ca/);
   assert.match(markup, /workpaper-us/);
 });

@@ -11,6 +11,17 @@ import {
   TAX_BASIS_REGIME_LABELS,
 } from "@openbooks/engine/src/tax-returns/asset-basis-policy.ts";
 const taxFields = new Map(TAX_BASIS_FIELDS.map((field) => [field.name, field]));
+const taxChoiceFields: Record<string, string> = {
+  regimes: "regime",
+  buyerMethod: "method",
+  buyerConvention: "convention",
+};
+const taxComputedLabels: Record<string, string> = {
+  buyerPlacedInServiceOn: "Receiving asset placed-in-service date",
+  buyerRecoveryPeriodYears: "Receiving asset recovery period (years)",
+  buyerMethod: "Receiving asset MACRS method",
+  buyerConvention: "Receiving asset MACRS convention",
+};
 const labels: Record<string, string> = {
   existingId: "Existing performance obligation",
   existingObligationIds: "Promises affected",
@@ -45,7 +56,8 @@ const labels: Record<string, string> = {
 function label(key: string, taxBasis: boolean) {
   return (
     (taxBasis
-      ? (taxFields.get(key)?.label ??
+      ? (taxComputedLabels[key] ??
+        taxFields.get(key)?.label ??
         TAX_BASIS_REGIME_LABELS[key as keyof typeof TAX_BASIS_REGIME_LABELS])
       : undefined) ??
     labels[key] ??
@@ -77,7 +89,7 @@ export function ChangeEvidence({
         {names[String(value)] ??
           (taxBasis && field
             ? taxFields
-                .get(field === "regimes" ? "regime" : field)
+                .get(taxChoiceFields[field] ?? field)
                 ?.choices?.find((choice) => choice.value === value)?.label
             : undefined) ??
           String(value)}
