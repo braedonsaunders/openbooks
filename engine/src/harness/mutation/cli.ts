@@ -11,10 +11,10 @@
  * --unit-only) the same run measures DB mutants too. The production database
  * is refused outright (see runner.assertNotProduction).
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadMutationConfig } from "./config.ts";
+import { loadMutationConfig, type MutationTargetConfig } from "./config.ts";
 import { runMutationTargets, type MutationReport, type TargetResult } from "./runner.ts";
 
 const REPO_ROOT = new URL("../../../..", import.meta.url).pathname.replace(/\/$/, "");
@@ -201,19 +201,15 @@ async function main(): Promise<void> {
   if (args.writeCheckedIn) {
     const checkedIn = join(REPO_ROOT, "engine", "src", "harness", "mutation", "mutation-report.json");
     const fresh = toCheckedInReport(report);
-    const existing = readCheckedInReport(checkedIn);
-    const merged = mergeCheckedInReports(
-      existing,
-      fresh,
-      config.targets.map((t) => t.path),
-    );
-    writeFileSync(checkedIn, `${JSON.stringify(merged.report, null, 2)}\n`);
-    console.log(`checked-in report updated: ${checkedIn}`);
-    for (const line of merged.preserved) console.log(`preserve: ${line}`);
-    for (const line of merged.dropped) console.log(`drop stale: ${line}`);
-    if (merged.refusals.length > 0) {
-      for (const line of merged.refusals) console.error(`REFUSAL: ${line}`);
+    const floors = readRatifiedFloors(join(REPO_ROOT, "engine", "src", "harness", "mutation", "mutation-floor.json"));
+    const refusals = checkedInPublishRefusals(fresh, config.targets, floors.floors);
+    if (refusals.length > 0) {
+      for (const line of refusals) console.error(`REFUSAL: ${line}`);
+      console.error(`checked-in report NOT updated: ${checkedIn}`);
       process.exitCode = 1;
+    } else {
+      writeFileSync(checkedIn, `${JSON.stringify(fresh, null, 2)}\n`);
+      console.log(`checked-in report updated: ${checkedIn}`);
     }
   }
   const blocked = report.targets.filter((t) => t.status === "baseline-failed");
@@ -223,16 +219,6 @@ async function main(): Promise<void> {
   }
 }
 
-export interface CheckedInMerge {
-  readonly report: CheckedInReport;
-  /** Ratified entries kept because this run did not measure them (partial run or unmeasured target). */
-  readonly preserved: readonly string[];
-  /** Fresh measurements below a ratified score: kept ratified, caller must fail loudly. */
-  readonly refusals: readonly string[];
-  /** Entries dropped: full run, target no longer configured (e.g. decomposed monolith). */
-  readonly dropped: readonly string[];
-}
-
 /** Tolerance matching the floor ratchet (`mutation-floor.test.ts`). */
 const SCORE_EPSILON = 1e-9;
 
@@ -240,27 +226,32 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+export interface RatifiedFloors {
+  readonly version: 1;
+  readonly floors: Record<string, { readonly ratio: number; readonly measured: number; readonly mode: string }>;
+}
+
 /**
- * Read the checked-in report for merging. Missing file means first publish
- * (null). A corrupt file is a hard failure: overwriting it would manufacture
- * evidence, so the publish is refused instead.
+ * Read the ratified floors the publish is checked against. A missing or
+ * malformed floor file is a hard failure: without the ratchet there is
+ * nothing to refuse against, so the publish is refused instead of guessed.
  */
-export function readCheckedInReport(path: string): CheckedInReport | null {
-  if (!existsSync(path)) return null;
+export function readRatifiedFloors(path: string): RatifiedFloors {
   let parsed: unknown;
   try {
     parsed = JSON.parse(readFileSync(path, "utf8")) as unknown;
-  } catch {
-    throw new Error(`checked-in report at ${path} is not valid JSON — refusing to overwrite it`);
+  } catch (error) {
+    throw new Error(`ratified floors at ${path} cannot be read — refusing publish: ${String(error)}`);
   }
-  if (!isRecord(parsed) || parsed.version !== 1 || !Array.isArray(parsed.targets)) {
-    throw new Error(`checked-in report at ${path} is malformed — refusing to overwrite it`);
+  if (!isRecord(parsed) || parsed.version !== 1 || !isRecord(parsed.floors)) {
+    throw new Error(`ratified floors at ${path} are malformed — refusing publish`);
   }
-  return parsed as CheckedInReport;
-}
-
-function isMeasured(entry: CheckedInTarget): boolean {
-  return entry.measured > 0 && entry.ratio !== null;
+  for (const [key, value] of Object.entries(parsed.floors)) {
+    if (!isRecord(value) || typeof value.ratio !== "number") {
+      throw new Error(`ratified floor for ${key} is malformed — refusing publish`);
+    }
+  }
+  return parsed as RatifiedFloors;
 }
 
 function ratifyRemedy(target: string): string {
@@ -271,92 +262,74 @@ function ratifyRemedy(target: string): string {
 }
 
 /**
- * Merge a fresh run into the checked-in report without ever lowering ratified
- * evidence.
+ * Atomic publish gate for `--write-checked-in`: returns every reason the
+ * fresh run must NOT become the checked-in report. Empty means publish.
  *
- * - Targets absent from this (partial) run keep their ratified entries.
- * - Fresh entries that measured nothing (baseline-skipped, no-mutants,
- *   measured 0, null ratio) never overwrite a ratified measurement.
- * - A fresh measured score below a ratified score keeps the ratified entry
- *   and records a refusal naming the remedy; raises replace silently.
- * - A full run (every configured target present in the fresh report) drops
- *   entries for targets that are no longer configured — the only path by
- *   which stale monolith entries leave. A partial run preserves them.
+ * The run must cover exactly all configured targets — no partial selection,
+ * no unconfigured extras. Every target must be honestly measured in this
+ * run, except a declared `needsDb` target whose baseline self-skipped in a
+ * unit-mode run (existing policy, also excused by the floor test). Refused:
+ * baseline-failed, no-mutants, any other unmeasured entry, and any measured
+ * score below its RATIFIED floor. Targets with no floor entry yet (freshly
+ * extracted modules) publish on their real measurement; this gate never
+ * invents floors — raises and first floors stay an explicit ratification act,
+ * and this gate never writes `mutation-floor.json`.
  *
- * Floor raises stay an explicit ratification act: this merge never writes
- * `mutation-floor.json`.
+ * Nothing is carried forward and nothing is written when refusals exist: the
+ * caller refuses before any checked-in write. The local report under
+ * `--report-dir` is unaffected and always written.
  */
-export function mergeCheckedInReports(
-  existing: CheckedInReport | null,
+export function checkedInPublishRefusals(
   fresh: CheckedInReport,
-  configuredPaths: readonly string[],
-): CheckedInMerge {
-  if (existing === null) {
-    return { report: fresh, preserved: [], refusals: [], dropped: [] };
-  }
-  const configured = new Set(configuredPaths);
-  const freshByTarget = new Map(fresh.targets.map((t) => [t.target, t]));
-  const full = [...configured].every((p) => freshByTarget.has(p));
-  const previous = new Map(existing.targets.map((t) => [t.target, t]));
-  const merged: CheckedInTarget[] = [];
-  const preserved: string[] = [];
+  configured: readonly MutationTargetConfig[],
+  floors: RatifiedFloors["floors"],
+): string[] {
   const refusals: string[] = [];
-  const dropped: string[] = [];
+  const configuredByPath = new Map(configured.map((t) => [t.path, t]));
+  const freshByTarget = new Map(fresh.targets.map((t) => [t.target, t]));
+
+  const missing = configured.map((t) => t.path).filter((p) => !freshByTarget.has(p));
+  if (missing.length > 0) {
+    refusals.push(
+      `partial run: missing configured targets (${missing.join(", ")}) — re-run without --target so the publish measures everything`,
+    );
+  }
+  for (const path of freshByTarget.keys()) {
+    if (!configuredByPath.has(path)) {
+      refusals.push(
+        `unconfigured target in run: ${path} — the config changed mid-run; re-run against the current mutation.config.json`,
+      );
+    }
+  }
 
   for (const entry of fresh.targets) {
-    const prev = previous.get(entry.target);
-    if (!prev) {
-      merged.push(entry);
+    const target = configuredByPath.get(entry.target);
+    if (entry.status === "baseline-failed") {
+      refusals.push(`${entry.target}: baseline failed — the harness cannot measure it; fix the baseline and re-run`);
       continue;
     }
-    if (!isMeasured(entry)) {
-      if (isMeasured(prev)) {
-        merged.push(prev);
-        preserved.push(
-          `${entry.target}: this run measured nothing (status ${entry.status}) — kept ratified score ${formatRatio(prev.ratio)}`,
+    if (entry.status === "no-mutants") {
+      refusals.push(`${entry.target}: zero mutants generated — operators cover nothing; fix generation and re-run`);
+      continue;
+    }
+    const measured = entry.measured > 0 && entry.ratio !== null;
+    if (!measured) {
+      const excused = target?.needsDb === true && fresh.mode === "unit";
+      if (!excused) {
+        refusals.push(
+          `${entry.target}: nothing measured (status ${entry.status}) — re-run with a database or fix the baseline`,
         );
-      } else {
-        merged.push(entry);
       }
       continue;
     }
-    if (prev.ratio !== null && entry.ratio < prev.ratio - SCORE_EPSILON) {
-      merged.push(prev);
+    const floor = floors[entry.target];
+    if (floor !== undefined && entry.ratio < floor.ratio - SCORE_EPSILON) {
       refusals.push(
-        `${entry.target}: fresh score ${formatRatio(entry.ratio)} below ratified ${formatRatio(prev.ratio)} — kept ratified entry; ${ratifyRemedy(entry.target)}`,
+        `${entry.target}: fresh score ${formatRatio(entry.ratio)} below ratified floor ${formatRatio(floor.ratio)} — publish refused; ${ratifyRemedy(entry.target)}`,
       );
-      continue;
     }
-    merged.push(entry);
   }
-  for (const prev of existing.targets) {
-    if (freshByTarget.has(prev.target)) continue;
-    if (full && !configured.has(prev.target)) {
-      dropped.push(prev.target);
-      continue;
-    }
-    merged.push(prev);
-    preserved.push(
-      `${prev.target}: not in this run — kept ratified score ${formatRatio(prev.ratio)}`,
-    );
-  }
-
-  const order = new Map(configuredPaths.map((p, i) => [p, i]));
-  merged.sort((a, b) => (order.get(a.target) ?? configuredPaths.length) - (order.get(b.target) ?? configuredPaths.length));
-
-  // A partial run must not present itself as a fresh full measurement: keep
-  // the prior run's provenance. A full run adopts the fresh provenance.
-  const report: CheckedInReport = full
-    ? { ...fresh, targets: merged }
-    : {
-      version: 1,
-      gitSha: existing.gitSha,
-      ...(existing.runId !== undefined ? { runId: existing.runId } : {}),
-      at: existing.at,
-      mode: existing.mode,
-      targets: merged,
-    };
-  return { report, preserved, refusals, dropped };
+  return refusals;
 }
 
 // Importing this module (e.g. from a unit test) must not launch a mutation

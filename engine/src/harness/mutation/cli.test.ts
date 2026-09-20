@@ -1,40 +1,33 @@
 /**
- * Publisher merge ratchet for `--write-checked-in`.
+ * Atomic publish gate for `--write-checked-in`.
  *
- * The publisher must never lower ratified evidence: a partial run preserves
- * unselected targets, a fresh entry that measured nothing never overwrites a
- * ratified measurement, and a fresh measured score below a ratified score
- * keeps the ratified entry while recording a refusal that names the remedy.
- * Only a full run drops entries for targets that left the config, and floors
- * are never written here — raises stay an explicit ratification act.
+ * The publish covers exactly all configured targets or nothing is written:
+ * partial runs, unconfigured extras, baseline-failed, no-mutants, unmeasured
+ * non-DB entries, and measured scores below the RATIFIED floor all refuse
+ * before any checked-in write. An honestly skipped `needsDb` target in a
+ * unit-mode run stays allowed under existing policy. New targets without a
+ * floor entry publish on their real measurement — the gate never invents
+ * floors and never writes `mutation-floor.json`.
  *
  * Pure unit tests: no database, no mutation run, no filesystem.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  mergeCheckedInReports,
+  checkedInPublishRefusals,
   toCheckedInReport,
   type CheckedInReport,
   type CheckedInTarget,
+  type RatifiedFloors,
 } from "./cli.ts";
 import type { MutationReport, TargetResult } from "./runner.ts";
+import type { MutationTargetConfig } from "./config.ts";
 
-const POSTING = "engine/src/ledger/posting.ts";
-const PAYMENTS = "engine/src/payments/payments.ts";
-const RUN = "engine/src/payroll/run.ts";
 const MONEY = "engine/src/money/money.ts";
 const COMMIT = "engine/src/ledger/posting-commit.ts";
+const RUN_CALC = "engine/src/payroll/run-calculation.ts";
 
-// Ratified floor values from mutation-floor.json.
-const POSTING_FLOOR = 0.34782608695652173;
-const PAYMENTS_FLOOR = 0.041666666666666664;
-const RUN_FLOOR = 0.32;
-
-function target(
-  path: string,
-  over: Partial<CheckedInTarget> = {},
-): CheckedInTarget {
+function target(path: string, over: Partial<CheckedInTarget> = {}): CheckedInTarget {
   return {
     target: path,
     needsDb: false,
@@ -46,24 +39,17 @@ function target(
     error: 2,
     total: 25,
     measured: 23,
-    ratio: POSTING_FLOOR,
+    ratio: 0.34782608695652173,
     topSurvivors: [],
     ...over,
   };
 }
 
-function report(paths: readonly string[], over: Partial<CheckedInReport> = {}): CheckedInReport {
-  return {
-    version: 1,
-    gitSha: "ratified-sha",
-    at: "2026-09-16T01:51:19.042Z",
-    mode: "unit",
-    targets: paths.map((p) => target(p)),
-    ...over,
-  };
+function configured(path: string, needsDb = false): MutationTargetConfig {
+  return { path, tests: [`${path}.test`], ...(needsDb ? { needsDb: true as const } : {}) };
 }
 
-function freshReport(paths: readonly string[], over: Partial<CheckedInReport> = {}): CheckedInReport {
+function fresh(paths: readonly string[], over: Partial<CheckedInReport> = {}): CheckedInReport {
   return {
     version: 1,
     gitSha: "fresh-sha",
@@ -74,135 +60,123 @@ function freshReport(paths: readonly string[], over: Partial<CheckedInReport> = 
   };
 }
 
-test("partial publish preserves unselected ratified entries instead of clobbering them", () => {
-  const existing = report([MONEY, POSTING], {
+const FLOORS: RatifiedFloors["floors"] = {
+  [MONEY]: { ratio: 0.391304347826087, measured: 23, mode: "unit" },
+};
+
+test("full valid run publishes: measured above floors, new targets need no floor", () => {
+  const report = fresh([MONEY, COMMIT], {
     targets: [
       target(MONEY, { ratio: 0.5217391304347826 }),
-      target(POSTING, { ratio: POSTING_FLOOR }),
+      target(COMMIT, { ratio: 0.4 }),
     ],
   });
-  // Fresh run covered only money, scoring higher.
-  const fresh = freshReport([MONEY], {
-    targets: [target(MONEY, { ratio: 0.6, killed: 12, survived: 8, measured: 20 })],
-  });
-  const merged = mergeCheckedInReports(existing, fresh, [MONEY, POSTING]);
-
-  assert.equal(merged.report.targets.length, 2);
-  assert.deepEqual(
-    merged.report.targets.find((t) => t.target === POSTING),
-    existing.targets.find((t) => t.target === POSTING),
-    "unselected posting entry must survive byte-identical",
+  const refusals = checkedInPublishRefusals(
+    report,
+    [configured(MONEY), configured(COMMIT)],
+    FLOORS,
   );
-  assert.equal(merged.report.targets.find((t) => t.target === MONEY)?.ratio, 0.6);
-  assert.equal(merged.refusals.length, 0);
-  assert.ok(
-    merged.preserved.some((line) => line.includes(POSTING)),
-    "preservation must be reported",
-  );
-  // A partial refresh must not present itself as a fresh full measurement.
-  assert.equal(merged.report.gitSha, "ratified-sha");
-  assert.equal(merged.report.at, existing.at);
+  assert.deepEqual(refusals, []);
 });
 
-test("publish refuses to lower a ratified score and the refusal names the remedy", () => {
-  const existing = report([PAYMENTS], {
-    targets: [target(PAYMENTS, { ratio: 0.5, measured: 24 })],
-  });
-  const fresh = freshReport([PAYMENTS], {
-    targets: [target(PAYMENTS, { ratio: PAYMENTS_FLOOR, measured: 24 })],
-  });
-  const merged = mergeCheckedInReports(existing, fresh, [PAYMENTS]);
-
-  assert.equal(merged.report.targets[0]?.ratio, 0.5, "ratified entry must win");
-  assert.equal(merged.refusals.length, 1);
-  const refusal = merged.refusals[0]!;
-  assert.ok(refusal.includes(PAYMENTS), "refusal names the target");
-  assert.ok(
-    refusal.includes(`--target ${PAYMENTS}`),
-    "refusal names the re-run remedy",
+test("partial run refuses: missing configured targets, nothing carried forward", () => {
+  const refusals = checkedInPublishRefusals(
+    fresh([MONEY]),
+    [configured(MONEY), configured(COMMIT)],
+    FLOORS,
   );
-  assert.ok(
-    refusal.includes("mutation-floor.json"),
-    "refusal names the explicit ratification path",
-  );
+  assert.equal(refusals.length, 1);
+  assert.ok(refusals[0]!.includes(COMMIT), "refusal names the missing target");
+  assert.ok(refusals[0]!.includes("--target"), "refusal names the re-run remedy");
 });
 
-test("a fresh run that measured nothing never overwrites a ratified measurement", () => {
-  const existing = report([RUN], {
-    mode: "db",
-    targets: [target(RUN, { ratio: RUN_FLOOR, measured: 25, needsDb: true })],
-  });
-  // Unit-mode re-run: the DB-only target self-skips its baseline.
-  const fresh = freshReport([RUN], {
-    mode: "unit",
+test("unconfigured extra in the run refuses", () => {
+  const refusals = checkedInPublishRefusals(
+    fresh([MONEY, COMMIT]),
+    [configured(MONEY)],
+    FLOORS,
+  );
+  assert.equal(refusals.length, 1);
+  assert.ok(refusals[0]!.includes(COMMIT));
+  assert.ok(refusals[0]!.includes("mutation.config.json"));
+});
+
+test("baseline-failed and no-mutants refuse", () => {
+  const report = fresh([MONEY, COMMIT], {
     targets: [
-      target(RUN, {
-        status: "baseline-skipped",
-        killed: 0,
-        survived: 0,
-        total: 0,
-        measured: 0,
-        ratio: null,
-        needsDb: true,
-      }),
+      target(MONEY, { status: "baseline-failed", measured: 0, ratio: null }),
+      target(COMMIT, { status: "no-mutants", measured: 0, ratio: null }),
     ],
   });
-  const merged = mergeCheckedInReports(existing, fresh, [RUN]);
-
-  assert.equal(merged.report.targets[0]?.ratio, RUN_FLOOR);
-  assert.equal(merged.report.targets[0]?.measured, 25);
-  assert.equal(merged.refusals.length, 0, "no measurement, no score refusal — preservation note suffices");
-  assert.ok(merged.preserved.some((line) => line.includes(RUN)));
+  const refusals = checkedInPublishRefusals(
+    report,
+    [configured(MONEY), configured(COMMIT)],
+    FLOORS,
+  );
+  assert.equal(refusals.length, 2);
+  assert.ok(refusals.some((r) => r.includes(MONEY) && r.includes("baseline failed")));
+  assert.ok(refusals.some((r) => r.includes(COMMIT) && r.includes("zero mutants")));
 });
 
-test("a fresh score above the ratified score replaces it without refusal", () => {
-  const existing = report([MONEY], {
-    targets: [target(MONEY, { ratio: 0.4, measured: 23 })],
-  });
-  const fresh = freshReport([MONEY], {
-    targets: [target(MONEY, { ratio: 0.5217391304347826, measured: 23 })],
-  });
-  const merged = mergeCheckedInReports(existing, fresh, [MONEY]);
+test("unmeasured non-DB entry refuses; honest needsDb skip in unit mode is allowed", () => {
+  const skipped: CheckedInTarget = {
+    ...target(RUN_CALC),
+    status: "baseline-skipped",
+    killed: 0,
+    survived: 0,
+    total: 0,
+    measured: 0,
+    ratio: null,
+    needsDb: true,
+  };
+  // needsDb target skipped in unit mode: allowed.
+  const allowed = checkedInPublishRefusals(
+    fresh([RUN_CALC], { mode: "unit", targets: [skipped] }),
+    [configured(RUN_CALC, true)],
+    {},
+  );
+  assert.deepEqual(allowed, []);
 
-  assert.equal(merged.report.targets[0]?.ratio, 0.5217391304347826);
-  assert.equal(merged.refusals.length, 0);
-  assert.equal(merged.preserved.length, 0);
-  // Full run adopts the fresh run's provenance.
-  assert.equal(merged.report.gitSha, "fresh-sha");
+  // Same skip with a database available: refused, the run should have measured it.
+  const refusedDb = checkedInPublishRefusals(
+    fresh([RUN_CALC], { mode: "db", targets: [skipped] }),
+    [configured(RUN_CALC, true)],
+    {},
+  );
+  assert.equal(refusedDb.length, 1);
+
+  // Non-DB target measuring nothing: refused.
+  const refusedUnit = checkedInPublishRefusals(
+    fresh([MONEY], { targets: [target(MONEY, { status: "baseline-skipped", measured: 0, ratio: null })] }),
+    [configured(MONEY)],
+    FLOORS,
+  );
+  assert.equal(refusedUnit.length, 1);
+  assert.ok(refusedUnit[0]!.includes(MONEY));
 });
 
-test("only a full run drops stale entries for unconfigured targets", () => {
-  const existing = report([POSTING, COMMIT], {
-    targets: [target(POSTING, { ratio: POSTING_FLOOR }), target(COMMIT, { ratio: 0.4 })],
+test("measured score below the RATIFIED floor refuses and names the remedy", () => {
+  const report = fresh([MONEY], {
+    targets: [target(MONEY, { ratio: 0.34 })],
   });
-
-  const partial = mergeCheckedInReports(
-    existing,
-    freshReport([COMMIT], { targets: [target(COMMIT, { ratio: 0.45 })] }),
-    [COMMIT, MONEY],
-  );
-  assert.ok(
-    partial.report.targets.some((t) => t.target === POSTING),
-    "partial run must preserve the decomposed monolith entry",
-  );
-  assert.deepEqual(partial.dropped, []);
-
-  // Full run: every configured target present, monolith gone from config.
-  const full = mergeCheckedInReports(
-    existing,
-    freshReport([COMMIT], { targets: [target(COMMIT, { ratio: 0.45 })] }),
-    [COMMIT],
-  );
-  assert.ok(full.report.targets.some((t) => t.target === POSTING) === false);
-  assert.deepEqual(full.dropped, [POSTING]);
-  assert.equal(full.report.targets.find((t) => t.target === COMMIT)?.ratio, 0.45);
+  const refusals = checkedInPublishRefusals(report, [configured(MONEY)], FLOORS);
+  assert.equal(refusals.length, 1);
+  const refusal = refusals[0]!;
+  assert.ok(refusal.includes(MONEY), "refusal names the target");
+  assert.ok(refusal.includes("ratified floor"), "refusal cites the floor, not a prior score");
+  assert.ok(refusal.includes(`--target ${MONEY}`), "refusal names the re-run remedy");
+  assert.ok(refusal.includes("mutation-floor.json"), "refusal names the explicit ratification path");
 });
 
-test("first publish writes the fresh report as-is", () => {
-  const fresh = freshReport([MONEY]);
-  const merged = mergeCheckedInReports(null, fresh, [MONEY]);
-  assert.deepEqual(merged.report, fresh);
-  assert.deepEqual([...merged.preserved, ...merged.refusals, ...merged.dropped], []);
+test("score at the floor (within tolerance) publishes; dip below refuses", () => {
+  const atFloor = fresh([MONEY], {
+    targets: [target(MONEY, { ratio: 0.391304347826087 })],
+  });
+  assert.deepEqual(checkedInPublishRefusals(atFloor, [configured(MONEY)], FLOORS), []);
+  const below = fresh([MONEY], {
+    targets: [target(MONEY, { ratio: 0.39 })],
+  });
+  assert.equal(checkedInPublishRefusals(below, [configured(MONEY)], FLOORS).length, 1);
 });
 
 test("toCheckedInReport compacts without inventing ratios", () => {
@@ -233,7 +207,7 @@ test("toCheckedInReport compacts without inventing ratios", () => {
         mutants: [],
       } satisfies TargetResult,
       {
-        target: RUN,
+        target: RUN_CALC,
         status: "baseline-skipped",
         needsDb: true,
         killed: 0,
@@ -252,6 +226,6 @@ test("toCheckedInReport compacts without inventing ratios", () => {
   const compact = toCheckedInReport(mutation);
   assert.equal(compact.targets.length, 2);
   assert.equal(compact.targets[0]?.ratio, 0.5217391304347826);
-  assert.equal(compact.targets[1]?.ratio, null, "unmeasured stays null — never a manufactured zero");
+  assert.equal(compact.targets[1]?.ratio, null, "unit-run skip stays null — never a manufactured zero");
   assert.equal(compact.targets[1]?.measured, 0);
 });
