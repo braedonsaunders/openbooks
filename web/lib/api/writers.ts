@@ -31,6 +31,7 @@ import {
   loadRecord,
   loadRecordTypeByKey,
   recordVisibleInSubsidiaryFence,
+  retainStoredSubsidiaryId,
 } from "../records";
 import {
   lintRecordFields,
@@ -178,9 +179,12 @@ async function applyCustomRecord(
     );
   }
 
-  const effectiveData = nextData ?? stripUnknownData(sections, record.data);
+  const strippedData = nextData ?? stripUnknownData(sections, record.data);
+  const persistedData = retainStoredSubsidiaryId(sections, record.data, strippedData);
+  if (nextData !== undefined) nextData = persistedData;
+  const effectiveData = strippedData;
   const effectiveStatus = nextStatus ?? record.status;
-  if (!recordVisibleInSubsidiaryFence(sections, effectiveData, allowed)) return err(404, "not found");
+  if (!recordVisibleInSubsidiaryFence(sections, persistedData, allowed)) return err(404, "not found");
   const stage = effectiveStatus === "active" ? "submit" : "draft";
   const errors = validateRecordData(sections, effectiveData, stage);
   if (errors.length > 0) {

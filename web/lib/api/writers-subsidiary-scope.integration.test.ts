@@ -15,11 +15,15 @@ registerHooks({
         url: "data:text/javascript,export {}",
       };
     }
+    if (specifier.startsWith("@/")) {
+      return nextResolve(new URL(`../../${specifier.slice(2)}`, import.meta.url).href, context);
+    }
     return nextResolve(specifier, context);
   },
 });
 
 const { deleteRecord, updateRecord } = await import("./writers.ts");
+const { createAppPlatformAdapter } = await import("../apps/platform.ts");
 const { loadApiSchema, resolveApiType } = await import("./schema-registry.ts");
 const { db, env, withBypass, withOrgContext } =
   await import("@openbooks/engine/src/platform/db.ts");
@@ -114,7 +118,7 @@ test(
     const hiddenId = randomUUID();
     const visibleId = randomUUID();
     const hiddenDraftId = randomUUID();
-    const { org, actorId } = await withBypass(async () => {
+    const { org, actorId, branch } = await withBypass(async () => {
       const created = await createScratchOrg();
       const actor = (await seedFlowActors(created.orgId)).adminId;
       const branch = randomUUID();
@@ -151,7 +155,7 @@ test(
              ${title}, ${status}, ${actor}, ${actor})
         `);
       }
-      return { org: created, actorId: actor };
+      return { org: created, actorId: actor, branch };
     });
 
     const { documentRevisionCounterSql } = await import("@openbooks/engine/src/records/revision.ts");
@@ -216,6 +220,31 @@ test(
           fence,
         );
         assert.equal(visibleUpdate.status, 200, JSON.stringify(visibleUpdate.body));
+        const after = (await db.execute<{ title: string; subsidiary_id: string | null }>(sql`
+          select data ->> 'title' as title, data ->> 'subsidiary_id' as subsidiary_id
+            from custom_records where id = ${visibleId}
+        `)).rows[0];
+        assert.equal(after?.title, "kept");
+        assert.equal(
+          after?.subsidiary_id,
+          org.subsidiaryId,
+          "an in-scope update after field-drop must not erase the stored JSON subsidiary_id",
+        );
+
+        const other = createAppPlatformAdapter({
+          orgId: org.orgId,
+          user,
+          grantedPermissions: ["records.read"],
+          userCan: () => true,
+          allowedSubsidiaryIds: new Set([branch]),
+        });
+        const listed = (await other.list(typeKey, {})) as { records: Array<{ id: string }>; total: number };
+        assert.equal(
+          listed.records.some((row) => row.id === visibleId),
+          false,
+          "a restricted other-subsidiary caller must not list the updated row",
+        );
+        assert.equal(await other.get(typeKey, visibleId), null);
       });
     } finally {
       await withBypass(() => dropScratchOrg(org.orgId));
