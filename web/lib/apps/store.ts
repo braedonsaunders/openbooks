@@ -121,6 +121,12 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
 
   const paths = bundle.files.map((f) => f.path)
   if (new Set(paths).size !== paths.length) throw new AppError('bundle has duplicate file paths')
+  // Zip parse already gates entries; installApp is also reachable with a
+  // hand-built bundle. Extra files must pass the same relative-path rule.
+  // validPackagePath rejects manifest.json, so skip that reserved name here.
+  if (bundle.files.some((file) => !validPackagePath(file.path) && file.path !== 'manifest.json')) {
+    throw new AppError(PACKAGE_PATH_REFUSAL)
+  }
   const vb = validateBundle(manifest, paths)
   if (!vb.ok) throw new AppError(`invalid bundle: ${vb.errors.join('; ')}`)
 
@@ -802,6 +808,15 @@ function isBridgePayloadObject(value: unknown): value is Record<string, unknown>
 /** Absent sub-object: the same `{}` every options/body/filters default used. */
 const EMPTY_PAYLOAD_OBJECT: Record<string, unknown> = {}
 
+function platformReadNeedsFreshInvocation(method: string): boolean {
+  return (
+    method === 'platform.query' ||
+    method === 'platform.schema' ||
+    method === 'platform.list' ||
+    method === 'platform.get'
+  )
+}
+
 export async function runBridgeMethod(opts: {
   orgId: string
   user: SessionUser
@@ -903,11 +918,6 @@ export async function runBridgeMethod(opts: {
       // Reads mint a nonce so a later identical fetch is a new claim, not a
       // stale replay of the first committed page/schema/record. Writes keep
       // the derived key so a byte-identical retry collapses.
-      const platformRead =
-        opts.method === 'platform.query' ||
-        opts.method === 'platform.schema' ||
-        opts.method === 'platform.list' ||
-        opts.method === 'platform.get'
       const outcome = await executeAppInvocation({
         orgId: opts.orgId,
         actorId: opts.user.id,
@@ -920,7 +930,9 @@ export async function runBridgeMethod(opts: {
           typeKey,
           id,
           payload: payload.body ?? payload.options ?? payload.plan ?? null,
-          ...(platformRead ? { readInvocation: crypto.randomUUID() } : {}),
+          ...(platformReadNeedsFreshInvocation(opts.method)
+            ? { readInvocation: crypto.randomUUID() }
+            : {}),
         }),
         requestHash: requestHash({ method: opts.method, typeKey, id, payload: opts.payload }),
         run: attemptDispatch,
