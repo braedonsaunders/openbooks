@@ -10,7 +10,6 @@ import {
   add,
   cmp,
   formatMoney,
-  fromUnits,
   mulDecimal,
   mulRatio,
   neg,
@@ -20,6 +19,7 @@ import {
   roundMoney,
   toUnits,
 } from "../money/money.ts";
+import { compareDecimal } from "../money/exact-decimal.ts";
 
 export class MacrsShortYearError extends Error {
   readonly name = "MacrsShortYearError";
@@ -69,11 +69,54 @@ function utc(day: CalendarDay): Date {
 }
 
 function fromUtc(date: Date): CalendarDay {
-  return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() };
+  return {
+    year: date.getUTCFullYear(),
+    month: date.getUTCMonth() + 1,
+    day: date.getUTCDate(),
+  };
 }
 
-export function inclusiveDayCount(start: CalendarDay, end: CalendarDay): number {
-  return Math.round((utc(end).getTime() - utc(start).getTime()) / 86_400_000) + 1;
+function taxYearWindow(yearStart: string, yearEnd: string) {
+  const start = parseCalendarDay(yearStart);
+  const end = parseCalendarDay(yearEnd);
+  if (!start || !end) {
+    throw new MacrsShortYearError(
+      "MACRS requires calendar yearStart and yearEnd (YYYY-MM-DD)",
+    );
+  }
+  if (utc(end) < utc(start)) {
+    throw new MacrsShortYearError(
+      `MACRS window ${yearStart}–${yearEnd} ends before it starts`,
+    );
+  }
+  return { start, end };
+}
+
+/** Convention dates are firsts or midpoints. Keep half months as integer
+ * periods before they multiply money; BigInt(3.5) would otherwise throw. */
+function halfMonths(months: number): bigint {
+  const periods = months * 2;
+  if (!Number.isSafeInteger(periods) || periods < 0) {
+    throw new MacrsShortYearError(
+      "MACRS recovery months must be non-negative whole or half months",
+    );
+  }
+  return BigInt(periods);
+}
+
+function rateRatio(numerator: bigint, denominator: bigint): string {
+  const scale = 10_000_000_000n;
+  const units = roundDiv(numerator * scale, denominator);
+  return `${units / scale}.${String(units % scale).padStart(10, "0")}`;
+}
+
+export function inclusiveDayCount(
+  start: CalendarDay,
+  end: CalendarDay,
+): number {
+  return (
+    Math.round((utc(end).getTime() - utc(start).getTime()) / 86_400_000) + 1
+  );
 }
 
 export function addCalendarDays(start: CalendarDay, days: number): CalendarDay {
@@ -87,15 +130,21 @@ export function shortTaxYearMonths(yearStart: string, yearEnd: string): number {
   const start = parseCalendarDay(yearStart);
   const end = parseCalendarDay(yearEnd);
   if (!start || !end) {
-    throw new MacrsShortYearError("short-year MACRS requires calendar yearStart and yearEnd (YYYY-MM-DD)");
+    throw new MacrsShortYearError(
+      "short-year MACRS requires calendar yearStart and yearEnd (YYYY-MM-DD)",
+    );
   }
   if (utc(end) < utc(start)) {
-    throw new MacrsShortYearError(`short-year window ${yearStart}–${yearEnd} ends before it starts`);
+    throw new MacrsShortYearError(
+      `short-year window ${yearStart}–${yearEnd} ends before it starts`,
+    );
   }
   if (!startsOnFirst(start) && !endsOnLast(end)) {
     const days = inclusiveDayCount(start, end);
     if (days < 1) {
-      throw new MacrsShortYearError(`short-year window ${yearStart}–${yearEnd} has no days`);
+      throw new MacrsShortYearError(
+        `short-year window ${yearStart}–${yearEnd} has no days`,
+      );
     }
     return Math.max(1, Math.round(days / 30.4166));
   }
@@ -110,22 +159,42 @@ export function shortTaxYearMonths(yearStart: string, yearEnd: string): number {
   return months;
 }
 
-export function impliedShortYearFactor(yearStart: string, yearEnd: string): string {
+export function impliedShortYearFactor(
+  yearStart: string,
+  yearEnd: string,
+): string {
   const months = shortTaxYearMonths(yearStart, yearEnd);
-  if (months === 12 && isFullCalendarYear(yearStart, yearEnd)) return normalizeDecimal(1, 10);
-  return normalizeDecimal(mulRatio("1.0000", BigInt(months), 12n), 10);
+  return rateRatio(halfMonths(months), 24n);
 }
 
-export function isFullCalendarYear(yearStart: string, yearEnd: string): boolean {
+export function isFullCalendarYear(
+  yearStart: string,
+  yearEnd: string,
+): boolean {
   const start = parseCalendarDay(yearStart);
   const end = parseCalendarDay(yearEnd);
-  return !!start && !!end && start.day === 1 && start.month === 1 && end.month === 12 && end.day === 31 && start.year === end.year;
+  return (
+    !!start &&
+    !!end &&
+    start.day === 1 &&
+    start.month === 1 &&
+    end.month === 12 &&
+    end.day === 31 &&
+    start.year === end.year
+  );
 }
 
 /** Pub 946: a short tax year is fewer than 12 full months. A July–June
  *  fiscal year is a full year even though it is not a calendar year. */
 export function isFullTaxYear(yearStart: string, yearEnd: string): boolean {
-  return shortTaxYearMonths(yearStart, yearEnd) === 12;
+  const { start, end } = taxYearWindow(yearStart, yearEnd);
+  // Counting a partly occupied January as a month for the half-year
+  // convention does not make January 15–December 31 twelve FULL months.
+  return (
+    startsOnFirst(start) &&
+    endsOnLast(end) &&
+    (end.year - start.year) * 12 + end.month - start.month === 11
+  );
 }
 
 export function isShortTaxYear(yearStart: string, yearEnd: string): boolean {
@@ -133,10 +202,14 @@ export function isShortTaxYear(yearStart: string, yearEnd: string): boolean {
 }
 
 export function factorsAgree(declared: string, implied: string): boolean {
-  return cmp(normalizeDecimal(declared, 10), implied) === 0;
+  return compareDecimal(normalizeDecimal(declared, 10), implied) === 0;
 }
 
-export function assertShortYearFactorAgrees(yearStart: string, yearEnd: string, declared?: string | number | null): string {
+export function assertShortYearFactorAgrees(
+  yearStart: string,
+  yearEnd: string,
+  declared?: string | number | null,
+): string {
   const months = shortTaxYearMonths(yearStart, yearEnd);
   const implied = impliedShortYearFactor(yearStart, yearEnd);
   if (declared == null || String(declared).trim() === "") return implied;
@@ -158,14 +231,16 @@ function nearestPrecedingFirstOrMidpoint(day: CalendarDay): CalendarDay {
 function addMonthsFirst(start: CalendarDay, months: number): CalendarDay {
   const monthIndex = start.month - 1 + months;
   const year = start.year + Math.floor(monthIndex / 12);
-  const month = ((monthIndex % 12) + 12) % 12 + 1;
+  const month = (((monthIndex % 12) + 12) % 12) + 1;
   return { year, month, day: 1 };
 }
 
 /** Half-year deemed placed-in-service date (Pub 946 short-year rules). */
-export function halfYearDeemedServiceDate(yearStart: string, yearEnd: string): CalendarDay {
-  const start = parseCalendarDay(yearStart)!;
-  const end = parseCalendarDay(yearEnd)!;
+export function halfYearDeemedServiceDate(
+  yearStart: string,
+  yearEnd: string,
+): CalendarDay {
+  const { start, end } = taxYearWindow(yearStart, yearEnd);
   if (startsOnFirst(start) || endsOnLast(end)) {
     const months = shortTaxYearMonths(yearStart, yearEnd);
     const origin = { year: start.year, month: start.month, day: 1 };
@@ -173,30 +248,60 @@ export function halfYearDeemedServiceDate(yearStart: string, yearEnd: string): C
     return { ...addMonthsFirst(origin, Math.floor(months / 2)), day: 15 };
   }
   const days = inclusiveDayCount(start, end);
-  const midpoint = addCalendarDays(start, Math.floor(days / 2));
+  const midpoint = addCalendarDays(start, Math.ceil(days / 2) - 1);
   return nearestPrecedingFirstOrMidpoint(midpoint);
 }
 
 /** Mid-quarter deemed placed-in-service date for a short year (Pub 946 table). */
-export function midQuarterDeemedServiceDate(yearStart: string, yearEnd: string, placedOn: string): CalendarDay {
-  const start = parseCalendarDay(yearStart)!;
+export function midQuarterDeemedServiceDate(
+  yearStart: string,
+  yearEnd: string,
+  placedOn: string,
+): CalendarDay {
+  const { start, end } = taxYearWindow(yearStart, yearEnd);
   const placed = parseCalendarDay(placedOn);
   if (!placed) {
-    throw new MacrsShortYearError("placedInServiceOn must be a calendar date (YYYY-MM-DD)");
+    throw new MacrsShortYearError(
+      "placedInServiceOn must be a calendar date (YYYY-MM-DD)",
+    );
   }
-  const days = inclusiveDayCount(start, parseCalendarDay(yearEnd)!);
-  const quarterDays = days / 4;
+  if (placedOn < yearStart || placedOn > yearEnd) {
+    throw new MacrsShortYearError(
+      "the date used for a MACRS quarter must be within its tax-year window",
+    );
+  }
+  const months = (end.year - start.year) * 12 + end.month - start.month + 1;
+  // Pub 946 explicitly uses whole calendar months for 4- and 8-month
+  // short years. A full fiscal year uses its four three-month quarters.
+  if (startsOnFirst(start) && endsOnLast(end) && [4, 8, 12].includes(months)) {
+    const quarterMonths = months / 4;
+    const monthOffset =
+      (placed.year - start.year) * 12 + placed.month - start.month;
+    const quarter = Math.floor(monthOffset / quarterMonths);
+    return {
+      ...addMonthsFirst(
+        start,
+        quarter * quarterMonths + Math.floor(quarterMonths / 2),
+      ),
+      day: quarterMonths % 2 === 0 ? 1 : 15,
+    };
+  }
+  const days = inclusiveDayCount(start, end);
   const offset = Math.max(0, inclusiveDayCount(start, placed) - 1);
-  const quarter = Math.min(3, Math.floor(offset / quarterDays));
-  const quarterStart = addCalendarDays(start, Math.round(quarter * quarterDays));
-  const midpoint = addCalendarDays(quarterStart, Math.floor(quarterDays / 2));
+  const quarter = Math.min(3, Math.floor((offset * 4) / days));
+  const midpoint = addCalendarDays(
+    start,
+    Math.ceil((days * (2 * quarter + 1)) / 8) - 1,
+  );
   return nearestPrecedingFirstOrMidpoint(midpoint);
 }
 
 export function midMonthDeemedServiceDate(placedOn: string): CalendarDay {
   const placed = parseCalendarDay(placedOn);
   if (!placed) {
-    throw new MacrsShortYearError("placedInServiceOn must be a calendar date (YYYY-MM-DD)");
+    throw new MacrsShortYearError(
+      "placedInServiceOn must be a calendar date (YYYY-MM-DD)",
+    );
   }
   return { year: placed.year, month: placed.month, day: 15 };
 }
@@ -207,26 +312,48 @@ export function deemedPlacedInServiceOn(
   yearEnd: string,
   placedOn: string,
 ): CalendarDay {
-  if (convention === "half_year") return halfYearDeemedServiceDate(yearStart, yearEnd);
-  if (convention === "mid_quarter") return midQuarterDeemedServiceDate(yearStart, yearEnd, placedOn);
+  if (convention === "half_year")
+    return halfYearDeemedServiceDate(yearStart, yearEnd);
+  if (convention === "mid_quarter")
+    return midQuarterDeemedServiceDate(yearStart, yearEnd, placedOn);
   return midMonthDeemedServiceDate(placedOn);
 }
 
 /** Months treated as in service from the deemed date through year-end, including parts of a month. */
-export function monthsTreatedInService(deemed: CalendarDay, yearEnd: string): number {
-  const end = parseCalendarDay(yearEnd)!;
+export function monthsTreatedInService(
+  deemed: CalendarDay,
+  yearEnd: string,
+): number {
+  const end = parseCalendarDay(yearEnd);
+  if (
+    !end ||
+    !parseCalendarDay(formatCalendarDay(deemed)) ||
+    ![1, 15].includes(deemed.day)
+  ) {
+    throw new MacrsShortYearError(
+      "MACRS service requires a valid first-of-month or midpoint deemed date and a calendar year-end",
+    );
+  }
   if (utc(end) < utc(deemed)) return 0;
-  return (end.year - deemed.year) * 12 + (end.month - deemed.month) + 1;
+  return (
+    (end.year - deemed.year) * 12 +
+    (end.month - deemed.month) +
+    1 -
+    (deemed.day === 15 ? 0.5 : 0)
+  );
 }
 
-export function decliningBalanceRate(method: "200_db" | "150_db" | "straight_line", recoveryPeriodYears: string): string {
+export function decliningBalanceRate(
+  method: "200_db" | "150_db" | "straight_line",
+  recoveryPeriodYears: string,
+): string {
   const yearUnits = toUnits(normalizeMoney(recoveryPeriodYears));
   if (yearUnits <= 0n) {
     throw new MacrsShortYearError("recovery period must be greater than 0");
   }
   const factorNum = method === "200_db" ? 2n : method === "150_db" ? 3n : 1n;
   const factorDen = method === "150_db" ? 2n : 1n;
-  return normalizeDecimal(fromUnits(roundDiv(factorNum * 10_000n * 10_000n, factorDen * yearUnits)), 10);
+  return rateRatio(factorNum * 10_000n, factorDen * yearUnits);
 }
 
 export function shortYearPlacementDeduction(args: {
@@ -235,7 +362,10 @@ export function shortYearPlacementDeduction(args: {
   monthsInService: number;
 }): string {
   const fullYear = mulDecimal(args.basis, args.rate);
-  return formatMoney(roundMoney(mulRatio(fullYear, BigInt(args.monthsInService), 12n), 2), 2);
+  return formatMoney(
+    roundMoney(mulRatio(fullYear, halfMonths(args.monthsInService), 24n), 2),
+    2,
+  );
 }
 
 export function subsequentSimplifiedDeduction(args: {
@@ -245,11 +375,19 @@ export function subsequentSimplifiedDeduction(args: {
 }): string {
   const annual = mulDecimal(args.adjustedBasis, args.rate);
   if (args.monthsInYear >= 12) return formatMoney(roundMoney(annual, 2), 2);
-  return formatMoney(roundMoney(mulRatio(annual, BigInt(args.monthsInYear), 12n), 2), 2);
+  return formatMoney(
+    roundMoney(mulRatio(annual, halfMonths(args.monthsInYear), 24n), 2),
+    2,
+  );
 }
 
 export function recoveryMonthsFromYears(recoveryPeriodYears: string): number {
-  return Number(formatMoney(roundMoney(mulDecimal(normalizeMoney(recoveryPeriodYears), "12"), 0), 0));
+  return Number(
+    formatMoney(
+      roundMoney(mulDecimal(normalizeMoney(recoveryPeriodYears), "12"), 0),
+      0,
+    ),
+  );
 }
 
 /** DB vs remaining-life SL. The applicable rate after a short year still
@@ -260,11 +398,22 @@ export function applicableAnnualDeduction(args: {
   recoveryPeriodYears: string;
   remainingMonths: number;
 }): string {
-  if (args.remainingMonths <= 0 || cmp(args.adjustedBasis, "0") <= 0) return "0.00";
-  const sl = mulRatio(args.adjustedBasis, 12n, BigInt(args.remainingMonths));
+  if (args.remainingMonths <= 0 || cmp(args.adjustedBasis, "0") <= 0)
+    return "0.00";
+  const sl = mulRatio(
+    args.adjustedBasis,
+    24n,
+    halfMonths(args.remainingMonths),
+  );
   if (args.method === "straight_line") return formatMoney(roundMoney(sl, 2), 2);
-  const declining = mulDecimal(args.adjustedBasis, decliningBalanceRate(args.method, args.recoveryPeriodYears));
-  return formatMoney(roundMoney(cmp(sl, declining) >= 0 ? sl : declining, 2), 2);
+  const declining = mulDecimal(
+    args.adjustedBasis,
+    decliningBalanceRate(args.method, args.recoveryPeriodYears),
+  );
+  return formatMoney(
+    roundMoney(cmp(sl, declining) >= 0 ? sl : declining, 2),
+    2,
+  );
 }
 
 function annualForRecoveryYear(args: {
@@ -306,7 +455,10 @@ export function allocationRecoveryDeduction(args: {
   monthsThisYear: number;
 }): string {
   const recoveryMonths = recoveryMonthsFromYears(args.recoveryPeriodYears);
-  let remaining = Math.max(0, Math.min(args.monthsThisYear, recoveryMonths - args.elapsedMonths));
+  let remaining = Math.max(
+    0,
+    Math.min(args.monthsThisYear, recoveryMonths - args.elapsedMonths),
+  );
   let elapsed = args.elapsedMonths;
   let total = "0";
   while (remaining > 0 && elapsed < recoveryMonths) {
@@ -318,7 +470,7 @@ export function allocationRecoveryDeduction(args: {
       recoveryPeriodYears: args.recoveryPeriodYears,
       recoveryYearIndex: Math.floor(elapsed / 12),
     });
-    total = add(total, mulRatio(annual, BigInt(chunk), 12n));
+    total = add(total, mulRatio(annual, halfMonths(chunk), 24n));
     remaining -= chunk;
     elapsed += chunk;
   }
@@ -352,8 +504,15 @@ export function subsequentRecoveryDeduction(args: {
     recoveryPeriodYears: args.recoveryPeriodYears,
     remainingMonths,
   });
-  if (args.monthsThisYear >= 12) return annual;
-  return formatMoney(roundMoney(mulRatio(annual, BigInt(args.monthsThisYear), 12n), 2), 2);
+  const serviceMonths = Math.min(args.monthsThisYear, remainingMonths, 12);
+  const deduction = mulRatio(annual, halfMonths(serviceMonths), 24n);
+  return formatMoney(
+    roundMoney(
+      cmp(deduction, args.adjustedBasis) > 0 ? args.adjustedBasis : deduction,
+      2,
+    ),
+    2,
+  );
 }
 
 export function remainingAfter(basis: string, deduction: string): string {
