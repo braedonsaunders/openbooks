@@ -221,3 +221,12 @@ export async function executeIdempotentInventoryAction<T>(
     "an identical inventory action is still in progress",
   );
 }
+
+export function normalizeMovementIdempotencyKey(value: string | null | undefined): string | null {
+  if (value == null) return null;
+  const normalized = value.trim();
+  if (normalized.length < 1 || normalized.length > 500) {
+    throw new InventoryError("inventory movement idempotency key must be between 1 and 500 characters");
+  }
+  return normalized;
+}

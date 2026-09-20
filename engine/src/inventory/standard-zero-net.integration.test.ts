@@ -7,7 +7,9 @@ import { db } from "../platform/db.ts";
 import { withSimClock } from "../platform/clock.ts";
 import { documentRevisionSql } from "../records/revision.ts";
 import { normalizeMoney } from "../money/money.ts";
-import { getOnHand, issueInventory, receiveInventory, revalueOpenLayersToStandardCost } from "./inventory.ts";
+import { getOnHand } from "./position.ts";
+import { issueInventory, receiveInventory } from "./movements.ts";
+import { revalueOpenLayersToStandardCost } from "./revaluation.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from "../testing/fixtures.ts";
 
 // Exercise the actual profile HTTP handler. Only the authenticated request

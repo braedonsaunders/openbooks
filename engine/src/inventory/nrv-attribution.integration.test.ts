@@ -3,7 +3,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { createScratchOrg, seedFlowActors, dropScratchOrg } from "../testing/fixtures.ts";
-import { receiveInventory } from "./inventory.ts";
+import { receiveInventory } from "./movements.ts";
 import { writeDownInventoryToNrv, reverseInventoryWritedown } from "./nrv.ts";
 
 for (const operation of ["write-down", "reversal"] as const) {

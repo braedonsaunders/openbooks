@@ -127,3 +127,13 @@ export async function postInventoryEntry(
   );
   return eid;
 }
+
+/** An offset hitting the valuation account would break inventory GL = layer value. */
+export function inventoryOffsetAccountProblem(
+  assetAccountId: string,
+  offsetAccountId: string | null | undefined,
+  label: string,
+): string | null {
+  return offsetAccountId?.toLowerCase() === assetAccountId.toLowerCase()
+    ? `the ${label} account must be distinct from the inventory asset account` : null;
+}

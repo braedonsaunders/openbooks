@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { cmp } from "../money/money.ts";
-import { InventoryError } from "./contracts.ts";
+import { InventoryError, type InventoryProfile, type Runner } from "./contracts.ts";
 // ---------------------------------------------------------------------------
 // Lot / serial tracking
 // ---------------------------------------------------------------------------
@@ -223,4 +223,79 @@ export async function queryLotRecall(
        ${subsidiaryScope}
      order by im.moved_at desc`));
   return r.rows;
+}
+
+export async function validateTrackingSelection(
+  tx: Runner,
+  orgId: string,
+  itemId: string,
+  stockLocationId: string,
+  profile: InventoryProfile,
+  selection: { quantity: string; lotId?: string | null; serialId?: string | null },
+  operation: "receipt" | "issue" | "transfer",
+): Promise<void> {
+  assertTracking(profile, selection, operation);
+  if (profile.tracking === "lot") {
+    const lot = (await tx.execute<{ id: string }>(sql`
+      select id
+        from lots
+       where id = ${selection.lotId} and org_id = ${orgId} and item_id = ${itemId}
+       for update
+    `));
+    if (!lot.rows[0]) {
+      throw new InventoryError(
+        "lot must belong to the item and organization",
+      );
+    }
+    return;
+  }
+  if (profile.tracking !== "serial") return;
+
+  const serial = (await tx.execute<{
+      id: string;
+      status: string;
+      current_stock_location_id: string | null;
+    }>(sql`
+    select id, status, current_stock_location_id
+      from serials
+     where id = ${selection.serialId} and org_id = ${orgId} and item_id = ${itemId}
+     for update
+  `));
+  const row = serial.rows[0];
+  if (!row) {
+    throw new InventoryError(
+      "serial must belong to the item and organization",
+    );
+  }
+  if (operation === "receipt") {
+    const prior = (await tx.execute(sql`
+      select 1
+        from inventory_movements
+       where org_id = ${orgId} and serial_id = ${selection.serialId}
+         and status = 'posted'
+       limit 1
+    `));
+    if (prior.rows.length) {
+      throw new InventoryError(
+        "serial already has posted inventory movement history; use a controlled return workflow",
+      );
+    }
+    if (
+      row.current_stock_location_id &&
+      row.current_stock_location_id !== stockLocationId
+    ) {
+      throw new InventoryError(
+        "serial is registered at a different stock location",
+      );
+    }
+    return;
+  }
+  if (
+    row.status !== "in_stock" ||
+    row.current_stock_location_id !== stockLocationId
+  ) {
+    throw new InventoryError(
+      `serial is not in stock at the ${operation === "issue" ? "issue" : "source"} location`,
+    );
+  }
 }

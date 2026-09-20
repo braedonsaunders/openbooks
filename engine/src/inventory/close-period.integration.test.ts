@@ -3,11 +3,8 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { setPeriodLockState } from "../close/period-locks.ts";
-import {
-  adjustInventory,
-  receiveInventory,
-  reverseInventoryMovement,
-} from "./inventory.ts";
+import { adjustInventory, receiveInventory } from "./movements.ts";
+import { reverseInventoryMovement } from "./reversal.ts";
 import {
   createScratchOrg,
   createScratchUser,

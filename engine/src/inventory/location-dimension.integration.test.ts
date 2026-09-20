@@ -4,15 +4,10 @@ import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { toUnits } from "../money/money.ts";
-import {
-  adjustInventory,
-  buildAssembly,
-  issueInventory,
-  postLandedCostVoucher,
-  receiveInventory,
-  reverseAssemblyBuild,
-  transferInventory,
-} from "./inventory.ts";
+import { adjustInventory, issueInventory, receiveInventory } from "./movements.ts";
+import { transferInventory } from "./transfers.ts";
+import { buildAssembly, reverseAssemblyBuild } from "./assembly.ts";
+import { postLandedCostVoucher } from "./landed-cost.ts";
 import { reverseInventoryWritedown, writeDownInventoryToNrv } from "./nrv.ts";
 import {
   createScratchOrg,

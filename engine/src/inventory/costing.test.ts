@@ -20,15 +20,12 @@ import {
   splitOriginalCost,
   sumOriginalCosts,
 } from "./original-cost.ts";
-import {
-  buildAssembly,
-  getOnHand,
-  issueInventory,
-  postLandedCostVoucher,
-  receiveInventory,
-  revalueOpenLayersToStandardCost,
-  unitCostPerQuantity,
-} from "./inventory.ts";
+import { unitCostPerQuantity } from "./costing.ts";
+import { getOnHand } from "./position.ts";
+import { issueInventory, receiveInventory } from "./movements.ts";
+import { buildAssembly } from "./assembly.ts";
+import { revalueOpenLayersToStandardCost } from "./revaluation.ts";
+import { postLandedCostVoucher } from "./landed-cost.ts";
 import { db } from "../platform/db.ts";
 import {
   createScratchOrg,
@@ -518,11 +515,14 @@ test("a receipt re-reads a costing policy after a concurrent revision commits", 
 });
 
 test("movement costing snapshots are locked inside their transaction", () => {
-  const source = readFileSync(new URL("./inventory.ts", import.meta.url), "utf8");
+  const movements = readFileSync(new URL("./movements.ts", import.meta.url), "utf8");
   // Each direct movement path must re-read the profile with FOR SHARE after
   // locking its position; a pre-transaction profile read can race a policy PUT.
-  assert.match(source, /const profile = await resolveProfile\(orgId, input\.itemId, tx, true\)/g);
-  assert.match(source, /const profile = await resolveProfile\(orgId, target\.itemId, tx, true\)/);
+  assert.match(movements, /const profile = await resolveProfile\(orgId, input\.itemId, tx, true\)/g);
+  const transfers = readFileSync(new URL("./transfers.ts", import.meta.url), "utf8");
+  assert.match(transfers, /const profile = await resolveProfile\(orgId, input\.itemId, tx, true\)/);
+  const landed = readFileSync(new URL("./landed-cost.ts", import.meta.url), "utf8");
+  assert.match(landed, /const profile = await resolveProfile\(orgId, target\.itemId, tx, true\)/);
   const tracking = readFileSync(new URL("./tracking.ts", import.meta.url), "utf8");
   assert.match(tracking, /subsidiaryIds\?: readonly string\[\] \| null/);
 });

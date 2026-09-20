@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, pool } from "../platform/db.ts";
-import { getOnHand, issueInventory, receiveInventory } from "./inventory.ts";
+import { getOnHand } from "./position.ts";
+import { issueInventory, receiveInventory } from "./movements.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
 for (const operation of ["receipt", "issue"] as const) {

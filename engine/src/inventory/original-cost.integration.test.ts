@@ -5,8 +5,12 @@ import { db } from "../platform/db.ts";
 import { withSimClock } from "../platform/clock.ts";
 import { sum, toUnits } from "../money/money.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from "../testing/fixtures.ts";
-import { getOnHand, issueInventory, receiveInventory, reverseInventoryMovement, transferInventory,
-  postLandedCostVoucher, reverseLandedCostVoucher, revalueOpenLayersToStandardCost } from "./inventory.ts";
+import { getOnHand } from "./position.ts";
+import { issueInventory, receiveInventory } from "./movements.ts";
+import { transferInventory } from "./transfers.ts";
+import { reverseInventoryMovement } from "./reversal.ts";
+import { revalueOpenLayersToStandardCost } from "./revaluation.ts";
+import { postLandedCostVoucher, reverseLandedCostVoucher } from "./landed-cost.ts";
 import { reverseInventoryWritedown, writeDownInventoryToNrv } from "./nrv.ts";
 
 const skip = !process.env.OPENBOOKS_DB_URL;
