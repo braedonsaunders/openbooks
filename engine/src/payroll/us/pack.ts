@@ -228,12 +228,15 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
   deductionTreatments: [
     // §125 cafeteria and 401(k) elective deferrals reduce FIT-able wages but
     // NOT Social Security or Medicare wages — so only `income` is named.
-    // Engine coverage, stated exactly: the state path honors these today via
-    // `deduction()` (tax-qualified deductions, e.g. the Nebraska minimum
-    // measured on gross wages after qualified deductions); FIT prices the
-    // reported wages and FICA/FUTA price their own legs, so wiring FIT to
-    // the reduced leg is a separate, untranscribed change — the declaration
-    // states the law, it does not claim the FIT engine models it.
+    // Engine coverage, stated exactly: FIT prices the reduced income leg
+    // (`reducedBases.income` in compute-statutory.ts); the state path honors
+    // these via `deduction()` (tax-qualified deductions, e.g. the Nebraska
+    // minimum measured on gross wages after qualified deductions) because
+    // state conformity differs by state; FICA/FUTA price their own legs.
+    // The W-2 and Form 941 federal-wage queries (yearend.ts) subtract
+    // deduction lines carrying these treatments, so Box 1 and 941 line 2
+    // agree with the withholding. State boxes 16/18 still report taxable
+    // earnings — state treatment is the state engines' own transcription.
     // Labels name the pack's own instruments: the shared catalog keys
     // (options.payTaxTreatment.*) carry the Canadian factor names, so the US
     // treatments state their own English labels and no labelKey.
