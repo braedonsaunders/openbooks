@@ -147,8 +147,15 @@ export function ListViewDesigner({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
-    const data = await res.json()
-    if (!res.ok) { toast.error(data.error ?? t('designer.list.saveFailed')); setBusy(false); return }
+    // Error bodies are checked before they are parsed. A 401/403/500 with a
+    // non-JSON body must surface as saveFailed, never throw past the busy
+    // reset and leave the button stuck on Saving.
+    if (!res.ok) {
+      const data = (await res.json().catch(() => ({}))) as { error?: string }
+      toast.error(data.error ?? t('designer.list.saveFailed'))
+      setBusy(false)
+      return
+    }
     toast.success(t('designer.list.saved'))
     router.push(`/admin/customization?recordType=${recordType}&tab=views`)
     router.refresh()
@@ -159,7 +166,11 @@ export function ListViewDesigner({
     setBusy(true)
     const res = await fetch(`/api/customization/list-views/${def.id}`, { method: 'DELETE' })
     if (res.ok) { toast.success(t('designer.list.deleted')); router.push(`/admin/customization?recordType=${recordType}&tab=views`); router.refresh() }
-    else { toast.error((await res.json()).error ?? t('designer.list.saveFailed')); setBusy(false) }
+    else {
+      const data = (await res.json().catch(() => ({}))) as { error?: string }
+      toast.error(data.error ?? t('designer.list.saveFailed'))
+      setBusy(false)
+    }
   }
 
   const canSetOrgDefault = scope === 'org' ? canManageOrg : true
