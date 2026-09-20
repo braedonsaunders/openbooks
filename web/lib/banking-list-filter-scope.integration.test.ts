@@ -13,8 +13,8 @@ registerHooks({
   },
 })
 
-const { db, env, withBypass } = await import('@openbooks/engine/src/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
+const { db, env, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { entityListSource } = await import('./list/entity-sources.ts')
 
 test('banking account filter options honor the caller subsidiary scope', { skip: !env.OPENBOOKS_DB_URL }, async () => {

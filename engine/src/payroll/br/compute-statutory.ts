@@ -15,7 +15,7 @@
  * Money enters as engine 4dp decimals and is truncated to centavos at the
  * boundary — the pack's uniform rule (see BR_2026_ROUNDING).
  */
-import { fromUnits, toUnits } from "../../money.ts";
+import { fromUnits, toUnits } from "../../money/money.ts";
 import { empFact } from "../employee-facts.ts";
 // Side effect: registers BR_EMPLOYEE_FACTS, so every read below resolves
 // through the declaration in every import graph — never via a transitive

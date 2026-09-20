@@ -1,6 +1,6 @@
 import { Worker } from "bullmq";
 import { BACKUP_QUEUE, getBlockingConnection, type BackupJobData } from "@openbooks/jobs";
-import { executeBackupRun } from "../backup.ts";
+import { executeBackupRun } from "../backup/backup.ts";
 
 /**
  * Execute one `backup` queue payload — the exact code the worker callback

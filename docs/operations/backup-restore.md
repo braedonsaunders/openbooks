@@ -120,7 +120,7 @@ with no decryptable ciphertext cannot prove that fact itself.
    OPENBOOKS_DATA_KEY=SOURCE_32_BYTE_KEY_FROM_SECRET_MANAGER \
    SESSION_SECRET=SOURCE_SESSION_SECRET_FROM_SECRET_MANAGER \
    NODE_ENV=production \
-   npx tsx engine/src/backup-restore-cli.ts \
+   npx tsx engine/src/backup/restore-cli.ts \
      --in=/secure/openbooks/acme-backup.json.gz \
      --manifest=/secure/openbooks/acme-backup.json.gz.manifest.json \
      --org=00000000-0000-4000-8000-000000000000 \
@@ -242,7 +242,7 @@ Record at least:
 - the operator, reviewer, exceptions, and follow-up actions.
 
 CI runs the opt-in database-backed restore drill in
-`engine/src/backup-restore.integration.test.ts`. It creates an organization,
+`engine/src/backup/restore.integration.test.ts`. It creates an organization,
 exports it, removes it, restores it, validates constraints, accounting counts,
 durable MFA/OIDC recovery, transient-auth exclusion, and the explicit MFA-reset
 path. A separate case proves sandbox and change-set cross-org foreign keys are

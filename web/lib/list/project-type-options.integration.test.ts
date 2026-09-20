@@ -19,10 +19,10 @@ registerHooks({
 });
 
 const { sql } = await import("drizzle-orm");
-const { db } = await import("@openbooks/engine/src/db.ts");
-const { installTrustedTestDatabaseBypass } = await import("@openbooks/engine/src/test-database-bypass.ts");
+const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { installTrustedTestDatabaseBypass } = await import("@openbooks/engine/src/testing/database-bypass.ts");
 const { BUILTIN_PROJECT_TYPES } = await import("@openbooks/schema");
-const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { entityListSource } = await import("./entity-sources.ts");
 
 installTrustedTestDatabaseBypass();

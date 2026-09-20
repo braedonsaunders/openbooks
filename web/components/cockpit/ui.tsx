@@ -1,7 +1,7 @@
 'use client'
 
 import { useMoney } from '@/components/money-provider'
-import { cmp as compareMoney, div as divideMoney, sum as sumMoney } from '@openbooks/engine/src/money.ts'
+import { cmp as compareMoney, div as divideMoney, sum as sumMoney } from '@openbooks/engine/src/money/money.ts'
 import type { LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { cn } from '@openbooks/ui'

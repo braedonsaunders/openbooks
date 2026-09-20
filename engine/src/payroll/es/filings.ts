@@ -14,7 +14,7 @@
  * de retener), RIRPF arts. 71–94 (retenciones sobre rendimientos del trabajo),
  * Orden PJC/297/2026 (cotización 2026).
  */
-import type { PayrollPackFilings } from "../../payroll-filing-registry.ts";
+import type { PayrollPackFilings } from "../filing-registry.ts";
 
 export function esPackFilings(): PayrollPackFilings {
   return {

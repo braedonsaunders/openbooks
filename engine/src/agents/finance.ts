@@ -1,11 +1,11 @@
 import { sql } from "drizzle-orm";
-import { businessToday } from "../business-date.ts";
-import { db } from "../db.ts";
-import { fromUnits, toUnits } from "../money.ts";
+import { businessToday } from "../platform/business-date.ts";
+import { db } from "../platform/db.ts";
+import { fromUnits, toUnits } from "../money/money.ts";
 import {
   effectiveDetectorMateriality,
   type ContinuousCloseDetectorPolicy,
-} from "../continuous-close-config.ts";
+} from "./continuous-close-config.ts";
 import {
   absoluteUnits,
   classifyBudgetVariance,

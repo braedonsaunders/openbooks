@@ -156,8 +156,8 @@ test('static fallbacks name every installable pack, treatment and program type',
   // grows with it.
   const packRegistry: typeof import('@openbooks/engine/src/payroll/packs.ts') =
     await import('@openbooks/engine/src/payroll/packs.ts')
-  const filingRegistry: typeof import('@openbooks/engine/src/payroll-filing-registry.ts') =
-    await import('@openbooks/engine/src/payroll-filing-registry.ts')
+  const filingRegistry: typeof import('@openbooks/engine/src/payroll/filing-registry.ts') =
+    await import('@openbooks/engine/src/payroll/filing-registry.ts')
   const { declaredPayrollFilings } = filingRegistry
   const installable = packRegistry.installablePayrollPacks().map((pack) => pack.country).sort()
   assert.ok(installable.length > 2, 'expected more than the two built-ins')
@@ -195,7 +195,7 @@ test('the declared payroll packs are all writable as a filing-account country', 
   // The persona's exact case. Every country the pack registry declares filings
   // for must be acceptable to the write path, or that country cannot have a
   // filing account created for it at all.
-  const { declaredPayrollFilings } = (await import('@openbooks/engine/src/payroll-filing-registry.ts')) as {
+  const { declaredPayrollFilings } = (await import('@openbooks/engine/src/payroll/filing-registry.ts')) as {
     declaredPayrollFilings: () => { country: string }[]
   }
   const declared = declaredPayrollFilings().map((pack) => pack.country)

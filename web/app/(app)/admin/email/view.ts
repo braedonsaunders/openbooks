@@ -2,7 +2,7 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import { frame, page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { readOrgEmailConfigView } from '@openbooks/engine/src/email-config.ts'
+import { readOrgEmailConfigView } from '@openbooks/engine/src/delivery/email-config.ts'
 import { requirePermission } from '../../../../lib/authz'
 import type { ComponentProps } from 'react'
 import type { EmailSettingsForm } from './EmailSettingsForm'

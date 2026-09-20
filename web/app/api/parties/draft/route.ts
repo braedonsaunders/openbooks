@@ -1,7 +1,7 @@
 import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, schema } from '@openbooks/engine/src/db.ts'
+import { db, schema } from '@openbooks/engine/src/platform/db.ts'
 import { guardPermission } from '../../../../lib/authz'
 
 export const runtime = 'nodejs'

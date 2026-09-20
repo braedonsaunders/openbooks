@@ -27,9 +27,9 @@ const { listResources, getResource } = (await import('./resources.ts')) as typeo
 const { guessMapping } = (await import('./parse.ts')) as typeof import('./parse.ts')
 hooks.deregister()
 
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrgReporting } = await import(
-  '@openbooks/engine/src/test-fixtures.ts'
+  '@openbooks/engine/src/testing/fixtures.ts'
 )
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL)

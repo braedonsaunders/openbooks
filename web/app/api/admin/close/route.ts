@@ -2,7 +2,7 @@ import { guardCloseScope } from "@/lib/close-scope";
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
 import {
   CLOSE_MODULES,
   CloseError,
@@ -12,7 +12,7 @@ import {
   requestPeriodReopen,
   setPeriodLockState,
   type CloseModule,
-} from "@openbooks/engine/src/close.ts";
+} from "@openbooks/engine/src/close/close.ts";
 import { guardPermission, guardSubsidiaryScope } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
 import { isFeatureEnabled } from "../../../../lib/features";

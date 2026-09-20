@@ -11,7 +11,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { toUnits } from "../../money.ts";
+import { toUnits } from "../../money/money.ts";
 import { calculateFrCotisations2026 } from "./cotisations.ts";
 import {
   FR_APEC_2026,

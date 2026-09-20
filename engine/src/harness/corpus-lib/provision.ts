@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withBypass } from "../../db.ts";
-import { provisionOrganizationDefaults } from "../../organization-provisioning.ts";
+import { db, withBypass } from "../../platform/db.ts";
+import { provisionOrganizationDefaults } from "../../provisioning/organization-provisioning.ts";
 import { SIM_ORG_PREFIX } from "../../sim/db-guard.ts";
 import type { SimOrg, SimPeriod } from "../../sim/world.ts";
 import type { Corpus, CorpusParty, CorpusProject } from "./types.ts";

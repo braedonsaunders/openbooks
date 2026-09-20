@@ -13,7 +13,7 @@ import {
   Textarea,
   UrlDrawer,
 } from '@openbooks/ui'
-import type { RequirementPolicy } from '@openbooks/engine/src/compliance.ts'
+import type { RequirementPolicy } from '@openbooks/engine/src/compliance/compliance.ts'
 import { useBusinessToday } from '../../../../components/business-date-provider'
 import { AttachmentPanel } from '../../../../components/attachment-panel'
 import { promptDialog } from '../../../../lib/prompt'

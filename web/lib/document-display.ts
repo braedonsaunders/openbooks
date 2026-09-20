@@ -24,7 +24,7 @@ export function displayDocumentNumber(documentNumber: unknown, referenceNumber: 
  * Seeded built-in form name (F-t02-013).
  *
  * New orgs get one record form layout per record type named exactly this
- * (engine/src/customization-defaults.ts DEFAULT_FORM_NAME). The name is
+ * (engine/src/provisioning/customization-defaults.ts DEFAULT_FORM_NAME). The name is
  * data, not chrome — but while it still carries the seed name AND is the
  * default, drawers show the translated "Default form" instead of leaking
  * English into localized chrome. Either condition alone shows the stored

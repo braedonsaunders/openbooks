@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db, type SqlExecutor } from "../db.ts";
+import { db, type SqlExecutor } from "../platform/db.ts";
 import type { AllocationRunStatus, AllocationRunTrigger, RunComputation } from "./types.ts";
 
 /**

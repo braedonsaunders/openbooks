@@ -33,19 +33,19 @@ const {
 } = await import('./documents.ts')
 const { computeBillTotals } = await import('./bills.ts')
 const { createRecord } = await import('./api/writers.ts')
-const { saveTaxRateProviderConfig } = await import('@openbooks/engine/src/tax-rate-providers.ts')
-const { withSimClock } = await import('@openbooks/engine/src/clock.ts')
+const { saveTaxRateProviderConfig } = await import('@openbooks/engine/src/tax/rate-providers.ts')
+const { withSimClock } = await import('@openbooks/engine/src/platform/clock.ts')
 const {
   DocumentVoidError,
   requestDocumentVoid,
-} = await import('@openbooks/engine/src/document-void.ts')
-const { db, env, pool, withBypass, withOrgContext, withOrgTransaction } = await import('@openbooks/engine/src/db.ts')
-const { postDocument } = await import('@openbooks/engine/src/posting.ts')
+} = await import('@openbooks/engine/src/ledger/document-void.ts')
+const { db, env, pool, withBypass, withOrgContext, withOrgTransaction } = await import('@openbooks/engine/src/platform/db.ts')
+const { postDocument } = await import('@openbooks/engine/src/ledger/posting.ts')
 const {
   createScratchOrg,
   dropScratchOrg,
   seedFlowActors,
-} = await import('@openbooks/engine/src/test-fixtures.ts')
+} = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { createApplicationRecord } = await import('./application/records.ts')
 const { correctPostedDocument } = await import('./application/documents.ts')
 
@@ -1319,7 +1319,7 @@ test(
 )
 test('load and lock SQL preserve the exact revision token end to end', () => {
   assert.match(
-    readFileSync(new URL('../../engine/src/document-revision.ts', import.meta.url), 'utf8'),
+    readFileSync(new URL('../../engine/src/records/revision.ts', import.meta.url), 'utf8'),
     /function documentRevisionSql[\s\S]*?at time zone 'UTC'[\s\S]*?HH24:MI:SS\.US/,
   )
   // Every load and every lock projects the exact canonical token — the

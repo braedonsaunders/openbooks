@@ -25,7 +25,7 @@
  */
 
 import { sql } from "drizzle-orm";
-import { sum } from "../../money.ts";
+import { sum } from "../../money/money.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import {

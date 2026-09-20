@@ -1,20 +1,20 @@
 import 'server-only'
 
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
-import { add, cmp, mul, mulPercent, normalizeMoney, roundMoney, sum } from '@openbooks/engine/src/money.ts'
-import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { add, cmp, mul, mulPercent, normalizeMoney, roundMoney, sum } from '@openbooks/engine/src/money/money.ts'
+import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
 import { canonicalDecimal } from './exact-decimal'
 import { pgTextArrayLiteral } from './pg-array'
-import { computeLineTaxes } from '@openbooks/engine/src/tax.ts'
+import { computeLineTaxes } from '@openbooks/engine/src/tax/tax.ts'
 import {
   loadTaxComponentConfig,
   persistLineTaxComponents,
-} from '@openbooks/engine/src/tax-persist.ts'
+} from '@openbooks/engine/src/tax/persist.ts'
 import { nextDocumentNumber } from './bills'
 import { acquireFeatureGateLock, isFeatureEnabled } from './features'
-import { lockAndCheckOrgFeature } from '@openbooks/engine/src/org-feature-lock.ts'
+import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 import { subsidiaryVisibleFilter } from './subsidiaries'
 import type { FinancialProfile, InvoicingProfile } from '@openbooks/schema'
 import {

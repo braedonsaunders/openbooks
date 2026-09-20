@@ -140,7 +140,7 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ['../../../../../lib/api/json', 'mock:json'],
-  ['@openbooks/engine/src/db.ts', 'mock:db'],
+  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['../../../../../lib/authz', 'mock:authz'],
   ['../../../../../lib/feature-gates', 'mock:feature-gates'],
   ['../../../../../lib/list-params', 'mock:list-params'],
@@ -179,7 +179,7 @@ if (process.env.VITEST) {
     jsonObject: {},
     parseJsonBody: async (request: Request) => ({ ok: true, data: await request.json() }),
   }))
-  vi['mock']('@openbooks/engine/src/db.ts', () => ({
+  vi['mock']('@openbooks/engine/src/platform/db.ts', () => ({
     db: {
       transaction: async (work: (tx: { execute: (query: unknown) => Promise<{ rows: Record<string, unknown>[] }> }) => unknown) =>
         work({ execute: async (query) => mockedQuery(query) }),

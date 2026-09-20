@@ -1,5 +1,5 @@
 import 'server-only'
-import { parseCsvRows } from '@openbooks/engine/src/banking.ts'
+import { parseCsvRows } from '@openbooks/engine/src/banking/banking.ts'
 import { isSheetFormulaCellValue, readSheet, type SheetCellValue } from '@openbooks/office'
 import { CELL_PROVENANCE_KEY, type CellProvenance, type ImportFormat } from './types'
 

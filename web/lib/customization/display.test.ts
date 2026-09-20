@@ -26,7 +26,7 @@ test('a renamed view keeps its own name in every locale', () => {
 
 test('the seeded-name reference matches the engine provisioning seed', () => {
   const here = dirname(fileURLToPath(import.meta.url))
-  const seed = readFileSync(join(here, '..', '..', '..', 'engine', 'src', 'customization-defaults.ts'), 'utf8')
+  const seed = readFileSync(join(here, '..', '..', '..', 'engine', 'src', 'provisioning', 'customization-defaults.ts'), 'utf8')
   const match = seed.match(/DEFAULT_VIEW_NAME = "([^"]+)"/)
   assert.ok(match, 'engine seed must declare DEFAULT_VIEW_NAME')
   assert.equal(SEEDED_DEFAULT_VIEW_NAME, match[1], 'display helper must track the engine seed name')

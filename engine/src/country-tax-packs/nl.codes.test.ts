@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isTaxProvisionSelection, PACK_DEFAULT_CODES } from "../tax-pack-provisioning.ts";
+import { isTaxProvisionSelection, PACK_DEFAULT_CODES } from "../tax/pack-provisioning.ts";
 import { NETHERLANDS_TAX_PACK } from "./nl.ts";
 import { packTaxCodesForReturn, primaryPackTaxCode } from "./index.ts";
 

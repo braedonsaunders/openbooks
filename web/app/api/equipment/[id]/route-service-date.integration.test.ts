@@ -3,8 +3,8 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
-import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/src/test-fixtures.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
+import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
 import type { Authz } from "../../../../lib/authz";
 
 // Equipment dates are interpolated into DATE columns. An impossible calendar

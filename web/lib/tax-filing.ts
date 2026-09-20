@@ -1,6 +1,6 @@
 import 'server-only'
 import type { ExportData, Translator } from './report-pdf'
-import type { TaxReturnResult } from '@openbooks/engine/src/tax-return.ts'
+import type { TaxReturnResult } from '@openbooks/engine/src/tax-returns/return.ts'
 
 /**
  * Shape a computed tax return into the shared ExportData so it flows through the

@@ -38,6 +38,10 @@ jobs:
         run: node --test scripts/test-workflow.test.mjs
       - name: Product-neutrality audit
         run: npm run check:product-neutrality
+      - name: Engine module boundaries
+        run: npm run check:engine-boundaries
+      - name: Source path references
+        run: npm run check:source-path-references
       - name: Typecheck every workspace
         # Fails the job if any workspace with a `typecheck` script errors;
         # workspaces without one are skipped by --if-present.
@@ -194,7 +198,7 @@ jobs:
           # `tee` exits 0, so without pipefail a failing suite greens the step.
           set -o pipefail
           node --import tsx --test --test-force-exit --test-reporter=tap \
-            engine/src/kernel-constraints.integration.test.ts 2>&1 | tee canary.tap
+            engine/src/ledger/kernel-constraints.integration.test.ts 2>&1 | tee canary.tap
           node -e 'const s=require("fs").readFileSync("canary.tap","utf8"); if (/# SKIP(?:\s|$)/im.test(s)) { console.error("FATAL: integration tests skipped — DB wiring is broken"); process.exit(1); } if (/^not ok \d+ - /m.test(s)) { console.error("FATAL: canary recorded a failing test"); process.exit(1); } if (!/^# fail 0$/m.test(s)) { console.error("FATAL: canary did not report zero failures"); process.exit(1); } if (!/^ok \d+ - /m.test(s)) { console.error("FATAL: canary ran zero tests"); process.exit(1); } console.log("canary ok: integration tests executed against the database");'
 
       - name: Database test shard
@@ -484,9 +488,9 @@ jobs:
           OPENBOOKS_RESTORE_DRILL: "1"
           OPENBOOKS_TRUSTED_TEST_BYPASS: "1"
         run: >-
-          node --import tsx --import ./engine/src/test-database-bypass.ts
+          node --import tsx --import ./engine/src/testing/database-bypass.ts
           --test --test-force-exit
-          engine/src/backup-restore.integration.test.ts
+          engine/src/backup/restore.integration.test.ts
 
   # The browser tests used to be one 24-minute serial job, and that job alone
   # was the pipeline's critical path: every other partition finished inside 16

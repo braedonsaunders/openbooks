@@ -70,12 +70,12 @@ const lineageUrl = "../lineage/route.ts?alloc-runs";
 const lineageRoute = (await import(lineageUrl)) as typeof import("../lineage/route.ts");
 hooks.deregister();
 
-const { db } = await import("../../../../../engine/src/db.ts");
+const { db } = await import("../../../../../engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "../../../../../engine/src/test-fixtures.ts"
+  "../../../../../engine/src/testing/fixtures.ts"
 );
 const { postProjectGlEntry } = await import(
-  "../../../../../engine/src/project-recognition.ts"
+  "../../../../../engine/src/projects/recognition.ts"
 );
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

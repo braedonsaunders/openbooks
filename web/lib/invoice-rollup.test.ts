@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { sum } from '@openbooks/engine/src/money.ts'
+import { sum } from '@openbooks/engine/src/money/money.ts'
 import {
   applyRollup,
   lineMatchesGroup,

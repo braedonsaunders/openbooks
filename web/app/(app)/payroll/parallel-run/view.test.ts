@@ -37,7 +37,7 @@ registerHooks({
       if (specifier.endsWith('/module-home/group-tabs')) {
         return virtual('export async function groupTabs(){return []}')
       }
-      if (specifier === '@openbooks/engine/src/payroll-parallel-run-store.ts') {
+      if (specifier === '@openbooks/engine/src/payroll/parallel-run-store.ts') {
         return virtual(`
           const visible = (scope) => scope?.allowedSubsidiaryIds?.has('sub-visible')
           const row = (scope) => [{id: visible(scope) ? 'VISIBLE' : 'HIDDEN'}]

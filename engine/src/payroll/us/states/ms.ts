@@ -20,7 +20,7 @@
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
 import { D, divIntCents, max0, mulRateCents, U } from "../../canada/decimal.ts";
-import { roundDiv } from "../../../money.ts";
+import { roundDiv } from "../../../money/money.ts";
 import {
   certificateAmount, certificateChoice, certificateFlag, type PayrollCertificate,
 } from "../../certificates.ts";

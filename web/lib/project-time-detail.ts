@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { normalizeMoney } from '@openbooks/engine/src/money.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 
 export type ProjectTimeDimension = 'employee' | 'item' | 'task'
 

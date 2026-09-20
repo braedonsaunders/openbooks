@@ -2,7 +2,7 @@ import 'server-only'
 
 import Link from 'next/link'
 import { cn } from '@openbooks/ui'
-import type { TaxDepreciationPack } from '@openbooks/engine/src/tax-depreciation-packs.ts'
+import type { TaxDepreciationPack } from '@openbooks/engine/src/tax-returns/depreciation-packs.ts'
 import { TaxDepreciationSetup } from './TaxDepreciationSetup'
 
 /**

@@ -8,10 +8,10 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context)
 } })
 
-const { db, withBypassContext } = await import('@openbooks/engine/src/db.ts')
+const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
 const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
-const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
+const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { createPrebill, WipBillingError } = await import('./wip-billing')
 
 test('WIP service refuses direct creation when WIP Billing is disabled', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {

@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
-import { db, withBypassContext, withOrgContext } from "../db.ts";
-import { abs, cmp, fromUnits, toUnits } from "../money.ts";
-import { runUserSql } from "../sqlapi.ts";
+import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
+import { abs, cmp, fromUnits, toUnits } from "../money/money.ts";
+import { runUserSql } from "../platform/sqlapi.ts";
 
 /**
  * Scenario / close harness — turns a migrated company into a verifiable golden

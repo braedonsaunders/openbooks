@@ -1,6 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db, type SqlExecutor } from '@openbooks/engine/src/db.ts'
+import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 
 /**
  * File Cabinet activity logging — writes to the shared immutable `audit_log`.

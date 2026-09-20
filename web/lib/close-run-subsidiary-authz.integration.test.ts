@@ -71,9 +71,9 @@ const routeUrl = "../app/api/close/runs/route.ts?close-run-subsidiary-authz";
 const { POST } = (await import(routeUrl)) as typeof import("../app/api/close/runs/route.ts");
 hooks.deregister();
 
-const { db, env } = await import("@openbooks/engine/src/db.ts");
+const { db, env } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/src/test-fixtures.ts",
+  "@openbooks/engine/src/testing/fixtures.ts",
 );
 
 const DB = !!env.OPENBOOKS_DB_URL;

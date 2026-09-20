@@ -1,8 +1,8 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db, schema, withOrgTransaction, type SqlExecutor } from '@openbooks/engine/src/db.ts'
-import { isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
-import { normalizeMoney } from '@openbooks/engine/src/money.ts'
+import { db, schema, withOrgTransaction, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { computeBillTotals, nextDocumentNumber, persistLineTaxComponents, taxProfileMap, type BillLineInput } from './bills'
 import {
   assertNoExistingDocumentCorrection,

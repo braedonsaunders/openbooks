@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
-import { postProjectGlEntry } from "../project-recognition.ts";
+import { db } from "../platform/db.ts";
+import { postProjectGlEntry } from "../projects/recognition.ts";
 import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrgReporting,
   type ScratchOrg,
-} from "../test-fixtures.ts";
+} from "../testing/fixtures.ts";
 import { previewDriverVector } from "./drivers.ts";
 import { previewAllocationRun } from "./period-run.ts";
 import { allocationServiceDeps } from "./service.ts";

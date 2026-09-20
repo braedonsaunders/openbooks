@@ -2,7 +2,7 @@ import type { WorkItemSeverity } from "./measure.ts";
 import type {
   ContinuousCloseAgentKey,
   ContinuousCloseDetectorPolicy,
-} from "../continuous-close-config.ts";
+} from "./continuous-close-config.ts";
 
 /**
  * Background agent detector packs (collections, payables, reconciliation,

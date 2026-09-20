@@ -3,8 +3,8 @@ import { statementBookExpr } from "../gl-summary";
 import { isFeatureEnabled } from "../features";
 import { getMoneyFormatter } from '../money-server'
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
-import { add, div, mulDecimal, mulRatio, normalizeMoney, toUnits } from "@openbooks/engine/src/money.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
+import { add, div, mulDecimal, mulRatio, normalizeMoney, toUnits } from "@openbooks/engine/src/money/money.ts";
 import {
   deriveOverheadCategoryDeptRates,
   deriveOverheadDeptComposite,
@@ -12,7 +12,7 @@ import {
   overheadPublishBlockers,
   quantizeOverheadMoney,
   type OverheadPublishBlocker,
-} from "@openbooks/engine/src/overhead-rates.ts";
+} from "@openbooks/engine/src/projects/overhead-rates.ts";
 import { flowRates } from "../fx-presentation";
 import { resolveAccountGroups } from "../account-groups";
 import {

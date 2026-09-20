@@ -1,4 +1,4 @@
-import { CONTINUOUS_CLOSE_AGENT_KEYS, type ContinuousCloseAgentKey } from "@openbooks/engine/src/continuous-close-config.ts";
+import { CONTINUOUS_CLOSE_AGENT_KEYS, type ContinuousCloseAgentKey } from "@openbooks/engine/src/agents/continuous-close-config.ts";
 import { isUuid, parseListParams, pickString } from "../list-params";
 import type { AgentInboxFilters, InboxSeverity, InboxStatus } from "../agents/inbox";
 

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db, withTransactionSavepoint, type SqlExecutor } from "../db.ts";
+import { db, withTransactionSavepoint, type SqlExecutor } from "../platform/db.ts";
 
 /**
  * Source-asserted party merges in the mirror.

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
-import { db } from "../db.ts";
+import { db } from "../platform/db.ts";
 import { BUILT_IN_ROLE_NAMES, EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 
@@ -132,7 +132,7 @@ export const closeRunsFlowAdapter: FlowSubjectAdapter = {
     outcome: "approved" | "rejected",
     ctx: FlowExecCtx,
   ): Promise<void> {
-    const { finalizeCloseFlowApproval } = await import("../close.ts");
+    const { finalizeCloseFlowApproval } = await import("../close/close.ts");
     await finalizeCloseFlowApproval({
       orgId: ctx.orgId,
       runId: subjectId,

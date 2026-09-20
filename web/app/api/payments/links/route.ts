@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
-import { db } from "@openbooks/engine/src/db.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
 import {
   PaymentAcceptanceError,
   createPaymentLink,
   listPaymentLinks,
-} from "@openbooks/engine/src/payment-acceptance.ts";
+} from "@openbooks/engine/src/payments/acceptance.ts";
 import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";

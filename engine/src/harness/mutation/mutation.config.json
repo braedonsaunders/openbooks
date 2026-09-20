@@ -3,28 +3,28 @@
   "comment": "Curated mutation scope (fleet item 3). Each target maps to the test files that cover it: fast unit files first so unit-only runs measure something, DB-backed files after so nightly runs with OPENBOOKS_DB_URL measure the rest. lineRanges restrict generation to the assigned math (payments allocation/application, payroll stub assembly + employer accruals). needsDb marks targets whose mapped tests all require a database: in unit mode their mutants report skipped-with-cause instead of silently vanishing.",
   "targets": [
     {
-      "path": "engine/src/money.ts",
-      "tests": ["engine/src/money.test.ts"]
+      "path": "engine/src/money/money.ts",
+      "tests": ["engine/src/money/money.test.ts"]
     },
     {
-      "path": "engine/src/posting.ts",
+      "path": "engine/src/ledger/posting.ts",
       "tests": [
-        "engine/src/posting-replay.test.ts",
-        "engine/src/posting-fx-rate-tiebreak.test.ts",
-        "engine/src/posting-project-charge.test.ts",
-        "engine/src/dunning.test.ts",
-        "engine/src/direct-debit.test.ts",
-        "engine/src/posting.test.ts",
-        "engine/src/posting-tax-guards.test.ts",
-        "engine/src/posting-period.integration.test.ts"
+        "engine/src/ledger/posting-replay.test.ts",
+        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
+        "engine/src/ledger/posting-project-charge.test.ts",
+        "engine/src/receivables/dunning.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/ledger/posting.test.ts",
+        "engine/src/ledger/posting-tax-guards.test.ts",
+        "engine/src/ledger/posting-period.integration.test.ts"
       ]
     },
     {
-      "path": "engine/src/posting-effects.ts",
+      "path": "engine/src/ledger/posting-effects.ts",
       "tests": [
-        "engine/src/posting-effects.test.ts",
-        "engine/src/posting-effects.integration.test.ts",
-        "engine/src/posting-effects-idempotency.integration.test.ts"
+        "engine/src/ledger/posting-effects.test.ts",
+        "engine/src/ledger/posting-effects.integration.test.ts",
+        "engine/src/ledger/posting-effects-idempotency.integration.test.ts"
       ]
     },
     {
@@ -35,20 +35,20 @@
       ]
     },
     {
-      "path": "engine/src/payments.ts",
+      "path": "engine/src/payments/payments.ts",
       "lineRanges": [
         { "start": 196, "end": 322 },
         { "start": 576, "end": 622 },
         { "start": 857, "end": 897 }
       ],
       "tests": [
-        "engine/src/payments.test.ts",
-        "engine/src/direct-debit.test.ts",
-        "engine/src/payments.integration.test.ts"
+        "engine/src/payments/payments.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/payments/payments.integration.test.ts"
       ]
     },
     {
-      "path": "engine/src/payroll-run.ts",
+      "path": "engine/src/payroll/run.ts",
       "needsDb": true,
       "lineRanges": [
         { "start": 1536, "end": 1639 },
@@ -56,8 +56,8 @@
         { "start": 3097, "end": 3484 }
       ],
       "tests": [
-        "engine/src/payroll-run.test.ts",
-        "engine/src/payroll-agnostic-core.test.ts"
+        "engine/src/payroll/run.test.ts",
+        "engine/src/payroll/agnostic-core.test.ts"
       ]
     },
     {
@@ -71,16 +71,16 @@
       "path": "engine/src/payroll/canada/compute-statutory.ts",
       "needsDb": true,
       "tests": [
-        "engine/src/payroll-controls.test.ts",
-        "engine/src/payroll-opening-balances.test.ts",
-        "engine/src/payroll-employer-taxes.integration.test.ts",
-        "engine/src/payroll-quebec.integration.test.ts"
+        "engine/src/payroll/controls.test.ts",
+        "engine/src/payroll/opening-balances.test.ts",
+        "engine/src/payroll/employer-taxes.integration.test.ts",
+        "engine/src/payroll/quebec.integration.test.ts"
       ]
     },
     {
       "path": "engine/src/payroll/canada/employer-levies.ts",
       "needsDb": true,
-      "tests": ["engine/src/payroll-employer-taxes.integration.test.ts"]
+      "tests": ["engine/src/payroll/employer-taxes.integration.test.ts"]
     },
     {
       "path": "engine/src/payroll/us/pub15t.ts",
@@ -94,44 +94,44 @@
       "path": "engine/src/payroll/us/compute-statutory.ts",
       "needsDb": true,
       "tests": [
-        "engine/src/payroll-controls.test.ts",
-        "engine/src/payroll-us-state-withholding.integration.test.ts"
+        "engine/src/payroll/controls.test.ts",
+        "engine/src/payroll/us-state-withholding.integration.test.ts"
       ]
     },
     {
-      "path": "engine/src/tax.ts",
+      "path": "engine/src/tax/tax.ts",
       "tests": [
-        "engine/src/tax.test.ts",
-        "engine/src/tax.integration.test.ts"
+        "engine/src/tax/tax.test.ts",
+        "engine/src/tax/tax.integration.test.ts"
       ]
     },
     {
-      "path": "engine/src/tax-return.ts",
+      "path": "engine/src/tax-returns/return.ts",
       "tests": [
-        "engine/src/tax-return.test.ts",
-        "engine/src/tax-filing.test.ts",
-        "engine/src/tax-return.integration.test.ts",
-        "engine/src/tax-return-filing-entity.integration.test.ts"
+        "engine/src/tax-returns/return.test.ts",
+        "engine/src/tax-returns/filing.test.ts",
+        "engine/src/tax-returns/return.integration.test.ts",
+        "engine/src/tax-returns/return-filing-entity.integration.test.ts"
       ]
     },
     {
-      "path": "engine/src/consolidation.ts",
+      "path": "engine/src/consolidation/consolidation.ts",
       "needsDb": true,
       "tests": [
-        "engine/src/consolidation.test.ts",
-        "engine/src/consolidation-proportionate.integration.test.ts",
-        "engine/src/consolidation.integration.test.ts",
-        "engine/src/consolidation-elimination-fx.integration.test.ts"
+        "engine/src/consolidation/consolidation.test.ts",
+        "engine/src/consolidation/proportionate.integration.test.ts",
+        "engine/src/consolidation/consolidation.integration.test.ts",
+        "engine/src/consolidation/elimination-fx.integration.test.ts"
       ]
     },
     {
-      "path": "engine/src/depreciation.ts",
+      "path": "engine/src/assets/depreciation.ts",
       "tests": [
-        "engine/src/depreciation.test.ts",
-        "engine/src/depreciation-formula.test.ts",
-        "engine/src/depreciation-conventions.test.ts",
-        "engine/src/depreciation-bounds.test.ts",
-        "engine/src/depreciation.integration.test.ts"
+        "engine/src/assets/depreciation.test.ts",
+        "engine/src/assets/depreciation-formula.test.ts",
+        "engine/src/assets/depreciation-conventions.test.ts",
+        "engine/src/assets/depreciation-bounds.test.ts",
+        "engine/src/assets/depreciation.integration.test.ts"
       ]
     }
   ]

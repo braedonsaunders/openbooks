@@ -24,9 +24,9 @@ registerHooks({
 });
 
 const { createRecord, updateRecord } = await import("./writers.ts");
-const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/src/test-fixtures.ts"
+  "@openbooks/engine/src/testing/fixtures.ts"
 );
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

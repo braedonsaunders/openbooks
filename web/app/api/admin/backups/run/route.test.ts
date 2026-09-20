@@ -82,10 +82,10 @@ const hooks = registerHooks({
     if (specifier === "server-only") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
     }
-    if (specifier === "@openbooks/engine/src/db.ts") {
+    if (specifier === "@openbooks/engine/src/platform/db.ts") {
       return { url: "mock:db", shortCircuit: true };
     }
-    if (specifier === "@openbooks/engine/src/file-storage.ts") {
+    if (specifier === "@openbooks/engine/src/platform/file-storage.ts") {
       return { url: "mock:file-storage", shortCircuit: true };
     }
     if (specifier === "@openbooks/jobs") {

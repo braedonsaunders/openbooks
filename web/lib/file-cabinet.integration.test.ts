@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import test from 'node:test'
-import { env } from '@openbooks/engine/src/db.ts'
+import { env } from '@openbooks/engine/src/platform/db.ts'
 
 /**
  * Regression coverage for the purge check/delete race: an attachment that is
@@ -14,8 +14,8 @@ test('purge serializes against a concurrently committed attachment', { skip: !en
     import { randomUUID } from 'node:crypto';
     import pg from 'pg';
     import { sql } from 'drizzle-orm';
-    import { db } from './engine/src/db.ts';
-    import { installTrustedTestDatabaseBypass } from './engine/src/test-database-bypass.ts';
+    import { db } from './engine/src/platform/db.ts';
+    import { installTrustedTestDatabaseBypass } from './engine/src/testing/database-bypass.ts';
     import { purgeFolder } from './web/lib/file-cabinet.ts';
 
     installTrustedTestDatabaseBypass();
@@ -81,7 +81,7 @@ test('purge serializes against a concurrently committed attachment', { skip: !en
   `;
   const result = spawnSync(
     process.execPath,
-    ['--conditions=react-server', '--import', 'tsx', '--import', './engine/src/test-database-bypass.ts', '--input-type=module', '-e', source],
+    ['--conditions=react-server', '--import', 'tsx', '--import', './engine/src/testing/database-bypass.ts', '--input-type=module', '-e', source],
     { cwd: process.cwd(), env: process.env, encoding: 'utf8' },
   );
   assert.equal(result.status, 0, result.stderr || result.stdout);

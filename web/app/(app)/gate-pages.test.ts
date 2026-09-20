@@ -95,7 +95,7 @@ const hooks = registerHooks({
 // Real registry (pure data): the page's known-feature check runs against the
 // same keys the gates enforce.
 (globalThis as Record<string, unknown>).__featureByKey = (
-  await import("@openbooks/engine/src/feature-registry.ts")
+  await import("@openbooks/engine/src/organization/feature-registry.ts")
 ).FEATURE_BY_KEY;
 const React = await import("react");
 Object.assign(globalThis, { React });

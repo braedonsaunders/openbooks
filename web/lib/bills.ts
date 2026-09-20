@@ -1,14 +1,14 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db, type SqlExecutor } from '@openbooks/engine/src/db.ts'
-import { allocateDocumentNumber } from '@openbooks/engine/src/document-numbering.ts'
-import { add, sum } from '@openbooks/engine/src/money.ts'
+import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import { allocateDocumentNumber } from '@openbooks/engine/src/records/numbering.ts'
+import { add, sum } from '@openbooks/engine/src/money/money.ts'
 import {
   computeLineTaxes,
   type ComputedTaxComponent,
   type TaxCalculationType,
   type TaxComponentConfig,
-} from '@openbooks/engine/src/tax.ts'
+} from '@openbooks/engine/src/tax/tax.ts'
 
 /** One tax_codes row (or left-joined group member) as the profile loader reads it. */
 interface TaxCodeProfileRow extends Record<string, unknown> {
@@ -29,10 +29,10 @@ import {
   readTaxRateProviderConfig,
   type TaxQuoteRequest,
   type TaxQuoteResult,
-} from '@openbooks/engine/src/tax-rate-providers.ts'
+} from '@openbooks/engine/src/tax/rate-providers.ts'
 import { resolveOrgId } from './org-scope'
-import { requireEffectiveRateRow } from '@openbooks/engine/src/tax-persist.ts'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { requireEffectiveRateRow } from '@openbooks/engine/src/tax/persist.ts'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 
 export interface TaxProfiles {
   codes: Map<string, TaxComponentConfig[]>
@@ -290,7 +290,7 @@ export async function persistLineTaxComponents(
 
 /**
  * The UI entry point for document numbering — a thin delegate to the ONE
- * canonical allocator (engine/src/document-numbering.ts). `subsidiaryId` is
+ * canonical allocator (engine/src/records/numbering.ts). `subsidiaryId` is
  * accepted for call-site compatibility. When supplied, its ownership is
  * checked against the organization before allocation; it never picks a
  * sequence because document numbers are organization-wide identities — every

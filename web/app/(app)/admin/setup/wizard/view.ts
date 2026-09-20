@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { getAuthz, can } from '../../../../../lib/authz'
 import { redirect } from 'next/navigation'

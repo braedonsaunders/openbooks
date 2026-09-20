@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, pool } from "../engine/src/db.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg } from "../engine/src/test-fixtures.ts";
+import { db, pool } from "../engine/src/platform/db.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../engine/src/testing/fixtures.ts";
 
 const skip = !process.env.OPENBOOKS_DB_URL;
 const cases = ["missing_user", "missing_role", "cross_org_user", "cross_org_role", "missing_assignment_org", "missing_role_org", "delete_referenced_role"] as const;

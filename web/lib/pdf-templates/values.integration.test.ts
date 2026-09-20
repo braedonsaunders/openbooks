@@ -10,8 +10,8 @@ registerHooks({
   },
 })
 const { sql } = await import('drizzle-orm')
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { findSamplePdfRecordId } = await import('./values')
 
 /**
@@ -78,8 +78,8 @@ test('findSamplePdfRecordId honours the caller subsidiary scope', { skip: !proce
  * record type — never a silent blank.
  */
 test('field-ticket merge values populate the customer party address', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const { withBypassContext } = await import('@openbooks/engine/src/db.ts')
-  const { seedFlowActors } = await import('@openbooks/engine/src/test-fixtures.ts')
+  const { withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+  const { seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
   const { createFieldTicket } = await import('../field-tickets')
   const { loadPdfRecordValues } = await import('./values')
   await withBypassContext(async () => {

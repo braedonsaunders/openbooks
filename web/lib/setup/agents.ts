@@ -1,18 +1,18 @@
 import 'server-only'
 
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
   CONTINUOUS_CLOSE_AGENT_KEYS,
   detectorSpecsForAgent,
   type ContinuousCloseAgentKey,
-} from '@openbooks/engine/src/continuous-close-config.ts'
+} from '@openbooks/engine/src/agents/continuous-close-config.ts'
 import {
   getContinuousClosePolicies,
   isContinuousCloseAgentKey,
   runContinuousCloseAgent,
   type ContinuousClosePolicy,
-} from '@openbooks/engine/src/continuous-close.ts'
+} from '@openbooks/engine/src/continuous-close/continuous-close.ts'
 import {
   normalizeAgentNotificationSettings,
   saveOrgAiAgentSettings,
@@ -63,7 +63,7 @@ const AGENT_PACK_READ_PERMISSIONS: Partial<Record<ContinuousCloseAgentKey, strin
 
 /** The registry keys as THIS setup lib sees them — one import point so pages
  *  and tests share the exact module instance instead of pinning a duplicate. */
-export { CONTINUOUS_CLOSE_AGENT_KEYS } from '@openbooks/engine/src/continuous-close-config.ts'
+export { CONTINUOUS_CLOSE_AGENT_KEYS } from '@openbooks/engine/src/agents/continuous-close-config.ts'
 
 export interface AgentPackMeta {
   agentKey: ContinuousCloseAgentKey

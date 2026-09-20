@@ -105,9 +105,9 @@ const { PATCH: PLATFORM_PATCH } = (await import(daemonUrl)) as typeof import(
 hooks.deregister();
 
 const { db, withBypass, withBypassContext, withOrgContext } =
-  await import("@openbooks/engine/src/db.ts");
+  await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
-  await import("@openbooks/engine/src/test-fixtures.ts");
+  await import("@openbooks/engine/src/testing/fixtures.ts");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 

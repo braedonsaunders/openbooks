@@ -1,7 +1,7 @@
 import "server-only";
 import { sql, type SQL } from "drizzle-orm";
-import { ambientTenantOrgId, db, withBypassContext } from "@openbooks/engine/src/db.ts";
-import { actorAllowedSubsidiaryIds } from "@openbooks/engine/src/actor-subsidiaries.ts";
+import { ambientTenantOrgId, db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
+import { actorAllowedSubsidiaryIds } from "@openbooks/engine/src/organization/actor-subsidiaries.ts";
 import { subsidiaryFeatureEnabled } from "./features";
 
 /**

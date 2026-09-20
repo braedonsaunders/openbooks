@@ -18,14 +18,14 @@ registerHooks({
 });
 
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/src/test-fixtures.ts"
+  "@openbooks/engine/src/testing/fixtures.ts"
 );
 const { applyDocumentEdit, DocumentEditError, loadDocument, loadDocumentEditCurrent } = await import(
   "./documents.ts"
 );
-const { postDocument } = await import("@openbooks/engine/src/posting.ts");
+const { postDocument } = await import("@openbooks/engine/src/ledger/posting.ts");
 const { submitAndReleaseIfUngated } = await import("@openbooks/engine/src/flows/submit.ts");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

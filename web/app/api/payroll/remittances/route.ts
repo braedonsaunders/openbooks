@@ -1,7 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { createRemittanceBill, payrollRemittanceSummary } from '@openbooks/engine/src/payroll-remittance.ts'
-import { PayrollError } from '@openbooks/engine/src/payroll-run.ts'
+import { createRemittanceBill, payrollRemittanceSummary } from '@openbooks/engine/src/payroll/remittance.ts'
+import { PayrollError } from '@openbooks/engine/src/payroll/run.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { suppliedValue } from '../../../../lib/payroll-decimal-refusal'

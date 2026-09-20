@@ -205,7 +205,7 @@ against direct SQL access, not merely against the application.
 The failure mode this prevents — a retried job double-recognising revenue — is
 one an auditor will specifically ask about whenever a process is automated.
 
-*Checked by:* `engine/src/posting-exactly-once.integration.test.ts`, conformance
+*Checked by:* `engine/src/ledger/posting-exactly-once.integration.test.ts`, conformance
 case `rev-recognition-is-idempotent`.
 
 ### 12. Tenants cannot see each other
@@ -219,7 +219,7 @@ to complete if the runtime role is over-privileged or if row-level security is
 missing from any organisation-scoped table.
 
 *Checked by:* **kernel**, `scripts/bootstrap.ts`,
-`engine/src/db-rls.integration.test.ts`.
+`engine/src/platform/db-rls.integration.test.ts`.
 
 ---
 

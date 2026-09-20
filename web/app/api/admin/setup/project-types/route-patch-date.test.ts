@@ -91,9 +91,9 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ["@/lib/api/json", "mock:json"],
-  ["@openbooks/engine/src/db.ts", "mock:db"],
-  ["@openbooks/engine/src/project-financial-profile-versions.ts", "mock:profile"],
-  ["@openbooks/engine/src/business-date.ts", "mock:date"],
+  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
+  ["@openbooks/engine/src/projects/financial-profile-versions.ts", "mock:profile"],
+  ["@openbooks/engine/src/platform/business-date.ts", "mock:date"],
   ["../../../../../lib/authz", "mock:authz"],
   ["../../../../../lib/projects-gate", "mock:gate"],
   ["../../../../../lib/features", "mock:features"],

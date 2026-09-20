@@ -1,9 +1,9 @@
 import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
-import { normalizeMoney } from "@openbooks/engine/src/money.ts";
-import { computeTaxReturn, TaxReturnError } from "@openbooks/engine/src/tax-return.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
+import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
+import { computeTaxReturn, TaxReturnError } from "@openbooks/engine/src/tax-returns/return.ts";
 import { can } from "../authz";
 import { isDocKindEnabled } from "../documents";
 import { subsidiaryVisibleFilter } from "../subsidiaries";

@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createSampleCompany, SampleCompanyError } from "./service.ts";
-import { withBypass } from "../db.ts";
+import { withBypass } from "../platform/db.ts";
 import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-} from "../test-fixtures.ts";
+} from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 

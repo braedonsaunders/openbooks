@@ -1,8 +1,8 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
-import { encryptAccountNumber } from '@openbooks/engine/src/payments.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { encryptAccountNumber } from '@openbooks/engine/src/payments/payments.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/run.ts'
 import { BANK_ACCOUNT_SUBJECT_KIND } from '@openbooks/engine/src/flows/bank-accounts-adapter.ts'
 import { guardPermission } from '../../../../../lib/authz'

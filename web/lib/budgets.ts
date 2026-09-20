@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 
 export const BUDGET_KINDS = ['budget', 'forecast'] as const
 export const BUDGET_STATUSES = ['draft', 'pending_approval', 'approved', 'archived'] as const

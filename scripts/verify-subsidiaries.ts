@@ -11,9 +11,9 @@
  * Run: npx tsx scripts/verify-subsidiaries.ts <sandbox-or-preview-org-id>
  */
 import { sql } from "drizzle-orm";
-import { db, withOrg, pool } from "../engine/src/db.ts";
-import { postDocument } from "../engine/src/posting.ts";
-import { deriveConsolidatedRates, runAutoElimination } from "../engine/src/consolidation.ts";
+import { db, withOrg, pool } from "../engine/src/platform/db.ts";
+import { postDocument } from "../engine/src/ledger/posting.ts";
+import { deriveConsolidatedRates, runAutoElimination } from "../engine/src/consolidation/consolidation.ts";
 
 const q = async (s: ReturnType<typeof sql>): Promise<Record<string, unknown>[]> =>
   (await db.execute<Record<string, unknown>>(s)).rows;

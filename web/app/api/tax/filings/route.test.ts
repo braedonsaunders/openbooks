@@ -149,11 +149,11 @@ const mockUrls = new Map<string, string>([
   ['@/lib/api/json', 'mock:json'],
   ['../../../../lib/authz', 'mock:authz'],
   ['../../../../../lib/authz', 'mock:authz'],
-  ['@openbooks/engine/src/db.ts', 'mock:db'],
-  ['@openbooks/engine/src/tax-filing.ts', 'mock:tax-filing'],
-  ['@openbooks/engine/src/tax-return.ts', 'mock:tax-return'],
-  ['@openbooks/engine/src/tax-nexus-ledger.ts', 'mock:tax-nexus-ledger'],
-  ['@openbooks/engine/src/business-date.ts', 'mock:business-date'],
+  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
+  ['@openbooks/engine/src/tax-returns/filing.ts', 'mock:tax-filing'],
+  ['@openbooks/engine/src/tax-returns/return.ts', 'mock:tax-return'],
+  ['@openbooks/engine/src/tax/nexus-ledger.ts', 'mock:tax-nexus-ledger'],
+  ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
 ])
 
 const hooks = registerHooks({

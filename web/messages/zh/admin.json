@@ -399,7 +399,7 @@
     "builtIn": "内置",
     "custom": "自定义",
     "emptyTitle": "暂无角色",
-    "emptyDescription": "运行角色种子脚本（engine/src/seed-roles.ts）以创建内置角色，或创建一个自定义角色。",
+    "emptyDescription": "运行角色种子脚本（engine/src/provisioning/seed-roles.ts）以创建内置角色，或创建一个自定义角色。",
     "noMatchTitle": "无匹配的角色",
     "noMatchDescription": "请调整搜索或类型筛选。",
     "table": {

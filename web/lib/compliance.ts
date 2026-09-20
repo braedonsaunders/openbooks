@@ -2,8 +2,8 @@ import 'server-only'
 import { redirect } from 'next/navigation'
 import { NextResponse } from 'next/server'
 import { sql, type SQL } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { formatMoney, mulRate, sum } from '@openbooks/engine/src/money.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { formatMoney, mulRate, sum } from '@openbooks/engine/src/money/money.ts'
 import {
   evaluateBillsForRelease,
   evaluateVendorCompliance,
@@ -16,15 +16,15 @@ import {
   type RequirementFinding,
   type RequirementPolicy,
   type WaiverRecord
-} from '@openbooks/engine/src/compliance.ts'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
+} from '@openbooks/engine/src/compliance/compliance.ts'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { addMoney, ZERO_MONEY } from './cash/core'
 import { openItems } from './cash/open-items'
 import { featureRequiredHref } from './gate-targets'
 import {
   GENERAL_THRESHOLD_CHANGE_YEAR,
   INFORMATION_RETURN_FORMS,
-} from '@openbooks/engine/src/information-returns.ts'
+} from '@openbooks/engine/src/compliance/information-returns.ts'
 import { isFeatureEnabled } from './features'
 
 /**
@@ -57,7 +57,7 @@ export function complianceSubsidiaryFilter(
 /**
  * Server-side reads for the Subcontractor Compliance workspace.
  *
- * The DECISION logic lives in engine/src/compliance.ts and is shared with the
+ * The DECISION logic lives in engine/src/compliance/compliance.ts and is shared with the
  * payment engine — this module only fetches and shapes. That split is what makes
  * the screen that shows a blocked payment and the code that refuses it the same
  * answer, always.

@@ -1,7 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { generateText, type LanguageModel } from "ai";
-import { db } from "@openbooks/engine/src/db.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
 import type { Authz } from "../authz";
 import { countConversationAssistantTurns, isMissingMetadataColumn } from "./conversation-memory";
 

@@ -206,7 +206,7 @@ export const taxRates = pgTable(
   },
   (t) => [
     index("tax_rates_code").on(t.taxCodeId),
-    // Mirrors migration 0042: the calculation engine (engine/src/tax.ts)
+    // Mirrors migration 0042: the calculation engine (engine/src/tax/tax.ts)
     // refuses negative rates, so a negative rate can never be usable —
     // storage rejects it at the write boundary. A statutory 0% rate is legal.
     check("tax_rates_rate_percent_domain", sql`${t.ratePercent} >= 0`),

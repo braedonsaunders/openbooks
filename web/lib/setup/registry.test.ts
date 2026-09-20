@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { INFORMATION_RETURN_FORMS } from '@openbooks/engine/src/information-returns.ts'
+import { INFORMATION_RETURN_FORMS } from '@openbooks/engine/src/compliance/information-returns.ts'
 import {
   SETUP_ENTITIES,
   SETUP_ENTITY_BY_KEY,

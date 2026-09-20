@@ -1,8 +1,8 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { PayrollError } from '@openbooks/engine/src/payroll-run.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { PayrollError } from '@openbooks/engine/src/payroll/run.ts'
 import {
   comparablePayRuns,
   comparableSlots,
@@ -11,7 +11,7 @@ import {
   priorRegisters,
   runParallelComparison,
   suggestedPayRunForRegister,
-} from '@openbooks/engine/src/payroll-parallel-run-store.ts'
+} from '@openbooks/engine/src/payroll/parallel-run-store.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
@@ -100,7 +100,7 @@ async function assertComparisonInputsInScope(
  * Every rule — the classification, the zero-tolerance default, the refusal to
  * report a clean result off an empty or non-intersecting population, and the
  * self-check that must pass before anything is stored — lives in
- * engine/src/payroll-parallel-run.ts and its store. This route only translates
+ * engine/src/payroll/parallel-run.ts and its store. This route only translates
  * HTTP, so a second caller cannot reach a different verdict.
  */
 

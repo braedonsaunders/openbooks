@@ -2,7 +2,7 @@ import {
   filedBoxAmounts,
   formDefinition,
   type FormDefinition,
-} from '@openbooks/engine/src/information-returns.ts'
+} from '@openbooks/engine/src/compliance/information-returns.ts'
 
 /**
  * Recipient copies of information returns (1099-NEC / 1099-MISC / T4A) as

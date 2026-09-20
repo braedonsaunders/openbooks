@@ -3,7 +3,7 @@ import test from "node:test";
 import {
   assertEarningsAssessedStable,
   dropIncomeAssessedLines,
-} from "../payroll-limits.ts";
+} from "./limits.ts";
 import {
   PAYROLL_COUNTRY_PACKS,
   PayrollPackError,

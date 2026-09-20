@@ -4,7 +4,7 @@ import { getTranslations } from 'next-intl/server'
 import { frame, grid, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { getAuthz } from '@/lib/authz'
 
-import { businessTimeZone } from '@openbooks/engine/src/business-date.ts'
+import { businessTimeZone } from '@openbooks/engine/src/platform/business-date.ts'
 import { buildGreeting } from './dashboard/_greeting'
 
 /**

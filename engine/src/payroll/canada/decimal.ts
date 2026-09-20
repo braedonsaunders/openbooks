@@ -4,7 +4,7 @@
  * multiplication here rounds half-up straight to the cent in one step —
  * never round-to-4dp-then-round-to-2dp, which double-rounds at the edge.
  */
-import { fromUnits, roundDiv, toUnits } from "../../money";
+import { fromUnits, roundDiv, toUnits } from "../../money/money";
 
 /** Money string → bigint units (1e4 scale). */
 export const U = (s: string | number): bigint => toUnits(s);

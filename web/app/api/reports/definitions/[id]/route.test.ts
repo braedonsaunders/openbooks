@@ -117,7 +117,7 @@ const mockUrl = (name: string) => `${selfUrl}?report-definition-mock=${name}`;
 const mockUrls = new Map<string, string>([
   ["@/lib/api/json", mockUrl("json")],
   ["@/lib/custom-record-report-catalog", mockUrl("catalog")],
-  ["@openbooks/engine/src/db.ts", mockUrl("db")],
+  ["@openbooks/engine/src/platform/db.ts", mockUrl("db")],
   ["../../../../../lib/authz", mockUrl("authz")],
   ["../../../../../lib/report-authz", mockUrl("reports-authz")],
   ["../../../../../lib/report-execution-context", mockUrl("reports-authz")],

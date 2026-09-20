@@ -68,7 +68,7 @@ const hooks = registerHooks({
       ['../../../../../../lib/file-cabinet', 'mock:cabinet'],
       ['../../../../../../lib/file-zip', 'mock:file-zip'],
       ['../../../../../../lib/list-params', 'mock:list-params'],
-      ['@openbooks/engine/src/business-date.ts', 'mock:business-date'],
+      ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
     ]).get(specifier)
     if (mocked) return { shortCircuit: true, format: 'module', url: mocked }
     return nextResolve(specifier, _context)

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { ensureCrmDefaults } from '@openbooks/engine/src/crm.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { ensureCrmDefaults } from '@openbooks/engine/src/crm/crm.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 
 export const runtime = 'nodejs'

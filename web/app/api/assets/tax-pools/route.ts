@@ -1,9 +1,9 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { listTaxRegimes, runTaxPool } from '@openbooks/engine/src/tax-pool-run.ts'
-import { isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { listTaxRegimes, runTaxPool } from '@openbooks/engine/src/tax-returns/pool-run.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'

@@ -1,9 +1,9 @@
 import { sql, type SQL } from "drizzle-orm";
-import { db, type SqlExecutor } from "../db.ts";
+import { db, type SqlExecutor } from "../platform/db.ts";
 import {
   publishProjectFinancialProfileInTransaction,
   type PublishProjectFinancialProfileInput,
-} from "../project-financial-profile-versions.ts";
+} from "../projects/financial-profile-versions.ts";
 import type { FinancialProfile } from "@openbooks/schema";
 
 const ROLLBACK = Symbol("expected validation rollback");

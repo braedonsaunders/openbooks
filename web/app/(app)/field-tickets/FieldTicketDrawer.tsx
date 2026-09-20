@@ -10,7 +10,7 @@ import { toast } from 'sonner'
 import { Mail, Plus, Send, Trash2 } from 'lucide-react'
 import { Badge, Button, Input, Label, SearchSelect, Select, Textarea, cn } from '@openbooks/ui'
 import { defaultFormLayout, type FormLayoutConfig, type HeaderFieldPlacement } from '@openbooks/customization'
-import { add } from '@openbooks/engine/src/money.ts'
+import { add } from '@openbooks/engine/src/money/money.ts'
 import {
   executeDocumentSave,
   persistedDocumentRevision,

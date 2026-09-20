@@ -1,6 +1,6 @@
 import "server-only";
 import { sql, type SQL } from "drizzle-orm";
-import { db, withBypassContext } from "@openbooks/engine/src/db.ts";
+import { db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
 
 export type PlatformSummary = {
   organizations: number;

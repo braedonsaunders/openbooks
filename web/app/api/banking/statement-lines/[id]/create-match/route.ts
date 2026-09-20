@@ -1,7 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { ControlAccountsIncompleteError } from '@openbooks/engine/src/control-accounts.ts'
-import { PostingError } from '@openbooks/engine/src/posting.ts'
+import { ControlAccountsIncompleteError } from '@openbooks/engine/src/records/control-accounts.ts'
+import { PostingError } from '@openbooks/engine/src/ledger/posting.ts'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../../lib/list-params'
 import { addJournalMatchFromLine } from '../../../../../../lib/banking-rules'

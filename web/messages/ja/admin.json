@@ -399,7 +399,7 @@
     "builtIn": "組み込み",
     "custom": "カスタム",
     "emptyTitle": "ロールがまだありません",
-    "emptyDescription": "ロールシードスクリプト（engine/src/seed-roles.ts）を実行して組み込みロールを作成するか、カスタムロールを作成してください。",
+    "emptyDescription": "ロールシードスクリプト（engine/src/provisioning/seed-roles.ts）を実行して組み込みロールを作成するか、カスタムロールを作成してください。",
     "noMatchTitle": "一致するロールがありません",
     "noMatchDescription": "検索または種類フィルターを調整してください。",
     "table": {

@@ -2,12 +2,12 @@ import { validateOrgReportQuery } from '@/lib/custom-record-report-catalog'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { validateReportLayout } from '@openbooks/reports'
 import { guardPermission } from '../../../../lib/authz'
 import { canRunReportEntity, canRunReportStatement, guardReportEntity } from '../../../../lib/report-authz'
 import { slugifyReportName, uniqueReportSlug } from '../../../../lib/custom-reports'
-import { ensureReportDefinitions } from '@openbooks/engine/src/ensure-report-definitions.ts'
+import { ensureReportDefinitions } from '@openbooks/engine/src/reports/ensure-report-definitions.ts'
 
 export const runtime = 'nodejs'
 

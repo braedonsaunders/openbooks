@@ -1,6 +1,6 @@
 // The Insights SQL compiler: InsightQuery → parameterized Postgres.
 //
-// Security model (mirrors engine/src/sqlapi.ts): every physical identifier comes
+// Security model (mirrors engine/src/platform/sqlapi.ts): every physical identifier comes
 // from the authored catalog whitelist (source `from`, `orgColumn`, field `expr`)
 // — NEVER from caller input. Callers only name catalog KEYS; the compiler looks
 // each key up and fails closed on anything unknown. Every VALUE binds as a

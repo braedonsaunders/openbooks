@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { pool } from "../../db.ts";
+import { pool } from "../../platform/db.ts";
 import { assertDedicatedSimDatabase, assertSimEnabled } from "../../sim/db-guard.ts";
 import { provisionRun, autopilotRunToEnd, loadRun } from "../../sim/runner.ts";
 import { resetOrg } from "../../sim/world.ts";

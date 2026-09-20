@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { businessToday } from "@openbooks/engine/src/business-date.ts";
+import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { guardPermission, guardSubsidiaryScope } from "../../../../../lib/authz";
 import { isDocKindEnabled } from "../../../../../lib/documents";
 import { pdfResponse, safeName } from "../../../../../lib/export";

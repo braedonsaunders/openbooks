@@ -1,10 +1,10 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
-import { documentBalanceDueLateral } from '@openbooks/engine/src/balance-due.ts'
-import { db } from '@openbooks/engine/src/db.ts'
-import { add, cmp, isZero, mul, neg, sum } from '@openbooks/engine/src/money.ts'
-import { amountInWords } from '@openbooks/engine/src/payroll-cheques.ts'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { documentBalanceDueLateral } from '@openbooks/engine/src/records/balance-due.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { add, cmp, isZero, mul, neg, sum } from '@openbooks/engine/src/money/money.ts'
+import { amountInWords } from '@openbooks/engine/src/payroll/cheques.ts'
 import { incomeTaxWithholdingSystemKeys } from '@openbooks/engine/src/payroll/packs.ts'
 import { createMoneyFormatter, type MoneyFormatter } from '../money-format'
 import { resolveLocale } from '../locale'
@@ -103,7 +103,7 @@ async function loadDocumentValues(
   orgId: string,
   id: string,
 ): Promise<PdfRecordValues | null> {
-  // Balance due comes from the shared reader (engine/src/balance-due.ts) —
+  // Balance due comes from the shared reader (engine/src/records/balance-due.ts) —
   // the same applied sum the drawer and dunning use, so the printed figure
   // cannot drift from what the drawer shows or what dunning acts on.
   const r = (await db.execute<Record<string, unknown>>(sql`

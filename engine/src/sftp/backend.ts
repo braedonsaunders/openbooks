@@ -9,7 +9,7 @@ import {
   CopyObjectCommand,
   HeadObjectCommand,
 } from "@aws-sdk/client-s3";
-import { env } from "../db.ts";
+import { env } from "../platform/db.ts";
 
 /**
  * Storage backend for the built-in SFTP server. Two implementations, mirroring

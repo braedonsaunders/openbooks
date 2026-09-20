@@ -229,8 +229,8 @@ const hooks = registerHooks({
     }
     const mockUrl = new Map([
       ['drizzle-orm', 'mock:drizzle'],
-      ['@openbooks/engine/src/db.ts', 'mock:db'],
-      ['@openbooks/engine/src/posting.ts', 'mock:posting'],
+      ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
+      ['@openbooks/engine/src/ledger/posting.ts', 'mock:posting'],
       ['../documents', 'mock:documents'],
       ['./resource-core', 'mock:resource-core'],
     ]).get(specifier)

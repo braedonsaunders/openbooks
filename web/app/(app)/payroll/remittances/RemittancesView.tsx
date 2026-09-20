@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Alert, AlertDescription, Badge, Button, Input } from '@openbooks/ui'
-import type { RemittanceEntitySlice, RemittanceGroup } from '@openbooks/engine/src/payroll-remittance.ts'
+import type { RemittanceEntitySlice, RemittanceGroup } from '@openbooks/engine/src/payroll/remittance.ts'
 import { useMoney } from '../../../../components/money-provider'
 
 /**

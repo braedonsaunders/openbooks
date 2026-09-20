@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { packTaxCodesForReturn, primaryPackTaxCode } from "./index.ts";
 import { JAPAN_TAX_PACK } from "./jp.ts";
-import { PACK_DEFAULT_CODES } from "../tax-pack-provisioning.ts";
+import { PACK_DEFAULT_CODES } from "../tax/pack-provisioning.ts";
 
 test("Japan declares standard and reduced combined consumption-tax codes on one return", () => {
   const codes = packTaxCodesForReturn(JAPAN_TAX_PACK, "JP_CONSUMPTION");

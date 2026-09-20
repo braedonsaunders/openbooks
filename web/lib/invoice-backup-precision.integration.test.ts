@@ -17,8 +17,8 @@ registerHooks({resolve(specifier,context,next){
   return next(specifier,context);
 }});
 const {sql}=await import('drizzle-orm');
-const {db,withBypassContext,withOrgContext}=await import('@openbooks/engine/src/db.ts');
-const {createScratchOrg,dropScratchOrg,createScratchUser}=await import('@openbooks/engine/src/test-fixtures.ts');
+const {db,withBypassContext,withOrgContext}=await import('@openbooks/engine/src/platform/db.ts');
+const {createScratchOrg,dropScratchOrg,createScratchUser}=await import('@openbooks/engine/src/testing/fixtures.ts');
 const {assembleInvoiceBackup}=await import('./invoice-backup');
 const {createMoneyFormatter}=await import('./money-format');
 test('costed invoice backup preserves cents in large exact cost totals',{skip:!process.env.OPENBOOKS_DB_URL},async()=>{

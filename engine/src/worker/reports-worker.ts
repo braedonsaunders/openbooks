@@ -1,7 +1,7 @@
 import { Worker } from "bullmq";
 import { REPORTS_QUEUE, getBlockingConnection, type ReportJobData } from "@openbooks/jobs";
-import { withBypassContext, withOrgContext } from "../db.ts";
-import { dispatchReportDeliveries, processScheduledReportRun } from "../report-delivery.ts";
+import { withBypassContext, withOrgContext } from "../platform/db.ts";
+import { dispatchReportDeliveries, processScheduledReportRun } from "../delivery/report-delivery.ts";
 import { renderReportPdf } from "./render-client.ts";
 
 /**

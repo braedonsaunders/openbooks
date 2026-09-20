@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
-import { env } from "@openbooks/engine/src/db.ts";
+import { env } from "@openbooks/engine/src/platform/db.ts";
 
 test("truncated ledger and party registers retain complete closing balances", { skip: !env.OPENBOOKS_DB_URL }, () => {
   const source = `
     import assert from "node:assert/strict";
     import { randomUUID } from "node:crypto";
     import { sql } from "drizzle-orm";
-    import { db, withBypass, withOrg } from "./engine/src/db.ts";
-    import { createScratchOrg, dropScratchOrg } from "./engine/src/test-fixtures.ts";
+    import { db, withBypass, withOrg } from "./engine/src/platform/db.ts";
+    import { createScratchOrg, dropScratchOrg } from "./engine/src/testing/fixtures.ts";
     import { generalLedger, partyRegister } from "./web/lib/reports.ts";
 
     const scratch = await withBypass(() => createScratchOrg());
@@ -88,8 +88,8 @@ test("capped-out register parties keep their sections and exact closings", { ski
     import assert from "node:assert/strict";
     import { randomUUID } from "node:crypto";
     import { sql } from "drizzle-orm";
-    import { db, withBypass, withOrg } from "./engine/src/db.ts";
-    import { createScratchOrg, dropScratchOrg } from "./engine/src/test-fixtures.ts";
+    import { db, withBypass, withOrg } from "./engine/src/platform/db.ts";
+    import { createScratchOrg, dropScratchOrg } from "./engine/src/testing/fixtures.ts";
     import { partyRegister } from "./web/lib/reports.ts";
 
     const scratch = await withBypass(() => createScratchOrg());

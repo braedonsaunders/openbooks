@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
-import { env } from "@openbooks/engine/src/db.ts";
+import { env } from "@openbooks/engine/src/platform/db.ts";
 
 test("indirect cash flow ties to bank balances and net income", { skip: !env.OPENBOOKS_DB_URL }, () => {
   // Web report modules intentionally import `server-only`, so the contract
@@ -9,8 +9,8 @@ test("indirect cash flow ties to bank balances and net income", { skip: !env.OPE
   const source = `
     import assert from "node:assert/strict";
     import { sql } from "drizzle-orm";
-    import { db, withOrg } from "./engine/src/db.ts";
-    import { toUnits } from "./engine/src/money.ts";
+    import { db, withOrg } from "./engine/src/platform/db.ts";
+    import { toUnits } from "./engine/src/money/money.ts";
     import { cashFlowIndirect, financialTrends } from "./web/lib/reports.ts";
 
     // Persistent application tenants only — scratch orgs come and go in

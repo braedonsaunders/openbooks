@@ -11,8 +11,8 @@ registerHooks({
 })
 
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { trueCostData } = await import('./true-cost-data')
 
 const D = '2026-07-14'

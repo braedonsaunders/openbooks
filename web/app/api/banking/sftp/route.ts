@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { randomBytes } from 'node:crypto'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { encryptSecret, sftpServerAuditSnapshot, type SftpServerAuditRow } from '@openbooks/engine/src/sftp/manager.ts'
 import { appStorageKind, appBucket, assertTenantRootPrefix } from '@openbooks/engine/src/sftp/backend.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'

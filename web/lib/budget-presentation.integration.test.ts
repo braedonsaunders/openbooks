@@ -11,9 +11,9 @@ registerHooks({
 })
 
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/db.ts')
-const { toUnits } = await import('@openbooks/engine/src/money.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { toUnits } = await import('@openbooks/engine/src/money/money.ts')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { budgetVsActualView } = await import('./budget-report')
 
 const D = '2026-07-14'

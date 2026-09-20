@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import {
   InformationReturnError,
   updateFilingRecipient,
-} from '@openbooks/engine/src/information-returns.ts'
+} from '@openbooks/engine/src/compliance/information-returns.ts'
 import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
 import { guardComplianceFeature, loadInformationReturnFilingScope } from '@/lib/compliance'
 import { isUuid } from '@/lib/list-params'

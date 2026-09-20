@@ -34,10 +34,10 @@ registerHooks({
 });
 
 const { sql } = await import("drizzle-orm");
-const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/db.ts");
-const { toUnits } = await import("@openbooks/engine/src/money.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
-const { withSimClock: pinClock } = await import("@openbooks/engine/src/clock.ts");
+const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { toUnits } = await import("@openbooks/engine/src/money/money.ts");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { withSimClock: pinClock } = await import("@openbooks/engine/src/platform/clock.ts");
 const { MissingRatesError } = await import("@/lib/consolidation.ts");
 const { cashPosition } = await import("@/lib/cash/cash-position.ts");
 const { loadDashboardMetrics } = await import("./_metrics.ts");

@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext, withOrgContext } from "../db.ts";
-import { runUserSql } from "../sqlapi.ts";
+import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
+import { runUserSql } from "../platform/sqlapi.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
-} from "../test-fixtures.ts";
+} from "../testing/fixtures.ts";
 import { runScenario } from "./scenario.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

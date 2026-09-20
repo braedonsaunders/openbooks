@@ -61,9 +61,9 @@ const { MASTER_BY_KEY, masterResource } = (await import(
 )) as typeof import('../../../../lib/data-io/master-data-resources.ts')
 hooks.deregister()
 
-const { db } = await import('@openbooks/engine/src/db.ts')
+const { db } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  '@openbooks/engine/src/test-fixtures.ts'
+  '@openbooks/engine/src/testing/fixtures.ts'
 )
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL)

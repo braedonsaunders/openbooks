@@ -5,7 +5,7 @@
  * ONLY when the environment is affirmatively known-safe (NODE_ENV
  * explicitly 'development' or 'test') AND the target database carries the
  * ephemeral marker ('openbooks-ci-ephemeral-*', the same comment
- * scripts/testdb.sh writes and engine/src/test-fixtures.ts enforces, read
+ * scripts/testdb.sh writes and engine/src/testing/fixtures.ts enforces, read
  * back with shobj_description(oid, 'pg_database')). Anything else —
  * NODE_ENV unset, 'production', a typo, or a database without the marker —
  * requires explicit reviewed approval: --allow-production AND a

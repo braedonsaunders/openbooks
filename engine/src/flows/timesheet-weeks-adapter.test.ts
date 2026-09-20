@@ -7,7 +7,7 @@ import {
   timesheetWeeksFlowAdapter,
 } from "./timesheet-weeks-adapter.ts";
 import { getFlowAdapter, listFlowSubjectProfiles } from "./registry.ts";
-import { db } from "../db.ts";
+import { db } from "../platform/db.ts";
 
 const EMPLOYEE = "b8cbe9f8-cc47-4291-8431-565540477c6e";
 const WEEK_ID = "01a01d40-a070-7faa-b9b3-37444cd75385";

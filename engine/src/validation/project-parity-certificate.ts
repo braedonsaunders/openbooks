@@ -38,11 +38,11 @@ import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
-import { db, withOrgContext } from "../db.ts";
-import { fromUnits, normalizeDecimal, roundDiv, toUnits } from "../money.ts";
+import { db, withOrgContext } from "../platform/db.ts";
+import { fromUnits, normalizeDecimal, roundDiv, toUnits } from "../money/money.ts";
 import { sourceClient } from "../sync/source-client.ts";
-import { resolveProjectFinancials } from "../project-financials.ts";
-import { loadProjectType } from "../project-type.ts";
+import { resolveProjectFinancials } from "../projects/financials.ts";
+import { loadProjectType } from "../projects/type.ts";
 
 type JsonRow = Record<string, unknown>;
 

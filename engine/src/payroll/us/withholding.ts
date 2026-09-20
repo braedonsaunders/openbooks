@@ -9,7 +9,7 @@
  *   algorithm and knows nothing about residence, reciprocity or conflict rules.
  *
  * Something has to join them, and if that something lives in
- * `engine/src/payroll-run.ts` then the pay run learns that Ohio has
+ * `engine/src/payroll/run.ts` then the pay run learns that Ohio has
  * municipalities and Michigan has cities — which is exactly how
  * `if (state === "PA")` gets written into generic code. So the join lives HERE,
  * inside the pack whose jurisdictions they are, and the pay run's US arm calls
@@ -41,10 +41,10 @@ import {
   emptyResolvedCertificate,
   type ResolvedCertificate,
 } from "../certificates.ts";
-import { add as addMoney } from "../../money.ts";
+import { add as addMoney } from "../../money/money.ts";
 import type { ResolvedWithholdingLevy } from "../withholding-resolution.ts";
 import { subRegionLevy } from "../withholding-jurisdictions.ts";
-import { PayrollError } from "../../payroll-error.ts";
+import { PayrollError } from "../error.ts";
 import {
   miCityWithholding,
   ohMunicipalWithholding,

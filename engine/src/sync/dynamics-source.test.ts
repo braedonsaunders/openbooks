@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { NativeContext } from "./native.ts";
 import { DynamicsSource } from "./dynamics-source.ts";
-import type { DynamicsClient } from "../dynamics.ts";
+import type { DynamicsClient } from "../connectors/dynamics.ts";
 
 /**
  * Settlement-link currency fixtures (fleet 4, from the vendor's published

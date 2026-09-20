@@ -4,4 +4,4 @@ export {
   isZeroDecimal,
   isPositiveDecimal,
   fixedDecimal,
-} from '@openbooks/engine/src/exact-decimal.ts'
+} from '@openbooks/engine/src/money/exact-decimal.ts'

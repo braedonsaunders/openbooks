@@ -1,13 +1,13 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql, type SQL } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
   canonicalizeProjectFinancialProfile,
   publishProjectFinancialProfileInTransaction,
-} from '@openbooks/engine/src/project-financial-profile-versions.ts'
+} from '@openbooks/engine/src/projects/financial-profile-versions.ts'
 import type { FinancialProfile } from '@openbooks/schema'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'

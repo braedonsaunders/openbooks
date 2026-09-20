@@ -33,11 +33,11 @@ registerHooks({
   },
 })
 const { db, pool, withBypassContext, withOrgContext } =
-  await import('@openbooks/engine/src/db.ts')
+  await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
-  await import('@openbooks/engine/src/test-fixtures.ts')
-const { ensureCrmDefaults } = await import('@openbooks/engine/src/crm.ts')
+  await import('@openbooks/engine/src/testing/fixtures.ts')
+const { ensureCrmDefaults } = await import('@openbooks/engine/src/crm/crm.ts')
 const { PATCH: opportunityEdit } =
   await import('../app/api/crm/opportunities/[id]/route')
 const { PATCH: activityEdit, DELETE: activityDelete } =

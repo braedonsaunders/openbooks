@@ -2,15 +2,15 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
-import { setPeriodLockState } from "../close.ts";
-import { postProjectGlEntry } from "../project-recognition.ts";
+import { db } from "../platform/db.ts";
+import { setPeriodLockState } from "../close/close.ts";
+import { postProjectGlEntry } from "../projects/recognition.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
   seedFlowActors,
   type ScratchOrg,
-} from "../test-fixtures.ts";
+} from "../testing/fixtures.ts";
 import {
   postAllocationRun,
   previewAllocationRun,

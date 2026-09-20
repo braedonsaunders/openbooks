@@ -208,11 +208,11 @@ const mockUrls = new Map<string, string>([
   ['@/lib/api/json', 'mock:json'],
   ['next/server', 'mock:next-server'],
   ['drizzle-orm', 'mock:drizzle'],
-  ['@openbooks/engine/src/db.ts', 'mock:db'],
+  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['../../../../../lib/feature-gates', 'mock:feature-gates'],
   ['../../../../../lib/list-params', 'mock:list-params'],
   ['../../util', 'mock:util'],
-  ['@openbooks/engine/src/money.ts', 'mock:money'],
+  ['@openbooks/engine/src/money/money.ts', 'mock:money'],
   ['../../../../../lib/exact-decimal', 'mock:exact-decimal'],
 ])
 
@@ -220,7 +220,7 @@ const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     // Exercise the extracted native adjustment service against the original
     // serialized SQL fake; preserve the audit before/after assertion below.
-    if (specifier === './db.ts' && (context.parentURL ?? '').endsWith('/engine/src/banking.ts')) {
+    if (specifier === '../platform/db.ts' && (context.parentURL ?? '').endsWith('/engine/src/banking/banking.ts')) {
       return { url: 'mock:db', shortCircuit: true }
     }
     const mocked = mockUrls.get(specifier)

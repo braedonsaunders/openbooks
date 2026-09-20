@@ -1,4 +1,4 @@
-import type { ContinuousCloseAgentKey } from "@openbooks/engine/src/continuous-close-config.ts";
+import type { ContinuousCloseAgentKey } from "@openbooks/engine/src/agents/continuous-close-config.ts";
 
 /**
  * Per-pack enrichment prompts for the continuous-close background agents.

@@ -1,13 +1,13 @@
 import { sql } from "drizzle-orm";
-import { db, schema } from "../../db.ts";
-import { postDocument, type PostingDeps } from "../../posting.ts";
+import { db, schema } from "../../platform/db.ts";
+import { postDocument, type PostingDeps } from "../../ledger/posting.ts";
 import { submitAndReleaseIfUngated } from "../../flows/submit.ts";
-import { sum } from "../../money.ts";
+import { sum } from "../../money/money.ts";
 import type { SimOrg } from "../world.ts";
 
 /**
  * The create-and-post primitive shared by every document activity. Follows the
- * canonical headless path proven in engine/src/demo-e2e.ts: insert a documents
+ * canonical headless path proven in engine/src/provisioning/demo-e2e.ts: insert a documents
  * header + document_lines, then call the real postDocument. No shortcut writes to
  * journal_lines — every figure flows through the posting kernel.
  */

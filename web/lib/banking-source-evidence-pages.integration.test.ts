@@ -5,7 +5,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { randomUUID } from 'node:crypto'
 import * as React from 'react'
-import type { ScratchOrg } from '../../engine/src/test-fixtures.ts'
+import type { ScratchOrg } from '../../engine/src/testing/fixtures.ts'
 const repo = process.cwd()
 const root = pathToFileURL(repo + '/').href
 const state: { user: import('./auth').SessionUser | null } = { user: null }
@@ -37,9 +37,9 @@ registerHooks({
   },
 })
 
-const { db, withBypassContext, withOrgContext } = await import(root + 'engine/src/db.ts') as typeof import('../../engine/src/db.ts')
+const { db, withBypassContext, withOrgContext } = await import(root + 'engine/src/platform/db.ts') as typeof import('../../engine/src/platform/db.ts')
 const { sql } = await import(root + 'node_modules/drizzle-orm/index.js') as typeof import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(root + 'engine/src/test-fixtures.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(root + 'engine/src/testing/fixtures.ts')
 // The pages' LOADERS, not their rendered trees: the evidence badge and the
 // workspace header are loader-resolved strings, so the loader output is the
 // thing under test (same rationale as banking-book-pages).

@@ -1,9 +1,9 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
-import { db, withOrgTransaction, withTransactionSavepoint } from "@openbooks/engine/src/db.ts";
-import { seedDashboardDefaultsForOrg } from "@openbooks/engine/src/dashboard-defaults.ts";
-import { permissionsOutsideCeiling } from "@openbooks/engine/src/permissions.ts";
+import { db, withOrgTransaction, withTransactionSavepoint } from "@openbooks/engine/src/platform/db.ts";
+import { seedDashboardDefaultsForOrg } from "@openbooks/engine/src/provisioning/dashboard-defaults.ts";
+import { permissionsOutsideCeiling } from "@openbooks/engine/src/organization/permissions.ts";
 import type { SubsidiaryRestriction } from "@openbooks/schema";
 import { type Authz, guardPermission } from "../../../../lib/authz";
 import { listActiveExtensionContributions } from "@openbooks/engine/src/extensions/projections.ts";

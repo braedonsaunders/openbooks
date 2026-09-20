@@ -163,7 +163,7 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/sftp/manager.ts', 'mock:sftp-manager'],
   ['@openbooks/engine/src/sftp/backend.ts', 'mock:sftp-backend'],
-  ['@openbooks/engine/src/db.ts', 'mock:db'],
+  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['../../../../../lib/feature-gates', 'mock:feature-gates'],
   ['../../../../lib/feature-gates', 'mock:feature-gates'],
 ])

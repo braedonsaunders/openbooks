@@ -1,5 +1,5 @@
 import { PDFDocument, PDFName } from 'pdf-lib'
-import type { TaxReturnBox } from '@openbooks/engine/src/tax-return.ts'
+import type { TaxReturnBox } from '@openbooks/engine/src/tax-returns/return.ts'
 
 /**
  * Fill a tenant-uploaded official government AcroForm PDF with the computed

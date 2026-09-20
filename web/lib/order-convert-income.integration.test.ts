@@ -9,15 +9,15 @@ registerHooks({ resolve(specifier, context, next) {
 }});
 
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
 const {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-} = await import("@openbooks/engine/src/test-fixtures.ts");
-import type { ScratchOrg } from "@openbooks/engine/src/test-fixtures.ts";
+} = await import("@openbooks/engine/src/testing/fixtures.ts");
+import type { ScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
 const { convertOrder } = await import("./order-cycle.ts");
-const { postDocument } = await import("@openbooks/engine/src/posting.ts");
+const { postDocument } = await import("@openbooks/engine/src/ledger/posting.ts");
 
 async function seedOrderWithoutLineAccount(
   org: ScratchOrg,

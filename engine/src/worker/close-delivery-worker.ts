@@ -7,8 +7,8 @@ import {
   type CloseDeliveryJobData,
 } from "@openbooks/jobs";
 import { isValidEmailAddress } from "@openbooks/emails";
-import { db, withOrgContext } from "../db.ts";
-import { ensureReportDefinitions } from "../ensure-report-definitions.ts";
+import { db, withOrgContext } from "../platform/db.ts";
+import { ensureReportDefinitions } from "../reports/ensure-report-definitions.ts";
 import { renderReportPdf } from "./render-client.ts";
 
 /** Per-report override captured on the package (mirrors the UI attachment). */

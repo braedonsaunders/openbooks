@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { guardAllocations } from "../../../../lib/allocations-gate";
 import { subsidiaryVisibleFilter } from "../../../../lib/subsidiaries";
-import { db } from "../../../../../engine/src/db.ts";
+import { db } from "../../../../../engine/src/platform/db.ts";
 import { NATIVE_MEASURES } from "../../../../../engine/src/allocations/driver-admin.ts";
 
 export const runtime = "nodejs";

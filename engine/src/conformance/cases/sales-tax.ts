@@ -10,13 +10,13 @@
  * each figure without reading any code.
  */
 
-import { add } from "../../money.ts";
-import { computeLineTaxes } from "../../tax.ts";
-import { assembleReturn, planReturn } from "../../tax-return.ts";
+import { add } from "../../money/money.ts";
+import { computeLineTaxes } from "../../tax/tax.ts";
+import { assembleReturn, planReturn } from "../../tax-returns/return.ts";
 import { CANADA_RETURN_PACKS } from "../../country-tax-packs/ca-returns.ts";
 import { UNITED_KINGDOM_TAX_PACK } from "../../country-tax-packs/gb.ts";
 import type { TaxReturnPack } from "../../country-tax-packs/types.ts";
-import { evaluateUsNexus } from "../../us-nexus.ts";
+import { evaluateUsNexus } from "../../tax/us-nexus.ts";
 import type { ConformanceCase } from "../types.ts";
 
 const GST34 = CANADA_RETURN_PACKS.find((pack) => pack.code === "CA_GST34")!;

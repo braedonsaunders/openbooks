@@ -2,8 +2,8 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { isDocumentRevisionToken } from "@/lib/api/registry-data";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { deleteDocument, DeleteError } from '@openbooks/engine/src/ledger/document-delete.ts'
 import { checkFlowLock, userRoleKeys } from '@openbooks/engine/src/flows/index.ts'
 import { getAuthz, can, guardSubsidiaryScope, subsidiariesInScope } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'

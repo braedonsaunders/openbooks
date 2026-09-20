@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
+import { db } from "../platform/db.ts";
 import { collectibleOpenItems } from "./activities/documents.ts";
 import type { SimOrg } from "./world.ts";
 

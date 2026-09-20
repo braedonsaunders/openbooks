@@ -9,7 +9,7 @@ import {
   moveFile,
   moveFolder,
 } from '../../../../lib/file-cabinet'
-import { inDbTransaction } from '@openbooks/engine/src/db.ts'
+import { inDbTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { isUuid } from '../../../../lib/list-params'
 import { fileViewer, requireSession } from '../lib'
 

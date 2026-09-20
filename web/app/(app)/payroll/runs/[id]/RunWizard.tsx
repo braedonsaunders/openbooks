@@ -29,11 +29,11 @@ import {
   TableRow,
   cn,
 } from '@openbooks/ui'
-import type { YearEndFilingSection } from '@openbooks/engine/src/payroll-yearend.ts'
+import type { YearEndFilingSection } from '@openbooks/engine/src/payroll/yearend.ts'
 import type {
   PayRunCalculationError,
   PayRunRefusalAcknowledgement,
-} from '@openbooks/engine/src/payroll-run.ts'
+} from '@openbooks/engine/src/payroll/run.ts'
 import { useMoney } from '../../../../../components/money-provider'
 import { FilterChips } from '../../../../../components/filter-bar'
 import { PagedTable, type PagedColumn } from '../../../../../components/paged-table'
@@ -253,7 +253,7 @@ const VARIANCE_FLAG_PERCENT = 15
 /**
  * The only trace factors NO pack declares: the deduction-protection
  * shortfall keys stamped by the generic pay-run engine itself
- * (engine/src/payroll-run.ts), not by any country's statutory engine.
+ * (engine/src/payroll/run.ts), not by any country's statutory engine.
  * Everything else resolves through the run's pack-declared `factorLabels`
  * prop — a flat web-layer map keyed by short codes could not tell
  * California's CA_TAX from Canada's CA, so it is gone.

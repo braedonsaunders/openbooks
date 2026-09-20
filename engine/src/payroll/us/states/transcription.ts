@@ -18,7 +18,7 @@
  * turn 2.9% into 0.028999999999999998 and the meta-test that forbids floating
  * point in statutory modules would be right to fail it.
  */
-import { PayrollError } from "../../../payroll-error.ts";
+import { PayrollError } from "../../error.ts";
 
 export class UsStateTranscriptionError extends PayrollError {}
 

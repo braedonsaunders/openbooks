@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
-import type { TaxReturnResult } from '@openbooks/engine/src/tax-return.ts'
+import type { TaxReturnResult } from '@openbooks/engine/src/tax-returns/return.ts'
 
 // tax-filing.ts is server-only in production. Shim the marker so this pure
 // adapter can be exercised directly by Node's test runner.

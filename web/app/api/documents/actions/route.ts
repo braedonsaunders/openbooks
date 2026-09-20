@@ -1,9 +1,9 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { and, eq, sql } from 'drizzle-orm'
-import { db, schema, withOrgTransaction } from '@openbooks/engine/src/db.ts'
+import { db, schema, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
-import { postDocument, runPostDocumentEffects } from '@openbooks/engine/src/posting.ts'
+import { postDocument, runPostDocumentEffects } from '@openbooks/engine/src/ledger/posting.ts'
 import { getAuthz, can, guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { controlDeps, DOC_KINDS, createPermission, isDocKindEnabled, postPermission } from '../../../../lib/documents'
@@ -34,7 +34,7 @@ async function attachPayRunEvidence(
   allowedSubsidiaryIds?: Authz['allowedSubsidiaryIds'],
 ): Promise<void> {
   if (kind !== 'pay_run') return
-  const { payRunApprovalState } = await import('@openbooks/engine/src/payroll-approval.ts')
+  const { payRunApprovalState } = await import('@openbooks/engine/src/payroll/approval.ts')
   if (!(await payRunApprovalState(orgId, documentId)).policyExists) return
   const { assemblePayRunEvidence } = await import('../../../../lib/payroll-evidence')
   await assemblePayRunEvidence(orgId, userId, documentId, allowedSubsidiaryIds)

@@ -7,13 +7,13 @@ import test from "node:test";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext, withOrg } from "../db.ts";
+import { db, withBypassContext, withOrg } from "../platform/db.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
   seedFlowActors,
   type ScratchOrg,
-} from "../test-fixtures.ts";
+} from "../testing/fixtures.ts";
 import {
   collectLegacyEmployments,
   EmploymentCollectionError,

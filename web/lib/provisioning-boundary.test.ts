@@ -9,7 +9,7 @@ const read = (path: string) => readFileSync(join(root, path), "utf8");
 test("organization defaults are installed by explicit setup commands", () => {
   const bootstrap = read("scripts/bootstrap.ts");
   const features = read("web/lib/features-admin.ts");
-  const provisioner = read("engine/src/organization-provisioning.ts");
+  const provisioner = read("engine/src/provisioning/organization-provisioning.ts");
 
   assert.match(bootstrap, /await provisionOrganizationDefaults\(orgId\)/);
   assert.match(features, /await provisionFeatureDefaults\(orgId, actorId, key\)/);

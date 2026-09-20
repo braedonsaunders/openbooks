@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Search } from 'lucide-react'
 import { cn, Drawer, Input } from '@openbooks/ui'
-import { abs as absoluteMoney, cmp as compareMoney, div as divideMoney } from '@openbooks/engine/src/money.ts'
+import { abs as absoluteMoney, cmp as compareMoney, div as divideMoney } from '@openbooks/engine/src/money/money.ts'
 import { TxnLink } from '../../reports/TxnLink'
 import { GroupedBar } from './charts'
 import { formatExactPercent, toChartNumber, useAnalyticsMoney } from './format'

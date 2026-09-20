@@ -1,5 +1,5 @@
 import type { FiscalContext } from "@openbooks/reports";
-import { FEATURES, featureEnabled, type FeatureState } from "@openbooks/engine/src/feature-registry.ts";
+import { FEATURES, featureEnabled, type FeatureState } from "@openbooks/engine/src/organization/feature-registry.ts";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",

@@ -2,12 +2,12 @@ import 'server-only'
 import { uuidId } from '../api/json'
 import { saveExtensionSettingRow } from './extension-settings'
 import { sql } from 'drizzle-orm'
-import { CurrencyError, updateFxRate } from '@openbooks/engine/src/currencies.ts'
-import { db, type SqlExecutor } from '@openbooks/engine/src/db.ts'
-import { toUnits } from '@openbooks/engine/src/money.ts'
-import { compileFormula } from '@openbooks/engine/src/depreciation-formula.ts'
-import { filingAccountProblem } from '@openbooks/engine/src/payroll-filing-registry.ts'
-import { payPeriodsPerYearProblem, payScheduleSubsidiaryProblem, rescopePayScheduleRuns, semiMonthlyAnchorProblem } from '@openbooks/engine/src/payroll-run.ts'
+import { CurrencyError, updateFxRate } from '@openbooks/engine/src/fx/currencies.ts'
+import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import { toUnits } from '@openbooks/engine/src/money/money.ts'
+import { compileFormula } from '@openbooks/engine/src/assets/depreciation-formula.ts'
+import { filingAccountProblem } from '@openbooks/engine/src/payroll/filing-registry.ts'
+import { payPeriodsPerYearProblem, payScheduleSubsidiaryProblem, rescopePayScheduleRuns, semiMonthlyAnchorProblem } from '@openbooks/engine/src/payroll/run.ts'
 import { payComponentTreatmentProblem } from '@openbooks/engine/src/payroll/treatment-bases.ts'
 import { SETUP_ENTITY_BY_KEY, setupEntityForFeatureState, toSnake, type SetupEntity } from './registry'
 import {
@@ -343,7 +343,7 @@ export async function validateEntityIntegrity(
   }
   if (entity.key === 'tax-rates') {
     // One exact-decimal contract with the calculation engine
-    // (engine/src/tax.ts): a rate is a nonnegative exact decimal with at most
+    // (engine/src/tax/tax.ts): a rate is a nonnegative exact decimal with at most
     // 4 decimal places. Without this check the generic percent coercer admits
     // FX-scale values PostgreSQL silently rounds into numeric(19,4), and a
     // negative rate saves "successfully" only to fail every later document at
@@ -473,7 +473,7 @@ export async function validateEntityIntegrity(
     // The pack's declared filing program types are the constraint that used
     // to be the payroll_filing_accounts_country/_program/_program_country/
     // _state DB CHECKs. A CHECK cannot enumerate an open pack registry, so
-    // the declaration (engine/src/payroll-filing-registry.ts) is asked here,
+    // the declaration (engine/src/payroll/filing-registry.ts) is asked here,
     // at the API boundary, for creates and edits alike.
     const current = rowId
       ? (((await executor.execute(sql`
@@ -519,7 +519,7 @@ export async function validateEntityIntegrity(
     // `anchor_period_end` is a REQUIRED field the engine derives every period
     // boundary from, semi-monthly included: the anchor's day-of-month names one
     // of the month's two period ends and its half-month complement names the
-    // other (engine/src/payroll-run.ts, `semiMonthlyBoundaries`). Two anchor
+    // other (engine/src/payroll/run.ts, `semiMonthlyBoundaries`). Two anchor
     // shapes do not determine a calendar — the 14th, whose complement is a day
     // February does not always have, and the last day of a 28-day February,
     // which is simultaneously "the 28th" and "the month end". Both are refused

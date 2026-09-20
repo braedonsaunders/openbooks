@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-// NOTE: PACK_DEFAULT_CODES (in ../tax-pack-provisioning.ts) derives its
+// NOTE: PACK_DEFAULT_CODES (in ../tax/pack-provisioning.ts) derives its
 // per-return entry from primaryPackTaxCode, so asserting the primary here
 // proves the default stays STD without pulling drizzle/db into this test.
 import { packTaxCodesForReturn, primaryPackTaxCode } from "./index.ts";

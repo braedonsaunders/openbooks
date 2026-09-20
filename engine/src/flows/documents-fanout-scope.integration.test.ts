@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { withOrg } from "../db.ts";
+import { withOrg } from "../platform/db.ts";
 import { createDocumentsFlowAdapter } from "./documents-adapter.ts";
 import { getFlowAdapter } from "./registry.ts";
 import {
@@ -8,7 +8,7 @@ import {
   dropScratchOrg,
   seedDraftDocument,
   seedFlowActors,
-} from "../test-fixtures.ts";
+} from "../testing/fixtures.ts";
 
 /**
  * Scheduled fan-out tenant isolation (fnd_mtlnbr4x_wd5odm): candidate reads

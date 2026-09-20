@@ -9,7 +9,7 @@ const layout = read("./layout.tsx");
 const island = read("./AgentsTriageKeys.tsx");
 const listSource = read("../../../lib/list/agent-findings.ts");
 const ccPage = read("../continuous-close/page.tsx");
-const nav = read("../../../../engine/src/modules/nav-registry.ts");
+const nav = read("../../../../engine/src/navigation/nav-registry.ts");
 
 // The workbench home is one ranked inbox across every readable pack — the
 // loadAgentInbox resolver the JSON feed also serves, never a second query.

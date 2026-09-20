@@ -1,16 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
-import { createScriptJournal } from "../journal-writes.ts";
-import { requestDocumentVoid } from "../document-void.ts";
-import { reverseProjectGlEntry } from "../project-recognition.ts";
+import { db } from "../platform/db.ts";
+import { createScriptJournal } from "../ledger/journal-writes.ts";
+import { requestDocumentVoid } from "../ledger/document-void.ts";
+import { reverseProjectGlEntry } from "../projects/recognition.ts";
 import {
   createPaymentDocument,
   postPaymentWithApplications,
   sameCurrencyAllocation,
   updateDraftPayment,
-} from "../payments.ts";
-import { add } from "../money.ts";
+} from "../payments/payments.ts";
+import { add } from "../money/money.ts";
 import { collectibleOpenItems, createAndPostDocument, releaseDraftIfUngated } from "./activities/documents.ts";
 import type { SimOrg, SimPeriod } from "./world.ts";
 import type { InvariantResult } from "./invariants/index.ts";

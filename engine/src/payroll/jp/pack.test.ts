@@ -11,7 +11,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { PayrollError } from "../../payroll-error.ts";
+import { PayrollError } from "../error.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { reduceTaxBases } from "../treatment-bases.ts";

@@ -15,8 +15,8 @@ import { HeaderFields } from '../../../components/transaction-form/header-fields
 import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import { JournalEntryLink } from '../../../components/journal-entry-link'
 import { PdfButton } from '../../../components/pdf-button'
-import { add, cmp } from '@openbooks/engine/src/money.ts'
-import { computeLineTaxes, type TaxComponentConfig } from '@openbooks/engine/src/tax.ts'
+import { add, cmp } from '@openbooks/engine/src/money/money.ts'
+import { computeLineTaxes, type TaxComponentConfig } from '@openbooks/engine/src/tax/tax.ts'
 import {
   DOCUMENT_CHANGED_AFTER_OPEN,
   buildDocumentSaveRequest,

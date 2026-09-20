@@ -1,4 +1,4 @@
-import { fromUnits, roundDiv, toUnits } from "../money.ts";
+import { fromUnits, roundDiv, toUnits } from "../money/money.ts";
 import type {
   AllocationResidualPolicy,
   AllocationRuleTarget,
@@ -8,7 +8,7 @@ import type {
 } from "./types.ts";
 
 /**
- * Exact apportionment over bigint money (engine/src/money.ts, 1e4 units).
+ * Exact apportionment over bigint money (engine/src/money/money.ts, 1e4 units).
  *
  * Floors every target's exact share and books the whole leftover on ONE
  * absorber chosen by the residual policy, so Σ(amounts) == total by

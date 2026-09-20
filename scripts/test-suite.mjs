@@ -27,47 +27,47 @@ const TEST_PATTERNS = ['scripts', 'deploy', 'engine', 'packages', 'web', 'schema
 // this list is the maintained compatibility inventory for legacy files.
 const DATABASE_TEST_OVERRIDES = new Set([
   'scripts/test-fixture-architecture.test.mjs',
-  'engine/src/ap-capture.test.ts',
-  'engine/src/bank-feed-providers.test.ts',
-  'engine/src/business-date.test.ts',
-  'engine/src/close.test.ts',
+  'engine/src/payables/ap-capture.test.ts',
+  'engine/src/banking/bank-feed-providers.test.ts',
+  'engine/src/platform/business-date.test.ts',
+  'engine/src/close/close.test.ts',
   'engine/src/conformance/conformance.test.ts',
   'engine/src/conformance/controls.test.ts',
-  'engine/src/control-accounts.test.ts',
-  'engine/src/direct-debit.test.ts',
-  'engine/src/dunning.test.ts',
-  'engine/src/fx-providers.test.ts',
+  'engine/src/records/control-accounts.test.ts',
+  'engine/src/payments/direct-debit.test.ts',
+  'engine/src/receivables/dunning.test.ts',
+  'engine/src/fx/providers.test.ts',
   // Proves the pack-refusal hierarchy at the real boundary: it installs every
   // declared country and runs their population() calls, which needs a database.
   // Left in the unit partition its DB block silently skipped, so the guard for
   // the year-end crash was never actually exercised in CI.
-  'engine/src/payroll-pack-refusal-class.test.ts',
+  'engine/src/payroll/pack-refusal-class.test.ts',
   'engine/src/harness/scenario.test.ts',
-  'engine/src/inventory-costing.test.ts',
-  'engine/src/journal-writes.test.ts',
-  'engine/src/payment-operations.test.ts',
-  'engine/src/payroll-agnostic-core.test.ts',
-  'engine/src/payroll-bank-file.test.ts',
-  'engine/src/payroll-controls.test.ts',
-  'engine/src/payroll-derived-earnings.test.ts',
-  'engine/src/payroll-entitlements.test.ts',
-  'engine/src/payroll-filing-registry.test.ts',
-  'engine/src/payroll-opening-balances.test.ts',
-  'engine/src/payroll-opening-entitlements.test.ts',
-  'engine/src/payroll-payment-method.test.ts',
-  'engine/src/payroll-roexml.test.ts',
-  'engine/src/payroll-run.test.ts',
-  'engine/src/payroll-statutory-rates.test.ts',
-  'engine/src/payroll-statutory-rate-history.test.ts',
-  'engine/src/payroll-tax-years.test.ts',
-  'engine/src/payroll-yearend-amendments.test.ts',
-  'engine/src/posting-subsidiary-restrictions.test.ts',
-  'engine/src/posting.test.ts',
-  'engine/src/revenue-recognition.test.ts',
+  'engine/src/inventory/costing.test.ts',
+  'engine/src/ledger/journal-writes.test.ts',
+  'engine/src/payments/operations.test.ts',
+  'engine/src/payroll/agnostic-core.test.ts',
+  'engine/src/payroll/bank-file.test.ts',
+  'engine/src/payroll/controls.test.ts',
+  'engine/src/payroll/derived-earnings.test.ts',
+  'engine/src/payroll/entitlements.test.ts',
+  'engine/src/payroll/filing-registry.test.ts',
+  'engine/src/payroll/opening-balances.test.ts',
+  'engine/src/payroll/opening-entitlements.test.ts',
+  'engine/src/payroll/payment-method.test.ts',
+  'engine/src/payroll/roexml.test.ts',
+  'engine/src/payroll/run.test.ts',
+  'engine/src/payroll/statutory-rates.test.ts',
+  'engine/src/payroll/statutory-rate-history.test.ts',
+  'engine/src/payroll/tax-years.test.ts',
+  'engine/src/payroll/yearend-amendments.test.ts',
+  'engine/src/ledger/posting-subsidiary-restrictions.test.ts',
+  'engine/src/ledger/posting.test.ts',
+  'engine/src/revenue/recognition.test.ts',
   'engine/src/sync/migrate.test.ts',
   'engine/src/sync/source-deletions.test.ts',
-  'engine/src/tax-rate-providers.test.ts',
-  'engine/src/work-schedules.test.ts',
+  'engine/src/tax/rate-providers.test.ts',
+  'engine/src/payroll/work-schedules.test.ts',
   'web/app/api/account-groups/[id]/route.test.ts',
   'web/app/api/admin/setup/[entity]/route.test.ts',
   'web/app/api/file-cabinet/files/route.test.ts',
@@ -97,7 +97,7 @@ const DATABASE_TEST_OVERRIDES = new Set([
 // Restore is an isolated disaster-recovery rehearsal. It has its own
 // scheduled/manual workflow owner and must not run as part of the ordinary
 // integration partition.
-const RESTORE_TEST_FILES = new Set(['engine/src/backup-restore.integration.test.ts'])
+const RESTORE_TEST_FILES = new Set(['engine/src/backup/restore.integration.test.ts'])
 
 function allTestFiles() {
   return [...new Set(TEST_PATTERNS.flatMap((pattern) => globSync(pattern, { cwd: ROOT, nodir: true })))]
@@ -261,7 +261,7 @@ async function startFixtureOwner(env) {
   const owner = spawn(process.execPath, [
     ...TEST_RUNTIME_FLAGS,
     '--import', 'tsx',
-    '--import', './engine/src/test-database-bypass.ts',
+    '--import', './engine/src/testing/database-bypass.ts',
     './scripts/test-fixture-lifecycle.mjs', '--owner',
   ], { cwd: ROOT, stdio: ['ignore', 'pipe', 'inherit'], env })
   let output = ''
@@ -380,7 +380,7 @@ async function runSuite(suite, forwarded, envOverrides = {}) {
     '--import',
     'tsx',
     '--import',
-    './engine/src/test-database-bypass.ts',
+    './engine/src/testing/database-bypass.ts',
     ...(pooled ? ['--import', './scripts/test-fixture-lifecycle.mjs'] : []),
     '--test',
     '--test-force-exit',

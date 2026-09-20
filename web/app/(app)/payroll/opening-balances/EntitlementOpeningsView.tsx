@@ -7,7 +7,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { AlertTriangle, Download, Info, Lock, Upload } from 'lucide-react'
 import { Badge, Button, FieldHelp, Input, Label, cn } from '@openbooks/ui'
-import type { EntitlementOpeningsResult } from '@openbooks/engine/src/payroll-entitlements.ts'
+import type { EntitlementOpeningsResult } from '@openbooks/engine/src/payroll/entitlements.ts'
 
 interface SaveError {
   employeePartyId: string

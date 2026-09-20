@@ -2,21 +2,21 @@ import assert from "node:assert/strict";
 import { createHmac, randomUUID } from "node:crypto";
 import test, { after, before } from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../../../../../../engine/src/db.ts";
+import { db } from "../../../../../../engine/src/platform/db.ts";
 import {
   ACCEPTANCE_ADAPTERS,
   PAYMENT_WEBHOOK_ITEM_MALFORMED_LOG_EVENT,
-} from "../../../../../../engine/src/payment-acceptance.ts";
-import { sealJson } from "../../../../../../engine/src/secrets.ts";
+} from "../../../../../../engine/src/payments/acceptance.ts";
+import { sealJson } from "../../../../../../engine/src/platform/secrets.ts";
 import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-} from "../../../../../../engine/src/test-fixtures.ts";
+} from "../../../../../../engine/src/testing/fixtures.ts";
 import { POST } from "./route.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
-// engine/src/secrets.ts reads the data key live from process.env (never the
+// engine/src/platform/secrets.ts reads the data key live from process.env (never the
 // engine db.ts module-evaluation snapshot), so seed it there too.
 const priorDataKey = process.env.OPENBOOKS_DATA_KEY;
 

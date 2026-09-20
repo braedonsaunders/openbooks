@@ -1,7 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { businessToday } from "@openbooks/engine/src/business-date.ts";
-import { db } from "@openbooks/engine/src/db.ts";
+import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
 import { statementBookExpr } from "../gl-summary";
 
 export type FinancialTrendRow = {
@@ -27,7 +27,7 @@ export type FinancialTrendRow = {
  * the same statementBookExpr contract as every statement).
  *
  * Period boundaries follow the ledger's exact period identity, never a date
- * inferred from posting_date (engine/src/period-identity-contract.test.ts):
+ * inferred from posting_date (engine/src/close/period-identity-contract.test.ts):
  * an activity row is the entries the ledger assigned to THAT period, so an
  * adjustment period's accruals (a separate ledger period sharing the final
  * regular period's dates) never masquerade as regular-period activity, and

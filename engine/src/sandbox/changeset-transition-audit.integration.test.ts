@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
+import { db } from "../platform/db.ts";
 import { approveChangeSet, reviewChangeSet } from "./promote.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
   seedFlowActors,
-} from "../test-fixtures.ts";
+} from "../testing/fixtures.ts";
 
 /**
  * Change-set review and approval are the four-eyes authorization for

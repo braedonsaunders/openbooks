@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, SearchSelect, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
-import { sum } from '@openbooks/engine/src/money.ts'
+import { sum } from '@openbooks/engine/src/money/money.ts'
 import { SortTh } from '../../../components/sortable-th'
 /**
  * Payment-run builder: select posted vendor bills with an open balance

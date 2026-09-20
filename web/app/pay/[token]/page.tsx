@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { publicPaymentPage } from "@openbooks/engine/src/payment-acceptance.ts";
+import { publicPaymentPage } from "@openbooks/engine/src/payments/acceptance.ts";
 import { createMoneyFormatter } from "@/lib/money-format";
 import { decimalCmp } from "@/lib/statement-format";
 import { PayButton } from "./PayButton";

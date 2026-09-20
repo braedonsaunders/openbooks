@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { authorizeUrl, type DynamicsApp } from '@openbooks/engine/src/dynamics.ts'
-import { sealJson, unsealJson } from '@openbooks/engine/src/secrets.ts'
+import { authorizeUrl, type DynamicsApp } from '@openbooks/engine/src/connectors/dynamics.ts'
+import { sealJson, unsealJson } from '@openbooks/engine/src/platform/secrets.ts'
 import { getConnection } from '@openbooks/engine/src/sync/connection.ts'
 import { guardPermission } from '../../../../../../../lib/authz'
 

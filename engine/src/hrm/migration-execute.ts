@@ -34,7 +34,7 @@
 
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withOrgTransaction } from "../db.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
 import {
   fingerprintSourceRow,
   preflightEmploymentMigration,

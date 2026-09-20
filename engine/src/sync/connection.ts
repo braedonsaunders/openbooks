@@ -1,20 +1,20 @@
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
-import { unsealJson } from "../secrets.ts";
-import type { NetSuiteCreds } from "../netsuite.ts";
+import { db } from "../platform/db.ts";
+import { unsealJson } from "../platform/secrets.ts";
+import type { NetSuiteCreds } from "../connectors/netsuite.ts";
 import { NetSuiteSource, parseNetSuiteMappings } from "./netsuite-source.ts";
 import { OdooSource } from "./odoo-source.ts";
-import type { OdooCreds } from "../odoo.ts";
+import type { OdooCreds } from "../connectors/odoo.ts";
 import { ErpNextSource } from "./erpnext-source.ts";
-import type { ErpNextCreds } from "../erpnext.ts";
-import { QboClient, type QboApp, type QboTokens } from "../qbo.ts";
+import type { ErpNextCreds } from "../connectors/erpnext.ts";
+import { QboClient, type QboApp, type QboTokens } from "../connectors/qbo.ts";
 import { QboSource } from "./qbo-source.ts";
-import { XeroClient, type XeroApp, type XeroTokens } from "../xero.ts";
+import { XeroClient, type XeroApp, type XeroTokens } from "../connectors/xero.ts";
 import { XeroSource } from "./xero-source.ts";
-import { DynamicsClient, type DynamicsApp, type DynamicsTokens } from "../dynamics.ts";
+import { DynamicsClient, type DynamicsApp, type DynamicsTokens } from "../connectors/dynamics.ts";
 import { DynamicsSource } from "./dynamics-source.ts";
 import { QbdSource } from "./qbd-source.ts";
-import { sealJson } from "../secrets.ts";
+import { sealJson } from "../platform/secrets.ts";
 import type { MigrationSource } from "./source.ts";
 
 /**

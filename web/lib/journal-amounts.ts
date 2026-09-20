@@ -1,7 +1,7 @@
 /**
  * Exact journal-line amount arithmetic for the client-side journal drawer.
  * Ledger amounts are numeric(19,4); these helpers mirror the semantics of
- * engine/src/money.ts (toUnits/fromUnits) in plain string/bigint math so UI
+ * engine/src/money/money.ts (toUnits/fromUnits) in plain string/bigint math so UI
  * parsing and balancing never cross the binary floating-point boundary —
  * including sub-cent (3–4 decimal) lines.
  */

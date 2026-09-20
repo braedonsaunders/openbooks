@@ -5,14 +5,14 @@ import { REVENUE_TYPES } from "../reports/statements";
 import { addMonthsIso } from "@openbooks/reports";
 import { getMoneyFormatter } from '../money-server'
 import { sql } from "drizzle-orm";
-import { businessToday } from "@openbooks/engine/src/business-date.ts";
-import { db } from "@openbooks/engine/src/db.ts";
+import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
 import { analyticsConfig } from "./config";
 import { englishCustomerStrings, type CustomerStrings } from "./customer-strings";
 import { paymentStats } from "../cash/core";
 import { isFeatureEnabled } from "../features";
 import { flowRates } from "../fx-presentation";
-import { add, mulDecimal, neg } from "@openbooks/engine/src/money.ts";
+import { add, mulDecimal, neg } from "@openbooks/engine/src/money/money.ts";
 import { PNL_COST_TYPES, PNL_TYPES } from "../account-types";
 
 /**

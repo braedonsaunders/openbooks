@@ -101,7 +101,7 @@ export const vendorRoles = pgTable("vendor_roles", {
   /**
    * Reportable on a year-end information return (1099/T4A). THE switch for
    * "do we file for this vendor"; `informationReturnForm` only decides which
-   * form, and the resolver requires both (see engine/src/information-returns.ts).
+   * form, and the resolver requires both (see engine/src/compliance/information-returns.ts).
    */
   is1099OrT4a: boolean("is_t4a").notNull().default(false),
   /**
@@ -131,7 +131,7 @@ export const vendorRoles = pgTable("vendor_roles", {
       "other",
     ],
   }),
-  /** Taxpayer identification number, sealed at rest (engine/src/secrets.ts). */
+  /** Taxpayer identification number, sealed at rest (engine/src/platform/secrets.ts). */
   tinEncrypted: text("tin_encrypted"),
   /** Last four digits, plaintext, for display and matching. Never the full TIN. */
   tinLast4: text("tin_last4"),

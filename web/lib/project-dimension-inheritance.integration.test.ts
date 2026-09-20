@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
-import { env } from "@openbooks/engine/src/db.ts";
+import { env } from "@openbooks/engine/src/platform/db.ts";
 
 test(
   "project financials inherit header scope while preserving line overrides",
@@ -11,13 +11,13 @@ test(
       import assert from "node:assert/strict";
       import { randomUUID } from "node:crypto";
       import { sql } from "drizzle-orm";
-      import { db, withOrg } from "./engine/src/db.ts";
-      import { installTrustedTestDatabaseBypass } from "./engine/src/test-database-bypass.ts";
+      import { db, withOrg } from "./engine/src/platform/db.ts";
+      import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
       import {
         createScratchOrg,
         dropScratchOrg,
         seedFlowActors,
-      } from "./engine/src/test-fixtures.ts";
+      } from "./engine/src/testing/fixtures.ts";
       import { generateInvoiceFromBillingRequest } from "./web/lib/billing.ts";
       import { createBillingRequest } from "./web/lib/billing-requests.ts";
       import { resolveProjectFinancials } from "./web/lib/project-financials.ts";
@@ -168,7 +168,7 @@ test(
         "--import",
         "tsx",
         "--import",
-        "./engine/src/test-database-bypass.ts",
+        "./engine/src/testing/database-bypass.ts",
         "--input-type=module",
         "-e",
         source,

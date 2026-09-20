@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, withBypassContext, withOrgContext } from '@openbooks/engine/src/db.ts'
+import { db, withBypassContext, withOrgContext } from '@openbooks/engine/src/platform/db.ts'
 import {
   decideGate,
   EMAIL_TOKEN_TTL_MS,

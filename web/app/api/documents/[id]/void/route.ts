@@ -1,12 +1,12 @@
-import { isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
+import { isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
   DocumentVoidError,
   requestDocumentVoid,
-} from '@openbooks/engine/src/document-void.ts'
+} from '@openbooks/engine/src/ledger/document-void.ts'
 import { can, getAuthz, guardSubsidiaryScope } from '../../../../../lib/authz'
 import { createPermission, isDocKindEnabled, postPermission } from '../../../../../lib/documents'
 import { isUuid } from '../../../../../lib/list-params'

@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
-import { db } from '../db.ts'
-import { unsealJson } from '../secrets.ts'
-import { netsuiteRecord, netsuiteRecords, suiteql, type NetSuiteCreds } from '../netsuite.ts'
-import { ensureCrmDefaults } from '../crm.ts'
-import { weightAmount } from '../crm-math.ts'
-import { canonicalDecimal } from '../exact-decimal.ts'
-import { normalizeMoney } from '../money.ts'
+import { db } from '../platform/db.ts'
+import { unsealJson } from '../platform/secrets.ts'
+import { netsuiteRecord, netsuiteRecords, suiteql, type NetSuiteCreds } from '../connectors/netsuite.ts'
+import { ensureCrmDefaults } from '../crm/crm.ts'
+import { weightAmount } from '../crm/crm-math.ts'
+import { canonicalDecimal } from '../money/exact-decimal.ts'
+import { normalizeMoney } from '../money/money.ts'
 
 export interface CrmImportReport {
   accountStatuses: number

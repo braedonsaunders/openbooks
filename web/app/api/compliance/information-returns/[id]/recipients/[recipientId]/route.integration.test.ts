@@ -89,14 +89,14 @@ const postRouteUrl = "../../route.ts?ir-filing-action-test";
 const { POST } = (await import(postRouteUrl)) as typeof import("../../route.ts");
 hooks.deregister();
 
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const {
   ensureFiling,
   finalizeFiling,
   markFilingFiled,
   recomputeFiling,
-} = await import("@openbooks/engine/src/information-returns.ts");
-const { createScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
+} = await import("@openbooks/engine/src/compliance/information-returns.ts");
+const { createScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -508,7 +508,7 @@ test("no caller outside the engine service can reach the information-return tabl
   // any INSERT INTO / UPDATE / DELETE FROM against information_return_filings
   // or information_return_recipients must live in the owning engine module.
   // Test files seed fixtures directly and are exempt; production code is not.
-  const owner = "engine/src/information-returns.ts";
+  const owner = "engine/src/compliance/information-returns.ts";
   const forbidden =
     /\b(?:insert\s+into|update|delete\s+from)\s+information_return_(?:filings|recipients)\b/i;
   const root = fileURLToPath(new URL("../../../../../../../../", import.meta.url));
@@ -533,6 +533,6 @@ test("no caller outside the engine service can reach the information-return tabl
 
 /** Teardown failures must not replace an in-flight assertion error. */
 async function dropScratchOrgReportingSafe(orgId: string): Promise<void> {
-  const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+  const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
   await dropScratchOrgReporting(orgId);
 }

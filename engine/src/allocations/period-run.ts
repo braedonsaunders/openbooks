@@ -1,10 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
-import { resolveAccountGroups } from "../account-groups.ts";
-import { canonicalJson } from "../canonical-json.ts";
-import { businessToday } from "../business-date.ts";
-import { db, inDbTransaction } from "../db.ts";
-import { add, cmp, isZero, neg, sum } from "../money.ts";
+import { resolveAccountGroups } from "../records/account-groups.ts";
+import { canonicalJson } from "../platform/canonical-json.ts";
+import { businessToday } from "../platform/business-date.ts";
+import { db, inDbTransaction } from "../platform/db.ts";
+import { add, cmp, isZero, neg, sum } from "../money/money.ts";
 import { apportion, fixedPercentWeights } from "./apportion.ts";
 import type { DriverResolveOptions } from "./drivers.ts";
 import { allocationServiceDeps } from "./service.ts";
@@ -12,9 +12,9 @@ import {
   postProjectGlEntryWithinTransaction,
   reverseProjectGlEntryWithinTransaction,
   type GlLine,
-} from "../project-recognition.ts";
-import { assertPeriodModulesOpen, CloseError } from "../close.ts";
-import { uuidArray } from "../subsidiaries.ts";
+} from "../projects/recognition.ts";
+import { assertPeriodModulesOpen, CloseError } from "../close/close.ts";
+import { uuidArray } from "../organization/subsidiaries.ts";
 import type {
   AccountScope,
   AllocationDimension,

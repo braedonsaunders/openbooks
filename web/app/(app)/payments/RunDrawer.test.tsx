@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
-import { sum } from '@openbooks/engine/src/money.ts'
+import { sum } from '@openbooks/engine/src/money/money.ts'
 
 const source = readFileSync(new URL('./RunDrawer.tsx', import.meta.url), 'utf8')
 

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-change-requests.ts";
-import { db, withOrgTransaction, type SqlExecutor } from "../db.ts";
+import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import {
   checkApprovalIdentitySeparation,
   loadActorPerson,

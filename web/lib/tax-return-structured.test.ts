@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import type { TaxReturnResult } from '@openbooks/engine/src/tax-return.ts'
+import type { TaxReturnResult } from '@openbooks/engine/src/tax-returns/return.ts'
 import { taxReturnToJsonString, taxReturnToStructured } from './tax-return-structured.ts'
 
 function gstr(): TaxReturnResult {

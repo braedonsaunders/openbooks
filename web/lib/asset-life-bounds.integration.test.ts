@@ -4,9 +4,9 @@ import test from 'node:test';
 import { registerHooks } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { sql } from 'drizzle-orm';
-import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts';
-import { db } from '@openbooks/engine/src/db.ts';
-import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/src/test-fixtures.ts';
+import { documentRevisionSql } from '@openbooks/engine/src/records/revision.ts';
+import { db } from '@openbooks/engine/src/platform/db.ts';
+import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts';
 
 async function seedAsset(org: ScratchOrg) {
   const actorId = (await seedFlowActors(org.orgId)).adminId;

@@ -12,7 +12,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { PayrollError } from "../../payroll-error.ts";
+import { PayrollError } from "../error.ts";
 import {
   certificateDeclarationProblem,
 } from "../certificates.ts";

@@ -25,9 +25,9 @@ const sources = {
       return { kind: 'sent', providerMessageId: 'provider-1' };
     }
   `,
-  '../db.ts': 'export const db = { execute: async () => ({ rows: [] }) }; export const withOrgContext = (_org, action) => action();',
-  '../sandbox/guard.ts': 'export const isSandboxOrg = async () => false;',
-  '../email-config.ts': `
+  '../platform/db.ts': 'export const db = { execute: async () => ({ rows: [] }) }; export const withOrgContext = (_org, action) => action();',
+  '../organization/sandbox-guard.ts': 'export const isSandboxOrg = async () => false;',
+  '../delivery/email-config.ts': `
     export const resolveOrgEmailTransport = async () => ({ provider: 'test' });
     export const claimEmailDeliveryLog = async () => ({ id: 'log', attempts: [] });
     export const appendEmailAttemptEvent = async () => [];
@@ -40,7 +40,7 @@ const sources = {
     export const markPaymentRemittanceFailed = async (_org, id, error, attempt, terminal) => globalThis.__paymentRemittanceEmailTest.remittanceFailed.push([id, error, attempt, terminal]);
     export const markPaymentRemittanceSent = async (_org, id) => globalThis.__paymentRemittanceEmailTest.remittanceSent.push(id);
   `,
-  '../report-delivery.ts': `
+  '../delivery/report-delivery.ts': `
     export const markReportDeliveryFailed = async () => {};
     export const markReportDeliverySent = async () => {};
     export const markReportDeliveryStarted = async () => {};

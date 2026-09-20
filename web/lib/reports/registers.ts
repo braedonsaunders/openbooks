@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
 import { functionalReportReader } from "./currency-basis";
 import { statementBookExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";

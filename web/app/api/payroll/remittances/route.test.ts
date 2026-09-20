@@ -64,10 +64,10 @@ const hooks = registerHooks({
       return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
     }
     if (specifier === '@/lib/api/json') return { url: 'mock:json', shortCircuit: true }
-    if (specifier === '@openbooks/engine/src/payroll-remittance.ts') {
+    if (specifier === '@openbooks/engine/src/payroll/remittance.ts') {
       return { url: 'mock:payroll-remittance', shortCircuit: true }
     }
-    if (specifier === '@openbooks/engine/src/payroll-run.ts') return { url: 'mock:payroll-run', shortCircuit: true }
+    if (specifier === '@openbooks/engine/src/payroll/run.ts') return { url: 'mock:payroll-run', shortCircuit: true }
     if (specifier.endsWith('/lib/feature-gates')) return { url: 'mock:feature-gates', shortCircuit: true }
     if (specifier === '../subsidiary-scope') return { url: 'mock:subsidiary-scope', shortCircuit: true }
     return nextResolve(specifier, context)

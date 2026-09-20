@@ -7,10 +7,10 @@ import {
   readTaxRateProviderConfigView,
   saveTaxRateProviderConfig,
   type TaxRateProviderKey,
-} from "@openbooks/engine/src/tax-rate-providers.ts";
+} from "@openbooks/engine/src/tax/rate-providers.ts";
 import { guardPermission } from "../../../../lib/authz";
 import { canonicalDecimal } from "../../../../lib/exact-decimal";
-import { normalizeMoney } from "@openbooks/engine/src/money.ts";
+import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 
 export const runtime = "nodejs";
 

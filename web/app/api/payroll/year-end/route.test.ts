@@ -28,7 +28,7 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ['../../../../lib/feature-gates', 'mock:feature-gates'],
   ['../subsidiary-scope', 'mock:subsidiary-scope'],
-  ['@openbooks/engine/src/payroll-yearend.ts', 'mock:yearend'],
+  ['@openbooks/engine/src/payroll/yearend.ts', 'mock:yearend'],
 ])
 
 const hooks = registerHooks({

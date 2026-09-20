@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
   loadPaymentDocument,
   PaymentRevisionConflictError,
   updateDraftPayment,
   type PaymentKind,
-} from '@openbooks/engine/src/payments.ts'
-import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
+} from '@openbooks/engine/src/payments/payments.ts'
+import { deleteDocument, DeleteError } from '@openbooks/engine/src/ledger/document-delete.ts'
 import { can, getAuthz, guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import {

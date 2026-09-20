@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
-import { add, mul, mulRate, neg } from '@openbooks/engine/src/money.ts'
+import { add, mul, mulRate, neg } from '@openbooks/engine/src/money/money.ts'
 
 // The scripted database below models the two SQL rollups with transaction- and
 // functional-currency fixture values. A query that omits its document FX rate
@@ -177,7 +177,7 @@ const mockSources = new Map<string, string>([
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === 'server-only') return { url: 'mock:server-only', shortCircuit: true }
-    if (specifier === '@openbooks/engine/src/db.ts') return { url: 'mock:db', shortCircuit: true }
+    if (specifier === '@openbooks/engine/src/platform/db.ts') return { url: 'mock:db', shortCircuit: true }
     if (specifier === './subcontract-commitments') {
       return { url: 'mock:subcontract-commitments', shortCircuit: true }
     }

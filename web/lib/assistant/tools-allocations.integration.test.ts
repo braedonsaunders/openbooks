@@ -21,14 +21,14 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 } });
 
 const { sql } = await import('drizzle-orm');
-const { db, withBypassContext, withOrgContext } = await import('../../../engine/src/db.ts');
+const { db, withBypassContext, withOrgContext } = await import('../../../engine/src/platform/db.ts');
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  '../../../engine/src/test-fixtures.ts'
+  '../../../engine/src/testing/fixtures.ts'
 );
 const { createDriver, createDriverValue } = await import(
   '../../../engine/src/allocations/driver-admin.ts'
 );
-const { postProjectGlEntry } = await import('../../../engine/src/project-recognition.ts');
+const { postProjectGlEntry } = await import('../../../engine/src/projects/recognition.ts');
 const { executeAssistantTool } = await import('./registry');
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

@@ -157,7 +157,7 @@ export const payrollRetroSettlements = pgTable(
 /**
  * One (component, project, department) bucket of a settlement.
  *
- * These rows ARE the retro run's earning lines: `engine/src/payroll-retro.ts`
+ * These rows ARE the retro run's earning lines: `engine/src/payroll/retro.ts`
  * emits them into `calculateStub`, which is why retro wages land on the jobs
  * the original hours were charged to, in the proportions those hours had, with
  * no allocation step to lose a penny in. Their `amount` sums to the

@@ -42,7 +42,7 @@ const hooks = registerHooks({
   },
 });
 const { POST } = await import("./route");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/test-fixtures.ts");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 hooks.deregister();
 
 const request = (body: unknown) =>

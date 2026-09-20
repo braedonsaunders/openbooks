@@ -40,7 +40,7 @@
  * Money: integer Cent throughout (PAP convention); SV halves are
  * half-up to the Cent (kaufmännisch). No floating point on money.
  */
-import { toUnits, fromUnits } from "../../money.ts";
+import { toUnits, fromUnits } from "../../money/money.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { resolveStatutoryRates } from "../statutory-rates.ts";

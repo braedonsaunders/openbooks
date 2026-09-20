@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db, withOrgContext } from "../db.ts";
+import { db, withOrgContext } from "../platform/db.ts";
 import { buildSource, getConnection } from "./connection.ts";
 import { syncNetSuiteFixedAssets } from "./netsuite-fixed-assets.ts";
 import { NetSuiteSource } from "./netsuite-source.ts";

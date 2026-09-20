@@ -1,6 +1,6 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { can, guardPermission } from '../../../../lib/authz'
 import { getResource } from '../../../../lib/data-io/resources'
 import { toCsv, toJson, toXlsx } from '../../../../lib/data-io/serialize'

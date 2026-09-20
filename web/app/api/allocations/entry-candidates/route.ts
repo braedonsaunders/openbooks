@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { listEntryRulesInEffect, matchLine, selectRule } from '@openbooks/engine/src/allocations/match.ts'
 import type { LineCoordinate, RuleInEffect } from '@openbooks/engine/src/allocations/types.ts'
-import { resolveAccountGroups } from '@openbooks/engine/src/account-groups.ts'
+import { resolveAccountGroups } from '@openbooks/engine/src/records/account-groups.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
@@ -122,7 +122,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   }
 
   // Account-group scopes resolve against the pool primitive
-  // (engine/src/account-groups.ts); preload every dimension the candidates
+  // (engine/src/records/account-groups.ts); preload every dimension the candidates
   // name so the matcher's synchronous resolver never sees a miss.
   const dimensions = new Set<string>()
   for (const candidate of inPolicy) {

@@ -1,6 +1,6 @@
-import { businessToday, parseIsoDate } from "../business-date.ts";
-import { XeroClient, xeroDate } from "../xero.ts";
-import { formatMoney, fromUnits, mulDecimal, toUnits } from "../money.ts";
+import { businessToday, parseIsoDate } from "../platform/business-date.ts";
+import { XeroClient, xeroDate } from "../connectors/xero.ts";
+import { formatMoney, fromUnits, mulDecimal, toUnits } from "../money/money.ts";
 import { buildNativeFromXero, type XeroBuildOpts, type XeroDoc } from "./xero-native.ts";
 import type { NativeContext, NativeDocument } from "./native.ts";
 import type {

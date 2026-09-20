@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
 import { guardPermission } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
 import { serializeLedgerDecimal } from "./ledger-decimal";

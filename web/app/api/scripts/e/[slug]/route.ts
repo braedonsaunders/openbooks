@@ -1,6 +1,6 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { runEndpointScript } from '@openbooks/engine/src/scripting.ts'
+import { runEndpointScript } from '@openbooks/engine/src/scripting/scripting.ts'
 import { guardFeaturePermission } from '@/lib/feature-gates'
 
 export const runtime = 'nodejs'

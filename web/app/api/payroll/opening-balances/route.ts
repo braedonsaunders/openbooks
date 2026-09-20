@@ -1,15 +1,15 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
-import { normalizeMoney } from '@openbooks/engine/src/money.ts'
-import { PayrollError } from '@openbooks/engine/src/payroll-run.ts'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { PayrollError } from '@openbooks/engine/src/payroll/run.ts'
 import {
   assertTaxYear,
   OPENING_BALANCE_FIELDS,
   OpeningBalanceSaveError,
   saveOpeningBalances,
   type OpeningBalanceWrite,
-} from '@openbooks/engine/src/payroll-opening-balances.ts'
+} from '@openbooks/engine/src/payroll/opening-balances.ts'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { guardPayrollEmployees } from '../subsidiary-scope'
@@ -30,7 +30,7 @@ export const runtime = 'nodejs'
  *
  * Every rule (money validation, the cross-field sanity checks, and the refusal
  * to edit a carry-in a committed run already consumed) lives in
- * engine/src/payroll-opening-balances.ts, which is the single write path. This
+ * engine/src/payroll/opening-balances.ts, which is the single write path. This
  * route only translates HTTP.
  */
 

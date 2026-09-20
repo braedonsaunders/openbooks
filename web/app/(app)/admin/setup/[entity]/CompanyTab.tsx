@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { DEFAULT_LOCALE, isLocale } from '../../../../../i18n/config'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../../lib/features'
 import { SettingsForm, type AccountOption } from '../../settings/SettingsForm'

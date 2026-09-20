@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import type { AutomationGraph } from "@openbooks/forms-core";
-import { db } from "../db.ts";
+import { db } from "../platform/db.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -10,7 +10,7 @@ import {
   seedFlowActors,
   type FlowActors,
   type ScratchOrg,
-} from "../test-fixtures.ts";
+} from "../testing/fixtures.ts";
 import {
   FLOW_OCCURRENCE_STALE_MS,
   lastCronOccurrenceBetween,
@@ -40,7 +40,7 @@ import {
  * transaction, reproducing exactly the durable state a killed process leaves
  * behind. Recovery staleness is crossed by calling recoverLostScheduledFlows
  * with an explicit now past FLOW_OCCURRENCE_STALE_MS — the same function the
- * scheduler tick invokes (engine/src/scheduler.ts), never a private shortcut.
+ * scheduler tick invokes (engine/src/scheduling/scheduler.ts), never a private shortcut.
  */
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

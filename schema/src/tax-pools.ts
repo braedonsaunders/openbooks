@@ -7,7 +7,7 @@ import { fxRate } from "./helpers";
  * Tax depreciation POOLS (jurisdiction-neutral). A pool is a class of assets a
  * tax regime depreciates as one running balance (Canada CCA/UCC, UK writing-down
  * allowances, AU low-value pools). Runs on a tax BOOK, annually; the math lives
- * in engine/src/tax-depreciation-pool.ts. Not Canada-literal — `regime` +
+ * in engine/src/tax-returns/depreciation-pool.ts. Not Canada-literal — `regime` +
  * `class_code` carry the jurisdiction; the class table is config data.
  */
 export const taxDepreciationPools = pgTable(

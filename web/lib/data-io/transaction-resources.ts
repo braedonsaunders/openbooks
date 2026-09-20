@@ -2,9 +2,9 @@
 
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db, schema } from '@openbooks/engine/src/db.ts'
-import { normalizeMoney } from '@openbooks/engine/src/money.ts'
-import { postDocument } from '@openbooks/engine/src/posting.ts'
+import { db, schema } from '@openbooks/engine/src/platform/db.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { postDocument } from '@openbooks/engine/src/ledger/posting.ts'
 import { loadEntryRuleByKey } from '@openbooks/engine/src/allocations/entry.ts'
 import { controlDeps, nextDocumentNumber } from '../documents'
 import { createPermission, postPermission, readPermission, type DocKindConfig } from '../document-kinds'

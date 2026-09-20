@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
+import { db } from "../platform/db.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -10,7 +10,7 @@ import {
   seedDraftDocument,
   type ScratchOrg,
   type FlowActors,
-} from "../test-fixtures.ts";
+} from "../testing/fixtures.ts";
 import { submitForApproval } from "./submit.ts";
 import { retryFlowRun } from "./run.ts";
 import { decideGate, delegateGate, escalateDueGate, worklistGates } from "./gates.ts";

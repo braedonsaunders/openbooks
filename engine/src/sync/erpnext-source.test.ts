@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { NativeContext } from "./native.ts";
 import { ErpNextSource, erpNextReconcilableAccountType } from "./erpnext-source.ts";
-import type { ErpNextClient } from "../erpnext.ts";
+import type { ErpNextClient } from "../connectors/erpnext.ts";
 
 /**
  * Settlement-link currency fixtures (fleet 4, from the vendor's published

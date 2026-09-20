@@ -122,8 +122,8 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ['@/lib/api/json', 'mock:json'],
-  ['@openbooks/engine/src/db.ts', 'mock:db'],
-  ['@openbooks/engine/src/money.ts', 'mock:money'],
+  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
+  ['@openbooks/engine/src/money/money.ts', 'mock:money'],
   ['../../../../lib/authz', 'mock:authz'],
   ['../../../../lib/custom-fields', 'mock:custom-fields'],
   ['../../../../lib/exact-decimal', 'mock:decimal'],

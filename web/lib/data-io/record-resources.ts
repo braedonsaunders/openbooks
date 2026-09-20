@@ -2,8 +2,8 @@
 
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { allocateDocumentNumber } from '@openbooks/engine/src/document-numbering.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { allocateDocumentNumber } from '@openbooks/engine/src/records/numbering.ts'
 import type { FieldType, FormField, FormSection } from '@openbooks/forms-core'
 import type { FieldValueMap } from '@openbooks/forms-core'
 import { loadRecordTypeByKey, buildSearchText } from '../records'
@@ -355,7 +355,7 @@ async function writeRecords(
 
 /**
  * Record number when the file omits one (bulk create) — delegated to the ONE
- * canonical allocator (engine/src/document-numbering.ts), which seeds the
+ * canonical allocator (engine/src/records/numbering.ts), which seeds the
  * org-wide `custrec:<typeKey>` sequence row on first use with the same
  * `recordNumberPrefix` stem the UI draft route uses.
  */

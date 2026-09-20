@@ -95,19 +95,19 @@ const hooks = registerHooks({
       return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
     }
     if (specifier === '@/lib/api/json') return { url: 'mock:json', shortCircuit: true }
-    if (specifier === '@openbooks/engine/src/db.ts') return { url: 'mock:db', shortCircuit: true }
-    if (specifier === '@openbooks/engine/src/payroll-run.ts') return { url: 'mock:payroll-run', shortCircuit: true }
-    if (specifier === '@openbooks/engine/src/payroll-payment.ts') return { url: 'mock:payroll-payment', shortCircuit: true }
-    if (specifier === '@openbooks/engine/src/payroll-readiness.ts') return { url: 'mock:payroll-readiness', shortCircuit: true }
-    if (specifier === '@openbooks/engine/src/payroll-approval.ts') return { url: 'mock:payroll-approval', shortCircuit: true }
+    if (specifier === '@openbooks/engine/src/platform/db.ts') return { url: 'mock:db', shortCircuit: true }
+    if (specifier === '@openbooks/engine/src/payroll/run.ts') return { url: 'mock:payroll-run', shortCircuit: true }
+    if (specifier === '@openbooks/engine/src/payroll/payment.ts') return { url: 'mock:payroll-payment', shortCircuit: true }
+    if (specifier === '@openbooks/engine/src/payroll/readiness.ts') return { url: 'mock:payroll-readiness', shortCircuit: true }
+    if (specifier === '@openbooks/engine/src/payroll/approval.ts') return { url: 'mock:payroll-approval', shortCircuit: true }
     if (specifier === '@openbooks/engine/src/flows/index.ts') return { url: 'mock:flows', shortCircuit: true }
-    if (specifier === '@openbooks/engine/src/payroll-run-adjustments.ts') {
+    if (specifier === '@openbooks/engine/src/payroll/run-adjustments.ts') {
       return { url: 'mock:payroll-run-adjustments', shortCircuit: true }
     }
-    if (specifier === '@openbooks/engine/src/payroll-holiday-attestations.ts') {
+    if (specifier === '@openbooks/engine/src/payroll/holiday-attestations.ts') {
       return { url: 'mock:payroll-holiday-attestations', shortCircuit: true }
     }
-    if (specifier === '@openbooks/engine/src/payroll-scope.ts') return { url: 'mock:payroll-scope', shortCircuit: true }
+    if (specifier === '@openbooks/engine/src/payroll/scope.ts') return { url: 'mock:payroll-scope', shortCircuit: true }
     if (specifier.endsWith('/lib/payroll-outputs')) return { url: 'mock:payroll-outputs', shortCircuit: true }
     if (specifier.endsWith('/lib/payroll-evidence')) return { url: 'mock:payroll-evidence', shortCircuit: true }
     if (specifier.endsWith('/lib/feature-gates')) return { url: 'mock:feature-gates', shortCircuit: true }

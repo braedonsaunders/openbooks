@@ -1,11 +1,11 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
-import { db, type SqlExecutor } from '@openbooks/engine/src/db.ts'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 
-import { FEATURES, featureEnabled, type FeatureState } from '@openbooks/engine/src/feature-registry.ts'
-import { dataDependentFeatureDefault } from '@openbooks/engine/src/feature-defaults.ts'
-export { FEATURES, FEATURE_BY_KEY, featureEnabled, featureRequirements, type FeatureDef, type FeatureState } from '@openbooks/engine/src/feature-registry.ts'
+import { FEATURES, featureEnabled, type FeatureState } from '@openbooks/engine/src/organization/feature-registry.ts'
+import { dataDependentFeatureDefault } from '@openbooks/engine/src/organization/feature-defaults.ts'
+export { FEATURES, FEATURE_BY_KEY, featureEnabled, featureRequirements, type FeatureDef, type FeatureState } from '@openbooks/engine/src/organization/feature-registry.ts'
 
 /** Load the org's feature state (raw overrides; combine with featureEnabled). */
 export async function orgFeatureState(orgId: string, executor: SqlExecutor = db): Promise<FeatureState> {

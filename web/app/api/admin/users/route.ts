@@ -6,8 +6,8 @@ import {
   type SqlExecutor,
   withOrgTransaction,
   withTransactionSavepoint,
-} from "@openbooks/engine/src/db.ts";
-import { permissionsOutsideCeiling } from "@openbooks/engine/src/permissions.ts";
+} from "@openbooks/engine/src/platform/db.ts";
+import { permissionsOutsideCeiling } from "@openbooks/engine/src/organization/permissions.ts";
 import { guardPermission } from "../../../../lib/authz";
 import { authRequestContext, normalizeLoginEmail } from "../../../../lib/auth-policy";
 import { issueInviteSetPasswordLink, setPasswordUrl } from "../../../../lib/auth-reset";

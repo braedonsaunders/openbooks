@@ -4,10 +4,10 @@ import test from 'node:test';
 import pg from 'pg';
 import { registerHooks } from 'node:module';
 import { pathToFileURL } from 'node:url';
-import { buildSchedule, runDepreciation } from '@openbooks/engine/src/depreciation.ts';
+import { buildSchedule, runDepreciation } from '@openbooks/engine/src/assets/depreciation.ts';
 import { sql } from 'drizzle-orm';
-import { db, env } from '@openbooks/engine/src/db.ts';
-import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/src/test-fixtures.ts';
+import { db, env } from '@openbooks/engine/src/platform/db.ts';
+import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts';
 
 async function seedAsset(org: ScratchOrg) {
   const actorId = (await seedFlowActors(org.orgId)).adminId;

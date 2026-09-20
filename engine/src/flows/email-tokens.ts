@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { env } from "../db.ts";
+import { env } from "../platform/db.ts";
 
 /**
  * One-click signed email approvals — HMAC tokens that let a gate assignee

@@ -2,9 +2,9 @@ import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
-import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
-import { sealSecret, unsealSecret } from '@openbooks/engine/src/secrets.ts'
-import { listFilingAccounts } from '@openbooks/engine/src/payroll-filing.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { sealSecret, unsealSecret } from '@openbooks/engine/src/platform/secrets.ts'
+import { listFilingAccounts } from '@openbooks/engine/src/payroll/filing.ts'
 import {
   employmentJurisdictionsOf,
   labourJurisdictionProblem,
@@ -25,7 +25,7 @@ import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { guardPayrollFilingAccounts, payrollVisibleScheduleFilter } from '../subsidiary-scope'
-import { normalizeMoney } from '@openbooks/engine/src/money.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'
 import { decimalNullRefusal } from '../../../../lib/payroll-decimal-refusal'
 import { isUuid } from '../../../../lib/list-params'
@@ -45,7 +45,7 @@ const STUB_DELIVERIES = new Set(['email', 'print', 'both'])
 /**
  * employee_payroll_profiles.payment_method — the payroll-owned override of the
  * rail. Empty/absent means "inherit the party preference"; the resolver
- * (engine/src/payroll-payment-method.ts) decides from there.
+ * (engine/src/payroll/payment-method.ts) decides from there.
  */
 const PAYMENT_METHODS = new Set(['eft', 'cheque'])
 

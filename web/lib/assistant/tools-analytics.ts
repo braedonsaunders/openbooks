@@ -1,6 +1,6 @@
 import "server-only";
 import { z } from "zod";
-import { withOrg } from "@openbooks/engine/src/db.ts";
+import { withOrg } from "@openbooks/engine/src/platform/db.ts";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { dateInput, num, capList, rangeInputFields, resolveToolRange, type RangeArgs } from "./tools-shared";
 import { healthData } from "../analytics/health-data";

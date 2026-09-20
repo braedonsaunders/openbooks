@@ -82,7 +82,7 @@ const mockSources = new Map<string, string>([
     // PayrollError, so the mock imports the mocked root and extends it.
     'mock:packs',
     `
-      import { PayrollError } from '@openbooks/engine/src/payroll-error.ts'
+      import { PayrollError } from '@openbooks/engine/src/payroll/error.ts'
       export class PayrollPackError extends PayrollError {}
       export class PayrollJurisdictionError extends PayrollPackError {}
       export function payrollPack(country) {
@@ -160,15 +160,15 @@ const mockUrls = new Map<string, string>([
   ['../../../../../lib/authz', 'mock:authz'],
   ['../../../../../lib/list-params', 'mock:list-params'],
   ['../../../../../lib/exact-decimal', 'mock:exact-decimal'],
-  ['@openbooks/engine/src/payroll-error.ts', 'mock:payroll-error'],
+  ['@openbooks/engine/src/payroll/error.ts', 'mock:payroll-error'],
   ['@openbooks/engine/src/payroll/packs.ts', 'mock:packs'],
   ['@openbooks/engine/src/payroll/statutory-rates.ts', 'mock:statutory-rates'],
-  ['@openbooks/engine/src/db.ts', 'mock:db'],
+  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['drizzle-orm', 'mock:drizzle'],
-  ['@openbooks/engine/src/payroll-filing.ts', 'mock:filing'],
-  ['@openbooks/engine/src/payroll-readiness.ts', 'mock:readiness'],
-  ['@openbooks/engine/src/money.ts', 'mock:money'],
-  ['@openbooks/engine/src/business-date.ts', 'mock:business-date'],
+  ['@openbooks/engine/src/payroll/filing.ts', 'mock:filing'],
+  ['@openbooks/engine/src/payroll/readiness.ts', 'mock:readiness'],
+  ['@openbooks/engine/src/money/money.ts', 'mock:money'],
+  ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
 ])
 
 const hooks = registerHooks({

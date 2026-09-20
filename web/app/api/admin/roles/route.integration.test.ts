@@ -3,13 +3,13 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, pool, withOrgContext, withOrgTransaction } from "@openbooks/engine/src/db.ts";
-import { PERMISSION_CATALOGUE } from "@openbooks/engine/src/permissions.ts";
+import { db, pool, withOrgContext, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
+import { PERMISSION_CATALOGUE } from "@openbooks/engine/src/organization/permissions.ts";
 import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-} from "@openbooks/engine/src/test-fixtures.ts";
+} from "@openbooks/engine/src/testing/fixtures.ts";
 
 // Boundary suite for /api/admin/roles against the real schema.
 //
@@ -418,7 +418,7 @@ for (const mode of ["subtree", "list"] as const) {
 test("module permission declarations are tenant-scoped, explicitly grantable inside the ceiling, and withdrawn without erasing stored grants", { skip }, async () => {
   const f = await seed(["*"]);
   const other = await createScratchOrg();
-  const { installTestExtension, disableTestExtension } = await import("@openbooks/engine/src/test-extension-packages.ts");
+  const { installTestExtension, disableTestExtension } = await import("@openbooks/engine/src/testing/extension-packages.ts");
   // Installing the extension pulls web modules that replace the suite-wide
   // test bypass with the request resolver (no Next request here), so every
   // route call and verification read below carries the mocked identity's

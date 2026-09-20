@@ -2,19 +2,19 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
-import { toUnits } from "../money.ts";
+import { db } from "../platform/db.ts";
+import { toUnits } from "../money/money.ts";
 import {
   getOnHand,
   revalueOpenLayersToStandardCost,
   receiveInventory,
   issueInventory,
-} from "../inventory.ts";
+} from "../inventory/inventory.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
   type ScratchOrg,
-} from "../test-fixtures.ts";
+} from "../testing/fixtures.ts";
 import { runScenario, type Checkpoint } from "./scenario.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

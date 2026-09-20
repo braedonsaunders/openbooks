@@ -25,7 +25,7 @@ import { auditColumns, id, money, orgRef } from "./helpers";
  * Everything a controller would tune is DATA, configured in the UI, not code:
  * recognition rules (method + date sources + offsets + accounts), standalone
  * selling prices (fair-value price lists), and per-item defaults. The engine
- * (engine/src/revenue-recognition.ts) reads this config; posting always runs
+ * (engine/src/revenue/recognition.ts) reads this config; posting always runs
  * through the kernel so deferred-revenue GL balance = Σ unrecognized plan.
  */
 

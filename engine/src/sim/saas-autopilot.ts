@@ -1,10 +1,10 @@
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
+import { db } from "../platform/db.ts";
 import { addDays, dayOfMonth, isMonthEnd } from "./manifest.ts";
-import { createScriptJournal } from "../journal-writes.ts";
-import { runDueSubscriptions, changeSubscription } from "../subscription-billing.ts";
-import { createObligationsFromInvoice, runRevenueRecognition } from "../revenue-recognition.ts";
-import { runDunningForOrg } from "../dunning.ts";
+import { createScriptJournal } from "../ledger/journal-writes.ts";
+import { runDueSubscriptions, changeSubscription } from "../billing/subscription-billing.ts";
+import { createObligationsFromInvoice, runRevenueRecognition } from "../revenue/recognition.ts";
+import { runDunningForOrg } from "../receivables/dunning.ts";
 import type { SimOrg } from "./world.ts";
 import type { Profile } from "./profiles/index.ts";
 

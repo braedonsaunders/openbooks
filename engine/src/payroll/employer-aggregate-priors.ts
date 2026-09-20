@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import type { db } from "../db.ts";
-import { cmp } from "../money.ts";
+import type { db } from "../platform/db.ts";
+import { cmp } from "../money/money.ts";
 import { PayrollPackError, payrollPack, statutoryAssessment } from "./packs.ts";
 import { PACK_OPENING_BALANCE_FIELDS } from "./opening-ytd-registry.ts";
 import { assertAggregateLeviesValid, assessAggregateLevyStub } from "./employer-aggregate.ts";

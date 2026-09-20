@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import test from 'node:test';
-import { actorHasPermission } from '../actor-permissions.ts';
+import { actorHasPermission } from '../organization/actor-permissions.ts';
 import { sql } from 'drizzle-orm';
-import { db, env, withBypassContext } from '../db.ts';
-import { createScratchOrg, createScratchUser, dropScratchOrg } from '../test-fixtures.ts';
-import { installTestExtension, disableTestExtension } from '../test-extension-packages.ts';
+import { db, env, withBypassContext } from '../platform/db.ts';
+import { createScratchOrg, createScratchUser, dropScratchOrg } from '../testing/fixtures.ts';
+import { installTestExtension, disableTestExtension } from '../testing/extension-packages.ts';
 import { getExtensionSettings, listActiveExtensionContributions, updateExtensionSetting } from './projections.ts';
 
 const permissions = ['admin.customization.manage', 'admin.setup.manage', 'admin.roles.manage'];

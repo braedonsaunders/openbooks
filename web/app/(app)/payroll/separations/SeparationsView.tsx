@@ -1,7 +1,7 @@
 'use client'
 
 import { useTranslations } from 'next-intl'
-import type { YearEndFilingSection } from '@openbooks/engine/src/payroll-yearend.ts'
+import type { YearEndFilingSection } from '@openbooks/engine/src/payroll/yearend.ts'
 import { FilingWorkspace } from '../_ui/filing-workspace'
 
 /**

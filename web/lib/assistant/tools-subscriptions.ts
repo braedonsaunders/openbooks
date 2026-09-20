@@ -1,14 +1,14 @@
 import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
-import { addCalendarDays, businessToday } from "@openbooks/engine/src/business-date.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
+import { addCalendarDays, businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import {
   monthlyRecurringRevenue,
   type Interval,
-} from "@openbooks/engine/src/subscription-billing.ts";
-import { recurringTemplateScopeFilter } from "@openbooks/engine/src/recurring.ts";
-import { add, mulDecimal } from "@openbooks/engine/src/money.ts";
+} from "@openbooks/engine/src/billing/subscription-billing.ts";
+import { recurringTemplateScopeFilter } from "@openbooks/engine/src/billing/recurring.ts";
+import { add, mulDecimal } from "@openbooks/engine/src/money/money.ts";
 import { isFeatureEnabled } from "../features";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { subsidiaryScopeAllows } from "../authz";

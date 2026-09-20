@@ -79,7 +79,7 @@ const hooks = registerHooks({
     if (specifier === "server-only") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
     }
-    if (specifier === "@openbooks/engine/src/db.ts") {
+    if (specifier === "@openbooks/engine/src/platform/db.ts") {
       return { shortCircuit: true, url: "mock:db" };
     }
     if (specifier === "../../../lib/authz") {

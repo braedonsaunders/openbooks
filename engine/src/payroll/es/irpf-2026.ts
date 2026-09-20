@@ -19,7 +19,7 @@
  * (ALGORITMO validation 14); PRESVIV at or above 33.007,20 € (validation
  * 21); IRREGULAR1 above 90.000 or above 30% of RETRIB (validations 19–20).
  */
-import { fromUnits, roundDiv, toUnits } from "../../money.ts";
+import { fromUnits, roundDiv, toUnits } from "../../money/money.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import {
   ES_ANUALIDADES_MINPERFA_OFFSET,

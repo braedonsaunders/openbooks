@@ -175,7 +175,7 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ['drizzle-orm', 'mock:sql'],
   ['@/lib/api/json', 'mock:json'],
-  ['@openbooks/engine/src/db.ts', 'mock:db'],
+  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['@openbooks/forms-core', 'mock:forms-core'],
   ['../../../../../../lib/authz', 'mock:authz'],
   ['../../../_lib', 'mock:forms-lib'],

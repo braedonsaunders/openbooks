@@ -2,7 +2,7 @@ import "server-only";
 import { loadExtensionSettingRows } from "../setup/extension-settings";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
 import {
   FEATURES,
   featureEnabled,

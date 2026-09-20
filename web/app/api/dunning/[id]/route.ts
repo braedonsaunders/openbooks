@@ -1,9 +1,9 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
-import { isDunnableDocumentKind } from "@openbooks/engine/src/dunning.ts";
-import { normalizeMoney } from "@openbooks/engine/src/money.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
+import { isDunnableDocumentKind } from "@openbooks/engine/src/receivables/dunning.ts";
+import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { guardPermission } from "../../../../lib/authz";
 import { canonicalDecimal, compareDecimal } from "../../../../lib/exact-decimal";
 import { isUuid } from "../../../../lib/list-params";

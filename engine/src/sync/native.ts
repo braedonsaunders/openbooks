@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
-import { normalizeMoney } from "../money.ts";
-import type { PostingDeps } from "../posting.ts";
+import { db } from "../platform/db.ts";
+import { normalizeMoney } from "../money/money.ts";
+import type { PostingDeps } from "../ledger/posting.ts";
 
 /**
  * NativeContext — everything an adapter needs to build INSERT-READY documents:

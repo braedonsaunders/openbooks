@@ -31,7 +31,7 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { sql } from "drizzle-orm";
-import { db, pool } from "../engine/src/db.ts";
+import { db, pool } from "../engine/src/platform/db.ts";
 import { decideProductionApply } from "../engine/src/hrm/migration-cli-gate.ts";
 import {
   collectLegacyEmployments,
@@ -118,7 +118,7 @@ function fail(message: string): number {
 
 /**
  * Read the target database's marker comment (the same catalog read
- * engine/src/test-fixtures.ts enforces). Read-only; used only as the
+ * engine/src/testing/fixtures.ts enforces). Read-only; used only as the
  * interlock's second input, never as a write precondition bypass.
  */
 async function readDatabaseMarker(): Promise<string | null> {

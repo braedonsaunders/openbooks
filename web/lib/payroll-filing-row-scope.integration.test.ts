@@ -11,11 +11,11 @@ registerHooks({
   },
 });
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { seedAdoption } =
-  await import("@openbooks/engine/src/payroll-filing-test-fixtures.ts");
+  await import("@openbooks/engine/src/payroll/filing-test-fixtures.ts");
 const { dropScratchOrgReporting } =
-  await import("@openbooks/engine/src/test-fixtures.ts");
+  await import("@openbooks/engine/src/testing/fixtures.ts");
 const { guardPayrollFilingRowIds, guardPayrollFilingData, payrollRowScope } =
   await import("../app/api/payroll/subsidiary-scope");
 

@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, schema, withMaintenanceTransaction } from "../db.ts";
+import { db, schema, withMaintenanceTransaction } from "../platform/db.ts";
 import { assertUuid } from "./catalog.ts";
 import { remapRoleRestriction, sandboxSubsidiaryMap } from "./json-references.ts";
-import { lockAndCheckOrgFeature } from "../org-feature-lock.ts";
-import { computeScheduledScriptNextRunAt } from "../scripting.ts";
-import { validateScriptConfiguration } from "../script-config.ts";
-import { isCataloguePermission, PERMISSION_CATALOGUE, permissionSetCovers, permissionsOutsideCeiling, resolveEffectivePermissions } from "../permissions.ts";
+import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
+import { computeScheduledScriptNextRunAt } from "../scripting/scripting.ts";
+import { validateScriptConfiguration } from "../scripting/script-config.ts";
+import { isCataloguePermission, PERMISSION_CATALOGUE, permissionSetCovers, permissionsOutsideCeiling, resolveEffectivePermissions } from "../organization/permissions.ts";
 
 /**
  * Promotion — config flows UP (sandbox → production) as a reviewable change set;

@@ -15,10 +15,10 @@ registerHooks({
     if (specifier === 'drizzle-orm' && context.parentURL?.startsWith('data:')) {
       return next(root + 'node_modules/drizzle-orm/index.js', context)
     }
-    if (specifier === '@openbooks/engine/src/db.ts') {
+    if (specifier === '@openbooks/engine/src/platform/db.ts') {
       return virtual('export const db = globalThis.__customersPipelineDb')
     }
-    if (specifier === '@openbooks/engine/src/business-date.ts') {
+    if (specifier === '@openbooks/engine/src/platform/business-date.ts') {
       return virtual(`
         export function addCalendarDays(date, _days) { return date }
         export function calendarQuarterBounds(date) { return { start: date, end: date } }

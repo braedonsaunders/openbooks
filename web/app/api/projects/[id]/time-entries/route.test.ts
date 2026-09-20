@@ -117,7 +117,7 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ['../../../../../lib/authz', 'mock:authz'],
   ['../../../../../lib/projects-gate', 'mock:projects-gate'],
-  ['@openbooks/engine/src/db.ts', 'mock:db'],
+  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
 ])
 
 const hooks = registerHooks({

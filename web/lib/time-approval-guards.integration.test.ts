@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
-import { env } from "@openbooks/engine/src/db.ts";
+import { env } from "@openbooks/engine/src/platform/db.ts";
 
 // Same child-process harness as time-approval-atomicity.integration.test.ts:
 // web/lib modules import `server-only`, so the approval service runs in a
@@ -31,7 +31,7 @@ function runIntegrationSource(source: string): void {
       "--import",
       "tsx",
       "--import",
-      "./engine/src/test-database-bypass.ts",
+      "./engine/src/testing/database-bypass.ts",
       "--input-type=module",
       "-e",
       source,
@@ -44,13 +44,13 @@ function runIntegrationSource(source: string): void {
 const SEED = `
   import { randomUUID } from "node:crypto";
   import { sql } from "drizzle-orm";
-  import { db } from "./engine/src/db.ts";
-  import { installTrustedTestDatabaseBypass } from "./engine/src/test-database-bypass.ts";
+  import { db } from "./engine/src/platform/db.ts";
+  import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
   import {
     createScratchOrg,
     dropScratchOrg,
     seedFlowActors,
-  } from "./engine/src/test-fixtures.ts";
+  } from "./engine/src/testing/fixtures.ts";
   import { approveSubmittedTimeEntries } from "./web/lib/time-approval.ts";
 
   installTrustedTestDatabaseBypass();

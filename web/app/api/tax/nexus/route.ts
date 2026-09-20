@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { computeUsNexusStatus } from '@openbooks/engine/src/us-nexus-ledger.ts'
+import { computeUsNexusStatus } from '@openbooks/engine/src/tax-returns/us-nexus-ledger.ts'
 import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 
 export const runtime = 'nodejs'

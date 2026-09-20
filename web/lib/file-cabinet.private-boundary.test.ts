@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
-import { env } from "@openbooks/engine/src/db.ts";
+import { env } from "@openbooks/engine/src/platform/db.ts";
 
 /**
  * Regression coverage for the nested private-folder boundary defect in
@@ -65,9 +65,9 @@ test(
       import assert from "node:assert/strict";
       import { randomUUID } from "node:crypto";
       import { sql } from "drizzle-orm";
-      import { db } from "./engine/src/db.ts";
-      import { installTrustedTestDatabaseBypass } from "./engine/src/test-database-bypass.ts";
-      import { createScratchOrg, dropScratchOrg } from "./engine/src/test-fixtures.ts";
+      import { db } from "./engine/src/platform/db.ts";
+      import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
+      import { createScratchOrg, dropScratchOrg } from "./engine/src/testing/fixtures.ts";
       import {
         fileAccessLevel,
         folderAccessLevel,
@@ -219,7 +219,7 @@ test(
         "--import",
         "tsx",
         "--import",
-        "./engine/src/test-database-bypass.ts",
+        "./engine/src/testing/database-bypass.ts",
         "--input-type=module",
         "-e",
         source,
@@ -289,7 +289,7 @@ function runCabinetAtomicityScenario(source: string): void {
       "--import",
       "tsx",
       "--import",
-      "./engine/src/test-database-bypass.ts",
+      "./engine/src/testing/database-bypass.ts",
       "--input-type=module",
       "-e",
       source,
@@ -357,9 +357,9 @@ test(
       import assert from "node:assert/strict";
       import { randomUUID } from "node:crypto";
       import { sql } from "drizzle-orm";
-      import { db } from "./engine/src/db.ts";
-      import { installTrustedTestDatabaseBypass } from "./engine/src/test-database-bypass.ts";
-      import { createScratchOrg, dropScratchOrg } from "./engine/src/test-fixtures.ts";
+      import { db } from "./engine/src/platform/db.ts";
+      import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
+      import { createScratchOrg, dropScratchOrg } from "./engine/src/testing/fixtures.ts";
       import { purgeFile } from "./web/lib/file-cabinet.ts";
 
       installTrustedTestDatabaseBypass();
@@ -422,9 +422,9 @@ test(
       import assert from "node:assert/strict";
       import { randomUUID } from "node:crypto";
       import { sql } from "drizzle-orm";
-      import { db } from "./engine/src/db.ts";
-      import { installTrustedTestDatabaseBypass } from "./engine/src/test-database-bypass.ts";
-      import { createScratchOrg, dropScratchOrg } from "./engine/src/test-fixtures.ts";
+      import { db } from "./engine/src/platform/db.ts";
+      import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
+      import { createScratchOrg, dropScratchOrg } from "./engine/src/testing/fixtures.ts";
       import { purgeFile } from "./web/lib/file-cabinet.ts";
 
       installTrustedTestDatabaseBypass();
@@ -497,9 +497,9 @@ test(
       import assert from "node:assert/strict";
       import { randomUUID } from "node:crypto";
       import { sql } from "drizzle-orm";
-      import { db } from "./engine/src/db.ts";
-      import { installTrustedTestDatabaseBypass } from "./engine/src/test-database-bypass.ts";
-      import { createScratchOrg, dropScratchOrg } from "./engine/src/test-fixtures.ts";
+      import { db } from "./engine/src/platform/db.ts";
+      import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
+      import { createScratchOrg, dropScratchOrg } from "./engine/src/testing/fixtures.ts";
       import { purgeFile } from "./web/lib/file-cabinet.ts";
 
       installTrustedTestDatabaseBypass();
@@ -561,9 +561,9 @@ test(
       import assert from "node:assert/strict";
       import { randomUUID } from "node:crypto";
       import { sql } from "drizzle-orm";
-      import { db } from "./engine/src/db.ts";
-      import { installTrustedTestDatabaseBypass } from "./engine/src/test-database-bypass.ts";
-      import { createScratchOrg, dropScratchOrg } from "./engine/src/test-fixtures.ts";
+      import { db } from "./engine/src/platform/db.ts";
+      import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
+      import { createScratchOrg, dropScratchOrg } from "./engine/src/testing/fixtures.ts";
       import { purgeFile } from "./web/lib/file-cabinet.ts";
 
       installTrustedTestDatabaseBypass();

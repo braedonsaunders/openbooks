@@ -30,8 +30,8 @@ registerHooks({
 });
 
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
-const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { appendMessage, createConversation, deleteConversation, listConversations, recentMessages } =
   await import("./ai-conversations");
 

@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
-import { db, type SqlExecutor } from "../db.ts";
-import { documentRevisionSql } from "../document-revision.ts";
-import { div, normalizeDecimal } from "../money.ts";
+import { db, type SqlExecutor } from "../platform/db.ts";
+import { documentRevisionSql } from "../records/revision.ts";
+import { div, normalizeDecimal } from "../money/money.ts";
 import type {
   AccountScope,
   AllocationDimension,

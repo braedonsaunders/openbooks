@@ -20,8 +20,8 @@ registerHooks({
   },
 });
 
-const { db } = await import("@openbooks/engine/src/db.ts");
-const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
+const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { activityWhere } = await import("./crm.ts");
 const { customerBaseJoins, customerWhere } = await import("./customers.ts");
 const { defaultListView } = await import("@openbooks/customization");

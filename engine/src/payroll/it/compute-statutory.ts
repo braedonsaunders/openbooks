@@ -43,8 +43,8 @@
  * repo's money.ts — the same discipline as canada/decimal.ts. Ratios are
  * TRUNCATED to 4 decimals per 730/2026 TABELLA 6 note (2).
  */
-import { fromUnits, roundDiv, toUnits } from "../../money.ts";
-import { PayrollError } from "../../payroll-error.ts";
+import { fromUnits, roundDiv, toUnits } from "../../money/money.ts";
+import { PayrollError } from "../error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { resolveStatutoryRates } from "../statutory-rates.ts";
 import { IT_PACK_RATES } from "./rates.ts";

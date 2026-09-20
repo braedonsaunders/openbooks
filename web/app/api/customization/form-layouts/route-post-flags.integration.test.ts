@@ -58,10 +58,10 @@ const routeUrl = "./route.ts?form-layout-post-bool-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
-const { db } = await import("@openbooks/engine/src/db.ts");
+const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { defaultFormLayout } = await import("@openbooks/customization");
 const { createScratchOrg, createScratchUser } = await import(
-  "@openbooks/engine/src/test-fixtures.ts"
+  "@openbooks/engine/src/testing/fixtures.ts"
 );
 
 async function seed(): Promise<{ orgId: string; actorId: string }> {

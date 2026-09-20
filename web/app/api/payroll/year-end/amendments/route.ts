@@ -1,14 +1,14 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { PayrollPackError } from '@openbooks/engine/src/payroll/packs.ts'
-import { PayrollError } from '@openbooks/engine/src/payroll-error.ts'
-import { orgYearEndFilings } from '@openbooks/engine/src/payroll-yearend.ts'
+import { PayrollError } from '@openbooks/engine/src/payroll/error.ts'
+import { orgYearEndFilings } from '@openbooks/engine/src/payroll/yearend.ts'
 import {
   filingLifecycle,
   recordFilingIssue,
-} from '@openbooks/engine/src/payroll-yearend-amendments.ts'
+} from '@openbooks/engine/src/payroll/yearend-amendments.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { payrollYearRefusal } from '../../../../../lib/payroll-year'
 import {

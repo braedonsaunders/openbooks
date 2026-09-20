@@ -6,7 +6,7 @@ import {
   sampleCompanyStatuses,
 } from "./service.ts";
 import { SAMPLE_COMPANY_BY_INDUSTRY } from "./catalog.ts";
-import { pool } from "../db.ts";
+import { pool } from "../platform/db.ts";
 
 function valueAfter(flag: string): string | null {
   const index = process.argv.indexOf(flag);

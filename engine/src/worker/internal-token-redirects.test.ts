@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import test from "node:test";
-import { db, pool } from "../db.ts";
+import { db, pool } from "../platform/db.ts";
 import { tick } from "./overhead-scheduler.ts";
 import { renderReportPdf } from "./render-client.ts";
 

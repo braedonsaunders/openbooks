@@ -20,8 +20,8 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 } });
 
 const { sql } = await import('drizzle-orm');
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts');
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/test-fixtures.ts');
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts');
 const { executeAssistantTool } = await import('./registry');
 const { applicationTool, executeApplicationTool } = await import('../application/tool-catalog.ts');
 type ApplicationContext = import('../application/context.ts').ApplicationContext;

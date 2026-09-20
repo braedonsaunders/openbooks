@@ -2,10 +2,10 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 registerHooks({ resolve(specifier, context, next) { return specifier === 'server-only' ? { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' } : next(specifier, context) } })
-const { db, env, withBypass } = await import('@openbooks/engine/src/db.ts')
+const { db, env, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
-const { installTestExtension } = await import('@openbooks/engine/src/test-extension-packages.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { installTestExtension } = await import('@openbooks/engine/src/testing/extension-packages.ts')
 const { loadPageSpec } = await import('./page-specs.ts')
 
 test('page resolution excludes disabled extensions and stale projections even if the page row remains active', { skip: !env.OPENBOOKS_DB_URL }, async () => {

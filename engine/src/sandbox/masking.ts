@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db, schema } from "../db.ts";
+import { db, schema } from "../platform/db.ts";
 
 /**
  * Data masking — the transform layer applied inline during the clone SELECT so

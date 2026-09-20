@@ -241,7 +241,7 @@ const mockSources = new Map<string, string>([
   // it costs nothing.
   ['mock:crm-math', `
     export { validateOpportunityStageTransition } from ${JSON.stringify(
-      new URL('../../../../../../engine/src/crm-math.ts', import.meta.url).href,
+      new URL('../../../../../../engine/src/crm/crm-math.ts', import.meta.url).href,
     )}
     export function computeOpportunityTotals(lines, probability) {
       return { lines, projectedAmount: '0.00', weightedAmount: '0.00', probability }
@@ -281,10 +281,10 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/src/db.ts', 'mock:db'],
-  ['@openbooks/engine/src/crm.ts', 'mock:crm'],
-  ['@openbooks/engine/src/crm-math.ts', 'mock:crm-math'],
-  ['@openbooks/engine/src/money.ts', 'mock:money'],
+  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
+  ['@openbooks/engine/src/crm/crm.ts', 'mock:crm'],
+  ['@openbooks/engine/src/crm/crm-math.ts', 'mock:crm-math'],
+  ['@openbooks/engine/src/money/money.ts', 'mock:money'],
   ['../../../../../lib/authz', 'mock:authz'],
   ['../../../../../lib/feature-gates', 'mock:feature-gates'],
   ['../../../../../lib/features', 'mock:features'],
@@ -672,7 +672,7 @@ test('the line write carries the cost columns', async () => {
   // This harness stubs the math, so it can prove the wiring and nothing more:
   // that a saved line reaches the insert with unit_cost and cost_amount on it.
   // What those values should BE — absence vs zero, the extension's rounding,
-  // the margin — is asserted in engine/src/crm-math.test.ts against the real
+  // the margin — is asserted in engine/src/crm/crm-math.test.ts against the real
   // function, which is the only place those answers actually come from.
   reset()
 

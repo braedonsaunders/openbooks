@@ -4,8 +4,8 @@ import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import pg from 'pg';
 import { sql } from 'drizzle-orm';
-import { db, env } from '@openbooks/engine/src/db.ts';
-import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/src/test-fixtures.ts';
+import { db, env } from '@openbooks/engine/src/platform/db.ts';
+import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts';
 
 const state: { gate: { user: { orgId: string; id: string } } | null } = { gate: null };
 Object.assign(globalThis, { __setupFeatureFence: state });

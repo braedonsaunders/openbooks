@@ -3,7 +3,7 @@
 import 'server-only'
 import { loadExtensionSettingRows } from '../setup/extension-settings'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { COUNTRY_CODES } from '../countries'
 import { featureEnabled, featureGateLockKey, resolvedFeatureState } from '../features'
 import { SETUP_ENTITY_BY_KEY, setupEntityForFeatureState, toSnake, type SetupEntity, type SetupField } from '../setup/registry'

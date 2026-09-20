@@ -69,7 +69,7 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ['@/lib/api/json', 'mock:json'],
   ['../../../../../lib/authz', 'mock:authz'],
-  ['@openbooks/engine/src/tax-filing.ts', 'mock:tax-filing'],
+  ['@openbooks/engine/src/tax-returns/filing.ts', 'mock:tax-filing'],
 ])
 
 const hooks = registerHooks({

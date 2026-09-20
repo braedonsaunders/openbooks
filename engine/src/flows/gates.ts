@@ -1,6 +1,6 @@
 import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { planFromGate, type GateData } from "@openbooks/forms-core";
-import { db, schema, withOrg, withBypassContext, withOrgContext, withTransactionSavepoint } from "../db.ts";
+import { db, schema, withOrg, withBypassContext, withOrgContext, withTransactionSavepoint } from "../platform/db.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { getFlowAdapter } from "./registry.ts";
 import { executeFlowPlan } from "./execute.ts";
@@ -631,7 +631,7 @@ async function notifySubmitterOfDecision(args: {
   });
 
   try {
-    const { enqueueFlowEmail } = await import("../scheduler-outbox.ts");
+    const { enqueueFlowEmail } = await import("../scheduling/outbox.ts");
     const { flowNotificationEmail } = await import("@openbooks/emails");
     const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, gate.orgId));
     const mail = flowNotificationEmail({
@@ -1052,7 +1052,7 @@ export async function delegateGate(gateId: string, fromUserId: string, toUserId:
 
 /**
  * Scan overdue gate timers — called from the 60s scheduler tick
- * (engine/src/scheduler.ts), which runs org-less/bypass like the
+ * (engine/src/scheduling/scheduler.ts), which runs org-less/bypass like the
  * user_scripts scan.
  *
  * Reminders: remind_at <= now, not yet reminded → re-notify + email, stamp
@@ -1128,7 +1128,7 @@ export async function processGateTimers(now: Date = new Date()): Promise<{
   // --- Escalations -----------------------------------------------------------
   // Enqueue a durable outbox row per due gate. The runner claims that row;
   // a throw leaves status=failed + error so the next tick retries.
-  const { enqueueApprovalEscalation } = await import("../scheduler-outbox.ts");
+  const { enqueueApprovalEscalation } = await import("../scheduling/outbox.ts");
   const dueEscalations = await withBypassContext(() =>
     db.execute<{ id: string; orgId: string }>(sql`
     select gate.id, gate.org_id as "orgId" from flow_gates gate

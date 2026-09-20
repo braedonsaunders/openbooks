@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { PaymentAcceptanceError, createCheckoutSession, paymentLinkOrgId } from "@openbooks/engine/src/payment-acceptance.ts";
+import { PaymentAcceptanceError, createCheckoutSession, paymentLinkOrgId } from "@openbooks/engine/src/payments/acceptance.ts";
 import { isFeatureEnabled } from "../../../../lib/features";
 
 export const runtime = "nodejs";

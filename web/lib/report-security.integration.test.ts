@@ -39,11 +39,11 @@ registerHooks({
   },
 })
 const { db, withBypassContext, withOrgContext } = await import(
-  root + 'engine/src/db.ts'
+  root + 'engine/src/platform/db.ts'
 )
 const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  root + 'engine/src/test-fixtures.ts'
+  root + 'engine/src/testing/fixtures.ts'
 )
 const { GET: cardGet } = await import(
   root + 'web/app/api/insights/cards/[id]/route.ts'

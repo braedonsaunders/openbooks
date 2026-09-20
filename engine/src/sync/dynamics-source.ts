@@ -1,6 +1,6 @@
-import { businessToday } from "../business-date.ts";
-import { DynamicsClient } from "../dynamics.ts";
-import { formatMoney, fromUnits, toUnits } from "../money.ts";
+import { businessToday } from "../platform/business-date.ts";
+import { DynamicsClient } from "../connectors/dynamics.ts";
+import { formatMoney, fromUnits, toUnits } from "../money/money.ts";
 import { buildNativeFromBC, type BCBuildOpts, type BCDoc } from "./dynamics-native.ts";
 import type { NativeContext, NativeDocument } from "./native.ts";
 import type {

@@ -15,8 +15,8 @@ registerHooks({
   },
 })
 
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { loadOrder } = await import('./lib.ts')
 
 test('order loader refuses documents outside the caller subsidiary scope', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {

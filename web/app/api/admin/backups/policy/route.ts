@@ -1,8 +1,8 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db, withOrgTransaction } from "@openbooks/engine/src/db.ts";
-import { auditBackupEvent, computeNextRunAt, type BackupPolicyShape } from "@openbooks/engine/src/backup.ts";
+import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
+import { auditBackupEvent, computeNextRunAt, type BackupPolicyShape } from "@openbooks/engine/src/backup/backup.ts";
 import { guardPermission } from "../../../../../lib/authz";
 
 export const runtime = "nodejs";

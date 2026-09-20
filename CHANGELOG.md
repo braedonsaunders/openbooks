@@ -8,6 +8,20 @@ changes; each release documents required operator action.
 
 No migrations.
 
+### Engine
+
+- **The engine namespace is bounded.** The 204 files that lived side by side at
+  `engine/src` root now live in module directories (`engine/src/ledger/`,
+  `engine/src/payroll/`, `engine/src/tax/`, …), each declared in
+  `engine/src/modules.json` with the modules it may import.
+  `npm run check:engine-boundaries` refuses a file at root, an undeclared
+  cross-module import, a declared edge nothing uses, engine code importing the
+  web app, and any growth of the pinned dependency cycles. Pure relocation: no
+  file's behaviour changes. Every deep import path
+  (`@openbooks/engine/src/<file>.ts`) changed; `scripts/engine-modules/moves.json`
+  records every move and `node scripts/engine-modules/rewrite-imports.mjs`
+  brings a branch written against the old layout across mechanically.
+
 ## [0.1.0-alpha.17] - 2026-09-19
 
 Three forward migrations (0180-0182). The swarm release script migrates before

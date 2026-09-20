@@ -16,7 +16,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { toUnits } from "../../money.ts";
+import { toUnits } from "../../money/money.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { reduceTaxBases } from "../treatment-bases.ts";
 import { calculateFrPas2026 } from "./compute-statutory.ts";

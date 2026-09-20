@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
-import { env } from "@openbooks/engine/src/db.ts";
+import { env } from "@openbooks/engine/src/platform/db.ts";
 
 /**
  * Regression (G5): a calendar's adjustment period starts AND ends on the
@@ -20,11 +20,11 @@ test(
       import assert from "node:assert/strict";
       import { randomUUID } from "node:crypto";
       import { sql } from "drizzle-orm";
-      import { generateAccountingPeriods } from "./engine/src/close.ts";
-      import { deriveConsolidatedRates } from "./engine/src/consolidation.ts";
-      import { db, withOrgContext } from "./engine/src/db.ts";
-      import { installTrustedTestDatabaseBypass } from "./engine/src/test-database-bypass.ts";
-      import { createScratchOrg, dropScratchOrg, seedFlowActors } from "./engine/src/test-fixtures.ts";
+      import { generateAccountingPeriods } from "./engine/src/close/close.ts";
+      import { deriveConsolidatedRates } from "./engine/src/consolidation/consolidation.ts";
+      import { db, withOrgContext } from "./engine/src/platform/db.ts";
+      import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
+      import { createScratchOrg, dropScratchOrg, seedFlowActors } from "./engine/src/testing/fixtures.ts";
       import { resolveSubsidiaryView } from "./web/lib/consolidation.ts";
       import { balanceSheetView, profitAndLossView } from "./web/lib/statement-matrix.ts";
 
@@ -145,7 +145,7 @@ test(
         "--import",
         "tsx",
         "--import",
-        "./engine/src/test-database-bypass.ts",
+        "./engine/src/testing/database-bypass.ts",
         "--input-type=module",
         "-e",
         source,

@@ -52,8 +52,8 @@ const { GET } = (await import("./route.ts")) as {
   GET: (req: Request) => Promise<Response>;
 };
 const { createScratchOrg, dropScratchOrg } = (await import(
-  "../../../../../engine/src/test-fixtures.ts"
-)) as typeof import("../../../../../engine/src/test-fixtures.ts");
+  "../../../../../engine/src/testing/fixtures.ts"
+)) as typeof import("../../../../../engine/src/testing/fixtures.ts");
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 test("scripts delivery answers the empty set with the feature off", { skip: !DB }, async () => {

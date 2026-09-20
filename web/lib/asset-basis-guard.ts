@@ -1,4 +1,4 @@
-import { cmp } from '@openbooks/engine/src/money.ts'
+import { cmp } from '@openbooks/engine/src/money/money.ts'
 
 /**
  * Depreciation-basis edit control for the fixed-asset PATCH route.

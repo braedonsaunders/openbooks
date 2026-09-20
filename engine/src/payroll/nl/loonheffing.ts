@@ -1,5 +1,5 @@
-import { toCents } from "../../money.ts";
-import { PayrollError } from "../../payroll-error.ts";
+import { toCents } from "../../money/money.ts";
+import { PayrollError } from "../error.ts";
 import {
   certificateAmount,
   certificateChoice,

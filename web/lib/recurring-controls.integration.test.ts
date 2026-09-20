@@ -19,11 +19,11 @@ registerHooks({
     return next(specifier, context);
   },
 });
-const { db, withBypassContext, withOrg, withOrgContext } = await import("@openbooks/engine/src/db.ts");
-const { withSimClock } = await import("@openbooks/engine/src/clock.ts");
+const { db, withBypassContext, withOrg, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { withSimClock } = await import("@openbooks/engine/src/platform/clock.ts");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
-const { runScheduleNow } = await import("@openbooks/engine/src/recurring.ts");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { runScheduleNow } = await import("@openbooks/engine/src/billing/recurring.ts");
 const collection = await import("../app/api/recurring/route");
 const detail = await import("../app/api/recurring/[id]/route");
 const request = (method: string, body?: unknown) => new Request("http://audit.local/api/recurring", { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });

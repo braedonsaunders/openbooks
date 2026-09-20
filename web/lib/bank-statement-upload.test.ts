@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
-import { decodeStatementSourceText as engineDecodeStatementSourceText } from '../../engine/src/banking.ts'
+import { decodeStatementSourceText as engineDecodeStatementSourceText } from '../../engine/src/banking/banking.ts'
 
 interface CapturedImport {
   dryRun?: boolean
@@ -110,7 +110,7 @@ const reactHarness = createReactHookHarness()
 
 const mockUrls = new Map<string, string>([
   ['@/lib/api/json', 'mock:json'],
-  ['@openbooks/engine/src/banking.ts', 'mock:banking'],
+  ['@openbooks/engine/src/banking/banking.ts', 'mock:banking'],
   ['../../../../lib/feature-gates', 'mock:feature-gates'],
   ['@/components/money-provider', 'mock:money-provider'],
   ['next/navigation', 'mock:next-navigation'],

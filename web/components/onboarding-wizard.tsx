@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { installablePayrollPacks } from '@openbooks/engine/src/payroll/packs.ts'
 import { canSwitchIndustry } from '@/lib/industries'
 import { INDUSTRIES } from '@/lib/industries'

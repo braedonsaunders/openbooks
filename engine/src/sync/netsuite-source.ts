@@ -1,6 +1,6 @@
-import { NetSuiteBridgeClient, type NetSuiteBridgeConfig } from "../netsuite-bridge.ts";
-import type { NetSuiteCreds } from "../netsuite.ts";
-import { fromUnits, mulDecimal, normalizeMoney, toUnits } from "../money.ts";
+import { NetSuiteBridgeClient, type NetSuiteBridgeConfig } from "../connectors/netsuite-bridge.ts";
+import type { NetSuiteCreds } from "../connectors/netsuite.ts";
+import { fromUnits, mulDecimal, normalizeMoney, toUnits } from "../money/money.ts";
 import { buildNativeFromNetSuite, netSuiteCurrencyIso, type NetSuiteTaxCodeFallbacks, type NsHeader, type NsLine } from "./netsuite-native.ts";
 import type { NativeContext, NativeDocument } from "./native.ts";
 import type {

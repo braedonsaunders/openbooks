@@ -15,8 +15,8 @@
 
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../test-fixtures.ts";
+import { db } from "../platform/db.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import type { LedgerContext, Role } from "./types.ts";
 
 import { ROLES } from "./role-bindings.ts";

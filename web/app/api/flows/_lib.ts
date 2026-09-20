@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { DecisionFailedError, GateError } from '@openbooks/engine/src/flows/index.ts'
 import { getAuthz, type Authz } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'

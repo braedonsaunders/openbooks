@@ -31,14 +31,14 @@ export function registerRequestOrgResolver() {}
 export type OrgCtx = { orgId: string };
 `;
 
-const SUBS = `import { db, withBypassContext } from "@openbooks/engine/src/db.ts";
-import type { OrgCtx } from "@openbooks/engine/src/db.ts";
+const SUBS = `import { db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
+import type { OrgCtx } from "@openbooks/engine/src/platform/db.ts";
 export async function subsidiaryOptions() {
   return withBypassContext(async () => db);
 }
 `;
 
-const ROUTE = `import { db } from "@openbooks/engine/src/db.ts";
+const ROUTE = `import { db } from "@openbooks/engine/src/platform/db.ts";
 import { subsidiaryOptions } from "../lib/subs.ts";
 export async function GET() {
   await subsidiaryOptions();
@@ -73,7 +73,7 @@ test("route loads", async () => { await GET(); });
 `;
 }
 
-const MAP_WIRING = `    const mocked = new Map([["@openbooks/engine/src/db.ts", "mock:db"]]).get(specifier);
+const MAP_WIRING = `    const mocked = new Map([["@openbooks/engine/src/platform/db.ts", "mock:db"]]).get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };`;
 
 test("import parsing keeps the exported name across aliases and drops types", () => {
@@ -138,7 +138,7 @@ export type G = number;
 
 test("complete mock reports no gaps", () => {
   const root = fixture({
-    "engine/src/db.ts": DB,
+    "engine/src/platform/db.ts": DB,
     "web/lib/subs.ts": SUBS,
     "web/app/route.test.ts": mockTest("      export function withBypassContext(fn) { return fn(); }\n      export function registerRequestOrgResolver() {}\n", MAP_WIRING),
     "web/app/route.ts": ROUTE,
@@ -150,7 +150,7 @@ test("complete mock reports no gaps", () => {
 
 test("a mock missing a statically-reached export is a gap naming the importer", () => {
   const root = fixture({
-    "engine/src/db.ts": DB,
+    "engine/src/platform/db.ts": DB,
     "web/lib/subs.ts": SUBS,
     "web/app/route.test.ts": mockTest("      export function registerRequestOrgResolver() {}\n", MAP_WIRING),
     "web/app/route.ts": ROUTE,
@@ -324,10 +324,10 @@ registerHooks({
 
 test("a dynamically-reached missing export warns instead of failing", () => {
   const root = fixture({
-    "engine/src/db.ts": DB,
+    "engine/src/platform/db.ts": DB,
     "web/lib/subs.ts": SUBS,
     "web/app/route.test.ts": mockTest("      export function registerRequestOrgResolver() {}\n", MAP_WIRING),
-    "web/app/route.ts": `import { db } from "@openbooks/engine/src/db.ts";
+    "web/app/route.ts": `import { db } from "@openbooks/engine/src/platform/db.ts";
 export async function GET(flag) {
   if (flag) {
     const { subsidiaryOptions } = await import("../lib/subs.ts");
@@ -345,7 +345,7 @@ export async function GET(flag) {
 
 test("mock blocks the wiring cannot model fail closed as unmodeled", () => {
   const root = fixture({
-    "engine/src/db.ts": DB,
+    "engine/src/platform/db.ts": DB,
     "web/app/route.test.ts": `import { registerHooks } from "node:module";
 import test from "node:test";
 function customResolve(specifier, context, nextResolve) {

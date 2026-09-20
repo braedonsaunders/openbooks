@@ -10,7 +10,7 @@ import { authedContext, dismissSetupWizard } from "../auth";
  * is driven through real page navigations, real approval clicks, real bank
  * matching clicks, and real report/audit reads. Every amount is asserted
  * exactly — computed in-test with bigint minor-unit math mirroring
- * engine/src/money.ts (4dp units) — against file bytes, journal legs, report
+ * engine/src/money/money.ts (4dp units) — against file bytes, journal legs, report
  * cells, and open balances. A suite that could pass while measuring nothing
  * is worse than no suite.
  *
@@ -244,7 +244,7 @@ function parseNacha(text: string, expectedCents: bigint, expectedCount: number) 
   const hashMod = (hash % 10_000_000_000n).toString().padStart(10, "0");
   expect(total.toString(), "entry amounts sum to the expected cents").toBe(expectedCents.toString());
   const batch = batchControls[0]!;
-  // Batch control layout (matches the product formatter in engine/src/payments.ts):
+  // Batch control layout (matches the product formatter in engine/src/payments/payments.ts):
   // '8' + service-class(3) + entry-count(6) + hash(10) + debit(12) + credit(12).
   expect(batch.slice(4, 10), "batch entry count").toBe(String(expectedCount).padStart(6, "0"));
   expect(batch.slice(10, 20), "batch entry hash").toBe(hashMod);

@@ -8,9 +8,9 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context)
 } })
 
-const { db, withBypassContext } = await import('@openbooks/engine/src/db.ts')
+const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { createScheduleTask, ScheduleError } = await import('./project-schedule')
 
 test('project schedule service refuses direct task creation when scheduling is disabled', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {

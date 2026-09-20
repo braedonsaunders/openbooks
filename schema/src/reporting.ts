@@ -33,7 +33,7 @@ const bytea = customType<{ data: Uint8Array; driverData: Uint8Array }>({
  * row and stores the shaped result as CSV for download/audit.
  */
 
-/** built_in = seeded by the platform (engine/src/seed-reports.ts); custom =
+/** built_in = seeded by the platform (engine/src/provisioning/seed-reports.ts); custom =
  *  authored by a user in the studio. Built-ins are cloneable, not deletable. */
 export const REPORT_DEFINITION_KINDS = ["built_in", "custom"] as const;
 

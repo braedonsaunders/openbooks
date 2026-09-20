@@ -1,4 +1,4 @@
-import { normalizeMoney } from '@openbooks/engine/src/money.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { canonicalDecimal, compareDecimal } from './exact-decimal'
 
 export interface CycleDay {

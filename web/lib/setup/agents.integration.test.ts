@@ -3,9 +3,9 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 registerHooks({ resolve(specifier, context, next) { return specifier === 'server-only' ? { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' } : next(specifier, context) } })
 const { sql } = await import('drizzle-orm')
-const { db, withBypassContext } = await import('@openbooks/engine/src/db.ts')
+const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  '@openbooks/engine/src/test-fixtures.ts'
+  '@openbooks/engine/src/testing/fixtures.ts'
 )
 type ScratchOrg = { orgId: string }
 const { applyFeatureChanges } = await import('../features-admin.ts')

@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { env } from "@openbooks/engine/src/db.ts";
+import { env } from "@openbooks/engine/src/platform/db.ts";
 
 /**
  * Live two-subsidiary regression for subsidiary-scoped payroll access
@@ -90,9 +90,9 @@ const { GET: getBankFilePanel, POST: postBankFileGenerate } = (await import(bank
 const { POST: postBankFileRelease } = (await import(bankFileReleaseUrl)) as typeof import("./[id]/bank-file/[fileId]/route.ts");
 hooks.deregister();
 
-const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/src/test-fixtures.ts"
+  "@openbooks/engine/src/testing/fixtures.ts"
 );
 
 const NOT_FOUND = JSON.stringify({ error: "not found" });
@@ -247,7 +247,7 @@ test(
           values (${orgId}, ${componentId}, 'COMMISSION', 'Commission', 'earning', 'fixed_amount', 90)`);
 
         // Runs created through the engine: run A inside A's scope, run B outside it.
-        const { createPayRun } = await import("@openbooks/engine/src/payroll-run.ts");
+        const { createPayRun } = await import("@openbooks/engine/src/payroll/run.ts");
         const runA = await createPayRun({ orgId, actorId: adminId, payScheduleId: scheduleA });
         const runB = await createPayRun({ orgId, actorId: adminId, payScheduleId: scheduleB });
 

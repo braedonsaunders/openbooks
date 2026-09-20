@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { env } from "@openbooks/engine/src/db.ts";
+import { env } from "@openbooks/engine/src/platform/db.ts";
 
 // The submit guards live in the week's server helper (route/route.ts pins the
 // wiring statically, as the neighbouring submit-atomicity test does); the
@@ -34,7 +34,7 @@ function runIntegrationSource(source: string): void {
       "--import",
       "tsx",
       "--import",
-      "./engine/src/test-database-bypass.ts",
+      "./engine/src/testing/database-bypass.ts",
       "--input-type=module",
       "-e",
       source,
@@ -47,13 +47,13 @@ function runIntegrationSource(source: string): void {
 const SEED = `
   import { randomUUID } from "node:crypto";
   import { sql } from "drizzle-orm";
-  import { db, withOrgTransaction } from "./engine/src/db.ts";
-  import { installTrustedTestDatabaseBypass } from "./engine/src/test-database-bypass.ts";
+  import { db, withOrgTransaction } from "./engine/src/platform/db.ts";
+  import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
   import {
     createScratchOrg,
     dropScratchOrg,
     seedFlowActors,
-  } from "./engine/src/test-fixtures.ts";
+  } from "./engine/src/testing/fixtures.ts";
   import { assertWeekSubmittable } from "./web/app/api/timesheets/_lib.ts";
 
   installTrustedTestDatabaseBypass();

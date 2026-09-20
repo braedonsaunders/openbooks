@@ -1,8 +1,8 @@
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
-import { defaultContinuousClosePolicy } from '@openbooks/engine/src/continuous-close.ts'
-import { detectorSpecsForAgent } from '@openbooks/engine/src/continuous-close-config.ts'
+import { defaultContinuousClosePolicy } from '@openbooks/engine/src/continuous-close/continuous-close.ts'
+import { detectorSpecsForAgent } from '@openbooks/engine/src/agents/continuous-close-config.ts'
 import {
   field,
   grid,

@@ -3,10 +3,10 @@ import { z } from 'zod'
 import {
   cancelRevenueRecognitionForInvoice,
   RevenueRecognitionCancellationError,
-} from '@openbooks/engine/src/revenue-recognition.ts'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
-import { DocumentVoidError } from '@openbooks/engine/src/document-void.ts'
-import { db } from '@openbooks/engine/src/db.ts'
+} from '@openbooks/engine/src/revenue/recognition.ts'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { DocumentVoidError } from '@openbooks/engine/src/ledger/document-void.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { sql } from 'drizzle-orm'
 import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'

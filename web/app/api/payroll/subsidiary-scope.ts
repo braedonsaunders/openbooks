@@ -1,12 +1,12 @@
 import { sql } from 'drizzle-orm'
 import { NextResponse } from 'next/server'
-import { db } from '@openbooks/engine/src/db.ts'
-import { roeSourceScope } from '@openbooks/engine/src/payroll-yearend.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { roeSourceScope } from '@openbooks/engine/src/payroll/yearend.ts'
 import {
   yearEndFiling,
   type PayrollFilingData,
   type PayrollYearEndFiling,
-} from '@openbooks/engine/src/payroll-filing-registry.ts'
+} from '@openbooks/engine/src/payroll/filing-registry.ts'
 import type { Authz } from '../../../lib/authz'
 import { guardSubsidiaryScope, subsidiaryScopeAllows } from '../../../lib/authz'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'

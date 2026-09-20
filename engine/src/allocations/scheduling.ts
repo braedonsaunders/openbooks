@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { db, type SqlExecutor } from "../db.ts";
-import { featureEnabled } from "../feature-registry.ts";
+import { db, type SqlExecutor } from "../platform/db.ts";
+import { featureEnabled } from "../organization/feature-registry.ts";
 import {
   postAllocationRun,
   previewAllocationRun,

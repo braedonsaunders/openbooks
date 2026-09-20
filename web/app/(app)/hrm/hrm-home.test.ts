@@ -18,11 +18,11 @@ const contracts = readFileSync(new URL("../../../components/viewspec/widget-cont
 const names = readFileSync(new URL("../../../components/viewspec/registry-names.ts", import.meta.url), "utf8");
 const groupTabs = readFileSync(new URL("../../../components/module-home/group-tabs.ts", import.meta.url), "utf8");
 const navRegistry = readFileSync(
-  new URL("../../../../engine/src/modules/nav-registry.ts", import.meta.url),
+  new URL("../../../../engine/src/navigation/nav-registry.ts", import.meta.url),
   "utf8",
 );
 const featureRegistry = readFileSync(
-  new URL("../../../../engine/src/feature-registry.ts", import.meta.url),
+  new URL("../../../../engine/src/organization/feature-registry.ts", import.meta.url),
   "utf8",
 );
 const strings = readFileSync(new URL("../../../messages/en/hrm.json", import.meta.url), "utf8");

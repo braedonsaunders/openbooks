@@ -50,7 +50,7 @@ import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
  * Two carry the reconciliation. It is materialized rather than computed live
  * because a parallel run is audit evidence: who compared what, against which
  * run, under which tolerances, and what it said. The classification itself has
- * exactly one home — `engine/src/payroll-parallel-run.ts` — and these rows are
+ * exactly one home — `engine/src/payroll/parallel-run.ts` — and these rows are
  * its persisted output, which is also what the report renders. No second
  * implementation in SQL.
  *

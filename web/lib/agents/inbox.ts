@@ -1,7 +1,7 @@
 import "server-only";
 import { sql, type SQL } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
-import type { ContinuousCloseAgentKey } from "@openbooks/engine/src/continuous-close-config.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
+import type { ContinuousCloseAgentKey } from "@openbooks/engine/src/agents/continuous-close-config.ts";
 import { can, type Authz } from "../authz";
 import { readableContinuousCloseAgents } from "../continuous-close";
 import type { FindingDir, FindingSort } from "../list/agent-findings";

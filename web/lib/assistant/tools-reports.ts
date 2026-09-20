@@ -2,7 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { getTranslations } from "next-intl/server";
-import { db, withOrg } from "@openbooks/engine/src/db.ts";
+import { db, withOrg } from "@openbooks/engine/src/platform/db.ts";
 import { can, type Authz } from "../authz";
 import { canRunReportEntity, canRunReportStatement } from "../report-authz";
 import {

@@ -1,11 +1,11 @@
 import { isoDate, uuidId, parseJsonBody } from "@/lib/api/json";
 import { z } from "zod";
-import { advanceCadence, recurringTemplateScopeFilter } from "@openbooks/engine/src/recurring.ts";
+import { advanceCadence, recurringTemplateScopeFilter } from "@openbooks/engine/src/billing/recurring.ts";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
 import { can, guardPermission } from "../../../lib/authz";
-import { businessToday } from "@openbooks/engine/src/business-date.ts";
+import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { disabledDocKinds, isDocKindEnabled } from "../../../lib/documents";
 
 export const runtime = "nodejs";
@@ -25,7 +25,7 @@ const createSchema = z.object({
 
 /**
  * Recurring schedules — a template document + a cadence. The engine runner
- * (engine/src/recurring.ts, driven by the scheduler) clones the template into a
+ * (engine/src/billing/recurring.ts, driven by the scheduler) clones the template into a
  * fresh document each time next_run_on comes due. Gated on documents.manage
  * because a schedule mints (and optionally posts) real documents. Auto-posting
  * additionally requires gl.post because the scheduler later posts due

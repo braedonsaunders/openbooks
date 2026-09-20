@@ -1,4 +1,4 @@
-import { fromUnits, toUnits } from "../money.ts";
+import { fromUnits, toUnits } from "../money/money.ts";
 import { parseQbdReportDate, type QbdReportRow } from "../qbd/qbxml.ts";
 import type { NativeContext, NativeDocument } from "./native.ts";
 

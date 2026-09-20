@@ -12,7 +12,7 @@ import {
   db,
   withBypass,
   withBypassContext,
-} from "@openbooks/engine/src/db.ts";
+} from "@openbooks/engine/src/platform/db.ts";
 import { resolveActiveEnv } from "./org-access";
 import { setRequestOrg } from "./request-org";
 import { sealSecret, unsealSecret } from "./secrets";

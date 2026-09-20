@@ -17,7 +17,7 @@ import { authedContext, dismissSetupWizard } from '../auth';
  * product's own HTTP APIs (the same calls its drawers make) and every
  * workflow state is asserted on real rendered pages and the product's own
  * report/document reads. Every amount is asserted exactly — computed in-test
- * with bigint 4dp math mirroring engine/src/money.ts.
+ * with bigint 4dp math mirroring engine/src/money/money.ts.
  *
  * Tenant contract: the suite runs on its own pristine tenant (CI clones one
  * database per suite file). The setup wizard establishes the

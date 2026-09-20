@@ -205,7 +205,7 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/src/db.ts', 'mock:db'],
+  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['../../../../../lib/feature-gates', 'mock:feature-gates'],
 ])
 
@@ -220,7 +220,7 @@ const hooks = registerHooks({
       return nextResolve(new URL('./' + specifier.slice('@/lib/'.length) + '.ts', import.meta.url).href, context)
     }
     // Swap the persistence and authorization seams for scripted doubles.
-    if (specifier === '@openbooks/engine/src/db.ts' || specifier.endsWith('/lib/feature-gates')) {
+    if (specifier === '@openbooks/engine/src/platform/db.ts' || specifier.endsWith('/lib/feature-gates')) {
       return { url: mockUrls.get(specifier)!, shortCircuit: true }
     }
     const mocked = mockSources.get(specifier)

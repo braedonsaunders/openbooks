@@ -2,7 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { cache } from 'react'
 import { currentUser } from './auth'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 
 /**
  * Resolve the tenant id before querying `orgs`, which cannot be protected by

@@ -1,4 +1,4 @@
-import { cmp as compareMoney, div as divideMoney, formatMoney, mulDecimal } from '@openbooks/engine/src/money.ts'
+import { cmp as compareMoney, div as divideMoney, formatMoney, mulDecimal } from '@openbooks/engine/src/money/money.ts'
 
 /**
  * Overdue share of open receivables as a bare whole-number percent string
