@@ -14,6 +14,7 @@ const view = readFileSync(new URL("./view.ts", import.meta.url), "utf8");
 const sections = readFileSync(new URL("./sections.tsx", import.meta.url), "utf8");
 const loader = readFileSync(new URL("../../../lib/hrm/home.ts", import.meta.url), "utf8");
 const widgets = readFileSync(new URL("../../../components/viewspec/widgets-home.tsx", import.meta.url), "utf8");
+const hrmWidgets = readFileSync(new URL("../../../components/viewspec/widgets-hrm.tsx", import.meta.url), "utf8");
 const contracts = readFileSync(new URL("../../../components/viewspec/widget-contracts.ts", import.meta.url), "utf8");
 const names = readFileSync(new URL("../../../components/viewspec/registry-names.ts", import.meta.url), "utf8");
 const groupTabs = readFileSync(new URL("../../../components/module-home/group-tabs.ts", import.meta.url), "utf8");
@@ -80,7 +81,7 @@ test("the cockpit keeps its hero and adds the workspace panels", () => {
     assert.match(view, new RegExp(`'${widget}'`), `cockpit composes the ${widget} body`);
   }
   for (const widget of ['hrm-pending-requests', 'hrm-upcoming-changes', 'hrm-recent-changes', 'hrm-readiness']) {
-    assert.match(widgets, new RegExp(`'${widget}'`), `${widget} renders the shared section, never a second copy`);
+    assert.match(hrmWidgets, new RegExp(`'${widget}'`), `${widget} renders the shared section, never a second copy`);
     assert.match(contracts, new RegExp(`'${widget}': \\{ props: \\[`), `${widget} contract pins the prop surface`);
     assert.match(names, new RegExp(`'${widget}'`), `${widget} name is registered`);
   }
