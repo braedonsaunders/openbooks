@@ -65,7 +65,6 @@ function gateItem(gate: Extract<UnifiedApproval, { kind: "flow_gate" }>["gate"],
 
 function documentItem(
   doc: Extract<UnifiedApproval, { kind: "document" }>["document"],
-  ctx: InboxListContext,
 ): InboxItem | null {
   if (doc.docKind === "expense_report") return null;
   const createdAt = new Date(doc.submittedAt ?? doc.createdAt).toISOString();
@@ -110,7 +109,7 @@ export const flowsApprovalAdapter: InboxAdapter = {
         const mapped = gateItem(item.gate, ctx);
         if (mapped) out.push(mapped);
       } else if (item.kind === "document") {
-        const mapped = documentItem(item.document, ctx);
+        const mapped = documentItem(item.document);
         if (mapped) out.push(mapped);
       }
       // Budget and pay-run legs intentionally unmapped (see header).

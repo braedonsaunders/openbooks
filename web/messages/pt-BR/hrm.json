@@ -220,7 +220,7 @@
       "binding": "Vínculo",
       "bindingValue": "Revisão da solicitação {request} contra revisão do emprego {expected}",
       "submitted": "Enviada",
-      "viewInApprovals": "Ver em aprovações",
+      "viewInApprovals": "Ver na Caixa de entrada",
       "noRun": "Rascunho: ainda não há execução de aprovação.",
       "empty": "Ainda não há solicitações de alteração.",
       "statusNames": {

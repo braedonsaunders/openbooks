@@ -270,7 +270,7 @@ can keep that single gate; a larger organization can add sequential gates or an
 quarter-end, year-end, books, readiness scores, or exception counts differently.
 
 The **Request approval** action evaluates every enabled matching close flow and
-places its gates in **Approvals**. Approval fails closed when no gate is produced
+places its gates in the **Inbox**. Approval fails closed when no gate is produced
 or an assignee cannot be resolved. The run initiator cannot decide any close gate,
 even if a flow gate is authored to permit self-approval. This separation is an
 accounting invariant.

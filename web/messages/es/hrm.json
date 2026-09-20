@@ -220,7 +220,7 @@
       "binding": "Vinculación",
       "bindingValue": "Revisión de solicitud {request} frente a revisión de empleo {expected}",
       "submitted": "Enviada",
-      "viewInApprovals": "Ver en aprobaciones",
+      "viewInApprovals": "Ver en la Bandeja de entrada",
       "noRun": "Borrador: aún no hay ejecución de aprobación.",
       "empty": "Aún no hay solicitudes de cambio.",
       "statusNames": {

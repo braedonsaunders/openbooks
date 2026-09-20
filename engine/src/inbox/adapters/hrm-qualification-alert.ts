@@ -14,7 +14,7 @@
  */
 
 import { sql } from "drizzle-orm";
-import { loadApprovalPerson } from "../../hrm/authorization.ts";
+import { actorPartyId } from "../guard.ts";
 import { db } from "../../platform/db.ts";
 import { hrmOn } from "../guard.ts";
 import type { InboxAdapter } from "../registry.ts";
@@ -50,15 +50,15 @@ export const hrmQualificationAlertAdapter: InboxAdapter = {
     if (!(await hrmOn(db, ctx.orgId))) return [];
     const table = await hr14Table();
     if (!table) return [];
-    const person = await loadApprovalPerson(db, ctx.orgId, ctx.actorId);
-    if (!person.partyId) return [];
+    const partyId = await actorPartyId(ctx.orgId, ctx.actorId);
+    if (!partyId) return [];
     // Column names follow the HR-14 contract (holder_party_id, expiry_on,
     // status, qualification name); probed shape, pinned when HR-14 lands.
     const rows = (await db.execute<AlertRow>(sql`
       select a.id, a.name, a.expiry_on::text as expiry_on
         from ${sql.raw(`public.${table}`)} a
        where a.org_id = ${ctx.orgId}
-         and a.holder_party_id = ${person.partyId}
+         and a.holder_party_id = ${partyId}
          and a.status = 'active'
          and a.expiry_on <= current_date + 30
        order by a.expiry_on, a.id

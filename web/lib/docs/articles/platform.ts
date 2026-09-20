@@ -61,7 +61,7 @@ are unavailable for that gate.
 
 When a record is submitted and a flow produces gates, the flow takes ownership of
 the submission and moves the record to **pending approval**. Approvers act from
-the **Approvals** worklist or from approval links in notification emails.
+the **Inbox** worklist or from approval links in notification emails.
 A rejection returns the record to draft and cancels the sibling gates; the record
 is released only once every gate across the flow is approved. Approval routing
 **fails closed**. If a flow cannot resolve an approver, the record remains in

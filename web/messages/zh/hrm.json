@@ -220,7 +220,7 @@
       "binding": "绑定",
       "bindingValue": "申请修订 {request}（对应雇用修订 {expected}）",
       "submitted": "已提交",
-      "viewInApprovals": "在审批中查看",
+      "viewInApprovals": "在收件箱中查看",
       "noRun": "草稿——尚无审批流程。",
       "empty": "尚无变更申请。",
       "statusNames": {

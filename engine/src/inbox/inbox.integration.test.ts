@@ -34,6 +34,7 @@ import {
 import { createProcessTemplate, openProcess, upsertProcessTemplateStep } from "../hrm/processes.ts";
 import { createChangeRequestDraft, submitChangeRequest } from "../hrm/change-requests.ts";
 import { actOnInboxItem, InboxError, listInbox } from "./registry.ts";
+import { writeNotification } from "./adapters/notification.ts";
 import "./index.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -257,6 +258,48 @@ test("change request: inbox approve and native decide release identically throug
       assert.equal(gate.status, "approved");
       assert.equal(gate.decided_by, approverId);
     }
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("notices: unread rows surface as items and mark-read completes in place", { skip: !DB }, async () => {
+  const org: ScratchOrg = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Inbox Reader", "inbox_reader");
+    const otherId = await createScratchUser(org.orgId, "Inbox Other", "inbox_other");
+    const ctx = { orgId: org.orgId, actorId: userId, asOf: nowIso() };
+    // A notice written through the shared insert path surfaces in the inbox.
+    await writeNotification(db, {
+      orgId: org.orgId,
+      userId,
+      kind: "approval",
+      title: "Gate assigned",
+      body: "A gate waits for your decision.",
+      href: "/inbox",
+      actorId: otherId,
+    });
+    // Another user's notice never surfaces here (self-scoped read).
+    await writeNotification(db, { orgId: org.orgId, userId: otherId, kind: "flow", title: "Elsewhere" });
+    const items = await listInbox(ctx, { kinds: ["notification"] });
+    assert.equal(items.length, 1);
+    assert.equal(items[0]!.title, "Gate assigned");
+    assert.deepEqual(
+      items[0]!.actions.map((action) => action.key),
+      ["mark-read"],
+    );
+    await actOnInboxItem(ctx, items[0]!.id, "mark-read");
+    assert.deepEqual(await listInbox(ctx, { kinds: ["notification"] }), [], "read notices leave the inbox");
+    // Stale: marking the same notice again refuses by name (zero matched rows).
+    await assert.rejects(actOnInboxItem(ctx, items[0]!.id, "mark-read"), (error: unknown) => {
+      assert.ok(error instanceof InboxError && error.code === "NOT_FOUND");
+      return true;
+    });
+    // The native PATCH route and the adapter share one predicate: the row is read.
+    const row = (await db.execute<{ read_at: string | null }>(sql`
+      select read_at::text as read_at from notifications where org_id = ${org.orgId} and user_id = ${userId}
+    `)).rows[0]!;
+    assert.ok(row.read_at !== null, "mark-read stamps the row the route reads");
   } finally {
     await dropScratchOrg(org.orgId);
   }

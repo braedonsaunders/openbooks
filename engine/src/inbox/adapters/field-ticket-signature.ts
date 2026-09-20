@@ -10,7 +10,7 @@
  */
 
 import { sql } from "drizzle-orm";
-import { loadApprovalPerson } from "../../hrm/authorization.ts";
+import { actorPartyId } from "../guard.ts";
 import { db } from "../../platform/db.ts";
 import type { InboxAdapter } from "../registry.ts";
 import type { InboxItem, InboxListContext } from "../types.ts";
@@ -26,8 +26,8 @@ type TicketRow = {
 export const fieldTicketSignatureAdapter: InboxAdapter = {
   kind: "field_ticket_signature",
   async list(ctx: InboxListContext): Promise<InboxItem[]> {
-    const person = await loadApprovalPerson(db, ctx.orgId, ctx.actorId);
-    if (!person.partyId) return [];
+    const partyId = await actorPartyId(ctx.orgId, ctx.actorId);
+    if (!partyId) return [];
     const rows = (await db.execute<TicketRow>(sql`
       select distinct t.document_id::text as ticket_id,
              coalesce(p.name, 'field ticket') as project_name,
@@ -41,7 +41,7 @@ export const fieldTicketSignatureAdapter: InboxAdapter = {
            where te.org_id = t.org_id and te.field_ticket_id = t.document_id
            limit 1)
        where t.org_id = ${ctx.orgId}
-         and (t.foreman_party_id = ${person.partyId} or t.submitted_by = ${ctx.actorId})
+         and (t.foreman_party_id = ${partyId} or t.submitted_by = ${ctx.actorId})
          and r.sent_at is not null
          and r.responded_at is null
          and r.revoked_at is null

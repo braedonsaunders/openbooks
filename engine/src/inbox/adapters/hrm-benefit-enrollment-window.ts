@@ -9,7 +9,7 @@
  */
 
 import { sql } from "drizzle-orm";
-import { loadApprovalPerson } from "../../hrm/authorization.ts";
+import { actorPartyId } from "../guard.ts";
 import { findEmploymentsByParty } from "../../hrm/employment-read.ts";
 import { db } from "../../platform/db.ts";
 import { hrmOn } from "../guard.ts";
@@ -27,12 +27,12 @@ export const hrmBenefitEnrollmentWindowAdapter: InboxAdapter = {
   kind: "hrm_benefit_enrollment_window",
   async list(ctx: InboxListContext): Promise<InboxItem[]> {
     if (!(await hrmOn(db, ctx.orgId))) return [];
-    const person = await loadApprovalPerson(db, ctx.orgId, ctx.actorId);
-    if (!person.partyId) return [];
+    const partyId = await actorPartyId(ctx.orgId, ctx.actorId);
+    if (!partyId) return [];
     const employmentIds = await findEmploymentsByParty({
       orgId: ctx.orgId,
       actorId: ctx.actorId,
-      workerPartyId: person.partyId,
+      workerPartyId: partyId,
     });
     if (employmentIds.length === 0) return [];
     const ids = [...employmentIds];

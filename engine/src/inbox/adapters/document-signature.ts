@@ -9,11 +9,11 @@
  */
 
 import type { InboxAdapter } from "../registry.ts";
-import type { InboxItem, InboxListContext } from "../types.ts";
+import type { InboxItem } from "../types.ts";
 
 export const documentSignatureAdapter: InboxAdapter = {
   kind: "document_signature",
-  async list(_ctx: InboxListContext): Promise<InboxItem[]> {
+  async list(): Promise<InboxItem[]> {
     return [];
   },
   async act(): Promise<void> {

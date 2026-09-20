@@ -109,11 +109,13 @@ export async function saveHomeAnnouncementRow(
   id: string,
   body: Record<string, unknown>,
 ): Promise<{ id: string }> {
-  const valid = validateAnnouncement(body)
   await db.transaction(async (tx) => {
     const list = await readList(tx, orgId)
     const index = list.findIndex((row) => row.id === id)
     if (index < 0) throw Object.assign(new Error('announcement not found'), { status: 404 })
+    // PATCH semantics like the setup drawer: the body overlays the stored
+    // row, so a drawer round-trip that omits unchanged fields still validates.
+    const valid = validateAnnouncement({ ...list[index], ...body })
     list[index] = { id, ...valid }
     await writeList(tx, orgId, list)
   })

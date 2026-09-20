@@ -220,7 +220,7 @@
       "binding": "バインディング",
       "bindingValue": "申請リビジョン {request}（雇用リビジョン {expected} に対して）",
       "submitted": "提出済み",
-      "viewInApprovals": "承認で表示",
+      "viewInApprovals": "受信トレイで表示",
       "noRun": "下書き — 承認ランはまだありません。",
       "empty": "変更申請はまだありません。",
       "statusNames": {

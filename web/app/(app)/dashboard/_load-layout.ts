@@ -49,10 +49,7 @@ async function loadAssignedRoleDefault(
   }
 }
 
-export async function resolveDashboardDefault(
-  authz: Authz,
-  role: RoleTier,
-): Promise<DashboardDefault> {
+export async function resolveDashboardDefault(authz: Authz): Promise<DashboardDefault> {
   const roleDefault = await loadAssignedRoleDefault(authz)
   if (roleDefault) return roleDefault
   // HR-15 persona defaults: employee always, manager by reports or
@@ -98,7 +95,7 @@ export async function loadDashboardLayout(
 }> {
   const role = getUserRoleTier(authz)
   const [fallback, hiddenQuickActionIds] = await Promise.all([
-    resolveDashboardDefault(authz, role),
+    resolveDashboardDefault(authz),
     hiddenQuickActionIdsForOrg(authz.user.orgId),
   ])
 
