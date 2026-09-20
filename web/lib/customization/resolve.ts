@@ -18,6 +18,7 @@ import {
 } from "@openbooks/customization";
 import type { CustomFieldDef } from "../custom-fields";
 import { AmbiguousListViewDefaultError } from "./list-view-default.ts";
+export { AmbiguousListViewDefaultError };
 
 /**
  * Effective-resolution layer for transaction form layouts + saved list views.
