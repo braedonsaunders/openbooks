@@ -37,6 +37,7 @@ const HRM_KEYS = [
   'hrm_certified_runs',
   'hrm_compliance_findings',
 ] as const
+const HRM_KEYS = ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests', 'hrm_positions', 'hrm_processes', 'hrm_leave_absences', 'hrm_requisitions', 'hrm_applications', 'hrm_benefit_enrollments', 'hrm_reviews', 'hrm_goals', 'hrm_turnover', 'hrm_pay_bands', 'hrm_comp_cycle_lines', 'hrm_headcount_plan_lines', 'hrm_pay_gap_snapshots'] as const
 
 const HRM_PERMISSIONS: Record<(typeof HRM_KEYS)[number], string> = {
   hrm_headcount: 'hrm.employment.read',
@@ -64,6 +65,12 @@ const HRM_PERMISSIONS: Record<(typeof HRM_KEYS)[number], string> = {
   hrm_certified_runs: 'hrm.construction.read',
   hrm_compliance_findings: 'hrm.construction.read',
   // HR-13 end
+  // HR-12 begin
+  hrm_pay_bands: 'hrm.compensation.read',
+  hrm_comp_cycle_lines: 'hrm.compensation.read',
+  hrm_headcount_plan_lines: 'hrm.compensation.read',
+  hrm_pay_gap_snapshots: 'hrm.compensation.read',
+  // HR-12 end
 }
 
 test('workforce entities are registered on the shared catalog exactly once', () => {
@@ -93,6 +100,9 @@ test('workforce entities refuse without their gate and their own read permission
     const entity = REPORT_ENTITY_MAP[key]!
     assert.equal(entity.requiredPermission, HRM_PERMISSIONS[key], key)
     assert.equal(entity.featureKey, HRM_FEATURES[key], key)
+    // HR-12 begin: compensation entities gate on the hrmCompensation switch.
+    assert.equal(entity.featureKey, key.startsWith('hrm_pay_bands') || key.startsWith('hrm_comp_') || key.startsWith('hrm_headcount_plan_') || key.startsWith('hrm_pay_gap_') ? 'hrmCompensation' : 'hrm', key)
+    // HR-12 end
   }
   // HR-16 end
 })
@@ -123,6 +133,12 @@ test('workforce entities scope to one org and one legal-entity boundary', () => 
     hrm_certified_runs: 'r.org_id',
     hrm_compliance_findings: 'f.org_id',
     // HR-13 end
+    // HR-12 begin
+    hrm_pay_bands: 'b.org_id',
+    hrm_comp_cycle_lines: 'l.org_id',
+    hrm_headcount_plan_lines: 'l.org_id',
+    hrm_pay_gap_snapshots: 's.org_id',
+    // HR-12 end
   }
   const scopeColumns: Record<(typeof HRM_KEYS)[number], string | null> = {
     hrm_headcount: 'hc.employer_subsidiary_id',
@@ -151,6 +167,12 @@ test('workforce entities scope to one org and one legal-entity boundary', () => 
     hrm_certified_runs: 'p.subsidiary_id',
     hrm_compliance_findings: 'w.employer_subsidiary_id',
     // HR-13 end
+    // HR-12 begin
+    hrm_pay_bands: 'b.employer_subsidiary_id',
+    hrm_comp_cycle_lines: 'emp.employer_subsidiary_id',
+    hrm_headcount_plan_lines: 'l.employer_subsidiary_id',
+    hrm_pay_gap_snapshots: `(s.scope->>'employer_subsidiary_id')::uuid`,
+    // HR-12 end
   }
   for (const key of HRM_KEYS) {
     const entity = REPORT_ENTITY_MAP[key]!
@@ -164,6 +186,13 @@ test('workforce entities scope to one org and one legal-entity boundary', () => 
     }
     // HR-16 end
     assert.deepEqual(entity.subsidiaryScope, scopeColumns[key] === null ? null : { column: scopeColumns[key] }, `${key} subsidiary scope`)
+    // HR-12 begin: gap snapshots are optionally subsidiary-scoped populations — org-wide rows stay shared.
+    assert.deepEqual(
+      entity.subsidiaryScope,
+      key === 'hrm_pay_gap_snapshots' ? { column: scopeColumns[key], sharedNull: true } : { column: scopeColumns[key] },
+      `${key} subsidiary scope`,
+    )
+    // HR-12 end
     // Every table join is pinned to the base org: an unpinned join is how a
     // report leaks rows across tenants. The decided-at lateral reads the
     // request's own snapshot, not another table, so it carries no pin.

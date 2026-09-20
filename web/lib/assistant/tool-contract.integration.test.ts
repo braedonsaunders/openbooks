@@ -123,6 +123,10 @@ const READER_PERMS = [
   // service; the harness reader holds the grant so both tools run.
   "hrm.construction.read",
   // HR-13 end
+  // HR-12 begin: compensation bands/cycles/plans and equity snapshots
+  // read through the compensation read grant at every surface.
+  "hrm.compensation.read",
+  // HR-12 end
 ];
 
 /** Empty-store refusals: stable error codes on an org with no transactions. */

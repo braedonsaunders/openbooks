@@ -1405,6 +1405,40 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: (input) => m.loadCompliancePageData(input.searchParams ?? {}),
         spec: (data) => m.complianceSpec(data as never),
+  '/hrm/compensation': {
+    route: '/hrm/compensation',
+    searchParams: false,
+      const m = await import('../app/(app)/hrm/compensation/view')
+        load: () => m.loadCompensationPage(),
+        spec: (data) => m.compensationSpec(data as never),
+      }
+    },
+  },
+  '/hrm/compensation/cycles/[id]': {
+    route: '/hrm/compensation/cycles/[id]',
+    segments: ['id'],
+      const m = await import('../app/(app)/hrm/compensation/cycles/[id]/view')
+        load: (input) => m.loadCompCyclePage(segment(input, 'id'), input.searchParams ?? {}),
+        spec: (data) => m.compCycleSpec(data as never),
+      }
+    },
+  },
+  '/hrm/compensation/equity': {
+    route: '/hrm/compensation/equity',
+    searchParams: false,
+      const m = await import('../app/(app)/hrm/compensation/equity/view')
+        load: () => m.loadEquityPage(),
+        spec: (data) => m.equitySpec(data as never),
+      }
+    },
+  },
+  '/hrm/compensation/plans/[id]': {
+    route: '/hrm/compensation/plans/[id]',
+    segments: ['id'],
+    searchParams: false,
+      const m = await import('../app/(app)/hrm/compensation/plans/[id]/view')
+        load: (input) => m.loadCompPlanPage(segment(input, 'id')),
+        spec: (data) => m.compPlanSpec(data as never),
       }
     },
   },
@@ -1621,6 +1655,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: () => m.loadMeChecklistsPage(),
         spec: (data) => m.meChecklistsSpec(data as never),
+      }
+    },
+  },
+  '/me/compensation': {
+    route: '/me/compensation',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/me/compensation/view')
+      return {
+        load: (input) => m.loadMyCompPage(input.searchParams ?? {}),
+        spec: (data) => m.myCompSpec(data as never),
       }
     },
   },

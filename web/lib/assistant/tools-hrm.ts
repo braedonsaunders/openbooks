@@ -4,6 +4,7 @@ import {
   listEnrollmentWindows,
   listEnrollments,
 } from "@openbooks/engine/src/hrm/benefits/benefits-read.ts";
+import { CompensationError } from "@openbooks/engine/src/hrm/compensation/errors.ts";
 import { BenefitsError } from "@openbooks/engine/src/hrm/benefits/errors.ts";
 import {
   listLeaveRequests,
@@ -106,6 +107,7 @@ export function hrmRefusal(error: unknown): ToolResult {
     error instanceof HrmConstructionError ||
     // HR-13 end
     error instanceof BenefitsError ||
+    error instanceof CompensationError ||
     error instanceof HrmAuthorizationError ||
     error instanceof TemporalError ||
     error instanceof SelfServiceError
@@ -1198,6 +1200,49 @@ const hrmComplianceFindings: AssistantToolDef = {
             status: finding.status,
             recordedAt: finding.recordedAt,
           href: "/hrm/compliance",
+// HR-12 begin: compensation and pay-equity read tools. Bands and
+// placement, cycle status, and plan status ride comp.read behind the
+// hrmCompensation switch; the equity tool reports the latest frozen
+// snapshot aggregates only (never per-person pay) behind
+// hrmPayTransparency. Both absent when their switch is off.
+const hrmCompensation: AssistantToolDef = {
+  name: 'hrm_compensation',
+    'Pay bands and placement, merit cycle status, and headcount plan status: band ranges by level, where one employment sits in range, and which rounds and plans are live. Read-only.',
+  category: 'search',
+  gate: { mode: 'anyOf', perms: ['hrm.compensation.read'] },
+  feature: 'hrmCompensation',
+  tier: 'module',
+    employmentId: uuidInput.optional().describe("One employment's band placement; omit for bands and rounds only"),
+    asOf: dateInput.optional().describe('Placement as of this date; defaults to today'),
+    if (!(await isFeatureEnabled(authz.user.orgId, 'hrmCompensation'))) return { ok: false, error: HRM_FEATURE_OFF };
+    const a = raw as { employmentId?: string; asOf?: string };
+      const { listPayBands } = await import('@openbooks/engine/src/hrm/compensation/bands.ts');
+      const { listCycles } = await import('@openbooks/engine/src/hrm/compensation/cycles.ts');
+      const { listPlans } = await import('@openbooks/engine/src/hrm/compensation/headcount-plans.ts');
+      const { orgToday: todayOf } = await import('./tools-shared');
+      const asOf = a.asOf ?? (await todayOf(authz.user.orgId));
+      const [bands, cycles, plans] = await Promise.all([
+        listPayBands({ orgId: authz.user.orgId, actorId: authz.user.id, asOf }),
+        isFeatureEnabled(authz.user.orgId, 'hrmMeritCycles').then((on) =>
+          on ? listCycles({ orgId: authz.user.orgId, actorId: authz.user.id }) : [],
+        ),
+        isFeatureEnabled(authz.user.orgId, 'hrmHeadcountPlans').then((on) =>
+          on ? listPlans({ orgId: authz.user.orgId, actorId: authz.user.id }) : [],
+        ),
+      ]);
+      let placement: { employmentId: string; placement: string; compaRatio: string | null } | null = null;
+      if (a.employmentId) {
+        const { compaRatioFor } = await import('@openbooks/engine/src/hrm/compensation/bands.ts');
+          const placed = await compaRatioFor(authz.user.orgId, authz.user.id, a.employmentId, asOf);
+          placement = { employmentId: a.employmentId, placement: placed.band ? placed.placement : 'no_band', compaRatio: placed.compaRatio };
+        } catch (error) {
+          return hrmRefusal(error);
+          asOf,
+          bands: bands.map((b) => ({ levelId: b.levelId, currency: b.currency, basis: b.basis, min: b.min, target: b.target, max: b.max })),
+          cycles: cycles.map((c) => ({ id: c.id, name: c.name, status: c.status, effectiveOn: c.effectiveOn })),
+          plans: plans.map((p) => ({ id: p.id, name: p.name, status: p.status })),
+          placement,
+          href: '/hrm/compensation',
         },
       };
     } catch (error) {
@@ -1287,6 +1332,32 @@ const hrmCertifiedPayroll: AssistantToolDef = {
             amendsRunId: run.amendsRunId,
           })),
           href: "/hrm/compliance?section=certified",
+const hrmPayEquity: AssistantToolDef = {
+  name: 'hrm_pay_equity',
+    'Latest frozen pay-gap snapshot: org-level mean/median gaps and per-category gaps with joint-assessment flags. Aggregates only — never per-person pay. Read-only.',
+  category: 'search',
+  gate: { mode: 'anyOf', perms: ['hrm.compensation.read'] },
+  feature: 'hrmPayTransparency',
+  tier: 'module',
+  inputSchema: z.object({}),
+    if (!(await isFeatureEnabled(authz.user.orgId, 'hrmPayTransparency'))) return { ok: false, error: HRM_FEATURE_OFF };
+      const { latestGapSnapshot } = await import('@openbooks/engine/src/hrm/compensation/pay-transparency.ts');
+      const snapshot = await latestGapSnapshot({ orgId: authz.user.orgId, actorId: authz.user.id });
+      if (!snapshot) return { ok: true, data: { snapshot: null, href: '/hrm/compensation/equity' } };
+          asOf: snapshot.asOf,
+          meanGapPct: snapshot.metrics.meanGapPct,
+          medianGapPct: snapshot.metrics.medianGapPct,
+          headcountA: snapshot.metrics.headcountA,
+          headcountB: snapshot.metrics.headcountB,
+          categories: snapshot.categories.map((c) => ({
+            levelCode: c.levelCode,
+            countA: c.countA,
+            countB: c.countB,
+            meanGapPct: c.meanGapPct,
+            medianGapPct: c.medianGapPct,
+            unexplainedGapPct: c.unexplainedGapPct,
+            jointAssessmentDue: c.jointAssessmentDue,
+          href: '/hrm/compensation/equity',
         },
       };
     } catch (error) {
@@ -1302,3 +1373,6 @@ export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, h
   hrmComplianceFindings, hrmCertifiedPayroll,
   // HR-13 end
 ];
+
+export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting, hrmPerformanceCycles, hrmTurnover, hrmBenefits, hrmMe, hrmCompensation, hrmPayEquity];
+// HR-12 end
