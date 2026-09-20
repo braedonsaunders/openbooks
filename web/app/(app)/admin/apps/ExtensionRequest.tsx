@@ -14,6 +14,7 @@ import {
 } from '@openbooks/ui'
 import { Code2, Sparkles, Upload, LayoutTemplate } from 'lucide-react'
 import { AppPackageEditor } from './AppPackageEditor'
+import { readApiErrorMessage } from '@/lib/api-error'
 import { confirmDialog } from '@/lib/confirm'
 import { createAppStarter } from '@/lib/apps/starter'
 import type { EditableAppPackage } from '@/lib/apps/package-files'
@@ -49,8 +50,11 @@ export function ExtensionRequest() {
               reason: ui('importReason'),
             }),
           })
+      // Status first: a non-JSON 413/415/500 from ZIP or draft import must
+      // surface the refusal (or fallback + status), never a SyntaxError.
+      if (!response.ok)
+        throw new Error(await readApiErrorMessage(response, ui('failed')))
       const data = await response.json()
-      if (!response.ok) throw new Error(data.error ?? ui('failed'))
       router.push(data.reviewUrl)
       router.refresh()
     } catch (error) {
