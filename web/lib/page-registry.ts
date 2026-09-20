@@ -784,18 +784,6 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
-  '/approvals': {
-    route: '/approvals',
-    segments: [],
-    searchParams: true,
-    module: async () => {
-      const m = await import('../app/(app)/approvals/view')
-      return {
-        load: (input) => m.loadApprovals(input.searchParams ?? {}),
-        spec: (data) => m.approvalsSpec(data as never),
-      }
-    },
-  },
   '/apps': {
     route: '/apps',
     segments: [],
@@ -1453,6 +1441,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: (input) => m.loadRecruitingPage(input.searchParams ?? {}),
         spec: (data) => m.recruitingSpec(data as never),
+      }
+    },
+  },
+  '/inbox': {
+    route: '/inbox',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/inbox/view')
+      return {
+        load: (input) => m.loadApprovals(input.searchParams ?? {}),
+        spec: (data) => m.approvalsSpec(data as never),
       }
     },
   },

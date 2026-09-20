@@ -60,6 +60,8 @@ export interface ApprovalRow {
   quorumAll: boolean
   /** Gate demands a typed e-signature to approve (blocks bulk approve). */
   signatureRequired?: boolean
+  /** Past its escalation date (drives the overdue filter). */
+  overdue?: boolean
 }
 
 const DAY_MS = 86_400_000

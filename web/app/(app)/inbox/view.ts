@@ -5,10 +5,12 @@ import { inArray, sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db, schema } from '@openbooks/engine/src/platform/db.ts'
 import { type WorklistGate } from '@openbooks/engine/src/flows/index.ts'
+import { listInbox, type InboxItem } from '@openbooks/engine/src/inbox/index.ts'
 import {
   approvalWorklistPageForAuthz,
   type ApprovalWorklistItem,
 } from '../../../lib/application/approvals'
+import { inboxContext, INBOX_FILTER_KINDS, INBOX_TASK_KINDS, maySeeUnion } from '../../../lib/inbox-context'
 import {
   badge,
   column,
@@ -18,6 +20,7 @@ import {
   money,
   page,
   pageHeader,
+  panel,
   ref,
   rootRef,
   table,
@@ -57,6 +60,18 @@ import type { DelegateOption } from './GateActions'
 
 type Tab = 'mine' | 'submitted' | 'all'
 
+/** Unified inbox filters. `approvals` is the union table; the rest are task lists. */
+type InboxFilter = 'all' | 'approvals' | 'my_tasks' | 'signatures' | 'notices' | 'overdue'
+
+const INBOX_FILTERS: readonly InboxFilter[] = [
+  'all',
+  'approvals',
+  'my_tasks',
+  'signatures',
+  'notices',
+  'overdue',
+]
+
 // Document kinds with catalog labels — unknown kinds fall back to the raw code.
 const KIND_KEYS = [
   'vendor_bill',
@@ -87,6 +102,18 @@ export interface SubmittedListRow {
 
 function iso(d: unknown): string {
   return d ? new Date(d as string | Date).toISOString() : new Date().toISOString()
+}
+
+export interface InboxTaskListRow {
+  id: string
+  kindLabel: string
+  title: string
+  subtitle: string | null
+  dueLabel: string | null
+  priorityLabel: string | null
+  priorityTone: 'rose' | 'amber' | 'slate'
+  href: string
+  actions: { key: string; label: string; style: 'primary' | 'secondary' | 'danger'; needsReason: boolean }[]
 }
 
 export interface ApprovalsData {
@@ -131,6 +158,23 @@ export interface ApprovalsData {
   paginationParams: Record<string, string>
   /** Submitted tab: flow runs + own budgets combined total. */
   submittedTotal: number
+  /** Unified inbox filter (chips row under the tabs). */
+  filter: InboxFilter
+  filters: { kind: string; label: string; count: number; active: boolean; href: string }[]
+  /** Union table visibility: decision rows show for all/approvals/overdue. */
+  showUnion: boolean
+  /** Task list (new kinds + notices) for the active filter. */
+  showTasks: boolean
+  tasksPresent: boolean
+  tasksEmpty: boolean
+  taskRows: InboxTaskListRow[]
+  tasksTitle: string
+  tasksEmptyTitle: string
+  tasksEmptyDescription: string
+  taskOpenLabel: string
+  taskActedLabel: string
+  taskRefusedLabel: string
+  taskDelegatePlaceholder: string
 }
 
 export async function loadApprovals(
@@ -139,6 +183,7 @@ export async function loadApprovals(
   const { money: formatMoney } = await getMoneyFormatter()
   const t = await getTranslations('approvals')
   const tc = await getTranslations('common')
+  const ti = await getTranslations('inbox')
   const authz = await getAuthz()
   if (!authz) return null
   const user = authz.user
@@ -150,6 +195,10 @@ export async function loadApprovals(
   const tab: Tab =
     rawTab === 'submitted' ? 'submitted' : rawTab === 'all' && canSeeAll ? 'all' : 'mine'
   const kindFilter = pickString(sp.kind) || undefined
+  const rawFilter = pickString(sp.filter)
+  const filter: InboxFilter = (INBOX_FILTERS as readonly string[]).includes(rawFilter ?? '')
+    ? (rawFilter as InboxFilter)
+    : 'all'
 
   // Server-side window shared by every tab on this page. perPage never
   // exceeds the bulk batch ceiling, so a page-scoped selection always fits
@@ -226,6 +275,7 @@ export async function loadApprovals(
     return {
       key: `gate:${g.id}`,
       gateId: g.id,
+      overdue: g.escalateAt != null && new Date(g.escalateAt).getTime() < Date.now(),
       documentNumber: g.document?.documentNumber ?? g.subjectLabel ?? g.subjectId.slice(0, 8),
       kind,
       kindLabel: kindLabel(kind),
@@ -458,6 +508,60 @@ export async function loadApprovals(
   const visibleRows = rowsForTab
   const visibleSubmitted = submittedRows
 
+  // ---- Task list (new inbox kinds + notices) ------------------------------
+  // Union-owned kinds never render here (see INBOX_TASK_KINDS): decision
+  // rows keep ApprovalsTable + GateActions, task rows get generic actions
+  // through /api/inbox/act. One shared per-request cache backs the counts
+  // and the active list so the sources read once.
+  const ctx = await inboxContext(authz)
+  const taskCache = new Map<string, InboxItem[]>()
+  const taskKindsFor = (key: InboxFilter) =>
+    key === 'all' || key === 'overdue' ? INBOX_TASK_KINDS : (INBOX_FILTER_KINDS[key] ?? [])
+  const taskItemsFor = async (key: InboxFilter): Promise<InboxItem[]> => {
+    const kinds = taskKindsFor(key)
+    if (kinds.length === 0) return []
+    const items = await listInbox(ctx, { kinds, cache: taskCache })
+    return key === 'overdue' ? items.filter((item) => item.priority === 'overdue') : items
+  }
+  const [tasksAll, tasksMy, tasksSig, tasksNotices, tasksOverdue, tasksActive] = await Promise.all([
+    taskItemsFor('all'),
+    taskItemsFor('my_tasks'),
+    taskItemsFor('signatures'),
+    taskItemsFor('notices'),
+    taskItemsFor('overdue'),
+    taskItemsFor(filter),
+  ])
+  const toTaskRow = (item: InboxItem): InboxTaskListRow => ({
+    id: item.id,
+    kindLabel: ti(`kinds.${item.kind}`),
+    title: item.title,
+    subtitle: item.subtitle,
+    dueLabel: item.dueAt ? item.dueAt.slice(0, 10) : null,
+    priorityLabel:
+      item.priority === 'overdue'
+        ? ti('priorities.overdue')
+        : item.priority === 'due_soon'
+          ? ti('priorities.dueSoon')
+          : null,
+    priorityTone: item.priority === 'overdue' ? 'rose' : item.priority === 'due_soon' ? 'amber' : 'slate',
+    href: item.subjectHref,
+    actions: item.actions.map((action) => ({ ...action })),
+  })
+  const showUnion = tab !== 'submitted' && (filter === 'all' || filter === 'approvals' || filter === 'overdue')
+  const unionOverdueRows = visibleRows.filter((row) => row.overdue === true)
+  const unionVisible = filter === 'overdue' ? unionOverdueRows : visibleRows
+  const showTasks = tab !== 'submitted' && filter !== 'approvals'
+  const taskRows = tasksActive.map(toTaskRow)
+  const tasksEmpty = showTasks && taskRows.length === 0
+  const filterCount = (key: InboxFilter): number => {
+    if (key === 'all') return unfilteredTotal + tasksAll.length
+    if (key === 'approvals') return unfilteredTotal
+    if (key === 'my_tasks') return tasksMy.length
+    if (key === 'signatures') return tasksSig.length
+    if (key === 'notices') return tasksNotices.length
+    return tasksOverdue.length + unionOverdueRows.length
+  }
+
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: 'mine', label: t('tabs.mine'), count: mineCount },
     { key: 'submitted', label: t('tabs.submitted') },
@@ -478,8 +582,8 @@ export async function loadApprovals(
     onSubmitted: tab === 'submitted',
     submittedEmpty: tab === 'submitted' && submittedTotal === 0,
     submittedPresent: tab === 'submitted' && submittedTotal > 0,
-    gatesEmpty: tab !== 'submitted' && unfilteredTotal === 0,
-    gatesPresent: tab !== 'submitted' && unfilteredTotal > 0,
+    gatesEmpty: showUnion && unionVisible.length === 0,
+    gatesPresent: showUnion && unionVisible.length > 0,
     emptySubmittedTitle: t('emptySubmitted.title'),
     emptySubmittedDescription: t('emptySubmitted.description'),
     emptyTitle: tab === 'all' ? t('emptyAll.title') : t('empty.title'),
@@ -509,7 +613,7 @@ export async function loadApprovals(
     columnWaitingSince: t('table.waitingSince'),
     columnStatus: tc('labels.status'),
     submittedRows: visibleSubmitted,
-    approvalRows: visibleRows,
+    approvalRows: unionVisible,
     bulk: tab === 'mine',
     showAssignee: tab === 'all',
     actionsEnabled: tab === 'mine' || canManageFlows,
@@ -520,6 +624,30 @@ export async function loadApprovals(
     perPage,
     paginationParams,
     submittedTotal,
+    filter,
+    filters: INBOX_FILTERS.map((key) => ({
+      kind: key,
+      label: ti(`filters.${key === 'my_tasks' ? 'myTasks' : key}`),
+      count: filterCount(key),
+      active: filter === key,
+      // A new filter restarts at page one: the old page may not exist.
+      href: mergeHref('/inbox', sp, { filter: key === 'all' ? undefined : key, page: undefined }),
+    })),
+    showUnion,
+    showTasks,
+    tasksPresent: showTasks && taskRows.length > 0,
+    tasksEmpty,
+    taskRows,
+    tasksTitle:
+      filter === 'all'
+        ? ti('filters.myTasks')
+        : ti(`filters.${filter === 'my_tasks' ? 'myTasks' : filter}`),
+    tasksEmptyTitle: ti('emptyTitle'),
+    tasksEmptyDescription: ti('emptyDescription'),
+    taskOpenLabel: ti('open'),
+    taskActedLabel: ti('acted'),
+    taskRefusedLabel: ti('refused'),
+    taskDelegatePlaceholder: ti('delegatePlaceholder'),
   }
 }
 
@@ -540,6 +668,13 @@ export function approvalsSpec(data: ApprovalsData): PageSpec {
         }),
         widgetBlock('delegation-banner', { users: data.delegateUsers }),
         widgetBlock('approval-tabs', { tabs: data.tabs }),
+        // Unified inbox filters (all, approvals, my tasks, signatures,
+        // notices, overdue) ride the shared kind-chips treatment.
+        widgetBlock('kind-chips', {
+          chips: data.filters,
+          clearHref: null,
+          clearLabel: '',
+        }),
       ]),
     ],
     body: [
@@ -626,6 +761,35 @@ export function approvalsSpec(data: ApprovalsData): PageSpec {
               }),
             ]),
             when: f('gatesPresent'),
+          },
+          {
+            ...panel({
+              title: f('tasksTitle'),
+              iconKey: 'list-checks',
+              bodyClassName: 'p-3',
+              blocks: [
+                {
+                  ...widgetBlock('inbox-task-list', {
+                    rows: data.taskRows,
+                    users: data.delegateUsers,
+                    openLabel: data.taskOpenLabel,
+                    actedLabel: data.taskActedLabel,
+                    refusedLabel: data.taskRefusedLabel,
+                    delegatePlaceholder: data.taskDelegatePlaceholder,
+                  }),
+                  when: f('tasksPresent'),
+                },
+                {
+                  ...widgetBlock('empty-state', {
+                    icon: 'check-circle',
+                    title: data.tasksEmptyTitle,
+                    description: data.tasksEmptyDescription,
+                  }),
+                  when: f('tasksEmpty'),
+                },
+              ],
+            }),
+            when: f('showTasks'),
           },
         ],
         { tabKey: data.tabKey },

@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import {
   actOnInboxItem,
   InboxError,
-  type InboxKind,
 } from "@openbooks/engine/src/inbox/index.ts";
 import { getAuthz } from "../../../../lib/authz";
 import { parseJsonBody } from "@/lib/api/json";
@@ -52,18 +51,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: message }, { status });
   }
 }
-
-export const INBOX_FILTER_KINDS: Record<string, InboxKind[]> = {
-  approvals: ["flows_approval", "expense_report"],
-  my_tasks: [
-    "hrm_process_step",
-    "hrm_leave_request",
-    "hrm_change_request",
-    "hrm_review",
-    "hrm_benefit_enrollment_window",
-    "hrm_qualification_alert",
-    "timesheet_week",
-  ],
-  signatures: ["field_ticket_signature", "document_signature"],
-  notices: ["notification"],
-};

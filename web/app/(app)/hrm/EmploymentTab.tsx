@@ -422,7 +422,7 @@ export function EmploymentTab({
                 ) : null}
                 <span className="ml-auto text-sm">
                   {request.flowRunId ? (
-                    <Link href="/approvals" className="font-medium text-teal-700 hover:underline dark:text-teal-300">
+                    <Link href="/inbox" className="font-medium text-teal-700 hover:underline dark:text-teal-300">
                       {t('employment.changeRequests.viewInApprovals')}
                     </Link>
                   ) : (

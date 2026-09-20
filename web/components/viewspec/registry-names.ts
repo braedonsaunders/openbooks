@@ -209,6 +209,8 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'import-statement',
   'import-wizard',
   'in-nav-cell',
+  // HR-15: unified inbox task rows.
+  'inbox-task-list',
   'insights-dashboard-builder',
   'insights-tabs',
   'inventory-action-drawer',

@@ -14,6 +14,7 @@ import { SETUP_WIDGETS } from './widgets-setup'
 import { AGENTS_WIDGETS } from './widgets-agents'
 import { HOME_WIDGETS } from './widgets-home'
 import { HRM_WIDGETS } from './widgets-hrm'
+import { PERSONA_WIDGETS } from './widgets-home-persona'
 import { OPERATIONS_WIDGETS } from './widgets-operations'
 import { RECORDS_WIDGETS } from './widgets-records'
 import { CONTROLS_WIDGETS } from './widgets-controls'
@@ -165,6 +166,8 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   ...AGENTS_WIDGETS,
   ...HOME_WIDGETS,
   ...HRM_WIDGETS,
+  // HR-15: persona-home widgets (inbox task list, dashboard persona tiles).
+  ...PERSONA_WIDGETS,
   ...OPERATIONS_WIDGETS,
   ...RECORDS_WIDGETS,
   ...CONTROLS_WIDGETS,

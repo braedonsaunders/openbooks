@@ -26,11 +26,10 @@ test('every inbox query is scoped to the signed-in user and their organization',
   assert.ok(apiScopes.length >= 3, `expected every API query scoped, found ${apiScopes.length}`)
   assert.doesNotMatch(api, /where\s+id\s+in\s*\(select/i)
 
-  // And the module carries no permission, deliberately — if one is ever added
-  // the comment explaining why there is none must go with it.
-  assert.match(
-    registry,
-    /key: 'notifications',\n\s+href: '\/notifications',\n\s+label: 'Notifications',\n\s+iconKey: 'bell',\n\s+group: 'my-work',\n\s+\}/,
-    'the inbox module must stay ungated and unchanged in shape',
-  )
+  // HR-15 rebrand: notices are no nav module — My Work shows one Inbox
+  // entry and notices surface as its Notices filter. The route, page, and
+  // API above stay directly reachable (and self-scoped); only the registry
+  // entry collapsed into the approvals-keyed Inbox module.
+  assert.doesNotMatch(registry, /key: 'notifications'/, 'notices must not be a nav module')
+  assert.match(registry, /key: 'approvals',\n\s+href: '\/inbox'/, 'the approvals-keyed module targets the inbox')
 })

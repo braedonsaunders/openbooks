@@ -914,7 +914,7 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
 }
 
 function closeTaskActionHref(task: CloseTaskRow, run: CloseRunRow): string | null {
-  if (task.task_type === "approval") return "/approvals";
+  if (task.task_type === "approval") return "/inbox";
   const exact: Record<string, string> = {
     "drafts-cleared": "/journal",
     "bank-reconciled": "/banking/reconciliations",
@@ -926,7 +926,7 @@ function closeTaskActionHref(task: CloseTaskRow, run: CloseRunRow): string | nul
     consolidation: "/reports/trial-balance",
     "variance-review": `/reports/pnl?period=custom&from=${run.starts_on}&to=${run.ends_on}`,
     "financial-review": `/reports/trial-balance?period=custom&from=${run.starts_on}&to=${run.ends_on}`,
-    "controller-approval": "/approvals",
+    "controller-approval": "/inbox",
     "publish-package": `/close?run=${run.id}&stage=publish`,
   };
   const exactHref = exact[task.key];
@@ -1064,7 +1064,7 @@ function LockStage(
           ) : null}
           {props.run.status === "review" ? (
             <Button variant="outline" asChild>
-              <Link href="/approvals">
+              <Link href="/inbox">
                 <ShieldCheck size={15} />
                 {t("actions.reviewApprovals")}
               </Link>

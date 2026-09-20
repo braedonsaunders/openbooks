@@ -101,7 +101,7 @@ export async function reversePaymentForReturn(
           values (${orgId}, ${pending.void_requested_by}, 'void_superseded',
                   'Void request superseded by bank return',
                   ${`Your void request for ${payment.document_number} (${pending.void_reason ?? "no reason recorded"}) was superseded by a bank return; the reversal now carries the bank evidence: ${voidReason}.`},
-                  '/approvals', ${actorId}, ${actorId})
+                  '/inbox', ${actorId}, ${actorId})
         `);
       }
     }

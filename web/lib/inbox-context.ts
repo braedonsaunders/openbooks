@@ -1,5 +1,5 @@
 import "server-only";
-import type { InboxListContext } from "@openbooks/engine/src/inbox/index.ts";
+import type { InboxKind, InboxListContext } from "@openbooks/engine/src/inbox/index.ts";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { can, type Authz } from "./authz";
 import { isFeatureEnabled } from "./features";
@@ -42,3 +42,25 @@ export function maySeeUnion(authz: Authz): boolean {
     can(authz, "budgets.approve")
   );
 }
+
+export const INBOX_FILTER_KINDS: Record<string, InboxKind[]> = {
+  approvals: ["flows_approval", "expense_report"],
+  my_tasks: [
+    "hrm_process_step",
+    "hrm_leave_request",
+    "hrm_change_request",
+    "hrm_review",
+    "hrm_benefit_enrollment_window",
+    "hrm_qualification_alert",
+    "timesheet_week",
+  ],
+  signatures: ["field_ticket_signature", "document_signature"],
+  notices: ["notification"],
+};
+
+/** Every kind the task list may render (union-owned kinds excluded). */
+export const INBOX_TASK_KINDS: InboxKind[] = [
+  ...INBOX_FILTER_KINDS.my_tasks!,
+  ...INBOX_FILTER_KINDS.signatures!,
+  ...INBOX_FILTER_KINDS.notices!,
+];

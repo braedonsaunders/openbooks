@@ -171,7 +171,7 @@ export type DashboardMetrics = {
   }>
   /**
    * Top-5 of the caller's actionable unified worklist — the same reader as
-   * the tile and the /approvals tabs, so all three tie by construction.
+   * the tile and the /inbox tabs, so all three tie by construction.
    */
   myApprovalList: Array<{
     id: string
@@ -292,7 +292,7 @@ export async function loadDashboardMetrics(
   const need = (...fields: (keyof DashboardMetrics)[]): boolean =>
     fields.some((f) => needed.has(f))
 
-  // The tile links to /approvals?tab=all, so its number is the unified
+  // The tile links to /inbox?tab=all, so its number is the unified
   // worklist (Flows gates + gateless document approvals + pending pay runs),
   // counted through the same reader as the worklist page and get_vitals —
   // never a gates-only subquery. Same doorway as get_vitals: a caller who

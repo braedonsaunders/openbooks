@@ -558,7 +558,7 @@ export function RunsTab() {
               {detail.status === 'pending_approval' ? (
                 <p className="text-sm text-slate-500 dark:text-slate-400">
                   {t('pendingApprovalNotice')}{' '}
-                  <Link className="font-medium text-teal-700 underline dark:text-teal-300" href="/approvals">
+                  <Link className="font-medium text-teal-700 underline dark:text-teal-300" href="/inbox">
                     {t('viewApproval')}
                   </Link>
                 </p>

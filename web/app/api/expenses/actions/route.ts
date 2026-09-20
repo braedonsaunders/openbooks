@@ -21,7 +21,7 @@ export const runtime = 'nodejs'
  * Expense report lifecycle: draft → submit (Flows approval) → approved → post.
  * Per-action permission gates: submit = expenses.create, post = ap.post,
  * recall = expenses.create plus submitter-or-admin on the report.
- * Approval decisions are owned by the Flows engine (via the /approvals worklist
+ * Approval decisions are owned by the Flows engine (via the /inbox worklist
  * and the record flyout → /api/flows/gates/decide), not this route.
  */
 
