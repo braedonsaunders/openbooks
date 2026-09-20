@@ -6,7 +6,9 @@ import {
 } from "@openbooks/engine/src/hrm/employment-read.ts";
 import { HrmPositionError } from "@openbooks/engine/src/hrm/positions.ts";
 import { listPositionOptions } from "@openbooks/engine/src/hrm/positions-read.ts";
+import { listLeaveTypeOptions } from "@openbooks/engine/src/hrm/leave-read.ts";
 import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
 import { isUuid } from "../../../../lib/list-params";
 
@@ -23,6 +25,17 @@ export const runtime = "nodejs";
  * employment grant). The drawer submits ids, never labels; unknown or
  * out-of-scope ids stay absent rather than leaking existence. GET carries
  * no body, so no JSON boundary parser runs here.
+ * Authoring pickers for employment change requests and leave requests. GET
+ * lists bounded, org- and subsidiary-scoped option pages behind the HRM
+ * feature switch and the read grant (the same double gate as the record
+ * route): `source=employments` names people holding an employment for the
+ * line-manager picker, `source=locations` names active native locations,
+ * `source=leave-types` names active leave types for the leave filing
+ * drawer (filers hold hrm.leave.request, so that source admits the request
+ * grant where the employment sources require the read grant). The drawer
+ * submits ids, never labels; unknown or out-of-scope ids stay absent rather
+ * than leaking existence. GET carries no body, so no JSON boundary parser
+ * runs here.
  */
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -34,6 +47,13 @@ export async function GET(req: Request) {
     source === "positions" ? "hrm.position.read" : "hrm.employment.read",
     "hrm",
   );
+  if (source !== "employments" && source !== "locations" && source !== "leave-types") {
+    return NextResponse.json({ error: "source must be one of employments, locations, leave-types" }, { status: 400 });
+  }
+  const gate =
+    source === "leave-types"
+      ? await guardLeaveOptions()
+      : await guardFeaturePermission("hrm.employment.read", "hrm");
   if (gate instanceof NextResponse) return gate;
   const rawLimit = url.searchParams.get("limit");
   if (rawLimit !== null && !/^\d+$/.test(rawLimit)) {
@@ -50,6 +70,10 @@ export async function GET(req: Request) {
     ...(rawLimit === null ? {} : { limit: Number(rawLimit) }),
   };
   try {
+    if (source === "leave-types") {
+      const options = await listLeaveTypeOptions(db, gate.user.orgId);
+      return NextResponse.json({ options });
+    }
     const options =
       source === "employments"
         ? await listEmploymentOptions(
@@ -72,4 +96,16 @@ export async function GET(req: Request) {
     }
     throw e;
   }
+}
+
+/**
+ * Leave-type options admit either grant: managers read the taxonomy, filers
+ * need it to file. The read denial reports when neither grant is held.
+ */
+async function guardLeaveOptions() {
+  const read = await guardFeaturePermission("hrm.leave.read", "hrm");
+  if (!(read instanceof NextResponse)) return read;
+  const request = await guardFeaturePermission("hrm.leave.request", "hrm");
+  if (!(request instanceof NextResponse)) return request;
+  return read;
 }

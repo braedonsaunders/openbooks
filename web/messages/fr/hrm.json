@@ -8,7 +8,9 @@
       "departments": "Services",
       "reports": "Rapports",
       "positions": "Postes",
-      "processes": "Processus"
+      "processes": "Processus",
+      "leave": "Congés",
+      "myLeave": "Mes congés"
     },
     "vitals": {
       "headcount": "Effectif",
@@ -100,6 +102,11 @@
       "proposeChange": "Proposer un changement",
       "manageDepartments": "Gérer les services",
       "openReports": "Ouvrir les rapports"
+    },
+    "leave": {
+      "title": "Congés",
+      "onLeaveEmpty": "Personne absent aujourd'hui.",
+      "pendingSub": "en attente d'approbation"
     }
   },
   "queue": {
@@ -384,5 +391,82 @@
       "done": "Terminé",
       "skipped": "Ignoré"
     }
+  },
+  "leave": {
+    "title": "Congés",
+    "description": "Demandes, approbations et registre d'absences — avec soldes en temps et, où un compteur existe, en valeur.",
+    "listTitle": "Demandes de congé",
+    "segmentsLabel": "Afficher",
+    "allLabel": "Toutes",
+    "segments": {
+      "pending": "À approuver",
+      "upcoming": "À venir",
+      "today": "Absents aujourd'hui",
+      "history": "Historique"
+    },
+    "columns": {
+      "employee": "Employé",
+      "type": "Type",
+      "range": "Période",
+      "hours": "Heures",
+      "status": "Statut"
+    },
+    "emptyTitle": "Rien ici",
+    "emptyDescription": "Encore rien dans ce segment.",
+    "truncatedNote": "Affichage des {limit} premières demandes.",
+    "unknownSegmentTitle": "Segment inconnu",
+    "unknownSegment": "Il n'existe pas de segment {segment}.",
+    "refusedTitle": "Congé refusé",
+    "fileTitle": "Demander un congé",
+    "fileButton": "Nouvelle demande",
+    "recordTitle": "Saisir une absence",
+    "recordButton": "Saisir une absence",
+    "calendarTitle": "Calendrier par service",
+    "calendarDepartmentLabel": "Service",
+    "calendarFromLabel": "Du",
+    "calendarToLabel": "Au",
+    "calendarShowLabel": "Afficher",
+    "calendarEmpty": "Aucune absence sur cette période. Choisissez un service.",
+    "openRequest": "Ouvrir",
+    "drawerTitle": "Demande de congé",
+    "detailLoading": "Chargement de la demande…",
+    "detailFailed": "La demande n'a pas pu être chargée.",
+    "actionFailed": "L'action a échoué.",
+    "submitButton": "Soumettre à approbation",
+    "withdrawButton": "Retirer",
+    "cancelButton": "Annuler la demande",
+    "withdrawReasonTitle": "Pourquoi cette demande est-elle retirée ?",
+    "cancelReasonTitle": "Pourquoi cette demande est-elle annulée ?",
+    "fileFailed": "La demande n'a pas pu être enregistrée.",
+    "fileEmploymentLabel": "Emploi",
+    "fileEmploymentPlaceholder": "ID d'emploi",
+    "fileTypeLabel": "Type de congé",
+    "fileTypePlaceholder": "Choisir un type",
+    "fileHoursLabel": "Heures",
+    "fileReasonLabel": "Motif",
+    "timeBalanceTitle": "Solde de temps au {date}",
+    "timeBalanceValue": "{balance} heures (acquises {earned}, reportées {carried}, prises {taken})",
+    "unlimitedBalance": "Illimité — aucun chiffre de solde.",
+    "noPolicyBalance": "Aucune politique ne couvre cet emploi.",
+    "valueBalanceTitle": "Valeur du compteur au {date}",
+    "statusNames": {
+      "draft": "Brouillon",
+      "submitted": "Soumise",
+      "approved": "Approuvée",
+      "rejected": "Rejetée",
+      "withdrawn": "Retirée",
+      "cancelled": "Annulée"
+    }
+  },
+  "myLeave": {
+    "title": "Mes congés",
+    "description": "Vos demandes et soldes — rien d'autre.",
+    "emptyTitle": "Aucune demande",
+    "emptyDescription": "Enregistrez votre première demande.",
+    "balancesTitle": "Soldes",
+    "balancesEmpty": "Aucun type de congé actif.",
+    "timeKind": "temps",
+    "valueKind": "valeur",
+    "unlimited": "Illimité"
   }
 }

@@ -70,6 +70,8 @@ const GROUP_TABS: Record<TabGroup, { href: string; ns: string; key: string }[]> 
     // and the workforce reports launch pad — each its own route with its
     // own page gate, so every tab lands on a surface the viewer may open.
     { href: '/hrm/change-requests', ns: 'hrm', key: 'home.tabs.changeRequests' },
+    { href: '/hrm/leave', ns: 'hrm', key: 'home.tabs.leave' },
+    { href: '/hrm/my-leave', ns: 'hrm', key: 'home.tabs.myLeave' },
     { href: '/hrm/departments', ns: 'hrm', key: 'home.tabs.departments' },
     { href: '/hrm/reports', ns: 'hrm', key: 'home.tabs.reports' },
     // The funded establishment behind the headcount plan — list, vacancy,
@@ -97,6 +99,8 @@ const TAB_FEATURE: Record<string, string> = {
   '/payroll/year-end': 'payroll',
   '/hrm': 'hrm',
   '/hrm/change-requests': 'hrm',
+  '/hrm/leave': 'hrm',
+  '/hrm/my-leave': 'hrm',
   '/hrm/departments': 'hrm',
   '/hrm/reports': 'hrm',
   '/hrm/positions': 'hrm',
@@ -178,6 +182,8 @@ const HRM_TAB_PERMISSION: Record<string, string> = {
   '/hrm/processes': 'hrm.process.read',
   '/entities/employees': 'parties.read',
   '/hrm/change-requests': 'hrm.employment.read',
+  '/hrm/leave': 'hrm.leave.read',
+  '/hrm/my-leave': 'hrm.leave.request',
   '/hrm/departments': 'hrm.employment.read',
   '/hrm/reports': 'reports.read',
   '/hrm/positions': 'hrm.position.read',

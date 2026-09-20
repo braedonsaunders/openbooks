@@ -8,7 +8,9 @@
       "departments": "Abteilungen",
       "reports": "Berichte",
       "positions": "Positionen",
-      "processes": "Vorgänge"
+      "processes": "Vorgänge",
+      "leave": "Urlaub",
+      "myLeave": "Mein Urlaub"
     },
     "vitals": {
       "headcount": "Personalbestand",
@@ -100,6 +102,11 @@
       "proposeChange": "Änderung beantragen",
       "manageDepartments": "Abteilungen verwalten",
       "openReports": "Berichte öffnen"
+    },
+    "leave": {
+      "title": "Urlaub",
+      "onLeaveEmpty": "Heute niemand abwesend.",
+      "pendingSub": "warten auf Genehmigung"
     }
   },
   "queue": {
@@ -384,5 +391,82 @@
       "done": "Erledigt",
       "skipped": "Übersprungen"
     }
+  },
+  "leave": {
+    "title": "Urlaub",
+    "description": "Anträge, Genehmigungen und Fehltage — mit Salden in Zeit und, wo ein Konto besteht, in Geld.",
+    "listTitle": "Urlaubsanträge",
+    "segmentsLabel": "Anzeigen",
+    "allLabel": "Alle",
+    "segments": {
+      "pending": "Zur Genehmigung",
+      "upcoming": "Bevorstehend",
+      "today": "Heute abwesend",
+      "history": "Verlauf"
+    },
+    "columns": {
+      "employee": "Mitarbeiter",
+      "type": "Art",
+      "range": "Zeitraum",
+      "hours": "Stunden",
+      "status": "Status"
+    },
+    "emptyTitle": "Keine Urlaubsanträge hier",
+    "emptyDescription": "Noch nichts in diesem Bereich.",
+    "truncatedNote": "Die ersten {limit} Anträge werden angezeigt.",
+    "unknownSegmentTitle": "Unbekannter Bereich",
+    "unknownSegment": "Es gibt keinen Urlaubsbereich {segment}.",
+    "refusedTitle": "Urlaub abgelehnt",
+    "fileTitle": "Urlaubsantrag stellen",
+    "fileButton": "Neuer Antrag",
+    "recordTitle": "Fehltag erfassen",
+    "recordButton": "Fehltag erfassen",
+    "calendarTitle": "Kalender nach Abteilung",
+    "calendarDepartmentLabel": "Abteilung",
+    "calendarFromLabel": "Von",
+    "calendarToLabel": "Bis",
+    "calendarShowLabel": "Anzeigen",
+    "calendarEmpty": "Keine Fehltage in diesem Zeitraum. Wählen Sie eine Abteilung.",
+    "openRequest": "Öffnen",
+    "drawerTitle": "Urlaubsantrag",
+    "detailLoading": "Antrag wird geladen…",
+    "detailFailed": "Der Antrag konnte nicht geladen werden.",
+    "actionFailed": "Die Aktion ist fehlgeschlagen.",
+    "submitButton": "Zur Genehmigung einreichen",
+    "withdrawButton": "Zurückziehen",
+    "cancelButton": "Antrag stornieren",
+    "withdrawReasonTitle": "Warum wird dieser Antrag zurückgezogen?",
+    "cancelReasonTitle": "Warum wird dieser Antrag storniert?",
+    "fileFailed": "Der Antrag konnte nicht gestellt werden.",
+    "fileEmploymentLabel": "Beschäftigung",
+    "fileEmploymentPlaceholder": "Beschäftigungs-ID",
+    "fileTypeLabel": "Urlaubsart",
+    "fileTypePlaceholder": "Urlaubsart wählen",
+    "fileHoursLabel": "Stunden",
+    "fileReasonLabel": "Grund",
+    "timeBalanceTitle": "Zeitsaldo zum {date}",
+    "timeBalanceValue": "{balance} Stunden (angesammelt {earned}, übertragen {carried}, genommen {taken})",
+    "unlimitedBalance": "Unbegrenzt — keine Saldozahl.",
+    "noPolicyBalance": "Keine Richtlinie gilt für diese Beschäftigung.",
+    "valueBalanceTitle": "Lohnkontostand zum {date}",
+    "statusNames": {
+      "draft": "Entwurf",
+      "submitted": "Eingereicht",
+      "approved": "Genehmigt",
+      "rejected": "Abgelehnt",
+      "withdrawn": "Zurückgezogen",
+      "cancelled": "Storniert"
+    }
+  },
+  "myLeave": {
+    "title": "Mein Urlaub",
+    "description": "Ihre Anträge und Salden — sonst nichts.",
+    "emptyTitle": "Noch keine Anträge",
+    "emptyDescription": "Stellen Sie Ihren ersten Antrag.",
+    "balancesTitle": "Salden",
+    "balancesEmpty": "Keine aktiven Urlaubsarten.",
+    "timeKind": "Zeit",
+    "valueKind": "Geldwert",
+    "unlimited": "Unbegrenzt"
   }
 }

@@ -8,7 +8,9 @@
       "departments": "Departamentos",
       "reports": "Informes",
       "positions": "Puestos",
-      "processes": "Procesos"
+      "processes": "Procesos",
+      "leave": "Ausencias",
+      "myLeave": "Mis ausencias"
     },
     "vitals": {
       "headcount": "Plantilla",
@@ -100,6 +102,11 @@
       "proposeChange": "Proponer cambio",
       "manageDepartments": "Gestionar departamentos",
       "openReports": "Abrir informes"
+    },
+    "leave": {
+      "title": "Ausencias",
+      "onLeaveEmpty": "Nadie ausente hoy.",
+      "pendingSub": "por aprobar"
     }
   },
   "queue": {
@@ -384,5 +391,82 @@
       "done": "Hecho",
       "skipped": "Omitido"
     }
+  },
+  "leave": {
+    "title": "Ausencias",
+    "description": "Solicitudes, aprobaciones y registro de ausencias — con saldos en tiempo y, donde haya banco, en valor.",
+    "listTitle": "Solicitudes de ausencia",
+    "segmentsLabel": "Mostrar",
+    "allLabel": "Todas",
+    "segments": {
+      "pending": "Por aprobar",
+      "upcoming": "Próximas",
+      "today": "Ausentes hoy",
+      "history": "Historial"
+    },
+    "columns": {
+      "employee": "Empleado",
+      "type": "Tipo",
+      "range": "Periodo",
+      "hours": "Horas",
+      "status": "Estado"
+    },
+    "emptyTitle": "Nada aquí",
+    "emptyDescription": "Aún nada en este segmento.",
+    "truncatedNote": "Mostrando las primeras {limit} solicitudes.",
+    "unknownSegmentTitle": "Segmento desconocido",
+    "unknownSegment": "No existe el segmento {segment}.",
+    "refusedTitle": "Ausencia denegada",
+    "fileTitle": "Solicitar una ausencia",
+    "fileButton": "Nueva solicitud",
+    "recordTitle": "Registrar una ausencia",
+    "recordButton": "Registrar ausencia",
+    "calendarTitle": "Calendario por departamento",
+    "calendarDepartmentLabel": "Departamento",
+    "calendarFromLabel": "Desde",
+    "calendarToLabel": "Hasta",
+    "calendarShowLabel": "Mostrar",
+    "calendarEmpty": "Sin ausencias en este periodo. Elija un departamento.",
+    "openRequest": "Abrir",
+    "drawerTitle": "Solicitud de ausencia",
+    "detailLoading": "Cargando la solicitud…",
+    "detailFailed": "No se pudo cargar la solicitud.",
+    "actionFailed": "La acción falló.",
+    "submitButton": "Enviar a aprobación",
+    "withdrawButton": "Retirar",
+    "cancelButton": "Cancelar solicitud",
+    "withdrawReasonTitle": "¿Por qué se retira esta solicitud?",
+    "cancelReasonTitle": "¿Por qué se cancela esta solicitud?",
+    "fileFailed": "No se pudo registrar la solicitud.",
+    "fileEmploymentLabel": "Empleo",
+    "fileEmploymentPlaceholder": "ID de empleo",
+    "fileTypeLabel": "Tipo de ausencia",
+    "fileTypePlaceholder": "Elija un tipo",
+    "fileHoursLabel": "Horas",
+    "fileReasonLabel": "Motivo",
+    "timeBalanceTitle": "Saldo de tiempo al {date}",
+    "timeBalanceValue": "{balance} horas (acumuladas {earned}, arrastradas {carried}, tomadas {taken})",
+    "unlimitedBalance": "Ilimitado — sin cifra de saldo.",
+    "noPolicyBalance": "Ninguna política cubre este empleo.",
+    "valueBalanceTitle": "Valor bancario al {date}",
+    "statusNames": {
+      "draft": "Borrador",
+      "submitted": "Enviada",
+      "approved": "Aprobada",
+      "rejected": "Rechazada",
+      "withdrawn": "Retirada",
+      "cancelled": "Cancelada"
+    }
+  },
+  "myLeave": {
+    "title": "Mis ausencias",
+    "description": "Sus solicitudes y saldos — nada más.",
+    "emptyTitle": "Sin solicitudes",
+    "emptyDescription": "Registre su primera solicitud.",
+    "balancesTitle": "Saldos",
+    "balancesEmpty": "Sin tipos de ausencia activos.",
+    "timeKind": "tiempo",
+    "valueKind": "valor",
+    "unlimited": "Ilimitado"
   }
 }

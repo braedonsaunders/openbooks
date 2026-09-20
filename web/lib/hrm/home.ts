@@ -14,6 +14,7 @@ import { subsidiaryVisibleFilter } from '../subsidiaries'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import type { DirectoryItem } from '../../components/module-home/ui'
 import { loadQueueLabels } from './change-requests'
+import { loadLeavePanel, type LeavePanelData } from './leave'
 
 /**
  * Human Resources module home — one read for the workspace landing cockpit:
@@ -160,6 +161,7 @@ export interface HrmHomeData {
   actions: DirectoryItem[]
   /** Headcount-plan summary; null when the viewer lacks hrm.position.read. */
   positions: HrmPositionsSummary | null
+  leavePanel: LeavePanelData | null
 }
 
 /**
@@ -279,6 +281,13 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
     label: t('home.tabs.changeRequests'),
     iconKey: 'scroll-text',
   })
+  if (can(authz, 'hrm.leave.read')) {
+    directory.push({
+      href: '/hrm/leave',
+      label: t('home.tabs.leave'),
+      iconKey: 'calendar',
+    })
+  }
   directory.push({
     href: '/hrm/departments',
     label: t('home.tabs.departments'),
@@ -541,5 +550,8 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
     actionsTitle: t('overview.actions.title'),
     actions,
     positions,
+    // Leave panel: on leave today plus pending approvals, for viewers who
+    // may open the Leave tab. Null (no panel) without the leave grant.
+    leavePanel: await loadLeavePanel(authz),
   }
 }

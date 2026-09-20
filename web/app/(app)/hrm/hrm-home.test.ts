@@ -118,13 +118,15 @@ test("hrm route tabs keep the native employee list as the sibling tab", () => {
 });
 
 test("hrm route tabs cover the whole workspace, each behind its own gate", () => {
-  for (const href of ['/hrm', '/entities/employees', '/hrm/change-requests', '/hrm/departments', '/hrm/reports']) {
+  for (const href of ['/hrm', '/entities/employees', '/hrm/change-requests', '/hrm/leave', '/hrm/my-leave', '/hrm/departments', '/hrm/reports']) {
     assert.match(groupTabs, new RegExp(`href: '${href.replace(/\//g, '\\/')}'`), `strip lands on ${href}`);
   }
-  for (const href of ['/hrm/change-requests', '/hrm/departments', '/hrm/reports']) {
+  for (const href of ['/hrm/change-requests', '/hrm/leave', '/hrm/my-leave', '/hrm/departments', '/hrm/reports']) {
     assert.match(groupTabs, new RegExp(`'${href.replace(/\//g, '\\/')}': 'hrm'`), `${href} tab hides while the feature switch is off`);
   }
   assert.match(groupTabs, /'\/hrm\/change-requests': 'hrm\.employment\.read'/, "queue tab hides without the employment read grant");
+  assert.match(groupTabs, /'\/hrm\/leave': 'hrm\.leave\.read'/, "leave desk tab hides without the leave read grant");
+  assert.match(groupTabs, /'\/hrm\/my-leave': 'hrm\.leave\.request'/, "self-service tab hides without the file-a-request grant, matching the page gate");
   assert.match(groupTabs, /'\/hrm\/departments': 'hrm\.employment\.read'/, "departments tab hides without the employment read grant");
   assert.match(groupTabs, /'\/hrm\/reports': 'reports\.read'/, "reports tab hides without the reports grant");
 });

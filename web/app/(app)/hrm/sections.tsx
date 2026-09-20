@@ -358,6 +358,62 @@ export function HrmRecentChanges({
  * and headcount excludes them, plus the migration article. A fully
  * migrated org renders the healthy state, never a blank panel.
  */
+export type HrmLeavePanelItem = {
+  workerName: string
+  leaveTypeCode: string
+  hours: string
+}
+
+/**
+ * Leave panel: who is on leave today plus the pending-approval count,
+ * beside the queue link. Empty names the quiet day instead of rendering a
+ * blank panel.
+ */
+export function HrmLeavePanel({
+  items,
+  empty,
+  pendingCount,
+  pendingLabel,
+  queueHref,
+  viewAllLabel,
+}: {
+  items: HrmLeavePanelItem[]
+  empty: string
+  pendingCount: number
+  pendingLabel: string
+  queueHref: string
+  viewAllLabel: string
+}) {
+  return (
+    <div>
+      {items.length === 0 ? (
+        <p className="px-4 py-4 text-center text-sm text-slate-400 dark:text-slate-500">{empty}</p>
+      ) : (
+        <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
+          {items.map((item, i) => (
+            <li key={i} className="flex items-baseline justify-between gap-3 px-4 py-2.5">
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                {item.workerName}{' '}
+                <span className="font-normal text-slate-400 dark:text-slate-500">· {item.leaveTypeCode}</span>
+              </p>
+              <p className="text-xs tabular-nums text-slate-400 dark:text-slate-500">{item.hours}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="border-t border-slate-100 px-4 py-2.5 text-center text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+        {pendingLabel} <span className="font-semibold tabular-nums">{pendingCount}</span>
+      </p>
+      <Link
+        href={queueHref as never}
+        className="block border-t border-slate-100 px-4 py-2 text-center text-xs font-semibold text-teal-600 transition-colors hover:text-teal-700 dark:border-slate-800 dark:text-teal-400 dark:hover:text-teal-300"
+      >
+        {viewAllLabel} →
+      </Link>
+    </div>
+  )
+}
+
 export function HrmReadiness({
   message,
   docHref,

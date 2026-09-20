@@ -225,7 +225,7 @@ test("happy path: file → submit → decide → approved writes absences plus p
   await withHarness(async (h) => {
     await seedFlow(h.org.orgId, h.approverId);
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
-    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId });
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const type = await seedType(h.org.orgId, h.managerId);
     await seedPolicy(h.org.orgId, h.managerId, type.id);
 
@@ -271,7 +271,7 @@ test("submit refused outside live employment, with no rows written", { skip: !DB
   await withHarness(async (h) => {
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
     // Version starts after the requested range: no live day.
-    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId, from: "2026-10-01" });
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty, from: "2026-10-01" });
     const type = await seedType(h.org.orgId, h.managerId, { valueCrossing: "none" });
     await seedPolicy(h.org.orgId, h.managerId, type.id);
     await assertLeaveRefusal(
@@ -289,7 +289,7 @@ test("submit refused on approved overlap and on insufficient time balance", { sk
   await withHarness(async (h) => {
     await seedFlow(h.org.orgId, h.approverId);
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
-    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId });
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const type = await seedType(h.org.orgId, h.managerId);
     await seedPolicy(h.org.orgId, h.managerId, type.id);
 
@@ -326,7 +326,7 @@ test("submit refused on approved overlap and on insufficient time balance", { sk
 test("short notice refused to the worker, filed by the manager with a reason", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
-    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId, from: "2020-01-01" });
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty, from: "2020-01-01" });
     const type = await seedType(h.org.orgId, h.managerId, { valueCrossing: "none" });
     await seedPolicy(h.org.orgId, h.managerId, type.id, { minimumNoticeDays: 30 });
     const today = new Date().toISOString().slice(0, 10);
@@ -352,7 +352,7 @@ test("short notice refused to the worker, filed by the manager with a reason", {
 test("requires_attachment refused at submit until evidence is recorded", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
-    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId });
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const type = await seedType(h.org.orgId, h.managerId, { valueCrossing: "none", requiresAttachment: true });
     await seedPolicy(h.org.orgId, h.managerId, type.id);
     const draft = await fileLeaveRequest({
@@ -423,7 +423,7 @@ test("approval refused with the retro remedy when a committed run covers the day
   await withHarness(async (h) => {
     await seedFlow(h.org.orgId, h.approverId);
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
-    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId });
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const type = await seedType(h.org.orgId, h.managerId);
     await seedPolicy(h.org.orgId, h.managerId, type.id);
     const draft = await fileLeaveRequest({
@@ -458,7 +458,7 @@ test("cancel voids pending inputs and reverses absences; committed consumption r
   await withHarness(async (h) => {
     await seedFlow(h.org.orgId, h.approverId);
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
-    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId });
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const type = await seedType(h.org.orgId, h.managerId);
     await seedPolicy(h.org.orgId, h.managerId, type.id);
 
@@ -531,7 +531,7 @@ test("withdraw ends drafts and in-flight approvals; the gate cannot release afte
   await withHarness(async (h) => {
     await seedFlow(h.org.orgId, h.approverId);
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
-    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId });
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const type = await seedType(h.org.orgId, h.managerId, { valueCrossing: "none" });
     await seedPolicy(h.org.orgId, h.managerId, type.id);
 
@@ -562,7 +562,7 @@ test("consume is idempotent per run, refuses foreign runs and stale parties; rel
   await withHarness(async (h) => {
     await seedFlow(h.org.orgId, h.approverId);
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
-    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId });
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const type = await seedType(h.org.orgId, h.managerId);
     await seedPolicy(h.org.orgId, h.managerId, type.id);
     const draft = await fileLeaveRequest({
@@ -641,7 +641,7 @@ test("commit gate refuses pending rows until the run consumes them", { skip: !DB
   await withHarness(async (h) => {
     await seedFlow(h.org.orgId, h.approverId);
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
-    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId });
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const type = await seedType(h.org.orgId, h.managerId);
     await seedPolicy(h.org.orgId, h.managerId, type.id);
     const draft = await fileLeaveRequest({
@@ -670,7 +670,7 @@ test("commit gate refuses pending rows until the run consumes them", { skip: !DB
 test("RLS: a foreign org session sees zero leave rows", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
-    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId });
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const type = await seedType(h.org.orgId, h.managerId, { valueCrossing: "none" });
     await seedPolicy(h.org.orgId, h.managerId, type.id);
     const draft = await fileLeaveRequest({
@@ -747,7 +747,7 @@ test("rejected requests decide with a reason and write no absences or inputs", {
   await withHarness(async (h) => {
     await seedFlow(h.org.orgId, h.approverId);
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
-    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId });
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const type = await seedType(h.org.orgId, h.managerId);
     await seedPolicy(h.org.orgId, h.managerId, type.id);
     const draft = await fileLeaveRequest({
@@ -767,7 +767,7 @@ test("rejected requests decide with a reason and write no absences or inputs", {
 test("after-the-fact recording writes the absence record and never a pay input", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
-    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId });
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
     const type = await seedType(h.org.orgId, h.managerId);
     await seedPolicy(h.org.orgId, h.managerId, type.id);
     const recorded = await recordAbsence({
