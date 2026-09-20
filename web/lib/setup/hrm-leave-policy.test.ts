@@ -32,12 +32,17 @@ function engineCarryoverRefusal(rule: Record<string, unknown>): string {
   throw new Error(`engine accepted ${JSON.stringify(rule)}; the red-proof needs a refused shape`)
 }
 
+// The fold never throws; the write path raises the shape refusal through
+// leavePolicyRuleProblem over the folded values, so the drawer's refusal is
+// exactly that function's answer for the folded body.
 function drawerRefusal(body: Record<string, unknown>): string {
-  try {
-    normalizeHrmLeavePolicyInput('leave-policies', body)
-  } catch (e) {
-    return (e as Error).message
-  }
+  const folded = normalizeHrmLeavePolicyInput('leave-policies', body)
+  const problem = leavePolicyRuleProblem({
+    appliesTo: folded.appliesTo,
+    accrualRule: folded.accrualRule,
+    carryoverRule: folded.carryoverRule,
+  })
+  if (problem) return problem
   throw new Error(`drawer accepted ${JSON.stringify(body)}; the red-proof needs a refused shape`)
 }
 

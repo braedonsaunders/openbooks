@@ -164,12 +164,12 @@ export function normalizeHrmLeavePolicyInput(
     if (expires !== undefined) rule.expires_after_days = expires;
     out.carryoverRule = rule;
   }
+  // The slot keys never reach the column writer: they are folded above and
+  // hrm-rule-slots.ts strips their generated columns from whatever buildRow
+  // emits for the declared slot fields, so nothing generated is written.
   for (const key of [...APPLIES_SLOTS, ...ACCRUAL_SLOTS, ...CARRYOVER_SLOTS]) delete out[key];
-  const problem = leavePolicyRuleProblem({
-    appliesTo: out.appliesTo,
-    accrualRule: out.accrualRule,
-    carryoverRule: out.carryoverRule,
-  });
-  if (problem) throw new Error(problem);
+  // The fold never throws: the shape refusal is raised by
+  // validateEntityIntegrity in write.ts through leavePolicyRuleProblem, so
+  // the caller receives a 400 with the engine's words, not an exception.
   return out;
 }
