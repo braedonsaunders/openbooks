@@ -152,52 +152,62 @@
       ]
     },
     {
-      "path": "engine/src/payroll/run.ts",
+      "path": "engine/src/payroll/run-calculation.ts",
       "needsDb": true,
       "lineRanges": [
         {
-          "start": 1205,
-          "end": 1226
+          "start": 122,
+          "end": 143
         },
         {
-          "start": 1229,
-          "end": 1233
+          "start": 146,
+          "end": 150
         },
         {
-          "start": 1235,
-          "end": 1277
+          "start": 152,
+          "end": 194
         },
         {
-          "start": 1279,
-          "end": 1284
+          "start": 196,
+          "end": 201
         },
         {
-          "start": 1286,
-          "end": 1353
+          "start": 203,
+          "end": 270
+        }
+      ],
+      "tests": [
+        "engine/src/payroll/run.test.ts",
+        "engine/src/payroll/agnostic-core.test.ts"
+      ]
+    },
+    {
+      "path": "engine/src/payroll/run-earning-lines.ts",
+      "needsDb": true,
+      "lineRanges": [
+        {
+          "start": 136,
+          "end": 177
         },
         {
-          "start": 2254,
-          "end": 2295
+          "start": 182,
+          "end": 254
         },
         {
-          "start": 2300,
-          "end": 2372
+          "start": 261,
+          "end": 314
         },
         {
-          "start": 2379,
-          "end": 2432
+          "start": 322,
+          "end": 399
         },
         {
-          "start": 2440,
-          "end": 2517
+          "start": 407,
+          "end": 461
         },
         {
-          "start": 2525,
-          "end": 2579
-        },
-        {
-          "start": 2587,
-          "end": 2641
+          "start": 469,
+          "end": 523
         }
       ],
       "tests": [

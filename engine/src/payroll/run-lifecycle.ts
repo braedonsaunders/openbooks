@@ -4,7 +4,7 @@
  * Extracted verbatim from engine/src/payroll/run.ts; bodies preserve exact
  * math, transaction/lock sequencing, and refusal identity.
  */
-import { payrollSubsidiaryInScope, payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
+import { payrollSubsidiaryInScope, type PayrollSubsidiaryScope } from "./scope.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
@@ -12,15 +12,8 @@ import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { resolvePayrollRunContext } from "./packs.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import { type ScheduleRow, DAY, iso, at, nextPeriodAfter } from "./run-calendar.ts";
-/**
- * `retro` pays, in the current period, the difference a backdated change makes
- * to periods that have ALREADY been paid (engine/src/payroll/retro.ts). Like
- * `bonus` and `termination` it is off-cycle: landing inside an already-paid
- * period is the entire point, so it is exempt from the regular-run overlap
- * guard below, which only ever inspected `run_type = 'regular'`.
- */
-export type PayRunType = "regular" | "bonus" | "termination" | "retro";
-
+import { type PayRunType } from "./run-contracts.ts";
+export { type PayRunType } from "./run-contracts.ts";
 export { payrollSubsidiaryInScope, payrollSubsidiaryScopeFilter, payrollSubsidiaryOutsideScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
 
 const RUN_TYPE_MEMO: Record<PayRunType, string> = {
@@ -29,10 +22,6 @@ const RUN_TYPE_MEMO: Record<PayRunType, string> = {
   termination: "Final pay run",
   retro: "Retroactive pay run",
 };
-
-/** Run types that pay ONLY their own one-off lines: no salary, no time, no
- *  recurring components, no derived earnings, no statutory holiday pay. */
-const ONE_OFF_RUN_TYPES = new Set<string>(["bonus", "retro"]);
 
 /** Run types that must NAME the employees they pay before they can exist. */
 const SCOPED_RUN_TYPES = new Set<string>(["termination", "retro"]);
@@ -385,7 +374,7 @@ export async function discardPayRun(input: {
  * decides the run is uncommitted — this helper asserts nothing about
  * lifecycle, it only re-stamps.
  */
-async function reresolveRunToSubsidiary(
+export async function reresolveRunToSubsidiary(
   tx: Pick<typeof db, "execute">,
   input: { orgId: string; actorId: string; documentId: string; subsidiaryId: string },
 ): Promise<{ currency: string; taxYear: number }> {

@@ -15,7 +15,8 @@ const REQUIRED_COVERAGE = [
   "engine/src/payments/payment-documents.ts",
   "engine/src/payments/payment-queries.ts",
   "engine/src/payments/settlement-policy.ts",
-  "engine/src/payroll/run.ts",
+  "engine/src/payroll/run-calculation.ts",
+  "engine/src/payroll/run-earning-lines.ts",
   "engine/src/tax/tax.ts",
   "engine/src/tax-returns/return.ts",
   "engine/src/consolidation/consolidation.ts",
@@ -48,9 +49,9 @@ test("checked-in config covers the curated scope and every referenced file exist
 test("scoped targets carry line ranges (allocation math, stub assembly)", () => {
   const config = loadMutationConfig();
   const payments = config.targets.find((t) => t.path === "engine/src/payments/settlement-policy.ts");
-  const payrollRun = config.targets.find((t) => t.path === "engine/src/payroll/run.ts");
+  const payrollRun = config.targets.find((t) => t.path === "engine/src/payroll/run-earning-lines.ts");
   assert.ok(payments?.lineRanges && payments.lineRanges.length > 0, "settlement-policy.ts scoped to allocation/application math");
-  assert.ok(payrollRun?.lineRanges && payrollRun.lineRanges.length > 0, "payroll-run.ts scoped to stub assembly + employer accruals");
+  assert.ok(payrollRun?.lineRanges && payrollRun.lineRanges.length > 0, "run-earning-lines.ts scoped to earning assembly + employer accruals");
 });
 
 test("parseMutationConfig rejects malformed configs", () => {

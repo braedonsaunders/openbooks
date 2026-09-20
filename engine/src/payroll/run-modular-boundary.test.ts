@@ -47,8 +47,8 @@ test('pay run operation modules form no static import cycle', () => {
     edges.set(
       file,
       relativeImports(source)
-        .filter((t) => t.startsWith('./run-') && sources.includes(`${t.slice(2)}.ts`))
-        .map((t) => `${t.slice(2)}.ts`),
+        .filter((t) => t.startsWith('./run-') && sources.includes(t.slice(2).endsWith('.ts') ? t.slice(2) : `${t.slice(2)}.ts`))
+        .map((t) => t.slice(2).endsWith('.ts') ? t.slice(2) : `${t.slice(2)}.ts`),
     )
   }
   const visiting = new Set<string>()
@@ -88,7 +88,7 @@ test('facade re-exports resolve and cover every intra-payroll consumer', () => {
   }
   for (const [name, from] of facadeExports) {
     if (!from.startsWith('./run-')) continue
-    const target = readFileSync(join(dir, `${from.slice(2)}.ts`), 'utf8')
+    const target = readFileSync(join(dir, from.slice(2).endsWith('.ts') ? from.slice(2) : `${from.slice(2)}.ts`), 'utf8')
     assert.ok(exportedNames(target).has(name), `facade advertises ${name} but ${from}.ts does not export it`)
   }
   const consumers = readdirSync(dir).filter(

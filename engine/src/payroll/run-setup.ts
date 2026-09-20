@@ -117,14 +117,14 @@ const BASELINE_COMPONENTS: SeedComponent[] = [
  * the IRS. Seeding asserts the declaration exists, so a pack cannot inherit
  * another jurisdiction's meaning for `pensionable` by silence.
  */
-const statutoryComponents = (country: string): SeedComponent[] =>
+export const statutoryComponents = (country: string): SeedComponent[] =>
   packStatutoryComponents(country).map((component) => ({
     code: component.code, name: component.name, kind: component.kind,
     systemKey: component.systemKey, sequence: component.sequence, country,
   }));
 
 /** One idempotent component insert — the single seeding path. */
-async function ensureComponents(
+export async function ensureComponents(
   executor: Pick<typeof db, "execute">,
   orgId: string, actorId: string | null, rows: readonly SeedComponent[],
 ): Promise<void> {
