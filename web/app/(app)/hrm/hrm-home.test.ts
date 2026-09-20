@@ -100,7 +100,7 @@ test("quick actions stay permission-gated and the readiness panel links migratio
 
 test("vacancy rides the same cockpit through the shared vacancy widget", () => {
   assert.match(view, /hrm-vacancy-table/, "vacancy renders through the shared widget");
-  assert.match(widgets, /'hrm-vacancy-table'/, "widget renders the shared section, never a second copy");
+  assert.match(hrmWidgets, /'hrm-vacancy-table'/, "widget renders the shared section, never a second copy");
   assert.match(contracts, /'hrm-vacancy-table': \{ props: \[/, "widget contract pins the prop surface");
   assert.match(names, /'hrm-vacancy-table'/, "widget name is registered");
   assert.match(loader, /getVacancyAsOf/, "vacancy resolves through the canonical position read service");

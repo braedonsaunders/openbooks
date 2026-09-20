@@ -57,7 +57,7 @@ renderers that look up another widget stay beside it. Families do not import
 the registry or its slot consumers. `widget-slot.tsx` owns slot rendering and
 field-reference resolution, and its callers import it directly.
 
-All 408 renderer bodies and key membership on the rebased main are preserved,
+All 412 renderer bodies and key membership on the rebased main are preserved,
 including the five subsequently added HRM adapters. Enumeration now follows
 family order; runtime consumers use keyed lookup, name validation compares
 membership, and contract generation sorts keys. Generated prop contracts remain
