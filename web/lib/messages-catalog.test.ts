@@ -2877,10 +2877,7 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   // unitsTotal, depreciationMethodId); all four ship translated in zh/pt-BR.
   // HR-5 grew it to 3416 (leave-types/leave-policies entities, leave fields,
   // fieldHelp, leaveValueCrossing options, hrm.leave.* permission labels);
-  // all 24 ship translated in zh/pt-BR. HR-8 grows it to 3502
-  // (benefit-plans/benefit-plan-levels entities, benefit fields, fieldHelp,
-  // cost/proration options, sections, hrm.benefits.* permission labels);
-  // all 42 ship translated in zh/pt-BR.
+  // all 24 ship translated in zh/pt-BR.
   const identicalByFact = new Set([
     'zh:admin.ai.agents.units.percent|%',
     'zh:admin.backupsManager.table.sha256|SHA-256',
@@ -2999,8 +2996,7 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   ])
   const source = flattenCatalog('en')
   const wanted = [...source.keys()].filter((key) => key.startsWith('admin.'))
-  assert.equal(wanted.length, 3503, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
-  assert.equal(wanted.length, 3502, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  assert.equal(wanted.length, 3545, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3341,10 +3337,8 @@ test('admin copy ships translated in de and ja (i2)', () => {
     'ja:admin.setup.paymentProviders.webhookUrl',
     'ja:admin.setup.wizard.company.namePlaceholder',
   ])
-  const ADMIN_I2_SOURCE_COUNT = 3503
-  const ADMIN_I2_SOURCE_HASH = '5c3a4d21ae24fb32c1cc83ae639da74d584333e12e7bbd2a7d72aa3c4174d200'
-  const ADMIN_I2_SOURCE_COUNT = 3502
-  const ADMIN_I2_SOURCE_HASH = 'a3edade42f994c3bff71ca454c229f28ac724d1dd8e5c87349a35e6c595055d9'
+  const ADMIN_I2_SOURCE_COUNT = 3545
+  const ADMIN_I2_SOURCE_HASH = '2cd5c95003ab8a2e60dc7df57f94bf68a60a519a8856e6440d6ec2b7c099f369'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))
@@ -4411,6 +4405,10 @@ test('I10 documents sharing trash and activity copy ships translated in every lo
   }
 })
 const I14_IDENTICAL_BY_FACT = new Set([
+    'de:reports.catalog.columns.hrm_benefit_enrollments.person|Person',
+    'de:reports.catalog.columns.hrm_benefit_enrollments.plan|Plan',
+    'de:reports.catalog.columns.hrm_benefit_enrollments.status|Status',
+    'es:reports.catalog.columns.hrm_benefit_enrollments.plan|Plan',
   // Spanish 'General' is the reviewed cognate for the payroll General sub-tab.
   'es:parties.drawer.payrollTabs.general|General',
     'de:reports.catalog.columns.hrm_employment_history.person|Person',
@@ -4423,12 +4421,6 @@ const I14_IDENTICAL_BY_FACT = new Set([
     'pt-BR:reports.catalog.columns.hrm_change_requests.status|Status',
     'de:reports.catalog.columns.hrm_positions.code|Code',
     'de:reports.catalog.columns.hrm_positions.status|Status',
-    // HR-8 benefit enrolments: reviewed cognates (Person/Plan/Status are
-    // identical in German, Plan in Spanish).
-    'de:reports.catalog.columns.hrm_benefit_enrollments.person|Person',
-    'de:reports.catalog.columns.hrm_benefit_enrollments.plan|Plan',
-    'de:reports.catalog.columns.hrm_benefit_enrollments.status|Status',
-    'es:reports.catalog.columns.hrm_benefit_enrollments.plan|Plan',
     'fr:reports.catalog.columns.hrm_positions.code|Code',
     'pt-BR:reports.catalog.columns.hrm_positions.status|Status',
   "de:accounts.types.assetBank|Bank",
@@ -5116,8 +5108,7 @@ const I14_IDENTICAL_BY_FACT = new Set([
 const I14_FILE_COUNTS: Record<string, number> = {
   "items": 161,
   "inventory": 104,
-  "reports": 1347,
-  "reports": 1306,
+  "reports": 1363,
   "sync": 172,
   "login": 33,
   "accounts": 82,

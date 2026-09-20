@@ -27,13 +27,7 @@
       "startingSoon": "Empiezan pronto",
       "startingSoonSub": "{count, plural, one {# termina en los próximos 30 días} other {# terminan en los próximos 30 días}}",
       "onLeave": "De permiso hoy",
-      "onLeaveSub": "{count, plural, one {# solicitud pendiente de aprobación} other {# solicitudes pendientes de aprobación}}",
-      "employers": "Empleadores",
-      "employersSub": "{count, plural, one {# filial} other {# filiales}}",
-      "departments": "Departamentos",
-      "departmentsSub": "{count, plural, one {# departamento} other {# departamentos}}",
-      "unfundedFte": "FTE cubiertos sin financiación",
-      "unfundedFteSub": "Cubierto sin financiación asignada"
+      "onLeaveSub": "{count, plural, one {# solicitud pendiente de aprobación} other {# solicitudes pendientes de aprobación}}"
     },
     "groups": {
       "title": "Plantilla por departamento",

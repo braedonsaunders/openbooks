@@ -69,7 +69,10 @@ type ExitState = {
   status: 'hidden' | 'loading' | 'ready' | 'error'
   record: ExitRecord | null
   message: string | null
+}
+
 type BenefitElection = {
+  id: string
   planCode: string
   planName: string
   coverageLabel: string | null
@@ -77,8 +80,10 @@ type BenefitElection = {
   employeeAmountPerPeriod: string | null
   employerAmountPerPeriod: string | null
   currency: string
+}
 
 type BenefitDependent = {
+  id: string
   displayName: string
   relationship: string
 }

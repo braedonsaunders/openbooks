@@ -678,6 +678,9 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
     // may open the Leave tab. Null (no panel) without the leave grant.
     leavePanel,
     recruiting,
+    // Benefits panel: open windows, pending approvals, elections missing
+    // inputs for the current month. Null without the benefits grant.
+    benefitsPanel: await loadBenefitsPanel(authz),
   }
 }
 
@@ -702,9 +705,5 @@ export async function loadRecruitingPanel(authz: Authz): Promise<HrmRecruitingPa
     interviewsValue: String(overview.interviewsThisWeek),
     viewAll: t('home.recruiting.viewAll'),
     viewAllHref: '/hrm/recruiting',
-    leavePanel: await loadLeavePanel(authz),
-    // Benefits panel: open windows, pending approvals, elections missing
-    // inputs for the current month. Null without the benefits grant.
-    benefitsPanel: await loadBenefitsPanel(authz),
   }
 }

@@ -250,6 +250,8 @@ export const HRM_WIDGETS = {
       empty={str(props, 'empty') ?? ''}
       viewAll={str(props, 'viewAll') ?? ''}
       viewAllHref={str(props, 'viewAllHref') ?? '/hrm/recruiting'}
+    />
+  ),
   /** Benefits panel: open windows plus pending-approval and missing-input
    *  counts beside the queue link. */
   'hrm-benefits-panel': (props) => (

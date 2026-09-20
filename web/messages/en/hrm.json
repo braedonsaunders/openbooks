@@ -27,13 +27,7 @@
       "startingSoon": "Starting soon",
       "startingSoonSub": "{count, plural, one {# ending in the next 30 days} other {# ending in the next 30 days}}",
       "onLeave": "On leave today",
-      "onLeaveSub": "{count, plural, one {# request awaiting approval} other {# requests awaiting approval}}",
-      "employers": "Employers",
-      "employersSub": "{count, plural, one {# subsidiary} other {# subsidiaries}}",
-      "departments": "Departments",
-      "departmentsSub": "{count, plural, one {# department} other {# departments}}",
-      "unfundedFte": "Unfunded filled FTE",
-      "unfundedFteSub": "Filled with no funding behind it"
+      "onLeaveSub": "{count, plural, one {# request awaiting approval} other {# requests awaiting approval}}"
     },
     "groups": {
       "title": "Headcount by department",
