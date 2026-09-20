@@ -135,8 +135,11 @@ test("inventory operation modules stay acyclic and bounded", () => {
   for (const file of files) {
     const code = stripComments(read(`./${file}`));
     const deps = [...code.matchAll(/from ["']\.\/([A-Za-z-]+\.ts)["']/g)]
-      .map((m) => m[1])
-      .filter((dep) => files.includes(dep) && dep !== file);
+      .map((match) => {
+        assert.ok(match[1], "relative import must capture its dependency");
+        return match[1];
+      })
+      .filter((dep) => files.includes(dep));
     edges.set(file, [...new Set(deps)]);
     const lines = read(`./${file}`).split("\n").length;
     assert.ok(lines <= 800, `${file} must stay <= 800 lines (now ${lines})`);
