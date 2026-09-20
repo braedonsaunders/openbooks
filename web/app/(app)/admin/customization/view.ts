@@ -162,6 +162,7 @@ export interface CustomizationData {
   viewDrawerFilterOptions: Record<string, { value: string; label: string }[]>
   inventoryEnabled: boolean
   crmEnabled: boolean
+  hrmEnabled: boolean
 }
 
 export async function loadCustomization(
@@ -170,10 +171,11 @@ export async function loadCustomization(
   const authz = await getAuthz()
   if (!authz) redirect('/login')
   const canManageOrg = can(authz, 'admin.customization.manage')
-  const [subsidiaryUiEnabled, inventoryEnabled, crmEnabled] = await Promise.all([
+  const [subsidiaryUiEnabled, inventoryEnabled, crmEnabled, hrmEnabled] = await Promise.all([
     subsidiaryFeatureEnabled(authz.user.orgId),
     isFeatureEnabled(authz.user.orgId, 'inventory'),
     isFeatureEnabled(authz.user.orgId, 'crm'),
+    isFeatureEnabled(authz.user.orgId, 'hrm'),
   ])
   const t = await getTranslations('customization')
   const tCommon = await getTranslations('common')
@@ -429,6 +431,7 @@ export async function loadCustomization(
     viewDrawerFilterOptions: listFilterOptions,
     inventoryEnabled,
     crmEnabled,
+    hrmEnabled,
   }
 }
 
@@ -585,6 +588,7 @@ export function customizationSpec(data: CustomizationData): PageSpec {
           filterOptions: data.viewDrawerFilterOptions,
           inventoryEnabled: data.inventoryEnabled,
           crmEnabled: data.crmEnabled,
+          hrmEnabled: data.hrmEnabled,
         },
         f('viewDrawerOpen'),
       ),

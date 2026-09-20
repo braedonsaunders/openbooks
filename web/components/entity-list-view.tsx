@@ -27,6 +27,8 @@ import {
   customerSorts,
   customerStatusExpr,
   employeeBaseJoins,
+  employeeBuiltInExpr,
+  employeeSorts,
   EMPLOYEE_HRM_FILTER_KEYS,
 } from '../lib/customization/entity-list-query'
 import { entityListSource, entityOrderClause, plannedPageClauses } from '../lib/list/entity-sources'
@@ -113,12 +115,16 @@ export async function EntityListView({
   // absent from the roster — never rendered empty.
   const hrmOn = recordType === 'employee' ? hrmFeatureOn && hrmEmploymentVisible : true
   const meta = catalog
-    ? recordTypeForFeatureState(catalog, { inventory: inventoryOn, crm: crmOn })
+    ? recordTypeForFeatureState(catalog, { inventory: inventoryOn, crm: crmOn, hrm: hrmOn })
     : catalog
   if (!source || !meta) throw new Error(`no entity list source registered for record type "${recordType}"`)
   const basePath = source.basePath
-  const builtInExpr = recordType === 'customer' ? customerBuiltInExpr(crmOn) : source.builtInExpr
-  const sorts = recordType === 'customer' ? customerSorts(crmOn) : source.sorts
+  const builtInExpr = recordType === 'customer'
+    ? customerBuiltInExpr(crmOn)
+    : recordType === 'employee' ? employeeBuiltInExpr(hrmOn) : source.builtInExpr
+  const sorts = recordType === 'customer'
+    ? customerSorts(crmOn)
+    : recordType === 'employee' ? employeeSorts(hrmOn) : source.sorts
 
   const t = await getTranslations()
   const tCommon = await getTranslations('common')

@@ -2689,8 +2689,28 @@ test('the surfaces this test was written for are covered', () => {
   )
   assert.match(
     read('components/entity-list-view.tsx'),
-    /recordTypeForFeatureState\(catalog, \{ inventory: inventoryOn, crm: crmOn \}\)/,
+    /recordTypeForFeatureState\(catalog, \{ inventory: inventoryOn, crm: crmOn, hrm: hrmOn \}\)/,
     'the entity list must hide customer prospect filters when CRM is off',
+  )
+  assert.match(
+    read('components/entity-list-view.tsx'),
+    /isFeatureEnabled\(orgId, 'hrm'\)/,
+    'the entity list must read the HRM switch before rendering employment',
+  )
+  assert.match(
+    read('components/entity-list-view.tsx'),
+    /recordType === 'employee' && !hrmOn[\s\S]{0,160}EMPLOYEE_HRM_QUICK_FILTERS/,
+    'the entity list must hide employment quick filters when HRM is off',
+  )
+  assert.match(
+    read('components/viewspec/entity-list-slot.tsx'),
+    /hrmEmploymentVisible=\{can\(authz, 'hrm\.employment\.read'\)\}/,
+    'the entity list must hide employment filters without the employment read grant',
+  )
+  assert.match(
+    read('../packages/customization/src/registry.ts'),
+    /features\.hrm === false && out\.key === ['"]employee['"]/,
+    'employee list customization must drop directory columns and filters when HRM is off',
   )
   assert.match(
     read('../packages/customization/src/registry.ts'),

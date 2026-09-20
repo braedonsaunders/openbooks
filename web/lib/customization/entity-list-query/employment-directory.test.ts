@@ -24,9 +24,12 @@ registerHooks({
 const { db } = await import("@openbooks/engine/src/db.ts");
 const {
   employeeBaseJoins,
+  employeeBuiltInExpr,
+  employeeSorts,
   employeeWhere,
   liveVersionAsOf,
 } = await import("./employment-directory.ts");
+const { PARTY_BUILT_IN_EXPR, PARTY_SORTS } = await import("./customers.ts");
 const { defaultListView } = await import("@openbooks/customization");
 
 const ORG = "019f5ea3-44c5-72c0-ad3b-ef34c19c8763";
@@ -192,6 +195,43 @@ test("saved-view directory filters support eq and in", () => {
     whereText([{ key: "employer", operator: "eq", value: SUB }]),
     /emp\.employer_subsidiary_id/,
     "saved-view employer eq filters the live employment's subsidiary",
+  );
+});
+
+test("directory columns read the shared joins, gated by the switch", () => {
+  const exprText = (expr: SQL): string =>
+    db.select({ value: expr }).from(sql.raw("parties p")).toSQL().sql;
+  const on = employeeBuiltInExpr(true);
+  assert.deepEqual(
+    Object.keys(on).sort(),
+    [...Object.keys(PARTY_BUILT_IN_EXPR), "department", "job_title", "employment_status", "employer", "service_start"].sort(),
+    "hrm-on keeps every party column and adds the five directory columns",
+  );
+  for (const key of ["department", "job_title", "employment_status", "employer", "service_start"]) {
+    assert.match(
+      exprText(on[key]!),
+      /emp/,
+      `${key} selects off the shared employment joins — no column carries its own version subquery`,
+    );
+  }
+  assert.doesNotMatch(
+    exprText(on.department!),
+    /worker_employment_versions|employment_assignment_versions/,
+    "columns read the lateral, never a second version scan",
+  );
+  assert.deepEqual(
+    Object.keys(employeeBuiltInExpr(false)).sort(),
+    Object.keys(PARTY_BUILT_IN_EXPR).sort(),
+    "hrm-off selects the party columns only — directory columns are absent, not empty",
+  );
+  const sortsOn = employeeSorts(true);
+  for (const key of ["department", "job_title", "employment_status", "employer", "service_start"]) {
+    assert.ok(sortsOn[key], `${key} is sortable`);
+  }
+  assert.deepEqual(
+    Object.keys(employeeSorts(false)).sort(),
+    Object.keys(PARTY_SORTS).sort(),
+    "hrm-off sorts the party keys only",
   );
 });
 
