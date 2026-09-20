@@ -22,8 +22,16 @@ test(
   async () => {
     const org = await createScratchOrg();
     try {
+      const connectionId = randomUUID();
       const documentId = randomUUID();
       const sourceRef = `posted-${randomUUID()}`;
+      await db.execute(sql`
+        insert into connections
+          (id, org_id, source, display_name, status)
+        values (
+          ${connectionId}, ${org.orgId}, 'netsuite',
+          'NetSuite posted source-deletion test', 'active'
+        )`);
       await db.execute(sql`
         insert into documents
           (id, org_id, kind, status, document_number, subsidiary_id, party_id,
@@ -31,7 +39,7 @@ test(
         values (
           ${documentId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-SOURCE-DELETE',
           ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '1',
-          '100', '0', '100', ${JSON.stringify({ nsId: sourceRef })}::jsonb
+          '100', '0', '100', ${JSON.stringify({ nsId: sourceRef, connectionId })}::jsonb
         )`);
       await db.execute(sql`
         insert into document_lines
@@ -58,6 +66,7 @@ test(
         orgId: org.orgId,
         source: "netsuite",
         sourceRef,
+        connectionId,
       });
       assert.deepEqual(result, { documentId, deleted: true });
 
@@ -112,6 +121,7 @@ test(
         orgId: org.orgId,
         source: "netsuite",
         sourceRef,
+        connectionId,
       });
       assert.deepEqual(repeat, { documentId, deleted: false });
       const reversalCount = (await db.execute<{ count: number }>(sql`
@@ -153,12 +163,13 @@ test(
         values (
           ${automaticDocumentId}, ${org.orgId}, 'sales_order', 'approved',
           'SO-SOURCE-DELETE', ${org.date}, 'CAD', '25', '0', '25',
-          ${JSON.stringify({ nsId: automaticRef })}::jsonb
+          ${JSON.stringify({ nsId: automaticRef, connectionId })}::jsonb
         )`);
       await mirrorSourceDeletion({
         orgId: org.orgId,
         source: "netsuite",
         sourceRef: automaticRef,
+        connectionId,
       });
 
       const controlledDocumentId = randomUUID();
@@ -170,7 +181,7 @@ test(
         values (
           ${controlledDocumentId}, ${org.orgId}, 'sales_order', 'approved',
           'SO-CONTROLLER-DELETE', ${org.date}, 'CAD', '30', '0', '30',
-          ${JSON.stringify({ nsId: controlledRef })}::jsonb
+          ${JSON.stringify({ nsId: controlledRef, connectionId })}::jsonb
         )`);
       const controlled = await resolveSourceDeletion({
         orgId: org.orgId,
@@ -217,6 +228,99 @@ test(
         resolution_audits: 1,
         voided_documents: 2,
       });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "source-deletion void and retain touch only the document imported by the named connection",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(
+        org.orgId,
+        "Same-source connection isolation controller",
+        "admin",
+      );
+      const connectionA = randomUUID();
+      const connectionB = randomUUID();
+      const documentA = randomUUID();
+      const documentB = randomUUID();
+      const sharedRef = `shared-${randomUUID()}`;
+      await db.execute(sql`
+        insert into connections
+          (id, org_id, source, display_name, status)
+        values
+          (${connectionA}, ${org.orgId}, 'qbo', 'QBO company A', 'active'),
+          (${connectionB}, ${org.orgId}, 'qbo', 'QBO company B', 'active')`);
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, status, document_number, document_date, currency,
+           subtotal, tax_total, total, custom)
+        values
+          (
+            ${documentA}, ${org.orgId}, 'sales_order', 'approved',
+            'SO-CONN-A', ${org.date}, 'CAD', '25', '0', '25',
+            ${JSON.stringify({ qboId: sharedRef, connectionId: connectionA })}::jsonb
+          ),
+          (
+            ${documentB}, ${org.orgId}, 'sales_order', 'approved',
+            'SO-CONN-B', ${org.date}, 'CAD', '30', '0', '30',
+            ${JSON.stringify({ qboId: sharedRef, connectionId: connectionB })}::jsonb
+          )`);
+
+      const mirrored = await mirrorSourceDeletion({
+        orgId: org.orgId,
+        source: "qbo",
+        sourceRef: sharedRef,
+        connectionId: connectionA,
+      });
+      assert.deepEqual(mirrored, { documentId: documentA, deleted: true });
+
+      const retained = await resolveSourceDeletion({
+        orgId: org.orgId,
+        connectionId: connectionB,
+        sourceRef: sharedRef,
+        action: "retain",
+        actorId,
+      });
+      assert.deepEqual(retained, {
+        documentId: documentB,
+        action: "retain",
+        reversalEntryId: null,
+      });
+
+      const otherRef = `other-${randomUUID()}`;
+      await assert.rejects(
+        () =>
+          resolveSourceDeletion({
+            orgId: org.orgId,
+            connectionId: connectionA,
+            sourceRef: otherRef,
+            action: "void",
+            actorId,
+          }),
+        (error: unknown) =>
+          error instanceof Error &&
+          /the imported document no longer exists/.test(error.message),
+      );
+
+      const statuses = (
+        await db.execute<{ id: string; status: string }>(sql`
+          select id, status
+            from documents
+           where org_id = ${org.orgId}
+             and id in (${documentA}, ${documentB})
+           order by document_number
+        `)
+      ).rows;
+      assert.deepEqual(statuses, [
+        { id: documentA, status: "voided" },
+        { id: documentB, status: "approved" },
+      ]);
     } finally {
       await dropScratchOrg(org.orgId);
     }
