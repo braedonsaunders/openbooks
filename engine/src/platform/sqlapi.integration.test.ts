@@ -77,6 +77,13 @@ test('governed SQL catalog enforces tenant RLS and denies credential surfaces', 
     assert.deepEqual(capped.rows, [{ value: 1 }, { value: 2 }])
     assert.equal(capped.truncated, true)
     await assert.rejects(
+      runUserSql("select repeat('x', 5000) as payload", {
+        orgId: first.orgId,
+        maxBytes: 200,
+      }),
+      /query result exceeds 200 bytes/,
+    )
+    await assert.rejects(
       runUserSql('select lo_create(0)', { orgId: first.orgId }),
       /read-only transaction/i,
     )
