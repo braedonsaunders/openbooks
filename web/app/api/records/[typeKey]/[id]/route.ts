@@ -10,11 +10,10 @@ import { isUuid } from '../../../../../lib/list-params'
 import { auditSetupChange } from '../../../../../lib/setup/audit'
 import {
   buildSearchText,
-  hasSubsidiaryField,
   inTypeAudience,
   loadRecord,
   loadRecordTypeByKey,
-  recordSubsidiaryScopeAllows,
+  recordVisibleInSubsidiaryFence,
 } from '../../../../../lib/records'
 import {
   lintRecordFields,
@@ -42,27 +41,6 @@ async function loadScope(
   if (!lint.success) return null
   if (!recordVisibleInSubsidiaryFence(lint.sections, record.data, allowedSubsidiaryIds)) return null
   return { type, record, sections: lint.sections }
-}
-
-/**
- * Visibility when the live type no longer declares subsidiary_id: honor the
- * JSON value if one is still stored, and keep field-less rows without a
- * subsidiary_id org-visible. Field-present types stay on the existing
- * fail-closed helper.
- */
-function recordVisibleInSubsidiaryFence(
-  sections: FormSection[],
-  data: FieldValueMap,
-  allowedSubsidiaryIds: ReadonlySet<string> | null | undefined,
-): boolean {
-  const fence = allowedSubsidiaryIds ?? null
-  if (fence === null) return true
-  if (hasSubsidiaryField(sections)) {
-    return recordSubsidiaryScopeAllows(sections, data, fence)
-  }
-  const subsidiaryId = data.subsidiary_id
-  if (typeof subsidiaryId !== 'string' || subsidiaryId.length === 0) return true
-  return fence.has(subsidiaryId)
 }
 
 const RECORD_REFERENCE_TABLES: Record<string, string> = {
