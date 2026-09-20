@@ -122,6 +122,16 @@ export function isFullCalendarYear(yearStart: string, yearEnd: string): boolean 
   return !!start && !!end && start.day === 1 && start.month === 1 && end.month === 12 && end.day === 31 && start.year === end.year;
 }
 
+/** Pub 946: a short tax year is fewer than 12 full months. A July–June
+ *  fiscal year is a full year even though it is not a calendar year. */
+export function isFullTaxYear(yearStart: string, yearEnd: string): boolean {
+  return shortTaxYearMonths(yearStart, yearEnd) === 12;
+}
+
+export function isShortTaxYear(yearStart: string, yearEnd: string): boolean {
+  return !isFullTaxYear(yearStart, yearEnd);
+}
+
 export function factorsAgree(declared: string, implied: string): boolean {
   return cmp(normalizeDecimal(declared, 10), implied) === 0;
 }
@@ -131,8 +141,7 @@ export function assertShortYearFactorAgrees(yearStart: string, yearEnd: string, 
   const implied = impliedShortYearFactor(yearStart, yearEnd);
   if (declared == null || String(declared).trim() === "") return implied;
   const exact = normalizeDecimal(declared, 10);
-  const declaredMonths = formatMoney(roundMoney(mulDecimal(exact, "12"), 0), 0);
-  if (declaredMonths !== String(months)) {
+  if (!factorsAgree(exact, implied)) {
     throw new MacrsShortYearError(
       `short-year factor ${exact} does not match ${yearStart}–${yearEnd} (${months}/12); pass the dates and matching factor, do not scale a calendar schedule`,
     );
@@ -237,6 +246,114 @@ export function subsequentSimplifiedDeduction(args: {
   const annual = mulDecimal(args.adjustedBasis, args.rate);
   if (args.monthsInYear >= 12) return formatMoney(roundMoney(annual, 2), 2);
   return formatMoney(roundMoney(mulRatio(annual, BigInt(args.monthsInYear), 12n), 2), 2);
+}
+
+export function recoveryMonthsFromYears(recoveryPeriodYears: string): number {
+  return Number(formatMoney(roundMoney(mulDecimal(normalizeMoney(recoveryPeriodYears), "12"), 0), 0));
+}
+
+/** DB vs remaining-life SL. The applicable rate after a short year still
+ *  switches; a fixed declining-balance rate on adjusted basis is not enough. */
+export function applicableAnnualDeduction(args: {
+  adjustedBasis: string;
+  method: "200_db" | "150_db" | "straight_line";
+  recoveryPeriodYears: string;
+  remainingMonths: number;
+}): string {
+  if (args.remainingMonths <= 0 || cmp(args.adjustedBasis, "0") <= 0) return "0.00";
+  const sl = mulRatio(args.adjustedBasis, 12n, BigInt(args.remainingMonths));
+  if (args.method === "straight_line") return formatMoney(roundMoney(sl, 2), 2);
+  const declining = mulDecimal(args.adjustedBasis, decliningBalanceRate(args.method, args.recoveryPeriodYears));
+  return formatMoney(roundMoney(cmp(sl, declining) >= 0 ? sl : declining, 2), 2);
+}
+
+function annualForRecoveryYear(args: {
+  originalMacrsBasis: string;
+  method: "200_db" | "150_db" | "straight_line";
+  recoveryPeriodYears: string;
+  recoveryYearIndex: number;
+}): string {
+  const recoveryMonths = recoveryMonthsFromYears(args.recoveryPeriodYears);
+  let basis = persistExact(args.originalMacrsBasis);
+  for (let year = 0; year < args.recoveryYearIndex; year += 1) {
+    const remaining = recoveryMonths - year * 12;
+    const annual = applicableAnnualDeduction({
+      adjustedBasis: basis,
+      method: args.method,
+      recoveryPeriodYears: args.recoveryPeriodYears,
+      remainingMonths: remaining,
+    });
+    basis = remainingAfter(basis, annual);
+  }
+  return applicableAnnualDeduction({
+    adjustedBasis: basis,
+    method: args.method,
+    recoveryPeriodYears: args.recoveryPeriodYears,
+    remainingMonths: recoveryMonths - args.recoveryYearIndex * 12,
+  });
+}
+
+function persistExact(value: string): string {
+  return formatMoney(value, 4);
+}
+
+/** Allocation applies every year after a short year — not only the follow year. */
+export function allocationRecoveryDeduction(args: {
+  originalMacrsBasis: string;
+  method: "200_db" | "150_db" | "straight_line";
+  recoveryPeriodYears: string;
+  elapsedMonths: number;
+  monthsThisYear: number;
+}): string {
+  const recoveryMonths = recoveryMonthsFromYears(args.recoveryPeriodYears);
+  let remaining = Math.max(0, Math.min(args.monthsThisYear, recoveryMonths - args.elapsedMonths));
+  let elapsed = args.elapsedMonths;
+  let total = "0";
+  while (remaining > 0 && elapsed < recoveryMonths) {
+    const intoYear = elapsed % 12;
+    const chunk = Math.min(12 - intoYear, remaining, recoveryMonths - elapsed);
+    const annual = annualForRecoveryYear({
+      originalMacrsBasis: args.originalMacrsBasis,
+      method: args.method,
+      recoveryPeriodYears: args.recoveryPeriodYears,
+      recoveryYearIndex: Math.floor(elapsed / 12),
+    });
+    total = add(total, mulRatio(annual, BigInt(chunk), 12n));
+    remaining -= chunk;
+    elapsed += chunk;
+  }
+  return formatMoney(roundMoney(total, 2), 2);
+}
+
+export function subsequentRecoveryDeduction(args: {
+  method: "200_db" | "150_db" | "straight_line";
+  recoveryPeriodYears: string;
+  originalMacrsBasis: string;
+  adjustedBasis: string;
+  elapsedMonths: number;
+  monthsThisYear: number;
+  shortYearMethod: "simplified" | "allocation";
+}): string {
+  const recoveryMonths = recoveryMonthsFromYears(args.recoveryPeriodYears);
+  const remainingMonths = recoveryMonths - args.elapsedMonths;
+  if (remainingMonths <= 0) return "0.00";
+  if (args.shortYearMethod === "allocation") {
+    return allocationRecoveryDeduction({
+      originalMacrsBasis: args.originalMacrsBasis,
+      method: args.method,
+      recoveryPeriodYears: args.recoveryPeriodYears,
+      elapsedMonths: args.elapsedMonths,
+      monthsThisYear: args.monthsThisYear,
+    });
+  }
+  const annual = applicableAnnualDeduction({
+    adjustedBasis: args.adjustedBasis,
+    method: args.method,
+    recoveryPeriodYears: args.recoveryPeriodYears,
+    remainingMonths,
+  });
+  if (args.monthsThisYear >= 12) return annual;
+  return formatMoney(roundMoney(mulRatio(annual, BigInt(args.monthsThisYear), 12n), 2), 2);
 }
 
 export function remainingAfter(basis: string, deduction: string): string {

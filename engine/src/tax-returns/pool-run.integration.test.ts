@@ -451,3 +451,55 @@ test("the MACRS model runs under the same fence: atomic years, chaining, orderin
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("a MACRS asset placed and taxably disposed in the same tax year takes no deduction", { skip: !DB }, async () => {
+  const { org, actorId } = await seededOrg();
+  try {
+    const cat5 = await seedTaxCategory(org, "5-year property", { us_macrs_class: "gds_5" });
+    const assetId = await seedAsset(org, actorId, cat5, "10000.00", "2023-03-15");
+    await seedDisposalEvent(org, actorId, assetId, "2023-09-01", "4000.00");
+    const result = await runYear(org, actorId, "us_macrs", 2023);
+    assert.equal(result.lines[0]!.allowance, "0.00");
+    assert.equal(result.lines[0]!.closingBalance, "0.00");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a MACRS placement after the tax-year window is not given a deemed first-year date", { skip: !DB }, async () => {
+  const { org, actorId } = await seededOrg();
+  try {
+    const cat5 = await seedTaxCategory(org, "5-year property", { us_macrs_class: "gds_5" });
+    await seedAsset(org, actorId, cat5, "10000.00", "2023-10-01");
+    const result = await runTaxPool(org.orgId, org.bookId, org.subsidiaryId, "us_macrs", 2023, {
+      yearStart: "2023-01-01",
+      yearEnd: "2023-06-30",
+      shortYearFactor: "0.5",
+      actorId,
+    });
+    assert.equal(result.lines.length, 0);
+    assert.equal((await periodsFor(org.orgId)).length, 0);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a 0.49 short-year factor refuses instead of rounding into a six-month year", { skip: !DB }, async () => {
+  const { org, actorId } = await seededOrg();
+  try {
+    const cat5 = await seedTaxCategory(org, "5-year property", { us_macrs_class: "gds_5" });
+    await seedAsset(org, actorId, cat5, "10000.00", "2023-03-15");
+    await assert.rejects(
+      runTaxPool(org.orgId, org.bookId, org.subsidiaryId, "us_macrs", 2023, {
+        yearStart: "2023-01-01",
+        yearEnd: "2023-06-30",
+        shortYearFactor: "0.49",
+        actorId,
+      }),
+      (error: unknown) => error instanceof TaxPoolError && /does not match/.test(error.message),
+    );
+    assert.equal((await periodsFor(org.orgId)).length, 0);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

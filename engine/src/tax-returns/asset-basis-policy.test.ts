@@ -26,6 +26,8 @@ import {
   usDispositionProceeds,
   usRegimeWorkpaperOutcome,
   validateTaxRegimeBasis,
+  nzAssociatedPersonEquivalentRate,
+  nzPooledDepreciationRate,
   nzPoolReduction,
   type CaCcaRegimeBasis,
   type NzPoolRegimeBasis,
@@ -397,12 +399,60 @@ test("nontaxable MACRS workpaper outcome does not demand Pub 544 proceeds", () =
     carryoverBasis: "4000.00",
     excessBasis: "250.00",
   };
-  const computed = usRegimeWorkpaperOutcome(carryover, "intercompany_transfer", "both");
+  const computed = usRegimeWorkpaperOutcome(carryover, "intercompany_transfer", "both", {
+    placedInServiceOn: "2025-08-01",
+    recoveryPeriodYears: "7",
+    method: "200_db",
+    convention: "half_year",
+  });
   assert.equal(computed.amountRealized, null);
   assert.equal(computed.recognition, "nontaxable");
   assert.equal(computed.carryoverBasis, "4000.00");
+  assert.equal(computed.placedInServiceOn, "2024-03-15");
+  assert.equal(computed.recoveryPeriodYears, "5");
+  assert.equal(computed.buyerPlacedInServiceOn, "2025-08-01");
+  assert.equal(computed.buyerRecoveryPeriodYears, "7.0000000000");
+  assert.equal(computed.buyerMethod, "200_db");
+  assert.equal(computed.buyerConvention, "half_year");
   assert.equal(taxWorkpaperSellerDisposition("us_macrs", computed), "4000.0000");
   assert.equal(taxWorkpaperBuyerAddition("us_macrs", computed), "4250.00");
+});
+
+test("applicable=both taxable MACRS freezes the derived buyer schedule, not only seller vintage", () => {
+  const taxable: UsMacrsRegimeBasis = {
+    regime: "us_macrs",
+    relationship: "arms_length",
+    dispositionTrigger: "sale",
+    originalUnadjustedBasis: "10000.00",
+    remainingUnadjustedBasis: "0",
+    disposedUnadjustedBasis: "10000.00",
+    placedInServiceOn: "2023-03-15",
+    recoveryPeriodYears: "5",
+    method: "200_db",
+    convention: "half_year",
+    recognition: "taxable",
+    relatedPerson: false,
+    statutoryProceeds: "8500.00",
+    amountRealizedRule: "amount_realized",
+    buyerCost: "8500.00",
+  };
+  const computed = usRegimeWorkpaperOutcome(taxable, "intercompany_transfer", "both", {
+    placedInServiceOn: "2025-08-01",
+    recoveryPeriodYears: "7",
+    method: "200_db",
+    convention: "half_year",
+  });
+  assert.equal(computed.placedInServiceOn, "2023-03-15");
+  assert.equal(computed.buyerCost, "8500.00");
+  assert.equal(computed.buyerPlacedInServiceOn, "2025-08-01");
+  assert.equal(computed.buyerRecoveryPeriodYears, "7.0000000000");
+  assert.equal(computed.buyerMethod, "200_db");
+  assert.equal(computed.buyerConvention, "half_year");
+  assert.throws(
+    () => usRegimeWorkpaperOutcome(taxable, "intercompany_transfer", "both"),
+    (error: unknown) =>
+      error instanceof TaxBasisPolicyError && /freeze its own placed-in-service date/.test(error.message),
+  );
 });
 
 test("classified seller and receiver derive seller, buyer, or both — never an election", () => {
@@ -559,4 +609,19 @@ test("NZ pool reduction may be a signed computed net when disposal expenditure e
     disposalExpenditure: "250.00",
   }) as NzPoolRegimeBasis;
   assert.equal(nzPoolReduction(row), "-150.00");
+});
+
+test("NZ associated-person equivalent rate caps the pool and refuses a missing declaration", () => {
+  assert.equal(nzPooledDepreciationRate("0.1", ["0.08"]), "0.0800000000");
+  assert.equal(nzPooledDepreciationRate("0.1", ["0.16"]), "0.1000000000");
+  assert.equal(nzAssociatedPersonEquivalentRate({
+    relationship: "non_arms_length",
+    associatedPersonEquivalentRate: "0.08",
+  }), "0.0800000000");
+  assert.equal(nzAssociatedPersonEquivalentRate({ relationship: "arms_length" }), null);
+  assert.throws(
+    () => nzAssociatedPersonEquivalentRate({ relationship: "non_arms_length" }),
+    (error: unknown) =>
+      error instanceof TaxBasisPolicyError && /associatedPersonEquivalentRate is required/.test(error.message),
+  );
 });

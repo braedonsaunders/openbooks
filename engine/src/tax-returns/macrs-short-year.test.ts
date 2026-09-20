@@ -48,6 +48,19 @@ test("a matching 6/12 factor agrees; a 0.5 factor on a 10-month year refuses", (
   );
 });
 
+test("a 0.49 or 0.52 factor does not round into agreement with a six-month year", () => {
+  assert.throws(
+    () => assertShortYearFactorAgrees("2023-01-01", "2023-06-30", "0.49"),
+    (error: unknown) =>
+      error instanceof MacrsShortYearError && /does not match/.test(error.message),
+  );
+  assert.throws(
+    () => assertShortYearFactorAgrees("2023-01-01", "2023-06-30", "0.52"),
+    (error: unknown) =>
+      error instanceof MacrsShortYearError && /does not match/.test(error.message),
+  );
+});
+
 test("5-year 200DB short-year placement is months/12 of the declining-balance amount", () => {
   const rate = decliningBalanceRate("200_db", "5");
   assert.equal(cmp(rate, "0.4"), 0);

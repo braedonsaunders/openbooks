@@ -18,7 +18,7 @@
  *   asset's FMV; a §482 or other deemed-value adjustment must be evidenced.
  */
 import { canonicalDecimal } from "../money/exact-decimal.ts";
-import { add, cmp, formatMoney, mulDecimal, mulPercent, mulRatio, neg, normalizeMoney, toUnits } from "../money/money.ts";
+import { add, cmp, formatMoney, mulDecimal, mulPercent, mulRatio, neg, normalizeDecimal, normalizeMoney, toUnits } from "../money/money.ts";
 
 export class TaxBasisPolicyError extends Error {
   readonly name = "TaxBasisPolicyError";
@@ -1498,12 +1498,83 @@ export function nzBuyerDepreciationCost(row: NzPoolRegimeBasis): string {
   return formatMoney(cmp(price, cap) <= 0 ? price : cap, 2);
 }
 
+/** IR260 p.24 rate restriction: the acquirer's equivalent rate, when declared. */
+export function nzAssociatedPersonEquivalentRate(row: {
+  relationship?: string;
+  associatedPersonEquivalentRate?: string | null;
+}): string | null {
+  if (row.relationship !== "non_arms_length") return null;
+  const declared = row.associatedPersonEquivalentRate;
+  if (declared == null || String(declared).trim() === "") {
+    throw new TaxBasisPolicyError(
+      "associatedPersonEquivalentRate is required for a non-arm's-length NZ buyer; do not depreciate at the class rate",
+    );
+  }
+  return normalizeDecimal(declared, 10);
+}
+
+/** NZ pool method uses the lowest DV rate of assets in the pool. An associated-person
+ *  equivalent rate is a ceiling on that pool rate, not a silent class-rate fallback. */
+export function nzPooledDepreciationRate(
+  classRate: string | number,
+  associatedEquivalentRates: readonly string[],
+): string {
+  let rate = normalizeDecimal(classRate, 10);
+  for (const candidate of associatedEquivalentRates) {
+    const exact = normalizeDecimal(candidate, 10);
+    if (cmp(exact, rate) < 0) rate = exact;
+  }
+  return rate;
+}
+
+/** Receiving-asset MACRS schedule frozen on approval. Taxable cost and
+ *  nontaxable excess use this; carryover keeps the transferor vintage. */
+export type UsBuyerMacrsSchedule = {
+  placedInServiceOn: string;
+  recoveryPeriodYears: string;
+  method: MacrsMethod;
+  convention: MacrsConvention;
+};
+
+function freezeUsBuyerMacrsSchedule(schedule: UsBuyerMacrsSchedule | null | undefined): {
+  buyerPlacedInServiceOn: string;
+  buyerRecoveryPeriodYears: string;
+  buyerMethod: MacrsMethod;
+  buyerConvention: MacrsConvention;
+} {
+  if (!schedule) {
+    throw new TaxBasisPolicyError(
+      "a US receiving tax asset must freeze its own placed-in-service date, recovery period, method and convention; set in_service_on or acquired_on and the receiving MACRS class — do not inherit the transferor's vintage",
+    );
+  }
+  if (!isTaxBasisCalendarDate(schedule.placedInServiceOn)) {
+    throw new TaxBasisPolicyError("buyerPlacedInServiceOn must be a calendar date (YYYY-MM-DD)");
+  }
+  if (!(MACRS_METHODS as readonly string[]).includes(schedule.method)) {
+    throw new TaxBasisPolicyError("buyerMethod must be 200_db, 150_db, or straight_line");
+  }
+  if (!(MACRS_CONVENTIONS as readonly string[]).includes(schedule.convention)) {
+    throw new TaxBasisPolicyError("buyerConvention must be half_year, mid_quarter, or mid_month");
+  }
+  const recovery = normalizeDecimal(schedule.recoveryPeriodYears, 10);
+  if (cmp(recovery, "0") <= 0) {
+    throw new TaxBasisPolicyError("buyerRecoveryPeriodYears must be greater than 0");
+  }
+  return {
+    buyerPlacedInServiceOn: schedule.placedInServiceOn,
+    buyerRecoveryPeriodYears: recovery,
+    buyerMethod: schedule.method,
+    buyerConvention: schedule.convention,
+  };
+}
+
 /** Frozen MACRS workpaper outcome. Nontaxable carryover has no Pub 544
  *  amount realized and must not call usDispositionProceeds. */
 export function usRegimeWorkpaperOutcome(
   row: UsMacrsRegimeBasis,
   sourceOperation: TaxBasisSourceOperation,
   applicable: TaxBasisApplicableSide = "both",
+  buyerSchedule?: UsBuyerMacrsSchedule | null,
 ): Record<string, unknown> {
   const seller = taxBasisSideApplies(applicable, "seller");
   const buyer = sourceOperation === "intercompany_transfer" && taxBasisSideApplies(applicable, "buyer");
@@ -1513,6 +1584,7 @@ export function usRegimeWorkpaperOutcome(
     remainingUnadjustedBasis: seller ? row.remainingUnadjustedBasis : null,
     disposedUnadjustedBasis: seller ? row.disposedUnadjustedBasis : null,
     placedInServiceOn: row.placedInServiceOn,
+    recoveryPeriodYears: row.recoveryPeriodYears,
     method: row.method,
     convention: row.convention,
     recognition: row.recognition,
@@ -1520,6 +1592,14 @@ export function usRegimeWorkpaperOutcome(
     excessBasis: buyer && !taxable ? row.excessBasis ?? null : null,
     buyerCost: buyer && taxable ? row.buyerCost ?? null : null,
     shortYearMethod: row.shortYearMethod ?? null,
+    ...(buyer
+      ? freezeUsBuyerMacrsSchedule(buyerSchedule)
+      : {
+          buyerPlacedInServiceOn: null,
+          buyerRecoveryPeriodYears: null,
+          buyerMethod: null,
+          buyerConvention: null,
+        }),
   };
 }
 

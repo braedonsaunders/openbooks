@@ -17,10 +17,7 @@ import {
   loadFinancialChange,
   proposeFinancialChange,
 } from "../platform/financial-changes.ts";
-import { TAX_DEPRECIATION_REGIMES } from "./depreciation-pool.ts";
 import {
-  TAX_BASIS_REGIMES,
-  TAX_BASIS_REGIME_LABELS,
   TAX_BASIS_SOURCE_KINDS,
   TAX_BASIS_SOURCE_OPERATIONS,
   allocatedCaCapitalCost,
@@ -30,6 +27,7 @@ import {
   caDispositionAmount,
   caStatutoryProceeds,
   freezeCaRegimeBasis,
+  nzAssociatedPersonEquivalentRate,
   nzBuyerDepreciationCost,
   nzPoolReduction,
   taxBasisApplicableSide,
@@ -39,6 +37,7 @@ import {
   ukDisposalValue,
   usRegimeWorkpaperOutcome,
   validateTaxAssetBasisInput,
+  isTaxBasisCalendarDate,
   type TaxAssetBasisApplyResult,
   type TaxAssetBasisInput,
   type TaxAssetBasisSourceChoice,
@@ -48,7 +47,17 @@ import {
   type TaxBasisSourceKind,
   type TaxBasisSourceOperation,
   type TaxRegimeBasis,
+  type UsBuyerMacrsSchedule,
+  type UsMacrsRegimeBasis,
 } from "./asset-basis-policy.ts";
+import {
+  classifyAssetFromContext,
+  classifyAssetRegimes,
+  effectiveClasses,
+  loadRegimeClassificationContext,
+  regimeClassAttribute,
+  type ClassifiedRegime,
+} from "./tax-classification.ts";
 
 export class TaxAssetBasisError extends Error {
   readonly name = "TaxAssetBasisError";
@@ -70,6 +79,7 @@ export function computeTaxRegimeOutcome(
   row: TaxRegimeBasis,
   sourceOperation: TaxBasisSourceOperation,
   applicable: TaxBasisApplicableSide,
+  buyerSchedule?: UsBuyerMacrsSchedule | null,
 ): Record<string, unknown> {
   const seller = taxBasisSideApplies(applicable, "seller");
   const buyer = sourceOperation === "intercompany_transfer" && taxBasisSideApplies(applicable, "buyer");
@@ -100,9 +110,10 @@ export function computeTaxRegimeOutcome(
     return {
       poolReduction: seller ? nzPoolReduction(row) : null,
       buyerDepreciationCost: buyer ? nzBuyerDepreciationCost(row) : null,
+      associatedPersonEquivalentRate: buyer ? nzAssociatedPersonEquivalentRate(row) : null,
     };
   }
-  return usRegimeWorkpaperOutcome(row, sourceOperation, applicable);
+  return usRegimeWorkpaperOutcome(row as UsMacrsRegimeBasis, sourceOperation, applicable, buyerSchedule);
 }
 
 function workpaperPayload(
@@ -115,7 +126,7 @@ function workpaperPayload(
     requiredSubsidiaryIds: string[];
     applicable: Record<string, TaxBasisApplicableSide>;
   },
-  frozen: { facts: TaxRegimeBasis; computed: Record<string, unknown> }[],
+  frozen: { facts: TaxRegimeBasis; computed: Record<string, unknown>; applicable: TaxBasisApplicableSide }[],
 ) {
   return {
     sourceChangeId: validated.sourceChangeId ?? null,
@@ -187,12 +198,65 @@ function classifiedApplicable(
   );
 }
 
-function freezeRegimes(
+async function loadUsBuyerMacrsSchedule(
+  tx: SqlExecutor,
+  orgId: string,
+  receivingAssetId: string,
+): Promise<UsBuyerMacrsSchedule> {
+  const attr = await regimeClassAttribute(tx, orgId, "us_macrs");
+  const row = (
+    await tx.execute<{ placed_on: string | null; class_code: string }>(sql`
+      select coalesce(a.in_service_on, a.acquired_on)::text as placed_on,
+             coalesce(a.custom->'taxDepreciation'->'us_macrs'->>'classCode', c.tax_attributes->>${attr}, '') as class_code
+        from fixed_assets a
+        join asset_categories c on c.org_id=a.org_id and c.id=a.category_id
+       where a.org_id=${orgId} and a.id=${receivingAssetId}`)
+  ).rows[0];
+  if (!row) throw new TaxAssetBasisError("receiving asset not found");
+  if (!row.placed_on || !isTaxBasisCalendarDate(row.placed_on)) {
+    throw new TaxAssetBasisError(
+      "the receiving asset has no placed-in-service date; set in_service_on or acquired_on on the receiving asset — do not inherit the transferor's placedInServiceOn",
+    );
+  }
+  const classes = await effectiveClasses(tx, orgId, "us_macrs");
+  const def = classes.get(row.class_code);
+  if (!def?.recoveryPeriodYears || !def.macrsMethod || !def.convention) {
+    throw new TaxAssetBasisError(
+      `the receiving asset is missing a complete ${row.class_code || "MACRS"} class; assign the US tax class on the receiving asset's Tax tab — do not inherit the transferor's recovery period, method or convention`,
+    );
+  }
+  return {
+    placedInServiceOn: row.placed_on,
+    recoveryPeriodYears: String(def.recoveryPeriodYears),
+    method: def.macrsMethod,
+    convention: def.convention,
+  };
+}
+
+async function freezeRegimes(
+  tx: SqlExecutor,
+  orgId: string,
   regimes: TaxRegimeBasis[],
   sourceOperation: TaxBasisSourceOperation,
   effectiveOn: string,
   applicableByRegime: Readonly<Partial<Record<TaxBasisRegime, TaxBasisApplicableSide>>>,
-): { facts: TaxRegimeBasis; computed: Record<string, unknown> }[] {
+  receivingAssetId: string | null,
+): Promise<{ facts: TaxRegimeBasis; computed: Record<string, unknown>; applicable: TaxBasisApplicableSide }[]> {
+  const needsBuyerSchedule = regimes.some(
+    (row) =>
+      row.regime === "us_macrs" &&
+      sourceOperation === "intercompany_transfer" &&
+      taxBasisSideApplies(applicableByRegime[row.regime], "buyer"),
+  );
+  let buyerSchedule: UsBuyerMacrsSchedule | null = null;
+  if (needsBuyerSchedule) {
+    if (!receivingAssetId) {
+      throw new TaxAssetBasisError(
+        "a US receiving tax asset is required to freeze the buyer MACRS schedule; this intercompany transfer has no receiving asset",
+      );
+    }
+    buyerSchedule = await loadUsBuyerMacrsSchedule(tx, orgId, receivingAssetId);
+  }
   return regimes.map((row) => {
     const applicable = applicableByRegime[row.regime];
     if (!applicable) {
@@ -201,41 +265,19 @@ function freezeRegimes(
       );
     }
     const facts = row.regime === "ca_cca" ? freezeCaRegimeBasis(row, effectiveOn) : row;
-    return { facts, computed: computeTaxRegimeOutcome(facts, sourceOperation, applicable), applicable };
+    return {
+      facts,
+      computed: computeTaxRegimeOutcome(facts, sourceOperation, applicable, buyerSchedule),
+      applicable,
+    };
   });
-}
-
-function classifiedRegimes(custom: unknown, taxAttributes: unknown): { code: TaxBasisRegime; name: string }[] {
-  const root =
-    custom && typeof custom === "object" && !Array.isArray(custom)
-      ? (custom as Record<string, unknown>).taxDepreciation
-      : null;
-  const tax =
-    taxAttributes && typeof taxAttributes === "object" && !Array.isArray(taxAttributes)
-      ? (taxAttributes as Record<string, unknown>)
-      : {};
-  const regimes: { code: TaxBasisRegime; name: string }[] = [];
-  for (const code of TAX_BASIS_REGIMES) {
-    const attr = TAX_DEPRECIATION_REGIMES[code]?.classAttribute;
-    const override =
-      root && typeof root === "object" && !Array.isArray(root)
-        ? (root as Record<string, unknown>)[code]
-        : null;
-    const classCode =
-      override && typeof override === "object" && !Array.isArray(override)
-        ? String((override as Record<string, unknown>).classCode ?? "")
-        : "";
-    const category = attr ? String(tax[attr] ?? "") : "";
-    if (classCode || category) regimes.push({ code, name: TAX_BASIS_REGIME_LABELS[code] });
-  }
-  return regimes;
 }
 
 async function assetRegimes(
   tx: SqlExecutor,
   orgId: string,
   assetId: string,
-): Promise<{ code: TaxBasisRegime; name: string }[]> {
+): Promise<ClassifiedRegime[]> {
   const row = (
     await tx.execute<{ custom: unknown; tax_attributes: unknown }>(sql`
       select a.custom, c.tax_attributes
@@ -244,7 +286,7 @@ async function assetRegimes(
        where a.org_id=${orgId} and a.id=${assetId}`)
   ).rows[0];
   if (!row) throw new TaxAssetBasisError("asset not found");
-  return classifiedRegimes(row.custom, row.tax_attributes);
+  return classifyAssetRegimes(tx, orgId, row.custom, row.tax_attributes);
 }
 
 async function sourceReversed(
@@ -435,7 +477,15 @@ async function snapshot(
   const transfer = source.sourceOperation === "intercompany_transfer";
   assertClassifiedRegimes(input.regimes, sellerClassified, receiverClassified, transfer);
   const applicable = classifiedApplicable(sellerClassified, receiverClassified, transfer);
-  const frozen = freezeRegimes(input.regimes, source.sourceOperation, source.effectiveOn, applicable);
+  const frozen = await freezeRegimes(
+    tx,
+    orgId,
+    input.regimes,
+    source.sourceOperation,
+    source.effectiveOn,
+    applicable,
+    source.receivingAssetId,
+  );
   return {
     required: source.requiredSubsidiaryIds,
     sourceOpen: true,
@@ -562,6 +612,7 @@ export async function listTaxAssetBasisSources(
              or payload->>'receivingAssetId'=${assetId}
            )`)
     ).rows;
+    const classification = await loadRegimeClassificationContext(db, orgId);
     const seen = new Set<string>();
     const sources: TaxAssetBasisSourceChoice[] = [];
     for (const row of rows) {
@@ -593,8 +644,8 @@ export async function listTaxAssetBasisSources(
         sourceKind: row.kind,
         sourceOperation: taxBasisSourceOperation(row.kind),
         regimes: taxBasisSourceRegimes(
-          classifiedRegimes(row.seller_custom, row.seller_tax),
-          classifiedRegimes(row.receiving_custom, row.receiving_tax),
+          classifyAssetFromContext(row.seller_custom, row.seller_tax, classification),
+          classifyAssetFromContext(row.receiving_custom, row.receiving_tax, classification),
           row.kind === "transferred",
         ),
         bookLabel: row.book_name,
@@ -651,11 +702,14 @@ export async function proposeTaxAssetBasis(
           sourceOperation: sourceOperation as TaxBasisSourceOperation,
           applicableByRegime: applicable,
         });
-        const frozen = freezeRegimes(
+        const frozen = await freezeRegimes(
+          db,
+          orgId,
           validated.regimes,
           sourceOperation as TaxBasisSourceOperation,
           String(replay.payload.effectiveOn ?? ""),
           applicable,
+          (replay.payload.receivingAssetId as string | null) ?? null,
         );
         const payload = workpaperPayload(
           validated,
@@ -713,7 +767,15 @@ export async function proposeTaxAssetBasis(
           "this source already has an applied tax basis workpaper; reverse that workpaper before proposing another",
         );
       }
-      const frozen = freezeRegimes(validated.regimes, state.sourceOperation, state.effectiveOn, state.applicable);
+      const frozen = await freezeRegimes(
+        db,
+        orgId,
+        validated.regimes,
+        state.sourceOperation,
+        state.effectiveOn,
+        state.applicable,
+        state.receivingAssetId,
+      );
       const payload = workpaperPayload(
         validated,
         {
@@ -800,7 +862,15 @@ export async function applyTaxAssetBasis(
           "the independent approver no longer covers every legal entity on this workpaper; obtain a new approval",
         );
       }
-      const frozen = freezeRegimes(payload.regimes, state.sourceOperation, state.effectiveOn, state.applicable);
+      const frozen = await freezeRegimes(
+        db,
+        orgId,
+        payload.regimes,
+        state.sourceOperation,
+        state.effectiveOn,
+        state.applicable,
+        state.receivingAssetId,
+      );
       const workpaperIds: string[] = [];
       for (const row of frozen) {
         const inserted = await db.execute<{ id: string }>(sql`
