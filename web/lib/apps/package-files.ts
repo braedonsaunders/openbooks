@@ -22,6 +22,38 @@ export function validPackagePath(path: string): boolean {
   )
 }
 
+/** Zip entry or shared-root prefix: relative, no `..`, no `//`. */
+export function validZipEntryLocation(path: string): boolean {
+  return !path.startsWith('/') && !path.includes('//') && !path.split('/').includes('..')
+}
+
+export function validZipRootPrefix(prefix: string): boolean {
+  if (!prefix) return true
+  if (prefix.startsWith('/')) return false
+  return validZipEntryLocation(prefix.endsWith('/') ? prefix.slice(0, -1) : prefix)
+}
+
+export type AppliedDraftInstallState = {
+  activeVersionId: string | null
+  appliedVersionId: string | null
+  activeVersionLabel: string | null
+  activeVersionCreatedAt: Date | string | null
+  draftManifestVersion: string
+  draftAppliedAt: Date | string | null
+}
+
+/** Concurrent activate may replay only when the live version row is the one this draft applied. */
+export function appliedDraftStillCurrent(state: AppliedDraftInstallState): boolean {
+  if (!state.activeVersionId || !state.appliedVersionId) return false
+  if (state.activeVersionId !== state.appliedVersionId) return false
+  if (!state.activeVersionLabel || state.activeVersionLabel !== state.draftManifestVersion) return false
+  if (!state.activeVersionCreatedAt || !state.draftAppliedAt) return false
+  const created = new Date(state.activeVersionCreatedAt).getTime()
+  const applied = new Date(state.draftAppliedAt).getTime()
+  if (!Number.isFinite(created) || !Number.isFinite(applied)) return false
+  return created <= applied
+}
+
 /** Keep the manifest in the file browser without duplicating its stored representation. */
 export function packageSourceFiles(
   bundle: EditableAppPackage,

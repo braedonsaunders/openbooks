@@ -20,6 +20,7 @@ import {
 import { createScriptJournal, type ScriptJournalInput } from '@openbooks/engine/src/ledger/journal-writes.ts'
 import { requestHash } from '@/lib/application/idempotency-core'
 import { parseManifest, validateBundle, validateAppToolsForInstall, contentTypeFor, type AppManifest } from './manifest'
+import { appliedDraftStillCurrent, PACKAGE_PATH_REFUSAL, validPackagePath } from './package-files'
 import { APP_CAPABILITIES } from './manifest'
 import { projectExtensionPage } from '@openbooks/engine/src/extensions/pages.ts'
 import { projectSupplementalContributions, withdrawSupplementalContributions } from '@openbooks/engine/src/extensions/projections.ts'
@@ -173,15 +174,42 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'extension-package:' + orgId + ':' + manifest.key}, 0))`)
     let draftReason: string | null = null
     if (draft) {
-      const proposal = (await tx.execute<{ bundle: unknown; content_hash: string; base_version_id: string | null; status: string; reason: string }>(sql`
-        select bundle, content_hash, base_version_id, status, reason from extension_drafts
+      const proposal = (await tx.execute<{ bundle: unknown; content_hash: string; base_version_id: string | null; status: string; reason: string; applied_at: Date | null }>(sql`
+        select bundle, content_hash, base_version_id, status, reason, applied_at from extension_drafts
         where org_id=${orgId} and id=${draft.id} and created_by=${userId} for update
       `)).rows[0]
       if (!proposal || proposal.content_hash !== draft.hash || requestHash(bundle) !== proposal.content_hash) throw new AppError('The reviewed extension draft does not match', 409)
       draftReason = proposal.reason
-      if (proposal.status === 'applied') return
+      const current = (await tx.execute<{ active_version_id: string | null; status: string }>(sql`select active_version_id, status from apps where org_id=${orgId} and key=${manifest.key} for update`)).rows[0]
+      if (proposal.status === 'applied') {
+        // A concurrent activate may observe the winner's apply. Return only
+        // when the live version row is the exact row this draft applied;
+        // a later uninstall/reinstall of the same version label is a new row.
+        if (!current) throw new AppError('The installed extension is no longer present; create and review a new draft', 409)
+        if (current.status !== 'installed') throw new AppError('The installed extension is disabled; enable it from Apps or create and review a new draft', 409)
+        const active = current.active_version_id
+          ? (await tx.execute<{ id: string; version: string; created_at: Date }>(sql`select id, version, created_at from app_versions where org_id=${orgId} and id=${current.active_version_id}`)).rows[0]
+          : undefined
+        const evidence = (await tx.execute<{ versionId: string | null }>(sql`
+          select changes->>'versionId' as "versionId"
+            from audit_log
+           where org_id=${orgId} and table_name='extension_drafts' and row_id=${draft.id}
+             and changes->>'event'='extension_draft_applied'
+           order by at desc, id desc
+           limit 1`)).rows[0]
+        if (!appliedDraftStillCurrent({
+          activeVersionId: current.active_version_id,
+          appliedVersionId: evidence?.versionId ?? null,
+          activeVersionLabel: active?.version ?? null,
+          activeVersionCreatedAt: active?.created_at ?? null,
+          draftManifestVersion: manifest.version,
+          draftAppliedAt: proposal.applied_at,
+        })) {
+          throw new AppError('The installed extension changed after this draft was created; create and review a new draft', 409)
+        }
+        return
+      }
       if (proposal.status !== 'draft') throw new AppError('This extension draft is no longer available', 409)
-      const current = (await tx.execute<{ active_version_id: string | null }>(sql`select active_version_id from apps where org_id=${orgId} and key=${manifest.key} for update`)).rows[0]
       if ((current?.active_version_id ?? null) !== proposal.base_version_id) throw new AppError('The installed extension changed after this draft was created; create and review a new draft', 409)
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${featureGateLockKey(orgId)}, 0))`)
       if (!(await isFeatureEnabled(orgId, 'apps', tx))) throw new AppError('Extensions are disabled', 404)
@@ -290,7 +318,7 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
     if (draft) {
       await tx.execute(sql`update extension_drafts set status='applied', applied_at=now() where org_id=${orgId} and id=${draft.id}`)
       await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
-        values(${orgId},'extension_drafts',${draft.id},'update',${JSON.stringify({ event: 'extension_draft_applied', reason: draftReason, contentHash: draft.hash, appKey: manifest.key, before: { status: 'draft' }, after: { status: 'applied' } })}::jsonb,${userId})`)
+        values(${orgId},'extension_drafts',${draft.id},'update',${JSON.stringify({ event: 'extension_draft_applied', reason: draftReason, contentHash: draft.hash, appKey: manifest.key, versionId, appId, before: { status: 'draft' }, after: { status: 'applied' } })}::jsonb,${userId})`)
     }
 
   })

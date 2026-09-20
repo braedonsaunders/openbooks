@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs'
 import { zipSync, strToU8, Zip, ZipDeflate } from 'fflate'
 import { parseZipBundle, ZipBundleError } from './zip.ts'
 import { parseObjectSpecs } from './objects.ts'
-import { PACKAGE_PATH_REFUSAL, validPackagePath } from './package-files.ts'
+import { appliedDraftStillCurrent, PACKAGE_PATH_REFUSAL, validPackagePath } from './package-files.ts'
 
 const MANIFEST = JSON.stringify({
   key: 'demo',
@@ -190,6 +190,50 @@ test('refuses traversal that remains after unwrapping a shared root folder', () 
   })
 })
 
+test('refuses archives whose shared root is a traversal or absolute prefix', () => {
+  for (const [manifestPath, filePath] of [
+    ['../manifest.json', '../frontend/index.html'],
+    ['/manifest.json', '/frontend/index.html'],
+  ] as const) {
+    const zip = zipSync({
+      [manifestPath]: strToU8(MANIFEST),
+      [filePath]: strToU8('<html></html>'),
+    })
+    assert.throws(() => parseZipBundle(zip), (error: unknown) => {
+      assert.ok(error instanceof ZipBundleError, manifestPath)
+      assert.equal(error.message, PACKAGE_PATH_REFUSAL, manifestPath)
+      return true
+    })
+  }
+})
+
+test('applied-draft replay is bound to the exact installed version row, not the version label', () => {
+  const appliedAt = new Date('2026-01-01T00:00:00.000Z')
+  const sameRow = {
+    activeVersionId: 'ver-applied',
+    appliedVersionId: 'ver-applied',
+    activeVersionLabel: '1.0.0',
+    activeVersionCreatedAt: appliedAt,
+    draftManifestVersion: '1.0.0',
+    draftAppliedAt: appliedAt,
+  }
+  assert.equal(appliedDraftStillCurrent(sameRow), true)
+  assert.equal(
+    appliedDraftStillCurrent({
+      ...sameRow,
+      activeVersionId: 'ver-reinstalled',
+      activeVersionCreatedAt: new Date('2026-01-02T00:00:00.000Z'),
+    }),
+    false,
+    'same key/version label after reinstall is a different version row',
+  )
+  assert.equal(
+    appliedDraftStillCurrent({ ...sameRow, appliedVersionId: null }),
+    false,
+    'missing apply evidence fails closed',
+  )
+})
+
 function storeFunctionBody(name: string): string {
   const store = readFileSync(new URL('./store.ts', import.meta.url), 'utf8')
   const start = store.indexOf(`export async function ${name}`)
@@ -225,8 +269,11 @@ test('applied draft activation validates current state instead of returning a no
   const body = storeFunctionBody('installApp')
   assert.doesNotMatch(body, /if \(proposal\.status === 'applied'\) return/)
   assert.match(body, /proposal\.status === 'applied'/)
+  assert.match(body, /appliedDraftStillCurrent\(/)
+  assert.match(body, /changes->>'versionId'/)
   assert.match(body, /no longer present/)
   assert.match(body, /installed extension changed after this draft/)
+  assert.match(body, /versionId, appId, before:/)
 })
 
 test('platform schema, list, and get take a fresh read invocation nonce', () => {
