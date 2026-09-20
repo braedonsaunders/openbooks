@@ -16,7 +16,6 @@ import { auditColumns, id, orgRef } from "./helpers";
  *   form_templates (stable identity, keyed by org+key slug)
  *     └─ form_template_versions (schema snapshots; immutable once published)
  *          └─ form_responses (filled submissions, pinned to a version)
- *               └─ form_response_steps (per-response actor/action audit trail)
  *
  * The version `schema` jsonb is a FormSchemaV1 — the runtime-validated shape
  * lives in @openbooks/forms-core (zod validators + evaluator). The designer
@@ -106,22 +105,6 @@ export const formResponses = pgTable(
   ],
 );
 
-/** Append-only audit trail of who did what to a response. */
-export const formResponseSteps = pgTable(
-  "form_response_steps",
-  {
-    id: id(),
-    orgId: orgRef(),
-    responseId: uuid("response_id").notNull(),
-    /** users.id of whoever acted. */
-    actor: uuid("actor"),
-    /** e.g. 'created', 'submitted', 'locked', 'unlocked'. */
-    action: text("action").notNull(),
-    at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [index("form_response_steps_response").on(t.responseId, t.at)],
-);
-
 /*
 FOREIGN KEYS (added by the integrator's migration pass):
   form_templates.org_id                → orgs.id
@@ -132,7 +115,4 @@ FOREIGN KEYS (added by the integrator's migration pass):
   form_responses.org_id                → orgs.id
   form_responses.version_id            → form_template_versions.id
   form_responses.submitted_by          → users.id
-  form_response_steps.org_id           → orgs.id
-  form_response_steps.response_id      → form_responses.id ON DELETE CASCADE
-  form_response_steps.actor            → users.id
 */
