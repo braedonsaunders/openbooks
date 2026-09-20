@@ -197,3 +197,42 @@ test('PATCH of a vanished view does not return 200', async () => {
     'sibling defaults must not be cleared before the target write lands',
   )
 })
+
+// resolveListView filters is_active before picking isDefault. Saving
+// default+inactive (or deactivating a view that stays default) stores a
+// flag no subsequent resolve can observe.
+test('PATCH refuses an inactive personal isDefault instead of saving it', async () => {
+  installDb()
+  const res = await PATCH(
+    new Request(`http://x/api/customization/list-views/${VIEW_ID}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ isDefault: true, isActive: false }),
+    }),
+    { params: Promise.resolve({ id: VIEW_ID }) },
+  )
+  assert.notEqual(res.status, 200, 'an inactive personal default must not report success')
+  assert.equal(res.status, 400)
+  assert.match(String((await res.json()).error), /inactive view cannot be the default/)
+  const text = haystack(dbState.statements)
+  assert.doesNotMatch(text, /update list_views set/, 'the inactive default must not be written')
+  assert.doesNotMatch(text, /audit_log/, 'audit must not run for a refused inactive default')
+})
+
+test('PATCH refuses deactivating a personal view that stays default', async () => {
+  installDb()
+  dbState.loadRow = { ...dbState.loadRow!, isDefault: true, isActive: true }
+  const res = await PATCH(
+    new Request(`http://x/api/customization/list-views/${VIEW_ID}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ isActive: false }),
+    }),
+    { params: Promise.resolve({ id: VIEW_ID }) },
+  )
+  assert.notEqual(res.status, 200, 'deactivating a default must not report success')
+  assert.equal(res.status, 400)
+  assert.match(String((await res.json()).error), /unset default before deactivating/)
+  const text = haystack(dbState.statements)
+  assert.doesNotMatch(text, /update list_views set/, 'the view must not be stored inactive and default')
+})

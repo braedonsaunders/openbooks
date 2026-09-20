@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   AmbiguousListViewDefaultError,
+  InactiveListViewDefaultError,
+  assertActiveListViewDefault,
   assertSingleListViewDefault,
   listViewDefaultLockKey,
   type ListViewDefaultExecutor,
@@ -37,6 +39,19 @@ test('assertSingleListViewDefault refuses overlapping defaults by name', async (
     (error: unknown) => {
       assert.ok(error instanceof AmbiguousListViewDefaultError)
       assert.match(error.message, /Clear the extra default/)
+      return true
+    },
+  )
+})
+
+test('assertActiveListViewDefault refuses default+inactive by name', () => {
+  assert.doesNotThrow(() => assertActiveListViewDefault(true, true))
+  assert.doesNotThrow(() => assertActiveListViewDefault(false, false))
+  assert.throws(
+    () => assertActiveListViewDefault(true, false),
+    (error: unknown) => {
+      assert.ok(error instanceof InactiveListViewDefaultError)
+      assert.match(error.message, /activate it, or unset default before deactivating/)
       return true
     },
   )
