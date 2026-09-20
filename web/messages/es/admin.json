@@ -2532,6 +2532,7 @@
       "customerId": "Cliente",
       "projectId": "Proyecto",
       "isDefault": "Predeterminado",
+      "isTerminal": "Final",
       "billMultiplier": "Multiplicador de facturación",
       "lienWaiverEnforcement": "Control de renuncias",
       "defaultLienWaiverType": "Formulario predeterminado",

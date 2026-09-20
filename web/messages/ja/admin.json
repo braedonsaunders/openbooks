@@ -2648,6 +2648,7 @@
       "customerId": "顧客",
       "projectId": "プロジェクト",
       "isDefault": "既定",
+      "isTerminal": "終了",
       "acquisitionCost": "取得原価",
       "acquisitionDate": "取得日",
       "acquisitionRate": "取得時為替レート",

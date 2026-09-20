@@ -2245,6 +2245,10 @@ export const SETUP_ENTITIES: SetupEntity[] = [
           { value: 'rejected', labelKey: 'options.hrmPipelineStageKind.rejected' },
         ],
       },
+      // Derived in storage from kind (never an independent control): the
+      // drawer hides it and the write path folds kind into it before
+      // buildRow (see normalizeHrmPipelineStageInput).
+      { key: 'isTerminal', kind: 'boolean', hidden: true },
     ],
   },
   // --- Assets --------------------------------------------------------------

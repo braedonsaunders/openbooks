@@ -129,8 +129,10 @@ if (!isVitest) {
       return nextLoad(url);
     },
   });
-  collectionRoute = (await import("./route.ts?hrm-recruiting-interviews-collection")) as typeof import("./route.ts");
-  itemRoute = (await import("./[id]/route.ts?hrm-recruiting-interviews-item")) as typeof import("./[id]/route.ts");
+  const collectionUrl = "./route.ts?hrm-recruiting-interviews-collection";
+  collectionRoute = (await import(collectionUrl)) as typeof import("./route.ts");
+  const itemUrl = "./[id]/route.ts?hrm-recruiting-interviews-item";
+  itemRoute = (await import(itemUrl)) as typeof import("./[id]/route.ts");
   hooks.deregister();
 }
 
@@ -140,9 +142,15 @@ const INTERVIEW_ID = "00000000-0000-4000-8000-000000000022";
 function reset(): void {
   routeState.gate = { user: { id: "user-1", orgId: "org-1" } };
   routeState.featureOn = true;
-  routeState.calls = [];
+  routeState.calls = [] as RouteState["calls"];
   routeState.serviceThrow = null;
   routeState.mapped = [];
+}
+
+/** Element reads defeat deepEqual narrowing: the mock pushes are invisible to tsc. */
+function firstCallFn(): string {
+  const calls: RouteState["calls"] = routeState.calls;
+  return calls.at(0)!.fn;
 }
 
 function jsonRequest(url: string, method: string, body: unknown): Request {
@@ -190,10 +198,11 @@ if (isVitest) {
       (await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", { action: "complete", outcome: "advance" }), params)).status,
       200,
     );
-    assert.equal(routeState.calls[0]!.fn, "complete");
-    routeState.calls = [];
+    const seenComplete = firstCallFn();
+    assert.equal(seenComplete, "complete");
+    routeState.calls = [] as RouteState["calls"];
     assert.equal((await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", { action: "cancel" }), params)).status, 200);
-    assert.equal(routeState.calls[0]!.fn, "cancel");
+    assert.equal(firstCallFn(), "cancel");
   });
 
   test("a service refusal delegates to the shared mapping with the error intact", async () => {

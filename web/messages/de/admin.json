@@ -2648,6 +2648,7 @@
       "customerId": "Kunde",
       "projectId": "Projekt",
       "isDefault": "Standard",
+      "isTerminal": "Endstufe",
       "acquisitionCost": "Anschaffungskosten",
       "acquisitionDate": "Erwerbsdatum",
       "acquisitionRate": "Erwerbs-Wechselkurs",
