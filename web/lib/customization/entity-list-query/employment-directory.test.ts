@@ -257,3 +257,19 @@ test("the employment joins stay single-row and fenced", () => {
     "an unrestricted viewer carries no employer fence",
   );
 });
+
+
+// The default is closed: a caller that never says hrmEnabled gets predicates
+// that match nothing, because only the caller knows whether it emitted the
+// employment joins the predicates would otherwise name.
+test("an unstated HRM flag fails closed exactly like HRM off", () => {
+  const where = employeeWhere(
+    { ...defaultListView("employee"), filters: [{ key: "department", operator: "eq", value: DEPT }] as never },
+    { filters: { employment_status: "active" } },
+    ORG,
+    null,
+  );
+  const text = JSON.stringify(where);
+  assert.doesNotMatch(text, /emp\./, "no emp.* predicate without the flag");
+  assert.match(text, /false/, "the filters match nothing");
+});

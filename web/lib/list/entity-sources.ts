@@ -325,6 +325,11 @@ const SOURCES: Record<string, EntityListSource> = {
     // HRM on by default here (the CRM-on twin of CUSTOMER_BASE_JOINS):
     // entity-list-view overrides with the request's feature state, and the
     // where builder fails directory filters closed while the switch is off.
+    // The source-level joins are always emitted (the HRM tables exist whether
+    // or not the switch is on); the list view re-derives them from the real
+    // switch and passes the same answer as adhoc.hrmEnabled, which is what
+    // employeeWhere reads. Any other caller that keeps these joins but says
+    // nothing gets directory filters that match nothing, never a SQL error.
     baseJoins: (allowedSubsidiaryIds, today) => employeeBaseJoins(true, today!, allowedSubsidiaryIds),
     builtInExpr: PARTY_BUILT_IN_EXPR,
     sorts: PARTY_SORTS,
