@@ -353,6 +353,7 @@
     {
       "path": "engine/src/ledger/posting-accounts.ts",
       "tests": [
+        "engine/src/ledger/posting-accounts.unit.test.ts",
         "engine/src/ledger/posting-replay.test.ts",
         "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
         "engine/src/ledger/posting-project-charge.test.ts",
@@ -380,6 +381,7 @@
     {
       "path": "engine/src/ledger/posting-subsidiaries.ts",
       "tests": [
+        "engine/src/ledger/posting-subsidiaries.unit.test.ts",
         "engine/src/ledger/posting-replay.test.ts",
         "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
         "engine/src/ledger/posting-project-charge.test.ts",
