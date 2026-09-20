@@ -59,6 +59,7 @@
         }
       ],
       "tests": [
+        "engine/src/payments/payment-document-entity.integration.test.ts",
         "engine/src/payments/payments.test.ts",
         "engine/src/payments/direct-debit.test.ts",
         "engine/src/payments/payments.integration.test.ts"
@@ -174,6 +175,7 @@
         }
       ],
       "tests": [
+        "engine/src/payroll/run.integration.test.ts",
         "engine/src/payroll/run.test.ts",
         "engine/src/payroll/agnostic-core.test.ts"
       ],
@@ -266,6 +268,7 @@
     {
       "path": "engine/src/ledger/posting-document.ts",
       "tests": [
+        "engine/src/ledger/posting-root-subsidiary-inventory.integration.test.ts",
         "engine/src/ledger/posting-replay.test.ts",
         "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
         "engine/src/ledger/posting-project-charge.test.ts",
@@ -281,6 +284,9 @@
     {
       "path": "engine/src/ledger/posting-prepare.ts",
       "tests": [
+        "engine/src/allocations/post-posting.integration.test.ts",
+        "engine/src/ledger/posting-root-subsidiary-inventory.integration.test.ts",
+        "engine/src/ledger/journal-posting-atomic.integration.test.ts",
         "engine/src/ledger/posting-replay.test.ts",
         "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
         "engine/src/ledger/posting-project-charge.test.ts",
@@ -296,6 +302,9 @@
     {
       "path": "engine/src/ledger/posting-commit.ts",
       "tests": [
+        "engine/src/allocations/post-posting.integration.test.ts",
+        "engine/src/ledger/posting-root-subsidiary-inventory.integration.test.ts",
+        "engine/src/ledger/journal-posting-atomic.integration.test.ts",
         "engine/src/ledger/posting-replay.test.ts",
         "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
         "engine/src/ledger/posting-project-charge.test.ts",
@@ -311,6 +320,8 @@
     {
       "path": "engine/src/ledger/posting-replay.ts",
       "tests": [
+        "engine/src/ledger/source-correction.integration.test.ts",
+        "engine/src/ledger/expense-settlement.integration.test.ts",
         "engine/src/ledger/gl-regeneration.integration.test.ts",
         "engine/src/ledger/posting-replay.test.ts",
         "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
