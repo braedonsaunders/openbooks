@@ -1386,6 +1386,70 @@ export const REPORT_ENTITY_MAP: Record<string, ReportEntity> = Object.assign(
   Object.fromEntries(REPORT_ENTITIES.map((e) => [e.key, e])),
 )
 
+/**
+ * Rebind the pay_stubs income_tax column from engine factor labels to the
+ * pack-declared withholding set.
+ *
+ * The static catalog reads income tax out of the stub `factors` JSON by
+ * factor name (T/TB/FIT …). Those trace keys are per-jurisdiction engine
+ * internals, so every pack whose labels differ reported 0.00 on the payroll
+ * register while its withholding sat on the stub lines. The payslip YTD had
+ * this identical defect and fixed it by aggregating `pay_stub_lines` by
+ * component `system_key` over the pack-declared set (`every deduction
+ * assessed on taxable income, across all registered packs`), so a new pack
+ * is counted on the day it registers — this binder applies that same
+ * derivation to the register, with the same lateral-join shape.
+ *
+ * The key set is passed IN (not imported from the engine pack registry,
+ * which pulls the database — the same reason the run-review buckets take
+ * their declarations as data): the caller that can see the engine supplies
+ * `incomeTaxWithholdingSystemKeys()`. Every other column — in particular
+ * the jurisdiction-labelled cpp_fica/ei buckets — is byte-identical.
+ *
+ * Throws when the entity is not pay_stubs, when it carries no income_tax
+ * column, when the key set is empty (an empty set is the silent-0.00 shape;
+ * refuse it loudly), or when a key is not a plain system-key literal.
+ */
+export function bindPayStubIncomeTaxKeys(
+  entity: ReportEntity,
+  incomeTaxSystemKeys: readonly string[],
+): ReportEntity {
+  if (entity.key !== 'pay_stubs') {
+    throw new Error(`pay-stub tax binding needs the pay_stubs entity, not ${entity.key}`)
+  }
+  if (!entity.columns.some((column) => column.key === 'income_tax')) {
+    throw new Error('pay-stub tax binding needs an income_tax column')
+  }
+  if (incomeTaxSystemKeys.length === 0) {
+    throw new Error('pay-stub tax binding needs a non-empty income-tax key set')
+  }
+  for (const key of incomeTaxSystemKeys) {
+    // Keys inline into the expression as string literals (column
+    // expressions are verbatim SQL, never bound parameters), so hold them
+    // to the same shape the pay_components_system_key check enforces.
+    if (!/^[a-z][a-z0-9_]{0,63}$/.test(key)) {
+      throw new Error(`pay-stub tax binding refuses non-literal system key ${JSON.stringify(key)}`)
+    }
+  }
+  const literals = incomeTaxSystemKeys.map((key) => `'${key}'`).join(', ')
+  return {
+    ...entity,
+    from: `${entity.from}
+      LEFT JOIN LATERAL (
+        select coalesce(sum(l.amount), 0) as tax
+          from pay_stub_lines l
+          join pay_components c on c.id = l.component_id and c.org_id = l.org_id
+         where l.org_id = s.org_id and l.stub_id = s.id
+           and c.system_key in (${literals})
+      ) income_tax_lines on true`,
+    columns: entity.columns.map((column) =>
+      column.key === 'income_tax'
+        ? { ...column, expr: 'coalesce(income_tax_lines.tax, 0)' }
+        : column,
+    ),
+  }
+}
+
 /** Item kinds that belong to the Inventory Features switch. The items report
  *  entity stays available; these values must not appear as filter-picker
  *  options while that switch is off. */
