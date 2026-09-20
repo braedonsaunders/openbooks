@@ -81,15 +81,22 @@ export async function canRunReportStatement(authz: Authz, kind: string | null | 
  * allowed, so a route reads
  * `const denied = await guardReportEntity(...); if (denied) return denied`.
  *
- * This is the HTTP face of `canRunReportEntity`: every export, run, and
- * definition-write path must go through this gate so a missing
- * `requiredPermission` cannot fail open.
+ * This is the HTTP face of `canRunReportEntity` for entity plans: every
+ * export, run, and definition-write path must go through this gate so a
+ * missing `requiredPermission` cannot fail open on an unknown entity.
  *
- * Permission misses and unknown/missing entities are 403. A disabled
- * feature is 404 so the module disappears rather than advertising that it
- * exists.
+ * A null/undefined query is not a missing entity. Statement definitions
+ * store `query=null` on purpose and are gated by `STATEMENT_KIND_FEATURE`
+ * / `canRunReportStatement`. The export route passes `def.query` into this
+ * function unconditionally; refusing that value 403s every standard
+ * CSV/XLSX/PDF download.
+ *
+ * Permission misses and unknown/missing entities on a query object are
+ * 403. A disabled feature is 404 so the module disappears rather than
+ * advertising that it exists.
  */
 export async function guardReportEntity(authz: Authz, query: unknown): Promise<NextResponse | null> {
+  if (query == null) return null
   if (await canRunReportEntity(authz, query)) return null
   const required = reportEntityPermission(query)
   if (required && !can(authz, required)) {
