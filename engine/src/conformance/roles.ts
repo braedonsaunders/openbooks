@@ -3,8 +3,8 @@
  *
  * Cases assert on semantic roles ("deferred revenue"), never on a chart-of-
  * accounts number, so every case stays valid across industry COA presets and
- * across tenants. This compatibility facade exposes both bindings the runner needs.
- * Computation-only callers import role-bindings.ts to avoid loading fixtures:
+ * across tenants. This module owns the database fixture. Computation-only
+ * callers import role-bindings.ts directly to avoid loading fixtures:
  *
  *  - `syntheticRoles()` for `computation` cases: stable fake ids, no database.
  *  - `createConformanceOrg()` for `ledger` cases: a scratch tenant whose real
@@ -20,7 +20,6 @@ import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } 
 import type { LedgerContext, Role } from "./types.ts";
 
 import { ROLES } from "./role-bindings.ts";
-export { ROLES, syntheticRoles } from "./role-bindings.ts";
 
 /** Accounts the corpus needs beyond the shared scratch fixture. */
 const EXTRA_ACCOUNTS: readonly [Role, string, string, string][] = [
