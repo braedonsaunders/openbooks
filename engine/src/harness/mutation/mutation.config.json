@@ -76,19 +76,47 @@
       ]
     },
     {
-      "path": "engine/src/payments/payments.ts",
+      "path": "engine/src/payments/payment-documents.ts",
       "lineRanges": [
         {
-          "start": 141,
-          "end": 167
+          "start": 48,
+          "end": 73
+        }
+      ],
+      "tests": [
+        "engine/src/payments/payments.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/payments/payments.integration.test.ts"
+      ]
+    },
+    {
+      "path": "engine/src/payments/payment-contracts.ts",
+      "lineRanges": [
+        {
+          "start": 51,
+          "end": 60
         },
         {
-          "start": 405,
-          "end": 451
+          "start": 62,
+          "end": 70
+        }
+      ],
+      "tests": [
+        "engine/src/payments/payments.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/payments/payments.integration.test.ts"
+      ]
+    },
+    {
+      "path": "engine/src/payments/payment-queries.ts",
+      "lineRanges": [
+        {
+          "start": 14,
+          "end": 33
         },
         {
-          "start": 686,
-          "end": 726
+          "start": 173,
+          "end": 213
         }
       ],
       "tests": [

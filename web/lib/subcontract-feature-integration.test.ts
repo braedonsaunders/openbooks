@@ -151,7 +151,7 @@ test("direct subcontracts join both project committed-cost rollups without doubl
 });
 
 test("subcontract payment controls gate run creation and final vendor-payment posting", () => {
-  const payments = source("../engine/src/payments/payments.ts");
+  const payments = source("../engine/src/payments/run-creation.ts") + source("../engine/src/payments/payment-posting.ts");
   const occurrences = payments.match(/assertSubcontractPaymentCleared/g) ?? [];
   assert.ok(occurrences.length >= 3, "expected import plus run-creation and final-posting gates");
   assert.match(payments, /for \(const bill of payable\)[\s\S]+assertSubcontractPaymentCleared/);
