@@ -82,7 +82,7 @@ import {
   HrmUpcomingChanges,
 } from '../../app/(app)/hrm/sections'
 import { ChangeRequestQueue } from '../../app/(app)/hrm/change-requests/QueueClient'
-import { VacancyTable } from '../../app/(app)/hrm/positions/sections'
+import { PositionDrawer, PositionSegments, PositionsTable, VacancyTable } from '../../app/(app)/hrm/positions/sections'
 import { ListChecks, ShieldCheck, ScrollText } from 'lucide-react'
 import { AnalyticsHub } from '../../app/(app)/analytics/AnalyticsHub'
 import { ReportsHub } from '../../app/(app)/reports/ReportsHub'
@@ -1123,6 +1123,37 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       totalLabel={str(props, 'totalLabel') ?? ''}
     />
   ),
+  /** Status segments: server-side filter pills with per-status counts over
+   *  loader-computed hrefs. A widget, not `filter-chips`: the hrefs carry the
+   *  effective date as well as the status, so they are resolved in the loader
+   *  and passed whole rather than rebuilt from a param key. */
+  'hrm-position-segments': (props) => (
+    <PositionSegments
+      ariaLabel={str(props, 'ariaLabel') ?? ''}
+      segments={(props.segments as ComponentProps<typeof PositionSegments>['segments']) ?? []}
+    />
+  ),
+  /** The funded-establishment vacancy table over loader-resolved rows plus
+   *  loader-resolved strings — the same PositionsTable the native page
+   *  renders, so the two cannot drift. */
+  'hrm-positions-table': (props) => (
+    <PositionsTable
+      columns={(props.columns as ComponentProps<typeof PositionsTable>['columns']) ?? {}}
+      rows={(props.rows as ComponentProps<typeof PositionsTable>['rows']) ?? []}
+      empty={str(props, 'empty') ?? ''}
+      totals={(props.totals as ComponentProps<typeof PositionsTable>['totals']) ?? { plannedFte: '0', fundedFte: '0', filledFte: '0', vacantFte: '0' }}
+      totalLabel={str(props, 'totalLabel') ?? ''}
+    />
+  ),
+  /** The position flyout: a URL drawer around the shared PositionDrawerBody
+   *  that closes by navigation. Null payload renders nothing — the spec's
+   *  `when` gate already omits it, so this is the second half of the same
+   *  guard. */
+  'hrm-position-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof PositionDrawer>['drawer']
+    if (!drawer) return null
+    return <PositionDrawer drawer={drawer} />
+  },
   /** A widget, not a slot: the loader already resolved vacancy through the
    *  canonical position read service and passes rows plus loader-resolved
    *  strings as data, so no org id, user id or Authz crosses the spec. */

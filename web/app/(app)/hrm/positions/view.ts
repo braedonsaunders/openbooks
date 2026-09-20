@@ -1,5 +1,16 @@
+import 'server-only'
+
 import { getTranslations } from 'next-intl/server'
 import { notFound } from 'next/navigation'
+import {
+  grid,
+  page,
+  pageHeader,
+  ref,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from '@braedonsaunders/appkit-viewspec'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { HrmPositionError } from '@openbooks/engine/src/hrm/positions.ts'
 import { getPositionAsOf, getVacancyAsOf } from '@openbooks/engine/src/hrm/positions-read.ts'
@@ -9,13 +20,17 @@ import { isFeatureEnabled } from '../../../../lib/features'
 import type { PositionRowDTO } from '@openbooks/engine/src/hrm/positions-read.ts'
 
 /**
- * Positions tab loader: the funded establishment as of a date with vacancy
- * per position, resolved through the canonical position read service (never
- * a row count). Status segments filter server-side; the row drawer resolves
- * one position with its versions, funding by period, and current holder.
- * Renders only when the hrm feature gate is on and the actor holds
- * hrm.position.read — the view 404s otherwise, the same gate the
- * route-gate scanner reads on the cockpit.
+ * Positions tab, split into a loader and a spec.
+ *
+ * Follows the change-requests list archetype: ViewSpec composes the header
+ * and the grid; the segment pills, the vacancy table, and the URL drawer
+ * stay components shared by the page and the widget registry via
+ * ./sections so they cannot drift. Status segments filter server-side; a
+ * row opens the position drawer (versions, funding by period, current
+ * holder) through the URL, so the selection is shareable and the drawer
+ * closes by navigation. Renders only when the hrm feature gate is on and
+ * the actor holds hrm.position.read — the view 404s otherwise, the same
+ * gate the route-gate scanner reads on the cockpit.
  */
 
 const STATUSES = ['planned', 'open', 'filled', 'frozen', 'closed'] as const
@@ -75,6 +90,52 @@ export interface PositionsPageData {
     closeHref: string
   } | null
   missingDetail: string | null
+  drawerOpen: boolean
+  drawer: {
+    closeHref: string
+    title: string
+    description: string | null
+    detail: PositionsPageData['detail']
+    missingDetail: string | null
+  } | null
+}
+
+const f = ref<PositionsPageData>()
+
+export function positionsSpec(data: PositionsPageData): PageSpec {
+  return page({
+    route: '/hrm/positions',
+    layout: 'list',
+    bodyClassName: 'flex h-full min-h-0 flex-col',
+    header: [
+      pageHeader({
+        title: f('title'),
+        description: f('description'),
+        actionsClassName: 'flex flex-wrap items-center gap-3',
+        actions: [widget('module-home-tabs', { tabs: data.tabs })],
+      }),
+    ],
+    body: [
+      grid('flex h-full min-h-0 flex-col gap-4', [
+        widgetBlock('hrm-position-segments', {
+          ariaLabel: data.title,
+          segments: data.segments,
+        }),
+        widgetBlock('hrm-positions-table', {
+          columns: data.columns,
+          rows: data.rows,
+          empty: data.empty,
+          totals: data.totals,
+          totalLabel: data.totalLabel,
+        }),
+      ]),
+      // URL-backed drawer, portaled to <body> wherever it renders.
+      {
+        ...widgetBlock('hrm-position-drawer', { drawer: data.drawer }),
+        when: f('drawerOpen'),
+      },
+    ],
+  })
 }
 
 function hrefFor(effectiveDate: string, status: string | null, positionId: string | null): string {
@@ -89,25 +150,25 @@ export async function positionsTitle(): Promise<string> {
   return t('positions.title')
 }
 
-export async function loadPositionsPage(searchParams: {
-  status?: string
-  position?: string
-  effectiveDate?: string
-}): Promise<PositionsPageData> {
+export async function loadPositionsPage(
+  sp: Record<string, string | undefined>,
+): Promise<PositionsPageData> {
+  // The page gate lives here — where the route-gate scanner reads — and the
+  // loader enforces nothing twice: it takes the authorized session as input.
   const authz = await requirePermission('hrm.position.read')
   if (!(await isFeatureEnabled(authz.user.orgId, 'hrm'))) notFound()
   const t = await getTranslations('hrm')
   const tabs = await hrmGroupTabs(authz, '/hrm/positions')
 
-  const status = typeof searchParams.status === 'string' && (STATUSES as readonly string[]).includes(searchParams.status)
-    ? searchParams.status
+  const status = typeof sp.status === 'string' && (STATUSES as readonly string[]).includes(sp.status)
+    ? sp.status
     : null
-  const rawDate = typeof searchParams.effectiveDate === 'string' ? searchParams.effectiveDate : null
+  const rawDate = typeof sp.effectiveDate === 'string' ? sp.effectiveDate : null
   const effectiveDate = rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate)
     ? rawDate
     : await businessToday(authz.user.orgId)
-  const positionId = typeof searchParams.position === 'string' && searchParams.position.length > 0
-    ? searchParams.position
+  const positionId = typeof sp.position === 'string' && sp.position.length > 0
+    ? sp.position
     : null
 
   const vacancy = await getVacancyAsOf({
@@ -217,8 +278,10 @@ export async function loadPositionsPage(searchParams: {
     }
   }
 
+  const title = t('positions.title')
+  const drawerOpen = detail !== null || missingDetail !== null
   return {
-    title: t('positions.title'),
+    title,
     description: t('positions.description'),
     tabs,
     effectiveDate,
@@ -245,5 +308,15 @@ export async function loadPositionsPage(searchParams: {
     },
     detail,
     missingDetail,
+    drawerOpen,
+    drawer: drawerOpen
+      ? {
+          closeHref: detail?.closeHref ?? '/hrm/positions',
+          title: detail ? detail.code : title,
+          description: detail ? detail.title : null,
+          detail,
+          missingDetail,
+        }
+      : null,
   }
 }
