@@ -73,6 +73,16 @@
     "employeesLink": "Mitarbeiterliste",
     "setupLink": "Abteilungen verwalten"
   },
+  "reports": {
+    "title": "Berichte",
+    "description": "Workforce-Berichte: die Headcount-Vorlage und die Beschäftigungs-Entitäten, geöffnet im Berichts-Builder.",
+    "presetTitle": "Headcount-Vorlage",
+    "presetHint": "Die Vorlage öffnet den gespeicherten Plan der Organisation — oder den Builder-Katalog, falls der Seed nie gelaufen ist.",
+    "entitiesTitle": "Workforce-Entitäten",
+    "entitiesHint": "Starten Sie einen neuen Workforce-Bericht aus einer der Beschäftigungs-Entitäten.",
+    "hubTitle": "Alle Berichte",
+    "hubDescription": "Den Berichts-Hub öffnen."
+  },
   "employment": {
     "episodes": {
       "title": "Beschäftigungsepisoden",

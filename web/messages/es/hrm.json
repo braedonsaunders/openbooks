@@ -73,6 +73,16 @@
     "employeesLink": "Lista de empleados",
     "setupLink": "Gestionar departamentos"
   },
+  "reports": {
+    "title": "Informes",
+    "description": "Informes de personal: la declaración de plantilla y las entidades de empleo, abiertas en el generador de informes.",
+    "presetTitle": "Declaración de plantilla",
+    "presetHint": "La plantilla abre el plan guardado de la organización — o el catálogo del generador si la semilla nunca se ha materializado.",
+    "entitiesTitle": "Entidades de personal",
+    "entitiesHint": "Cree un informe de personal desde una de las entidades de empleo.",
+    "hubTitle": "Todos los informes",
+    "hubDescription": "Abrir el centro de informes."
+  },
   "employment": {
     "episodes": {
       "title": "Episodios de empleo",

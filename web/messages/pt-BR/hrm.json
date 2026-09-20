@@ -73,6 +73,16 @@
     "employeesLink": "Lista de funcionários",
     "setupLink": "Gerenciar departamentos"
   },
+  "reports": {
+    "title": "Relatórios",
+    "description": "Relatórios de pessoal: o modelo de quadro de pessoal e as entidades de emprego, abertos no construtor de relatórios.",
+    "presetTitle": "Quadro de pessoal",
+    "presetHint": "O modelo abre o plano salvo da organização — ou o catálogo do construtor caso a semeadura nunca tenha se materializado.",
+    "entitiesTitle": "Entidades de pessoal",
+    "entitiesHint": "Crie um relatório de pessoal a partir de uma das entidades de emprego.",
+    "hubTitle": "Todos os relatórios",
+    "hubDescription": "Abrir o centro de relatórios."
+  },
   "employment": {
     "episodes": {
       "title": "Episódios de emprego",

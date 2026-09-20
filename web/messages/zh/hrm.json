@@ -73,6 +73,16 @@
     "employeesLink": "员工列表",
     "setupLink": "管理部门"
   },
+  "reports": {
+    "title": "报表",
+    "description": "人员报表：人数报表预设和雇佣实体，在报表构建器中打开。",
+    "presetTitle": "人数报表",
+    "presetHint": "预设打开组织已保存的方案 — 若从未执行过种子数据，则打开构建器目录。",
+    "entitiesTitle": "人员实体",
+    "entitiesHint": "从某个雇佣实体开始新建人员报表。",
+    "hubTitle": "所有报表",
+    "hubDescription": "打开报表中心。"
+  },
   "employment": {
     "episodes": {
       "title": "雇用阶段",
