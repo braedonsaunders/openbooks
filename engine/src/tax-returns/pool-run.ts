@@ -2,10 +2,9 @@ import { lockAssetTaxLifecycle } from "../organization/asset-tax-fence.ts";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
-import { add, cmp, formatMoney, fromUnits, neg, normalizeDecimal, normalizeMoney, toUnits } from "../money/money.ts";
+import { add, formatMoney, fromUnits, normalizeDecimal, normalizeMoney, toUnits } from "../money/money.ts";
 import {
   computeMacrsThroughYear,
-  computeMacrsYear,
   computePoolYear,
   placedAndDisposedInSameTaxYear,
   type MacrsYearWindow,
@@ -949,44 +948,7 @@ async function runMacrs(
           adjustedCarryover: vintage.adjustedCarryover ?? undefined,
           carryoverOn: vintage.transferOn && vintage.adjustedCarryover ? vintage.transferOn : undefined,
         }, windows);
-        let current = walked.current;
-        if (
-          vintage.role === "buyer" &&
-          vintage.recognition === "nontaxable" &&
-          vintage.transferOn &&
-          vintage.transferOn >= run.yearStart &&
-          vintage.transferOn <= run.yearEnd &&
-          vintage.placedInServiceOn < vintage.transferOn
-        ) {
-          const sellerShare = computeMacrsYear({
-            basis: vintage.basis,
-            placedInServiceOn: vintage.placedInServiceOn,
-            taxYear,
-            yearStart: run.yearStart,
-            yearEnd: run.yearEnd,
-            recoveryPeriodYears: vintage.recoveryPeriodYears,
-            method: vintage.method,
-            convention: vintage.convention,
-            disposedOn: vintage.transferOn,
-            dispositionRecognition: "nontaxable",
-            section179: vintage.section179,
-            bonusPercent: vintage.bonusPercent,
-            businessUsePercent: vintage.businessUsePercent,
-            shortYearFactor: run.shortYearFactor,
-            shortYearMethod: vintage.shortYearMethod,
-            recoveryYearIndex: walked.currentRecoveryYearIndex ?? undefined,
-          });
-          const residual = formatMoney(add(current.allowance, neg(sellerShare.allowance)), 2);
-          if (cmp(residual, "0") < 0) {
-            throw new TaxPoolError(
-              `nontaxable MACRS transfer-year allocation for asset ${asset.id} produced a negative buyer residual; reverse and re-propose the workpaper — do not invent a split`,
-            );
-          }
-          const closingAfterResidual = vintage.adjustedCarryover
-            ? formatMoney(add(current.remainingBasis, sellerShare.allowance), 2)
-            : current.remainingBasis;
-          current = { ...current, allowance: residual, macrs: residual, remainingBasis: closingAfterResidual };
-        }
+        const current = walked.current;
         const transferredThisYear = !!(
           vintage.role === "buyer" &&
           vintage.adjustedCarryover &&

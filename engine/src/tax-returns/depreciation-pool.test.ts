@@ -370,6 +370,81 @@ test("a short year before this vintage existed does not skip its first-year conv
   assert.equal(walked.current.allowance, "2800.00");
 });
 
+test("a later year after disposal records zero remaining, not the original basis", () => {
+  const windows = [
+    { taxYear: 2024, yearStart: "2024-01-01", yearEnd: "2024-12-31" },
+    { taxYear: 2025, yearStart: "2025-01-01", yearEnd: "2025-12-31" },
+    { taxYear: 2026, yearStart: "2026-01-01", yearEnd: "2026-12-31" },
+  ];
+  const after = computeMacrsThroughYear({
+    basis: "10000",
+    placedInServiceOn: "2024-03-01",
+    taxYear: 2026,
+    recoveryPeriodYears: 5,
+    method: "200_db",
+    convention: "half_year",
+    disposedOn: "2025-09-15",
+    dispositionRecognition: "taxable",
+  }, windows);
+  assert.equal(after.current.allowance, "0.00");
+  assert.equal(after.current.remainingBasis, "0.00");
+  assert.notEqual(after.current.remainingBasis, "10000.00");
+});
+
+test("later fiscal windows keep the original placement month, not month 1 of the current year", () => {
+  const windows = [
+    { taxYear: 2026, yearStart: "2025-07-01", yearEnd: "2026-06-30" },
+    { taxYear: 2027, yearStart: "2026-07-01", yearEnd: "2027-06-30" },
+  ];
+  const walked = computeMacrsThroughYear({
+    basis: "10000",
+    placedInServiceOn: "2025-11-15",
+    taxYear: 2027,
+    recoveryPeriodYears: 5,
+    method: "200_db",
+    convention: "mid_quarter",
+  }, windows);
+  const year1 = computeMacrsYear({
+    basis: "10000",
+    placedInServiceOn: "2025-11-15",
+    taxYear: 2026,
+    yearStart: "2025-07-01",
+    yearEnd: "2026-06-30",
+    recoveryPeriodYears: 5,
+    method: "200_db",
+    convention: "mid_quarter",
+    recoveryYearIndex: 0,
+    placedMonth: 5,
+  });
+  const year2 = computeMacrsYear({
+    basis: "10000",
+    placedInServiceOn: "2025-11-15",
+    taxYear: 2027,
+    yearStart: "2026-07-01",
+    yearEnd: "2027-06-30",
+    recoveryPeriodYears: 5,
+    method: "200_db",
+    convention: "mid_quarter",
+    recoveryYearIndex: 1,
+    placedMonth: 5,
+  });
+  const januaryOrigin = computeMacrsYear({
+    basis: "10000",
+    placedInServiceOn: "2025-11-15",
+    taxYear: 2027,
+    yearStart: "2026-07-01",
+    yearEnd: "2027-06-30",
+    recoveryPeriodYears: 5,
+    method: "200_db",
+    convention: "mid_quarter",
+    recoveryYearIndex: 1,
+    placedMonth: 1,
+  });
+  assert.equal(walked.prior.allowance, year1.allowance);
+  assert.equal(walked.current.allowance, year2.allowance);
+  assert.notEqual(walked.current.allowance, januaryOrigin.allowance);
+});
+
 test("declared adjusted carryover is the buyer checkpoint; pre-transfer years do not re-subtract from it", () => {
   const walked = computeMacrsThroughYear({
     basis: "10000",
@@ -389,6 +464,33 @@ test("declared adjusted carryover is the buyer checkpoint; pre-transfer years do
   assert.equal(walked.prior.remainingBasis, "6400.00");
   assert.equal(walked.current.allowance, "1920.00");
   assert.equal(walked.current.remainingBasis, "4480.00");
+});
+
+test("transfer-year buyer residual is stored in the walk so next year's opening matches the persisted close", () => {
+  const windows = [
+    { taxYear: 2023, yearStart: "2023-01-01", yearEnd: "2023-12-31" },
+    { taxYear: 2024, yearStart: "2024-01-01", yearEnd: "2024-12-31" },
+    { taxYear: 2025, yearStart: "2025-01-01", yearEnd: "2025-12-31" },
+    { taxYear: 2026, yearStart: "2026-01-01", yearEnd: "2026-12-31" },
+  ];
+  const input = {
+    basis: "10000",
+    placedInServiceOn: "2023-01-01",
+    recoveryPeriodYears: 5 as const,
+    method: "200_db" as const,
+    convention: "half_year" as const,
+    adjustedCarryover: "6400.00",
+    carryoverOn: "2025-07-01",
+  };
+  const transferYear = computeMacrsThroughYear({ ...input, taxYear: 2025 }, windows);
+  const nextYear = computeMacrsThroughYear({ ...input, taxYear: 2026 }, windows);
+  // Year 3 full table amount is 1920; mid-year HY seller share is 960; buyer residual 960.
+  // Checkpoint 6400 − 960 = 5440. Subtracting the full 1920 would leave 4480.
+  assert.equal(transferYear.current.allowance, "960.00");
+  assert.equal(transferYear.current.remainingBasis, "5440.00");
+  assert.equal(nextYear.prior.remainingBasis, transferYear.current.remainingBasis);
+  assert.equal(nextYear.prior.allowance, transferYear.current.allowance);
+  assert.notEqual(nextYear.prior.remainingBasis, "4480.00");
 });
 
 test("regimes that disallow recapture (Canada Class 10.1) just zero the pool", () => {

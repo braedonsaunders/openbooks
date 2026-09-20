@@ -253,6 +253,8 @@ export interface MacrsYearInput {
   adjustedCarryover?: string;
   /** Transfer date that starts the carryover checkpoint (pre-transfer years are history only). */
   carryoverOn?: string;
+  /** Fiscal month of original placement, frozen from the original service window. */
+  placedMonth?: number;
   /**
    * Taxable MACRS dispositions (default when disposedOn is set) are Pub 946
    * excepted property if placed and disposed in the same tax-year window.
@@ -456,7 +458,7 @@ export function computeMacrsYear(input: MacrsYearInput): MacrsYearResult {
       ? 0
       : input.taxYear - placed.year
   );
-  const placedMonth = monthInTaxYear(input.placedInServiceOn, input.yearStart);
+  const placedMonth = input.placedMonth ?? placementMonth(input);
   const disposedMonth = input.disposedOn ? monthInTaxYear(input.disposedOn, input.yearStart) : null;
   const schedule = macrsSchedule({
     basis: macrsBasis,
@@ -569,6 +571,15 @@ export function computeMacrsThroughYear(
   const ordered = [...windows].sort((left, right) => left.taxYear - right.taxYear);
   const checkpoint = input.adjustedCarryover ? persistMacrsBasis(input.adjustedCarryover) : null;
   const carryoverOn = input.carryoverOn ?? null;
+  const originWindow = ordered.find((window) =>
+    input.placedInServiceOn >= window.yearStart && input.placedInServiceOn <= window.yearEnd,
+  );
+  const frozenPlacedMonth = originWindow
+    ? monthInTaxYear(input.placedInServiceOn, originWindow.yearStart)
+    : monthInTaxYear(input.placedInServiceOn);
+  const postDisposalZero = (): MacrsYearResult => ({
+    section179: "0.00", bonus: "0.00", macrs: "0.00", allowance: "0.00", remainingBasis: "0.00",
+  });
   let vintageShortSeen = false;
   let yearsSinceVintageShort = 0;
   let deemedPlacedOn: string | null = null;
@@ -584,7 +595,15 @@ export function computeMacrsThroughYear(
   for (const window of ordered) {
     if (window.taxYear > input.taxYear) break;
     if (input.placedInServiceOn > window.yearEnd) continue;
-    if (input.disposedOn && input.disposedOn < window.yearStart) continue;
+    if (input.disposedOn && input.disposedOn < window.yearStart) {
+      const gone = postDisposalZero();
+      if (window.taxYear === input.taxYear - 1) prior = gone;
+      if (window.taxYear === input.taxYear) {
+        current = gone;
+        currentRecoveryYearIndex = null;
+      }
+      continue;
+    }
     const firstServiceYear = serviceYears === 0;
     if (vintageShortSeen) yearsSinceVintageShort += 1;
     const short = isShortTaxYear(window.yearStart, window.yearEnd);
@@ -601,6 +620,7 @@ export function computeMacrsThroughYear(
       yearStart: window.yearStart,
       yearEnd: window.yearEnd,
       recoveryYearIndex: serviceYears,
+      placedMonth: frozenPlacedMonth,
       afterShortYear,
       allocationFollowYear: followYear,
       firstYearMonthsInService: firstYearMonthsInService ?? undefined,
@@ -633,7 +653,7 @@ export function computeMacrsThroughYear(
       elapsedRecoveryMonths += short ? shortTaxYearMonths(window.yearStart, window.yearEnd) : 12;
     } else {
       elapsedRecoveryMonths += firstServiceYear
-        ? Number(taxConventionHalfMonths(input.convention, monthInTaxYear(input.placedInServiceOn, window.yearStart), "placed")) / 2
+        ? Number(taxConventionHalfMonths(input.convention, frozenPlacedMonth, "placed")) / 2
         : 12;
     }
     if (preTransfer) {
@@ -649,7 +669,41 @@ export function computeMacrsThroughYear(
     let applied = result;
     if (checkpoint) {
       const opening = persistMacrsBasis(add(checkpoint, neg(postTransferTaken)));
-      const take = firstServiceYear ? result.allowance : result.macrs;
+      const transferThisWindow = !!(
+        carryoverOn
+        && carryoverOn > window.yearStart
+        && carryoverOn <= window.yearEnd
+        && input.placedInServiceOn < carryoverOn
+      );
+      let take = firstServiceYear ? result.allowance : result.macrs;
+      if (transferThisWindow) {
+        const sellerShare = computeMacrsYear({
+          ...input,
+          taxYear: window.taxYear,
+          yearStart: window.yearStart,
+          yearEnd: window.yearEnd,
+          recoveryYearIndex: serviceYears,
+          placedMonth: frozenPlacedMonth,
+          afterShortYear,
+          allocationFollowYear: followYear,
+          firstYearMonthsInService: firstYearMonthsInService ?? undefined,
+          elapsedRecoveryMonths,
+          adjustedBasisAtYearStart: afterShortYear ? opening : undefined,
+          deemedPlacedOn: deemedPlacedOn ?? undefined,
+          shortYearFactor: window.taxYear === input.taxYear ? input.shortYearFactor : windowFactor,
+          disposedOn: carryoverOn,
+          dispositionRecognition: "nontaxable",
+          adjustedCarryover: undefined,
+          carryoverOn: undefined,
+        });
+        const residual = formatMoney(add(take, neg(sellerShare.allowance)), 2);
+        if (cmp(residual, "0") < 0) {
+          throw new Error(
+            "nontaxable MACRS transfer-year allocation produced a negative buyer residual; reverse and re-propose the workpaper — do not invent a split",
+          );
+        }
+        take = residual;
+      }
       const remaining = input.disposedOn
         && input.disposedOn >= window.yearStart
         && input.disposedOn <= window.yearEnd
@@ -658,8 +712,8 @@ export function computeMacrsThroughYear(
       applied = {
         section179: firstServiceYear ? result.section179 : "0.00",
         bonus: firstServiceYear ? result.bonus : "0.00",
-        macrs: result.macrs,
-        allowance: firstServiceYear ? result.allowance : result.macrs,
+        macrs: take,
+        allowance: firstServiceYear && !transferThisWindow ? result.allowance : take,
         remainingBasis: remaining,
       };
       postTransferTaken = formatMoney(add(postTransferTaken, take), 2);
@@ -683,6 +737,19 @@ function monthInTaxYear(date: string, yearStart?: string): number {
   const start = parseIsoDate(yearStart);
   if (!start) return day.month;
   return Math.min(12, Math.max(1, (day.year - start.year) * 12 + (day.month - start.month) + 1));
+}
+
+/** Convention month for original placement. Later windows must not re-base it. */
+function placementMonth(input: MacrsYearInput): number {
+  if (
+    input.yearStart
+    && input.yearEnd
+    && input.placedInServiceOn >= input.yearStart
+    && input.placedInServiceOn <= input.yearEnd
+  ) {
+    return monthInTaxYear(input.placedInServiceOn, input.yearStart);
+  }
+  return monthInTaxYear(input.placedInServiceOn);
 }
 
 function macrsSchedule(args: {
