@@ -1,4 +1,4 @@
--- OpenBooks forward migration 0212_flow_runs_flow_tenant_coherence.
+-- OpenBooks forward migration 0213_flow_runs_flow_tenant_coherence.
 --
 -- The canonical baseline installed flow_runs_flow_id_fkey as
 -- FOREIGN KEY (flow_id) REFERENCES flows(id) ON DELETE CASCADE. That
@@ -55,7 +55,7 @@ BEGIN
         'flow_id', violation.flow_id,
         'referenced_org_id', violation.referenced_org_id
       )::text,
-      HINT = 'Reconcile the flow run flow_id to a flow owned by the same organization, then retry migration 0212; this migration will not rewrite financial history.';
+      HINT = 'Reconcile the flow run flow_id to a flow owned by the same organization, then retry migration 0213; this migration will not rewrite financial history.';
   END IF;
 END
 $flow_runs_flow_tenant_preflight$;

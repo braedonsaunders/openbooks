@@ -109,7 +109,7 @@ export const paymentSchedules = pgTable(
     uniqueIndex("payment_schedules_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("payment_schedules_org_name").on(t.orgId, t.name),
     index("payment_schedules_due").on(t.isActive, t.nextRunAt),
-    // Tenant pair required by 0211: a schedule may only name a last run of its own org.
+    // Tenant pair required by 0212: a schedule may only name a last run of its own org.
     foreignKey({
       name: "payment_schedules_last_payment_run_id_fkey",
       columns: [t.orgId, t.lastPaymentRunId],

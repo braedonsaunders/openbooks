@@ -1,4 +1,4 @@
--- OpenBooks forward migration 0211_payment_schedules_last_payment_run_tenant_coherence.
+-- OpenBooks forward migration 0212_payment_schedules_last_payment_run_tenant_coherence.
 --
 -- The canonical baseline installed payment_schedules_last_payment_run_id_fkey
 -- as FOREIGN KEY (last_payment_run_id) REFERENCES payment_runs(id). That
@@ -55,7 +55,7 @@ BEGIN
         'last_payment_run_id', violation.last_payment_run_id,
         'referenced_org_id', violation.referenced_org_id
       )::text,
-      HINT = 'Reconcile the payment schedule last_payment_run_id to a payment run owned by the same organization, then retry migration 0211; this migration will not rewrite financial history.';
+      HINT = 'Reconcile the payment schedule last_payment_run_id to a payment run owned by the same organization, then retry migration 0212; this migration will not rewrite financial history.';
   END IF;
 END
 $payment_schedules_last_payment_run_tenant_preflight$;

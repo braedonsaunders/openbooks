@@ -1,10 +1,10 @@
 /**
- * Testdb proof for 0212_flow_runs_flow_tenant_coherence.
+ * Testdb proof for 0213_flow_runs_flow_tenant_coherence.
  *
  * Same-org flow runs may name their flow. A cross-tenant flow_id insert or
- * update is refused by the composite FK. Applying 0212 against a dirty
+ * update is refused by the composite FK. Applying 0213 against a dirty
  * pointer (cross-tenant or orphaned) fails closed and does not rewrite
- * those rows. 0212 itself is not rewritten here.
+ * those rows. 0213 itself is not rewritten here.
  */
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -17,7 +17,7 @@ import pg from "pg";
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 const generatedDir = join(dirname(fileURLToPath(import.meta.url)), "generated");
 const repairSql = readFileSync(
-  join(generatedDir, "0212_flow_runs_flow_tenant_coherence.sql"),
+  join(generatedDir, "0213_flow_runs_flow_tenant_coherence.sql"),
   "utf8",
 );
 
@@ -153,7 +153,7 @@ test(
 );
 
 test(
-  "0212 fails closed on a dirty cross-tenant or orphaned pointer and does not rewrite those rows",
+  "0213 fails closed on a dirty cross-tenant or orphaned pointer and does not rewrite those rows",
   { skip: !DB },
   async () => {
     const client = new pg.Client({ connectionString: adminConnectionString() });

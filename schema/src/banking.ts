@@ -277,7 +277,7 @@ export const paymentRuns = pgTable(
     ...auditColumns,
   },
   (t): PgTableExtraConfigValue[] => [
-    // Exact organization and id key required by tenant-coherent references (0211).
+    // Exact organization and id key required by tenant-coherent references (0212).
     uniqueIndex("payment_runs_org_id_id_unique").on(t.orgId, t.id),
     // Tenant pair required by 0210: a run may only name a schedule of its own org.
     foreignKey({
