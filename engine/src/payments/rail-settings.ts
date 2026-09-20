@@ -200,3 +200,119 @@ export async function loadSepaSettings(orgId: string, runId?: string) {
   `));
   return validateSepaSettings(unsealJson<Partial<SepaSettings>>(r.rows[0]?.originator_secrets_encrypted));
 }
+
+// ---------------------------------------------------------------------------
+// Cemtex (Australian ABA) originator settings
+// ---------------------------------------------------------------------------
+
+/**
+ * The name is `cemtex`, never `aba`, on purpose. `ABA` already means the US
+ * 9-digit routing number (American Bankers Association) throughout this
+ * module and its neighbours (`odfiRouting`, the NACHA check digit) — a
+ * format keyed `aba` would read as the US routing concept to every future
+ * reader. Cemtex is the Australian file format's own name (the .aba
+ * extension stays, because that is what the banks' upload screens ask for).
+ */
+export interface CemtexSettings {
+  /** 3-letter APCA financial-institution abbreviation of the processing bank (CBA, NAB, ANZ, WBC, BQL, …). */
+  bankAbbreviation: string;
+  /** Name of the user supplying the file (26 chars; what the bank shows). */
+  userName: string;
+  /** APCA-allocated Direct Entry user ID (BECS User Identification Number, ≤6 digits). */
+  userId: string;
+  /** Source (trace) account BSB, NNN-NNN — the account the debit draws. */
+  traceBsb: string;
+  /** Source (trace) account number, ≤9 chars — the account the debit draws. */
+  traceAccount: string;
+  /** Name of the remitter as it appears on employee statements (16 chars). */
+  remitterName: string;
+}
+
+/**
+ * Australian BSB, canonical `NNN-NNN` form.
+ *
+ * Positions carry meaning (first two digits: financial institution, third:
+ * state 0–9), but this validates SHAPE only — the directory of allocated
+ * BSBs is not transcribed here, so an unallocated-but-shaped BSB passes and
+ * the bank refuses it. The hyphen is pure formatting: six digits with an
+ * optional hyphen or space canonicalize to `NNN-NNN`; anything else is not a
+ * BSB and is refused rather than coerced (a coerced BSB pays a stranger).
+ */
+export function normalizeBsb(value: string): string | null {
+  const digits = value.replace(/[\s-]/g, "");
+  if (!/^\d{6}$/.test(digits)) return null;
+  return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+}
+
+export function isValidBsb(value: string): boolean {
+  return normalizeBsb(value) !== null;
+}
+
+/**
+ * An Australian account number as the Cemtex detail record carries it:
+ * numeric with hyphens/blanks only, right-justified blank-filled to 9.
+ * Longer than nine characters even with hyphens edited out cannot be
+ * expressed — refused, never truncated (truncation pays a stranger).
+ */
+export function normalizeCemtexAccount(value: string): string | null {
+  const stripped = value.replace(/[-\s]/g, "");
+  if (stripped === "" || stripped.length > 9 || !/^\d+$/.test(stripped)) return null;
+  if (/^0+$/.test(stripped)) return null;
+  return stripped;
+}
+
+const CEMTEX_REQUIRED: (keyof CemtexSettings)[] = [
+  "bankAbbreviation", "userName", "userId", "traceBsb", "traceAccount", "remitterName",
+];
+
+export function validateCemtexSettings(raw: Partial<CemtexSettings> | null): { ok: true; settings: CemtexSettings } | { ok: false; missing: string[] } {
+  const s = raw ?? {};
+  const missing: string[] = CEMTEX_REQUIRED.filter((k) => {
+    const v = s[k];
+    return typeof v !== "string" || v.trim() === "" || v.includes("FILL-ME");
+  });
+  if (!missing.includes("bankAbbreviation") && !/^[A-Za-z]{3}$/.test(s.bankAbbreviation!)) {
+    missing.push("bankAbbreviation (3-letter APCA abbreviation, e.g. CBA, ANZ, WBC)");
+  }
+  if (!missing.includes("userName") && s.userName!.length > 26) {
+    missing.push("userName (max 26 characters)");
+  }
+  if (!missing.includes("userId") && !/^\d{1,6}$/.test(s.userId!.trim())) {
+    missing.push("userId (APCA-allocated Direct Entry user ID, up to 6 digits)");
+  }
+  if (!missing.includes("traceBsb") && !isValidBsb(s.traceBsb!)) {
+    missing.push("traceBsb (6-digit BSB, NNN-NNN)");
+  }
+  if (!missing.includes("traceAccount") && normalizeCemtexAccount(s.traceAccount!) === null) {
+    missing.push("traceAccount (1–9 digits)");
+  }
+  if (!missing.includes("remitterName") && (s.remitterName!.trim() === "" || s.remitterName!.length > 16)) {
+    missing.push("remitterName (1–16 characters, shown on employee statements)");
+  }
+  if (missing.length) return { ok: false, missing: [...new Set(missing)] };
+  return {
+    ok: true,
+    settings: {
+      bankAbbreviation: s.bankAbbreviation!.trim().toUpperCase(),
+      userName: s.userName!.trim(),
+      userId: s.userId!.trim(),
+      traceBsb: normalizeBsb(s.traceBsb!)!,
+      traceAccount: normalizeCemtexAccount(s.traceAccount!)!,
+      remitterName: s.remitterName!.trim(),
+    },
+  };
+}
+
+export async function loadCemtexSettings(orgId: string, runId?: string) {
+  const r = (await db.execute<{ originator_secrets_encrypted: string | null }>(sql`
+    select p.originator_secrets_encrypted
+      from payment_bank_profiles p
+      join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
+      left join payment_runs r on r.payment_bank_profile_id = p.id and r.org_id = p.org_id
+     where p.org_id = ${orgId} and p.is_active and f.rail = 'cemtex_credit'
+       and (${runId ?? null}::uuid is null or r.id = ${runId ?? null})
+     order by case when r.id is not null then 0 else 1 end, p.created_at
+     limit 1
+  `));
+  return validateCemtexSettings(unsealJson<Partial<CemtexSettings>>(r.rows[0]?.originator_secrets_encrypted));
+}
