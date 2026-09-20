@@ -8,6 +8,9 @@ const state = { allowed: true, calls: [] as unknown[][], refusal: "" };
 ] = state;
 const hooks = registerHooks({
   resolve(specifier, context, next) {
+    // A virtual auth module has no filesystem parent for tsx package resolution.
+    if (specifier === "next/server" && context.parentURL?.startsWith("mock:"))
+      return next(specifier, { ...context, parentURL: import.meta.url });
     if (specifier === "server-only")
       return { shortCircuit: true, url: "data:text/javascript,export {}" };
     if (specifier === "@/lib/feature-gates")
@@ -45,7 +48,7 @@ const hooks = registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        source: `export class TaxAssetBasisError extends Error { readonly name='TaxAssetBasisError' }
+        source: `export class TaxAssetBasisError extends Error { name='TaxAssetBasisError' }
         export async function listTaxAssetBasisSources(...args){const s=globalThis[Symbol.for('tax-basis-route')];s.calls.push(['list',...args]);if(s.refusal)throw new Error(s.refusal);return {assetId:args[1],assetNumber:'FA-1',sources:[]}}
         export async function proposeTaxAssetBasis(...args){const s=globalThis[Symbol.for('tax-basis-route')];s.calls.push(['propose',...args]);if(s.refusal)throw new Error(s.refusal);return 'change'}`,
       };
