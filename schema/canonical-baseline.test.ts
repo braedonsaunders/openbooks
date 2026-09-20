@@ -1799,6 +1799,12 @@ test("API keys state their scopes explicitly: legacy empty sets freeze to the ca
     "hrm.employment.read",
     "hrm.employment.manage",
     "hrm.employment.approve",
+    // HRM positions (0192): added after the snapshot, so a LEGACY API key
+    // with an empty scope set does NOT gain them — the headcount plan is
+    // reachable only by a key that names these scopes. Deliberate: this is
+    // an authorization decision, not a snapshot bump.
+    "hrm.position.read",
+    "hrm.position.manage",
   ];
   assert.deepEqual(
     snapshot,
