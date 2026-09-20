@@ -158,6 +158,8 @@ const MATRIX: Entry[] = [
   { prefix: "admin/flows", tools: ["list_approvals"], note: "flow authoring writes have no application service" },
   { prefix: "flows", tools: ["list_approvals", "decide_approval"], note: "flow authoring and manual/record-state triggers have no application service" },
   { prefix: "hrm/change-requests", tools: ["hrm_change_requests", "list_approvals", "decide_approval"], note: "the queue lists through the employment read service while decisions run through native Flows gates; authoring, submit and withdraw are human-attested HR actions with no assistant write surface by design" },
+  { prefix: "hrm/leave-requests", tools: ["hrm_leave", "list_approvals", "decide_approval"], note: "the queue and drawer read through the leave read service (TIME balances; VALUE stays in payroll tools) while decisions run through native Flows gates; filing, submit, withdraw, cancel and attachment are human-attested HR actions with no assistant write surface by design" },
+  { prefix: "hrm/leave-absences", tools: ["hrm_leave"], note: "after-the-fact absence recording is a human-attested HR action with no assistant write surface by design" },
   { prefix: "admin/fx-provider", tools: ["list_currencies", "list_fx_rates"] },
   { prefix: "admin/navigation", uncovered: "no application service: nav config persists inline" },
   { prefix: "admin/payment-operations", uncovered: "no application service: bank-profile/format/schedule config persists inline" },
