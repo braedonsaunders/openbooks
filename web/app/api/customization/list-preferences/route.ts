@@ -34,28 +34,44 @@ export async function PUT(req: Request) {
   if (viewId && !isUuid(viewId)) {
     return NextResponse.json({ error: "list view not found" }, { status: 404 });
   }
-  if (viewId) {
-    // Must be a view this user can actually use: in-org, right record type,
-    // and either org-shared or their own personal view. resolveListView only
-    // loads is_active rows, so an inactive preference would report {ok} and
-    // then fall through to the org/system default — refuse by name instead.
-    const owned = (await db.execute<{ isActive: boolean; name: string }>(sql`
-      select is_active as "isActive", name from list_views
-       where id = ${viewId} and org_id = ${user.orgId} and record_type = ${body.recordType}
-         and (scope = 'org' or owner_id = ${user.id})
-    `));
-    if (!owned.rows[0]) return NextResponse.json({ error: "list view not found" }, { status: 404 });
-    if (!owned.rows[0].isActive) {
-      return NextResponse.json({
-        error: `list view "${owned.rows[0].name}" is inactive — reactivate it or choose an active view`,
-      }, { status: 422 });
+  // db.execute goes through the pool (each statement may land on a different
+  // connection), so BEGIN/COMMIT must use db.transaction to actually be atomic.
+  // FOR UPDATE holds the list_views row until the preference write commits, so
+  // a concurrent deactivation cannot slip between the active-state read and
+  // the upsert. resolveListView only loads is_active rows; a split read/write
+  // would report {ok} for a view resolution cannot apply.
+  const outcome = await db.transaction(async (tx) => {
+    if (viewId) {
+      const owned = (await tx.execute<{ isActive: boolean; name: string }>(sql`
+        select is_active as "isActive", name from list_views
+         where id = ${viewId} and org_id = ${user.orgId} and record_type = ${body.recordType}
+           and (scope = 'org' or owner_id = ${user.id})
+         for update
+      `));
+      if (!owned.rows[0]) return { kind: "missing" as const };
+      if (!owned.rows[0].isActive) {
+        return { kind: "inactive" as const, name: owned.rows[0].name };
+      }
     }
+    const written = await tx.execute(sql`
+      insert into user_list_preferences (org_id, user_id, record_type, view_id, created_by, updated_by)
+      values (${user.orgId}, ${user.id}, ${body.recordType}, ${viewId}, ${user.id}, ${user.id})
+      on conflict (org_id, user_id, record_type) do update
+        set view_id = excluded.view_id, updated_at = now(), updated_by = ${user.id}
+      where user_list_preferences.org_id = ${user.orgId}`);
+    if ((written.rowCount ?? 0) !== 1) return { kind: "unwritten" as const };
+    return { kind: "ok" as const };
+  });
+  if (outcome.kind === "missing") return NextResponse.json({ error: "list view not found" }, { status: 404 });
+  if (outcome.kind === "inactive") {
+    return NextResponse.json({
+      error: `list view "${outcome.name}" is inactive — reactivate it or choose an active view`,
+    }, { status: 422 });
   }
-  await db.execute(sql`
-    insert into user_list_preferences (org_id, user_id, record_type, view_id, created_by, updated_by)
-    values (${user.orgId}, ${user.id}, ${body.recordType}, ${viewId}, ${user.id}, ${user.id})
-    on conflict (org_id, user_id, record_type) do update
-      set view_id = excluded.view_id, updated_at = now(), updated_by = ${user.id}
-    where user_list_preferences.org_id = ${user.orgId}`);
+  if (outcome.kind === "unwritten") {
+    return NextResponse.json({
+      error: "list preference was not saved — retry after confirming the view is still active",
+    }, { status: 409 });
+  }
   return NextResponse.json({ ok: true, viewId });
 }
