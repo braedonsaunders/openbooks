@@ -46,6 +46,7 @@ type Row = Record<string, unknown>
 }
 
 const { resolveListView } = await import('./resolve.ts')
+const { AmbiguousListViewDefaultError } = await import('./list-view-default.ts')
 const { defaultListView, stripSeededDefaultMark } = await import('@openbooks/customization')
 
 const AT = new Date('2025-01-01T00:00:00Z')
@@ -348,9 +349,10 @@ test('a cleared preference with no org default uses the system default, not a pe
   assert.equal(resolved.row, null)
 })
 
-// Two personal isDefaults are overlapping configuration, not a default.
-// Guessing the first by name would hide the race the write must refuse.
-test('two personal isDefaults are ignored rather than guessed', async () => {
+// Two personal isDefaults are overlapping configuration. Falling through to
+// the org default (or picking either personal view) would paper over flags
+// the write already refuses with 409. Resolve must raise, not guess.
+test('two personal isDefaults are refused rather than resolved to a view', async () => {
   const first = {
     id: '77777777-7777-4777-8777-777777777777',
     name: 'Alpha',
@@ -370,9 +372,14 @@ test('two personal isDefaults are ignored rather than guessed', async () => {
     config: { ...seedShape, perPage: 20 },
   }
   const orgDefault = seedRow()
-  const resolved = await resolve({ viewRows: [orgDefault, first, second] }, 'org-case-16')
-  assert.equal(resolved.source, 'org')
-  assert.equal(resolved.row?.id, orgDefault.id)
+  await assert.rejects(
+    () => resolve({ viewRows: [orgDefault, first, second] }, 'org-case-16'),
+    (error: unknown) => {
+      assert.ok(error instanceof AmbiguousListViewDefaultError)
+      assert.match(error.message, /Clear the extra default/)
+      return true
+    },
+  )
 })
 
 // The full PATCH round trip: a seeded default edited only in sort direction
