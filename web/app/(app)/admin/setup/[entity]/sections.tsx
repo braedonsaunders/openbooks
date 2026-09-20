@@ -13,7 +13,6 @@ import {
   setupEntityForFeatureState,
 } from '../../../../../lib/setup/registry'
 import { resolveDynamicSetupOptions } from '../../../../../lib/setup/dynamic-options'
-import { resolveLocale } from '../../../../../lib/locale'
 import { resolvedFeatureState, featureEnabled } from '../../../../../lib/features'
 import {
   isUuid,
@@ -143,7 +142,7 @@ export async function SetupDrawerSlot({
     multiSubsidiary: featureEnabled(features, 'multiSubsidiary'),
     equipment: featureEnabled(features, 'equipment'),
     fieldTickets: featureEnabled(features, 'fieldTickets'),
-  }), await resolveLocale())
+  }))
 
   const t = await getTranslations('admin.setup')
   const rowParam = typeof sp.row === 'string' ? sp.row : undefined

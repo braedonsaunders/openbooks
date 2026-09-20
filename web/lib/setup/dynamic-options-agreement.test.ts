@@ -44,7 +44,7 @@ const { SETUP_ENTITIES } = (await import('./registry')) as {
   }[]
 }
 const { resolveDynamicSetupOptions } = (await import('./dynamic-options')) as {
-  resolveDynamicSetupOptions: (entity: unknown, locale: string) => {
+  resolveDynamicSetupOptions: (entity: unknown) => {
     fields?: {
       key: string
       options?: { value: string }[]
@@ -77,7 +77,7 @@ test('some field declares a dynamic options source, so these tests are not vacuo
 test('resolving an entity replaces the static fallback with the dynamic list', () => {
   for (const { entity: entityKey, field: fieldKey, staticValues } of dynamicFields()) {
     const entity = SETUP_ENTITIES.find((candidate) => candidate.key === entityKey)!
-    const resolved = resolveDynamicSetupOptions(entity, 'en')
+    const resolved = resolveDynamicSetupOptions(entity)
     const field = resolved.fields?.find((candidate) => candidate.key === fieldKey)
     assert.ok(field, `${entityKey}.${fieldKey} survives resolution`)
     const resolvedValues = (field.options ?? []).map((option) => option.value)
@@ -112,7 +112,7 @@ test('every installable pack is writable as a pay-component country', async () =
 
   const entity = SETUP_ENTITIES.find((candidate) => candidate.key === 'pay-components')
   assert.ok(entity, 'the pay-components entity exists')
-  const resolved = resolveDynamicSetupOptions(entity, 'en')
+  const resolved = resolveDynamicSetupOptions(entity)
   const country = resolved.fields?.find((field) => field.key === 'country')
   assert.ok(country, 'it has a country field')
   const accepted = (country.options ?? []).map((option) => option.value)
@@ -134,7 +134,7 @@ test('every installable pack scopes its own treatment list, starting with after-
     await import('@openbooks/engine/src/payroll/packs.ts')
   const { installablePayrollPacks, payrollPack } = packRegistry
   const entity = SETUP_ENTITIES.find((candidate) => candidate.key === 'pay-components')
-  const resolved = resolveDynamicSetupOptions(entity, 'en')
+  const resolved = resolveDynamicSetupOptions(entity)
   const treatment = resolved.fields?.find((field) => field.key === 'taxTreatment')
   assert.ok(treatment, 'it has a taxTreatment field')
   const scoped = treatment.scopedOptions
@@ -172,7 +172,7 @@ test('static fallbacks name every installable pack, treatment and program type',
 
   const treatmentFallback = (components.fields ?? []).find((field) => field.key === 'taxTreatment')
   const staticTreatments = (treatmentFallback?.options ?? []).map((option) => option.value).sort()
-  const resolved = resolveDynamicSetupOptions(components, 'en')
+  const resolved = resolveDynamicSetupOptions(components)
   const union = (resolved.fields?.find((field) => field.key === 'taxTreatment')?.options ?? [])
     .map((option) => option.value)
     .sort()
@@ -203,7 +203,7 @@ test('the declared payroll packs are all writable as a filing-account country', 
 
   const entity = SETUP_ENTITIES.find((candidate) => candidate.key === 'payroll-filing-accounts')
   assert.ok(entity, 'the payroll-filing-accounts entity exists')
-  const resolved = resolveDynamicSetupOptions(entity, 'en')
+  const resolved = resolveDynamicSetupOptions(entity)
   const country = resolved.fields?.find((field) => field.key === 'country')
   assert.ok(country, 'it has a country field')
   const accepted = (country.options ?? []).map((option) => option.value)
