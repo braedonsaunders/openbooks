@@ -334,3 +334,12 @@ test("maxPerOperator caps prolific operators deterministically", () => {
   const recapped = generateMutants("engine/src/probe.ts", source, { maxPerOperator: 5 });
   assert.deepEqual(capped.map((m) => m.key), recapped.map((m) => m.key));
 });
+
+
+test("negative literal types never become financial sign mutants", () => {
+  const source = "type Direction = -1 | 1;\nconst signed = -amount;\n";
+  const mutants = generateMutants("sign.ts", source).filter(m => m.operator === "arith-sign-flip");
+  assert.equal(mutants.length, 1);
+  assert.equal(mutants[0]?.line, 2);
+  assert.match(mutants[0]!.mutatedSource, /signed = \+amount/);
+});
