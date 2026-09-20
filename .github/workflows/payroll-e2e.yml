@@ -1,0 +1,158 @@
+name: payroll e2e (manual)
+
+# The payroll browser walk, ON DEMAND ONLY.
+#
+# This is deliberately NOT a merge gate and must not become one. The payroll
+# suite provisions a tenant, seeds employees, calculates, approves, commits,
+# produces bank files and remits — it is the longest browser walk in the
+# repository, and it moves only when a pack or the run wizard changes. Running
+# it on every commit spends minutes per push to re-prove statutory behaviour
+# that unit and golden tests already cover, so it runs when someone asks for it.
+#
+# `suites` is an input rather than a literal so a per-pack spec can be added
+# without editing this file: pass "payroll:payroll payroll-de:payrollde" and
+# each named spec gets its own cloned database. The format is
+# "<spec basename>:<database suffix>", matching the e2e-workflows matrix in
+# test.yml.
+#
+# What this does NOT replace: an ad-hoc persona run driving a pack by hand in a
+# real browser. That finds operator traps a scripted walk cannot, because the
+# script knows where to click.
+
+on:
+  workflow_dispatch:
+    inputs:
+      suites:
+        description: 'Space-separated "<spec>:<db-suffix>" pairs to run'
+        required: false
+        default: "payroll:payroll"
+
+concurrency:
+  group: payroll-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SESSION_SECRET: openbooks-ci-test-secret-not-production
+  OPENBOOKS_DATA_KEY: 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
+  ORG_COUNTRY: US
+  ORG_CURRENCY: USD
+
+jobs:
+  payroll-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: postgres:16.9-alpine3.22@sha256:7c688148e5e156d0e86df7ba8ae5a05a2386aaec1e2ad8e6d11bdf10504b1fb7
+        env:
+          POSTGRES_USER: openbooks
+          POSTGRES_PASSWORD: openbooks
+          POSTGRES_DB: openbooks_e2e
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U openbooks -d openbooks_e2e"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:7.4.5-alpine3.21@sha256:bb186d083732f669da90be8b0f975a37812b15e913465bb14d845db72a4e3e08
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      OPENBOOKS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_e2e
+      OPENBOOKS_RUNTIME_DB_URL: postgres://openbooks_app:openbooks-runtime-ci-password@localhost:5433/openbooks_e2e
+      OPENBOOKS_REDIS_URL: redis://localhost:6379/0
+      OPENBOOKS_DB_PASSWORD: openbooks-runtime-ci-password
+      PGPASSWORD: openbooks
+      ADMIN_EMAIL: e2e@openbooks.test
+      ADMIN_NAME: E2E Admin
+      ADMIN_PASSWORD: e2e-test-password-123
+      E2E_EMAIL: e2e@openbooks.test
+      E2E_PASSWORD: e2e-test-password-123
+      E2E_APPROVER_EMAIL: approver@openbooks.test
+      E2E_APPROVER_PASSWORD: approver-test-password-123
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      - name: Load schema + seed admin
+        run: npx tsx scripts/bootstrap.ts
+
+      - name: Seed workflow approver
+        # The payroll commit demands a second actor: commit approval refuses the
+        # calculating user, and no HTTP endpoint creates users.
+        env:
+          E2E_SEED_APPROVER: "1"
+          E2E_APPROVER_EMAIL: approver@openbooks.test
+          E2E_APPROVER_PASSWORD: approver-test-password-123
+        run: node --import tsx e2e/workflows/support/seed-e2e-approver.ts
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Generate ephemeral browser session secret
+        run: |
+          node --input-type=module <<'NODE'
+          import { randomBytes } from 'node:crypto';
+          import { appendFileSync } from 'node:fs';
+          const secret = randomBytes(48).toString('base64');
+          console.log(`::add-mask::${secret}`);
+          appendFileSync(process.env.GITHUB_ENV, `SESSION_SECRET=${secret}\n`);
+          NODE
+
+      - name: Snapshot pristine workflow databases
+        # Snapshot the bootstrapped tenant once, right after seeding and before
+        # the build or any server can touch it, then clone one database per
+        # requested suite. Template sources must have no sessions;
+        # PGDATABASE=postgres keeps our own session off the template source.
+        env:
+          PGDATABASE: postgres
+          SUITES: ${{ inputs.suites }}
+        shell: bash
+        run: |
+          set -o pipefail
+          psql "$OPENBOOKS_DB_URL" -c "CREATE DATABASE openbooks_e2e_tmpl TEMPLATE openbooks_e2e"
+          for pair in $SUITES; do
+            psql "$OPENBOOKS_DB_URL" -c "CREATE DATABASE openbooks_e2e_${pair##*:} TEMPLATE openbooks_e2e_tmpl"
+          done
+
+      - name: Build browser application
+        env:
+          OPENBOOKS_DB_URL: ${{ env.OPENBOOKS_RUNTIME_DB_URL }}
+        run: npm run build -w web
+
+      - name: Playwright payroll suites
+        # Every requested suite runs even if an earlier one fails, so one
+        # dispatch reports every broken pack rather than only the first.
+        env:
+          SUITES: ${{ inputs.suites }}
+          E2E_PRODUCTION: "1"
+          E2E_IGNORE_HTTPS_ERRORS: "1"
+        shell: bash
+        run: |
+          set -o pipefail
+          status=0
+          for pair in $SUITES; do
+            spec="${pair%%:*}"
+            echo "::group::playwright payroll ${spec}"
+            OPENBOOKS_DB_URL="postgres://openbooks_app:${OPENBOOKS_DB_PASSWORD}@localhost:5433/openbooks_e2e_${pair##*:}" \
+              npx playwright test --project workflows --workers=1 "e2e/workflows/${spec}.spec.ts" || status=1
+            echo "::endgroup::"
+          done
+          exit $status
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: playwright-report-payroll
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7
