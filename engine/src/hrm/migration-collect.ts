@@ -475,7 +475,7 @@ function buildRow(input: BuildRowInput): SourcePersonRow {
           `conflicting-employment-evidence terminated_on:${role.terminated_on} ` +
           `vs ${anchorProvenance}`,
         conflict: {
-          terminatedOn: role.terminated_on,
+          terminatedOn: termination,
           activityAnchor: anchorProvenance,
           activityDate: anchorDate,
         },
