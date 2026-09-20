@@ -9,6 +9,16 @@ import { exactMoney, parseJsonBody } from "@/lib/api/json";
 import { isUuid } from "@/lib/list-params";
 export const runtime = "nodejs";
 const date = z.string().refine(isIsoCalendarDate, "enter a calendar date");
+const plan = z.array(z.object({ date, amount: exactMoney() })).max(1200);
+const groupComponent = z.object({
+  cost: exactMoney(),
+  accumulated: exactMoney(),
+  salvage: exactMoney(),
+  remainingPlan: plan,
+  removedPlan: plan.optional(),
+  unimpairedAccumulated: exactMoney().optional(),
+  unimpairedRemainingPlan: plan.optional(),
+});
 const assetChangeSchema = z.object({
   operation: z.enum(["partial_disposal", "intercompany_transfer"]),
   effectiveOn: date,
@@ -26,6 +36,7 @@ const assetChangeSchema = z.object({
             accumulated: exactMoney(),
             salvage: exactMoney(),
             remainingProductionUnits: exactMoney().optional(),
+            group: groupComponent.optional(),
           }),
         )
         .min(1)
@@ -109,7 +120,30 @@ export async function GET(
       sql`select id,name from accounting_books where org_id=${orgId} and is_active order by is_primary desc,name`,
     )
   ).rows;
-  return NextResponse.json({ subsidiaries, books });
+  const groupBooks = (
+    await db.execute<{ book_id: string; group_currency: string }>(
+      sql`select book_id,group_currency from asset_transfer_bases where org_id=${orgId} and receiving_asset_id=${id} and reversed_by_change_id is null order by book_id`,
+    )
+  ).rows;
+  const groupScope = (
+    await db.execute<{ elimination_subsidiary_id: string }>(
+      sql`select distinct elimination_subsidiary_id from asset_transfer_bases where org_id=${orgId} and receiving_asset_id=${id} and reversed_by_change_id is null`,
+    )
+  ).rows;
+  if (
+    gate.allowedSubsidiaryIds &&
+    groupScope.some(
+      (s) => !gate.allowedSubsidiaryIds!.has(s.elimination_subsidiary_id),
+    )
+  )
+    return NextResponse.json(
+      {
+        error:
+          "this asset change includes a group entity outside your authorization",
+      },
+      { status: 403 },
+    );
+  return NextResponse.json({ subsidiaries, books, groupBooks });
 }
 export async function POST(
   req: Request,

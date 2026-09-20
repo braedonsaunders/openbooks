@@ -1,12 +1,11 @@
+import { assetGroupHistory } from "../organization/asset-group-history.ts";
+import {
+  measureGroupComponent,
+  type GroupComponentInput,
+} from "./group-component.ts";
 import { lockAssetTaxLifecycle } from "../organization/asset-tax-fence.ts";
-import {
-  groupAssetPlan,
-  type GroupAssetValuation,
-} from "../money/asset-group-plan.ts";
-import {
-  splitDepreciationPlan,
-  type DatedDepreciation,
-} from "../money/depreciation-plan.ts";
+import { type GroupAssetValuation } from "../money/asset-group-plan.ts";
+import { type DatedDepreciation } from "../money/depreciation-plan.ts";
 import { applyAssetReversal } from "./asset-change-reversals.ts";
 import {
   intercompanyBalancingLegs,
@@ -74,6 +73,7 @@ export interface AssetChangeInput {
           accumulated: string;
           salvage: string;
           remainingProductionUnits?: string;
+          group?: GroupComponentInput;
         }[];
       };
   proceeds: string;
@@ -301,12 +301,26 @@ async function snapshot(
     (!elimination?.is_active || !elimination.is_elimination)
   )
     throw new Error("select the active group elimination entity");
+  const groupScope = (
+    await tx.execute<{ elimination_subsidiary_id: string }>(
+      sql`select distinct elimination_subsidiary_id from asset_transfer_bases where org_id=${orgId} and receiving_asset_id=${assetId} and reversed_by_change_id is null order by elimination_subsidiary_id`,
+    )
+  ).rows.map((r) => r.elimination_subsidiary_id);
   const requiredSubsidiaryIds = [
-    seller.id,
-    ...(buyer ? [buyer.id] : []),
-    ...(elimination ? [elimination.id] : []),
+    ...new Set([
+      seller.id,
+      ...groupScope,
+      ...(buyer ? [buyer.id] : []),
+      ...(elimination ? [elimination.id] : []),
+    ]),
   ];
-  await access(tx, orgId, actorId, requiredSubsidiaryIds, !!buyer);
+  await access(
+    tx,
+    orgId,
+    actorId,
+    requiredSubsidiaryIds,
+    !!buyer || groupScope.length > 0,
+  );
   const category = (
     await tx.execute<Category>(
       sql`select * from asset_categories where org_id=${orgId} and id=${asset.category_id}`,
@@ -538,6 +552,7 @@ async function snapshot(
     const futureTotal = future.reduce((a, l) => add(a, l.amount), "0");
     if (
       input.transfer &&
+      groupScope.length === 0 &&
       cmp(
         futureTotal,
         suppliedPlan
@@ -865,6 +880,7 @@ async function snapshot(
     )
   ).rows;
   const predecessorValuations: Record<string, GroupAssetValuation[]> = {};
+  const groupComponents: Record<string, GroupAssetValuation> = {};
   for (const predecessor of predecessors) {
     const unresolved = (
       await tx.execute(
@@ -875,51 +891,51 @@ async function snapshot(
       throw new Error(
         "record and approve the receiving asset Group valuation before disposing or transferring its changed group basis",
       );
-    predecessorValuations[predecessor.book_id] = (
-      await tx.execute<{ measurement: GroupAssetValuation }>(
-        sql`select m.measurement from asset_transfer_measurements m join asset_events v on v.org_id=m.org_id and v.id=m.source_event_id join journal_entries e on e.org_id=v.org_id and e.id=v.journal_entry_id where m.org_id=${orgId} and m.transfer_id=${predecessor.id} and m.effective_on<=${input.effectiveOn} and e.status='posted' and not exists(select 1 from asset_events r where r.org_id=v.org_id and r.reverses_event_id=v.id) order by m.effective_on,m.ordinal`,
-      )
-    ).rows.map((row) => row.measurement);
-    // A received record represents the homogeneous group asset measured at
-    // transfer. An identified disposal must conserve the same physical share
-    // in both books; independently componentized assets remain separate records.
+    predecessorValuations[predecessor.book_id] = await assetGroupHistory(
+      tx,
+      orgId,
+      predecessor.id,
+      input.effectiveOn,
+    );
     const preview = previews.find((p) => p.bookId === predecessor.book_id)!;
-    if (!("percent" in input.portion)) {
-      const values = (
-        await tx.execute<{
-          cost: string;
-          accumulated: string;
-          salvage: string;
-        }>(
-          sql`select cost::text,accumulated::text,salvage::text from asset_book_carrying_values where org_id=${orgId} and asset_id=${assetId} and book_id=${predecessor.book_id}`,
-        )
-      ).rows[0]!;
-      if (
-        cmp(
-          preview.removedAccumulated,
-          mulRatio(
-            add(values.accumulated, preview.stub),
-            toUnits(preview.removedCost),
-            toUnits(values.cost),
-          ),
-        ) !== 0 ||
-        cmp(
-          preview.removedSalvage,
-          mulRatio(
-            values.salvage,
-            toUnits(preview.removedCost),
-            toUnits(values.cost),
-          ),
-        ) !== 0
+    const identified =
+      "books" in input.portion
+        ? input.portion.books.find((b) => b.bookId === predecessor.book_id)
+        : undefined;
+    if (identified && !identified.group)
+      throw new Error(
+        "record the identified component's group cost, accumulated depreciation, residual value and retained service in the asset change's Group component section",
+      );
+    const periods = (
+      await tx.execute<{ starts_on: string; ends_on: string }>(
+        sql`select starts_on::text,ends_on::text from accounting_periods where org_id=${orgId} and fiscal_calendar_id=${preview.calendarId} and not is_adjustment and ends_on>=${input.effectiveOn} order by starts_on`,
       )
-        throw new Error(
-          "the transferred group asset is not componentized: identified amounts must describe the same physical share of cost, depreciation and residual value; use separately recorded asset components for independently measured portions",
-        );
-    }
+    ).rows;
+    groupComponents[predecessor.book_id] = measureGroupComponent({
+      basis: predecessor.basis,
+      history: predecessorValuations[predecessor.book_id]!,
+      effectiveOn: input.effectiveOn,
+      originalBuyerCost: asset.acquisition_cost,
+      buyerCostBefore: add(preview.remainingCost, preview.removedCost),
+      removedBuyerCost: preview.removedCost,
+      identified: identified?.group,
+      onward: !!input.transfer,
+      periods,
+    });
   }
+  if (
+    "books" in input.portion &&
+    input.portion.books.some(
+      (b) => b.group && !predecessors.some((p) => p.book_id === b.bookId),
+    )
+  )
+    throw new Error(
+      "group component evidence requires a received intercompany asset in that accounting book",
+    );
   return {
     predecessors,
     predecessorValuations,
+    groupComponents,
     ownership,
     nci,
     asset,
@@ -952,16 +968,30 @@ export async function proposeAssetChange(
         )
       ).rows[0];
       if (!identity) throw new Error("asset not found");
+      const groupScope = (
+        await tx.execute<{ elimination_subsidiary_id: string }>(
+          sql`select distinct elimination_subsidiary_id from asset_transfer_bases where org_id=${orgId} and receiving_asset_id=${assetId} and reversed_by_change_id is null order by elimination_subsidiary_id`,
+        )
+      ).rows.map((r) => r.elimination_subsidiary_id);
       const required = [
-        identity.subsidiary_id,
-        ...(input.transfer
-          ? [
-              input.transfer.subsidiaryId,
-              input.transfer.eliminationSubsidiaryId,
-            ]
-          : []),
+        ...new Set([
+          identity.subsidiary_id,
+          ...groupScope,
+          ...(input.transfer
+            ? [
+                input.transfer.subsidiaryId,
+                input.transfer.eliminationSubsidiaryId,
+              ]
+            : []),
+        ]),
       ];
-      await access(tx, orgId, actorId, required, !!input.transfer);
+      await access(
+        tx,
+        orgId,
+        actorId,
+        required,
+        !!input.transfer || groupScope.length > 0,
+      );
       const args = {
         orgId,
         subsidiaryId: identity.subsidiary_id,
@@ -1005,16 +1035,9 @@ export async function applyAssetChange(
         tx,
         orgId,
         actorId,
-        [
-          change.subsidiary_id,
-          ...(input.transfer
-            ? [
-                input.transfer.subsidiaryId,
-                input.transfer.eliminationSubsidiaryId,
-              ]
-            : []),
-        ],
-        !!input.transfer,
+        change.payload.requiredSubsidiaryIds as string[],
+        !!input.transfer ||
+          (change.payload.requiredSubsidiaryIds as string[]).length > 1,
       );
       if (change.status === "applied") return change.result!;
       const state = await snapshot(
@@ -1083,7 +1106,7 @@ export async function applyAssetChange(
         if (stubId) entries.push(stubId);
         if (entryId) entries.push(entryId);
         await tx.execute(
-          sql`insert into asset_basis_changes(org_id,asset_id,book_id,change_id,effective_on,cost_delta,accumulated_delta,salvage_delta,impairment_released,units_remaining,depreciable_after,journal_entry_id,stub_journal_entry_id,created_by) values(${orgId},${change.subject_id},${preview.bookId},${changeId},${input.effectiveOn},${neg(preview.removedCost)},${add(preview.stub, neg(preview.removedAccumulated))},${neg(preview.removedSalvage)},${preview.impairmentReleased},${preview.unitsRemaining},${add(add(preview.remainingCost, neg(preview.remainingAccumulated)), neg(preview.remainingSalvage))},${entryId},${stubId},${actorId})`,
+          sql`insert into asset_basis_changes(org_id,asset_id,book_id,change_id,effective_on,cost_delta,accumulated_delta,salvage_delta,impairment_released,units_remaining,depreciable_after,journal_entry_id,stub_journal_entry_id,group_component,created_by) values(${orgId},${change.subject_id},${preview.bookId},${changeId},${input.effectiveOn},${neg(preview.removedCost)},${add(preview.stub, neg(preview.removedAccumulated))},${neg(preview.removedSalvage)},${preview.impairmentReleased},${preview.unitsRemaining},${add(add(preview.remainingCost, neg(preview.remainingAccumulated)), neg(preview.remainingSalvage))},${entryId},${stubId},${state.groupComponents[preview.bookId] ? JSON.stringify(state.groupComponents[preview.bookId]) : null}::jsonb,${actorId})`,
         );
         await tx.execute(
           sql`insert into asset_events(org_id,asset_id,kind,occurred_on,amount,journal_entry_id,book_id,financial_change_id,memo,created_by,updated_by) values(${orgId},${change.subject_id},${input.transfer ? "transferred" : preview.full ? "disposed" : "partially_disposed"},${input.effectiveOn},${input.proceeds},${entryId},${preview.bookId},${changeId},${`${preview.full ? "Full" : "Partial"} ${input.operation}: ${input.reason}`},${actorId},${actorId})`,
@@ -1167,10 +1190,6 @@ export async function applyAssetChange(
             (p) => p.book_id === preview.bookId,
           );
           if (predecessor) {
-            const revisedGroup = groupAssetPlan(
-              predecessor.basis.groupPlan,
-              state.predecessorValuations[preview.bookId] ?? [],
-            );
             if (
               predecessor.elimination_subsidiary_id !==
                 t.eliminationSubsidiaryId ||
@@ -1179,49 +1198,28 @@ export async function applyAssetChange(
               throw new Error(
                 "an onward transfer must retain its existing group consolidation currency and elimination entity",
               );
-            const original = (
-              await tx.execute<{ acquisition_cost: string }>(
-                sql`select acquisition_cost::text from fixed_assets where org_id=${orgId} and id=${change.subject_id}`,
-              )
-            ).rows[0]!.acquisition_cost;
-            const p = predecessor.basis,
-              priorGroupDep = splitDepreciationPlan(
-                revisedGroup.plan,
-                input.effectiveOn,
-              ).accrued;
+            const component = state.groupComponents[preview.bookId]!;
             const translateBasis = (v: string) =>
-              mulRate(divRate(v, p.buyerToGroupRate), t.sellerToGroupRate);
-            groupCost = mulRatio(
-              translateBasis(p.groupCost),
-              toUnits(preview.removedCost),
-              toUnits(original),
-            );
-            groupAccumulated = mulRatio(
-              translateBasis(
-                add(
-                  add(p.groupAccumulated, revisedGroup.accumulatedDelta),
-                  priorGroupDep,
-                ),
-              ),
-              toUnits(preview.removedCost),
-              toUnits(original),
-            );
-            groupSalvage = mulRatio(
-              translateBasis(p.groupSalvage),
-              toUnits(preview.removedCost),
-              toUnits(original),
-            );
-            groupPlan = splitDepreciationPlan(
-              revisedGroup.plan,
-              input.effectiveOn,
-            ).remaining.map((l) => ({
+              mulRate(
+                divRate(v, predecessor.basis.buyerToGroupRate),
+                t.sellerToGroupRate,
+              );
+            groupCost = translateBasis(component.removedCost!);
+            groupAccumulated = translateBasis(component.removedAccumulated!);
+            groupSalvage = translateBasis(component.removedSalvage!);
+            groupPlan = component.removedPlan!.map((l) => ({
               ...l,
-              amount: mulRatio(
-                translateBasis(l.amount),
-                toUnits(preview.removedCost),
-                toUnits(original),
-              ),
+              amount: translateBasis(l.amount),
             }));
+            if (groupPlan.length) {
+              const assigned = groupPlan
+                .slice(0, -1)
+                .reduce((sum, l) => add(sum, l.amount), "0");
+              groupPlan.at(-1)!.amount = add(
+                add(add(groupCost, neg(groupAccumulated)), neg(groupSalvage)),
+                neg(assigned),
+              );
+            }
           }
           await tx.execute(
             sql`insert into asset_transfer_bases(org_id,change_id,source_asset_id,receiving_asset_id,book_id,effective_on,seller_subsidiary_id,buyer_subsidiary_id,elimination_subsidiary_id,group_currency,basis,created_by) values(${orgId},${changeId},${change.subject_id},${receivingAssetId},${preview.bookId},${input.effectiveOn},${state.seller.id},${state.buyer.id},${t.eliminationSubsidiaryId},${state.elimination!.base_currency},${JSON.stringify({ groupCost, groupAccumulated, groupSalvage, groupPlan, nci: state.nci, buyerCost: mulRate(t.buyerAmount, t.buyerToGroupRate), buyerToGroupRate: t.buyerToGroupRate, ctaAccountId: t.ctaAccountId, groupAssetAccountId: t.groupAssetAccountId, groupAccumulatedAccountId: t.groupAccumulatedAccountId, groupDepreciationAccountId: t.groupDepreciationAccountId, groupGainLossAccountId: t.groupGainLossAccountId, taxRatePercent: t.taxRatePercent, deferredTaxAccountId: t.deferredTaxAccountId, taxExpenseAccountId: t.taxExpenseAccountId })}::jsonb,${actorId})`,

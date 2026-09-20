@@ -1,4 +1,6 @@
 "use client";
+import { GroupComponentFields } from "./GroupComponentFields";
+import type { GroupComponentInput } from "@openbooks/engine/src/assets/group-component.ts";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -21,6 +23,7 @@ type Setup = {
     is_elimination: boolean;
   }[];
   books: { id: string; name: string }[];
+  groupBooks: { book_id: string; group_currency: string }[];
 };
 /** Uses the same stacked native Drawer and account pickers as the asset record. */
 export function AssetChangeButton({
@@ -57,6 +60,7 @@ export function AssetChangeButton({
         accumulated: string;
         salvage: string;
         remainingProductionUnits?: string;
+        group?: GroupComponentInput;
       }
     >
   >({});
@@ -301,6 +305,29 @@ export function AssetChangeButton({
                       </div>
                     ))}
                   </div>
+                  {setup.groupBooks?.find((g) => g.book_id === b.id) ? (
+                    <GroupComponentFields
+                      value={components[b.id]?.group}
+                      currency={
+                        setup.groupBooks.find((g) => g.book_id === b.id)!
+                          .group_currency
+                      }
+                      onward={operation === "intercompany_transfer"}
+                      onChange={(group) => {
+                        setComponents((v) => ({
+                          ...v,
+                          [b.id]: {
+                            cost: "",
+                            accumulated: "",
+                            salvage: "",
+                            ...v[b.id],
+                            group,
+                          },
+                        }));
+                        setKey(crypto.randomUUID());
+                      }}
+                    />
+                  ) : null}
                 </fieldset>
               ))}
             </div>
