@@ -984,7 +984,9 @@
     "hrm_team_manage": "Work manager-assigned team steps",
     "automations_read": "See automation recipes and the run log",
     "automations_manage": "Author automations and approval settings",
-    "automations_run": "Run automations now"
+    "automations_run": "Run automations now",
+    "hrm_construction_read": "See construction compliance",
+    "hrm_construction_manage": "Manage construction compliance"
   },
   "ai": {
     "metaTitle": "AI providers",
@@ -2471,6 +2473,31 @@
       "home-announcements": {
         "title": "Announcements",
         "description": "Company announcements for the home page, with audience scope and dates."
+      },
+      "construction-classifications": {
+        "title": "Work classifications",
+        "singularTitle": "Work classification",
+        "description": "Trade taxonomy for prevailing-wage pricing: journey and apprentice classes with the journey class each apprentice ratio counts against."
+      },
+      "construction-rate-schedules": {
+        "title": "Rate schedules",
+        "singularTitle": "Rate schedule",
+        "description": "Prevailing-wage, union-agreement, and org-declared tables with project, location, and subsidiary scope plus the reciprocity the resolver applies."
+      },
+      "construction-comp-classes": {
+        "title": "Comp classes",
+        "singularTitle": "Comp class",
+        "description": "Workers'-comp premium classes with the rate per 100 where declared; priority rules below decide which class prices each hour."
+      },
+      "construction-per-diem-policies": {
+        "title": "Per-diem policies",
+        "singularTitle": "Per-diem policy",
+        "description": "Per-diem computation rules per basis. Taxability lives on the linked pay component, never here."
+      },
+      "construction-ratio-rules": {
+        "title": "Ratio rules",
+        "singularTitle": "Ratio rule",
+        "description": "Journey-to-apprentice ratios per schedule, measured daily or weekly. A breach reprices apprentice hours at the journey line."
       }
     },
     "fields": {
@@ -2788,7 +2815,22 @@
       "endsOn": "Ends on",
       "action": "Action",
       "reasonCode": "Reason code",
-      "requiresComment": "Requires comment"
+      "requiresComment": "Requires comment",
+      "trade": "Trade",
+      "isApprentice": "Apprentice",
+      "apprenticeProgramRef": "Program ref",
+      "journeyClassificationId": "Journey class",
+      "apprenticeClassificationId": "Apprentice class",
+      "sourceRef": "Source ref",
+      "jurisdictionCode": "Jurisdiction",
+      "reciprocity": "Reciprocity",
+      "ratePer100": "Rate / 100",
+      "lodgingOffset": "Lodging offset",
+      "payComponentId": "Pay component",
+      "scheduleId": "Schedule",
+      "ratioJourney": "Journey",
+      "ratioApprentice": "Apprentice",
+      "measured": "Measured"
     },
     "fieldHelp": {
       "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",
@@ -2867,7 +2909,10 @@
       "benefitEmployerComponent": "Employer-contribution component pricing the employer rows. Required when the plan prices an employer cost.",
       "benefitWaitingPeriod": "Days of service before the plan may be elected.",
       "benefitRequiresApproval": "Elections land pending until a manager approves them.",
-      "benefitLevelKey": "Tier key the election names — single, family — stable across repricings."
+      "benefitLevelKey": "Tier key the election names — single, family — stable across repricings.",
+      "rateScheduleSource": "Determination number or agreement id behind this schedule.",
+      "rateScheduleJurisdiction": "Pack vocabulary, free text at the generic layer — the pack interprets it.",
+      "perDiemComponent": "Earning component the amounts cross through. Its tax treatment is the single taxability declaration."
     },
     "options": {
       "payFrequency": {
@@ -3285,6 +3330,25 @@
         "termination": "Termination",
         "profile_change": "Profile change",
         "other": "Other"
+      },
+      "hrmScheduleKind": {
+        "prevailingWage": "Prevailing wage",
+        "unionAgreement": "Union agreement",
+        "orgDeclared": "Org declared"
+      },
+      "hrmReciprocity": {
+        "homeLocal": "Home local",
+        "jobsiteLocal": "Jobsite local",
+        "higherOf": "Higher of"
+      },
+      "hrmPerDiemBasis": {
+        "flatDaily": "Flat daily",
+        "distanceBrackets": "Distance brackets",
+        "hoursThreshold": "Hours threshold"
+      },
+      "hrmRatioMeasured": {
+        "daily": "Daily",
+        "weekly": "Weekly"
       }
     },
     "payroll": {
@@ -4558,6 +4622,30 @@
     "hrmEventVerbs": {
       "title": "Change event verbs",
       "description": "Cancel, rescind, and correct employment changes as appended events."
+    },
+    "hrmConstructionCompliance": {
+      "title": "Construction compliance",
+      "description": "Prevailing-wage and union rate tables, certified payroll, workers'-comp class splits, apprentice ratios, and per-diem for self-performed construction. Needs payroll, projects, and time tracking."
+    },
+    "hrmPrevailingWage": {
+      "title": "Prevailing wage",
+      "description": "Resolve the wage by project location, classification, and date from declared rate schedules."
+    },
+    "hrmCertifiedPayroll": {
+      "title": "Certified payroll",
+      "description": "Frozen weekly certified reports rendered through the payroll pack's declared files."
+    },
+    "hrmWorkersCompClasses": {
+      "title": "Workers'-comp classes",
+      "description": "Split costed hours across premium classes by priority match rules."
+    },
+    "hrmApprenticeRatios": {
+      "title": "Apprentice ratios",
+      "description": "Enforce journey-to-apprentice ratios daily; breaches reprice at the journey line."
+    },
+    "hrmPerDiem": {
+      "title": "Per diem",
+      "description": "Compute per-diem and travel pay from approved time into the payroll seam."
     }
   },
   "backupsManager": {

@@ -692,6 +692,26 @@
       "hrm_action_reasons": {
         "label": "Motivos de ação",
         "description": "Uma linha por código de motivo e ação de RH — o vocabulário das solicitações. Requer a permissão de emprego do RH."
+      },
+      "hrm_rate_schedule_lines": {
+        "label": "Tabelas salariais",
+        "description": "Uma linha por tabela, classificação e data: base resolúvel, benefícios em dinheiro, creditável e hora extra."
+      },
+      "hrm_per_diem_entries": {
+        "label": "Diárias",
+        "description": "Uma linha por vínculo, projeto e dia: diárias e viagens calculadas com status."
+      },
+      "hrm_comp_class_split": {
+        "label": "Divisão de classes",
+        "description": "Regras de prioridade com suas classes: qual classe precifica cada hora e sua taxa por 100."
+      },
+      "hrm_certified_runs": {
+        "label": "Folhas certificadas",
+        "description": "Folhas certificadas por projeto e semana: dados congelados com formato e arquivo."
+      },
+      "hrm_compliance_findings": {
+        "label": "Achados",
+        "description": "Sinalizadores prévios por tipo: proporções, taxas ausentes, classes sem solução."
       }
     },
     "columns": {
@@ -1373,6 +1393,38 @@
         "effective_to": "Vigente até",
         "employment_id": "Emprego (id)",
         "id": "Inscrição (id)"
+      },
+      "hrm_rate_schedule_lines": {
+        "schedule": "Tabela",
+        "classification": "Classificação",
+        "base_rate": "Taxa base",
+        "fringe_rate": "Benefícios",
+        "currency": "Moeda",
+        "effective_from": "Vigente desde"
+      },
+      "hrm_per_diem_entries": {
+        "worked_on": "Dia",
+        "amount": "Valor",
+        "currency": "Moeda",
+        "status": "Status",
+        "employment_id": "Vínculo (id)"
+      },
+      "hrm_comp_class_split": {
+        "class": "Classe",
+        "priority": "Prioridade",
+        "rate": "Taxa / 100"
+      },
+      "hrm_certified_runs": {
+        "week_ending": "Semana até",
+        "format_key": "Formato",
+        "status": "Status",
+        "project_id": "Projeto (id)"
+      },
+      "hrm_compliance_findings": {
+        "kind": "Tipo",
+        "worked_on": "Dia",
+        "status": "Status",
+        "project_id": "Projeto (id)"
       }
     },
     "enumValues": {

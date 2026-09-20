@@ -10,7 +10,8 @@
       "myLeave": "Mis ausencias",
       "recruiting": "Contratación",
       "performance": "Desempeño",
-      "benefits": "Beneficios"
+      "benefits": "Beneficios",
+      "compliance": "Cumplimiento"
     },
     "recruiting": {
       "title": "Contratación",
@@ -1085,6 +1086,114 @@
       "termination": "Baja",
       "profile_change": "Cambio de perfil",
       "other": "Otro"
+    }
+  },
+  "compliance": {
+    "title": "Cumplimiento",
+    "description": "Salarios vigentes, nóminas certificadas, clases de compensación, proporciones de aprendices y dietas — cumplimiento de construcción desde los mismos registros de tiempo, proyecto y nómina.",
+    "refused": "Cumplimiento no disponible",
+    "needRead": "Necesita el permiso de lectura de construcción para abrir este espacio.",
+    "generate": "Generar informe",
+    "findingsTitle": "Hallazgos",
+    "ratesTitle": "Tablas salariales",
+    "certifiedTitle": "Nómina certificada",
+    "classesTitle": "Clases",
+    "perdiemTitle": "Dietas",
+    "empty": "Nada aquí todavía.",
+    "emptyAction": "Configúrelo en Ajustes abajo.",
+    "active": "Activo",
+    "retired": "Retirado",
+    "sections": {
+      "findings": "Hallazgos",
+      "rates": "Tarifas",
+      "certified": "Nómina certificada",
+      "classes": "Clases",
+      "perdiem": "Dietas"
+    },
+    "kinds": {
+      "ratio_breach": "Proporción incumplida",
+      "missing_rate": "Tarifa faltante",
+      "class_unresolved": "Clase sin resolver",
+      "registration_missing": "Registro faltante",
+      "fringe_mismatch": "Diferencia de beneficios"
+    },
+    "findingStatus": {
+      "open": "Abierto",
+      "acknowledged": "Reconocido",
+      "resolved": "Resuelto"
+    },
+    "runStatus": {
+      "draft": "Borrador",
+      "generated": "Generado",
+      "submitted": "Enviado",
+      "amended": "Modificado"
+    },
+    "entryStatus": {
+      "computed": "Calculado",
+      "approved": "Aprobado",
+      "voided": "Anulado",
+      "consumed": "Consumido"
+    },
+    "scheduleKind": {
+      "prevailing_wage": "Salario vigente",
+      "union_agreement": "Convenio sindical",
+      "org_declared": "Declarado"
+    },
+    "reciprocity": {
+      "home_local": "Local de origen",
+      "jobsite_local": "Lugar de obra",
+      "higher_of": "El mayor"
+    },
+    "scope": {
+      "project": "proyectos",
+      "location": "ubicaciones",
+      "subsidiary": "Filial",
+      "org": "Toda la empresa"
+    },
+    "columns": {
+      "kind": "Tipo",
+      "project": "Proyecto",
+      "day": "Día",
+      "status": "Estado",
+      "recorded": "Registrado",
+      "schedule": "Tabla",
+      "scope": "Alcance",
+      "reciprocity": "Reciprocidad",
+      "window": "Vigencia",
+      "run": "Ejecución",
+      "week": "Semana",
+      "format": "Formato",
+      "code": "Código",
+      "name": "Nombre",
+      "rate": "Tasa / 100",
+      "rules": "Reglas",
+      "amount": "Importe",
+      "actions": "Acciones"
+    },
+    "stats": {
+      "openFindings": "Hallazgos abiertos",
+      "openFindingsSub": "Por atender antes del próximo ciclo",
+      "dueReports": "Informes pendientes",
+      "dueReportsSub": "Proyectos sin informe para la semana hasta {week}",
+      "unresolvedClasses": "Clases sin resolver",
+      "unresolvedClassesSub": "Horas sin regla aplicable",
+      "perdiemWaiting": "Dietas en espera",
+      "perdiemWaitingSub": "Entradas calculadas por aprobar"
+    },
+    "actions": {
+      "acknowledge": "Reconocer",
+      "resolve": "Resolver",
+      "approve": "Aprobar",
+      "void": "Anular",
+      "submit": "Enviar"
+    },
+    "generateDialog": {
+      "title": "Generar informe certificado",
+      "project": "Proyecto",
+      "week": "Semana hasta",
+      "format": "Formato",
+      "generate": "Generar",
+      "cancel": "Cancelar"
     }
   }
 }

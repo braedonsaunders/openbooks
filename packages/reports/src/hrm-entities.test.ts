@@ -15,11 +15,27 @@ import { validateCustomQuery } from './validate'
 // entity (0193) carries hrm.process.read: checklist state is governed by
 // the process gate, not the employment one.
 
-const HRM_KEYS = ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests', 'hrm_positions', 'hrm_processes', 'hrm_leave_absences', 'hrm_requisitions', 'hrm_applications', 'hrm_benefit_enrollments', 'hrm_reviews', 'hrm_goals', 'hrm_turnover', 'automations', 'automation_runs', 'hrm_action_reasons'] as const
-const HRM_KEYS = ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests', 'hrm_positions', 'hrm_processes', 'hrm_leave_absences', 'hrm_requisitions', 'hrm_applications', 'hrm_benefit_enrollments', 'hrm_reviews', 'hrm_goals', 'hrm_turnover',
-  // HR-13 begin: construction-compliance entities (0223/0224).
-  'hrm_rate_schedule_lines', 'hrm_per_diem_entries', 'hrm_comp_class_split', 'hrm_certified_runs', 'hrm_compliance_findings',
-  // HR-13 end
+const HRM_KEYS = [
+  'hrm_headcount',
+  'hrm_employment_history',
+  'hrm_change_requests',
+  'hrm_positions',
+  'hrm_processes',
+  'hrm_leave_absences',
+  'hrm_requisitions',
+  'hrm_applications',
+  'hrm_reviews',
+  'hrm_goals',
+  'hrm_turnover',
+  'hrm_benefit_enrollments',
+  'automations',
+  'automation_runs',
+  'hrm_action_reasons',
+  'hrm_rate_schedule_lines',
+  'hrm_per_diem_entries',
+  'hrm_comp_class_split',
+  'hrm_certified_runs',
+  'hrm_compliance_findings',
 ] as const
 
 const HRM_PERMISSIONS: Record<(typeof HRM_KEYS)[number], string> = {
@@ -68,35 +84,15 @@ test('workforce entities refuse without their gate and their own read permission
     hrm_requisitions: 'hrm', hrm_applications: 'hrm', hrm_benefit_enrollments: 'hrm',
     hrm_reviews: 'hrm', hrm_goals: 'hrm', hrm_turnover: 'hrm',
     automations: 'automations', automation_runs: 'automations', hrm_action_reasons: 'hrmActionReasons',
+    // HR-13: construction entities ride the construction switch, not the bare hrm one.
+    hrm_rate_schedule_lines: 'hrmConstructionCompliance', hrm_per_diem_entries: 'hrmConstructionCompliance',
+    hrm_comp_class_split: 'hrmConstructionCompliance', hrm_certified_runs: 'hrmConstructionCompliance',
+    hrm_compliance_findings: 'hrmConstructionCompliance',
   }
   for (const key of HRM_KEYS) {
     const entity = REPORT_ENTITY_MAP[key]!
     assert.equal(entity.requiredPermission, HRM_PERMISSIONS[key], key)
     assert.equal(entity.featureKey, HRM_FEATURES[key], key)
-test('workforce entities refuse without the hrm gate and their own read permission', () => {
-  // HR-13 begin: construction entities sit behind the construction
-  // switch, not the bare hrm switch — a general-business org never sees
-  // them. The map below pins each entity's feature alongside its grant.
-  const HRM_FEATURE_KEYS: Record<(typeof HRM_KEYS)[number], string> = {
-    hrm_headcount: 'hrm',
-    hrm_employment_history: 'hrm',
-    hrm_change_requests: 'hrm',
-    hrm_positions: 'hrm',
-    hrm_processes: 'hrm',
-    hrm_leave_absences: 'hrm',
-    hrm_benefit_enrollments: 'hrm',
-    hrm_requisitions: 'hrm',
-    hrm_applications: 'hrm',
-    hrm_reviews: 'hrm',
-    hrm_goals: 'hrm',
-    hrm_turnover: 'hrm',
-    hrm_rate_schedule_lines: 'hrmConstructionCompliance',
-    hrm_per_diem_entries: 'hrmConstructionCompliance',
-    hrm_comp_class_split: 'hrmConstructionCompliance',
-    hrm_certified_runs: 'hrmConstructionCompliance',
-    hrm_compliance_findings: 'hrmConstructionCompliance',
-  // HR-13 end
-    assert.equal(entity.featureKey, HRM_FEATURE_KEYS[key], key)
   }
   // HR-16 end
 })

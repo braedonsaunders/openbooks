@@ -10,7 +10,8 @@
       "myLeave": "Minhas licenças",
       "recruiting": "Recrutamento",
       "performance": "Desempenho",
-      "benefits": "Benefícios"
+      "benefits": "Benefícios",
+      "compliance": "Conformidade"
     },
     "recruiting": {
       "title": "Recrutamento",
@@ -1085,6 +1086,114 @@
       "termination": "Desligamento",
       "profile_change": "Alteração de perfil",
       "other": "Outro"
+    }
+  },
+  "compliance": {
+    "title": "Conformidade",
+    "description": "Salários vigentes, folhas certificadas, classes de compensação, proporções de aprendizes e diárias — conformidade de construção a partir dos mesmos registros de tempo, projeto e folha.",
+    "refused": "Conformidade indisponível",
+    "needRead": "Você precisa da permissão de leitura de construção para abrir este espaço.",
+    "generate": "Gerar relatório",
+    "findingsTitle": "Achados",
+    "ratesTitle": "Tabelas salariais",
+    "certifiedTitle": "Folha certificada",
+    "classesTitle": "Classes",
+    "perdiemTitle": "Diárias",
+    "empty": "Nada aqui ainda.",
+    "emptyAction": "Configure em Ajustes abaixo.",
+    "active": "Ativo",
+    "retired": "Aposentado",
+    "sections": {
+      "findings": "Achados",
+      "rates": "Tabelas",
+      "certified": "Folha certificada",
+      "classes": "Classes",
+      "perdiem": "Diárias"
+    },
+    "kinds": {
+      "ratio_breach": "Proporção violada",
+      "missing_rate": "Taxa ausente",
+      "class_unresolved": "Classe sem solução",
+      "registration_missing": "Registro ausente",
+      "fringe_mismatch": "Divergência de benefícios"
+    },
+    "findingStatus": {
+      "open": "Aberto",
+      "acknowledged": "Reconhecido",
+      "resolved": "Resolvido"
+    },
+    "runStatus": {
+      "draft": "Rascunho",
+      "generated": "Gerado",
+      "submitted": "Enviado",
+      "amended": "Retificado"
+    },
+    "entryStatus": {
+      "computed": "Calculado",
+      "approved": "Aprovado",
+      "voided": "Anulado",
+      "consumed": "Consumido"
+    },
+    "scheduleKind": {
+      "prevailing_wage": "Salário vigente",
+      "union_agreement": "Acordo sindical",
+      "org_declared": "Declarado"
+    },
+    "reciprocity": {
+      "home_local": "Local de origem",
+      "jobsite_local": "Local da obra",
+      "higher_of": "O maior"
+    },
+    "scope": {
+      "project": "projetos",
+      "location": "locais",
+      "subsidiary": "Filial",
+      "org": "Empresa toda"
+    },
+    "columns": {
+      "kind": "Tipo",
+      "project": "Projeto",
+      "day": "Dia",
+      "status": "Status",
+      "recorded": "Registrado",
+      "schedule": "Tabela",
+      "scope": "Abrangência",
+      "reciprocity": "Reciprocidade",
+      "window": "Vigência",
+      "run": "Execução",
+      "week": "Semana",
+      "format": "Formato",
+      "code": "Código",
+      "name": "Nome",
+      "rate": "Taxa / 100",
+      "rules": "Regras",
+      "amount": "Valor",
+      "actions": "Ações"
+    },
+    "stats": {
+      "openFindings": "Achados abertos",
+      "openFindingsSub": "A tratar antes do próximo ciclo",
+      "dueReports": "Relatórios devidos",
+      "dueReportsSub": "Projetos sem relatório para a semana até {week}",
+      "unresolvedClasses": "Classes sem solução",
+      "unresolvedClassesSub": "Horas sem regra aplicável",
+      "perdiemWaiting": "Diárias aguardando",
+      "perdiemWaitingSub": "Entradas calculadas a aprovar"
+    },
+    "actions": {
+      "acknowledge": "Reconhecer",
+      "resolve": "Resolver",
+      "approve": "Aprovar",
+      "void": "Anular",
+      "submit": "Enviar"
+    },
+    "generateDialog": {
+      "title": "Gerar relatório certificado",
+      "project": "Projeto",
+      "week": "Semana até",
+      "format": "Formato",
+      "generate": "Gerar",
+      "cancel": "Cancelar"
     }
   }
 }

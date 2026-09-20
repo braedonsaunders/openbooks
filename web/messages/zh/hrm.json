@@ -10,7 +10,8 @@
       "myLeave": "我的休假",
       "recruiting": "招聘",
       "performance": "绩效",
-      "benefits": "福利"
+      "benefits": "福利",
+      "compliance": "合规"
     },
     "recruiting": {
       "title": "招聘",
@@ -1085,6 +1086,114 @@
       "termination": "离职",
       "profile_change": "档案变更",
       "other": "其他"
+    }
+  },
+  "compliance": {
+    "title": "合规",
+    "description": "现行工资、认证工资、工伤类别、学徒比例和每日津贴 — 基于相同的考勤、项目和工资记录处理建筑合规。",
+    "refused": "合规功能不可用",
+    "needRead": "打开此工作区需要建筑合规读取权限。",
+    "generate": "生成报告",
+    "findingsTitle": "发现项",
+    "ratesTitle": "工资表",
+    "certifiedTitle": "认证工资",
+    "classesTitle": "类别",
+    "perdiemTitle": "每日津贴",
+    "empty": "此处暂无内容。",
+    "emptyAction": "请在下方“设置”中配置。",
+    "active": "启用",
+    "retired": "停用",
+    "sections": {
+      "findings": "发现项",
+      "rates": "工资表",
+      "certified": "认证工资",
+      "classes": "类别",
+      "perdiem": "每日津贴"
+    },
+    "kinds": {
+      "ratio_breach": "比例违规",
+      "missing_rate": "缺少工资标准",
+      "class_unresolved": "类别未解决",
+      "registration_missing": "缺少登记",
+      "fringe_mismatch": "附加福利不符"
+    },
+    "findingStatus": {
+      "open": "待处理",
+      "acknowledged": "已确认",
+      "resolved": "已解决"
+    },
+    "runStatus": {
+      "draft": "草稿",
+      "generated": "已生成",
+      "submitted": "已提交",
+      "amended": "已修订"
+    },
+    "entryStatus": {
+      "computed": "已计算",
+      "approved": "已批准",
+      "voided": "已作废",
+      "consumed": "已使用"
+    },
+    "scheduleKind": {
+      "prevailing_wage": "现行工资",
+      "union_agreement": "工会协议",
+      "org_declared": "企业自定"
+    },
+    "reciprocity": {
+      "home_local": "属地标准",
+      "jobsite_local": "工地标准",
+      "higher_of": "取较高者"
+    },
+    "scope": {
+      "project": "个项目",
+      "location": "个地点",
+      "subsidiary": "子公司",
+      "org": "全公司"
+    },
+    "columns": {
+      "kind": "类型",
+      "project": "项目",
+      "day": "日期",
+      "status": "状态",
+      "recorded": "记录时间",
+      "schedule": "工资表",
+      "scope": "范围",
+      "reciprocity": "互惠规则",
+      "window": "有效期",
+      "run": "运行",
+      "week": "周",
+      "format": "格式",
+      "code": "编码",
+      "name": "名称",
+      "rate": "费率 / 100",
+      "rules": "规则",
+      "amount": "金额",
+      "actions": "操作"
+    },
+    "stats": {
+      "openFindings": "待处理发现项",
+      "openFindingsSub": "下次运行前处理",
+      "dueReports": "待提交报告",
+      "dueReportsSub": "截至 {week} 当周无报告的项目",
+      "unresolvedClasses": "未解决类别",
+      "unresolvedClassesSub": "无匹配规则的工时",
+      "perdiemWaiting": "待审批津贴",
+      "perdiemWaitingSub": "待审批的已计算条目"
+    },
+    "actions": {
+      "acknowledge": "确认",
+      "resolve": "解决",
+      "approve": "批准",
+      "void": "作废",
+      "submit": "提交"
+    },
+    "generateDialog": {
+      "title": "生成认证报告",
+      "project": "项目",
+      "week": "截至周",
+      "format": "格式",
+      "generate": "生成",
+      "cancel": "取消"
     }
   }
 }

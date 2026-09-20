@@ -10,7 +10,8 @@
       "myLeave": "Mes congés",
       "recruiting": "Recrutement",
       "performance": "Évaluations",
-      "benefits": "Avantages"
+      "benefits": "Avantages",
+      "compliance": "Conformité"
     },
     "recruiting": {
       "title": "Recrutement",
@@ -1085,6 +1086,114 @@
       "termination": "Départ",
       "profile_change": "Changement de profil",
       "other": "Autre"
+    }
+  },
+  "compliance": {
+    "title": "Conformité",
+    "description": "Salaires en vigueur, paies certifiées, classes d'indemnisation, ratios d'apprentis et indemnités journalières — la conformité construction issue des mêmes relevés de temps, projets et paies.",
+    "refused": "Conformité indisponible",
+    "needRead": "La permission de lecture construction est requise pour ouvrir cet espace.",
+    "generate": "Générer le rapport",
+    "findingsTitle": "Constats",
+    "ratesTitle": "Grilles salariales",
+    "certifiedTitle": "Paie certifiée",
+    "classesTitle": "Classes",
+    "perdiemTitle": "Indemnités journalières",
+    "empty": "Rien ici pour le moment.",
+    "emptyAction": "Configurez ci-dessous dans Paramètres.",
+    "active": "Actif",
+    "retired": "Retiré",
+    "sections": {
+      "findings": "Constats",
+      "rates": "Grilles",
+      "certified": "Paie certifiée",
+      "classes": "Classes",
+      "perdiem": "Journalières"
+    },
+    "kinds": {
+      "ratio_breach": "Ratio non respecté",
+      "missing_rate": "Taux manquant",
+      "class_unresolved": "Classe non résolue",
+      "registration_missing": "Immatriculation manquante",
+      "fringe_mismatch": "Écart d'avantages"
+    },
+    "findingStatus": {
+      "open": "Ouvert",
+      "acknowledged": "Pris en compte",
+      "resolved": "Résolu"
+    },
+    "runStatus": {
+      "draft": "Brouillon",
+      "generated": "Généré",
+      "submitted": "Soumis",
+      "amended": "Modifié"
+    },
+    "entryStatus": {
+      "computed": "Calculé",
+      "approved": "Approuvé",
+      "voided": "Annulé",
+      "consumed": "Consommé"
+    },
+    "scheduleKind": {
+      "prevailing_wage": "Salaire en vigueur",
+      "union_agreement": "Convention syndicale",
+      "org_declared": "Déclaré"
+    },
+    "reciprocity": {
+      "home_local": "Section d'origine",
+      "jobsite_local": "Lieu du chantier",
+      "higher_of": "Le plus élevé"
+    },
+    "scope": {
+      "project": "projets",
+      "location": "sites",
+      "subsidiary": "Filiale",
+      "org": "Toute l'entreprise"
+    },
+    "columns": {
+      "kind": "Type",
+      "project": "Projet",
+      "day": "Jour",
+      "status": "Statut",
+      "recorded": "Enregistré",
+      "schedule": "Grille",
+      "scope": "Portée",
+      "reciprocity": "Réciprocité",
+      "window": "Période",
+      "run": "Exécution",
+      "week": "Semaine",
+      "format": "Format",
+      "code": "Code",
+      "name": "Nom",
+      "rate": "Taux / 100",
+      "rules": "Règles",
+      "amount": "Montant",
+      "actions": "Actions"
+    },
+    "stats": {
+      "openFindings": "Constats ouverts",
+      "openFindingsSub": "À traiter avant le prochain cycle",
+      "dueReports": "Rapports dus",
+      "dueReportsSub": "Chantiers sans rapport pour la semaine au {week}",
+      "unresolvedClasses": "Classes non résolues",
+      "unresolvedClassesSub": "Heures sans règle applicable",
+      "perdiemWaiting": "Journalières en attente",
+      "perdiemWaitingSub": "Entrées calculées à approuver"
+    },
+    "actions": {
+      "acknowledge": "Prendre en compte",
+      "resolve": "Résoudre",
+      "approve": "Approuver",
+      "void": "Annuler",
+      "submit": "Soumettre"
+    },
+    "generateDialog": {
+      "title": "Générer le rapport certifié",
+      "project": "Projet",
+      "week": "Semaine au",
+      "format": "Format",
+      "generate": "Générer",
+      "cancel": "Annuler"
     }
   }
 }

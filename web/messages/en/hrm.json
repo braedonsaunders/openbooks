@@ -10,7 +10,8 @@
       "myLeave": "My leave",
       "recruiting": "Recruiting",
       "performance": "Performance",
-      "benefits": "Benefits"
+      "benefits": "Benefits",
+      "compliance": "Compliance"
     },
     "recruiting": {
       "title": "Recruiting",
@@ -1086,6 +1087,114 @@
       "termination": "Termination",
       "profile_change": "Profile change",
       "other": "Other"
+    }
+  },
+  "compliance": {
+    "title": "Compliance",
+    "description": "Prevailing wage, certified payroll, workers' comp classes, apprentice ratios, and per-diem — construction compliance from the same time, project, and payroll records.",
+    "refused": "Compliance is unavailable",
+    "needRead": "You need the construction read permission to open this workspace.",
+    "generate": "Generate report",
+    "findingsTitle": "Findings",
+    "ratesTitle": "Rate schedules",
+    "certifiedTitle": "Certified payroll",
+    "classesTitle": "Comp classes",
+    "perdiemTitle": "Per-diem entries",
+    "empty": "Nothing here yet.",
+    "emptyAction": "Configure it in Setup below.",
+    "active": "Active",
+    "retired": "Retired",
+    "sections": {
+      "findings": "Findings",
+      "rates": "Rates",
+      "certified": "Certified payroll",
+      "classes": "Classes",
+      "perdiem": "Per diem"
+    },
+    "kinds": {
+      "ratio_breach": "Ratio breach",
+      "missing_rate": "Missing rate",
+      "class_unresolved": "Unresolved class",
+      "registration_missing": "Missing registration",
+      "fringe_mismatch": "Fringe mismatch"
+    },
+    "findingStatus": {
+      "open": "Open",
+      "acknowledged": "Acknowledged",
+      "resolved": "Resolved"
+    },
+    "runStatus": {
+      "draft": "Draft",
+      "generated": "Generated",
+      "submitted": "Submitted",
+      "amended": "Amended"
+    },
+    "entryStatus": {
+      "computed": "Computed",
+      "approved": "Approved",
+      "voided": "Voided",
+      "consumed": "Consumed"
+    },
+    "scheduleKind": {
+      "prevailing_wage": "Prevailing wage",
+      "union_agreement": "Union agreement",
+      "org_declared": "Org declared"
+    },
+    "reciprocity": {
+      "home_local": "Home local",
+      "jobsite_local": "Jobsite local",
+      "higher_of": "Higher of"
+    },
+    "scope": {
+      "project": "projects",
+      "location": "locations",
+      "subsidiary": "Subsidiary",
+      "org": "Whole org"
+    },
+    "columns": {
+      "kind": "Kind",
+      "project": "Project",
+      "day": "Day",
+      "status": "Status",
+      "recorded": "Recorded",
+      "schedule": "Schedule",
+      "scope": "Scope",
+      "reciprocity": "Reciprocity",
+      "window": "Window",
+      "run": "Run",
+      "week": "Week",
+      "format": "Format",
+      "code": "Code",
+      "name": "Name",
+      "rate": "Rate / 100",
+      "rules": "Rules",
+      "amount": "Amount",
+      "actions": "Actions"
+    },
+    "stats": {
+      "openFindings": "Open findings",
+      "openFindingsSub": "Needs attention before the next run",
+      "dueReports": "Reports due",
+      "dueReportsSub": "Scoped projects with no report for week ending {week}",
+      "unresolvedClasses": "Unresolved classes",
+      "unresolvedClassesSub": "Hours no rule matched",
+      "perdiemWaiting": "Per-diem waiting",
+      "perdiemWaitingSub": "Computed entries to approve"
+    },
+    "actions": {
+      "acknowledge": "Acknowledge",
+      "resolve": "Resolve",
+      "approve": "Approve",
+      "void": "Void",
+      "submit": "Submit"
+    },
+    "generateDialog": {
+      "title": "Generate certified report",
+      "project": "Project",
+      "week": "Week ending",
+      "format": "Format",
+      "generate": "Generate",
+      "cancel": "Cancel"
     }
   }
 }

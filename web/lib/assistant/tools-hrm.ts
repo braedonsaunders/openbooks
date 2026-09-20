@@ -1256,7 +1256,6 @@ const automationsStatus: AssistantToolDef = {
       return { ok: false, error: error instanceof Error ? error.message : "automations_status_failed" };
 // HR-16 end
 
-export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting, hrmPerformanceCycles, hrmTurnover, hrmBenefits, hrmMe, automationsStatus];
 // HR-15: the core own-scope inbox tool rides after every slice tool.
 HRM_TOOLS.push(inboxItems);
 const hrmCertifiedPayroll: AssistantToolDef = {
@@ -1297,7 +1296,7 @@ const hrmCertifiedPayroll: AssistantToolDef = {
 };
 // HR-13 end
 
-export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting, hrmPerformanceCycles, hrmTurnover, hrmBenefits, hrmMe,
+export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting, hrmPerformanceCycles, hrmTurnover, hrmBenefits, hrmMe, automationsStatus,
   // HR-13 begin: read-only construction-compliance tools (generation,
   // approval, and finding transitions stay human-attested).
   hrmComplianceFindings, hrmCertifiedPayroll,

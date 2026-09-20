@@ -10,7 +10,8 @@
       "myLeave": "Mein Urlaub",
       "recruiting": "Einstellung",
       "performance": "Leistung",
-      "benefits": "Leistungen"
+      "benefits": "Leistungen",
+      "compliance": "Compliance"
     },
     "recruiting": {
       "title": "Einstellung",
@@ -1085,6 +1086,114 @@
       "termination": "Austritt",
       "profile_change": "Profiländerung",
       "other": "Sonstiges"
+    }
+  },
+  "compliance": {
+    "title": "Compliance",
+    "description": "Lohntafeln, zertifizierte Abrechnungen, Berufsgenossenschaftsklassen, Azubi-Quoten und Tagegelder — Bau-Compliance aus denselben Zeit-, Projekt- und Lohndaten.",
+    "refused": "Compliance ist nicht verfügbar",
+    "needRead": "Sie benötigen die Leseberechtigung für Bau-Compliance, um diesen Bereich zu öffnen.",
+    "generate": "Bericht erstellen",
+    "findingsTitle": "Feststellungen",
+    "ratesTitle": "Lohntafeln",
+    "certifiedTitle": "Zertifizierte Abrechnung",
+    "classesTitle": "Gefahrenklassen",
+    "perdiemTitle": "Tagegelder",
+    "empty": "Noch nichts vorhanden.",
+    "emptyAction": "Unten unter Setup konfigurieren.",
+    "active": "Aktiv",
+    "retired": "Archiviert",
+    "sections": {
+      "findings": "Feststellungen",
+      "rates": "Tarife",
+      "certified": "Zertifizierte Abrechnung",
+      "classes": "Klassen",
+      "perdiem": "Tagegeld"
+    },
+    "kinds": {
+      "ratio_breach": "Quotenverstoß",
+      "missing_rate": "Fehlender Satz",
+      "class_unresolved": "Ungeklärte Klasse",
+      "registration_missing": "Fehlende Meldung",
+      "fringe_mismatch": "Abweichende Zulage"
+    },
+    "findingStatus": {
+      "open": "Offen",
+      "acknowledged": "Zur Kenntnis",
+      "resolved": "Erledigt"
+    },
+    "runStatus": {
+      "draft": "Entwurf",
+      "generated": "Erstellt",
+      "submitted": "Eingereicht",
+      "amended": "Geändert"
+    },
+    "entryStatus": {
+      "computed": "Berechnet",
+      "approved": "Genehmigt",
+      "voided": "Storniert",
+      "consumed": "Verbraucht"
+    },
+    "scheduleKind": {
+      "prevailing_wage": "Tariflohn",
+      "union_agreement": "Tarifvertrag",
+      "org_declared": "Betrieblich"
+    },
+    "reciprocity": {
+      "home_local": "Heimbezirk",
+      "jobsite_local": "Einsatzort",
+      "higher_of": "Höherer Satz"
+    },
+    "scope": {
+      "project": "Projekte",
+      "location": "Standorte",
+      "subsidiary": "Gesellschaft",
+      "org": "Gesamtbetrieb"
+    },
+    "columns": {
+      "kind": "Art",
+      "project": "Projekt",
+      "day": "Tag",
+      "status": "Status",
+      "recorded": "Erfasst",
+      "schedule": "Tafel",
+      "scope": "Geltung",
+      "reciprocity": "Reziprozität",
+      "window": "Zeitraum",
+      "run": "Lauf",
+      "week": "Woche",
+      "format": "Format",
+      "code": "Code",
+      "name": "Name",
+      "rate": "Satz / 100",
+      "rules": "Regeln",
+      "amount": "Betrag",
+      "actions": "Aktionen"
+    },
+    "stats": {
+      "openFindings": "Offene Feststellungen",
+      "openFindingsSub": "Vor dem nächsten Lauf klären",
+      "dueReports": "Fällige Berichte",
+      "dueReportsSub": "Projekte ohne Bericht für Woche bis {week}",
+      "unresolvedClasses": "Ungeklärte Klassen",
+      "unresolvedClassesSub": "Stunden ohne passende Regel",
+      "perdiemWaiting": "Tagegeld wartet",
+      "perdiemWaitingSub": "Berechnete Einträge zum Genehmigen"
+    },
+    "actions": {
+      "acknowledge": "Zur Kenntnis",
+      "resolve": "Erledigen",
+      "approve": "Genehmigen",
+      "void": "Stornieren",
+      "submit": "Einreichen"
+    },
+    "generateDialog": {
+      "title": "Zertifizierten Bericht erstellen",
+      "project": "Projekt",
+      "week": "Woche bis",
+      "format": "Format",
+      "generate": "Erstellen",
+      "cancel": "Abbrechen"
     }
   }
 }

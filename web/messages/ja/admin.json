@@ -984,7 +984,9 @@
     "hrm_team_manage": "マネージャー割当のチームステップを処理",
     "automations_read": "自動化レシピと実行ログを閲覧",
     "automations_manage": "自動化と承認設定を作成",
-    "automations_run": "自動化を今すぐ実行"
+    "automations_run": "自動化を今すぐ実行",
+    "hrm_construction_read": "建設コンプライアンスを表示",
+    "hrm_construction_manage": "建設コンプライアンスを管理"
   },
   "ai": {
     "metaTitle": "AI設定",
@@ -2539,6 +2541,31 @@
       "home-announcements": {
         "title": "お知らせ",
         "description": "対象者と期間付きの、ホーム向け会社お知らせ。"
+      },
+      "construction-classifications": {
+        "title": "作業分類",
+        "singularTitle": "作業分類",
+        "description": "標準賃金単価用の職種分類：見習い比率が紐づく熟練分類を持つ熟練・見習いクラス。"
+      },
+      "construction-rate-schedules": {
+        "title": "賃金表",
+        "singularTitle": "賃金表",
+        "description": "プロジェクト・拠点・子会社スコープと相互適用を持つ標準賃金・組合協定・自社宣言テーブル。"
+      },
+      "construction-comp-classes": {
+        "title": "労災クラス",
+        "singularTitle": "労災クラス",
+        "description": "宣言された100あたり料率を持つ労災プレミアムクラス；優先度ルールが各時間の単価を決定。"
+      },
+      "construction-per-diem-policies": {
+        "title": "日当ポリシー",
+        "singularTitle": "日当ポリシー",
+        "description": "基準別の日当計算ルール。課税区分は給与コンポーネント上にあり、ここにはない。"
+      },
+      "construction-ratio-rules": {
+        "title": "比率ルール",
+        "singularTitle": "比率ルール",
+        "description": "賃金表ごとの熟練・見習い比率を日次・週次で測定。違反は熟練単価で計算。"
       }
     },
     "fields": {
@@ -2856,7 +2883,22 @@
       "endsOn": "終了日",
       "action": "アクション",
       "reasonCode": "理由コード",
-      "requiresComment": "コメント必須"
+      "requiresComment": "コメント必須",
+      "trade": "職種",
+      "isApprentice": "見習い",
+      "apprenticeProgramRef": "プログラム参照",
+      "journeyClassificationId": "熟練分類",
+      "apprenticeClassificationId": "見習い分類",
+      "sourceRef": "根拠参照",
+      "jurisdictionCode": "管轄",
+      "reciprocity": "相互適用",
+      "ratePer100": "率 / 100",
+      "lodgingOffset": "宿泊控除",
+      "payComponentId": "給与コンポーネント",
+      "scheduleId": "賃金表",
+      "ratioJourney": "熟練",
+      "ratioApprentice": "見習い",
+      "measured": "測定"
     },
     "fieldHelp": {
       "gapless": "欠番なしとは、連番のすべての番号が記録され、番号が飛ばないことを意味します。法令または監査要件で途切れない採番が必要な場合にのみ有効にしてください。",
@@ -2935,7 +2977,10 @@
       "benefitEmployerComponent": "会社分明細に課金する会社拠出コンポーネント。会社費用がある場合は必須。",
       "benefitWaitingPeriod": "加入できるまでの勤務日数。",
       "benefitRequiresApproval": "加入は管理者の承認まで保留される。",
-      "benefitLevelKey": "加入が指定する区分キー — single、family — 改定しても安定。"
+      "benefitLevelKey": "加入が指定する区分キー — single、family — 改定しても安定。",
+      "rateScheduleSource": "この賃金表の根拠となる決定番号または協定ID。",
+      "rateScheduleJurisdiction": "パック語彙。汎用層では自由記述 — 解釈はパックが行う。",
+      "perDiemComponent": "金額が通過する支給コンポーネント。その税務処理が唯一の課税区分宣言。"
     },
     "options": {
       "timeClassification": {
@@ -3353,6 +3398,25 @@
         "termination": "退職",
         "profile_change": "プロフィール変更",
         "other": "その他"
+      },
+      "hrmScheduleKind": {
+        "prevailingWage": "標準賃金",
+        "unionAgreement": "組合協定",
+        "orgDeclared": "自社宣言"
+      },
+      "hrmReciprocity": {
+        "homeLocal": "所属支部",
+        "jobsiteLocal": "現場支部",
+        "higherOf": "高い方"
+      },
+      "hrmPerDiemBasis": {
+        "flatDaily": "日額定額",
+        "distanceBrackets": "距離区分",
+        "hoursThreshold": "時間しきい値"
+      },
+      "hrmRatioMeasured": {
+        "daily": "日次",
+        "weekly": "週次"
       }
     },
     "invoicing": {
@@ -4558,6 +4622,30 @@
     "hrmEventVerbs": {
       "title": "変更イベント動詞",
       "description": "雇用変更の取消・破棄・訂正を追加イベントとして行います。"
+    },
+    "hrmConstructionCompliance": {
+      "title": "建設コンプライアンス",
+      "description": "自社施工向けの標準賃金表、認証給与、労災クラス、見習い比率、日当。給与・プロジェクト・勤怠が必要。"
+    },
+    "hrmPrevailingWage": {
+      "title": "標準賃金",
+      "description": "宣言済み賃金表から現場・分類・日付で賃金を解決。"
+    },
+    "hrmCertifiedPayroll": {
+      "title": "認証給与",
+      "description": "パック宣言ファイルで描画する週次確定レポート。"
+    },
+    "hrmWorkersCompClasses": {
+      "title": "労災クラス",
+      "description": "優先度ルールで原価時間をプレミアムクラスに分割。"
+    },
+    "hrmApprenticeRatios": {
+      "title": "見習い比率",
+      "description": "熟練・見習い比率を日次で強制；違反は熟練単価で計算。"
+    },
+    "hrmPerDiem": {
+      "title": "日当",
+      "description": "承認済み勤怠から日当・旅費を給与シームへ計算。"
     }
   },
   "extensions": {

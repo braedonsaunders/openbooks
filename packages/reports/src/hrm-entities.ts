@@ -729,8 +729,11 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
   // Gated on the construction switch with the construction read grant —
   // a general-business org never sees them, and the feature-off path
   // hides rather than empties.
+  {
     key: 'hrm_rate_schedule_lines',
     label: 'Rate schedule lines',
+    category: 'hrm',
+    description:
       'One row per schedule, classification, and effective date: the resolvable base, cash fringe, creditable fringe, and overtime multiplier the wage resolver prices from.',
     from: `hrm_rate_schedule_lines l
   JOIN hrm_rate_schedules s ON s.id = l.schedule_id AND s.org_id = l.org_id
@@ -743,15 +746,21 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     requiredPermission: 'hrm.construction.read',
     featureKey: 'hrmConstructionCompliance',
     defaultPeriodField: null,
+    columns: [
       { key: 'schedule', label: 'Schedule', kind: 'text', expr: 's.name' },
       { key: 'classification', label: 'Classification', kind: 'text', expr: 'c.code' },
       { key: 'base_rate', label: 'Base rate', kind: 'number', expr: 'l.base_rate' },
       { key: 'fringe_rate', label: 'Cash fringe', kind: 'number', expr: 'l.fringe_rate' },
       { key: 'currency', label: 'Currency', kind: 'text', expr: 'l.currency' },
       { key: 'effective_from', label: 'Effective from', kind: 'date', expr: 'l.effective_from' },
+    ],
     defaultSort: { column: 'effective_from', direction: 'desc' },
+  },
+  {
     key: 'hrm_per_diem_entries',
     label: 'Per-diem entries',
+    category: 'hrm',
+    description:
       'One row per employment, project, and day: computed per-diem and travel amounts with their status across computed, approved, voided, and consumed.',
     from: `hrm_per_diem_entries e
   JOIN hrm_per_diem_policies p ON p.id = e.policy_id AND p.org_id = e.org_id
@@ -764,18 +773,25 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     requiredPermission: 'hrm.construction.read',
     featureKey: 'hrmConstructionCompliance',
     defaultPeriodField: 'worked_on',
+    columns: [
       { key: 'worked_on', label: 'Day', kind: 'date', expr: 'e.worked_on' },
       { key: 'amount', label: 'Amount', kind: 'number', expr: 'e.amount' },
       { key: 'currency', label: 'Currency', kind: 'text', expr: 'e.currency' },
       { key: 'status', label: 'Status', kind: 'text', expr: 'e.status' },
       { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'e.employment_id' },
+    ],
     defaultSort: { column: 'worked_on', direction: 'desc' },
+  },
+  {
     key: 'hrm_comp_class_split',
     label: 'Comp class split',
+    category: 'hrm',
+    description:
       'Approved project hours priced per comp class: the daily split the resolver reports from the priority match rules.',
     from: `hrm_comp_class_rules r
   JOIN hrm_comp_classes c ON c.id = r.comp_class_id AND c.org_id = r.org_id
   LEFT JOIN hrm_work_classifications cl ON cl.id::text = (r.match->>'classification_id') AND cl.org_id = r.org_id`,
+    orgColumn: 'r.org_id',
     // Org-level match configuration: no subsidiary boundary applies, so
     // no clamp — the construction read grant and the feature switch are
     // the gates, enforced generically at every run path.
@@ -783,16 +799,23 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     requiredPermission: 'hrm.construction.read',
     featureKey: 'hrmConstructionCompliance',
     defaultPeriodField: null,
+    columns: [
       { key: 'class', label: 'Class', kind: 'text', expr: 'c.code' },
       { key: 'priority', label: 'Priority', kind: 'number', expr: 'r.priority' },
       { key: 'rate', label: 'Rate / 100', kind: 'number', expr: 'c.rate_per_100' },
+    ],
     defaultSort: { column: 'priority', direction: 'desc' },
+  },
+  {
     key: 'hrm_certified_runs',
     label: 'Certified runs',
+    category: 'hrm',
+    description:
       'Certified payroll runs by project and week: frozen payloads with their pack format, file artefact, and amendment links.',
     from: `hrm_certified_payroll_runs r
   LEFT JOIN projects p ON p.id = r.project_id AND p.org_id = r.org_id
   LEFT JOIN hrm_certified_payroll_runs a ON a.id = r.amends_run_id AND a.org_id = r.org_id`,
+    orgColumn: 'r.org_id',
     // The project's subsidiary is the legal-entity boundary: the executor
     // clamps this to the reader's allowlist. Runs on subsidiary-less
     // projects hide from restricted readers (fail closed), never leak.
@@ -800,13 +823,19 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     requiredPermission: 'hrm.construction.read',
     featureKey: 'hrmConstructionCompliance',
     defaultPeriodField: 'week_ending',
+    columns: [
       { key: 'week_ending', label: 'Week ending', kind: 'date', expr: 'r.week_ending' },
       { key: 'format_key', label: 'Format', kind: 'text', expr: 'r.format_key' },
       { key: 'status', label: 'Status', kind: 'text', expr: 'r.status' },
       { key: 'project_id', label: 'Project (id)', kind: 'uuid', expr: 'r.project_id' },
+    ],
     defaultSort: { column: 'week_ending', direction: 'desc' },
+  },
+  {
     key: 'hrm_compliance_findings',
     label: 'Compliance findings',
+    category: 'hrm',
+    description:
       'Append-only pre-run flags by kind: ratio breaches, missing rates, unresolved classes, missing registrations, and fringe mismatches with their lifecycle status.',
     from: `hrm_compliance_findings f
   LEFT JOIN projects p ON p.id = f.project_id AND p.org_id = f.org_id
@@ -818,10 +847,13 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     requiredPermission: 'hrm.construction.read',
     featureKey: 'hrmConstructionCompliance',
     defaultPeriodField: 'worked_on',
+    columns: [
       { key: 'kind', label: 'Kind', kind: 'text', expr: 'f.kind' },
       { key: 'worked_on', label: 'Day', kind: 'date', expr: 'f.worked_on' },
       { key: 'status', label: 'Status', kind: 'text', expr: 'f.status' },
       { key: 'project_id', label: 'Project (id)', kind: 'uuid', expr: 'f.project_id' },
+    ],
     defaultSort: { column: 'worked_on', direction: 'desc' },
+  },
   // HR-13 end
 ]
