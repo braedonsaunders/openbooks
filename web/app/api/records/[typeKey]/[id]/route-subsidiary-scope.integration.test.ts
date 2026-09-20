@@ -47,7 +47,8 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?custom-record-detail-scope-test'
 const { GET, PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
-const { GET: LIST } = (await import('../route.ts?custom-record-detail-scope-list')) as typeof import('../route.ts')
+const custom_record_detail_scope_listUrl = '../route.ts?custom-record-detail-scope-list'
+const { GET: LIST } = (await import(custom_record_detail_scope_listUrl)) as typeof import('../route.ts')
 hooks.deregister()
 
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')

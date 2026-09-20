@@ -168,7 +168,8 @@ const hooks = registerHooks({
   },
 })
 
-const { POST } = (await import('./route.ts?marketplace-unpublish-route-test')) as typeof import('./route.ts')
+const marketplace_unpublish_route_testUrl = './route.ts?marketplace-unpublish-route-test'
+const { POST } = (await import(marketplace_unpublish_route_testUrl)) as typeof import('./route.ts')
 hooks.deregister()
 
 function reset(listingRows: { is_active: boolean }[] = []): void {

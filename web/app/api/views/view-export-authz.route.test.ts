@@ -89,7 +89,8 @@ const hooks = registerHooks({
   },
 })
 
-const { GET } = (await import('./[id]/export/route.ts?view-export-authz')) as typeof import('./[id]/export/route.ts')
+const view_export_authzUrl = './[id]/export/route.ts?view-export-authz'
+const { GET } = (await import(view_export_authzUrl)) as typeof import('./[id]/export/route.ts')
 hooks.deregister()
 
 test('view export refuses a payroll plan when the caller lacks payroll.read', async () => {

@@ -78,8 +78,10 @@ const hooks = registerHooks({
   },
 });
 
-const { GET } = (await import("./route.ts?xero-oauth-start")) as typeof import("./route.ts");
-const { CONNECTION_OAUTH_COOKIE } = (await import("../../_flow.ts?xero-oauth-start-flow")) as typeof import("../../_flow.ts");
+const xero_oauth_startUrl = './route.ts?xero-oauth-start'
+const { GET } = (await import(xero_oauth_startUrl)) as typeof import('./route.ts');
+const xero_oauth_start_flowUrl = '../../_flow.ts?xero-oauth-start-flow'
+const { CONNECTION_OAUTH_COOKIE } = (await import(xero_oauth_start_flowUrl)) as typeof import('../../_flow.ts');
 hooks.deregister();
 
 const routeSource = readFileSync(new URL("./route.ts", import.meta.url), "utf8");

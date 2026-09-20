@@ -131,14 +131,13 @@ test("hour/active PATCH keeps a restricted authorization_snapshot when the edito
     ] as const) {
       const patched = await PATCH(json("PATCH", body), params(scheduleId));
       assert.equal(patched.status, 200, `${label} PATCH: ${await patched.clone().text()}`);
-      const stored = await withBypassContext(async () =>
-        (
-          await db.execute<{ authorization_snapshot: typeof pin }>(sql`
+      const stored = await withBypassContext(async () => {
+        const result = await db.execute(sql`
             select authorization_snapshot from report_schedules
              where id = ${scheduleId} and org_id = ${oid}
-          `)
-        ).rows[0],
-      );
+          `);
+        return result.rows[0] as { authorization_snapshot: typeof pin } | undefined;
+      });
       assert.ok(stored, `${label} PATCH left a schedule row`);
       assert.notEqual(
         stored!.authorization_snapshot.allowedSubsidiaryIds,

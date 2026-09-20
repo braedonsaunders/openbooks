@@ -49,7 +49,8 @@ const hooks = registerHooks({
   },
 });
 
-const { GET } = (await import("./route.ts?qwc-origin-test")) as typeof import("./route.ts");
+const qwc_origin_testUrl = './route.ts?qwc-origin-test'
+const { GET } = (await import(qwc_origin_testUrl)) as typeof import('./route.ts');
 hooks.deregister();
 
 const routeSource = readFileSync(new URL("./route.ts", import.meta.url), "utf8");

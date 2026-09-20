@@ -114,10 +114,10 @@ const hooks = registerHooks({
   },
 });
 
-const { GET } = (await import("./route.ts?dynamics-oauth-callback")) as typeof import("./route.ts");
-const { CONNECTION_OAUTH_COOKIE, mintConnectionOauthState } = (await import(
-  "../../_flow.ts?dynamics-oauth-callback-flow"
-)) as typeof import("../../_flow.ts");
+const dynamics_oauth_callbackUrl = './route.ts?dynamics-oauth-callback'
+const { GET } = (await import(dynamics_oauth_callbackUrl)) as typeof import('./route.ts');
+const dynamics_oauth_callback_flowUrl = '../../_flow.ts?dynamics-oauth-callback-flow'
+const { CONNECTION_OAUTH_COOKIE, mintConnectionOauthState } = (await import(dynamics_oauth_callback_flowUrl)) as typeof import('../../_flow.ts');
 hooks.deregister();
 
 const routeSource = readFileSync(new URL("./route.ts", import.meta.url), "utf8");

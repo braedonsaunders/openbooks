@@ -43,7 +43,8 @@ const hooks = registerHooks({
   },
 });
 
-const { PUT } = (await import("./route.ts?form-pref-resolve-guard")) as typeof import("./route.ts");
+const form_pref_resolve_guardUrl = './route.ts?form-pref-resolve-guard'
+const { PUT } = (await import(form_pref_resolve_guardUrl)) as typeof import('./route.ts');
 hooks.deregister();
 
 const { db, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");

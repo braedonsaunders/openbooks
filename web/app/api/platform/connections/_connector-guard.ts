@@ -49,14 +49,14 @@ function ipv4FromMapped6(host: string): string | null {
   return null;
 }
 
-function parseIpv4(ip: string): number[] | null {
+function parseIpv4(ip: string): [number, number, number, number] | null {
   const parts = ip.split(".");
   if (parts.length !== 4) return null;
   const octets = parts.map((part) => (/^\d{1,3}$/.test(part) ? Number(part) : Number.NaN));
-  if (octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)) {
+  if (octets.length !== 4 || octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)) {
     return null;
   }
-  return octets;
+  return [octets[0]!, octets[1]!, octets[2]!, octets[3]!];
 }
 
 function isPublicUnicastIpv4(ip: string): boolean {

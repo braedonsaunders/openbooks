@@ -72,7 +72,8 @@ const hooks = registerHooks({
   },
 });
 
-const { POST } = (await import("./route.ts?pay-origin-test")) as typeof import("./route.ts");
+const pay_origin_testUrl = './route.ts?pay-origin-test'
+const { POST } = (await import(pay_origin_testUrl)) as typeof import('./route.ts');
 hooks.deregister();
 
 const TOKEN = "tok_v1_forged_host";

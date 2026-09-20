@@ -98,7 +98,8 @@ const hooks = registerHooks({
 })
 
 const LAYOUT_ID = '22222222-2222-4222-8222-222222222222'
-const { PATCH } = (await import('./route.ts?form-layout-empty-name-patch')) as typeof import('./route.ts')
+const form_layout_empty_name_patchUrl = './route.ts?form-layout-empty-name-patch'
+const { PATCH } = (await import(form_layout_empty_name_patchUrl)) as typeof import('./route.ts')
 hooks.deregister()
 
 state.loadRow = {

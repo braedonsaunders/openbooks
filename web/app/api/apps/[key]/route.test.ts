@@ -108,7 +108,8 @@ const hooks = registerHooks({
   },
 })
 
-const { PATCH, DELETE } = (await import('./route.ts?app-key-route-test')) as typeof import('./route.ts')
+const app_key_route_testUrl = './route.ts?app-key-route-test'
+const { PATCH, DELETE } = (await import(app_key_route_testUrl)) as typeof import('./route.ts')
 const store = (await import('@/lib/apps/store')) as {
   AppError: new (message: string, status?: number) => Error & { status: number }
 }

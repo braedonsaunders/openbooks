@@ -61,8 +61,10 @@ const hooks = registerHooks({
   },
 });
 
-const { GET } = (await import("./route.ts?qbo-oauth-start")) as typeof import("./route.ts");
-const { CONNECTION_OAUTH_COOKIE } = (await import("../../_flow.ts?qbo-oauth-start-flow")) as typeof import("../../_flow.ts");
+const qbo_oauth_startUrl = './route.ts?qbo-oauth-start'
+const { GET } = (await import(qbo_oauth_startUrl)) as typeof import('./route.ts');
+const qbo_oauth_start_flowUrl = '../../_flow.ts?qbo-oauth-start-flow'
+const { CONNECTION_OAUTH_COOKIE } = (await import(qbo_oauth_start_flowUrl)) as typeof import('../../_flow.ts');
 hooks.deregister();
 
 const routeSource = readFileSync(new URL("./route.ts", import.meta.url), "utf8");

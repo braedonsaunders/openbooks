@@ -110,10 +110,10 @@ const hooks = registerHooks({
   },
 })
 
-const { GET: csv } = (await import('./[id]/csv/route.ts?run-download-csv')) as typeof import('./[id]/csv/route.ts')
-const { GET: artifact } = (await import(
-  './[id]/artifact/route.ts?run-download-artifact'
-)) as typeof import('./[id]/artifact/route.ts')
+const run_download_csvUrl = './[id]/csv/route.ts?run-download-csv'
+const { GET: csv } = (await import(run_download_csvUrl)) as typeof import('./[id]/csv/route.ts')
+const run_download_artifactUrl = './[id]/artifact/route.ts?run-download-artifact'
+const { GET: artifact } = (await import(run_download_artifactUrl)) as typeof import('./[id]/artifact/route.ts')
 hooks.deregister()
 
 const params = { params: Promise.resolve({ id: RUN_ID }) }

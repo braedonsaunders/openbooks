@@ -251,8 +251,8 @@ test("GET /api/views/[id] 404s a pay_stubs plan when the caller lacks payroll.re
   const denied = await GET(json("GET"), params(PAY_STUBS_ID));
   assert.equal(denied.status, 404);
   const body = (await denied.json()) as { error?: string; view?: { query?: unknown } };
-  assert.deepEqual(body, { error: "not found" });
   assert.equal(body.view, undefined);
+  assert.deepEqual(body, { error: "not found" });
 
   const allowed = await GET(json("GET"), params(LEDGER_ID));
   assert.equal(allowed.status, 200);

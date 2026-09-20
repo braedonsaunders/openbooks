@@ -179,7 +179,8 @@ const hooks = registerHooks({
   },
 });
 
-const { PATCH, DELETE } = (await import("./route.ts?connection-id-url")) as typeof import("./route.ts");
+const connection_id_urlUrl = './route.ts?connection-id-url'
+const { PATCH, DELETE } = (await import(connection_id_urlUrl)) as typeof import('./route.ts');
 hooks.deregister();
 
 const refused = [

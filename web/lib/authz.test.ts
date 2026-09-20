@@ -134,6 +134,7 @@ const behavioralHooks = registerHooks({
   },
 });
 
+const behavioralUrl = './authz.ts?behavioral'
 const {
   can,
   subsidiaryScopeAllows,
@@ -143,7 +144,7 @@ const {
   guardPermission,
   assertCan,
   ForbiddenError,
-} = (await import("./authz.ts?behavioral")) as typeof import("./authz.ts");
+} = (await import(behavioralUrl)) as typeof import('./authz.ts');
 behavioralHooks.deregister();
 
 type Authz = import("./authz.ts").Authz;
