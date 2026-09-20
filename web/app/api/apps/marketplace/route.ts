@@ -29,9 +29,10 @@ export async function POST(request: Request) {
   const body = parsed.data
   try {
     if (body.action === 'unpublish' && typeof body.key === 'string') {
-      // unpublishApp locks then returns without UPDATE or audit when the
-      // listing is already inactive. A write that matches zero rows is a
-      // failure: refuse by name so a second unpublish is not {ok:true}.
+      // unpublishApp holds FOR UPDATE and throws when the listing is
+      // already inactive, so a concurrent second withdraw cannot report
+      // {ok:true} after this read. The route still names the key here
+      // so a sequential second unpublish refuses before calling the helper.
       const listing = (
         await db.execute<{ is_active: boolean }>(
           sql`select is_active from app_listings where key=${body.key} and publisher_org_id=${gate.user.orgId}`,

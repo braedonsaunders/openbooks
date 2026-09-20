@@ -2,9 +2,10 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 
-// Boundary suite for POST unpublish. The helper no-ops on an already-inactive
-// listing (no UPDATE, no audit). The route must refuse that by name so a
-// second unpublish is never {ok:true} for a write no read can observe.
+// Boundary suite for POST unpublish. The helper refuses an already-inactive
+// listing under FOR UPDATE. The route also refuses that by name (and key)
+// so a sequential second unpublish is never {ok:true} for a write no read
+// can observe, and never calls the helper.
 const stateKey = Symbol.for('openbooks.marketplace-unpublish-route-test')
 type RouteState = {
   listingRows: { is_active: boolean }[]

@@ -127,6 +127,24 @@ const HOST_STACK_EXHAUSTED = "Maximum call stack size exceeded";
 const GUEST_STACK_OVERFLOW_MESSAGE =
   "guest stack overflow: the handler exceeded the sandbox stack limit";
 
+/**
+ * True only for a host/VM stack-exhaustion signal. Dumped guest
+ * exceptions are plain objects or Error instances whose text the
+ * handler chose — matching that text would skip JS_FreeRuntime
+ * and rewrite the operator-visible refusal. `Error.name` is
+ * mutable, so a renamed ordinary Error is not a WASM abort;
+ * Emscripten abort() throws `new WebAssembly.RuntimeError(...)`.
+ */
+export function isHostStackExhaustion(error: unknown): boolean {
+  return error instanceof RangeError && error.message === HOST_STACK_EXHAUSTED;
+}
+
+export function isHostVmUnfreeableSignal(error: unknown): boolean {
+  return (
+    error instanceof WebAssembly.RuntimeError || isHostStackExhaustion(error)
+  );
+}
+
 export async function runAppEndpoint(opts: {
   source: string;
   request: AppRequest;
@@ -196,11 +214,6 @@ export async function runAppEndpoint(opts: {
   // Only a host RangeError / WASM abort sets this; guest exception
   // text is attacker-controlled and must not skip FreeRuntime.
   let runtimeUnfreeable = false;
-  const isWasmRuntimeAbort = (error: unknown): boolean =>
-    error instanceof WebAssembly.RuntimeError ||
-    (error instanceof Error && error.name === "RuntimeError");
-  const isHostStackExhaustion = (error: unknown): boolean =>
-    error instanceof RangeError && error.message === HOST_STACK_EXHAUSTED;
   const disposeVm = (): void => {
     if (vmDisposed) return;
     vmDisposed = true;
@@ -208,7 +221,7 @@ export async function runAppEndpoint(opts: {
       try {
         fn();
       } catch (e) {
-        if (!isWasmRuntimeAbort(e)) throw e;
+        if (!isHostVmUnfreeableSignal(e)) throw e;
         runtimeUnfreeable = true;
       }
     };
@@ -611,7 +624,7 @@ export async function runAppEndpoint(opts: {
       durationMs: Date.now() - started,
     };
   } catch (e) {
-    if (isHostStackExhaustion(e) || isWasmRuntimeAbort(e)) {
+    if (isHostVmUnfreeableSignal(e)) {
       runtimeUnfreeable = true;
     }
     if (Date.now() > deadline) {
