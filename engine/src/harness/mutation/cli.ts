@@ -247,18 +247,18 @@ export function readRatifiedFloors(path: string): RatifiedFloors {
     throw new Error(`ratified floors at ${path} are malformed — refusing publish`);
   }
   for (const [key, value] of Object.entries(parsed.floors)) {
-    if (!isRecord(value) || typeof value.ratio !== "number") {
+    if (!isRecord(value) || typeof value.ratio !== "number" || !Number.isFinite(value.ratio) || value.ratio < 0 || value.ratio > 1) {
       throw new Error(`ratified floor for ${key} is malformed — refusing publish`);
     }
   }
   return parsed as RatifiedFloors;
 }
 
-function ratifyRemedy(target: string): string {
+function measurementRemedy(target: string): string {
   return (
-    `re-run \`npm run test:mutation -- --target ${target}\` to confirm, then either fix the ` +
-    `surviving mutants or ratify explicitly by committing an updated mutation-report.json + ` +
-    `mutation-floor.json together (coordinator decision)`;
+    `re-run \`npm run test:mutation -- --target ${target}\` to confirm, then add tests for the ` +
+    `surviving behavior changes and re-run the full corpus; mutation-floor.json is raise-only`
+  );
 }
 
 /**
@@ -312,8 +312,7 @@ export function checkedInPublishRefusals(
       refusals.push(`${entry.target}: zero mutants generated — operators cover nothing; fix generation and re-run`);
       continue;
     }
-    const measured = entry.measured > 0 && entry.ratio !== null;
-    if (!measured) {
+    if (entry.measured <= 0 || entry.ratio === null) {
       const excused = target?.needsDb === true && fresh.mode === "unit";
       if (!excused) {
         refusals.push(
@@ -322,10 +321,14 @@ export function checkedInPublishRefusals(
       }
       continue;
     }
+    if (!Number.isFinite(entry.ratio) || entry.ratio < 0 || entry.ratio > 1) {
+      refusals.push(`${entry.target}: invalid ratio — fix the measurement and re-run`);
+      continue;
+    }
     const floor = floors[entry.target];
     if (floor !== undefined && entry.ratio < floor.ratio - SCORE_EPSILON) {
       refusals.push(
-        `${entry.target}: fresh score ${formatRatio(entry.ratio)} below ratified floor ${formatRatio(floor.ratio)} — publish refused; ${ratifyRemedy(entry.target)}`,
+        `${entry.target}: fresh score ${formatRatio(entry.ratio)} below ratified floor ${formatRatio(floor.ratio)} — publish refused; ${measurementRemedy(entry.target)}`,
       );
     }
   }
