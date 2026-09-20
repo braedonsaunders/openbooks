@@ -19,6 +19,13 @@ import {
 } from "@openbooks/engine/src/hrm/employment-read.ts";
 import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
 import { HrmPositionError } from "@openbooks/engine/src/hrm/positions.ts";
+import { HrmPerformanceError } from "@openbooks/engine/src/hrm/performance/errors.ts";
+import {
+  getCycleDetail,
+  getRetentionOverview,
+  getTurnover,
+  listCycleProgress,
+} from "@openbooks/engine/src/hrm/performance/performance-read.ts";
 import { getVacancyAsOf } from "@openbooks/engine/src/hrm/positions-read.ts";
 import { RecruitingError } from "@openbooks/engine/src/hrm/recruiting/errors.ts";
 import {
@@ -75,6 +82,7 @@ export function hrmRefusal(error: unknown): ToolResult {
     error instanceof HrmProcessError ||
     error instanceof LeaveError ||
     error instanceof RecruitingError ||
+    error instanceof HrmPerformanceError ||
     error instanceof HrmAuthorizationError ||
     error instanceof TemporalError
   ) {
@@ -643,6 +651,15 @@ const hrmRecruiting: AssistantToolDef = {
     requisitionId: uuidInput.optional().describe("One opening in full (pipeline, funnel, applications); omit for the segment list"),
     segment: z.enum(requisitionSegments).optional().describe("List segment (default open)"),
     limit: z.number().int().min(1).max(200).optional().describe("Maximum openings to return (default 50)"),
+const cycleStatuses = ["draft", "open", "calibrating", "closed"] as const;
+
+const hrmPerformanceCycles: AssistantToolDef = {
+  name: "hrm_performance_cycles",
+    "Review cycles with self/manager progress, or one cycle in full with its privacy-scoped reviews. HR sees every cycle; structural viewers see their slice. Read-only.",
+  gate: { mode: "anyOf", perms: ["hrm.performance.read"] },
+    cycleId: uuidInput.optional().describe("One cycle in full; omit for the cycle list"),
+    status: z.enum(cycleStatuses).optional().describe("Keep only this cycle status"),
+    limit: z.number().int().min(1).max(200).optional().describe("Maximum cycles to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const gated = await hrmFeatureRefused(authz.user.orgId);
@@ -655,6 +672,10 @@ const hrmRecruiting: AssistantToolDef = {
           orgId: authz.user.orgId,
           actorId: authz.user.id,
           requisitionId: a.requisitionId,
+    const a = raw as { cycleId?: string; status?: (typeof cycleStatuses)[number]; limit?: number };
+      if (a.cycleId) {
+        const detail = await getCycleDetail({
+          cycleId: a.cycleId,
         });
         return {
           ok: true,
@@ -710,6 +731,40 @@ const hrmRecruiting: AssistantToolDef = {
           truncated: page.truncated,
           requisitions: page.items,
           href: "/hrm/recruiting",
+            name: detail.name,
+            templateName: detail.templateName,
+            periodStartOn: detail.periodStartOn,
+            periodEndOn: detail.periodEndOn,
+            totalSelf: detail.totalSelf,
+            submittedSelf: detail.submittedSelf,
+            totalManager: detail.totalManager,
+            submittedManager: detail.submittedManager,
+            reviews: detail.reviews.map((review) => ({
+              id: review.id,
+              kind: review.kind,
+              status: review.status,
+              overallRating: review.overallRating,
+              calibratedRating: review.calibratedRating,
+            href: "/hrm/performance",
+      const cycles = await listCycleProgress({ orgId: authz.user.orgId, actorId: authz.user.id });
+      const kept = cycles
+        .filter((cycle) => !a.status || cycle.status === a.status)
+        .map((cycle) => ({
+          id: cycle.id,
+          name: cycle.name,
+          templateName: cycle.templateName,
+          periodStartOn: cycle.periodStartOn,
+          periodEndOn: cycle.periodEndOn,
+          status: cycle.status,
+          totalSelf: cycle.totalSelf,
+          submittedSelf: cycle.submittedSelf,
+          totalManager: cycle.totalManager,
+          submittedManager: cycle.submittedManager,
+        }));
+      const page = compactRows(kept, { limit });
+          status: a.status ?? null,
+          cycles: page.items,
+          href: "/hrm/performance",
         },
       };
     } catch (error) {
@@ -719,3 +774,78 @@ const hrmRecruiting: AssistantToolDef = {
 };
 
 export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting];
+const hrmTurnover: AssistantToolDef = {
+  name: "hrm_turnover",
+  description:
+    "Attrition derived from employment history: trailing-twelve-months turnover with the regrettable count, or turnover per period and department. HR-only. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.retention.read"] },
+  feature: "hrm",
+  tier: "module",
+  inputSchema: z.object({
+    departmentId: uuidInput.optional().describe("Keep only this department"),
+    periods: z
+      .array(z.object({ start: dateInput, end: dateInput }))
+      .min(1)
+      .max(12)
+      .optional()
+      .describe("Explicit civil-date ranges; omit for the trailing-twelve-months overview"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const gated = await hrmFeatureRefused(authz.user.orgId);
+    if (gated) return gated;
+    const a = raw as { departmentId?: string; periods?: { start: string; end: string }[] };
+    try {
+      if (!a.periods) {
+        const overview = await getRetentionOverview({ orgId: authz.user.orgId, actorId: authz.user.id });
+        const trailing = overview.trailingTwelveMonths;
+        return {
+          ok: true,
+          data: {
+            periodStart: trailing?.periodStart ?? null,
+            periodEnd: trailing?.periodEnd ?? null,
+            headcountStart: trailing?.headcountStart ?? null,
+            headcountEnd: trailing?.headcountEnd ?? null,
+            terminations: trailing?.terminations ?? null,
+            voluntary: trailing?.voluntary ?? null,
+            involuntary: trailing?.involuntary ?? null,
+            turnoverRate: trailing?.turnoverRate ?? null,
+            regrettableLeavers: overview.regrettableLeavers,
+            missingExitRecords: overview.missingExitRecords.length,
+            exitRecordsWithoutInterview: overview.exitRecordsWithoutInterview.length,
+            href: "/hrm/performance",
+          },
+        };
+      }
+      const turnover = await getTurnover({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        periods: a.periods,
+        ...(a.departmentId ? { departmentId: a.departmentId } : {}),
+      });
+      return {
+        ok: true,
+        data: {
+          periods: turnover.periods.map((row) => ({
+            periodStart: row.periodStart,
+            periodEnd: row.periodEnd,
+            departmentId: row.departmentId,
+            headcountStart: row.headcountStart,
+            headcountEnd: row.headcountEnd,
+            terminations: row.terminations,
+            voluntary: row.voluntary,
+            involuntary: row.involuntary,
+            turnoverRate: row.turnoverRate,
+            regrettableShare: row.regrettableShare,
+            medianTenureDays: row.medianTenureDays,
+          })),
+          href: "/hrm/performance",
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+
+export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmPerformanceCycles, hrmTurnover];
