@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { syntheticRoles } from "./roles.ts";
+import { syntheticRoles } from "./role-bindings.ts";
 import { SALES_TAX_CASES } from "./cases/sales-tax.ts";
 
 // Independent published-rule expectation: changing the corpus expected values
