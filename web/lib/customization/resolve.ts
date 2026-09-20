@@ -6,7 +6,9 @@ import {
   defaultFormLayout,
   defaultListView,
   getRecordType,
+  isUntouchedSeededView,
   mergeRegisteredFieldsIntoLayout,
+  stripSeededDefaultMark,
   type FormLayoutConfig,
   type LineColumnPlacement,
   type ListViewConfig,
@@ -55,6 +57,9 @@ export type ListViewRow = {
   ownerId: string | null;
   isDefault: boolean;
   isActive: boolean;
+  /** Seed timestamps — the untouched-seed rule reads them (null when unselected). */
+  createdAt?: Date | string | null;
+  updatedAt?: Date | string | null;
 };
 
 export interface ResolvedListView {
@@ -269,7 +274,8 @@ export const resolveListView = cache(
 
     const rows = (await db.execute<(ListViewRow & { config: unknown })>(sql`
       select id, name, record_type as "recordType", scope, owner_id as "ownerId",
-             is_default as "isDefault", is_active as "isActive", config
+             is_default as "isDefault", is_active as "isActive", config,
+             created_at as "createdAt", updated_at as "updatedAt"
         from list_views
        where org_id = ${orgId} and record_type = ${recordType} and is_active
          and (scope = 'org' or owner_id = ${userId})
@@ -284,6 +290,8 @@ export const resolveListView = cache(
       ownerId: r.ownerId,
       isDefault: r.isDefault,
       isActive: r.isActive,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
     }));
 
     const byId = (id: string) => rows.rows.find((r) => r.id === id);
@@ -302,8 +310,9 @@ export const resolveListView = cache(
     }
     // 3. org default
     if (!chosen) chosen = rows.rows.find((r) => r.scope === "org" && r.isDefault);
-    // 4. first available
-    if (!chosen) chosen = rows.rows[0];
+    // 4. no saved default wins over the system default: a first-available
+    // non-default view must never outrank the registry (it is how a stale
+    // Z→A snapshot kept winning after the registry declared A→Z).
 
     if (!chosen) {
       return {
@@ -314,9 +323,33 @@ export const resolveListView = cache(
       };
     }
 
-    const config = (chosen.config ?? defaultListView(recordType)) as ListViewConfig;
+    // A seeded org default nobody edited is a frozen copy of a registry that
+    // keeps moving, so it resolves to the LIVE registry default at request
+    // time (direction and columns follow the registry) — however it was
+    // chosen. Untouched needs both the metadata rule and the stored-config
+    // shape rule (see isUntouchedSeededView); an edited one keeps its stored
+    // edits exactly, and user views never take this path.
     const source: ResolvedListView["source"] =
       viewId && chosen.id === viewId ? "explicit" : chosen.scope === "user" ? "user" : "org";
+    if (
+      chosen.scope === "org" &&
+      chosen.isDefault &&
+      isUntouchedSeededView(chosen, getRecordType(recordType))
+    ) {
+      return {
+        view: mergeCustomFieldsIntoView(
+          stripSeededDefaultMark(defaultListView(recordType)),
+          showInListDefs,
+        ),
+        source,
+        row: { ...chosen, config: undefined } as unknown as ListViewRow,
+        available,
+      };
+    }
+
+    const config = stripSeededDefaultMark(
+      (chosen.config ?? defaultListView(recordType)) as ListViewConfig,
+    );
     return {
       view: mergeCustomFieldsIntoView(config, showInListDefs),
       source,

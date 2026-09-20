@@ -1132,6 +1132,10 @@ const BANK_RULE: RecordTypeMeta = {
   supportsForms: false,
   customFieldLineTable: null,
   headerFields: [], lineFields: [],
+  // Rules evaluate in priority order, so the list opens in that order — not
+  // newest-first via the date fallback, which would hide the first-evaluated
+  // rule at the bottom.
+  defaultSort: { sortKey: "priority", dir: "asc" },
   listColumns: [
     { key: "priority", labelKey: "banking.rules.priority", kind: "text", sortable: true, sortKey: "priority", defaultWidth: 90 },
     { key: "name", labelKey: "common.labels.name", kind: "reference", sortable: true, sortKey: "name", locked: true },
@@ -1220,6 +1224,10 @@ const PROJECT: RecordTypeMeta = {
   supportsForms: true,
   customFieldTable: "projects",
   customFieldLineTable: null,
+  // A project directory opens A→Z like every other name-ordered directory —
+  // not newest-first via the created fallback, which buries the project you
+  // are looking for.
+  defaultSort: { sortKey: "name", dir: "asc" },
   // The project cockpit's tabs, in default order. `overview` is locked: a
   // record has to be able to show its own fields. Project planning panels live
   // beneath one top-level Project management workspace. `schedule` remains
