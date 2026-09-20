@@ -91,11 +91,11 @@ test(
         values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-01-18', 3, true,
                 ${actorId}, ${actorId})`);
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
                                                pay_basis, federal_claim_code, provincial_claim_code,
                                                vacation_percent, vacation_method, is_active,
                                                created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 1, 1,
+        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
                 '4', 'accrue', true, ${actorId}, ${actorId})`);
 
       // Three committed periods, 60 h on job A and 20 h on job B in each.
@@ -450,11 +450,11 @@ test(
         values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-01-18', 3, true,
                 ${actorId}, ${actorId})`);
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
                                                pay_basis, federal_claim_code, provincial_claim_code,
                                                vacation_percent, vacation_method, is_active,
                                                created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 1, 1,
+        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
                 '4', 'accrue', true, ${actorId}, ${actorId})`);
 
       // One committed period: 30 h on job A at $30.00/h = $900.00.
@@ -645,11 +645,11 @@ test(
         values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-01-18', 3, true,
                 ${actorId}, ${actorId})`);
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
                                                pay_basis, federal_claim_code, provincial_claim_code,
                                                vacation_percent, vacation_method, is_active,
                                                created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 1, 1,
+        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
                 '4', 'accrue', true, ${actorId}, ${actorId})`);
 
       // One committed period: 20 h + 10 h on job A at $30.00/h = $900.00.

@@ -76,10 +76,10 @@ async function seedWcbHarness(orgId: string, actorId: string, hourlyRate: string
     values (${scheduleId}, ${orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
             ${actorId}, ${actorId})`);
   await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
                                            pay_basis, federal_claim_code, provincial_claim_code,
                                            is_active, created_by, updated_by)
-    values (${orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 1, 1,
+    values (${orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
             true, ${actorId}, ${actorId})`);
   const jobs = { jobA: randomUUID(), jobB: randomUUID(), jobC: randomUUID() };
   for (const [id, name] of [[jobs.jobA, "Job A"], [jobs.jobB, "Job B"], [jobs.jobC, "Job C"]] as const) {
@@ -163,10 +163,10 @@ test(
         values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
                 ${actorId}, ${actorId})`);
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
                                                pay_basis, federal_claim_code, provincial_claim_code,
                                                is_active, created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 1, 1,
+        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
                 true, ${actorId}, ${actorId})`);
 
       // 40h on each of two jobs → $1,200 per job, $2,400 gross.
@@ -554,10 +554,10 @@ test(
         values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
                 ${actorId}, ${actorId})`);
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
                                                pay_basis, federal_claim_code, provincial_claim_code,
                                                is_active, created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 1, 1,
+        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
                 true, ${actorId}, ${actorId})`);
       const jobA = randomUUID();
       await db.execute(sql`

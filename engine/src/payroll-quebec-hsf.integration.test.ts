@@ -107,10 +107,10 @@ test(
                                         is_active, created_by, updated_by)
           values (${org.orgId}, ${employeeId}, 'CAD', '30', 'hour', '2026-01-01', true, ${actorId}, ${actorId})`);
         await db.execute(sql`
-          insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+          insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
                                                  pay_basis, federal_claim_code, vacation_percent,
                                                  vacation_method, is_active, created_by, updated_by)
-          values (${org.orgId}, ${employeeId}, ${scheduleId}, ${province}, 'hourly', 1,
+          values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', ${province}, 'hourly', 1,
                   '0', 'accrue', true, ${actorId}, ${actorId})`);
         for (const workedOn of ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]) {
           await db.execute(sql`

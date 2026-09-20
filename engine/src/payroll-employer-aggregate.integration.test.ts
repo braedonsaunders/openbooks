@@ -125,10 +125,10 @@ async function makeEmployee(
                                   is_active, created_by, updated_by)
     values (${orgId}, ${employeeId}, 'CAD', ${hourlyRate}, 'hour', '2026-01-01', true, ${actorId}, ${actorId})`);
   await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
                                            pay_basis, federal_claim_code, provincial_claim_code,
                                            is_active, created_by, updated_by)
-    values (${orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 1, 1,
+    values (${orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
             true, ${actorId}, ${actorId})`);
   return employeeId;
 }

@@ -239,8 +239,8 @@ test(
           values (${orgId}, ${empA}, 'person', 'Employee A', ${rootId}),
                  (${orgId}, ${empB}, 'person', 'Employee B', ${subBId})`);
         await db.execute(sql`
-          insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province)
-          values (${orgId}, ${empA}, ${scheduleA}, 'ON')`);
+          insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province)
+          values (${orgId}, ${empA}, ${scheduleA}, 'CA', 'ON')`);
         const componentId = randomUUID();
         await db.execute(sql`
           insert into pay_components (org_id, id, code, name, kind, basis, sequence)

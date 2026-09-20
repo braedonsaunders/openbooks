@@ -322,11 +322,11 @@ test(
         values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
                 ${actorId}, ${actorId})`);
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
                                                pay_basis, federal_claim_code, provincial_claim_code,
                                                vacation_percent, vacation_method,
                                                is_active, created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 1, 1,
+        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
                 '0', 'accrue', true, ${actorId}, ${actorId})`);
       for (const workedOn of ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]) {
         await db.execute(sql`

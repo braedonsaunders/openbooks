@@ -138,10 +138,10 @@ async function hourlyCalcFixture(label: string, days: { workedOn: string; hours:
     values (${org.orgId}, ${employeeId}, 'CAD', '30', 'hour', '2026-01-01', true,
             ${actorId}, ${actorId})`)
   await db.execute(sql`
-    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
                                            pay_basis, federal_claim_code, provincial_claim_code,
                                            vacation_method, is_active, created_by, updated_by)
-    values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 1, 1,
+    values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
             'accrue', true, ${actorId}, ${actorId})`)
   for (const day of days) {
     await db.execute(sql`
@@ -207,11 +207,11 @@ test('a retro run settles quantified back pay; a regular run never does', { skip
       values (${org.orgId}, ${employeeId}, 'CAD', '30', 'hour', '2025-06-01', true,
               ${actorId}, ${actorId})`)
     await db.execute(sql`
-      insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+      insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
                                              pay_basis, federal_claim_code, provincial_claim_code,
                                              vacation_percent, vacation_method, is_active,
                                              created_by, updated_by)
-      values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 1, 1,
+      values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
               '4', 'accrue', true, ${actorId}, ${actorId})`)
     await db.execute(sql`
       insert into time_entries (org_id, employee_party_id, worked_on, hours, status, is_billable,
@@ -299,10 +299,10 @@ test('a salaried employee holding only an hourly rate is refused before calculat
       values (${f.orgId}, ${employeeId}, 'CAD', '30', 'hour', '2026-01-01', true,
               ${f.actorId}, ${f.actorId})`)
     await db.execute(sql`
-      insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+      insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
                                              pay_basis, federal_claim_code, provincial_claim_code,
                                              vacation_method, is_active, created_by, updated_by)
-      values (${f.orgId}, ${employeeId}, ${f.scheduleId}, 'ON', 'salary', 1, 1,
+      values (${f.orgId}, ${employeeId}, ${f.scheduleId}, 'CA', 'ON', 'salary', 1, 1,
               'accrue', true, ${f.actorId}, ${f.actorId})`)
     const calculated = await calculatePayRun({ orgId: f.orgId, documentId: f.documentId, actorId: f.actorId })
     const refusal = calculated.errors.find((e) => e.employee === 'Salaried Sam')
@@ -442,10 +442,10 @@ async function partialRefusalFixture(label: string) {
                 ${actorId}, ${actorId})`)
     }
     await db.execute(sql`
-      insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+      insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
                                              pay_basis, federal_claim_code, provincial_claim_code,
                                              vacation_method, is_active, created_by, updated_by)
-      values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', ${payBasis}, 1, 1,
+      values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', ${payBasis}, 1, 1,
               'accrue', true, ${actorId}, ${actorId})`)
     await db.execute(sql`
       insert into time_entries (org_id, employee_party_id, worked_on, hours, status, is_billable,
@@ -678,10 +678,10 @@ test('a run where every in-scope employee refuses is not a success', { skip: !DB
         insert into parties (id, org_id, kind, display_name, is_active, custom)
         values (${employeeId}, ${org.orgId}, 'person', ${name}, true, '{}'::jsonb)`)
       await db.execute(sql`
-        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
                                                pay_basis, federal_claim_code, provincial_claim_code,
                                                vacation_method, is_active, created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 1, 1,
+        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
                 'accrue', true, ${actorId}, ${actorId})`)
     }
     const run = await createPayRun({
