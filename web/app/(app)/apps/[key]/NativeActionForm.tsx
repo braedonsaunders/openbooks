@@ -7,6 +7,7 @@ import type { NativeExtension } from '@/lib/apps/native-ui'
 import { RecordFields, RecordPreviewOptions } from '@/components/record-fields'
 import { validateRecordData, withComputedFormulas } from '@/lib/record-schema'
 import { confirmDialog } from '@/lib/confirm'
+import { readApiErrorMessage } from '@/lib/api-error'
 
 type ActionScreen = Extract<NativeExtension['screens'][number], { kind: 'action' }>
 /** The same form editor and validation as RecordDrawer; only submission goes
@@ -38,8 +39,12 @@ export function NativeActionForm({ appKey, versionId, screen, preview }: {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ screenKey: screen.key, versionId, invocationId: invocation.current, input }),
       })
+      // The status is checked before the body is parsed: a non-JSON error
+      // body must surface the actions-route refusal, never a SyntaxError
+      // from response.json() that hides the named remedy.
+      if (!response.ok) throw new Error(await readApiErrorMessage(response, t('actionFailed')))
       const result = await response.json() as { ok?: boolean; error?: string; result?: { status: number; body: unknown } }
-      if (!response.ok || !result.ok) throw new Error(result.error || t('actionFailed'))
+      if (!result.ok) throw new Error(result.error || t('actionFailed'))
       const body = result.result?.body
       const text = body && typeof body === 'object' && 'message' in body && typeof body.message === 'string' ? body.message : ''
       if ((result.result?.status ?? 500) >= 400) throw new Error(text || t('actionFailed'))
