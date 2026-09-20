@@ -19,6 +19,7 @@ import {
   Search,
   Sparkles,
   Target,
+  Users,
   Wallet,
   Waves,
 } from 'lucide-react'
