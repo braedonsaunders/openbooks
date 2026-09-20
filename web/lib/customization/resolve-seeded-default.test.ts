@@ -41,7 +41,7 @@ type Row = Record<string, unknown>
 }
 
 const { resolveListView } = await import('./resolve.ts')
-const { defaultListView } = await import('@openbooks/customization')
+const { defaultListView, stripSeededDefaultMark } = await import('@openbooks/customization')
 
 const AT = new Date('2025-01-01T00:00:00Z')
 const LATER = new Date('2025-02-01T00:00:00Z')
@@ -180,4 +180,23 @@ test('explicit pick of an untouched seed resolves live as explicit', async () =>
   assert.equal(resolved.source, 'explicit')
   assert.deepEqual(resolved.view.sort, { column: 'display_name', dir: 'asc' })
   assert.equal(resolved.row?.id, seed.id)
+})
+
+// The full PATCH round trip: a seeded default edited only in sort direction
+// is stored by PATCH without the mark (stripped explicitly in the route) and
+// with a bumped updated_at — so resolution keeps the edited direction even
+// though the shape rule alone would pass.
+test('a sort-only edit through the PATCH path keeps its direction', async () => {
+  const editedThroughPatch = stripSeededDefaultMark({
+    ...staleDescSeed,
+    seededDefault: true,
+    sort: { column: 'short_code', dir: 'desc' as const },
+  })
+  assert.ok(!('seededDefault' in (editedThroughPatch as Record<string, unknown>)))
+  const resolved = await resolve(
+    { viewRows: [seedRow({ config: editedThroughPatch, updatedAt: LATER })] },
+    'org-case-8',
+  )
+  assert.equal(resolved.source, 'org')
+  assert.deepEqual(resolved.view.sort, { column: 'short_code', dir: 'desc' })
 })

@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { getAuthz, can } from "../../../../../lib/authz";
-import { parseListView } from "@openbooks/customization";
+import { parseListView, stripSeededDefaultMark } from "@openbooks/customization";
 import { refuseDisabledRecordType } from "../../../../../lib/customization/gates";
 
 export const runtime = "nodejs";
@@ -78,7 +78,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: "invalid view config", issues: parsed.issues }, { status: 400 });
     if (parsed.data!.recordType !== existing.recordType)
       return NextResponse.json({ error: "config.recordType does not match this view's record type" }, { status: 400 });
-    sets.push(sql`config = ${parsed.data}`);
+    // The seed mark must never be re-stored through the designer: strip it
+    // explicitly here rather than relying on the parser dropping unknown
+    // keys, so a sort-only edit that passes the shape rule is still stored
+    // unmarked — and resolution keeps it instead of replacing it live.
+    sets.push(sql`config = ${stripSeededDefaultMark(parsed.data!)}`);
     changes.config = true;
   }
   if (body.isDefault !== undefined) {
