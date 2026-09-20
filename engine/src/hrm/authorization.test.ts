@@ -5,14 +5,14 @@ import type { SqlExecutor } from "../platform/db.ts";
 
 // Static imports evaluate before the module body, so in-file assignments
 // cannot guard the import-time database-environment resolution in db.ts.
-// The launch command MUST set OPENBOOKS_DB_URL= (and the migration URL)
-// explicitly; these assignments only re-assert that for anything resolved
-// lazily afterwards. These tests never touch a real database — a
-// missing-user case needs a real isolated integration test, not a unit
-// fake (actorIdentity falls back to the global db when its local row is
-// absent, so every actor used here has a local row).
-process.env.OPENBOOKS_DB_URL = "";
-process.env.OPENBOOKS_MIGRATION_DB_URL = "";
+// The unit launch command sets OPENBOOKS_DB_URL=. Keep a supplied URL so
+// the missing-user integration case can run against an isolated testdb;
+// re-assert emptiness only when nothing was supplied.
+const integrationDbUrl = process.env.OPENBOOKS_DB_URL?.trim() ?? "";
+if (!integrationDbUrl) {
+  process.env.OPENBOOKS_DB_URL = "";
+  process.env.OPENBOOKS_MIGRATION_DB_URL = "";
+}
 
 const {
   checkApprovalIdentitySeparation,
@@ -316,4 +316,59 @@ test("person loaders fail closed on unknown or inactive identity", async () => {
   await assert.rejects(loadActorPerson(exec, ORG, actor), HrmAuthorizationError);
   const person = await loadApprovalPerson(exec, ORG, actor);
   assert.equal(person.partyId, state.users.get(actor)!.partyId);
+});
+
+test("missing actor is refused without planting a local user in the fake", async () => {
+  const state = emptyState();
+  const exec = fakeExec(state);
+  const record = seedEmployment(state);
+  const missing = randomUUID();
+  // No users row. If this path went fail-open, the gate would return the
+  // seeded employment as a trusted subject.
+  await assert.rejects(
+    requireHrmEmploymentRead(exec, ORG, missing, record.id),
+    /identity behind this action is not established/,
+  );
+  await assert.rejects(
+    requireHrmEmploymentManage(exec, ORG, missing, record.id),
+    /identity behind this action is not established/,
+  );
+  await assert.rejects(
+    requireHrmEmploymentApprove(exec, ORG, missing, record.id),
+    /identity behind this action is not established/,
+  );
+  await assert.rejects(
+    loadActorPerson(exec, ORG, missing),
+    /identity behind this action is not established/,
+  );
+});
+
+test("nonexistent actor id is refused against a real organization", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const { sql } = await import("drizzle-orm");
+  const { db } = await import("../platform/db.ts");
+  const { createScratchOrg, dropScratchOrg } = await import("../testing/fixtures.ts");
+  const org = await createScratchOrg();
+  try {
+    const partyId = (await db.execute<{ id: string }>(sql`
+      insert into parties (org_id, kind, display_name)
+      values (${org.orgId}, 'person', 'Missing-actor worker')
+      returning id
+    `)).rows[0]!.id;
+    const employmentId = (await db.execute<{ id: string }>(sql`
+      insert into worker_employments (org_id, worker_party_id, employer_subsidiary_id)
+      values (${org.orgId}, ${partyId}, ${org.subsidiaryId})
+      returning id
+    `)).rows[0]!.id;
+    const missing = randomUUID();
+    await assert.rejects(
+      requireHrmEmploymentRead(db, org.orgId, missing, employmentId),
+      /identity behind this action is not established/,
+    );
+    await assert.rejects(
+      loadActorPerson(db, org.orgId, missing),
+      /identity behind this action is not established/,
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
 });
