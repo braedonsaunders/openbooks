@@ -246,9 +246,11 @@ DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'hrm_proc
 -- One OPEN process of a kind per employment (partial unique: completed and
 -- cancelled rows never conflict, so history accumulates while the open
 -- invariant holds race-safe under concurrent writers).
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'hrm_processes_open_one_per_kind') THEN
-  ALTER TABLE ONLY public.hrm_processes ADD CONSTRAINT hrm_processes_open_one_per_kind
-    UNIQUE (org_id, employment_id, kind) WHERE status = 'open'; END IF; END $$;
+-- One OPEN process per kind per employment: a partial uniqueness rule, which
+-- Postgres expresses as a partial unique INDEX (a UNIQUE constraint cannot
+-- carry a WHERE clause).
+CREATE UNIQUE INDEX IF NOT EXISTS hrm_processes_open_one_per_kind
+  ON public.hrm_processes (org_id, employment_id, kind) WHERE status = 'open';
 
 -- Covering unique for the composite attachment FK below. files.id is the
 -- primary key so (org_id, id) uniqueness already holds; this only names it
