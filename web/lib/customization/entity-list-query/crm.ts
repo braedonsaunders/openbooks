@@ -3,7 +3,7 @@ import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
-import { uuidOrFalse } from "../list-query";
+import { pushCustomFieldFilter, uuidOrFalse } from "../list-query";
 
 /* ------------------------------------------------------------------ */
 /* CRM activities                                                      */
@@ -67,6 +67,7 @@ function activityFilterPredicate(clause: FilterClause): SQL | null {
 export function activityWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: string, allowed?: ReadonlySet<string> | null): SQL {
   const parts: SQL[] = [sql`a.org_id = ${orgId}`,crmActivityScope(allowed)]
   for (const filter of view.filters) {
+    if (pushCustomFieldFilter(parts, filter, "a")) continue
     const predicate = activityFilterPredicate(filter)
     if (predicate) parts.push(sql`and ${predicate}`)
   }

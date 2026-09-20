@@ -2,7 +2,7 @@ import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
-import { dateOrFalse, uuidOrFalse } from "../list-query";
+import { dateOrFalse, pushCustomFieldFilter, uuidOrFalse } from "../list-query";
 
 /* ------------------------------------------------------------------ */
 /* Bank reconciliations                                                */
@@ -74,6 +74,7 @@ export function bankReconciliationWhere(
     parts.push(ids.length ? sql`and (bank_account.subsidiary_id is null or bank_account.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[]))` : sql`and false`)
   }
   for (const filter of view.filters) {
+    if (pushCustomFieldFilter(parts, filter, null)) continue
     const predicate = bankReconciliationFilterPredicate(filter)
     if (predicate) parts.push(sql`and ${predicate}`)
   }
@@ -169,6 +170,7 @@ export function bankStatementWhere(
     parts.push(ids.length ? sql`and (statement_account.subsidiary_id is null or statement_account.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[]))` : sql`and false`)
   }
   for (const filter of view.filters) {
+    if (pushCustomFieldFilter(parts, filter, null)) continue
     const predicate = bankStatementFilterPredicate(filter)
     if (predicate) parts.push(sql`and ${predicate}`)
   }
@@ -206,6 +208,7 @@ export const BANK_RULE_SORTS: Record<string, SQL> = {
 export function bankRuleWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: string): SQL {
   const parts: SQL[] = [sql`br.org_id = ${orgId}`]
   for (const filter of view.filters) {
+    if (pushCustomFieldFilter(parts, filter, null)) continue
     if (filter.key !== 'is_active') continue
     const value = Array.isArray(filter.value) ? String(filter.value[0] ?? '') : String(filter.value ?? '')
     if (filter.operator === 'eq') parts.push(sql`and br.is_active = ${value === 'true'}`)

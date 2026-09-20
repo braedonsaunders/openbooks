@@ -279,6 +279,25 @@ export function customFieldFilterPredicate(clause: FilterClause, tableAlias = "d
   }
 }
 
+/**
+ * AND a saved `cf_*` clause into a WHERE parts list. `customAlias` is the
+ * code-controlled table whose `custom` jsonb backs this list (same as
+ * columnDescriptors). `null` means the list has no custom store — fail
+ * closed to empty rather than dropping the clause or referencing a missing
+ * column. Returns true when `clause` is a custom-field filter so the caller
+ * skips its built-in switch.
+ */
+export function pushCustomFieldFilter(
+  parts: SQL[],
+  clause: FilterClause,
+  customAlias: string | null,
+): boolean {
+  if (!isCustomFieldKey(clause.key)) return false
+  const predicate = customAlias ? customFieldFilterPredicate(clause, customAlias) : sql`false`
+  if (predicate) parts.push(sql`and ${predicate}`)
+  return true
+}
+
 function filterPredicate(clause: FilterClause): SQL | null {
   const custom = customFieldFilterPredicate(clause, "d")
   if (custom) return custom

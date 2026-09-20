@@ -2,7 +2,7 @@ import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
-import { uuidOrFalse } from "../list-query";
+import { pushCustomFieldFilter, uuidOrFalse } from "../list-query";
 
 /* ------------------------------------------------------------------ */
 /* Customers                                                           */
@@ -162,6 +162,7 @@ export function customerWhere(
   if (crmOn) parts.push(sql`and (cr.party_id is not null or cap.party_id is not null)`)
   const statusExpr = customerStatusExpr(crmOn)
   for (const filter of view.filters) {
+    if (pushCustomFieldFilter(parts, filter, "p")) continue
     const predicate = customerFilterPredicate(filter, statusExpr, crmOn)
     if (predicate) parts.push(sql`and ${predicate}`)
   }
@@ -203,7 +204,9 @@ export function rolePartyWhere(
     const ids = [...allowedSubsidiaryIds]
     parts.push(ids.length ? sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[]))` : sql`and false`)
   }
-  void view
+  for (const filter of view.filters) {
+    pushCustomFieldFilter(parts, filter, "p")
+  }
   if (adhoc.q) {
     const query = `%${adhoc.q}%`
     parts.push(sql`and (p.display_name ilike ${query} or p.short_code ilike ${query} or p.email ilike ${query})`)

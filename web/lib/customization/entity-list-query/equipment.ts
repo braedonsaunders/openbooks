@@ -2,7 +2,7 @@ import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
-import { uuidOrFalse } from "../list-query";
+import { pushCustomFieldFilter, uuidOrFalse } from "../list-query";
 
 /* ------------------------------------------------------------------ */
 /* Equipment units                                                     */
@@ -66,6 +66,7 @@ export function equipmentWhere(
     parts.push(ids.length ? sql`and eu.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[])` : sql`and false`)
   }
   for (const filter of view.filters) {
+    if (pushCustomFieldFilter(parts, filter, "eu")) continue
     const predicate = equipmentFilterPredicate(filter)
     if (predicate) parts.push(sql`and ${predicate}`)
   }
