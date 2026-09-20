@@ -208,11 +208,22 @@ function resolveEntity(entityKey: string): SetupEntity | null {
  * engine's pack registry, and a read-only entity must fail closed WITHOUT
  * loading it (web/lib/setup-route.test.ts pins that a currency mutation
  * answers 405 with zero database calls — a top-level import breaks it).
+ *
+ * The locale comes from the same `resolveLocale()` the render path uses, not
+ * a literal: labels do not participate in validation (`coerceField`'s `select`
+ * check compares `option.value`, never `label` — web/lib/setup/coerce.ts),
+ * so resolving in the operator's language keeps both paths on the same
+ * descriptor without making the accept set depend on language. Passing 'en'
+ * "because labels do not matter here" would reintroduce the hardcode item 58
+ * removed; a future reader could not tell it was deliberate.
  */
 async function entityForValidation(entity: SetupEntity): Promise<SetupEntity> {
   if (!hasDynamicOptions(entity)) return entity
-  const { resolveDynamicSetupOptions } = await import('./dynamic-options')
-  return resolveDynamicSetupOptions(entity)
+  const [{ resolveDynamicSetupOptions }, { resolveLocale }] = await Promise.all([
+    import('./dynamic-options'),
+    import('../locale'),
+  ])
+  return resolveDynamicSetupOptions(entity, await resolveLocale())
 }
 
 /** Cheap, pure check so the dynamic import happens only where it is needed. */
