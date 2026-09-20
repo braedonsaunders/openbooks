@@ -303,7 +303,14 @@ const FR_NATIONAL_HOLIDAYS: PayrollCountryPack["jurisdictions"][number]["holiday
 
 const FR_JURISDICTIONS: PayrollCountryPack["jurisdictions"] = [
   {
-    key: "FR",
+    // The key is the profile-resolved jurisdiction, not the bare country:
+    // jurisdictionKey("FR", "FR") is "FR-FR" (the profile always names
+    // the single national region, so the bare country never resolves). A
+    // bare "FR" key declares a calendar no employee can ever reach, and
+    // the undeclared-jurisdiction gate then refuses every period containing
+    // a mandatory holiday. Alsace-Moselle stays reachable explicitly via
+    // labour_jurisdiction = "FR-AM".
+    key: "FR-FR",
     name: "France",
     scope: "employment",
     citation: "Code du travail, art. L3133-1 (jours fériés légaux)",
