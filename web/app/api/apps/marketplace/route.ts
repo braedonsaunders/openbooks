@@ -29,6 +29,19 @@ export async function POST(request: Request) {
   const body = parsed.data
   try {
     if (body.action === 'unpublish' && typeof body.key === 'string') {
+      // unpublishApp locks then returns without UPDATE or audit when the
+      // listing is already inactive. A write that matches zero rows is a
+      // failure: refuse by name so a second unpublish is not {ok:true}.
+      const listing = (
+        await db.execute<{ is_active: boolean }>(
+          sql`select is_active from app_listings where key=${body.key} and publisher_org_id=${gate.user.orgId}`,
+        )
+      ).rows[0]
+      if (listing && !listing.is_active)
+        throw new AppError(
+          `Nothing was withdrawn: "${body.key}" is already inactive. Publish it again if you need to withdraw a live listing.`,
+          409,
+        )
       await unpublishApp(gate.user.orgId, gate.user.id, body.key)
       return NextResponse.json({ ok: true })
     }
