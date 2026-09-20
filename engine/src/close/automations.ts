@@ -1,11 +1,6 @@
 /** Durable close automation claims and fenced effect execution. */
-import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { canonicalJson } from "../platform/canonical-json.ts";
-import { addCalendarDays, businessToday } from "../platform/business-date.ts";
-import { db, withBypassContext, withOrgContext, type SqlExecutor } from "../platform/db.ts";
-import { CloseError } from "./period-policy.ts";
-import { advancedCloseEnabled } from "./features.ts";
+import { db, type SqlExecutor } from "../platform/db.ts";
 
 type CloseAutomationTrigger =
   | "run_started"
