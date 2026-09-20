@@ -10,7 +10,7 @@ import {
   createScratchUser,
   dropScratchOrg,
 } from "./fixtures.ts";
-import { postDocument } from "../ledger/posting.ts";
+import { postDocument } from "../ledger/posting-document.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 const CHILD = fileURLToPath(new URL("./concurrent-office.child.mts", import.meta.url));

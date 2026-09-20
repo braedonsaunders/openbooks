@@ -1,82 +1,100 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
+import { dirname } from 'node:path'
 import { test } from 'node:test'
+import { fileURLToPath } from 'node:url'
+import ts from 'typescript'
+import { registryContracts } from '../../../scripts/widget-contracts-source.mjs'
 import { FRAME_NAMES, WIDGET_NAMES } from './registry-names'
 
-/**
- * `registry-names.ts` must say exactly what the registries contain.
- *
- * It is a mirror, and a mirror that drifts is worse than no mirror: it decides
- * whether a tenant- or agent-authored layout is accepted, so a stale entry
- * either rejects a widget that works or accepts one that throws mid-render.
- *
- * The comparison reads the registries from SOURCE rather than importing them.
- * Importing pulls a graph of ~200 React components into a plain node test —
- * which is the exact coupling the mirror exists to avoid, and reintroducing it
- * here to check the mirror would defeat the point.
- */
+const read = (file: string) => readFileSync(new URL(file, import.meta.url), 'utf8')
+const parse = (source: string) => ts.createSourceFile('registry.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
 
-/** Keys declared directly on an object literal, ignoring nested ones. */
-function registryKeys(source: string, declaration: string): string[] {
-  const start = source.indexOf(declaration)
-  assert.ok(start >= 0, `declaration not found: ${declaration}`)
-  const open = source.indexOf('{', start)
-  const keys: string[] = []
-  let depth = 0
-  for (let i = open; i < source.length; i++) {
-    const c = source[i]!
-    if (c === '"' || c === "'" || c === '`') {
-      const quote = c
-      const from = i
-      i++
-      while (i < source.length && source[i] !== quote) {
-        if (source[i] === '\\') i++
-        i++
-      }
-      if (depth === 1 && /^\s*:/.test(source.slice(i + 1))) keys.push(source.slice(from + 1, i))
-      continue
-    }
-    if (c === '/' && source[i + 1] === '/') {
-      while (i < source.length && source[i] !== '\n') i++
-      continue
-    }
-    if (c === '/' && source[i + 1] === '*') {
-      i = source.indexOf('*/', i) + 1
-      continue
-    }
-    if (c === '{' || c === '(' || c === '[') { depth++; continue }
-    if (c === '}' || c === ')' || c === ']') { depth--; if (depth === 0) break; continue }
-    if (depth === 1 && /[A-Za-z_$]/.test(c)) {
-      const word = /^[A-Za-z0-9_$]+/.exec(source.slice(i))![0]
-      if (/^\s*:/.test(source.slice(i + word.length))) keys.push(word)
-      i += word.length - 1
-    }
-  }
-  return keys
+/** Inspect one literal; imported composition is resolved only by registryContracts. */
+function objectLiteral(source: string, name: string): ts.ObjectLiteralExpression {
+  const node = parse(source).statements.filter(ts.isVariableStatement)
+    .flatMap((statement) => [...statement.declarationList.declarations])
+    .find((declaration) => ts.isIdentifier(declaration.name) && declaration.name.text === name)
+  assert.ok(node?.initializer, `${name} declaration is missing`)
+  let value = node.initializer
+  while (ts.isSatisfiesExpression(value) || ts.isAsExpression(value) || ts.isParenthesizedExpression(value)) value = value.expression
+  assert.ok(ts.isObjectLiteralExpression(value), `${name} must be a static object literal`)
+  return value
 }
 
-const read = (file: string) => readFileSync(new URL(file, import.meta.url), 'utf8')
+function forbiddenFamilyImports(source: string): string[] {
+  const forbidden: string[] = []
+  function visit(node: ts.Node): void {
+    let specifier: ts.Node | undefined
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) specifier = node.moduleSpecifier
+    if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) specifier = node.arguments[0]
+    if (specifier && ts.isStringLiteralLike(specifier)) {
+      const path = specifier.text.replace(/\.(?:tsx?|jsx?)$/, '')
+      if (path === './widgets' || path === './widget-slot') forbidden.push(specifier.text)
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(parse(source))
+  return forbidden
+}
 
-test('WIDGET_NAMES mirrors WIDGET_REGISTRY exactly', () => {
-  const actual = registryKeys(read('./widgets.tsx'), 'export const WIDGET_REGISTRY')
-  assert.equal(new Set(actual).size, actual.length, 'the registry must not declare a key twice')
-  const missing = actual.filter((name) => !WIDGET_NAMES.has(name))
-  const extra = [...WIDGET_NAMES].filter((name) => !actual.includes(name))
-  assert.deepEqual({ missing, extra }, { missing: [], extra: [] })
+test('WIDGET_NAMES mirrors the composed WIDGET_REGISTRY exactly', () => {
+  const file = fileURLToPath(new URL('./widgets.tsx', import.meta.url))
+  // The generator's parser also refuses missing, duplicate and cyclic adapters.
+  const actual = Object.keys(registryContracts(read('./widgets.tsx'), 'WIDGET_REGISTRY', file))
+  assert.ok(actual.length > 300, 'the registry parse found almost nothing')
+  assert.deepEqual({
+    missing: actual.filter((name) => !WIDGET_NAMES.has(name)),
+    extra: [...WIDGET_NAMES].filter((name) => !actual.includes(name)),
+  }, { missing: [], extra: [] })
 })
 
 test('FRAME_NAMES mirrors FRAME_REGISTRY exactly', () => {
-  const actual = registryKeys(read('./blocks.tsx'), 'const FRAME_REGISTRY')
-  const missing = actual.filter((name) => !FRAME_NAMES.has(name))
-  const extra = [...FRAME_NAMES].filter((name) => !actual.includes(name))
-  assert.deepEqual({ missing, extra }, { missing: [], extra: [] })
+  const actual = objectLiteral(read('./blocks.tsx'), 'FRAME_REGISTRY').properties.map((property) => {
+    assert.ok(ts.isPropertyAssignment(property), 'frame registry must declare explicit keys')
+    assert.ok(ts.isIdentifier(property.name) || ts.isStringLiteral(property.name), 'frame key must be static')
+    return property.name.text
+  })
+  assert.equal(new Set(actual).size, actual.length, 'frame registry must not duplicate keys')
+  assert.deepEqual({ missing: actual.filter((name) => !FRAME_NAMES.has(name)), extra: [...FRAME_NAMES].filter((name) => !actual.includes(name)) }, { missing: [], extra: [] })
 })
 
-test('every name is a slug the spec schema will accept', () => {
-  // The schema requires `^[a-z][a-z0-9-]*$`. A registry entry that cannot be
-  // named by a spec is unreachable, which is a bug in the registry rather than
-  // a fact about it.
-  for (const name of [...WIDGET_NAMES, ...FRAME_NAMES]) {
-    assert.match(name, /^[a-z][a-z0-9-]*$/, `${name} is not nameable from a spec`)
+test('every registry name is a slug the spec schema accepts', () => {
+  for (const name of [...WIDGET_NAMES, ...FRAME_NAMES]) assert.match(name, /^[a-z][a-z0-9-]*$/, `${name} cannot be named by a spec`)
+})
+
+test('the widget composition and families stay bounded without backwards imports', () => {
+  assert.ok(read('./widgets.tsx').split('\n').length <= 200, 'registry exceeds 200 lines; move independent renderers to a family')
+  const dir = dirname(fileURLToPath(import.meta.url))
+  const families = readdirSync(dir).filter((name) => name.startsWith('widgets-') && name.endsWith('.tsx'))
+  assert.ok(families.length > 0, 'no widget families found')
+  for (const file of families) {
+    const source = read(`./${file}`)
+    assert.ok(source.split('\n').length <= 500, `${file} exceeds 500 lines; split by responsibility`)
+    assert.deepEqual(forbiddenFamilyImports(source), [], `${file} must not depend on the registry or its slot consumers`)
   }
+})
+
+test('registry-local renderers resolve other widgets by name', () => {
+  const inline = objectLiteral(read('./widgets.tsx'), 'WIDGET_REGISTRY').properties.filter(ts.isPropertyAssignment)
+  assert.ok(inline.length > 0, 'expected the registry-dependent renderers')
+  for (const entry of inline) {
+    let resolvesRegistry = false
+    function visit(node: ts.Node): void {
+      if (ts.isElementAccessExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'WIDGET_REGISTRY') resolvesRegistry = true
+      ts.forEachChild(node, visit)
+    }
+    visit(entry.initializer)
+    assert.ok(resolvesRegistry, `${entry.name.getText()} belongs in a family; it does not resolve another widget`)
+  }
+})
+
+test('family boundary refuses both quote styles, extensions, reexports and dynamic imports', () => {
+  for (const source of [
+    "import { WIDGET_REGISTRY } from './widgets'",
+    'import { WIDGET_REGISTRY } from "./widgets.tsx"',
+    "export { WidgetSlot } from './widget-slot'",
+    "const slot = await import('./widget-slot.js')",
+  ]) assert.equal(forbiddenFamilyImports(source).length, 1, source)
+  assert.deepEqual(forbiddenFamilyImports("import { str } from './widget-props'"), [])
 })

@@ -8,7 +8,8 @@ import {
   requestDocumentVoid,
 } from '@openbooks/engine/src/ledger/document-void.ts'
 import { can, getAuthz, guardSubsidiaryScope } from '../../../../../lib/authz'
-import { createPermission, isDocKindEnabled, postPermission } from '../../../../../lib/documents'
+import { createPermission, postPermission } from "../../../../../lib/document-kinds.ts";
+import { isDocKindEnabled } from "../../../../../lib/documents.ts";
 import { isUuid } from '../../../../../lib/list-params'
 
 export const runtime = 'nodejs'

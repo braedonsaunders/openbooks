@@ -12,16 +12,14 @@ import {
 import { listEntryRulesInEffect } from '@openbooks/engine/src/allocations/match.ts'
 import type { RuleInEffect } from '@openbooks/engine/src/allocations/types.ts'
 import { assertGeneratedBillingEdit, BillingSourceIntegrityError } from '@openbooks/engine/src/projects/billing-source-integrity.ts'
-import { documentBalanceDueLateral } from '@openbooks/engine/src/records/balance-due.ts'
-import { documentRevisionCounterSql, documentRevisionSql } from '@openbooks/engine/src/records/revision.ts'
-export { documentRevisionCounterSql, documentRevisionSql }
-import { sql, type SQL } from 'drizzle-orm'
+import { documentRevisionCounterSql } from '@openbooks/engine/src/records/revision.ts'
+import { sql } from 'drizzle-orm'
 import { db, schema, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { cmp, normalizeDecimal, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/records/transaction-audit.ts'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm/crm.ts'
-import { computeBillTotals, computeBillTotalsWithProvider, nextDocumentNumber, persistLineTaxComponents, taxProfileMap, type BillLineInput } from './bills'
+import { computeBillTotals, computeBillTotalsWithProvider, nextDocumentNumber, persistLineTaxComponents, taxProfileMap } from './bills'
 import { canonicalDecimal } from './exact-decimal'
 import { activeStockLocations, profiledItemIds } from './stock-locations'
 import { DOC_KIND_FEATURE, docKindConfig, type DocKindConfig } from './document-kinds'
@@ -30,43 +28,15 @@ import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from
 import { segmentRegistry, validateExtraDims } from './segments'
 import { resolveOrgId } from './org-scope'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
-import { loadRequiredControlAccounts } from '@openbooks/engine/src/records/control-accounts.ts'
-import { isDocumentRevisionToken } from './api/registry-data'
 import { isUuid } from './list-params'
 import { persistTaxQuote } from '@openbooks/engine/src/tax/rate-providers.ts'
 
-/**
- * Unified line-based posting-document machinery.
- *
- * The `documents` table is a single supertype keyed by `kind`; the posting
- * engine (engine/src/ledger/posting.ts) holds the per-kind GL rules. The UI for
- * vendor bills, customer invoices, credit memos, card charges, checks, and
- * transfers is structurally identical — a header (party or funding source +
- * dates + memo) and a line grid (account + amount + tax + dimensions). This
- * module is the single source of truth for how each kind is loaded and
- * draft-created, so the drawer, the API, and the list pages never diverge.
- *
- * The kind configuration (client-safe) lives in lib/document-kinds.ts and is
- * re-exported here. The shared math (number sequences, tax computation,
- * tax-rate lookup) lives in lib/bills.ts and is re-exported here; it is fully
- * kind-agnostic.
- */
-
-export { computeBillTotals, computeBillTotalsWithProvider, taxProfileMap, nextDocumentNumber, type BillLineInput } from './bills'
-export {
-  DOC_KINDS,
-  DOC_KIND_FEATURE,
-  AP_KINDS,
-  AR_KINDS,
-  BANK_KINDS,
-  docKindConfig,
-  createPermission,
-  postPermission,
-  readPermission,
-  type DocKindConfig,
-  type DocFamily,
-  type PermNamespace,
-} from './document-kinds'
+import {
+  DOCUMENT_EDIT_REVISION_CONFLICT, DocumentEditError, requireDocumentEditRevision, assertNoExistingDocumentCorrection,
+  runDocumentVersionedTransaction, buildReversalLinkEvidence,
+} from '@openbooks/engine/src/records/document-edit-policy.ts'
+import type { DocumentLineInput, DocumentEditInput, DocumentEditCurrent } from '@openbooks/engine/src/ledger/document-input.ts'
+import { loadDocumentEditCurrent } from '@openbooks/engine/src/ledger/document-service.ts'
 
 /** False when this kind belongs to a Features switch that is off. */
 export async function isDocKindEnabled(orgId: string, kind: string): Promise<boolean> {
@@ -87,52 +57,12 @@ export async function disabledDocKinds(orgId: string): Promise<string[]> {
 // Draft creation + loading
 // ---------------------------------------------------------------------------
 
-const DOCUMENT_REVISION_ALIAS = '__documentRevision'
-
-/** Tables whose revision_seq counter is the optimistic-concurrency revision. */
-const REVISION_TABLES = new Set(['documents', 'custom_records'])
-
-/** Add the exact revision sidecar to reads backed by a revisioned table. */
-export function documentRevisionProjection(table: string): SQL {
-  return REVISION_TABLES.has(table)
-    ? sql`, ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "__documentRevision"`
-    : sql``
-}
-
-/**
- * Replace the driver's noncanonical timestamp value with the exact persisted
- * wire revision, preserving the established updated_at response field.
- * Non-revisioned records pass through untouched.
- */
-export function normalizeDocumentRecordRevisions(
-  table: string,
-  rows: Record<string, unknown>[],
-): Record<string, unknown>[] {
-  if (!REVISION_TABLES.has(table)) return rows
-  return rows.map((row) => {
-    const revision = row[DOCUMENT_REVISION_ALIAS]
-    if (!isDocumentRevisionToken(revision)) {
-      throw new Error('document read did not return an exact persisted revision')
-    }
-    const record = { ...row }
-    delete record[DOCUMENT_REVISION_ALIAS]
-    return { ...record, updated_at: revision }
-  })
-}
-
 /** Resolve the org's base currency (used when minting a draft). */
 async function orgBaseCurrency(orgId: string): Promise<string> {
   const r = (await db.execute<{ base_currency: string }>(
     sql`select base_currency from orgs where id = ${orgId}`,
   ))
   return r.rows[0]?.base_currency ?? 'CAD'
-}
-
-/** Posting deps for the shared document machinery. Fails closed: throws
- * ControlAccountsIncompleteError unless ar/ap/bank are configured, so a
- * half-configured org can never hand undefined account ids to the kernel. */
-export async function controlDeps(orgId: string) {
-  return { control: await loadRequiredControlAccounts(orgId) }
 }
 
 /** Instant-into-draft: mint an empty draft document for a kind, return id + number. */
@@ -180,62 +110,6 @@ export async function createDocumentDraft(
  * evidence (reason + requester + timestamp — see buildReversalLinkEvidence)
  * and blocks submission until the source's controlled void completes.
  */
-/**
- * Trimmed correction reason admissible on a posted-document amendment: the
- * same 8..500 btrim window the database enforces on every `reverses`
- * document_links edge (document_links_reversal_evidence CHECK), so a reason
- * this accepts can never detonate the link insert mid-transaction.
- */
-export function validateCorrectionReason(value: string | undefined | null): string {
-  const reason = value?.trim() ?? ''
-  if (reason.length < 8 || reason.length > 500) {
-    throw new DocumentEditError(422, 'A correction reason between 8 and 500 characters is required')
-  }
-  return reason
-}
-
-/**
- * The mandatory, immutable controller evidence every `reverses` document_links
- * edge must carry — `reason`, `requested_by`, and `requested_at` are not
- * optional metadata on a correction edge; the database refuses any row without
- * them (document_links_reversal_evidence CHECK) and submission of the
- * replacement stays gated on the linked void either way
- * (engine/src/flows/submit.ts). This is the same evidence the engine's own
- * correction writer records (engine/src/ledger/document-correction.ts); the web draft
- * path composes it instead of hand-rolling a bare edge. Fails closed: an edge
- * without admissible evidence cannot be constructed here at all.
- *
- * Pure — unit-tested directly in documents.test.ts.
- */
-export function buildReversalLinkEvidence(input: {
-  fromDocumentId: string
-  toDocumentId: string
-  reason: string | undefined | null
-  requestedBy: string
-}): {
-  fromDocumentId: string
-  toDocumentId: string
-  linkType: 'reverses'
-  reason: string
-  requestedBy: string
-  requestedAt: Date
-} {
-  if (!input.fromDocumentId || !input.toDocumentId) {
-    throw new DocumentEditError(422, 'a reversal link requires both the replacement and the corrected document')
-  }
-  if (!input.requestedBy) {
-    throw new DocumentEditError(422, 'a correction requires an attributable requester')
-  }
-  return {
-    fromDocumentId: input.fromDocumentId,
-    toDocumentId: input.toDocumentId,
-    linkType: 'reverses',
-    reason: validateCorrectionReason(input.reason),
-    requestedBy: input.requestedBy,
-    requestedAt: new Date(),
-  }
-}
-
 export async function createPostedCorrectionDraft(
   sourceId: string,
   body: DocumentEditInput,
@@ -364,52 +238,6 @@ export async function runPostedCorrectionDraftFlows(
   )
 }
 
-/**
- * Full document payload for a drawer: header + lines. For open-item kinds
- * (invoices, credits) `applied` and `balance_due` (= total − applied) come
- * from the shared balance-due reader (engine/src/records/balance-due.ts), so the
- * drawer, the customer PDF, and dunning report the same figure by
- * construction. Both stay NULL until the document posts.
- */
-export async function loadDocument(id: string, orgId?: string) {
-  const resolvedOrgId = await resolveOrgId(orgId)
-  const doc = (await db.execute<Record<string, unknown> & { documentRevision: string }>(sql`
-    select d.*, p.display_name as party_name, e.id as entry_id,
-           ${documentRevisionCounterSql(sql.raw('d.revision_seq'))} as "documentRevision",
-           ${sql`case when d.status = 'posted' then ap.applied end`} as applied,
-           ${sql`case when d.status = 'posted' then d.total - ap.applied end`} as balance_due
-      from documents d
-      left join parties p on p.id = d.party_id and p.org_id = d.org_id
-      left join journal_entries e on e.id = d.posted_entry_id and e.org_id = d.org_id
-      ${documentBalanceDueLateral()}
-     where d.id = ${id} and d.org_id = ${resolvedOrgId}
-  `))
-  const loaded = doc.rows[0]
-  if (!loaded) return null
-  // node-postgres maps timestamptz to JavaScript Date, which discards the
-  // microseconds PostgreSQL retains. Keep the public `updated_at` shape, but
-  // replace its lossy Date with the exact canonical token used by OCC.
-  const { documentRevision, ...document } = loaded
-  const exactDocument: Record<string, unknown> = {
-    ...document,
-    updated_at: documentRevision,
-  }
-  const lines = (await db.execute<Record<string, unknown>>(sql`
-    select l.id, l.line_number, l.account_id, l.item_id, l.description, l.quantity, l.unit,
-           l.unit_price, l.amount, l.cost_rate, l.bill_rate, l.cost_amount, l.bill_amount, l.is_billable,
-           l.tax_code_id, l.tax_group_id, l.tax_input_amount, l.tax_amount,
-           l.tax_overridden, l.department_id, l.project_id, l.location_id, l.class_id,
-           l.stock_location_id, l.extra_dims, l.custom,
-           l.distribution_group_id, l.distribution_rule_id, l.distribution_version_id,
-           l.distribution_locked, ar.name as distribution_rule_name
-      from document_lines l
-      left join allocation_rules ar on ar.id = l.distribution_rule_id and ar.org_id = l.org_id
-     where l.document_id = ${id} and l.org_id = ${resolvedOrgId}
-     order by l.line_number
-  `))
-  return { doc: exactDocument, lines: lines.rows }
-}
-
 // ---------------------------------------------------------------------------
 // Shared edit service — the single source of truth for writing a posting
 // document's header + lines. Both the interactive drawer route
@@ -418,93 +246,6 @@ export async function loadDocument(id: string, orgId?: string) {
 // field validation, GL re-materialization, transaction audit, CRM promotion,
 // and on_update flows the UI does — no duplicated, drifting write logic.
 // ---------------------------------------------------------------------------
-
-/** A line as accepted on a document edit (built-ins + dimensions + custom). */
-export interface DocumentLineInput extends BillLineInput {
-  itemId?: string | null
-  quantity?: string | null
-  unit?: string | null
-  unitPrice?: string | null
-  /** Line entity: the customer/vendor/employee this line belongs to. */
-  partyId?: string | null
-  departmentId?: string | null
-  projectId?: string | null
-  locationId?: string | null
-  classId?: string | null
-  /** Warehouse used by inventory receipt or issue effects for this line. */
-  stockLocationId?: string | null
-  extraDims?: Record<string, string | null>
-  custom?: Record<string, unknown>
-  /** Entry-mode allocation: rule key to explode this line (explicit request). */
-  distributionKey?: string | null
-  /** Stored distribution group this submitted line belongs to (re-save matching). */
-  distributionGroupId?: string | null
-  /** True locks the group against re-explosion; false unlocks; absent preserves. */
-  distributionLocked?: boolean | null
-}
-
-/** The header + lines payload for a document edit. Every field is optional; an
- *  absent key leaves the stored value untouched (partial patch). */
-export interface DocumentEditInput {
-  /** Required evidence for every posted-document amendment. Not persisted on
-   * the document; stored only in the immutable before/after audit envelope. */
-  amendmentReason?: string
-  /** Optimistic concurrency token from documents.revision_seq. Required when
-   * editing any existing document. A newly minted, still-private draft is the
-   * sole initialization path that may omit it. */
-  expectedUpdatedAt?: string
-  partyId?: string | null
-  paymentCardId?: string | null
-  documentDate?: string
-  dueDate?: string | null
-  referenceNumber?: string | null
-  memo?: string | null
-  postingDate?: string | null
-  departmentId?: string | null
-  projectId?: string | null
-  locationId?: string | null
-  classId?: string | null
-  extraDims?: Record<string, string | null>
-  subsidiaryId?: string | null
-  expectedPayDate?: string | null
-  paymentHoldReason?: string | null
-  internalNotes?: string | null
-  billingMethod?: string | null
-  isFinalInvoice?: boolean
-  currency?: string
-  custom?: Record<string, unknown>
-  lines?: DocumentLineInput[]
-  /** Stored distribution groups collapsing back to one line each. */
-  unsplitDistributionGroups?: string[]
-}
-
-/** The pre-edit snapshot a caller loads under its own org scope. */
-export type DocumentEditCurrent = {
-  kind: string
-  status: string
-  total: string
-  taxTotal: string
-  partyId: string | null
-  documentDate: string
-  updatedAt: string
-  custom?: Record<string, unknown>
-};
-
-/** Exact edit snapshot used by every internal and external document writer. */
-export async function loadDocumentEditCurrent(
-  id: string,
-  orgId: string,
-): Promise<DocumentEditCurrent | null> {
-  const result = await db.execute<DocumentEditCurrent>(sql`
-    select kind, status, total, tax_total as "taxTotal", party_id as "partyId",
-           document_date as "documentDate",
-           custom,
-           ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt"
-      from documents
-     where id = ${id} and org_id = ${orgId}
-  `)
-  return result.rows[0] ?? null
-}
 
 export type PreparedDocumentTotals = Awaited<ReturnType<typeof computeBillTotalsWithProvider>>
 
@@ -591,92 +332,6 @@ function wholeDigits(canonical: string): number {
 }
 
 /** A validation/period failure with the HTTP status the callers should return. */
-export class DocumentEditError extends Error {
-  status: number
-  fieldErrors?: Record<string, string>
-  constructor(status: number, message: string, fieldErrors?: Record<string, string>) {
-    super(message)
-    this.name = 'DocumentEditError'
-    this.status = status
-    this.fieldErrors = fieldErrors
-  }
-}
-
-export const DOCUMENT_EDIT_VERSION_REQUIRED =
-  'the document revision is required; reload and review the latest revision'
-
-const DOCUMENT_EDIT_REVISION_CONFLICT =
-  'this document changed after you opened it; reload and review the latest revision'
-
-const DOCUMENT_CORRECTION_CONFLICT =
-  'this document already has a correction; continue that retained correction instead of creating a competing version'
-
-/** Require the opaque revision token returned by loadDocument. */
-export function requireDocumentEditRevision(value: unknown): string {
-  if (!isDocumentRevisionToken(value)) {
-    throw new DocumentEditError(409, DOCUMENT_EDIT_VERSION_REQUIRED)
-  }
-  return value
-}
-
-/**
- * Compare exact PostgreSQL revision text without lossy JavaScript Date parsing.
- *
- * Exact string equality is sound end to end because storage guarantees a
- * document's revision ADVANCES on every update: migration
- * 0167_document_revision_counter bumps the revision_seq counter on every
- * UPDATE at the database boundary — including writes that backdate the
- * updated_at display timestamp. Two committed revisions can therefore never
- * serialize to one token, so an equal-string match really does mean "nothing
- * changed since you read it".
- */
-export function assertDocumentEditRevision(expected: unknown, actual: unknown): void {
-  if (typeof expected !== 'string' || typeof actual !== 'string' || expected !== actual) {
-    throw new DocumentEditError(409, DOCUMENT_EDIT_REVISION_CONFLICT)
-  }
-}
-
-export function assertNoExistingDocumentCorrection(existingDocumentNumber: string | null): void {
-  if (existingDocumentNumber !== null) {
-    throw new DocumentEditError(409, DOCUMENT_CORRECTION_CONFLICT)
-  }
-}
-
-/**
- * Keep the authoritative revision read and every dependent mutation inside one
- * transaction callback. The injected shape is intentionally tiny; production
- * supplies Drizzle's transaction + `select … for update`, and PostgreSQL-backed
- * regressions exercise this exact orchestration under competing connections.
- *
- * The locked row's revision must itself carry the exact canonical wire token
- * the documentRevisionCounterSql projection guarantees. String equality
- * between two equally lossy values — a driver-mapped Date coerced back to
- * text, PostgreSQL's default timestamp rendering, a truncated fractional
- * part — would otherwise authorize a write against a revision this system
- * can never have handed out, so a lock without an exact token fails closed
- * before any comparison runs.
- */
-export async function runDocumentVersionedTransaction<
-  Transaction,
-  Locked extends { updatedAt: unknown },
-  Result,
->(args: {
-  expectedRevision: string
-  transaction: (work: (tx: Transaction) => Promise<Result>) => Promise<Result>
-  lock: (tx: Transaction) => Promise<Locked | null>
-  mutate: (tx: Transaction, locked: Locked) => Promise<Result>
-}): Promise<Result> {
-  return args.transaction(async (tx) => {
-    const locked = await args.lock(tx)
-    if (!locked) throw new DocumentEditError(404, 'not found')
-    if (!isDocumentRevisionToken(locked.updatedAt)) {
-      throw new Error('document lock did not return an exact persisted revision')
-    }
-    assertDocumentEditRevision(args.expectedRevision, locked.updatedAt)
-    return args.mutate(tx, locked)
-  })
-}
-
 type DocumentTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 /**

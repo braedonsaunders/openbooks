@@ -4,21 +4,24 @@
     "description": "Registros de emprego com histórico por data, headcount e acompanhamento de solicitações de alteração.",
     "tabs": {
       "overview": "Visão geral",
-      "changeRequests": "Solicitações de alteração",
-      "departments": "Departamentos",
-      "reports": "Relatórios"
+      "positions": "Posições",
+      "processes": "Processos",
+      "leave": "Licenças",
+      "myLeave": "Minhas licenças"
     },
     "vitals": {
       "headcount": "Headcount",
       "headcountSub": "Em {date}",
-      "employers": "Empregadores",
-      "employersSub": "{count, plural, one {# subsidiária} other {# subsidiárias}}",
-      "departments": "Departamentos",
-      "departmentsSub": "{count, plural, one {# departamento} other {# departamentos}}"
+      "openPositions": "Posições abertas",
+      "openPositionsSub": "{fte} FTE vagos",
+      "startingSoon": "Começam em breve",
+      "startingSoonSub": "{count, plural, one {# termina nos próximos 30 dias} other {# terminam nos próximos 30 dias}}",
+      "onLeave": "De licença hoje",
+      "onLeaveSub": "{count, plural, one {# solicitação aguardando aprovação} other {# solicitações aguardando aprovação}}"
     },
     "groups": {
-      "title": "Headcount por empregador e departamento",
-      "employer": "Empregador",
+      "title": "Quadro de pessoal por departamento",
+      "employer": "Subsidiária",
       "department": "Departamento",
       "headcount": "Headcount",
       "unassigned": "Não atribuído",
@@ -26,7 +29,45 @@
       "total": "Total"
     },
     "directory": {
-      "title": "Diretório"
+      "title": "Diretório",
+      "employeesHint": "em serviço hoje",
+      "positionsHint": "abertas",
+      "processesHint": "{count, plural, one {# etapa atrasada} other {# etapas atrasadas}}",
+      "leaveHint": "{count, plural, one {# aguardando aprovação} other {# aguardando aprovação}}"
+    },
+    "vacancy": {
+      "title": "Vagas por departamento",
+      "department": "Departamento",
+      "employer": "Subsidiária",
+      "positions": "Posições",
+      "planned": "FTE planejado",
+      "funded": "FTE financiado",
+      "filled": "FTE preenchido",
+      "vacant": "FTE vago",
+      "unassignedDepartment": "Sem departamento",
+      "empty": "Nenhuma posição está estabelecida em {date}.",
+      "total": "Total"
+    },
+    "onboarding": {
+      "title": "Integração",
+      "openLabel": "Listas abertas",
+      "overdueLabel": "Atrasado",
+      "upcomingLabel": "A vencer",
+      "empty": "Nenhuma lista aberta.",
+      "viewAll": "Ver todos os processos"
+    },
+    "trend": {
+      "title": "Quadro de pessoal, últimos 12 meses",
+      "hint": "Em serviço no fim de cada mês, até hoje.",
+      "series": "Quadro de pessoal"
+    },
+    "attention": {
+      "title": "Precisa de atenção",
+      "allClear": "Nada precisa de atenção.",
+      "pending": "{count, plural, one {# solicitação de mudança aguardando decisão} other {# solicitações de mudança aguardando decisão}}",
+      "overdueSteps": "{count, plural, one {# etapa de checklist atrasada} other {# etapas de checklist atrasadas}}",
+      "leavePending": "{count, plural, one {# solicitação de licença aguardando aprovação} other {# solicitações de licença aguardando aprovação}}",
+      "unfunded": "{fte} FTE preenchidos sem financiamento"
     }
   },
   "overview": {
@@ -73,6 +114,11 @@
       "proposeChange": "Propor alteração",
       "manageDepartments": "Gerenciar departamentos",
       "openReports": "Abrir relatórios"
+    },
+    "leave": {
+      "title": "Licenças",
+      "onLeaveEmpty": "Ninguém ausente hoje.",
+      "pendingSub": "aguardando aprovação"
     }
   },
   "queue": {
@@ -109,25 +155,6 @@
     "draftBadge": "Ações",
     "openEmployee": "Abrir o registro do funcionário",
     "notAvailable": "Indisponível"
-  },
-  "departments": {
-    "title": "Departamentos",
-    "description": "Quadro de hoje por departamento, com detalhamento por empregador — resolvido pelo serviço de headcount.",
-    "listTitle": "Quadro por departamento",
-    "listNote": "A lista de funcionários não tem filtro por departamento, por isso o link abre a lista completa.",
-    "linksTitle": "Links",
-    "employeesLink": "Lista de funcionários",
-    "setupLink": "Gerenciar departamentos"
-  },
-  "reports": {
-    "title": "Relatórios",
-    "description": "Relatórios de pessoal: o modelo de quadro de pessoal e as entidades de emprego, abertos no construtor de relatórios.",
-    "presetTitle": "Quadro de pessoal",
-    "presetHint": "O modelo abre o plano salvo da organização — ou o catálogo do construtor caso a semeadura nunca tenha se materializado.",
-    "entitiesTitle": "Entidades de pessoal",
-    "entitiesHint": "Crie um relatório de pessoal a partir de uma das entidades de emprego.",
-    "hubTitle": "Todos os relatórios",
-    "hubDescription": "Abrir o centro de relatórios."
   },
   "employment": {
     "episodes": {
@@ -238,12 +265,220 @@
       "updatedToast": "Rascunho atualizado.",
       "submittedToast": "Enviado para aprovação.",
       "withdrawnToast": "Solicitação retirada.",
-      "requestFailed": "Não foi possível salvar a solicitação de alteração."
+      "requestFailed": "Não foi possível salvar a solicitação de alteração.",
+      "kindPositionAssignment": "Atribuição de posição",
+      "positionLabel": "Posição",
+      "positionUnset": "Sem posição",
+      "positionHint": "O quadro financiado que esta atribuição ocupa. A atribuição mantém seu próprio título, departamento e local.",
+      "positionRequired": "Escolha uma posição ou marque a atribuição como não atribuída.",
+      "unassignLabel": "Desatribuir da posição",
+      "unassignHint": "Registra um vínculo nulo explícito: o espaço mantém seu conteúdo, mas não ocupa quadro."
     }
   },
   "directory": {
     "employmentStatus": "Status de emprego",
     "serviceStart": "Início do serviço",
     "noEmployment": "Sem vínculo empregatício"
+  },
+  "positions": {
+    "title": "Posições",
+    "description": "O quadro financiado por trás do plano de headcount: FTE planejado, financiado e preenchido por posição, com suas versões, financiamento por período e titular atual.",
+    "statusAll": "Todos os status",
+    "statusPlanned": "Planejado",
+    "statusOpen": "Aberto",
+    "statusFilled": "Preenchido",
+    "statusFrozen": "Congelado",
+    "statusClosed": "Encerrado",
+    "columns": {
+      "code": "Código",
+      "title": "Título",
+      "status": "Status",
+      "department": "Departamento",
+      "planned": "FTE planejado",
+      "funded": "FTE financiado",
+      "filled": "FTE preenchido",
+      "vacant": "FTE vago",
+      "holder": "Titular",
+      "unassignedHolder": "Vago"
+    },
+    "holdersCount": "{count, plural, one {# titular} other {# titulares}}",
+    "empty": "Nenhuma posição corresponde a este filtro.",
+    "total": "Total",
+    "drawer": {
+      "title": "Posição {code}",
+      "versions": "Versões",
+      "versionNo": "Versão {no}",
+      "effective": "Vigente de {from} até {to}",
+      "effectiveOpen": "Vigente desde {from}, sem data final",
+      "recorded": "Registrado em {at}",
+      "funding": "Financiamento por período",
+      "period": "Período de {from} até {to}",
+      "funded": "{fte} FTE financiado",
+      "costPlan": "Plano de custos {amount} {currency}",
+      "unfunded": "Sem financiamento registrado",
+      "holder": "Titular atual",
+      "holderEmployment": "Emprego {id}",
+      "noHolder": "Sem titular em {date}",
+      "warnings": "Avisos",
+      "refusal": "Requer atenção",
+      "missing": "Esta posição não está mais visível."
+    },
+    "add": "Adicionar posição",
+    "create": {
+      "title": "Nova posição",
+      "code": "Código da posição",
+      "titleField": "Título",
+      "employer": "Subsidiária empregadora",
+      "department": "Departamento",
+      "noDepartment": "Sem departamento",
+      "plannedFte": "FTE planejado",
+      "status": "Status",
+      "effectiveFrom": "Vigente a partir de",
+      "reason": "Motivo",
+      "reasonPlaceholder": "Por que esta posição existe — registrado com a primeira versão",
+      "submit": "Criar posição",
+      "failed": "Não foi possível criar a posição."
+    },
+    "segmentsLabel": "Status"
+  },
+  "processes": {
+    "title": "Listas de processos",
+    "description": "Listas de integração, desligamento e transferência com responsáveis, prazos e evidências.",
+    "listTitle": "Listas",
+    "listFailed": "Não foi possível carregar os processos.",
+    "detailTitle": "Lista",
+    "detailFailed": "Não foi possível carregar a lista.",
+    "actionFailed": "Não foi possível concluir a ação.",
+    "loading": "Carregando…",
+    "empty": "Nenhuma lista neste segmento.",
+    "overdueBadge": "{count} atrasado",
+    "progressLine": "{done} de {required} etapas obrigatórias · vigência {effective}",
+    "dueOn": "Vence {date}",
+    "required": "Obrigatório",
+    "completeStep": "Concluir etapa",
+    "skipStep": "Pular etapa",
+    "completeProcess": "Concluir lista",
+    "cancelProcess": "Cancelar lista",
+    "attachmentLabel": "Arquivo de evidência",
+    "attachmentUnset": "Digite para pesquisar",
+    "skipReasonLabel": "Motivo",
+    "skipReasonPlaceholder": "Por que esta etapa foi pulada?",
+    "cancelReasonLabel": "Motivo do cancelamento",
+    "cancelReasonPlaceholder": "Por que esta lista foi cancelada?",
+    "confirmReason": "Confirmar",
+    "cancelReasonAbort": "Voltar",
+    "segments": {
+      "open": "Abertas",
+      "overdue": "Atrasadas",
+      "completed": "Concluídas",
+      "cancelled": "Canceladas"
+    },
+    "columns": {
+      "employee": "Colaborador",
+      "kind": "Tipo",
+      "effective": "Vigência",
+      "progress": "Progresso",
+      "nextDue": "Próximo vencimento",
+      "status": "Status"
+    },
+    "kinds": {
+      "onboarding": "Integração",
+      "offboarding": "Desligamento",
+      "transfer": "Transferência"
+    },
+    "owners": {
+      "manager": "Gestor",
+      "hr": "RH",
+      "employee": "Colaborador",
+      "named_party": "Pessoa designada"
+    },
+    "evidence": {
+      "none": "Nenhuma",
+      "acknowledgement": "Ciência",
+      "attachment": "Anexo"
+    },
+    "stepStatus": {
+      "pending": "Pendente",
+      "done": "Concluído",
+      "skipped": "Pulado"
+    },
+    "segmentsLabel": "Mostrar"
+  },
+  "leave": {
+    "title": "Licenças",
+    "description": "Solicitações, aprovações e registro de ausências — com saldos em tempo e, onde houver banco, em valor.",
+    "listTitle": "Solicitações de licença",
+    "segmentsLabel": "Mostrar",
+    "allLabel": "Todas",
+    "segments": {
+      "pending": "Aguardando aprovação",
+      "upcoming": "Próximas",
+      "today": "Ausentes hoje",
+      "history": "Histórico"
+    },
+    "columns": {
+      "employee": "Pessoa",
+      "type": "Tipo",
+      "range": "Período",
+      "hours": "Horas",
+      "status": "Estado"
+    },
+    "emptyTitle": "Nada aqui",
+    "emptyDescription": "Ainda nada neste segmento.",
+    "truncatedNote": "Mostrando as primeiras {limit} solicitações.",
+    "unknownSegmentTitle": "Segmento desconhecido",
+    "unknownSegment": "Não existe o segmento {segment}.",
+    "refusedTitle": "Licença recusada",
+    "fileTitle": "Solicitar uma licença",
+    "fileButton": "Nova solicitação",
+    "recordTitle": "Registrar uma ausência",
+    "recordButton": "Registrar ausência",
+    "calendarTitle": "Calendário por departamento",
+    "calendarDepartmentLabel": "Departamento",
+    "calendarFromLabel": "De",
+    "calendarToLabel": "Até",
+    "calendarShowLabel": "Mostrar",
+    "calendarEmpty": "Sem ausências neste período. Escolha um departamento.",
+    "openRequest": "Abrir",
+    "drawerTitle": "Solicitação de licença",
+    "detailLoading": "Carregando a solicitação…",
+    "detailFailed": "Não foi possível carregar a solicitação.",
+    "actionFailed": "A ação falhou.",
+    "submitButton": "Enviar para aprovação",
+    "withdrawButton": "Retirar",
+    "cancelButton": "Cancelar solicitação",
+    "withdrawReasonTitle": "Por que esta solicitação é retirada?",
+    "cancelReasonTitle": "Por que esta solicitação é cancelada?",
+    "fileFailed": "Não foi possível registrar a solicitação.",
+    "fileEmploymentLabel": "Emprego",
+    "fileEmploymentPlaceholder": "ID do emprego",
+    "fileTypeLabel": "Tipo de licença",
+    "fileTypePlaceholder": "Escolha um tipo",
+    "fileHoursLabel": "Horas",
+    "fileReasonLabel": "Motivo",
+    "timeBalanceTitle": "Saldo de tempo em {date}",
+    "timeBalanceValue": "{balance} horas (acumuladas {earned}, transferidas {carried}, usadas {taken})",
+    "unlimitedBalance": "Ilimitado — sem número de saldo.",
+    "noPolicyBalance": "Nenhuma política cobre este emprego.",
+    "valueBalanceTitle": "Valor bancário em {date}",
+    "statusNames": {
+      "draft": "Rascunho",
+      "submitted": "Enviada",
+      "approved": "Aprovada",
+      "rejected": "Rejeitada",
+      "withdrawn": "Retirada",
+      "cancelled": "Cancelada"
+    }
+  },
+  "myLeave": {
+    "title": "Minhas licenças",
+    "description": "Suas solicitações e saldos — nada mais.",
+    "emptyTitle": "Sem solicitações",
+    "emptyDescription": "Registre sua primeira solicitação.",
+    "balancesTitle": "Saldos",
+    "balancesEmpty": "Sem tipos de licença ativos.",
+    "timeKind": "tempo",
+    "valueKind": "valor",
+    "unlimited": "Ilimitado"
   }
 }

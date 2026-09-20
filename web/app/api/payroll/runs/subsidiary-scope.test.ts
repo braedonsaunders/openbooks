@@ -247,7 +247,14 @@ test(
           values (${orgId}, ${componentId}, 'COMMISSION', 'Commission', 'earning', 'fixed_amount', 90)`);
 
         // Runs created through the engine: run A inside A's scope, run B outside it.
-        const { createPayRun } = await import("@openbooks/engine/src/payroll/run.ts");
+        // Runs created through the engine: run A inside A's scope, run B outside it.
+// Runs created through the engine: run A inside A's scope, run B outside it.
+// Runs created through the engine: run A inside A's scope, run B outside it.
+// Runs created through the engine: run A inside A's scope, run B outside it.
+// Runs created through the engine: run A inside A's scope, run B outside it.
+// Runs created through the engine: run A inside A's scope, run B outside it.
+// Runs created through the engine: run A inside A's scope, run B outside it.
+const { createPayRun } = await import("@openbooks/engine/src/payroll/run-lifecycle.ts");
         const runA = await createPayRun({ orgId, actorId: adminId, payScheduleId: scheduleA });
         const runB = await createPayRun({ orgId, actorId: adminId, payScheduleId: scheduleB });
 

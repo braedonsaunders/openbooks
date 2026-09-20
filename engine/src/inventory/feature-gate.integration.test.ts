@@ -3,11 +3,12 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, pool, withOrgTransaction } from "../platform/db.ts";
-import {
-  adjustInventory, buildAssembly, createTransferOrder, issueInventory,
-  postLandedCostVoucher, receiveInventory, receiveTransferOrder, reverseInventoryMovement,
-  shipTransferOrder, transferInventory,
-} from "./inventory.ts";
+import { adjustInventory, issueInventory, receiveInventory } from "./movements.ts";
+import { transferInventory } from "./transfers.ts";
+import { reverseInventoryMovement } from "./reversal.ts";
+import { buildAssembly } from "./assembly.ts";
+import { createTransferOrder, receiveTransferOrder, shipTransferOrder } from "./transfer-orders.ts";
+import { postLandedCostVoucher } from "./landed-cost.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
 async function evidence(orgId: string) {

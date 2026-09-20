@@ -4,11 +4,9 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../../../engine/src/platform/db.ts";
-import {
-  createPaymentRun,
-  PaymentError,
-} from "../../../engine/src/payments/payments.ts";
-import { postDocument } from "../../../engine/src/ledger/posting.ts";
+import { createPaymentRun } from "../../../engine/src/payments/run-creation.ts";
+import { PaymentError } from "../../../engine/src/payments/payment-errors.ts";
+import { postDocument } from "../../../engine/src/ledger/posting-document.ts";
 import {
   createScratchOrg,
   createScratchUser,

@@ -5,7 +5,7 @@ import { formatInZone } from "../platform/business-date.ts";
 import { now, withSimClock } from "../platform/clock.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { payRunReadiness, payrollSetupState } from "./readiness.ts";
+import { payRunReadiness, payrollSetupState, setupTaxYearCheck } from "./readiness.ts";
 import { orgYearEndFilings } from "./yearend.ts";
 import { ratesForPayDate as caRatesForPayDate } from "./canada/rates.ts";
 import { qcRatesForPayDate } from "./canada/quebec/rates.ts";
@@ -78,6 +78,120 @@ test("an unloaded year is named, with the year, the pack and the fix", () => {
   assert.match(problem!.message, /engine\/src\/payroll\/canada\/rates\.ts/);
   assert.equal(payrollTaxYearProblem("CA", 2026), null);
   assert.throws(() => assertPayrollTaxYearSupported("US", beyond), /not loaded for US/);
+});
+
+test("an unsupported year tells the operator what is published, with no developer remedy", () => {
+  // REALISTIC: ES publishes 2026 only, so 2025 is a real pack with a real
+  // gap. The operator surface (readiness detail) must name the pack, the
+  // requested year, and the published years — and must not prescribe the
+  // scaffold script, which only a developer with a terminal can run.
+  const problem = payrollTaxYearProblem("ES", 2025);
+  assert.equal(problem?.kind, "missing");
+  const operator = problem!.operatorMessage;
+  assert.match(operator, /ES/);
+  assert.match(operator, /2025/);
+  assert.match(operator, /2026/);
+  assert.match(operator, /No action in the product/);
+  assert.ok(!operator.includes("payroll-new-tax-year"), `operator text must not name the scaffold script:\n${operator}`);
+  assert.ok(
+    !operator.includes(payrollTaxYearSupport("ES").ratesModule),
+    `operator text must not name the rates module:\n${operator}`,
+  );
+  assert.ok(!/scaffold/i.test(operator), `operator text must not prescribe scaffolding:\n${operator}`);
+  assert.ok(!/transcribe/i.test(operator), `operator text must not prescribe transcription:\n${operator}`);
+  // The developer remedy is unchanged for engine throws and logs.
+  assert.match(problem!.message, /payroll-new-tax-year/);
+});
+
+test("a draft year tells the operator it is not available, with no developer remedy", () => {
+  // REALISTIC: AU publishes 2027 while its 2026 edition is scaffolded but
+  // unfilled, so 2026 is a real draft gap — not a synthetic collision.
+  const problem = payrollTaxYearProblem("AU", 2026);
+  assert.equal(problem?.kind, "draft");
+  const operator = problem!.operatorMessage;
+  assert.match(operator, /AU/);
+  assert.match(operator, /2026/);
+  assert.match(operator, /2027/);
+  assert.match(operator, /No action in the product/);
+  assert.ok(!operator.includes("payroll-new-tax-year"), `operator text must not name the scaffold script:\n${operator}`);
+  assert.ok(
+    !operator.includes(payrollTaxYearSupport("AU").ratesModule),
+    `operator text must not name the rates module:\n${operator}`,
+  );
+  assert.ok(!/scaffold/i.test(operator), `operator text must not prescribe scaffolding:\n${operator}`);
+  assert.ok(!/transcribe/i.test(operator), `operator text must not prescribe transcription:\n${operator}`);
+  // The developer remedy is unchanged for engine throws and logs.
+  assert.match(problem!.message, /placeholder values/);
+});
+
+test("the setup check reports an unpublished year in operator text", () => {
+  // Asserts on the CHECK the setup surface reads — code, verdict, detail,
+  // href as one object — not on the composer. A call site reading the wrong
+  // field passes a composer-level test and fails here, which is exactly the
+  // defect this guards: setup.taxYear once shipped problem.message.
+  // REALISTIC: in 2025 the ES pack (2026 only) blocks setup, naming ES, the
+  // requested year, and the published year, with no developer remedy.
+  const check = setupTaxYearCheck("ES", "2025-06-15", "/admin/setup/payroll");
+  assert.equal(check.code, "setup.taxYear");
+  assert.equal(check.severity, "blocker");
+  assert.equal(check.ok, false);
+  assert.equal(check.href, "/admin/setup/payroll?tab=packs");
+  const detail = check.detail ?? "";
+  assert.match(detail, /ES/);
+  assert.match(detail, /2025/);
+  assert.match(detail, /2026/);
+  assert.match(detail, /No action in the product/);
+  assert.ok(!detail.includes("payroll-new-tax-year"), `setup detail must not name the scaffold script:\n${detail}`);
+  assert.ok(
+    !detail.includes(payrollTaxYearSupport("ES").ratesModule),
+    `setup detail must not name the rates module:\n${detail}`,
+  );
+  assert.ok(!/scaffold/i.test(detail), `setup detail must not prescribe scaffolding:\n${detail}`);
+  assert.ok(!/transcribe/i.test(detail), `setup detail must not prescribe transcription:\n${detail}`);
+  // And a loaded year stays a passing check naming the pack and the year.
+  const okCheck = setupTaxYearCheck("ES", "2026-06-15", "/admin/setup/payroll");
+  assert.equal(okCheck.ok, true);
+  assert.equal(okCheck.detail, "ES · 2026");
+  assert.equal(okCheck.href, "/admin/setup/payroll?tab=packs");
+});
+
+test("the setup check returns a blocker for a country with no pack", () => {
+  // The composer answers undeclared for XX, but the setup path THREW
+  // PayrollJurisdictionError out of the pack registry before reaching it —
+  // the setup page crashed instead of showing a blocker. This asserts on
+  // the CHECK, so the throw fails it. REALISTIC: a settings blob naming XX
+  // (the blob reader does not filter against the registry), as a hand edit
+  // or a future writer that forgets the API guard could leave behind.
+  const check = setupTaxYearCheck("XX", "2026-06-15", "/admin/setup/payroll");
+  assert.equal(check.code, "setup.taxYear");
+  assert.equal(check.severity, "blocker");
+  assert.equal(check.ok, false);
+  assert.equal(check.href, "/admin/setup/payroll?tab=packs");
+  const detail = check.detail ?? "";
+  assert.match(detail, /XX/);
+  assert.match(detail, /no payroll pack/i);
+  assert.match(detail, /No action in the product/);
+  // Year-free: with no pack there is no year arithmetic, so no year may be
+  // named (and the calendar-year guess is wrong for fiscal jurisdictions).
+  assert.ok(!/(19|20)\d{2}/.test(detail), `undeclared setup detail must name no year:\n${detail}`);
+  assert.ok(!detail.includes("payroll-new-tax-year"), `setup detail must not name the scaffold script:\n${detail}`);
+  assert.ok(!/scaffold/i.test(detail), `setup detail must not prescribe scaffolding:\n${detail}`);
+  assert.ok(!/transcribe/i.test(detail), `setup detail must not prescribe transcription:\n${detail}`);
+});
+
+test("a country with no pack tells the operator there is nothing to load", () => {
+  // REALISTIC: XX is declared nowhere, so the operator must learn the
+  // country itself is uncovered — not go looking for a year to load.
+  const problem = payrollTaxYearProblem("XX", 2025);
+  assert.equal(problem?.kind, "undeclared");
+  const operator = problem!.operatorMessage;
+  assert.match(operator, /XX/);
+  assert.match(operator, /2025/);
+  assert.match(operator, /no payroll pack/i);
+  assert.match(operator, /No action in the product/);
+  assert.ok(!operator.includes("payroll-new-tax-year"), `operator text must not name the scaffold script:\n${operator}`);
+  assert.ok(!/scaffold/i.test(operator), `operator text must not prescribe scaffolding:\n${operator}`);
+  assert.ok(!/transcribe/i.test(operator), `operator text must not prescribe transcription:\n${operator}`);
 });
 
 test("a region with its own tables can lag the country's, and says so", () => {

@@ -24,3 +24,17 @@ test("posted correction routes approval flows inside the idempotent command", ()
     "completed idempotency replays must not bypass correction routing",
   );
 });
+
+test("application document reads and refusal policy use engine boundaries", () => {
+  assert.match(SOURCE, /import \{ controlDeps, loadDocument \} from "@openbooks\/engine\/src\/ledger\/document-service\.ts"/);
+  assert.match(SOURCE, /import \{ DocumentEditError \} from "@openbooks\/engine\/src\/records\/document-edit-policy\.ts"/);
+  const webImport = SOURCE.match(/import \{([^}]+)\} from "\.\.\/documents(?:\.ts)?"/);
+  assert.ok(webImport);
+  assert.deepEqual(webImport[1]!.split(',').map((name) => name.trim()).filter(Boolean).sort(), [
+    'createPostedCorrectionDraft', 'isDocKindEnabled', 'runPostedCorrectionDraftFlows',
+  ]);
+  for (const name of ['ledger/document-service', 'records/document-edit-policy', 'ledger/document-input']) {
+    const engineSource = readFileSync(new URL(`../../../engine/src/${name}.ts`, import.meta.url), 'utf8');
+    assert.doesNotMatch(engineSource, /(?:from\s+|import\s*)['"][^'"]*(?:web\/|server-only|next\/|org-scope)/);
+  }
+});

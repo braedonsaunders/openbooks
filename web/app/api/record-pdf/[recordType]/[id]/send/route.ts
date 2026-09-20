@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { isValidEmailAddress } from '@openbooks/emails'
 import { can, guardPermission, guardSubsidiaryScope } from '../../../../../../lib/authz'
-import { isDocKindEnabled } from '../../../../../../lib/documents'
+import { isDocKindEnabled } from "../../../../../../lib/documents.ts";
 import { isUuid } from '../../../../../../lib/list-params'
 import { PDF_RECORD_TYPE_BY_KEY } from '../../../../../../lib/pdf-templates/catalog'
 import { resolveRecordRecipient, sendRecordPdfEmail } from '../../../../../../lib/pdf-templates/send'

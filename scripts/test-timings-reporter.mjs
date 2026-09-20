@@ -35,14 +35,15 @@ export default async function* timingsReporter(source) {
   function flush() {
     if (!destination) return
     const files = {}
+    const incompleteFiles = {}
     for (const [file, { whole, parts }] of [...measured].sort(([left], [right]) => (left < right ? -1 : 1))) {
-      // Prefer the file-level total. Fall back to the sum of its tests when the
-      // file never completed, which understates rather than invents a cost.
-      const duration = whole ?? parts
-      if (duration > 0) files[file] = Math.round(duration)
+      // Assertion time cannot stand in for file completion: a stalled worker
+      // can finish assertions and then wait forever during shutdown.
+      if (whole !== undefined) files[file] = Math.round(whole)
+      else incompleteFiles[file] = { assertionDurationMs: Math.round(parts) }
     }
     mkdirSync(dirname(resolve(destination)), { recursive: true })
-    writeFileSync(resolve(destination), `${JSON.stringify({ measuredAt: new Date().toISOString(), files }, null, 2)}\n`)
+    writeFileSync(resolve(destination), `${JSON.stringify({ version: 2, measuredAt: new Date().toISOString(), files, incompleteFiles }, null, 2)}\n`)
   }
 
   for await (const event of source) {

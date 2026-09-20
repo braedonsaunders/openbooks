@@ -16,13 +16,10 @@ import {
   sealSecret as sealEmailSecret,
   unsealSecret as unsealEmailSecret,
 } from "@openbooks/emails";
-import { postDocument } from "../ledger/posting.ts";
-import {
-  createPaymentDocument,
-  postPaymentWithApplications,
-  reversePaymentForReturn,
-  updateDraftPayment,
-} from "../payments/payments.ts";
+import { postDocument } from "../ledger/posting-document.ts";
+import { createPaymentDocument, updateDraftPayment } from "../payments/payment-documents.ts";
+import { postPaymentWithApplications } from "../payments/payment-posting.ts";
+import { reversePaymentForReturn } from "../payments/payment-return.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, dropScratchOrgReporting, orgRowCounts } from "../testing/fixtures.ts";
 
 const ENABLED = !!process.env.OPENBOOKS_DB_URL && !!process.env.OPENBOOKS_DATA_KEY && process.env.OPENBOOKS_RESTORE_DRILL === "1";
@@ -87,6 +84,13 @@ test("offline drill exports, removes, restores, and revalidates an organization"
     await db.execute(sql`
       insert into user_org_access (member_user_id, org_id, acting_user_id, is_active)
       values (${externalUserId}, ${source.orgId}, ${authUserId}, true)`);
+    // A table with GENERATED ALWAYS projections: the spooled row_to_json carries
+    // them, and the restore insert must name only the storable columns.
+    const processTemplateId = randomUUID();
+    await db.execute(sql`
+      insert into hrm_process_templates (id, org_id, kind, name, applies_to)
+      values (${processTemplateId}, ${source.orgId}, 'onboarding', 'Restore drill',
+              jsonb_build_object('employer_subsidiary_id', ${source.subsidiaryId}::text))`);
 
     const gzip = createGzip({ level: 6 });
     const completed = pipeline(gzip, createWriteStream(archive, { mode: 0o600 }));
@@ -184,6 +188,9 @@ test("offline drill exports, removes, restores, and revalidates an organization"
     assert.match(restored.rows[0]?.name ?? "", /^Scratch /);
     assert.ok(restored.rows[0]!.account_count >= 15);
     assert.equal(restored.rows[0]!.party_count, 2);
+    const restoredTemplate = (await db.execute<{ applies_employer_subsidiary_id: string | null }>(sql`
+      select applies_employer_subsidiary_id from hrm_process_templates where org_id = ${source.orgId} and id = ${processTemplateId}`)).rows[0];
+    assert.equal(restoredTemplate?.applies_employer_subsidiary_id, source.subsidiaryId, "generated projection recomputed on restore");
     assert.equal(
       unsealEmailSecret({
         ciphertext: restored.rows[0]!.email.keyCiphertext,

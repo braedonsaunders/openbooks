@@ -1229,17 +1229,17 @@ test('the surfaces this test was written for are covered', () => {
     'manual FX sync must refuse when Multi-currency is off',
   )
   assert.match(
-    read('../engine/src/close/close.ts'),
+    read('../engine/src/close/run-automation.ts'),
     /if \(!\(await advancedCloseEnabled\(context\.orgId\)\)\) return \{ completed: 0, failed: 0 \}/,
     'close automations must not fire when Advanced close is off — core close still runs',
   )
   assert.match(
-    read('../engine/src/close/close.ts'),
+    read('../engine/src/close/run-automation.ts'),
     /coalesce\(\(organization\.settings->'features'->>'advancedClose'\)::boolean, false\)/,
     'scheduled close automations must skip orgs whose Advanced close switch is off',
   )
   assert.match(
-    read('../engine/src/close/close.ts'),
+    read('../engine/src/close/run-completion.ts'),
     /export async function publishCloseRun[\s\S]{0,200}advancedCloseEnabled/,
     'publishCloseRun must refuse when Advanced close is off — stored binders stay',
   )
@@ -1371,22 +1371,22 @@ test('the surfaces this test was written for are covered', () => {
     'percent-complete sync must not write revenue contracts when Revenue Recognition is off',
   )
   assert.match(
-    read('../engine/src/ledger/posting.ts'),
+    read('../engine/src/ledger/posting-accounts.ts'),
     /async function resolveDeferralAccounts[\s\S]{0,350}revenueRecognitionFeatureEnabled\(runner, orgId\)/,
     'invoice posting must credit income, not deferred, when Revenue Recognition is off',
   )
   assert.match(
-    read('../engine/src/inventory/inventory.ts'),
+    read('../engine/src/inventory/documents-sales.ts'),
     /export async function applyInventoryIssuesForInvoice[\s\S]{0,400}inventoryFeatureEnabled\(db, orgId\)/,
     'invoice posting must not mint inventory movements when Inventory is off — existing layers stay',
   )
   assert.match(
-    read('../engine/src/inventory/inventory.ts'),
+    read('../engine/src/inventory/documents-purchasing.ts'),
     /export async function applyBillInventoryReceipts[\s\S]{0,200}inventoryFeatureEnabled\(runner, orgId\)/,
     'bill posting must not mint inventory receipts when Inventory is off',
   )
   assert.match(
-    read('../engine/src/inventory/inventory.ts'),
+    read('../engine/src/inventory/documents-purchasing.ts'),
     /export async function resolveBillInventoryAccounts[\s\S]{0,350}inventoryFeatureEnabled\(runner, orgId\)/,
     'bill posting must debit the line account, not inventory, when Inventory is off',
   )

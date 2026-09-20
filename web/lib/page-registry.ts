@@ -1372,27 +1372,51 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
-  '/hrm/departments': {
-    route: '/hrm/departments',
+  '/hrm/leave': {
+    route: '/hrm/leave',
     segments: [],
-    searchParams: false,
+    searchParams: true,
     module: async () => {
-      const m = await import('../app/(app)/hrm/departments/view')
+      const m = await import('../app/(app)/hrm/leave/view')
       return {
-        load: () => m.loadHrmDepartmentsPage(),
-        spec: (data) => m.hrmDepartmentsSpec(data as never),
+        load: (input) => m.loadLeaveQueuePage(input.searchParams ?? {}),
+        spec: (data) => m.leaveQueueSpec(data as never),
       }
     },
   },
-  '/hrm/reports': {
-    route: '/hrm/reports',
+  '/hrm/my-leave': {
+    route: '/hrm/my-leave',
     segments: [],
-    searchParams: false,
+    searchParams: true,
     module: async () => {
-      const m = await import('../app/(app)/hrm/reports/view')
+      const m = await import('../app/(app)/hrm/my-leave/view')
       return {
-        load: () => m.loadHrmReportsPage(),
-        spec: (data) => m.hrmReportsSpec(data as never),
+        load: (input) => m.loadMyLeavePage(input.searchParams ?? {}),
+        spec: (data) => m.myLeaveSpec(data as never),
+      }
+    },
+  },
+  '/hrm/positions': {
+    route: '/hrm/positions',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/hrm/positions/view')
+      return {
+        load: (input) => m.loadPositionsPage(input.searchParams ?? {}),
+        spec: (data) => m.positionsSpec(data as never),
+      }
+    },
+  },
+  '/hrm/processes': {
+    route: '/hrm/processes',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/hrm/processes/view')
+      return {
+        load: (input) => m.loadProcessesRoute(input.searchParams ?? {}),
+        spec: (data) => m.processesSpec(data as never),
       }
     },
   },

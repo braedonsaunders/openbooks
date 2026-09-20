@@ -48,7 +48,7 @@ const { db, withOrgContext, withBypassContext } = await import('@openbooks/engin
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
   '@openbooks/engine/src/testing/fixtures.ts'
 )
-const { startCloseRun } = await import('@openbooks/engine/src/close/close.ts')
+const { startCloseRun } = await import("@openbooks/engine/src/close/run-start.ts");
 const { loadClose, closeSpec } = await import('../app/(app)/close/view')
 
 test('the run branch loads the wizard and renders under its own shell', {

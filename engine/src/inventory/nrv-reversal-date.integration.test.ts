@@ -3,7 +3,8 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { createScratchOrg, seedFlowActors, dropScratchOrg } from "../testing/fixtures.ts";
-import { receiveInventory, getOnHand } from "./inventory.ts";
+import { getOnHand } from "./position.ts";
+import { receiveInventory } from "./movements.ts";
 import { writeDownInventoryToNrv, reverseInventoryWritedown, InventoryNrvError } from "./nrv.ts";
 
 for (const timing of ["before source", "same day", "later day", "mixed future source", "invalid calendar"] as const) {

@@ -1,0 +1,178 @@
+import 'server-only'
+
+import { notFound } from 'next/navigation'
+import { getTranslations } from 'next-intl/server'
+import {
+  badge,
+  column,
+  grid,
+  field as item,
+  link,
+  page,
+  pageHeader,
+  panel,
+  ref,
+  spanRow,
+  table,
+  text,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from '@braedonsaunders/appkit-viewspec'
+import { requirePermission } from '../../../../lib/authz'
+import { isFeatureEnabled } from '../../../../lib/features'
+import { loadLeaveQueue, type LeaveQueueData } from '../../../../lib/hrm/leave'
+
+/**
+ * The org-wide leave queue, split into a loader and a spec.
+ *
+ * Follows the close-list archetype: the rows render through the shared
+ * `table` block (variant 'app') over loader-resolved display cells, segments
+ * ride the shared `filter-chips` widget on the `segment` search param
+ * (pending approval, upcoming, on leave today, history), and "File leave
+ * request" plus "Record absence" are page-header primary actions opening a
+ * URL-param dialog. The list itself is loader-resolved through the leave
+ * read service, newest start first, with subsidiary scope enforced inside
+ * it. The department calendar reads through the attendance service on the
+ * department/from/to params and stays a component — it is not a list.
+ */
+
+const f = ref<LeaveQueueData>()
+
+// The registry builds every spec from its data alone (scripts/page-registry-source.mjs),
+// so the base path defaults to the literal route the spec declares.
+export function leaveQueueSpec(data: LeaveQueueData, basePath: string = '/hrm/leave'): PageSpec {
+  return page({
+    route: '/hrm/leave',
+    layout: 'list',
+    bodyClassName: 'flex h-full min-h-0 flex-col',
+    header: [
+      pageHeader({
+        title: f('title'),
+        description: f('description'),
+        actionsClassName: 'flex flex-wrap items-center gap-3',
+        actions: [
+          widget(
+            'link-button',
+            { href: f('fileHref'), label: f('fileButton'), iconKey: 'plus' },
+            f('canFile'),
+          ),
+          widget(
+            'link-button',
+            { href: f('recordHref'), label: f('recordButton'), iconKey: 'plus', variant: 'outline' },
+            f('canRecord'),
+          ),
+          widget('module-home-tabs', { tabs: data.tabs }),
+        ],
+      }),
+    ],
+    body: [
+      // A computed refusal (unknown segment, scope denial) renders with its
+      // message intact — never a success, never an empty table.
+      widgetBlock(
+        'empty-state',
+        {
+          title: data.refusal?.title ?? '',
+          description: data.refusal?.message,
+        },
+        f('refusal'),
+      ),
+      {
+        ...grid('flex h-full min-h-0 flex-col gap-4', [
+          widgetBlock('filter-chips', {
+            basePath,
+            currentParams: data.currentParams,
+            paramKey: 'segment',
+            label: data.segmentsLabel,
+            allLabel: data.allLabel,
+            options: data.segments,
+          }),
+          panel({
+            title: f('listTitle'),
+            iconKey: 'calendar',
+            bodyClassName: 'min-h-0 overflow-y-auto p-0',
+            className: 'min-h-0 flex-1',
+            blocks: [
+              table({
+                variant: 'app',
+                rows: f('rows'),
+                rowKey: item('id'),
+                columns: [
+                  column(f('columns.employee'), link(item('employeeLabel'), item('employeeHref'))),
+                  column(f('columns.type'), text(item('leaveTypeCode'))),
+                  column(
+                    f('columns.range'),
+                    text(item('rangeLabel'), { className: 'tabular-nums' }),
+                  ),
+                  column(f('columns.hours'), text(item('hours')), {
+                    align: 'right',
+                    className: 'tabular-nums',
+                  }),
+                  column(f('columns.status'), badge(item('statusLabel'), { variant: item('statusVariant') })),
+                  column('', link(item('openLabel'), item('requestHref'))),
+                ],
+                empty: { title: f('emptyTitle'), description: f('emptyDescription') },
+                ...(data.truncated
+                  ? {
+                      trailing: [
+                        spanRow({
+                          label: f('truncatedNote'),
+                          labelColSpan: 6,
+                          labelClassName:
+                            'text-center text-xs text-slate-400 dark:text-slate-500',
+                          cells: [],
+                        }),
+                      ],
+                    }
+                  : {}),
+              }),
+              widgetBlock(
+                'hrm-leave-dialog',
+                {
+                  requestId: f('dialogRequestId'),
+                  closeHref: f('dialogCloseHref'),
+                },
+                f('dialogOpen'),
+              ),
+            ],
+          }),
+          panel({
+            title: f('calendarTitle'),
+            iconKey: 'calendar',
+            bodyClassName: 'p-4',
+            blocks: [
+              widgetBlock('hrm-leave-calendar', {
+                basePath,
+                currentParams: data.currentParams,
+                departmentOptions: data.departmentOptions,
+                departmentLabel: data.calendarDepartmentLabel,
+                fromLabel: data.calendarFromLabel,
+                toLabel: data.calendarToLabel,
+                showLabel: data.calendarShowLabel,
+                days: data.calendarDays,
+                empty: data.calendarEmpty,
+                notAvailable: data.queue.notAvailable,
+              }),
+            ],
+          }),
+        ]),
+        when: f('hasContent'),
+      },
+    ],
+  })
+}
+
+export async function loadLeaveQueuePage(
+  sp: Record<string, string | undefined>,
+): Promise<LeaveQueueData> {
+  // The page gate lives here — where the route-gate scanner reads — and the
+  // loader enforces nothing twice: it takes the authorized session as input.
+  const authz = await requirePermission('hrm.leave.read')
+  if (!(await isFeatureEnabled(authz.user.orgId, 'hrm'))) notFound()
+  return loadLeaveQueue(authz, sp)
+}
+
+export async function leaveQueueTitle(): Promise<string> {
+  const t = await getTranslations('hrm')
+  return t('leave.title')
+}

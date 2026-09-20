@@ -7,12 +7,8 @@ import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbo
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
-import {
-  DocumentEditError,
-  documentRevisionCounterSql,
-  requireDocumentEditRevision,
-  runDocumentVersionedTransaction,
-} from '../../../../lib/documents'
+import { DocumentEditError, requireDocumentEditRevision, runDocumentVersionedTransaction } from "../../../../../engine/src/records/document-edit-policy.ts";
+import { documentRevisionCounterSql } from "../../../../../engine/src/records/revision.ts";
 import { type ExpenseEditBody, persistExpenseEdit, prepareExpenseEdit } from '../../../../lib/expense-edit'
 import { loadExpenseReport } from '../../../../lib/expenses'
 

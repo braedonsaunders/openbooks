@@ -16,7 +16,7 @@
  */
 
 import { fromUnits, toUnits } from "../money/money.ts";
-import { syntheticRoles } from "./roles.ts";
+import { syntheticRoles } from "./role-bindings.ts";
 import type {
   ActualOutcome,
   CaseContext,

@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { db, withBypass, withOrgContext, withOrgTransaction } from "../platform/db.ts";
 import { toUnits } from "../money/money.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
-import { postDocument } from "./posting.ts";
+import { postDocument } from "./posting-document.ts";
 import {
   mergeBeforePostCustomMutation,
   runBulkScript,

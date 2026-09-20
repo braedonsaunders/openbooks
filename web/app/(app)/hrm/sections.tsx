@@ -11,81 +11,76 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 
-export type HrmHeadcountRow = {
-  subsidiary: string
-  department: string | null
-  headcount: number
-  /** Drill-through to the employee directory filtered to this department
-   *  (or its unassigned roster); absent when the viewer may not open it. */
-  href?: string | null
+export type OnboardingPanelItem = {
+  worker: string
+  title: string
+  dueOn: string
 }
 
 /**
- * Headcount as-of today by employer subsidiary and department, INCLUDING
- * its empty state. The empty case lives here rather than as a conditional
- * pair of blocks in the spec: a resolved zero is data (nobody in service
- * on the date), and the component that knows how to render itself when it
- * has no rows is the ordinary answer.
+ * Onboarding panel for the HR cockpit rail: open checklist counts plus the
+ * overdue steps and the next seven days, all resolved by the loader through
+ * the canonical process read service. The panel links to the processes tab;
+ * the checklist itself lives there, never as a second copy here.
  */
-export function HrmHeadcountTable({
-  groups,
-  total,
-  employerColumn,
-  departmentColumn,
-  headcountColumn,
-  unassigned,
+export function OnboardingPanel({
+  openCount,
+  overdue,
+  upcoming,
+  openLabel,
+  overdueLabel,
+  upcomingLabel,
   empty,
-  totalLabel,
+  viewAll,
+  viewAllHref,
 }: {
-  groups: HrmHeadcountRow[]
-  total: number
-  employerColumn: string
-  departmentColumn: string
-  headcountColumn: string
-  unassigned: string
+  openCount: number
+  overdue: OnboardingPanelItem[]
+  upcoming: OnboardingPanelItem[]
+  openLabel: string
+  overdueLabel: string
+  upcomingLabel: string
   empty: string
-  totalLabel: string
+  viewAll: string
+  viewAllHref: string
 }) {
-  if (groups.length === 0) {
+  if (openCount === 0) {
     return <p className="px-4 py-6 text-center text-sm text-slate-400 dark:text-slate-500">{empty}</p>
   }
+  const rows = [
+    ...overdue.map((item) => ({ ...item, tone: 'overdue' as const })),
+    ...upcoming.map((item) => ({ ...item, tone: 'upcoming' as const })),
+  ]
   return (
-    <table className="w-full text-sm">
-      <thead className="sticky top-0 z-10 bg-white dark:bg-slate-900">
-        <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-          <th className="px-4 py-2 text-left font-medium">{employerColumn}</th>
-          <th className="px-3 py-2 text-left font-medium">{departmentColumn}</th>
-          <th className="px-4 py-2 text-right font-medium">{headcountColumn}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {groups.map((group, i) => (
-          <tr key={`${group.subsidiary}-${group.department ?? ''}-${i}`} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-            <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-200">{group.subsidiary}</td>
-            <td className="px-3 py-2 text-slate-500 dark:text-slate-400">
-              {group.href ? (
-                <Link href={group.href as never} className="hover:underline">{group.department ?? unassigned}</Link>
-              ) : (
-                group.department ?? unassigned
-              )}
-            </td>
-            <td className="px-4 py-2 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-100">
-              {group.headcount.toLocaleString()}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-      <tfoot>
-        <tr className="border-t border-slate-100 dark:border-slate-800">
-          <td className="px-4 py-2 font-semibold text-slate-900 dark:text-slate-100" colSpan={2}>
-            {totalLabel}
-          </td>
-          <td className="px-4 py-2 text-right font-semibold tabular-nums text-slate-900 dark:text-slate-100">
-            {total.toLocaleString()}
-          </td>
-        </tr>
-      </tfoot>
-    </table>
+    <div className="px-4 py-3">
+      <p className="text-sm text-slate-500 dark:text-slate-400">{openLabel}</p>
+      <p className="text-2xl font-semibold tabular-nums text-slate-900 dark:text-slate-100">{openCount}</p>
+      {rows.length === 0 ? (
+        <p className="mt-2 text-sm text-slate-400 dark:text-slate-500">{empty}</p>
+      ) : (
+        <ul className="mt-2 space-y-2">
+          {rows.slice(0, 7).map((row, i) => (
+            <li key={`${row.worker}-${row.title}-${i}`} className="text-sm">
+              <span
+                className={
+                  row.tone === 'overdue'
+                    ? 'font-medium text-red-700 dark:text-red-300'
+                    : 'font-medium text-slate-700 dark:text-slate-200'
+                }
+              >
+                {row.tone === 'overdue' ? overdueLabel : upcomingLabel} · {row.dueOn}
+              </span>{' '}
+              <span className="text-slate-500 dark:text-slate-400">
+                {row.title} — {row.worker}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <a href={viewAllHref} className="mt-3 inline-block text-sm font-medium text-teal-700 dark:text-teal-300">
+        {viewAll}
+      </a>
+    </div>
   )
 }
 
@@ -279,39 +274,57 @@ export function HrmRecentChanges({
   )
 }
 
+export type HrmLeavePanelItem = {
+  workerName: string
+  leaveTypeCode: string
+  hours: string
+}
+
 /**
- * The honesty panel: active employee parties without an employment record
- * are named by count, with the sentence that they are not yet migrated
- * and headcount excludes them, plus the migration article. A fully
- * migrated org renders the healthy state, never a blank panel.
+ * Leave panel: who is on leave today plus the pending-approval count,
+ * beside the queue link. Empty names the quiet day instead of rendering a
+ * blank panel.
  */
-export function HrmReadiness({
-  message,
-  docHref,
-  docLabel,
-  tone,
+export function HrmLeavePanel({
+  items,
+  empty,
+  pendingCount,
+  pendingLabel,
+  queueHref,
+  viewAllLabel,
 }: {
-  message: string
-  docHref: string
-  docLabel: string
-  tone: 'warning' | 'positive'
+  items: HrmLeavePanelItem[]
+  empty: string
+  pendingCount: number
+  pendingLabel: string
+  queueHref: string
+  viewAllLabel: string
 }) {
   return (
-    <div className="space-y-3 px-4 py-4">
-      <p
-        className={
-          tone === 'warning'
-            ? 'rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200'
-            : 'rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200'
-        }
-      >
-        {message}
+    <div>
+      {items.length === 0 ? (
+        <p className="px-4 py-4 text-center text-sm text-slate-400 dark:text-slate-500">{empty}</p>
+      ) : (
+        <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
+          {items.map((item, i) => (
+            <li key={i} className="flex items-baseline justify-between gap-3 px-4 py-2.5">
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                {item.workerName}{' '}
+                <span className="font-normal text-slate-400 dark:text-slate-500">· {item.leaveTypeCode}</span>
+              </p>
+              <p className="text-xs tabular-nums text-slate-400 dark:text-slate-500">{item.hours}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="border-t border-slate-100 px-4 py-2.5 text-center text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+        {pendingLabel} <span className="font-semibold tabular-nums">{pendingCount}</span>
       </p>
       <Link
-        href={docHref as never}
-        className="block text-center text-xs font-semibold text-teal-600 transition-colors hover:text-teal-700 dark:text-teal-400 dark:hover:text-teal-300"
+        href={queueHref as never}
+        className="block border-t border-slate-100 px-4 py-2 text-center text-xs font-semibold text-teal-600 transition-colors hover:text-teal-700 dark:border-slate-800 dark:text-teal-400 dark:hover:text-teal-300"
       >
-        {docLabel} →
+        {viewAllLabel} →
       </Link>
     </div>
   )

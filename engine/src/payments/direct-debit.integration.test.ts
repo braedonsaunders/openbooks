@@ -4,8 +4,8 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { createDirectDebitRun } from "./direct-debit.ts";
 import { db, withBypass, withOrgContext } from "../platform/db.ts";
-import { PaymentError } from "./payments.ts";
-import { postDocument } from "../ledger/posting.ts";
+import { PaymentError } from "./payment-errors.ts";
+import { postDocument } from "../ledger/posting-document.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
@@ -267,8 +267,7 @@ test("direct-debit collection uses the transaction-ledger open, not base divided
     });
 
     await withOrgContext(org.orgId, async () => {
-      const { createPaymentDocument, postPaymentWithApplications, sameCurrencyAllocation, updateDraftPayment } =
-        await import("./payments.ts");
+      const { createPaymentDocument, updateDraftPayment } = await import("./payment-documents.ts"), { postPaymentWithApplications } = await import("./payment-posting.ts"), { sameCurrencyAllocation } = await import("./settlement-policy.ts");
       const receipt = await createPaymentDocument({
         orgId: org.orgId,
         kind: "customer_payment",

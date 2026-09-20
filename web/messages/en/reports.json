@@ -32,7 +32,8 @@
       "ordersDescription": "Open quotes, sales orders and purchase orders — count, value and conversion",
       "cashFlowIndirectTitle": "Cash Flow (Indirect)",
       "cashFlowIndirectDescription": "GAAP indirect method — net income reconciled to operating cash with working-capital detail",
-      "payrollDescription": "Built-in payroll report over pay stubs — wage data needs the payroll permission."
+      "payrollDescription": "Built-in payroll report over pay stubs — wage data needs the payroll permission.",
+      "hrmDescription": "Built-in workforce report over employment records — needs the HRM employment permission."
     },
     "groups": {
       "financial": "Financial Statements",
@@ -42,7 +43,8 @@
       "custom": "Custom & Saved",
       "projects": "Projects",
       "orders": "Sales & orders",
-      "payroll": "Payroll"
+      "payroll": "Payroll",
+      "hrm": "Human resources"
     },
     "customStudio": {
       "title": "Custom report builder",
@@ -642,6 +644,18 @@
       "hrm_change_requests": {
         "label": "Change requests",
         "description": "One row per employment change request — status, kind, employment, requester, submission and decision stamps, bound approval run and revision binding. Requires the HRM employment permission."
+      },
+      "hrm_positions": {
+        "label": "Positions",
+        "description": "One row per established position at the report as-of date: code, title, status, department, employer, and planned versus funded versus filled FTE. Requires the HRM position permission."
+      },
+      "hrm_processes": {
+        "label": "Process checklists",
+        "description": "One row per process checklist step — process kind and status, employee, template, step owner, due date, evidence kind, and step status with its evidence. Requires the HRM process permission."
+      },
+      "hrm_leave_absences": {
+        "label": "Leave absences",
+        "description": "One row per absence day — person, employer, department at the time, leave type, and hours. Reversals are separate rows; sums net. Requires the HRM leave permission."
       }
     },
     "columns": {
@@ -1208,6 +1222,46 @@
         "created_at": "Created at",
         "id": "Request (id)",
         "employment_id": "Employment (id)"
+      },
+      "hrm_positions": {
+        "code": "Code",
+        "title": "Title",
+        "status": "Status",
+        "employer": "Employer",
+        "department": "Department",
+        "planned_fte": "Planned FTE",
+        "funded_fte": "Funded FTE",
+        "filled_fte": "Filled FTE",
+        "vacant_fte": "Vacant FTE",
+        "position_id": "Position (id)"
+      },
+      "hrm_processes": {
+        "process_kind": "Process kind",
+        "process_status": "Process status",
+        "effective_date": "Effective date",
+        "employee": "Employee",
+        "employer": "Employer",
+        "template": "Template",
+        "step": "Step",
+        "step_status": "Step status",
+        "owner": "Owner",
+        "due_on": "Due on",
+        "evidence": "Evidence",
+        "done_at": "Done at",
+        "skip_reason": "Skip reason",
+        "process_id": "Process (id)",
+        "employment_id": "Employment (id)"
+      },
+      "hrm_leave_absences": {
+        "on_date": "Date",
+        "person": "Person",
+        "employer": "Employer",
+        "department": "Department",
+        "leave_type": "Leave type",
+        "hours": "Hours",
+        "source": "Source",
+        "employment_id": "Employment (id)",
+        "id": "Absence (id)"
       }
     },
     "enumValues": {
@@ -1244,6 +1298,11 @@
       "status_change": "Status change",
       "assignment_change": "Assignment change",
       "termination": "Termination",
+      "frozen": "Frozen",
+      "filled": "Filled",
+      "open": "Open",
+      "planned": "Planned",
+      "position_assignment": "Position assignment",
       "time_and_materials": "Time & materials",
       "fixed_price": "Fixed price",
       "cost_plus": "Cost plus",

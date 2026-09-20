@@ -59,7 +59,7 @@ registerHooks({
 const { db, withBypassContext, withOrgContext } = await import(root + 'engine/src/platform/db.ts')
 const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(root + 'engine/src/testing/fixtures.ts')
-const { postDocument } = await import(root + 'engine/src/ledger/posting.ts')
+const { postDocument } = await import(root + "engine/src/ledger/posting-document.ts");
 const { materializeDueReportRuns } = await import(root + 'engine/src/delivery/report-delivery.ts')
 const { REPORT_ENTITY_MAP } = await import(root + 'packages/reports/src/index.ts')
 const { GET: drill } = await import(root + 'web/app/api/reports/drill/route.ts')

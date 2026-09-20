@@ -17,6 +17,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { departments, locations, orgs } from "./core";
 import { auditColumns, id, orgRef } from "./helpers";
+import { positions } from "./hrm-positions";
 import { parties } from "./parties";
 import { subsidiaries } from "./subsidiaries";
 
@@ -245,6 +246,12 @@ export const employmentAssignmentVersions = pgTable(
     orgId: orgRef(),
     assignmentId: uuid("assignment_id").notNull(),
     employmentId: uuid("employment_id").notNull(),
+    /**
+     * Funded establishment slot this version holds (0192). Null = no
+     * position. Title, department and location stay on this row and are
+     * never inherited from the position version.
+     */
+    positionId: uuid("position_id"),
     versionNo: integer("version_no").notNull(),
     jobTitle: text("job_title"),
     departmentId: uuid("department_id"),
@@ -287,10 +294,16 @@ export const employmentAssignmentVersions = pgTable(
       columns: [t.orgId, t.locationId],
       foreignColumns: [locations.orgId, locations.id],
     }),
+    foreignKey({
+      name: "employment_assignment_versions_position_tenant_fkey",
+      columns: [t.orgId, t.positionId],
+      foreignColumns: [positions.orgId, positions.id],
+    }),
     uniqueIndex("employment_assignment_versions_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("employment_assignment_versions_assignment_no").on(t.orgId, t.assignmentId, t.versionNo),
     index("employment_assignment_versions_assignment").on(t.orgId, t.assignmentId, t.effectiveFrom),
     index("employment_assignment_versions_employment").on(t.orgId, t.employmentId, t.effectiveFrom),
+    index("employment_assignment_versions_position").on(t.orgId, t.positionId),
     // Versions of one slot may not overlap in effective AND recorded time
     // at once, and at most one primary version per employment may cover any
     // (effective, recorded) point; both enforced by bitemporal exclusion

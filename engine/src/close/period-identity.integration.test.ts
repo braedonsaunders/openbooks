@@ -3,7 +3,9 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import type { PoolClient } from "pg";
 import { sql } from "drizzle-orm";
-import { closeApprovedRun, refreshCloseRun, startCloseRun } from "./close.ts";
+import { closeApprovedRun } from "./run-completion.ts";
+import { refreshCloseRun } from "./run-automation.ts";
+import { startCloseRun } from "./run-start.ts";
 import { db, pool } from "../platform/db.ts";
 import {
   createScratchOrg,

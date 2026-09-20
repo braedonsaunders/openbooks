@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { encryptAccountNumber } from '@openbooks/engine/src/payments/payments.ts'
+import { encryptAccountNumber } from "@openbooks/engine/src/payments/rail-settings.ts";
 import { runRecordFlows } from '@openbooks/engine/src/flows/run.ts'
 import { BANK_ACCOUNT_SUBJECT_KIND } from '@openbooks/engine/src/flows/bank-accounts-adapter.ts'
 import { guardPermission } from '../../../../../lib/authz'
@@ -10,7 +10,7 @@ import { denyOutsidePartyScope } from './party-scope'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
 import { normalizeCountryCode } from '../../../../../lib/countries'
-import { documentRevisionSql } from '../../../../../lib/documents'
+import { documentRevisionSql } from "../../../../../../engine/src/records/revision.ts";
 import { isDocumentRevisionToken } from '../../../../../lib/api/registry-data'
 
 export const runtime = 'nodejs'

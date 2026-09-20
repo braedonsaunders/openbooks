@@ -6,7 +6,8 @@ import {
   withOrgTransaction,
 } from "@openbooks/engine/src/platform/db.ts";
 import { runTriggerScripts } from "@openbooks/engine/src/scripting/scripting.ts";
-import { postDocument, PostingError } from "@openbooks/engine/src/ledger/posting.ts";
+import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
+import { PostingError } from "@openbooks/engine/src/ledger/posting-contracts.ts";
 import { ControlAccountsIncompleteError } from "@openbooks/engine/src/records/control-accounts.ts";
 import { submitAndReleaseIfUngated } from "@openbooks/engine/src/flows/index.ts";
 import {
@@ -19,7 +20,7 @@ import {
   type FormSection,
 } from "@openbooks/forms-core";
 import type { SessionUser } from "../auth";
-import { nextDocumentNumber } from "../bills";
+import { nextDocumentNumber } from "../bills.ts";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from "../custom-fields";
 import { allowedSubsidiaryIds as loadAllowedSubsidiaryIds } from "../subsidiaries";
@@ -39,19 +40,11 @@ import {
   withComputedFormulas,
   type RecordStatus,
 } from "../record-schema";
-import {
-  applyDocumentEdit,
-  controlDeps,
-  createDocumentDraft,
-  documentRevisionCounterSql,
-  DocumentEditError,
-  isDocKindEnabled,
-  loadDocument,
-  loadDocumentEditCurrent,
-  precomputeDocumentTotalsForCreate,
-  type DocumentEditCurrent,
-  type DocumentEditInput,
-} from "../documents";
+import { applyDocumentEdit, createDocumentDraft, isDocKindEnabled, precomputeDocumentTotalsForCreate } from "../documents.ts";
+import { controlDeps, loadDocument, loadDocumentEditCurrent } from "../../../engine/src/ledger/document-service.ts";
+import { documentRevisionCounterSql } from "../../../engine/src/records/revision.ts";
+import { DocumentEditError } from "../../../engine/src/records/document-edit-policy.ts";
+import { type DocumentEditCurrent, type DocumentEditInput } from "../../../engine/src/ledger/document-input.ts";
 import { isFeatureEnabled } from "../features";
 import { isDocumentRevisionToken } from "@openbooks/engine/src/records/revision.ts";
 import { auditSetupChange } from "../setup/audit";

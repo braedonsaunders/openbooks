@@ -96,7 +96,7 @@ test('party_concentration scopes posted documents to the caller subsidiary', { s
   // and party names.
   const { org, actor, hidden } = await seedScopedOrg();
   try {
-    const { postDocument } = await import('@openbooks/engine/src/ledger/posting.ts');
+    const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
     const parties: Record<string, string> = {};
     await withBypassContext(async () => {
       for (const [label, sub] of [['VISIBLE', org.subsidiaryId], ['HIDDEN', hidden]] as const) {

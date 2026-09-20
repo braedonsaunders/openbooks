@@ -17,8 +17,8 @@ test("partial sales fulfillments move inventory and fence billing exactly once",
     import { sql } from "drizzle-orm";
     import { db, withOrg } from "./engine/src/platform/db.ts";
     import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
-    import { receiveInventory } from "./engine/src/inventory/inventory.ts";
-    import { postDocument } from "./engine/src/ledger/posting.ts";
+    import { receiveInventory } from "./engine/src/inventory/movements.ts";
+    import { postDocument } from "./engine/src/ledger/posting-document.ts";
     import { toUnits } from "./engine/src/money/money.ts";
     import {
       convertOrder,
@@ -271,7 +271,7 @@ test("sales fulfillment rejects a non-calendar date without mutating the order",
     import { sql } from "drizzle-orm";
     import { db, withOrg } from "./engine/src/platform/db.ts";
     import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
-    import { receiveInventory } from "./engine/src/inventory/inventory.ts";
+    import { receiveInventory } from "./engine/src/inventory/movements.ts";
     import { toUnits } from "./engine/src/money/money.ts";
     import { createOrderDraft, fulfillSalesOrder } from "./web/lib/order-cycle.ts";
     import { createScratchOrg, createScratchUser, dropScratchOrg } from "./engine/src/testing/fixtures.ts";
@@ -361,7 +361,7 @@ test("voiding a shipment unwinds stock and restores counters, then the order voi
     import { sql } from "drizzle-orm";
     import { db, withOrg } from "./engine/src/platform/db.ts";
     import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
-    import { receiveInventory } from "./engine/src/inventory/inventory.ts";
+    import { receiveInventory } from "./engine/src/inventory/movements.ts";
     import { requestDocumentVoid } from "./engine/src/ledger/document-void.ts";
     import { toUnits } from "./engine/src/money/money.ts";
     import { createOrderDraft, fulfillSalesOrder } from "./web/lib/order-cycle.ts";
@@ -468,7 +468,8 @@ test("voiding a shipment with already-reversed movements is not reversed twice",
     import { sql } from "drizzle-orm";
     import { db, withOrg } from "./engine/src/platform/db.ts";
     import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
-    import { receiveInventory, reverseInventoryMovement } from "./engine/src/inventory/inventory.ts";
+    import { receiveInventory } from "./engine/src/inventory/movements.ts";
+import { reverseInventoryMovement } from "./engine/src/inventory/reversal.ts";
     import { requestDocumentVoid } from "./engine/src/ledger/document-void.ts";
     import { toUnits } from "./engine/src/money/money.ts";
     import { createOrderDraft, fulfillSalesOrder } from "./web/lib/order-cycle.ts";
@@ -563,9 +564,9 @@ test("voiding a shipment of billed quantities is refused without mutation", { sk
     import { sql } from "drizzle-orm";
     import { db, withOrg } from "./engine/src/platform/db.ts";
     import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
-    import { receiveInventory } from "./engine/src/inventory/inventory.ts";
+    import { receiveInventory } from "./engine/src/inventory/movements.ts";
     import { requestDocumentVoid } from "./engine/src/ledger/document-void.ts";
-    import { postDocument } from "./engine/src/ledger/posting.ts";
+    import { postDocument } from "./engine/src/ledger/posting-document.ts";
     import { toUnits } from "./engine/src/money/money.ts";
     import { convertOrder, createOrderDraft, fulfillSalesOrder } from "./web/lib/order-cycle.ts";
     import { createScratchOrg, createScratchUser, dropScratchOrg } from "./engine/src/testing/fixtures.ts";
@@ -738,7 +739,7 @@ test("voiding a shipment with malformed provenance is refused as a controlled er
     import { sql } from "drizzle-orm";
     import { db, withOrg } from "./engine/src/platform/db.ts";
     import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
-    import { receiveInventory } from "./engine/src/inventory/inventory.ts";
+    import { receiveInventory } from "./engine/src/inventory/movements.ts";
     import { DocumentVoidError, requestDocumentVoid } from "./engine/src/ledger/document-void.ts";
     import { toUnits } from "./engine/src/money/money.ts";
     import { createOrderDraft, fulfillSalesOrder } from "./web/lib/order-cycle.ts";
@@ -845,7 +846,7 @@ test("voiding a shipment writes per-source-order audit with before and after", {
     import { sql } from "drizzle-orm";
     import { db, withOrg } from "./engine/src/platform/db.ts";
     import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
-    import { receiveInventory } from "./engine/src/inventory/inventory.ts";
+    import { receiveInventory } from "./engine/src/inventory/movements.ts";
     import { requestDocumentVoid } from "./engine/src/ledger/document-void.ts";
     import { toUnits } from "./engine/src/money/money.ts";
     import { createOrderDraft, fulfillSalesOrder } from "./web/lib/order-cycle.ts";

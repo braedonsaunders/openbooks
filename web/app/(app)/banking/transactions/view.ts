@@ -7,19 +7,9 @@ import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@brae
 import { pickString } from '../../../../lib/list-params'
 import { can, requirePermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
-import {
-  BANK_KINDS,
-  DOC_KINDS,
-  accountOptions,
-  bankAccountOptions,
-  cardLiabilityAccountOptions,
-  cardOptions,
-  dimensionOptions,
-  loadDocument,
-  partyOptions,
-  taxCodeOptions,
-  taxGroupOptions,
-} from '../../../../lib/documents'
+import { BANK_KINDS, DOC_KINDS } from "../../../../lib/document-kinds.ts";
+import { accountOptions, bankAccountOptions, cardLiabilityAccountOptions, cardOptions, dimensionOptions, partyOptions, taxCodeOptions, taxGroupOptions } from "../../../../lib/documents.ts";
+import { loadDocument } from "../../../../../engine/src/ledger/document-service.ts";
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../../lib/subsidiaries'
 import { resolveFormLayout } from '../../../../lib/customization/resolve'

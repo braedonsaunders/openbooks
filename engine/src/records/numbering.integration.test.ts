@@ -6,7 +6,9 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { allocateDocumentNumber } from "./numbering.ts";
 import { cmp } from "../money/money.ts";
-import { receiveInventory, revalueOpenLayersToStandardCost, InventoryError } from "../inventory/inventory.ts";
+import { receiveInventory } from "../inventory/movements.ts";
+import { revalueOpenLayersToStandardCost } from "../inventory/revaluation.ts";
+import { InventoryError } from "../inventory/contracts.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -25,12 +27,12 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 const ALLOCATOR_CONTRACT_FILES = [
   "engine/src/ledger/journal-writes.ts",
   "engine/src/payables/ap-capture-service.ts",
-  "engine/src/inventory/inventory.ts",
+  "engine/src/inventory/document-numbering.ts",
   "engine/src/projects/construction-billing.ts",
   "engine/src/projects/subcontracts.ts",
   "engine/src/billing/subscription-billing.ts",
   "engine/src/billing/recurring.ts",
-  "engine/src/payments/payments.ts",
+  "engine/src/payments/payment-documents.ts",
   "web/lib/bills.ts",
   "web/lib/data-io/record-resources.ts",
 ] as const;

@@ -3,8 +3,8 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { setPeriodLockState } from "../close/close.ts";
-import { postDocument } from "../ledger/posting.ts";
+import { setPeriodLockState } from "../close/period-locks.ts";
+import { postDocument } from "../ledger/posting-document.ts";
 import {
   buildRecognitionSchedule,
   cancelRevenueRecognitionForInvoice,

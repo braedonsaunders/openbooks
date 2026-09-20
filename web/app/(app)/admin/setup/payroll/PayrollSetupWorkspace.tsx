@@ -5,8 +5,9 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
+import { readApiErrorMessage } from '../../../../../lib/api-error'
 import { Button, Label, Select } from '@openbooks/ui'
-import type { PayrollSettings } from '@openbooks/engine/src/payroll/run.ts'
+import type { PayrollSettings } from "@openbooks/engine/src/payroll/run-setup.ts";
 
 // Generic, jurisdiction-free slots only. Statutory liabilities (CPP/EI/income
 // tax/…) are declared by the installed country packs and rendered from
@@ -71,8 +72,10 @@ export function PayrollSetupWorkspace(props: {
           ])),
         }),
       })
-      const j = await res.json()
-      if (!res.ok) throw new Error(j.error ?? 'failed')
+      // The status is checked before the body is parsed: a non-JSON error body
+      // (this route rethrows non-domain errors as an unhandled empty 500) must
+      // surface the failure, never a SyntaxError from res.json().
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
       toast.success(t('saved'))
       router.refresh()
     } catch (e) {

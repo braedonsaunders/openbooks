@@ -4,21 +4,24 @@
     "description": "Dossiers d'emploi avec historique à date, effectifs et suivi des demandes de changement.",
     "tabs": {
       "overview": "Vue d'ensemble",
-      "changeRequests": "Demandes de changement",
-      "departments": "Services",
-      "reports": "Rapports"
+      "positions": "Postes",
+      "processes": "Processus",
+      "leave": "Congés",
+      "myLeave": "Mes congés"
     },
     "vitals": {
       "headcount": "Effectif",
       "headcountSub": "Au {date}",
-      "employers": "Employeurs",
-      "employersSub": "{count, plural, one {# filiale} other {# filiales}}",
-      "departments": "Services",
-      "departmentsSub": "{count, plural, one {# service} other {# services}}"
+      "openPositions": "Postes ouverts",
+      "openPositionsSub": "{fte} ETP vacants",
+      "startingSoon": "Arrivées prochaines",
+      "startingSoonSub": "{count, plural, one {# départ dans les 30 prochains jours} other {# départs dans les 30 prochains jours}}",
+      "onLeave": "En congé aujourd'hui",
+      "onLeaveSub": "{count, plural, one {# demande en attente d'approbation} other {# demandes en attente d'approbation}}"
     },
     "groups": {
-      "title": "Effectif par employeur et par service",
-      "employer": "Employeur",
+      "title": "Effectif par service",
+      "employer": "Filiale",
       "department": "Service",
       "headcount": "Effectif",
       "unassigned": "Non affecté",
@@ -26,7 +29,45 @@
       "total": "Total"
     },
     "directory": {
-      "title": "Annuaire"
+      "title": "Annuaire",
+      "employeesHint": "en service aujourd'hui",
+      "positionsHint": "ouverts",
+      "processesHint": "{count, plural, one {# étape en retard} other {# étapes en retard}}",
+      "leaveHint": "{count, plural, one {# en attente d'approbation} other {# en attente d'approbation}}"
+    },
+    "vacancy": {
+      "title": "Postes vacants par service",
+      "department": "Service",
+      "employer": "Filiale",
+      "positions": "Postes",
+      "planned": "ETP prévus",
+      "funded": "ETP financés",
+      "filled": "ETP pourvus",
+      "vacant": "ETP vacants",
+      "unassignedDepartment": "Sans service",
+      "empty": "Aucun poste n'est établi au {date}.",
+      "total": "Total"
+    },
+    "onboarding": {
+      "title": "Intégration",
+      "openLabel": "Listes ouvertes",
+      "overdueLabel": "En retard",
+      "upcomingLabel": "Bientôt dû",
+      "empty": "Aucune liste ouverte.",
+      "viewAll": "Voir tous les processus"
+    },
+    "trend": {
+      "title": "Effectif, 12 derniers mois",
+      "hint": "En service à chaque fin de mois, jusqu'à aujourd'hui.",
+      "series": "Effectif"
+    },
+    "attention": {
+      "title": "À traiter",
+      "allClear": "Rien à traiter.",
+      "pending": "{count, plural, one {# demande de changement en attente de décision} other {# demandes de changement en attente de décision}}",
+      "overdueSteps": "{count, plural, one {# étape de liste en retard} other {# étapes de liste en retard}}",
+      "leavePending": "{count, plural, one {# demande de congé en attente d'approbation} other {# demandes de congé en attente d'approbation}}",
+      "unfunded": "{fte} ETP pourvus sans financement"
     }
   },
   "overview": {
@@ -73,6 +114,11 @@
       "proposeChange": "Proposer un changement",
       "manageDepartments": "Gérer les services",
       "openReports": "Ouvrir les rapports"
+    },
+    "leave": {
+      "title": "Congés",
+      "onLeaveEmpty": "Personne absent aujourd'hui.",
+      "pendingSub": "en attente d'approbation"
     }
   },
   "queue": {
@@ -109,25 +155,6 @@
     "draftBadge": "Actions",
     "openEmployee": "Ouvrir le dossier de l'employé",
     "notAvailable": "Non disponible"
-  },
-  "departments": {
-    "title": "Services",
-    "description": "Effectif du jour par service, avec la répartition par employeur — résolu par le service des effectifs.",
-    "listTitle": "Effectif par service",
-    "listNote": "La liste des employés n'a pas de filtre par service : le lien ouvre donc la liste complète.",
-    "linksTitle": "Liens",
-    "employeesLink": "Liste des employés",
-    "setupLink": "Gérer les services"
-  },
-  "reports": {
-    "title": "Rapports",
-    "description": "Rapports d'effectif : le modèle de déclaration d'effectif et les entités d'emploi, ouverts dans le générateur de rapports.",
-    "presetTitle": "Déclaration d'effectif",
-    "presetHint": "Le modèle ouvre le plan enregistré de l'organisation — ou le catalogue du générateur si l'initialisation ne s'est jamais matérialisée.",
-    "entitiesTitle": "Entités d'effectif",
-    "entitiesHint": "Créez un rapport d'effectif à partir d'une des entités d'emploi.",
-    "hubTitle": "Tous les rapports",
-    "hubDescription": "Ouvrir le centre de rapports."
   },
   "employment": {
     "episodes": {
@@ -238,12 +265,220 @@
       "updatedToast": "Brouillon mis à jour.",
       "submittedToast": "Soumis pour approbation.",
       "withdrawnToast": "Demande retirée.",
-      "requestFailed": "La demande de changement n'a pas pu être enregistrée."
+      "requestFailed": "La demande de changement n'a pas pu être enregistrée.",
+      "kindPositionAssignment": "Affectation à un poste",
+      "positionLabel": "Poste",
+      "positionUnset": "Sans poste",
+      "positionHint": "L'effectif financé qu'occupe cette affectation. L'affectation conserve son propre intitulé, service et lieu.",
+      "positionRequired": "Choisissez un poste ou marquez l'affectation comme non affectée.",
+      "unassignLabel": "Retirer du poste",
+      "unassignHint": "Enregistre un lien nul explicite : l'emplacement conserve son contenu mais n'occupe aucun effectif."
     }
   },
   "directory": {
     "employmentStatus": "Statut d'emploi",
     "serviceStart": "Début de service",
     "noEmployment": "Sans emploi"
+  },
+  "positions": {
+    "title": "Postes",
+    "description": "L'effectif financé derrière le plan d'effectifs : ETP prévus, financés et pourvus par poste, avec ses versions, son financement par période et son titulaire actuel.",
+    "statusAll": "Tous les statuts",
+    "statusPlanned": "Prévu",
+    "statusOpen": "Ouvert",
+    "statusFilled": "Pourvu",
+    "statusFrozen": "Gelé",
+    "statusClosed": "Clôturé",
+    "columns": {
+      "code": "Code",
+      "title": "Titre",
+      "status": "Statut",
+      "department": "Service",
+      "planned": "ETP prévus",
+      "funded": "ETP financés",
+      "filled": "ETP pourvus",
+      "vacant": "ETP vacants",
+      "holder": "Titulaire",
+      "unassignedHolder": "Vacant"
+    },
+    "holdersCount": "{count, plural, one {# titulaire} other {# titulaires}}",
+    "empty": "Aucun poste ne correspond à ce filtre.",
+    "total": "Total",
+    "drawer": {
+      "title": "Poste {code}",
+      "versions": "Versions",
+      "versionNo": "Version {no}",
+      "effective": "En vigueur du {from} au {to}",
+      "effectiveOpen": "En vigueur depuis le {from}, sans fin",
+      "recorded": "Enregistré le {at}",
+      "funding": "Financement par période",
+      "period": "Période du {from} au {to}",
+      "funded": "{fte} ETP financés",
+      "costPlan": "Budget {amount} {currency}",
+      "unfunded": "Aucun financement enregistré",
+      "holder": "Titulaire actuel",
+      "holderEmployment": "Emploi {id}",
+      "noHolder": "Aucun titulaire au {date}",
+      "warnings": "Avertissements",
+      "refusal": "Nécessite une attention",
+      "missing": "Ce poste n'est plus visible."
+    },
+    "add": "Ajouter un poste",
+    "create": {
+      "title": "Nouveau poste",
+      "code": "Code du poste",
+      "titleField": "Intitulé",
+      "employer": "Filiale employeuse",
+      "department": "Service",
+      "noDepartment": "Aucun service",
+      "plannedFte": "ETP prévu",
+      "status": "Statut",
+      "effectiveFrom": "En vigueur à partir du",
+      "reason": "Motif",
+      "reasonPlaceholder": "Pourquoi ce poste existe — enregistré avec sa première version",
+      "submit": "Créer le poste",
+      "failed": "Le poste n'a pas pu être créé."
+    },
+    "segmentsLabel": "Statut"
+  },
+  "processes": {
+    "title": "Listes de processus",
+    "description": "Listes d'intégration, de départ et de transfert avec responsables, échéances et preuves.",
+    "listTitle": "Listes",
+    "listFailed": "Impossible de charger les processus.",
+    "detailTitle": "Liste",
+    "detailFailed": "Impossible de charger la liste.",
+    "actionFailed": "Impossible d'exécuter l'action.",
+    "loading": "Chargement…",
+    "empty": "Aucune liste dans ce segment.",
+    "overdueBadge": "{count} en retard",
+    "progressLine": "{done} étapes requises sur {required} · effet {effective}",
+    "dueOn": "Dû {date}",
+    "required": "Requis",
+    "completeStep": "Terminer l'étape",
+    "skipStep": "Ignorer l'étape",
+    "completeProcess": "Terminer la liste",
+    "cancelProcess": "Annuler la liste",
+    "attachmentLabel": "Fichier de preuve",
+    "attachmentUnset": "Taper pour rechercher",
+    "skipReasonLabel": "Motif",
+    "skipReasonPlaceholder": "Pourquoi cette étape est-elle ignorée ?",
+    "cancelReasonLabel": "Motif d'annulation",
+    "cancelReasonPlaceholder": "Pourquoi cette liste est-elle annulée ?",
+    "confirmReason": "Confirmer",
+    "cancelReasonAbort": "Retour",
+    "segments": {
+      "open": "Ouvertes",
+      "overdue": "En retard",
+      "completed": "Terminées",
+      "cancelled": "Annulées"
+    },
+    "columns": {
+      "employee": "Employé",
+      "kind": "Type",
+      "effective": "Effet",
+      "progress": "Progrès",
+      "nextDue": "Prochaine échéance",
+      "status": "Statut"
+    },
+    "kinds": {
+      "onboarding": "Intégration",
+      "offboarding": "Départ",
+      "transfer": "Transfert"
+    },
+    "owners": {
+      "manager": "Manager",
+      "hr": "RH",
+      "employee": "Employé",
+      "named_party": "Personne désignée"
+    },
+    "evidence": {
+      "none": "Aucune",
+      "acknowledgement": "Accusé de réception",
+      "attachment": "Pièce jointe"
+    },
+    "stepStatus": {
+      "pending": "En attente",
+      "done": "Terminé",
+      "skipped": "Ignoré"
+    },
+    "segmentsLabel": "Afficher"
+  },
+  "leave": {
+    "title": "Congés",
+    "description": "Demandes, approbations et registre d'absences — avec soldes en temps et, où un compteur existe, en valeur.",
+    "listTitle": "Demandes de congé",
+    "segmentsLabel": "Afficher",
+    "allLabel": "Toutes",
+    "segments": {
+      "pending": "À approuver",
+      "upcoming": "À venir",
+      "today": "Absents aujourd'hui",
+      "history": "Historique"
+    },
+    "columns": {
+      "employee": "Employé",
+      "type": "Type",
+      "range": "Période",
+      "hours": "Heures",
+      "status": "Statut"
+    },
+    "emptyTitle": "Rien ici",
+    "emptyDescription": "Encore rien dans ce segment.",
+    "truncatedNote": "Affichage des {limit} premières demandes.",
+    "unknownSegmentTitle": "Segment inconnu",
+    "unknownSegment": "Il n'existe pas de segment {segment}.",
+    "refusedTitle": "Congé refusé",
+    "fileTitle": "Demander un congé",
+    "fileButton": "Nouvelle demande",
+    "recordTitle": "Saisir une absence",
+    "recordButton": "Saisir une absence",
+    "calendarTitle": "Calendrier par service",
+    "calendarDepartmentLabel": "Service",
+    "calendarFromLabel": "Du",
+    "calendarToLabel": "Au",
+    "calendarShowLabel": "Afficher",
+    "calendarEmpty": "Aucune absence sur cette période. Choisissez un service.",
+    "openRequest": "Ouvrir",
+    "drawerTitle": "Demande de congé",
+    "detailLoading": "Chargement de la demande…",
+    "detailFailed": "La demande n'a pas pu être chargée.",
+    "actionFailed": "L'action a échoué.",
+    "submitButton": "Soumettre à approbation",
+    "withdrawButton": "Retirer",
+    "cancelButton": "Annuler la demande",
+    "withdrawReasonTitle": "Pourquoi cette demande est-elle retirée ?",
+    "cancelReasonTitle": "Pourquoi cette demande est-elle annulée ?",
+    "fileFailed": "La demande n'a pas pu être enregistrée.",
+    "fileEmploymentLabel": "Emploi",
+    "fileEmploymentPlaceholder": "ID d'emploi",
+    "fileTypeLabel": "Type de congé",
+    "fileTypePlaceholder": "Choisir un type",
+    "fileHoursLabel": "Heures",
+    "fileReasonLabel": "Motif",
+    "timeBalanceTitle": "Solde de temps au {date}",
+    "timeBalanceValue": "{balance} heures (acquises {earned}, reportées {carried}, prises {taken})",
+    "unlimitedBalance": "Illimité — aucun chiffre de solde.",
+    "noPolicyBalance": "Aucune politique ne couvre cet emploi.",
+    "valueBalanceTitle": "Valeur du compteur au {date}",
+    "statusNames": {
+      "draft": "Brouillon",
+      "submitted": "Soumise",
+      "approved": "Approuvée",
+      "rejected": "Rejetée",
+      "withdrawn": "Retirée",
+      "cancelled": "Annulée"
+    }
+  },
+  "myLeave": {
+    "title": "Mes congés",
+    "description": "Vos demandes et soldes — rien d'autre.",
+    "emptyTitle": "Aucune demande",
+    "emptyDescription": "Enregistrez votre première demande.",
+    "balancesTitle": "Soldes",
+    "balancesEmpty": "Aucun type de congé actif.",
+    "timeKind": "temps",
+    "valueKind": "valeur",
+    "unlimited": "Illimité"
   }
 }

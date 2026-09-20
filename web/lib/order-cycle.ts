@@ -3,7 +3,7 @@ import 'server-only'
 import { createHash, randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { nextDocumentNumber, persistLineTaxComponents } from './bills'
+import { nextDocumentNumber, persistLineTaxComponents } from "./bills.ts";
 import {
   ORDER_KINDS,
   PURCHASE_RECEIPT_KIND,
@@ -23,12 +23,10 @@ import {
 } from './order-cycle-math'
 import { isFeatureEnabled } from './features'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
-import { applyPurchaseReceiptInventory, applySalesFulfillmentInventoryIssues } from '@openbooks/engine/src/inventory/inventory.ts'
-import {
-  assertStockLocationAdmitsSubsidiary,
-  InventoryError,
-  InventoryOwnershipError,
-} from '@openbooks/engine/src/inventory/inventory.ts'
+import { applyPurchaseReceiptInventory } from "@openbooks/engine/src/inventory/documents-purchasing.ts";
+import { applySalesFulfillmentInventoryIssues } from "@openbooks/engine/src/inventory/documents-sales.ts";
+import { assertStockLocationAdmitsSubsidiary } from "@openbooks/engine/src/inventory/profile-policy.ts";
+import { InventoryError, InventoryOwnershipError } from "@openbooks/engine/src/inventory/contracts.ts";
 import { loadSubsidiaryContext } from '@openbooks/engine/src/organization/subsidiaries.ts'
 import { issueSalesOrder } from '@openbooks/engine/src/sales/sales-orders.ts'
 import { activeStockLocations, resolveLineStockLocation } from './stock-locations'

@@ -29,7 +29,7 @@ import any module.
 - Put a new file in the module whose description covers it. If none does, add
   a module: a directory, a manifest entry, and the edges it needs.
 - Extract internals into the SAME module as the file they come from. A piece of
-  `ledger/posting.ts` stays in `engine/src/ledger/`.
+  `ledger/posting-commit.ts` stays in `engine/src/ledger/`.
 - When a file needs a module it does not declare, first ask whether the shared
   piece belongs lower (a constant or a type that two modules both need usually
   belongs in `records`, `organization`, `money` or `platform`). Only then add
@@ -46,8 +46,8 @@ sit directly above them. Subledgers (`inventory`, `assets`, `revenue`,
 those, and the tooling modules (`worker`, `harness`, `sim`, `conformance`,
 `sample-companies`, `validation`) sit on top.
 
-The pinned cycle is the engine's known layering debt: `ledger/posting.ts` is
-both the posting kernel and the orchestrator that calls subledger guards and
+The pinned cycle is the engine's known layering debt: the ledger posting operation family contains
+both the posting kernel and orchestration that calls subledger guards and
 effects (inventory movements, revenue obligations, payroll remittance checks,
 user scripts, allocations), while those same subledgers post through it.
 `close` and `flows` play the same double role for period close and record
@@ -62,3 +62,6 @@ new path). `node scripts/engine-modules/rewrite-imports.mjs` rewrites every
 reference in a tree, so a branch written against an older layout comes across
 mechanically: rebase, run the script, typecheck. It follows a file through
 several relocations and is idempotent on a tree that is already current.
+
+Operation ownership and transaction boundaries are described in
+[Financial operation boundaries](financial-operation-boundaries.md).

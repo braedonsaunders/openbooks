@@ -519,22 +519,33 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
     // principal reads under its own org scope — RLS denies context-free
     // reads with zero rows (never an error), so these must not ride on
     // ambient test bypass.
-    const reader = fakeAuthz(scratch.orgId, ['reports.read', 'hrm.employment.read'], null)
+    // A reader holding every HRM read grant sees every HRM entity: scope
+    // clamping bounds ROWS, never the catalogue.
+    const reader = fakeAuthz(scratch.orgId, ['reports.read', 'hrm.employment.read', 'hrm.position.read', 'hrm.process.read', 'hrm.leave.read'], null)
     await withOrgContext(scratch.orgId, async () => {
-      for (const key of ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests'] as const) {
+      for (const key of ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests', 'hrm_positions', 'hrm_processes', 'hrm_leave_absences'] as const) {
         assert.equal(await canRunReportEntity(reader, { entity: key }), true, `${key} runs for a permitted reader`)
       }
       assert.ok(!(await hiddenReportEntityKeys(reader)).some((key) => key.startsWith('hrm_')), 'hrm entities stay listed')
     })
+    // Hiding is by PERMISSION, entity by entity: without the headcount-plan
+    // grant exactly the positions entity hides, and the employment ones stay.
+    const employmentOnly = fakeAuthz(scratch.orgId, ['reports.read', 'hrm.employment.read'], null)
+    await withOrgContext(scratch.orgId, async () => {
+      const hiddenHrm = (await hiddenReportEntityKeys(employmentOnly)).filter((key) => key.startsWith('hrm_')).sort()
+      assert.deepEqual(hiddenHrm, ['hrm_leave_absences', 'hrm_positions', 'hrm_processes'], 'only the entities whose grants are missing hide')
+    })
 
     const noPerm = fakeAuthz(scratch.orgId, ['reports.read'], null)
     await withOrgContext(scratch.orgId, async () => {
-      for (const key of ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests'] as const) {
+      for (const key of ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests', 'hrm_positions'] as const) {
         assert.equal(await canRunReportEntity(noPerm, { entity: key }), false, `${key} refuses without the permission`)
       }
+      // Every HRM entity hides for a reader holding no HRM grant (each one
+      // names its own permission); the list grows with each HRM entity.
       assert.deepEqual(
         (await hiddenReportEntityKeys(noPerm)).filter((key) => key.startsWith('hrm_')).sort(),
-        ['hrm_change_requests', 'hrm_employment_history', 'hrm_headcount'],
+        ['hrm_change_requests', 'hrm_employment_history', 'hrm_headcount', 'hrm_leave_absences', 'hrm_positions', 'hrm_processes'],
       )
     })
 
@@ -546,7 +557,7 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
       }
       assert.deepEqual(
         (await hiddenReportEntityKeys(darkReader)).filter((key) => key.startsWith('hrm_')).sort(),
-        ['hrm_change_requests', 'hrm_employment_history', 'hrm_headcount'],
+        ['hrm_change_requests', 'hrm_employment_history', 'hrm_headcount', 'hrm_leave_absences', 'hrm_positions', 'hrm_processes'],
       )
     })
   } finally {

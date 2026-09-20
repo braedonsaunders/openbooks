@@ -5,7 +5,7 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { computeTaxReturn, TaxReturnError } from "@openbooks/engine/src/tax-returns/return.ts";
 import { can } from "../authz";
-import { isDocKindEnabled } from "../documents";
+import { isDocKindEnabled } from "../documents.ts";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { rangeInputFields, resolveToolRange, type RangeArgs } from "./tools-shared";

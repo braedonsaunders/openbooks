@@ -7,7 +7,7 @@ import { ReportDrillLink } from '../../app/(app)/reports/ReportDrillLink'
 import { TxnLink } from '../../app/(app)/reports/TxnLink'
 import type { ReportDrillTarget } from '../../lib/report-drill'
 import { DRILL_LINK_CLASS, FALLBACK_CLASS } from './tone'
-import { WidgetBlockView } from './widgets'
+import { WidgetBlockView } from './widget-slot'
 
 /**
  * Cell renderers — the leaves of the block registry.

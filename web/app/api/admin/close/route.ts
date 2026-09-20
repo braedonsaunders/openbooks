@@ -3,16 +3,10 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import {
-  CLOSE_MODULES,
-  CloseError,
-  decidePeriodReopen,
-  generateAccountingPeriods,
-  recloseApprovedReopen,
-  requestPeriodReopen,
-  setPeriodLockState,
-  type CloseModule,
-} from "@openbooks/engine/src/close/close.ts";
+import { CLOSE_MODULES, CloseError, type CloseModule } from "@openbooks/engine/src/close/period-policy.ts";
+import { decidePeriodReopen, recloseApprovedReopen, requestPeriodReopen } from "@openbooks/engine/src/close/reopening.ts";
+import { generateAccountingPeriods } from "@openbooks/engine/src/close/calendar.ts";
+import { setPeriodLockState } from "@openbooks/engine/src/close/period-locks.ts";
 import { guardPermission, guardSubsidiaryScope } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
 import { isFeatureEnabled } from "../../../../lib/features";

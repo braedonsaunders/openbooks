@@ -17,7 +17,7 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { parseListParams, pickString } from '../../../../lib/list-params'
 import { can, requirePermission } from '../../../../lib/authz'
-import { isDocKindEnabled } from '../../../../lib/documents'
+import { isDocKindEnabled } from "../../../../lib/documents.ts";
 import type { CaptureListRow } from './sections'
 import type { CaptureDetail } from './CaptureReviewDrawer'
 

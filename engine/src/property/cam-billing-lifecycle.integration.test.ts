@@ -6,7 +6,7 @@ import {db,pool,withOrgTransaction} from '../platform/db.ts';
 import {createScratchOrg,createScratchUser,dropScratchOrgReporting} from '../testing/fixtures.ts';
 import {billCamReconciliation,reopenFinalizedCamPool} from './management.ts';
 import {requestDocumentVoid} from '../ledger/document-void.ts';
-import {postDocument} from '../ledger/posting.ts';
+import { postDocument } from "../ledger/posting-document.ts";
 import {submitAndReleaseIfUngated} from '../flows/submit.ts';
 import {releaseCamBillingProvenance} from '../ledger/billing-provenance.ts';
 import {deleteDocument} from '../ledger/document-delete.ts';

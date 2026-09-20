@@ -4,8 +4,10 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, pool } from "../platform/db.ts";
-import { createPaymentDocument, updateDraftPayment, postPaymentWithApplications, reversePaymentForReturn } from "../payments/payments.ts";
-import { postDocument } from "./posting.ts";
+import { createPaymentDocument, updateDraftPayment } from "../payments/payment-documents.ts";
+import { postPaymentWithApplications } from "../payments/payment-posting.ts";
+import { reversePaymentForReturn } from "../payments/payment-return.ts";
+import { postDocument } from "./posting-document.ts";
 import { recomputeOpenBalances } from "../sync/applications.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 

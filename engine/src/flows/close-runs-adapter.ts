@@ -132,7 +132,7 @@ export const closeRunsFlowAdapter: FlowSubjectAdapter = {
     outcome: "approved" | "rejected",
     ctx: FlowExecCtx,
   ): Promise<void> {
-    const { finalizeCloseFlowApproval } = await import("../close/close.ts");
+    const { finalizeCloseFlowApproval } = await import("../close/approvals.ts");
     await finalizeCloseFlowApproval({
       orgId: ctx.orgId,
       runId: subjectId,

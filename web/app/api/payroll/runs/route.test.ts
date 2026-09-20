@@ -117,7 +117,8 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ['@/lib/api/json', 'mock:json'],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['@openbooks/engine/src/payroll/run.ts', 'mock:payroll-run'],
+  ['@openbooks/engine/src/payroll/error.ts', 'mock:payroll-run'],
+  ['@openbooks/engine/src/payroll/run-lifecycle.ts', 'mock:payroll-run'],
   ['../../../../lib/feature-gates', 'mock:feature-gates'],
   ['../../../../lib/authz', 'mock:authz'],
   ['../../../../lib/subsidiaries', 'mock:subsidiaries'],

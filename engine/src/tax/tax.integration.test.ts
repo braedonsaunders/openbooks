@@ -4,7 +4,7 @@ import { createServer, type IncomingMessage, type Server } from "node:http";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { postDocument } from "../ledger/posting.ts";
+import { postDocument } from "../ledger/posting-document.ts";
 import { computeLineTaxes, type TaxComponentConfig } from "./tax.ts";
 import { computeTaxReturn } from "../tax-returns/return.ts";
 import { quoteExternalTax, saveTaxRateProviderConfig } from "./rate-providers.ts";

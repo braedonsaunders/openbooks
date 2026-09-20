@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm";
 import { db, withOrg, type SqlExecutor } from "../platform/db.ts";
-import { CLOSE_MODULES, ensureCloseDefaults, periodScopeAdvisoryLock } from "../close/close.ts";
+import { CLOSE_MODULES } from "../close/period-policy.ts";
+import { ensureCloseDefaults } from "../close/defaults.ts";
+import { periodScopeAdvisoryLock } from "../close/period-locks.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { normalizeMoney } from "../money/money.ts";
 import type {

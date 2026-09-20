@@ -77,7 +77,7 @@ const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`
 
 const mockUrls = new Map<string, string>([
   ['../../../../../lib/authz', mockUrl('authz')],
-  ['../../../../../lib/documents', mockUrl('documents')],
+  ['../../../../../lib/documents.ts', mockUrl('documents')],
   ['../../../../../lib/export', mockUrl('export')],
   ['../../../../../lib/pdf-templates/render', mockUrl('render')],
   ['../../../../../lib/pdf-templates/store', mockUrl('store')],

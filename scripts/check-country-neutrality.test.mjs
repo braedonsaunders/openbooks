@@ -45,7 +45,7 @@ test('the tax layer scope covers the filing UI, its APIs, and provisioning', () 
 test('the tax layer scope excludes payroll, so its slice cannot hide here', () => {
   assert.equal(isTaxLayerPath('web/app/(app)/payroll/_ui/EmployeesPanel.tsx'), false)
   assert.equal(isTaxLayerPath('web/app/api/payroll/subsidiary-scope.ts'), false)
-  assert.equal(isTaxLayerPath('engine/src/payroll/run.ts'), false)
+  assert.equal(isTaxLayerPath('engine/src/payroll/run-calculation.ts'), false)
 })
 
 test('the audit accepts the real pack and conformance files, branch literals included', () => {

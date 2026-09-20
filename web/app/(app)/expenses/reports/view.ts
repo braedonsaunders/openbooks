@@ -18,7 +18,7 @@ import { canRecallExpenseReport, loadExpenseReport } from '../../../../lib/expen
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { customSegmentOptions } from '../../../../lib/segments'
 import { resolveFormLayout } from '../../../../lib/customization/resolve'
-import { cardOptions, taxCodeOptions, taxGroupOptions } from '../../../../lib/documents'
+import { cardOptions, taxCodeOptions, taxGroupOptions } from "../../../../lib/documents.ts";
 import type { ExpenseDrawer } from '../ExpenseDrawer'
 
 /**

@@ -1,13 +1,28 @@
 {
   "version": 1,
-  "comment": "Curated mutation scope (fleet item 3). Each target maps to the test files that cover it: fast unit files first so unit-only runs measure something, DB-backed files after so nightly runs with OPENBOOKS_DB_URL measure the rest. lineRanges restrict generation to the assigned math (payments allocation/application, payroll stub assembly + employer accruals). needsDb marks targets whose mapped tests all require a database: in unit mode their mutants report skipped-with-cause instead of silently vanishing.",
+  "comment": "Curated mutation scope. Each target maps to tests of its owning behavior. lineRanges preserve selected financial math after decomposition. needsDb plus needsDbReason declares that measurement requires persisted database state: unit runs report it unmeasured even when neighboring mapped pure tests pass. Pure calculation evidence, policies and scripted-IO tests remain independently measured. Contract-only scopes with no runtime operators are excluded.",
   "targets": [
     {
       "path": "engine/src/money/money.ts",
-      "tests": ["engine/src/money/money.test.ts"]
+      "tests": [
+        "engine/src/money/money.test.ts"
+      ]
     },
     {
-      "path": "engine/src/ledger/posting.ts",
+      "path": "engine/src/ledger/posting-rules.ts",
+      "tests": [
+        "engine/src/ledger/posting-replay.test.ts",
+        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
+        "engine/src/ledger/posting-project-charge.test.ts",
+        "engine/src/receivables/dunning.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/ledger/posting.test.ts",
+        "engine/src/ledger/posting-tax-guards.test.ts",
+        "engine/src/ledger/posting-period.integration.test.ts"
+      ]
+    },
+    {
+      "path": "engine/src/ledger/posting-tax-policy.ts",
       "tests": [
         "engine/src/ledger/posting-replay.test.ts",
         "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
@@ -22,6 +37,7 @@
     {
       "path": "engine/src/ledger/posting-effects.ts",
       "tests": [
+        "engine/src/ledger/posting-effects-behavior.test.ts",
         "engine/src/ledger/posting-effects.test.ts",
         "engine/src/ledger/posting-effects.integration.test.ts",
         "engine/src/ledger/posting-effects-idempotency.integration.test.ts"
@@ -35,30 +51,135 @@
       ]
     },
     {
-      "path": "engine/src/payments/payments.ts",
+      "path": "engine/src/payments/payment-documents.ts",
       "lineRanges": [
-        { "start": 196, "end": 322 },
-        { "start": 576, "end": 622 },
-        { "start": 857, "end": 897 }
+        {
+          "start": 48,
+          "end": 73
+        }
       ],
       "tests": [
+        "engine/src/payments/payment-document-entity.integration.test.ts",
         "engine/src/payments/payments.test.ts",
         "engine/src/payments/direct-debit.test.ts",
         "engine/src/payments/payments.integration.test.ts"
+      ],
+      "needsDb": true,
+      "needsDbReason": "Selected lines48-73 insert the payment document and return its persisted row; this scope excludes the pure isPaymentKind predicate."
+    },
+    {
+      "path": "engine/src/payments/payment-queries.ts",
+      "lineRanges": [
+        {
+          "start": 14,
+          "end": 33
+        },
+        {
+          "start": 173,
+          "end": 213
+        }
+      ],
+      "tests": [
+        "engine/src/payments/credit-items.integration.test.ts",
+        "engine/src/payments/payments.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/payments/payments.integration.test.ts"
+      ],
+      "needsDb": true,
+      "needsDbReason": "Selected application and credit-selection paths read persisted open items and accounting book context before allocation; standalone settlement math is measured separately."
+    },
+    {
+      "path": "engine/src/payroll/run-calculation-evidence.ts",
+      "lineRanges": [
+        {
+          "start": 80,
+          "end": 82
+        },
+        {
+          "start": 84,
+          "end": 88
+        },
+        {
+          "start": 90,
+          "end": 107
+        },
+        {
+          "start": 121,
+          "end": 183
+        }
+      ],
+      "tests": [
+        "engine/src/payroll/run-calculation-evidence.unit.test.ts",
+        "engine/src/payroll/run.test.ts",
+        "engine/src/payroll/agnostic-core.test.ts"
       ]
     },
     {
-      "path": "engine/src/payroll/run.ts",
+      "path": "engine/src/payroll/run-calculation.ts",
       "needsDb": true,
       "lineRanges": [
-        { "start": 1536, "end": 1639 },
-        { "start": 2048, "end": 2196 },
-        { "start": 3097, "end": 3484 }
+        {
+          "start": 122,
+          "end": 143
+        },
+        {
+          "start": 146,
+          "end": 150
+        },
+        {
+          "start": 152,
+          "end": 194
+        },
+        {
+          "start": 196,
+          "end": 201
+        },
+        {
+          "start": 203,
+          "end": 270
+        }
       ],
       "tests": [
         "engine/src/payroll/run.test.ts",
         "engine/src/payroll/agnostic-core.test.ts"
-      ]
+      ],
+      "needsDbReason": "Selected stub-capture and calculation paths consume persisted pay-stub rows and run a payroll transaction; evidence parsing is measured separately without a database."
+    },
+    {
+      "path": "engine/src/payroll/run-earning-lines.ts",
+      "needsDb": true,
+      "lineRanges": [
+        {
+          "start": 136,
+          "end": 177
+        },
+        {
+          "start": 182,
+          "end": 254
+        },
+        {
+          "start": 261,
+          "end": 314
+        },
+        {
+          "start": 322,
+          "end": 399
+        },
+        {
+          "start": 407,
+          "end": 461
+        },
+        {
+          "start": 469,
+          "end": 523
+        }
+      ],
+      "tests": [
+        "engine/src/payroll/run.integration.test.ts",
+        "engine/src/payroll/run.test.ts",
+        "engine/src/payroll/agnostic-core.test.ts"
+      ],
+      "needsDbReason": "Selected earning builders resolve persisted retro settlements, schedules and employee balances on the transaction executor before appending lines."
     },
     {
       "path": "engine/src/payroll/canada/t4127.ts",
@@ -75,28 +196,39 @@
         "engine/src/payroll/opening-balances.test.ts",
         "engine/src/payroll/employer-taxes.integration.test.ts",
         "engine/src/payroll/quebec.integration.test.ts"
-      ]
+      ],
+      "needsDbReason": "Statutory computation loads employee profile and year-to-date payroll state; the mapped behavior suites require disposable database fixtures."
     },
     {
       "path": "engine/src/payroll/canada/employer-levies.ts",
       "needsDb": true,
-      "tests": ["engine/src/payroll/employer-taxes.integration.test.ts"]
+      "tests": [
+        "engine/src/payroll/employer-taxes.integration.test.ts",
+        "engine/src/payroll/quebec.integration.test.ts"
+      ],
+      "needsDbReason": "Employer levy calculation resolves organization rates and year-to-date remuneration from persisted payroll state."
     },
     {
       "path": "engine/src/payroll/us/pub15t.ts",
-      "tests": ["engine/src/payroll/us/pub15t.test.ts"]
+      "tests": [
+        "engine/src/payroll/us/pub15t.test.ts"
+      ]
     },
     {
       "path": "engine/src/payroll/us/withholding.ts",
-      "tests": ["engine/src/payroll/us/withholding-current-fit.test.ts"]
+      "tests": [
+        "engine/src/payroll/us/withholding-current-fit.test.ts"
+      ]
     },
     {
       "path": "engine/src/payroll/us/compute-statutory.ts",
       "needsDb": true,
       "tests": [
         "engine/src/payroll/controls.test.ts",
-        "engine/src/payroll/us-state-withholding.integration.test.ts"
-      ]
+        "engine/src/payroll/us-state-withholding.integration.test.ts",
+        "engine/src/payroll/run.integration.test.ts"
+      ],
+      "needsDbReason": "Statutory computation resolves employee withholding certificates and year-to-date payroll state from the database."
     },
     {
       "path": "engine/src/tax/tax.ts",
@@ -122,7 +254,8 @@
         "engine/src/consolidation/proportionate.integration.test.ts",
         "engine/src/consolidation/consolidation.integration.test.ts",
         "engine/src/consolidation/elimination-fx.integration.test.ts"
-      ]
+      ],
+      "needsDbReason": "Journal, rate-derivation and neededPairs paths resolve persisted subsidiary hierarchy, period locks and primary-book activity; the unit serialization-error predicate does not measure these paths."
     },
     {
       "path": "engine/src/assets/depreciation.ts",
@@ -132,6 +265,187 @@
         "engine/src/assets/depreciation-conventions.test.ts",
         "engine/src/assets/depreciation-bounds.test.ts",
         "engine/src/assets/depreciation.integration.test.ts"
+      ]
+    },
+    {
+      "path": "engine/src/ledger/posting-document.ts",
+      "tests": [
+        "engine/src/ledger/posting-root-subsidiary-inventory.integration.test.ts",
+        "engine/src/ledger/posting-replay.test.ts",
+        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
+        "engine/src/ledger/posting-project-charge.test.ts",
+        "engine/src/receivables/dunning.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/ledger/posting.test.ts",
+        "engine/src/ledger/posting-tax-guards.test.ts",
+        "engine/src/ledger/posting-period.integration.test.ts"
+      ],
+      "needsDb": true,
+      "needsDbReason": "postDocument coordinates database preparation, atomic commit and durable effect dispatch; neighboring pure posting rules do not execute this coordinator."
+    },
+    {
+      "path": "engine/src/ledger/posting-prepare.ts",
+      "tests": [
+        "engine/src/allocations/post-posting.integration.test.ts",
+        "engine/src/ledger/posting-root-subsidiary-inventory.integration.test.ts",
+        "engine/src/ledger/journal-posting-atomic.integration.test.ts",
+        "engine/src/ledger/posting-replay.test.ts",
+        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
+        "engine/src/ledger/posting-project-charge.test.ts",
+        "engine/src/receivables/dunning.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/ledger/posting.test.ts",
+        "engine/src/ledger/posting-tax-guards.test.ts",
+        "engine/src/ledger/posting-period.integration.test.ts"
+      ],
+      "needsDb": true,
+      "needsDbReason": "prepareDocumentPosting resolves locked document, tax, account and inventory state before projection; the mapped pure rule tests do not execute this database coordinator."
+    },
+    {
+      "path": "engine/src/ledger/posting-commit.ts",
+      "tests": [
+        "engine/src/allocations/post-posting.integration.test.ts",
+        "engine/src/ledger/posting-root-subsidiary-inventory.integration.test.ts",
+        "engine/src/ledger/journal-posting-atomic.integration.test.ts",
+        "engine/src/ledger/posting-replay.test.ts",
+        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
+        "engine/src/ledger/posting-project-charge.test.ts",
+        "engine/src/receivables/dunning.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/ledger/posting.test.ts",
+        "engine/src/ledger/posting-tax-guards.test.ts",
+        "engine/src/ledger/posting-period.integration.test.ts"
+      ],
+      "needsDb": true,
+      "needsDbReason": "commitDocumentPosting writes and locks journal/document/effect rows atomically; its transaction and row-count behavior requires the database partition."
+    },
+    {
+      "path": "engine/src/ledger/posting-replay.ts",
+      "tests": [
+        "engine/src/ledger/source-correction.integration.test.ts",
+        "engine/src/ledger/expense-settlement.integration.test.ts",
+        "engine/src/ledger/gl-regeneration.integration.test.ts",
+        "engine/src/ledger/posting-replay.test.ts",
+        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
+        "engine/src/ledger/posting-project-charge.test.ts",
+        "engine/src/receivables/dunning.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/ledger/posting.test.ts",
+        "engine/src/ledger/posting-tax-guards.test.ts",
+        "engine/src/ledger/posting-period.integration.test.ts"
+      ],
+      "needsDb": true,
+      "needsDbReason": "regenerateGlImpactTx reads and reverses persisted posted entries under transaction locks before regenerating journal state."
+    },
+    {
+      "path": "engine/src/ledger/posting-projection.ts",
+      "tests": [
+        "engine/src/ledger/posting-projection.unit.test.ts",
+        "engine/src/ledger/posting-replay.test.ts",
+        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
+        "engine/src/ledger/posting-project-charge.test.ts",
+        "engine/src/receivables/dunning.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/ledger/posting.test.ts",
+        "engine/src/ledger/posting-tax-guards.test.ts",
+        "engine/src/ledger/posting-period.integration.test.ts"
+      ]
+    },
+    {
+      "path": "engine/src/ledger/posting-dispatch.ts",
+      "tests": [
+        "engine/src/ledger/posting-dispatch.unit.test.ts",
+        "engine/src/ledger/posting-replay.test.ts",
+        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
+        "engine/src/ledger/posting-project-charge.test.ts",
+        "engine/src/receivables/dunning.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/ledger/posting.test.ts",
+        "engine/src/ledger/posting-tax-guards.test.ts",
+        "engine/src/ledger/posting-period.integration.test.ts"
+      ]
+    },
+    {
+      "path": "engine/src/ledger/posting-accounts.ts",
+      "tests": [
+        "engine/src/ledger/posting-accounts.unit.test.ts",
+        "engine/src/ledger/posting-replay.test.ts",
+        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
+        "engine/src/ledger/posting-project-charge.test.ts",
+        "engine/src/receivables/dunning.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/ledger/posting.test.ts",
+        "engine/src/ledger/posting-tax-guards.test.ts",
+        "engine/src/ledger/posting-period.integration.test.ts"
+      ]
+    },
+    {
+      "path": "engine/src/ledger/posting-provider-tax.ts",
+      "tests": [
+        "engine/src/ledger/posting-provider-tax.unit.test.ts",
+        "engine/src/ledger/posting-replay.test.ts",
+        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
+        "engine/src/ledger/posting-project-charge.test.ts",
+        "engine/src/receivables/dunning.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/ledger/posting.test.ts",
+        "engine/src/ledger/posting-tax-guards.test.ts",
+        "engine/src/ledger/posting-period.integration.test.ts"
+      ]
+    },
+    {
+      "path": "engine/src/ledger/posting-subsidiaries.ts",
+      "tests": [
+        "engine/src/ledger/posting-subsidiaries.unit.test.ts",
+        "engine/src/ledger/posting-replay.test.ts",
+        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
+        "engine/src/ledger/posting-project-charge.test.ts",
+        "engine/src/receivables/dunning.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/ledger/posting.test.ts",
+        "engine/src/ledger/posting-tax-guards.test.ts",
+        "engine/src/ledger/posting-period.integration.test.ts"
+      ]
+    },
+    {
+      "path": "engine/src/ledger/posting-period.ts",
+      "tests": [
+        "engine/src/ledger/posting-period.unit.test.ts",
+        "engine/src/ledger/posting-replay.test.ts",
+        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
+        "engine/src/ledger/posting-project-charge.test.ts",
+        "engine/src/receivables/dunning.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/ledger/posting.test.ts",
+        "engine/src/ledger/posting-tax-guards.test.ts",
+        "engine/src/ledger/posting-period.integration.test.ts"
+      ]
+    },
+    {
+      "path": "engine/src/ledger/posting-invariants.ts",
+      "tests": [
+        "engine/src/ledger/posting-replay.test.ts",
+        "engine/src/ledger/posting-fx-rate-tiebreak.test.ts",
+        "engine/src/ledger/posting-project-charge.test.ts",
+        "engine/src/receivables/dunning.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/ledger/posting.test.ts",
+        "engine/src/ledger/posting-tax-guards.test.ts",
+        "engine/src/ledger/posting-period.integration.test.ts"
+      ]
+    },
+    {
+      "path": "engine/src/payments/settlement-policy.ts",
+      "lineRanges": [
+        {
+          "start": 24,
+          "end": 199
+        }
+      ],
+      "tests": [
+        "engine/src/payments/payments.test.ts",
+        "engine/src/payments/direct-debit.test.ts",
+        "engine/src/payments/payments.integration.test.ts"
       ]
     }
   ]

@@ -1,6 +1,6 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { PostingError } from '@openbooks/engine/src/ledger/posting.ts'
+import { PostingError } from "@openbooks/engine/src/ledger/posting-contracts.ts";
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { applyRulesToAccount } from '../../../../../lib/banking-rules'

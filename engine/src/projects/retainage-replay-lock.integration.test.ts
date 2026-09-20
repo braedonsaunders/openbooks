@@ -12,7 +12,7 @@ import {
   submitPayApplication,
 } from "./construction-billing.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
-import { postDocument } from "../ledger/posting.ts";
+import { postDocument } from "../ledger/posting-document.ts";
 import {
   approveVendorPayApplication,
   createVendorPayApplication,

@@ -35,9 +35,35 @@ export const HRM_EMPLOYMENT_PERMISSIONS = [
 
 export type HrmEmploymentPermission = (typeof HRM_EMPLOYMENT_PERMISSIONS)[number];
 
+/**
+ * Headcount-plan duties (0192). read = see positions, funding and vacancy;
+ * manage = create, revise, fund and close positions. Assignment of an
+ * employment onto a position rides the employment change-request path, so
+ * its approval stays hrm.employment.approve — there is deliberately no
+ * position approve key.
+ */
+export const HRM_POSITION_PERMISSIONS = [
+  "hrm.position.read",
+  "hrm.position.manage",
+] as const;
+
+export type HrmPositionPermission = (typeof HRM_POSITION_PERMISSIONS)[number];
+
+/**
+ * Process checklist duties (0193): read sees processes and steps, manage
+ * opens, completes, and cancels them. Granted to the same built-in roles as
+ * the employment read/manage keys (admin only, via the catalogue spread —
+ * the permission-role sync rule re-seeds on deploy). Skipping a required
+ * step is NOT covered here: it needs hrm.employment.manage.
+ */
+export const HRM_PROCESS_PERMISSIONS = ["hrm.process.read", "hrm.process.manage"] as const;
+
+export type HrmProcessPermission = (typeof HRM_PROCESS_PERMISSIONS)[number];
+
 // Module-private brand: a real symbol, so a forged record built without
 // this module cannot satisfy the type, and loading is the only producer.
-const trustedEmploymentSubject = Symbol("trustedEmploymentSubject");
+// One brand for every HRM subject (employments and positions alike).
+const trustedHrmSubject = Symbol("trustedHrmSubject");
 
 /**
  * Employment identity loaded from worker_employments on the trusted runner,
@@ -56,7 +82,7 @@ export interface TrustedEmploymentSubject {
   readonly workerPartyId: string;
   readonly employerSubsidiaryId: string;
   readonly revision: number;
-  readonly [trustedEmploymentSubject]: true;
+  readonly [trustedHrmSubject]: true;
 }
 
 async function loadTrustedEmploymentSubject(
@@ -97,7 +123,7 @@ async function loadTrustedEmploymentSubject(
     workerPartyId: rows.workerPartyId,
     employerSubsidiaryId: rows.employerSubsidiaryId,
     revision: rows.revision,
-    [trustedEmploymentSubject]: true,
+    [trustedHrmSubject]: true,
   };
 }
 
@@ -134,6 +160,70 @@ async function requireHrmEmploymentAccess(
   const subject = await loadTrustedEmploymentSubject(exec, orgId, employmentId);
   await assertEmployerScope(exec, orgId, actorId, subject);
   return subject;
+}
+
+async function requireHrmProcessAccess(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+  permission: HrmProcessPermission,
+): Promise<TrustedEmploymentSubject> {
+  // Same shape as the employment gates: the live grant set decides, then
+  // the trusted subject plus the employer scope. No caller-supplied parties,
+  // booleans, or scope at any boundary.
+  if (!(await actorHasPermission(exec, orgId, actorId, permission))) {
+    throw new HrmAuthorizationError(
+      `Process access requires the ${permission} permission — ask an administrator to grant it in /admin/roles.`,
+    );
+  }
+  const subject = await loadTrustedEmploymentSubject(exec, orgId, employmentId);
+  await assertEmployerScope(exec, orgId, actorId, subject);
+  return subject;
+}
+
+/** See a process checklist. Read-only; accepts `db` or a transaction runner. */
+export async function requireHrmProcessRead(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+): Promise<TrustedEmploymentSubject> {
+  return requireHrmProcessAccess(exec, orgId, actorId, employmentId, "hrm.process.read");
+}
+
+/**
+ * Open, complete, or cancel a process checklist. The caller MUST pass its
+ * write transaction's runner so this check and the subsequent write are
+ * atomic. Skipping a required step additionally needs
+ * requireHrmEmploymentManage; completing one's own employee-owned steps
+ * needs neither key (see resolveStepActor in processes.ts).
+ */
+export async function requireHrmProcessManage(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+): Promise<TrustedEmploymentSubject> {
+  return requireHrmProcessAccess(exec, orgId, actorId, employmentId, "hrm.process.manage");
+}
+
+/**
+ * Configuration-only process gate (templates have no employment subject):
+ * the live hrm.process.manage grant, no subsidiary scope to check. The
+ * Setup registry UI fences the same writes behind admin.setup.manage; this
+ * is the engine-service boundary for direct callers.
+ */
+export async function requireHrmProcessConfig(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<void> {
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.process.manage"))) {
+    throw new HrmAuthorizationError(
+      "Process access requires the hrm.process.manage permission — ask an administrator to grant it in /admin/roles.",
+    );
+  }
 }
 
 /** See an employment record. Read-only; accepts `db` or a transaction runner. */
@@ -199,6 +289,161 @@ export async function loadApprovalPerson(
   return { userId: row.id, partyId: row.partyId };
 }
 
+/**
+ * Position identity loaded from positions on the trusted runner,
+ * org-scoped, with the employer of the CURRENT live version (highest
+ * version_no among recorded-live rows). The establishment code is stable
+ * but carries no legal entity; scope must come from a version, and the
+ * current one is the only defensible choice for a gate that names no
+ * as-of date. A position with no live version has no employer to scope
+ * by and is refused outright — never treated as globally visible.
+ */
+export interface TrustedPositionSubject {
+  readonly id: string;
+  readonly orgId: string;
+  readonly positionCode: string;
+  readonly employerSubsidiaryId: string;
+  readonly revision: number;
+  readonly [trustedHrmSubject]: true;
+}
+
+async function loadTrustedPositionSubject(
+  exec: SqlExecutor,
+  orgId: string,
+  positionId: string,
+): Promise<TrustedPositionSubject> {
+  const rows = (await exec.execute<{
+    id: string;
+    orgId: string;
+    positionCode: string;
+    employerSubsidiaryId: string | null;
+    revision: number;
+  }>(sql`
+    select p.id,
+           p.org_id as "orgId",
+           p.position_code as "positionCode",
+           (select v.employer_subsidiary_id
+              from position_versions v
+             where v.org_id = p.org_id and v.position_id = p.id
+               and v.recorded_until is null
+             order by v.version_no desc
+             limit 1) as "employerSubsidiaryId",
+           p.revision
+      from positions p
+     where p.org_id = ${orgId} and p.id = ${positionId}
+  `)).rows[0];
+  // Zero rows is a failure: unknown id, or an id from another organization
+  // (the org_id predicate is the org-isolation enforcement).
+  if (!rows) {
+    throw new HrmAuthorizationError(
+      "Position is not visible in this organization and legal-entity scope.",
+    );
+  }
+  if (!rows.employerSubsidiaryId) {
+    throw new HrmAuthorizationError(
+      "Position is not visible in this organization and legal-entity scope.",
+    );
+  }
+  return {
+    id: rows.id,
+    orgId: rows.orgId,
+    positionCode: rows.positionCode,
+    employerSubsidiaryId: rows.employerSubsidiaryId,
+    revision: rows.revision,
+    [trustedHrmSubject]: true,
+  };
+}
+
+async function requireHrmPositionAccess(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  positionId: string,
+  permission: HrmPositionPermission,
+): Promise<TrustedPositionSubject> {
+  if (!(await actorHasPermission(exec, orgId, actorId, permission))) {
+    throw new HrmAuthorizationError(
+      `Position access requires the ${permission} permission — ask an administrator to grant it in /admin/roles.`,
+    );
+  }
+  const subject = await loadTrustedPositionSubject(exec, orgId, positionId);
+  const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
+  if (allowed !== null && !allowed.has(subject.employerSubsidiaryId)) {
+    throw new HrmAuthorizationError(
+      "Position is not visible in this organization and legal-entity scope.",
+    );
+  }
+  return subject;
+}
+
+/** See a position, its funding and its vacancy. Read-only. */
+export async function requireHrmPositionRead(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  positionId: string,
+): Promise<TrustedPositionSubject> {
+  return requireHrmPositionAccess(exec, orgId, actorId, positionId, "hrm.position.read");
+}
+
+/**
+ * Create, revise, fund or close a position. The caller MUST pass its write
+ * transaction's runner so this check and the subsequent write are atomic.
+ */
+export async function requireHrmPositionManage(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  positionId: string,
+): Promise<TrustedPositionSubject> {
+  return requireHrmPositionAccess(exec, orgId, actorId, positionId, "hrm.position.manage");
+}
+
+/**
+ * The aggregate half of position authority for creates (which name no
+ * position yet) and list-shaped reads: the hrm.position.manage/read grant,
+ * then the employer-subsidiary scope. Creation validates against the
+ * DECLARED employer — the subsidiary the new position will belong to — so
+ * a caller cannot plant headcount in a legal entity they cannot see.
+ */
+export async function requirePositionManageForEmployer(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employerSubsidiaryId: string,
+): Promise<Set<string> | null> {
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.position.manage"))) {
+    throw new HrmAuthorizationError(
+      "Position access requires the hrm.position.manage permission — ask an administrator to grant it in /admin/roles.",
+    );
+  }
+  const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
+  if (allowed !== null && !allowed.has(employerSubsidiaryId)) {
+    throw new HrmAuthorizationError(
+      "Position is not visible in this organization and legal-entity scope.",
+    );
+  }
+  return allowed;
+}
+
+/**
+ * The aggregate half of position read authority, lifted to list-shaped
+ * reads that name no single position. Returns the allowed employer set
+ * (null = unrestricted) for the caller to filter by, never a boolean.
+ */
+export async function requireAggregatePositionRead(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<Set<string> | null> {
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.position.read"))) {
+    throw new HrmAuthorizationError(
+      "Position access requires the hrm.position.read permission — ask an administrator to grant it in /admin/roles.",
+    );
+  }
+  return actorAllowedSubsidiaryIds(exec, orgId, actorId);
+}
+
 /** Actor identity as the SoD legs see it: super-admin flag travels with the login. */
 export async function loadActorPerson(
   exec: SqlExecutor,
@@ -251,4 +496,142 @@ export function checkApprovalIdentitySeparation(args: {
       "Employment approval refused: the submitter cannot approve their own change — route it to an independent approver.",
     );
   }
+}
+
+/** Leave and attendance duties (HR-5). Confidential like employment. */
+export const HRM_LEAVE_PERMISSIONS = [
+  "hrm.leave.read",
+  "hrm.leave.request",
+  "hrm.leave.approve",
+  "hrm.leave.manage",
+] as const;
+
+export type HrmLeavePermission = (typeof HRM_LEAVE_PERMISSIONS)[number];
+
+async function requireHrmLeaveAccess(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+  permission: HrmLeavePermission,
+): Promise<TrustedEmploymentSubject> {
+  // Same hardwiring as employment: live grant set, subject loaded from
+  // worker_employments on the trusted runner, employer scope enforced.
+  if (!(await actorHasPermission(exec, orgId, actorId, permission))) {
+    throw new HrmAuthorizationError(
+      `Leave access requires the ${permission} permission — ask an administrator to grant it in /admin/roles.`,
+    );
+  }
+  const subject = await loadTrustedEmploymentSubject(exec, orgId, employmentId);
+  await assertEmployerScope(exec, orgId, actorId, subject);
+  return subject;
+}
+
+/** See leave records scoped to an employment. */
+export async function requireHrmLeaveRead(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+): Promise<TrustedEmploymentSubject> {
+  return requireHrmLeaveAccess(exec, orgId, actorId, employmentId, "hrm.leave.read");
+}
+
+/** File a leave request against an employment. */
+export async function requireHrmLeaveRequest(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+): Promise<TrustedEmploymentSubject> {
+  return requireHrmLeaveAccess(exec, orgId, actorId, employmentId, "hrm.leave.request");
+}
+
+/** Permission/scope half of leave approval; identity half is the shared SoD invariant. */
+export async function requireHrmLeaveApprove(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+): Promise<TrustedEmploymentSubject> {
+  return requireHrmLeaveAccess(exec, orgId, actorId, employmentId, "hrm.leave.approve");
+}
+
+/**
+ * Org-level leave configuration (types, policies): permission only, no
+ * subsidiary scope — a type or policy is org configuration, and scoping it
+ * by one employer would let two managers define the same code differently.
+ */
+export async function requireHrmLeaveManage(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<void> {
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.leave.manage"))) {
+    throw new HrmAuthorizationError(
+      "Leave configuration requires the hrm.leave.manage permission — ask an administrator to grant it in /admin/roles.",
+    );
+  }
+}
+
+/**
+ * The actor's own employments, resolved from users.party_id on the trusted
+ * runner. The second self-service touch: an employee files and reads only
+ * through these ids — the service never accepts a caller-supplied worker.
+ */
+export async function loadOwnEmploymentIds(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<string[]> {
+  const person = await loadApprovalPerson(exec, orgId, actorId);
+  if (!person.partyId) return [];
+  const rows = (await exec.execute<{ id: string }>(sql`
+    select id from worker_employments
+     where org_id = ${orgId} and worker_party_id = ${person.partyId}
+  `)).rows;
+  return rows.map((row) => row.id);
+}
+
+/**
+ * Manager file gate: hrm.leave.manage plus the same employer scope as every
+ * employment gate, for filing on behalf of another worker. The short-notice
+ * override lives here: a manager files with a reason where the worker is
+ * refused.
+ */
+export async function requireHrmLeaveManageOnEmployment(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+): Promise<TrustedEmploymentSubject> {
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.leave.manage"))) {
+    throw new HrmAuthorizationError(
+      "Leave access requires the hrm.leave.manage permission — ask an administrator to grant it in /admin/roles.",
+    );
+  }
+  const subject = await loadTrustedEmploymentSubject(exec, orgId, employmentId);
+  await assertEmployerScope(exec, orgId, actorId, subject);
+  return subject;
+}
+
+/**
+ * Self-service file gate: hrm.leave.request plus proof the employment is
+ * the actor's own. Throws HrmAuthorizationError naming the refused shape —
+ * the caller must not learn whether the id exists elsewhere.
+ */
+export async function requireOwnEmploymentForRequest(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+): Promise<TrustedEmploymentSubject> {
+  const subject = await requireHrmLeaveRequest(exec, orgId, actorId, employmentId);
+  const own = await loadOwnEmploymentIds(exec, orgId, actorId);
+  if (!own.includes(employmentId)) {
+    throw new HrmAuthorizationError(
+      "Leave requests file only against your own employment — ask a manager holding hrm.leave.manage to file on your behalf.",
+    );
+  }
+  return subject;
 }

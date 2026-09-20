@@ -10,7 +10,7 @@ import {
   seedAdoption,
 } from "./filing-test-fixtures.ts";
 import { reconcilePayrollFilingAccounts } from "./filing-reconciliation.ts";
-import { commitPayRun } from "./run.ts";
+import { commitPayRun } from "./run-commit.ts";
 import {
   createRemittanceBill,
   payrollRemittanceSummary,

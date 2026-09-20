@@ -32,7 +32,8 @@
       "ordersDescription": "Offene Angebote, Kundenaufträge und Bestellungen – Anzahl, Wert und Konversion",
       "cashFlowIndirectTitle": "Kapitalfluss (indirekt)",
       "cashFlowIndirectDescription": "Indirekte Methode — Jahresüberschuss zum operativen Cashflow mit Working-Capital-Details",
-      "payrollDescription": "Integrierter Lohnbericht über Abrechnungen — Lohndaten erfordern die Lohnabrechnungs-Berechtigung."
+      "payrollDescription": "Integrierter Lohnbericht über Abrechnungen — Lohndaten erfordern die Lohnabrechnungs-Berechtigung.",
+      "hrmDescription": "Integrierter Personalbericht über Beschäftigungsdatensätze – erfordert die HRM-Beschäftigungsberechtigung."
     },
     "groups": {
       "financial": "Finanzberichte",
@@ -42,7 +43,8 @@
       "custom": "Benutzerdefiniert & Gespeichert",
       "projects": "Projekte",
       "orders": "Vertrieb & Aufträge",
-      "payroll": "Lohnabrechnung"
+      "payroll": "Lohnabrechnung",
+      "hrm": "Personal"
     },
     "customStudio": {
       "title": "Benutzerdefinierter Berichtsgenerator",
@@ -642,6 +644,18 @@
       "hrm_change_requests": {
         "label": "Änderungsanträge",
         "description": "Eine Zeile je Beschäftigungs-Änderungsantrag — Status, Art, Beschäftigung, Antragsteller, Einreichungs- und Entscheidungsstempel, gebundener Genehmigungslauf und Revisionsbindung. Erfordert die HRM-Beschäftigungsberechtigung."
+      },
+      "hrm_positions": {
+        "label": "Positionen",
+        "description": "Eine Zeile je eingerichteter Position zum Berichtsstichtag: Code, Titel, Status, Abteilung, Arbeitgeber sowie geplante, finanzierte und besetzte FTE. Erfordert die HRM-Positionsberechtigung."
+      },
+      "hrm_processes": {
+        "label": "Prozess-Checklisten",
+        "description": "Eine Zeile je Prozesschecklisten-Schritt — Prozessart und -status, Mitarbeiter, Vorlage, Schrittverantwortlicher, Fälligkeitsdatum, Nachweisart sowie Schrittstatus mit Nachweis. Erfordert die HRM-Prozessberechtigung."
+      },
+      "hrm_leave_absences": {
+        "label": "Fehltage",
+        "description": "Eine Zeile pro Fehltag — Person, Arbeitgeber, damalige Abteilung, Urlaubsart und Stunden. Stornierungen sind eigene Zeilen; Summen saldieren. Erfordert die Urlaubs-Berechtigung."
       }
     },
     "columns": {
@@ -1208,6 +1222,46 @@
         "created_at": "Erstellt am",
         "id": "Antrag (ID)",
         "employment_id": "Beschäftigung (ID)"
+      },
+      "hrm_positions": {
+        "code": "Code",
+        "title": "Titel",
+        "status": "Status",
+        "employer": "Arbeitgeber",
+        "department": "Abteilung",
+        "planned_fte": "Geplante FTE",
+        "funded_fte": "Finanzierte FTE",
+        "filled_fte": "Besetzte FTE",
+        "vacant_fte": "Offene FTE",
+        "position_id": "Position (ID)"
+      },
+      "hrm_processes": {
+        "process_kind": "Prozessart",
+        "process_status": "Prozessstatus",
+        "effective_date": "Gültigkeitsdatum",
+        "employee": "Mitarbeiter",
+        "employer": "Arbeitgeber",
+        "template": "Vorlage",
+        "step": "Schritt",
+        "step_status": "Schrittstatus",
+        "owner": "Verantwortlich",
+        "due_on": "Fällig am",
+        "evidence": "Nachweis",
+        "done_at": "Erledigt am",
+        "skip_reason": "Grund für das Überspringen",
+        "process_id": "Vorgang (ID)",
+        "employment_id": "Beschäftigung (ID)"
+      },
+      "hrm_leave_absences": {
+        "on_date": "Datum",
+        "person": "Person",
+        "employer": "Arbeitgeber",
+        "department": "Abteilung",
+        "leave_type": "Urlaubsart",
+        "hours": "Stunden",
+        "source": "Quelle",
+        "employment_id": "Beschäftigung (ID)",
+        "id": "Fehltag (ID)"
       }
     },
     "enumValues": {
@@ -1285,7 +1339,12 @@
       "hire": "Einstellung",
       "status_change": "Statusänderung",
       "assignment_change": "Zuordnungsänderung",
-      "termination": "Beendigung"
+      "termination": "Beendigung",
+      "frozen": "Eingefroren",
+      "filled": "Besetzt",
+      "open": "Offen",
+      "planned": "Geplant",
+      "position_assignment": "Positionszuordnung"
     }
   },
   "operators": {

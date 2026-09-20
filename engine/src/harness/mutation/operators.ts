@@ -1,13 +1,17 @@
 /**
  * Line-oriented mutant operators for the OpenBooks financial engine.
  *
- * Dependency-free by design: every operator is a source-text transform over a
- * masked copy of the file (string literals and comments blanked, offsets
- * preserved), so generation never needs a TypeScript parser. The trade-off is
- * that generation is heuristic — a mutant that does not parse is the
- * runner's problem, not this module's: the runner syntax-gates every mutant
- * and reports unparseable ones as `error` (excluded from the score, never
- * counted as killed).
+ * Candidate sites are source-text edits, but classification is AST-backed:
+ * the TypeScript parser (already a repo dependency) identifies real
+ * expression operators, so generic angle brackets (`Map<string, number>`)
+ * are never mistaken for comparisons and type-only literals
+ * (`Parameters<F>[0]`) are never mistaken for runtime boundary literals.
+ * Masked-text scans (strings/comments blanked, offsets preserved) still
+ * serve the remaining operators, and template interpolations stay excluded
+ * (conservative by design: no mutant is generated inside `${...}`).
+ * The runner syntax-gates every mutant and reports unparseable ones as
+ * `error` (excluded from the score, never counted as killed) — a backstop,
+ * not the filter.
  *
  * What each operator probes, in financial terms:
  * - arith-sign-flip:         a posted debit/credit or allocation with the wrong sign.
@@ -18,6 +22,8 @@
  * - guard-negation:          an inverted authorization/invariant check.
  * - early-return-before-write: a write that never happens (silent data loss).
  */
+
+import ts from "typescript";
 
 export type MutationOperator =
   | "arith-sign-flip"
@@ -155,109 +161,166 @@ function offsetToLineColumn(starts: number[], offset: number): { line: number; c
   return { line: line + 1, column: offset - starts[line]! + 1 };
 }
 
-function mutateArithSignFlip(masked: string, starts: number[], push: Push): void {
-  for (let i = 0; i < masked.length; i += 1) {
-    const ch = masked[i]!;
-    const prev = i > 0 ? masked[i - 1]! : "";
-    const next = i + 1 < masked.length ? masked[i + 1]! : "";
-    if (ch === "+" || ch === "-") {
-      if (prev === ch || next === ch || prev === "=" || next === "=") continue;
-      // Scientific notation (`1e+5`, `1e-5`): not an addition.
-      if ((prev === "e" || prev === "E") && /[0-9]/.test(next)) continue;
-      const flipped = ch === "+" ? "-" : "+";
-      const { line, column } = offsetToLineColumn(starts, i);
-      push({ operator: "arith-sign-flip", line, column, description: `arith '${ch}' -> '${flipped}'`, start: i, end: i + 1, text: flipped });
-    } else if (ch === "*" || ch === "/") {
-      if (prev === "*" || next === "*" || prev === "/" || next === "/" || prev === "=" || next === "=") continue;
-      const flipped = ch === "*" ? "/" : "*";
-      const { line, column } = offsetToLineColumn(starts, i);
-      push({ operator: "arith-sign-flip", line, column, description: `arith '${ch}' -> '${flipped}'`, start: i, end: i + 1, text: flipped });
-    }
-  }
+/**
+ * Parse once per generation pass. ScriptKind.TS matters: without it a
+ * generic instantiation (`Map<string>`) could lex as comparisons.
+ * setParentPointers lets boundary-shift test type ancestry.
+ */
+function parseSource(source: string): ts.SourceFile {
+  return ts.createSourceFile("mutation-target.ts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
 }
 
-function mutateComparisonFlip(masked: string, starts: number[], push: Push): void {
-  let i = 0;
+/** Template interpolations are real expressions but stay excluded (conservative). */
+function insideTemplate(node: ts.Node): boolean {
+  let current: ts.Node | undefined = node.parent;
+  while (current) {
+    if (ts.isTemplateSpan(current) || ts.isTemplateExpression(current)) return true;
+    current = current.parent;
+  }
+  return false;
+}
+
+/** Negative literal types also contain unary-expression nodes but are erased. */
+function insideType(node: ts.Node): boolean {
+  for (let current = node.parent; current; current = current.parent) {
+    if (ts.isTypeNode(current)) return true;
+  }
+  return false;
+}
+
+/**
+ * Real expression arithmetic only: BinaryExpression `+ - * /` plus unary
+ * financial signs (`-amount`, `+fee`). Type syntax, increments, compound
+ * assignment, arrows, shifts, and scientific-notation exponents are not
+ * BinaryExpression/ unary-sign nodes, so they can never become candidates —
+ * including unspaced runtime operators (`a+b`) the old text heuristic
+ * could not tell apart from generics.
+ */
+function mutateArithSignFlip(source: string, sourceFile: ts.SourceFile, starts: number[], push: Push): void {
+  const emit = (offset: number, ch: string, flipped: string): void => {
+    const { line, column } = offsetToLineColumn(starts, offset);
+    push({ operator: "arith-sign-flip", line, column, description: `arith '${ch}' -> '${flipped}'`, start: offset, end: offset + 1, text: flipped });
+  };
+  const visit = (node: ts.Node): void => {
+    if (ts.isBinaryExpression(node)) {
+      if (!insideTemplate(node) && !insideType(node)) {
+        const start = node.operatorToken.getStart(sourceFile);
+        switch (node.operatorToken.kind) {
+          case ts.SyntaxKind.PlusToken:
+            emit(start, "+", "-");
+            break;
+          case ts.SyntaxKind.MinusToken:
+            emit(start, "-", "+");
+            break;
+          case ts.SyntaxKind.AsteriskToken:
+            emit(start, "*", "/");
+            break;
+          case ts.SyntaxKind.SlashToken:
+            emit(start, "/", "*");
+            break;
+          default:
+            break;
+        }
+      }
+    } else if (ts.isPrefixUnaryExpression(node)) {
+      if (
+        (node.operator === ts.SyntaxKind.PlusToken || node.operator === ts.SyntaxKind.MinusToken) &&
+        !insideTemplate(node) && !insideType(node)
+      ) {
+        const start = node.getStart(sourceFile);
+        const ch = source[start]!;
+        emit(start, ch, ch === "+" ? "-" : "+");
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+}
+
+/**
+ * Real expression comparisons only: BinaryExpression `< <= > >= === !==`.
+ * Generic brackets, arrows, and shifts are different AST shapes, so no
+ * spacing heuristic is needed — unspaced runtime comparisons (`a<b`)
+ * mutate exactly like spaced ones.
+ */
+function mutateComparisonFlip(sourceFile: ts.SourceFile, starts: number[], push: Push): void {
   const emit = (offset: number, end: number, description: string, text: string): void => {
     const { line, column } = offsetToLineColumn(starts, offset);
     push({ operator: "comparison-flip", line, column, description, start: offset, end, text });
   };
-  while (i < masked.length) {
-    const prev = i > 0 ? masked[i - 1]! : "";
-    const three = masked.slice(i, i + 3);
-    const two = masked.slice(i, i + 2);
-    const one = masked[i]!;
-    if (three === "===") {
-      emit(i, i + 3, "comparison '===' -> '!=='", "!==");
-      i += 3;
-    } else if (three === "!==") {
-      emit(i, i + 3, "comparison '!==' -> '==='", "===");
-      i += 2 + 1;
-    } else if (two === "<=") {
-      emit(i, i + 2, "comparison '<=' -> '<'", "<");
-      i += 2;
-    } else if (two === ">=") {
-      emit(i, i + 2, "comparison '>=' -> '>'", ">");
-      i += 2;
-    } else if (two === "=>" || two === "<<" || two === ">>") {
-      i += 2;
-    } else if (one === "<") {
-      // Angle-bracket heuristic: an unspaced `<` after an identifier or
-      // closer is a type argument (`Map<string>`, `foo<Bar>(`) — the engine
-      // writes comparisons spaced (`a < b`; verified zero unspaced cases).
-      // The syntax gate remains the backstop for anything ambiguous.
-      const next = i + 1 < masked.length ? masked[i + 1]! : "";
-      if (/[A-Za-z0-9_$>\]\)\"'?]/.test(prev) && next !== "" && !/\s/.test(next)) {
-        i += 1;
-        continue;
+  const visit = (node: ts.Node): void => {
+    if (ts.isBinaryExpression(node) && !insideTemplate(node) && !insideType(node)) {
+      const start = node.operatorToken.getStart(sourceFile);
+      const end = node.operatorToken.getEnd();
+      switch (node.operatorToken.kind) {
+        case ts.SyntaxKind.LessThanToken:
+          emit(start, end, "comparison '<' -> '<='", "<=");
+          break;
+        case ts.SyntaxKind.LessThanEqualsToken:
+          emit(start, end, "comparison '<=' -> '<'", "<");
+          break;
+        case ts.SyntaxKind.GreaterThanToken:
+          emit(start, end, "comparison '>' -> '>='", ">=");
+          break;
+        case ts.SyntaxKind.GreaterThanEqualsToken:
+          emit(start, end, "comparison '>=' -> '>'", ">");
+          break;
+        case ts.SyntaxKind.EqualsEqualsEqualsToken:
+          emit(start, end, "comparison '===' -> '!=='", "!==");
+          break;
+        case ts.SyntaxKind.ExclamationEqualsEqualsToken:
+          emit(start, end, "comparison '!==' -> '==='", "===");
+          break;
+        default:
+          break;
       }
-      emit(i, i + 1, "comparison '<' -> '<='", "<=");
-      i += 1;
-    } else if (one === ">") {
-      // Mirror heuristic for the generic closer (`Promise<void> {`,
-      // `foo<Bar>(`, `Pick<A, B>)`): an identifier/closer before `>` and a
-      // type-position punctuator after it is not a comparison. A masked
-      // string literal can stand between the opener and the bracket
-      // (`Pick<typeof db, "execute">)`), so look past whitespace for an
-      // opener (`,`, `(`, `[`, `=`, `:`) in that case.
-      const nextNonSpace = masked.slice(i + 1).match(/\S/)?.[0] ?? "";
-      let prevNonSpace = prev;
-      for (let k = i - 1; k >= 0 && /\s/.test(masked[k]!); k -= 1) {
-        prevNonSpace = k > 0 ? masked[k - 1]! : "";
-      }
-      const prevIsCloser = /[A-Za-z0-9_$>\]\)\"'?]/.test(prev);
-      const prevIsOpenerGap = /\s/.test(prev) && /[,\[(=:]/.test(prevNonSpace);
-      if (
-        (prevIsCloser || prevIsOpenerGap) &&
-        ["(", ",", ";", "{", ")", "[", "|", "&", "?", "=", ":"].includes(nextNonSpace)
-      ) {
-        i += 1;
-        continue;
-      }
-      // `=>` is not a comparison; the `=` half never matches above because
-      // the scan consumes pairs left to right, so guard the `>` half here.
-      if (prev === "=") {
-        i += 1;
-        continue;
-      }
-      emit(i, i + 1, "comparison '>' -> '>='", ">=");
-      i += 1;
-    } else {
-      i += 1;
     }
-  }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
 }
 
 const LIMIT_LINE_PATTERN =
   /(\bfor\b|\bwhile\b|\bif\b|<=?|>=?|===|!==|\blength\b|\bslice\b|\bsubstring\b|\bpadStart\b|\bpadEnd\b|\blimit\b|\bthreshold\b|\bmax\b|\bmin\b|\bexpire\b|\bdays?\b|\bmonths?\b)/;
+
+/**
+ * Numeric/bigint literals that live inside type syntax (`Parameters<F>[0]`,
+ * literal union members, generic arguments) are erased at runtime: shifting
+ * them yields survivors no suite can kill. Collect their spans so the
+ * line scan below can skip them; runtime literals keep existing semantics.
+ */
+function collectTypeLiteralRanges(sourceFile: ts.SourceFile): Array<{ start: number; end: number }> {
+  const ranges: Array<{ start: number; end: number }> = [];
+  const visit = (node: ts.Node): void => {
+    if (
+      node.kind === ts.SyntaxKind.NumericLiteral ||
+      node.kind === ts.SyntaxKind.BigIntLiteral
+    ) {
+      let current: ts.Node | undefined = node.parent;
+      while (current) {
+        if (ts.isTypeNode(current)) {
+          ranges.push({ start: node.getStart(sourceFile), end: node.getEnd() });
+          break;
+        }
+        current = current.parent;
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return ranges;
+}
 
 function mutateBoundaryShift(
   maskedLines: string[],
   lineOffsets: number[],
   starts: number[],
   push: Push,
+  typeLiteralRanges: ReadonlyArray<{ start: number; end: number }> = [],
 ): void {
   void starts;
+  const inTypeSyntax = (absStart: number, absEnd: number): boolean =>
+    typeLiteralRanges.some((r) => absStart >= r.start && absEnd <= r.end);
   for (let lineIdx = 0; lineIdx < maskedLines.length; lineIdx += 1) {
     const line = maskedLines[lineIdx]!;
     if (!LIMIT_LINE_PATTERN.test(line)) continue;
@@ -266,6 +329,8 @@ function mutateBoundaryShift(
     while ((match = literal.exec(line)) !== null) {
       const token = match[2]!;
       const tokenStart = match.index + match[1]!.length;
+      const absStart = lineOffsets[lineIdx]! + tokenStart;
+      if (inTypeSyntax(absStart, absStart + token.length)) continue;
       // A float's integer part (`1.5`) is not a limit.
       const after = line[tokenStart + token.length];
       const afterNext = line[tokenStart + token.length + 1];
@@ -277,7 +342,6 @@ function mutateBoundaryShift(
       const suffix = token.endsWith("n") ? "n" : "";
       const line1 = lineIdx + 1;
       const column = tokenStart + 1;
-      const absStart = lineOffsets[lineIdx]! + tokenStart;
       for (const shifted of [value + 1, value - 1]) {
         push({
           operator: "boundary-shift", line: line1, column,
@@ -517,9 +581,10 @@ export function generateMutants(
   };
   const sourceLines = source.split("\n");
 
-  mutateArithSignFlip(masked, starts, push);
-  mutateComparisonFlip(masked, starts, push);
-  mutateBoundaryShift(maskedLines, starts, starts, push);
+  const sourceFile = parseSource(source);
+  mutateArithSignFlip(source, sourceFile, starts, push);
+  mutateComparisonFlip(sourceFile, starts, push);
+  mutateBoundaryShift(maskedLines, starts, starts, push, collectTypeLiteralRanges(sourceFile));
   mutateRoundingSwap(source, masked, starts, push);
   mutateDroppedAccumulator(maskedLines, push);
   mutateGuardNegation(maskedLines, sourceLines, starts, push);

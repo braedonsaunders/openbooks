@@ -78,8 +78,8 @@ test("a synthetic path is opted out on its line; an absence assertion and a comm
 });
 
 test("segmentReferences reads quoted segments across line breaks and stops at the first non-segment", () => {
-  const refs = segmentReferences('join(root,\n  "engine",\n  "src",\n  "payroll", "run.ts",\n) + other("engine", "x")');
-  assert.deepEqual(refs.map((r) => r.path), ["engine/src/payroll/run.ts"]);
+  const refs = segmentReferences('join(root,\n  "engine",\n  "src",\n  "payroll", "run-lifecycle.ts",\n) + other("engine", "x")');
+  assert.deepEqual(refs.map((r) => r.path), ["engine/src/payroll/run-lifecycle.ts"]);
 });
 
 test("stripComments keeps line structure", () => {

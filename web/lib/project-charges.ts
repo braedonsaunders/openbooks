@@ -1,11 +1,11 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { inDbTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { postDocument } from '@openbooks/engine/src/ledger/posting.ts'
+import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import { cmp, div, isZero, mul, normalizeMoney, sum } from '@openbooks/engine/src/money/money.ts'
-import { nextDocumentNumber } from './bills'
-import { controlDeps } from './documents'
+import { nextDocumentNumber } from "./bills.ts";
+import { controlDeps } from "../../engine/src/ledger/document-service.ts";
 import { resolveItemRate } from './item-rates'
 import type { RatePrice } from '@openbooks/engine/src/sales/item-rate-pricing.ts'
 import { canonicalDecimal } from './exact-decimal'

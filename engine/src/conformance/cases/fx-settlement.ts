@@ -15,7 +15,23 @@
  * that recomputed the answer itself would prove nothing.
  */
 
-import { carryingAmountForSettlement, realizedFxControlAdjustment } from "../../payments/payments.ts";
+/**
+ * Foreign-currency settlement and non-monetary items — IAS 21.28 / IAS 21.23(b)
+ * (and the equivalent US GAAP requirements in ASC 830-20, cited as the
+ * operative second source).
+ *
+ * The retranslation corpus in foreign-currency.ts proves the period-end
+ * UNREALIZED side. These cases prove the other two FX requirements: the
+ * REALIZED difference recognised when a monetary item settles during the
+ * period, and the rule that non-monetary items measured at historical cost
+ * are never retranslated.
+ *
+ * Settlement cases drive the payment engine's own settlement arithmetic
+ * (`carryingAmountForSettlement` + `realizedFxControlAdjustment`): the
+ * consumed carrying value and the gain/loss plug the payment posts. A case
+ * that recomputed the answer itself would prove nothing.
+ */
+import { carryingAmountForSettlement, realizedFxControlAdjustment } from "../../payments/settlement-policy.ts";
 import { runRevaluation } from "../../close/fx-revaluation.ts";
 import { capture, periodFor, postNewDocument, setSpotRate } from "../ledger-helpers.ts";
 import { db } from "../../platform/db.ts";

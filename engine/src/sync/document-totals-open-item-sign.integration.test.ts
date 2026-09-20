@@ -19,7 +19,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { postDocument } from "../ledger/posting.ts";
+import { postDocument } from "../ledger/posting-document.ts";
 import { createScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { refreshDocumentHeaderTotals } from "./sync.ts";
 

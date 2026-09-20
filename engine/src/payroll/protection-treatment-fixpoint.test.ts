@@ -22,7 +22,8 @@ import { cmp } from "../money/money.ts";
 import { AU_PAYROLL_PACK } from "./au/pack.ts";
 import { calculateAu2027 } from "./au/compute-statutory.ts";
 import { reduceTaxBases } from "./treatment-bases.ts";
-import { settleDeductionProtection, type Line } from "./run.ts";
+import { settleDeductionProtection } from "./run-protection.ts";
+import { type Line } from "./run-stub-records.ts";
 
 const GROSS = "3653.8500";
 

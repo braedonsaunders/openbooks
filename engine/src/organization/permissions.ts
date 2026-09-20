@@ -119,6 +119,30 @@ export const PERMISSION_CATALOGUE = [
   "hrm.employment.read",
   "hrm.employment.manage",
   "hrm.employment.approve",
+  // HRM headcount plan — the same confidentiality rule as employment: the
+  // funded establishment is never a rider on time.*, payroll.*, or
+  // parties.*. read = see positions, funding and vacancy; manage = create,
+  // revise, fund and close positions. Assignment approval stays
+  // hrm.employment.approve: there is deliberately no position approve key.
+  "hrm.position.read",
+  "hrm.position.manage",
+  // HRM processes (0193) — onboarding/offboarding/transfer checklists. read
+  // = see processes and steps; manage = open, complete, and cancel them. A
+  // step owner who is the employee themself may complete only their own
+  // steps without either key (the first self-service touch, fenced to the
+  // step in engine/src/hrm/processes.ts). Skipping a required step needs
+  // hrm.employment.manage, never this key alone.
+  "hrm.process.read",
+  "hrm.process.manage",
+  // HR-5 leave and attendance — the same confidentiality rule as employment:
+  // read sees leave records; request files for one's own employment only
+  // (the service scopes the subject, never the caller); approve decides;
+  // manage configures types/policies and acts with a reason where others
+  // are refused. Admin-only like the employment keys below.
+  "hrm.leave.read",
+  "hrm.leave.request",
+  "hrm.leave.approve",
+  "hrm.leave.manage",
   // Custom records — user-defined record types + their generated modules
   "records.read",
   "records.create",
@@ -361,6 +385,14 @@ export const PERMISSION_GROUPS: {
       { key: "hrm.employment.read", labelKey: permissionLabelKey("hrm.employment.read") },
       { key: "hrm.employment.manage", labelKey: permissionLabelKey("hrm.employment.manage") },
       { key: "hrm.employment.approve", labelKey: permissionLabelKey("hrm.employment.approve") },
+      { key: "hrm.position.read", labelKey: permissionLabelKey("hrm.position.read") },
+      { key: "hrm.position.manage", labelKey: permissionLabelKey("hrm.position.manage") },
+      { key: "hrm.process.read", labelKey: permissionLabelKey("hrm.process.read") },
+      { key: "hrm.process.manage", labelKey: permissionLabelKey("hrm.process.manage") },
+      { key: "hrm.leave.read", labelKey: permissionLabelKey("hrm.leave.read") },
+      { key: "hrm.leave.request", labelKey: permissionLabelKey("hrm.leave.request") },
+      { key: "hrm.leave.approve", labelKey: permissionLabelKey("hrm.leave.approve") },
+      { key: "hrm.leave.manage", labelKey: permissionLabelKey("hrm.leave.manage") },
     ],
   },
   {

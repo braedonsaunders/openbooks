@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
-import { setPeriodLockState } from "../close/close.ts";
+import { setPeriodLockState } from "../close/period-locks.ts";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { deleteDocument } from "./document-delete.ts";
 import { DocumentVoidError, requestDocumentVoid } from "./document-void.ts";
 import { submitForApproval } from "../flows/submit.ts";
-import { postDocument } from "./posting.ts";
+import { postDocument } from "./posting-document.ts";
 import {
   createScratchOrg,
   createScratchUser,

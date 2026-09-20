@@ -7,7 +7,8 @@ import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 import { toUnits } from '@openbooks/engine/src/money/money.ts'
 import { compileFormula } from '@openbooks/engine/src/assets/depreciation-formula.ts'
 import { filingAccountProblem } from '@openbooks/engine/src/payroll/filing-registry.ts'
-import { payPeriodsPerYearProblem, payScheduleSubsidiaryProblem, rescopePayScheduleRuns, semiMonthlyAnchorProblem } from '@openbooks/engine/src/payroll/run.ts'
+import { payPeriodsPerYearProblem, semiMonthlyAnchorProblem } from "@openbooks/engine/src/payroll/run-calendar.ts";
+import { payScheduleSubsidiaryProblem, rescopePayScheduleRuns } from "@openbooks/engine/src/payroll/run-lifecycle.ts";
 import { payComponentTreatmentProblem } from '@openbooks/engine/src/payroll/treatment-bases.ts'
 import { SETUP_ENTITY_BY_KEY, setupEntityForFeatureState, toSnake, type SetupEntity } from './registry'
 import {
@@ -20,6 +21,9 @@ import {
   taxRatePercentProblem,
   UUID_RE,
 } from './coerce'
+import { normalizeHrmProcessTemplateInput } from './hrm-process-template'
+import { leavePolicyRuleProblem, normalizeHrmLeavePolicyInput } from './hrm-leave-policy'
+import { applyRuleSlotColumns } from './hrm-rule-slots'
 import { normalizeTaxReturnFormInput } from './tax-return-form'
 import { saveSetupBook } from './books'
 import { auditSetupChange as audit, loadSetupAuditRow } from './audit'
@@ -828,6 +832,96 @@ export async function validateEntityIntegrity(
     }
     if (overlap.rows.length) return 'This scope already has an active rate book for part of that date range'
   }
+  // HRM process templates (0193): prove the applies_to filter targets are
+  // visible in this org — a template that can never apply is refused by
+  // field name instead of saved as applicable. The body arrives normalized
+  // (slot fields folded into appliesTo); a direct appliesTo object from
+  // API callers is accepted as-is.
+  if (entity.key === 'hrm-process-templates') {
+    let values = body
+    if (rowId) {
+      const current = await executor.execute(sql`
+        select applies_to as "appliesTo" from hrm_process_templates where id = ${rowId} and org_id = ${orgId}
+      `)
+      if (!current.rows[0]) return 'Process template not found'
+      values = { ...(current.rows[0] as Record<string, unknown>), ...body }
+    }
+    const raw = values.appliesTo
+    const parsed: { employer_subsidiary_id?: unknown; department_id?: unknown } =
+      raw === undefined || raw === null
+        ? {}
+        : typeof raw === 'string'
+          ? (() => { try { return JSON.parse(raw) as Record<string, unknown> } catch { return { __bad: true } } })()
+          : (raw as Record<string, unknown>)
+    if ((parsed as Record<string, unknown>).__bad !== undefined || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return 'The applies-to filter must be a JSON object'
+    }
+    const subsidiary = (parsed.employer_subsidiary_id ?? null) as string | null
+    const department = (parsed.department_id ?? null) as string | null
+    const uuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
+    if ((subsidiary !== null && !uuid.test(subsidiary)) || (department !== null && !uuid.test(department))) {
+      return 'The applies-to subsidiary and department must be ids, or null for all'
+    }
+    const refs = await executor.execute(sql`
+      select
+        ${subsidiary ? sql`exists(select 1 from subsidiaries where id = ${subsidiary} and org_id = ${orgId})` : sql`true`} as subsidiary_ok,
+        ${department ? sql`exists(select 1 from departments where id = ${department} and org_id = ${orgId})` : sql`true`} as department_ok
+    `)
+    if (!refs.rows[0]?.subsidiary_ok) return 'The applies-to subsidiary is not visible in this organization'
+    if (!refs.rows[0]?.department_ok) return 'The applies-to department is not visible in this organization'
+  }
+  // HRM leave policies (0194): the rule shapes are refused with the engine's
+  // own words before the write, and the applies_to targets must be visible
+  // in this org — a policy that can never apply is refused by field name.
+  if (entity.key === 'leave-policies') {
+    const problem = leavePolicyRuleProblem({
+      appliesTo: body.appliesTo,
+      accrualRule: body.accrualRule,
+      carryoverRule: body.carryoverRule,
+    })
+    if (problem) return problem
+    const applies = (body.appliesTo ?? null) as { employer_subsidiary_id?: unknown; department_id?: unknown } | null
+    if (applies) {
+      const subsidiary = (applies.employer_subsidiary_id ?? null) as string | null
+      const department = (applies.department_id ?? null) as string | null
+      const refs = await executor.execute(sql`
+        select
+          ${subsidiary ? sql`exists(select 1 from subsidiaries where id = ${subsidiary} and org_id = ${orgId})` : sql`true`} as subsidiary_ok,
+          ${department ? sql`exists(select 1 from departments where id = ${department} and org_id = ${orgId})` : sql`true`} as department_ok
+      `)
+      if (!refs.rows[0]?.subsidiary_ok) return 'The applies-to subsidiary is not visible in this organization'
+      if (!refs.rows[0]?.department_ok) return 'The applies-to department is not visible in this organization'
+    }
+  }
+  // HRM process template steps (0193): named owners must be visible parties
+  // (named_party needs exactly one, other owners need none), and the parent
+  // template must live in this org.
+  if (entity.key === 'hrm-process-template-steps') {
+    let values = body
+    if (rowId) {
+      const current = await executor.execute(sql`
+        select template_id as "templateId", owner_kind as "ownerKind", owner_party_id as "ownerPartyId"
+          from hrm_process_template_steps where id = ${rowId} and org_id = ${orgId}
+      `)
+      if (!current.rows[0]) return 'Template step not found'
+      values = { ...(current.rows[0] as Record<string, unknown>), ...body }
+    }
+    if (values.ownerKind !== undefined && !['manager', 'hr', 'employee', 'named_party'].includes(String(values.ownerKind))) {
+      return 'Assign the step to manager, hr, employee, or named_party'
+    }
+    const ownerParty = (values.ownerPartyId ?? null) as string | null
+    if (values.ownerKind === 'named_party' && ownerParty === null) return 'A named-party step needs exactly one owner party'
+    if (values.ownerKind !== undefined && values.ownerKind !== 'named_party' && ownerParty !== null) {
+      return 'Only a named-party step takes an owner party — clear it'
+    }
+    const refs = await executor.execute(sql`
+      select
+        ${values.templateId ? sql`exists(select 1 from hrm_process_templates where id = ${values.templateId} and org_id = ${orgId})` : sql`false`} as template_ok,
+        ${ownerParty ? sql`exists(select 1 from parties where id = ${ownerParty} and org_id = ${orgId})` : sql`true`} as party_ok
+    `)
+    if (!refs.rows[0]?.template_ok) return 'The parent template is not visible in this organization'
+    if (!refs.rows[0]?.party_ok) return 'The owner party is not visible in this organization'
+  }
   return null
 }
 
@@ -892,7 +986,7 @@ export async function createSetupRecord(
   if (entity.allowCreate === false) return { status: 405, body: { error: 'This configuration is declared by its module' } }
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
 
-  const body = normalizeTaxReturnFormInput(entity.key, rawBody)
+  const body = normalizeHrmLeavePolicyInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody)))
   const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
   const writableEntity = writableSetupEntity(entity, {
     multiSubsidiary: await subsidiaryFeatureEnabled(orgId),
@@ -960,9 +1054,13 @@ export async function createSetupRecord(
     if (dup.rows.length > 0) return duplicateConflict(entity.key)
   }
 
+  // Rule-slot entities: generated slot columns are never written and the
+  // folded rule objects always are (see hrm-rule-slots.ts).
+  const slotted = applyRuleSlotColumns(entity.key, body, built.cols)
+  if ('error' in slotted) return { status: 400, body: { error: slotted.error } }
   let cols = entity.key === 'fx-rates'
-    ? built.cols.filter((column) => !['source', 'provider_config_id', 'imported_at'].includes(column.column))
-    : [...built.cols]
+    ? slotted.cols.filter((column) => !['source', 'provider_config_id', 'imported_at'].includes(column.column))
+    : [...slotted.cols]
   if (entity.key === 'fx-rates' || entity.key === 'consolidated-fx-rates') {
     try {
       cols = persistFxRateCols(cols)
@@ -1097,7 +1195,7 @@ export async function updateSetupRecord(
   if (!(await setupEntityEnabled(entity, orgId))) return { status: 404, body: { error: 'unknown setup entity' } }
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
 
-  const body = normalizeTaxReturnFormInput(entity.key, rawBody)
+  const body = normalizeHrmLeavePolicyInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody)))
   const id = String(body.id ?? '')
   if (!id) return { status: 400, body: { error: 'id required' } }
   if (entity.dataSource !== 'extension-settings' && idColumn(entity) === 'id' && !UUID_RE.test(id)) {
@@ -1298,9 +1396,11 @@ export async function updateSetupRecord(
     }
   }
 
+  const slottedUpdate = applyRuleSlotColumns(entity.key, body, built.cols)
+  if ('error' in slottedUpdate) return { status: 400, body: { error: slottedUpdate.error } }
   let updateCols = entity.key === 'fx-rates'
-    ? built.cols.filter((column) => !['source', 'provider_config_id', 'imported_at'].includes(column.column))
-    : built.cols
+    ? slottedUpdate.cols.filter((column) => !['source', 'provider_config_id', 'imported_at'].includes(column.column))
+    : slottedUpdate.cols
   if (entity.key === 'fx-rates' || entity.key === 'consolidated-fx-rates') {
     try {
       updateCols = persistFxRateCols(updateCols)

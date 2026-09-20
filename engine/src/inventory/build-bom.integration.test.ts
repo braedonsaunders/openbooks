@@ -6,11 +6,9 @@ import pg from "pg";
 import { sql } from "drizzle-orm";
 import type { AssemblyBomRevisionEvidence } from "@openbooks/schema";
 import { db, env } from "../platform/db.ts";
-import {
-  buildAssembly,
-  getOnHand,
-  receiveInventory,
-} from "./inventory.ts";
+import { getOnHand } from "./position.ts";
+import { receiveInventory } from "./movements.ts";
+import { buildAssembly } from "./assembly.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -33,7 +31,7 @@ async function quietly(statement: string): Promise<void> {
 }
 
 test("assembly builds acquire and snapshot the BOM inside their transaction", () => {
-  const source = readFileSync(new URL("./inventory.ts", import.meta.url), "utf8");
+  const source = readFileSync(new URL("./assembly.ts", import.meta.url), "utf8");
   const start = source.indexOf("export async function buildAssembly(");
   const end = source.indexOf("export async function reverseAssemblyBuild(", start);
   assert.ok(start >= 0 && end > start, "buildAssembly source must be present");

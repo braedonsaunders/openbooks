@@ -1,15 +1,8 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { cmp, formatMoney, sum, toUnits } from "../money/money.ts";
-import {
-  buildCpa005File,
-  buildNachaFile,
-  decryptAccountNumber,
-  type Cpa005Payment,
-  type EftSettings,
-  type NachaEntry,
-  type NachaSettings,
-} from "../payments/payments.ts";
+import { buildCpa005File, buildNachaFile, type Cpa005Payment, type NachaEntry } from "../payments/rail-formatters.ts";
+import { decryptAccountNumber, type EftSettings, type NachaSettings } from "../payments/rail-settings.ts";
 import { stubPaymentMethods } from "./payment-method.ts";
 import { PayrollError } from "./error.ts";
 import { unsealJson } from "../platform/secrets.ts";

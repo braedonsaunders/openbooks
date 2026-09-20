@@ -4,7 +4,8 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { withSimClock } from "../platform/clock.ts";
-import { receiveInventory, revalueOpenLayersToStandardCost } from "./inventory.ts";
+import { receiveInventory } from "./movements.ts";
+import { revalueOpenLayersToStandardCost } from "./revaluation.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
 async function evidence(orgId: string) {

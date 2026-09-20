@@ -79,7 +79,7 @@ registerHooks({ resolve(specifier, context, next) {
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { seedAdoption, calculatedRun } = await import("@openbooks/engine/src/payroll/filing-test-fixtures.ts");
-const { commitPayRun } = await import("@openbooks/engine/src/payroll/run.ts");
+const { commitPayRun } = await import("@openbooks/engine/src/payroll/run-commit.ts");
 const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { GET: stubsPdf } = await import("../app/api/payroll/runs/[id]/stubs-pdf/route");
 const { POST: runAction } = await import("../app/api/payroll/runs/[id]/route");

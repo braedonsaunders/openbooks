@@ -5,7 +5,8 @@ import { allocateDocumentNumber } from "../records/numbering.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import { abs, cmp, isZero, normalizeMoney, sum } from "../money/money.ts";
 import { loadRequiredControlAccounts } from "../records/control-accounts.ts";
-import { postDocument, runPostDocumentEffects } from "./posting.ts";
+import { postDocument } from "./posting-document.ts";
+import { runPostDocumentEffects } from "./posting-dispatch.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 

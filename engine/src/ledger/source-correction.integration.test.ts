@@ -3,12 +3,9 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import {
-  postDocument,
-  PostingError,
-  regenerateGlImpactTx,
-  type PostingDeps,
-} from "./posting.ts";
+import { postDocument } from "./posting-document.ts";
+import { PostingError, type PostingDeps } from "./posting-contracts.ts";
+import { regenerateGlImpactTx } from "./posting-replay.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

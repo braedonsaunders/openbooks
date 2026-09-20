@@ -4,21 +4,24 @@
     "description": "Employment records with as-of history, headcount, and change-request tracking.",
     "tabs": {
       "overview": "Overview",
-      "changeRequests": "Change requests",
-      "departments": "Departments",
-      "reports": "Reports"
+      "positions": "Positions",
+      "processes": "Processes",
+      "leave": "Leave",
+      "myLeave": "My leave"
     },
     "vitals": {
       "headcount": "Headcount",
       "headcountSub": "As of {date}",
-      "employers": "Employers",
-      "employersSub": "{count, plural, one {# subsidiary} other {# subsidiaries}}",
-      "departments": "Departments",
-      "departmentsSub": "{count, plural, one {# department} other {# departments}}"
+      "openPositions": "Open positions",
+      "openPositionsSub": "{fte} vacant FTE",
+      "startingSoon": "Starting soon",
+      "startingSoonSub": "{count, plural, one {# ending in the next 30 days} other {# ending in the next 30 days}}",
+      "onLeave": "On leave today",
+      "onLeaveSub": "{count, plural, one {# request awaiting approval} other {# requests awaiting approval}}"
     },
     "groups": {
-      "title": "Headcount by employer and department",
-      "employer": "Employer",
+      "title": "Headcount by department",
+      "employer": "Subsidiary",
       "department": "Department",
       "headcount": "Headcount",
       "unassigned": "Unassigned",
@@ -26,7 +29,45 @@
       "total": "Total"
     },
     "directory": {
-      "title": "Directory"
+      "title": "Directory",
+      "employeesHint": "in service today",
+      "positionsHint": "open",
+      "processesHint": "{count, plural, one {# step overdue} other {# steps overdue}}",
+      "leaveHint": "{count, plural, one {# awaiting approval} other {# awaiting approval}}"
+    },
+    "vacancy": {
+      "title": "Vacancy by department",
+      "department": "Department",
+      "employer": "Subsidiary",
+      "positions": "Positions",
+      "planned": "Planned FTE",
+      "funded": "Funded FTE",
+      "filled": "Filled FTE",
+      "vacant": "Vacant FTE",
+      "unassignedDepartment": "No department",
+      "empty": "No positions are established as of {date}.",
+      "total": "Total"
+    },
+    "onboarding": {
+      "title": "Onboarding",
+      "openLabel": "Open checklists",
+      "overdueLabel": "Overdue",
+      "upcomingLabel": "Due soon",
+      "empty": "No open checklists.",
+      "viewAll": "View all processes"
+    },
+    "trend": {
+      "title": "Headcount, last 12 months",
+      "hint": "In service at each month end, through today.",
+      "series": "Headcount"
+    },
+    "attention": {
+      "title": "Needs attention",
+      "allClear": "Nothing needs attention.",
+      "pending": "{count, plural, one {# change request awaiting decision} other {# change requests awaiting decision}}",
+      "overdueSteps": "{count, plural, one {# checklist step overdue} other {# checklist steps overdue}}",
+      "leavePending": "{count, plural, one {# leave request awaiting approval} other {# leave requests awaiting approval}}",
+      "unfunded": "{fte} filled FTE with no funding behind it"
     }
   },
   "overview": {
@@ -73,6 +114,11 @@
       "proposeChange": "Propose change",
       "manageDepartments": "Manage departments",
       "openReports": "Open reports"
+    },
+    "leave": {
+      "title": "Leave",
+      "onLeaveEmpty": "Nobody on leave today.",
+      "pendingSub": "awaiting approval"
     }
   },
   "queue": {
@@ -109,25 +155,6 @@
     "draftBadge": "Actions",
     "openEmployee": "Open the employee record",
     "notAvailable": "Not available"
-  },
-  "departments": {
-    "title": "Departments",
-    "description": "Headcount as of today per department, with the employer subsidiary breakdown — resolved through the headcount service.",
-    "listTitle": "Headcount by department",
-    "listNote": "The employees list has no department filter, so drill-through opens the full list.",
-    "linksTitle": "Links",
-    "employeesLink": "Employees list",
-    "setupLink": "Manage departments"
-  },
-  "reports": {
-    "title": "Reports",
-    "description": "Workforce reports: the headcount statement preset and the employment entities, opened in the report builder.",
-    "presetTitle": "Headcount statement",
-    "presetHint": "The preset opens the org's saved plan — or the builder catalog while the seed has never materialized.",
-    "entitiesTitle": "Workforce entities",
-    "entitiesHint": "Start a new workforce report from one of the employment entities.",
-    "hubTitle": "All reports",
-    "hubDescription": "Open the reports hub."
   },
   "employment": {
     "episodes": {
@@ -238,12 +265,221 @@
         "rejected": "Rejected",
         "withdrawn": "Withdrawn",
         "applied": "Applied"
-      }
+      },
+      "kindPositionAssignment": "Position assignment",
+      "positionLabel": "Position",
+      "positionUnset": "No position",
+      "positionHint": "The funded establishment this assignment holds. The assignment keeps its own title, department, and location.",
+      "positionRequired": "Pick a position or mark the assignment as unassigned.",
+      "unassignLabel": "Unassign from the position",
+      "unassignHint": "Posts an explicit null link: the slot keeps its content but holds no establishment."
     }
   },
   "directory": {
     "employmentStatus": "Employment status",
     "serviceStart": "Service start",
     "noEmployment": "No employment"
+  },
+  "positions": {
+    "title": "Positions",
+    "description": "The funded establishment behind the headcount plan: planned, funded, and filled FTE per position with its versions, funding by period, and current holder.",
+    "statusAll": "All statuses",
+    "statusPlanned": "Planned",
+    "statusOpen": "Open",
+    "statusFilled": "Filled",
+    "statusFrozen": "Frozen",
+    "statusClosed": "Closed",
+    "columns": {
+      "code": "Code",
+      "title": "Title",
+      "status": "Status",
+      "department": "Department",
+      "planned": "Planned FTE",
+      "funded": "Funded FTE",
+      "filled": "Filled FTE",
+      "vacant": "Vacant FTE",
+      "holder": "Holder",
+      "unassignedHolder": "Vacant",
+      "holdersCount": "{count, plural, one {# holder} other {# holders}}"
+    },
+    "holdersCount": "{count, plural, one {# holder} other {# holders}}",
+    "empty": "No positions match this filter.",
+    "total": "Total",
+    "drawer": {
+      "title": "Position {code}",
+      "versions": "Versions",
+      "versionNo": "Version {no}",
+      "effective": "Effective {from} to {to}",
+      "effectiveOpen": "Effective {from}, open-ended",
+      "recorded": "Recorded {at}",
+      "funding": "Funding by period",
+      "period": "Period {from} to {to}",
+      "funded": "Funded {fte} FTE",
+      "costPlan": "Cost plan {amount} {currency}",
+      "unfunded": "No funding recorded",
+      "holder": "Current holder",
+      "holderEmployment": "Employment {id}",
+      "noHolder": "No holder as of {date}",
+      "warnings": "Warnings",
+      "refusal": "Needs attention",
+      "missing": "This position is no longer visible."
+    },
+    "add": "Add position",
+    "create": {
+      "title": "New position",
+      "code": "Position code",
+      "titleField": "Title",
+      "employer": "Employing subsidiary",
+      "department": "Department",
+      "noDepartment": "No department",
+      "plannedFte": "Planned FTE",
+      "status": "Status",
+      "effectiveFrom": "Effective from",
+      "reason": "Reason",
+      "reasonPlaceholder": "Why this position exists — recorded with its first version",
+      "submit": "Create position",
+      "failed": "The position could not be created."
+    },
+    "segmentsLabel": "Status"
+  },
+  "processes": {
+    "title": "Process checklists",
+    "description": "Onboarding, offboarding, and transfer checklists with owners, due dates, and evidence.",
+    "listTitle": "Checklists",
+    "listFailed": "Processes could not be loaded.",
+    "detailTitle": "Checklist",
+    "detailFailed": "Checklist could not be loaded.",
+    "actionFailed": "Action could not be completed.",
+    "loading": "Loading…",
+    "empty": "No checklists in this segment.",
+    "overdueBadge": "{count} overdue",
+    "progressLine": "{done} of {required} required steps · effective {effective}",
+    "dueOn": "Due {date}",
+    "required": "Required",
+    "completeStep": "Complete step",
+    "skipStep": "Skip step",
+    "completeProcess": "Complete checklist",
+    "cancelProcess": "Cancel checklist",
+    "attachmentLabel": "Evidence file",
+    "attachmentUnset": "Type to search files",
+    "skipReasonLabel": "Skip reason",
+    "skipReasonPlaceholder": "Why is this step skipped?",
+    "cancelReasonLabel": "Cancellation reason",
+    "cancelReasonPlaceholder": "Why is this checklist cancelled?",
+    "confirmReason": "Confirm",
+    "cancelReasonAbort": "Back",
+    "segments": {
+      "open": "Open",
+      "overdue": "Overdue",
+      "completed": "Completed",
+      "cancelled": "Cancelled"
+    },
+    "columns": {
+      "employee": "Employee",
+      "kind": "Kind",
+      "effective": "Effective",
+      "progress": "Progress",
+      "nextDue": "Next due",
+      "status": "Status"
+    },
+    "kinds": {
+      "onboarding": "Onboarding",
+      "offboarding": "Offboarding",
+      "transfer": "Transfer"
+    },
+    "owners": {
+      "manager": "Manager",
+      "hr": "HR",
+      "employee": "Employee",
+      "named_party": "Named person"
+    },
+    "evidence": {
+      "none": "None",
+      "acknowledgement": "Acknowledgement",
+      "attachment": "Attachment"
+    },
+    "stepStatus": {
+      "pending": "Pending",
+      "done": "Done",
+      "skipped": "Skipped"
+    },
+    "segmentsLabel": "Show"
+  },
+  "leave": {
+    "title": "Leave",
+    "description": "Requests, approvals, and the absence record — with balances in time and, where a bank exists, in value.",
+    "listTitle": "Leave requests",
+    "segmentsLabel": "Show",
+    "allLabel": "All",
+    "segments": {
+      "pending": "Pending approval",
+      "upcoming": "Upcoming",
+      "today": "On leave today",
+      "history": "History"
+    },
+    "columns": {
+      "employee": "Employee",
+      "type": "Type",
+      "range": "Range",
+      "hours": "Hours",
+      "status": "Status"
+    },
+    "emptyTitle": "No leave requests here",
+    "emptyDescription": "Nothing in this segment yet.",
+    "truncatedNote": "Showing the first {limit} requests.",
+    "unknownSegmentTitle": "Unknown segment",
+    "unknownSegment": "There is no leave segment {segment}.",
+    "refusedTitle": "Leave refused",
+    "fileTitle": "File a leave request",
+    "fileButton": "New request",
+    "recordTitle": "Record an absence",
+    "recordButton": "Record absence",
+    "calendarTitle": "Calendar by department",
+    "calendarDepartmentLabel": "Department",
+    "calendarFromLabel": "From",
+    "calendarToLabel": "To",
+    "calendarShowLabel": "Show",
+    "calendarEmpty": "No absences in this window. Pick a department to resolve the calendar.",
+    "openRequest": "Open",
+    "drawerTitle": "Leave request",
+    "detailLoading": "Loading the request…",
+    "detailFailed": "The request could not be loaded.",
+    "actionFailed": "The action failed.",
+    "submitButton": "Submit for approval",
+    "withdrawButton": "Withdraw",
+    "cancelButton": "Cancel request",
+    "withdrawReasonTitle": "Why is this request withdrawn?",
+    "cancelReasonTitle": "Why is this request cancelled?",
+    "fileFailed": "The request could not be filed.",
+    "fileEmploymentLabel": "Employment",
+    "fileEmploymentPlaceholder": "Employment id",
+    "fileTypeLabel": "Leave type",
+    "fileTypePlaceholder": "Pick a leave type",
+    "fileHoursLabel": "Hours",
+    "fileReasonLabel": "Reason",
+    "timeBalanceTitle": "Time balance as of {date}",
+    "timeBalanceValue": "{balance} hours (earned {earned}, carried {carried}, taken {taken})",
+    "unlimitedBalance": "Unlimited — no balance number.",
+    "noPolicyBalance": "No policy covers this employment on these dates.",
+    "valueBalanceTitle": "Payroll bank value as of {date}",
+    "statusNames": {
+      "draft": "Draft",
+      "submitted": "Submitted",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "withdrawn": "Withdrawn",
+      "cancelled": "Cancelled"
+    }
+  },
+  "myLeave": {
+    "title": "My leave",
+    "description": "Your requests and balances — nothing else lists here.",
+    "emptyTitle": "No requests yet",
+    "emptyDescription": "File your first request to see it here.",
+    "balancesTitle": "Balances",
+    "balancesEmpty": "No active leave types.",
+    "timeKind": "time",
+    "valueKind": "value",
+    "unlimited": "Unlimited"
   }
 }

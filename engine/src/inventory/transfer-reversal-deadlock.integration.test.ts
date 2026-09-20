@@ -4,12 +4,10 @@ import pg from "pg";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { toUnits } from "../money/money.ts";
-import {
-  getOnHand,
-  receiveInventory,
-  reverseInventoryMovement,
-  transferInventory,
-} from "./inventory.ts";
+import { getOnHand } from "./position.ts";
+import { receiveInventory } from "./movements.ts";
+import { transferInventory } from "./transfers.ts";
+import { reverseInventoryMovement } from "./reversal.ts";
 import {
   createScratchOrg,
   dropScratchOrg,

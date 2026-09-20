@@ -18,7 +18,7 @@ const { ApplicationError } = await import("./errors.ts");
 const { applicationWriteValue, normalizeDocumentRecordRevisions } = await import("./records.ts");
 const { applicationTool } = await import("./tool-catalog.ts");
 const { domainFailure } = await import("./documents.ts");
-const { DocumentEditError } = await import("../documents.ts");
+const { DocumentEditError } = await import("../../../engine/src/records/document-edit-policy.ts");
 type ApplicationContext = import("./context").ApplicationContext;
 
 const EXACT_REVISION = "2026-08-24T12:34:56.123456Z";

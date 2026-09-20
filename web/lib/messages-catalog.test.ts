@@ -2875,6 +2875,9 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   // English except for reviewed cognates, pinned to the exact term.
   // F-coord-008 grew the source to 3362 keys (allocatedThrough, dateBasis,
   // unitsTotal, depreciationMethodId); all four ship translated in zh/pt-BR.
+  // HR-5 grew it to 3416 (leave-types/leave-policies entities, leave fields,
+  // fieldHelp, leaveValueCrossing options, hrm.leave.* permission labels);
+  // all 24 ship translated in zh/pt-BR.
   const identicalByFact = new Set([
     'zh:admin.ai.agents.units.percent|%',
     'zh:admin.backupsManager.table.sha256|SHA-256',
@@ -2993,7 +2996,7 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   ])
   const source = flattenCatalog('en')
   const wanted = [...source.keys()].filter((key) => key.startsWith('admin.'))
-  assert.equal(wanted.length, 3392, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  assert.equal(wanted.length, 3466, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3230,6 +3233,10 @@ test('admin copy ships translated in de and ja (i2)', () => {
     'de:admin.setup.entities.sftp.title',
     'de:admin.setup.fieldHelp.expiryWarningDaysHint',
     'de:admin.setup.fieldHelp.graceDaysHint',
+    // HR-5: genuine German prose whose only English-looking words are the
+    // JSON accrual-kind/field identifiers that must stay exact (kind,
+    // per_year, hours, none, per_period, periods_per_year, unlimited).
+    'de:admin.setup.fieldHelp.leaveAccrualRule',
     'de:admin.setup.fields.basis',
     'de:admin.setup.fields.code',
     'de:admin.setup.fields.dimension',
@@ -3330,8 +3337,8 @@ test('admin copy ships translated in de and ja (i2)', () => {
     'ja:admin.setup.paymentProviders.webhookUrl',
     'ja:admin.setup.wizard.company.namePlaceholder',
   ])
-  const ADMIN_I2_SOURCE_COUNT = 3392
-  const ADMIN_I2_SOURCE_HASH = '45ded81ac81247bf9c12a1f55cea176badd7379624c3c6a6d02ca02bf116b1e5'
+  const ADMIN_I2_SOURCE_COUNT = 3466
+  const ADMIN_I2_SOURCE_HASH = 'd21a8ea2ac6bc0f4f9faca5bf0f5308e9ba780e3915a6751b3e0865bc1ba1015'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))
@@ -4408,6 +4415,10 @@ const I14_IDENTICAL_BY_FACT = new Set([
     'pt-BR:reports.catalog.columns.hrm_headcount.headcount|Headcount',
     'pt-BR:reports.catalog.columns.hrm_employment_history.status|Status',
     'pt-BR:reports.catalog.columns.hrm_change_requests.status|Status',
+    'de:reports.catalog.columns.hrm_positions.code|Code',
+    'de:reports.catalog.columns.hrm_positions.status|Status',
+    'fr:reports.catalog.columns.hrm_positions.code|Code',
+    'pt-BR:reports.catalog.columns.hrm_positions.status|Status',
   "de:accounts.types.assetBank|Bank",
   "de:common.actions.pdf|PDF",
   "de:common.auditTrail.systemActor|System",
@@ -4849,6 +4860,10 @@ const I14_IDENTICAL_BY_FACT = new Set([
   "fr:reports.run.csvSection|Section",
   "fr:reports.run.subtotal|{level} — total",
   "fr:reports.run.summarySource|Source",
+  "fr:reports.catalog.columns.hrm_leave_absences.on_date|Date",
+  "fr:reports.catalog.columns.hrm_leave_absences.source|Source",
+  "fr:reports.catalog.columns.hrm_leave_absences.id|Absence (id)",
+  "de:reports.catalog.columns.hrm_leave_absences.person|Person",
   "fr:reports.run.summaryTotal|Total {measure}",
   "fr:reports.schedule.recipientsPlaceholder|finance@example.com, cfo@example.com",
   "fr:reports.statement.sectionTotal|Total {section}",
@@ -5089,7 +5104,7 @@ const I14_IDENTICAL_BY_FACT = new Set([
 const I14_FILE_COUNTS: Record<string, number> = {
   "items": 161,
   "inventory": 104,
-  "reports": 1243,
+  "reports": 1290,
   "sync": 172,
   "login": 33,
   "accounts": 82,
@@ -5102,7 +5117,7 @@ const I14_FILE_COUNTS: Record<string, number> = {
   "data": 85,
   "journal": 58,
   "labor-pricing": 128,
-  "nav": 109,
+  "nav": 106,
   "parties": 221,
   "payments": 255,
   "pdfTemplates": 50,

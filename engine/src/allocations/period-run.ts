@@ -13,7 +13,7 @@ import {
   reverseProjectGlEntryWithinTransaction,
   type GlLine,
 } from "../projects/recognition.ts";
-import { assertPeriodModulesOpen, CloseError } from "../close/close.ts";
+import { assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
 import type {
   AccountScope,

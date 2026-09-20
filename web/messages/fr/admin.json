@@ -833,8 +833,14 @@
   },
   "permissions": {
     "hrm_employment_read": "Consulter les dossiers d'emploi",
+    "hrm_leave_read": "Consulter les dossiers de congé",
+    "hrm_leave_request": "Demander un congé pour son propre emploi",
+    "hrm_leave_approve": "Statuer sur les demandes de congé",
+    "hrm_leave_manage": "Configurer les types et politiques de congé",
     "hrm_employment_manage": "Rédiger des changements d'emploi",
     "hrm_employment_approve": "Décider des changements d'emploi",
+    "hrm_position_read": "Consulter les postes et le plan d'effectifs",
+    "hrm_position_manage": "Créer, modifier, financer et clore des postes",
     "groups": {
       "hrm": "Ressources humaines",
       "gl": "Grand livre",
@@ -962,7 +968,9 @@
     "allocations_run": "Prévisualiser, comptabiliser, contre-passer et réexécuter les répartitions",
     "payroll_manage": "Configurer la paie et les profils des employés",
     "payroll_read": "Consulter les cycles et les bulletins de paie",
-    "payroll_run": "Créer, calculer et valider les cycles de paie"
+    "payroll_run": "Créer, calculer et valider les cycles de paie",
+    "hrm_process_read": "Voir les listes de processus",
+    "hrm_process_manage": "Ouvrir, terminer et annuler les listes de processus"
   },
   "ai": {
     "metaTitle": "Fournisseurs d'IA",
@@ -2355,6 +2363,26 @@
       "extension-settings": {
         "title": "Paramètres des applications",
         "description": "Configurez les paramètres déclarés par les applications installées. Les modifications conservent les valeurs antérieures et leurs dates d’effet."
+      },
+      "leave-types": {
+        "title": "Types de congé",
+        "singularTitle": "Type de congé",
+        "description": "Les absences accordées par votre organisation — vacances, maladie, sans solde — et le mouvement de paie éventuel de chacune. Les compteurs de paie ne se configurent pas ici."
+      },
+      "leave-policies": {
+        "title": "Politiques de congé",
+        "singularTitle": "Politique de congé",
+        "description": "Le temps accumulé par chaque type, qui il couvre et le préavis requis. Droit en temps ; la valeur est calculée par la paie."
+      },
+      "hrm-process-templates": {
+        "title": "Modèles de processus",
+        "singularTitle": "Modèle de processus",
+        "description": "Listes d'intégration, de départ et de mutation : les étapes, responsables, délais et preuves avec lesquels un processus s'ouvre."
+      },
+      "hrm-process-template-steps": {
+        "title": "Étapes de modèle de processus",
+        "singularTitle": "Étape de modèle de processus",
+        "description": "Une étape ordonnée d'un modèle de processus avec son responsable, son délai et sa règle de preuve."
       }
     },
     "fields": {
@@ -2621,7 +2649,30 @@
       "dateBasis": "Base de dates",
       "unitsTotal": "Unités totales",
       "network": "Réseau",
-      "lastFour": "Quatre derniers"
+      "lastFour": "Quatre derniers",
+      "templateId": "Modèle",
+      "position": "Position",
+      "title": "Titre",
+      "ownerKind": "Responsable",
+      "ownerPartyId": "Partie responsable",
+      "dueOffsetDays": "Décalage d'échéance (jours)",
+      "required": "Requis",
+      "evidenceKind": "Preuve",
+      "appliesEmployerSubsidiaryId": "Filiale concernée",
+      "appliesDepartmentId": "Service concerné",
+      "paid": "Payé",
+      "valueCrossing": "Génère en paie",
+      "requiresAttachment": "Justificatif requis",
+      "leaveTypeId": "Type de congé",
+      "minimumNoticeDays": "Préavis minimum (jours)",
+      "accrualRule": "Règle d'accumulation (JSON)",
+      "carryoverRule": "Règle de report (JSON)",
+      "accrualKind": "Acquisition",
+      "accrualHours": "Heures d'acquisition",
+      "accrualPeriodsPerYear": "Périodes d'acquisition par an",
+      "carryoverKind": "Report",
+      "carryoverHours": "Plafond de report (heures)",
+      "carryoverExpiresAfterDays": "Le report expire après (jours)"
     },
     "fieldHelp": {
       "gapless": "Sans rupture signifie que chaque numéro de la séquence doit être justifié, sans aucun numéro sauté. Activez cette option uniquement si vos obligations légales ou d’audit imposent une numérotation ininterrompue.",
@@ -2673,7 +2724,18 @@
       "protectionBase": "Ce contre quoi le plafond de la retenue est mesuré. La paie nette est la paie après toute autre retenue. Les gains disponibles ne comptent que les gains et retenues marqués dans l’assiette ci-dessous : c’est ainsi qu’une allocation ou un avantage reste hors de la part.",
       "protectionMaxPercent": "Le maximum que cette retenue peut prélever de cette assiette — 20 % pour une saisie-arrêt ordinaire en Ontario, 50 % pour une pension alimentaire, 25 % sous le CCPA américain. Ce qui ne tient pas est signalé comme manque à gagner sur le cycle de paie.",
       "protectionPriority": "Quel ordre l’emporte quand plusieurs retenues protégées se disputent la même paie. Au plus petit d’abord ; les ordonnances alimentaires priment normalement sur les créanciers ordinaires.",
-      "stateCode": "Requis pour, et seulement pour, les types de programme inscrits par État ou région (comme les comptes d’assurance-chômage d’État) — validé contre la déclaration de l’ensemble réglementaire du pays quand le compte est enregistré."
+      "stateCode": "Requis pour, et seulement pour, les types de programme inscrits par État ou région (comme les comptes d’assurance-chômage d’État) — validé contre la déclaration de l’ensemble réglementaire du pays quand le compte est enregistré.",
+      "hrmProcessAppliesSubsidiary": "Vide : le modèle s'applique à toutes les filiales.",
+      "hrmProcessAppliesDepartment": "Vide : le modèle s'applique à tous les services.",
+      "leaveValueCrossing": "Quelle entrée de paie un jour d'absence approuvé génère. Aucune ne touche jamais le livre de paie ; paiement et accumulation transitent en heures que le calcul valorise.",
+      "leaveAppliesSubsidiary": "Vide signifie que la politique s'applique à toutes les filiales.",
+      "leaveAppliesDepartment": "Vide signifie que la politique s'applique à tous les services.",
+      "leaveAccrualKind": "Comment le temps est acquis : aucun, par période, par an ou illimité.",
+      "leaveAccrualHours": "Heures acquises par période ou par an (obligatoire pour ces types).",
+      "leaveAccrualPeriodsPerYear": "Périodes entières dans une année d'acquisition (obligatoire pour l'acquisition par période).",
+      "leaveCarryoverKind": "Ce qu'il advient du temps non utilisé en fin d'année : rien, tout reporter ou reporter jusqu'à un plafond.",
+      "leaveCarryoverHours": "Heures reportées au maximum (obligatoire pour « jusqu'à un plafond »).",
+      "leaveCarryoverExpiresAfterDays": "Jours après le début de la nouvelle année avant l'expiration des heures reportées ; vide signifie sans expiration."
     },
     "options": {
       "timeClassification": {
@@ -3010,6 +3072,38 @@
         "qst": "TVQ",
         "salesUse": "Taxe de vente et d’utilisation",
         "vat": "TVA"
+      },
+      "hrmProcessKind": {
+        "onboarding": "Intégration",
+        "offboarding": "Départ",
+        "transfer": "Transfert"
+      },
+      "hrmStepOwner": {
+        "manager": "Manager",
+        "hr": "RH",
+        "employee": "Employé",
+        "namedParty": "Personne désignée"
+      },
+      "hrmStepEvidence": {
+        "none": "Aucune",
+        "acknowledgement": "Accusé de réception",
+        "attachment": "Pièce jointe"
+      },
+      "leaveValueCrossing": {
+        "none": "Aucun — sans solde ou sur salaire",
+        "payout": "Paiement depuis le compteur",
+        "bankIn": "Compter en temps accumulé"
+      },
+      "leaveAccrualKind": {
+        "none": "Aucune",
+        "per_period": "Par période",
+        "per_year": "Par an",
+        "unlimited": "Illimitée"
+      },
+      "leaveCarryoverKind": {
+        "none": "Aucun",
+        "carry_all": "Tout reporter",
+        "carry_up_to": "Reporter jusqu'à un plafond"
       }
     },
     "laborCosting": {

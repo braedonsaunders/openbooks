@@ -63,6 +63,7 @@ export interface TargetResult {
   readonly target: string;
   readonly status: TargetStatus;
   readonly needsDb: boolean;
+  readonly unmeasuredReason?: string;
   readonly killed: number;
   readonly survived: number;
   readonly timedOut: number;
@@ -107,7 +108,7 @@ interface TapSummary {
   crashed: boolean;
 }
 
-function parseTap(output: string, exitCode: number | null): TapSummary {
+export function parseTap(output: string, exitCode: number | null): TapSummary {
   const pick = (label: string): number => {
     const m = output.match(new RegExp(`^# ${label} (\\d+)`, "m"));
     return m ? Number(m[1]) : 0;
@@ -116,7 +117,7 @@ function parseTap(output: string, exitCode: number | null): TapSummary {
     tests: pick("tests"),
     pass: pick("pass"),
     fail: pick("fail"),
-    skipped: pick("skip"),
+    skipped: pick("skipped"),
     crashed: false,
   };
   if (summary.fail === 0 && /^not ok /m.test(output)) {
@@ -328,7 +329,7 @@ function verdictFor(summary: TapSummary, timedOut: boolean): { status: MutantSta
   return { status: "skipped", detail: "zero tests executed (self-skipped without a database?)" };
 }
 
-async function runTarget(
+export async function runTarget(
   scratch: string,
   target: MutationTargetConfig,
   options: RunMutationOptions,
@@ -341,6 +342,14 @@ async function runTarget(
     total: 0, measured: 0, ratio: null, baselineFiles: [], mutants: [],
   };
 
+  // A pure neighbor passing does not measure a transaction owner. A reviewed
+  // database requirement is decided before baseline execution, never inferred
+  // from a low score or a failed import.
+  if (!options.useDb && target.needsDb === true) {
+    if (!target.needsDbReason?.trim()) throw new Error(`${target.path}: database requirement has no source rationale`);
+    return { ...empty, status: "baseline-skipped", unmeasuredReason: target.needsDbReason };
+  }
+
   // Baseline: every mapped file individually, so one bad file cannot poison
   // the verdict, and files that self-skip (no DB) are known up front.
   const baselineFiles: BaselineFile[] = [];
@@ -352,13 +361,6 @@ async function runTarget(
         file, tests: summary.tests, pass: summary.pass, fail: summary.fail,
         skipped: summary.skipped, executed: summary.pass + summary.fail > 0,
       };
-      // Without a database a red baseline on a needsDb target only proves
-      // the file needs the database (e.g. a test that issues a real query
-      // instead of self-skipping). Report it as skipped-with-cause; the DB
-      // run delivers the real verdict. In db mode a red baseline blocks.
-      if (!options.useDb && target.needsDb === true) {
-        return { ...empty, status: "baseline-skipped", baselineFiles: [...baselineFiles, failed] };
-      }
       return { ...empty, status: "baseline-failed", baselineFiles: [...baselineFiles, failed] };
     }
     baselineFiles.push({

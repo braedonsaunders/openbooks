@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { ArrowUpRight, CheckCircle2, CircleAlert } from 'lucide-react'
+import { readApiErrorMessage } from '../../../../../lib/api-error'
 import { Button, Input, Label } from '@openbooks/ui'
 import type { StubPasswordPolicy } from './PayrollSetupWorkspace'
 
@@ -41,8 +42,10 @@ export function PayrollPaydaySettings(props: {
           stubPassword: { enabled: stubPasswordEnabled, expression: stubPasswordExpression },
         }),
       })
-      const j = await res.json()
-      if (!res.ok) throw new Error(j.error ?? 'failed')
+      // The status is checked before the body is parsed: a non-JSON error body
+      // (this route rethrows non-domain errors as an unhandled empty 500) must
+      // surface the failure, never a SyntaxError from res.json().
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
       toast.success(t('saved'))
       router.refresh()
     } catch (e) {

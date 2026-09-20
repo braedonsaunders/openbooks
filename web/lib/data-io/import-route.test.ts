@@ -293,8 +293,9 @@ const hooks = registerHooks({
     const mockUrl = new Map([
       ['drizzle-orm', 'mock:drizzle'],
       ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-      ['@openbooks/engine/src/ledger/posting.ts', 'mock:posting'],
-      ['../documents', 'mock:documents'],
+      ['@openbooks/engine/src/ledger/posting-document.ts', 'mock:posting'],
+      ['../../../engine/src/ledger/document-service.ts', 'mock:documents'],
+      ['../bills.ts', 'mock:documents'],
       ['./resource-core', 'mock:resource-core'],
       ['../../../../lib/authz', 'mock:authz'],
       ['../../../../lib/data-io/resources', 'mock:resources'],

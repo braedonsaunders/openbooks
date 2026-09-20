@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
+import { withSimClock } from '@openbooks/engine/src/platform/clock.ts'
 
 type CancelBehavior =
   | { mode: 'cancelled' }
@@ -64,25 +65,6 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'business-date',
-    `export async function businessToday() { return '2026-08-31' }`,
-  ],
-  [
-    'json',
-    `
-      import { NextResponse } from 'next/server'
-      import { z } from 'zod'
-      export const uuidId = z.string().uuid()
-      export function isoDate() { return z.string().regex(/^\\d{4}-\\d{2}-\\d{2}$/) }
-      export async function parseJsonBody(req, schema, opts) {
-        const raw = await req.json().catch(() => undefined)
-        const parsed = schema.safeParse(raw)
-        if (!parsed.success) return { ok: false, response: NextResponse.json({ error: 'invalid request body' }, { status: opts?.status ?? 400 }) }
-        return { ok: true, data: parsed.data }
-      }
-    `,
-  ],
-  [
     'revenue-recognition',
     `
       const state = globalThis[Symbol.for('openbooks.cancel-recognition-route-test')]
@@ -133,18 +115,21 @@ const mockUrl = (name: string) => `${selfUrl}?cancel-mock=${name}`
 const mockUrls = new Map<string, string>([
   ['../../../../lib/authz', mockUrl('authz')],
   ['../../../../lib/features', mockUrl('features')],
-  ['../../../../lib/documents', mockUrl('documents')],
-  ['@openbooks/engine/src/platform/business-date.ts', mockUrl('business-date')],
+  ['../../../../lib/documents.ts', mockUrl('documents')],
   ['@openbooks/engine/src/revenue/recognition.ts', mockUrl('revenue-recognition')],
   ['@openbooks/engine/src/ledger/document-void.ts', mockUrl('document-void')],
   ['@openbooks/engine/src/platform/db.ts', mockUrl('db')],
-  ['../../../../lib/api/json', mockUrl('json')],
 ])
 
 const hooks = registerHooks({
   resolve(specifier, _context, nextResolve) {
     if (specifier === 'server-only') {
       return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
+    }
+    // The real business-date service owns calendar validation and reads its
+    // timezone through the same DB seam as the route.
+    if (specifier === './db.ts' && _context.parentURL?.endsWith('/platform/business-date.ts')) {
+      return { shortCircuit: true, url: mockUrl('db') }
     }
     const mocked = mockUrls.get(specifier)
     if (mocked) return { shortCircuit: true, url: mocked }
@@ -172,13 +157,13 @@ function reset(): void {
 }
 
 function post(body: unknown): Promise<Response> {
-  return POST(
+  return withSimClock('2026-08-31', () => POST(
     new Request('http://openbooks.test/api/revenue/cancel-recognition', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
     }),
-  )
+  ))
 }
 
 test('cancelling a posted invoice reaches the engine with reason and date', async () => {

@@ -264,7 +264,7 @@ const hooks = registerHooks({
       ['drizzle-orm', 'mock:drizzle'],
       ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
       ['./authz', 'mock:authz'],
-      ['./documents', 'mock:documents'],
+      ['./documents.ts', 'mock:documents'],
       ['./features', 'mock:features'],
     ]).get(specifier)
     // The './documents' mock stands in for web/lib/documents.ts only: schema

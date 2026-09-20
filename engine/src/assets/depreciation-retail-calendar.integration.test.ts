@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { generateAccountingPeriods } from "../close/close.ts";
+import { generateAccountingPeriods } from "../close/calendar.ts";
 import { db } from "../platform/db.ts";
 import { buildSchedule } from "./depreciation.ts";
 import { toUnits } from "../money/money.ts";

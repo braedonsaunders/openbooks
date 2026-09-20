@@ -32,7 +32,8 @@
       "ordersDescription": "Orçamentos, pedidos de venda e pedidos de compra em aberto — quantidade, valor e conversão",
       "cashFlowIndirectTitle": "Fluxo de caixa (indireto)",
       "cashFlowIndirectDescription": "Método indireto — lucro líquido reconciliado ao caixa operacional com detalhe do capital de giro",
-      "payrollDescription": "Relatório de folha integrado sobre contracheques — dados salariais exigem a permissão da folha."
+      "payrollDescription": "Relatório de folha integrado sobre contracheques — dados salariais exigem a permissão da folha.",
+      "hrmDescription": "Relatório integrado de força de trabalho sobre registros de emprego — requer a permissão de emprego do RH."
     },
     "groups": {
       "financial": "Demonstrações Financeiras",
@@ -42,7 +43,8 @@
       "custom": "Personalizados e Salvos",
       "projects": "Projetos",
       "orders": "Vendas e pedidos",
-      "payroll": "Folha de pagamento"
+      "payroll": "Folha de pagamento",
+      "hrm": "Recursos humanos"
     },
     "customStudio": {
       "title": "Construtor de relatórios personalizados",
@@ -642,6 +644,18 @@
       "hrm_change_requests": {
         "label": "Solicitações de alteração",
         "description": "Uma linha por solicitação de alteração de emprego: status, tipo, emprego, solicitante, carimbos de envio e decisão, execução de aprovação vinculada e vínculo de revisão. Requer a permissão de emprego de RH."
+      },
+      "hrm_positions": {
+        "label": "Posições",
+        "description": "Uma linha por posição estabelecida na data do relatório: código, título, status, departamento, empregador e FTE planejado, financiado e preenchido. Requer a permissão de posições do RH."
+      },
+      "hrm_processes": {
+        "label": "Listas de processos",
+        "description": "Uma linha por etapa de lista de processos — tipo e status do processo, colaborador, modelo, responsável pela etapa, vencimento, tipo de evidência e status da etapa com sua evidência. Requer a permissão de processos de RH."
+      },
+      "hrm_leave_absences": {
+        "label": "Ausências",
+        "description": "Uma linha por dia de ausência — pessoa, empregador, departamento da época, tipo e horas. Reversões são linhas próprias; somas liquidam. Requer a permissão de licença."
       }
     },
     "columns": {
@@ -1208,6 +1222,46 @@
         "created_at": "Criado em",
         "id": "Solicitação (id)",
         "employment_id": "Emprego (id)"
+      },
+      "hrm_positions": {
+        "code": "Código",
+        "title": "Título",
+        "status": "Status",
+        "employer": "Empregador",
+        "department": "Departamento",
+        "planned_fte": "FTE planejado",
+        "funded_fte": "FTE financiado",
+        "filled_fte": "FTE preenchido",
+        "vacant_fte": "FTE vago",
+        "position_id": "Posição (id)"
+      },
+      "hrm_processes": {
+        "process_kind": "Tipo de processo",
+        "process_status": "Status do processo",
+        "effective_date": "Data de vigência",
+        "employee": "Colaborador",
+        "employer": "Empregador",
+        "template": "Modelo",
+        "step": "Etapa",
+        "step_status": "Status da etapa",
+        "owner": "Responsável",
+        "due_on": "Vencimento",
+        "evidence": "Evidência",
+        "done_at": "Concluído em",
+        "skip_reason": "Motivo",
+        "process_id": "Processo (id)",
+        "employment_id": "Emprego (id)"
+      },
+      "hrm_leave_absences": {
+        "on_date": "Data",
+        "person": "Pessoa",
+        "employer": "Empregador",
+        "department": "Departamento",
+        "leave_type": "Tipo de licença",
+        "hours": "Horas",
+        "source": "Origem",
+        "employment_id": "Emprego (id)",
+        "id": "Ausência (id)"
       }
     },
     "enumValues": {
@@ -1285,7 +1339,12 @@
       "hire": "Contratação",
       "status_change": "Alteração de status",
       "assignment_change": "Alteração de atribuição",
-      "termination": "Desligamento"
+      "termination": "Desligamento",
+      "frozen": "Congelado",
+      "filled": "Preenchido",
+      "open": "Aberto",
+      "planned": "Planejado",
+      "position_assignment": "Atribuição de posição"
     }
   },
   "operators": {

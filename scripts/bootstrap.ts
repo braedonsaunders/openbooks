@@ -26,7 +26,7 @@ import {
   describeBootstrapMigrationFailure,
   releaseMigrationClient,
 } from "./bootstrap-migration-client.ts";
-import { ensureCloseDefaults } from "../engine/src/close/close.ts";
+import { ensureCloseDefaults } from "../engine/src/close/defaults.ts";
 import { provisionOrganizationDefaults } from "../engine/src/provisioning/organization-provisioning.ts";
 import { SUPPORTED_CURRENCIES } from "../engine/src/fx/currencies.ts";
 import { BUILT_IN_ROLES } from "../web/lib/permissions.ts";

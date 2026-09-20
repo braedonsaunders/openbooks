@@ -1,15 +1,12 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import {
-  createPaymentDocument,
-  postPaymentWithApplications,
-  sameCurrencyAllocation,
-  updateDraftPayment,
-  type AllocationInput,
-} from "../payments/payments.ts";
+import { createPaymentDocument, updateDraftPayment } from "../payments/payment-documents.ts";
+import { postPaymentWithApplications } from "../payments/payment-posting.ts";
+import { sameCurrencyAllocation, type AllocationInput } from "../payments/settlement-policy.ts";
 import { createScriptJournal, type ScriptJournalLine } from "../ledger/journal-writes.ts";
 import { sum } from "../money/money.ts";
-import { setPeriodLockState, CLOSE_MODULES } from "../close/close.ts";
+import { setPeriodLockState } from "../close/period-locks.ts";
+import { CLOSE_MODULES } from "../close/period-policy.ts";
 import {
   collectibleOpenItems,
   postDraftDocument,

@@ -6,9 +6,10 @@ import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts
 import { addCalendarDays, parseIsoDate, businessToday } from "../platform/business-date.ts";
 import { now } from "../platform/clock.ts";
 import { loadRequiredControlAccounts } from "../records/control-accounts.ts";
-import { inventoryFeatureEnabled } from "../inventory/inventory.ts";
+import { inventoryFeatureEnabled } from "../inventory/profile-policy.ts";
 import { add, cmp, neg, sum } from "../money/money.ts";
-import { postDocument, type PostingDeps } from "../ledger/posting.ts";
+import { postDocument } from "../ledger/posting-document.ts";
+import { type PostingDeps } from "../ledger/posting-contracts.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { computeLineTaxes, type TaxComponentConfig } from "../tax/tax.ts";
 import { loadTaxProfileConfig, persistLineTaxComponents } from "../tax/persist.ts";

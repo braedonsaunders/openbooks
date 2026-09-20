@@ -99,6 +99,8 @@ const payrollProfileCountryNoDefaultMigrationPath =
   "schema/migrations/generated/0190_payroll_profile_country_no_default.sql";
 const payrollProfilePackFactsMigrationPath =
   "schema/migrations/generated/0191_payroll_profile_pack_facts.sql";
+const hrmEmploymentProcessesMigrationPath =
+  "schema/migrations/generated/0193_hrm_employment_processes.sql";
 
 test("payroll opening-balance migration rebuilds its widened governed view safely", () => {
   const migration = readFileSync(payrollOpeningBalanceSecondOrderMigrationPath, "utf8");
@@ -381,6 +383,9 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0189_pay_components_country_identity.sql",
     "0190_payroll_profile_country_no_default.sql",
     "0191_payroll_profile_pack_facts.sql",
+    "0192_hrm_positions_headcount_plan.sql",
+    "0193_hrm_employment_processes.sql",
+    "0194_hrm_leave_attendance.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -1798,6 +1803,25 @@ test("API keys state their scopes explicitly: legacy empty sets freeze to the ca
     "hrm.employment.read",
     "hrm.employment.manage",
     "hrm.employment.approve",
+    // HRM positions (0192): added after the snapshot, so a LEGACY API key
+    // with an empty scope set does NOT gain them — the headcount plan is
+    // reachable only by a key that names these scopes. Deliberate: this is
+    // an authorization decision, not a snapshot bump.
+    "hrm.position.read",
+    "hrm.position.manage",
+    // HRM process checklists (0193): read sees checklists, manage opens,
+    // completes, and cancels them — granted to the same built-in roles as
+    // the employment read/manage keys (admin only, via the catalogue
+    // spread; the role seed refreshes on re-run).
+    "hrm.process.read",
+    "hrm.process.manage",
+    // HR-5 leave and attendance (migration 0194): read sees leave records,
+    // request files for one's own employment only, approve decides, manage
+    // configures types/policies. Admin-only like the employment keys above.
+    "hrm.leave.read",
+    "hrm.leave.request",
+    "hrm.leave.approve",
+    "hrm.leave.manage",
   ];
   assert.deepEqual(
     snapshot,
@@ -1899,6 +1923,52 @@ test("payroll profile pack facts add nullable columns and fail closed", () => {
   assert.doesNotMatch(migration, /UPDATE\s+public\.employee_payroll_profiles/);
   assert.doesNotMatch(migration, /0001_baseline/);
   assert.match(migration, /SAFETY ARGUMENT/);
+  assert.match(migration, /[^\n]\n$/);
+  assert.doesNotMatch(migration, /\n\n$/);
+});
+
+test("hrm employment processes carry snapshot history with org isolation", () => {
+  // 0193 opens onboarding/offboarding/transfer checklists as snapshots: the
+  // runtime rows copy the template, terminal rows are immutable except an
+  // audit touch, deletes ride the governed amend path only, and every table
+  // enforces org isolation in RLS. The one-open-process-per-kind rule is a
+  // partial unique (a trigger would go blind under READ COMMITTED).
+  const migration = readFileSync(hrmEmploymentProcessesMigrationPath, "utf8");
+  for (const table of [
+    "hrm_process_templates",
+    "hrm_process_template_steps",
+    "hrm_processes",
+    "hrm_process_steps",
+  ]) {
+    assert.match(migration, new RegExp(`CREATE TABLE IF NOT EXISTS public\\.${table} \\(`));
+  }
+  assert.match(migration, /hrm_processes_open_one_per_kind/);
+  assert.match(migration, /CREATE UNIQUE INDEX IF NOT EXISTS hrm_processes_open_one_per_kind\s+ON public\.hrm_processes \(org_id, employment_id, kind\) WHERE status = 'open'/);
+  assert.match(
+    migration,
+    /'hrm_process_templates', 'hrm_process_template_steps',\s*\n\s*'hrm_processes', 'hrm_process_steps'/,
+  );
+  assert.match(migration, /FORCE ROW LEVEL SECURITY/);
+  assert.match(migration, /openbooks:org_isolation:v1/);
+  assert.match(migration, /openbooks\.amend/);
+  assert.match(migration, /hrm_process_template_no_delete/);
+  assert.match(migration, /set is_active = false to retire it instead of deleting it/);
+  // Terminal immutability is an audit-touch allowlist, not a freeze: the
+  // prose claim ("except a pure audit touch") must show in the DDL.
+  assert.match(migration, /to_jsonb\(NEW\) - ARRAY\['updated_at','updated_by'\]/);
+  // The applies_to slots project as read-only generated columns for
+  // structured surfaces (never a raw-JSON workforce field): readable, never
+  // written, with the shape CHECK staying the single authority.
+  assert.match(migration, /applies_employer_subsidiary_id uuid\s*\n\s*GENERATED ALWAYS AS/);
+  assert.match(migration, /applies_department_id uuid\s*\n\s*GENERATED ALWAYS AS/);
+  // Evidence pins its file and its actor: composite tenant FK plus frozen
+  // users evidence, never nulled away.
+  assert.match(migration, /hrm_process_steps_attachment_tenant_fkey/);
+  assert.match(migration, /files_org_id_id_unique/);
+  assert.match(migration, /hrm_process_steps_done_by_fkey/);
+  assert.doesNotMatch(migration, /on conflict do nothing/i);
+  assert.doesNotMatch(migration, /SELECT public\.openbooks_refresh_query_catalog\(\)/);
+  assert.doesNotMatch(migration, /0001_baseline/);
   assert.match(migration, /[^\n]\n$/);
   assert.doesNotMatch(migration, /\n\n$/);
 });

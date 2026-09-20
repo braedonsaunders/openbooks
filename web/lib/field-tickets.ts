@@ -9,11 +9,9 @@ import {
 } from '@openbooks/engine/src/projects/field-ticket-labor-evidence.ts'
 import { mul, div, isZero, add, sum, cmp, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
-import { nextDocumentNumber } from './bills'
-import {
-  
-  documentRevisionCounterSql,
-  runDocumentVersionedTransaction } from './documents'
+import { nextDocumentNumber } from "./bills.ts";
+import { documentRevisionCounterSql } from "../../engine/src/records/revision.ts";
+import { runDocumentVersionedTransaction } from "../../engine/src/records/document-edit-policy.ts";
 import { canonicalDecimal } from './exact-decimal'
 import { unpricedLaborHours as fieldTicketUnpricedHours } from './field-ticket-totals'
 import { acquireFeatureGateLock, isFeatureEnabled } from './features'

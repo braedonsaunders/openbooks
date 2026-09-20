@@ -28,7 +28,12 @@ import type { ReportEntity } from './entities'
 // limit resolution; it is never CURRENT_DATE.
 
 export const HRM_EMPLOYMENT_READ_PERMISSION = 'hrm.employment.read'
+export const HRM_POSITION_READ_PERMISSION = 'hrm.position.read'
+export const HRM_PROCESS_READ_PERMISSION = 'hrm.process.read'
+export const HRM_LEAVE_READ_PERMISSION = 'hrm.leave.read'
 export const HRM_FEATURE_KEY = 'hrm'
+
+const HRM_POSITION_STATUSES = ['planned', 'open', 'filled', 'frozen', 'closed'] as const
 
 const HRM_EMPLOYMENT_STATUSES = ['offered', 'active', 'on_leave', 'suspended', 'terminated'] as const
 const HRM_REQUEST_STATUSES = [
@@ -39,7 +44,15 @@ const HRM_REQUEST_STATUSES = [
   'withdrawn',
   'applied',
 ] as const
-const HRM_REQUEST_KINDS = ['hire', 'status_change', 'assignment_change', 'termination'] as const
+const HRM_REQUEST_KINDS = ['hire', 'status_change', 'assignment_change', 'termination', 'position_assignment'] as const
+
+const HRM_ABSENCE_SOURCES = ['request', 'recorded'] as const
+
+const HRM_PROCESS_KINDS = ['onboarding', 'offboarding', 'transfer'] as const
+const HRM_PROCESS_STATUSES = ['open', 'completed', 'cancelled'] as const
+const HRM_STEP_STATUSES = ['pending', 'done', 'skipped'] as const
+const HRM_STEP_OWNERS = ['manager', 'hr', 'employee', 'named_party'] as const
+const HRM_STEP_EVIDENCE = ['none', 'acknowledgement', 'attachment'] as const
 
 export const HRM_REPORT_ENTITIES: ReportEntity[] = [
   {
@@ -189,5 +202,163 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
       { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'r.employment_id' },
     ],
     defaultSort: { column: 'created_at', direction: 'desc' },
+  },
+  {
+    key: 'hrm_positions',
+    label: 'Positions',
+    category: 'hrm',
+    description:
+      'One row per established position at the report as-of date: code, title, status, department, employer, and planned versus funded versus filled FTE. Requires the HRM position permission.',
+    // One row per position whose version covers the as-of day (half-open
+    // effective containment, currently-known revisions only — the same
+    // contract the vacancy read resolves through temporal.ts). Filled sums
+    // the live primary assignment versions naming the position; funded sums
+    // the plan rows whose fiscal period contains the as-of day. Funded is
+    // NULL (not zero) when no plan row covers the day: SUM ignores it, so a
+    // missing plan can never deflate the funded total into a
+    // precise-looking wrong number — the unfunded gap stays visible.
+    from: `positions p
+  JOIN LATERAL (
+    SELECT title, status, department_id, employer_subsidiary_id, planned_fte
+      FROM position_versions
+     WHERE org_id = p.org_id AND position_id = p.id AND recorded_until IS NULL
+       AND effective_from <= ${REPORT_AS_OF}
+       AND (effective_to IS NULL OR effective_to > ${REPORT_AS_OF})
+     ORDER BY version_no DESC LIMIT 1
+  ) v ON TRUE
+  JOIN subsidiaries sub ON sub.id = v.employer_subsidiary_id AND sub.org_id = p.org_id
+  LEFT JOIN departments dep ON dep.id = v.department_id AND dep.org_id = p.org_id
+  LEFT JOIN LATERAL (
+    SELECT sum(f.funded_fte) AS funded_fte
+      FROM position_funding f
+      JOIN accounting_periods per ON per.id = f.period_id
+     WHERE f.org_id = p.org_id AND f.position_id = p.id
+       AND per.starts_on <= ${REPORT_AS_OF} AND per.ends_on >= ${REPORT_AS_OF}
+  ) fund ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT sum(av.fte) AS filled_fte
+      FROM employment_assignment_versions av
+     WHERE av.org_id = p.org_id AND av.position_id = p.id AND av.is_primary
+       AND av.recorded_until IS NULL
+       AND av.effective_from <= ${REPORT_AS_OF}
+       AND (av.effective_to IS NULL OR av.effective_to > ${REPORT_AS_OF})
+  ) fill ON TRUE`,
+    orgColumn: 'p.org_id',
+    // The position's employer is the legal-entity boundary: the executor
+    // clamps this to the reader's allowlist, so a restricted reader sees
+    // only their own establishments.
+    subsidiaryScope: { column: 'v.employer_subsidiary_id' },
+    requiredPermission: HRM_POSITION_READ_PERMISSION,
+    featureKey: HRM_FEATURE_KEY,
+    // No fiscal window: the as-of date is the sentinel bound to the org
+    // business day, not the period picker. An implicit period on a date
+    // column would silently re-window a point-in-time statement.
+    defaultPeriodField: null,
+    columns: [
+      { key: 'code', label: 'Code', kind: 'text', expr: 'p.position_code' },
+      { key: 'title', label: 'Title', kind: 'text', expr: 'v.title' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'v.status', options: HRM_POSITION_STATUSES },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
+      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
+      { key: 'planned_fte', label: 'Planned FTE', kind: 'number', expr: 'v.planned_fte' },
+      { key: 'funded_fte', label: 'Funded FTE', kind: 'number', expr: 'fund.funded_fte' },
+      { key: 'filled_fte', label: 'Filled FTE', kind: 'number', expr: 'fill.filled_fte' },
+      {
+        key: 'vacant_fte',
+        label: 'Vacant FTE',
+        kind: 'number',
+        expr: 'v.planned_fte - coalesce(fill.filled_fte, 0)',
+      },
+      { key: 'position_id', label: 'Position (id)', kind: 'uuid', expr: 'p.id' },
+    ],
+    defaultSort: { column: 'code', direction: 'asc' },
+  },
+  {
+    key: 'hrm_processes',
+    label: 'Process checklists',
+    category: 'hrm',
+    description:
+      'One row per process checklist step — process kind and status, employee, template, step owner, due date, evidence kind, and step status with its evidence. Requires the HRM process permission.',
+    // The 0193 runtime: every row is a snapshot step copied at open time, so
+    // the template join only names the checklist (LEFT: a retired template
+    // row is never required for history to read). Skip reasons and done
+    // stamps read NULL until set — never inferred. Overdue is derived in
+    // the viewer from due_on against the org business day, never stored.
+    from: `hrm_process_steps s
+      JOIN hrm_processes p ON p.id = s.process_id AND p.org_id = s.org_id
+      JOIN worker_employments e ON e.id = p.employment_id AND e.org_id = s.org_id
+      JOIN parties w ON w.id = e.worker_party_id AND w.org_id = s.org_id
+      JOIN subsidiaries sub ON sub.id = e.employer_subsidiary_id AND sub.org_id = s.org_id
+      LEFT JOIN hrm_process_templates t ON t.id = p.template_id AND t.org_id = s.org_id`,
+    orgColumn: 's.org_id',
+    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
+    requiredPermission: HRM_PROCESS_READ_PERMISSION,
+    featureKey: HRM_FEATURE_KEY,
+    // The period picker narrows steps by due date; the open register reads
+    // the full checklist regardless of window.
+    defaultPeriodField: 'due_on',
+    columns: [
+      { key: 'process_kind', label: 'Process kind', kind: 'enum', expr: 'p.kind', options: HRM_PROCESS_KINDS },
+      { key: 'process_status', label: 'Process status', kind: 'enum', expr: 'p.status', options: HRM_PROCESS_STATUSES },
+      { key: 'effective_date', label: 'Effective date', kind: 'date', expr: 'p.effective_date' },
+      { key: 'employee', label: 'Employee', kind: 'text', expr: 'w.display_name' },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
+      { key: 'template', label: 'Template', kind: 'text', expr: 't.name' },
+      { key: 'step', label: 'Step', kind: 'text', expr: 's.title' },
+      { key: 'step_status', label: 'Step status', kind: 'enum', expr: 's.status', options: HRM_STEP_STATUSES },
+      { key: 'owner', label: 'Owner', kind: 'enum', expr: 's.owner_kind', options: HRM_STEP_OWNERS },
+      { key: 'due_on', label: 'Due on', kind: 'date', expr: 's.due_on' },
+      { key: 'evidence', label: 'Evidence', kind: 'enum', expr: 's.evidence_kind', options: HRM_STEP_EVIDENCE },
+      { key: 'done_at', label: 'Done at', kind: 'timestamp', expr: 's.done_at' },
+      { key: 'skip_reason', label: 'Skip reason', kind: 'text', expr: 's.skip_reason' },
+      { key: 'process_id', label: 'Process (id)', kind: 'uuid', expr: 'p.id' },
+      { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'p.employment_id' },
+    ],
+    defaultSort: { column: 'due_on', direction: 'asc' },
+  },
+  {
+    key: 'hrm_leave_absences',
+    label: 'Leave absences',
+    category: 'hrm',
+    description:
+      'One row per absence day — person, employer, department at the time, leave type, and hours. Reversals are separate rows; sums net. Requires the HRM leave permission.',
+    // One row per hrm_absences day row (request approvals and after-the-fact
+    // recordings alike). The department is the primary assignment effective
+    // on the absence day — the same half-open containment the calendar
+    // reads use — NULL when no primary covered the day (an unattributed
+    // bucket, never dropped and never misattributed). Reversals are
+    // negative rows of their own, so SUM(hours) nets while the evidence
+    // stays row-visible. This entity never joins the payroll ledger: TIME
+    // here, VALUE in payroll's own entities.
+    from: `hrm_absences a
+      JOIN hrm_leave_types t ON t.id = a.leave_type_id AND t.org_id = a.org_id
+      JOIN worker_employments e ON e.id = a.employment_id AND e.org_id = a.org_id
+      JOIN parties w ON w.id = e.worker_party_id AND w.org_id = a.org_id
+      JOIN subsidiaries sub ON sub.id = e.employer_subsidiary_id AND sub.org_id = a.org_id
+      LEFT JOIN employment_assignment_versions pa
+        ON pa.employment_id = a.employment_id AND pa.org_id = a.org_id
+       AND pa.is_primary AND pa.recorded_until IS NULL
+       AND pa.effective_from <= a.on_date
+       AND (pa.effective_to IS NULL OR pa.effective_to > a.on_date)
+      LEFT JOIN departments dep ON dep.id = pa.department_id AND dep.org_id = a.org_id`,
+    orgColumn: 'a.org_id',
+    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
+    requiredPermission: HRM_LEAVE_READ_PERMISSION,
+    featureKey: HRM_FEATURE_KEY,
+    // The absence day is the fact: the period picker narrows on it, so a
+    // request spanning a boundary splits by the fact, never by the window.
+    defaultPeriodField: 'on_date',
+    columns: [
+      { key: 'on_date', label: 'Date', kind: 'date', expr: 'a.on_date' },
+      { key: 'person', label: 'Person', kind: 'text', expr: 'w.display_name' },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
+      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
+      { key: 'leave_type', label: 'Leave type', kind: 'text', expr: 't.code' },
+      { key: 'hours', label: 'Hours', kind: 'number', expr: 'a.hours' },
+      { key: 'source', label: 'Source', kind: 'enum', expr: 'a.source', options: HRM_ABSENCE_SOURCES },
+      { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'a.employment_id' },
+      { key: 'id', label: 'Absence (id)', kind: 'uuid', expr: 'a.id' },
+    ],
+    defaultSort: { column: 'on_date', direction: 'desc' },
   },
 ]

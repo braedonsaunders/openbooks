@@ -321,7 +321,7 @@ export async function processDuePostingEffects(
   const drain =
     run ??
     (async (row: PostingEffectsRow) => {
-      const { runPostDocumentEffects } = await import("./posting.ts");
+      const { runPostDocumentEffects } = await import("./posting-dispatch.ts");
       await runPostDocumentEffects(row.document_id, "approved", {
         actorId: row.actor_id,
         alreadyClaimed: row,

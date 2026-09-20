@@ -4,17 +4,13 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import {
-  applyInventoryReturnsForVendorCredit,
-  ensureLot,
-  ensureSerial,
-  getOnHand,
-  issueInventory,
-  parseVendorCreditInventoryReturnSelection,
-  receiveInventory,
-} from "./inventory.ts";
+import { ensureLot, ensureSerial } from "./tracking.ts";
+import { getOnHand } from "./position.ts";
+import { issueInventory, receiveInventory } from "./movements.ts";
+import { applyInventoryReturnsForVendorCredit, parseVendorCreditInventoryReturnSelection } from "./documents-vendor-credits.ts";
 import { toUnits } from "../money/money.ts";
-import { postDocument, PostingError } from "../ledger/posting.ts";
+import { postDocument } from "../ledger/posting-document.ts";
+import { PostingError } from "../ledger/posting-contracts.ts";
 import {
   createScratchOrg,
   dropScratchOrg,

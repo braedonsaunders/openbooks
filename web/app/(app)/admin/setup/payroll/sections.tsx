@@ -5,11 +5,8 @@ import { cn } from '@openbooks/ui'
 import { ModuleHomeTabs } from '../../../../../components/module-home/ui'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import {
-  payrollSettings,
-  statutoryHolidayPayEnabled,
-  type PayrollSubsidiaryScope,
-} from '@openbooks/engine/src/payroll/run.ts'
+import { payrollSettings, statutoryHolidayPayEnabled } from "@openbooks/engine/src/payroll/run-setup.ts";
+import { type PayrollSubsidiaryScope } from "@openbooks/engine/src/payroll/scope.ts";
 import { payrollPaymentMethodSettings } from '@openbooks/engine/src/payroll/payment-method.ts'
 import { payrollSetupState } from '@openbooks/engine/src/payroll/readiness.ts'
 import { payrollBankProfiles } from '@openbooks/engine/src/payroll/bank-file.ts'

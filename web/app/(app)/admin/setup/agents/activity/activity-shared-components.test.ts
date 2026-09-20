@@ -12,7 +12,7 @@ import test from "node:test";
 // fetches.
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const view = read("./view.ts");
-const widgets = read("../../../../../../components/viewspec/widgets.tsx");
+const widgets = read("../../../../../../components/viewspec/widgets-agents.tsx");
 const lib = read("../../../../../../lib/setup/agents.ts");
 
 test("the activity spec binds shared filter, table, paging and empty state", () => {

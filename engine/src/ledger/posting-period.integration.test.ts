@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { postDocument } from "./posting.ts";
+import { postDocument } from "./posting-document.ts";
 import { buildNativeContext } from "../sync/native.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 

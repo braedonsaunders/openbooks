@@ -1,4 +1,5 @@
 import 'server-only'
+import type { BillLineInput } from '@openbooks/engine/src/ledger/document-input.ts'
 import { sql } from 'drizzle-orm'
 import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 import { allocateDocumentNumber } from '@openbooks/engine/src/records/numbering.ts'
@@ -114,24 +115,6 @@ export async function taxProfileMap(orgId?: string, asOfDate?: string): Promise<
   // missing or lapsed member. The entire selected group must be usable.
   for (const id of unusableGroups) groups.delete(id)
   return { codes, groups }
-}
-
-export interface BillLineInput {
-  accountId: string
-  description?: string | null
-  amount: string
-  taxCodeId?: string | null
-  taxGroupId?: string | null
-  /** Manual tax override: when true, `taxAmount` is honored instead of computed. */
-  taxOverridden?: boolean
-  taxAmount?: string | null
-  custom?: Record<string, unknown>
-  /** Internal pre-persistence provider evidence; never accepted from API input. */
-  providerQuote?: {
-    providerConfigId: string
-    request: TaxQuoteRequest
-    result: TaxQuoteResult
-  }
 }
 
 /** Pre-tax lines → per-line tax + document totals. Honors manual overrides. */

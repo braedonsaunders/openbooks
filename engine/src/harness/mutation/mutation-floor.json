@@ -7,11 +7,6 @@
       "measured": 23,
       "mode": "unit"
     },
-    "engine/src/ledger/posting.ts": {
-      "ratio": 0.34782608695652173,
-      "measured": 23,
-      "mode": "unit"
-    },
     "engine/src/ledger/posting-effects.ts": {
       "ratio": 0.2,
       "measured": 25,
@@ -20,16 +15,6 @@
     "engine/src/sync/applications.ts": {
       "ratio": 0,
       "measured": 23,
-      "mode": "unit"
-    },
-    "engine/src/payments/payments.ts": {
-      "ratio": 0.041666666666666664,
-      "measured": 24,
-      "mode": "unit"
-    },
-    "engine/src/payroll/run.ts": {
-      "ratio": 0.32,
-      "measured": 25,
       "mode": "unit"
     },
     "engine/src/payroll/canada/t4127.ts": {
@@ -66,6 +51,135 @@
       "ratio": 0.09523809523809523,
       "measured": 21,
       "mode": "unit"
+    },
+    "engine/src/ledger/posting-rules.ts": {
+      "ratio": 0.34782608695652173,
+      "measured": 23,
+      "mode": "unit",
+      "inheritedFrom": "engine/src/ledger/posting.ts"
+    },
+    "engine/src/ledger/posting-tax-policy.ts": {
+      "ratio": 0.34782608695652173,
+      "measured": 23,
+      "mode": "unit",
+      "inheritedFrom": "engine/src/ledger/posting.ts"
+    },
+    "engine/src/payments/payment-documents.ts": {
+      "ratio": 0.041666666666666664,
+      "measured": 24,
+      "mode": "unit",
+      "inheritedFrom": "engine/src/payments/payments.ts"
+    },
+    "engine/src/payments/payment-queries.ts": {
+      "ratio": 0.041666666666666664,
+      "measured": 24,
+      "mode": "unit",
+      "inheritedFrom": "engine/src/payments/payments.ts"
+    },
+    "engine/src/payroll/run-calculation-evidence.ts": {
+      "ratio": 0.32,
+      "measured": 25,
+      "mode": "unit",
+      "inheritedFrom": "engine/src/payroll/run.ts"
+    },
+    "engine/src/payroll/run-calculation.ts": {
+      "ratio": 0.32,
+      "measured": 25,
+      "mode": "unit",
+      "inheritedFrom": "engine/src/payroll/run.ts"
+    },
+    "engine/src/payroll/run-earning-lines.ts": {
+      "ratio": 0.32,
+      "measured": 25,
+      "mode": "unit",
+      "inheritedFrom": "engine/src/payroll/run.ts"
+    },
+    "engine/src/ledger/posting-document.ts": {
+      "ratio": 0.34782608695652173,
+      "measured": 23,
+      "mode": "unit",
+      "inheritedFrom": "engine/src/ledger/posting.ts"
+    },
+    "engine/src/ledger/posting-prepare.ts": {
+      "ratio": 0.34782608695652173,
+      "measured": 23,
+      "mode": "unit",
+      "inheritedFrom": "engine/src/ledger/posting.ts"
+    },
+    "engine/src/ledger/posting-commit.ts": {
+      "ratio": 0.34782608695652173,
+      "measured": 23,
+      "mode": "unit",
+      "inheritedFrom": "engine/src/ledger/posting.ts"
+    },
+    "engine/src/ledger/posting-replay.ts": {
+      "ratio": 0.34782608695652173,
+      "measured": 23,
+      "mode": "unit",
+      "inheritedFrom": "engine/src/ledger/posting.ts"
+    },
+    "engine/src/ledger/posting-projection.ts": {
+      "ratio": 0.34782608695652173,
+      "measured": 23,
+      "mode": "unit",
+      "inheritedFrom": "engine/src/ledger/posting.ts"
+    },
+    "engine/src/ledger/posting-dispatch.ts": {
+      "ratio": 0.34782608695652173,
+      "measured": 23,
+      "mode": "unit",
+      "inheritedFrom": "engine/src/ledger/posting.ts"
+    },
+    "engine/src/ledger/posting-accounts.ts": {
+      "ratio": 0.34782608695652173,
+      "measured": 23,
+      "mode": "unit",
+      "inheritedFrom": "engine/src/ledger/posting.ts"
+    },
+    "engine/src/ledger/posting-provider-tax.ts": {
+      "ratio": 0.34782608695652173,
+      "measured": 23,
+      "mode": "unit",
+      "inheritedFrom": "engine/src/ledger/posting.ts"
+    },
+    "engine/src/ledger/posting-subsidiaries.ts": {
+      "ratio": 0.34782608695652173,
+      "measured": 23,
+      "mode": "unit",
+      "inheritedFrom": "engine/src/ledger/posting.ts"
+    },
+    "engine/src/ledger/posting-period.ts": {
+      "ratio": 0.34782608695652173,
+      "measured": 23,
+      "mode": "unit",
+      "inheritedFrom": "engine/src/ledger/posting.ts"
+    },
+    "engine/src/ledger/posting-invariants.ts": {
+      "ratio": 0.34782608695652173,
+      "measured": 23,
+      "mode": "unit",
+      "inheritedFrom": "engine/src/ledger/posting.ts"
+    },
+    "engine/src/payments/settlement-policy.ts": {
+      "ratio": 0.041666666666666664,
+      "measured": 24,
+      "mode": "unit",
+      "inheritedFrom": "engine/src/payments/payments.ts"
+    },
+    "engine/src/payroll/canada/compute-statutory.ts": {
+      "ratio": 0.8695652173913043,
+      "measured": 23,
+      "mode": "db"
+    },
+    "engine/src/payroll/canada/employer-levies.ts": {
+      "ratio": 0.6,
+      "measured": 25,
+      "mode": "db"
+    },
+    "engine/src/payroll/us/compute-statutory.ts": {
+      "ratio": 0.6521739130434783,
+      "measured": 23,
+      "mode": "db"
     }
   }
 }

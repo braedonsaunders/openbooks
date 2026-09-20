@@ -31,8 +31,8 @@ test("authoring drawer uses the native Drawer shell and house field primitives",
   assert.match(drawer, /useTranslations\('hrm'\)/, "every string resolves from the hrm catalog");
 });
 
-test("kind selector mirrors the four governed payload kinds exactly", () => {
-  for (const kind of ["hire", "status_change", "assignment_change", "termination"]) {
+test("kind selector mirrors the five governed payload kinds exactly", () => {
+  for (const kind of ["hire", "status_change", "assignment_change", "termination", "position_assignment"]) {
     assert.ok(drawer.includes(`'${kind}'`), `drawer offers the ${kind} kind`);
   }
   assert.match(drawer, /assignmentKey/, "assignment change names its slot key");
@@ -42,6 +42,9 @@ test("kind selector mirrors the four governed payload kinds exactly", () => {
   assert.match(drawer, /managerEmploymentId/, "assignment change carries the line-manager repoint");
   assert.match(drawer, /effectiveDate/, "termination names its civil effective date");
   assert.match(drawer, /effectiveFrom/, "dated kinds name their effective start");
+  assert.match(drawer, /positionId: unassign \? null : positionId/, "position assignment posts the link or an explicit null");
+  assert.match(drawer, /'source', 'positions'/, "the position picker pages the establishment");
+  assert.match(drawer, /cr-unassign/, "unassignment is an explicit mode, never an empty picker");
 });
 
 test("manager and location ride remote SearchSelects over the options route, never uuid boxes", () => {
@@ -161,6 +164,13 @@ test("authoring copy resolves from the hrm catalog, never inline English", () =>
     "kindStatusChange",
     "kindAssignmentChange",
     "kindTermination",
+    "kindPositionAssignment",
+    "positionLabel",
+    "positionUnset",
+    "positionHint",
+    "positionRequired",
+    "unassignLabel",
+    "unassignHint",
     "statusLabel",
     "effectiveFromLabel",
     "effectiveToLabel",

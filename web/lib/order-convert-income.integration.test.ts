@@ -17,7 +17,7 @@ const {
 } = await import("@openbooks/engine/src/testing/fixtures.ts");
 import type { ScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
 const { convertOrder } = await import("./order-cycle.ts");
-const { postDocument } = await import("@openbooks/engine/src/ledger/posting.ts");
+const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
 
 async function seedOrderWithoutLineAccount(
   org: ScratchOrg,

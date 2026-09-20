@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { documentBalanceDueLateral } from "./balance-due.ts";
 import { db } from "../platform/db.ts";
 import { runDunningForOrg } from "../receivables/dunning.ts";
-import { postDocument } from "../ledger/posting.ts";
+import { postDocument } from "../ledger/posting-document.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);

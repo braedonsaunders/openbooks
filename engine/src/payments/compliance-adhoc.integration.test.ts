@@ -4,14 +4,11 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { evaluateBillsForRelease } from "../compliance/compliance.ts";
-import { postDocument } from "../ledger/posting.ts";
-import {
-  createPaymentDocument,
-  openItemsForParty,
-  postPaymentWithApplications,
-  sameCurrencyAllocation,
-  updateDraftPayment,
-} from "./payments.ts";
+import { postDocument } from "../ledger/posting-document.ts";
+import { createPaymentDocument, updateDraftPayment } from "./payment-documents.ts";
+import { openItemsForParty } from "./payment-queries.ts";
+import { postPaymentWithApplications } from "./payment-posting.ts";
+import { sameCurrencyAllocation } from "./settlement-policy.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import {
   createScratchOrg,

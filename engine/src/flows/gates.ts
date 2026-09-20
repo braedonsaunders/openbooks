@@ -64,14 +64,32 @@ export class GateError extends Error {}
  * carries the stage, the cause, and the remedy for every caller.
  */
 export class DecisionFailedError extends GateError {
-  constructor(args: { decision: "approved" | "rejected"; stage: string; cause: string }) {
+  /** False when the cause is a defect (a TypeError and its kin): retrying replays it. */
+  readonly retryable: boolean;
+  constructor(args: { decision: "approved" | "rejected"; stage: string; cause: string; retryable?: boolean }) {
+    const retryable = args.retryable ?? true;
     super(
       `approval ${args.stage} failed: ${args.cause}. ` +
         `The decision to ${args.decision === "approved" ? "approve" : "reject"} was not recorded ` +
-        `and the approval is still pending — retry your decision.`,
+        `and the approval is still pending — ` +
+        (retryable
+          ? `retry your decision.`
+          : `this is a defect in the ${args.stage} path, not a data condition: retrying will fail the ` +
+            `same way. Report the message above; the approval stays pending until the defect is fixed.`),
     );
     this.name = "DecisionFailedError";
+    this.retryable = retryable;
   }
+}
+
+/**
+ * A thrown value that can only come from broken code, never from data: a
+ * remedy that says "retry" for these invites an infinite loop on an
+ * approval. Everything else (adapter refusals, storage errors) stays
+ * retryable because the next attempt may genuinely succeed.
+ */
+export function isProgrammingError(e: unknown): boolean {
+  return e instanceof TypeError || e instanceof ReferenceError || e instanceof RangeError || e instanceof SyntaxError;
 }
 
 /**
@@ -80,8 +98,8 @@ export class DecisionFailedError extends GateError {
  * unified one above (nothing recorded, retry the decision).
  */
 export class ReleaseError extends DecisionFailedError {
-  constructor(decision: "approved" | "rejected", cause: string) {
-    super({ decision, stage: "release", cause });
+  constructor(decision: "approved" | "rejected", cause: string, retryable = true) {
+    super({ decision, stage: "release", cause, retryable });
     this.name = "ReleaseError";
   }
 }
@@ -463,7 +481,7 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0]): Promise<D
           });
           releasedBeforeActions = true;
         } catch (e) {
-          throw new ReleaseError(decision, e instanceof Error ? e.message : String(e));
+          throw new ReleaseError(decision, e instanceof Error ? e.message : String(e), !isProgrammingError(e));
         }
       }
 
@@ -520,7 +538,7 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0]): Promise<D
             });
           }
         } catch (e) {
-          throw new ReleaseError(decision, e instanceof Error ? e.message : String(e));
+          throw new ReleaseError(decision, e instanceof Error ? e.message : String(e), !isProgrammingError(e));
         }
       }
 

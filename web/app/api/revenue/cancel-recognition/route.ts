@@ -11,7 +11,7 @@ import { sql } from 'drizzle-orm'
 import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isoDate, parseJsonBody, uuidId } from '../../../../lib/api/json'
-import { isDocKindEnabled } from '../../../../lib/documents'
+import { isDocKindEnabled } from "../../../../lib/documents.ts";
 
 export const runtime = 'nodejs'
 

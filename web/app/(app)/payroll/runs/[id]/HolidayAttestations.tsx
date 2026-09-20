@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
 import { Button, Label, Select } from '@openbooks/ui'
+import { readApiErrorMessage } from '../../../../../lib/api-error'
 
 /**
  * Inline attestation controls for statutory-holiday exceptions (migration
@@ -101,8 +102,10 @@ export function HolidayAttestations(props: {
     ;(async () => {
       try {
         const res = await fetch(`/api/payroll/runs/${runId}/holiday-assertions`)
+        // The status is checked before the body is parsed: a non-JSON error
+        // body must surface the failure, never a SyntaxError from res.json().
+        if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
         const j = await res.json()
-        if (!res.ok) throw new Error(j.error ?? 'failed')
         if (!cancelled) setEmployees(Array.isArray(j.employees) ? j.employees : [])
       } catch {
         if (!cancelled) setLoadFailed(true)
@@ -125,13 +128,16 @@ export function HolidayAttestations(props: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      const j = await res.json()
-      if (!res.ok) throw new Error(j.error ?? 'failed')
+      // The status is checked before the body is parsed (see load above).
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
       // Refresh standing answers + filed assertions so the row shows what
       // was just answered, then recalculate through the server-side merge.
+      // A failed refresh is a failure, not a silent skip: the success toast
+      // below must never follow a refresh the operator never saw.
       const reload = await fetch(`/api/payroll/runs/${runId}/holiday-assertions`)
+      if (!reload.ok) throw new Error(await readApiErrorMessage(reload, 'failed'))
       const rj = await reload.json()
-      if (reload.ok && Array.isArray(rj.employees)) setEmployees(rj.employees)
+      if (Array.isArray(rj.employees)) setEmployees(rj.employees)
       toast.success('Answer filed — recalculating')
       await onAnswered()
     } catch (e) {

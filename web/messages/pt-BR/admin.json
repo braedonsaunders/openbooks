@@ -833,8 +833,14 @@
   },
   "permissions": {
     "hrm_employment_read": "Ver registros de emprego",
+    "hrm_leave_read": "Ver registros de licença",
+    "hrm_leave_request": "Solicitar licença para o próprio emprego",
+    "hrm_leave_approve": "Decidir solicitações de licença",
+    "hrm_leave_manage": "Configurar tipos e políticas de licença",
     "hrm_employment_manage": "Redigir alterações de emprego",
     "hrm_employment_approve": "Decidir alterações de emprego",
+    "hrm_position_read": "Ver posições e o plano de headcount",
+    "hrm_position_manage": "Criar, revisar, financiar e encerrar posições",
     "groups": {
       "hrm": "Recursos humanos",
       "gl": "Livro-razão",
@@ -962,7 +968,9 @@
     "compliance_manage": "Registrar certificados, isenções e declarações",
     "compliance_verify": "Verificar certificados",
     "compliance_waive": "Conceder exceções de conformidade",
-    "compliance_file": "Finalizar e entregar declarações informativas"
+    "compliance_file": "Finalizar e entregar declarações informativas",
+    "hrm_process_read": "Ver listas de processos",
+    "hrm_process_manage": "Abrir, concluir e cancelar listas de processos"
   },
   "ai": {
     "metaTitle": "Configurações de IA",
@@ -2400,6 +2408,26 @@
       "extension-settings": {
         "title": "Configurações de aplicativos",
         "description": "Configure definições declaradas pelos apps instalados. Alterações preservam valores anteriores e suas vigências."
+      },
+      "leave-types": {
+        "title": "Tipos de licença",
+        "singularTitle": "Tipo de licença",
+        "description": "As ausências que sua organização concede — férias, doença, não remuneradas — e qual movimento de folha cada uma gera. Bancos de folha não se configuram aqui."
+      },
+      "leave-policies": {
+        "title": "Políticas de licença",
+        "singularTitle": "Política de licença",
+        "description": "Quanto tempo cada tipo acumula, quem cobre e quanta antecedência exige. Direito em tempo; o valor é calculado pela folha."
+      },
+      "hrm-process-templates": {
+        "title": "Modelos de processo",
+        "singularTitle": "Modelo de processo",
+        "description": "Checklists de admissão, desligamento e transferência: etapas, responsáveis, prazos e evidências com que um processo é aberto."
+      },
+      "hrm-process-template-steps": {
+        "title": "Etapas de modelo de processo",
+        "singularTitle": "Etapa de modelo de processo",
+        "description": "Uma etapa ordenada de um modelo de processo com responsável, prazo e regra de evidência."
       }
     },
     "fields": {
@@ -2666,7 +2694,30 @@
       "dateBasis": "Base de data",
       "unitsTotal": "Unidades totais",
       "network": "Bandeira",
-      "lastFour": "Últimos quatro"
+      "lastFour": "Últimos quatro",
+      "templateId": "Modelo",
+      "position": "Posição",
+      "title": "Título",
+      "ownerKind": "Responsável",
+      "ownerPartyId": "Parte responsável",
+      "dueOffsetDays": "Deslocamento (dias)",
+      "required": "Obrigatório",
+      "evidenceKind": "Evidência",
+      "appliesEmployerSubsidiaryId": "Subsidiária aplicável",
+      "appliesDepartmentId": "Departamento aplicável",
+      "paid": "Remunerada",
+      "valueCrossing": "Gera na folha",
+      "requiresAttachment": "Requer anexo",
+      "leaveTypeId": "Tipo de licença",
+      "minimumNoticeDays": "Antecedência mínima (dias)",
+      "accrualRule": "Regra de acúmulo (JSON)",
+      "carryoverRule": "Regra de transferência (JSON)",
+      "accrualKind": "Acúmulo",
+      "accrualHours": "Horas acumuladas",
+      "accrualPeriodsPerYear": "Períodos de acúmulo por ano",
+      "carryoverKind": "Transferência",
+      "carryoverHours": "Limite de transferência (horas)",
+      "carryoverExpiresAfterDays": "A transferência expira após (dias)"
     },
     "fieldHelp": {
       "gapless": "Sem lacunas significa que todos os números da sequência devem ser contabilizados, sem números pulados. Ative somente quando exigências legais ou de auditoria determinarem uma numeração ininterrupta.",
@@ -2718,7 +2769,18 @@
       "holidayObservance": "Feriados legais mantêm a data e a lei dá um dia de folga substituto. Escolha um deslocamento só para feriado da empresa que você realmente move.",
       "equipmentUnitId": "Pague sobre uma máquina nomeada apenas. Deixe vazio e use o item de cobrança para cobrir uma classe inteira de equipamentos com uma regra.",
       "itemId": "Pague sobre cada unidade que cobra por este item de catálogo — \"todas as escavadeiras\" como uma regra em vez de uma por máquina.",
-      "payScheduleAnchor": "A data de FIM de um período qualquer; todos os outros derivam dela. Quinzenal lê o dia do mês: dia 20 significa períodos terminando dia 5 e dia 20, e dia 15 (ou o último dia de mês de 30/31 dias) significa dia 15 e fim do mês. Dia 14, e o último dia de fevereiro, não nomeiam calendário e são recusados."
+      "payScheduleAnchor": "A data de FIM de um período qualquer; todos os outros derivam dela. Quinzenal lê o dia do mês: dia 20 significa períodos terminando dia 5 e dia 20, e dia 15 (ou o último dia de mês de 30/31 dias) significa dia 15 e fim do mês. Dia 14, e o último dia de fevereiro, não nomeiam calendário e são recusados.",
+      "hrmProcessAppliesSubsidiary": "Vazio: o modelo se aplica a todas as subsidiárias.",
+      "hrmProcessAppliesDepartment": "Vazio: o modelo se aplica a todos os departamentos.",
+      "leaveValueCrossing": "Qual insumo de folha um dia de ausência aprovado gera. Nenhum nunca toca o razão de folha; pagamento e acúmulo cruzam como horas que o cálculo avalia.",
+      "leaveAppliesSubsidiary": "Vazio significa que a política se aplica a todas as subsidiárias.",
+      "leaveAppliesDepartment": "Vazio significa que a política se aplica a todos os departamentos.",
+      "leaveAccrualKind": "Como o tempo é acumulado: nenhum, por período, por ano ou ilimitado.",
+      "leaveAccrualHours": "Horas acumuladas por período ou por ano (obrigatório para esses tipos).",
+      "leaveAccrualPeriodsPerYear": "Períodos inteiros em um ano de acúmulo (obrigatório para o acúmulo por período).",
+      "leaveCarryoverKind": "O que acontece com o tempo não usado no fim do ano: nada, transferir tudo ou até um limite.",
+      "leaveCarryoverHours": "Máximo de horas transferidas (obrigatório para «até um limite»).",
+      "leaveCarryoverExpiresAfterDays": "Dias após o início do novo ano até as horas transferidas expirarem; vazio significa que não expiram."
     },
     "options": {
       "payFrequency": {
@@ -3055,6 +3117,38 @@
         "none": "Mantém a data",
         "nextMonday": "Passa p/ o próximo dia útil",
         "nearestWeekday": "Passa p/ o dia útil mais próximo"
+      },
+      "hrmProcessKind": {
+        "onboarding": "Integração",
+        "offboarding": "Desligamento",
+        "transfer": "Transferência"
+      },
+      "hrmStepOwner": {
+        "manager": "Gestor",
+        "hr": "RH",
+        "employee": "Colaborador",
+        "namedParty": "Pessoa designada"
+      },
+      "hrmStepEvidence": {
+        "none": "Nenhuma",
+        "acknowledgement": "Ciência",
+        "attachment": "Anexo"
+      },
+      "leaveValueCrossing": {
+        "none": "Nenhum — não remunerado ou em salário",
+        "payout": "Pagamento do banco",
+        "bankIn": "Acumular como tempo"
+      },
+      "leaveAccrualKind": {
+        "none": "Nenhum",
+        "per_period": "Por período",
+        "per_year": "Por ano",
+        "unlimited": "Ilimitado"
+      },
+      "leaveCarryoverKind": {
+        "none": "Nenhuma",
+        "carry_all": "Transferir tudo",
+        "carry_up_to": "Transferir até um limite"
       }
     },
     "payroll": {

@@ -833,8 +833,14 @@
   },
   "permissions": {
     "hrm_employment_read": "雇用記録の表示",
+    "hrm_leave_read": "休暇記録の表示",
+    "hrm_leave_request": "自身の雇用の休暇申請",
+    "hrm_leave_approve": "休暇申請の承認",
+    "hrm_leave_manage": "休暇種別とポリシーの設定",
     "hrm_employment_manage": "雇用変更の作成",
     "hrm_employment_approve": "雇用変更の決定",
+    "hrm_position_read": "ポジションと人員計画の表示",
+    "hrm_position_manage": "ポジションの作成・改訂・財源設定・終了",
     "groups": {
       "hrm": "人事",
       "gl": "総勘定元帳",
@@ -962,7 +968,9 @@
     "compliance_waive": "コンプライアンス例外を認めます",
     "payroll_manage": "給与計算と従業員プロフィールを設定します",
     "payroll_read": "給与計算と明細を表示します",
-    "payroll_run": "給与計算を作成・計算・確定します"
+    "payroll_run": "給与計算を作成・計算・確定します",
+    "hrm_process_read": "プロセスチェックリストを表示",
+    "hrm_process_manage": "プロセスチェックリストを開く、完了する、キャンセルする"
   },
   "ai": {
     "metaTitle": "AI設定",
@@ -2468,6 +2476,26 @@
       "extension-settings": {
         "title": "アプリ設定",
         "description": "インストール済みアプリが宣言した設定を構成します。変更時は以前の値と発効日を保持します。"
+      },
+      "leave-types": {
+        "title": "休暇種別",
+        "singularTitle": "休暇種別",
+        "description": "組織が付与する休暇の種類（年次休暇、病気休暇、無給休暇）と、それぞれが生じさせる給与計算の動き。給与残高はここでは設定しません。"
+      },
+      "leave-policies": {
+        "title": "休暇ポリシー",
+        "singularTitle": "休暇ポリシー",
+        "description": "各休暇種別の付与時間、適用対象、必要な事前通知。時間としての権利であり、金額は給与計算で算出されます。"
+      },
+      "hrm-process-templates": {
+        "title": "プロセステンプレート",
+        "singularTitle": "プロセステンプレート",
+        "description": "入社・退社・異動のチェックリスト。プロセス開始時の手順、担当者、期限オフセット、証跡を定義します。"
+      },
+      "hrm-process-template-steps": {
+        "title": "プロセステンプレートの手順",
+        "singularTitle": "プロセステンプレートの手順",
+        "description": "プロセステンプレートの順序付き手順。担当者、期限オフセット、証跡ルールを持ちます。"
       }
     },
     "fields": {
@@ -2734,7 +2762,30 @@
       "dateBasis": "日付基準",
       "unitsTotal": "総単位数",
       "network": "ネットワーク",
-      "lastFour": "下4桁"
+      "lastFour": "下4桁",
+      "templateId": "テンプレート",
+      "position": "順序",
+      "title": "タイトル",
+      "ownerKind": "担当",
+      "ownerPartyId": "担当者",
+      "dueOffsetDays": "期限オフセット（日）",
+      "required": "必須",
+      "evidenceKind": "証跡",
+      "appliesEmployerSubsidiaryId": "対象子会社",
+      "appliesDepartmentId": "対象部門",
+      "paid": "有給",
+      "valueCrossing": "給与計算への連動",
+      "requiresAttachment": "添付必須",
+      "leaveTypeId": "休暇種別",
+      "minimumNoticeDays": "最小通知日数",
+      "accrualRule": "付与ルール (JSON)",
+      "carryoverRule": "繰越ルール (JSON)",
+      "accrualKind": "付与方式",
+      "accrualHours": "付与時間",
+      "accrualPeriodsPerYear": "年間の付与期間数",
+      "carryoverKind": "繰越",
+      "carryoverHours": "繰越上限（時間）",
+      "carryoverExpiresAfterDays": "繰越の失効（日数）"
     },
     "fieldHelp": {
       "gapless": "欠番なしとは、連番のすべての番号が記録され、番号が飛ばないことを意味します。法令または監査要件で途切れない採番が必要な場合にのみ有効にしてください。",
@@ -2786,7 +2837,18 @@
       "protectionPriority": "複数の保護対象控除が同じ給与を奪い合う場合の優先順位です。数値の小さい順。扶養命令は通常の債権者に優先します。",
       "requiresExpiry": "保険はオン、期限のないW-9はオフです。",
       "requiresVerification": "証明書を記録した本人が検証することはできません。",
-      "stateCode": "州・地域ごとに登録される制度種別（州失業保険口座など）にのみ必須です。口座保存時に国別パックの宣言と照合されます。"
+      "stateCode": "州・地域ごとに登録される制度種別（州失業保険口座など）にのみ必須です。口座保存時に国別パックの宣言と照合されます。",
+      "hrmProcessAppliesSubsidiary": "空欄はすべての子会社に適用されます。",
+      "hrmProcessAppliesDepartment": "空欄はすべての部門に適用されます。",
+      "leaveValueCrossing": "承認された休暇日が生じさせる給与計算インプット。「なし」は給与台帳に触れません。支払いと積立は、計算が評価する時間として渡されます。",
+      "leaveAppliesSubsidiary": "空欄の場合、このポリシーはすべての子会社に適用されます。",
+      "leaveAppliesDepartment": "空欄の場合、このポリシーはすべての部門に適用されます。",
+      "leaveAccrualKind": "時間の付与方法：なし、期間ごと、年ごと、無制限。",
+      "leaveAccrualHours": "期間ごとまたは年ごとに付与される時間（これらの方式では必須）。",
+      "leaveAccrualPeriodsPerYear": "付与年内の期間数（期間ごとの付与では必須）。",
+      "leaveCarryoverKind": "年度末の未使用時間の扱い：なし、全額繰越、上限まで繰越。",
+      "leaveCarryoverHours": "繰り越せる最大時間（「上限まで繰越」では必須）。",
+      "leaveCarryoverExpiresAfterDays": "新年度開始から繰越時間が失効するまでの日数。空欄なら失効しません。"
     },
     "options": {
       "timeClassification": {
@@ -3123,6 +3185,38 @@
         "accelerated2": "加速 — 基準2",
         "quarterly": "四半期",
         "regular": "通常（月次）"
+      },
+      "hrmProcessKind": {
+        "onboarding": "オンボーディング",
+        "offboarding": "オフボーディング",
+        "transfer": "異動"
+      },
+      "hrmStepOwner": {
+        "manager": "マネージャー",
+        "hr": "人事",
+        "employee": "従業員",
+        "namedParty": "指定者"
+      },
+      "hrmStepEvidence": {
+        "none": "なし",
+        "acknowledgement": "確認",
+        "attachment": "添付ファイル"
+      },
+      "leaveValueCrossing": {
+        "none": "なし — 無給または給与扱い",
+        "payout": "残高からの支払い",
+        "bankIn": "代替時間として積立"
+      },
+      "leaveAccrualKind": {
+        "none": "なし",
+        "per_period": "期間ごと",
+        "per_year": "年ごと",
+        "unlimited": "無制限"
+      },
+      "leaveCarryoverKind": {
+        "none": "なし",
+        "carry_all": "全額繰越",
+        "carry_up_to": "上限まで繰越"
       }
     },
     "invoicing": {

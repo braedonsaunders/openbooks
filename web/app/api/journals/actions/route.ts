@@ -2,11 +2,9 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import {
-  postDocument,
-  PostingError,
-  runPostDocumentEffects,
-} from '@openbooks/engine/src/ledger/posting.ts'
+import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
+import { PostingError } from "@openbooks/engine/src/ledger/posting-contracts.ts";
+import { runPostDocumentEffects } from "@openbooks/engine/src/ledger/posting-dispatch.ts";
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import {
   ControlAccountsIncompleteError,

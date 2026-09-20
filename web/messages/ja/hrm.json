@@ -4,21 +4,24 @@
     "description": "時点履歴、人員数、変更申請の追跡を備えた雇用記録。",
     "tabs": {
       "overview": "概要",
-      "changeRequests": "変更申請",
-      "departments": "部門",
-      "reports": "レポート"
+      "positions": "ポジション",
+      "processes": "プロセス",
+      "leave": "休暇",
+      "myLeave": "自分の休暇"
     },
     "vitals": {
       "headcount": "人員数",
       "headcountSub": "{date} 時点",
-      "employers": "雇用主",
-      "employersSub": "{count, plural, other {# 子会社}}",
-      "departments": "部門",
-      "departmentsSub": "{count, plural, other {# 部門}}"
+      "openPositions": "募集中のポジション",
+      "openPositionsSub": "空席FTE {fte}",
+      "startingSoon": "まもなく入社",
+      "startingSoonSub": "{count, plural, other {今後30日以内に # 名が退社}}",
+      "onLeave": "本日休暇中",
+      "onLeaveSub": "{count, plural, other {承認待ち # 件}}"
     },
     "groups": {
-      "title": "雇用主・部門別の人員数",
-      "employer": "雇用主",
+      "title": "部門別人員数",
+      "employer": "子会社",
       "department": "部門",
       "headcount": "人員数",
       "unassigned": "未割り当て",
@@ -26,7 +29,45 @@
       "total": "合計"
     },
     "directory": {
-      "title": "名簿"
+      "title": "名簿",
+      "employeesHint": "本日在籍",
+      "positionsHint": "募集中",
+      "processesHint": "{count, plural, other {期限超過 # 件}}",
+      "leaveHint": "{count, plural, other {承認待ち # 件}}"
+    },
+    "vacancy": {
+      "title": "部門別の欠員",
+      "department": "部門",
+      "employer": "子会社",
+      "positions": "ポジション",
+      "planned": "計画FTE",
+      "funded": "財源付きFTE",
+      "filled": "充足済みFTE",
+      "vacant": "欠員FTE",
+      "unassignedDepartment": "部門なし",
+      "empty": "{date} 時点で設定済みのポジションはありません。",
+      "total": "合計"
+    },
+    "onboarding": {
+      "title": "オンボーディング",
+      "openLabel": "未完了のチェックリスト",
+      "overdueLabel": "期限切れ",
+      "upcomingLabel": "期限間近",
+      "empty": "未完了のチェックリストはありません。",
+      "viewAll": "すべてのプロセスを表示"
+    },
+    "trend": {
+      "title": "人員数（過去12か月）",
+      "hint": "各月末時点の在籍者数（本日まで）。",
+      "series": "人員数"
+    },
+    "attention": {
+      "title": "要対応",
+      "allClear": "対応が必要な項目はありません。",
+      "pending": "{count, plural, other {決定待ちの変更申請 # 件}}",
+      "overdueSteps": "{count, plural, other {期限超過のチェックリスト項目 # 件}}",
+      "leavePending": "{count, plural, other {承認待ちの休暇申請 # 件}}",
+      "unfunded": "予算裏付けのない充足FTE {fte}"
     }
   },
   "overview": {
@@ -73,6 +114,11 @@
       "proposeChange": "変更を提案",
       "manageDepartments": "部門を管理",
       "openReports": "レポートを開く"
+    },
+    "leave": {
+      "title": "休暇",
+      "onLeaveEmpty": "本日欠勤中の人はいません。",
+      "pendingSub": "承認待ち"
     }
   },
   "queue": {
@@ -109,25 +155,6 @@
     "draftBadge": "操作",
     "openEmployee": "従業員レコードを開く",
     "notAvailable": "利用不可"
-  },
-  "departments": {
-    "title": "部門",
-    "description": "今日時点の部門別人員を、雇用主子会社別の内訳付きで — ヘッドカウントサービス経由で解決します。",
-    "listTitle": "部門別人員",
-    "listNote": "従業員リストには部門フィルターがないため、ドリルスルーは全リストを開きます。",
-    "linksTitle": "リンク",
-    "employeesLink": "従業員リスト",
-    "setupLink": "部門を管理"
-  },
-  "reports": {
-    "title": "レポート",
-    "description": "人員レポート：ヘッドカウントステートメントのプリセットと雇用エンティティを、レポートビルダーで開きます。",
-    "presetTitle": "ヘッドカウントステートメント",
-    "presetHint": "プリセットは組織の保存済みプランを開きます — シードが未実行の場合はビルダーカタログを開きます。",
-    "entitiesTitle": "人員エンティティ",
-    "entitiesHint": "雇用エンティティのいずれかから新しい人員レポートを開始します。",
-    "hubTitle": "すべてのレポート",
-    "hubDescription": "レポートハブを開く。"
   },
   "employment": {
     "episodes": {
@@ -238,12 +265,220 @@
       "updatedToast": "下書きを更新しました。",
       "submittedToast": "承認のために提出しました。",
       "withdrawnToast": "申請を取り下げました。",
-      "requestFailed": "変更申請を保存できませんでした。"
+      "requestFailed": "変更申請を保存できませんでした。",
+      "kindPositionAssignment": "ポジション割当",
+      "positionLabel": "ポジション",
+      "positionUnset": "ポジションなし",
+      "positionHint": "この配属が保持する財源付き編制。配属自体のタイトル、部門、勤務地は保持されます。",
+      "positionRequired": "ポジションを選択するか、配属を未割当としてマークしてください。",
+      "unassignLabel": "ポジションから外す",
+      "unassignHint": "明示的なnullリンクを記録します：枠は内容を保持しますが、編制を保持しません。"
     }
   },
   "directory": {
     "employmentStatus": "雇用ステータス",
     "serviceStart": "勤務開始日",
     "noEmployment": "雇用なし"
+  },
+  "positions": {
+    "title": "ポジション",
+    "description": "人員計画の裏付けとなる財源付き編制：ポジションごとの計画FTE・財源付きFTE・充足済みFTEを、バージョン、期間別財源、現在の保持者とともに表示します。",
+    "statusAll": "すべてのステータス",
+    "statusPlanned": "計画中",
+    "statusOpen": "募集中",
+    "statusFilled": "充足済み",
+    "statusFrozen": "凍結済み",
+    "statusClosed": "終了",
+    "columns": {
+      "code": "コード",
+      "title": "タイトル",
+      "status": "ステータス",
+      "department": "部門",
+      "planned": "計画FTE",
+      "funded": "財源付きFTE",
+      "filled": "充足済みFTE",
+      "vacant": "欠員FTE",
+      "holder": "保持者",
+      "unassignedHolder": "欠員"
+    },
+    "holdersCount": "{count, plural, other {# 名の保持者}}",
+    "empty": "このフィルターに一致するポジションはありません。",
+    "total": "合計",
+    "drawer": {
+      "title": "ポジション {code}",
+      "versions": "バージョン",
+      "versionNo": "バージョン {no}",
+      "effective": "{from} から {to} まで有効",
+      "effectiveOpen": "{from} から有効（終了日なし）",
+      "recorded": "記録日時 {at}",
+      "funding": "期間別の財源",
+      "period": "期間 {from}〜{to}",
+      "funded": "財源付き {fte} FTE",
+      "costPlan": "コスト計画 {amount} {currency}",
+      "unfunded": "財源の記録なし",
+      "holder": "現在の保持者",
+      "holderEmployment": "雇用 {id}",
+      "noHolder": "{date} 時点で保持者なし",
+      "warnings": "警告",
+      "refusal": "要対応",
+      "missing": "このポジションは表示できなくなりました。"
+    },
+    "add": "ポジションを追加",
+    "create": {
+      "title": "新しいポジション",
+      "code": "ポジションコード",
+      "titleField": "役職名",
+      "employer": "雇用主となる子会社",
+      "department": "部門",
+      "noDepartment": "部門なし",
+      "plannedFte": "計画FTE",
+      "status": "ステータス",
+      "effectiveFrom": "有効開始日",
+      "reason": "理由",
+      "reasonPlaceholder": "このポジションが存在する理由（最初のバージョンとともに記録されます）",
+      "submit": "ポジションを作成",
+      "failed": "ポジションを作成できませんでした。"
+    },
+    "segmentsLabel": "ステータス"
+  },
+  "processes": {
+    "title": "プロセスチェックリスト",
+    "description": "担当者、期限、証跡付きのオンボーディング、オフボーディング、異動チェックリスト。",
+    "listTitle": "チェックリスト",
+    "listFailed": "プロセスを読み込めませんでした。",
+    "detailTitle": "チェックリスト",
+    "detailFailed": "チェックリストを読み込めませんでした。",
+    "actionFailed": "操作を完了できませんでした。",
+    "loading": "読み込み中…",
+    "empty": "このセグメントにチェックリストはありません。",
+    "overdueBadge": "期限切れ {count}件",
+    "progressLine": "必須 {required} 件中 {done} 件完了 · 発効日 {effective}",
+    "dueOn": "期限 {date}",
+    "required": "必須",
+    "completeStep": "手順を完了",
+    "skipStep": "手順をスキップ",
+    "completeProcess": "チェックリストを完了",
+    "cancelProcess": "チェックリストをキャンセル",
+    "attachmentLabel": "証跡ファイル",
+    "attachmentUnset": "検索語を入力",
+    "skipReasonLabel": "スキップ理由",
+    "skipReasonPlaceholder": "この手順をスキップする理由",
+    "cancelReasonLabel": "キャンセル理由",
+    "cancelReasonPlaceholder": "このチェックリストをキャンセルする理由",
+    "confirmReason": "確定",
+    "cancelReasonAbort": "戻る",
+    "segments": {
+      "open": "未完了",
+      "overdue": "期限切れ",
+      "completed": "完了済み",
+      "cancelled": "キャンセル済み"
+    },
+    "columns": {
+      "employee": "従業員",
+      "kind": "種類",
+      "effective": "発効日",
+      "progress": "進捗",
+      "nextDue": "次の期限",
+      "status": "ステータス"
+    },
+    "kinds": {
+      "onboarding": "オンボーディング",
+      "offboarding": "オフボーディング",
+      "transfer": "異動"
+    },
+    "owners": {
+      "manager": "マネージャー",
+      "hr": "人事",
+      "employee": "従業員",
+      "named_party": "指定者"
+    },
+    "evidence": {
+      "none": "なし",
+      "acknowledgement": "確認",
+      "attachment": "添付ファイル"
+    },
+    "stepStatus": {
+      "pending": "未完了",
+      "done": "完了",
+      "skipped": "スキップ済み"
+    },
+    "segmentsLabel": "表示"
+  },
+  "leave": {
+    "title": "休暇",
+    "description": "申請、承認、欠勤記録 — 時間残高と、残高がある場合は金額も表示します。",
+    "listTitle": "休暇申請",
+    "segmentsLabel": "表示",
+    "allLabel": "すべて",
+    "segments": {
+      "pending": "承認待ち",
+      "upcoming": "予定",
+      "today": "本日欠勤中",
+      "history": "履歴"
+    },
+    "columns": {
+      "employee": "氏名",
+      "type": "種別",
+      "range": "期間",
+      "hours": "時間",
+      "status": "状態"
+    },
+    "emptyTitle": "ここには何もありません",
+    "emptyDescription": "この区分にはまだ何もありません。",
+    "truncatedNote": "最初の{limit}件を表示しています。",
+    "unknownSegmentTitle": "不明な区分",
+    "unknownSegment": "{segment}という区分はありません。",
+    "refusedTitle": "休暇は拒否されました",
+    "fileTitle": "休暇を申請する",
+    "fileButton": "新規申請",
+    "recordTitle": "欠勤を記録する",
+    "recordButton": "欠勤を記録",
+    "calendarTitle": "部門別カレンダー",
+    "calendarDepartmentLabel": "部門",
+    "calendarFromLabel": "開始",
+    "calendarToLabel": "終了",
+    "calendarShowLabel": "表示",
+    "calendarEmpty": "この期間に欠勤はありません。部門を選んでください。",
+    "openRequest": "開く",
+    "drawerTitle": "休暇申請",
+    "detailLoading": "申請を読み込んでいます…",
+    "detailFailed": "申請を読み込めませんでした。",
+    "actionFailed": "操作に失敗しました。",
+    "submitButton": "承認に提出する",
+    "withdrawButton": "取り下げる",
+    "cancelButton": "申請を取り消す",
+    "withdrawReasonTitle": "この申請を取り下げる理由は？",
+    "cancelReasonTitle": "この申請を取り消す理由は？",
+    "fileFailed": "申請を登録できませんでした。",
+    "fileEmploymentLabel": "雇用",
+    "fileEmploymentPlaceholder": "雇用ID",
+    "fileTypeLabel": "休暇種別",
+    "fileTypePlaceholder": "休暇種別を選ぶ",
+    "fileHoursLabel": "時間",
+    "fileReasonLabel": "理由",
+    "timeBalanceTitle": "{date}時点の時間残高",
+    "timeBalanceValue": "{balance}時間（付与{earned}、繰越{carried}、取得{taken}）",
+    "unlimitedBalance": "無制限 — 残高数値なし。",
+    "noPolicyBalance": "この雇用に適用されるポリシーがありません。",
+    "valueBalanceTitle": "{date}時点の給与残高",
+    "statusNames": {
+      "draft": "下書き",
+      "submitted": "提出済み",
+      "approved": "承認済み",
+      "rejected": "却下",
+      "withdrawn": "取下げ",
+      "cancelled": "取消済み"
+    }
+  },
+  "myLeave": {
+    "title": "自分の休暇",
+    "description": "自分の申請と残高のみ表示します。",
+    "emptyTitle": "申請はまだありません",
+    "emptyDescription": "最初の申請を登録してください。",
+    "balancesTitle": "残高",
+    "balancesEmpty": "有効な休暇種別がありません。",
+    "timeKind": "時間",
+    "valueKind": "金額",
+    "unlimited": "無制限"
   }
 }

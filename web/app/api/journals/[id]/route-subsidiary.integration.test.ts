@@ -72,7 +72,7 @@ hooks.deregister();
 
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const { documentRevisionCounterSql } = await import("../../../../lib/documents.ts");
+const { documentRevisionCounterSql } = await import("../../../../../engine/src/records/revision.ts");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 

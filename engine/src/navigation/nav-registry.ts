@@ -623,40 +623,6 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'hrm.employment.read',
     featureKey: 'hrm',
   },
-  // Human Resources working surfaces — the banking pattern (banking-cash
-  // beside /banking): one nav module per tab route, each carrying the
-  // permission and feature gate its page enforces.
-  {
-    key: 'hrm-change-requests',
-    href: '/hrm/change-requests',
-    label: 'Change Requests',
-    iconKey: 'clipboard-check',
-    group: 'operations',
-    subgroup: 'people',
-    requiredPermission: 'hrm.employment.read',
-    featureKey: 'hrm',
-  },
-  {
-    key: 'hrm-departments',
-    href: '/hrm/departments',
-    label: 'Departments',
-    iconKey: 'building',
-    group: 'operations',
-    subgroup: 'people',
-    requiredPermission: 'hrm.employment.read',
-    featureKey: 'hrm',
-  },
-  {
-    key: 'hrm-reports',
-    href: '/hrm/reports',
-    label: 'HR Reports',
-    iconKey: 'file',
-    group: 'operations',
-    subgroup: 'people',
-    requiredPermission: 'reports.read',
-    featureKey: 'hrm',
-  },
-
   // Insights — reports, native analytics, custom dashboards, and saved views.
   {
     key: 'reports',
@@ -925,9 +891,6 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'equipment',
     'employees',
     'hrm',
-    'hrm-change-requests',
-    'hrm-departments',
-    'hrm-reports',
   ],
   banking: [
     'banking',

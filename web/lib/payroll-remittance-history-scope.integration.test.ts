@@ -32,7 +32,7 @@ const { seedAdoption, calculatedRun } =
   await import("@openbooks/engine/src/payroll/filing-test-fixtures.ts");
 const { dropScratchOrgReporting } =
   await import("@openbooks/engine/src/testing/fixtures.ts");
-const { commitPayRun } = await import("@openbooks/engine/src/payroll/run.ts");
+const { commitPayRun } = await import("@openbooks/engine/src/payroll/run-commit.ts");
 const { guardRemittancePeriod } =
   await import("../app/api/payroll/subsidiary-scope");
 const { payrollRemittanceSummary, createRemittanceBill } =

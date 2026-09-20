@@ -10,7 +10,8 @@ import test from "node:test";
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const view = read("./view.ts");
 const actions = read("./AgentsPackActions.tsx");
-const widgets = read("../../../../../components/viewspec/widgets.tsx");
+const widgets = read("../../../../../components/viewspec/widgets-agents.tsx");
+const controls = read("../../../../../components/viewspec/widgets-controls.tsx");
 const lib = read("../../../../../lib/setup/agents.ts");
 
 test("the overview spec binds the shared KPI strip and the spec table", () => {
@@ -45,7 +46,7 @@ test("row actions arrive through a small island cell, not a page monolith", () =
 });
 
 test("the registry exposes the shared strip and the row island", () => {
-  assert.match(widgets, /'kpi-strip'/);
+  assert.match(controls, /'kpi-strip'/);
   assert.match(widgets, /'agents-pack-actions'/);
   assert.doesNotMatch(widgets, /agents-overview-workspace/);
 });

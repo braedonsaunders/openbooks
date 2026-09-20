@@ -3,7 +3,8 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrgContext, withOrgTransaction } from "../platform/db.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
-import { createPaymentDocument, postPaymentWithApplications } from "./payments.ts";
+import { createPaymentDocument } from "./payment-documents.ts";
+import { postPaymentWithApplications } from "./payment-posting.ts";
 import {
   createScratchOrg,
   createScratchUser,

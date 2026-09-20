@@ -5,15 +5,16 @@ import test from 'node:test';
 import { sql } from 'drizzle-orm';
 import { db, pool, withBypassContext, withOrgContext, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts';
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, type ScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts';
-import { postDocument } from '@openbooks/engine/src/ledger/posting.ts';
-import { createTransferOrder, receiveInventory, receiveTransferOrder, shipTransferOrder } from '@openbooks/engine/src/inventory/inventory.ts';
+import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
+import { createTransferOrder, receiveTransferOrder, shipTransferOrder } from "@openbooks/engine/src/inventory/transfer-orders.ts";
+import { receiveInventory } from "@openbooks/engine/src/inventory/movements.ts";
 registerHooks({ resolve(specifier, context, next) {
   if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' };
   return next(specifier, context);
 } });
 const { saveSetupBook } = await import('./setup/books.ts');
 const { SETUP_ENTITY_BY_KEY } = await import('./setup/registry.ts');
-const { createPaymentDocument, updateDraftPayment, postPaymentWithApplications, sameCurrencyAllocation } = await import('@openbooks/engine/src/payments/payments.ts');
+const { createPaymentDocument, updateDraftPayment } = await import("@openbooks/engine/src/payments/payment-documents.ts"), { postPaymentWithApplications } = await import("@openbooks/engine/src/payments/payment-posting.ts"), { sameCurrencyAllocation } = await import("@openbooks/engine/src/payments/settlement-policy.ts");
 const routeAuth = { user: { orgId: '', id: '' }, allowedSubsidiaryIds: null };
 Object.assign(globalThis, { __primaryBookRouteAuth: routeAuth });
 const authHooks = registerHooks({ resolve(specifier, context, next) {

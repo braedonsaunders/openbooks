@@ -69,7 +69,7 @@ test('the selector renders through the registry, not a direct import', () => {
   // outside the registry would make the registry entry a lie.
   assert.ok(WIDGET_NAMES.has('currency-basis'), 'currency-basis must be a renderable registry name')
   assert.match(
-    readFileSync(new URL('../../../../components/viewspec/widgets.tsx', import.meta.url), 'utf8'),
+    readFileSync(new URL('../../../../components/viewspec/widgets-controls.tsx', import.meta.url), 'utf8'),
     /'currency-basis': \(props\)/,
     'the registry must own the currency-basis entry',
   )

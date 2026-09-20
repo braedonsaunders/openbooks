@@ -12,7 +12,11 @@ import { readApiErrorMessage } from '../../../lib/api-error'
  * behind hrm.employment.manage (the API re-checks the grant): a kind
  * selector plus kind-specific fields that mirror the zod payload contract in
  * engine/src/hrm/change-requests.ts field for field — hire, status_change,
- * assignment_change (including the line-manager repoint), termination.
+ * assignment_change (including the line-manager repoint), termination, and
+ * position_assignment (the establishment link, with an unassign mode that
+ * posts an explicit null). The position picker reads source=positions
+ * behind hrm.position.read; without that grant the picker reports the
+ * refusal instead of a roster.
  *
  * Civil dates travel verbatim: the date controls yield YYYY-MM-DD strings
  * and the payload carries them untouched, never through a Date. FTE posts as
@@ -22,7 +26,7 @@ import { readApiErrorMessage } from '../../../lib/api-error'
  * Approvals: this surface only files, edits, submits, and withdraws.
  */
 
-export type ChangeRequestKind = 'hire' | 'status_change' | 'assignment_change' | 'termination'
+export type ChangeRequestKind = 'hire' | 'status_change' | 'assignment_change' | 'termination' | 'position_assignment'
 
 export type DepartmentOption = {
   value: string
@@ -40,7 +44,7 @@ export type EditableChangeRequest = {
   payload: Record<string, unknown>
 }
 
-const KINDS: ChangeRequestKind[] = ['hire', 'status_change', 'assignment_change', 'termination']
+const KINDS: ChangeRequestKind[] = ['hire', 'status_change', 'assignment_change', 'termination', 'position_assignment']
 
 const HIRE_STATUSES = ['offered', 'active', 'on_leave', 'suspended'] as const
 const ALL_STATUSES = ['offered', 'active', 'on_leave', 'suspended', 'terminated'] as const
@@ -76,7 +80,8 @@ export function ChangeRequestDrawer({
   const [kind, setKind] = useState<ChangeRequestKind>(
     initialPayload.kind === 'status_change' ||
       initialPayload.kind === 'assignment_change' ||
-      initialPayload.kind === 'termination'
+      initialPayload.kind === 'termination' ||
+      initialPayload.kind === 'position_assignment'
       ? initialPayload.kind
       : 'hire',
   )
@@ -97,6 +102,14 @@ export function ChangeRequestDrawer({
     initialPayload.isPrimary === true ? 'yes' : initialPayload.isPrimary === false ? 'no' : 'unchanged',
   )
   const [managerEmploymentId, setManagerEmploymentId] = useState(asText(initialPayload.managerEmploymentId))
+  const [positionId, setPositionId] = useState(asText(initialPayload.positionId))
+  const [unassign, setUnassign] = useState(
+    initialPayload.kind === 'position_assignment' && (initialPayload as { positionId?: unknown }).positionId === null,
+  )
+  const [positionOptions, setPositionOptions] = useState<PickerOption[]>([])
+  const [positionQuery, setPositionQuery] = useState('')
+  const [positionLoading, setPositionLoading] = useState(true)
+  const [positionStatus, setPositionStatus] = useState<string | undefined>(undefined)
   const [managerOptions, setManagerOptions] = useState<PickerOption[]>([])
   const [managerQuery, setManagerQuery] = useState('')
   const [managerLoading, setManagerLoading] = useState(true)
@@ -106,6 +119,7 @@ export function ChangeRequestDrawer({
   const [busy, setBusy] = useState(false)
   const managerRequestId = useRef(0)
   const locationRequestId = useRef(0)
+  const positionRequestId = useRef(0)
 
   // Remote per-query pickers over the HRM options route: bounded page per
   // query so holders beyond the first page stay selectable. A sequence
@@ -192,6 +206,50 @@ export function ChangeRequestDrawer({
       })
   }, [locationQuery, locationId, t])
 
+  // The establishment picker over source=positions (position read grant):
+  // same bounded-page, sequence-guarded, pin-first composition as the
+  // manager and location pickers. A refusal (no position read grant) lands
+  // in the picker status line with its message, never as an empty list.
+  useEffect(() => {
+    const id = (positionRequestId.current += 1)
+    const params = new URLSearchParams()
+    params.set('source', 'positions')
+    params.set('limit', '25')
+    if (positionQuery.trim()) params.set('q', positionQuery.trim())
+    if (positionId) params.set('include', positionId)
+    fetch(`/api/hrm/options?${params.toString()}`, { method: 'GET' })
+      .then(async (res) => {
+        if (id !== positionRequestId.current) return
+        if (!res.ok) {
+          setPositionStatus(await readApiErrorMessage(res, t('employment.changeRequests.requestFailed')))
+          setPositionLoading(false)
+          return
+        }
+        const payload = (await res.json().catch(() => ({}))) as {
+          options?: { positionId?: unknown; label?: unknown }[]
+        }
+        if (id !== positionRequestId.current) return
+        const page = Array.isArray(payload.options) ? payload.options : []
+        const merged: PickerOption[] = []
+        for (const row of page) {
+          if (typeof row.positionId === 'string' && typeof row.label === 'string') {
+            merged.push({ value: row.positionId, label: row.label })
+          }
+        }
+        if (positionId && !merged.some((option) => option.value === positionId)) {
+          merged.push({ value: positionId, label: positionId })
+        }
+        setPositionOptions(merged)
+        setPositionStatus(undefined)
+        setPositionLoading(false)
+      })
+      .catch(() => {
+        if (id !== positionRequestId.current) return
+        setPositionStatus(t('employment.changeRequests.requestFailed'))
+        setPositionLoading(false)
+      })
+  }, [positionQuery, positionId, t])
+
   const kindLabel = (value: ChangeRequestKind): string =>
     value === 'hire'
       ? t('employment.changeRequests.kindHire')
@@ -199,7 +257,9 @@ export function ChangeRequestDrawer({
         ? t('employment.changeRequests.kindStatusChange')
         : value === 'assignment_change'
           ? t('employment.changeRequests.kindAssignmentChange')
-          : t('employment.changeRequests.kindTermination')
+          : value === 'termination'
+            ? t('employment.changeRequests.kindTermination')
+            : t('employment.changeRequests.kindPositionAssignment')
 
   const statusLabel = (value: string): string =>
     t.has(`employment.status.${value}`) ? t(`employment.status.${value}`) : value
@@ -216,6 +276,15 @@ export function ChangeRequestDrawer({
     }
     if (kind === 'termination') {
       return { kind, effectiveDate }
+    }
+    if (kind === 'position_assignment') {
+      return {
+        kind,
+        assignmentKey: assignmentKey.trim(),
+        positionId: unassign ? null : positionId,
+        ...(effectiveFrom.trim() ? { effectiveFrom: effectiveFrom.trim() } : {}),
+        ...(effectiveTo.trim() ? { effectiveTo: effectiveTo.trim() } : {}),
+      }
     }
     return {
       kind,
@@ -281,8 +350,16 @@ export function ChangeRequestDrawer({
   }
 
   function requireAssignmentKey(): boolean {
-    if (kind === 'assignment_change' && !assignmentKey.trim()) {
+    if ((kind === 'assignment_change' || kind === 'position_assignment') && !assignmentKey.trim()) {
       setError(t('employment.changeRequests.assignmentKeyRequired'))
+      return false
+    }
+    return true
+  }
+
+  function requirePositionLink(): boolean {
+    if (kind === 'position_assignment' && !unassign && !positionId) {
+      setError(t('employment.changeRequests.positionRequired'))
       return false
     }
     return true
@@ -298,6 +375,7 @@ export function ChangeRequestDrawer({
 
   async function saveDraft() {
     if (!requireAssignmentKey()) return
+    if (!requirePositionLink()) return
     setBusy(true)
     setError(null)
     const payload = buildPayload()
@@ -319,6 +397,7 @@ export function ChangeRequestDrawer({
 
   async function submitForApproval() {
     if (!requireAssignmentKey()) return
+    if (!requirePositionLink()) return
     const submitReason = requireReason()
     if (submitReason === null) return
     setBusy(true)
@@ -590,6 +669,94 @@ export function ChangeRequestDrawer({
               className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
             />
           </div>
+        ) : null}
+
+        {kind === 'position_assignment' ? (
+          <>
+            <div className="space-y-1.5">
+              <Label htmlFor="cr-position-assignment-key">{t('employment.changeRequests.assignmentKeyLabel')}</Label>
+              <Input
+                id="cr-position-assignment-key"
+                value={assignmentKey}
+                disabled={busy}
+                required
+                onChange={(event) => setAssignmentKey(event.target.value)}
+                placeholder={t('employment.changeRequests.assignmentKeyPlaceholder')}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="cr-position">{t('employment.changeRequests.positionLabel')}</Label>
+              <SearchSelect
+                id="cr-position"
+                value={unassign ? '' : positionId}
+                onChange={(next) => {
+                  setPositionId(next)
+                  setError(null)
+                }}
+                options={positionOptions}
+                ariaLabel={t('employment.changeRequests.positionLabel')}
+                sheetTitle={t('employment.changeRequests.positionLabel')}
+                clearable
+                emptyLabel={t('employment.changeRequests.positionUnset')}
+                remote
+                loading={positionLoading}
+                statusMessage={positionStatus}
+                statusTone={positionStatus ? 'error' : 'muted'}
+                onSearchChange={(next) => {
+                  setPositionQuery(next)
+                  setPositionLoading(true)
+                  setPositionStatus(undefined)
+                }}
+                disabled={busy || unassign}
+              />
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {t('employment.changeRequests.positionHint')}
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <label className="flex items-center gap-2 text-sm text-slate-900 dark:text-slate-100">
+                <input
+                  id="cr-unassign"
+                  type="checkbox"
+                  checked={unassign}
+                  disabled={busy}
+                  onChange={(event) => {
+                    setUnassign(event.target.checked)
+                    setError(null)
+                  }}
+                />
+                {t('employment.changeRequests.unassignLabel')}
+              </label>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {t('employment.changeRequests.unassignHint')}
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="cr-position-from">{t('employment.changeRequests.effectiveFromLabel')}</Label>
+              <input
+                id="cr-position-from"
+                type="date"
+                value={effectiveFrom}
+                disabled={busy}
+                onChange={(event) => setEffectiveFrom(event.target.value)}
+                className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="cr-position-to">{t('employment.changeRequests.effectiveToLabel')}</Label>
+              <input
+                id="cr-position-to"
+                type="date"
+                value={effectiveTo}
+                disabled={busy}
+                onChange={(event) => setEffectiveTo(event.target.value)}
+                className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              />
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {t('employment.changeRequests.effectiveToHint')}
+              </p>
+            </div>
+          </>
         ) : null}
 
         <div className="space-y-1.5">

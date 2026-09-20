@@ -4,7 +4,9 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, pool, withOrgTransaction } from "../platform/db.ts";
 import { calculatedRun, seedAdoption } from "./filing-test-fixtures.ts";
-import { calculatePayRun, commitPayRun, createPayRun } from "./run.ts";
+import { calculatePayRun } from "./run-calculation.ts";
+import { commitPayRun } from "./run-commit.ts";
+import { createPayRun } from "./run-lifecycle.ts";
 import { dropScratchOrgReporting } from "../testing/fixtures.ts";
 
 async function snapshot(orgId: string) {

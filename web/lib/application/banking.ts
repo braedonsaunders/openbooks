@@ -10,7 +10,7 @@ import {
 } from "@openbooks/engine/src/banking/banking.ts";
 import { ControlAccountsIncompleteError } from "@openbooks/engine/src/records/control-accounts.ts";
 import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
-import { PostingError } from "@openbooks/engine/src/ledger/posting.ts";
+import { PostingError } from "@openbooks/engine/src/ledger/posting-contracts.ts";
 import { addJournalMatchFromLine } from "../banking-rules";
 import { canonicalDecimal } from "../exact-decimal";
 import { isFeatureEnabled } from "../features";

@@ -19,7 +19,7 @@ import { loadOrder } from '../../api/_order/lib'
 import type { OrderDrawer } from '../_order/OrderDrawer'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { customSegmentOptions } from '../../../lib/segments'
-import { taxCodeOptions, taxGroupOptions } from '../../../lib/documents'
+import { taxCodeOptions, taxGroupOptions } from "../../../lib/documents.ts";
 import { subsidiaryUiOptions } from '../../../lib/subsidiaries'
 
 /**

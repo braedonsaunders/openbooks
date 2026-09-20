@@ -7,16 +7,27 @@ import { compileCustomQuery } from './custom-query'
 import { BUILT_IN_REPORT_DEFINITION_MAP } from './built-ins'
 import { validateCustomQuery } from './validate'
 
-// Slice G pins: the three workforce entities ride the shared catalog (and
+// Slice G pins: the workforce entities ride the shared catalog (and
 // therefore the builder, saved views and card studio, which all derive from
-// REPORT_ENTITIES), each behind the hrm feature gate and
-// hrm.employment.read — enforced generically at every run path, so the pins
-// below assert the declaration, never a private gate.
+// REPORT_ENTITIES), each behind the hrm feature gate and its domain read
+// permission — enforced generically at every run path, so the pins below
+// assert the declaration, never a private gate. The process checklist
+// entity (0193) carries hrm.process.read: checklist state is governed by
+// the process gate, not the employment one.
 
-const HRM_KEYS = ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests'] as const
+const HRM_KEYS = ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests', 'hrm_positions', 'hrm_processes', 'hrm_leave_absences'] as const
+
+const HRM_PERMISSIONS: Record<(typeof HRM_KEYS)[number], string> = {
+  hrm_headcount: 'hrm.employment.read',
+  hrm_employment_history: 'hrm.employment.read',
+  hrm_change_requests: 'hrm.employment.read',
+  hrm_positions: 'hrm.position.read',
+  hrm_processes: 'hrm.process.read',
+  hrm_leave_absences: 'hrm.leave.read',
+}
 
 test('workforce entities are registered on the shared catalog exactly once', () => {
-  assert.equal(HRM_REPORT_ENTITIES.length, 3)
+  assert.equal(HRM_REPORT_ENTITIES.length, HRM_KEYS.length)
   for (const key of HRM_KEYS) {
     const entity = REPORT_ENTITY_MAP[key]
     assert.ok(entity, `${key} must be in REPORT_ENTITY_MAP`)
@@ -24,10 +35,10 @@ test('workforce entities are registered on the shared catalog exactly once', () 
   }
 })
 
-test('workforce entities refuse without the hrm gate and the employment permission', () => {
+test('workforce entities refuse without the hrm gate and their own read permission', () => {
   for (const key of HRM_KEYS) {
     const entity = REPORT_ENTITY_MAP[key]!
-    assert.equal(entity.requiredPermission, 'hrm.employment.read', key)
+    assert.equal(entity.requiredPermission, HRM_PERMISSIONS[key], key)
     assert.equal(entity.featureKey, 'hrm', key)
   }
 })
@@ -37,11 +48,17 @@ test('workforce entities scope to one org and one legal-entity boundary', () => 
     hrm_headcount: 'hc.org_id',
     hrm_employment_history: 'ev.org_id',
     hrm_change_requests: 'r.org_id',
+    hrm_positions: 'p.org_id',
+    hrm_processes: 's.org_id',
+    hrm_leave_absences: 'a.org_id',
   }
   const scopeColumns: Record<(typeof HRM_KEYS)[number], string> = {
     hrm_headcount: 'hc.employer_subsidiary_id',
     hrm_employment_history: 'e.employer_subsidiary_id',
     hrm_change_requests: 'e.employer_subsidiary_id',
+    hrm_positions: 'v.employer_subsidiary_id',
+    hrm_processes: 'e.employer_subsidiary_id',
+    hrm_leave_absences: 'e.employer_subsidiary_id',
   }
   for (const key of HRM_KEYS) {
     const entity = REPORT_ENTITY_MAP[key]!
@@ -57,6 +74,21 @@ test('workforce entities scope to one org and one legal-entity boundary', () => 
       assert.match(block, /\borg_id\s*=\s*\w+\.org_id/i, `${key}: ${block.trim().slice(0, 80)}`)
     }
   }
+})
+
+test('positions vacancy as-of is the catalog sentinel, bound server-side, never CURRENT_DATE', () => {
+  const from = REPORT_ENTITY_MAP.hrm_positions!.from
+  assert.match(from, new RegExp(REPORT_AS_OF))
+  assert.doesNotMatch(from, /CURRENT_DATE/)
+  // Half-open containment on all three legs (version, funding period,
+  // holder assignment) plus currently-known revisions only — the same
+  // contract the vacancy read resolves through temporal.ts.
+  assert.match(from, /effective_from <=/)
+  assert.match(from, /effective_to IS NULL OR effective_to >/)
+  assert.match(from, /recorded_until IS NULL/)
+  assert.match(from, /per\.starts_on <=/)
+  assert.match(from, /per\.ends_on >=/)
+  assert.equal(REPORT_ENTITY_MAP.hrm_positions!.defaultPeriodField, null)
 })
 
 test('headcount as-of is the catalog sentinel, bound server-side, never CURRENT_DATE', () => {

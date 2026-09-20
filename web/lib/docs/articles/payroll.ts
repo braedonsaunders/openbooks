@@ -6,8 +6,8 @@ export const payroll: DocArticle = {
   category: "projects",
   order: 6,
   summary:
-    "Run payroll with installable country packs: CRA T4127 (Canada) and IRS Pub 15-T (US) statutory engines, pay schedules, TD1/W-4 profiles, pay runs, union fringes, and GL posting.",
-  updated: "2026-09-15",
+    "Run payroll with installable country packs: statutory withholding engines for the jurisdictions you employ, pay schedules, withholding profiles, pay runs, union fringes, and GL posting.",
+  updated: "2026-09-20",
   keywords: [
     "payroll",
     "pay run",
@@ -35,6 +35,37 @@ export const payroll: DocArticle = {
     "remittance",
     "net pay",
     "stub",
+    "IRPEF",
+    "INPS",
+    "addizionale",
+    "trattamento integrativo",
+    "ZUS",
+    "PIT",
+    "kaigo",
+    "IRPF",
+    "situación familiar",
+    "eSocial",
+    "FGTS",
+    "INSS",
+    "PAYE",
+    "NICs",
+    "PRSI",
+    "USC",
+    "PAYG",
+    "SG",
+    "CPF",
+    "MediSave",
+    "IRAS",
+    "Lohnsteuer",
+    "Solidaritätszuschlag",
+    "Sozialversicherung",
+    "URSSAF",
+    "CSG",
+    "CRDS",
+    "DSN",
+    "PAS",
+    "Loonbelasting",
+    "Zvw",
   ],
   related: ["labor-costing", "overhead-costing"],
   body: `# Payroll
@@ -79,67 +110,25 @@ incomplete stubs.
   Québec-source amounts remit to Revenu Québec on its own schedule — see
   Remitting source deductions below.
 
-## What the US engine covers
+### Canada setup notes
 
-- Federal income tax with the Pub 15-T annual percentage method: 2020-or-later
-  W-4s (filing status, the Step 2 multiple-jobs checkbox, Step 3 dependent
-  credits, Step 4 other income, deductions, and extra withholding) and
-  2019-or-earlier W-4s via withholding allowances.
-- Social Security with the annual wage-base maximum, Medicare with the
-  employee-only Additional Medicare tax over 200,000 dollars, and the
-  employer matches.
-- Supplemental wages (bonuses, retroactive pay) at the optional flat rate,
-  with the mandatory higher rate past 1,000,000 dollars year to date.
-- FUTA at a configurable effective rate (for credit-reduction states) and
-  state unemployment insurance at the employer's own experience rate and each
-  state's wage base, entered in Setup → Payroll → Accounts & posting.
+The generic setup steps below name the concept; the Canada answers are:
 
-## Setup
+- Remittance payables: CRA remittance payables for income tax, CPP, and EI,
+  plus Revenu Québec payables for Québec employment.
+- Pre-tax deductions: the T4127 factor treatment — pension is factor F, union
+  dues are factor U1, and pre-1997 alimony is factor F2.
+- Retirement match example: an RRSP match.
+- Withholding certificates: TD1 claim codes 0 through 10 or exact claim
+  amounts, as listed above.
+- Opening balances: year-to-date pensionable and insurable earnings with
+  CPP/CPP2/EI/QPIP contributions, so annual maxima stay exact.
+- Working-dues fringes flow into the T4127 union-dues factor.
 
-1. **Accounts** — Setup → Payroll: wage expense, employer burden expense, net
-   pay payable, CRA remittance payables (income tax, CPP, EI), and vacation
-   payable. Choose where time-driven wages debit: wage expense with project
-   splits, or the labor clearing account when standard labor costing posts at
-   time approval (the payroll actuals then wash the clearing balance and the
-   existing true-up reconciles the variance).
-2. **Components** — seed the standard component set, then add organization
-   components (allowances, RRSP match, garnishees). Deductions can be pre-tax
-   under the correct T4127 factor: pension (factor F), union dues (U1), or
-   pre-1997 alimony (F2).
-3. **Schedules** — weekly, biweekly, semi-monthly, or monthly, anchored to any
-   period end. Years with 27 or 53 pay days are supported explicitly.
-4. **Employees** — each employee gets a payroll profile: schedule, country
-   and province or state of employment, TD1 claim codes or W-4 elections,
-   exemptions, vacation percent (accrue or pay each period), and union
-   membership. Wages are not entered here: payroll
-   resolves the same effective-dated employee wage the costing engine uses,
-   so job cost and pay never disagree.
-5. **Opening balances** — adopting mid-year, enter each employee's
-   year-to-date pensionable and insurable earnings, CPP/CPP2/EI/QPIP
-   contributions, taxable income, and tax withheld so annual maxima and the
-   bonus method stay exact.
+### Remitting for the Canada pack
 
-## Running a pay run
-
-Create a run for a schedule (the next period is derived automatically),
-calculate, review each stub with its statutory trace, and commit. Committing
-claims the period's approved time entries, builds the balanced journal
-projection, and hands the run to the standard document posting flow. Hourly
-earnings come from approved time entries at the employee wage times the time
-type multiplier; salaried employees pay the annual rate over the schedule's
-periods.
-
-## Remitting source deductions
-
-Committing a pay run accrues withholding liabilities; getting the money to
-the agency is a separate step under Payroll → Remittances. The cockpit groups
-accrued amounts by destination vendor and payroll program account — one card
-per destination (the CRA vendor, the Revenu Québec vendor, union funds) — and
-each group materializes as one draft vendor bill debiting the liability
-accounts. The bill then rides the normal AP review, post, and pay flow.
-
-CRA and Revenu Québec destinations remit on different timetables, and a bill's
-due date always comes from its own destination's schedule:
+CRA and Revenu Québec destinations remit on different timetables, and a
+bill's due date always comes from its own destination's schedule:
 
 - CRA bills follow the filing account's CRA remitter type (regular,
   quarterly, and the two accelerated thresholds), moved off weekends and
@@ -159,12 +148,87 @@ while the frequency is unconfirmed, and when last year's average monthly
 remittance points at a different band. Every bill stamps the rule that dated
 it, so a due date is always explainable.
 
+## What the US engine covers
+
+- Federal income tax with the Pub 15-T annual percentage method: 2020-or-later
+  W-4s (filing status, the Step 2 multiple-jobs checkbox, Step 3 dependent
+  credits, Step 4 other income, deductions, and extra withholding) and
+  2019-or-earlier W-4s via withholding allowances.
+- Social Security with the annual wage-base maximum, Medicare with the
+  employee-only Additional Medicare tax over 200,000 dollars, and the
+  employer matches.
+- Supplemental wages (bonuses, retroactive pay) at the optional flat rate,
+  with the mandatory higher rate past 1,000,000 dollars year to date.
+- FUTA at a configurable effective rate (for credit-reduction states) and
+  state unemployment insurance at the employer's own experience rate and each
+  state's wage base, entered in Setup → Payroll → Accounts & posting.
+
+## Setup
+
+The steps below are the same for every jurisdiction; the statutory specifics
+— which payables, which pre-tax treatments, which certificates, which
+year-to-date bases — come from each installed pack. The pack sections above
+(Canada, US) name the specifics for the packs they cover, alongside the setup
+screens under Setup → Payroll → Country packs. Read the section for every
+jurisdiction you employ alongside these steps.
+
+1. **Accounts** — Setup → Payroll: wage expense, employer burden expense, net
+   pay payable, the remittance payables each installed pack declares for its
+   agencies, and vacation payable. Choose where time-driven wages debit: wage
+   expense with project splits, or the labor clearing account when standard
+   labor costing posts at time approval (the payroll actuals then wash the
+   clearing balance and the existing true-up reconciles the variance).
+2. **Components** — seed the standard component set, then add organization
+   components (allowances, employer retirement match, garnishees). Deductions
+   can be pre-tax under the treatment the employee's pack recognizes — the
+   Canada pack expresses this with T4127 factors, listed in its section above.
+3. **Schedules** — weekly, biweekly, semi-monthly, or monthly, anchored to any
+   period end. Years with 27 or 53 pay days are supported explicitly.
+4. **Employees** — each employee gets a payroll profile: schedule, country
+   and province or state of employment, the withholding certificate or
+   elections the employee's pack requires (TD1 claim codes in Canada, W-4
+   elections in the US), exemptions, vacation percent (accrue or pay each
+   period), and union membership. Wages are not entered here: payroll
+   resolves the same effective-dated employee wage the costing engine uses,
+   so job cost and pay never disagree.
+5. **Opening balances** — adopting mid-year, enter each employee's
+   year-to-date assessable bases and statutory contributions the pack's annual
+   maxima depend on (in Canada: pensionable and insurable earnings with
+   CPP/CPP2/EI/QPIP contributions), plus taxable income and tax withheld, so
+   annual maxima and the pack's special payment calculations stay exact.
+
+## Running a pay run
+
+Create a run for a schedule (the next period is derived automatically),
+calculate, review each stub with its statutory trace, and commit. Committing
+claims the period's approved time entries, builds the balanced journal
+projection, and hands the run to the standard document posting flow. Hourly
+earnings come from approved time entries at the employee wage times the time
+type multiplier; salaried employees pay the annual rate over the schedule's
+periods.
+
+## Remitting source deductions
+
+Committing a pay run accrues withholding liabilities; getting the money to
+the agency is a separate step under Payroll → Remittances. The cockpit groups
+accrued amounts by destination vendor and payroll program account — one card
+per destination, covering the statutory agency vendors the installed packs
+declare and any union funds — and each group materializes as one draft vendor
+bill debiting the liability accounts. The bill then rides the normal AP
+review, post, and pay flow.
+
+Each destination remits on its own timetable, and a bill's due date always
+comes from its own destination's schedule; the pack sections above name the
+timetable each pack declares.
+
 ## Union construction payroll
 
 Define collective agreements (union, local, remittance vendor), their
 classifications, and their fringes. Employee-paid fringes such as working
-dues become deductions and automatically flow into the T4127 union-dues
-factor. Employer-paid fringes (pension, health, training funds) accrue per
+dues become deductions and automatically take the deductible-dues treatment
+the employee's pack recognizes (the Canada pack maps them into the T4127
+union-dues factor — see its section above). Employer-paid fringes (pension,
+health, training funds) accrue per
 hour worked or as a percent of gross, post to their own liability per fund,
 and job-cost to the projects the hours were worked on. The monthly remittance
 report totals hours and amounts per fund for any date range.

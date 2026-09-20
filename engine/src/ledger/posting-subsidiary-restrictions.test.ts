@@ -3,13 +3,9 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import {
-  postDocument,
-  PostingError,
-  RULES,
-  type PostingDocument,
-  type PostingDocumentLine,
-} from "./posting.ts";
+import { postDocument } from "./posting-document.ts";
+import { PostingError, type PostingDocument, type PostingDocumentLine } from "./posting-contracts.ts";
+import { RULES } from "./posting-rules.ts";
 import {
   intercompanyBalancingLegs,
   SubsidiaryError,

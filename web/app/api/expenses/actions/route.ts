@@ -7,13 +7,11 @@ import {
   ControlAccountsIncompleteError,
   loadRequiredControlAccounts,
 } from '@openbooks/engine/src/records/control-accounts.ts'
-import { postDocument, PostingError } from '@openbooks/engine/src/ledger/posting.ts'
+import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
+import { PostingError } from "@openbooks/engine/src/ledger/posting-contracts.ts";
 import { can, getAuthz, guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
-import {
-  DocumentEditError,
-  documentRevisionCounterSql,
-  requireDocumentEditRevision,
-} from '../../../../lib/documents'
+import { DocumentEditError, requireDocumentEditRevision } from "../../../../../engine/src/records/document-edit-policy.ts";
+import { documentRevisionCounterSql } from "../../../../../engine/src/records/revision.ts";
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
 

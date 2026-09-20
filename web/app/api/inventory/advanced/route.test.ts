@@ -74,7 +74,11 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/platform/db.ts", "mock:db"],
   ["@openbooks/engine/src/platform/business-date.ts", "mock:business-date"],
-  ["@openbooks/engine/src/inventory/inventory.ts", "mock:inventory"],
+  ["@openbooks/engine/src/inventory/action-idempotency.ts", "mock:inventory"],
+  ["@openbooks/engine/src/inventory/contracts.ts", "mock:inventory"],
+  ["@openbooks/engine/src/inventory/landed-cost.ts", "mock:inventory"],
+  ["@openbooks/engine/src/inventory/tracking.ts", "mock:inventory"],
+  ["@openbooks/engine/src/inventory/transfer-orders.ts", "mock:inventory"],
   ["../../../../lib/authz", "mock:authz"],
   ["../../../../lib/features", "mock:features"],
 ]);

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { guardPermission } from "../../../../../lib/authz";
-import { isDocKindEnabled } from "../../../../../lib/documents";
+import { isDocKindEnabled } from "../../../../../lib/documents.ts";
 import { PDF_RECORD_TYPE_BY_KEY } from "../../../../../lib/pdf-templates/catalog";
 import { listPdfTemplates } from "../../../../../lib/pdf-templates/store";
 

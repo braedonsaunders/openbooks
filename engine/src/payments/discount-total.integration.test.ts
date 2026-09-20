@@ -3,8 +3,8 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { createPaymentDocument, updateDraftPayment } from "./payments.ts";
-import { postDocument } from "../ledger/posting.ts";
+import { createPaymentDocument, updateDraftPayment } from "./payment-documents.ts";
+import { postDocument } from "../ledger/posting-document.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
