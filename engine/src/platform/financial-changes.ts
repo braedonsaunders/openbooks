@@ -8,7 +8,7 @@ import type { SqlExecutor } from "./db.ts";
  * stay in their owning modules; the existing Flows engine owns decisions. */
 export type FinancialChangeDomain =
   "lease" | "revenue" | "asset" | "consolidation";
-export interface FinancialChange {
+export type FinancialChange = {
   id: string;
   org_id: string;
   subsidiary_id: string;
@@ -23,7 +23,7 @@ export interface FinancialChange {
   submitted_by: string;
   approved_by: string | null;
   result: Record<string, unknown> | null;
-}
+};
 export async function loadFinancialChange(
   tx: SqlExecutor,
   orgId: string,
