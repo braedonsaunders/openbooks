@@ -134,7 +134,7 @@ function reset(): void {
   routeState.serviceThrow = null;
 }
 
-test("managers read through the employment gate with time and value balances", { skip: !detailRoute }, async () => {
+test("managers read through the employment gate with time and value balances", async () => {
   reset();
   const res = await detailRoute!.GET(new Request("http://x"), ctx);
   assert.equal(res.status, 200);
@@ -153,7 +153,7 @@ test("managers read through the employment gate with time and value balances", {
   assert.ok(!fns.includes("getOwn"), "the manager path never takes the self-service read");
 });
 
-test("self-service reads only its own requests", { skip: !detailRoute }, async () => {
+test("self-service reads only its own requests", async () => {
   reset();
   routeState.grants = ["hrm.leave.request"];
   const res = await detailRoute!.GET(new Request("http://x"), ctx);
@@ -162,7 +162,7 @@ test("self-service reads only its own requests", { skip: !detailRoute }, async (
   assert.ok(!routeState.calls.some((call) => call.fn === "get"));
 });
 
-test("a stranger's refusal reaches the caller with its message intact", { skip: !detailRoute }, async () => {
+test("a stranger's refusal reaches the caller with its message intact", async () => {
   reset();
   routeState.grants = ["hrm.leave.request"];
   routeState.serviceThrow = new HrmAuthorizationError(
@@ -174,7 +174,7 @@ test("a stranger's refusal reaches the caller with its message intact", { skip: 
   assert.match(((await res.json()) as { error: string }).error, /your own inbox/);
 });
 
-test("unauthorized, switched-off, and non-uuid requests fail closed", { skip: !detailRoute }, async () => {
+test("unauthorized, switched-off, and non-uuid requests fail closed", async () => {
   reset();
   routeState.authz = null;
   assert.equal((await detailRoute!.GET(new Request("http://x"), ctx)).status, 401);

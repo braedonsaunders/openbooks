@@ -119,7 +119,7 @@ function jsonRequest(body: unknown): Request {
   });
 }
 
-test("withdraw records the reason through the real body parser", { skip: !withdrawRoute }, async () => {
+test("withdraw records the reason through the real body parser", async () => {
   reset();
   const res = await withdrawRoute!.POST(jsonRequest({ reason: "dates wrong" }), ctx);
   assert.equal(res.status, 200);
@@ -129,7 +129,7 @@ test("withdraw records the reason through the real body parser", { skip: !withdr
   });
 });
 
-test("withdraw refuses a missing reason with 400 before the service", { skip: !withdrawRoute }, async () => {
+test("withdraw refuses a missing reason with 400 before the service", async () => {
   reset();
   const res = await withdrawRoute!.POST(jsonRequest({}), ctx);
   assert.equal(res.status, 400);
@@ -138,7 +138,7 @@ test("withdraw refuses a missing reason with 400 before the service", { skip: !w
   assert.equal(routeState.calls.length, 0);
 });
 
-test("withdraw maps a terminal-state refusal with message intact", { skip: !withdrawRoute }, async () => {
+test("withdraw maps a terminal-state refusal with message intact", async () => {
   reset();
   routeState.serviceThrow = new LeaveError(
     "BAD_STATE",
@@ -150,7 +150,7 @@ test("withdraw maps a terminal-state refusal with message intact", { skip: !with
   assert.match(((await res.json()) as { error: string }).error, /cancel it instead/);
 });
 
-test("withdraw forwards a non-uuid id and the gate", { skip: !withdrawRoute }, async () => {
+test("withdraw forwards a non-uuid id and the gate", async () => {
   reset();
   const bad = await withdrawRoute!.POST(jsonRequest({ reason: "x" }), { params: Promise.resolve({ id: "nope" }) });
   assert.equal(bad.status, 400);

@@ -37,3 +37,12 @@ export const recordAbsenceBody = z.object({
   onDate: civilDate,
   hours: exactHours,
 });
+
+/**
+ * Submit carries no fields, but it still parses a body: the empty object
+ * schema keeps the route inside parseJsonBody so malformed JSON and
+ * non-object payloads are refused at the shared boundary, never seen by
+ * the service (the same shape as completeProcessBody).
+ */
+export const submitLeaveRequestBody = z.object({});
+
