@@ -133,6 +133,39 @@ CREATE TABLE IF NOT EXISTS public.hrm_leave_policies (
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'hrm_leave_policies_org_id_id_unique') THEN
   ALTER TABLE ONLY public.hrm_leave_policies ADD CONSTRAINT hrm_leave_policies_org_id_id_unique UNIQUE (org_id, id); END IF; END $$;
 
+-- Read-only slot projections of the leave-policy rules for structured
+-- surfaces (the Setup drawer edits scope, accrual, and carryover through
+-- typed controls and prefills them from row columns, and a raw-JSON
+-- workforce field is barred by web/lib/setup/registry.test.ts): GENERATED
+-- ALWAYS STORED, so they are readable but never written — the Setup write
+-- path folds the slot fields back into applies_to, accrual_rule, and
+-- carryover_rule before buildRow (see web/lib/setup/hrm-leave-policy.ts),
+-- and the stored jsonb stays the source of truth.
+ALTER TABLE ONLY public.hrm_leave_policies
+  ADD COLUMN IF NOT EXISTS applies_employer_subsidiary_id uuid
+    GENERATED ALWAYS AS ((applies_to ->> 'employer_subsidiary_id')::uuid) STORED;
+ALTER TABLE ONLY public.hrm_leave_policies
+  ADD COLUMN IF NOT EXISTS applies_department_id uuid
+    GENERATED ALWAYS AS ((applies_to ->> 'department_id')::uuid) STORED;
+ALTER TABLE ONLY public.hrm_leave_policies
+  ADD COLUMN IF NOT EXISTS accrual_kind text
+    GENERATED ALWAYS AS (accrual_rule ->> 'kind') STORED;
+ALTER TABLE ONLY public.hrm_leave_policies
+  ADD COLUMN IF NOT EXISTS accrual_hours text
+    GENERATED ALWAYS AS (accrual_rule ->> 'hours') STORED;
+ALTER TABLE ONLY public.hrm_leave_policies
+  ADD COLUMN IF NOT EXISTS accrual_periods_per_year integer
+    GENERATED ALWAYS AS ((accrual_rule ->> 'periods_per_year')::integer) STORED;
+ALTER TABLE ONLY public.hrm_leave_policies
+  ADD COLUMN IF NOT EXISTS carryover_kind text
+    GENERATED ALWAYS AS (carryover_rule ->> 'kind') STORED;
+ALTER TABLE ONLY public.hrm_leave_policies
+  ADD COLUMN IF NOT EXISTS carryover_hours text
+    GENERATED ALWAYS AS (carryover_rule ->> 'hours') STORED;
+ALTER TABLE ONLY public.hrm_leave_policies
+  ADD COLUMN IF NOT EXISTS carryover_expires_after_days integer
+    GENERATED ALWAYS AS ((carryover_rule ->> 'expires_after_days')::integer) STORED;
+
 CREATE TABLE IF NOT EXISTS public.hrm_leave_requests (
     id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
     org_id uuid NOT NULL,
