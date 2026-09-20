@@ -10,6 +10,57 @@ import {
 
 export const runtime = 'nodejs'
 
+type ObservedAppStatus = 'installed' | 'disabled'
+
+/**
+ * setAppStatus / deleteApp return without writing when the scoped row is
+ * missing or already in the requested state. A later GET is the proof a
+ * mutation happened; this raises that computed refusal instead of {ok:true}.
+ */
+function refuseAppWrite(input: {
+  action: 'status' | 'uninstall'
+  key: string
+  before: { status: ObservedAppStatus } | null
+  requestedStatus?: ObservedAppStatus
+  after?: { status: ObservedAppStatus } | null
+}): AppError | null {
+  const { action, key, before, requestedStatus, after } = input
+  if (!before) {
+    return new AppError(
+      action === 'uninstall'
+        ? `App "${key}" was not found in this organization. Confirm the key is installed here before uninstalling.`
+        : `App "${key}" was not found in this organization. Install it or GET /api/apps/${key} to confirm the key before changing status.`,
+      404,
+    )
+  }
+  if (action === 'status') {
+    if (requestedStatus !== 'installed' && requestedStatus !== 'disabled') {
+      return new AppError('status must be "installed" or "disabled"', 400)
+    }
+    if (before.status === requestedStatus) {
+      const other = requestedStatus === 'installed' ? 'disabled' : 'installed'
+      return new AppError(
+        `App "${key}" is already ${requestedStatus}. PATCH status to "${other}" if you need a status change.`,
+        409,
+      )
+    }
+    if (after !== undefined && (!after || after.status !== requestedStatus)) {
+      return new AppError(
+        `App "${key}" status was not changed to ${requestedStatus}. Confirm the app is still visible in this organization and retry.`,
+        409,
+      )
+    }
+    return null
+  }
+  if (after) {
+    return new AppError(
+      `App "${key}" was not uninstalled. Confirm the app is still visible in this organization and retry.`,
+      409,
+    )
+  }
+  return null
+}
+
 /** GET — App details (any user who may use apps). */
 export async function GET(
   _req: Request,
@@ -41,7 +92,24 @@ export async function PATCH(
     )
   }
   try {
+    const app = await getAppByKey(gate.user.orgId, key)
+    const beforeRefusal = refuseAppWrite({
+      action: 'status',
+      key,
+      before: app,
+      requestedStatus: body.status,
+    })
+    if (beforeRefusal) throw beforeRefusal
     await setAppStatus(gate.user.orgId, gate.user.id, key, body.status)
+    const after = await getAppByKey(gate.user.orgId, key)
+    const afterRefusal = refuseAppWrite({
+      action: 'status',
+      key,
+      before: app,
+      requestedStatus: body.status,
+      after,
+    })
+    if (afterRefusal) throw afterRefusal
   } catch (error) {
     if (error instanceof AppError)
       return NextResponse.json(
@@ -62,7 +130,22 @@ export async function DELETE(
   if (gate instanceof NextResponse) return gate
   const { key } = await params
   try {
+    const app = await getAppByKey(gate.user.orgId, key)
+    const beforeRefusal = refuseAppWrite({
+      action: 'uninstall',
+      key,
+      before: app,
+    })
+    if (beforeRefusal) throw beforeRefusal
     await deleteApp(gate.user.orgId, gate.user.id, key)
+    const after = await getAppByKey(gate.user.orgId, key)
+    const afterRefusal = refuseAppWrite({
+      action: 'uninstall',
+      key,
+      before: app,
+      after,
+    })
+    if (afterRefusal) throw afterRefusal
   } catch (error) {
     if (error instanceof AppError)
       return NextResponse.json(
