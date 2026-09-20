@@ -35,12 +35,9 @@ import { str, type WidgetRenderer } from './widget-props'
  * author who lacks a permission gets the same empty result a user would.
  */
 
+// Only renderers that resolve another widget remain beside the registry.
+// Families compose in deterministic domain order; consumers use keyed lookup.
 export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
-  /* Facade-local entries. These four renderers resolve other widgets by name
-   * through WIDGET_REGISTRY at render time, so they live beside the registry
-   * object: a composed family file must never import the facade that
-   * composes it. Every other entry lives in a family below and joins by
-   * spread, in one place each — no per-key aliases, no duplicate entrypoints. */
   'empty-state': (props) => {
     // `action` names a widget rather than carrying JSX, so an empty state can
     // offer its create button without the spec expressing a component.
@@ -59,7 +56,6 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       />
     )
   },
-
   'opportunity-kanban-board': (props) => {
     const statuses = (props.statuses as ComponentProps<typeof OpportunityKanbanBoard>['statuses']) ?? []
     const opportunities = (props.opportunities as ComponentProps<typeof OpportunityKanbanBoard>['opportunities']) ?? []
@@ -79,7 +75,12 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       />
     )
   },
-
+  /**
+   * The universal record list. `drawer` and `emptyAction` name widgets, one or
+   * several, exactly as `entity-list-view` does. `rowActions` names ONE widget
+   * rendered per row: `renderRowActions` is a function, and a spec can never
+   * carry a function, so the registry builds it from the ref here.
+   */
   'record-list-view': (props) => {
     const one = (value: unknown, key: number) => {
       if (!value || typeof value !== 'object') return null
@@ -122,10 +123,11 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       />
     )
   },
-  /** The remount key rides along as a prop: switching documents must reset the
-   *  drawer's client state, and a widget at a fixed position would otherwise
-   *  be reused (same as `account-drawer` / `party-drawer`). */
-
+  /**
+   * The universal entity list. `drawer` and `emptyAction` name widgets rather
+   * than carrying components — a spec cannot express JSX, so the indirection is
+   * the same one the empty state already uses for its action.
+   */
   'entity-list-view': (props) => {
     const one = (value: unknown, key: number) => {
       if (!value || typeof value !== 'object') return null
@@ -153,10 +155,6 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       />
     )
   },
-
-  /* --- continuous close -------------------------------------------------- */
-
-  /* --- composed families ------------------------------------------------------ */
   ...PAYROLL_WIDGETS,
   ...BANKING_WIDGETS,
   ...REPORTING_WIDGETS,

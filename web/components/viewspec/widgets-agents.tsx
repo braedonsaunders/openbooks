@@ -19,7 +19,8 @@ import { str, type WidgetRenderer } from './widget-props'
 
 /** Agentic operations adapters: workbench, assistant handoff and continuous close. Compose native components without changing their props or boundaries. */
 export const AGENTS_WIDGETS = {
-
+  /** Due-date cell: the formatted date plus a red Overdue pill when past
+   *  due — the house date-plus-flag arrangement, one cell. */
   'agents-due-cell': (props) => {
     const date = str(props, 'date')
     const overdueLabel = str(props, 'overdueLabel')
@@ -31,7 +32,7 @@ export const AGENTS_WIDGETS = {
       </span>
     )
   },
-
+  /** One pack's last-run cell: run-status badge, relative instant, muted next run. */
   'agents-pack-last-run': (props) => (
     <AgentsLastRunCell
       hasRun={props.hasRun === true}
@@ -44,7 +45,6 @@ export const AGENTS_WIDGETS = {
     />
   ),
   /** One pack's open-findings cell: link when above zero, muted text at zero. */
-
   'agents-pack-findings': (props) => (
     <AgentsPackFindings
       openFindings={typeof props.openFindings === 'number' ? props.openFindings : 0}
@@ -53,7 +53,6 @@ export const AGENTS_WIDGETS = {
     />
   ),
   /** One pack's fenced enable switch + run-now for the Agents overview table. */
-
   'agents-pack-actions': (props) => (
     <AgentsPackActions
       agentKey={str(props, 'agentKey') ?? ''}
@@ -66,7 +65,6 @@ export const AGENTS_WIDGETS = {
     />
   ),
   /** One agent-pack marketplace card: medallion, reads/proposes, checks, install/configure footer. */
-
   'agents-pack-card': (props) => (
     <AgentsPackCard
       agentKey={str(props, 'agentKey') ?? ''}
@@ -92,7 +90,6 @@ export const AGENTS_WIDGETS = {
     />
   ),
   /** One pack's policy form: shared Card sections, shared form fields. */
-
   'agents-policy-form': (props) => (
     <AgentPolicyForm
       statusLabel={str(props, 'statusLabel') ?? ''}
@@ -110,7 +107,6 @@ export const AGENTS_WIDGETS = {
     />
   ),
   /** One run's findings link + re-run for the Agents activity table. */
-
   'agents-run-actions': (props) => (
     <AgentsRunActions
       agentKey={str(props, 'agentKey') ?? ''}
@@ -120,14 +116,12 @@ export const AGENTS_WIDGETS = {
   ),
   /** Keyboard + bulk selection over the inbox's row links — the shared list
    *  cannot host ephemeral selection or global key handling. */
-
   'agents-triage-keys': (props) => (
     <AgentsTriageKeys {...(props as unknown as ComponentProps<typeof AgentsTriageKeys>)} />
   ),
   /** Muted keyboard helper for the paging row (never above the KPIs). The
    *  loader computed the localized sentence; this only binds the key caps —
    *  the first token of each ·-separated part — in the house kbd style. */
-
   'agents-triage-hint': (props) => {
     const text = str(props, 'text')
     if (!text) return null
@@ -153,13 +147,11 @@ export const AGENTS_WIDGETS = {
   },
   /** Loader-formatted `Kpi[]` straight through: the KPI strip's markup is not
    *  the stat-tile block's (same arrangement as `equipment-kpi-strip`). */
-
   'agents-kpi-strip': (props) => (
     <KpiStrip items={(props.items as ComponentProps<typeof KpiStrip>['items']) ?? []} />
   ),
   /** Retired-route landing notice (?from=continuous-close): loader-resolved
    *  strings, session-local dismiss. Renders nothing without a title. */
-
   'moved-notice': (props) => {
     const title = str(props, 'title')
     if (!title) return null
@@ -174,20 +166,22 @@ export const AGENTS_WIDGETS = {
   /** The cached narrative's markdown. A widget, not a block, because no spec
    *  block renders markdown — the loader computed the text, this only binds
    *  the renderer. Null text renders nothing. */
-
   'agents-briefing-body': (props) => {
     const text = str(props, 'text')
     if (!text) return null
     return <ChatMarkdown>{text}</ChatMarkdown>
   },
   /** The briefing tab's only interactivity: generate + send buttons. */
-
   'agents-briefing-actions': (props) => (
     <AgentsBriefingActions {...(props as unknown as ComponentProps<typeof AgentsBriefingActions>)} />
   ),
-  /** ONE prop. The secret ciphertext never leaves the engine module; only
-   *  `hasSecret` crosses into the redacted view the loader reads. */
 
+  /* --- assistant -------------------------------------------------------------------- */
+  /** Whole: sidebar, streaming thread, composer and every fetch. Serves both
+   *  /assistant and /assistant/[id]: `activeId` and `initialMessages` default
+   *  to the new-conversation values the launcher route passes natively, and
+   *  the deep-link route binds real ones. Hardcoding them here would have made
+   *  this entry a single route's assumption wearing a general name. */
   'assistant-app': (props) => (
     <AssistantApp
       conversations={props.conversations as ComponentProps<typeof AssistantApp>['conversations']}
@@ -203,13 +197,13 @@ export const AGENTS_WIDGETS = {
     />
   ),
 
+  /* --- continuous close -------------------------------------------------- */
   'tab-nav': (props) => (
     <TabNav
       ariaLabel={str(props, 'ariaLabel') ?? ''}
       tabs={(props.tabs as ComponentProps<typeof TabNav>['tabs']) ?? []}
     />
   ),
-
   'metric-tile': (props) => (
     <Metric
       label={str(props, 'label') ?? ''}
@@ -218,14 +212,12 @@ export const AGENTS_WIDGETS = {
       tone={str(props, 'tone')}
     />
   ),
-
   'reports-card-heading': (props) => (
     <ReportsCardHeading
       title={str(props, 'title') ?? ''}
       description={str(props, 'description') ?? ''}
     />
   ),
-
   'narrative-entry': (props) => (
     <NarrativeEntry
       narrative={(props.narrative as Record<string, unknown>) ?? {}}
@@ -233,7 +225,6 @@ export const AGENTS_WIDGETS = {
       labels={props.labels as ComponentProps<typeof NarrativeEntry>['labels']}
     />
   ),
-
   'finding-cell': (props) => (
     <FindingCell
       title={str(props, 'title') ?? ''}
@@ -241,17 +232,14 @@ export const AGENTS_WIDGETS = {
       summary={str(props, 'summary') ?? ''}
     />
   ),
-
   'work-item-drawer': (props) => {
     const drawer = props.drawer as ComponentProps<typeof WorkItemDrawer> | null
     if (!drawer) return null
     return <WorkItemDrawer {...drawer} />
   },
-
   'narrative-drawer': (props) => {
     const drawer = props.drawer as ComponentProps<typeof NarrativeDrawer> | null
     if (!drawer) return null
     return <NarrativeDrawer {...drawer} />
   },
-
 } satisfies Record<string, WidgetRenderer>

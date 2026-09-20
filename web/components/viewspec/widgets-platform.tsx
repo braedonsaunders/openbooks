@@ -17,14 +17,17 @@ import { str, num, type WidgetRenderer } from './widget-props'
 
 /** Platform identity, access and administration adapters. Compose native components without changing their props or boundaries. */
 export const PLATFORM_WIDGETS = {
-
   'new-api-key': () => <NewKeyButton />,
-
   'api-key-drawer': (props) => (
     <KeyDrawer keyRow={(props.keyRow as ComponentProps<typeof KeyDrawer>['keyRow']) ?? null} />
   ),
 
-
+  /* --- platform user record --------------------------------------------------- */
+  //
+  // Every entry here exists because a bound SERVER ACTION is involved. A bound
+  // action is a capability, not data, so the widget takes ids and binds the
+  // action itself — the spec says which user, the host decides what may be
+  // done to them.
   'platform-user-header': (props) => (
     <PlatformUserHeader
       userId={str(props, 'userId') ?? ''}
@@ -37,17 +40,13 @@ export const PLATFORM_WIDGETS = {
       backLabel={str(props, 'backLabel') ?? ''}
     />
   ),
-
   'grant-acting-cell': (props) => (
     <GrantActingCell name={str(props, 'name') ?? ''} email={str(props, 'email') ?? ''} />
   ),
-
   'grant-control-cell': (props) => (
     <GrantControlCell grantId={str(props, 'grantId') ?? ''} isActive={props.isActive === true} />
   ),
-
   'no-grants-body': () => <NoGrantsBody />,
-
   'identity-record-card': (props) => (
     <IdentityRecordCard
       title={str(props, 'title') ?? ''}
@@ -59,7 +58,6 @@ export const PLATFORM_WIDGETS = {
   /** Same doctrine as `admin-users-table`: the native page hand-rolls a plain
    *  `<table>` the spec's table vocabulary cannot name, so one component
    *  serves the page and the widget registry. */
-
   'admin-roles-table': (props) => (
     <AdminRolesTable
       roles={(props.roles as ComponentProps<typeof AdminRolesTable>['roles']) ?? []}
@@ -73,7 +71,6 @@ export const PLATFORM_WIDGETS = {
       labels={props.labels as ComponentProps<typeof AdminRolesTable>['labels']}
     />
   ),
-
   'new-role': (props) => (
     <NewRoleButton
       subsidiaries={(props.subsidiaries as ComponentProps<typeof NewRoleButton>['subsidiaries']) ?? null}
@@ -84,11 +81,9 @@ export const PLATFORM_WIDGETS = {
   /** Not `docs-link-button`: that one is a 14px icon with no space before the
    *  label, this one a 15px icon with one. Same-looking buttons that are not
    *  the same button. */
-
   'audit-docs-link': (props) => (
     <AuditDocsLink href={str(props, 'href') ?? ''} label={str(props, 'label') ?? ''} />
   ),
-
   'audit-rows-table': (props) => (
     <AuditRowsTable
       rows={(props.rows as ComponentProps<typeof AuditRowsTable>['rows']) ?? []}
@@ -97,7 +92,6 @@ export const PLATFORM_WIDGETS = {
       }
     />
   ),
-
   'audit-event-drawer': (props) => {
     const drawer = props.drawer as {
       event: ComponentProps<typeof AuditEventFlyout>['event']
@@ -110,17 +104,19 @@ export const PLATFORM_WIDGETS = {
   /* --- notifications inbox ---------------------------------------------------- */
   /** Not a `table` block: the inbox is a read/unread list whose rows mark
    *  themselves read on the way to the record they point at. */
-
   'notifications-inbox': (props) => (
     <NotificationsInbox
       rows={(props.rows as ComponentProps<typeof NotificationsInbox>['rows']) ?? []}
     />
   ),
-
   'notifications-mark-all-read': (props) => (
     <NotificationsMarkAllRead unread={num(props, 'unread') ?? 0} />
   ),
 
+  /* --- admin hub ------------------------------------------------------------ */
+  /** One hub navigation card. The icon and the accent are lookups resolved
+   *  here, so the spec carries only data — and the accent's Tailwind classes
+   *  stay complete literals in the component, or the scanner purges them. */
   'admin-hub-card': (props) => (
     <AdminHubCard
       href={str(props, 'href') ?? '#'}
@@ -138,7 +134,6 @@ export const PLATFORM_WIDGETS = {
   /** A widget, not a `table` block: this page hand-rolls a plain <table> with
    *  its own classes, and the spec's table block offers only the two real
    *  table variants the app has. */
-
   'admin-users-table': (props) => (
     <AdminUsersTable
       users={(props.users as ComponentProps<typeof AdminUsersTable>['users']) ?? []}
@@ -153,23 +148,17 @@ export const PLATFORM_WIDGETS = {
   /** Invite entry point for the Users page header. The button owns its own
    *  drawer and strings (like the roles page's `new-role`), so the widget
    *  carries only the role picker options. */
-
   'invite-user': (props) => (
     <InviteUserButton
       allRoles={(props.allRoles as ComponentProps<typeof InviteUserButton>['allRoles']) ?? []}
     />
   ),
-  /** A link wrapped in a Button — the plain form several admin headers use,
-   *  distinct from `link-button` only in that the Link is on the OUTSIDE. */
-
   'email-subject-cell': (props) => (
     <EmailSubjectCell subject={str(props, 'subject') ?? ''} category={str(props, 'category') ?? ''} />
   ),
-
   'email-evidence-cell': (props) => (
     <EmailEvidenceCell summary={str(props, 'summary') ?? ''} error={str(props, 'error') ?? ''} />
   ),
-
   'user-identity-cell': (props) => (
     <UserIdentityCell
       name={str(props, 'name') ?? ''}
@@ -179,19 +168,14 @@ export const PLATFORM_WIDGETS = {
       isActive={props.isActive === true}
     />
   ),
-
   'user-roles-cell': (props) => <UserRolesCell roles={(props.roles as string[]) ?? []} />,
-
   'user-grants-cell': (props) => (
     <UserGrantsCell label={str(props, 'label') ?? ''} emphasised={props.emphasised === true} />
   ),
-
   'user-manage-cell': (props) => <UserManageCell href={str(props, 'href') ?? ''} />,
-
   'org-name-cell': (props) => (
     <OrgNameCell name={str(props, 'name') ?? ''} subtitle={str(props, 'subtitle') ?? ''} />
   ),
-
   'org-environment-cell': (props) => (
     <OrgEnvironmentCell
       envKind={str(props, 'envKind') ?? ''}
@@ -199,25 +183,19 @@ export const PLATFORM_WIDGETS = {
       parentNote={str(props, 'parentNote') ?? ''}
     />
   ),
-
   'org-locale-cell': (props) => (
     <OrgLocaleCell country={str(props, 'country') ?? ''} currency={str(props, 'currency') ?? ''} />
   ),
-
   'org-users-cell': (props) => (
     <OrgUsersCell active={str(props, 'active') ?? ''} total={str(props, 'total') ?? ''} />
   ),
-
   'org-open-cell': (props) => <OrgOpenCell orgId={str(props, 'orgId') ?? ''} />,
-
   'identity-cell': (props) => (
     <IdentityCell name={str(props, 'name') ?? ''} detail={str(props, 'detail') ?? ''} />
   ),
-
   'acting-cell': (props) => (
     <ActingCell name={str(props, 'name') ?? ''} email={str(props, 'email') ?? ''} />
   ),
-
   'access-control-cell': (props) => (
     <AccessControlCell grantId={str(props, 'grantId') ?? ''} isActive={props.isActive === true} />
   ),
@@ -225,7 +203,6 @@ export const PLATFORM_WIDGETS = {
    *  bundle, the user record spreads its own fields and adds a default
    *  member. Accepting either keeps ONE entry in front of one component
    *  rather than a second entry that would drift from it. */
-
   'grant-access-form': (props) => {
     const options = (props.options as ComponentProps<typeof GrantAccessForm> | undefined) ?? {
       members: (props.members as ComponentProps<typeof GrantAccessForm>['members']) ?? [],

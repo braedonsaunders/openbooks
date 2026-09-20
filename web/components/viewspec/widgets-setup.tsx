@@ -39,7 +39,6 @@ import { str, type WidgetRenderer } from './widget-props'
 export const SETUP_WIDGETS = {
 
   'new-custom-field': () => <NewFieldButton />,
-
   'custom-field-drawer': (props) => (
     <FieldDrawer
       def={(props.def as ComponentProps<typeof FieldDrawer>['def']) ?? null}
@@ -55,26 +54,21 @@ export const SETUP_WIDGETS = {
    * blocks would reimplement it rather than compose it. Its page uses
    * `layout: 'bare'` so the wizard's shell is the only one.
    */
-
   'close-wizard': (props) => {
     const wizard = props.wizard as ComponentProps<typeof CloseWizard> | null
     if (!wizard) return null
     return <CloseWizard {...wizard} />
   },
-
   'page-layout-drawer': (props) => {
     const drawer = props.drawer as ComponentProps<typeof LayoutDrawer>['drawer'] | null
     if (!drawer) return null
     return <LayoutDrawer drawer={drawer} />
   },
   /** The "N of M routes customized" line under the list. */
-
   'page-layout-summary': (props) => (
     <p className="px-1 pt-2 text-xs text-slate-500 dark:text-slate-400">{str(props, 'text') ?? ''}</p>
   ),
-
   'new-script': () => <NewScriptButton />,
-
   'script-drawer': (props) => (
     <ScriptDrawer
       script={(props.script as ComponentProps<typeof ScriptDrawer>['script']) ?? null}
@@ -83,6 +77,7 @@ export const SETUP_WIDGETS = {
     />
   ),
 
+  /* --- customization designer --------------------------------------------- */
   'customization-tabs': (props) => (
     <CustomizationTabs
       formsHref={str(props, 'formsHref') ?? ''}
@@ -93,9 +88,6 @@ export const SETUP_WIDGETS = {
       showForms={props.showForms !== false}
     />
   ),
-  /** Not `filter-chips`: a different component AND a different contract
-   *  (router.replace + resetParamKeys, no basePath navigation). */
-
   'form-default-cell': (props) => (
     <FormDefaultCell
       showDefault={props.showDefault === true}
@@ -103,7 +95,6 @@ export const SETUP_WIDGETS = {
       rolesLabel={str(props, 'rolesLabel') ?? ''}
     />
   ),
-
   'view-scope-cell': (props) => (
     <ViewScopeCell
       scopeLabel={str(props, 'scopeLabel') ?? ''}
@@ -112,13 +103,10 @@ export const SETUP_WIDGETS = {
       defaultLabel={str(props, 'defaultLabel') ?? ''}
     />
   ),
-
   'new-form': (props) => <NewFormButton recordType={str(props, 'recordType') ?? ''} />,
-
   'new-view': (props) => <NewListViewButton recordType={str(props, 'recordType') ?? ''} />,
   /** Not `link-button`: that is a solid Button with no icon; this is the
    *  outline+icon treatment the designer header actually renders. */
-
   'docs-link-button': (props) => {
     const href = str(props, 'href')
     if (!href) return null
@@ -131,7 +119,6 @@ export const SETUP_WIDGETS = {
       </Button>
     )
   },
-
   'form-drawer': (props) => (
     <FormDesigner
       // Session remount key (F-t10-002): a duplicate opened after an edit
@@ -145,7 +132,6 @@ export const SETUP_WIDGETS = {
       subsidiaryEnabled={props.subsidiaryEnabled === true}
     />
   ),
-
   'list-view-drawer': (props) => (
     <ListViewDesigner
       recordType={str(props, 'recordType') ?? ''}
@@ -160,8 +146,9 @@ export const SETUP_WIDGETS = {
     />
   ),
 
-  /** The AP capture shortcut: outline button with a scan icon. */
-
+  /* --- admin backups ---------------------------------------------------------- */
+  /** Whole: a per-field schedule form, polling effects and fetch mutations
+   *  are client state and capabilities, not spec vocabulary. */
   'backup-manager': (props) => (
     <BackupManager
       policy={(props.policy as ComponentProps<typeof BackupManager>['policy']) ?? null}
@@ -171,8 +158,9 @@ export const SETUP_WIDGETS = {
     />
   ),
 
-  /* --- platform hub ----------------------------------------------------------- */
-
+  /* --- admin islands ---------------------------------------------------------------- */
+  /** The org nav-layout editor: unsaved client state, prompt() dialogs, a
+   *  four-pin mobile limit with a toast, and a PUT save. */
   'nav-editor': (props) => (
     <NavEditor
       initial={props.initial as ComponentProps<typeof NavEditor>['initial']}
@@ -180,12 +168,11 @@ export const SETUP_WIDGETS = {
     />
   ),
   /** THREE FLAT props, no wrapper bag — the bank-feeds division. */
-
   'features-workspace': (props) => (
     <FeaturesWorkspace {...(props as unknown as ComponentProps<typeof FeaturesWorkspace>)} />
   ),
-  /** One pack's last-run cell: run-status badge, relative instant, muted next run. */
-
+  /** ONE prop. The secret ciphertext never leaves the engine module; only
+   *  `hasSecret` crosses into the redacted view the loader reads. */
   'email-settings-form': (props) => (
     <EmailSettingsForm initial={props.initial as ComponentProps<typeof EmailSettingsForm>['initial']} />
   ),
@@ -193,7 +180,6 @@ export const SETUP_WIDGETS = {
   /** `selectedAgentKey` uses a typeof guard rather than `str()`, because the
    *  native page passes `null` for an unrecognized key and `undefined` would
    *  not reproduce it. */
-
   'ai-settings-form': (props) => (
     <AiSettingsForm
       specs={props.specs as ComponentProps<typeof AiSettingsForm>['specs']}
@@ -203,7 +189,6 @@ export const SETUP_WIDGETS = {
   /** SEVEN FLAT props, no wrapper bag. The page is seven conditional PAIRS
    *  (a badge plus an optional count line; a footer CTA that swaps both href
    *  and label on one flag) — presence omits, it never chooses. */
-
   'invoicing-setup-workspace': (props) => (
     <InvoicingSettingsWorkspace
       {...(props as unknown as ComponentProps<typeof InvoicingSettingsWorkspace>)}
@@ -212,7 +197,6 @@ export const SETUP_WIDGETS = {
   /** Whole, not a `table` block: search, the type dropdown and pagination are
    *  PagedTable CLIENT state that reads no URL params, so spec table blocks
    *  would navigate where the native page never does. */
-
   'pdf-templates-list': (props) => (
     <TemplatesList
       templates={(props.templates as ComponentProps<typeof TemplatesList>['templates']) ?? []}
@@ -221,15 +205,17 @@ export const SETUP_WIDGETS = {
     />
   ),
 
-  /* --- installed-app runtime -------------------------------------------------------- */
-  /** ONE entry for BOTH notice branches (not-found and disabled): the markup
-   *  is identical and only the strings differ, so a second entry would be a
-   *  duplicate that drifts. */
-
+  /* --- API console ------------------------------------------------------------------ */
+  /** The schema IS server data — the same plain-data prop the native page
+   *  hands the component — so it travels as a literal widget prop. Nothing
+   *  here is a capability or an org id, so no slot is needed. */
   'api-console': (props) => (
     <ApiConsole schema={(props.schema as ComponentProps<typeof ApiConsole>['schema']) ?? []} />
   ),
 
+  /* --- setup wizard ----------------------------------------------------------------- */
+  /** FIVE FLAT props. Ten animated steps, each owning state, mutations and
+   *  framer-motion transitions. */
   'setup-wizard': (props) => (
     <SetupWizard {...(props as unknown as ComponentProps<typeof SetupWizard>)} />
   ),
@@ -237,20 +223,27 @@ export const SETUP_WIDGETS = {
   /* --- payment providers setup ------------------------------------------------------ */
   /** No props: the island fetches its own providers, bank accounts and
    *  surcharge rules and owns every form. */
-
   'payment-providers-workspace': () => <PaymentProvidersClient />,
 
+  /* --- security settings ------------------------------------------------------------ */
+  /** No props. Every control is client state or a fetch to /api/auth/*. */
   'security-panel': () => <SecurityPageContent />,
 
   /* --- project types setup ---------------------------------------------------------- */
   /** FOUR FLAT props. `incomeAccounts` is loaded but currently unread by the
    *  workspace (it destructures it away) — passed anyway, so both renders
    *  carry identical data and a future read cannot diverge them. */
-
   'project-types-workspace': (props) => (
     <ProjectTypesWorkspace {...(props as unknown as ComponentProps<typeof ProjectTypesWorkspace>)} />
   ),
 
+  /* --- sandboxes -------------------------------------------------------------------- */
+  /** Whole, and the per-row mutations are the reason: create / refresh /
+   *  reset / delete / setSchedule / promote are BOUND SERVER ACTIONS. A spec
+   *  may not carry one, so they stay inside the component wherever it renders
+   *  rather than being lifted into props. */
+  /** The remount key rides along as a prop: reviewing a different change set
+   *  must reset the drawer's approval state. */
   'change-set-drawer': (props) => {
     const drawer = props.drawer as
       | (ComponentProps<typeof ChangeSetDrawer> & { remountKey: string })
@@ -259,14 +252,15 @@ export const SETUP_WIDGETS = {
     const { remountKey, ...rest } = drawer
     return <ChangeSetDrawer key={remountKey} {...rest} />
   },
-
   'sandbox-manager': (props) => (
     <SandboxManager
       sandboxes={props.sandboxes as ComponentProps<typeof SandboxManager>['sandboxes']}
       periods={props.periods as ComponentProps<typeof SandboxManager>['periods']}
     />
   ),
-
+  /** `permissions` is PERMISSION_CATALOGUE — the static list of permission
+   *  KEYS the app defines, for the gate inspector's picker. A catalogue, not a
+   *  grant: nothing about it is caller-specific and it confers nothing. */
   'flow-builder': (props) => (
     <FlowBuilder
       flow={props.flow as ComponentProps<typeof FlowBuilder>['flow']}
@@ -277,7 +271,8 @@ export const SETUP_WIDGETS = {
       permissions={props.permissions as ComponentProps<typeof FlowBuilder>['permissions']}
     />
   ),
-
+  /** The GrapesJS canvas: its own document model, drag-and-drop, the
+   *  merge-field palette and every save/preview mutation. */
   'pdf-template-editor': (props) => (
     <PdfTemplateEditor
       template={props.template as ComponentProps<typeof PdfTemplateEditor>['template']}
@@ -286,45 +281,36 @@ export const SETUP_WIDGETS = {
     />
   ),
 
+  /* --- overhead model --------------------------------------------------------- */
   'overhead-model-header': (props) => (
     <OverheadModelHeader {...(props as ComponentProps<typeof OverheadModelHeader>)} />
   ),
-
   'overhead-model-body': (props) => (
     <OverheadModelBody {...(props as ComponentProps<typeof OverheadModelBody>)} />
   ),
-
   'overhead-rates-tab': (props) => (
     <OverheadRatesTabSlot {...(props as ComponentProps<typeof OverheadRatesTabSlot>)} />
   ),
-
   'overhead-lifecycle-tab': () => <OverheadLifecycleTabSlot />,
-
   'overhead-application-tab': () => <OverheadApplicationTabSlot />,
 
   /* --- allocations setup ------------------------------------------------------ */
-
   'allocations-setup-header': (props) => (
     <AllocationsSetupHeader {...(props as ComponentProps<typeof AllocationsSetupHeader>)} />
   ),
-
   'allocations-rules-tab': (props) => (
     <AllocationsRulesTabSlot {...(props as ComponentProps<typeof AllocationsRulesTabSlot>)} />
   ),
-
   'allocations-drivers-tab': () => <AllocationsDriversTabSlot />,
-
   'allocations-rule-drawer': (props) => (
     <AllocationsRuleDrawerSlot {...(props as ComponentProps<typeof AllocationsRuleDrawerSlot>)} />
   ),
-
   'allocations-runs-tab': () => <AllocationsRunsTabSlot />,
 
   /* --- setup readiness -------------------------------------------------------- */
   //
   // NOT the existing `readiness-panel`: that one renders the compliance 1099
   // queue and shares no markup with this page. Two names, two components.
-
   'setup-readiness-hero': (props) => (
     <SetupReadinessHero
       kicker={str(props, 'kicker') ?? ''}
@@ -343,7 +329,6 @@ export const SETUP_WIDGETS = {
   /** `state` is a closed complete | review | waiting vocabulary the loader
    *  resolves; the component switches icon and tile classes on it, never the
    *  spec. */
-
   'setup-readiness-check-card': (props) => (
     <SetupReadinessCheckCard
       indexLabel={str(props, 'indexLabel') ?? ''}
@@ -362,12 +347,11 @@ export const SETUP_WIDGETS = {
     />
   ),
 
+  /* --- automation flows ------------------------------------------------------- */
   'new-flow': () => <NewFlowListButton />,
-
   'flow-name-cell': (props) => (
     <FlowNameCell name={str(props, 'name') ?? ''} href={str(props, 'href') ?? ''} />
   ),
-
   'flow-last-run-cell': (props) => (
     <FlowLastRunCell
       status={str(props, 'status') ?? null}
@@ -378,7 +362,6 @@ export const SETUP_WIDGETS = {
       fallback={str(props, 'fallback') ?? ''}
     />
   ),
-
   'flow-row-actions': (props) => (
     <FlowRowActionsCell
       id={str(props, 'id') ?? ''}
@@ -387,7 +370,9 @@ export const SETUP_WIDGETS = {
       updatedAt={str(props, 'updatedAt') ?? ''}
     />
   ),
-
+  /** A registry-backed configuration surface re-homed onto another module's
+   *  tab. The registry entry is CODE, so the spec names it by key and the slot
+   *  looks it up; org id and the manage gate are re-derived from the session. */
   'setup-section': (props) => (
     <SetupSectionSlot
       entityKey={str(props, 'entityKey') ?? ''}
@@ -396,8 +381,10 @@ export const SETUP_WIDGETS = {
     />
   ),
 
-  /* --- crm opportunities ---------------------------------------------------- */
-
+  /* --- setup workspace ------------------------------------------------------ */
+  /** The inline "Learn more" link (with its significant leading space) appears
+   *  only when the entity declares a doc slug — a conditional pair inside one
+   *  paragraph, so a component. */
   'setup-description': (props) => (
     <SetupDescription
       description={str(props, 'description') ?? ''}
@@ -407,11 +394,9 @@ export const SETUP_WIDGETS = {
   ),
   /** A client component that pushes `?row=new` — not a link, so `link-button`
    *  cannot stand in for it. */
-
   'new-setup-button': (props) => (
     <NewSetupButton entityKey={str(props, 'entityKey') ?? ''} label={str(props, 'label') ?? ''} />
   ),
-
   'tax-return-library': (props) => (
     <TaxReturnLibrary
       packs={(props.packs as ComponentProps<typeof TaxReturnLibrary>['packs']) ?? []}
@@ -421,7 +406,6 @@ export const SETUP_WIDGETS = {
       closeHref={str(props, 'closeHref') ?? ''}
     />
   ),
-
   'setup-code-cell': (props) => (
     <SetupCodeCell
       text={str(props, 'text') ?? ''}
@@ -429,7 +413,6 @@ export const SETUP_WIDGETS = {
       href={str(props, 'href')}
     />
   ),
-
   'setup-badge-link-cell': (props) => (
     <SetupBadgeLinkCell
       label={str(props, 'label') ?? ''}
@@ -440,24 +423,18 @@ export const SETUP_WIDGETS = {
   /** The drawer, its nested sub-tabs and its stacked child drawers arrive
    *  through a slot that re-derives Authz; the spec carries only the entity
    *  key and the current URL. */
-
   'setup-drawer': (props) => (
     <SetupDrawerSlot
       entityKey={str(props, 'entityKey') ?? ''}
       sp={(props.sp as Record<string, string | string[] | undefined>) ?? {}}
     />
   ),
-
   'setup-company': () => <SetupCompanySlot />,
-
   'setup-close': (props) => (
     <SetupCloseSlot
       sp={(props.sp as Record<string, string | string[] | undefined>) ?? {}}
       canReopen={props.canReopen === true}
     />
   ),
-
   'setup-fx': () => <SetupFxSlot />,
-
-  /* --- journal ------------------------------------------------------------- */
 } satisfies Record<string, WidgetRenderer>
