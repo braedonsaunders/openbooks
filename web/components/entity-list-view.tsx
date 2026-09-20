@@ -135,11 +135,13 @@ export async function EntityListView({
   const metaDefault = meta.defaultSort && allowedSorts.includes(meta.defaultSort.sortKey)
     ? meta.defaultSort
     : undefined
-  // Column AND direction move together. Saved views are seeded snapshots of
-  // defaultListView, so a view whose stored column has since left the registry
-  // (or lost `sortable`) must surrender its direction with it — keeping the
-  // direction alone silently paired "name" with a dated column's `desc` and
-  // listed customers Z→A.
+  // Column AND direction move together. A seeded org default nobody edited
+  // resolves to the LIVE registry default in resolveListView, so `view.sort`
+  // here already follows the registry for untouched seeds; only genuinely
+  // edited views carry a stored direction. A view whose stored column has
+  // since left the registry (or lost `sortable`) must surrender its direction
+  // with it — keeping the direction alone silently paired "name" with a dated
+  // column's `desc` and listed customers Z→A.
   const viewSort = viewSortKey && allowedSorts.includes(viewSortKey)
     ? { sortKey: viewSortKey, dir: view.sort!.dir }
     : undefined

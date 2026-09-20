@@ -3,6 +3,7 @@ import {
   RECORD_TYPES,
   defaultFormLayout,
   defaultListView,
+  markSeededDefaultView,
 } from "@openbooks/customization";
 import { db } from "../platform/db.ts";
 
@@ -58,7 +59,15 @@ export async function ensureCustomizationDefaults(args: {
         `);
       }
 
-      const config = defaultListView(meta.key);
+      // The mark tells resolution this snapshot was never edited through the
+      // designer (whose parse strips unknown keys), so the live registry
+      // default wins at request time without the timestamp heuristic.
+      // Stored with the row because list_views.config is NOT NULL and no
+      // migration adds a column. The insert below conflicts-do-nothing on an
+      // existing (org, scope, record_type, name) row: re-running provisioning
+      // must never overwrite an operator's edits, so only genuinely new rows
+      // gain the mark and existing rows keep whatever they hold.
+      const config = markSeededDefaultView(defaultListView(meta.key));
       await tx.execute(sql`
         insert into list_views (
           org_id, record_type, name, scope, owner_id, is_default, is_active,
