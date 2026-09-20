@@ -122,8 +122,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     sets.push(sql`is_active = ${body.isActive}`);
     changes.isActive = body.isActive;
   }
-  // Request-complete contradiction needs no row snapshot. Concurrent
-  // default+deactivate is decided from the locked row inside the write.
+  // Request-complete contradiction needs no row snapshot. resolveListView
+  // filters is_active before picking isDefault, so default+inactive is a
+  // save no subsequent read can observe. Concurrent default+deactivate is
+  // decided from the locked row inside the write.
   const requestFlags = nextDefaultFlags(existing, { isDefault: body.isDefault, isActive: body.isActive });
   const requestRefusal = refuseInactiveDefault({ kind: "view", ...requestFlags });
   if (!requestRefusal.ok) return NextResponse.json({ error: requestRefusal.error }, { status: 400 });
@@ -163,7 +165,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       // Lock only — sibling clears wait until THIS update returns a row.
       // Otherwise a concurrent delete can demote the live default, write
       // audit, and still report {ok:true} for a view that is gone.
-      if (body.isDefault) await lockListViewDefaultScope(tx, defaultScope);
+      if (body.isDefault === true) await lockListViewDefaultScope(tx, defaultScope);
       // Next-state default+inactive must match zero rows even if the JS
       // refusal is skipped — refuse by name, never {ok:true}.
       const written = (await tx.execute<{ id: string }>(sql`
@@ -177,7 +179,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         }
         return { kind: "not_found" as const };
       }
-      if (body.isDefault) {
+      if (body.isDefault === true) {
         await clearSiblingListViewDefaults(tx, defaultScope);
         await assertSingleListViewDefault(tx, defaultScope);
       }
