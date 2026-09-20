@@ -119,6 +119,13 @@ export const PERMISSION_CATALOGUE = [
   "hrm.employment.read",
   "hrm.employment.manage",
   "hrm.employment.approve",
+  // HRM headcount plan — the same confidentiality rule as employment: the
+  // funded establishment is never a rider on time.*, payroll.*, or
+  // parties.*. read = see positions, funding and vacancy; manage = create,
+  // revise, fund and close positions. Assignment approval stays
+  // hrm.employment.approve: there is deliberately no position approve key.
+  "hrm.position.read",
+  "hrm.position.manage",
   // Custom records — user-defined record types + their generated modules
   "records.read",
   "records.create",
@@ -361,6 +368,8 @@ export const PERMISSION_GROUPS: {
       { key: "hrm.employment.read", labelKey: permissionLabelKey("hrm.employment.read") },
       { key: "hrm.employment.manage", labelKey: permissionLabelKey("hrm.employment.manage") },
       { key: "hrm.employment.approve", labelKey: permissionLabelKey("hrm.employment.approve") },
+      { key: "hrm.position.read", labelKey: permissionLabelKey("hrm.position.read") },
+      { key: "hrm.position.manage", labelKey: permissionLabelKey("hrm.position.manage") },
     ],
   },
   {
