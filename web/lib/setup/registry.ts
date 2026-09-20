@@ -19,6 +19,7 @@ import { MAX_DEPRECIATION_PERIODS } from '@openbooks/engine/src/assets/depreciat
 import { PAY_DERIVED_RULE_ENTITIES } from './payroll-derived-rules'
 import { PAYROLL_HOLIDAYS_ENTITY } from './payroll-holidays'
 import { LEAVE_POLICIES_ENTITY, LEAVE_TYPES_ENTITY } from './hrm-leave'
+import { BENEFIT_PLANS_ENTITY, BENEFIT_PLAN_LEVELS_ENTITY } from './hrm-benefits'
 
 export type SetupFieldKind =
   | 'text'
@@ -1742,6 +1743,10 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   // ./hrm-leave.ts; ordinary registry entities behind the hrm switch.
   LEAVE_TYPES_ENTITY,
   LEAVE_POLICIES_ENTITY,
+  // HRM benefit plans and ordered pricing tiers. Declared in
+  // ./hrm-benefits.ts; ordinary registry entities behind the hrm switch.
+  BENEFIT_PLANS_ENTITY,
+  BENEFIT_PLAN_LEVELS_ENTITY,
   {
     key: 'pay-schedules',
     table: 'pay_schedules',

@@ -1,6 +1,11 @@
 import "server-only";
 import { z } from "zod";
 import {
+  listEnrollmentWindows,
+  listEnrollments,
+} from "@openbooks/engine/src/hrm/benefits/benefits-read.ts";
+import { BenefitsError } from "@openbooks/engine/src/hrm/benefits/errors.ts";
+import {
   listLeaveRequests,
   listLeaveTypes,
   timeBalanceAsOf,
@@ -83,6 +88,7 @@ export function hrmRefusal(error: unknown): ToolResult {
     error instanceof LeaveError ||
     error instanceof RecruitingError ||
     error instanceof HrmPerformanceError ||
+    error instanceof BenefitsError ||
     error instanceof HrmAuthorizationError ||
     error instanceof TemporalError
   ) {
@@ -651,6 +657,19 @@ const hrmRecruiting: AssistantToolDef = {
     requisitionId: uuidInput.optional().describe("One opening in full (pipeline, funnel, applications); omit for the segment list"),
     segment: z.enum(requisitionSegments).optional().describe("List segment (default open)"),
     limit: z.number().int().min(1).max(200).optional().describe("Maximum openings to return (default 50)"),
+const enrollmentStatuses = ['elected', 'waived', 'pending_approval', 'active', 'ended', 'cancelled'] as const;
+
+const hrmBenefits: AssistantToolDef = {
+  name: 'hrm_benefits',
+    'Benefit enrollment windows and elections for one employment (or every visible employment): window, plan, coverage tier, status, and stored per-period amounts. Read-only.',
+  category: 'search',
+  gate: { mode: 'anyOf', perms: ['hrm.benefits.read'] },
+  feature: 'hrm',
+  tier: 'module',
+    employmentId: uuidInput.optional().describe("One employment's elections; omit for every visible employment"),
+    windowId: uuidInput.optional().describe('Keep only this enrollment window'),
+    status: z.enum(enrollmentStatuses).optional().describe('Keep only this lifecycle status'),
+    limit: z.number().int().min(1).max(200).optional().describe('Maximum elections to return (default 50)'),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const gated = await hrmFeatureRefused(authz.user.orgId);
@@ -876,6 +895,55 @@ const hrmTurnover: AssistantToolDef = {
             medianTenureDays: row.medianTenureDays,
           })),
           href: "/hrm/performance",
+    const a = raw as {
+      employmentId?: string;
+      windowId?: string;
+      status?: (typeof enrollmentStatuses)[number];
+      limit?: number;
+      // Windows read org-wide through the loader's own aggregate gate;
+      // elections resolve per employment through the same gate.
+      const windows = await listEnrollmentWindows(db, authz.user.orgId, authz.user.id, {});
+      const scoped = a.employmentId
+        ? { ids: [a.employmentId], truncated: false }
+        : await visibleEmploymentIds(authz.user.orgId, authz.allowedSubsidiaryIds, 200);
+      const collected: {
+        employmentId: string;
+        id: string;
+        status: string;
+        planCode: string;
+        coverageLevelKey: string | null;
+        employeeAmountPerPeriod: string | null;
+        employerAmountPerPeriod: string | null;
+        currency: string;
+      }[] = [];
+      // Sequential, never parallel: one pinned client per loader call, the
+      // same discipline the record boundary keeps inside its transaction.
+      for (const employmentId of scoped.ids) {
+        const elections = await listEnrollments(db, authz.user.orgId, authz.user.id, {
+          employmentId,
+          ...(a.windowId ? { windowId: a.windowId } : {}),
+          ...(a.status ? { status: a.status } : {}),
+        for (const election of elections) {
+          collected.push({
+            employmentId,
+            id: election.id,
+            status: election.status,
+            planCode: election.planCode,
+            coverageLevelKey: election.coverageLevelKey,
+            employeeAmountPerPeriod: election.employeeAmountPerPeriod,
+            employerAmountPerPeriod: election.employerAmountPerPeriod,
+            currency: election.currency,
+        if (collected.length >= limit) break;
+      const page = compactRows(collected, { limit });
+          employmentId: a.employmentId ?? null,
+          truncated: page.truncated || scoped.truncated,
+          windows: windows.map((window) => ({
+            id: window.id,
+            name: window.name,
+            kind: window.kind,
+            status: window.status,
+          elections: page.items,
+          href: '/hrm/benefits',
         },
       };
     } catch (error) {
@@ -885,3 +953,4 @@ const hrmTurnover: AssistantToolDef = {
 };
 
 export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting, hrmPerformanceCycles, hrmTurnover];
+export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmBenefits];

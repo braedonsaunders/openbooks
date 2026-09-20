@@ -9,7 +9,8 @@
       "leave": "Leave",
       "myLeave": "My leave",
       "recruiting": "Recruiting",
-      "performance": "Performance"
+      "performance": "Performance",
+      "benefits": "Benefits"
     },
     "recruiting": {
       "title": "Recruiting",
@@ -26,7 +27,13 @@
       "startingSoon": "Starting soon",
       "startingSoonSub": "{count, plural, one {# ending in the next 30 days} other {# ending in the next 30 days}}",
       "onLeave": "On leave today",
-      "onLeaveSub": "{count, plural, one {# request awaiting approval} other {# requests awaiting approval}}"
+      "onLeaveSub": "{count, plural, one {# request awaiting approval} other {# requests awaiting approval}}",
+      "employers": "Employers",
+      "employersSub": "{count, plural, one {# subsidiary} other {# subsidiaries}}",
+      "departments": "Departments",
+      "departmentsSub": "{count, plural, one {# department} other {# departments}}",
+      "unfundedFte": "Unfunded filled FTE",
+      "unfundedFteSub": "Filled with no funding behind it"
     },
     "groups": {
       "title": "Headcount by department",
@@ -129,6 +136,13 @@
       "title": "Leave",
       "onLeaveEmpty": "Nobody on leave today.",
       "pendingSub": "awaiting approval"
+    },
+    "benefits": {
+      "title": "Benefits",
+      "openWindows": "Open",
+      "noOpenWindow": "No enrollment window is open.",
+      "pendingSub": "Pending approvals",
+      "missingSub": "Elections missing inputs"
     }
   },
   "queue": {
@@ -287,6 +301,12 @@
     "exit": {
       "title": "Exit record",
       "empty": "No exit record yet."
+    },
+    "benefits": {
+      "title": "Benefits",
+      "empty": "No benefit elections or dependents yet.",
+      "viewAll": "Benefits",
+      "dependents": "{count, plural, one {# dependent: {names}} other {# dependents: {names}}}"
     }
   },
   "directory": {
@@ -711,5 +731,77 @@
     "noMissingExits": "Every termination has its exit record.",
     "noInterviewTitle": "Exit records without an interview",
     "noInterviewEmpty": "Every exit record has its interview."
+  },
+  "benefits": {
+    "title": "Benefits",
+    "description": "Plans, enrollment windows, elections, and the monthly amounts that cross into payroll.",
+    "windowsTitle": "Enrollment windows",
+    "enrolmentsTitle": "Enrolments",
+    "segmentsLabel": "Show",
+    "allLabel": "All",
+    "segments": {
+      "open": "Open",
+      "draft": "Draft",
+      "closed": "Closed",
+      "enrolments": "Enrolments"
+    },
+    "columns": {
+      "window": "Window",
+      "kind": "Kind",
+      "range": "Dates",
+      "elections": "Elections",
+      "pending": "Pending",
+      "status": "Status",
+      "employee": "Employee",
+      "plan": "Plan",
+      "coverage": "Coverage",
+      "employeeAmount": "Employee",
+      "employerAmount": "Employer"
+    },
+    "windowsEmptyTitle": "No windows here",
+    "windowsEmpty": "Nothing in this segment yet.",
+    "enrolmentsEmptyTitle": "No enrolments here",
+    "enrolmentsEmpty": "Nothing elected yet.",
+    "unknownSegmentTitle": "Unknown segment",
+    "unknownSegment": "There is no benefits segment {segment}.",
+    "newWindow": "New window",
+    "newWindowTitle": "New enrollment window",
+    "windowName": "Name",
+    "windowKind": "Kind",
+    "windowOpens": "Opens on",
+    "windowCloses": "Closes on",
+    "windowPlanYear": "Plan year starts on",
+    "windowSubsidiary": "Employer subsidiary",
+    "windowDepartment": "Department",
+    "windowAll": "All",
+    "windowRequired": "Name the window and set all three dates before saving.",
+    "windowFailed": "The window could not be saved.",
+    "createWindow": "Create window",
+    "cancel": "Cancel",
+    "openAction": "Open window",
+    "closeAction": "Close window",
+    "closeReasonPlaceholder": "Why is this window closing? Pending elections are refused with this reason.",
+    "openWindow": "Open",
+    "openEnrollment": "Open",
+    "approve": "Approve",
+    "drawerProgress": "Election progress",
+    "drawerEnrolments": "Enrolments in this window",
+    "drawerNoEnrolments": "No elections in this window yet.",
+    "windowKinds": {
+      "open_enrollment": "Open enrollment",
+      "new_hire": "New hire",
+      "life_event": "Life event"
+    },
+    "statusNames": {
+      "draft": "Draft",
+      "open": "Open",
+      "closed": "Closed",
+      "elected": "Elected",
+      "waived": "Waived",
+      "pending_approval": "Pending approval",
+      "active": "Active",
+      "ended": "Ended",
+      "cancelled": "Cancelled"
+    }
   }
 }

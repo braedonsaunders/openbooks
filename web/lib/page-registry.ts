@@ -1360,6 +1360,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/hrm/benefits': {
+    route: '/hrm/benefits',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/hrm/benefits/view')
+      return {
+        load: (input) => m.loadBenefitsPage(input.searchParams ?? {}),
+        spec: (data) => m.benefitsSpec(data as never),
+      }
+    },
+  },
   '/hrm/change-requests': {
     route: '/hrm/change-requests',
     segments: [],

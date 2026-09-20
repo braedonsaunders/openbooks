@@ -1,5 +1,6 @@
 import type { ComponentProps } from 'react'
 import {
+  HrmBenefitsPanel,
   HrmLeavePanel,
   HrmPendingRequests,
   HrmRecentChanges,
@@ -12,6 +13,9 @@ import { RecruitingDrawer } from '../../app/(app)/hrm/recruiting/sections'
 import { ChangeRequestRowActions } from '../../app/(app)/hrm/change-requests/ChangeRequestRowActions'
 import { ProposeChangeDialog } from '../../app/(app)/hrm/change-requests/ProposeChangeDialog'
 import { LeaveDialog } from '../../app/(app)/hrm/leave/LeaveDialog'
+import { EnrollmentRowActions } from '../../app/(app)/hrm/benefits/EnrollmentRowActions'
+import { WindowDialog } from '../../app/(app)/hrm/benefits/WindowDialog'
+import { WindowDrawer } from '../../app/(app)/hrm/benefits/WindowDrawer'
 import { ProcessDrawer } from '../../app/(app)/hrm/processes/sections'
 import { LeaveCalendar } from '../../app/(app)/hrm/leave/LeaveCalendar'
 import {
@@ -207,6 +211,35 @@ export const HRM_WIDGETS = {
       viewAllLabel={str(props, 'viewAllLabel') ?? ''}
     />
   ),
+  /* --- HR-8 benefits (window dialog, drawer, and the approve island) --- */
+  /** New-window dialog, opened from the page header through the
+   *  `window=new` search param; closing navigates the param away. */
+  'hrm-window-dialog': (props) => (
+    <WindowDialog
+      closeHref={str(props, 'closeHref') ?? '/hrm/benefits'}
+      subsidiaryOptions={(props.subsidiaryOptions as ComponentProps<typeof WindowDialog>['subsidiaryOptions']) ?? []}
+      departmentOptions={(props.departmentOptions as ComponentProps<typeof WindowDialog>['departmentOptions']) ?? []}
+    />
+  ),
+  /** The window flyout: loader-resolved progress plus the window's
+   *  enrolments. Null payload renders nothing — the spec's `when` gate
+   *  already omits it, so this is the second half of the same guard. */
+  'hrm-window-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof WindowDrawer>['drawer']
+    if (!drawer) return null
+    return <WindowDrawer drawer={drawer} closeHref={str(props, 'closeHref') ?? '/hrm/benefits'} />
+  },
+  /** One row's approve island inside the shared enrolments table:
+   *  pending rows carry it for managers; every other status renders
+   *  nothing, refreshing the list after the transition. */
+  'hrm-enrollment-actions': (props) => (
+    <EnrollmentRowActions
+      enrollmentId={str(props, 'enrollmentId') ?? ''}
+      enrollmentStatus={str(props, 'enrollmentStatus') ?? ''}
+      approveLabel={str(props, 'approveLabel') ?? ''}
+      canManage={props.canManage === true}
+    />
+  ),
 
   /** Recruiting funnel figures beside the queue link: open requisitions,
    *  offers awaiting response, interviews this week — loader-resolved.
@@ -217,6 +250,19 @@ export const HRM_WIDGETS = {
       empty={str(props, 'empty') ?? ''}
       viewAll={str(props, 'viewAll') ?? ''}
       viewAllHref={str(props, 'viewAllHref') ?? '/hrm/recruiting'}
+  /** Benefits panel: open windows plus pending-approval and missing-input
+   *  counts beside the queue link. */
+  'hrm-benefits-panel': (props) => (
+    <HrmBenefitsPanel
+      openWindows={(props.openWindows as ComponentProps<typeof HrmBenefitsPanel>['openWindows']) ?? []}
+      openLabel={str(props, 'openLabel') ?? ''}
+      openEmpty={str(props, 'openEmpty') ?? ''}
+      pendingCount={typeof props.pendingCount === 'number' ? props.pendingCount : 0}
+      pendingLabel={str(props, 'pendingLabel') ?? ''}
+      missingCount={typeof props.missingCount === 'number' ? props.missingCount : 0}
+      missingLabel={str(props, 'missingLabel') ?? ''}
+      queueHref={str(props, 'queueHref') ?? '/hrm/benefits'}
+      viewAllLabel={str(props, 'viewAllLabel') ?? ''}
     />
   ),
 } satisfies Record<string, WidgetRenderer>

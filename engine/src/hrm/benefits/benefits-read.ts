@@ -105,6 +105,7 @@ export async function listEnrollmentWindows(
 export interface EnrollmentSummary {
   readonly id: string;
   readonly employmentId: string;
+  readonly windowId: string | null;
   readonly employeeName: string | null;
   readonly planCode: string;
   readonly planName: string;
@@ -130,7 +131,7 @@ export async function listEnrollments(
   }
   const rows = (
     await exec.execute<Record<string, unknown>>(sql`
-      select e.id, e.employment_id as "employmentId",
+      select e.id, e.employment_id as "employmentId", e.window_id as "windowId",
              p.display_name as "employeeName",
              plan.code as "planCode", plan.name as "planName",
              e.coverage_level_key as "coverageLevelKey",
@@ -159,6 +160,7 @@ export async function listEnrollments(
     .map((row) => ({
       id: String(row.id),
       employmentId: String(row.employmentId),
+      windowId: row.windowId != null ? String(row.windowId) : null,
       employeeName: row.employeeName != null ? String(row.employeeName) : null,
       planCode: String(row.planCode),
       planName: String(row.planName),

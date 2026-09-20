@@ -80,6 +80,9 @@ const GROUP_TABS: Record<TabGroup, { href: string; ns: string; key: string }[]> 
     // page never access-denies: the read service narrows every row to
     // the actor's privacy scope instead.
     { href: '/hrm/performance', ns: 'hrm', key: 'home.tabs.performance' },
+    // Plans, windows, elections, and the monthly payroll-input seam —
+    // behind hrm.benefits.read (HRM_TAB_PERMISSION).
+    { href: '/hrm/benefits', ns: 'hrm', key: 'home.tabs.benefits' },
     // NOT tabs, by review: the change-request queue is a working surface
     // reached from the cockpit's pending panel and the employee drawer, not
     // a top-level destination; self-service leave is a quick action on the
@@ -110,6 +113,7 @@ const TAB_FEATURE: Record<string, string> = {
   '/hrm/leave': 'hrm',
   '/hrm/recruiting': 'hrm',
   '/hrm/performance': 'hrm',
+  '/hrm/benefits': 'hrm',
   '/hrm/positions': 'hrm',
   '/hrm/processes': 'hrm',
   '/close': 'continuousClose',
@@ -190,6 +194,7 @@ const HRM_TAB_PERMISSION: Record<string, string> = {
   '/hrm/processes': 'hrm.process.read',
   '/hrm/leave': 'hrm.leave.read',
   '/hrm/recruiting': 'hrm.recruiting.read',
+  '/hrm/benefits': 'hrm.benefits.read',
 }
 
 /**
