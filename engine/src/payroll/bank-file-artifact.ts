@@ -668,6 +668,8 @@ export async function generatePayRunBankFile(
       format === "bacs" ? String(((sequenceValue - 1) % 999999) + 1).padStart(6, "0") : null;
     const bacsFileNumber =
       format === "bacs" ? String(((sequenceValue - 1) % 999) + 1).padStart(3, "0") : null;
+    const cnabNsa =
+      format === "cnab240" ? String(((sequenceValue - 1) % 999999) + 1).padStart(6, "0") : null;
 
     // --- render (pure) -----------------------------------------------------
     const rendered = renderPayRunBankFile(inputs, {
@@ -680,6 +682,7 @@ export async function generatePayRunBankFile(
       messageId: format === "sepa" ? fileNumber : undefined,
       bacsVolSerial: bacsVolSerial ?? undefined,
       bacsFileNumber: bacsFileNumber ?? undefined,
+      cnabNsa: cnabNsa ?? undefined,
       fundsDate: entitlement.payDate,
       createdAt: now,
     });
@@ -717,7 +720,7 @@ export async function generatePayRunBankFile(
       );
     }
     const contentHash = createHash("sha256").update(bytes).digest("hex");
-    const filename = `${fileNumber}-${format === "cpa005" ? "CPA005" : format === "sepa" ? "SEPA" : format === "cemtex" ? "CEMTEX" : format === "bacs" ? "BACS" : format === "zengin" ? "ZENGIN" : "NACHA"}-${
+    const filename = `${fileNumber}-${format === "cpa005" ? "CPA005" : format === "sepa" ? "SEPA" : format === "cemtex" ? "CEMTEX" : format === "bacs" ? "BACS" : format === "zengin" ? "ZENGIN" : format === "cnab240" ? "CNAB240" : "NACHA"}-${
       entitlement.documentNumber
     }.${rendered.extension}`.replace(/[^A-Za-z0-9._-]/g, "-");
 

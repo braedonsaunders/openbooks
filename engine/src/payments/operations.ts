@@ -24,6 +24,7 @@ export type BuiltInPaymentRail =
   | "cemtex_credit"
   | "bacs_credit"
   | "zengin_credit"
+  | "cnab240_bb_credit"
   | "nacha_debit"
   | "sepa_debit"
   | "positive_pay"
@@ -47,6 +48,7 @@ const BUILTIN_FORMATS: Array<{
   { code: "CEMTEX-CREDIT", name: "Cemtex (ABA) credit transfer", rail: "cemtex_credit", direction: "credit", country: "AU", currency: "AUD", extension: "aba", contentType: "text/plain; charset=us-ascii" },
   { code: "BACS-CREDIT", name: "Bacs Standard 18 credit transfer", rail: "bacs_credit", direction: "credit", country: "GB", currency: "GBP", extension: "txt", contentType: "text/plain; charset=us-ascii" },
   { code: "ZENGIN-CREDIT", name: "Zengin salary transfer", rail: "zengin_credit", direction: "credit", country: "JP", currency: "JPY", extension: "txt", contentType: "text/plain; charset=Shift_JIS" },
+  { code: "CNAB240-BB-CREDIT", name: "CNAB 240 Pagamentos (Banco do Brasil)", rail: "cnab240_bb_credit", direction: "credit", country: "BR", currency: "BRL", extension: "rem", contentType: "text/plain; charset=us-ascii" },
   { code: "NACHA-DEBIT", name: "NACHA ACH debit", rail: "nacha_debit", direction: "debit", country: "US", currency: "USD", extension: "ach", contentType: "text/plain; charset=us-ascii" },
   { code: "SEPA-DEBIT", name: "SEPA direct debit", rail: "sepa_debit", direction: "debit", country: null, currency: "EUR", extension: "xml", contentType: "application/xml" },
   { code: "POSITIVE-PAY", name: "Positive Pay", rail: "positive_pay", direction: "credit", country: null, currency: null, extension: "csv", contentType: "text/csv; charset=utf-8" },
