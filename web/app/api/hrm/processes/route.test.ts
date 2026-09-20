@@ -126,16 +126,19 @@ const authzDepths = [
   "../../../../lib/authz",
   "../../../../../lib/authz",
   "../../../../../../lib/authz",
+  "../../../../../../../lib/authz",
 ];
 const featureDepths = [
   "../../../../lib/features",
   "../../../../../lib/features",
   "../../../../../../lib/features",
+  "../../../../../../../lib/features",
 ];
 const listParamDepths = [
   "../../../../lib/list-params",
   "../../../../../lib/list-params",
   "../../../../../../lib/list-params",
+  "../../../../../../../lib/list-params",
 ];
 
 const mockUrls = new Map<string, string>([

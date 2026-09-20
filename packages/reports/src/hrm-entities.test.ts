@@ -26,7 +26,7 @@ const HRM_PERMISSIONS: Record<(typeof HRM_KEYS)[number], string> = {
 }
 
 test('workforce entities are registered on the shared catalog exactly once', () => {
-  assert.equal(HRM_REPORT_ENTITIES.length, 4)
+  assert.equal(HRM_REPORT_ENTITIES.length, HRM_KEYS.length)
   for (const key of HRM_KEYS) {
     const entity = REPORT_ENTITY_MAP[key]
     assert.ok(entity, `${key} must be in REPORT_ENTITY_MAP`)
