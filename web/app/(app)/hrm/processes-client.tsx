@@ -40,11 +40,11 @@ export function ProcessChecklistBody({ detail }: { detail: ProcessDetail }) {
   const [fileOptions, setFileOptions] = useState<FileOption[]>([])
   const [fileQuery, setFileQuery] = useState('')
 
+  // Options are only meaningful for a query of two or more characters; the
+  // render derives that instead of an effect clearing state synchronously.
+  const visibleFileOptions = fileQuery.length < 2 ? [] : fileOptions
   useEffect(() => {
-    if (fileQuery.length < 2) {
-      setFileOptions([])
-      return
-    }
+    if (fileQuery.length < 2) return
     let cancelled = false
     const timer = setTimeout(async () => {
       const res = await fetch(`/api/file-cabinet/files?q=${encodeURIComponent(fileQuery)}&perPage=20`)
@@ -132,7 +132,7 @@ export function ProcessChecklistBody({ detail }: { detail: ProcessDetail }) {
                       id={`file-${step.id}`}
                       value={attachmentId}
                       onChange={(next) => setAttachmentId(next)}
-                      options={fileOptions}
+                      options={visibleFileOptions}
                       ariaLabel={t('processes.attachmentLabel')}
                       sheetTitle={t('processes.attachmentLabel')}
                       clearable
