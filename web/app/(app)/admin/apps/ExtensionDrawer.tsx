@@ -11,6 +11,7 @@ import {
   nextAppVersion,
   type EditableAppPackage,
 } from '@/lib/apps/package-files'
+import { readApiErrorMessage } from '@/lib/api-error'
 import { confirmDialog } from '@/lib/confirm'
 import { AppPackageEditor } from './AppPackageEditor'
 import { AppHistory } from './AppHistory'
@@ -69,8 +70,10 @@ export function ExtensionDrawer({
         headers: { 'Content-Type': 'application/json' },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       })
-      const data = await response.json()
-      if (!response.ok) throw new Error(data.error ?? t('failed'))
+      // Status first: a non-JSON 500/HTML refusal must toast the API
+      // failure, never a SyntaxError from response.json().
+      if (!response.ok)
+        throw new Error(await readApiErrorMessage(response, t('failed')))
       router.refresh()
       return true
     } catch (error) {
@@ -87,8 +90,9 @@ export function ExtensionDrawer({
       const response = await fetch(
         `/api/apps/${encodeURIComponent(app.key)}/package${versionId ? `?versionId=${versionId}` : ''}`,
       )
+      if (!response.ok)
+        throw new Error(await readApiErrorMessage(response, t('failed')))
       const result = await response.json()
-      if (!response.ok) throw new Error(result.error ?? t('failed'))
       const manifest = parseManifest(result.bundle.manifest).manifest
       if (!manifest) throw new Error(t('failed'))
       setEditing({
