@@ -64,6 +64,7 @@ export class HrmPositionError extends Error {
  * constructed only by vacancyRefusalFor, never by hand.
  */
 export class PositionOverfilledError extends HrmPositionError {
+  declare readonly code: "OVER_FILLED";
   constructor(message: string) {
     super("OVER_FILLED", message);
     this.name = "PositionOverfilledError";
@@ -76,6 +77,7 @@ export class PositionOverfilledError extends HrmPositionError {
  * vacancyRefusalFor.
  */
 export class PositionUnderfundedError extends HrmPositionError {
+  declare readonly code: "UNDER_FUNDED";
   constructor(message: string) {
     super("UNDER_FUNDED", message);
     this.name = "PositionUnderfundedError";
