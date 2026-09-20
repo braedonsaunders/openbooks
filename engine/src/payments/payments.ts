@@ -4,12 +4,10 @@ import { allocateDocumentNumber } from "../records/numbering.ts";
 import { documentRevisionCounterSql } from "../records/revision.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { roundCurrencyMoney } from "../fx/currencies.ts";
-import { canonicalDecimal } from "../money/exact-decimal.ts";
-import { add, cmp, divRate, formatMoney, fromUnits, isZero, mulRate, mulRatio, neg, normalizeDecimal, sum, toUnits } from "../money/money.ts";
+import { add, cmp, divRate, fromUnits, isZero, mulRate, neg, sum, toUnits } from "../money/money.ts";
 import { postDocument, runPostDocumentEffects, type PostingDeps } from "../ledger/posting.ts";
 import { assertNotSandbox } from "../organization/sandbox-guard.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
-import { sealSecret, unsealJson, unsealSecret } from "../platform/secrets.ts";
 import {
   evaluateBillsForRelease,
   recordReleaseCheck,
@@ -20,6 +18,31 @@ import {
   recordTransactionAudit,
 } from "../records/transaction-audit.ts";
 import { assertSubcontractPaymentCleared } from "../projects/subcontracts.ts";
+
+import { PaymentError, PaymentRevisionConflictError, PaymentRunPostingClaimFencedError } from "./payment-errors.ts";
+import {
+  allocationsMatchApprovedSnapshot, canonicalSettlementRate, carryingAmountForSettlement,
+  persistPaymentFxRate, persistPaymentMoney, realizedFxControlAdjustment,
+  sameCurrencyAllocation, validateAllocationInputs, validateSettlementEvidence,
+  type AllocationInput, type SettlementRateSource,
+} from "./settlement-policy.ts";
+import {
+  decryptAccountNumber, loadEftSettings, loadNachaSettings, loadSepaSettings,
+  type EftSettings, type EftSettingsResult,
+} from "./rail-settings.ts";
+import {
+  buildCpa005File, buildNachaFile, buildSepaFile, nachaCheckDigit,
+  type Cpa005Payment, type NachaEntry,
+} from "./rail-formatters.ts";
+
+// Preserve the public payments entry point; extracted modules never import this facade.
+export { PaymentError, PaymentRevisionConflictError, PaymentRunPostingClaimFencedError } from "./payment-errors.ts";
+export { carryingAmountForSettlement, realizedFxControlAdjustment, sameCurrencyAllocation } from "./settlement-policy.ts";
+export type { AllocationInput, SettlementRateSource } from "./settlement-policy.ts";
+export { decryptAccountNumber, encryptAccountNumber, loadEftSettings, loadNachaSettings, loadSepaSettings, validateNachaSettings, validateSepaSettings } from "./rail-settings.ts";
+export type { EftSettings, EftSettingsResult, NachaSettings, SepaSettings } from "./rail-settings.ts";
+export { buildCpa005File, buildNachaFile, buildSepaFile } from "./rail-formatters.ts";
+export type { Cpa005Payment, Cpa005Run, NachaEntry } from "./rail-formatters.ts";
 
 /**
  * Payments: vendor payments and customer receipts with open-item application,
@@ -38,33 +61,8 @@ import { assertSubcontractPaymentCleared } from "../projects/subcontracts.ts";
  * the existing posting rules pick up the right bank account.
  */
 
-export class PaymentError extends Error {}
-
-/** Raised when a caller lost the posting claim it was working under — the run
- *  moved on (terminal transition, or a recovered stale claim) and no further
- *  mutation from this worker may commit. */
-export class PaymentRunPostingClaimFencedError extends PaymentError {
-  constructor(runId: string) {
-    super(`payment-run posting claim ${runId} no longer owns the run`);
-    this.name = "PaymentRunPostingClaimFencedError";
-  }
-}
-
-/**
- * Raised when a draft-payment save echoes a revision token that no longer
- * matches the row locked FOR UPDATE — another save committed first. The HTTP
- * layer maps this to 409 so the client reloads instead of overwriting.
- */
-export class PaymentRevisionConflictError extends PaymentError {
-  constructor() {
-    super("this payment changed after you opened it; reload and review the latest revision");
-    this.name = "PaymentRevisionConflictError";
-  }
-}
-
 export type PaymentKind = "vendor_payment" | "customer_payment";
 export type OpenItemSide = "ap" | "ar";
-export type SettlementRateSource = "same_currency" | "provider" | "manual" | "contractual" | "imported";
 
 export const PAYMENT_KIND_SIDE: Record<PaymentKind, OpenItemSide> = {
   vendor_payment: "ap",
@@ -75,23 +73,6 @@ const NUMBER_PREFIX: Record<PaymentKind, string> = {
   vendor_payment: "PAY-",
   customer_payment: "RCPT-",
 };
-
-export interface AllocationInput {
-  openLineId: string;
-  /** Amount consumed from the payment/credit source, in the payment currency. */
-  sourceTransactionAmount: string;
-  /** Amount extinguished on the invoice/bill, in the target open-item currency. */
-  targetTransactionAmount: string;
-  /** Optional independently saved target carrying value, revalidated at posting. */
-  targetBaseAmount?: string;
-  /** Target-currency units for one source-currency unit. Required cross-currency. */
-  settlementRate: string;
-  settlementRateSource: SettlementRateSource;
-  /** Bank advice, contract, provider observation, or import evidence reference. */
-  settlementRateReference: string;
-  /** Tenant-owned fx_rates observation when settlementRateSource is provider. */
-  settlementFxRateId?: string | null;
-}
 
 export interface CreditAllocationInput {
   fromLineId: string;
@@ -139,42 +120,6 @@ export async function paymentControlDeps(orgId: string): Promise<PostingDeps> {
 // Draft payment documents
 // ---------------------------------------------------------------------------
 
-/** Persist-time payment FX rate: exact decimal at numeric(19,10). Fail closed. */
-function persistPaymentFxRate(value: unknown): string {
-  const exact = canonicalDecimal(value, 10);
-  if (exact === null) throw new PaymentError("exchange rate must be an exact decimal");
-  try {
-    return normalizeDecimal(exact, 10);
-  } catch {
-    throw new PaymentError("exchange rate must be an exact decimal");
-  }
-}
-
-/**
- * Draft discount/fee/on-account inputs must be exact 4dp amounts the
- * numeric(19,4) header/total columns can hold. Reading them with toUnits
- * directly threw a bare Error on junk text (a 500 at the payments API, which
- * maps only PaymentError to 422) and admitted any magnitude (a storage
- * failure on save), so both fail closed here as PaymentError.
- */
-function persistPaymentMoney(value: unknown, label: string): bigint {
-  const exact = canonicalDecimal(value, 4);
-  if (exact === null) {
-    throw new PaymentError(`${label} must be an exact decimal amount of at most 4 decimal places`);
-  }
-  let units: bigint;
-  try {
-    units = toUnits(exact);
-  } catch {
-    throw new PaymentError(`${label} must be an exact decimal amount of at most 4 decimal places`);
-  }
-  const whole = (units < 0n ? -units : units) / 10_000n;
-  if (whole >= 10n ** 15n) {
-    throw new PaymentError(`${label} is out of range — at most 15 whole digits fit the ledger`);
-  }
-  return units;
-}
-
 export async function createPaymentDocument(opts: {
   orgId: string;
   kind: PaymentKind;
@@ -218,122 +163,6 @@ export async function createPaymentDocument(opts: {
     })
     .returning({ id: schema.documents.id, documentNumber: schema.documents.documentNumber });
   return doc!;
-}
-
-export function sameCurrencyAllocation(
-  openLineId: string,
-  amount: string,
-  targetBaseAmount?: string,
-): AllocationInput {
-  return {
-    openLineId,
-    sourceTransactionAmount: amount,
-    targetTransactionAmount: amount,
-    ...(targetBaseAmount === undefined ? {} : { targetBaseAmount }),
-    settlementRate: "1",
-    settlementRateSource: "same_currency",
-    settlementRateReference: "same transaction currency",
-  };
-}
-
-/** Validate allocation shape: positive exact amounts, rate evidence, distinct lines. */
-function validateAllocationInputs(allocations: AllocationInput[]): void {
-  const seen = new Set<string>();
-  for (const a of allocations) {
-    if (!a.openLineId) throw new PaymentError("allocation is missing its open item line");
-    if (seen.has(a.openLineId)) throw new PaymentError("the same open item is allocated twice");
-    seen.add(a.openLineId);
-    try {
-      if (toUnits(a.sourceTransactionAmount) <= 0n || toUnits(a.targetTransactionAmount) <= 0n) {
-        throw new Error("transaction amounts must be positive");
-      }
-      if (a.targetBaseAmount !== undefined && toUnits(a.targetBaseAmount) <= 0n) {
-        throw new Error("target base amount must be positive");
-      }
-      // Also validates numeric(19,10) precision and positivity.
-      mulRate(a.sourceTransactionAmount, a.settlementRate);
-    } catch {
-      throw new PaymentError("allocation amounts and settlement rate must be positive exact decimals");
-    }
-    if (!a.settlementRateReference?.trim()) throw new PaymentError("settlement-rate evidence reference is required");
-    if (!["same_currency", "provider", "manual", "contractual", "imported"].includes(a.settlementRateSource)) {
-      throw new PaymentError("settlement-rate evidence source is invalid");
-    }
-  }
-}
-
-/**
- * Compare the allocation workpaper as an approved snapshot, not as a raw JSON
- * string. Decimal spellings and row order are presentation details; the open
- * item, amounts, settlement evidence, and rate are the approval scope.
- */
-function allocationSnapshot(allocations: AllocationInput[]): string[] {
-  return allocations
-    .map((allocation) => JSON.stringify({
-      openLineId: allocation.openLineId,
-      sourceTransactionAmount: fromUnits(toUnits(allocation.sourceTransactionAmount)),
-      targetTransactionAmount: fromUnits(toUnits(allocation.targetTransactionAmount)),
-      targetBaseAmount:
-        allocation.targetBaseAmount === undefined
-          ? null
-          : fromUnits(toUnits(allocation.targetBaseAmount)),
-      settlementRate: canonicalSettlementRate(allocation.settlementRate),
-      settlementRateSource: allocation.settlementRateSource,
-      settlementRateReference: allocation.settlementRateReference.trim(),
-      settlementFxRateId: allocation.settlementFxRateId ?? null,
-    }))
-    .sort();
-}
-
-function allocationsMatchApprovedSnapshot(
-  submitted: AllocationInput[],
-  approved: AllocationInput[],
-): boolean {
-  const submittedSnapshot = allocationSnapshot(submitted);
-  const approvedSnapshot = allocationSnapshot(approved);
-  return (
-    submittedSnapshot.length === approvedSnapshot.length &&
-    submittedSnapshot.every((value, index) => value === approvedSnapshot[index])
-  );
-}
-
-function canonicalSettlementRate(rate: string): string {
-  const raw = String(rate).trim();
-  const match = raw.match(/^\+?(\d+)(?:\.(\d*))?$/);
-  if (!match || (match[2]?.length ?? 0) > 10) {
-    throw new PaymentError("settlement rate must be a positive decimal with at most ten decimal places");
-  }
-  const whole = BigInt(match[1]!).toString();
-  const fraction = (match[2] ?? "").padEnd(10, "0");
-  if (BigInt(whole) === 0n && !/[1-9]/.test(fraction)) throw new PaymentError("settlement rate must be positive");
-  return `${whole}.${fraction}`;
-}
-
-function validateSettlementEvidence(
-  allocation: AllocationInput,
-  sourceCurrency: string,
-  targetCurrency: string,
-): void {
-  if (cmp(mulRate(allocation.sourceTransactionAmount, allocation.settlementRate), allocation.targetTransactionAmount) !== 0) {
-    throw new PaymentError("settlement rate does not cross-foot source and target transaction amounts");
-  }
-  if (sourceCurrency === targetCurrency) {
-    if (
-      cmp(allocation.sourceTransactionAmount, allocation.targetTransactionAmount) !== 0 ||
-      canonicalSettlementRate(allocation.settlementRate) !== "1.0000000000" ||
-      allocation.settlementRateSource !== "same_currency" ||
-      allocation.settlementFxRateId
-    ) {
-      throw new PaymentError("same-currency applications require equal amounts and a rate of one");
-    }
-    return;
-  }
-  if (allocation.settlementRateSource === "same_currency") {
-    throw new PaymentError("cross-currency applications require explicit settlement-rate evidence");
-  }
-  if (allocation.settlementRateSource === "provider" && !allocation.settlementFxRateId) {
-    throw new PaymentError("provider settlement evidence requires an FX rate observation");
-  }
 }
 
 /**
@@ -959,32 +788,6 @@ export async function loadPaymentDocument(id: string, kind: PaymentKind, orgId: 
 // Post + apply
 // ---------------------------------------------------------------------------
 
-/** Exact carrying amount consumed by a transaction-currency settlement. */
-export function carryingAmountForSettlement(
-  openBase: string,
-  openTransaction: string,
-  settledTransaction: string,
-): string {
-  if (cmp(settledTransaction, "0") <= 0 || cmp(settledTransaction, openTransaction) > 0) {
-    throw new PaymentError("settlement amount must be positive and cannot exceed the open transaction amount");
-  }
-  // Taking the complete residual consumes the complete carrying value. This
-  // prevents proportional rounding from leaving an uncloseable 0.0001 tail.
-  if (cmp(settledTransaction, openTransaction) === 0) return openBase;
-  return mulRatio(openBase, toUnits(settledTransaction), toUnits(openTransaction));
-}
-
-/**
- * Control-account adjustment required to clear source and target carrying
- * values. Positive is a debit; its exact opposite is realized gain/loss.
- */
-export function realizedFxControlAdjustment(
-  sourceSignedAmount: string,
-  targetSignedAmount: string,
-): string {
-  return neg(add(sourceSignedAmount, targetSignedAmount));
-}
-
 type SettlementApplication = {
   fromLineId: string;
   toLineId: string;
@@ -1521,94 +1324,6 @@ export async function reversePaymentForReturn(
   });
   if (!reversalId) throw new PaymentError("payment reversal could not be created");
   return reversalId;
-}
-
-// ---------------------------------------------------------------------------
-// Originator settings (tenant-owned payment bank profiles)
-// ---------------------------------------------------------------------------
-
-export interface EftSettings {
-  /** 10-character originator ID assigned by the financial institution. */
-  originatorId: string;
-  /** Up to 15 characters; appears on payee statements. */
-  originatorShortName: string;
-  /** Up to 30 characters; appears on payee statements. */
-  originatorLongName: string;
-  /** 5-digit destination data centre code of the processing institution. */
-  dataCentre: string;
-  /**
-   * 5-digit data centre of the ORIGINATING direct clearer (the org's own
-   * institution), assigned by that institution — not the same number as
-   * `dataCentre`, which identifies the destination. Both are components of the
-   * item trace number (DE 12) and neither may be zero-filled.
-   */
-  originatingDataCentre: string;
-  /** Payer (settlement) bank: 3-digit institution, 5-digit transit, account. */
-  institution: string;
-  transit: string;
-  account: string;
-  /** Optional CPA transaction code override; default 460 (accounts payable). */
-  transactionCode?: string;
-}
-
-const EFT_REQUIRED: (keyof EftSettings)[] = [
-  "originatorId",
-  "originatorShortName",
-  "originatorLongName",
-  "dataCentre",
-  "originatingDataCentre",
-  "institution",
-  "transit",
-  "account",
-];
-
-export type EftSettingsResult =
-  | { ok: true; settings: EftSettings }
-  | { ok: false; missing: string[] };
-
-/** Read and validate the org's EFT origination settings. Never fakes success. */
-export async function loadEftSettings(orgId: string, runId?: string): Promise<EftSettingsResult> {
-  const r = (await db.execute<{ originator_secrets_encrypted: string | null }>(sql`
-    select p.originator_secrets_encrypted
-      from payment_bank_profiles p
-      join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
-      left join payment_runs r on r.payment_bank_profile_id = p.id and r.org_id = p.org_id
-     where p.org_id = ${orgId} and p.is_active and f.rail = 'cpa005_credit'
-       and (${runId ?? null}::uuid is null or r.id = ${runId ?? null})
-     order by case when r.id is not null then 0 else 1 end, p.created_at
-     limit 1
-  `));
-  const eft = unsealJson<Partial<EftSettings>>(r.rows[0]?.originator_secrets_encrypted) ?? {};
-  const missing = EFT_REQUIRED.filter((k) => {
-    const v = eft[k];
-    return typeof v !== "string" || v.trim() === "" || v.includes("FILL-ME");
-  });
-  if (missing.length > 0) return { ok: false, missing };
-  const s = eft as EftSettings;
-  if (!/^\d{5}$/.test(s.dataCentre)) return { ok: false, missing: ["dataCentre (must be 5 digits)"] };
-  if (!/^\d{5}$/.test(s.originatingDataCentre) || Number(s.originatingDataCentre) === 0) {
-    return { ok: false, missing: ["originatingDataCentre (must be 5 digits and greater than zero)"] };
-  }
-  if (!/^\d{3}$/.test(s.institution)) return { ok: false, missing: ["institution (must be 3 digits)"] };
-  if (!/^\d{5}$/.test(s.transit)) return { ok: false, missing: ["transit (must be 5 digits)"] };
-  if (!/^\d{1,12}$/.test(s.account)) return { ok: false, missing: ["account (1–12 digits)"] };
-  if (s.originatorId.length > 10) return { ok: false, missing: ["originatorId (max 10 characters)"] };
-  return { ok: true, settings: s };
-}
-
-// ---------------------------------------------------------------------------
-// Counterparty bank account number encryption
-// ---------------------------------------------------------------------------
-
-/** Encrypt a payee bank account number for party_bank_accounts.account_number_encrypted. */
-export function encryptAccountNumber(plain: string): string {
-  return sealSecret(plain);
-}
-
-export function decryptAccountNumber(stored: string): string {
-  const plain = unsealSecret(stored);
-  if (plain === null) throw new PaymentError("stored bank account number is malformed or could not be decrypted");
-  return plain;
 }
 
 // ---------------------------------------------------------------------------
@@ -3289,206 +3004,6 @@ async function queueAutomaticRemittance(
 // CPA Standard 005 file
 // ---------------------------------------------------------------------------
 
-export interface Cpa005Payment {
-  /** Amount in cents (positive integer, max 10 digits). */
-  amountCents: bigint;
-  /** Date funds are to be made available (payment date). */
-  fundsDate: Date;
-  /** Payee routing: 3-digit institution + 5-digit transit. */
-  institution: string;
-  transit: string;
-  /** Payee account number, 1–12 digits/characters. */
-  accountNumber: string;
-  /** Payee name, truncated to 30 characters. */
-  payeeName: string;
-  /** Originator's cross-reference (e.g. payment document number), ≤19 chars. */
-  crossReference: string;
-}
-
-export interface Cpa005Run {
-  settings: EftSettings;
-  /** 1–9999, unique per file transmitted to the institution. */
-  fileCreationNumber: number;
-  fileCreationDate: Date;
-  payments: Cpa005Payment[];
-}
-
-const RECORD_LEN = 1464;
-const SEGMENTS_PER_RECORD = 6;
-const SEGMENT_LEN = 240;
-
-function alpha(value: string, len: number): string {
-  return value.slice(0, len).padEnd(len, " ");
-}
-
-function num(value: bigint | number, len: number): string {
-  const s = String(value);
-  if (s.length > len || Number(value) < 0) {
-    throw new PaymentError(`numeric field value ${s} does not fit in ${len} digits`);
-  }
-  return s.padStart(len, "0");
-}
-
-/** CPA date format: 0YYDDD (leading zero, 2-digit year, julian day of year). */
-function julian(d: Date): string {
-  const year = d.getFullYear();
-  const start = Date.UTC(year, 0, 1);
-  const day =
-    Math.floor((Date.UTC(year, d.getMonth(), d.getDate()) - start) / 86_400_000) + 1;
-  return `0${String(year % 100).padStart(2, "0")}${String(day).padStart(3, "0")}`;
-}
-
-/**
- * DE 12, Item Trace Number (22 characters), per Payments Canada Standard 005
- * (2024 ed., Appendix 1 — Data Element Dictionary). It is a structured field,
- * not filler:
- *
- *   4  destination data centre, trailing digit dropped — a value that does not
- *      match the receiving data centre REJECTS the transaction
- *   5  the originating direct clearer's data centre, > 0
- *   4  the file creation number, > 0
- *   9  an item sequence number within the file, > 0
- *
- * Zero-filling any component is a rejected item, so every component is proved
- * here rather than defaulted.
- */
-function itemTraceNumber(opts: {
-  destinationDataCentre: string;
-  originatingDataCentre: string;
-  fileCreationNumber: number;
-  itemSequence: number;
-}): string {
-  if (!/^\d{5}$/.test(opts.destinationDataCentre)) {
-    throw new PaymentError(`destination data centre "${opts.destinationDataCentre}" must be 5 digits`);
-  }
-  if (!/^\d{5}$/.test(opts.originatingDataCentre) || Number(opts.originatingDataCentre) === 0) {
-    throw new PaymentError(
-      `originating direct clearer's data centre "${opts.originatingDataCentre}" must be 5 digits and greater than zero`,
-    );
-  }
-  if (opts.fileCreationNumber < 1) throw new PaymentError("item trace number requires a file creation number above zero");
-  if (opts.itemSequence < 1) throw new PaymentError("item trace number requires an item sequence above zero");
-  const trace =
-    opts.destinationDataCentre.slice(0, 4) +
-    opts.originatingDataCentre +
-    num(opts.fileCreationNumber, 4) +
-    num(opts.itemSequence, 9);
-  if (trace.length !== 22) throw new PaymentError("internal error: CPA-005 item trace number is not 22 characters");
-  return trace;
-}
-
-/** 9-digit institutional ID: 0 + institution(3) + transit(5). */
-function institutionalId(institution: string, transit: string): string {
-  if (!/^\d{3}$/.test(institution)) throw new PaymentError(`institution "${institution}" must be 3 digits`);
-  if (!/^\d{5}$/.test(transit)) throw new PaymentError(`transit "${transit}" must be 5 digits`);
-  return `0${institution}${transit}`;
-}
-
-/**
- * Build a CPA Standard 005 credit file (logical records A, C, Z; fixed-width
- * 1464-character records; up to six 240-character credit segments per C
- * record; CAD funds). Records are joined with CRLF.
- */
-export function buildCpa005File(run: Cpa005Run): string {
-  const s = run.settings;
-  if (run.fileCreationNumber < 1 || run.fileCreationNumber > 9999) {
-    throw new PaymentError("file creation number must be 1–9999");
-  }
-  if (run.payments.length === 0) throw new PaymentError("run has no payments to export");
-
-  const originatorId = alpha(s.originatorId, 10);
-  const fileCreationNo = num(run.fileCreationNumber, 4);
-  const originControl = `${originatorId}${fileCreationNo}`; // positions 11–24
-  const txnType = /^\d{3}$/.test(s.transactionCode ?? "") ? s.transactionCode! : "460";
-
-  let recordCount = 0;
-  const records: string[] = [];
-
-  // -- A: header --------------------------------------------------------
-  recordCount += 1;
-  records.push(
-    (
-      "A" +
-      num(recordCount, 9) +
-      originControl +
-      julian(run.fileCreationDate) +
-      num(Number(s.dataCentre), 5) +
-      " ".repeat(20) + // reserved customer-direct clearer communication area
-      "CAD"
-    ).padEnd(RECORD_LEN, " "),
-  );
-
-  // -- C: credit details, 6 segments per logical record -------------------
-  const returnRouting = institutionalId(s.institution, s.transit);
-  const returnAccount = alpha(s.account, 12);
-
-  const segments = run.payments.map((p, i) => {
-    if (p.amountCents <= 0n) throw new PaymentError("payment amounts must be positive");
-    if (p.accountNumber.trim() === "") throw new PaymentError("payee account number must not be blank");
-    if (p.accountNumber.length > 12) throw new PaymentError("payee account number must be 12 characters or fewer");
-    if (p.crossReference.length > 19) throw new PaymentError("cross-reference must be 19 characters or fewer");
-    return (
-      txnType + // transaction type (3)
-      num(p.amountCents, 10) + // amount in cents (10)
-      julian(p.fundsDate) + // date funds to be available (6)
-      institutionalId(p.institution, p.transit) + // payee institutional id (9)
-      alpha(p.accountNumber, 12) + // payee account number (12)
-      itemTraceNumber({
-        // item trace number (22)
-        destinationDataCentre: s.dataCentre,
-        originatingDataCentre: s.originatingDataCentre,
-        fileCreationNumber: run.fileCreationNumber,
-        itemSequence: i + 1,
-      }) +
-      "0".repeat(3) + // stored transaction type (3)
-      alpha(s.originatorShortName, 15) + // originator short name (15)
-      alpha(p.payeeName, 30) + // payee name (30)
-      alpha(s.originatorLongName, 30) + // originator long name (30)
-      originatorId + // originating direct clearer's user id (10)
-      alpha(p.crossReference, 19) + // originator cross-reference (19)
-      returnRouting + // institutional id for returns (9)
-      returnAccount + // account number for returns (12)
-      " ".repeat(15) + // originator sundry information (15)
-      " ".repeat(22) + // filler (22)
-      " ".repeat(2) + // originator-direct clearer settlement code (2)
-      "0".repeat(11) // invalid data element id (11)
-    );
-  });
-  for (const seg of segments) {
-    if (seg.length !== SEGMENT_LEN) throw new PaymentError("internal error: CPA-005 segment is not 240 characters");
-  }
-
-  for (let i = 0; i < segments.length; i += SEGMENTS_PER_RECORD) {
-    recordCount += 1;
-    const chunk = segments.slice(i, i + SEGMENTS_PER_RECORD).join("");
-    records.push(("C" + num(recordCount, 9) + originControl + chunk).padEnd(RECORD_LEN, " "));
-  }
-
-  // -- Z: trailer ---------------------------------------------------------
-  const totalValue = run.payments.reduce((acc, p) => acc + p.amountCents, 0n);
-  recordCount += 1;
-  records.push(
-    (
-      "Z" +
-      num(recordCount, 9) +
-      originControl +
-      num(0, 14) + // total value of debit transactions
-      num(0, 8) + // total number of debit transactions
-      num(totalValue, 14) + // total value of credit transactions
-      num(run.payments.length, 8) + // total number of credit transactions
-      num(0, 14) + // total value of error corrections "E"
-      num(0, 8) + // total number of error corrections "E"
-      num(0, 14) + // total value of error corrections "F"
-      num(0, 8) // total number of error corrections "F"
-    ).padEnd(RECORD_LEN, " "),
-  );
-
-  for (const rec of records) {
-    if (rec.length !== RECORD_LEN) throw new PaymentError("internal error: CPA-005 record is not 1464 characters");
-  }
-  return records.join("\r\n") + "\r\n";
-}
-
 /**
  * Assemble and build the CPA-005 file for a payment run. Throws PaymentError
  * with every blocking problem (settings or payee bank details) — no partial
@@ -3557,149 +3072,6 @@ export async function loadCpa005RunFile(
 // NACHA (US ACH) — orgs.settings.nacha
 // ---------------------------------------------------------------------------
 
-export interface NachaSettings {
-  /** ODFI 9-digit routing/ABA number (the originating bank). */
-  odfiRouting: string;
-  /** 10-char immediate destination (usually " " + destination routing 9). */
-  immediateDestination: string;
-  /** 10-char immediate origin (usually company id / " " + routing 9). */
-  immediateOrigin: string;
-  destinationName: string;
-  originName: string;
-  /** Company name on the batch (≤16). */
-  companyName: string;
-  /** Company id (10) — commonly "1" + 9-digit EIN. */
-  companyId: string;
-  /** PPD (consumer) or CCD (corporate). Default CCD. */
-  entryClassCode?: "PPD" | "CCD";
-  /** Batch entry description (≤10). Default "PAYMENT". */
-  entryDescription?: string;
-}
-
-const NACHA_REQUIRED: (keyof NachaSettings)[] = [
-  "odfiRouting", "immediateDestination", "immediateOrigin", "destinationName", "originName", "companyName", "companyId",
-];
-
-export function validateNachaSettings(raw: Partial<NachaSettings> | null): { ok: true; settings: NachaSettings } | { ok: false; missing: string[] } {
-  const s = raw ?? {};
-  const missing = NACHA_REQUIRED.filter((k) => {
-    const v = s[k];
-    return typeof v !== "string" || v.trim() === "" || v.includes("FILL-ME");
-  });
-  if (missing.length) return { ok: false, missing };
-  if (!/^\d{9}$/.test(s.odfiRouting!)) return { ok: false, missing: ["odfiRouting (9 digits)"] };
-  return { ok: true, settings: s as NachaSettings };
-}
-
-export async function loadNachaSettings(orgId: string, runId?: string) {
-  const r = (await db.execute<{ originator_secrets_encrypted: string | null }>(sql`
-    select p.originator_secrets_encrypted
-      from payment_bank_profiles p
-      join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
-      left join payment_runs r on r.payment_bank_profile_id = p.id and r.org_id = p.org_id
-     where p.org_id = ${orgId} and p.is_active and f.rail in ('nacha_credit', 'nacha_debit')
-       and (${runId ?? null}::uuid is null or r.id = ${runId ?? null})
-     order by case when r.id is not null then 0 else 1 end, p.created_at
-     limit 1
-  `));
-  return validateNachaSettings(unsealJson<Partial<NachaSettings>>(r.rows[0]?.originator_secrets_encrypted));
-}
-
-export interface NachaEntry {
-  /** 22 = checking credit, 32 = savings credit. */
-  transactionCode: "22" | "32";
-  /** Receiving bank 9-digit routing (8 + check digit). */
-  routingNumber: string;
-  accountNumber: string;
-  amountCents: bigint;
-  individualId: string;
-  individualName: string;
-}
-
-function nachaField(v: string, len: number, align: "l" | "r" = "l", pad = " "): string {
-  const s = v.slice(0, len);
-  return align === "l" ? s.padEnd(len, pad) : s.padStart(len, pad);
-}
-
-/** Build a NACHA ACH credit file (94-char records, blocked to 10). */
-export function buildNachaFile(opts: {
-  settings: NachaSettings;
-  effectiveDate: Date;
-  creationDate: Date;
-  fileIdModifier?: string;
-  entries: NachaEntry[];
-}): string {
-  const s = opts.settings;
-  if (opts.entries.length === 0) throw new PaymentError("run has no payments to export");
-  const sec = s.entryClassCode ?? "CCD";
-  const odfi8 = s.odfiRouting.slice(0, 8);
-  const yymmdd = (d: Date) => `${String(d.getFullYear() % 100).padStart(2, "0")}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-  const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}`;
-
-  const rows: string[] = [];
-  // 1 — File Header
-  rows.push(
-    "1" + "01" + nachaField(s.immediateDestination, 10, "r") + nachaField(s.immediateOrigin, 10, "r") +
-    yymmdd(opts.creationDate) + hhmm(opts.creationDate) + (opts.fileIdModifier ?? "A") + "094" + "10" + "1" +
-    nachaField(s.destinationName, 23) + nachaField(s.originName, 23) + nachaField("", 8),
-  );
-  // 5 — Batch Header (220 = credits only)
-  rows.push(
-    "5" + "220" + nachaField(s.companyName, 16) + nachaField("", 20) + nachaField(s.companyId, 10) + sec +
-    nachaField(s.entryDescription ?? "PAYMENT", 10) + nachaField("", 6) + yymmdd(opts.effectiveDate) + nachaField("", 3) +
-    "1" + odfi8 + nachaField("0000001", 7, "r", "0"),
-  );
-  // 6 — Entry Details
-  let entryHash = 0n;
-  let totalCredit = 0n;
-  opts.entries.forEach((e, i) => {
-    if (e.amountCents <= 0n) throw new PaymentError("payment amounts must be positive");
-    if (e.accountNumber.trim() === "") throw new PaymentError("payment account number must not be blank");
-    if (e.accountNumber.length > 17) throw new PaymentError("payment account number must be 17 characters or fewer");
-    if (!/^\d{8,9}$/.test(e.routingNumber)) {
-      throw new PaymentError("payment routing number must contain eight or nine digits");
-    }
-    const rt8 = e.routingNumber.slice(0, 8);
-    const expectedCheckDigit = nachaCheckDigit(rt8);
-    if (e.routingNumber.length === 9 && e.routingNumber[8] !== expectedCheckDigit) {
-      throw new PaymentError("payment routing number has an invalid ABA check digit");
-    }
-    const checkDigit = e.routingNumber.length === 9 ? e.routingNumber[8] : expectedCheckDigit;
-    entryHash += BigInt(rt8);
-    totalCredit += e.amountCents;
-    const trace = odfi8 + String(i + 1).padStart(7, "0");
-    rows.push(
-      "6" + e.transactionCode + rt8 + checkDigit + nachaField(e.accountNumber, 17) + nachaField(String(e.amountCents), 10, "r", "0") +
-      nachaField(e.individualId, 15) + nachaField(e.individualName, 22) + nachaField("", 2) + "0" + trace,
-    );
-  });
-  const hashMod = (entryHash % 10_000_000_000n).toString().padStart(10, "0");
-  // 8 — Batch Control
-  rows.push(
-    "8" + "220" + nachaField(String(opts.entries.length), 6, "r", "0") + hashMod +
-    nachaField("0", 12, "r", "0") + nachaField(String(totalCredit), 12, "r", "0") + nachaField(s.companyId, 10) +
-    nachaField("", 19) + nachaField("", 6) + odfi8 + nachaField("0000001", 7, "r", "0"),
-  );
-  // 9 — File Control
-  const entryCount = opts.entries.length;
-  const blockCount = Math.ceil((rows.length + 1) / 10);
-  rows.push(
-    "9" + nachaField("1", 6, "r", "0") + nachaField(String(blockCount), 6, "r", "0") + nachaField(String(entryCount), 8, "r", "0") +
-    hashMod + nachaField("0", 12, "r", "0") + nachaField(String(totalCredit), 12, "r", "0") + nachaField("", 39),
-  );
-  // pad with 9-filler records to a full 10-record block
-  while (rows.length % 10 !== 0) rows.push("9".repeat(94));
-  for (const r of rows) if (r.length !== 94) throw new PaymentError(`NACHA record is ${r.length} chars, not 94`);
-  return rows.join("\n") + "\n";
-}
-
-/** ABA routing check digit (mod-10 weighted 3-7-1) from the first 8 digits. */
-function nachaCheckDigit(rt8: string): string {
-  const w = [3, 7, 1, 3, 7, 1, 3, 7];
-  const sum = rt8.split("").reduce((a, d, i) => a + Number(d) * w[i]!, 0);
-  return String((10 - (sum % 10)) % 10);
-}
-
 export async function loadNachaRunFile(runId: string, orgId: string): Promise<{ filename: string; content: string; runNumber: string }> {
   await assertNotSandbox(orgId, "generate ACH payment file");
   const [run] = await db.select().from(schema.paymentRuns).where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
@@ -3736,143 +3108,6 @@ export async function loadNachaRunFile(runId: string, orgId: string): Promise<{ 
 // ---------------------------------------------------------------------------
 // SEPA — pain.001.001.03 credit transfer, orgs.settings.sepa
 // ---------------------------------------------------------------------------
-
-export interface SepaSettings {
-  originatorName: string;
-  originatorIban: string;
-  originatorBic: string;
-}
-
-/** ISO 13616 IBAN validation, including the mandatory mod-97 check. */
-function isValidIban(value: string): boolean {
-  const iban = value.replace(/\s/g, "").toUpperCase();
-  if (!/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(iban)) return false;
-  const rearranged = `${iban.slice(4)}${iban.slice(0, 4)}`;
-  let remainder = 0;
-  for (const character of rearranged) {
-    const digits = /[A-Z]/.test(character)
-      ? String(character.charCodeAt(0) - 55)
-      : character;
-    for (const digit of digits) remainder = (remainder * 10 + Number(digit)) % 97;
-  }
-  return remainder === 1;
-}
-
-/** ISO 9362 BIC: 8 characters, optionally followed by a 3-character branch. */
-function isValidBic(value: string): boolean {
-  return /^[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?$/.test(value.trim().toUpperCase());
-}
-
-export function validateSepaSettings(raw: Partial<SepaSettings> | null): { ok: true; settings: SepaSettings } | { ok: false; missing: string[] } {
-  const s = raw ?? {};
-  const missing = (["originatorName", "originatorIban", "originatorBic"] as (keyof SepaSettings)[]).filter(
-    (k) => typeof s[k] !== "string" || (s[k] as string).trim() === "" || (s[k] as string).includes("FILL-ME"),
-  );
-  if (typeof s.originatorIban === "string" && !isValidIban(s.originatorIban)) {
-    missing.push("originatorIban");
-  }
-  if (typeof s.originatorBic === "string" && !isValidBic(s.originatorBic)) {
-    missing.push("originatorBic");
-  }
-  if (missing.length) return { ok: false, missing: [...new Set(missing)] };
-  return {
-    ok: true,
-    settings: {
-      originatorName: s.originatorName!.trim(),
-      originatorIban: s.originatorIban!.replace(/\s/g, "").toUpperCase(),
-      originatorBic: s.originatorBic!.trim().toUpperCase(),
-    },
-  };
-}
-
-export async function loadSepaSettings(orgId: string, runId?: string) {
-  const r = (await db.execute<{ originator_secrets_encrypted: string | null }>(sql`
-    select p.originator_secrets_encrypted
-      from payment_bank_profiles p
-      join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
-      left join payment_runs r on r.payment_bank_profile_id = p.id and r.org_id = p.org_id
-     where p.org_id = ${orgId} and p.is_active and f.rail in ('sepa_credit', 'sepa_debit')
-       and (${runId ?? null}::uuid is null or r.id = ${runId ?? null})
-     order by case when r.id is not null then 0 else 1 end, p.created_at
-     limit 1
-  `));
-  return validateSepaSettings(unsealJson<Partial<SepaSettings>>(r.rows[0]?.originator_secrets_encrypted));
-}
-
-const xmlEsc = (v: string) => v.replace(/[<>&'"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c]!));
-
-/** Build a SEPA pain.001.001.03 Customer Credit Transfer Initiation (EUR). */
-export function buildSepaFile(opts: {
-  settings: SepaSettings;
-  messageId: string;
-  creationDateTime: string; // ISO
-  executionDate: string; // YYYY-MM-DD
-  payments: { endToEndId: string; amount: string; creditorName: string; creditorIban: string; creditorBic?: string | null; remittance: string | null }[];
-}): string {
-  const settings = validateSepaSettings(opts.settings);
-  if (!settings.ok) {
-    throw new PaymentError(`SEPA originator settings are invalid: ${settings.missing.join(", ")}`);
-  }
-  const s = settings.settings;
-  if (opts.payments.length === 0) throw new PaymentError("run has no payments to export");
-  // pain.001 carries exact 2dp credit amounts: a non-positive payment is not
-  // a credit transfer, and anything finer than cents must fail here rather
-  // than be silently rounded into CtrlSum and InstdAmt (the CPA-005, NACHA,
-  // and SEPA-debit writers all refuse non-positive amounts the same way).
-  for (const payment of opts.payments) {
-    const units = toUnits(payment.amount);
-    if (units <= 0n) throw new PaymentError("payment amounts must be positive");
-    if (units % 100n !== 0n) {
-      throw new PaymentError(`payment amount ${payment.amount} has sub-cent precision`);
-    }
-    if (!isValidIban(payment.creditorIban)) {
-      throw new PaymentError(`creditor IBAN for ${payment.creditorName} is invalid`);
-    }
-    const creditorBic = (payment.creditorBic ?? "").trim();
-    if (creditorBic && !isValidBic(creditorBic)) {
-      throw new PaymentError(`creditor BIC for ${payment.creditorName} is invalid`);
-    }
-  }
-  const ctrlSum = formatMoney(sum(opts.payments.map((payment) => payment.amount)), 2);
-  const nb = opts.payments.length;
-  const tx = opts.payments.map((p) => {
-    const bic = (p.creditorBic ?? "").trim().toUpperCase();
-    const iban = p.creditorIban.replace(/\s/g, "").toUpperCase();
-    return `      <CdtTrfTxInf>
-        <PmtId><EndToEndId>${xmlEsc(p.endToEndId.slice(0, 35))}</EndToEndId></PmtId>
-        <Amt><InstdAmt Ccy="EUR">${formatMoney(p.amount, 2)}</InstdAmt></Amt>
-${bic ? `        <CdtrAgt><FinInstnId><BIC>${xmlEsc(bic)}</BIC></FinInstnId></CdtrAgt>\n` : ""}        <Cdtr><Nm>${xmlEsc(p.creditorName.slice(0, 70))}</Nm></Cdtr>
-        <CdtrAcct><Id><IBAN>${xmlEsc(iban)}</IBAN></Id></CdtrAcct>
-        <RmtInf><Ustrd>${xmlEsc((p.remittance ?? p.endToEndId).slice(0, 140))}</Ustrd></RmtInf>
-      </CdtTrfTxInf>`;
-  }).join("\n");
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.001.001.03">
-  <CstmrCdtTrfInitn>
-    <GrpHdr>
-      <MsgId>${xmlEsc(opts.messageId.slice(0, 35))}</MsgId>
-      <CreDtTm>${opts.creationDateTime}</CreDtTm>
-      <NbOfTxs>${nb}</NbOfTxs>
-      <CtrlSum>${ctrlSum}</CtrlSum>
-      <InitgPty><Nm>${xmlEsc(s.originatorName.slice(0, 70))}</Nm></InitgPty>
-    </GrpHdr>
-    <PmtInf>
-      <PmtInfId>${xmlEsc(opts.messageId.slice(0, 35))}</PmtInfId>
-      <PmtMtd>TRF</PmtMtd>
-      <NbOfTxs>${nb}</NbOfTxs>
-      <CtrlSum>${ctrlSum}</CtrlSum>
-      <PmtTpInf><SvcLvl><Cd>SEPA</Cd></SvcLvl></PmtTpInf>
-      <ReqdExctnDt>${opts.executionDate}</ReqdExctnDt>
-      <Dbtr><Nm>${xmlEsc(s.originatorName.slice(0, 70))}</Nm></Dbtr>
-      <DbtrAcct><Id><IBAN>${xmlEsc(s.originatorIban.replace(/\s/g, ""))}</IBAN></Id></DbtrAcct>
-      <DbtrAgt><FinInstnId><BIC>${xmlEsc(s.originatorBic)}</BIC></FinInstnId></DbtrAgt>
-      <ChrgBr>SLEV</ChrgBr>
-${tx}
-    </PmtInf>
-  </CstmrCdtTrfInitn>
-</Document>
-`;
-}
 
 export async function loadSepaRunFile(runId: string, orgId: string): Promise<{ filename: string; content: string; runNumber: string }> {
   await assertNotSandbox(orgId, "generate SEPA payment file");
