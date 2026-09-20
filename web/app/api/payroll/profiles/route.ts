@@ -20,6 +20,7 @@ import {
   type PayrollCertificate,
 } from '@openbooks/engine/src/payroll/certificates.ts'
 import type { PayrollProfileExemptionFlag } from '@openbooks/engine/src/payroll/packs.ts'
+import type { PayrollEmployeeFact } from '@openbooks/engine/src/payroll/employee-facts.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
@@ -49,6 +50,7 @@ const STUB_DELIVERIES = new Set(['email', 'print', 'both'])
 const PAYMENT_METHODS = new Set(['eft', 'cheque'])
 
 const optionalCount = z.union([z.number().int(), z.string().trim().regex(/^\d*$/)]).nullable().optional()
+const optionalPackCount = z.union([z.number(), z.string()]).nullable().optional()
 const profileBodySchema = z.looseObject({
   employeePartyId: z.string(),
   payScheduleId: z.string(),
@@ -72,17 +74,20 @@ const profileBodySchema = z.looseObject({
   eiExempt: z.boolean().optional(),
   taxExempt: z.boolean().optional(),
   // Pack-declared employee facts (0191): one body key per profile column,
-  // named camelCase(column) exactly like the CA/US keys above. Validated
-  // below against the pack's own certificate declarations — never
-  // hardcoded bands here — and refused with the fact's operator-facing
-  // label, never the engine key.
-  plRokUrodzenia: optionalCount,
-  esAnoNacimiento: optionalCount,
-  esGrupoCotizacion: optionalCount,
+  // named camelCase(column) exactly like the CA/US keys above. Counts
+  // accept any number or string here on purpose: the CA/US `optionalCount`
+  // regex would 400 an unreadable value naming the BODY key, while the
+  // task requires the refusal to name the fact's OPERATOR-FACING label —
+  // so every value reaches `packFactCount`, which validates against the
+  // pack's own certificate declaration (never a hardcoded band here) and
+  // refuses with the label, never the engine key.
+  plRokUrodzenia: optionalPackCount,
+  esAnoNacimiento: optionalPackCount,
+  esGrupoCotizacion: optionalPackCount,
   esSituacionLaboral: z.string().nullable().optional(),
-  jpHyojunHoshu: optionalCount,
+  jpHyojunHoshu: optionalPackCount,
   jpKaigoDainigou: z.string().nullable().optional(),
-  brDependentes: optionalCount,
+  brDependentes: optionalPackCount,
   brPensaoMensal: z.union([z.number(), z.string()]).nullable().optional(),
   // Standing commission-pay status for statutory-holiday rules that read it.
   // Nullable three-state: true/false answers, null un-answers. Omit to keep.
@@ -247,17 +252,28 @@ function packFactBodyKey(column: string): string {
 }
 
 /**
- * The operator-facing label for a profile column, read off the pack's own
- * employeeFacts declaration — the statutory artefact the operator can go
- * and find (the JPS notice's 標準報酬月額), never the engine key. Falls
- * back to the column only when the pack declares no such fact, which the
- * conformance test refuses for every consumed key.
+ * The operator-facing label for a profile column, read off the packs'
+ * employeeFacts declarations — the statutory artefact the operator can go
+ * and find (the JPS notice's 標準報酬月額), never the engine key. The
+ * selected pack answers first; when the value belongs to a column that
+ * pack does not declare (a grupo on a PL profile), the declaring pack's
+ * label still names what the operator typed — the refusal is about the
+ * wrong pack, not an unknown fact. Falls back to the column only when no
+ * pack declares it, which the conformance test refuses for every consumed
+ * key.
  */
 function packFactLabel(country: string, column: string): string {
-  const fact = (PAYROLL_COUNTRY_PACKS[country]?.employeeFacts ?? []).find(
-    (entry) => entry.producer.kind === 'profile_column' && entry.producer.column === column,
-  )
-  return fact?.label ?? column
+  const columnFact = (facts: readonly PayrollEmployeeFact[]) =>
+    facts.find(
+      (entry) => entry.producer.kind === 'profile_column' && entry.producer.column === column,
+    )
+  const own = columnFact(PAYROLL_COUNTRY_PACKS[country]?.employeeFacts ?? [])
+  if (own) return own.label
+  for (const pack of Object.values(PAYROLL_COUNTRY_PACKS)) {
+    const declared = columnFact(pack?.employeeFacts ?? [])
+    if (declared) return declared.label
+  }
+  return column
 }
 
 /**
@@ -272,11 +288,14 @@ function packFactCount(
   column: string,
   value: unknown,
 ): { ok: true; value: number | null } | { ok: false; error: string } {
-  if (value === null || value === undefined || value === '') return { ok: true, value: null }
+  // Whitespace-only is blank, not zero: Number(' ') is 0, and storing a
+  // fact nobody typed as the meaningful value 0 would be a guess.
+  const text = typeof value === 'string' ? value.trim() : value
+  if (text === null || text === undefined || text === '') return { ok: true, value: null }
   const label = packFactLabel(country, column)
   const bounds = profileColumnCountBounds(country, column)
   if (!bounds) return { ok: false, error: `${label} is not declared by the ${country} payroll pack — it cannot be stored here` }
-  const n = Number(value)
+  const n = Number(text)
   if (!Number.isInteger(n) || n < bounds.min || n > bounds.max) {
     const band = bounds.max >= Number.MAX_SAFE_INTEGER
       ? `a whole number at least ${bounds.min}`
