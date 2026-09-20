@@ -183,6 +183,8 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'hrm-recent-changes',
   'hrm-upcoming-changes',
   'hrm-vacancy-table',
+  'hrm-onboarding-panel',
+  'hrm-processes',
   'identity-cell',
   'identity-record-card',
   'import-statement',
