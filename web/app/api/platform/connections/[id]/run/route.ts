@@ -6,46 +6,9 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 import { getConnection } from "@openbooks/engine/src/sync/connection.ts";
 import { guardPermission } from "../../../../../../lib/authz";
 import { storageIdentityError } from "../../_storage-identity";
+import { connectionConfigUrlRefusal } from "../../_connector-guard";
 
 export const runtime = "nodejs";
-
-const CONNECTOR_URL_REFUSED =
-  "Connector URL must be a public http:// or https:// address. Loopback, link-local, metadata, and non-http(s) URLs are refused.";
-
-/** Stored connector URL/host. Same refusal set as bank-feed metadata hosts. */
-function connectorUrlRefusal(value: unknown): string | null {
-  if (value == null) return null;
-  const raw = String(value).trim();
-  if (!raw) return null;
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    return CONNECTOR_URL_REFUSED;
-  }
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    return CONNECTOR_URL_REFUSED;
-  }
-  const host = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
-  const ipv4 = host.startsWith("::ffff:") ? host.slice(7) : host;
-  if (
-    host === "localhost" ||
-    host.endsWith(".localhost") ||
-    host === "::1" ||
-    host.startsWith("fe80:") ||
-    /^127(?:\.\d{1,3}){3}$/.test(ipv4) ||
-    /^169\.254(?:\.\d{1,3}){2}$/.test(ipv4)
-  ) {
-    return CONNECTOR_URL_REFUSED;
-  }
-  return null;
-}
-
-function connectionConfigUrlRefusal(config: unknown): string | null {
-  if (!config || typeof config !== "object" || Array.isArray(config)) return null;
-  const row = config as Record<string, unknown>;
-  return connectorUrlRefusal(row.url) ?? connectorUrlRefusal(row.host);
-}
 
 const ACTIVE_MIGRATION_JOB_STATES = new Set([
   "active",
@@ -135,7 +98,7 @@ export async function POST(
       : mode === "preflight"
         ? "full_preflight"
         : mode;
-  const job = await db.transaction(async (tx) => {
+  const outcome = await db.transaction(async (tx) => {
     // The worker creates the sync_runs row after it starts consuming the job.
     // Serialize the database check and queue claim so concurrent requests cannot
     // both pass the pre-worker window. The stable job id closes that same window
@@ -146,19 +109,27 @@ export async function POST(
         hashtext(${`connection-run:${id}:${mode}`})
       )`);
 
+    const live = await tx.execute(sql`
+      select 1 from connections
+       where id = ${id} and org_id = ${orgId}
+         and config is not distinct from ${JSON.stringify(conn.config ?? {})}::jsonb
+         and secrets is not distinct from ${conn.secrets}
+       limit 1`);
+    if (live.rows.length === 0) return { kind: "changed" as const };
+
     const running = await tx.execute(sql`
       select 1 from sync_runs
        where org_id = ${orgId} and connection_id = ${id}
          and kind = ${runKind} and status = 'running'
        limit 1`);
-    if (running.rows.length > 0) return null;
+    if (running.rows.length > 0) return { kind: "active" as const };
 
     const queue = getMigrationQueue();
     const jobId = `migration|${id}|${mode}`;
     const existing = await queue.getJob(jobId);
     if (existing) {
       const state = await existing.getState();
-      if (ACTIVE_MIGRATION_JOB_STATES.has(state)) return null;
+      if (ACTIVE_MIGRATION_JOB_STATES.has(state)) return { kind: "active" as const };
       // Completed/failed jobs are retained by the queue for operational
       // history. Remove the terminal record before reusing its stable id for a
       // deliberate later run; active and waiting records returned above remain
@@ -166,16 +137,27 @@ export async function POST(
       await existing.remove();
     }
 
-    return enqueueMigration(
+    const job = await enqueueMigration(
       { orgId, connectionId: id, mode, triggeredBy: gate.user.id },
       { jobId },
     );
+    return { kind: "queued" as const, job };
   });
-  if (!job) {
+  if (outcome.kind === "changed") {
+    return NextResponse.json(
+      {
+        error:
+          "connection changed during the run; retry against the current configuration",
+        errorCode: "CONNECTION_CHANGED",
+      },
+      { status: 409 },
+    );
+  }
+  if (outcome.kind !== "queued") {
     return NextResponse.json(
       { errorCode: "RUN_ALREADY_ACTIVE" },
       { status: 409 },
     );
   }
-  return NextResponse.json({ jobId: job.id, mode });
+  return NextResponse.json({ jobId: outcome.job.id, mode });
 }

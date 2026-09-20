@@ -29,8 +29,19 @@ const mockSources = new Map<string, string>([
     "mock:connection",
     `
       export function sourceType(source) {
-        if (source === "odoo" || source === "netsuite") {
-          return { source, displayName: source, authKind: "token", secretFields: [] }
+        if (source === "odoo" || source === "netsuite" || source === "qbo") {
+          return {
+            source,
+            displayName: source,
+            authKind: source === "qbo" ? "oauth2" : "token",
+            secretFields: [],
+            configFields: [
+              { key: "url" },
+              { key: "host" },
+              { key: "database" },
+              { key: "environment" },
+            ],
+          }
         }
         return undefined
       }
@@ -113,6 +124,8 @@ const refused = [
   ["loopback IPv6", "odoo", { url: "http://[::1]/" }],
   ["file scheme", "odoo", { url: "file:///etc/passwd" }],
   ["NetSuite host loopback", "netsuite", { host: "https://127.0.0.1" }],
+  ["IPv4-mapped IPv6 hex", "odoo", { url: "http://[::ffff:7f00:1]/" }],
+  ["IPv4-mapped IPv6 dotted", "odoo", { url: "http://[::ffff:127.0.0.1]/" }],
 ] as const;
 
 for (const [name, source, config] of refused) {
@@ -130,5 +143,28 @@ for (const [name, source, config] of refused) {
     assert.equal(body.errorCode, "CONNECTOR_URL_REFUSED");
     assert.match(String(body.error), /loopback|link-local|metadata|http/i);
     assert.equal(routeState.persisted, 0, "must not persist a refused connector URL");
+  });
+}
+
+const oauthKeys = ["realmId", "tenantId", "companyId", "companyName"] as const;
+
+for (const key of oauthKeys) {
+  test(`create refuses callback-owned ${key} by name`, async () => {
+    routeState.persisted = 0;
+    const response = await POST(
+      new Request("http://openbooks.test/api/platform/connections", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          source: "qbo",
+          config: { environment: "sandbox", [key]: "attacker-bound" },
+        }),
+      }),
+    );
+    assert.equal(response.status, 400);
+    const body = (await response.json()) as { errorCode?: string; error?: string };
+    assert.equal(body.errorCode, "OAUTH_IDENTITY_REFUSED");
+    assert.match(String(body.error), new RegExp(key));
+    assert.equal(routeState.persisted, 0, "must not persist callback-owned OAuth identity");
   });
 }

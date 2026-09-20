@@ -7,52 +7,55 @@ import {
 } from "@openbooks/engine/src/sync/connection.ts";
 import { guardPermission } from "../../../../../../lib/authz";
 import { storageIdentityError } from "../../_storage-identity";
+import { connectionConfigUrlRefusal } from "../../_connector-guard";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const CONNECTOR_URL_REFUSED =
-  "Connector URL must be a public http:// or https:// address. Loopback, link-local, metadata, and non-http(s) URLs are refused.";
+type ConnectionVersion = {
+  updatedAt: Date | string | null;
+  config: unknown;
+  secrets: string | null;
+};
 
-/** Stored connector URL/host. Same refusal set as bank-feed metadata hosts. */
-function connectorUrlRefusal(value: unknown): string | null {
-  if (value == null) return null;
-  const raw = String(value).trim();
-  if (!raw) return null;
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    return CONNECTOR_URL_REFUSED;
-  }
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    return CONNECTOR_URL_REFUSED;
-  }
-  const host = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
-  const ipv4 = host.startsWith("::ffff:") ? host.slice(7) : host;
-  if (
-    host === "localhost" ||
-    host.endsWith(".localhost") ||
-    host === "::1" ||
-    host.startsWith("fe80:") ||
-    /^127(?:\.\d{1,3}){3}$/.test(ipv4) ||
-    /^169\.254(?:\.\d{1,3}){2}$/.test(ipv4)
-  ) {
-    return CONNECTOR_URL_REFUSED;
-  }
-  return null;
+async function loadConnectionVersion(
+  orgId: string,
+  id: string,
+): Promise<ConnectionVersion | null> {
+  const snapshot = await db.execute<ConnectionVersion>(sql`
+    select updated_at as "updatedAt", config, secrets
+      from connections
+     where id = ${id} and org_id = ${orgId}
+  `);
+  return snapshot.rows[0] ?? null;
 }
 
-function connectionConfigUrlRefusal(config: unknown): string | null {
-  if (!config || typeof config !== "object" || Array.isArray(config)) return null;
-  const row = config as Record<string, unknown>;
-  return connectorUrlRefusal(row.url) ?? connectorUrlRefusal(row.host);
+async function writeProbeOutcome(
+  orgId: string,
+  id: string,
+  version: ConnectionVersion,
+  status: string,
+  lastError: string | null,
+): Promise<boolean> {
+  const written = await db.execute<{ id: string }>(sql`
+    update connections
+       set status = ${status},
+           last_error = ${lastError},
+           updated_at = now()
+     where id = ${id}
+       and org_id = ${orgId}
+       and updated_at is not distinct from ${version.updatedAt}
+       and config is not distinct from ${JSON.stringify(version.config ?? {})}::jsonb
+       and secrets is not distinct from ${version.secrets}
+     returning id
+  `);
+  return Boolean(written.rows[0]);
 }
 
 /**
- * Test a connection's credentials without mutating anything: build the adapter
- * and run its cheap `ping()` (falling back to a trial-balance fetch). Returns a
- * friendly ok/error the wizard shows before the tenant commits to a migration.
+ * Test a connection's credentials and persist the probe outcome onto that
+ * same version of the row (status / last_error). A concurrent config or
+ * credential change leaves the new row untouched.
  */
 export async function POST(
   _req: Request,
@@ -73,6 +76,18 @@ export async function POST(
       { status: 404 },
     );
   }
+  const version = await loadConnectionVersion(gate.user.orgId, id);
+  if (!version) return NextResponse.json({ error: "not found" }, { status: 404 });
+
+  const stale = () =>
+    NextResponse.json(
+      {
+        error:
+          "connection changed during the test; retry against the current configuration",
+        errorCode: "CONNECTION_CHANGED",
+      },
+      { status: 409 },
+    );
 
   try {
     const source = buildSource(conn);
@@ -80,24 +95,42 @@ export async function POST(
       const r = await source.ping();
       const status = r.ok ? "active" : "error";
       const lastError = r.ok ? null : (r.detail ?? "connection ping failed");
-      await db.execute(
-        sql`update connections set status = ${status}, last_error = ${lastError}, updated_at = now() where id = ${id} and org_id = ${gate.user.orgId}`,
+      const matched = await writeProbeOutcome(
+        gate.user.orgId,
+        id,
+        version,
+        status,
+        lastError,
       );
-      return NextResponse.json({ ok: r.ok, detail: r.detail });
+      if (!matched) return stale();
+      return NextResponse.json(
+        { ok: r.ok, detail: r.detail },
+        { status: r.ok ? 200 : 422 },
+      );
     }
     const tb = await source.trialBalance();
-    await db.execute(
-      sql`update connections set status = 'active', last_error = null, updated_at = now() where id = ${id} and org_id = ${gate.user.orgId}`,
+    const matched = await writeProbeOutcome(
+      gate.user.orgId,
+      id,
+      version,
+      "active",
+      null,
     );
+    if (!matched) return stale();
     return NextResponse.json({
       ok: true,
       detail: `${tb.length} accounts in trial balance`,
     });
   } catch (e) {
     const message = (e as Error).message;
-    await db.execute(
-      sql`update connections set status = 'error', last_error = ${message}, updated_at = now() where id = ${id} and org_id = ${gate.user.orgId}`,
+    const matched = await writeProbeOutcome(
+      gate.user.orgId,
+      id,
+      version,
+      "error",
+      message,
     );
-    return NextResponse.json({ ok: false, error: message }, { status: 200 });
+    if (!matched) return stale();
+    return NextResponse.json({ ok: false, error: message }, { status: 422 });
   }
 }
