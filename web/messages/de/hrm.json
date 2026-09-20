@@ -64,6 +64,15 @@
     "openEmployee": "Personalakte öffnen",
     "notAvailable": "Nicht verfügbar"
   },
+  "departments": {
+    "title": "Abteilungen",
+    "description": "Personalbestand heute je Abteilung, mit Arbeitgeber-Aufschlüsselung — gelesen über den Headcount-Service.",
+    "listTitle": "Personalbestand nach Abteilung",
+    "listNote": "Die Mitarbeiterliste hat keinen Abteilungsfilter, daher öffnet der Absprung die vollständige Liste.",
+    "linksTitle": "Links",
+    "employeesLink": "Mitarbeiterliste",
+    "setupLink": "Abteilungen verwalten"
+  },
   "employment": {
     "episodes": {
       "title": "Beschäftigungsepisoden",

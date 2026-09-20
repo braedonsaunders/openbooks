@@ -64,6 +64,15 @@
     "openEmployee": "従業員レコードを開く",
     "notAvailable": "利用不可"
   },
+  "departments": {
+    "title": "部門",
+    "description": "今日時点の部門別人員を、雇用主子会社別の内訳付きで — ヘッドカウントサービス経由で解決します。",
+    "listTitle": "部門別人員",
+    "listNote": "従業員リストには部門フィルターがないため、ドリルスルーは全リストを開きます。",
+    "linksTitle": "リンク",
+    "employeesLink": "従業員リスト",
+    "setupLink": "部門を管理"
+  },
   "employment": {
     "episodes": {
       "title": "雇用エピソード",

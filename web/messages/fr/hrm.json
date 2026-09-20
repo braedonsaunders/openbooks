@@ -64,6 +64,15 @@
     "openEmployee": "Ouvrir le dossier de l'employé",
     "notAvailable": "Non disponible"
   },
+  "departments": {
+    "title": "Services",
+    "description": "Effectif du jour par service, avec la répartition par employeur — résolu par le service des effectifs.",
+    "listTitle": "Effectif par service",
+    "listNote": "La liste des employés n'a pas de filtre par service : le lien ouvre donc la liste complète.",
+    "linksTitle": "Liens",
+    "employeesLink": "Liste des employés",
+    "setupLink": "Gérer les services"
+  },
   "employment": {
     "episodes": {
       "title": "Épisodes d'emploi",
