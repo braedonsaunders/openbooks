@@ -42,10 +42,10 @@ export {
   runDocumentVersionedTransaction, validateCorrectionReason, buildReversalLinkEvidence,
   documentRevisionProjection, normalizeDocumentRecordRevisions,
 } from '@openbooks/engine/src/records/document-edit-policy.ts'
-import type { DocumentLineInput, DocumentEditInput, DocumentEditCurrent } from '@openbooks/engine/src/records/document-input.ts'
-export type { DocumentLineInput, DocumentEditInput, DocumentEditCurrent } from '@openbooks/engine/src/records/document-input.ts'
-import { loadDocument as loadDocumentForOrg, loadDocumentEditCurrent } from '@openbooks/engine/src/records/document-service.ts'
-export { controlDeps, loadDocumentEditCurrent } from '@openbooks/engine/src/records/document-service.ts'
+import type { DocumentLineInput, DocumentEditInput, DocumentEditCurrent } from '@openbooks/engine/src/ledger/document-input.ts'
+export type { DocumentLineInput, DocumentEditInput, DocumentEditCurrent } from '@openbooks/engine/src/ledger/document-input.ts'
+import { loadDocument as loadDocumentForOrg, loadDocumentEditCurrent } from '@openbooks/engine/src/ledger/document-service.ts'
+export { controlDeps, loadDocumentEditCurrent } from '@openbooks/engine/src/ledger/document-service.ts'
 
 /** Compatibility adapter for session-scoped web callers; engine reads require an explicit org. */
 export async function loadDocument(id: string, orgId?: string) {
@@ -62,7 +62,7 @@ export async function loadDocument(id: string, orgId?: string) {
  * dates + memo) and a line grid (account + amount + tax + dimensions). This
  * module retains the shared draft/edit orchestration and web compatibility
  * exports. Explicit-org reads and revision/correction policy live in engine
- * records services so non-web adapters can use them without this editor.
+ * ledger/records services so non-web adapters can use them without this editor.
  *
  * The kind configuration (client-safe) lives in lib/document-kinds.ts and is
  * re-exported here. The shared math (number sequences, tax computation,

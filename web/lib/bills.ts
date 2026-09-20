@@ -1,6 +1,6 @@
 import 'server-only'
-import type { BillLineInput } from '@openbooks/engine/src/records/document-input.ts'
-export type { BillLineInput } from '@openbooks/engine/src/records/document-input.ts'
+import type { BillLineInput } from '@openbooks/engine/src/ledger/document-input.ts'
+export type { BillLineInput } from '@openbooks/engine/src/ledger/document-input.ts'
 import { sql } from 'drizzle-orm'
 import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 import { allocateDocumentNumber } from '@openbooks/engine/src/records/numbering.ts'

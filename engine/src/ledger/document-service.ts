@@ -9,7 +9,7 @@ import { documentBalanceDueLateral } from '../balance-due.ts'
 import { documentRevisionCounterSql } from '../document-revision.ts'
 import { loadRequiredControlAccounts } from '../control-accounts.ts'
 import type { DocumentEditCurrent } from './document-input.ts'
-import { DocumentEditError } from './document-edit-policy.ts'
+import { DocumentEditError } from '../records/document-edit-policy.ts'
 
 function requireOrganization(orgId: string): void {
   if (typeof orgId !== 'string' || !orgId.trim()) {
