@@ -4344,6 +4344,18 @@
       "title": "人力资源",
       "description": "带有时点历史、人员数量和变更申请跟踪的雇用记录。仅读取人力资源基础数据，绝不驱动薪资。"
     },
+    "hrmCelebrations": {
+      "title": "团队庆祝",
+      "description": "在首页显示生日、入职周年和新成员。"
+    },
+    "hrmManagerNudges": {
+      "title": "管理者提醒",
+      "description": "在管理者首页显示离职与1:1提醒，仅限其团队。"
+    },
+    "homeAnnouncements": {
+      "title": "首页公告",
+      "description": "在首页显示管理员编写的公告卡片，可设置受众与日期。"
+    },
     "crm": {
       "title": "CRM",
       "description": "线索、潜在客户、商机、活动与销售预测。"

@@ -17,6 +17,7 @@ import { hrmLeaveRequestAdapter } from "./adapters/hrm-leave-request.ts";
 import { hrmProcessStepAdapter } from "./adapters/hrm-process-step.ts";
 import { hrmQualificationAlertAdapter } from "./adapters/hrm-qualification-alert.ts";
 import { hrmReviewAdapter } from "./adapters/hrm-review.ts";
+import { notificationAdapter } from "./adapters/notification.ts";
 import { timesheetWeekAdapter } from "./adapters/timesheet-week.ts";
 import { registerInboxAdapter } from "./registry.ts";
 
@@ -25,6 +26,7 @@ registerInboxAdapter(hrmProcessStepAdapter);
 registerInboxAdapter(hrmLeaveRequestAdapter);
 registerInboxAdapter(hrmChangeRequestAdapter);
 registerInboxAdapter(hrmReviewAdapter);
+registerInboxAdapter(notificationAdapter);
 registerInboxAdapter(hrmBenefitEnrollmentWindowAdapter);
 registerInboxAdapter(hrmQualificationAlertAdapter);
 registerInboxAdapter(fieldTicketSignatureAdapter);
@@ -33,6 +35,7 @@ registerInboxAdapter(expenseReportAdapter);
 registerInboxAdapter(documentSignatureAdapter);
 
 export { actOnInboxItem, countInbox, InboxError, listInbox } from "./registry.ts";
+export { writeNotification, type NotificationWrite } from "./adapters/notification.ts";
 export type { InboxAdapter } from "./registry.ts";
 export type {
   InboxActionDef,

@@ -1,10 +1,16 @@
 /**
  * HR-15 flows_approval adapter — the approvals leg of the inbox.
  *
- * Lists flow gates plus gateless documents through worklistApprovals (the
- * same reader the /approvals page renders from, so the two can never
- * disagree) and acts through decideGate / delegateGate /
- * decideDocumentApproval — the existing write path, never a second one.
+ * Wraps worklistApprovalsPage (the same paged union reader the inbox page
+ * and the dashboard tile render from — documents, pay runs, budgets, flow
+ * gates — so the three can never disagree) and acts through decideGate /
+ * delegateGate / decideDocumentApproval — the existing write path, never
+ * a second one.
+ *
+ * Mapped legs: flow gates and gateless documents carry inbox actions.
+ * Budget and pay-run legs are decision items with specialized decide paths
+ * (checker flow, idempotent run approval) — they stay on the inbox page's
+ * union table and are not inbox actions.
  *
  * Dedupe: gates whose subject is owned by a dedicated inbox adapter are
  * excluded here and listed there instead (leave, change request,
@@ -16,7 +22,7 @@ import { HRM_LEAVE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-leave.
 import { TIMESHEET_WEEK_SUBJECT_KIND } from "../../flows/timesheet-weeks-adapter.ts";
 import {
   decideDocumentApproval,
-  worklistApprovals,
+  worklistApprovalsPage,
   type UnifiedApproval,
 } from "../../flows/approval-worklist.ts";
 import { decideGate, delegateGate } from "../../flows/gates.ts";
@@ -32,6 +38,9 @@ export const INBOX_OWNED_GATE_SUBJECTS: ReadonlySet<string> = new Set([
   "expense_report",
 ]);
 
+/** Bounded head window: the inbox is a working list, not an archive scan. */
+export const INBOX_UNION_WINDOW = { offset: 0, limit: 100 } as const;
+
 function gateItem(gate: Extract<UnifiedApproval, { kind: "flow_gate" }>["gate"], ctx: InboxListContext): InboxItem | null {
   if (INBOX_OWNED_GATE_SUBJECTS.has(gate.subjectKind)) return null;
   const dueAt = gate.escalateAt ? new Date(gate.escalateAt).toISOString() : null;
@@ -44,7 +53,7 @@ function gateItem(gate: Extract<UnifiedApproval, { kind: "flow_gate" }>["gate"],
     dueAt,
     createdAt: new Date(gate.createdAt).toISOString(),
     priority: priorityForDueDate(dueAt, ctx.asOf),
-    subjectHref: gate.href ?? "/approvals?tab=mine",
+    subjectHref: gate.href ?? "/inbox",
     actions: [
       { key: "approve", label: "Approve", style: "primary", needsReason: false },
       { key: "reject", label: "Reject", style: "danger", needsReason: true },
@@ -68,7 +77,7 @@ function documentItem(
     dueAt: null,
     createdAt,
     priority: "normal",
-    subjectHref: `/approvals?tab=mine`,
+    subjectHref: `/inbox`,
     actions: [
       { key: "approve", label: "Approve", style: "primary", needsReason: false },
       { key: "reject", label: "Reject", style: "danger", needsReason: true },
@@ -80,9 +89,23 @@ function documentItem(
 export const flowsApprovalAdapter: InboxAdapter = {
   kind: "flows_approval",
   async list(ctx: InboxListContext): Promise<InboxItem[]> {
-    const approvals = await worklistApprovals(ctx.orgId, ctx.actorId, {});
+    const scope = ctx.scope;
+    const page = await worklistApprovalsPage(
+      ctx.orgId,
+      ctx.actorId,
+      {
+        ...(scope?.roles ? { roles: scope.roles } : {}),
+        ...(scope?.allowedSubsidiaryIds !== undefined
+          ? { allowedSubsidiaryIds: scope.allowedSubsidiaryIds === null ? null : new Set(scope.allowedSubsidiaryIds) }
+          : {}),
+        ...(scope?.includeBudgets !== undefined ? { includeBudgets: scope.includeBudgets } : {}),
+        ...(scope?.includePayRuns !== undefined ? { includePayRuns: scope.includePayRuns } : {}),
+        ...(scope?.payDirections ? { payDirections: [...scope.payDirections] } : {}),
+      },
+      { ...INBOX_UNION_WINDOW },
+    );
     const out: InboxItem[] = [];
-    for (const item of approvals) {
+    for (const item of page.items) {
       if (item.kind === "flow_gate") {
         const mapped = gateItem(item.gate, ctx);
         if (mapped) out.push(mapped);
@@ -90,6 +113,7 @@ export const flowsApprovalAdapter: InboxAdapter = {
         const mapped = documentItem(item.document, ctx);
         if (mapped) out.push(mapped);
       }
+      // Budget and pay-run legs intentionally unmapped (see header).
     }
     return out;
   },

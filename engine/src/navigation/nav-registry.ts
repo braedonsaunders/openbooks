@@ -17,6 +17,9 @@ export interface NavModule {
   requiredPermission?: string
   /** Optional-feature gate — hidden while the org has the feature off. */
   featureKey?: string
+  /** HR-15: when set, the shell renders a live count badge on this entry,
+   *  polled from this route (which must self-scope to the actor). */
+  badgeCountHref?: string
   /** How a native list opens one of its records. Transaction links derive
    *  their path from this module-owned contract instead of copying routes. */
   recordTarget?: NavRecordTarget
@@ -82,14 +85,20 @@ export const NAV_MODULES: NavModule[] = [
     group: 'my-work',
     requiredPermission: 'assistant.use',
   },
+  // HR-15 begin: Inbox is core — every leader lands here. Unpermissioned
+  // by design (like notifications): every query self-scopes to the actor.
+  // The module key stays `approvals` (identifiers are stable); only the
+  // place label (catalog) and target changed. The /approvals route stays
+  // as a permanent redirect for deep links.
   {
     key: 'approvals',
-    href: '/approvals',
-    label: 'Approvals',
-    iconKey: 'check',
+    href: '/inbox',
+    label: 'Inbox',
+    iconKey: 'inbox',
     group: 'my-work',
-    requiredPermission: 'ap.approve',
+    badgeCountHref: '/api/inbox?count=1',
   },
+  // HR-15 end
   {
     // Deliberately ungated: the inbox shows only the signed-in user's own
     // notifications, and every query self-scopes to (org_id, user_id). If a
@@ -880,7 +889,9 @@ export function resolveStoredHref(stored: unknown): string | null {
 /** Canonical scan order inside each workspace. Kept separate from the module
  * declarations so the information architecture is reviewable in one place. */
 export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
-  'my-work': ['dashboard', 'approvals', 'notifications', 'assistant', 'documents', 'apps'],
+  // HR-15: one My Work entry (Inbox); /notifications stays a route and a
+  // Notices filter inside the inbox, but no longer a nav entry.
+  'my-work': ['dashboard', 'approvals', 'assistant', 'documents', 'apps'],
   customers: [
     'customers',
     'crm-activities',

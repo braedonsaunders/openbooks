@@ -4344,6 +4344,18 @@
       "title": "Ressources humaines",
       "description": "Dossiers d'emploi avec historique à date, effectifs et suivi des demandes de changement. Lit le socle RH ; ne pilote jamais la paie."
     },
+    "hrmCelebrations": {
+      "title": "Célébrations d'équipe",
+      "description": "Anniversaires, anniversaires de travail et nouveaux arrivants sur la page d'accueil."
+    },
+    "hrmManagerNudges": {
+      "title": "Rappels manager",
+      "description": "Alertes d'attrition et de 1:1 sur l'accueil manager, limitées à son équipe."
+    },
+    "homeAnnouncements": {
+      "title": "Annonces d'accueil",
+      "description": "Carte d'annonces rédigées par l'administration sur la page d'accueil, avec audience et dates."
+    },
     "crm": {
       "title": "CRM",
       "description": "Prospects, opportunités, activités et prévisions de ventes."

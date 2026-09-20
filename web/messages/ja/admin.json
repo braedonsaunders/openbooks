@@ -4344,6 +4344,18 @@
       "title": "人事",
       "description": "時点履歴、人員数、変更申請の追跡を備えた雇用記録。HRM基盤を読み取るだけで、給与計算を動かすことはありません。"
     },
+    "hrmCelebrations": {
+      "title": "職場のお祝い",
+      "description": "ホームに従業員の誕生日・勤続記念・新しい仲間を表示します。"
+    },
+    "hrmManagerNudges": {
+      "title": "マネージャーへの促し",
+      "description": "マネージャーのホームに離職と1:1の促しを、自分のチームに限定して表示します。"
+    },
+    "homeAnnouncements": {
+      "title": "ホームのお知らせ",
+      "description": "管理者が作成したお知らせカードをホームに表示します。対象者と期間付き。"
+    },
     "bankFeeds": {
       "title": "銀行フィード",
       "description": "銀行接続の自動化です。SFTPファイル受け渡しとPlaid・GoCardless・TrueLayerのライブフィードに対応します。"

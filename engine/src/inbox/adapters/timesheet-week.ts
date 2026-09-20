@@ -20,6 +20,7 @@ import { decideGate, delegateGate } from "../../flows/gates.ts";
 import { worklistApprovals } from "../../flows/approval-worklist.ts";
 import { loadApprovalPerson } from "../../hrm/authorization.ts";
 import { db } from "../../platform/db.ts";
+import { toWorklistScope } from "../guard.ts";
 import type { InboxAdapter } from "../registry.ts";
 import type { InboxItem, InboxListContext } from "../types.ts";
 import { inboxItemId, priorityForDueDate } from "../types.ts";
@@ -34,7 +35,7 @@ export const timesheetWeekAdapter: InboxAdapter = {
   kind: "timesheet_week",
   async list(ctx: InboxListContext): Promise<InboxItem[]> {
     const out: InboxItem[] = [];
-    const approvals = await worklistApprovals(ctx.orgId, ctx.actorId, {});
+    const approvals = await worklistApprovals(ctx.orgId, ctx.actorId, toWorklistScope(ctx));
     for (const item of approvals) {
       if (item.kind !== "flow_gate" || item.gate.subjectKind !== TIMESHEET_WEEK_SUBJECT_KIND) continue;
       const gate = item.gate;

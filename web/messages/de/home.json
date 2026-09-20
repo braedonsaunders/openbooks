@@ -1,0 +1,39 @@
+{
+  "title": "Start",
+  "greeting": "Schön, dass Sie da sind, {name}",
+  "sections": {
+    "myTasks": "Meine Aufgaben",
+    "openInbox": "Posteingang öffnen",
+    "pay": "Gehalt",
+    "timeOff": "Urlaub",
+    "requestTimeOff": "Urlaub beantragen",
+    "whosOut": "Wer ist diese Woche abwesend",
+    "upcoming": "Anstehend",
+    "celebrations": "Feiern",
+    "announcements": "Ankündigungen",
+    "ask": "Fragen",
+    "askPlaceholder": "Fragen zu Gehalt, Urlaub oder Richtlinien…",
+    "teamApprovals": "Genehmigungen, die auf mich warten",
+    "teamOut": "Team abwesend",
+    "teamSteps": "Überfällige Team-Checklisten",
+    "teamQualifications": "Ablaufende Qualifikationen",
+    "oneOnOnes": "1:1-Hinweise",
+    "headcount": "Mein Team",
+    "attention": "Handlungsbedarf",
+    "workflows": "Workflow-Fehler",
+    "compliance": "Compliance-Kalender"
+  },
+  "empty": {
+    "tasks": "Nichts wartet auf Sie.",
+    "out": "Diese Woche ist niemand abwesend.",
+    "upcoming": "Nichts anstehend.",
+    "celebrations": "Keine Feiern diese Woche.",
+    "announcements": "Keine Ankündigungen.",
+    "attention": "Alles in Ordnung."
+  },
+  "pay": {
+    "nextPay": "Nächster Zahltag",
+    "lastSlip": "Letzte Abrechnung",
+    "viewSlip": "Abrechnung ansehen"
+  }
+}

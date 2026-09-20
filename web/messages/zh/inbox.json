@@ -1,0 +1,43 @@
+{
+  "title": "收件箱",
+  "description": "等待您处理的审批、清单步骤、申请和签名——在此一并完成。",
+  "filters": {
+    "all": "全部",
+    "approvals": "审批",
+    "myTasks": "我的任务",
+    "signatures": "签名",
+    "overdue": "已逾期"
+  },
+  "columns": {
+    "task": "任务",
+    "detail": "详情",
+    "due": "到期",
+    "priority": "优先级",
+    "actions": "操作"
+  },
+  "priorities": {
+    "overdue": "已逾期",
+    "dueSoon": "即将到期",
+    "normal": "普通"
+  },
+  "kinds": {
+    "flows_approval": "审批",
+    "hrm_process_step": "清单步骤",
+    "hrm_leave_request": "休假",
+    "hrm_change_request": "变更申请",
+    "hrm_review": "评估",
+    "hrm_benefit_enrollment_window": "福利",
+    "hrm_qualification_alert": "资质",
+    "field_ticket_signature": "签名",
+    "timesheet_week": "工时表",
+    "expense_report": "费用",
+    "document_signature": "签名"
+  },
+  "emptyTitle": "全部完成",
+  "emptyDescription": "当前没有等待您处理的事项。",
+  "open": "打开",
+  "acted": "已完成",
+  "refused": "无法完成：{message}",
+  "delegatePlaceholder": "委派给…",
+  "count": "{count}项"
+}

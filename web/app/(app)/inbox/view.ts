@@ -470,7 +470,7 @@ export async function loadApprovals(
     delegateUsers,
     tabs: tabs.map(({ key, label, count }) => ({
       key,
-      href: key === 'mine' ? '/approvals' : `/approvals?tab=${key}`,
+      href: key === 'mine' ? '/inbox' :  `/inbox?tab=${key}`,
       label,
       active: tab === key,
       count: typeof count === 'number' ? count : null,
@@ -491,13 +491,13 @@ export async function loadApprovals(
       count,
       active: kindFilter === kind,
       // A new filter restarts at page one: the old page may not exist.
-      href: mergeHref('/approvals', sp, {
+      href: mergeHref('/inbox', sp, {
         kind: kindFilter === kind ? undefined : kind,
         page: undefined,
       }),
     })),
     clearHref: kindFilter
-      ? mergeHref('/approvals', sp, { kind: undefined, page: undefined })
+      ? mergeHref('/inbox', sp, { kind: undefined, page: undefined })
       : null,
     clearLabel: tc('labels.all'),
     columnDocument: t('table.document'),
@@ -529,7 +529,7 @@ const rootF = rootRef<ApprovalsData>()
 
 export function approvalsSpec(data: ApprovalsData): PageSpec {
   return page({
-    route: '/approvals',
+    route: '/inbox',
     layout: 'list',
     header: [
       grid('space-y-3', [

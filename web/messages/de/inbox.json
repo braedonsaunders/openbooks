@@ -1,0 +1,43 @@
+{
+  "title": "Posteingang",
+  "description": "Genehmigungen, Checklisten, Anfragen und Unterschriften, die auf Sie warten — erledigen Sie sie hier.",
+  "filters": {
+    "all": "Alle",
+    "approvals": "Genehmigungen",
+    "myTasks": "Meine Aufgaben",
+    "signatures": "Unterschriften",
+    "overdue": "Überfällig"
+  },
+  "columns": {
+    "task": "Aufgabe",
+    "detail": "Detail",
+    "due": "Fällig",
+    "priority": "Priorität",
+    "actions": "Aktionen"
+  },
+  "priorities": {
+    "overdue": "Überfällig",
+    "dueSoon": "Bald fällig",
+    "normal": "Normal"
+  },
+  "kinds": {
+    "flows_approval": "Genehmigung",
+    "hrm_process_step": "Checklistenpunkt",
+    "hrm_leave_request": "Urlaub",
+    "hrm_change_request": "Änderungsantrag",
+    "hrm_review": "Beurteilung",
+    "hrm_benefit_enrollment_window": "Benefits",
+    "hrm_qualification_alert": "Qualifikation",
+    "field_ticket_signature": "Unterschrift",
+    "timesheet_week": "Stundenzettel",
+    "expense_report": "Spesen",
+    "document_signature": "Unterschrift"
+  },
+  "emptyTitle": "Alles erledigt",
+  "emptyDescription": "Im Moment wartet nichts auf Sie.",
+  "open": "Öffnen",
+  "acted": "Erledigt",
+  "refused": "Konnte nicht abgeschlossen werden: {message}",
+  "delegatePlaceholder": "Delegieren an…",
+  "count": "{count, plural, one {# Eintrag} other {# Einträge}}"
+}

@@ -1,0 +1,39 @@
+{
+  "title": "Home",
+  "greeting": "Good to see you, {name}",
+  "sections": {
+    "myTasks": "My tasks",
+    "openInbox": "Open inbox",
+    "pay": "Pay",
+    "timeOff": "Time off",
+    "requestTimeOff": "Request time off",
+    "whosOut": "Who's out this week",
+    "upcoming": "Upcoming",
+    "celebrations": "Celebrations",
+    "announcements": "Announcements",
+    "ask": "Ask",
+    "askPlaceholder": "Ask about pay, time off, or policies…",
+    "teamApprovals": "Approvals awaiting me",
+    "teamOut": "Team who's out",
+    "teamSteps": "Team checklist steps overdue",
+    "teamQualifications": "Qualifications expiring",
+    "oneOnOnes": "1:1 prompts",
+    "headcount": "My team",
+    "attention": "Needs attention",
+    "workflows": "Workflow errors",
+    "compliance": "Compliance calendar"
+  },
+  "empty": {
+    "tasks": "Nothing waits on you.",
+    "out": "Nobody out this week.",
+    "upcoming": "Nothing upcoming.",
+    "celebrations": "No celebrations this week.",
+    "announcements": "No announcements.",
+    "attention": "All clear."
+  },
+  "pay": {
+    "nextPay": "Next pay date",
+    "lastSlip": "Last payslip",
+    "viewSlip": "View payslip"
+  }
+}

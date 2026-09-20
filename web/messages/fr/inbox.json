@@ -1,0 +1,43 @@
+{
+  "title": "Boite de reception",
+  "description": "Approbations, étapes de listes, demandes et signatures qui vous attendent — traitez-les ici.",
+  "filters": {
+    "all": "Tout",
+    "approvals": "Approbations",
+    "myTasks": "Mes tâches",
+    "signatures": "Signatures",
+    "overdue": "En retard"
+  },
+  "columns": {
+    "task": "Tâche",
+    "detail": "Détail",
+    "due": "Échéance",
+    "priority": "Priorité",
+    "actions": "Actions"
+  },
+  "priorities": {
+    "overdue": "En retard",
+    "dueSoon": "Bientôt",
+    "normal": "Normal"
+  },
+  "kinds": {
+    "flows_approval": "Approbation",
+    "hrm_process_step": "Étape de liste",
+    "hrm_leave_request": "Congé",
+    "hrm_change_request": "Demande de modification",
+    "hrm_review": "Entretien",
+    "hrm_benefit_enrollment_window": "Avantages",
+    "hrm_qualification_alert": "Qualification",
+    "field_ticket_signature": "Signature",
+    "timesheet_week": "Feuille de temps",
+    "expense_report": "Note de frais",
+    "document_signature": "Signature"
+  },
+  "emptyTitle": "Tout est à jour",
+  "emptyDescription": "Rien ne vous attend pour le moment.",
+  "open": "Ouvrir",
+  "acted": "Terminé",
+  "refused": "Impossible de terminer : {message}",
+  "delegatePlaceholder": "Déléguer à…",
+  "count": "{count, plural, one {# élément} other {# éléments}}"
+}
