@@ -192,10 +192,15 @@ test("0193 migration exposes four org-isolated tables with the open-process uniq
       assert.equal(table.force, true, `${table.tbl} must keep FORCE RLS live`);
       assert.equal(table.policies, 1, `${table.tbl} must keep exactly the org_isolation policy`);
     }
-    const unique = (await db.execute<{ name: string }>(sql`
-      select conname as name from pg_constraint
-       where conname = 'hrm_processes_open_one_per_kind'`)).rows;
-    assert.equal(unique.length, 1, "the one-open-process-per-kind partial unique must exist");
+    // A partial uniqueness rule is an INDEX in Postgres (a UNIQUE constraint
+    // cannot carry a WHERE clause), so it is probed in pg_indexes and its
+    // predicate is pinned: only OPEN processes are unique per kind.
+    const unique = (await db.execute<{ name: string; def: string }>(sql`
+      select indexname as name, indexdef as def from pg_indexes
+       where schemaname = 'public' and indexname = 'hrm_processes_open_one_per_kind'`)).rows;
+    assert.equal(unique.length, 1, "the one-open-process-per-kind partial unique index must exist");
+    assert.match(unique[0]!.def, /CREATE UNIQUE INDEX/, "it is unique");
+    assert.match(unique[0]!.def, /WHERE .*status[^']*'open'/, "it covers only open processes");
     const covering = (await db.execute<{ name: string }>(sql`
       select conname as name from pg_constraint where conname = 'files_org_id_id_unique'`)).rows;
     assert.equal(covering.length, 1, "the files covering unique for the evidence FK must exist");
