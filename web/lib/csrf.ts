@@ -12,8 +12,10 @@
  * must either send the deployment Origin or use a token-authenticated surface
  * exempted by `isCsrfExemptPath`. This module deliberately duplicates none of
  * auth-policy: that file imports `node:net`, which the Edge runtime cannot
- * bundle.
+ * bundle. `trustsForwardedHeaders` lives in proxy-policy for the same reason.
  */
+
+import { trustsForwardedHeaders } from "./proxy-policy";
 
 const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
@@ -121,8 +123,11 @@ function forwardedRequestOrigin(
 
 /**
  * Origin (scheme://hostname[:port]) this deployment is reached through. The
- * operator-declared OPENBOOKS_APP_URL wins when set; otherwise the outermost
- * forwarded host/protocol pair (set by the trusted edge) or the request URL.
+ * operator-declared OPENBOOKS_APP_URL wins when set. An unset canonical URL
+ * is unknown: client-supplied X-Forwarded-Host must not become the trusted
+ * origin. Honor OPENBOOKS_TRUST_PROXY before treating the outermost
+ * forwarded pair as the edge; otherwise the request URL is the only origin
+ * the process can know.
  */
 export function trustedRequestOrigin(
   headers: Pick<Headers, "get">,
@@ -135,7 +140,10 @@ export function trustedRequestOrigin(
     if (!origin) throw new Error("OPENBOOKS_APP_URL must be a valid HTTP(S) URL");
     return origin;
   }
-  if (headers.get("x-forwarded-host") !== null) {
+  if (
+    trustsForwardedHeaders(environment)
+    && headers.get("x-forwarded-host") !== null
+  ) {
     return forwardedRequestOrigin(headers, fallbackUrl);
   }
   return httpOrigin(fallbackUrl);
