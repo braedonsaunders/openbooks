@@ -650,6 +650,10 @@
       "hrm_processes": {
         "label": "Process checklists",
         "description": "One row per process checklist step — process kind and status, employee, template, step owner, due date, evidence kind, and step status with its evidence. Requires the HRM process permission."
+      },
+      "hrm_leave_absences": {
+        "label": "Leave absences",
+        "description": "One row per absence day — person, employer, department at the time, leave type, and hours. Reversals are separate rows; sums net. Requires the HRM leave permission."
       }
     },
     "columns": {
@@ -1245,6 +1249,17 @@
         "skip_reason": "Skip reason",
         "process_id": "Process (id)",
         "employment_id": "Employment (id)"
+      },
+      "hrm_leave_absences": {
+        "on_date": "Date",
+        "person": "Person",
+        "employer": "Employer",
+        "department": "Department",
+        "leave_type": "Leave type",
+        "hours": "Hours",
+        "source": "Source",
+        "employment_id": "Employment (id)",
+        "id": "Absence (id)"
       }
     },
     "enumValues": {

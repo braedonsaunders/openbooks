@@ -11,6 +11,12 @@ import {
   getHeadcountAsOf,
   loadEmploymentChangeRequests,
 } from "@openbooks/engine/src/hrm/employment-read.ts";
+import {
+  listLeaveRequests,
+  listLeaveTypes,
+  timeBalanceAsOf,
+} from "@openbooks/engine/src/hrm/leave-read.ts";
+import { LeaveError } from "@openbooks/engine/src/hrm/leave-errors.ts";
 import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
 import { HrmPositionError } from "@openbooks/engine/src/hrm/positions.ts";
 import { getVacancyAsOf } from "@openbooks/engine/src/hrm/positions-read.ts";
@@ -63,7 +69,8 @@ export function hrmRefusal(error: unknown): ToolResult {
     error instanceof HrmPositionError ||
     error instanceof HrmProcessError ||
     error instanceof HrmAuthorizationError ||
-    error instanceof TemporalError
+    error instanceof TemporalError ||
+    error instanceof LeaveError
   ) {
     return { ok: false, error: error.message };
   }
@@ -410,6 +417,23 @@ const hrmProcesses: AssistantToolDef = {
     segment: z.enum(processSegments).optional().describe("List segment (default open)"),
     employmentId: uuidInput.optional().describe("Keep only this employment's checklists"),
     limit: z.number().int().min(1).max(200).optional().describe("Maximum checklists to return (default 50)"),
+/** 0194 request lifecycle statuses: the CHECK the leave-request table enforces. */
+const leaveRequestStatuses = ["draft", "submitted", "approved", "rejected", "withdrawn", "cancelled"] as const;
+
+const hrmLeave: AssistantToolDef = {
+  name: "hrm_leave",
+  description:
+    "Leave requests with status and hours for one employment (or every visible employment), plus TIME balances per type as of a date; payroll banks stay in payroll tools. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.leave.read"] },
+  feature: "hrm",
+  tier: "module",
+  inputSchema: z.object({
+    employmentId: uuidInput.optional().describe("One employment's requests and balances; omit for every visible employment"),
+    status: z.enum(leaveRequestStatuses).optional().describe("Keep only this lifecycle status"),
+    includeBalances: z.boolean().optional().describe("Include TIME balances per leave type (single employment only)"),
+    asOf: dateInput.optional().describe("Balance date; defaults to today"),
+    limit: z.number().int().min(1).max(200).optional().describe("Maximum requests to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const gated = await hrmFeatureRefused(authz.user.orgId);
@@ -418,6 +442,10 @@ const hrmProcesses: AssistantToolDef = {
       processId?: string;
       segment?: (typeof processSegments)[number];
       employmentId?: string;
+      employmentId?: string;
+      status?: (typeof leaveRequestStatuses)[number];
+      includeBalances?: boolean;
+      asOf?: string;
       limit?: number;
     };
     const limit = Math.min(a.limit ?? 50, 200);
@@ -492,6 +520,85 @@ const hrmProcesses: AssistantToolDef = {
           truncated: page.truncated,
           processes: page.items,
           href: "/hrm/processes",
+      // A named employment is authorized per record inside the loader, so a
+      // missing, foreign-org, or out-of-scope id refuses uniformly instead
+      // of returning an empty list pretending it does not exist.
+      const scoped = a.employmentId
+        ? { ids: [a.employmentId], truncated: false }
+        : await visibleEmploymentIds(authz.user.orgId, authz.allowedSubsidiaryIds, 200);
+      const collected: {
+        employmentId: string;
+        id: string;
+        status: string;
+        leaveTypeCode: string;
+        startsOn: string;
+        endsOn: string;
+        hours: string;
+      }[] = [];
+      // Sequential, never parallel: one pinned client per loader call, the
+      // same discipline the record boundary keeps inside its transaction.
+      for (const employmentId of scoped.ids) {
+        const requests = await listLeaveRequests({
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          employmentId,
+          ...(a.status ? { status: a.status } : {}),
+        });
+        for (const request of requests) {
+          collected.push({
+            employmentId,
+            id: request.id,
+            status: request.status,
+            leaveTypeCode: request.leaveTypeCode,
+            startsOn: request.startsOn,
+            endsOn: request.endsOn,
+            hours: request.hours,
+          });
+        }
+      }
+      // Newest start first across employments (id breaks ties deterministically).
+      collected.sort((x, y) => (y.startsOn < x.startsOn ? -1 : y.startsOn > x.startsOn ? 1 : x.id < y.id ? -1 : 1));
+      const page = compactRows(collected, { limit });
+      // TIME balances are single-employment only: org-wide balances would
+      // sum incommensurable policies into a precise-looking wrong number.
+      // VALUE (payroll banks) is never read here — payroll tools own it.
+      let balances: {
+        leaveTypeCode: string;
+        balance: string | null;
+        unlimited: boolean;
+        earned: string | null;
+        carried: string;
+        taken: string;
+      }[] | null = null;
+      if (a.includeBalances) {
+        if (!a.employmentId) return { ok: false, error: "balances_need_employment" };
+        const asOf = a.asOf ?? (await orgToday(authz.user.orgId));
+        const types = await listLeaveTypes(db, authz.user.orgId);
+        balances = [];
+        for (const type of types) {
+          if (!type.isActive) continue;
+          const read = await timeBalanceAsOf(db, authz.user.orgId, a.employmentId, type.id, asOf);
+          balances.push({
+            leaveTypeCode: type.code,
+            balance: read.balance,
+            unlimited: read.unlimited,
+            earned: read.earned,
+            carried: read.carried,
+            taken: read.taken,
+          });
+        }
+      }
+      return {
+        ok: true,
+        data: {
+          employmentId: a.employmentId ?? null,
+          status: a.status ?? null,
+          total: page.total,
+          returned: page.returned,
+          truncated: page.truncated || scoped.truncated,
+          requests: page.items,
+          balances,
+          href: "/hrm/leave",
         },
       };
     } catch (error) {
@@ -501,3 +608,4 @@ const hrmProcesses: AssistantToolDef = {
 };
 
 export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses];
+export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmLeave];

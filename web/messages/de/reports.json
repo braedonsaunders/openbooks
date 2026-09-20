@@ -650,6 +650,10 @@
       "hrm_processes": {
         "label": "Prozess-Checklisten",
         "description": "Eine Zeile je Prozesschecklisten-Schritt — Prozessart und -status, Mitarbeiter, Vorlage, Schrittverantwortlicher, Fälligkeitsdatum, Nachweisart sowie Schrittstatus mit Nachweis. Erfordert die HRM-Prozessberechtigung."
+      },
+      "hrm_leave_absences": {
+        "label": "Fehltage",
+        "description": "Eine Zeile pro Fehltag — Person, Arbeitgeber, damalige Abteilung, Urlaubsart und Stunden. Stornierungen sind eigene Zeilen; Summen saldieren. Erfordert die Urlaubs-Berechtigung."
       }
     },
     "columns": {
@@ -1245,6 +1249,17 @@
         "skip_reason": "Grund für das Überspringen",
         "process_id": "Vorgang (ID)",
         "employment_id": "Beschäftigung (ID)"
+      },
+      "hrm_leave_absences": {
+        "on_date": "Datum",
+        "person": "Person",
+        "employer": "Arbeitgeber",
+        "department": "Abteilung",
+        "leave_type": "Urlaubsart",
+        "hours": "Stunden",
+        "source": "Quelle",
+        "employment_id": "Beschäftigung (ID)",
+        "id": "Fehltag (ID)"
       }
     },
     "enumValues": {

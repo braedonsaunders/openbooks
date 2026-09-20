@@ -129,6 +129,7 @@ const MATRIX: Entry[] = [
   { prefix: "expenses", tools: ["list_expense_reports", "get_expense_report", "expense_overview", "expense_approvals"] },
   { prefix: "payroll", tools: ["list_pay_runs", "get_pay_run", "payroll_year_end", "payroll_setup_status", "list_payroll_employees", "payroll_entitlements", "payroll_remittances"], note: "profiles/settings/opening-balance/retro/parallel-run writes have no application service" },
   { prefix: "hrm", tools: ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes"], note: "as-of headcount, the effective version with assignments, the change-request list, positions with vacancy, and the process checklists reuse their canonical HRM read services; authoring stays human-attested with no tool" },
+  { prefix: "hrm", tools: ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_leave"], note: "as-of headcount, the effective version with assignments, the change-request list, and the leave-request list with TIME balances reuse the employment and leave read services; authoring stays human-attested with no tool" },
   { prefix: "labor-rate-cards", uncovered: "no application service: rate card writes are route-inline" },
   { prefix: "rate-book-assignments", tools: ["list_setup_records"], note: "item-rate-book-assignments is a setup entity" },
   { prefix: "revenue", uncovered: "no application service: recognition run persists inline" },

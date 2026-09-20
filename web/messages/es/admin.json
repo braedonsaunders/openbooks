@@ -2363,6 +2363,16 @@
       "extension-settings": {
         "title": "Configuración de aplicaciones",
         "description": "Configure los ajustes declarados por las aplicaciones instaladas. Los cambios conservan los valores anteriores y sus fechas de vigencia."
+      },
+      "leave-types": {
+        "title": "Tipos de ausencia",
+        "singularTitle": "Tipo de ausencia",
+        "description": "Clases de tiempo libre de su organización — vacaciones, enfermedad, no remuneradas — y qué movimiento de nómina genera cada una. Los bancos de nómina no se configuran aquí."
+      },
+      "leave-policies": {
+        "title": "Políticas de ausencias",
+        "singularTitle": "Política de ausencia",
+        "description": "Cuánto tiempo acumula cada tipo, a quién cubre y cuánta antelación necesita. Derecho en tiempo; el valor lo calcula la nómina."
       }
     },
     "fields": {
@@ -2639,7 +2649,14 @@
       "required": "Obligatorio",
       "evidenceKind": "Evidencia",
       "appliesEmployerSubsidiaryId": "Filial aplicable",
-      "appliesDepartmentId": "Departamento aplicable"
+      "appliesDepartmentId": "Departamento aplicable",
+      "paid": "Remunerada",
+      "valueCrossing": "Genera en nómina",
+      "requiresAttachment": "Requiere adjunto",
+      "leaveTypeId": "Tipo de ausencia",
+      "minimumNoticeDays": "Antelación mínima (días)",
+      "accrualRule": "Regla de acumulación (JSON)",
+      "carryoverRule": "Regla de arrastre (JSON)"
     },
     "fieldHelp": {
       "gapless": "Sin huecos significa que cada número de la secuencia debe quedar contabilizado, sin números omitidos. Actívelo solo cuando los requisitos legales o de auditoría exijan una numeración ininterrumpida.",
@@ -2693,7 +2710,11 @@
       "protectionPriority": "Qué orden prevalece cuando varias deducciones protegidas compiten por la misma paga. Primero la menor; las órdenes de manutención normalmente superan a los acreedores ordinarios.",
       "stateCode": "Obligatorio para, y solo para, tipos de programa registrados por estado o región (como cuentas estatales de desempleo): se valida contra la declaración del paquete reglamentario del país al guardar la cuenta.",
       "hrmProcessAppliesSubsidiary": "Vacío: la plantilla se aplica a todas las filiales.",
-      "hrmProcessAppliesDepartment": "Vacío: la plantilla se aplica a todos los departamentos."
+      "hrmProcessAppliesDepartment": "Vacío: la plantilla se aplica a todos los departamentos.",
+      "leaveValueCrossing": "Qué insumo de nómina genera un día de ausencia aprobado. Ninguno nunca toca el libro de nómina; pago y acumulación cruzan como horas que el cálculo valora.",
+      "leaveAppliesTo": "Alcance como JSON, p. ej. {\"employer_subsidiary_id\": null, \"department_id\": null}. Null significa toda la organización; el motor resuelve solapamientos por especificidad.",
+      "leaveAccrualRule": "Acumulación como JSON, p. ej. {\"kind\": \"per_year\", \"hours\": \"120\"}. Tipos: none, per_period (necesita hours y periods_per_year), per_year (necesita hours), unlimited.",
+      "leaveCarryoverRule": "Arrastre como JSON, p. ej. {\"kind\": \"carry_up_to\", \"hours\": \"40\"}. Tipos: none, carry_all, carry_up_to (necesita hours). Opcional expires_after_days."
     },
     "options": {
       "timeClassification": {
@@ -3046,6 +3067,11 @@
         "none": "Ninguna",
         "acknowledgement": "Acuse de recibo",
         "attachment": "Adjunto"
+      },
+      "leaveValueCrossing": {
+        "none": "Ninguno — no remunerado o en salario",
+        "payout": "Pago desde el banco",
+        "bankIn": "Acumular como tiempo"
       }
     },
     "laborCosting": {

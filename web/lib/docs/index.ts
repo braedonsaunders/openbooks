@@ -13,6 +13,7 @@ import { hrmProcesses } from './articles/hrm-processes'
 import { payroll } from './articles/payroll'
 import { employmentMigration } from './articles/employment-migration'
 import { positionsAndHeadcount } from './articles/positions-and-headcount'
+import { leaveTimeVersusValue } from './articles/leave-time-versus-value'
 import { taxConfiguration } from './articles/tax-configuration'
 import { taxJurisdictionsAndNexus, taxReturnsAndBoxes } from './articles/taxes'
 import { fieldTickets } from './articles/field-tickets'
@@ -245,6 +246,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   bankingAndReconciliation,
   periodClose,
   projectTypes, overheadCosting, laborCosting, laborPricing, payroll, employmentMigration, positionsAndHeadcount, hrmProcesses, fieldTickets, subcontractorCompliance,
+  projectTypes, overheadCosting, laborCosting, laborPricing, payroll, employmentMigration, leaveTimeVersusValue, fieldTickets, subcontractorCompliance,
   itemRates,
   financialReports,
   analyticsAndSavedViews,

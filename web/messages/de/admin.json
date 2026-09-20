@@ -2476,6 +2476,16 @@
       "extension-settings": {
         "title": "App-Einstellungen",
         "description": "Konfigurieren Sie Einstellungen, die von installierten Apps deklariert werden. Änderungen erhalten frühere Werte und deren Wirksamkeitsdaten."
+      },
+      "leave-types": {
+        "title": "Urlaubsarten",
+        "singularTitle": "Urlaubsart",
+        "description": "Freistellungsarten Ihres Unternehmens — Urlaub, Krankheit, unbezahlt — und welche Abrechnung jede auslöst. Gehaltskonten werden nicht hier konfiguriert."
+      },
+      "leave-policies": {
+        "title": "Urlaubsrichtlinien",
+        "singularTitle": "Urlaubsrichtlinie",
+        "description": "Wie viel Zeit jede Art ansammelt, für wen sie gilt und wie viel Vorlauf sie braucht. Anspruch in Zeit; der Geldwert wird vom Lohnlauf berechnet."
       }
     },
     "fields": {
@@ -2752,7 +2762,14 @@
       "required": "Erforderlich",
       "evidenceKind": "Nachweis",
       "appliesEmployerSubsidiaryId": "Gilt für Tochtergesellschaft",
-      "appliesDepartmentId": "Gilt für Abteilung"
+      "appliesDepartmentId": "Gilt für Abteilung",
+      "paid": "Bezahlt",
+      "valueCrossing": "Abrechnung löst aus",
+      "requiresAttachment": "Nachweis erforderlich",
+      "leaveTypeId": "Urlaubsart",
+      "minimumNoticeDays": "Mindestvorlauf (Tage)",
+      "accrualRule": "Ansammlungsregel (JSON)",
+      "carryoverRule": "Übertragsregel (JSON)"
     },
     "fieldHelp": {
       "gapless": "Lückenlos bedeutet, dass jede Nummer in der Folge belegt sein muss und keine Nummer übersprungen wird. Aktivieren Sie dies nur, wenn gesetzliche oder prüfungsbezogene Vorgaben eine ununterbrochene Nummerierung verlangen.",
@@ -2806,7 +2823,11 @@
       "requiresVerification": "Wer ein Zertifikat erfasst, darf niemals derjenige sein, der es verifiziert.",
       "stateCode": "Erforderlich für – und nur für – Programmarten, die je Bundesstaat oder Region registriert sind (wie Arbeitslosenversicherungskonten der Bundesstaaten) – beim Speichern des Kontos gegen die Deklaration des Länderpakets geprüft.",
       "hrmProcessAppliesSubsidiary": "Leer bedeutet: Die Vorlage gilt für alle Tochtergesellschaften.",
-      "hrmProcessAppliesDepartment": "Leer bedeutet: Die Vorlage gilt für alle Abteilungen."
+      "hrmProcessAppliesDepartment": "Leer bedeutet: Die Vorlage gilt für alle Abteilungen.",
+      "leaveValueCrossing": "Welchen Lohnlauf-Input ein genehmigter Fehltag erzeugt. „Keine“ berührt nie die Lohnkonten; Auszahlung und Gutschrift werden als Stunden übergeben, die der Lauf bepreist.",
+      "leaveAppliesTo": "Geltungsbereich als JSON, z. B. {\"employer_subsidiary_id\": null, \"department_id\": null}. Null bedeutet unternehmensweit; Überschneidungen löst die Engine nach Spezifität.",
+      "leaveAccrualRule": "Ansammlung als JSON, z. B. {\"kind\": \"per_year\", \"hours\": \"120\"}. Arten: none, per_period (braucht hours und periods_per_year), per_year (braucht hours), unlimited.",
+      "leaveCarryoverRule": "Übertrag als JSON, z. B. {\"kind\": \"carry_up_to\", \"hours\": \"40\"}. Arten: none, carry_all, carry_up_to (braucht hours). Optional expires_after_days."
     },
     "options": {
       "timeClassification": {
@@ -3159,6 +3180,11 @@
         "none": "Keine",
         "acknowledgement": "Bestätigung",
         "attachment": "Anhang"
+      },
+      "leaveValueCrossing": {
+        "none": "Keine — unbezahlt oder gehaltsbasiert",
+        "payout": "Auszahlung aus dem Konto",
+        "bankIn": "Gutschrift als Ersatzzeit"
       }
     },
     "bankFeeds": {

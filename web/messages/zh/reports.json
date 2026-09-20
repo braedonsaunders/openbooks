@@ -650,6 +650,10 @@
       "hrm_processes": {
         "label": "流程清单",
         "description": "每个流程清单步骤一行 — 流程类型与状态、员工、模板、步骤负责人、到期日、凭证类型，以及步骤状态及其凭证。需要 HRM 流程权限。"
+      },
+      "hrm_leave_absences": {
+        "label": "休假缺勤",
+        "description": "每个缺勤日一行——人员、雇主、当时部门、休假类型和小时。冲销为单独行；求和为净额。需要休假权限。"
       }
     },
     "columns": {
@@ -1245,6 +1249,17 @@
         "skip_reason": "跳过原因",
         "process_id": "流程（ID）",
         "employment_id": "雇用（ID）"
+      },
+      "hrm_leave_absences": {
+        "on_date": "日期",
+        "person": "人员",
+        "employer": "雇主",
+        "department": "部门",
+        "leave_type": "休假类型",
+        "hours": "小时",
+        "source": "来源",
+        "employment_id": "雇佣 (ID)",
+        "id": "缺勤 (ID)"
       }
     },
     "enumValues": {
