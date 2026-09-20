@@ -326,6 +326,10 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   // clearly-scoped loader query reads recorded-live rows in the window,
   // org-predicated and employer-scope filtered. Date arithmetic stays in
   // SQL off the org business day; the loader does no JS date math.
+  // The window length is bound with an explicit ::int: a bare bound number
+  // reaches PostgreSQL as an untyped parameter, and `date + unknown` is
+  // ambiguous (integer days or an interval) — the query that took the HRM
+  // overview down in production on alpha.19.
   // Probation ends are not modeled (versions carry status and the
   // effective window only), and the panel says so instead of implying it.
   const employmentScope = subsidiaryVisibleFilter(sql`w.employer_subsidiary_id`, authz.allowedSubsidiaryIds)
@@ -347,9 +351,9 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
        and ev.recorded_until is null
        ${employmentScope}
        and ((ev.effective_from > ${effectiveDate}::date
-             and ev.effective_from <= (${effectiveDate}::date + ${HOME_WINDOW_DAYS}))
+             and ev.effective_from <= (${effectiveDate}::date + ${HOME_WINDOW_DAYS}::int))
          or (ev.effective_to > ${effectiveDate}::date
-             and ev.effective_to <= (${effectiveDate}::date + ${HOME_WINDOW_DAYS})))
+             and ev.effective_to <= (${effectiveDate}::date + ${HOME_WINDOW_DAYS}::int)))
      order by ev.effective_from
      limit ${HOME_WINDOW_LIMIT}`)).rows
   const upcomingTruncated = windowRows.length >= HOME_WINDOW_LIMIT
