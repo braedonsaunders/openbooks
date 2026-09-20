@@ -8,7 +8,6 @@ import { getHeadcountAsOf } from '@openbooks/engine/src/hrm/employment-read.ts'
 import { HrmAuthorizationError } from '@openbooks/engine/src/hrm/authorization.ts'
 import { HrmChangeRequestError, listChangeRequests } from '@openbooks/engine/src/hrm/change-requests.ts'
 import { getVacancyAsOf } from '@openbooks/engine/src/hrm/positions-read.ts'
-import { getOnboardingOverview } from '@openbooks/engine/src/hrm/processes-read.ts'
 import { can, type Authz } from '../authz'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
@@ -87,27 +86,12 @@ export interface HrmPositionsSummary {
   totals: { positions: number; plannedFte: string; fundedFte: string; filledFte: string; vacantFte: string }
 }
 
-export interface HrmOnboardingPanelData {
-  openCount: number
-  overdue: { worker: string; title: string; dueOn: string }[]
-  upcoming: { worker: string; title: string; dueOn: string }[]
-  panelTitle: string
-  openLabel: string
-  overdueLabel: string
-  upcomingLabel: string
-  empty: string
-  viewAll: string
-  viewAllHref: string
-}
-
 export interface HrmHomeData {
   title: string
   description: string
   tabs: Awaited<ReturnType<typeof hrmGroupTabs>>
   canCreateEmployee: boolean
   newEmployee: { basePath: string; role: 'employee'; label: string }
-  /** Present exactly when the viewer holds hrm.process.read; otherwise the rail stays headcount-only. */
-  onboarding: HrmOnboardingPanelData | null
   headcountLabel: string
   headcountValue: string
   headcountSub: string
@@ -446,39 +430,12 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
     actions.push({ href: '/hrm/reports', label: t('overview.actions.openReports'), iconKey: 'file' })
   }
 
-  // The onboarding panel is additive: employment.read viewers without
-  // process.read keep their cockpit, and the panel resolves through the
-  // canonical process read service — never a direct table read.
-  const onboarding = can(authz, 'hrm.process.read')
-    ? await getOnboardingOverview({ orgId, actorId: authz.user.id }).then((overview) => ({
-        openCount: overview.openProcesses.length,
-        overdue: overview.overdueSteps.map((step) => ({
-          worker: step.workerName,
-          title: step.title,
-          dueOn: step.dueOn,
-        })),
-        upcoming: overview.dueNextSevenDays.map((step) => ({
-          worker: step.workerName,
-          title: step.title,
-          dueOn: step.dueOn,
-        })),
-        panelTitle: t('home.onboarding.title'),
-        openLabel: t('home.onboarding.openLabel'),
-        overdueLabel: t('home.onboarding.overdueLabel'),
-        upcomingLabel: t('home.onboarding.upcomingLabel'),
-        empty: t('home.onboarding.empty'),
-        viewAll: t('home.onboarding.viewAll'),
-        viewAllHref: '/hrm/processes',
-      }))
-    : null
-
   return {
     title: t('home.title'),
     description: t('home.description'),
     tabs: await hrmGroupTabs(authz, '/hrm'),
     canCreateEmployee: can(authz, 'parties.manage'),
     newEmployee: { basePath: '/entities/employees', role: 'employee', label: t('overview.actions.newEmployee') },
-    onboarding,
     headcountLabel: t('home.vitals.headcount'),
     headcountValue: String(headcount.total),
     headcountSub: t('home.vitals.headcountSub', { date: headcount.effectiveDate }),

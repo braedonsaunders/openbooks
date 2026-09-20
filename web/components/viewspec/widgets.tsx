@@ -80,11 +80,9 @@ import {
   HrmReadiness,
   HrmRecentChanges,
   HrmUpcomingChanges,
-  OnboardingPanel,
 } from '../../app/(app)/hrm/sections'
 import { ChangeRequestQueue } from '../../app/(app)/hrm/change-requests/QueueClient'
 import { PositionDrawer, PositionSegments, PositionsTable, VacancyTable } from '../../app/(app)/hrm/positions/sections'
-import { ProcessDrawer, ProcessSegments, ProcessesTable } from '../../app/(app)/hrm/processes/sections'
 import { ListChecks, ShieldCheck, ScrollText } from 'lucide-react'
 import { AnalyticsHub } from '../../app/(app)/analytics/AnalyticsHub'
 import { ReportsHub } from '../../app/(app)/reports/ReportsHub'
@@ -1174,51 +1172,6 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
       totalLabel={str(props, 'totalLabel') ?? ''}
     />
   ),
-  /** The onboarding rail panel: loader-resolved open counts plus the overdue
-   *  and upcoming steps with loader-resolved strings — the same widget-not-
-   *  slot division as the headcount hero above. */
-  'hrm-onboarding-panel': (props) => (
-    <OnboardingPanel
-      openCount={num(props, 'openCount') ?? 0}
-      overdue={(props.overdue as ComponentProps<typeof OnboardingPanel>['overdue']) ?? []}
-      upcoming={(props.upcoming as ComponentProps<typeof OnboardingPanel>['upcoming']) ?? []}
-      openLabel={str(props, 'openLabel') ?? ''}
-      overdueLabel={str(props, 'overdueLabel') ?? ''}
-      upcomingLabel={str(props, 'upcomingLabel') ?? ''}
-      empty={str(props, 'empty') ?? ''}
-      viewAll={str(props, 'viewAll') ?? ''}
-      viewAllHref={str(props, 'viewAllHref') ?? '/hrm/processes'}
-    />
-  ),
-  /** Segment pills over loader-resolved hrefs: the active segment filters
-   *  server-side through listProcesses, so switching is navigation, not
-   *  state. A widget, not `filter-chips`: the pills carry per-segment
-   *  counts resolved in the loader rather than rebuilt from a param key. */
-  'hrm-process-segments': (props) => (
-    <ProcessSegments
-      ariaLabel={str(props, 'ariaLabel') ?? ''}
-      segments={(props.segments as ComponentProps<typeof ProcessSegments>['segments']) ?? []}
-    />
-  ),
-  /** The checklist table over loader-resolved rows plus loader-resolved
-   *  strings — the same ProcessesTable the native page renders, so the two
-   *  cannot drift. */
-  'hrm-processes-table': (props) => (
-    <ProcessesTable
-      columns={(props.columns as ComponentProps<typeof ProcessesTable>['columns']) ?? {}}
-      rows={(props.rows as ComponentProps<typeof ProcessesTable>['rows']) ?? []}
-      empty={str(props, 'empty') ?? ''}
-    />
-  ),
-  /** The checklist flyout: a URL drawer around the shared client checklist
-   *  body that closes by navigation. Null payload renders nothing — the
-   *  spec's `when` gate already omits it, so this is the second half of the
-   *  same guard. */
-  'hrm-process-drawer': (props) => {
-    const drawer = props.drawer as ComponentProps<typeof ProcessDrawer>['drawer']
-    if (!drawer) return null
-    return <ProcessDrawer drawer={drawer} />
-  },
 
   /** The build hub's card. NOT `admin-hub-card`: the shells match but the icon
    *  maps are disjoint and the fallbacks differ, so each hub keeps its own. */

@@ -646,10 +646,6 @@
       "hrm_positions": {
         "label": "Positionen",
         "description": "Eine Zeile je eingerichteter Position zum Berichtsstichtag: Code, Titel, Status, Abteilung, Arbeitgeber sowie geplante, finanzierte und besetzte FTE. Erfordert die HRM-Positionsberechtigung."
-      },
-      "hrm_processes": {
-        "label": "Prozess-Checklisten",
-        "description": "Eine Zeile je Prozesschecklisten-Schritt — Prozessart und -status, Mitarbeiter, Vorlage, Schrittverantwortlicher, Fälligkeitsdatum, Nachweisart sowie Schrittstatus mit Nachweis. Erfordert die HRM-Prozessberechtigung."
       }
     },
     "columns": {
@@ -1228,23 +1224,6 @@
         "filled_fte": "Besetzte FTE",
         "vacant_fte": "Offene FTE",
         "position_id": "Position (ID)"
-      },
-      "hrm_processes": {
-        "process_kind": "Prozessart",
-        "process_status": "Prozessstatus",
-        "effective_date": "Gültigkeitsdatum",
-        "employee": "Mitarbeiter",
-        "employer": "Arbeitgeber",
-        "template": "Vorlage",
-        "step": "Schritt",
-        "step_status": "Schrittstatus",
-        "owner": "Verantwortlich",
-        "due_on": "Fällig am",
-        "evidence": "Nachweis",
-        "done_at": "Erledigt am",
-        "skip_reason": "Grund für das Überspringen",
-        "process_id": "Vorgang (ID)",
-        "employment_id": "Beschäftigung (ID)"
       }
     },
     "enumValues": {

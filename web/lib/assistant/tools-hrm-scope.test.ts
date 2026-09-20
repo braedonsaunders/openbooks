@@ -40,21 +40,18 @@ const { AmbiguousRevisionError, NoRevisionError } = await import("@openbooks/eng
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const tools = read("./tools-hrm.ts");
 
-const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes"];
+const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of"];
 
 const TOOL_PERMS: Record<string, string> = {
   hrm_headcount: "hrm.employment.read",
   hrm_employment_as_of: "hrm.employment.read",
   hrm_change_requests: "hrm.employment.read",
   hrm_positions_as_of: "hrm.position.read",
-  // The checklist tool carries the process gate, not the employment one:
-  // checklist state is governed by hrm.process.read at every surface.
-  hrm_processes: "hrm.process.read",
 };
 
 const UUID = "11111111-1111-4111-8111-111111111111";
 
-test("the module exports exactly the five HRM read tools", () => {
+test("the module exports exactly the four HRM read tools", () => {
   assert.deepEqual(HRM_TOOLS.map((tool) => tool.name), TOOL_NAMES);
 });
 
@@ -102,11 +99,6 @@ test("minimal valid inputs parse; addressing is runtime-enforced with stable cod
   byName.get("hrm_positions_as_of")!.inputSchema.parse({ period: "this_fiscal_year_to_date" });
   assert.throws(() => byName.get("hrm_positions_as_of")!.inputSchema.parse({ status: "recruiting" }));
   assert.throws(() => byName.get("hrm_positions_as_of")!.inputSchema.parse({ asOf: "tomorrow" }));
-  byName.get("hrm_processes")!.inputSchema.parse({});
-  byName.get("hrm_processes")!.inputSchema.parse({ processId: UUID });
-  byName.get("hrm_processes")!.inputSchema.parse({ segment: "overdue", employmentId: UUID, limit: 10 });
-  assert.throws(() => byName.get("hrm_processes")!.inputSchema.parse({ segment: "someday" }));
-  assert.throws(() => byName.get("hrm_processes")!.inputSchema.parse({ processId: "nope" }));
 });
 
 // Every tool reuses the canonical read loaders the HRM tabs read
@@ -118,8 +110,6 @@ test("HRM reads reuse the canonical HRM read services", () => {
     "findEmploymentsByParty(",
     "loadEmploymentChangeRequests(",
     "getVacancyAsOf(",
-    "getProcess(",
-    "listProcesses(",
     "resolveToolRange(",
     "AmbiguousRevisionError(",
     "hrmRefusal(",

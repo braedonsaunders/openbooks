@@ -204,30 +204,6 @@ export function hrmSpec(data: HrmHomeData): PageSpec {
               items: data.directory,
               title: data.directoryTitle,
             }),
-            // The onboarding panel is additive: it renders exactly when the
-            // loader resolved it (the viewer holds hrm.process.read).
-            ...(data.onboarding
-              ? [
-                  panel({
-                    title: data.onboarding.panelTitle,
-                    iconKey: 'clipboard-check',
-                    bodyClassName: 'p-0',
-                    blocks: [
-                      widgetBlock('hrm-onboarding-panel', {
-                        openCount: data.onboarding.openCount,
-                        overdue: data.onboarding.overdue,
-                        upcoming: data.onboarding.upcoming,
-                        openLabel: data.onboarding.openLabel,
-                        overdueLabel: data.onboarding.overdueLabel,
-                        upcomingLabel: data.onboarding.upcomingLabel,
-                        empty: data.onboarding.empty,
-                        viewAll: data.onboarding.viewAll,
-                        viewAllHref: data.onboarding.viewAllHref,
-                      }),
-                    ],
-                  }),
-                ]
-              : []),
           ]),
         ]),
 

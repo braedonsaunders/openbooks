@@ -49,17 +49,6 @@ export const HRM_POSITION_PERMISSIONS = [
 
 export type HrmPositionPermission = (typeof HRM_POSITION_PERMISSIONS)[number];
 
-/**
- * Process checklist duties (0193): read sees processes and steps, manage
- * opens, completes, and cancels them. Granted to the same built-in roles as
- * the employment read/manage keys (admin only, via the catalogue spread —
- * the permission-role sync rule re-seeds on deploy). Skipping a required
- * step is NOT covered here: it needs hrm.employment.manage.
- */
-export const HRM_PROCESS_PERMISSIONS = ["hrm.process.read", "hrm.process.manage"] as const;
-
-export type HrmProcessPermission = (typeof HRM_PROCESS_PERMISSIONS)[number];
-
 // Module-private brand: a real symbol, so a forged record built without
 // this module cannot satisfy the type, and loading is the only producer.
 // One brand for every HRM subject (employments and positions alike).
@@ -160,70 +149,6 @@ async function requireHrmEmploymentAccess(
   const subject = await loadTrustedEmploymentSubject(exec, orgId, employmentId);
   await assertEmployerScope(exec, orgId, actorId, subject);
   return subject;
-}
-
-async function requireHrmProcessAccess(
-  exec: SqlExecutor,
-  orgId: string,
-  actorId: string,
-  employmentId: string,
-  permission: HrmProcessPermission,
-): Promise<TrustedEmploymentSubject> {
-  // Same shape as the employment gates: the live grant set decides, then
-  // the trusted subject plus the employer scope. No caller-supplied parties,
-  // booleans, or scope at any boundary.
-  if (!(await actorHasPermission(exec, orgId, actorId, permission))) {
-    throw new HrmAuthorizationError(
-      `Process access requires the ${permission} permission — ask an administrator to grant it in /admin/roles.`,
-    );
-  }
-  const subject = await loadTrustedEmploymentSubject(exec, orgId, employmentId);
-  await assertEmployerScope(exec, orgId, actorId, subject);
-  return subject;
-}
-
-/** See a process checklist. Read-only; accepts `db` or a transaction runner. */
-export async function requireHrmProcessRead(
-  exec: SqlExecutor,
-  orgId: string,
-  actorId: string,
-  employmentId: string,
-): Promise<TrustedEmploymentSubject> {
-  return requireHrmProcessAccess(exec, orgId, actorId, employmentId, "hrm.process.read");
-}
-
-/**
- * Open, complete, or cancel a process checklist. The caller MUST pass its
- * write transaction's runner so this check and the subsequent write are
- * atomic. Skipping a required step additionally needs
- * requireHrmEmploymentManage; completing one's own employee-owned steps
- * needs neither key (see resolveStepActor in processes.ts).
- */
-export async function requireHrmProcessManage(
-  exec: SqlExecutor,
-  orgId: string,
-  actorId: string,
-  employmentId: string,
-): Promise<TrustedEmploymentSubject> {
-  return requireHrmProcessAccess(exec, orgId, actorId, employmentId, "hrm.process.manage");
-}
-
-/**
- * Configuration-only process gate (templates have no employment subject):
- * the live hrm.process.manage grant, no subsidiary scope to check. The
- * Setup registry UI fences the same writes behind admin.setup.manage; this
- * is the engine-service boundary for direct callers.
- */
-export async function requireHrmProcessConfig(
-  exec: SqlExecutor,
-  orgId: string,
-  actorId: string,
-): Promise<void> {
-  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.process.manage"))) {
-    throw new HrmAuthorizationError(
-      "Process access requires the hrm.process.manage permission — ask an administrator to grant it in /admin/roles.",
-    );
-  }
 }
 
 /** See an employment record. Read-only; accepts `db` or a transaction runner. */

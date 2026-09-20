@@ -60,9 +60,6 @@ const GROUP_TABS: Record<TabGroup, { href: string; ns: string; key: string }[]> 
   ],
   hrm: [
     { href: '/hrm', ns: 'hrm', key: 'home.tabs.overview' },
-    // Employment start/end/transfer checklists — the HR-4 recorded
-    // companion to the change-request queue.
-    { href: '/hrm/processes', ns: 'hrm', key: 'home.tabs.processes' },
     // The NATIVE employee entity list — HRM deliberately has no second
     // roster; the employment record is a tab on the employee drawer.
     { href: '/entities/employees', ns: 'nav', key: 'modules.employees' },
@@ -100,7 +97,6 @@ const TAB_FEATURE: Record<string, string> = {
   '/hrm/departments': 'hrm',
   '/hrm/reports': 'hrm',
   '/hrm/positions': 'hrm',
-  '/hrm/processes': 'hrm',
   '/close': 'continuousClose',
 }
 
@@ -170,12 +166,10 @@ export async function customerGroupTabs(
 /** The permission each HRM-strip destination enforces. The cockpit tab needs
  * nothing beyond the page's own hrm.employment.read gate; the queue and
  * departments tabs sit behind the same grant, the reports tab behind the
- * reports grant the builder uses, the positions tab behind the headcount-plan
- * read grant, and the processes tab behind its own hrm.process.read gate. A
- * tab present in the list but absent here would render a destination the
- * viewer cannot open. */
+ * reports grant the builder uses, and the positions tab behind the
+ * headcount-plan read grant. A tab present in the list but absent here would
+ * render a destination the viewer cannot open. */
 const HRM_TAB_PERMISSION: Record<string, string> = {
-  '/hrm/processes': 'hrm.process.read',
   '/entities/employees': 'parties.read',
   '/hrm/change-requests': 'hrm.employment.read',
   '/hrm/departments': 'hrm.employment.read',

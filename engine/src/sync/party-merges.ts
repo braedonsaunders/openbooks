@@ -102,12 +102,6 @@ const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] =
   // duplicate. The 0184 deferred identity trigger validates the merge
   // marker at commit; the employer is never reassigned by a merge.
   ["worker_employments", "worker_party_id"],
-  // 0193: process owner parties follow the merge wholesale. No uniqueness
-  // on either table involves owner_party_id (positions are per template /
-  // process, never per party), so re-pointing the owner cannot duplicate.
-  // The composite tenant FKs keep the re-point inside the org.
-  ["hrm_process_template_steps", "owner_party_id"],
-  ["hrm_process_steps", "owner_party_id"],
 ];
 
 /**

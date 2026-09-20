@@ -7,26 +7,23 @@ import { compileCustomQuery } from './custom-query'
 import { BUILT_IN_REPORT_DEFINITION_MAP } from './built-ins'
 import { validateCustomQuery } from './validate'
 
-// Slice G pins: the workforce entities ride the shared catalog (and
+// Slice G pins: the three workforce entities ride the shared catalog (and
 // therefore the builder, saved views and card studio, which all derive from
-// REPORT_ENTITIES), each behind the hrm feature gate and its domain read
-// permission — enforced generically at every run path, so the pins below
-// assert the declaration, never a private gate. The process checklist
-// entity (0193) carries hrm.process.read: checklist state is governed by
-// the process gate, not the employment one.
+// REPORT_ENTITIES), each behind the hrm feature gate and
+// hrm.employment.read — enforced generically at every run path, so the pins
+// below assert the declaration, never a private gate.
 
-const HRM_KEYS = ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests', 'hrm_positions', 'hrm_processes'] as const
+const HRM_KEYS = ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests', 'hrm_positions'] as const
 
 const HRM_PERMISSIONS: Record<(typeof HRM_KEYS)[number], string> = {
   hrm_headcount: 'hrm.employment.read',
   hrm_employment_history: 'hrm.employment.read',
   hrm_change_requests: 'hrm.employment.read',
   hrm_positions: 'hrm.position.read',
-  hrm_processes: 'hrm.process.read',
 }
 
 test('workforce entities are registered on the shared catalog exactly once', () => {
-  assert.equal(HRM_REPORT_ENTITIES.length, HRM_KEYS.length)
+  assert.equal(HRM_REPORT_ENTITIES.length, 4)
   for (const key of HRM_KEYS) {
     const entity = REPORT_ENTITY_MAP[key]
     assert.ok(entity, `${key} must be in REPORT_ENTITY_MAP`)
@@ -48,14 +45,12 @@ test('workforce entities scope to one org and one legal-entity boundary', () => 
     hrm_employment_history: 'ev.org_id',
     hrm_change_requests: 'r.org_id',
     hrm_positions: 'p.org_id',
-    hrm_processes: 's.org_id',
   }
   const scopeColumns: Record<(typeof HRM_KEYS)[number], string> = {
     hrm_headcount: 'hc.employer_subsidiary_id',
     hrm_employment_history: 'e.employer_subsidiary_id',
     hrm_change_requests: 'e.employer_subsidiary_id',
     hrm_positions: 'v.employer_subsidiary_id',
-    hrm_processes: 'e.employer_subsidiary_id',
   }
   for (const key of HRM_KEYS) {
     const entity = REPORT_ENTITY_MAP[key]!
