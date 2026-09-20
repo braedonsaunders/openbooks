@@ -635,3 +635,255 @@ export async function requireOwnEmploymentForRequest(
   }
   return subject;
 }
+
+/** Recruiting duties (HR-6). Confidential like employment. */
+export const HRM_RECRUITING_PERMISSIONS = ["hrm.recruiting.read", "hrm.recruiting.manage"] as const;
+
+export type HrmRecruitingPermission = (typeof HRM_RECRUITING_PERMISSIONS)[number];
+
+/**
+ * Requisition identity loaded from hrm_requisitions on the trusted runner,
+ * org-scoped. The brand marks records no caller could have forged; gates
+ * return it so the service reuses the checked record in-transaction.
+ */
+export interface TrustedRequisitionSubject {
+  readonly id: string;
+  readonly orgId: string;
+  readonly requisitionNumber: string;
+  readonly employerSubsidiaryId: string;
+  readonly status: string;
+  readonly hiringManagerPartyId: string | null;
+  readonly revision: number;
+  readonly [trustedHrmSubject]: true;
+}
+
+async function loadTrustedRequisitionSubject(
+  exec: SqlExecutor,
+  orgId: string,
+  requisitionId: string,
+): Promise<TrustedRequisitionSubject> {
+  const rows = (await exec.execute<{
+    id: string;
+    orgId: string;
+    requisitionNumber: string;
+    employerSubsidiaryId: string | null;
+    status: string;
+    hiringManagerPartyId: string | null;
+    revision: number;
+  }>(sql`
+    select id,
+           org_id as "orgId",
+           requisition_number as "requisitionNumber",
+           employer_subsidiary_id as "employerSubsidiaryId",
+           status,
+           hiring_manager_party_id as "hiringManagerPartyId",
+           revision
+      from hrm_requisitions
+     where org_id = ${orgId} and id = ${requisitionId}
+  `)).rows[0];
+  // Zero rows is a failure: unknown id, or an id from another organization
+  // (the org_id predicate is the org-isolation enforcement).
+  if (!rows) {
+    throw new HrmAuthorizationError(
+      "Requisition is not visible in this organization and legal-entity scope.",
+    );
+  }
+  if (!rows.employerSubsidiaryId) {
+    throw new HrmAuthorizationError(
+      "Requisition is not visible in this organization and legal-entity scope.",
+    );
+  }
+  return {
+    id: rows.id,
+    orgId: rows.orgId,
+    requisitionNumber: rows.requisitionNumber,
+    employerSubsidiaryId: rows.employerSubsidiaryId,
+    status: rows.status,
+    hiringManagerPartyId: rows.hiringManagerPartyId,
+    revision: rows.revision,
+    [trustedHrmSubject]: true,
+  };
+}
+
+async function requireHrmRecruitingAccess(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  requisitionId: string,
+  permission: HrmRecruitingPermission,
+): Promise<TrustedRequisitionSubject> {
+  // The live grant set decides, then the trusted subject plus the employer
+  // scope. No caller-supplied parties, booleans, or scope at any boundary.
+  if (!(await actorHasPermission(exec, orgId, actorId, permission))) {
+    throw new HrmAuthorizationError(
+      `Recruiting access requires the ${permission} permission — ask an administrator to grant it in /admin/roles.`,
+    );
+  }
+  const subject = await loadTrustedRequisitionSubject(exec, orgId, requisitionId);
+  const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
+  if (allowed !== null && !allowed.has(subject.employerSubsidiaryId)) {
+    throw new HrmAuthorizationError(
+      "Requisition is not visible in this organization and legal-entity scope.",
+    );
+  }
+  return subject;
+}
+
+/** See a requisition, its funnel, interviews and offers. Read-only. */
+export async function requireHrmRecruitingRead(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  requisitionId: string,
+): Promise<TrustedRequisitionSubject> {
+  return requireHrmRecruitingAccess(exec, orgId, actorId, requisitionId, "hrm.recruiting.read");
+}
+
+/**
+ * Author a recruiting write on a requisition. The caller MUST pass its write
+ * transaction's runner so this check and the subsequent write are atomic.
+ */
+export async function requireHrmRecruitingManage(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  requisitionId: string,
+): Promise<TrustedRequisitionSubject> {
+  return requireHrmRecruitingAccess(exec, orgId, actorId, requisitionId, "hrm.recruiting.manage");
+}
+
+/**
+ * The aggregate half of recruiting authority for creates (which name no
+ * requisition yet): the hrm.recruiting.manage grant, then the
+ * employer-subsidiary scope. Creation validates against the DECLARED
+ * employer — the subsidiary the opening will belong to — so a caller cannot
+ * plant vacancies in a legal entity they cannot see.
+ */
+export async function requireRecruitingManageForEmployer(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employerSubsidiaryId: string,
+): Promise<Set<string> | null> {
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.recruiting.manage"))) {
+    throw new HrmAuthorizationError(
+      "Recruiting access requires the hrm.recruiting.manage permission — ask an administrator to grant it in /admin/roles.",
+    );
+  }
+  const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
+  if (allowed !== null && !allowed.has(employerSubsidiaryId)) {
+    throw new HrmAuthorizationError(
+      "Requisition is not visible in this organization and legal-entity scope.",
+    );
+  }
+  return allowed;
+}
+
+/**
+ * The aggregate half of recruiting read authority, lifted to list-shaped
+ * reads that name no single requisition. Returns the allowed employer set
+ * (null = unrestricted) for the caller to filter by, never a boolean.
+ */
+export async function requireAggregateRecruitingRead(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<Set<string> | null> {
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.recruiting.read"))) {
+    throw new HrmAuthorizationError(
+      "Recruiting access requires the hrm.recruiting.read permission — ask an administrator to grant it in /admin/roles.",
+    );
+  }
+  return actorAllowedSubsidiaryIds(exec, orgId, actorId);
+}
+
+/**
+ * Whether the actor holds an org-wide recruiting grant (either key). The
+ * PII rule keys off this, not off the hiring-manager override: a manager
+ * sees their own funnel, never the contact PII inside it.
+ */
+export async function actorHoldsRecruitingRead(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<boolean> {
+  return actorHasPermission(exec, orgId, actorId, "hrm.recruiting.read");
+}
+
+/**
+ * The hiring-manager override: the actor whose person identity
+ * (users.party_id, loaded on the trusted runner) equals the requisition's
+ * hiring_manager_party_id reads and moves candidates on their OWN
+ * requisitions without the org-wide grant. The manager sees the funnel —
+ * names, stages, interviews, offers — but never candidate contact PII
+ * (email, phone, resume), which stays behind hrm.recruiting.read.
+ *
+ * Returns the trusted subject so the service reuses the checked record
+ * in-transaction; throws HrmAuthorizationError otherwise. The employer
+ * scope still applies: a manager scoped away from the requisition's legal
+ * entity cannot reach it through this path either.
+ */
+export async function requireOwnRequisitionForHiringManager(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  requisitionId: string,
+): Promise<TrustedRequisitionSubject> {
+  const subject = await loadTrustedRequisitionSubject(exec, orgId, requisitionId);
+  const person = await loadApprovalPerson(exec, orgId, actorId);
+  if (!person.partyId || subject.hiringManagerPartyId === null || person.partyId !== subject.hiringManagerPartyId) {
+    throw new HrmAuthorizationError(
+      "Recruiting access requires the hrm.recruiting.read permission — ask an administrator to grant it in /admin/roles.",
+    );
+  }
+  const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
+  if (allowed !== null && !allowed.has(subject.employerSubsidiaryId)) {
+    throw new HrmAuthorizationError(
+      "Requisition is not visible in this organization and legal-entity scope.",
+    );
+  }
+  return subject;
+}
+
+/**
+ * Whether the actor sits on an interview's panel (panel membership loaded
+ * on the trusted runner from hrm_interview_panel). An interviewer sees the
+ * candidate NAME and the interview — nothing else: no contact PII, no other
+ * applications, no offers. Never caller-supplied membership.
+ */
+export async function actorOnInterviewPanel(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  interviewId: string,
+): Promise<boolean> {
+  const person = await loadApprovalPerson(exec, orgId, actorId);
+  if (!person.partyId) return false;
+  const rows = (await exec.execute<{ one: number }>(sql`
+    select 1 as one
+      from hrm_interview_panel p
+      join hrm_interviews i on i.org_id = p.org_id and i.id = p.interview_id
+     where p.org_id = ${orgId} and p.interview_id = ${interviewId}
+       and p.party_id = ${person.partyId}
+     limit 1
+  `)).rows;
+  return rows.length > 0;
+}
+
+/**
+ * Org-level recruiting configuration gate (pipeline templates and candidate
+ * authoring name no requisition): the live hrm.recruiting.manage grant, no
+ * subsidiary scope to check. Write paths MUST pass their own transaction
+ * runner so this check and the subsequent write are atomic.
+ */
+export async function requireHrmRecruitingManageOrg(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<void> {
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.recruiting.manage"))) {
+    throw new HrmAuthorizationError(
+      "Recruiting access requires the hrm.recruiting.manage permission — ask an administrator to grant it in /admin/roles.",
+    );
+  }
+}
