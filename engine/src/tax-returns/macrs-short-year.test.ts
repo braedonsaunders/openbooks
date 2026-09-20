@@ -22,6 +22,38 @@ test("Pub 946 counts March 15–December 31 as ten months", () => {
   assert.equal(shortTaxYearMonths("2023-01-01", "2023-06-30"), 6);
 });
 
+test("Rev. Proc. 89-15 consecutive short years allocate their shared October only once", () => {
+  // §4.01(1)(a)(i)'s original worked example. The caller derives context
+  // from Jun1–Oct15 followed immediately by Oct16–May31, not from a UI flag.
+  const context = { excludedTerminalMonth: true };
+  assert.equal(shortTaxYearMonths("2025-06-01", "2025-10-15", context), 4);
+  assert.equal(shortTaxYearMonths("2025-10-16", "2026-05-31"), 8);
+  const first = halfYearDeemedServiceDate("2025-06-01", "2025-10-15", context);
+  const second = halfYearDeemedServiceDate("2025-10-16", "2026-05-31");
+  assert.equal(formatCalendarDay(first), "2025-08-01");
+  assert.equal(formatCalendarDay(second), "2026-02-01");
+  assert.equal(monthsTreatedInService(first, "2025-10-15", context), 2);
+  assert.equal(monthsTreatedInService(second, "2026-05-31"), 4);
+  assert.equal(
+    impliedShortYearFactor("2025-06-01", "2025-10-15", context),
+    "0.3333333333",
+  );
+  assert.throws(
+    () =>
+      assertShortYearFactorAgrees(
+        "2025-06-01",
+        "2025-10-15",
+        "0.4166666667",
+        context,
+      ),
+    /does not match/,
+  );
+  assert.throws(
+    () => shortTaxYearMonths("2025-06-01", "2025-10-31", context),
+    /consecutive statutory windows/,
+  );
+});
+
 test("full fiscal years require twelve full months, not twelve touched months", () => {
   assert.equal(isFullTaxYear("2025-07-01", "2026-06-30"), true);
   assert.equal(isFullTaxYear("2024-01-01", "2024-12-31"), true);
