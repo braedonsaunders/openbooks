@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 import { PERMISSION_CATALOGUE } from "@openbooks/engine/src/organization/permissions.ts";
 
@@ -102,6 +102,8 @@ const payrollProfilePackFactsMigrationPath =
 const hrmEmploymentProcessesMigrationPath =
   "schema/migrations/generated/0193_hrm_employment_processes.sql";
 const hrmRecruitingMigrationPath = "schema/migrations/generated/0195_hrm_recruiting.sql";
+const allocationKernelTenantFksMigrationPath =
+  "schema/migrations/generated/0207_allocation_kernel_tenant_fks.sql";
 
 test("payroll opening-balance migration rebuilds its widened governed view safely", () => {
   const migration = readFileSync(payrollOpeningBalanceSecondOrderMigrationPath, "utf8");
@@ -394,6 +396,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0199_drop_form_response_steps.sql",
     "0200_stock_count_subsidiary.sql",
     "0201_pay_run_bank_file_sepa_cemtex.sql",
+    "0207_allocation_kernel_tenant_fks.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -2060,4 +2063,24 @@ test("hrm recruiting carries funnel evidence with org isolation", () => {
   assert.doesNotMatch(migration, /0001_baseline/);
   assert.match(migration, /[^\n]\n$/);
   assert.doesNotMatch(migration, /\n\n$/);
+});
+
+test("0207 allocation kernel tenant FKs is shipped only as a reviewed migration", () => {
+  // Shipped-but-unlisted is the failure this pin exists for. The file on
+  // disk is an unreviewed artifact until the exact registry names it.
+  assert.ok(
+    existsSync(allocationKernelTenantFksMigrationPath),
+    "0207 must be shipped as schema/migrations/generated/0207_allocation_kernel_tenant_fks.sql",
+  );
+  const inventory = readFileSync("schema/canonical-baseline.test.ts", "utf8");
+  const registry = inventory.match(
+    /assert\.deepEqual\(generated, \[([\s\S]*?)\]\);/,
+  )?.[1];
+  assert.ok(registry, "the reviewed-migration registry must exist");
+  assert.match(
+    registry,
+    /"0207_allocation_kernel_tenant_fks\.sql"/,
+    "0207 must appear in the exact reviewed-migration registry",
+  );
+  assert.doesNotMatch(readFileSync(allocationKernelTenantFksMigrationPath, "utf8"), /0001_baseline/);
 });
