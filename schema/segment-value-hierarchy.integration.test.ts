@@ -3,8 +3,8 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import type { PoolClient, QueryResult } from "pg";
-import { db, pool } from "../engine/src/db.ts";
-import { createScratchOrg, dropScratchOrgReporting } from "../engine/src/test-fixtures.ts";
+import { db, pool } from "../engine/src/platform/db.ts";
+import { createScratchOrg, dropScratchOrgReporting } from "../engine/src/testing/fixtures.ts";
 
 /** Drizzle wraps driver errors (DrizzleQueryError), hiding the PostgreSQL
  * message in `cause`; match the whole rendered chain so a trigger rejection

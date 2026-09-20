@@ -98,9 +98,9 @@ const testMatchRoute = (await import(
 )) as { POST: (req: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response> }
 hooks.deregister()
 
-const { db } = await import('@openbooks/engine/src/db.ts')
+const { db } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  '@openbooks/engine/src/test-fixtures.ts'
+  '@openbooks/engine/src/testing/fixtures.ts'
 )
 
 interface Fixture {

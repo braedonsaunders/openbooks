@@ -1,10 +1,10 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
-import { db, withOrgContext } from "../db.ts";
-import { withSimClock } from "../clock.ts";
-import { regenerateGlImpactTx, type PostingDeps } from "../posting.ts";
-import { paymentControlDeps } from "../payments.ts";
+import { db, withOrgContext } from "../platform/db.ts";
+import { withSimClock } from "../platform/clock.ts";
+import { regenerateGlImpactTx, type PostingDeps } from "../ledger/posting.ts";
+import { paymentControlDeps } from "../payments/payments.ts";
 import { Rng } from "./rng.ts";
 import { getProfile } from "./profiles/index.ts";
 import { autopilotDay } from "./autopilot.ts";

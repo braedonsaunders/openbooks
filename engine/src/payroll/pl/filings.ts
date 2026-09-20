@@ -10,7 +10,7 @@
  *   `yearEnd` is empty rather than approximate — a channel question for
  *   Orchestrate, not a second engine.
  */
-import type { PayrollPackFilings } from "../../payroll-filing-registry.ts";
+import type { PayrollPackFilings } from "../filing-registry.ts";
 
 export function plPackFilings(): PayrollPackFilings {
   return {

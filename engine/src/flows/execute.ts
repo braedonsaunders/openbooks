@@ -7,8 +7,8 @@ import {
   type EvalContext,
   type GateData,
 } from "@openbooks/forms-core";
-import { businessToday } from "../business-date.ts";
-import { db, schema, withOrgTransaction, withTransactionSavepoint } from "../db.ts";
+import { businessToday } from "../platform/business-date.ts";
+import { db, schema, withOrgTransaction, withTransactionSavepoint } from "../platform/db.ts";
 import type { FlowExecCtx, FlowSubjectAdapter } from "./types.ts";
 import {
   resolveAssigneeUsers,
@@ -19,8 +19,8 @@ import {
 import { emailActionUrls } from "./email-tokens.ts";
 import { lockRecord, unlockRecord } from "./locks.ts";
 import { renderFlowPdf } from "./pdf-hook.ts";
-import { enqueueFlowEmail } from "../scheduler-outbox.ts";
-import { loadRequiredControlAccounts } from "../control-accounts.ts";
+import { enqueueFlowEmail } from "../scheduling/outbox.ts";
+import { loadRequiredControlAccounts } from "../records/control-accounts.ts";
 
 /**
  * The subject-agnostic flows executor. Runs a planned graph (actions + gates)
@@ -274,7 +274,7 @@ export async function executeFlowPlan(
         ) {
           // Payment posting is a larger accounting unit than its GL entry:
           // applications, realized FX and provenance links must commit with it.
-          const { postPaymentWithApplications } = await import("../payments.ts");
+          const { postPaymentWithApplications } = await import("../payments/payments.ts");
           entryId = (
             await postPaymentWithApplications(
               subjectId,
@@ -285,7 +285,7 @@ export async function executeFlowPlan(
           ).entryId;
         } else {
           // Break the static import cycle (posting.ts dispatches flows).
-          const { postDocument } = await import("../posting.ts");
+          const { postDocument } = await import("../ledger/posting.ts");
           const deps = { control: await loadRequiredControlAccounts(ctx.orgId) };
           entryId = await postDocument(subjectId, deps, {
             audit: { actorId: ctx.userId ?? null, source: "flows" },

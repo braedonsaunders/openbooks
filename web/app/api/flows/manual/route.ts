@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { and, eq } from 'drizzle-orm'
 import { evaluateLogicRule, type EvalContext } from '@openbooks/forms-core'
-import { db, schema, withOrgContext } from '@openbooks/engine/src/db.ts'
+import { db, schema, withOrgContext } from '@openbooks/engine/src/platform/db.ts'
 import {
   getFlowAdapter,
   parseFlowGraph,

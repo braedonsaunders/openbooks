@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { db } from "../../db.ts";
-import { fromUnits, toUnits } from "../../money.ts";
+import { db } from "../../platform/db.ts";
+import { fromUnits, toUnits } from "../../money/money.ts";
 import { openBalancesByParty, projectRollups, trialBalanceByKey } from "../corpus-lib/extract.ts";
 import { assertSimOrg } from "../../sim/db-guard.ts";
 import type { CorpusAccount, CorpusDocLine, CorpusParty, CorpusProject } from "../corpus-lib/types.ts";

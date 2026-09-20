@@ -87,9 +87,9 @@ const transitionRouteMockUrls = new Map<string, string>([
   ["../../../lib/subsidiaries", "mock:subsidiaries"],
   ["../../../lib/features", "mock:features"],
   ["../../../lib/exact-decimal", "mock:exact-decimal"],
-  ["@openbooks/engine/src/db.ts", "mock:db"],
-  ["@openbooks/engine/src/money.ts", "mock:money"],
-  ["@openbooks/engine/src/subcontracts.ts", "mock:subcontracts"],
+  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
+  ["@openbooks/engine/src/money/money.ts", "mock:money"],
+  ["@openbooks/engine/src/projects/subcontracts.ts", "mock:subcontracts"],
 ]);
 
 const transitionRouteHooks = registerHooks({
@@ -140,9 +140,9 @@ test("subcontract API validates transition actions before dispatch instead of fa
 });
 
 test("direct subcontracts join both project committed-cost rollups without double-counting linked POs", () => {
-  const helper = source("../engine/src/subcontract-commitments.ts");
+  const helper = source("../engine/src/projects/subcontract-commitments.ts");
   const costing = source("lib/project-costing.ts");
-  const financials = source("../engine/src/project-financials.ts");
+  const financials = source("../engine/src/projects/financials.ts");
   assert.match(helper, /original_commitment[\s\S]+changes\.approved[\s\S]+apps\.billed/);
   assert.match(helper, /status in \('active', 'substantially_complete'\)/);
   assert.match(helper, /purchase_order_id is null/);
@@ -151,7 +151,7 @@ test("direct subcontracts join both project committed-cost rollups without doubl
 });
 
 test("subcontract payment controls gate run creation and final vendor-payment posting", () => {
-  const payments = source("../engine/src/payments.ts");
+  const payments = source("../engine/src/payments/payments.ts");
   const occurrences = payments.match(/assertSubcontractPaymentCleared/g) ?? [];
   assert.ok(occurrences.length >= 3, "expected import plus run-creation and final-posting gates");
   assert.match(payments, /for \(const bill of payable\)[\s\S]+assertSubcontractPaymentCleared/);

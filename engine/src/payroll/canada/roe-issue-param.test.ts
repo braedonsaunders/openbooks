@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { parseRoeIssueParam } from "./filings.ts";
-import { PayrollError } from "../../payroll-error.ts";
+import { PayrollError } from "../error.ts";
 
 /**
  * The ROE issue-selection parser fails closed on every malformed input.

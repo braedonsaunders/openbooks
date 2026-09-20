@@ -848,7 +848,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     description:
       'Prior-provider parallel run, cell by cell: for each employee and each component, what the old payroll system paid, what this one calculates, and the difference — classified as an exact match, inside a disclosed tolerance, a material difference, or present on one side only. Wage data: requires the payroll permission.',
     // The classification is NOT recomputed here. It is produced once by
-    // engine/src/payroll-parallel-run.ts and filed; this entity reads those
+    // engine/src/payroll/parallel-run.ts and filed; this entity reads those
     // rows. Restating the rules in SQL would create a second source of truth
     // for the one thing a verification tool must not be ambiguous about.
     from: `payroll_parallel_findings f
@@ -941,7 +941,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     // The balance is the ledger sum. The limit is resolved per employee with
     // the SAME most-specific-wins precedence the wage resolver uses
     // (employee > job title > trade > department > subsidiary > plan default,
-    // latest effective_from within a scope) — see engine/src/payroll-entitlements.ts.
+    // latest effective_from within a scope) — see engine/src/payroll/entitlements.ts.
     from: `(select l.org_id, l.plan_id, l.employee_party_id,
                    sum(l.amount) as balance,
                    max(l.movement_date) as last_movement_date,

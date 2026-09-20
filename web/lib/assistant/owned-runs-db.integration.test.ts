@@ -12,9 +12,9 @@ registerHooks({
   },
 });
 
-const { db, withBypass, env } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypass, env } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/src/test-fixtures.ts"
+  "@openbooks/engine/src/testing/fixtures.ts"
 );
 const { createConversation, deleteConversation } = await import("../ai-conversations.ts");
 const { createDbOwnedRunStore } = await import("./owned-runs-db.ts");

@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import {
   isContinuousCloseAgentKey,
   runContinuousCloseAgent,
-} from "@openbooks/engine/src/continuous-close.ts";
+} from "@openbooks/engine/src/continuous-close/continuous-close.ts";
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
 
 export const runtime = "nodejs";

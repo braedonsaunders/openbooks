@@ -119,7 +119,7 @@ jobs:
         run: npx tsx scripts/bootstrap.ts
       - name: Mark database as the owned ephemeral fixture
         # Scratch-org fixtures fail closed on a database that does not carry
-        # this nonce (engine/src/test-fixtures.ts), so a stray run can never
+        # this nonce (engine/src/testing/fixtures.ts), so a stray run can never
         # write to a real database. It is stamped only after the throwaway
         # service for this job is provisioned.
         shell: bash
@@ -135,7 +135,7 @@ jobs:
           NODE_ENV: production
           OPENBOOKS_DB_URL: postgres://openbooks_app:openbooks-runtime-release-test-password@localhost:5433/openbooks_release
         run: >-
-          npx tsx -e "import { assertSafeRuntimeDatabaseRole, pool } from './engine/src/db.ts';
+          npx tsx -e "import { assertSafeRuntimeDatabaseRole, pool } from './engine/src/platform/db.ts';
           void (async () => { try { await assertSafeRuntimeDatabaseRole(); }
           finally { await pool.end(); } })();"
       - name: Verify release policies

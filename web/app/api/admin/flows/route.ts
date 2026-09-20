@@ -1,8 +1,8 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts'
-import { db } from '@openbooks/engine/src/db.ts'
+import { documentRevisionSql } from '@openbooks/engine/src/records/revision.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { emptyAutomationGraph } from '@openbooks/forms-core'
 import { listFlowSubjectProfiles } from '@openbooks/engine/src/flows/index.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'

@@ -1,15 +1,15 @@
 import { NextResponse } from 'next/server'
 import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
-import { PayrollError } from '@openbooks/engine/src/payroll-error.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { PayrollError } from '@openbooks/engine/src/payroll/error.ts'
 import {
   demandingHolidays,
   loadStoredHolidayFacts,
   mergeHolidayEligibility,
   recordHolidayAssertion,
   type DemandingHoliday,
-} from '@openbooks/engine/src/payroll-holiday-attestations.ts'
+} from '@openbooks/engine/src/payroll/holiday-attestations.ts'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'

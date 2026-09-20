@@ -1,8 +1,8 @@
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
-import { createPaymentDocument } from "../payments.ts";
-import { createScriptJournal } from "../journal-writes.ts";
-import { add, cmp, mulDecimal, neg, sum } from "../money.ts";
+import { db } from "../platform/db.ts";
+import { createPaymentDocument } from "../payments/payments.ts";
+import { createScriptJournal } from "../ledger/journal-writes.ts";
+import { add, cmp, mulDecimal, neg, sum } from "../money/money.ts";
 import { addDays, isWeekend, isMonthEnd, dayOfMonth } from "./manifest.ts";
 import { mark, nextNumber, type SimContext } from "./context.ts";
 import type { SimJob } from "./world.ts";

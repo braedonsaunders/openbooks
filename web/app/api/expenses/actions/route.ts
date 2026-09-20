@@ -1,13 +1,13 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { SubmitError, submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import {
   ControlAccountsIncompleteError,
   loadRequiredControlAccounts,
-} from '@openbooks/engine/src/control-accounts.ts'
-import { postDocument, PostingError } from '@openbooks/engine/src/posting.ts'
+} from '@openbooks/engine/src/records/control-accounts.ts'
+import { postDocument, PostingError } from '@openbooks/engine/src/ledger/posting.ts'
 import { can, getAuthz, guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
 import {
   DocumentEditError,

@@ -8,16 +8,16 @@ const REPO_ROOT = new URL("../../../..", import.meta.url).pathname.replace(/\/$/
 
 // The assignment's curated scope: every one of these areas must be covered.
 const REQUIRED_COVERAGE = [
-  "engine/src/money.ts",
-  "engine/src/posting.ts",
-  "engine/src/posting-effects.ts",
+  "engine/src/money/money.ts",
+  "engine/src/ledger/posting.ts",
+  "engine/src/ledger/posting-effects.ts",
   "engine/src/sync/applications.ts",
-  "engine/src/payments.ts",
-  "engine/src/payroll-run.ts",
-  "engine/src/tax.ts",
-  "engine/src/tax-return.ts",
-  "engine/src/consolidation.ts",
-  "engine/src/depreciation.ts",
+  "engine/src/payments/payments.ts",
+  "engine/src/payroll/run.ts",
+  "engine/src/tax/tax.ts",
+  "engine/src/tax-returns/return.ts",
+  "engine/src/consolidation/consolidation.ts",
+  "engine/src/assets/depreciation.ts",
 ];
 
 test("checked-in config covers the curated scope and every referenced file exists", () => {
@@ -45,8 +45,8 @@ test("checked-in config covers the curated scope and every referenced file exist
 
 test("scoped targets carry line ranges (allocation math, stub assembly)", () => {
   const config = loadMutationConfig();
-  const payments = config.targets.find((t) => t.path === "engine/src/payments.ts");
-  const payrollRun = config.targets.find((t) => t.path === "engine/src/payroll-run.ts");
+  const payments = config.targets.find((t) => t.path === "engine/src/payments/payments.ts");
+  const payrollRun = config.targets.find((t) => t.path === "engine/src/payroll/run.ts");
   assert.ok(payments?.lineRanges && payments.lineRanges.length > 0, "payments.ts scoped to allocation/application math");
   assert.ok(payrollRun?.lineRanges && payrollRun.lineRanges.length > 0, "payroll-run.ts scoped to stub assembly + employer accruals");
 });
@@ -87,5 +87,5 @@ test("unmapped targets fall back to same-directory tests, never the harness itse
   assert.ok(fallback.every((f) => f.startsWith("engine/src/sync/")));
   assert.ok(!fallback.some((f) => f.includes("mutation-") || f.includes("harness-selfcheck")));
   // Curated entries win over the fallback.
-  assert.deepEqual(resolveTargetTests(config, "engine/src/money.ts", REPO_ROOT), ["engine/src/money.test.ts"]);
+  assert.deepEqual(resolveTargetTests(config, "engine/src/money/money.ts", REPO_ROOT), ["engine/src/money/money.test.ts"]);
 });

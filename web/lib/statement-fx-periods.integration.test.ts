@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
-import { env } from "@openbooks/engine/src/db.ts";
+import { env } from "@openbooks/engine/src/platform/db.ts";
 
 /**
  * Regression (fnd_mt9f3fnu_tztsoy): comparative statements and accumulated
@@ -21,9 +21,9 @@ test(
       import assert from "node:assert/strict";
       import { randomUUID } from "node:crypto";
       import { sql } from "drizzle-orm";
-      import { db, withOrgContext } from "./engine/src/db.ts";
-      import { installTrustedTestDatabaseBypass } from "./engine/src/test-database-bypass.ts";
-      import { createScratchOrg, dropScratchOrg } from "./engine/src/test-fixtures.ts";
+      import { db, withOrgContext } from "./engine/src/platform/db.ts";
+      import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
+      import { createScratchOrg, dropScratchOrg } from "./engine/src/testing/fixtures.ts";
       import { MissingRatesError, resolveSubsidiaryView } from "./web/lib/consolidation.ts";
       import { balanceSheetView, profitAndLossView, statementMatrix }
         from "./web/lib/statement-matrix.ts";
@@ -234,7 +234,7 @@ test(
         "--import",
         "tsx",
         "--import",
-        "./engine/src/test-database-bypass.ts",
+        "./engine/src/testing/database-bypass.ts",
         "--input-type=module",
         "-e",
         source,

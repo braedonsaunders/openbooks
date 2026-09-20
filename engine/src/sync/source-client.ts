@@ -5,4 +5,4 @@
  * from; they should not name a vendor to do it. Connector selection belongs
  * here, inside connector scope.
  */
-export { nsClient as sourceClient } from "../netsuite-golden.ts";
+export { nsClient as sourceClient } from "../connectors/netsuite-golden.ts";

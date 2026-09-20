@@ -1,15 +1,15 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
-import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import {
   PaymentRevisionConflictError,
   postPaymentWithApplications,
   updateDraftPayment,
   type PaymentKind,
-} from '@openbooks/engine/src/payments.ts'
+} from '@openbooks/engine/src/payments/payments.ts'
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
-import { runPostDocumentEffects } from '@openbooks/engine/src/posting.ts'
+import { runPostDocumentEffects } from '@openbooks/engine/src/ledger/posting.ts'
 import { can, getAuthz, guardSubsidiaryScope } from '../../../../lib/authz'
 import {
   DocumentEditError,
@@ -46,7 +46,7 @@ const postWithApplicationsBody = z.object({
 /**
  * Explicit "Pay & post": posts the payment document through the kernel and
  * applies it to the selected open items atomically (auto-reversal on
- * application failure — see engine/src/payments.ts).
+ * application failure — see engine/src/payments/payments.ts).
  */
 export async function POST(req: Request) {
   const authz = await getAuthz()

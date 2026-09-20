@@ -12,14 +12,14 @@ import {
   type AutomationPlan,
   type EvalContext,
 } from "@openbooks/forms-core";
-import { db, schema, withBypassContext, withOrg } from "../db.ts";
+import { db, schema, withBypassContext, withOrg } from "../platform/db.ts";
 import { getFlowAdapter } from "./registry.ts";
 import { executeFlowPlan } from "./execute.ts";
 import { parseFlowGraph } from "./run.ts";
 
 /**
  * Scheduled flow triggers on the 60-second scheduler tick
- * (engine/src/scheduler.ts).
+ * (engine/src/scheduling/scheduler.ts).
  *
  * Anchoring: a flow fires when any of its `scheduled` trigger nodes has a
  * cron occurrence in (lastScheduledRunAt ?? createdAt, now] — a late tick or

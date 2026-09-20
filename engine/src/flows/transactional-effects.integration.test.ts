@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import type { AutomationPlan } from "@openbooks/forms-core";
-import { db, schema, withOrgTransaction } from "../db.ts";
+import { db, schema, withOrgTransaction } from "../platform/db.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -11,14 +11,14 @@ import {
   seedFlowActors,
   type FlowActors,
   type ScratchOrg,
-} from "../test-fixtures.ts";
+} from "../testing/fixtures.ts";
 import { executeFlowPlan } from "./execute.ts";
 import { createDocumentsFlowAdapter } from "./documents-adapter.ts";
 import {
   enqueueFlowEmail,
   processDueSchedulerOutbox,
   type OutboxRow,
-} from "../scheduler-outbox.ts";
+} from "../scheduling/outbox.ts";
 
 /**
  * Transactional flow-email effects. Flows dispatched from inside a caller's

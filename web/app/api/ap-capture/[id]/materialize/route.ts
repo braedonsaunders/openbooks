@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { materializeCapture, CaptureMaterializationError } from '@openbooks/engine/src/ap-capture-service.ts'
+import { materializeCapture, CaptureMaterializationError } from '@openbooks/engine/src/payables/ap-capture-service.ts'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 

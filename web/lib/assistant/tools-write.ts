@@ -1,9 +1,9 @@
 import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
-import { businessToday } from "@openbooks/engine/src/business-date.ts";
-import { cmp, formatMoney, isZero, normalizeMoney, sum } from "@openbooks/engine/src/money.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
+import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { cmp, formatMoney, isZero, normalizeMoney, sum } from "@openbooks/engine/src/money/money.ts";
 import { canonicalDecimal } from "../exact-decimal";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { signProposal, type JournalLinePreview, type JournalPreview } from "./proposals";

@@ -14,10 +14,10 @@
 
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "../../db.ts";
-import { fromUnits, toUnits } from "../../money.ts";
-import { computeRevaluation, runRevaluation } from "../../fx-revaluation.ts";
-import { postDocument } from "../../posting.ts";
+import { db } from "../../platform/db.ts";
+import { fromUnits, toUnits } from "../../money/money.ts";
+import { computeRevaluation, runRevaluation } from "../../close/fx-revaluation.ts";
+import { postDocument } from "../../ledger/posting.ts";
 import { capture, deps, periodFor, setSpotRate, type DraftDocumentInput } from "../ledger-helpers.ts";
 import type { CaseContext, ConformanceCase } from "../types.ts";
 

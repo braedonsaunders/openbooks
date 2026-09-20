@@ -1,20 +1,20 @@
-import { lockAndCheckPayrollRunPopulation } from "@openbooks/engine/src/payroll-scope.ts";
+import { lockAndCheckPayrollRunPopulation } from "@openbooks/engine/src/payroll/scope.ts";
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
-import { acknowledgePayRunRefusals, calculatePayRun, commitPayRun, discardPayRun, PayrollError, previewPayRunGl } from '@openbooks/engine/src/payroll-run.ts'
-import { recordPayRunPayment } from '@openbooks/engine/src/payroll-payment.ts'
-import { assertPayRunNotStale } from '@openbooks/engine/src/payroll-readiness.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { acknowledgePayRunRefusals, calculatePayRun, commitPayRun, discardPayRun, PayrollError, previewPayRunGl } from '@openbooks/engine/src/payroll/run.ts'
+import { recordPayRunPayment } from '@openbooks/engine/src/payroll/payment.ts'
+import { assertPayRunNotStale } from '@openbooks/engine/src/payroll/readiness.ts'
 import {
   assertPayRunApprovalReleased, payRunApprovalState,
-} from '@openbooks/engine/src/payroll-approval.ts'
+} from '@openbooks/engine/src/payroll/approval.ts'
 import { submitForApproval } from '@openbooks/engine/src/flows/index.ts'
 import { emailRunStubs } from '../../../../../lib/payroll-outputs'
 import { assemblePayRunEvidence } from '../../../../../lib/payroll-evidence'
-import { canonicalAdjustmentHours, mutatePayRunAdjustment } from '@openbooks/engine/src/payroll-run-adjustments.ts'
-import { storedHolidayEligibilityForRun } from '@openbooks/engine/src/payroll-holiday-attestations.ts'
-import { normalizeMoney } from '@openbooks/engine/src/money.ts'
+import { canonicalAdjustmentHours, mutatePayRunAdjustment } from '@openbooks/engine/src/payroll/run-adjustments.ts'
+import { storedHolidayEligibilityForRun } from '@openbooks/engine/src/payroll/holiday-attestations.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'

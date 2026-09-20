@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, Label, Select } from '@openbooks/ui'
-import type { PayrollSettings } from '@openbooks/engine/src/payroll-run.ts'
+import type { PayrollSettings } from '@openbooks/engine/src/payroll/run.ts'
 
 // Generic, jurisdiction-free slots only. Statutory liabilities (CPP/EI/income
 // tax/…) are declared by the installed country packs and rendered from

@@ -20,7 +20,7 @@ const mocks = new Map<string, string>([
     export async function currentUser() { return state.user }
   `],
   ["mock:nav-loader-authz", `
-    import { permissionSetCovers } from '@openbooks/engine/src/permissions.ts';
+    import { permissionSetCovers } from '@openbooks/engine/src/organization/permissions.ts';
     const state = globalThis[Symbol.for('openbooks.nav-loader-permission-test')]
     export async function getAuthz() {
       if (!state.user) return null
@@ -69,9 +69,9 @@ const { loadNavigationAdmin } = (await import(viewUrl)) as typeof import("./view
 hooks.deregister();
 
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(
-  "@openbooks/engine/src/test-fixtures.ts"
+  "@openbooks/engine/src/testing/fixtures.ts"
 );
-const { withBypassContext } = await import("@openbooks/engine/src/db.ts");
+const { withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
 
 async function freshOrgWithUser(): Promise<{ orgId: string; userId: string }> {
   const org = await withBypassContext(() => createScratchOrg());

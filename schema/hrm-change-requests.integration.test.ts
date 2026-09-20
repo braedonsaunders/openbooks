@@ -78,7 +78,7 @@ function pgMessage(error: unknown): string {
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
-type EngineDb = typeof import("../engine/src/db.ts");
+type EngineDb = typeof import("../engine/src/platform/db.ts");
 type Tx = Parameters<Parameters<EngineDb["db"]["transaction"]>[0]>[0];
 
 type Harness = {
@@ -102,7 +102,7 @@ type Harness = {
 const harnesses: Harness[] = [];
 
 after(async () => {
-  const { dropScratchOrgReporting } = await import("../engine/src/test-fixtures.ts");
+  const { dropScratchOrgReporting } = await import("../engine/src/testing/fixtures.ts");
   for (const h of harnesses.splice(0)) for (const id of h.cleanupOrgs.splice(0)) await dropScratchOrgReporting(id);
 });
 
@@ -112,8 +112,8 @@ async function ctx(t?: unknown): Promise<Harness> {
   let harness: Harness;
   {
     const [{ db }, { createScratchOrg, createScratchUser }] = await Promise.all([
-      import("../engine/src/db.ts"),
-      import("../engine/src/test-fixtures.ts"),
+      import("../engine/src/platform/db.ts"),
+      import("../engine/src/testing/fixtures.ts"),
     ]);
     const org = await createScratchOrg();
     // Inspect (never assume) every seed this suite joins to: the submission
@@ -150,7 +150,7 @@ async function ctx(t?: unknown): Promise<Harness> {
   const hook = (t as TestAfter | undefined)?.after;
   if (typeof hook === "function") {
     hook.call(t, async () => {
-      const { dropScratchOrgReporting } = await import("../engine/src/test-fixtures.ts");
+      const { dropScratchOrgReporting } = await import("../engine/src/testing/fixtures.ts");
       for (const id of harness.cleanupOrgs.splice(0)) await dropScratchOrgReporting(id);
       const at = harnesses.indexOf(harness);
       if (at >= 0) harnesses.splice(at, 1);
@@ -438,7 +438,7 @@ test("decision snapshot exists exactly on decided rows, binds digests, freezes",
 
 test("employment scope is composite: a valid employment id from another org is refused", { skip: !DB, timeout: 120_000 }, async (t) => {
   const h = await ctx(t);
-  const { createScratchOrg } = await import("../engine/src/test-fixtures.ts");
+  const { createScratchOrg } = await import("../engine/src/testing/fixtures.ts");
   const other = await createScratchOrg();
   h.cleanupOrgs.push(other.orgId);
   await isolated(h, async () => {
@@ -458,7 +458,7 @@ test("employment scope is composite: a valid employment id from another org is r
 
 test("flow run anchor is scope-bound, retained, never re-pointed", { skip: !DB, timeout: 120_000 }, async (t) => {
   const h = await ctx(t);
-  const { createScratchOrg } = await import("../engine/src/test-fixtures.ts");
+  const { createScratchOrg } = await import("../engine/src/testing/fixtures.ts");
   const other = await createScratchOrg();
   h.cleanupOrgs.push(other.orgId);
   await isolated(h, async () => {
@@ -635,7 +635,7 @@ test("history FKs are restrictive except org cascade", { skip: !DB, timeout: 120
 
 test("RLS restricts by identity under a proven-restricted role", { skip: !DB, timeout: 120_000 }, async (t) => {
   const h = await ctx(t);
-  const { createScratchOrg } = await import("../engine/src/test-fixtures.ts");
+  const { createScratchOrg } = await import("../engine/src/testing/fixtures.ts");
   const other = await createScratchOrg();
   h.cleanupOrgs.push(other.orgId);
   await isolated(h, async () => {

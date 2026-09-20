@@ -1,2 +1,2 @@
 // Shared registry: engine projections and web navigation use exactly the same vocabulary.
-export * from '@openbooks/engine/src/modules/nav-registry.ts'
+export * from '@openbooks/engine/src/navigation/nav-registry.ts'

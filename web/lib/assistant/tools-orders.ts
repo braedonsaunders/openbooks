@@ -1,8 +1,8 @@
 import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
-import { normalizeMoney } from "@openbooks/engine/src/money.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
+import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { can } from "../authz";
 import { isFeatureEnabled } from "../features";
 import { subsidiaryVisibleFilter } from "../subsidiaries";

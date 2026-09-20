@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { addCalendarDays, addCalendarMonthsStart } from "../business-date.ts";
-import { withSimClock } from "../clock.ts";
-import { db } from "../db.ts";
-import type { QboClient } from "../qbo.ts";
-import type { XeroClient } from "../xero.ts";
+import { addCalendarDays, addCalendarMonthsStart } from "../platform/business-date.ts";
+import { withSimClock } from "../platform/clock.ts";
+import { db } from "../platform/db.ts";
+import type { QboClient } from "../connectors/qbo.ts";
+import type { XeroClient } from "../connectors/xero.ts";
 import { ErpNextSource } from "./erpnext-source.ts";
 import { NetSuiteSource } from "./netsuite-source.ts";
 import { OdooSource } from "./odoo-source.ts";

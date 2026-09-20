@@ -9,7 +9,7 @@
  *    badge endpoint reads.
  */
 
-import { caseDigest } from "../provenance.ts";
+import { caseDigest } from "../platform/provenance.ts";
 import type { CaseResult, CorpusReport } from "./types.ts";
 
 const STATUS_LABEL: Record<string, string> = {

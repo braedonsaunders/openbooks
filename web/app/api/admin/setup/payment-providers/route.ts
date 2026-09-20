@@ -1,16 +1,16 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db, orgContext, withOrgTransaction } from "@openbooks/engine/src/db.ts";
+import { db, orgContext, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
 import {
   PaymentAcceptanceError,
   configSecrets,
   normalizeAcceptanceProviderSettings,
   saveAcceptanceConfig,
   testAcceptanceConnection,
-} from "@openbooks/engine/src/payment-acceptance.ts";
-import { businessToday, isIsoCalendarDate } from "@openbooks/engine/src/business-date.ts";
-import { normalizeMoney } from "@openbooks/engine/src/money.ts";
+} from "@openbooks/engine/src/payments/acceptance.ts";
+import { businessToday, isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
+import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { guardPermission } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";

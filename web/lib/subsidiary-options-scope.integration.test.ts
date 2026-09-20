@@ -13,8 +13,8 @@ registerHooks({
   },
 })
 
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { subsidiaryOptions } = await import('./subsidiaries')
 
 /**

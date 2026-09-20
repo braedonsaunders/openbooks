@@ -31,8 +31,8 @@ const { propertyDataResource } = (await import('./property-resources.ts')) as ty
 )
 hooks.deregister()
 
-const { db } = await import('@openbooks/engine/src/db.ts')
-const { createScratchOrg, dropScratchOrgReporting } = await import('@openbooks/engine/src/test-fixtures.ts')
+const { db } = await import('@openbooks/engine/src/platform/db.ts')
+const { createScratchOrg, dropScratchOrgReporting } = await import('@openbooks/engine/src/testing/fixtures.ts')
 
 /**
  * Import references are tenant data: a file carrying another org's UUID must

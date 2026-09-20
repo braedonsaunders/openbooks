@@ -1,19 +1,19 @@
-import type { ContinuousCloseAgentKey } from "@openbooks/engine/src/continuous-close-config.ts";
+import type { ContinuousCloseAgentKey } from "@openbooks/engine/src/agents/continuous-close-config.ts";
 import "server-only";
 import { sql } from "drizzle-orm";
-import { businessToday } from "@openbooks/engine/src/business-date.ts";
-import { db } from "@openbooks/engine/src/db.ts";
+import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
 import type {
   ContinuousCloseEnrichmentInput,
   ContinuousCloseEnrichmentResult,
-} from "@openbooks/engine/src/continuous-close.ts";
+} from "@openbooks/engine/src/continuous-close/continuous-close.ts";
 import type { Authz } from "../authz";
 import { runBackgroundAgent, type BackgroundAgentResult } from "./agent";
 import { getOrgAiConfig } from "./ai-config";
 import { defaultModel, getModel } from "./client";
 import { buildToolRegistry, executeAssistantTool } from "./registry";
 import { resolvedFeatureState } from "../features";
-import type { FeatureState } from "@openbooks/engine/src/feature-registry.ts";
+import type { FeatureState } from "@openbooks/engine/src/organization/feature-registry.ts";
 import type { ToolResult } from "./types";
 import { validateFinanceNarrative } from "./continuous-close-validation";
 import { packMissionBrief, packNarrativeTitle, packSystemGuidance } from "./continuous-close-prompts.ts";

@@ -14,7 +14,7 @@ import { jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
  * server-side code inside withBypass/withBypassContext (behind the
  * super-admin gate) can read or write it.
  *
- * Credentials inside `settings` are sealed by engine/src/secrets.ts before
+ * Credentials inside `settings` are sealed by engine/src/platform/secrets.ts before
  * they are stored — this table never holds a plaintext secret.
  */
 export const platformSettings = pgTable("platform_settings", {

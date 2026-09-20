@@ -9,7 +9,7 @@ function source(file: string): string {
 
 test("every project commercial query follows canonical dimension inheritance", () => {
   for (const file of [
-    "engine/src/project-financials.ts",
+    "engine/src/projects/financials.ts",
     "web/lib/project-costing.ts",
     "web/lib/billing.ts",
   ]) {

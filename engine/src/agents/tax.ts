@@ -1,11 +1,11 @@
 import { sql } from "drizzle-orm";
-import { addCalendarDays, businessToday } from "../business-date.ts";
+import { addCalendarDays, businessToday } from "../platform/business-date.ts";
 import {
   effectiveDetectorMateriality,
   type ContinuousCloseDetectorPolicy,
-} from "../continuous-close-config.ts";
-import { db } from "../db.ts";
-import { computeTaxReturn, TaxReturnError } from "../tax-return.ts";
+} from "./continuous-close-config.ts";
+import { db } from "../platform/db.ts";
+import { computeTaxReturn, TaxReturnError } from "../tax-returns/return.ts";
 import { absoluteUnits, classifyForensicItem, moneyAbs } from "./measure.ts";
 import type { AgentFinding } from "./types.ts";
 

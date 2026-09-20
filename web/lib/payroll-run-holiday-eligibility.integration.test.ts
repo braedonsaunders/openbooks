@@ -25,12 +25,12 @@ registerHooks({ resolve(specifier, context, next) {
 } });
 const { sql } = await import("drizzle-orm");
 const { randomUUID } = await import("node:crypto");
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
-const { seedAdoption } = await import("@openbooks/engine/src/payroll-filing-test-fixtures.ts");
-const { createPayRun } = await import("@openbooks/engine/src/payroll-run.ts");
-const { demandingHolidays, recordHolidayAssertion } = await import("@openbooks/engine/src/payroll-holiday-attestations.ts");
-const { payRunStaleness } = await import("@openbooks/engine/src/payroll-readiness.ts");
-const { dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { seedAdoption } = await import("@openbooks/engine/src/payroll/filing-test-fixtures.ts");
+const { createPayRun } = await import("@openbooks/engine/src/payroll/run.ts");
+const { demandingHolidays, recordHolidayAssertion } = await import("@openbooks/engine/src/payroll/holiday-attestations.ts");
+const { payRunStaleness } = await import("@openbooks/engine/src/payroll/readiness.ts");
+const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { POST } = await import("../app/api/payroll/runs/[id]/route");
 const assertionsRoute = await import("../app/api/payroll/runs/[id]/holiday-assertions/route");
 const profilesRoute = await import("../app/api/payroll/profiles/route");

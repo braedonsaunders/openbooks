@@ -71,9 +71,9 @@ const hooks = registerHooks({
 const { loadAllocations } = (await import('./view.ts')) as typeof import('./view.ts')
 hooks.deregister()
 
-const { db } = await import('@openbooks/engine/src/db.ts')
+const { db } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import(
-  '@openbooks/engine/src/test-fixtures.ts'
+  '@openbooks/engine/src/testing/fixtures.ts'
 )
 
 async function seed(withFeature: boolean): Promise<string> {

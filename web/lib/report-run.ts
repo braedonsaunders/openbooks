@@ -2,7 +2,7 @@ import { reportEntityCatalog, validateCatalogReportQuery } from './custom-record
 import 'server-only'
 import { trueCostExportData } from './analytics/true-cost-report'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
   applyBuiltInUrlFilters,
   BUILT_IN_REPORT_DEFINITION_MAP,

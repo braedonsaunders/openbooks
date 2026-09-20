@@ -1,10 +1,10 @@
-import { isIsoCalendarDate } from "@openbooks/engine/src/business-date.ts";
-import { payrollRunPopulationScopeFilter } from "@openbooks/engine/src/payroll-scope.ts";
+import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
+import { payrollRunPopulationScopeFilter } from "@openbooks/engine/src/payroll/scope.ts";
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { createPayRun, PayrollError, type PayRunType } from '@openbooks/engine/src/payroll-run.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { createPayRun, PayrollError, type PayRunType } from '@openbooks/engine/src/payroll/run.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { guardSubsidiaryScope, subsidiaryScopeAllows } from '../../../../lib/authz'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'

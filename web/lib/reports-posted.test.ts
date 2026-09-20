@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { env } from "@openbooks/engine/src/db.ts";
+import { env } from "@openbooks/engine/src/platform/db.ts";
 
 test("transaction detail scopes both reads to the statement accounting book", () => {
   const source = readFileSync(new URL("./reports/transaction-detail.ts", import.meta.url), "utf8");
@@ -110,9 +110,9 @@ test("financial statements exclude draft and other unposted journals", { skip: !
     import assert from "node:assert/strict";
     import { randomUUID } from "node:crypto";
     import { sql } from "drizzle-orm";
-    import { db, withBypass, withOrg } from "./engine/src/db.ts";
-    import { toUnits } from "./engine/src/money.ts";
-    import { createScratchOrg, dropScratchOrg } from "./engine/src/test-fixtures.ts";
+    import { db, withBypass, withOrg } from "./engine/src/platform/db.ts";
+    import { toUnits } from "./engine/src/money/money.ts";
+    import { createScratchOrg, dropScratchOrg } from "./engine/src/testing/fixtures.ts";
     import { agingByParty, agingDetail, cashFlow, financialTrends, journalReport, profitAndLoss, projectProfitability, transactionDetail } from "./web/lib/reports.ts";
 
     // Exercise persistent application tenants only. Other DB-backed test files
@@ -369,8 +369,8 @@ test("transaction detail excludes parallel-book lines", { skip: !env.OPENBOOKS_D
     import assert from "node:assert/strict";
     import { randomUUID } from "node:crypto";
     import { sql } from "drizzle-orm";
-    import { db, withBypass, withOrg } from "./engine/src/db.ts";
-    import { createScratchOrg, dropScratchOrg } from "./engine/src/test-fixtures.ts";
+    import { db, withBypass, withOrg } from "./engine/src/platform/db.ts";
+    import { createScratchOrg, dropScratchOrg } from "./engine/src/testing/fixtures.ts";
     import { transactionDetail } from "./web/lib/reports.ts";
 
     const scratch = await withBypass(() => createScratchOrg());
@@ -440,8 +440,8 @@ test("journal report truncation keeps entries complete", { skip: !env.OPENBOOKS_
     import assert from "node:assert/strict";
     import { randomUUID } from "node:crypto";
     import { sql } from "drizzle-orm";
-    import { db, withBypass, withOrg } from "./engine/src/db.ts";
-    import { createScratchOrg, dropScratchOrg } from "./engine/src/test-fixtures.ts";
+    import { db, withBypass, withOrg } from "./engine/src/platform/db.ts";
+    import { createScratchOrg, dropScratchOrg } from "./engine/src/testing/fixtures.ts";
     import { journalReport } from "./web/lib/reports.ts";
 
     const scratch = await withBypass(() => createScratchOrg());
@@ -504,8 +504,8 @@ test("ledger-backed detail reports read one accounting book (omitted means prima
     import assert from "node:assert/strict";
     import { randomUUID } from "node:crypto";
     import { sql } from "drizzle-orm";
-    import { db, withBypass, withOrg } from "./engine/src/db.ts";
-    import { createScratchOrg, dropScratchOrg } from "./engine/src/test-fixtures.ts";
+    import { db, withBypass, withOrg } from "./engine/src/platform/db.ts";
+    import { createScratchOrg, dropScratchOrg } from "./engine/src/testing/fixtures.ts";
     import { cashFlow, generalLedger, journalReport, partnerBalances, partyRegister, trialBalance } from "./web/lib/reports.ts";
 
     const scratch = await withBypass(() => createScratchOrg());

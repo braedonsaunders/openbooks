@@ -4,8 +4,8 @@ import {
   getBlockingConnection,
   type ApCaptureJobData,
 } from "@openbooks/jobs";
-import { withOrgContext } from "../db.ts";
-import { processCaptureItem } from "../ap-capture-service.ts";
+import { withOrgContext } from "../platform/db.ts";
+import { processCaptureItem } from "../payables/ap-capture-service.ts";
 
 export function createApCaptureWorker(): Worker<ApCaptureJobData> {
   return new Worker<ApCaptureJobData>(

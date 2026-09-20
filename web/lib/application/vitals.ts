@@ -1,5 +1,5 @@
 import "server-only";
-import { businessToday } from "@openbooks/engine/src/business-date.ts";
+import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { can } from "../authz";
 import { analyticsConfig } from "../analytics/config";
 import { cashPosition } from "../cash/cash-position";

@@ -72,7 +72,7 @@ const hooks = registerHooks({
     const mocked = new Map<string, string>([
       ['@/lib/api/json', 'mock:json'],
       ['../../../../lib/authz', 'mock:authz'],
-      ['@openbooks/engine/src/business-date.ts', 'mock:business-date'],
+      ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
       ['../../../../lib/file-zip', 'mock:file-zip'],
       ['../lib', 'mock:cabinet-lib'],
     ]).get(specifier)

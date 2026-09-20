@@ -27,16 +27,16 @@ registerHooks({
   },
 });
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { seedAdoption, calculatedRun } =
-  await import("@openbooks/engine/src/payroll-filing-test-fixtures.ts");
+  await import("@openbooks/engine/src/payroll/filing-test-fixtures.ts");
 const { dropScratchOrgReporting } =
-  await import("@openbooks/engine/src/test-fixtures.ts");
-const { commitPayRun } = await import("@openbooks/engine/src/payroll-run.ts");
+  await import("@openbooks/engine/src/testing/fixtures.ts");
+const { commitPayRun } = await import("@openbooks/engine/src/payroll/run.ts");
 const { guardRemittancePeriod } =
   await import("../app/api/payroll/subsidiary-scope");
 const { payrollRemittanceSummary, createRemittanceBill } =
-  await import("@openbooks/engine/src/payroll-remittance.ts");
+  await import("@openbooks/engine/src/payroll/remittance.ts");
 
 const { scopedRemittanceSummary } = await import("./payroll-scoped-views");
 const { GET: remittanceGet, POST: remittancePost } =

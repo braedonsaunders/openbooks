@@ -8,7 +8,7 @@
  * reaches the financial statements.
  */
 
-import { buildProvision, deferredAssetAdjustmentLabel } from "../../income-tax-provision.ts";
+import { buildProvision, deferredAssetAdjustmentLabel } from "../../tax-returns/income-tax-provision.ts";
 import type { ConformanceCase } from "../types.ts";
 
 export const INCOME_TAX_CASES: readonly ConformanceCase[] = [

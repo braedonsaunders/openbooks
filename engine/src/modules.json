@@ -1,0 +1,563 @@
+{
+  "$comment": [
+    "Engine module manifest. Each top-level directory under engine/src is one bounded module.",
+    "dependsOn is the complete list of other modules a module's non-test files may import; scripts/check-engine-boundaries.mjs refuses anything else and refuses declared edges nothing uses.",
+    "cycles pins the strongly connected sets of the declared graph. They are known layering debt (the posting kernel orchestrates subledgers that post back through it) and may only shrink: a change that would grow one is refused.",
+    "Tests and engine/src/testing are composition and may import any module."
+  ],
+  "modules": {
+    "agents": {
+      "description": "Continuous-close agent packs and their detector policy configuration.",
+      "dependsOn": [
+        "banking",
+        "money",
+        "navigation",
+        "payroll",
+        "platform",
+        "records",
+        "tax-returns"
+      ]
+    },
+    "allocations": {
+      "description": "The allocation kernel: rules, drivers, apportionment, period runs and the posting seam.",
+      "dependsOn": [
+        "close",
+        "flows",
+        "money",
+        "organization",
+        "platform",
+        "projects",
+        "records",
+        "reports"
+      ]
+    },
+    "apps": {
+      "description": "Installed app packages: the sandboxed runtime and invocation records.",
+      "dependsOn": [
+        "platform"
+      ]
+    },
+    "assets": {
+      "description": "Fixed-asset lifecycle and book depreciation.",
+      "dependsOn": [
+        "close",
+        "ledger",
+        "money",
+        "organization",
+        "platform"
+      ]
+    },
+    "backup": {
+      "description": "Organization backup and restore, local and stored, with CLIs.",
+      "dependsOn": [
+        "platform",
+        "sandbox"
+      ]
+    },
+    "banking": {
+      "description": "Bank accounts, statement parsing (BAI2, CAMT, MT940), reconciliation, source evidence policy, bank feed providers.",
+      "dependsOn": [
+        "money",
+        "platform"
+      ]
+    },
+    "billing": {
+      "description": "Generated billing: recurring templates, subscription billing and advanced subscriptions.",
+      "dependsOn": [
+        "banking",
+        "flows",
+        "inventory",
+        "ledger",
+        "money",
+        "organization",
+        "platform",
+        "records",
+        "scripting",
+        "tax"
+      ]
+    },
+    "close": {
+      "description": "Period close: calendars, module fences, close packages and automations, FX revaluation, posting-period assignment.",
+      "dependsOn": [
+        "allocations",
+        "banking",
+        "flows",
+        "money",
+        "organization",
+        "platform",
+        "records"
+      ]
+    },
+    "compliance": {
+      "description": "Subcontractor compliance (COIs, lien waivers) and year-end information returns.",
+      "dependsOn": [
+        "money",
+        "platform"
+      ]
+    },
+    "conformance": {
+      "description": "Standards conformance corpus and controls matrix.",
+      "dependsOn": [
+        "allocations",
+        "assets",
+        "close",
+        "consolidation",
+        "country-tax-packs",
+        "inventory",
+        "ledger",
+        "money",
+        "payments",
+        "payroll",
+        "platform",
+        "projects",
+        "revenue",
+        "tax",
+        "tax-returns",
+        "testing"
+      ]
+    },
+    "connectors": {
+      "description": "Source-system clients for the migration connectors: authentication, paging and record fetch for each supported accounting system.",
+      "dependsOn": []
+    },
+    "consolidation": {
+      "description": "Multi-entity consolidation: ownership, eliminations, proportionate consolidation, rate derivation.",
+      "dependsOn": [
+        "close",
+        "fx",
+        "ledger",
+        "money",
+        "organization",
+        "platform"
+      ]
+    },
+    "continuous-close": {
+      "description": "The continuous-close runner: scheduling agent packs, work items and proposals.",
+      "dependsOn": [
+        "agents",
+        "platform"
+      ]
+    },
+    "country-tax-packs": {
+      "description": "Per-country indirect-tax packs and return schedules.",
+      "dependsOn": []
+    },
+    "crm": {
+      "description": "Leads, prospects and pipeline math.",
+      "dependsOn": [
+        "money",
+        "platform"
+      ]
+    },
+    "delivery": {
+      "description": "Outbound delivery: per-org email transport configuration and report delivery.",
+      "dependsOn": [
+        "platform",
+        "records"
+      ]
+    },
+    "extensions": {
+      "description": "Extension contributions: schemas, projections and navigation surfaces.",
+      "dependsOn": [
+        "navigation",
+        "organization",
+        "platform"
+      ]
+    },
+    "flows": {
+      "description": "Approvals and workflow engine: gates, registry, subject adapters, record flows, the approvals worklist.",
+      "dependsOn": [
+        "allocations",
+        "close",
+        "hrm",
+        "ledger",
+        "payments",
+        "platform",
+        "records",
+        "scheduling",
+        "scripting"
+      ]
+    },
+    "fx": {
+      "description": "Currencies (ISO 4217 registry), exchange-rate providers and presentation-currency translation.",
+      "dependsOn": [
+        "money",
+        "organization",
+        "platform"
+      ]
+    },
+    "harness": {
+      "description": "Verification harnesses: golden scenario, differential corpus, replay, mutation.",
+      "dependsOn": [
+        "ledger",
+        "money",
+        "payments",
+        "platform",
+        "provisioning",
+        "sim"
+      ]
+    },
+    "hrm": {
+      "description": "Human resources: employments, change requests, temporal records.",
+      "dependsOn": [
+        "flows",
+        "organization",
+        "platform"
+      ]
+    },
+    "inventory": {
+      "description": "Inventory movements, costing, NRV write-downs, transfers and builds.",
+      "dependsOn": [
+        "banking",
+        "close",
+        "money",
+        "organization",
+        "platform",
+        "records"
+      ]
+    },
+    "ledger": {
+      "description": "The posting kernel and its orchestration: postDocument, posting effects, script journal writes, document void, delete and correction, billing provenance release.",
+      "dependsOn": [
+        "allocations",
+        "close",
+        "compliance",
+        "flows",
+        "inventory",
+        "money",
+        "organization",
+        "payables",
+        "payments",
+        "payroll",
+        "platform",
+        "projects",
+        "records",
+        "revenue",
+        "scripting",
+        "tax"
+      ]
+    },
+    "money": {
+      "description": "Exact bigint money and decimal arithmetic; present value on rationals. No floats, no database.",
+      "dependsOn": []
+    },
+    "navigation": {
+      "description": "The navigation module registry.",
+      "dependsOn": []
+    },
+    "organization": {
+      "description": "Organizations, subsidiaries, permissions and actor authority, the feature registry and org feature locks, sandbox and extension-permission guards.",
+      "dependsOn": [
+        "money",
+        "platform"
+      ]
+    },
+    "payables": {
+      "description": "Vendor bill capture: the AP capture pipeline, its configuration and receipt materialization.",
+      "dependsOn": [
+        "flows",
+        "inventory",
+        "money",
+        "organization",
+        "platform",
+        "records"
+      ]
+    },
+    "payments": {
+      "description": "Customer and vendor payments, payment runs and formats, payment acceptance, PSP settlement, direct debit.",
+      "dependsOn": [
+        "close",
+        "compliance",
+        "flows",
+        "fx",
+        "ledger",
+        "money",
+        "organization",
+        "platform",
+        "projects",
+        "records",
+        "scripting"
+      ]
+    },
+    "payroll": {
+      "description": "Payroll: runs, readiness, remittances, filings, entitlements, year-end, bank files, statutory country packs.",
+      "dependsOn": [
+        "flows",
+        "money",
+        "organization",
+        "payments",
+        "platform",
+        "projects",
+        "records"
+      ]
+    },
+    "platform": {
+      "description": "Infrastructure every module stands on: the database handle and RLS request scoping, sealed secrets, telemetry, clock and business date, file storage, canonical JSON, the SQL query surface.",
+      "dependsOn": []
+    },
+    "projects": {
+      "description": "Project accounting: financials and profiles, recognition, project revenue, labor costing, overhead, construction billing, subcontracts, field-ticket labor evidence, billing source integrity.",
+      "dependsOn": [
+        "allocations",
+        "close",
+        "fx",
+        "money",
+        "organization",
+        "platform",
+        "records",
+        "revenue"
+      ]
+    },
+    "property": {
+      "description": "Property management: leases, CAM billing, deposits, rebilling.",
+      "dependsOn": [
+        "billing",
+        "close",
+        "inventory",
+        "money",
+        "organization",
+        "platform",
+        "revenue"
+      ]
+    },
+    "provisioning": {
+      "description": "Organization provisioning and seeders: defaults, roles, users, dashboards, project types, the end-to-end demo.",
+      "dependsOn": [
+        "close",
+        "crm",
+        "ledger",
+        "organization",
+        "payments",
+        "platform",
+        "projects",
+        "reports"
+      ]
+    },
+    "qbd": {
+      "description": "Desktop accounting web-connector session handling.",
+      "dependsOn": [
+        "platform"
+      ]
+    },
+    "receivables": {
+      "description": "Collections: dunning and the live balance-due subquery.",
+      "dependsOn": [
+        "money",
+        "platform",
+        "records",
+        "scheduling"
+      ]
+    },
+    "records": {
+      "description": "Document primitives shared by every subledger: numbering, revisions, mutation-ref fences, entry numbers, transaction audit evidence, reversal lines, control accounts, account groups, open-item kinds, expense settlement validation.",
+      "dependsOn": [
+        "money",
+        "platform"
+      ]
+    },
+    "reports": {
+      "description": "Report definition provisioning shared by seeders, workers and runtime callers.",
+      "dependsOn": [
+        "platform"
+      ]
+    },
+    "revenue": {
+      "description": "Revenue recognition obligations and schedules; lease accounting.",
+      "dependsOn": [
+        "close",
+        "ledger",
+        "money",
+        "organization",
+        "platform"
+      ]
+    },
+    "sales": {
+      "description": "Sales orders, credit exposure and item rate pricing ladders.",
+      "dependsOn": [
+        "flows",
+        "money",
+        "organization",
+        "platform",
+        "records"
+      ]
+    },
+    "sample-companies": {
+      "description": "Sample company generators.",
+      "dependsOn": [
+        "platform",
+        "sandbox",
+        "sim"
+      ]
+    },
+    "sandbox": {
+      "description": "Environments: sandbox cloning, refresh, promotion, catalog and wipe guards.",
+      "dependsOn": [
+        "organization",
+        "platform",
+        "scripting"
+      ]
+    },
+    "scheduling": {
+      "description": "The web scheduler tick, its outbox and lock identities.",
+      "dependsOn": [
+        "allocations",
+        "banking",
+        "billing",
+        "close",
+        "continuous-close",
+        "flows",
+        "fx",
+        "ledger",
+        "payments",
+        "platform",
+        "property",
+        "receivables",
+        "scripting",
+        "sftp",
+        "worker"
+      ]
+    },
+    "scripting": {
+      "description": "User scripts: the QuickJS trigger runtime and its configuration boundary.",
+      "dependsOn": [
+        "allocations",
+        "ledger",
+        "money",
+        "organization",
+        "platform"
+      ]
+    },
+    "sftp": {
+      "description": "SFTP intake and delivery for bank and payment files.",
+      "dependsOn": [
+        "banking",
+        "payments",
+        "platform"
+      ]
+    },
+    "sim": {
+      "description": "The business simulator: seeded world, persona activities, invariant oracle.",
+      "dependsOn": [
+        "assets",
+        "billing",
+        "close",
+        "consolidation",
+        "flows",
+        "harness",
+        "ledger",
+        "money",
+        "payments",
+        "platform",
+        "projects",
+        "provisioning",
+        "receivables",
+        "reports",
+        "revenue",
+        "tax-returns",
+        "testing"
+      ]
+    },
+    "sync": {
+      "description": "Migration and mirroring runs from external systems; party merges; verification.",
+      "dependsOn": [
+        "banking",
+        "close",
+        "connectors",
+        "crm",
+        "ledger",
+        "money",
+        "platform",
+        "projects",
+        "qbd",
+        "records",
+        "tax"
+      ]
+    },
+    "tax": {
+      "description": "Indirect tax: rates and providers, persistence, nexus and registrations, US economic nexus, tax pack provisioning and form seeding.",
+      "dependsOn": [
+        "country-tax-packs",
+        "money",
+        "organization",
+        "platform"
+      ]
+    },
+    "tax-returns": {
+      "description": "Returns and provisions: income tax provision, return packs and filing, the US nexus ledger, tax depreciation pools and pool runs.",
+      "dependsOn": [
+        "assets",
+        "close",
+        "country-tax-packs",
+        "ledger",
+        "money",
+        "organization",
+        "platform",
+        "tax"
+      ]
+    },
+    "testing": {
+      "description": "Test support: scratch organizations and fixture pools, the database bypass loader, test child processes.",
+      "dependsOn": []
+    },
+    "validation": {
+      "description": "Project financial validation against source-system oracles.",
+      "dependsOn": [
+        "money",
+        "platform",
+        "projects",
+        "sync"
+      ]
+    },
+    "worker": {
+      "description": "The background worker process: queues, schedulers, migration and delivery workers.",
+      "dependsOn": [
+        "backup",
+        "delivery",
+        "flows",
+        "ledger",
+        "organization",
+        "payables",
+        "platform",
+        "qbd",
+        "reports",
+        "sandbox",
+        "scheduling",
+        "scripting",
+        "sync"
+      ]
+    }
+  },
+  "cycles": [
+    [
+      "agents",
+      "allocations",
+      "assets",
+      "backup",
+      "billing",
+      "close",
+      "continuous-close",
+      "flows",
+      "hrm",
+      "inventory",
+      "ledger",
+      "payables",
+      "payments",
+      "payroll",
+      "projects",
+      "property",
+      "receivables",
+      "revenue",
+      "sandbox",
+      "scheduling",
+      "scripting",
+      "sftp",
+      "sync",
+      "tax-returns",
+      "worker"
+    ],
+    [
+      "harness",
+      "sim"
+    ]
+  ]
+}

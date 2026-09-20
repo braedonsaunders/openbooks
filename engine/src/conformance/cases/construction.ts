@@ -14,8 +14,8 @@
 import {
   computeApplication,
   revisedScheduleValue,
-} from "../../construction-billing.ts";
-import { costToCostPercent } from "../../project-revenue.ts";
+} from "../../projects/construction-billing.ts";
+import { costToCostPercent } from "../../projects/revenue.ts";
 import type { ConformanceCase } from "../types.ts";
 
 export const CONSTRUCTION_CASES: readonly ConformanceCase[] = [

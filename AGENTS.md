@@ -117,6 +117,16 @@ Corresponding test rules, because every one of the above was green somewhere:
   files — run `git log --oneline origin/main..main` first and treat a
   non-empty result as someone's work, not debris.
 
+## Engine modules are bounded
+
+`engine/src` is a set of declared modules (one directory each, manifest at
+`engine/src/modules.json`, rules in `docs/design/engine-modules.md`). No file
+lives at `engine/src` root; a module imports only the modules it declares;
+declared-but-unused edges and any growth of the pinned dependency cycles are
+refused by `npm run check:engine-boundaries`. Extract internals into the same
+module as their source; put a shared constant or type LOWER rather than adding
+an upward edge.
+
 ## Feature-gate hierarchy
 
 Every organization-level feature gate must live on the single authoritative **Company Settings → Features** switchboard, without exceptions. Module-specific settings pages may display effective feature status and link to the Features page, but must not expose a second switch or persist a parallel gate. The main Projects gate on the Features page is the authoritative parent gate for the entire Projects domain.
@@ -139,10 +149,10 @@ bar; it must BE the same component.
 | Record detail popups | `UrlDrawer` / `Drawer` flyouts — never expanded table rows | party/document drawers |
 | Org settings | Setup registry (`web/lib/setup/registry.ts`) → `/admin/setup` tabs, or `SetupEntitySection` rehomed onto the module | tax setup |
 | Printable record output | PDF template designer (`web/lib/pdf-templates/*` + `packages/pdf`) | invoice PDFs |
-| Outbound email | `packages/emails` templates + per-org transport (`engine/src/email-config.ts`) | record send dialog |
+| Outbound email | `packages/emails` templates + per-org transport (`engine/src/delivery/email-config.ts`) | record send dialog |
 | Menus/prompts | `ContextMenu`/`useContextMenu`, `promptDialog` | existing usages |
 | People/companies | The native `parties` model + role views (`/entities/employees` …) — never a parallel roster | entities pages |
-| Numbers | `engine/src/money.ts` bigint helpers — never floats | everywhere |
+| Numbers | `engine/src/money/money.ts` bigint helpers — never floats | everywhere |
 | Refusing an unreadable amount | `web/lib/payroll-decimal-refusal.ts` (`decimalNullRefusal`, `decimalNullCause`, `suppliedValue`) — **never a second decimal classifier** | `payroll/profiles`, `payroll/runs/[id]` |
 
 **Why that last row is a rule and not a preference.** `canonicalDecimal` returns

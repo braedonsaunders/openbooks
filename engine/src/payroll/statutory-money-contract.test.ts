@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { toCents } from "../money.ts";
+import { toCents } from "../money/money.ts";
 import { calculateNlStatutory } from "./nl/loonheffing.ts";
 import { calculateSgStatutory } from "./sg/cpf.ts";
 
 /**
  * THE MONEY CONTRACT, pinned.
  *
- * `calculateStub` (engine/src/payroll-run.ts) sums earning lines with
+ * `calculateStub` (engine/src/payroll/run.ts) sums earning lines with
  * money.ts `sum`, so the `income`, `nonPeriodic`, `pensionable` and
  * `insurable` every pack's `computeStatutory` receives ALWAYS arrive as
  * canonical numeric(19,4) strings — "0.0000" for an empty base, "999.0000"

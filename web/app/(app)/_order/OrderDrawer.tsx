@@ -25,8 +25,8 @@ import { ApprovalHistory } from '../../../components/approval-history'
 import { CONVERSION_TARGETS, type OrderKind } from '../../../lib/order-kinds'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import type { FormLayoutConfig, HeaderFieldPlacement } from '@openbooks/customization'
-import { cmp, fromUnits, mul, toUnits } from '@openbooks/engine/src/money.ts'
-import { computeLineTaxes, type TaxComponentConfig } from '@openbooks/engine/src/tax.ts'
+import { cmp, fromUnits, mul, toUnits } from '@openbooks/engine/src/money/money.ts'
+import { computeLineTaxes, type TaxComponentConfig } from '@openbooks/engine/src/tax/tax.ts'
 type Opt = {
   id: string
   display_name?: string

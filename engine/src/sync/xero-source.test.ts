@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { NativeContext } from "./native.ts";
 import { XeroSource, xeroReconcilableAccount } from "./xero-source.ts";
-import type { XeroClient } from "../xero.ts";
+import type { XeroClient } from "../connectors/xero.ts";
 
 const ctx = { baseCurrency: "NZD" } as NativeContext;
 

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypass, withOrgContext } from "../db.ts";
-import { provisionTaxPacks } from "../tax-pack-provisioning.ts";
-import { createScratchOrg, dropScratchOrg } from "../test-fixtures.ts";
+import { db, withBypass, withOrgContext } from "../platform/db.ts";
+import { provisionTaxPacks } from "../tax/pack-provisioning.ts";
+import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 const selections = ["ES_MODELO303", "IT_LIPE", "NL_OB", "IE_VAT3", "SG_GSTF5"] as const;

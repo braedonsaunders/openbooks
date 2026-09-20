@@ -9,8 +9,8 @@ registerHooks({ resolve(specifier, context, next) {
 }});
 
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext } = await import("@openbooks/engine/src/db.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
+const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { DOCUMENT_BUILT_IN_EXPR, PAYMENT_BUILT_IN_EXPR } = await import("./list-query.ts");
 
 /**

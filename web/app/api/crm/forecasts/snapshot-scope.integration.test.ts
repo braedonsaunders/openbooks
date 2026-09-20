@@ -24,11 +24,11 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier,context);
 }});
 const { sql } = await import('drizzle-orm');
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 
 const {randomUUID}=await import('node:crypto');
-const {ensureCrmDefaults}=await import('@openbooks/engine/src/crm.ts');
+const {ensureCrmDefaults}=await import('@openbooks/engine/src/crm/crm.ts');
 const {POST,GET}=await import('./route');
 const {NextRequest}=await import('next/server');
 const enabled={skip:!process.env.OPENBOOKS_DB_URL};

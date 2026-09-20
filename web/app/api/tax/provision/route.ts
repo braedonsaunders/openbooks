@@ -1,6 +1,6 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { isTaxProvisionSelection, provisionTaxPacks } from '@openbooks/engine/src/tax-pack-provisioning.ts'
+import { isTaxProvisionSelection, provisionTaxPacks } from '@openbooks/engine/src/tax/pack-provisioning.ts'
 import { guardPermission } from '../../../../lib/authz'
 
 export const runtime = 'nodejs'

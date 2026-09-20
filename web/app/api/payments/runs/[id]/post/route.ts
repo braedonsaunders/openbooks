@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { postPaymentRun } from '@openbooks/engine/src/payments.ts'
+import { postPaymentRun } from '@openbooks/engine/src/payments/payments.ts'
 import { isUuid } from '../../../../../../lib/list-params'
 import { guardPaymentRunPermission, paymentErrorResponse } from '../../../lib'
 

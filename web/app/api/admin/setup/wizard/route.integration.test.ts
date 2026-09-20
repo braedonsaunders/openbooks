@@ -63,10 +63,10 @@ const { PUT } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
 const { db, withBypassContext, withOrgContext } = await import(
-  "@openbooks/engine/src/db.ts"
+  "@openbooks/engine/src/platform/db.ts"
 );
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/src/test-fixtures.ts"
+  "@openbooks/engine/src/testing/fixtures.ts"
 );
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

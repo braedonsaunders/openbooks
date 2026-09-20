@@ -81,9 +81,9 @@ const hooks = registerHooks({
 
 const routeUrl = "../app/api/compliance/vendors/[partyId]/route.ts?compliance-vendor-audit-test";
 const { PATCH } = (await import(routeUrl)) as typeof import("../app/api/compliance/vendors/[partyId]/route.ts");
-const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/src/test-fixtures.ts",
+  "@openbooks/engine/src/testing/fixtures.ts",
 );
 hooks.deregister();
 

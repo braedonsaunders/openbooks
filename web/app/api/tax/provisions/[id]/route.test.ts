@@ -74,7 +74,7 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/authz", "mock:authz"],
   [
-    "@openbooks/engine/src/income-tax-provision.ts",
+    "@openbooks/engine/src/tax-returns/income-tax-provision.ts",
     "mock:income-tax-provision",
   ],
 ]);

@@ -1,8 +1,8 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../lib/authz'
-import { OrgEmailConfigConflictError, readOrgEmailConfigView, saveOrgEmailConfig } from '@openbooks/engine/src/email-config.ts'
-import { isDocumentRevisionToken } from '@openbooks/engine/src/document-revision.ts'
+import { OrgEmailConfigConflictError, readOrgEmailConfigView, saveOrgEmailConfig } from '@openbooks/engine/src/delivery/email-config.ts'
+import { isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
 import { isEmailProvider } from '@openbooks/emails'
 
 export const runtime = 'nodejs'

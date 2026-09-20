@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
 
-const fixtures = readFileSync(new URL("../engine/src/test-fixtures.ts", import.meta.url), "utf8");
+const fixtures = readFileSync(new URL("../engine/src/testing/fixtures.ts", import.meta.url), "utf8");
 const runner = readFileSync(new URL("./test-suite.mjs", import.meta.url), "utf8");
 const workflow = readFileSync(new URL("../.github/workflows/test.yml", import.meta.url), "utf8");
 
@@ -226,7 +226,7 @@ test("the lifecycle receipt survives an owner that exits immediately after writi
 const behavior = process.env.OPENBOOKS_TEST_FIXTURE_BEHAVIOR === "1";
 
 test("pool refuses shared databases even when the isolation flag is spoofed", { skip: !behavior }, async () => {
-  const { ScratchOrgPool, hasEphemeralDatabaseMarker } = await import("../engine/src/test-fixtures.ts");
+  const { ScratchOrgPool, hasEphemeralDatabaseMarker } = await import("../engine/src/testing/fixtures.ts");
   const store = { bootstrap: async () => ({ orgId: "unused" }), reset: async () => {}, teardown: async () => {} };
   assert.throws(
     () => new ScratchOrgPool({ size: 2, isolatedDatabase: false, store }),
@@ -238,7 +238,7 @@ test("pool refuses shared databases even when the isolation flag is spoofed", { 
 });
 
 test("leases reset committed state, preserve tenant isolation, and bound lifecycle work", { skip: !behavior }, async () => {
-  const { ScratchOrgPool } = await import("../engine/src/test-fixtures.ts");
+  const { ScratchOrgPool } = await import("../engine/src/testing/fixtures.ts");
   let next = 0;
   const records = new Map();
   const baselineRows = new Map([["baseline-account", "original"], ["baseline-setting", "production"]]);
@@ -289,7 +289,7 @@ test("leases reset committed state, preserve tenant isolation, and bound lifecyc
 });
 
 test("leaked rows taint a slot and fail closed", { skip: !behavior }, async () => {
-  const { ScratchOrgPool } = await import("../engine/src/test-fixtures.ts");
+  const { ScratchOrgPool } = await import("../engine/src/testing/fixtures.ts");
   const store = {
     bootstrap: async () => ({ orgId: "leaky", rows: new Set(["uncommitted-leak"]) }),
     reset: async (org) => {
@@ -308,7 +308,7 @@ test("leaked rows taint a slot and fail closed", { skip: !behavior }, async () =
 test("worker lifecycle releases owner leases that legacy tests leave outstanding", { skip: !behavior }, async () => {
   const dir = mkdtempSync(join(tmpdir(), "openbooks-fixture-worker-"));
   const workerFile = join(dir, "worker.test.mjs");
-  const fixtureModule = new URL("../engine/src/test-fixtures.ts", import.meta.url).href;
+  const fixtureModule = new URL("../engine/src/testing/fixtures.ts", import.meta.url).href;
   writeFileSync(workerFile, `
 import test from "node:test";
 import { createScratchOrg } from ${JSON.stringify(fixtureModule)};
@@ -339,7 +339,7 @@ test("legacy lease is returned by the lifecycle hook", () => {});
   const result = await new Promise((resolveResult, rejectResult) => {
     const child = spawn(process.execPath, [
       "--import", "tsx",
-      "--import", "./engine/src/test-database-bypass.ts",
+      "--import", "./engine/src/testing/database-bypass.ts",
       "--import", "./scripts/test-fixture-lifecycle.mjs",
       "--test", "--test-force-exit", workerFile,
     ], {
@@ -367,8 +367,8 @@ test("legacy lease is returned by the lifecycle hook", () => {});
 test("real pooled leases restore committed baseline rows and stay cross-tenant isolated", {
   skip: !behavior || !process.env.OPENBOOKS_DB_URL || !process.env.OPENBOOKS_TEST_DB_MARKER,
 }, async () => {
-  const { createScratchOrg, dropScratchOrg } = await import("../engine/src/test-fixtures.ts");
-  const { db, withBypassContext } = await import("../engine/src/db.ts");
+  const { createScratchOrg, dropScratchOrg } = await import("../engine/src/testing/fixtures.ts");
+  const { db, withBypassContext } = await import("../engine/src/platform/db.ts");
   const { sql } = await import("drizzle-orm");
   const { randomUUID } = await import("node:crypto");
   const first = await createScratchOrg();
@@ -426,8 +426,8 @@ test("narrowed resets mark exactly the dirtied tables and restore a pristine slo
     dropScratchOrg,
     listOrgIdTables,
     probeScratchOrgTouchedTables,
-  } = await import("../engine/src/test-fixtures.ts");
-  const { db, withBypassContext } = await import("../engine/src/db.ts");
+  } = await import("../engine/src/testing/fixtures.ts");
+  const { db, withBypassContext } = await import("../engine/src/platform/db.ts");
   const { sql } = await import("drizzle-orm");
   const { randomUUID } = await import("node:crypto");
 
@@ -536,7 +536,7 @@ test("${name}", () => { if (!response.ok) throw new Error("owner rejected lease"
   try {
     const result = await new Promise((resolveResult, rejectResult) => {
       const child = spawn(process.execPath, [
-        "--import", "tsx", "--import", "./engine/src/test-database-bypass.ts", "--test", "--test-force-exit", "--test-concurrency=1", ...files,
+        "--import", "tsx", "--import", "./engine/src/testing/database-bypass.ts", "--test", "--test-force-exit", "--test-concurrency=1", ...files,
       ], { cwd: resolve(new URL("..", import.meta.url).pathname), env: { ...process.env, NODE_TEST_CONTEXT: undefined, OPENBOOKS_TRUSTED_TEST_BYPASS: "1", OPENBOOKS_FIXTURE_PROBE_PORT: String(port) }, stdio: ["ignore", "pipe", "pipe"] });
       let output = "";
       child.stdout.on("data", chunk => { output += chunk; });

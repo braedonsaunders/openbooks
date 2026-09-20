@@ -20,7 +20,7 @@ import { PagedTable } from '../../../../../components/paged-table'
  * Work schedules — the hours and days an employee is normally scheduled to
  * work, edited as REAL CONTROLS.
  *
- * The pattern is a repeating cycle of days (engine/src/work-schedules.ts), and
+ * The pattern is a repeating cycle of days (engine/src/payroll/work-schedules.ts), and
  * the one thing this editor must never become is a JSON box: a working week is
  * a grid of numbers a payroll administrator reads at a glance, and the numbers
  * decide a day's statutory holiday pay in several jurisdictions. So the cycle

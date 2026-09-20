@@ -9,8 +9,8 @@ registerHooks({ resolve(specifier, context, next) {
 } })
 
 const { sql } = await import('drizzle-orm')
-const { db } = await import('@openbooks/engine/src/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
+const { db } = await import('@openbooks/engine/src/platform/db.ts')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { projectUnbilled } = await import('./project-costing.ts')
 
 test('project unbilled labor rounds fractional rate products to ledger precision', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {

@@ -20,8 +20,8 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 } })
 
 const { sql } = await import('drizzle-orm')
-const { db, env, withOrgContext } = await import('@openbooks/engine/src/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
+const { db, env, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { executeAssistantTool } = await import('./registry')
 
 function authzFor(orgId: string, permissions: string[]): Authz {
@@ -176,7 +176,7 @@ test('assistant report runs and deliveries surface with visibility filtering, is
   const orgB = await createScratchOrg()
   try {
     const runId = randomUUID()
-    const { ensureReportDefinitions } = await import('@openbooks/engine/src/ensure-report-definitions.ts')
+    const { ensureReportDefinitions } = await import('@openbooks/engine/src/reports/ensure-report-definitions.ts')
     await withOrgContext(orgA.orgId, async () => {
       const authz = authzFor(orgA.orgId, READER)
       // Seed the built-in catalog (same seeding the product paths use), then

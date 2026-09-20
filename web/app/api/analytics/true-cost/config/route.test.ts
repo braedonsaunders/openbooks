@@ -121,8 +121,8 @@ const mockUrls = new Map<string, string>([
   ['../../../../../lib/exact-decimal', 'mock:decimal'],
   ['../../../../../lib/analytics/true-cost-data', 'mock:data'],
   ['../../../../../lib/analytics/true-cost-engine', 'mock:engine'],
-  ['@openbooks/engine/src/db.ts', 'mock:db'],
-  ['@openbooks/engine/src/money.ts', 'mock:money'],
+  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
+  ['@openbooks/engine/src/money/money.ts', 'mock:money'],
 ])
 
 const hooks = registerHooks({

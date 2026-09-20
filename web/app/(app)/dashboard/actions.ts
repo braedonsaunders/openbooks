@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { can, getAuthz } from '@/lib/authz'
 import { NAV_MODULES } from '@/lib/nav/registry'
 import { getUserRoleTier } from './_role-tier'

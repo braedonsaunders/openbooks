@@ -5,23 +5,23 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { SYSTEM_ACTOR_ID, importStatement, type ParsedStatementLine } from "../banking.ts";
+import { SYSTEM_ACTOR_ID, importStatement, type ParsedStatementLine } from "../banking/banking.ts";
 import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrgReporting,
   type ScratchOrg,
-} from "../test-fixtures.ts";
+} from "../testing/fixtures.ts";
 
 // The storage backend resolves its data root from the engine env snapshot
 // (taken when db.ts first loads), so hand that snapshot a throwaway directory
 // before seeding any watch-folder files.
 const scratchDataDir = mkdtempSync(join(tmpdir(), "openbooks-sftp-import-job-"));
-const { env } = await import("../db.ts");
+const { env } = await import("../platform/db.ts");
 env.OPENBOOKS_DATA_DIR = scratchDataDir;
 
 const { runDueSftpImports, sftpImportAuditSource } = await import("./import-job.ts");
-const { db } = await import("../db.ts");
+const { db } = await import("../platform/db.ts");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 

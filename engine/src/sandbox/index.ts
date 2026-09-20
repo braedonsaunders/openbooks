@@ -1,9 +1,9 @@
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
+import { db } from "../platform/db.ts";
 
 export { createSandbox, refreshSandbox, resetSandbox, deleteSandbox } from "./lifecycle.ts";
 export { buildChangeSet, applyChangeSet } from "./promote.ts";
-export { isSandboxOrg, assertNotSandbox, getEnvKind, neuterSandbox } from "./guard.ts";
+export { isSandboxOrg, assertNotSandbox, getEnvKind, neuterSandbox } from "../organization/sandbox-guard.ts";
 export { runClone } from "./clone.ts";
 export type { SandboxTier } from "./clone.ts";
 

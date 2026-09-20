@@ -15,7 +15,7 @@
  *  - A `not-implemented` case never runs and is reported as GAP, never as pass.
  */
 
-import { fromUnits, toUnits } from "../money.ts";
+import { fromUnits, toUnits } from "../money/money.ts";
 import { syntheticRoles } from "./roles.ts";
 import type {
   ActualOutcome,

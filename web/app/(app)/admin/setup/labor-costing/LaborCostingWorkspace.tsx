@@ -12,7 +12,7 @@ import { SearchInput } from '../../../../../components/search-input'
 import { FilterChips } from '../../../../../components/filter-bar'
 import { Pagination } from '../../../../../components/pagination'
 import { mergeHref } from '../../../../../lib/list-params'
-import type { LaborCostComponent, LaborCostingSettings } from '@openbooks/engine/src/labor-costing.ts'
+import type { LaborCostComponent, LaborCostingSettings } from '@openbooks/engine/src/projects/labor-costing.ts'
 import { useBusinessToday } from '../../../../../components/business-date-provider'
 import { LaborCostingWizard } from './LaborCostingWizard'
 

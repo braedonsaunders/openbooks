@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { sql } from "drizzle-orm";
 import type { AutomationPlan } from "@openbooks/forms-core";
-import { db, schema } from "../db.ts";
+import { db, schema } from "../platform/db.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -11,7 +11,7 @@ import {
   seedDraftDocument,
   type ScratchOrg,
   type FlowActors,
-} from "../test-fixtures.ts";
+} from "../testing/fixtures.ts";
 import { executeFlowPlan } from "./execute.ts";
 import { createDocumentsFlowAdapter } from "./documents-adapter.ts";
 

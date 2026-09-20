@@ -1,0 +1,118 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+import { listFailedPostingEffects, MAX_POSTING_EFFECTS_ATTEMPTS, postingEffectsBackoffMs, replayTerminalPostingEffect } from "./posting-effects.ts";
+
+const source = (relative: string) =>
+  readFileSync(new URL(relative, import.meta.url), "utf8");
+
+test("posting effects backoff doubles then caps at one hour", () => {
+  assert.equal(postingEffectsBackoffMs(0), 60_000);
+  assert.equal(postingEffectsBackoffMs(1), 60_000);
+  assert.equal(postingEffectsBackoffMs(2), 120_000);
+  assert.equal(postingEffectsBackoffMs(3), 240_000);
+  assert.equal(postingEffectsBackoffMs(MAX_POSTING_EFFECTS_ATTEMPTS), 60 * 60_000);
+});
+
+test("replay reason length is enforced before any database work", async () => {
+  // The bounds throw before the function touches the database, so these
+  // rows pin both fences without a database: a narrowed bound accepts the
+  // 9-character reason (or rejects the 1001-character one differently) and
+  // a negated guard lets everything through to a connection error.
+  const base = { orgId: "00000000-0000-0000-0000-000000000000", id: "00000000-0000-0000-0000-000000000000", actorId: "00000000-0000-0000-0000-000000000000" };
+  await assert.rejects(
+    () => replayTerminalPostingEffect({ ...base, reason: "too short" }),
+    /between 10 and 1000/,
+  );
+  await assert.rejects(
+    () => replayTerminalPostingEffect({ ...base, reason: "x".repeat(1001) }),
+    /between 10 and 1000/,
+  );
+});
+
+test("failed-effects listing requires its tenant scope up front", async () => {
+  // The org guard throws before any query: a negated guard queries with an
+  // empty scope and surfaces a connection error instead of this refusal.
+  await assert.rejects(() => listFailedPostingEffects(""), /organization id is required/);
+});
+
+test("posting writes a posting_effects row inside the transaction and drains via runPostDocumentEffects", () => {
+  const posting = source("./posting.ts");
+  assert.match(posting, /enqueuePostingEffects\(tx/);
+  assert.match(posting, /createObligationsFromInvoice/);
+  assert.match(posting, /applyInventoryIssuesForInvoice/);
+  assert.match(posting, /applyInventoryReceiptsForBill/);
+  assert.match(posting, /alreadyClaimed/);
+
+  const postDocument = posting.slice(
+    posting.indexOf("export async function postDocument"),
+    posting.indexOf("export async function runPostDocumentEffects"),
+  );
+  assert.match(postDocument, /enqueuePostingEffects\(tx/);
+  assert.doesNotMatch(postDocument, /createObligationsFromInvoice/);
+  assert.doesNotMatch(postDocument, /applyInventoryIssuesForInvoice/);
+  assert.doesNotMatch(postDocument, /applyInventoryReceiptsForBill/);
+  assert.match(postDocument, /runPostDocumentEffects/);
+
+  const drain = posting.slice(posting.indexOf("export async function runPostDocumentEffects"));
+  assert.match(drain, /createObligationsFromInvoice/);
+  assert.match(drain, /applyInventoryIssuesForInvoice/);
+  assert.match(drain, /applyInventoryReceiptsForBill/);
+  assert.match(drain, /claimPostingEffectsForDocument/);
+
+  const outbox = source("./posting-effects.ts");
+  assert.match(outbox, /runPostDocumentEffects/);
+  assert.match(outbox, /insert into posting_effects/);
+
+  const scheduler = source("../scheduling/scheduler.ts");
+  assert.match(scheduler, /processDuePostingEffects/);
+
+  const worker = source("../worker/scheduler.ts");
+  assert.match(worker, /processDuePostingEffects/);
+  assert.doesNotMatch(worker, /bullmq.*dlq|dead.?letter/i);
+});
+
+test("posting effects have an explicit terminal lifecycle and an audited operator replay", () => {
+  const outbox = source("./posting-effects.ts");
+  assert.match(outbox, /status='terminal_failed'/);
+  assert.match(outbox, /terminal_failure_reason/);
+  assert.match(outbox, /terminal_failed_at/);
+  assert.match(outbox, /terminal_failed_by/);
+  assert.match(outbox, /logTerminalFailure/);
+  assert.match(outbox, /recordOutboxAttempt\("posting_effects"/);
+  assert.match(outbox, /listFailedPostingEffects/);
+  assert.match(outbox, /replayTerminalPostingEffect/);
+  assert.match(outbox, /posting_effects_terminal_failure/);
+  assert.match(outbox, /posting_effects_replay_authorized/);
+
+  const terminal = source("../platform/terminal-failure.ts");
+  assert.match(terminal, /POSTING_EFFECTS_WORKER_IDENTITY/);
+  assert.match(terminal, /from posting_effects/);
+
+  const cli = source("./posting-effects-cli.ts");
+  assert.match(cli, /replay --org=<uuid> --id=<uuid>/);
+  assert.match(cli, /--actor=<uuid>/);
+  assert.match(cli, /--reason=/);
+});
+
+test("posting-effect completions are fenced by the active per-claim lease", () => {
+  const outbox = source("./posting-effects.ts");
+  assert.match(outbox, /lease_token=gen_random_uuid\(\)/);
+  assert.match(outbox, /where id=\$\{row\.id\} and lease_token=\$\{row\.lease_token\} and status='running'/);
+  assert.match(outbox, /PostingEffectsLeaseFencedError/);
+  const recovery = outbox.slice(outbox.indexOf("recoverStalePostingEffects"));
+  assert.match(recovery, /lease_token=null/);
+});
+
+test("downstream posting effects carry storage-enforced idempotency keys", () => {
+  const inventory = source("../inventory/inventory.ts");
+  assert.match(inventory, /inventoryPostingEffectKey/);
+  assert.match(inventory, /idempotency_key/);
+  assert.match(inventory, /idempotencyKey: inventoryPostingEffectKey\((?:line|l)\.lineId, "receipt"\)/);
+  assert.match(inventory, /idempotencyKey: inventoryPostingEffectKey\((?:line|l)\.lineId, "issue"\)/);
+
+  const revenue = source("../revenue/recognition.ts");
+  assert.match(revenue, /revenueContractPostingEffectKey/);
+  assert.match(revenue, /revenueObligationPostingEffectKey/);
+  assert.match(revenue, /on conflict \(org_id, idempotency_key\) where idempotency_key is not null do nothing/);
+});

@@ -399,7 +399,7 @@
     "builtIn": "Built-in",
     "custom": "Custom",
     "emptyTitle": "No roles yet",
-    "emptyDescription": "Run the role seed script (engine/src/seed-roles.ts) to create the built-in roles, or create a custom role.",
+    "emptyDescription": "Run the role seed script (engine/src/provisioning/seed-roles.ts) to create the built-in roles, or create a custom role.",
     "noMatchTitle": "No matching roles",
     "noMatchDescription": "Adjust the search or type filter.",
     "table": {

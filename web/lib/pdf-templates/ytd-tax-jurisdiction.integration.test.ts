@@ -11,11 +11,11 @@ registerHooks({
   },
 })
 const { sql } = await import('drizzle-orm')
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts')
-const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import('@openbooks/engine/src/test-fixtures.ts')
-const { calculatePayRun, commitPayRun, createPayRun, seedPayrollComponents } = await import('@openbooks/engine/src/payroll-run.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { calculatePayRun, commitPayRun, createPayRun, seedPayrollComponents } = await import('@openbooks/engine/src/payroll/run.ts')
 const { setPackSlotAccount, incomeTaxWithholdingSystemKeys } = await import('@openbooks/engine/src/payroll/packs.ts')
-const { completeRequestedDocumentVoid, requestDocumentVoid } = await import('@openbooks/engine/src/document-void.ts')
+const { completeRequestedDocumentVoid, requestDocumentVoid } = await import('@openbooks/engine/src/ledger/document-void.ts')
 const { loadPdfRecordValues } = await import('./values')
 
 const DB = !!process.env.OPENBOOKS_DB_URL

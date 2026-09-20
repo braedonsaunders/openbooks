@@ -16,7 +16,7 @@
  * bootstrap.ts runs main() on import; tests import this module directly.
  */
 import pg from "pg";
-import { longPool } from "../engine/src/db.ts";
+import { longPool } from "../engine/src/platform/db.ts";
 
 export async function connectMigrationClient(): Promise<pg.PoolClient> {
   const client = await longPool.connect();

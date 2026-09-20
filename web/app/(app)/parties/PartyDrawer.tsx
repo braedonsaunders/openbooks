@@ -55,7 +55,7 @@ import { FlowManualButtons } from '../../../components/flow-manual-buttons'
 import { countryOptions } from '../../../lib/countries'
 import { ReadOnlyValue } from '../../../components/read-only-value'
 import { promptDialog } from '../../../lib/prompt'
-import { formatMoney } from '@openbooks/engine/src/money.ts'
+import { formatMoney } from '@openbooks/engine/src/money/money.ts'
 type Opt = {
   id: string
   name?: string

@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
-import { provisionFeatureDefaults } from '@openbooks/engine/src/organization-provisioning.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { provisionFeatureDefaults } from '@openbooks/engine/src/provisioning/organization-provisioning.ts'
 import {
   FEATURES,
   FEATURE_BY_KEY,
@@ -107,7 +107,7 @@ export async function applyFeatureChanges(
     // stores the disable, so a scheduler pass can never execute a script for a
     // feature the org has already turned off.
     if (clean.scripts !== undefined) {
-      const { refreshScheduledNextRuns } = await import('@openbooks/engine/src/scripting.ts')
+      const { refreshScheduledNextRuns } = await import('@openbooks/engine/src/scripting/scripting.ts')
       await refreshScheduledNextRuns(orgId)
     }
     // Install each enabled feature's editable baseline under the same

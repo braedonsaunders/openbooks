@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
+import { db } from "../platform/db.ts";
 import { addDays, dayOfMonth, isMonthEnd, recordCoverage } from "./manifest.ts";
 import * as observe from "./observe.ts";
 import * as ops from "./ops.ts";

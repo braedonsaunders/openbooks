@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import test from 'node:test'
-import { add, cmp, sum } from '../../../engine/src/money.ts'
+import { add, cmp, sum } from '../../../engine/src/money/money.ts'
 
 const source = readFileSync(join(import.meta.dirname, 'cashflow-data.ts'), 'utf8')
 const timelineSource = readFileSync(join(import.meta.dirname, '..', 'cash', 'cash-position.ts'), 'utf8')

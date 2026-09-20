@@ -182,7 +182,7 @@ const hooks = registerHooks({
                 ? "mock:connection"
                 : specifier === "@openbooks/jobs"
                   ? "mock:jobs"
-                  : specifier === "@openbooks/engine/src/db.ts"
+                  : specifier === "@openbooks/engine/src/platform/db.ts"
                     ? "mock:db"
                     : specifier === "drizzle-orm"
                       ? "mock:drizzle"

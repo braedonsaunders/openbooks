@@ -192,9 +192,9 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ["@/lib/api/json", "mock:json"],
-  ["@openbooks/engine/src/db.ts", "mock:db"],
-  ["@openbooks/engine/src/psp-settlement.ts", "mock:psp-settlement"],
-  ["@openbooks/engine/src/business-date.ts", "mock:business-date"],
+  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
+  ["@openbooks/engine/src/payments/psp-settlement.ts", "mock:psp-settlement"],
+  ["@openbooks/engine/src/platform/business-date.ts", "mock:business-date"],
   ["../../../../lib/authz", "mock:authz"],
   ["../../../../lib/feature-gates", "mock:feature-gates"],
   ["../../../../lib/features", "mock:features"],

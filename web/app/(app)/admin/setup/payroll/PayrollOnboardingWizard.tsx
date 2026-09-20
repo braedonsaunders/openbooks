@@ -28,7 +28,7 @@ import { readApiErrorMessage } from '../../../../../lib/api-error'
  * writes through the EXISTING settings APIs (`/api/payroll/settings`, the
  * generic `/api/admin/setup/pay-schedules` entity route); the wizard is
  * composition, not a write path. The step list and the review checklist both
- * derive from `payrollSetupState` (engine/src/payroll-readiness.ts) — the
+ * derive from `payrollSetupState` (engine/src/payroll/readiness.ts) — the
  * same org-level checks the pay-run pre-flight performs — so the wizard and
  * readiness can never disagree about what is still missing.
  */

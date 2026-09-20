@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
-import { s3Enabled } from "@openbooks/engine/src/file-storage.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
+import { s3Enabled } from "@openbooks/engine/src/platform/file-storage.ts";
 import { enqueueBackupRun } from "@openbooks/jobs";
 import { guardPermission } from "../../../../../lib/authz";
 

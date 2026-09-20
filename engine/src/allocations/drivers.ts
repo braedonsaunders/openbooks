@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
-import { resolveAccountGroups } from "../account-groups.ts";
-import { add, normalizeDecimal } from "../money.ts";
+import { db } from "../platform/db.ts";
+import { resolveAccountGroups } from "../records/account-groups.ts";
+import { add, normalizeDecimal } from "../money/money.ts";
 import {
   DRIVER_SOURCE_KINDS,
   DriverAdminError,

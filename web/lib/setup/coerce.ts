@@ -8,7 +8,7 @@
  * parameter values. This is the same whitelist that keeps the generic API safe.
  */
 
-import { normalizeDecimal, toUnits } from '@openbooks/engine/src/money.ts'
+import { normalizeDecimal, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { SETUP_ENTITY_BY_KEY, setupFieldOptions, setupFieldVisible, toSnake, type SetupEntity, type SetupField } from './registry'
 import { normalizeCountryCode } from '../countries'
 import { canonicalDecimal } from '../exact-decimal'
@@ -17,7 +17,7 @@ import { canonicalDecimal } from '../exact-decimal'
 const SETUP_DECIMAL_SCALE = 10
 
 /** The tax-rate domain, stated once and shared with the calculation engine
- * (engine/src/tax.ts): a rate is a nonnegative exact decimal with at most 4
+ * (engine/src/tax/tax.ts): a rate is a nonnegative exact decimal with at most 4
  * decimal places — tax_rates.rate_percent is numeric(19,4), and the engine's
  * toUnits refuses anything finer. The generic percent coercer deliberately
  * accepts FX-scale (10dp) values, so this is the boundary that keeps a rate

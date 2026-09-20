@@ -1,5 +1,5 @@
 import type { FlowFieldDef, FlowSubjectProfile } from "@openbooks/forms-core";
-import { DOCUMENT_KINDS } from "../close.ts";
+import { DOCUMENT_KINDS } from "../close/close.ts";
 
 /**
  * FlowSubjectProfiles for document kinds — the author-time vocabulary the
@@ -16,9 +16,9 @@ export const NON_POSTING_DOC_KINDS = ["sales_order", "purchase_order", "quote"] 
 
 /**
  * Document kinds flows can run over. The posting kinds are derived from the
- * engine kind universe (engine/src/close.ts DOCUMENT_KINDS) minus the
+ * engine kind universe (engine/src/close/close.ts DOCUMENT_KINDS) minus the
  * explicitly non-posting order kinds — never a hand mirror of
- * engine/src/posting.ts RULES, which drifted before (pay_run and
+ * engine/src/ledger/posting.ts RULES, which drifted before (pay_run and
  * project_charge posted in the kernel with no flow profile). The order kinds
  * live in the same documents table without a posting rule, so their profiles
  * omit `post_document`. A parity test pins POSTING_DOC_KINDS to the RULES
@@ -70,7 +70,7 @@ export const EVENT_SOURCE_OPTIONS = [
 
 /**
  * Header fields flows may write via set_field — mirrors the trigger-script
- * whitelist (engine/src/scripting.ts MUTABLE_FIELDS) minus the raw `custom`
+ * whitelist (engine/src/scripting/scripting.ts MUTABLE_FIELDS) minus the raw `custom`
  * jsonb blob, which has no single field type to offer the builder.
  */
 export const WRITABLE_DOCUMENT_FIELDS = new Set([

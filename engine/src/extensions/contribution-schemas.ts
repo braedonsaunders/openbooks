@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { FEATURES } from "../feature-registry.ts";
+import { FEATURES } from "../organization/feature-registry.ts";
 const featureKeys = new Set(FEATURES.map((feature) => feature.key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)));
-import { NAV_GROUP_BY_KEY, NAV_MODULES } from "../modules/nav-registry.ts";
+import { NAV_GROUP_BY_KEY, NAV_MODULES } from "../navigation/nav-registry.ts";
 const KEY = /^[a-z][a-z0-9_]{0,63}$/;
 const PERMISSION_KEY = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*){1,3}$/;
 export const navContributionSchema = z.object({

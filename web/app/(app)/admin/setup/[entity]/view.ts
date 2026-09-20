@@ -4,8 +4,8 @@ import { loadExtensionSettingRows } from '../../../../../lib/setup/extension-set
 import { notFound, redirect } from 'next/navigation'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
-import { db } from '@openbooks/engine/src/db.ts'
-import { TAX_RETURN_PACKS } from '@openbooks/engine/src/seed-tax-forms.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { TAX_RETURN_PACKS } from '@openbooks/engine/src/tax/seed-tax-forms.ts'
 import {
   badge,
   column,

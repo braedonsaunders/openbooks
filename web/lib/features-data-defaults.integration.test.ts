@@ -11,7 +11,7 @@ import { sql } from "drizzle-orm";
 // (lockAndCheckOrgFeature): the application layer used to say ON while both
 // enforcement points said OFF, so FX revaluation refused an org the UI
 // presented as multi-currency. All three resolve through the single engine
-// helper (engine/src/feature-defaults.ts); an explicit stored boolean always
+// helper (engine/src/organization/feature-defaults.ts); an explicit stored boolean always
 // wins in both directions.
 registerHooks({
   resolve(specifier, context, next) {
@@ -23,16 +23,16 @@ registerHooks({
 });
 
 const { db, withBypassContext, withOrgTransaction } = await import(
-  "@openbooks/engine/src/db.ts"
+  "@openbooks/engine/src/platform/db.ts"
 );
 const { createScratchOrg, dropScratchOrg } = await import(
-  "@openbooks/engine/src/test-fixtures.ts"
+  "@openbooks/engine/src/testing/fixtures.ts"
 );
 const { lockAndCheckOrgFeature } = await import(
-  "@openbooks/engine/src/org-feature-lock.ts"
+  "@openbooks/engine/src/organization/org-feature-lock.ts"
 );
 const { dataDependentFeatureDefault } = await import(
-  "@openbooks/engine/src/feature-defaults.ts"
+  "@openbooks/engine/src/organization/feature-defaults.ts"
 );
 const { isFeatureEnabled, resolvedFeatureState } = await import("./features.ts");
 import type { FeatureState } from "./features.ts";

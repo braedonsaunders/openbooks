@@ -18,10 +18,10 @@ const { fixedAssetsResource, FIXED_ASSETS_DESCRIPTOR } = (await import(
 )) as typeof import('./fixed-asset-resources.ts')
 hooks.deregister()
 
-const { db } = await import('@openbooks/engine/src/db.ts')
-const { runDepreciation } = await import('@openbooks/engine/src/depreciation.ts')
+const { db } = await import('@openbooks/engine/src/platform/db.ts')
+const { runDepreciation } = await import('@openbooks/engine/src/assets/depreciation.ts')
 const { createScratchOrg, dropScratchOrgReporting } = await import(
-  '@openbooks/engine/src/test-fixtures.ts'
+  '@openbooks/engine/src/testing/fixtures.ts'
 )
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL)

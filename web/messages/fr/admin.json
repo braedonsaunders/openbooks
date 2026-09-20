@@ -399,7 +399,7 @@
     "builtIn": "Intégré",
     "custom": "Personnalisé",
     "emptyTitle": "Aucun rôle pour l’instant",
-    "emptyDescription": "Exécutez le script d’amorçage des rôles (engine/src/seed-roles.ts) pour créer les rôles intégrés, ou créez un rôle personnalisé.",
+    "emptyDescription": "Exécutez le script d’amorçage des rôles (engine/src/provisioning/seed-roles.ts) pour créer les rôles intégrés, ou créez un rôle personnalisé.",
     "noMatchTitle": "Aucun rôle correspondant",
     "noMatchDescription": "Ajustez la recherche ou le filtre de type.",
     "table": {

@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm'
-import { type SqlExecutor } from '../db.ts'
-import { canonicalJson } from '../canonical-json.ts'
+import { type SqlExecutor } from '../platform/db.ts'
+import { canonicalJson } from '../platform/canonical-json.ts'
 export class ExtensionProjectionError extends Error { constructor(message: string, readonly status = 409) { super(message) } }
 async function writeAudit(
   tx: SqlExecutor,

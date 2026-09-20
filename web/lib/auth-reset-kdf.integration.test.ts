@@ -3,8 +3,8 @@ import { createHash, randomBytes } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypass } from "@openbooks/engine/src/db.ts";
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/src/test-fixtures.ts";
+import { db, withBypass } from "@openbooks/engine/src/platform/db.ts";
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/src/testing/fixtures.ts";
 import { hashPassword, verifyPassword } from "./auth-password";
 
 const state = {

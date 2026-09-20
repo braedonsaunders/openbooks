@@ -134,10 +134,10 @@ const mockUrls = new Map<string, string>([
   ['../../../../lib/authz', mockUrl('authz')],
   ['../../../../lib/features', mockUrl('features')],
   ['../../../../lib/documents', mockUrl('documents')],
-  ['@openbooks/engine/src/business-date.ts', mockUrl('business-date')],
-  ['@openbooks/engine/src/revenue-recognition.ts', mockUrl('revenue-recognition')],
-  ['@openbooks/engine/src/document-void.ts', mockUrl('document-void')],
-  ['@openbooks/engine/src/db.ts', mockUrl('db')],
+  ['@openbooks/engine/src/platform/business-date.ts', mockUrl('business-date')],
+  ['@openbooks/engine/src/revenue/recognition.ts', mockUrl('revenue-recognition')],
+  ['@openbooks/engine/src/ledger/document-void.ts', mockUrl('document-void')],
+  ['@openbooks/engine/src/platform/db.ts', mockUrl('db')],
   ['../../../../lib/api/json', mockUrl('json')],
 ])
 

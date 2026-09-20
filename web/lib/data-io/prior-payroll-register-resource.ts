@@ -1,6 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
   comparableSlots,
   savePriorStub,
@@ -9,7 +9,7 @@ import {
   TOTAL_FIELD_KEYS,
   type ComparableSlot,
   type PriorStubWrite,
-} from '@openbooks/engine/src/payroll-parallel-run-store.ts'
+} from '@openbooks/engine/src/payroll/parallel-run-store.ts'
 import {
   SOURCE_COLUMNS_KEY,
   UNMAPPED_COLUMNS_KEY,
@@ -45,7 +45,7 @@ import { employeeWriteScopeError } from './write-scope'
  *   3. records them on the register, so the RECONCILIATION states them — a
  *      warning only the import screen showed is not a control.
  *
- * Writes go through engine/src/payroll-parallel-run-store.ts, so an import
+ * Writes go through engine/src/payroll/parallel-run-store.ts, so an import
  * cannot bypass the money validation or invent a component slot.
  */
 

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, inDbTransaction } from "../db.ts";
-import { cmp, mulDecimal, normalizeDecimal } from "../money.ts";
+import { db, inDbTransaction } from "../platform/db.ts";
+import { cmp, mulDecimal, normalizeDecimal } from "../money/money.ts";
 import { PayrollPackError } from "./payroll-error.ts";
 import type { PayrollRegionCoverage } from "./packs.ts";
 

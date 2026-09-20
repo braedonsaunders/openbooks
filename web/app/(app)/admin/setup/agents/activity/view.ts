@@ -18,7 +18,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../../../lib/authz'
-import { isContinuousCloseAgentKey } from '@openbooks/engine/src/continuous-close.ts'
+import { isContinuousCloseAgentKey } from '@openbooks/engine/src/continuous-close/continuous-close.ts'
 import { dateTime } from '../../../../../../lib/format'
 import {
   AGENT_RUN_STATUSES,

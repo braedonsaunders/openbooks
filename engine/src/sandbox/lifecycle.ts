@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, orgContext, schema, withMaintenanceTransaction, withOrg, type MaintenanceTransactionOptions } from "../db.ts";
+import { db, orgContext, schema, withMaintenanceTransaction, withOrg, type MaintenanceTransactionOptions } from "../platform/db.ts";
 import {
   deferredDeletionTables,
   deletionOrder,
@@ -10,7 +10,7 @@ import {
   selfRefColumns,
 } from "./catalog.ts";
 import { CUSTOMIZATION_LAYER, runClone, type SandboxTier } from "./clone.ts";
-import { neuterSandbox } from "./guard.ts";
+import { neuterSandbox } from "../organization/sandbox-guard.ts";
 import { seedDefaultMaskingPolicies } from "./masking.ts";
 
 /**

@@ -59,46 +59,46 @@ enabled on **378 tables**.
 | # | Control | Layer | Evidence |
 | --- | --- | --- | --- |
 | E1 | A journal entry cannot be created from a source document that has not completed its approval lifecycle. `postDocument` refuses any document that is draft, voided, or not approved. | Service | `engine/src/flows/approval-lifecycle.integration.test.ts` |
-| E2 | Every posted document carries exact journal identity: `validate_document_posted_period_identity` rejects a posted document whose journal entry is missing, belongs to another tenant, or sits in a different accounting period. | Database | `engine/src/close-period-identity.integration.test.ts` |
+| E2 | Every posted document carries exact journal identity: `validate_document_posted_period_identity` rejects a posted document whose journal entry is missing, belongs to another tenant, or sits in a different accounting period. | Database | `engine/src/close/period-identity.integration.test.ts` |
 | E3 | Approval gates support quorum, delegation, escalation, and **prevention of self-approval**, so the approver is a different person from the submitter. | Service | `engine/src/flows/quorum.test.ts` |
-| E4 | The audit log is append-only. `audit_log_append_only_guard` raises on any update or delete. | Database | `audit_log_append_only` trigger; exercised by `engine/src/sales-orders.integration.test.ts` ("leaves immutable audit evidence" attempts the forbidden update and asserts rejection) |
+| E4 | The audit log is append-only. `audit_log_append_only_guard` raises on any update or delete. | Database | `audit_log_append_only` trigger; exercised by `engine/src/sales/sales-orders.integration.test.ts` ("leaves immutable audit evidence" attempts the forbidden update and asserts rejection) |
 | E5 | Close evidence, sign-offs, and close events are append-only once recorded. | Database | `close_events_append_only`, `close_signoffs_append_only`, `close_evidence_append_only` triggers |
-| E6 | Inventory movements cannot be deleted once posted (`inv_move_guard`), so stock history cannot be rewritten to fabricate quantities. | Database | `engine/src/inventory.integration.test.ts` |
+| E6 | Inventory movements cannot be deleted once posted (`inv_move_guard`), so stock history cannot be rewritten to fabricate quantities. | Database | `engine/src/inventory/inventory.integration.test.ts` |
 | E7 | Field-ticket signatures and signature requests are immutable once captured, with HMAC signing. | Database | `field_ticket_signature_immutable`, `field_ticket_signature_request_immutable` |
-| E8 | **An open item can be reserved by only one live payment run at a time.** A `selected` payment-run item reserves its source bill or credit line, and the partial unique index `payment_run_items_live_source` allows one live reservation per organisation per open line — two operators, or an operator and the scheduler, cannot build overlapping runs against the same payable. Cancellation, rejection, rollback, return, reversal, and settlement release the reservation through lifecycle triggers before the line can be selected again. | Database | `payment_run_items_live_source`, `payment_run_item_instruction_lifecycle`, `payment_run_item_run_lifecycle`; exercised by `engine/src/payments.integration.test.ts` |
-| E9 | **Posted journal history is immutable except through evidenced reversal.** A line that leaves a posted or reversed entry is refused (`jl_guard` resolves the original and the resulting parent); flipping an entry to reversed requires a posted mirror reversal in the same organisation and book that references the original and negates every leg, with no other header change (`je_guard`, `openbooks_reversal_mirrors`). Corrections reverse and replace — the original, reversal, and replacement all stay in the ledger. | Database | `engine/src/journal-status-guard.integration.test.ts`, `engine/src/journal-line-guard.integration.test.ts`, `engine/src/kernel-constraints.integration.test.ts`; internal-controls case `correction-reversal-restores` (`npm -w engine run conformance -- controls report`) |
+| E8 | **An open item can be reserved by only one live payment run at a time.** A `selected` payment-run item reserves its source bill or credit line, and the partial unique index `payment_run_items_live_source` allows one live reservation per organisation per open line — two operators, or an operator and the scheduler, cannot build overlapping runs against the same payable. Cancellation, rejection, rollback, return, reversal, and settlement release the reservation through lifecycle triggers before the line can be selected again. | Database | `payment_run_items_live_source`, `payment_run_item_instruction_lifecycle`, `payment_run_item_run_lifecycle`; exercised by `engine/src/payments/payments.integration.test.ts` |
+| E9 | **Posted journal history is immutable except through evidenced reversal.** A line that leaves a posted or reversed entry is refused (`jl_guard` resolves the original and the resulting parent); flipping an entry to reversed requires a posted mirror reversal in the same organisation and book that references the original and negates every leg, with no other header change (`je_guard`, `openbooks_reversal_mirrors`). Corrections reverse and replace — the original, reversal, and replacement all stay in the ledger. | Database | `engine/src/ledger/journal-status-guard.integration.test.ts`, `engine/src/ledger/journal-line-guard.integration.test.ts`, `engine/src/ledger/kernel-constraints.integration.test.ts`; internal-controls case `correction-reversal-restores` (`npm -w engine run conformance -- controls report`) |
 
 ### Completeness
 *All transactions and events that should have been recorded have been recorded.*
 
 | # | Control | Layer | Evidence |
 | --- | --- | --- | --- |
-| C1 | **Every journal entry balances.** `jl_check_balanced` recomputes the sum of an entry's lines on every insert, update, and delete and raises if it is not zero. | Database | `engine/src/kernel-constraints.integration.test.ts` |
-| C2 | **Every posted entry balances, balances by legal entity, and has at least two lines.** `je_check_posted_balance` enforces all three on transition to posted. | Database | `engine/src/kernel-constraints.integration.test.ts` |
+| C1 | **Every journal entry balances.** `jl_check_balanced` recomputes the sum of an entry's lines on every insert, update, and delete and raises if it is not zero. | Database | `engine/src/ledger/kernel-constraints.integration.test.ts` |
+| C2 | **Every posted entry balances, balances by legal entity, and has at least two lines.** `je_check_posted_balance` enforces all three on transition to posted. | Database | `engine/src/ledger/kernel-constraints.integration.test.ts` |
 | C3 | **The whole ledger balances.** The golden harness asserts the sum of all posted journal lines across the tenant is exactly zero (`global-balance`). | Harness | `npm -w engine run harness` |
 | C4 | **Every entry individually balances**, asserted independently of the trigger, across the entire posted population (`per-entry-balance`). | Harness | `npm -w engine run harness` |
 | C5 | **Subledgers agree with the general ledger.** Receivable and payable control-account balances are compared to the sum of open items (`subledger-gl-tieout`). | Harness | `npm -w engine run harness` |
 | C6 | **Document totals agree with the ledger.** Every posted invoice, bill, and credit's stated total equals its net posting to the AR or AP control account (`doc-total-tieout`). Retainage-safe. | Simulator | `engine/src/sim/invariants/index.ts` |
-| C7 | **Open balances are not stale.** Stored open-item balances are recomputed and compared to the recorded value (`open-balance-fresh`); `recompute_document_open_balance` maintains them on every application. | Database + Harness | `engine/src/payments.integration.test.ts` |
-| C8 | **Posting is exactly-once.** Concurrent or repeated posting of the same document produces one entry, not two. | Service | `engine/src/posting-exactly-once.integration.test.ts` |
-| C9 | **Period processes are idempotent.** Revenue recognition, depreciation, and FX revaluation each refuse to post twice for the same period, and refuse to skip. | Service | Conformance case `rev-recognition-is-idempotent`; `engine/src/fx-revaluation.test.ts` |
-| C10 | Journal entries cannot be orphaned from their tenant or their period: referential-integrity migrations enforce foreign keys across every org-scoped table. | Database | `schema/migrations/generated`, `engine/src/kernel-constraints.integration.test.ts` |
+| C7 | **Open balances are not stale.** Stored open-item balances are recomputed and compared to the recorded value (`open-balance-fresh`); `recompute_document_open_balance` maintains them on every application. | Database + Harness | `engine/src/payments/payments.integration.test.ts` |
+| C8 | **Posting is exactly-once.** Concurrent or repeated posting of the same document produces one entry, not two. | Service | `engine/src/ledger/posting-exactly-once.integration.test.ts` |
+| C9 | **Period processes are idempotent.** Revenue recognition, depreciation, and FX revaluation each refuse to post twice for the same period, and refuse to skip. | Service | Conformance case `rev-recognition-is-idempotent`; `engine/src/close/fx-revaluation.test.ts` |
+| C10 | Journal entries cannot be orphaned from their tenant or their period: referential-integrity migrations enforce foreign keys across every org-scoped table. | Database | `schema/migrations/generated`, `engine/src/ledger/kernel-constraints.integration.test.ts` |
 
 ### Accuracy and valuation
 *Amounts and other data are recorded appropriately and at appropriate amounts.*
 
 | # | Control | Layer | Evidence |
 | --- | --- | --- | --- |
-| A1 | **No floating point anywhere in money.** Amounts are stored as `numeric(19,4)` and all arithmetic runs on scaled BigInt integers. | Database + Service | `engine/src/money.ts`, `engine/src/money.test.ts` |
+| A1 | **No floating point anywhere in money.** Amounts are stored as `numeric(19,4)` and all arithmetic runs on scaled BigInt integers. | Database + Service | `engine/src/money/money.ts`, `engine/src/money/money.test.ts` |
 | A2 | **Allocations never lose or invent a cent.** `apportion` distributes a total across weights so the parts sum exactly to the whole, placing the residual deterministically. | Service | Conformance cases `rev-allocate-relative-ssp`, `rev-allocate-no-lost-cent` |
 | A3 | Inventory is costed by FIFO, weighted average, or standard cost with purchase-price variance, and cost of sales is recomputed from the actual cost layers consumed. | Service | Conformance cases `inv-fifo-cost-formula`, `inv-weighted-average-cost-formula` |
 | A4 | Foreign-currency transactions are translated at the transaction-date rate; monetary balances are retranslated at the closing rate with the difference to profit or loss. | Service | Conformance cases `fx-initial-recognition-at-spot`, `fx-monetary-item-retranslated-at-closing-rate` |
-| A5 | Depreciation supports straight-line, declining balance, double declining, sum-of-years-digits, units of production, and custom formulas, across alternate books. | Service | `engine/src/depreciation.integration.test.ts` |
+| A5 | Depreciation supports straight-line, declining balance, double declining, sum-of-years-digits, units of production, and custom formulas, across alternate books. | Service | `engine/src/assets/depreciation.integration.test.ts` |
 | A6 | Impairment and disposal arithmetic is a pure function that refuses to emit an unbalanced entry. | Service | Conformance cases `ppe-impairment-to-fair-value`, `ppe-disposal-gain-loss` |
 | A7 | **Independent recomputation.** A published transaction corpus is replayed through the real OpenBooks posting pipeline and independently recomputed by a tiny reference ledger that imports nothing from the engine; the resulting trial balance and per-party open balances are compared with zero rounding tolerance, alongside the native integrity invariants. | Harness | `engine/src/harness/differential/`, `corpus/differential/` |
 | A8 | **Standards conformance.** Requirements of ASC 606/IFRS 15, ASC 842/IFRS 16, IAS 2/ASC 330, IAS 21, ASC 360/IAS 16, and ASC 740/IAS 12 are encoded as executable fixtures with exact expected entries. | Corpus | `npm -w engine run conformance -- report` |
-| A9 | Lease liabilities are measured at the exact present value of the payments on BigInt rationals — a 5%/12 monthly rate is carried as the exact fraction, never a truncated decimal — and every schedule retires to exactly zero. | Service | `engine/src/leases.test.ts`, `engine/src/present-value.ts` |
-| A10 | Inventory NRV write-downs remeasure value only: quantity is untouched, the change distributes across cost layers with no lost cent, and the subledger stays equal to the general ledger. | Service | `engine/src/inventory-nrv.integration.test.ts` |
+| A9 | Lease liabilities are measured at the exact present value of the payments on BigInt rationals — a 5%/12 monthly rate is carried as the exact fraction, never a truncated decimal — and every schedule retires to exactly zero. | Service | `engine/src/revenue/leases.test.ts`, `engine/src/money/present-value.ts` |
+| A10 | Inventory NRV write-downs remeasure value only: quantity is untouched, the change distributes across cost layers with no lost cent, and the subledger stays equal to the general ledger. | Service | `engine/src/inventory/nrv.integration.test.ts` |
 | A11 | Current tax is measured on taxable profit: the year's originating or reversing movement in temporary differences adjusts taxable income, so income tax payable is the amount owed on the return. | Service | Conformance case `tax-current-tax-omits-temporary-differences` |
 | A12 | **Allocation runs are immutable, reversible, and explainable.** A posted period sweep is never edited: corrections reverse the stored lines or re-run to a linked fresh run, at most one posted run exists per rule/period/book/subsidiary, an unchanged re-run posts nothing, unbalanced contributor sets are refused before any write, net-zero pairs leave every account total unchanged, published versions are frozen with a stable definition hash, and every allocated line carries lineage to the version that produced it. | Service + Corpus | Internal-controls cases `alloc-no-lost-cent`, `alloc-entry-group-sum`, `alloc-reversal-restores`, `alloc-rerun-idempotent`, `alloc-contributor-balance`, `alloc-net-zero-pair-account-total-unchanged`, `alloc-published-version-frozen` (`npm -w engine run conformance -- controls report`) |
 
@@ -107,9 +107,9 @@ enabled on **378 tables**.
 
 | # | Control | Layer | Evidence |
 | --- | --- | --- | --- |
-| K1 | **A closed period rejects postings.** `period_module_blocks_write` is consulted on write; a closed module lock raises regardless of the code path. | Database | `engine/src/close.test.ts` ("only an approved reopen restores posting beneath a scope-wide close" posts into a closed period and asserts refusal) |
-| K2 | **A document's posting period must equal its journal's period.** A posted document cannot claim one period while its entry sits in another. | Database | `engine/src/close-period-identity.integration.test.ts` |
-| K3 | **Close is sequenced per module.** AR, AP, and GL close independently, so closing receivables does not silently freeze general-ledger adjustments. | Service | `engine/src/close.ts`, `engine/src/flows/close-approval.integration.test.ts` |
+| K1 | **A closed period rejects postings.** `period_module_blocks_write` is consulted on write; a closed module lock raises regardless of the code path. | Database | `engine/src/close/close.test.ts` ("only an approved reopen restores posting beneath a scope-wide close" posts into a closed period and asserts refusal) |
+| K2 | **A document's posting period must equal its journal's period.** A posted document cannot claim one period while its entry sits in another. | Database | `engine/src/close/period-identity.integration.test.ts` |
+| K3 | **Close is sequenced per module.** AR, AP, and GL close independently, so closing receivables does not silently freeze general-ledger adjustments. | Service | `engine/src/close/close.ts`, `engine/src/flows/close-approval.integration.test.ts` |
 | K4 | **Reopening is controlled and audited**, with an expiry after which the lock re-asserts itself automatically. | Database + Service | `period_module_blocks_write` (`reopen_expires_at`), `close_reopen_requests` |
 | K5 | **Immutability is probed, not assumed.** The business simulator constructs a document dated inside a closed period, attempts to post it, and halts the run if the kernel does not refuse. | Simulator | `immutabilityProbe` in `engine/src/sim/invariants/index.ts` |
 | K6 | Period-end FX revaluation books the adjustment in the period and its reversal in the next, so a reporting-date balance sheet and the following period are both correct. | Service | Conformance case `fx-monetary-item-retranslated-at-closing-rate` |
@@ -119,9 +119,9 @@ enabled on **378 tables**.
 
 | # | Control | Layer | Evidence |
 | --- | --- | --- | --- |
-| L1 | **Postings to summary accounts are refused.** `jl_check_account` raises if the account is a summary (roll-up) account, so parent-account posting cannot corrupt statement subtotals. | Database | `engine/src/kernel-constraints.integration.test.ts` |
+| L1 | **Postings to summary accounts are refused.** `jl_check_account` raises if the account is a summary (roll-up) account, so parent-account posting cannot corrupt statement subtotals. | Database | `engine/src/ledger/kernel-constraints.integration.test.ts` |
 | L2 | **Postings to inactive or non-existent accounts are refused.** The only relaxation is an explicitly flagged historical migration replay, which requires direct database access and never relaxes balance, immutability, or summary rules. | Database | `jl_check_account` |
-| L3 | **Required dimensions are enforced per account.** An account may require subsidiary, department, project, location, class, party, or any custom segment; `jl_check_required_dimensions` raises if it is missing. | Database | `engine/src/project-gl-controls.integration.test.ts` |
+| L3 | **Required dimensions are enforced per account.** An account may require subsidiary, department, project, location, class, party, or any custom segment; `jl_check_required_dimensions` raises if it is missing. | Database | `engine/src/projects/gl-controls.integration.test.ts` |
 | L4 | Account type carries normal balance and statement placement directly, rather than being re-derived in report code. | Database | `schema/src/coa.ts` |
 | L5 | Accounts may be restricted to one subsidiary or currency, preventing cross-entity or cross-currency misposting. | Database | `accounts.subsidiary_id`, `accounts.currency_restriction` |
 | L6 | Custom segment values on documents, lines, and journal lines are validated against their segment definitions. | Database | `documents_extra_dims_guard`, `journal_lines_extra_dims_guard` |
@@ -132,7 +132,7 @@ enabled on **378 tables**.
 | # | Control | Layer | Evidence |
 | --- | --- | --- | --- |
 | P1 | **Every entry balances per legal entity**, not merely in aggregate, so entity-level statements can be produced from any entry population. | Database | `jl_check_balanced_by_subsidiary` |
-| P2 | Consolidation supports ownership percentages, non-controlling interests, goodwill configuration, and intercompany eliminations. | Service | `engine/src/consolidation.integration.test.ts` |
+| P2 | Consolidation supports ownership percentages, non-controlling interests, goodwill configuration, and intercompany eliminations. | Service | `engine/src/consolidation/consolidation.integration.test.ts` |
 | P3 | Billing ahead of performance is presented as a contract liability, not revenue. | Service | Conformance case `rev-contract-liability-then-recognition` |
 | P4 | Gross deferred tax assets and liabilities are presented separately rather than netted, as the tax note requires. | Service | Conformance case `tax-deductible-difference-creates-deferred-asset` |
 | P5 | The rate reconciliation runs from the statutory charge through each reconciling item to the reported total, supporting the effective-tax-rate disclosure. | Service | Conformance case `tax-permanent-difference-changes-effective-rate` |
@@ -144,11 +144,11 @@ enabled on **378 tables**.
 
 | # | Control | Layer | Evidence |
 | --- | --- | --- | --- |
-| R1 | **Tenant isolation is enforced by the database.** Row-level security is enabled on 378 tables with 387 policies; the application connects as a role that is neither superuser nor `BYPASSRLS`. | Database | `engine/src/db-rls.integration.test.ts`, verified at bootstrap |
-| R2 | Payment applications cannot exceed the document amount; over-application is refused. | Database + Service | `application_open_balance`, `engine/src/payments.integration.test.ts` |
+| R1 | **Tenant isolation is enforced by the database.** Row-level security is enabled on 378 tables with 387 policies; the application connects as a role that is neither superuser nor `BYPASSRLS`. | Database | `engine/src/platform/db-rls.integration.test.ts`, verified at bootstrap |
+| R2 | Payment applications cannot exceed the document amount; over-application is refused. | Database + Service | `application_open_balance`, `engine/src/payments/payments.integration.test.ts` |
 | R3 | Applications are idempotent under retry, so a repeated request cannot settle the same open item twice. | Database | `application_idempotency_guard` |
-| R4 | Vendor payment release can be gated on compliance evidence — insurance certificates and lien waivers — so an obligation is not discharged before conditions are met. | Service | `engine/src/subcontracts.ts` |
-| R5 | Inventory concurrency controls prevent overselling stock the entity does not hold. | Database + Service | `engine/src/inventory.integration.test.ts` |
+| R4 | Vendor payment release can be gated on compliance evidence — insurance certificates and lien waivers — so an obligation is not discharged before conditions are met. | Service | `engine/src/projects/subcontracts.ts` |
+| R5 | Inventory concurrency controls prevent overselling stock the entity does not hold. | Database + Service | `engine/src/inventory/inventory.integration.test.ts` |
 
 ---
 
@@ -160,7 +160,7 @@ enabled on **378 tables**.
 | --- | --- | --- |
 | G1 | The runtime database role is verified at bootstrap to be `NOSUPERUSER`, `NOBYPASSRLS`, with fail-closed row-level security. Bootstrap refuses to complete otherwise. | `scripts/bootstrap.ts` |
 | G2 | Separate database-owner and constrained application credentials are generated at install; migrations run in a one-shot privileged container, and the long-running web and worker processes never receive the owner login. | `scripts/compose-up.sh` |
-| G3 | Role-based permissions with built-in roles; permission changes require re-seeding role snapshots, so a permission cannot be silently granted by editing one row. | `engine/src/seed-roles.ts` |
+| G3 | Role-based permissions with built-in roles; permission changes require re-seeding role snapshots, so a permission cannot be silently granted by editing one row. | `engine/src/provisioning/seed-roles.ts` |
 | G4 | Self-approval prevention, quorum, and delegation provide segregation of duties over material transactions. | `engine/src/flows/quorum.test.ts` |
 | G5 | Organisation-scoped API keys with generated OpenAPI documentation; secrets are encrypted at rest with a deployment-supplied data key. | `web/lib/api/openapi.ts` |
 | G6 | Sandboxes are clones with outbound side effects neutered and optional data masking, so testing cannot email real customers or move real money. Row-level security is re-verified on the clone. | `engine/src/sandbox/`, `engine/src/sandbox/verify-rls.ts` |
@@ -180,7 +180,7 @@ enabled on **378 tables**.
 | # | Control | Evidence |
 | --- | --- | --- |
 | G12 | The audit log and all close evidence are append-only at the database layer. | `audit_log_append_only_guard` and the close-evidence triggers |
-| G13 | Continuous-close detectors run configurable accounting and finance exception checks and raise findings for review. | `engine/src/continuous-close.ts` |
+| G13 | Continuous-close detectors run configurable accounting and finance exception checks and raise findings for review. | `engine/src/continuous-close/continuous-close.ts` |
 | G14 | A seeded business simulator advances a synthetic company through time and **halts on the first invariant failure**, writing a defect bundle with a reproduction recipe. Its operator protocol requires fixing the product — never the harness, never relaxing the invariant. | `engine/src/sim/` |
 | G15 | The golden harness produces a diffable checkpoint — counts, trial balance, control tie-outs, check results, and report timings — that can be compared across commits to detect an unintended change in reported figures. | `engine/src/harness/scenario.ts` |
 | G16 | A health endpoint reports application and background-worker status. | `GET /api/v1/health?include=worker` |
@@ -213,9 +213,9 @@ are not claimed in either direction.
 
 **Coverage gaps.** Browser end-to-end coverage is a smoke tier only. Targeted
 database integration tests cover concurrent posting of one document
-(`engine/src/posting-exactly-once.integration.test.ts`) and rollback of period
+(`engine/src/ledger/posting-exactly-once.integration.test.ts`) and rollback of period
 close writes after an injected failure
-(`engine/src/close-period-identity.integration.test.ts`). These cases do not
+(`engine/src/close/period-identity.integration.test.ts`). These cases do not
 establish comprehensive concurrency, load, or fault-injection coverage across
 the product. There is no automated segregation-of-duties conflict report or
 automated authorisation-matrix test across every route and role.

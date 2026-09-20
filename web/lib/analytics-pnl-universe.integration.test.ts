@@ -5,7 +5,7 @@
 //
 // Run single-file with:
 //   OPENBOOKS_TEST_ALLOW_UNMARKED_DB=1 node --import tsx \
-//     --import ./engine/src/test-database-bypass.ts \
+//     --import ./engine/src/testing/database-bypass.ts \
 //     --test web/lib/analytics-pnl-universe.integration.test.ts   (from repo root)
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -20,8 +20,8 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import('drizzle-orm');
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts');
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts');
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
 const { healthData } = await import('./analytics/health-data');
 const { customerProfitability } = await import('./analytics/customer-data');
 const { profitAndLoss } = await import('./reports/statements');

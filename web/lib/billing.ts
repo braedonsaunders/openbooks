@@ -1,14 +1,14 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { add, cmp, fromUnits, isZero, mulDecimal, mulPercent, normalizeMoney, sum, toUnits } from '@openbooks/engine/src/money.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { add, cmp, fromUnits, isZero, mulDecimal, mulPercent, normalizeMoney, sum, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { canonicalDecimal } from './exact-decimal'
 import { findLapsedRateCard, mergeCharges, priceAdjustments, resolveRateAdjustments } from './rate-adjustments'
 import { addInvoiceQuantities, applyRollup, resolveInvoicingProfile } from './invoice-rollup'
-import { roundCurrencyMoney } from '@openbooks/engine/src/currencies.ts'
+import { roundCurrencyMoney } from '@openbooks/engine/src/fx/currencies.ts'
 import { subsidiaryVisibleFilter } from './subsidiaries'
 import { projectContractCapacityUsed } from './wip-billing'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 
 /** The day the invoice is cut, or the period it closes. */
 async function invoiceDateOf(orgId: string, req: { cutoff_date?: string | null }): Promise<string> {
@@ -30,10 +30,10 @@ function timeKindOf(name: unknown): 'regular' | 'overtime' | 'double_time' | nul
   if (n.includes('over')) return 'overtime'
   return 'regular'
 }
-import { recognitionAccounts } from '@openbooks/engine/src/project-recognition.ts'
+import { recognitionAccounts } from '@openbooks/engine/src/projects/recognition.ts'
 import { loadProjectType } from './project-type'
 import { computeBillTotalsWithProvider, nextDocumentNumber, persistLineTaxComponents, taxProfileMap } from './bills'
-import { persistTaxQuote } from '@openbooks/engine/src/tax-rate-providers.ts'
+import { persistTaxQuote } from '@openbooks/engine/src/tax/rate-providers.ts'
 import { featureEnabled, type FeatureState } from './features'
 
 /**

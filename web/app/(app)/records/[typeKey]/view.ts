@@ -3,7 +3,7 @@ import 'server-only'
 import { getTranslations } from 'next-intl/server'
 import { notFound } from 'next/navigation'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import type { FieldValueMap, FormSection } from '@openbooks/forms-core'
 import type { FormField } from '@openbooks/forms-core'
 import {

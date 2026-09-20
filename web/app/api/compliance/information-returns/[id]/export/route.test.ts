@@ -113,9 +113,9 @@ const mockUrls = new Map<string, string>([
   ["@/lib/authz", "mock:authz"],
   ["@/lib/compliance", "mock:compliance"],
   ["@/lib/list-params", "mock:list-params"],
-  ["@openbooks/engine/src/business-date.ts", "mock:business-date"],
-  ["@openbooks/engine/src/db.ts", "mock:db"],
-  ["@openbooks/engine/src/information-returns.ts", "mock:information-returns"],
+  ["@openbooks/engine/src/platform/business-date.ts", "mock:business-date"],
+  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
+  ["@openbooks/engine/src/compliance/information-returns.ts", "mock:information-returns"],
 ]);
 
 const hooks = registerHooks({

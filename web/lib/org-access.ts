@@ -1,8 +1,8 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext } from "@openbooks/engine/src/db.ts";
-import { permissionSetCovers, resolveEffectivePermissions } from "@openbooks/engine/src/permissions.ts";
+import { db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
+import { permissionSetCovers, resolveEffectivePermissions } from "@openbooks/engine/src/organization/permissions.ts";
 
 /**
  * The "one login across tenants" resolution layer. A person logs in as their

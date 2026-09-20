@@ -77,7 +77,7 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ['@/lib/api/json', 'mock:json'],
-  ['@openbooks/engine/src/db.ts', 'mock:db'],
+  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['../../../../lib/file-cabinet', 'mock:file-cabinet'],
   ['../../../../lib/field-ticket-lock', 'mock:lock'],
   ['../../../../lib/field-ticket-token', 'mock:token'],

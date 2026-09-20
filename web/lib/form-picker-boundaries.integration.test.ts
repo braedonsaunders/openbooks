@@ -13,8 +13,8 @@ registerHooks({resolve(specifier,context,next){
  return next(specifier,context);
 }});
 const {sql}=await import('drizzle-orm');
-const {db,withOrgContext}=await import('@openbooks/engine/src/db.ts');
-const {createScratchOrg,createScratchUser,dropScratchOrg}=await import('@openbooks/engine/src/test-fixtures.ts');
+const {db,withOrgContext}=await import('@openbooks/engine/src/platform/db.ts');
+const {createScratchOrg,createScratchUser,dropScratchOrg}=await import('@openbooks/engine/src/testing/fixtures.ts');
 const {GET}=await import('../app/api/forms/options/route');
 const sources=['parties','parties&partyKind=customer','parties&partyKind=vendor','parties&partyKind=employee','reference&table=parties','reference&table=projects','reference&table=accounts','gl_accounts','reference&table=items'] as const;
 for(const source of sources){for(const scope of ['all','restricted','empty'] as const){

@@ -91,7 +91,7 @@ const mockUrls = new Map<string, string>([
   ['../../../../../lib/report-labels', 'mock:report-labels'],
   ['../../../../../lib/export', 'mock:export'],
   ['../../../../../lib/statement-format', 'mock:statement-format'],
-  ['@openbooks/engine/src/business-date.ts', 'mock:business-date'],
+  ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
   ['@openbooks/pdf', 'mock:pdf'],
 ])
 

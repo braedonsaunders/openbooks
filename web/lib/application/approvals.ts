@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
 import {
   decideDocumentApproval,
   DocumentApprovalError,
@@ -9,14 +9,14 @@ import {
   type WorklistBudget,
   type WorklistDocument,
   type WorklistPayRun,
-} from "@openbooks/engine/src/approval-worklist.ts";
+} from "@openbooks/engine/src/flows/approval-worklist.ts";
 import {
   decideGate,
   GateError,
   type WorklistGate,
 } from "@openbooks/engine/src/flows/index.ts";
-import { decidePaymentRun } from "@openbooks/engine/src/payment-operations.ts";
-import { PaymentError } from "@openbooks/engine/src/payments.ts";
+import { decidePaymentRun } from "@openbooks/engine/src/payments/operations.ts";
+import { PaymentError } from "@openbooks/engine/src/payments/payments.ts";
 import { can, type Authz } from "../authz";
 import { isFeatureEnabled } from "../features";
 import { isUuid } from "../list-params";

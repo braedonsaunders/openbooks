@@ -78,7 +78,7 @@ test("an untranscribed state is refused BY NAME, with the publication and the fi
       const message = (error as Error).message;
       assert.match(message, /DC income tax withholding is not implemented/);
       assert.match(message, /District of Columbia FR-230/);
-      assert.match(message, /engine\/src\/payroll\/us\/states\/dc\.ts/);
+      assert.match(message, /engine\/src\/payroll\/us\/states\/dc\.ts/); // source-path: synthetic
       assert.match(message, /withholding the federal amount.*would each be silently\s+wrong/s);
       assert.match(message, /Implemented today: AL, AZ, AR, CA, CO, CT, DE, GA, HI, ID, IL, IN, IA, KS, KY, LA, ME, MD, MA, MI, MN, MS, MO, MT, NE, NJ, NM, NY, NC, ND, OH, OK, OR, PA, RI, SC, UT, VT, VA, WV, WI/);
       return true;

@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { documentRevisionCounterSql } from '@openbooks/engine/src/document-revision.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { documentRevisionCounterSql } from '@openbooks/engine/src/records/revision.ts'
 import type { FieldValueMap, FormField, FormSection } from '@openbooks/forms-core'
 import { formatFieldValue, lintRecordFields, type RecordStatus, type RecordTypeStatus } from './record-schema'
 

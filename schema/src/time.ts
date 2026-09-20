@@ -88,7 +88,7 @@ export const timeEntries = pgTable(
      *
      * The ordering fact, and nothing else. Several derived earnings are costed
      * to "the first job of the day" (travel pay:
-     * engine/src/payroll-derived-earnings.ts), and with only `worked_on` to go
+     * engine/src/payroll/derived-earnings.ts), and with only `worked_on` to go
      * on "first" could be resolved from nothing better than the order the rows
      * were captured in — so a field app that uploads a day's rows out of order,
      * or a crew sheet keyed in job-by-job, costed travel to the wrong job with

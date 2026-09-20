@@ -1,5 +1,5 @@
 import type { InvoiceRollup, InvoiceRollupGroup, InvoicingProfile } from '@openbooks/schema/src/project-types.ts'
-import { add, normalizeDecimal } from '@openbooks/engine/src/money.ts'
+import { add, normalizeDecimal } from '@openbooks/engine/src/money/money.ts'
 
 /**
  * Invoice rollup — presenting billed work the way a customer has agreed to see it.

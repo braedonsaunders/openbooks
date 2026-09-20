@@ -1,5 +1,5 @@
 // Built-in report definitions — plain ReportCustomQuery plans against the
-// entity catalog, seeded per-org by engine/src/seed-reports.ts (kind =
+// entity catalog, seeded per-org by engine/src/provisioning/seed-reports.ts (kind =
 // 'built_in'). Users can run/schedule them as-is or clone them in the studio.
 //
 // Year-wide windows use the `period_preset` operator with value

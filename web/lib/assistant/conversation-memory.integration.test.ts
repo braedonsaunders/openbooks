@@ -31,8 +31,8 @@ registerHooks({
 });
 
 const { sql } = await import("drizzle-orm");
-const { db } = await import("@openbooks/engine/src/db.ts");
-const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
+const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { countConversationAssistantTurns, readConversationSummary, writeConversationSummary } =
   await import("./conversation-memory");
 const { appendMessage } = await import("../ai-conversations");

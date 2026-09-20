@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { markReconciled } from '@openbooks/engine/src/banking.ts'
+import { markReconciled } from '@openbooks/engine/src/banking/banking.ts'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../../lib/list-params'
 import { bankingErrorResponse } from '../../../util'

@@ -1,6 +1,6 @@
-import { addCalendarDays, businessToday, parseIsoDate } from "../business-date.ts";
-import { QboClient } from "../qbo.ts";
-import { formatMoney, fromUnits, toUnits } from "../money.ts";
+import { addCalendarDays, businessToday, parseIsoDate } from "../platform/business-date.ts";
+import { QboClient } from "../connectors/qbo.ts";
+import { formatMoney, fromUnits, toUnits } from "../money/money.ts";
 import { buildNativeFromQbo, isQboVoided, qboVoidNote, type QboBuildOpts, type QboTxn } from "./qbo-native.ts";
 import type { NativeContext, NativeDocument } from "./native.ts";
 import type {

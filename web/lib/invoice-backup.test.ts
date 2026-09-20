@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
-import { toUnits } from '../../engine/src/money.ts'
+import { toUnits } from '../../engine/src/money/money.ts'
 import { readFileSync } from 'node:fs'
 
 // invoice-backup is a server-only module; mock that marker so its pure amount

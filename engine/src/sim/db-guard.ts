@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db, env } from "../db.ts";
+import { db, env } from "../platform/db.ts";
 
 /**
  * Safety interlocks.

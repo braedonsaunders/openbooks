@@ -10,7 +10,7 @@
  * - The annual Informe de Rendimentos (ex-DIRF, now eSocial + EFD-Reinf
  *   fed) has no builder: `yearEnd` is empty rather than approximate.
  */
-import type { PayrollPackFilings } from "../../payroll-filing-registry.ts";
+import type { PayrollPackFilings } from "../filing-registry.ts";
 
 export function brPackFilings(): PayrollPackFilings {
   return {

@@ -3,7 +3,7 @@
  * NIC (category A), no database, no floats.
  *
  * Money discipline: decimal strings at the repo's 1e4-unit scale
- * (`toUnits`/`fromUnits` from engine/src/money.ts). All rates here are whole
+ * (`toUnits`/`fromUnits` from engine/src/money/money.ts). All rates here are whole
  * percents, so every multiplication is exact integer arithmetic; the only
  * rounding in the pack is the penny rounding below.
  *
@@ -44,7 +44,7 @@
  * declaration-B starter's old-employer pay. See its doc comment.
  */
 
-import { fromUnits, toUnits } from "../../money.ts";
+import { fromUnits, toUnits } from "../../money/money.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import {
   GB_NIC_ANNUAL,

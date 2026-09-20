@@ -1,10 +1,10 @@
 import { sql } from "drizzle-orm";
-import { addCalendarDays, businessToday } from "../business-date.ts";
-import { db } from "../db.ts";
+import { addCalendarDays, businessToday } from "../platform/business-date.ts";
+import { db } from "../platform/db.ts";
 import {
   effectiveDetectorMateriality,
   type ContinuousCloseDetectorPolicy,
-} from "../continuous-close-config.ts";
+} from "./continuous-close-config.ts";
 import { classifyForensicItem, moneyAbs } from "./measure.ts";
 import type { AgentFinding } from "./types.ts";
 

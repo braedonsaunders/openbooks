@@ -266,7 +266,7 @@ const hooks = registerHooks({
     }
     const mockUrl = new Map([
       ['drizzle-orm', 'mock:drizzle'],
-      ['@openbooks/engine/src/db.ts', 'mock:db'],
+      ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
       ['../setup/registry', 'mock:registry'],
       ['../setup/coerce', 'mock:coerce'],
       ['../custom-fields', 'mock:custom-fields'],

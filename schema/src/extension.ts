@@ -100,7 +100,7 @@ export const userScripts = pgTable(
     source: text("source").notNull(),
     /** For scheduled scripts. */
     cron: text("cron"),
-    /** Scheduled scripts: next due tick (polled by engine/src/scheduler.ts);
+    /** Scheduled scripts: next due tick (polled by engine/src/scheduling/scheduler.ts);
      *  null = not scheduled. Set on create/update from the cron expression. */
     nextRunAt: timestamp("next_run_at", { withTimezone: true }),
     /** Denormalized last-execution stamp for the admin list view. */
@@ -248,7 +248,7 @@ export const savedReports = pgTable(
  * migration loader, the incremental "mirror" sync, and the A/B comparison.
  *
  * Credentials NEVER live in plaintext: `secrets` holds an AES-256-GCM sealed
- * JSON blob (engine/src/secrets.ts, keyed on OPENBOOKS_DATA_KEY); `config`
+ * JSON blob (engine/src/platform/secrets.ts, keyed on OPENBOOKS_DATA_KEY); `config`
  * holds only non-secret settings (host, account id, base currency, realm id).
  */
 export const connections = pgTable(

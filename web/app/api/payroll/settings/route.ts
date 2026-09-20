@@ -1,13 +1,13 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import {
   payrollSettings,
   seedPayrollComponents,
   statutoryHolidayPayEnabled,
   type PayrollSubsidiaryScope,
-} from '@openbooks/engine/src/payroll-run.ts'
+} from '@openbooks/engine/src/payroll/run.ts'
 import {
   declaredRemittanceFrequencySettingsKeys,
   declaredRemittanceVendorSettingsKeys,
@@ -18,8 +18,8 @@ import {
   remittanceScheduleForFrequencyKey,
 } from '@openbooks/engine/src/payroll/packs.ts'
 import { assertValidPasswordExpression, pdfEncryptionAvailable } from '@openbooks/pdf'
-import { payrollPaymentMethodSettings } from '@openbooks/engine/src/payroll-payment-method.ts'
-import { payrollSetupState } from '@openbooks/engine/src/payroll-readiness.ts'
+import { payrollPaymentMethodSettings } from '@openbooks/engine/src/payroll/payment-method.ts'
+import { payrollSetupState } from '@openbooks/engine/src/payroll/readiness.ts'
 import { STUB_PASSWORD_TOKENS, stubPasswordPolicy } from '../../../../lib/payroll-outputs'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { guardRootSubsidiaryScope } from '../../../../lib/authz'
@@ -492,7 +492,7 @@ export async function PUT(req: Request) {
     }
     settings.countries = [...new Set(countries.map(String))]
   }
-  // Statutory holiday pay (engine/src/payroll-run.ts phase 2). Org-level
+  // Statutory holiday pay (engine/src/payroll/run.ts phase 2). Org-level
   // gate; default OFF for tenants that predate the feature because it changes
   // gross pay.
   if ('statutoryHolidayPay' in body) {

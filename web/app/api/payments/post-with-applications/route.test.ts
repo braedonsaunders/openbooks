@@ -85,10 +85,10 @@ const hooks = registerHooks({
 
     if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
     const mocked = new Map<string, string>([
-      ['@openbooks/engine/src/db.ts', 'mock:db'],
-      ['@openbooks/engine/src/payments.ts', 'mock:payments'],
+      ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
+      ['@openbooks/engine/src/payments/payments.ts', 'mock:payments'],
       ['@openbooks/engine/src/flows/index.ts', 'mock:flows'],
-      ['@openbooks/engine/src/posting.ts', 'mock:posting'],
+      ['@openbooks/engine/src/ledger/posting.ts', 'mock:posting'],
       ['../../../../lib/authz', 'mock:authz'],
       ['@/lib/authz', 'mock:authz'],
     ]).get(specifier)

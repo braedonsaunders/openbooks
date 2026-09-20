@@ -22,8 +22,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
-import { createScratchOrg, type ScratchOrg } from "../test-fixtures.ts";
+import { db } from "../platform/db.ts";
+import { createScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { runSync } from "./sync.ts";
 import type {
   MigrationSource,

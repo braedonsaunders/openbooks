@@ -71,13 +71,13 @@ test("unattended preview input runs as the version publisher", () => {
 });
 
 test("scheduler outbox enqueues and processes the allocation_run kind", () => {
-  const source = readFileSync(new URL("../scheduler-outbox.ts", import.meta.url), "utf8");
+  const source = readFileSync(new URL("../scheduling/outbox.ts", import.meta.url), "utf8");
   assert.match(source, /ensureAllocationRunOutboxRows/);
   assert.match(source, /processAllocationRunOutboxRow/);
 });
 
 test("close automation routes run_allocation to the allocation scheduler", () => {
-  const source = readFileSync(new URL("../close.ts", import.meta.url), "utf8");
+  const source = readFileSync(new URL("../close/close.ts", import.meta.url), "utf8");
   assert.match(source, /rule\.action === "run_allocation"/);
   assert.match(source, /runAllocationCloseAction/);
 });

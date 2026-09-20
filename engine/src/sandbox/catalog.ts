@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
+import { db } from "../platform/db.ts";
 
 /**
  * Catalog introspection for the clone engine. Rather than hardcode 119 tables,

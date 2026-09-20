@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { recognitionAccounts } from '@openbooks/engine/src/project-recognition.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { recognitionAccounts } from '@openbooks/engine/src/projects/recognition.ts'
 import { projectTimeSummary, projectUnbilled } from '../../../lib/project-costing'
 import { resolveProjectFinancials } from '../../../lib/project-financials'
 import { loadProjectType } from '../../../lib/project-type'
@@ -8,8 +8,8 @@ import { listBillableFieldTickets, listBillingRequests } from '../../../lib/bill
 import { resolveInvoicingPreference } from '../../../lib/invoicing-preference'
 import { isFeatureEnabled } from '../../../lib/features'
 import type { ProjectCockpitData } from './ProjectDrawer'
-import { formatMoney, mulPercent, sum } from '@openbooks/engine/src/money.ts'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { formatMoney, mulPercent, sum } from '@openbooks/engine/src/money/money.ts'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 
 /**
  * Loads everything the project flyout's cockpit tabs need. The Financials tab is

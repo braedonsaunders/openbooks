@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
-import { createScratchOrg, dropScratchOrg } from "../test-fixtures.ts";
+import { db } from "../platform/db.ts";
+import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 import { definitionHash } from "./validate.ts";
 import {
   AllocationRuleError,

@@ -55,11 +55,11 @@ const routeUrl = "./route.ts?payment-links-expiry-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
-const { db, withOrgContext } = await import("@openbooks/engine/src/db.ts");
-const { sealJson } = await import("@openbooks/engine/src/secrets.ts");
-const { postDocument } = await import("@openbooks/engine/src/posting.ts");
+const { db, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { sealJson } = await import("@openbooks/engine/src/platform/secrets.ts");
+const { postDocument } = await import("@openbooks/engine/src/ledger/posting.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/src/test-fixtures.ts"
+  "@openbooks/engine/src/testing/fixtures.ts"
 );
 const DB = !!process.env.OPENBOOKS_DB_URL;
 

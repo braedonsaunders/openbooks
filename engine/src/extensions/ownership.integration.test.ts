@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
-import { db, env, withBypass } from '../db.ts'
-import { createScratchOrg, createScratchUser, dropScratchOrg } from '../test-fixtures.ts'
-import { installTestExtension } from '../test-extension-packages.ts'
+import { db, env, withBypass } from '../platform/db.ts'
+import { createScratchOrg, createScratchUser, dropScratchOrg } from '../testing/fixtures.ts'
+import { installTestExtension } from '../testing/extension-packages.ts'
 
 test('database refuses another extension active version within the same tenant', { skip: !env.OPENBOOKS_DB_URL }, async () => {
   const { orgId } = await withBypass(() => createScratchOrg())

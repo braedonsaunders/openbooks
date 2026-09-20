@@ -2,7 +2,7 @@ import 'server-only'
 import { cookies } from 'next/headers'
 import { sql } from 'drizzle-orm'
 import type { EmailActor } from '@openbooks/schema'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { documentEmail, deriveEmailDeliveryKey, sendVia } from '@openbooks/emails'
 import {
   insertEmailLog,
@@ -10,8 +10,8 @@ import {
   markEmailUncertain,
   markEmailSent,
   resolveOrgEmailTransport,
-} from '@openbooks/engine/src/email-config.ts'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
+} from '@openbooks/engine/src/delivery/email-config.ts'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { appBaseUrl } from '@openbooks/engine/src/flows/email-tokens.ts'
 import { verifyPdfEncryption } from '@openbooks/pdf'
 import { isFeatureEnabled } from '../features'

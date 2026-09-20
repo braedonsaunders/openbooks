@@ -7,7 +7,7 @@ const lib = read("./continuous-close.ts");
 const tools = read("./assistant/tools.ts");
 // Pack keys from the WORKTREE engine source (not the linked package, which
 // tracks main and may know packs this worktree does not yet).
-const engineSource = read("../../engine/src/continuous-close-config.ts");
+const engineSource = read("../../engine/src/agents/continuous-close-config.ts");
 const keyBlock = engineSource.slice(
   engineSource.indexOf("CONTINUOUS_CLOSE_AGENT_KEYS = ["),
   engineSource.indexOf("] as const"),
@@ -19,7 +19,7 @@ const CONTINUOUS_CLOSE_AGENT_KEYS = [...keyBlock.matchAll(/"([a-z_]+)"/g)].map((
 // are invisible to the workbench, the routes, and the chat tools.
 test("agent read access is registry-driven, not a hardcoded pair", () => {
   assert.match(lib, /CONTINUOUS_CLOSE_AGENT_KEYS/);
-  assert.match(lib, /from "@openbooks\/engine\/src\/continuous-close-config\.ts"/);
+  assert.match(lib, /from "@openbooks\/engine\/src\/agents\/continuous-close-config\.ts"/);
   assert.doesNotMatch(lib, /\["accounting",\s*"finance"\]/);
   assert.match(lib, /export function canReadContinuousCloseAgent/);
   assert.match(lib, /export function readableContinuousCloseAgents/);

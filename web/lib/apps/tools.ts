@@ -1,6 +1,6 @@
 import 'server-only'
 import { createHash, randomUUID } from 'node:crypto'
-import { featureEnabled, type FeatureState } from '@openbooks/engine/src/feature-registry.ts'
+import { featureEnabled, type FeatureState } from '@openbooks/engine/src/organization/feature-registry.ts'
 import type { Authz } from '../authz'
 import { can } from '../authz'
 import type { SessionUser } from '../auth'

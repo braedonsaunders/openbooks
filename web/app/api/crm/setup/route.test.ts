@@ -121,8 +121,8 @@ const mockSources = new Map<string, string>([
 ]);
 
 const mockUrls = new Map<string, string>([
-  ["@openbooks/engine/src/db.ts", "mock:db"],
-  ["@openbooks/engine/src/crm.ts", "mock:crm"],
+  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
+  ["@openbooks/engine/src/crm/crm.ts", "mock:crm"],
   ["../../../../lib/feature-gates", "mock:feature-gates"],
   ["../../../../lib/features", "mock:features"],
 ]);

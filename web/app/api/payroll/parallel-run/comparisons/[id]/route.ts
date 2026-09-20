@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
   comparisonFindings,
   parallelComparisons,
-} from '@openbooks/engine/src/payroll-parallel-run-store.ts'
+} from '@openbooks/engine/src/payroll/parallel-run-store.ts'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../../lib/list-params'
 import { subsidiaryVisibleFilter } from '../../../../../../lib/subsidiaries'

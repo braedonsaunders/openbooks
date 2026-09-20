@@ -22,7 +22,7 @@ registerHooks({
 });
 
 const { createRecord, updateRecord } = await import("./writers.ts");
-const { documentRevisionCounterSql } = await import("@openbooks/engine/src/document-revision.ts");
+const { documentRevisionCounterSql } = await import("@openbooks/engine/src/records/revision.ts");
 
 /** Current optimistic-concurrency token for a custom record (opaque wire form). */
 async function revisionOf(id: string): Promise<string> {
@@ -33,9 +33,9 @@ async function revisionOf(id: string): Promise<string> {
   );
   return rows.rows[0]!.revision;
 }
-const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/src/test-fixtures.ts"
+  "@openbooks/engine/src/testing/fixtures.ts"
 );
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

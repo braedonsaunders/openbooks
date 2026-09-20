@@ -1,6 +1,6 @@
 import "server-only";
 import { workAsyncStorage } from "next/dist/server/app-render/work-async-storage.external";
-import { registerRequestOrgResolver } from "@openbooks/engine/src/db.ts";
+import { registerRequestOrgResolver } from "@openbooks/engine/src/platform/db.ts";
 import { requestOrgByWorkStore } from "./request-org-state";
 
 /**

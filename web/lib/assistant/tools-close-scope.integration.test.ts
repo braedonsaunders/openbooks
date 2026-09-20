@@ -19,9 +19,9 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 } });
 
 const { sql } = await import('drizzle-orm');
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts');
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/test-fixtures.ts');
-const { ensureCloseDefaults } = await import('@openbooks/engine/src/close.ts');
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts');
+const { ensureCloseDefaults } = await import('@openbooks/engine/src/close/close.ts');
 const { executeAssistantTool } = await import('./registry');
 
 function userFor(orgId: string, userId: string): SessionUser {

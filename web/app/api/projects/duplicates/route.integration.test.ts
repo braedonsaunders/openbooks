@@ -83,9 +83,9 @@ const { GET: previewMerge, POST: commitMerge } =
   (await import(mergeUrl)) as typeof import("../merge/route.ts");
 hooks.deregister();
 
-const { db } = await import("../../../../../engine/src/db.ts");
+const { db } = await import("../../../../../engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } =
-  await import("../../../../../engine/src/test-fixtures.ts");
+  await import("../../../../../engine/src/testing/fixtures.ts");
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 

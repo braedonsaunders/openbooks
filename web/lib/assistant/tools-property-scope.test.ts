@@ -40,7 +40,7 @@ test("rent-roll figures mirror the screen predicates with engine decimal math", 
   assert.match(source, /charge\.frequency === "monthly"/);
   assert.match(source, /line\.invoiceStatus === "posted"/);
   assert.match(source, /String\(line\.invoiceDueOn\) < asOf/);
-  assert.match(source, /from "@openbooks\/engine\/src\/money\.ts"/);
+  assert.match(source, /from "@openbooks\/engine\/src\/money\/money\.ts"/);
   assert.match(source, /propertyManagement_feature_disabled/);
   assert.match(source, /lease_not_found/);
 });

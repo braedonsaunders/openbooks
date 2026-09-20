@@ -28,9 +28,9 @@ function pgMessage(error: unknown): string {
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
-type EngineDb = typeof import("../engine/src/db.ts");
-type EnginePosting = typeof import("../engine/src/posting.ts");
-type EngineFixtures = typeof import("../engine/src/test-fixtures.ts");
+type EngineDb = typeof import("../engine/src/platform/db.ts");
+type EnginePosting = typeof import("../engine/src/ledger/posting.ts");
+type EngineFixtures = typeof import("../engine/src/testing/fixtures.ts");
 type Tx = Parameters<Parameters<EngineDb["db"]["transaction"]>[0]>[0];
 
 type Harness = {
@@ -45,9 +45,9 @@ let harness: Harness | null = null;
 async function ctx(): Promise<Harness> {
   if (!harness) {
     const [{ db }, { postDocument }, { createScratchOrg }] = await Promise.all([
-      import("../engine/src/db.ts"),
-      import("../engine/src/posting.ts"),
-      import("../engine/src/test-fixtures.ts"),
+      import("../engine/src/platform/db.ts"),
+      import("../engine/src/ledger/posting.ts"),
+      import("../engine/src/testing/fixtures.ts"),
     ]);
     const org = await createScratchOrg();
     harness = { db, postDocument, org, retainageAccountId: randomUUID() };
@@ -187,7 +187,7 @@ test(
 if (DB) {
   test.after(async () => {
     if (!harness) return;
-    const { dropScratchOrg } = await import("../engine/src/test-fixtures.ts");
+    const { dropScratchOrg } = await import("../engine/src/testing/fixtures.ts");
     await dropScratchOrg(harness.org.orgId);
     harness = null;
   });

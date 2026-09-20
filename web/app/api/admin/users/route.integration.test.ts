@@ -4,8 +4,8 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { db, pool, orgContext, withBypassContext, withOrgContext, withOrgTransaction } from "@openbooks/engine/src/db.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg } from "@openbooks/engine/src/test-fixtures.ts";
+import { db, pool, orgContext, withBypassContext, withOrgContext, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
 
 const state: { authz: {
   user: { orgId: string; id: string; isSuperAdmin: boolean };

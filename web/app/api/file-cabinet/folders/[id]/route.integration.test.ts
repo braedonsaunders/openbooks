@@ -3,8 +3,8 @@ import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
-import { env, db } from '@openbooks/engine/src/db.ts'
-import { createScratchOrg, dropScratchOrg } from '@openbooks/engine/src/test-fixtures.ts'
+import { env, db } from '@openbooks/engine/src/platform/db.ts'
+import { createScratchOrg, dropScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts'
 
 const stateKey = Symbol.for('openbooks.folder-route-test')
 const state = { authz: null as {

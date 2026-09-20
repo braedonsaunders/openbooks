@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, pool } from "../db.ts";
-import { tick as webTick } from "../scheduler.ts";
-import { WEB_TICK_LOCK_KEY, WORKER_TICK_LOCK_KEY, withTickClaim } from "../scheduler-lock.ts";
+import { db, pool } from "../platform/db.ts";
+import { tick as webTick } from "../scheduling/scheduler.ts";
+import { WEB_TICK_LOCK_KEY, WORKER_TICK_LOCK_KEY, withTickClaim } from "../scheduling/lock.ts";
 import { tick } from "./scheduler.ts";
-import { createScratchOrg, dropScratchOrg } from "../test-fixtures.ts";
+import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 

@@ -7,8 +7,8 @@ import {
   runAutoElimination,
   runCombinedConsolidation,
   runOwnershipConsolidation,
-} from '@openbooks/engine/src/consolidation.ts'
-import { withOrgTransaction } from '@openbooks/engine/src/db.ts'
+} from '@openbooks/engine/src/consolidation/consolidation.ts'
+import { withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { guardFeaturePermission } from '../../../lib/feature-gates'
 import { isUuid } from '../../../lib/list-params'
 

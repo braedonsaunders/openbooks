@@ -1,9 +1,9 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { documentRevisionSql } from '@openbooks/engine/src/document-revision.ts'
-import { db, type SqlExecutor } from '@openbooks/engine/src/db.ts'
-import { resolveAssetAccounts } from '@openbooks/engine/src/depreciation.ts'
-import { fromUnits, toUnits } from '@openbooks/engine/src/money.ts'
+import { documentRevisionSql } from '@openbooks/engine/src/records/revision.ts'
+import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import { resolveAssetAccounts } from '@openbooks/engine/src/assets/depreciation.ts'
+import { fromUnits, toUnits } from '@openbooks/engine/src/money/money.ts'
 
 /**
  * Asset payload for the flyout: the asset row, its category, the resolved

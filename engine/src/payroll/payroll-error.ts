@@ -1,4 +1,4 @@
-import { PayrollError } from "../payroll-error.ts";
+import { PayrollError } from "./error.ts";
 
 /**
  * Anything the jurisdiction layer refuses.
@@ -21,7 +21,7 @@ import { PayrollError } from "../payroll-error.ts";
  * NL — the packs that happened to pick the other root.
  *
  * This still lives in its own module. The cycle hazard both this module and
- * `../payroll-error.ts` were split out to avoid is `extends` evaluating at
+ * `./error.ts` were split out to avoid is `extends` evaluating at
  * MODULE-EVALUATION time against a binding a cycle has not initialized yet;
  * the one module imported here imports NOTHING, so this chain is two deep and
  * terminates, and no cycle can run through it. Do not add another import.

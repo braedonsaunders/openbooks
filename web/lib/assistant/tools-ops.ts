@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
 import { listConnections } from "@openbooks/engine/src/sync/connection.ts";
 import { listSandboxes } from "@openbooks/engine/src/sandbox/index.ts";
 import { PDF_RECORD_TYPE_BY_KEY } from "../pdf-templates/catalog";

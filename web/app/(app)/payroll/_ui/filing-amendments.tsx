@@ -15,8 +15,8 @@ import {
   Skeleton,
   Textarea,
 } from '@openbooks/ui'
-import type { YearEndFilingSection } from '@openbooks/engine/src/payroll-yearend.ts'
-import type { PayrollFilingSlipData } from '@openbooks/engine/src/payroll-filing-registry.ts'
+import type { YearEndFilingSection } from '@openbooks/engine/src/payroll/yearend.ts'
+import type { PayrollFilingSlipData } from '@openbooks/engine/src/payroll/filing-registry.ts'
 import { useMoney } from '../../../../components/money-provider'
 import { confirmDialog } from '../../../../lib/confirm'
 import { payrollSlipFacsimile } from '../../../../lib/payroll-slip-facsimile'

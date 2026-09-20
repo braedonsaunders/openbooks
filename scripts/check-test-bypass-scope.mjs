@@ -979,7 +979,7 @@ for (const finding of findings) {
   const where = finding.note ? `${finding.call} ${finding.note}` : finding.call;
   console.log(
     `${finding.file}:${finding.line} [${finding.name}] ${where} performs unscoped fixture writes, but this file eagerly loads web/lib/request-org.ts (${finding.via || "directly"}).\n` +
-    `  WHY THIS FAILS (and why the symptom misleads): --import ./engine/src/test-database-bypass.ts installs a bypass resolver for the test process, but importing ` +
+    `  WHY THIS FAILS (and why the symptom misleads): --import ./engine/src/testing/database-bypass.ts installs a bypass resolver for the test process, but importing ` +
     `request-org.ts REPLACES it process-wide (the slot lives on globalThis) with a resolver returning undefined outside a Next.js request - so every unscoped write from here on runs RLS-enforced. ` +
     `An unscoped INSERT then dies at setup with \`new row violates row-level security policy\` (looks like a product regression; observed at bootstrapScratchOrg). ` +
     `An unscoped UPDATE/DELETE is worse: it silently matches zero rows, so setup never applies and the test can pass while proving nothing. ` +

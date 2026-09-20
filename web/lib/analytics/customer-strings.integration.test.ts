@@ -12,10 +12,10 @@ registerHooks({ resolve(specifier, context, next) {
 } })
 
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/db.ts')
-const { withSimClock: pinClock } = await import('@openbooks/engine/src/clock.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
-const { postDocument } = await import('@openbooks/engine/src/posting.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/clock.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { postDocument } = await import('@openbooks/engine/src/ledger/posting.ts')
 const { customerStrings } = await import('./customer-strings.ts')
 const { customerData } = await import('./customer-data.ts')
 

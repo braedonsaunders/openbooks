@@ -1,7 +1,7 @@
 'use client'
 
 import { useMoney } from '@/components/money-provider'
-import { cmp as compareMoney } from '@openbooks/engine/src/money.ts'
+import { cmp as compareMoney } from '@openbooks/engine/src/money/money.ts'
 import Link from 'next/link'
 import { Drawer } from '@openbooks/ui'
 import { SlidersHorizontal, Landmark, ArrowUpRight } from 'lucide-react'

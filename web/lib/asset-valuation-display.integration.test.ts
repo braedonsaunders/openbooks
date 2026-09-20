@@ -2,12 +2,12 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { registerHooks } from 'node:module';
-import { buildSchedule, runDepreciation } from '@openbooks/engine/src/depreciation.ts';
-import { toUnits } from '@openbooks/engine/src/money.ts';
+import { buildSchedule, runDepreciation } from '@openbooks/engine/src/assets/depreciation.ts';
+import { toUnits } from '@openbooks/engine/src/money/money.ts';
 import { sql } from 'drizzle-orm';
-import { db } from '@openbooks/engine/src/db.ts';
-import { disposeAsset, remeasureAsset, reverseAssetLifecycleEvent } from '@openbooks/engine/src/asset-lifecycle.ts';
-import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/src/test-fixtures.ts';
+import { db } from '@openbooks/engine/src/platform/db.ts';
+import { disposeAsset, remeasureAsset, reverseAssetLifecycleEvent } from '@openbooks/engine/src/assets/asset-lifecycle.ts';
+import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts';
 
 async function seedAsset(org: ScratchOrg) {
   const actorId = (await seedFlowActors(org.orgId)).adminId;

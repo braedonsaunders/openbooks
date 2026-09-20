@@ -8,7 +8,7 @@ import type {
   PropertyLeaseRow,
   PropertyUnitRow,
   SecurityDepositRow,
-} from "@openbooks/engine/src/property-management.ts";
+} from "@openbooks/engine/src/property/management.ts";
 
 export type PropertyWorkspace = {
   properties: ManagedPropertyRow[];

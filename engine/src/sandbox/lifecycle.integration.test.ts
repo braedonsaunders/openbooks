@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg } from "../test-fixtures.ts";
-import { postDocument } from "../posting.ts";
+import { db } from "../platform/db.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
+import { postDocument } from "../ledger/posting.ts";
 import { createSandbox, deleteSandbox, refreshSandbox, resetSandbox } from "./lifecycle.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

@@ -72,7 +72,7 @@ export interface CostSource {
  * `overheadApplication`): report_only (pure statistical, the default) and
  * net_zero_pair (DR overhead account tagged with the project + CR the SAME
  * account untagged — project-scoped ledger views carry burden, the account and
- * P&L net to zero; see engine/src/overhead-apply.ts). The `rate_engine` method
+ * P&L net to zero; see engine/src/projects/overhead-apply.ts). The `rate_engine` method
  * reuses the True Cost rate engine (per-department composite $/hr = overhead
  * pool ÷ billed hours) and applies it to a project's labor:
  * Σ_dept(project hours × dept rate).

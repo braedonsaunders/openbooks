@@ -34,7 +34,7 @@ failed boot or shutdown is logged loudly but is never fatal.
 ## Signals
 
 All signals are emitted under the instrumentation scope `openbooks.engine`
-(see `engine/src/telemetry.ts`).
+(see `engine/src/platform/telemetry.ts`).
 
 Spans:
 
@@ -61,7 +61,7 @@ Every durable-work surface stops retrying a row once its attempt ceiling is
 reached. That transition is never silent: the poison row itself is stamped
 durably with `terminal_failed_at`, `terminal_failed_by`, the last error, and
 the attempt count (exactly once, crash-safe — see
-`engine/src/terminal-failure.ts`). `posting_effects` additionally records
+`engine/src/platform/terminal-failure.ts`). `posting_effects` additionally records
 `terminal_failure_reason` and changes `status` to `terminal_failed`. One
 structured log line `{"event":"scheduler.terminal_failure",…}` is emitted, and
 the `openbooks.terminal_failures` counter increments by exactly 1.

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { db, schema } from '@openbooks/engine/src/db.ts'
+import { db, schema } from '@openbooks/engine/src/platform/db.ts'
 import { guardPermission } from '../../../../lib/authz'
 
 export const runtime = 'nodejs'

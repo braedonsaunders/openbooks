@@ -10,9 +10,9 @@ registerHooks({
   },
 })
 const { sql } = await import('drizzle-orm')
-const { db } = await import('@openbooks/engine/src/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
-const { postDocument } = await import('@openbooks/engine/src/posting.ts')
+const { db } = await import('@openbooks/engine/src/platform/db.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { postDocument } = await import('@openbooks/engine/src/ledger/posting.ts')
 const { attachExisting, detachAttachment, getAttachmentLink } = await import('./file-cabinet')
 
 /**

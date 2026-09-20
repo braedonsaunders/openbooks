@@ -6,8 +6,8 @@ registerHooks({resolve(specifier,context,next){
   if(specifier === '../money-server' && context.parentURL?.includes('/analytics/'))return {shortCircuit:true,url:'data:text/javascript,export async function getMoneyFormatter(){return {money:String,moneyCompact:String}}'};
   return next(specifier,context);
 }});
-const {withBypass,withOrgContext} = await import('@openbooks/engine/src/db.ts');
-const {createScratchOrg,dropScratchOrg} = await import('@openbooks/engine/src/test-fixtures.ts');
+const {withBypass,withOrgContext} = await import('@openbooks/engine/src/platform/db.ts');
+const {createScratchOrg,dropScratchOrg} = await import('@openbooks/engine/src/testing/fixtures.ts');
 const {healthData} = await import('./analytics/health-data');
 const {financialHealth} = await import('./analytics/financial-health');
 const {customerData} = await import('./analytics/customer-data');

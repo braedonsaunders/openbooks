@@ -11,7 +11,7 @@
  * a specific production org.
  */
 import { sql } from "drizzle-orm";
-import { db, pool } from "../db.ts";
+import { db, pool } from "../platform/db.ts";
 import { applyChangeSet, buildChangeSet } from "./promote.ts";
 import { createSandbox, deleteSandbox, refreshSandbox } from "./lifecycle.ts";
 import { listSandboxes } from "./index.ts";

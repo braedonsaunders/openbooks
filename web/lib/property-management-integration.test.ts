@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
-import { FEATURE_BY_KEY } from '@openbooks/engine/src/feature-registry.ts'
+import { FEATURE_BY_KEY } from '@openbooks/engine/src/organization/feature-registry.ts'
 import { fileURLToPath } from 'node:url'
 import { getArticle } from './docs/index'
 import { MODULE_BY_KEY } from './nav/registry'
@@ -41,7 +41,7 @@ test('property management has feature-switch, navigation, scheduler, and help wi
   const featureWorkspace = source('../app/(app)/admin/setup/features/FeaturesWorkspace.tsx')
   assert.match(featureWorkspace, /propertyManagement: Building2/)
 
-  const schedulerOutbox = source('../../engine/src/scheduler-outbox.ts')
+  const schedulerOutbox = source('../../engine/src/scheduling/outbox.ts')
   assert.match(schedulerOutbox, /runDuePropertyBilling/)
 
   const article = getArticle('property-management')

@@ -2,17 +2,17 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext, withOrgTransaction } from "../db.ts";
-import { CLOSE_MODULES, setPeriodLockState } from "../close.ts";
+import { db, withBypassContext, withOrgTransaction } from "../platform/db.ts";
+import { CLOSE_MODULES, setPeriodLockState } from "../close/close.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
-import { receiveInventory, InventoryError } from "../inventory.ts";
-import { PostingError, postDocument } from "../posting.ts";
+import { receiveInventory, InventoryError } from "../inventory/inventory.ts";
+import { PostingError, postDocument } from "../ledger/posting.ts";
 import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
   type ScratchOrg,
-} from "../test-fixtures.ts";
+} from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 

@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { db, schema } from "../db.ts";
+import { db, schema } from "../platform/db.ts";
 
 /**
  * Flow-managed record locks — the runtime side of the `lock_record` /

@@ -1,6 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import type React from 'react'
 import type { DashboardLayoutData } from '@openbooks/schema'
 import type { Authz } from '@/lib/authz'

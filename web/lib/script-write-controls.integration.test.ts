@@ -17,8 +17,8 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import("drizzle-orm");
-const { db, pool, withOrgContext } = await import("@openbooks/engine/src/db.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import("@openbooks/engine/src/test-fixtures.ts");
+const { db, pool, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { POST, PATCH } = await import("../app/api/admin/scripts/route");
 const { DELETE } = await import("../app/api/admin/scripts/[id]/route");
 

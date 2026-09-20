@@ -3,8 +3,8 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypass, withBypassContext, withOrgContext } from "@openbooks/engine/src/db.ts";
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/src/test-fixtures.ts";
+import { db, withBypass, withBypassContext, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/src/testing/fixtures.ts";
 
 const deliveries: string[] = [];
 const key = Symbol.for("openbooks.reset-concurrency-test");
@@ -26,7 +26,7 @@ registerHooks({
         }
       `)}` };
     }
-    if (context.parentURL?.includes("auth-reset.ts") && specifier === "@openbooks/engine/src/email-config.ts") {
+    if (context.parentURL?.includes("auth-reset.ts") && specifier === "@openbooks/engine/src/delivery/email-config.ts") {
       return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(`
         export async function resolveOrgEmailTransport() {
           await new Promise(resolve => setTimeout(resolve,100));

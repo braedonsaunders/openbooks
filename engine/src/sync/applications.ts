@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { db, pool } from "../db.ts";
-import { divRate, fromUnits, mulRate, toUnits } from "../money.ts";
+import { db, pool } from "../platform/db.ts";
+import { divRate, fromUnits, mulRate, toUnits } from "../money/money.ts";
 import type { SourceApplicationLink } from "./source.ts";
 
 /**

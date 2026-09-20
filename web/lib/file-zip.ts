@@ -1,7 +1,7 @@
 import 'server-only'
 import JSZip from 'jszip'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { getFileBlob, type FileViewer } from './file-cabinet'
 
 /** Guardrails — zipping fetches every blob (often from object storage), so cap

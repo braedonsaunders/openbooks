@@ -8,7 +8,7 @@ import {
   Scale, Search, Table2, Target, TrendingDown, TrendingUp, Trophy,
   UserPlus, UserRound, Users, LayoutGrid, Grid3X3 } from 'lucide-react'
 import { cn, Select, Drawer, Badge } from '@openbooks/ui'
-import { cmp as compareMoney } from '@openbooks/engine/src/money.ts'
+import { cmp as compareMoney } from '@openbooks/engine/src/money/money.ts'
 import type { MoneyValue } from '../../../../lib/money-format'
 import type { UtilizationData, UGroupRow } from '../../../../lib/analytics/utilization-data'
 import { KpiCard } from '../_ui/KpiCard'

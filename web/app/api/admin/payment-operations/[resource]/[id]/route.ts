@@ -1,14 +1,14 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { updatePaymentBankProfile } from '@openbooks/engine/src/payment-operations.ts'
-import { computeNextRunAt } from '@openbooks/engine/src/scripting.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { updatePaymentBankProfile } from '@openbooks/engine/src/payments/operations.ts'
+import { computeNextRunAt } from '@openbooks/engine/src/scripting/scripting.ts'
 import { guardPermission } from '../../../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../../../lib/features'
 import { isUuid } from '../../../../../../lib/list-params'
 import { normalizeCountryCode } from '../../../../../../lib/countries'
-import { isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { auditConfigChange } from '../../_lib'
 
 export const runtime = 'nodejs'

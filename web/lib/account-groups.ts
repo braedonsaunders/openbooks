@@ -6,4 +6,4 @@ export {
   type AccountGroup,
   type GroupRef,
   type ResolvedGroups,
-} from '@openbooks/engine/src/account-groups.ts'
+} from '@openbooks/engine/src/records/account-groups.ts'

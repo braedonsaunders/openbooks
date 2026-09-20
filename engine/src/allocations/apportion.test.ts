@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeMoney, sum } from "../money.ts";
+import { normalizeMoney, sum } from "../money/money.ts";
 import {
   AllocationApportionError,
   apportion,

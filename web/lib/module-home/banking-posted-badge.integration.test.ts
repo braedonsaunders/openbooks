@@ -13,9 +13,9 @@ registerHooks({
   },
 })
 
-const { db, env, withBypass } = await import('@openbooks/engine/src/db.ts')
-const { businessToday } = await import('@openbooks/engine/src/business-date.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
+const { db, env, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
+const { businessToday } = await import('@openbooks/engine/src/platform/business-date.ts')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { bankingHome } = await import('./banking.ts')
 
 /**

@@ -1,6 +1,6 @@
 // The catalog of STANDARD financial-statement reports, seeded into
 // report_definitions as `report_type = 'statement'` rows (kind = 'built_in',
-// system = true) by engine/src/seed-reports.ts. This makes standard reports
+// system = true) by engine/src/provisioning/seed-reports.ts. This makes standard reports
 // first-class definitions in the SAME table as custom reports — the first step
 // of unifying standard + custom onto one model/pipeline/editor.
 //

@@ -8,7 +8,7 @@ import { sql } from "drizzle-orm";
 
 // Regression for the tax-rate domain contract (web/app/api/admin/setup/[entity]/route.ts).
 // Setup used to persist negative and FX-scale tax rates that the calculation
-// engine (engine/src/tax.ts) refuses at every later document, and its
+// engine (engine/src/tax/tax.ts) refuses at every later document, and its
 // autocommit natural-key duplicate check let two concurrent creates commit
 // parallel authoritative definitions. These tests pin the API rejection, the
 // storage CHECK/UNIQUE authority (migration 0042), the deterministic 409
@@ -62,12 +62,12 @@ const routeUrl = "./route.ts?tax-rate-domain-route-test";
 const { DELETE, PATCH, POST } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
-const { db } = await import("@openbooks/engine/src/db.ts");
+const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(
-  "@openbooks/engine/src/test-fixtures.ts"
+  "@openbooks/engine/src/testing/fixtures.ts"
 );
-const { computeLineTaxes } = await import("@openbooks/engine/src/tax.ts");
-const { loadTaxComponentConfig } = await import("@openbooks/engine/src/tax-persist.ts");
+const { computeLineTaxes } = await import("@openbooks/engine/src/tax/tax.ts");
+const { loadTaxComponentConfig } = await import("@openbooks/engine/src/tax/persist.ts");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 

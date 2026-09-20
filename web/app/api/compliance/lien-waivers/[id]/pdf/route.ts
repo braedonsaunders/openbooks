@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
 import { guardLienWaiverFeature } from '@/lib/compliance'
 import { renderLienWaiverPdf } from '@/lib/lien-waiver-pdf'

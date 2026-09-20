@@ -1,4 +1,4 @@
-import { add, neg, sum } from "../money.ts";
+import { add, neg, sum } from "../money/money.ts";
 import { PAYROLL_COUNTRY_PACKS, payrollPack } from "./packs.ts";
 import type { PayrollDeductionTreatment, PayrollTaxBaseKey } from "./packs.ts";
 

@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
-import { postProjectLaborCost } from "../project-recognition.ts";
-import { mul, sum as sumMoney } from "../money.ts";
+import { db } from "../platform/db.ts";
+import { postProjectLaborCost } from "../projects/recognition.ts";
+import { mul, sum as sumMoney } from "../money/money.ts";
 import { addDays } from "./manifest.ts";
 import { postDraftDocument } from "./activities/documents.ts";
 import type { SimOrg } from "./world.ts";

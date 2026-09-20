@@ -10,8 +10,8 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { add, cmp } from "../../money.ts";
-import { PayrollError } from "../../payroll-error.ts";
+import { add, cmp } from "../../money/money.ts";
+import { PayrollError } from "../error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { reduceTaxBases } from "../treatment-bases.ts";
 import { IT_CERTIFICATES } from "./certificates.ts";

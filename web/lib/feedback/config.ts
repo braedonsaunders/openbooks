@@ -1,8 +1,8 @@
 import 'server-only'
 
 import { eq, sql } from 'drizzle-orm'
-import { db, withBypass, withBypassContext } from '@openbooks/engine/src/db.ts'
-import { sealSecret, unsealSecret } from '@openbooks/engine/src/secrets.ts'
+import { db, withBypass, withBypassContext } from '@openbooks/engine/src/platform/db.ts'
+import { sealSecret, unsealSecret } from '@openbooks/engine/src/platform/secrets.ts'
 import { PLATFORM_SETTINGS_ID, platformSettings } from '@openbooks/schema'
 
 /**
@@ -15,7 +15,7 @@ import { PLATFORM_SETTINGS_ID, platformSettings } from '@openbooks/schema'
  * tracker somewhere else — which is why it is deliberately absent from
  * Company Settings and from the Features switchboard.
  *
- * The access token is AES-256-GCM sealed by engine/src/secrets.ts under
+ * The access token is AES-256-GCM sealed by engine/src/platform/secrets.ts under
  * OPENBOOKS_DATA_KEY, the same wire format as every other stored credential.
  * Nothing on this module's read paths returns the plaintext to a browser: the
  * settings view carries only whether a token exists.
@@ -35,7 +35,7 @@ type StoredFeedback = {
   repo?: string
   labels?: string[]
   searchDuplicates?: boolean
-  /** enc:v1 sealed access token (engine/src/secrets.ts). Never plaintext. */
+  /** enc:v1 sealed access token (engine/src/platform/secrets.ts). Never plaintext. */
   token?: string
 }
 

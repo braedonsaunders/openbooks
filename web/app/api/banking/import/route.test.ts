@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
-import { decodeStatementSourceText as engineDecodeStatementSourceText } from '../../../../../engine/src/banking.ts'
+import { decodeStatementSourceText as engineDecodeStatementSourceText } from '../../../../../engine/src/banking/banking.ts'
 
 interface ImportCall {
   options: {
@@ -128,7 +128,7 @@ const hooks = registerHooks({
     if (specifier === '@/lib/api/json') {
       return { url: 'mock:json', shortCircuit: true }
     }
-    if (specifier === '@openbooks/engine/src/banking.ts') {
+    if (specifier === '@openbooks/engine/src/banking/banking.ts') {
       return { url: 'mock:banking', shortCircuit: true }
     }
     if (specifier === '../../../../lib/feature-gates') {

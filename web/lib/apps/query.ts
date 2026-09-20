@@ -1,5 +1,5 @@
 import 'server-only'
-import { db, withOrgTransaction, withTransactionSavepoint } from '@openbooks/engine/src/db.ts'
+import { db, withOrgTransaction, withTransactionSavepoint } from '@openbooks/engine/src/platform/db.ts'
 import { queryIdentifier as ident, queryLiteral as literal, type ReportColumnKind, type ReportEntityColumn } from '@openbooks/reports'
 import { loadApiSchema, resolveApiType, type ApiField } from '../api/schema-registry'
 import { customRecordReportCatalog } from '../custom-record-report-catalog'

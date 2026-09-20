@@ -17,7 +17,7 @@ import { auditColumns, id, money, orgRef } from "./helpers";
 
 /**
  * User-authored depreciation methods — the "formula builder". A method is a
- * formula over the depreciation variable set (engine/src/depreciation-formula.ts:
+ * formula over the depreciation variable set (engine/src/assets/depreciation-formula.ts:
  * NB, OC, RV, AL, CP, …) evaluated each period. Together with the built-ins these
  * make depreciation methods DATA. Category, asset, and book policy rows hold a
  * typed reference to the immutable formula definition.

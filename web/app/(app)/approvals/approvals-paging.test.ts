@@ -14,7 +14,7 @@ const unionReader = readFileSync(
   'utf8',
 )
 const engineUnion = readFileSync(
-  new URL('../../../../engine/src/approval-worklist.ts', import.meta.url),
+  new URL('../../../../engine/src/flows/approval-worklist.ts', import.meta.url),
   'utf8',
 )
 const engineGates = readFileSync(

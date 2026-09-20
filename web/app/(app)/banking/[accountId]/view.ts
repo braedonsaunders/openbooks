@@ -4,8 +4,8 @@ import { getMoneyFormatter } from '@/lib/money-server'
 import { notFound } from 'next/navigation'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { businessTimeZone } from '@openbooks/engine/src/business-date.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { businessTimeZone } from '@openbooks/engine/src/platform/business-date.ts'
 import {
   badge,
   column,

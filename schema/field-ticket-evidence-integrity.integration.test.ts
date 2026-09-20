@@ -12,8 +12,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, pool } from "../engine/src/db.ts";
-import { createScratchOrg, dropScratchOrg } from "../engine/src/test-fixtures.ts";
+import { db, pool } from "../engine/src/platform/db.ts";
+import { createScratchOrg, dropScratchOrg } from "../engine/src/testing/fixtures.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 

@@ -2,7 +2,7 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import { grid, page, pageHeader, panel, ref, statTile, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { requirePermission } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
 import { loadComplianceOverview, requireComplianceFeature, stateTone } from '../../../lib/compliance'

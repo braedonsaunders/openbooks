@@ -1,4 +1,4 @@
-import type { db } from "../db.ts";
+import type { db } from "../platform/db.ts";
 import type { ResolvedCertificate, StoredCertificate } from "./certificates.ts";
 import type { PayrollAssessedOn, PayrollTaxBaseKey } from "./packs.ts";
 
@@ -110,7 +110,7 @@ export interface PayrollStatutoryComputeContext {
   employerEmployeeCount?: number;
   /**
    * THE MONEY CONTRACT. Every amount below is the ledger's canonical
-   * numeric(19,4) decimal string (engine/src/money.ts `toUnits`/`fromUnits`):
+   * numeric(19,4) decimal string (engine/src/money/money.ts `toUnits`/`fromUnits`):
    * up to 4 decimal places, trailing zeros included, plain integers accepted
    * ("0.0000", "999.0000", "0", "0.00" are all legal money; "" is not money —
    * it means absent, and only `insurable`/`nonPeriodic` admit it).

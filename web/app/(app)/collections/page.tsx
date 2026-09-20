@@ -11,10 +11,10 @@ export async function generateMetadata() {
 
 /**
  * Recurring billing + dunning control surface. Recurring schedules clone a
- * template document on a cadence (engine/src/recurring.ts); dunning policies
- * fire an overdue-invoice reminder ladder (engine/src/dunning.ts). When the
+ * template document on a cadence (engine/src/billing/recurring.ts); dunning policies
+ * fire an overdue-invoice reminder ladder (engine/src/receivables/dunning.ts). When the
  * subscriptionBilling feature is on, a Subscriptions tab (plans + subscriptions,
- * engine/src/subscription-billing.ts) is added. All run from the scheduler.
+ * engine/src/billing/subscription-billing.ts) is added. All run from the scheduler.
  */
 export default async function CollectionsPage({
   searchParams,

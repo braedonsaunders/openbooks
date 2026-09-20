@@ -2,8 +2,8 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { enqueueApCapture } from '@openbooks/jobs'
-import { db } from '@openbooks/engine/src/db.ts'
-import { materializeCapture } from '@openbooks/engine/src/ap-capture-service.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { materializeCapture } from '@openbooks/engine/src/payables/ap-capture-service.ts'
 import { guardPermission } from '../../../../lib/authz'
 
 export const runtime = 'nodejs'

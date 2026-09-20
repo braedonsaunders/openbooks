@@ -17,7 +17,7 @@
  * threshold but no daily tranches — monthly tranches are never stretched
  * onto it); grupo outside 1–11; diaria without días de alta.
  */
-import { fromUnits, roundDiv, toUnits } from "../../money.ts";
+import { fromUnits, roundDiv, toUnits } from "../../money/money.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import {
   ES_GRUPOS_2026,

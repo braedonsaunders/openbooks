@@ -30,7 +30,7 @@ registerHooks({
 });
 
 const { buildChatTurn, chatCatalogTiers, createChatPrepareStep } = await import("./registry");
-const { FEATURES } = await import("@openbooks/engine/src/feature-registry.ts");
+const { FEATURES } = await import("@openbooks/engine/src/organization/feature-registry.ts");
 const { activateTurnModules } = await import("./tool-router");
 
 /**

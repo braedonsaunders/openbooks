@@ -1,10 +1,10 @@
 import 'server-only'
 import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { buildAllSchedules } from '@openbooks/engine/src/depreciation.ts'
-import { isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
-import { cmp, normalizeMoney, toUnits } from '@openbooks/engine/src/money.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { buildAllSchedules } from '@openbooks/engine/src/assets/depreciation.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { cmp, normalizeMoney, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { canonicalDecimal } from '../exact-decimal'
 import {
   RefResolver,

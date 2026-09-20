@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { NativeContext } from "./native.ts";
 import { QboSource } from "./qbo-source.ts";
-import type { QboClient } from "../qbo.ts";
+import type { QboClient } from "../connectors/qbo.ts";
 
 const ctx = { baseCurrency: "USD" } as NativeContext;
 

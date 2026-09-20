@@ -97,12 +97,12 @@ const mockUrls = new Map<string, string>([
   ['@/lib/api/json', 'mock:json'],
   ['../../../../../lib/feature-gates', 'mock:feature-gates'],
   ['../../subsidiary-scope', 'mock:subsidiary-scope'],
-  ['@openbooks/engine/src/db.ts', 'mock:db'],
+  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['drizzle-orm', 'mock:drizzle'],
   ['@openbooks/engine/src/payroll/packs.ts', 'mock:packs'],
-  ['@openbooks/engine/src/payroll-error.ts', 'mock:payroll-error'],
-  ['@openbooks/engine/src/payroll-yearend.ts', 'mock:yearend'],
-  ['@openbooks/engine/src/payroll-yearend-amendments.ts', 'mock:amendments'],
+  ['@openbooks/engine/src/payroll/error.ts', 'mock:payroll-error'],
+  ['@openbooks/engine/src/payroll/yearend.ts', 'mock:yearend'],
+  ['@openbooks/engine/src/payroll/yearend-amendments.ts', 'mock:amendments'],
 ])
 
 const hooks = registerHooks({

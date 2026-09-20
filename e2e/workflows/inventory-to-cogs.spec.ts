@@ -11,7 +11,7 @@ import { authedContext, dismissSetupWizard } from "../auth";
  * no UI affordance, so the movement is located through the rendered
  * movements view and reversed through that route. Every amount is asserted
  * exactly — computed in-test with bigint 4dp-unit math mirroring
- * engine/src/money.ts — against rendered lists, drawers, reports, and the
+ * engine/src/money/money.ts — against rendered lists, drawers, reports, and the
  * audit trail.
  *
  * Story (FIFO item, three purchase lots at different costs):

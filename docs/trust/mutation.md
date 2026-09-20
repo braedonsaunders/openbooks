@@ -12,18 +12,18 @@ change there, so a future regression in that code would also pass green.
 | target | score | measured | notes |
 | --- | --- | --- | --- |
 | engine/src/payroll/us/pub15t.ts | 76.0% | 25 | strongest unit coverage in scope |
-| engine/src/tax.ts | 48.0% | 25 | |
-| engine/src/tax-return.ts | 43.5% | 23 | |
-| engine/src/money.ts | 39.1% | 23 | survivors in precision validation + div() rounding |
+| engine/src/tax/tax.ts | 48.0% | 25 | |
+| engine/src/tax-returns/return.ts | 43.5% | 23 | |
+| engine/src/money/money.ts | 39.1% | 23 | survivors in precision validation + div() rounding |
 | engine/src/payroll/canada/t4127.ts | 37.5% | 24 | |
-| engine/src/posting.ts | 34.8% | 23 | unit mode; DB run pending |
-| engine/src/posting-effects.ts | 20.0% | 25 | backoff math covered; claim guards are not |
-| engine/src/depreciation.ts | 17.4% | 23 | 47 baseline tests execute — breadth without teeth |
-| engine/src/payroll-run.ts | 16.0% | 25 | partial unit signal; DB run pending |
-| engine/src/payments.ts | 8.3% | 24 | allocation math thinly covered in unit mode |
+| engine/src/ledger/posting.ts | 34.8% | 23 | unit mode; DB run pending |
+| engine/src/ledger/posting-effects.ts | 20.0% | 25 | backoff math covered; claim guards are not |
+| engine/src/assets/depreciation.ts | 17.4% | 23 | 47 baseline tests execute — breadth without teeth |
+| engine/src/payroll/run.ts | 16.0% | 25 | partial unit signal; DB run pending |
+| engine/src/payments/payments.ts | 8.3% | 24 | allocation math thinly covered in unit mode |
 | engine/src/payroll/us/withholding.ts | 8.3% | 24 | certificate/rate guards survive |
 | engine/src/sync/applications.ts | 0.0% | 23 | only 2 unit tests execute; rest need a DB |
-| engine/src/consolidation.ts | n/a | 0 | DB-only; nightly measures it |
+| engine/src/consolidation/consolidation.ts | n/a | 0 | DB-only; nightly measures it |
 | engine/src/payroll/canada/compute-statutory.ts | n/a | 0 | DB-only; pilot run executed 25/25 baseline tests with 2 survivors at line 127 (boundary `210->211`, `===`→`!==`) |
 | engine/src/payroll/canada/employer-levies.ts | n/a | 0 | DB-only; pilot run executed 2/2 baseline tests |
 | engine/src/payroll/us/compute-statutory.ts | n/a | 0 | DB-only |

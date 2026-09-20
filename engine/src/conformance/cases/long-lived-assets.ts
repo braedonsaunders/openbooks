@@ -8,10 +8,10 @@
 
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { computeDisposal, computeRemeasurement, remeasurementPolicy } from "../../asset-lifecycle.ts";
-import { db } from "../../db.ts";
-import { buildSchedule, runDepreciation } from "../../depreciation.ts";
-import { add } from "../../money.ts";
+import { computeDisposal, computeRemeasurement, remeasurementPolicy } from "../../assets/asset-lifecycle.ts";
+import { db } from "../../platform/db.ts";
+import { buildSchedule, runDepreciation } from "../../assets/depreciation.ts";
+import { add } from "../../money/money.ts";
 import type { ConformanceCase } from "../types.ts";
 
 export const LONG_LIVED_ASSET_CASES: readonly ConformanceCase[] = [

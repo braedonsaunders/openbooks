@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { defaultContinuousCloseDetectors } from "../continuous-close-config.ts";
+import { defaultContinuousCloseDetectors } from "./continuous-close-config.ts";
 import {
   classifyCollectionSeverity,
   collectionsFindings,
@@ -10,7 +10,7 @@ import {
   type OverdueCustomerRow,
   type OverdueInvoiceRow,
 } from "./collections.ts";
-import { MODULE_BY_KEY } from "../modules/nav-registry.ts";
+import { MODULE_BY_KEY } from "../navigation/nav-registry.ts";
 
 function policies(agentThreshold = "1000.0000") {
   void agentThreshold;

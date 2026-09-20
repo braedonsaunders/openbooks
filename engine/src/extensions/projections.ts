@@ -1,10 +1,10 @@
 import { sql } from 'drizzle-orm';
 import { ExtensionProjectionError } from './pages.ts';
 import { isDeepStrictEqual } from 'node:util';
-import { actorHasPermission } from '../actor-permissions.ts';
-import { db, type SqlExecutor } from '../db.ts';
-import { isCataloguePermission, permissionSetCovers } from '../permissions.ts';
-import { defaultNavConfig, type OrgNavConfig } from '../modules/nav-registry.ts';
+import { actorHasPermission } from '../organization/actor-permissions.ts';
+import { db, type SqlExecutor } from '../platform/db.ts';
+import { isCataloguePermission, permissionSetCovers } from '../organization/permissions.ts';
+import { defaultNavConfig, type OrgNavConfig } from '../navigation/nav-registry.ts';
 import { supplementalContributionSchema, type SupplementalContribution } from './contribution-schemas.ts';
 
 export async function listActiveExtensionContributions(orgId: string, tx: SqlExecutor = db) {

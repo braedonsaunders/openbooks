@@ -1,10 +1,10 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
 import {
   CONTINUOUS_CLOSE_AGENT_KEYS,
   type ContinuousCloseAgentKey,
-} from "@openbooks/engine/src/continuous-close-config.ts";
+} from "@openbooks/engine/src/agents/continuous-close-config.ts";
 import { can, type Authz } from "./authz";
 
 export type WorkItemAccess = {

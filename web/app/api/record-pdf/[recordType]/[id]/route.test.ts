@@ -83,7 +83,7 @@ const mockUrls = new Map<string, string>([
   ['../../../../../lib/pdf-templates/store', mockUrl('store')],
   ['../../../../../lib/pdf-templates/values', mockUrl('values')],
   ['../../lib', mockUrl('record-scope')],
-  ['@openbooks/engine/src/business-date.ts', mockUrl('business-date')],
+  ['@openbooks/engine/src/platform/business-date.ts', mockUrl('business-date')],
 ])
 
 const hooks = registerHooks({

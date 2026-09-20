@@ -1,10 +1,10 @@
 import { and, eq, sql } from "drizzle-orm";
-import { ambientTenantOrgId, db, schema } from "../db.ts";
-import { assertDocumentMutationRefsOwned } from "../document-mutation-refs.ts";
+import { ambientTenantOrgId, db, schema } from "../platform/db.ts";
+import { assertDocumentMutationRefsOwned } from "../records/mutation-refs.ts";
 import {
   captureTransactionAuditSnapshot,
   recordTransactionAudit,
-} from "../transaction-audit.ts";
+} from "../records/transaction-audit.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import {
   DOCUMENT_FIELDS,
@@ -17,7 +17,7 @@ import {
  * (subjectKind = the kind string, 'vendor_bill' …), all sharing the documents
  * supertype, collapsed onto OpenBooks' single documents table.
  *
- * loadContext mirrors how engine/src/scripting.ts builds a ScriptContext:
+ * loadContext mirrors how engine/src/scripting/scripting.ts builds a ScriptContext:
  * header row + ordered lines. The header is flattened into `values` (the
  * curated DOCUMENT_FIELDS keys plus everything else on the row for template
  * use); lines ride in `rows.lines` so LogicRule/formula section rollups
@@ -288,7 +288,7 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
         (doc.status === "posted" || doc.status === "approved")
       ) {
         const { completeRequestedDocumentVoid, rejectRequestedDocumentVoid } =
-          await import("../document-void.ts");
+          await import("../ledger/document-void.ts");
         if (outcome === "approved") {
           await completeRequestedDocumentVoid(subjectId, ctx.orgId);
         } else {

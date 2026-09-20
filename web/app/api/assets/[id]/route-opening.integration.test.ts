@@ -59,11 +59,11 @@ const {
 } = await import("../../../../lib/customization/entity-list-query/fixed-assets.ts");
 hooks.deregister();
 
-const { db } = await import("@openbooks/engine/src/db.ts");
-const { documentRevisionSql } = await import("@openbooks/engine/src/document-revision.ts");
-const { buildSchedule, runDepreciation } = await import("@openbooks/engine/src/depreciation.ts");
+const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { documentRevisionSql } = await import("@openbooks/engine/src/records/revision.ts");
+const { buildSchedule, runDepreciation } = await import("@openbooks/engine/src/assets/depreciation.ts");
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import(
-  "@openbooks/engine/src/test-fixtures.ts"
+  "@openbooks/engine/src/testing/fixtures.ts"
 );
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

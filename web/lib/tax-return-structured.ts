@@ -1,5 +1,5 @@
-import type { TaxReturnResult } from '@openbooks/engine/src/tax-return.ts'
-import { normalizeMoney } from '@openbooks/engine/src/money.ts'
+import type { TaxReturnResult } from '@openbooks/engine/src/tax-returns/return.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { TAX_FORM_LAYOUTS, type TaxFormLayout } from './tax-form-facsimile-html'
 
 /**

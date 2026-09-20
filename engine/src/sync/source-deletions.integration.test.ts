@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
-import { postDocument } from "../posting.ts";
+import { db } from "../platform/db.ts";
+import { postDocument } from "../ledger/posting.ts";
 import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-} from "../test-fixtures.ts";
+} from "../testing/fixtures.ts";
 import {
   mirrorSourceDeletion,
   resolveSourceDeletion,

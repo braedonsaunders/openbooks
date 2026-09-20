@@ -9,11 +9,11 @@
  * grouping, group totals, the share-preserving re-explode used by the
  * editable group total, lock semantics, and un-split collapse.
  *
- * Money moves through `engine/src/money.ts` bigint helpers only — never
+ * Money moves through `engine/src/money/money.ts` bigint helpers only — never
  * floats, never `Number(amount)` arithmetic.
  */
 
-import { add, cmp, fromUnits, mulPercent, sum, toUnits } from '@openbooks/engine/src/money.ts'
+import { add, cmp, fromUnits, mulPercent, sum, toUnits } from '@openbooks/engine/src/money/money.ts'
 
 /** Minimal row shape the group model reads. LineGrid rows and drawer LineRows both satisfy it. */
 export interface DistributionGroupRow {

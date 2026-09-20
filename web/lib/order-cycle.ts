@@ -1,8 +1,8 @@
-import { documentRevisionCounterSql, isDocumentRevisionToken } from "@openbooks/engine/src/document-revision.ts"
+import { documentRevisionCounterSql, isDocumentRevisionToken } from "@openbooks/engine/src/records/revision.ts"
 import 'server-only'
 import { createHash, randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { nextDocumentNumber, persistLineTaxComponents } from './bills'
 import {
   ORDER_KINDS,
@@ -11,9 +11,9 @@ import {
   type OrderKind,
   CONVERSION_TARGETS,
 } from './order-kinds'
-import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
-import { add, mulRatio, neg, sum } from '@openbooks/engine/src/money.ts'
-import { lineRequiresReceipt } from '@openbooks/engine/src/ap-capture-service.ts'
+import { promoteCrmAccount } from '@openbooks/engine/src/crm/crm.ts'
+import { add, mulRatio, neg, sum } from '@openbooks/engine/src/money/money.ts'
+import { lineRequiresReceipt } from '@openbooks/engine/src/payables/ap-capture-service.ts'
 import {
   billableRemainderQuantityUnits,
   fromQuantityUnits,
@@ -22,15 +22,15 @@ import {
   toQuantityUnits,
 } from './order-cycle-math'
 import { isFeatureEnabled } from './features'
-import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
-import { applyPurchaseReceiptInventory, applySalesFulfillmentInventoryIssues } from '@openbooks/engine/src/inventory.ts'
+import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { applyPurchaseReceiptInventory, applySalesFulfillmentInventoryIssues } from '@openbooks/engine/src/inventory/inventory.ts'
 import {
   assertStockLocationAdmitsSubsidiary,
   InventoryError,
   InventoryOwnershipError,
-} from '@openbooks/engine/src/inventory.ts'
-import { loadSubsidiaryContext } from '@openbooks/engine/src/subsidiaries.ts'
-import { issueSalesOrder } from '@openbooks/engine/src/sales-orders.ts'
+} from '@openbooks/engine/src/inventory/inventory.ts'
+import { loadSubsidiaryContext } from '@openbooks/engine/src/organization/subsidiaries.ts'
+import { issueSalesOrder } from '@openbooks/engine/src/sales/sales-orders.ts'
 import { activeStockLocations, resolveLineStockLocation } from './stock-locations'
 import { isUuid } from './list-params'
 

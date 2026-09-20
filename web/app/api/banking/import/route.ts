@@ -14,8 +14,8 @@ import {
   type CsvMapping,
   type ParsedStatement,
   type ParsedStatementLine,
-} from '@openbooks/engine/src/banking.ts'
-import { normalizeMoney } from '@openbooks/engine/src/money.ts'
+} from '@openbooks/engine/src/banking/banking.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { bankingErrorResponse } from '../util'

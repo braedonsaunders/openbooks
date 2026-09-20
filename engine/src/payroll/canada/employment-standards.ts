@@ -13,13 +13,13 @@ import type {
  *
  * Every fact here is a TRANSCRIPTION of a statute, cited on the declaration it
  * belongs to. Nothing in this file is a policy choice, a default, or a
- * convenience: the engine (engine/src/payroll-holidays.ts) executes these
+ * convenience: the engine (engine/src/payroll/holidays.ts) executes these
  * declarations and knows no province, and a jurisdiction nobody has transcribed
  * is REFUSED by name rather than quietly inheriting a neighbour's formula.
  *
  * It imports TYPES ONLY from ../packs.ts. `packs.ts` imports the jurisdiction
  * list back, and a value import in both directions is a module-evaluation cycle
- * — the failure engine/src/payroll-error.ts exists to explain. Type imports are
+ * — the failure engine/src/payroll/error.ts exists to explain. Type imports are
  * erased, so this direction costs nothing at runtime.
  *
  * ---------------------------------------------------------------------------

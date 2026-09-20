@@ -1,4 +1,4 @@
-import { declaredPayrollFilings } from '@openbooks/engine/src/payroll-filing-registry.ts'
+import { declaredPayrollFilings } from '@openbooks/engine/src/payroll/filing-registry.ts'
 import { installablePayrollPacks, payrollPack } from '@openbooks/engine/src/payroll/packs.ts'
 import type { SetupColumn, SetupDynamicOptionsSource, SetupEntity, SetupField, SetupFilter, SetupOption } from './registry'
 

@@ -1,7 +1,7 @@
 import 'server-only'
 import { renderHtmlDocumentPdf } from '@openbooks/pdf'
 import type { PdfBranding } from '@openbooks/pdf'
-import type { TaxReturnResult } from '@openbooks/engine/src/tax-return.ts'
+import type { TaxReturnResult } from '@openbooks/engine/src/tax-returns/return.ts'
 import { escFacsimile, renderTaxFormFacsimileBody, type TaxFormLayout } from './tax-form-facsimile-html'
 
 /** Render a form-faithful facsimile straight to a PDF Buffer via the shared

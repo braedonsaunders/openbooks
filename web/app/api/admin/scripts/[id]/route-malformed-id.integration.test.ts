@@ -5,8 +5,8 @@ import test from "node:test";
 
 const root = pathToFileURL(process.cwd() + "/").href;
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
-import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/src/test-fixtures.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
+import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
 import type { Authz } from "../../../../../lib/authz";
 
 // Manually running a script looks the row up by path id. A malformed id must

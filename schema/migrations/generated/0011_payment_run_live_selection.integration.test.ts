@@ -3,17 +3,17 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../../../engine/src/db.ts";
+import { db } from "../../../engine/src/platform/db.ts";
 import {
   createPaymentRun,
   PaymentError,
-} from "../../../engine/src/payments.ts";
-import { postDocument } from "../../../engine/src/posting.ts";
+} from "../../../engine/src/payments/payments.ts";
+import { postDocument } from "../../../engine/src/ledger/posting.ts";
 import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-} from "../../../engine/src/test-fixtures.ts";
+} from "../../../engine/src/testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 const migrationSql = readFileSync(

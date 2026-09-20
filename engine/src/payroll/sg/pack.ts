@@ -37,8 +37,8 @@
  * foreign-worker levy, IR8A/AIS population and the OA/SA/MA split are
  * refused by name.
  */
-import { PayrollError } from "../../payroll-error.ts";
-import type { PayrollFilingData, PayrollPackFilings } from "../../payroll-filing-registry.ts";
+import { PayrollError } from "../error.ts";
+import type { PayrollFilingData, PayrollPackFilings } from "../filing-registry.ts";
 import type {
   PayrollCountryPack,
   PayrollRemittanceSchedule,

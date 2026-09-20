@@ -25,7 +25,7 @@
  * Nothing here knows a country or a state. An agreement is a row; the resolver
  * (engine/src/payroll/withholding-resolution.ts) reads rows.
  */
-import { PayrollError } from "../payroll-error.ts";
+import { PayrollError } from "./error.ts";
 
 export class PayrollReciprocityError extends PayrollError {}
 

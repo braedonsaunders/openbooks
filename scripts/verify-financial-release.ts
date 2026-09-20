@@ -25,7 +25,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { sql } from "drizzle-orm";
-import { db, pool } from "../engine/src/db.ts";
+import { db, pool } from "../engine/src/platform/db.ts";
 
 const repoRoot = resolve(import.meta.dirname, "..");
 

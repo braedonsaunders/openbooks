@@ -99,8 +99,8 @@ const hooks = registerHooks({
       return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
     }
     if (specifier === '@/lib/api/json') return { url: 'mock:json', shortCircuit: true }
-    if (specifier === '@openbooks/engine/src/db.ts') return { url: 'mock:db', shortCircuit: true }
-    if (specifier === '@openbooks/engine/src/payroll-run.ts') {
+    if (specifier === '@openbooks/engine/src/platform/db.ts') return { url: 'mock:db', shortCircuit: true }
+    if (specifier === '@openbooks/engine/src/payroll/run.ts') {
       return { url: 'mock:payroll-run', shortCircuit: true }
     }
     if (specifier.endsWith('/lib/feature-gates')) return { url: 'mock:feature-gates', shortCircuit: true }

@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../../db.ts";
+import { db } from "../../platform/db.ts";
 import { PAYROLL_COUNTRY_PACKS, setPackSlotAccount } from "../packs.ts";
 import {
   calculatePayRun, commitPayRun, createPayRun, seedPayrollComponents,
-} from "../../payroll-run.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../../test-fixtures.ts";
+} from "../run.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../../testing/fixtures.ts";
 
 /**
  * The NL pack, ON A REAL PAY RUN.

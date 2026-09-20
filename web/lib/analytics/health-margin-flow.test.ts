@@ -6,7 +6,7 @@ const state = { otherIncome: 0 };
 Object.assign(globalThis, { __healthMarginFlow: state });
 const mocks: Record<string, string> = {
   "server-only": "export {}",
-  "@openbooks/engine/src/db.ts": "export function ambientTenantOrgId(){return null} export function registerRequestOrgResolver(){} export async function withBypassContext(work){return work()} export const db={async execute(){return {rows:[]}}}",
+  "@openbooks/engine/src/platform/db.ts": "export function ambientTenantOrgId(){return null} export function registerRequestOrgResolver(){} export async function withBypassContext(work){return work()} export const db={async execute(){return {rows:[]}}}",
   "../money-server": "export async function getMoneyFormatter(){return {money:String,moneyCompact:String}}",
   "../features": "export async function isFeatureEnabled(){return false}",
   "./financial-health": `export async function financialHealth(){return {figures:{

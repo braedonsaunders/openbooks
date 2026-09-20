@@ -8,9 +8,9 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context)
 } })
 
-const { db } = await import('@openbooks/engine/src/db.ts')
+const { db } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { resolveItemRate } = await import('./item-rates.ts')
 const { resolveRateAdjustments, findLapsedRateCard } = await import('./rate-adjustments.ts')
 

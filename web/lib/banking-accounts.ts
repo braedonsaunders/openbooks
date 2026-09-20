@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 
 /**
  * The ONE membership read every banking surface agrees on (F-t06-001).
@@ -74,7 +74,7 @@ interface OpeningCarryRow extends Record<string, unknown> {
  *
  * The engine persists the first reconciliation's proven statement opening in
  * that sign-off's audit record (see `firstReconciliationCarry` in
- * engine/src/banking.ts); pre-coverage ledger lines are cleared by that
+ * engine/src/banking/banking.ts); pre-coverage ledger lines are cleared by that
  * carry, so candidate lists must stop offering them for matching. The
  * earliest signed-off session wins, matching the engine's reuse rule.
  */

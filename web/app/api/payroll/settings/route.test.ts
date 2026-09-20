@@ -123,9 +123,9 @@ const { GET, PUT, POST } = (await import(routeUrl)) as typeof import("./route.ts
 hooks.deregister();
 
 const { db, withBypass, withBypassContext, withOrgContext } =
-  await import("../../../../../engine/src/db.ts");
+  await import("../../../../../engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
-  await import("../../../../../engine/src/test-fixtures.ts");
+  await import("../../../../../engine/src/testing/fixtures.ts");
 const { PAYROLL_COUNTRY_PACKS, remittanceScheduleForFrequencyKey } =
   await import("../../../../../engine/src/payroll/packs.ts");
 

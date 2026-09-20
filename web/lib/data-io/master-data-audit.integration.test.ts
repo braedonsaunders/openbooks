@@ -16,9 +16,9 @@ registerHooks({
   },
 })
 
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/db.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  '@openbooks/engine/src/test-fixtures.ts'
+  '@openbooks/engine/src/testing/fixtures.ts'
 )
 const { MASTER_BY_KEY, masterResource } = await import('./master-data-resources.ts')
 

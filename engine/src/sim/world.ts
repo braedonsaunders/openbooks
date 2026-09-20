@@ -1,16 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withBypass, withOrgContext } from "../db.ts";
-import { dropSimOrg } from "../test-fixtures.ts";
-import { provisionOrganizationDefaults } from "../organization-provisioning.ts";
-import { ensureReportDefinitions } from "../ensure-report-definitions.ts";
-import { createScriptJournal } from "../journal-writes.ts";
+import { db, withBypass, withOrgContext } from "../platform/db.ts";
+import { dropSimOrg } from "../testing/fixtures.ts";
+import { provisionOrganizationDefaults } from "../provisioning/organization-provisioning.ts";
+import { ensureReportDefinitions } from "../reports/ensure-report-definitions.ts";
+import { createScriptJournal } from "../ledger/journal-writes.ts";
 import { SIM_ORG_PREFIX } from "./db-guard.ts";
 import type { Profile } from "./profiles/index.ts";
 
 /**
  * Provision a full accounting org for a profile, spanning the entire simulation
- * window. Mirrors the verified column layout of engine/src/test-fixtures.ts
+ * window. Mirrors the verified column layout of engine/src/testing/fixtures.ts
  * createScratchOrg, but parameterized: profile currency, a real chart of
  * accounts, a vendor/customer population, role-scoped actors, and one accounting
  * period per month across [startDate, endDate] (so posting any simulated day

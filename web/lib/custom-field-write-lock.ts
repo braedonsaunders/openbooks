@@ -1,6 +1,6 @@
 import 'server-only';
 import { sql } from 'drizzle-orm';
-import type { SqlExecutor } from '@openbooks/engine/src/db.ts';
+import type { SqlExecutor } from '@openbooks/engine/src/platform/db.ts';
 
 /** App provenance reserves a table/key across kinds. All definition creators
  * share that namespace, acquiring bundle keys in one order to avoid deadlocks. */

@@ -18,8 +18,8 @@
  * passing.
  */
 
-import { toUnits } from "../money.ts";
-import { caseDigest } from "../provenance.ts";
+import { toUnits } from "../money/money.ts";
+import { caseDigest } from "../platform/provenance.ts";
 import type { CaseResult, CorpusReport, RunnableCase } from "./types.ts";
 import { ALLOCATION_CONTROL_CASES } from "./cases/allocations.ts";
 import { CORRECTION_CONTROL_CASES } from "./cases/corrections.ts";

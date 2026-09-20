@@ -11,7 +11,7 @@
  * "none transcribed", which the year-end enumeration reports by name.
  */
 
-import type { PayrollPackFilings } from "../../payroll-filing-registry.ts";
+import type { PayrollPackFilings } from "../filing-registry.ts";
 
 /** Lazy, like caPackFilings/usPackFilings: the filings modules sit in an
  * import cycle with the year-end builders, so the declaration must not be

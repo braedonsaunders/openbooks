@@ -1,7 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
-import { db, type SqlExecutor } from "@openbooks/engine/src/db.ts";
+import { db, type SqlExecutor } from "@openbooks/engine/src/platform/db.ts";
 import {
   ConstructionBillingError,
   approvePayApplication,
@@ -13,15 +13,15 @@ import {
   revisedScheduleValue,
   submitPayApplication,
   voidPayApplication,
-} from "@openbooks/engine/src/construction-billing.ts";
+} from "@openbooks/engine/src/projects/construction-billing.ts";
 import { guardPermission, guardSubsidiaryScope } from "../../../lib/authz";
 import { isUuid } from "../../../lib/list-params";
 import { projectCostSummary } from "../../../lib/project-costing";
-import { add, cmp, normalizeMoney, sum } from "@openbooks/engine/src/money.ts";
+import { add, cmp, normalizeMoney, sum } from "@openbooks/engine/src/money/money.ts";
 import { canonicalDecimal } from "../../../lib/exact-decimal";
 import { guardProjectsFeature } from "../../../lib/projects-gate";
 import { supportsApplicationsForPayment } from "../../../lib/project-billing-procedure";
-import { businessToday } from "@openbooks/engine/src/business-date.ts";
+import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 
 export const runtime = "nodejs";
 

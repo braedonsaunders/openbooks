@@ -1,6 +1,6 @@
 'use client'
 
-import { sum } from '@openbooks/engine/src/money.ts'
+import { sum } from '@openbooks/engine/src/money/money.ts'
 import { useMoney } from '@/components/money-provider'
 import type { MoneyValue } from '@/lib/money-format'
 import { useMemo, useState } from 'react'

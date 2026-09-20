@@ -1,12 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
+import { db } from "../platform/db.ts";
 import {
   ensureCloseDefaults,
   refreshCloseRun,
   requestCloseApproval,
-} from "../close.ts";
+} from "../close/close.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -15,7 +15,7 @@ import {
   seedFlowActors,
   type FlowActors,
   type ScratchOrg,
-} from "../test-fixtures.ts";
+} from "../testing/fixtures.ts";
 import { decideGate } from "./gates.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

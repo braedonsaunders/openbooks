@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { BankingError } from '@openbooks/engine/src/banking.ts'
+import { BankingError } from '@openbooks/engine/src/banking/banking.ts'
 
 /** Map engine BankingError → 422 with its user-safe message; anything else → 500. */
 export function bankingErrorResponse(e: unknown): NextResponse {

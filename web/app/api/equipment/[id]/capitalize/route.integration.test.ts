@@ -84,9 +84,9 @@ const routeUrl = "./route.ts?equipment-capitalization-concurrency-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
-const { db, pool } = await import("@openbooks/engine/src/db.ts");
+const { db, pool } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/src/test-fixtures.ts",
+  "@openbooks/engine/src/testing/fixtures.ts",
 );
 const { Client } = await import("pg");
 type ScratchOrg = Awaited<ReturnType<typeof createScratchOrg>>;

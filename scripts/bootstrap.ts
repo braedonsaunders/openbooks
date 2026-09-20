@@ -20,15 +20,15 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sql } from "drizzle-orm";
 import pg from "pg";
-import { db, env, longPool, pool, withBypassContext } from "../engine/src/db.ts";
+import { db, env, longPool, pool, withBypassContext } from "../engine/src/platform/db.ts";
 import {
   connectMigrationClient,
   describeBootstrapMigrationFailure,
   releaseMigrationClient,
 } from "./bootstrap-migration-client.ts";
-import { ensureCloseDefaults } from "../engine/src/close.ts";
-import { provisionOrganizationDefaults } from "../engine/src/organization-provisioning.ts";
-import { SUPPORTED_CURRENCIES } from "../engine/src/currencies.ts";
+import { ensureCloseDefaults } from "../engine/src/close/close.ts";
+import { provisionOrganizationDefaults } from "../engine/src/provisioning/organization-provisioning.ts";
+import { SUPPORTED_CURRENCIES } from "../engine/src/fx/currencies.ts";
 import { BUILT_IN_ROLES } from "../web/lib/permissions.ts";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");

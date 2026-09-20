@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withOrg } from "../db.ts";
+import { db, withOrg } from "../platform/db.ts";
 import { timesheetWeeksFlowAdapter } from "./timesheet-weeks-adapter.ts";
 import { getFlowAdapter } from "./registry.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
   seedFlowActors,
-} from "../test-fixtures.ts";
+} from "../testing/fixtures.ts";
 
 /**
  * Scheduled fan-out tenant isolation for timesheet weeks — parity with the

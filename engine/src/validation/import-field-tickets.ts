@@ -23,7 +23,7 @@
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
-import { db, withOrg } from "../db.ts";
+import { db, withOrg } from "../platform/db.ts";
 import { resolveTargetOrg } from "./target-org.ts";
 
 const args = new Map(

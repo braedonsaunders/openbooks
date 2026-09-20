@@ -10,8 +10,8 @@ registerHooks({ resolve(specifier, context, next) {
 }});
 const { sql } = await import('drizzle-orm');
 const { randomUUID } = await import('node:crypto');
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
-const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { loadParty } = await import("../app/api/parties/_lib");
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 

@@ -12,9 +12,9 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
-import { postDocument } from "../posting.ts";
-import { createScratchOrg, type ScratchOrg } from "../test-fixtures.ts";
+import { db } from "../platform/db.ts";
+import { postDocument } from "../ledger/posting.ts";
+import { createScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { reconcileApplications } from "./applications.ts";
 import { toSourceApplicationLinks } from "./netsuite-source.ts";
 

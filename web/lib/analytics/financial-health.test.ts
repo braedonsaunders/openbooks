@@ -130,7 +130,7 @@ const hooks = registerHooks({
     const mockUrl = new Map([
       ["../money-server", "mock:money-server"],
       ["drizzle-orm", "mock:drizzle"],
-      ["@openbooks/engine/src/db.ts", "mock:db"],
+      ["@openbooks/engine/src/platform/db.ts", "mock:db"],
       ["../reports", "mock:reports"],
       ["../gl-summary", "mock:gl-summary"],
       ["../org-scope", "mock:org-scope"],

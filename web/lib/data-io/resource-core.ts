@@ -8,7 +8,7 @@
 
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { featureEnabled, resolvedFeatureState } from '../features'
 import { loadNumberSequenceKindOptions } from '../setup/number-sequence-kinds'
 import { SETUP_ENTITY_BY_KEY, toSnake } from '../setup/registry'

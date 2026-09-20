@@ -2,8 +2,8 @@
 
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db, type SqlExecutor } from '@openbooks/engine/src/db.ts'
-import { normalizeMoney } from '@openbooks/engine/src/money.ts'
+import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { canonicalDecimal } from '../exact-decimal'
 import { assetBankHygieneWarning } from '../accounts-hygiene'
 import { toSnake } from '../setup/registry'

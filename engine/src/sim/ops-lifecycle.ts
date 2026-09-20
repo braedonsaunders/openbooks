@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { deleteDocument } from "../document-delete.ts";
-import { reverseProjectGlEntry } from "../project-recognition.ts";
+import { deleteDocument } from "../ledger/document-delete.ts";
+import { reverseProjectGlEntry } from "../projects/recognition.ts";
 import { createAndPostDocument } from "./activities/documents.ts";
 import type { SimOrg } from "./world.ts";
 

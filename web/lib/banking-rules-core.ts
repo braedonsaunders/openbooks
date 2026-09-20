@@ -5,7 +5,7 @@
  * composes these with posting + matching primitives.
  */
 
-import { abs as moneyAbs, add, cmp, formatMoney, mulPercent, neg, normalizeMoney, sum } from '@openbooks/engine/src/money.ts'
+import { abs as moneyAbs, add, cmp, formatMoney, mulPercent, neg, normalizeMoney, sum } from '@openbooks/engine/src/money/money.ts'
 
 // ---------------------------------------------------------------------------
 // Condition model

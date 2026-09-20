@@ -1,8 +1,8 @@
 import { z } from 'zod'
 import { isoDate, parseJsonBody, uuidId } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { runDepreciation } from '@openbooks/engine/src/depreciation.ts'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { runDepreciation } from '@openbooks/engine/src/assets/depreciation.ts'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 
 export const runtime = 'nodejs'

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { db } from "../../db.ts";
-import { fromUnits, toUnits } from "../../money.ts";
+import { db } from "../../platform/db.ts";
+import { fromUnits, toUnits } from "../../money/money.ts";
 
 /**
  * Canonical snapshot extraction — the OpenBooks side of a comparison. Every

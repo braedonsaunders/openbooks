@@ -13,8 +13,8 @@ registerHooks({
   },
 })
 
-const { db, env, withBypass } = await import('@openbooks/engine/src/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
+const { db, env, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { accountBaseJoins } = await import('./customization/entity-list-query/accounts.ts')
 
 test('account list balances exclude journal lines outside the caller subsidiary scope', { skip: !env.OPENBOOKS_DB_URL }, async () => {

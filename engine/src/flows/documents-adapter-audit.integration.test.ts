@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withOrg } from "../db.ts";
+import { db, withOrg } from "../platform/db.ts";
 import { createDocumentsFlowAdapter } from "./documents-adapter.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
   seedDraftDocument,
   seedFlowActors,
-} from "../test-fixtures.ts";
+} from "../testing/fixtures.ts";
 
 /**
  * Flow-driven document mutations must leave the same transaction evidence as

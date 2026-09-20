@@ -2,9 +2,9 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { FORM_TYPES } from '@openbooks/engine/src/information-returns.ts'
+import { FORM_TYPES } from '@openbooks/engine/src/compliance/information-returns.ts'
 import { can, requirePermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import {
@@ -16,7 +16,7 @@ import {
   requireComplianceFeature,
   type ComplianceMatrix,
 } from '../../../../lib/compliance'
-import { loadRequirementPolicies } from '@openbooks/engine/src/compliance.ts'
+import { loadRequirementPolicies } from '@openbooks/engine/src/compliance/compliance.ts'
 import { pickString } from '../../../../lib/list-params'
 import { getMoneyFormatter } from '@/lib/money-server'
 import { complianceTabs } from '../tabs'

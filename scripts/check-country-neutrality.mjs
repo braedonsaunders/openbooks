@@ -53,9 +53,9 @@ const scopedRoots = ["web/app", "web/lib", "web/components", "engine/src", "pack
 const taxLayerPaths = [
   /^web\/app\/\(app\)\/tax\//,
   /^web\/app\/api\/tax\//,
-  /^engine\/src\/seed-tax-forms\.ts$/,
-  /^engine\/src\/tax-return\.ts$/,
-  /^engine\/src\/tax-pack-provisioning\.ts$/,
+  /^engine\/src\/tax\/seed-tax-forms\.ts$/,
+  /^engine\/src\/tax-returns\/return\.ts$/,
+  /^engine\/src\/tax\/pack-provisioning\.ts$/,
 ];
 
 export function isPackPath(filePath) {

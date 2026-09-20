@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
   computeScheduledScriptNextRunAt,
   InvalidScheduledScriptCronError,
   INVALID_SCHEDULED_SCRIPT_CRON_CODE,
   runBulkScript,
   runScheduledScript,
-} from '@openbooks/engine/src/scripting.ts'
+} from '@openbooks/engine/src/scripting/scripting.ts'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../../lib/list-params'
 

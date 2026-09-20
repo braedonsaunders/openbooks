@@ -98,7 +98,7 @@ const hooks = registerHooks({
     if (specifier === '../../../../../lib/authz' && context.parentURL?.includes('setup/wizard/route')) {
       return { url: 'mock:setup-wizard-authz', shortCircuit: true }
     }
-    if (specifier === '@openbooks/engine/src/db.ts') {
+    if (specifier === '@openbooks/engine/src/platform/db.ts') {
       return { url: 'mock:setup-wizard-db', shortCircuit: true }
     }
     if (specifier.startsWith('@/') && context.parentURL) {

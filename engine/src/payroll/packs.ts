@@ -4,10 +4,10 @@ import {
   type ControlAccountRecord,
   type ControlAccountRole,
   type OrgControlAccounts,
-} from "../control-accounts.ts";
-import { db } from "../db.ts";
-import { cmp } from "../money.ts";
-import type { PayrollPackFilings } from "../payroll-filing-registry.ts";
+} from "../records/control-accounts.ts";
+import { db } from "../platform/db.ts";
+import { cmp } from "../money/money.ts";
+import type { PayrollPackFilings } from "./filing-registry.ts";
 import { CA_PAYROLL_PACK } from "./canada/pack.ts";
 import { US_PAYROLL_PACK } from "./us/pack.ts";
 import { GB_PACK } from "./gb/pack.ts";
@@ -68,7 +68,7 @@ import { PayrollJurisdictionError, PayrollPackError } from "./payroll-error.ts";
  * the components.
  *
  * The pack's component declarations are also the SEED for those components
- * (engine/src/payroll-run.ts `seedPayrollComponents` provisions exactly this
+ * (engine/src/payroll/run.ts `seedPayrollComponents` provisions exactly this
  * set) and the source of each one's `assessedOn` class, so a jurisdiction's
  * statutory set is declared once, in one place, and nowhere else.
  *
@@ -1113,7 +1113,7 @@ export type PayrollHolidayPayLookbackBasis =
  *   off, so what is owed is one normal day either way — never the zero hours of
  *   whichever weekday the holiday happened to occupy.
  *
- *   It reads `work_schedules` (engine/src/work-schedules.ts), and where that is
+ *   It reads `work_schedules` (engine/src/payroll/work-schedules.ts), and where that is
  *   silent it REFUSES by name: there is no default working day, and inventing
  *   an eight-hour one produces a number indistinguishable on the stub from a
  *   correct one.

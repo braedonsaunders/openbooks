@@ -73,10 +73,10 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ['../../../../../../lib/feature-gates', 'mock:feature-gates'],
   ['../../../subsidiary-scope', 'mock:subsidiary-scope'],
-  ['@openbooks/engine/src/payroll-yearend-amendments.ts', 'mock:amendments'],
+  ['@openbooks/engine/src/payroll/yearend-amendments.ts', 'mock:amendments'],
   ['@openbooks/engine/src/payroll/packs.ts', 'mock:packs'],
-  ['@openbooks/engine/src/payroll-error.ts', 'mock:payroll-error'],
-  ['@openbooks/engine/src/business-date.ts', 'mock:business-date'],
+  ['@openbooks/engine/src/payroll/error.ts', 'mock:payroll-error'],
+  ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
   ['../../../../../../lib/export', 'mock:export'],
   ['../../../../../../lib/payroll-slip-facsimile', 'mock:facsimile'],
   ['../../../../../../lib/tax-form-facsimile', 'mock:tax-form'],

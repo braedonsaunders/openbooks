@@ -173,8 +173,8 @@ const state = { orgId: '', userId: '' }
  */
 const featureGateLockKey = (orgId: string): string => `openbooks:feature-gate:${orgId}`
 
-const { db, env } = await import('@openbooks/engine/src/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
+const { db, env } = await import('@openbooks/engine/src/platform/db.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { isFeatureEnabled } = await import('./features.ts')
 const { PUT: putFeaturesRoute } = await import('../app/api/admin/setup/features/route.ts') as {
   PUT: (req: Request) => Promise<Response>

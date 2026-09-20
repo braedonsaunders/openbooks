@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { SETUP_ENTITY_BY_KEY, OVERHEAD_RATE_KINDS } from '../../../../../lib/setup/registry'
 import { NewSetupButton, SetupDrawer } from '../[entity]/SetupDrawer'

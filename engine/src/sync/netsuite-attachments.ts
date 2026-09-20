@@ -1,19 +1,19 @@
 import { createHash, randomUUID } from "node:crypto";
 import { basename, extname } from "node:path";
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
-import { getS3Blob, putS3Blob, s3Enabled } from "../file-storage.ts";
+import { db } from "../platform/db.ts";
+import { getS3Blob, putS3Blob, s3Enabled } from "../platform/file-storage.ts";
 import {
   netsuiteRestlet,
   netsuiteSoapFileGet,
   netsuiteSoapTransactionIdsForFile,
   type NetSuiteCreds,
-} from "../netsuite.ts";
+} from "../connectors/netsuite.ts";
 import {
   DEFAULT_NETSUITE_BRIDGE_DEPLOYMENT_ID,
   DEFAULT_NETSUITE_BRIDGE_SCRIPT_ID,
-} from "../netsuite-bridge.ts";
-import { unsealJson } from "../secrets.ts";
+} from "../connectors/netsuite-bridge.ts";
+import { unsealJson } from "../platform/secrets.ts";
 
 const SOURCE_SYSTEM = "netsuite";
 const RESTLET_BATCH_SIZE = 50;

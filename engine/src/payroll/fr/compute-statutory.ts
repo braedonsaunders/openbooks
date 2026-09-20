@@ -50,7 +50,7 @@
  * final PAS is exact to the centime; pushed at 4dp like every statutory
  * line. Never floating point.
  */
-import { fromUnits, roundDiv, toUnits } from "../../money.ts";
+import { fromUnits, roundDiv, toUnits } from "../../money/money.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import {

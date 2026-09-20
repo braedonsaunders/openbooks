@@ -1,7 +1,7 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { tool, type ToolSet } from "ai";
-import { featureEnabled, type FeatureState } from "@openbooks/engine/src/feature-registry.ts";
+import { featureEnabled, type FeatureState } from "@openbooks/engine/src/organization/feature-registry.ts";
 import type { Authz } from "../authz";
 import { can, ForbiddenError } from "../authz";
 import { applicationContextFromSession } from "../application/context";

@@ -1,9 +1,9 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
-import { sealSecret } from '@openbooks/engine/src/secrets.ts'
-import { FORM_TYPES, type FormType } from '@openbooks/engine/src/information-returns.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { sealSecret } from '@openbooks/engine/src/platform/secrets.ts'
+import { FORM_TYPES, type FormType } from '@openbooks/engine/src/compliance/information-returns.ts'
 import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
 import { guardComplianceFeature } from '@/lib/compliance'
 import { isUuid } from '@/lib/list-params'

@@ -96,11 +96,11 @@ const connectorPaths = [
   // they integrate with or verify: a test that cannot say which connector it
   // exercises cannot fail for the right reason. Product/UI code outside these
   // files stays vendor-neutral.
-  /^engine\/src\/(?:netsuite|(?:qbo|xero|odoo|erpnext|dynamics)(?:\.test)?\.ts$|qbd\/|sync\/)/,
+  /^engine\/src\/(?:connectors\/|qbd\/|sync\/)/,
   // Feature-gate and reversal invariants assert connector-specific gates and
   // source enums by exact file path; naming the system under test is the point
   // of these tests, not product copy.
-  /^engine\/src\/reversal-journal-lines\.integration\.test\.ts$/,
+  /^engine\/src\/records\/reversal-journal-lines\.integration\.test\.ts$/,
   /^web\/lib\/feature-gates\.test\.ts$/,
   /^engine\/src\/worker\/migration-worker\.ts$/,
   /^engine\/src\/harness\/differential\//,
@@ -131,6 +131,10 @@ const connectorPaths = [
   // record that could not name the connector tests it measured would have to
   // omit them from shard balancing instead.
   /^scripts\/test-timings\.json$/,
+  // Relocation record for the engine module move. Its keys and values are
+  // repository-relative file paths, so it names the connector client files it
+  // moved exactly as the connector scope above does. No product copy.
+  /^scripts\/engine-modules\/moves\.json$/,
 ];
 
 export function isConnectorPath(filePath) {

@@ -2,7 +2,7 @@
  * Display names for resolved customization rows.
  *
  * Provisioned baselines are seeded in English (see
- * engine/src/customization-defaults.ts) while the catalog carries the
+ * engine/src/provisioning/customization-defaults.ts) while the catalog carries the
  * translated system-default names. An unrenamed baseline row must render as
  * the translated default; a row the tenant renamed keeps its own name.
  * `display.test.ts` pins the seed reference so the two cannot drift apart.

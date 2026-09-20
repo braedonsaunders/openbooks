@@ -1,13 +1,13 @@
 import { desc, sql } from "drizzle-orm";
-import { canonicalDecimal } from "../exact-decimal.ts";
-import { db, schema, withOrg } from "../db.ts";
-import { toUnits, fromUnits, normalizeDecimal, normalizeMoney } from "../money.ts";
+import { canonicalDecimal } from "../money/exact-decimal.ts";
+import { db, schema, withOrg } from "../platform/db.ts";
+import { toUnits, fromUnits, normalizeDecimal, normalizeMoney } from "../money/money.ts";
 import {
   postDocument,
   regenerateGlImpactTx,
   runPostDocumentEffects,
   type PostingDeps,
-} from "../posting.ts";
+} from "../ledger/posting.ts";
 import {
   buildNativeContext,
   type NativeContext,
@@ -29,7 +29,7 @@ import {
 } from "./applications.ts";
 import { trueUpResidualGl, type TrueUpStats } from "./trueup.ts";
 import { mirrorSourceDeletion } from "./source-deletions.ts";
-import { SYSTEM_ACTOR_ID } from "../banking.ts";
+import { SYSTEM_ACTOR_ID } from "../banking/banking.ts";
 import {
   applySourceReconciliationEvidence,
   type SourceEvidenceOutcome,
@@ -44,13 +44,13 @@ import {
 import {
   captureTransactionAuditSnapshot,
   recordTransactionAudit,
-} from "../transaction-audit.ts";
+} from "../records/transaction-audit.ts";
 import {
   computeImportedLineTaxEvidence,
   loadTaxComponentConfig,
   persistLineTaxComponents,
-} from "../tax-persist.ts";
-import type { ComputedTaxComponent } from "../tax.ts";
+} from "../tax/persist.ts";
+import type { ComputedTaxComponent } from "../tax/tax.ts";
 
 /**
  * NATIVE sync engine — migration and mirror are one code path.

@@ -1,5 +1,5 @@
-import { ErpNextClient, type ErpNextCreds } from "../erpnext.ts";
-import { formatMoney, fromUnits, toUnits } from "../money.ts";
+import { ErpNextClient, type ErpNextCreds } from "../connectors/erpnext.ts";
+import { formatMoney, fromUnits, toUnits } from "../money/money.ts";
 import {
   buildErpInvoice, buildErpJournal, buildErpPayment,
   type ErpInvoice, type ErpJournal, type ErpPayment,

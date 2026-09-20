@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db, withOrgContext } from "@openbooks/engine/src/db.ts";
+import { db, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
 import { effectiveNavMode, isNavMode, type NavMode } from "./nav-mode";
 
 /**

@@ -2,11 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withOrg } from "../db.ts";
+import { db, withOrg } from "../platform/db.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
-} from "../test-fixtures.ts";
+} from "../testing/fixtures.ts";
 import { budgetScenariosFlowAdapter } from "./budget-scenarios-adapter.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

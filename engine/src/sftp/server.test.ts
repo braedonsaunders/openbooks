@@ -9,7 +9,7 @@ import ssh2 from "ssh2";
 // Set a throwaway root before loading the server module, just like the other
 // SFTP integration suites do.
 const scratchDataDir = mkdtempSync(join(tmpdir(), "openbooks-sftp-server-"));
-const { env } = await import("../db.ts");
+const { env } = await import("../platform/db.ts");
 env.OPENBOOKS_DATA_DIR = scratchDataDir;
 
 const { generateHostKey, startSftpServer } = await import("./server.ts");

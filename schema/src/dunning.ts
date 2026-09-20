@@ -16,7 +16,7 @@ import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
  * invoice crosses that stage's offset from its due date. Firing sends an email
  * (through the org's mail delivery) and writes an append-only dunning_log row.
  *
- * The runner (engine/src/dunning.ts) never posts to the ledger — collections is
+ * The runner (engine/src/receivables/dunning.ts) never posts to the ledger — collections is
  * a communications layer over the AR subledger, so it stays outside the kernel.
  */
 export const dunningPolicies = pgTable(

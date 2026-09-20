@@ -1,6 +1,6 @@
 import { join } from "node:path";
-import { pool, withOrgContext } from "../db.ts";
-import { withSimClock } from "../clock.ts";
+import { pool, withOrgContext } from "../platform/db.ts";
+import { withSimClock } from "../platform/clock.ts";
 import { assertSimEnabled, assertDedicatedSimDatabase } from "./db-guard.ts";
 import { listProfiles } from "./profiles/index.ts";
 import { provisionRun, dayStart, dayEnd, verify, loadRun } from "./runner.ts";
@@ -14,7 +14,7 @@ import * as opsLifecycle from "./ops-lifecycle.ts";
 import * as opsPeriodic from "./ops-periodic.ts";
 import * as opsConstruction from "./ops-construction.ts";
 import * as opsTm from "./ops-tm.ts";
-import type { ScriptJournalLine } from "../journal-writes.ts";
+import type { ScriptJournalLine } from "../ledger/journal-writes.ts";
 
 /**
  * The environment CLI — the entire action + observation surface a persona

@@ -1,14 +1,14 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
   finalizeFiling,
   InformationReturnError,
   markFilingFiled,
   recomputeFiling,
   voidFiling,
-} from '@openbooks/engine/src/information-returns.ts'
+} from '@openbooks/engine/src/compliance/information-returns.ts'
 import { getAuthz, can, guardSubsidiaryScope } from '@/lib/authz'
 import { guardComplianceFeature, loadInformationReturnFilingScope } from '@/lib/compliance'
 import { isUuid } from '@/lib/list-params'

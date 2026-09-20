@@ -4,7 +4,7 @@
  * already load `select code, name from currencies` should pass those instead —
  * this is the client-safe fallback so a currency field is NEVER free text.
  */
-import { SUPPORTED_CURRENCIES } from "@openbooks/engine/src/currencies.ts";
+import { SUPPORTED_CURRENCIES } from "@openbooks/engine/src/fx/currencies.ts";
 
 export interface IsoCurrency {
   code: string;

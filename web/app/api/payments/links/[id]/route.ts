@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { PaymentAcceptanceError, voidPaymentLink } from "@openbooks/engine/src/payment-acceptance.ts";
+import { PaymentAcceptanceError, voidPaymentLink } from "@openbooks/engine/src/payments/acceptance.ts";
 import { guardPermission } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";

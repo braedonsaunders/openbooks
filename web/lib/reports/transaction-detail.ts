@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
 import { resolveOrgId } from "../org-scope";
 import type { ExactDecimal } from "../statement-format";
 import { statementBookExpr } from "../gl-summary";

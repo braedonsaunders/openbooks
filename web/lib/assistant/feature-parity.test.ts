@@ -83,7 +83,7 @@ test("soft-feature markers never sit on a refusal path", () => {
 });
 
 test("every declared assistant feature key exists in the feature registry", () => {
-  const registry = read("../../../engine/src/feature-registry.ts");
+  const registry = read("../../../engine/src/organization/feature-registry.ts");
   const known = new Set([...registry.matchAll(/key: '([A-Za-z]+)'/g)].map((m) => m[1]!));
   assert.ok(known.size > 10, "feature key extraction looks broken");
   const unknown: string[] = [];

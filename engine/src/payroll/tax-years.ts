@@ -20,7 +20,7 @@
  * a payroll. A pack now DECLARES its editions, so:
  *
  *   - `payRunReadiness` names the missing year as a blocker before a run
- *     calculates (engine/src/payroll-readiness.ts);
+ *     calculates (engine/src/payroll/readiness.ts);
  *   - the setup surface lists what is loaded and what is not, per pack;
  *   - the year-end enumeration refuses an unsupported year by name instead of
  *     letting one pack's exception blank the page;

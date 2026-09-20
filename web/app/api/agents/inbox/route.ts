@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { CONTINUOUS_CLOSE_AGENT_KEYS } from "@openbooks/engine/src/continuous-close-config.ts";
+import { CONTINUOUS_CLOSE_AGENT_KEYS } from "@openbooks/engine/src/agents/continuous-close-config.ts";
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
 import { isUuid, pickString } from "../../../../lib/list-params";
 import { loadAgentInbox } from "../../../../lib/agents/inbox";

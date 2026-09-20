@@ -34,7 +34,7 @@ import { CONFORMANCE_CORPUS, coveredStandards, validateCorpus } from "./matrix.t
 import { renderConsole, renderJson, renderMarkdown } from "./report.ts";
 import { createConformanceOrg } from "./roles.ts";
 import { runCorpus } from "./runner.ts";
-import { runId, sourceSha } from "../provenance.ts";
+import { runId, sourceSha } from "../platform/provenance.ts";
 import type { ControlCase } from "./controls.ts";
 import type { CorpusReport } from "./types.ts";
 

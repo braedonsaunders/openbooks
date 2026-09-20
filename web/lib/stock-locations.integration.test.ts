@@ -11,8 +11,8 @@ registerHooks({
 });
 
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext } = await import("@openbooks/engine/src/db.ts");
-const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
+const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { activeStockLocations, profiledItemIds, resolveLineStockLocation } = await import("./stock-locations.ts");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

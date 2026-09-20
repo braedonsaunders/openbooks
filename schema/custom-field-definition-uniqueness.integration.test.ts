@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { sql } from 'drizzle-orm';
-import { db } from '../engine/src/db.ts';
+import { db } from '../engine/src/platform/db.ts';
 
 const migration = readFileSync(new URL('./migrations/generated/0088_custom_field_definition_uniqueness.sql', import.meta.url), 'utf8');
 function uniqueViolation(error: unknown): boolean {

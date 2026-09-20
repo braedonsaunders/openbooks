@@ -1,16 +1,16 @@
-import { add, cmp } from "../../money.ts";
-import { filingAccountRef, filingAccountsById } from "../../payroll-filing.ts";
-import { PayrollError } from "../../payroll-error.ts";
-import { form941Worksheet, w2Slips } from "../../payroll-yearend.ts";
-import { build941X, buildW2c } from "../../payroll-w2c.ts";
-import { isFilingRowUuid } from "../../payroll-filing-registry.ts";
+import { add, cmp } from "../../money/money.ts";
+import { filingAccountRef, filingAccountsById } from "../filing.ts";
+import { PayrollError } from "../error.ts";
+import { form941Worksheet, w2Slips } from "../yearend.ts";
+import { build941X, buildW2c } from "../w2c.ts";
+import { isFilingRowUuid } from "../filing-registry.ts";
 import type {
   PayrollFilingData,
   PayrollFilingRowScope,
   PayrollFilingSlipData,
   PayrollPackFilings,
   PayrollSlipBox,
-} from "../../payroll-filing-registry.ts";
+} from "../filing-registry.ts";
 
 /**
  * The US pack's filing declaration: the Form 941 quarterly worksheet and the

@@ -51,8 +51,8 @@
  * pass whose only job is the move. `PayrollCertificate.storage` is the honest
  * record of which certificates are on which side of that line.
  */
-import { PayrollError } from "../payroll-error.ts";
-import { normalizeDecimal } from "../money.ts";
+import { PayrollError } from "./error.ts";
+import { normalizeDecimal } from "../money/money.ts";
 
 export class PayrollCertificateError extends PayrollError {}
 

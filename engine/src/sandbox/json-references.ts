@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { SubsidiaryRestriction } from "@openbooks/schema";
-import { db } from "../db.ts";
+import { db } from "../platform/db.ts";
 
 /** JSON identities do not participate in the catalog's scalar FK rebasing.
  * Resolve them through proven tenant-owned counterparts, never a UUID guess. */

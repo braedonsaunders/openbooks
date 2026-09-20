@@ -6,7 +6,7 @@
  *   - scoping to a different/bogus org sees ZERO (fail-closed, no leak)
  */
 import { sql } from "drizzle-orm";
-import { db, pool, withBypass, withOrg } from "../db.ts";
+import { db, pool, withBypass, withOrg } from "../platform/db.ts";
 
 const BOGUS = "00000000-0000-0000-0000-000000000000";
 

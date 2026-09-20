@@ -8,10 +8,10 @@ import {
   detectorSpecsForAgent,
   enabledDetectorKeys,
   normalizeContinuousCloseDetectors,
-} from "../continuous-close-config.ts";
+} from "./continuous-close-config.ts";
 import { AGENT_PACKS } from "./registry.ts";
 
-const controlPlane = readFileSync(new URL("../continuous-close.ts", import.meta.url), "utf8");
+const controlPlane = readFileSync(new URL("../continuous-close/continuous-close.ts", import.meta.url), "utf8");
 
 test("every registered agent key has exactly one pack implementation", () => {
   assert.deepEqual(

@@ -22,9 +22,9 @@ registerHooks({
 const { deleteRecord, updateRecord } = await import("./writers.ts");
 const { loadApiSchema, resolveApiType } = await import("./schema-registry.ts");
 const { db, env, withBypass, withOrgContext } =
-  await import("@openbooks/engine/src/db.ts");
+  await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg } =
-  await import("@openbooks/engine/src/test-fixtures.ts");
+  await import("@openbooks/engine/src/testing/fixtures.ts");
 
 // Subsidiary scope gates only types carrying a subsidiary_id field (the
 // platform list/get paths check `fields.some(f => f.name === 'subsidiary_id')`

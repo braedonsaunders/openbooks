@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
-import { env } from "@openbooks/engine/src/db.ts";
+import { env } from "@openbooks/engine/src/platform/db.ts";
 
 // Run the child with React's normal Node condition so Next's navigation
 // boundary receives the full React API (the react-server export omits
@@ -32,7 +32,7 @@ function runIntegrationSource(source: string): void {
       "--import",
       "tsx",
       "--import",
-      "./engine/src/test-database-bypass.ts",
+      "./engine/src/testing/database-bypass.ts",
       "--input-type=module",
       "-e",
       source,
@@ -50,13 +50,13 @@ test(
       import assert from "node:assert/strict";
       import { randomUUID } from "node:crypto";
       import { sql } from "drizzle-orm";
-      import { db } from "./engine/src/db.ts";
-      import { installTrustedTestDatabaseBypass } from "./engine/src/test-database-bypass.ts";
+      import { db } from "./engine/src/platform/db.ts";
+      import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
       import {
         createScratchOrg,
         dropScratchOrg,
         seedFlowActors,
-      } from "./engine/src/test-fixtures.ts";
+      } from "./engine/src/testing/fixtures.ts";
       import { approveSubmittedTimeEntries } from "./web/lib/time-approval.ts";
 
       installTrustedTestDatabaseBypass();
@@ -159,13 +159,13 @@ test(
       import assert from "node:assert/strict";
       import { randomUUID } from "node:crypto";
       import { sql } from "drizzle-orm";
-      import { db } from "./engine/src/db.ts";
-      import { installTrustedTestDatabaseBypass } from "./engine/src/test-database-bypass.ts";
+      import { db } from "./engine/src/platform/db.ts";
+      import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
       import {
         createScratchOrg,
         dropScratchOrg,
         seedFlowActors,
-      } from "./engine/src/test-fixtures.ts";
+      } from "./engine/src/testing/fixtures.ts";
       import { approveSubmittedTimeEntries } from "./web/lib/time-approval.ts";
 
       installTrustedTestDatabaseBypass();

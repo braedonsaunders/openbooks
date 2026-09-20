@@ -3,14 +3,14 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { Client } from "pg";
-import { db } from "../db.ts";
+import { db } from "../platform/db.ts";
 import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
   seedApprovalFlow,
   type ScratchOrg,
-} from "../test-fixtures.ts";
+} from "../testing/fixtures.ts";
 import {
   createChangeRequestDraft,
   getChangeRequest,

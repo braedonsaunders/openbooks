@@ -5,7 +5,7 @@ import type {
 } from "../certificates.ts";
 import type { PayrollPackWithholding } from "../withholding-jurisdictions.ts";
 import type { PayrollPackRates } from "../statutory-rates.ts";
-import type { PayrollPackFilings } from "../../payroll-filing-registry.ts";
+import type { PayrollPackFilings } from "../filing-registry.ts";
 import { computeFrStatutory, FR_FACTOR_LABELS } from "./compute-statutory.ts";
 import { FR_TAX_YEARS } from "./rates.ts";
 

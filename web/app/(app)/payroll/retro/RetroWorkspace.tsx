@@ -11,7 +11,7 @@ import { useBusinessToday } from '../../../../components/business-date-provider'
 import { useMoney } from '../../../../components/money-provider'
 
 /* ------------------------------------------------------------------ */
-/* Shapes (mirror engine/src/payroll-retro-store.ts)                   */
+/* Shapes (mirror engine/src/payroll/retro-store.ts)                   */
 /* ------------------------------------------------------------------ */
 
 interface RetroReason {
@@ -81,7 +81,7 @@ export type RetroSchedule = {
  * wizard for calculate → approve → commit → post.
  *
  * Every number and every refusal comes from the engine
- * (engine/src/payroll-retro.ts and its store). This component computes no
+ * (engine/src/payroll/retro.ts and its store). This component computes no
  * money.
  */
 export function RetroWorkspace({

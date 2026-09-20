@@ -1,4 +1,4 @@
-import { isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 
 export { isIsoCalendarDate }
 

@@ -1,4 +1,4 @@
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { sql } from 'drizzle-orm'
 import 'server-only'
 import { NextResponse } from 'next/server'

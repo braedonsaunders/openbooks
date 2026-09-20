@@ -73,7 +73,7 @@ create a new branch of independently deliverable bank files; legitimate
 reprocessing proceeds from the latest artifact. No existing artifacts or
 historical lineage are rewritten by deployment.
 
-Five PostgreSQL regressions in `engine/src/payments.integration.test.ts` cover
+Five PostgreSQL regressions in `engine/src/payments/payments.integration.test.ts` cover
 unrelated runs, missing parents, concurrent and sequential retries, stale
 ancestors and voided artifacts. The first three failed against the preceding
 implementation. The settlement API also validates both route identifiers before

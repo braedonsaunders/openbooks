@@ -92,9 +92,9 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL)
 
 if (DB) {
   const { sql } = await import('drizzle-orm')
-  const { db, withBypass, withOrgContext, env } = await import('@openbooks/engine/src/db.ts')
+  const { db, withBypass, withOrgContext, env } = await import('@openbooks/engine/src/platform/db.ts')
   const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-    '@openbooks/engine/src/test-fixtures.ts',
+    '@openbooks/engine/src/testing/fixtures.ts',
   )
   const {
     deleteApp,

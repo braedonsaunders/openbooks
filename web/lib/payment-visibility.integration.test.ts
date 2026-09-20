@@ -19,15 +19,15 @@ const moduleSource = (source: string) => ({
 registerHooks({
   resolve(specifier, context, next) {
     if (
-      specifier === '@openbooks/engine/src/payments.ts' &&
+      specifier === '@openbooks/engine/src/payments/payments.ts' &&
       context.parentURL &&
       decodeURIComponent(context.parentURL).includes(
         '/api/payments/[id]/route.ts',
       )
     )
       return moduleSource(`
-      export * from ${JSON.stringify(root + 'engine/src/payments.ts')};
-      import { loadPaymentDocument as load } from ${JSON.stringify(root + 'engine/src/payments.ts')};
+      export * from ${JSON.stringify(root + 'engine/src/payments/payments.ts')};
+      import { loadPaymentDocument as load } from ${JSON.stringify(root + 'engine/src/payments/payments.ts')};
       export async function loadPaymentDocument(...args) {
         const snapshot = await load(...args);
         await globalThis.__paymentVisibilityState.afterPaymentLoad?.();
@@ -97,15 +97,15 @@ registerHooks({
   },
 })
 const { db, withBypassContext, withOrgContext } = (await import(
-  root + 'engine/src/db.ts'
-)) as typeof import('@openbooks/engine/src/db.ts')
+  root + 'engine/src/platform/db.ts'
+)) as typeof import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = (await import(
-  root + 'engine/src/test-fixtures.ts'
-)) as typeof import('@openbooks/engine/src/test-fixtures.ts')
+  root + 'engine/src/testing/fixtures.ts'
+)) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
 const { postDocument } = (await import(
-  root + 'engine/src/posting.ts'
-)) as typeof import('@openbooks/engine/src/posting.ts')
+  root + 'engine/src/ledger/posting.ts'
+)) as typeof import('@openbooks/engine/src/ledger/posting.ts')
 const { getAuthz } = await import('./authz')
 const { RunsSection } = await import('../app/(app)/payments/RunsSection')
 const { GET: listRuns } = await import('../app/api/payments/runs/route')
@@ -113,8 +113,8 @@ const { guardPaymentRunPermission } = await import('../app/api/payments/lib')
 const { PaymentsSection } =
   await import('../app/(app)/payments/PaymentsSection')
 const { createPaymentDocument, updateDraftPayment } = (await import(
-  root + 'engine/src/payments.ts'
-)) as typeof import('@openbooks/engine/src/payments.ts')
+  root + 'engine/src/payments/payments.ts'
+)) as typeof import('@openbooks/engine/src/payments/payments.ts')
 const { POST: suggest } = await import('../app/api/payments/suggest/route')
 const { POST: postPayment } =
   await import('../app/api/payments/post-with-applications/route')

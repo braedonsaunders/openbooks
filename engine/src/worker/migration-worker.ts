@@ -6,7 +6,7 @@ import {
   getBlockingConnection,
   type MigrationJobData,
 } from "@openbooks/jobs";
-import { db, withBypassContext, withOrgContext } from "../db.ts";
+import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
 import { buildSource, getConnection } from "../sync/connection.ts";
 import {
   preflightFullSync,

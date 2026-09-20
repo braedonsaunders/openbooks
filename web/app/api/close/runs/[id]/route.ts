@@ -8,7 +8,7 @@ import {
   publishCloseRun,
   requestCloseApproval,
   refreshCloseRun,
-} from "@openbooks/engine/src/close.ts";
+} from "@openbooks/engine/src/close/close.ts";
 import { guardPermission } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";

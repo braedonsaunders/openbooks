@@ -17,7 +17,7 @@ export type PermissionKey = string;
 /**
  * Org-scoped roles: named bundles of permission keys. Built-in roles
  * (admin/controller/accountant/approver/viewer) are seeded per org by
- * engine/src/seed-roles.ts; custom roles are created in the admin UI. `key` is
+ * engine/src/provisioning/seed-roles.ts; custom roles are created in the admin UI. `key` is
  * the stable identifier used by workflow targets and policy evaluation.
  *
  * Named app_roles (not roles) to stay clear of Postgres's pg_roles and any

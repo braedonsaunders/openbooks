@@ -3,7 +3,7 @@
 import { useMoney } from '@/components/money-provider'
 import { useTranslations } from 'next-intl'
 import { Badge, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, UrlDrawer } from '@openbooks/ui'
-import { add, neg, sum } from '@openbooks/engine/src/money.ts'
+import { add, neg, sum } from '@openbooks/engine/src/money/money.ts'
 import { CancelRecognitionButton } from './CancelRecognitionButton'
 import { RunRecognitionButton } from './RunRecognitionButton'
 import type { ContractPayload } from './_lib'

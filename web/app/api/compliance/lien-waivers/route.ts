@@ -1,13 +1,13 @@
 import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
-import { nextNumber } from '@openbooks/engine/src/payments.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { nextNumber } from '@openbooks/engine/src/payments/payments.ts'
 import { guardPermission } from '@/lib/authz'
 import { complianceSubsidiaryFilter, guardLienWaiverFeature, loadLienWaivers } from '@/lib/compliance'
 import { isUuid, pickString } from '@/lib/list-params'
-import { normalizeMoney } from '@openbooks/engine/src/money.ts'
-import { isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { canonicalDecimal } from '@/lib/exact-decimal'
 
 /** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */

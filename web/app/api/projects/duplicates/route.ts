@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { findDuplicateProjects } from "@openbooks/engine/src/project-merge.ts";
+import { findDuplicateProjects } from "@openbooks/engine/src/projects/merge.ts";
 import { guardPermission } from "../../../../lib/authz";
 import { guardProjectsFeature } from "../../../../lib/projects-gate";
 

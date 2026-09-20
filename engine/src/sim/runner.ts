@@ -1,8 +1,8 @@
 import { execSync } from "node:child_process";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
-import { db, withOrgContext } from "../db.ts";
-import { withSimClock } from "../clock.ts";
+import { db, withOrgContext } from "../platform/db.ts";
+import { withSimClock } from "../platform/clock.ts";
 import { Rng } from "./rng.ts";
 import { provisionOrg } from "./world.ts";
 import { getProfile } from "./profiles/index.ts";

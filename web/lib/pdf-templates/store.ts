@@ -1,6 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { compileTemplateHtml } from '@openbooks/pdf'
 import { PDF_RECORD_TYPE_BY_KEY } from './catalog'
 import { starterTemplate } from './starters'

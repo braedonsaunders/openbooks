@@ -1,7 +1,7 @@
 /**
  * Leases — ASC 842 and IFRS 16.
  *
- * The lessee model is implemented in engine/src/leases.ts: liability at the
+ * The lessee model is implemented in engine/src/revenue/leases.ts: liability at the
  * present value of unpaid payments, right-of-use asset at cost, exact-decimal
  * interest/principal/amortization schedules, the US GAAP operating single-cost
  * model, framework-resolved classification, and the short-term/low-value
@@ -15,8 +15,8 @@
 
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "../../db.ts";
-import { add, neg, toUnits, fromUnits } from "../../money.ts";
+import { db } from "../../platform/db.ts";
+import { add, neg, toUnits, fromUnits } from "../../money/money.ts";
 import {
   classifyLease,
   classifyLessorLease,
@@ -27,7 +27,7 @@ import {
   measureLesseeLease,
   postDueLeaseSchedules,
   salesTypeCommencement,
-} from "../../leases.ts";
+} from "../../revenue/leases.ts";
 import { capture } from "../ledger-helpers.ts";
 import type { CaseContext, ConformanceCase } from "../types.ts";
 

@@ -32,7 +32,7 @@ const {
 const { APPLICATION_TOOLS } = await import("../application/tool-catalog.ts");
 const { can } = await import("../authz.ts");
 const { canRunTool } = await import("./gate.ts");
-const { FEATURES } = await import("../../../engine/src/feature-registry.ts");
+const { FEATURES } = await import("../../../engine/src/organization/feature-registry.ts");
 
 type SessionUser = import("../auth.ts").SessionUser;
 type Authz = import("../authz.ts").Authz;

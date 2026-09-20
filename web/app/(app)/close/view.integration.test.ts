@@ -69,9 +69,9 @@ registerHooks({
     return next(specifier, context)
   },
 })
-await import('@openbooks/engine/src/db.ts')
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/test-fixtures.ts')
-const { setPeriodLockState } = await import('@openbooks/engine/src/close.ts')
+await import('@openbooks/engine/src/platform/db.ts')
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { setPeriodLockState } = await import('@openbooks/engine/src/close/close.ts')
 const { loadClose } = await import('./view.ts')
 const DB = !!process.env.OPENBOOKS_DB_URL
 

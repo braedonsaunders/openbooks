@@ -4,7 +4,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { readingPagePairs } from './page-source'
 import test from 'node:test'
 import ts from 'typescript'
-import { FEATURES } from '@openbooks/engine/src/feature-registry.ts'
+import { FEATURES } from '@openbooks/engine/src/organization/feature-registry.ts'
 
 /**
  * The feature registry states a contract: "a feature that's off disappears from
@@ -576,27 +576,27 @@ test('the surfaces this test was written for are covered', () => {
     'convertPrebill must 404 — not persist equipment_charge — when Equipment is off',
   )
   assert.match(
-    read('../engine/src/subscription-billing.ts'),
+    read('../engine/src/billing/subscription-billing.ts'),
     /\["inventory", "assembly", "kit"\]/,
     'subscription invoice generate must name the inventory kinds the Features switch refuses',
   )
   assert.match(
-    read('../engine/src/subscription-billing.ts'),
+    read('../engine/src/billing/subscription-billing.ts'),
     /INVENTORY_ITEM_KINDS\.has\([^)]+\)[\s\S]{0,80}Inventory is disabled/,
     'createSubscriptionInvoice must not persist inventory/assembly/kit lines when Inventory is off — stored subscriptions and existing invoices stay',
   )
   assert.match(
-    read('../engine/src/subscription-billing.ts'),
+    read('../engine/src/billing/subscription-billing.ts'),
     /SubscriptionError\("Inventory is disabled", 404\)/,
     'createSubscriptionInvoice must 404 — not persist inventory/assembly/kit — when Inventory is off',
   )
   assert.match(
-    read('../engine/src/subscription-billing.ts'),
+    read('../engine/src/billing/subscription-billing.ts'),
     /kind === "equipment_charge"[\s\S]{0,80}Equipment is disabled/,
     'createSubscriptionInvoice must not persist equipment_charge lines when Equipment is off — stored subscriptions and existing invoices stay',
   )
   assert.match(
-    read('../engine/src/subscription-billing.ts'),
+    read('../engine/src/billing/subscription-billing.ts'),
     /SubscriptionError\("Equipment is disabled", 404\)/,
     'createSubscriptionInvoice must 404 — not persist equipment_charge — when Equipment is off',
   )
@@ -631,27 +631,27 @@ test('the surfaces this test was written for are covered', () => {
     'subscription addPlan/updatePlan must 404 — not persist equipment_charge items — when Equipment is off',
   )
   assert.match(
-    read('../engine/src/advanced-subscriptions.ts'),
+    read('../engine/src/billing/advanced-subscriptions.ts'),
     /\["inventory", "assembly", "kit"\]/,
     'advanced subscription component writes must name the inventory kinds the Features switch refuses',
   )
   assert.match(
-    read('../engine/src/advanced-subscriptions.ts'),
+    read('../engine/src/billing/advanced-subscriptions.ts'),
     /INVENTORY_ITEM_KINDS\.has\([^)]+\)[\s\S]{0,80}Inventory is disabled/,
     'assertCommercialRefs must not persist inventory/assembly/kit items when Inventory is off — stored components stay when itemId is omitted',
   )
   assert.match(
-    read('../engine/src/advanced-subscriptions.ts'),
+    read('../engine/src/billing/advanced-subscriptions.ts'),
     /AdvancedSubscriptionError\("Inventory is disabled", 404\)/,
     'createPlanVersion and change-order add/change component must 404 — not persist inventory/assembly/kit — when Inventory is off',
   )
   assert.match(
-    read('../engine/src/advanced-subscriptions.ts'),
+    read('../engine/src/billing/advanced-subscriptions.ts'),
     /kind === "equipment_charge"[\s\S]{0,80}Equipment is disabled/,
     'assertCommercialRefs must not persist equipment_charge items when Equipment is off — stored components stay when itemId is omitted',
   )
   assert.match(
-    read('../engine/src/advanced-subscriptions.ts'),
+    read('../engine/src/billing/advanced-subscriptions.ts'),
     /AdvancedSubscriptionError\("Equipment is disabled", 404\)/,
     'createPlanVersion and change-order add/change component must 404 — not persist equipment_charge — when Equipment is off',
   )
@@ -661,27 +661,27 @@ test('the surfaces this test was written for are covered', () => {
     'advanced subscription writes must 404 — not persist inventory/assembly/kit items — when Inventory is off',
   )
   assert.match(
-    read('../engine/src/ap-capture-service.ts'),
+    read('../engine/src/payables/ap-capture-service.ts'),
     /\["inventory", "assembly", "kit"\]/,
     'AP capture materialize must name the inventory kinds the Features switch refuses',
   )
   assert.match(
-    read('../engine/src/ap-capture-service.ts'),
+    read('../engine/src/payables/ap-capture-service.ts'),
     /INVENTORY_ITEM_KINDS\.has\([^)]+\)[\s\S]{0,80}Inventory is disabled/,
     'materializeCapture must not persist inventory/assembly/kit lines when Inventory is off — stored captures and existing bills stay',
   )
   assert.match(
-    read('../engine/src/ap-capture-service.ts'),
+    read('../engine/src/payables/ap-capture-service.ts'),
     /CaptureMaterializationError\("Inventory is disabled", 404\)/,
     'materializeCapture must 404 — not persist inventory/assembly/kit — when Inventory is off',
   )
   assert.match(
-    read('../engine/src/ap-capture-service.ts'),
+    read('../engine/src/payables/ap-capture-service.ts'),
     /kind === "equipment_charge"[\s\S]{0,80}Equipment is disabled/,
     'materializeCapture must not persist equipment_charge lines when Equipment is off — stored captures and existing bills stay',
   )
   assert.match(
-    read('../engine/src/ap-capture-service.ts'),
+    read('../engine/src/payables/ap-capture-service.ts'),
     /CaptureMaterializationError\("Equipment is disabled", 404\)/,
     'materializeCapture must 404 — not persist equipment_charge — when Equipment is off',
   )
@@ -848,7 +848,7 @@ test('the surfaces this test was written for are covered', () => {
     'gate reminder/escalation timers must not fire when the Flows switch is off',
   )
   assert.match(
-    read('../engine/src/continuous-close.ts'),
+    read('../engine/src/continuous-close/continuous-close.ts'),
     /coalesce\(\(o\.settings->'features'->>'continuousClose'\)::boolean, true\)/,
     'scheduled continuous-close agents must not scan when Continuous Close is off',
   )
@@ -1219,27 +1219,27 @@ test('the surfaces this test was written for are covered', () => {
     'transaction import must refuse optional-module kinds when the feature is off',
   )
   assert.match(
-    read('../engine/src/fx-providers.ts'),
+    read('../engine/src/fx/providers.ts'),
     /coalesce\(\(organization\.settings->'features'->>'multiCurrency'\)::boolean, false\)/,
     'scheduled FX imports must not write rates when Multi-currency is off',
   )
   assert.match(
-    read('../engine/src/fx-providers.ts'),
+    read('../engine/src/fx/providers.ts'),
     /multiCurrencyFeatureEnabled\(orgId\)/,
     'manual FX sync must refuse when Multi-currency is off',
   )
   assert.match(
-    read('../engine/src/close.ts'),
+    read('../engine/src/close/close.ts'),
     /if \(!\(await advancedCloseEnabled\(context\.orgId\)\)\) return \{ completed: 0, failed: 0 \}/,
     'close automations must not fire when Advanced close is off — core close still runs',
   )
   assert.match(
-    read('../engine/src/close.ts'),
+    read('../engine/src/close/close.ts'),
     /coalesce\(\(organization\.settings->'features'->>'advancedClose'\)::boolean, false\)/,
     'scheduled close automations must skip orgs whose Advanced close switch is off',
   )
   assert.match(
-    read('../engine/src/close.ts'),
+    read('../engine/src/close/close.ts'),
     /export async function publishCloseRun[\s\S]{0,200}advancedCloseEnabled/,
     'publishCloseRun must refuse when Advanced close is off — stored binders stay',
   )
@@ -1274,42 +1274,42 @@ test('the surfaces this test was written for are covered', () => {
     'scheduled overhead publish must skip orgs whose Projects switch is off',
   )
   assert.match(
-    read('../engine/src/recurring.ts'),
+    read('../engine/src/billing/recurring.ts'),
     /when 'quote' then coalesce\(\(o\.settings->'features'->>'orders'\)::boolean, true\)/,
     'scheduled recurring must not mint quotes/orders when Orders is off',
   )
   assert.match(
-    read('../engine/src/recurring.ts'),
+    read('../engine/src/billing/recurring.ts'),
     /when 'expense_report' then coalesce\(\(o\.settings->'features'->>'expenses'\)::boolean, true\)/,
     'scheduled recurring must not mint expense reports when Expenses is off',
   )
   assert.match(
-    read('../engine/src/recurring.ts'),
+    read('../engine/src/billing/recurring.ts'),
     /isRecurringKindEnabled\(orgId, String\(tpl\.kind\)\)/,
     'recurring generate-now must refuse optional-module kinds when the feature is off',
   )
   assert.match(
-    read('../engine/src/recurring.ts'),
+    read('../engine/src/billing/recurring.ts'),
     /\["inventory", "assembly", "kit"\]/,
     'recurring generate must name the inventory kinds the Features switch refuses',
   )
   assert.match(
-    read('../engine/src/recurring.ts'),
+    read('../engine/src/billing/recurring.ts'),
     /INVENTORY_ITEM_KINDS\.has\([^)]+\)[\s\S]{0,80}Inventory is disabled/,
     'generateFromTemplate must not persist inventory/assembly/kit lines when Inventory is off — stored templates and existing documents stay',
   )
   assert.match(
-    read('../engine/src/recurring.ts'),
+    read('../engine/src/billing/recurring.ts'),
     /RecurringError\("Inventory is disabled", 404\)/,
     'generateFromTemplate must 404 — not persist inventory/assembly/kit — when Inventory is off',
   )
   assert.match(
-    read('../engine/src/recurring.ts'),
+    read('../engine/src/billing/recurring.ts'),
     /kind === "equipment_charge"[\s\S]{0,80}Equipment is disabled/,
     'generateFromTemplate must not persist equipment_charge lines when Equipment is off — stored templates and existing documents stay',
   )
   assert.match(
-    read('../engine/src/recurring.ts'),
+    read('../engine/src/billing/recurring.ts'),
     /RecurringError\("Equipment is disabled", 404\)/,
     'generateFromTemplate must 404 — not persist equipment_charge — when Equipment is off',
   )
@@ -1338,7 +1338,7 @@ test('the surfaces this test was written for are covered', () => {
     /status: 404/,
     'recurring run-now must 404 — not mint — when the template kind is off',
   )
-  const propertySource = ts.createSourceFile('property-management.ts', read('../engine/src/property-management.ts'), ts.ScriptTarget.Latest, true)
+  const propertySource = ts.createSourceFile('property-management.ts', read('../engine/src/property/management.ts'), ts.ScriptTarget.Latest, true)
   const addCharge = propertySource.statements.find((node): node is ts.FunctionDeclaration =>
     ts.isFunctionDeclaration(node) && node.name?.text === 'addLeaseCharge')
   assert.ok(addCharge?.body, 'lease-charge service must exist')
@@ -1346,56 +1346,56 @@ test('the surfaces this test was written for are covered', () => {
   assert.match(chargeBody, /db\.transaction\(async \(tx\) => \{\s*await assertEnabled\(tx, input\.orgId\)/,
     'lease-charge transaction must check Property Management before reading or writing lease data')
   assert.match(
-    read('../engine/src/property-management.ts'),
+    read('../engine/src/property/management.ts'),
     /export async function scheduleLeaseCharges[\s\S]{0,200}await assertEnabled\(db, orgId\)/,
     'lease-schedule writes must refuse when Property Management is off — existing schedule lines stay',
   )
   assert.match(
-    read('../engine/src/property-management.ts'),
+    read('../engine/src/property/management.ts'),
     /export async function finalizeCamPool[\s\S]{0,200}await assertEnabled\(tx, orgId\)/,
     'CAM finalize must refuse when Property Management is off — existing pools stay',
   )
   assert.match(
-    read('../engine/src/revenue-recognition.ts'),
+    read('../engine/src/revenue/recognition.ts'),
     /export async function createObligationsFromInvoice[\s\S]{0,400}revenueRecognitionFeatureEnabled\(db, orgId\)/,
     'invoice posting must not mint obligations when Revenue Recognition is off — existing schedules stay',
   )
   assert.match(
-    read('../engine/src/revenue-recognition.ts'),
+    read('../engine/src/revenue/recognition.ts'),
     /export async function runRevenueRecognition[\s\S]{0,400}await assertEnabled\(db, orgId\)/,
     'recognition posting must refuse when Revenue Recognition is off — existing journals stay',
   )
   assert.match(
-    read('../engine/src/project-revenue.ts'),
+    read('../engine/src/projects/revenue.ts'),
     /export async function syncProjectRevenueContracts[\s\S]{0,400}revenueRecognitionFeatureEnabled\(db, orgId\)/,
     'percent-complete sync must not write revenue contracts when Revenue Recognition is off',
   )
   assert.match(
-    read('../engine/src/posting.ts'),
+    read('../engine/src/ledger/posting.ts'),
     /async function resolveDeferralAccounts[\s\S]{0,350}revenueRecognitionFeatureEnabled\(runner, orgId\)/,
     'invoice posting must credit income, not deferred, when Revenue Recognition is off',
   )
   assert.match(
-    read('../engine/src/inventory.ts'),
+    read('../engine/src/inventory/inventory.ts'),
     /export async function applyInventoryIssuesForInvoice[\s\S]{0,400}inventoryFeatureEnabled\(db, orgId\)/,
     'invoice posting must not mint inventory movements when Inventory is off — existing layers stay',
   )
   assert.match(
-    read('../engine/src/inventory.ts'),
+    read('../engine/src/inventory/inventory.ts'),
     /export async function applyBillInventoryReceipts[\s\S]{0,200}inventoryFeatureEnabled\(runner, orgId\)/,
     'bill posting must not mint inventory receipts when Inventory is off',
   )
   assert.match(
-    read('../engine/src/inventory.ts'),
+    read('../engine/src/inventory/inventory.ts'),
     /export async function resolveBillInventoryAccounts[\s\S]{0,350}inventoryFeatureEnabled\(runner, orgId\)/,
     'bill posting must debit the line account, not inventory, when Inventory is off',
   )
   assert.match(
-    read('../engine/src/advanced-subscriptions.ts'),
+    read('../engine/src/billing/advanced-subscriptions.ts'),
     /export async function applyAmendment[\s\S]{0,200}await assertEnabled\(orgId\)/,
     'amendments and scheduled auto-renew must refuse when Advanced subscriptions is off — existing terms stay',
   )
-  const advancedSubscriptions = read('../engine/src/advanced-subscriptions.ts')
+  const advancedSubscriptions = read('../engine/src/billing/advanced-subscriptions.ts')
   for (const mutation of ['createPlanVersion', 'publishPlanVersion', 'activateLifecycle']) {
     assert.match(
       advancedSubscriptions,
@@ -1409,7 +1409,7 @@ test('the surfaces this test was written for are covered', () => {
     'amendment idempotency retries must compare the immutable request snapshot, not only subscription id',
   )
   assert.match(
-    read('../engine/src/advanced-subscriptions.ts'),
+    read('../engine/src/billing/advanced-subscriptions.ts'),
     /if \(!row\?\.billingTiming\) return true;\s*await assertEnabled\(orgId\)/,
     'scheduled billing may continue without a lifecycle; a lifecycle must not renew when Advanced subscriptions is off',
   )
@@ -1889,12 +1889,12 @@ test('the surfaces this test was written for are covered', () => {
     'NetSuite FAM sync must not write fixed assets when the Fixed Assets switch is off — existing register stays',
   )
   assert.match(
-    read('../engine/src/property-management.ts'),
+    read('../engine/src/property/management.ts'),
     /coalesce\(\(settings->'features'->>'fixedAssets'\)::boolean, true\)/,
     'property writes must not store fixed_asset_id when Fixed Assets is off — existing links stay',
   )
   assert.match(
-    read('../engine/src/property-management.ts'),
+    read('../engine/src/property/management.ts'),
     /input\.fixedAssetId && !\(await fixedAssetsFeatureEnabled[\s\S]{0,120}Fixed assets feature is disabled/,
     'property create must refuse a new fixed-asset link when Fixed Assets is off',
   )
@@ -1924,12 +1924,12 @@ test('the surfaces this test was written for are covered', () => {
     'the property form must hide the fixed-asset picker when Fixed Assets is off',
   )
   assert.match(
-    read('../engine/src/property-management.ts'),
+    read('../engine/src/property/management.ts'),
     /coalesce\(\(settings->'features'->>'multiCurrency'\)::boolean, false\)/,
     'property writes must not store a caller currency when Multi-currency is off — existing values stay',
   )
   assert.match(
-    read('../engine/src/property-management.ts'),
+    read('../engine/src/property/management.ts'),
     /PropertyManagementError\("Multi-currency is disabled", 404\)/,
     'property create/update must 404 — not persist — currency when Multi-currency is off',
   )
@@ -1989,27 +1989,27 @@ test('the surfaces this test was written for are covered', () => {
     'lease-charge import must hide item when Inventory is off',
   )
   assert.match(
-    read('../engine/src/property-management.ts'),
+    read('../engine/src/property/management.ts'),
     /\["inventory", "assembly", "kit"\]/,
     'lease escalation must name the inventory kinds the Features switch refuses',
   )
   assert.match(
-    read('../engine/src/property-management.ts'),
+    read('../engine/src/property/management.ts'),
     /INVENTORY_ITEM_KINDS\.has\([^)]+\)[\s\S]{0,80}Inventory is disabled/,
     'applyLeaseEscalation must not persist inventory/assembly/kit items when Inventory is off — stored charges and scheduled escalations stay',
   )
   assert.match(
-    read('../engine/src/property-management.ts'),
+    read('../engine/src/property/management.ts'),
     /PropertyManagementError\("Inventory is disabled", 404\)/,
     'applyLeaseEscalation must 404 — not persist inventory/assembly/kit — when Inventory is off',
   )
   assert.match(
-    read('../engine/src/property-management.ts'),
+    read('../engine/src/property/management.ts'),
     /kind === "equipment_charge"[\s\S]{0,80}Equipment is disabled/,
     'applyLeaseEscalation must not persist equipment_charge items when Equipment is off — stored charges and scheduled escalations stay',
   )
   assert.match(
-    read('../engine/src/property-management.ts'),
+    read('../engine/src/property/management.ts'),
     /PropertyManagementError\("Equipment is disabled", 404\)/,
     'applyLeaseEscalation must 404 — not persist equipment_charge — when Equipment is off',
   )
@@ -2018,7 +2018,7 @@ test('the surfaces this test was written for are covered', () => {
     /error instanceof PropertyManagementError[\s\S]{0,120}status: error\.status/,
     'lease apply-escalation must 404 — not persist inventory/assembly/kit — when Inventory is off',
   )
-  const propertyBilling = read('../engine/src/property-management.ts')
+  const propertyBilling = read('../engine/src/property/management.ts')
     .split('export async function billDueLeaseCharges')[1]?.split('\nexport ')[0] ?? ''
   assert.match(
     propertyBilling,
@@ -2810,12 +2810,12 @@ test('the surfaces this test was written for are covered', () => {
     'hosted checkout must 404 — not create a payment attempt — when Online Payments is off',
   )
   assert.match(
-    read('../engine/src/payment-acceptance.ts'),
+    read('../engine/src/payments/acceptance.ts'),
     /export async function createCheckoutSession[\s\S]{0,400}onlinePaymentsFeatureEnabled/,
     'createCheckoutSession must not insert payment_attempts when Online Payments is off — stored links stay',
   )
   assert.match(
-    read('../engine/src/payment-acceptance.ts'),
+    read('../engine/src/payments/acceptance.ts'),
     /export async function publicPaymentPage[\s\S]{0,250}onlinePaymentsFeatureEnabled/,
     'the hosted pay page must hide when Online Payments is off — stored links stay',
   )

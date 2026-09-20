@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { NextResponse } from 'next/server'
-import { cmp as compareMoney, normalizeMoney } from '../../../../../../engine/src/money.ts'
+import { cmp as compareMoney, normalizeMoney } from '../../../../../../engine/src/money/money.ts'
 
 interface RouteState {
   permissions: Set<string>
@@ -127,8 +127,8 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ['@/lib/api/json', 'mock:json'],
   ['../../../../../lib/authz', 'mock:authz'],
-  ['@openbooks/engine/src/db.ts', 'mock:db'],
-  ['@openbooks/engine/src/money.ts', 'mock:money'],
+  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
+  ['@openbooks/engine/src/money/money.ts', 'mock:money'],
 ])
 
 const hooks = registerHooks({

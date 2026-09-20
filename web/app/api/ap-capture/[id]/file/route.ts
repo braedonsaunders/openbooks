@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { guardPermission, can } from '../../../../../lib/authz'
 import { getFileBlob } from '../../../../../lib/file-cabinet'
 import { blobResponse } from '../../../../../lib/blob-response'

@@ -18,7 +18,7 @@ import {
   type Translator,
 } from '../../../../../../lib/report-pdf'
 import { csvResponse, pdfResponse, safeName, xlsxResponse } from '../../../../../../lib/export'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 
 export const runtime = 'nodejs'
 

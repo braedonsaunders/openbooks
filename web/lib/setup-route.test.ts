@@ -114,13 +114,13 @@ const hooks = registerHooks({
     if (specifier === '../../../../../lib/features' || specifier === '../features') {
       return { url: 'mock:features', shortCircuit: true }
     }
-    if (specifier === '@openbooks/engine/src/db.ts') {
+    if (specifier === '@openbooks/engine/src/platform/db.ts') {
       return { url: 'mock:db', shortCircuit: true }
     }
-    if (specifier === '@openbooks/engine/src/payroll-run.ts') {
+    if (specifier === '@openbooks/engine/src/payroll/run.ts') {
       return { url: 'mock:payroll-run', shortCircuit: true }
     }
-    if (specifier === '@openbooks/engine/src/payroll-filing-registry.ts') {
+    if (specifier === '@openbooks/engine/src/payroll/filing-registry.ts') {
       return { url: 'mock:payroll-filing-registry', shortCircuit: true }
     }
     return nextResolve(specifier, context)

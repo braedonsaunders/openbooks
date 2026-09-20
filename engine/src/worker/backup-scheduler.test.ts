@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const scheduler = readFileSync("engine/src/worker/backup-scheduler.ts", "utf8");
-const backup = readFileSync("engine/src/backup.ts", "utf8");
+const backup = readFileSync("engine/src/backup/backup.ts", "utf8");
 const backupPolicy = readFileSync("web/app/api/admin/backups/policy/route.ts", "utf8");
 const manualPurge = readFileSync("web/app/api/admin/backups/[id]/route.ts", "utf8");
 const storedDownload = readFileSync("web/app/api/admin/backups/[id]/download/route.ts", "utf8");

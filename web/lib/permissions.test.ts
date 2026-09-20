@@ -4,7 +4,7 @@ import test from 'node:test'
 import {
   INVENTORY_ACTION_PERMISSIONS,
   INVENTORY_ADVANCED_ACTION_PERMISSIONS,
-} from '@openbooks/engine/src/permissions.ts'
+} from '@openbooks/engine/src/organization/permissions.ts'
 import {
   BUILT_IN_ROLES,
   PERMISSION_CATALOGUE,
@@ -56,7 +56,7 @@ const mockedSpecifiers = new Map<string, string>([
   ['@/lib/api/json', 'mock:json'],
   ['../../../../lib/authz', 'mock:authz'],
   ['../../../../../lib/authz', 'mock:authz'],
-  ['@openbooks/engine/src/email-config.ts', 'mock:email-config'],
+  ['@openbooks/engine/src/delivery/email-config.ts', 'mock:email-config'],
 ])
 
 const mockSources = new Map<string, string>([
@@ -334,10 +334,10 @@ const provisionPostHooks = registerHooks({
         url: 'data:text/javascript,export function redirect(){throw new Error("redirect")}',
       }
     }
-    if (specifier === '@openbooks/engine/src/db.ts' || (specifier === '../db.ts' && context.parentURL?.endsWith('/extensions/permission-availability.ts'))) {
+    if (specifier === '@openbooks/engine/src/platform/db.ts' || (specifier === '../platform/db.ts' && context.parentURL?.endsWith('/organization/extension-permission-availability.ts'))) {
       return { url: 'mock:provision-post-db', shortCircuit: true }
     }
-    if (specifier === '@openbooks/engine/src/income-tax-provision.ts') {
+    if (specifier === '@openbooks/engine/src/tax-returns/income-tax-provision.ts') {
       return { url: 'mock:provision-post-engine', shortCircuit: true }
     }
     // authz.ts reaches these siblings as './auth'/'./subsidiaries'; the

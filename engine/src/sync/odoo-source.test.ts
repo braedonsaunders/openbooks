@@ -3,7 +3,7 @@ import test from "node:test";
 import type { NativeContext } from "./native.ts";
 import { buildNativeFromOdoo, type OdooMove, type OdooMoveLine } from "./odoo-native.ts";
 import { OdooSource, odooReconcilableAccountType } from "./odoo-source.ts";
-import type { OdooClient } from "../odoo.ts";
+import type { OdooClient } from "../connectors/odoo.ts";
 
 /**
  * Settlement-link currency fixtures (wave 3): Odoo `account.partial.reconcile`

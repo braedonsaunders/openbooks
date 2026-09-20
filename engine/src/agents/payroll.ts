@@ -1,21 +1,21 @@
 import { sql } from "drizzle-orm";
-import { add, cmp, neg, sum } from "../money.ts";
-import { addCalendarDays, businessToday } from "../business-date.ts";
+import { add, cmp, neg, sum } from "../money/money.ts";
+import { addCalendarDays, businessToday } from "../platform/business-date.ts";
 import {
   effectiveDetectorMateriality,
   type ContinuousCloseDetectorPolicy,
-} from "../continuous-close-config.ts";
-import { db } from "../db.ts";
-import { PayrollError } from "../payroll-error.ts";
+} from "./continuous-close-config.ts";
+import { db } from "../platform/db.ts";
+import { PayrollError } from "../payroll/error.ts";
 import {
   installedPayrollCountries,
   payrollStatutoryRateGaps,
-} from "../payroll-readiness.ts";
+} from "../payroll/readiness.ts";
 import {
   payrollRemittanceSummary,
   remittanceDueDateExplained,
   remittanceGroupUsesQuebecCalendar,
-} from "../payroll-remittance.ts";
+} from "../payroll/remittance.ts";
 import { packWarnsOnMissingIdentifier, payrollTaxYearForDate } from "../payroll/packs.ts";
 import { classifyForensicItem, moneyAbs } from "./measure.ts";
 import type { AgentFinding } from "./types.ts";

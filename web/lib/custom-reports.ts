@@ -3,7 +3,7 @@ import { reportEntityCatalog, validateCatalogReportQuery } from './custom-record
 import { requireReportAuthz, snapshotReportAuthorization, withReportAuthz } from './report-execution-context'
 import { canRunReportEntity } from './report-authz'
 import { sql } from 'drizzle-orm'
-import { db, pool } from '@openbooks/engine/src/db.ts'
+import { db, pool } from '@openbooks/engine/src/platform/db.ts'
 import {
   REPORT_ENTITY_MAP,
   customQueryReferencesBook,
@@ -35,8 +35,8 @@ import { resolvePeriod } from './periods'
 import { fiscalStartMonth } from './fiscal'
 import { isFeatureEnabled } from './features'
 import { reportEntityFeatureKey } from './report-authz'
-import { ensureReportDefinitions } from '@openbooks/engine/src/ensure-report-definitions.ts'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { ensureReportDefinitions } from '@openbooks/engine/src/reports/ensure-report-definitions.ts'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 
 /**
  * Server helpers for the custom-report studio (list/builder/run/schedule). The

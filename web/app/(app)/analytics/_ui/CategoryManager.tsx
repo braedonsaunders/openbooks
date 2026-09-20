@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Pencil, Plus, SlidersHorizontal } from 'lucide-react'
 import { Button, Select, cn } from '@openbooks/ui'
-import { cmp as compareMoney } from '@openbooks/engine/src/money.ts'
+import { cmp as compareMoney } from '@openbooks/engine/src/money/money.ts'
 import type { ForecastCategory, ForecastCategoryMethod } from '../../../../lib/cash/core'
 import { Panel } from './Panel'
 

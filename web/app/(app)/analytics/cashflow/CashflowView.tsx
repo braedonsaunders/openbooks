@@ -21,7 +21,7 @@ import {
   SlidersHorizontal,
 } from 'lucide-react'
 import { cn } from '@openbooks/ui'
-import { cmp as compareMoney, div as divideMoney, sum as sumMoney } from '@openbooks/engine/src/money.ts'
+import { cmp as compareMoney, div as divideMoney, sum as sumMoney } from '@openbooks/engine/src/money/money.ts'
 import type { CashflowData, SideSummary } from '../../../../lib/analytics/cashflow-data'
 import { Panel } from '../_ui/Panel'
 import { TrendChart, Chart, cashBridgeOption } from '../_ui/charts'

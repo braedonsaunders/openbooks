@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db, withBypassContext, withOrgContext } from "../db.ts";
+import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
 import {
   BANK_STATEMENT_PARSER_VERSION,
   SYSTEM_ACTOR_ID,
@@ -14,8 +14,8 @@ import {
   type ParsedStatement,
   type ParsedStatementLine,
   type StatementSourceContent,
-} from "../banking.ts";
-import { generatePaymentFileArtifact, recordPaymentFileDeliveryFailure, recordPaymentFileSftpDelivery } from "../payment-operations.ts";
+} from "../banking/banking.ts";
+import { generatePaymentFileArtifact, recordPaymentFileDeliveryFailure, recordPaymentFileSftpDelivery } from "../payments/operations.ts";
 import { backendFor } from "./backend.ts";
 
 /**

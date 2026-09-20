@@ -1,5 +1,5 @@
 import type { FinancialProfile, InvoicingProfile } from '@openbooks/schema'
-import { add, cmp, mul, mulPercent, neg, normalizeMoney } from '@openbooks/engine/src/money.ts'
+import { add, cmp, mul, mulPercent, neg, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 
 export type WipPolicyVersion = {
   id: string | null

@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { convertToModelMessages, generateText, type UIMessage } from "ai";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
 import { can, guardPermission } from "../../../../lib/authz";
 import { AIDisabledError, getModel } from "../../../../lib/assistant/client";
 import { getOrgAiConfig } from "../../../../lib/assistant/ai-config";
@@ -43,7 +43,7 @@ import {
 } from "../../../../lib/assistant/conversation-memory";
 import { scheduleAutoTitle } from "../../../../lib/assistant/conversation-title";
 import { moduleOfTool } from "../../../../lib/assistant/tool-router";
-import { businessToday } from "@openbooks/engine/src/business-date.ts";
+import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { orgFiscalContext } from "../../../../lib/fiscal";
 import { resolvedFeatureState } from "../../../../lib/features";
 import {

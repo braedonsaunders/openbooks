@@ -1,5 +1,5 @@
 import 'server-only'
-import { resolveAccountGroups } from '@openbooks/engine/src/account-groups.ts'
+import { resolveAccountGroups } from '@openbooks/engine/src/records/account-groups.ts'
 import {
   EntryAllocationError,
   loadEntryRuleByKey,
@@ -11,16 +11,16 @@ import {
 } from '@openbooks/engine/src/allocations/entry.ts'
 import { listEntryRulesInEffect } from '@openbooks/engine/src/allocations/match.ts'
 import type { RuleInEffect } from '@openbooks/engine/src/allocations/types.ts'
-import { assertGeneratedBillingEdit, BillingSourceIntegrityError } from '@openbooks/engine/src/billing-source-integrity.ts'
-import { documentBalanceDueLateral } from '@openbooks/engine/src/balance-due.ts'
-import { documentRevisionCounterSql, documentRevisionSql } from '@openbooks/engine/src/document-revision.ts'
+import { assertGeneratedBillingEdit, BillingSourceIntegrityError } from '@openbooks/engine/src/projects/billing-source-integrity.ts'
+import { documentBalanceDueLateral } from '@openbooks/engine/src/records/balance-due.ts'
+import { documentRevisionCounterSql, documentRevisionSql } from '@openbooks/engine/src/records/revision.ts'
 export { documentRevisionCounterSql, documentRevisionSql }
 import { sql, type SQL } from 'drizzle-orm'
-import { db, schema, withOrgTransaction } from '@openbooks/engine/src/db.ts'
-import { cmp, normalizeDecimal, normalizeMoney } from '@openbooks/engine/src/money.ts'
+import { db, schema, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { cmp, normalizeDecimal, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
-import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/transaction-audit.ts'
-import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
+import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/records/transaction-audit.ts'
+import { promoteCrmAccount } from '@openbooks/engine/src/crm/crm.ts'
 import { computeBillTotals, computeBillTotalsWithProvider, nextDocumentNumber, persistLineTaxComponents, taxProfileMap, type BillLineInput } from './bills'
 import { canonicalDecimal } from './exact-decimal'
 import { activeStockLocations, profiledItemIds } from './stock-locations'
@@ -29,17 +29,17 @@ import { featureEnabled, isFeatureEnabled, orgFeatureState } from './features'
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from './custom-fields'
 import { segmentRegistry, validateExtraDims } from './segments'
 import { resolveOrgId } from './org-scope'
-import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
-import { loadRequiredControlAccounts } from '@openbooks/engine/src/control-accounts.ts'
+import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { loadRequiredControlAccounts } from '@openbooks/engine/src/records/control-accounts.ts'
 import { isDocumentRevisionToken } from './api/registry-data'
 import { isUuid } from './list-params'
-import { persistTaxQuote } from '@openbooks/engine/src/tax-rate-providers.ts'
+import { persistTaxQuote } from '@openbooks/engine/src/tax/rate-providers.ts'
 
 /**
  * Unified line-based posting-document machinery.
  *
  * The `documents` table is a single supertype keyed by `kind`; the posting
- * engine (engine/src/posting.ts) holds the per-kind GL rules. The UI for
+ * engine (engine/src/ledger/posting.ts) holds the per-kind GL rules. The UI for
  * vendor bills, customer invoices, credit memos, card charges, checks, and
  * transfers is structurally identical — a header (party or funding source +
  * dates + memo) and a line grid (account + amount + tax + dimensions). This
@@ -201,7 +201,7 @@ export function validateCorrectionReason(value: string | undefined | null): stri
  * them (document_links_reversal_evidence CHECK) and submission of the
  * replacement stays gated on the linked void either way
  * (engine/src/flows/submit.ts). This is the same evidence the engine's own
- * correction writer records (engine/src/document-correction.ts); the web draft
+ * correction writer records (engine/src/ledger/document-correction.ts); the web draft
  * path composes it instead of hand-rolling a bare edge. Fails closed: an edge
  * without admissible evidence cannot be constructed here at all.
  *
@@ -367,7 +367,7 @@ export async function runPostedCorrectionDraftFlows(
 /**
  * Full document payload for a drawer: header + lines. For open-item kinds
  * (invoices, credits) `applied` and `balance_due` (= total − applied) come
- * from the shared balance-due reader (engine/src/balance-due.ts), so the
+ * from the shared balance-due reader (engine/src/records/balance-due.ts), so the
  * drawer, the customer PDF, and dunning report the same figure by
  * construction. Both stay NULL until the document posts.
  */
@@ -684,7 +684,7 @@ type DocumentTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
  * OUT every line without a positive amount, so a credit-memo leg, a discount
  * line, or a zero memo line silently vanished on any edit and the totals were
  * recomputed without it — silent data loss on a financial document. The tax
- * engine computes signed bases (engine/src/tax.ts), so negative and zero
+ * engine computes signed bases (engine/src/tax/tax.ts), so negative and zero
  * lines are legitimate and pass through to computeBillTotals untouched; the
  * only rejections are what the calculator provably cannot use — a missing
  * account, or an amount that is not an exact decimal within ledger scale —
@@ -1698,7 +1698,7 @@ export type Opt = {
   currency_restriction?: string | null
   /** Party pickers carry the party's primary subsidiary (drafts default to it). */
   subsidiary_id?: string | null
-  tax_components?: import('@openbooks/engine/src/tax.ts').TaxComponentConfig[]
+  tax_components?: import('@openbooks/engine/src/tax/tax.ts').TaxComponentConfig[]
 };
 
 export async function partyOptions(role: 'vendor' | 'customer', orgId?: string): Promise<Opt[]> {

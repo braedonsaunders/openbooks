@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, withOrgContext } from '@openbooks/engine/src/db.ts'
+import { db, withOrgContext } from '@openbooks/engine/src/platform/db.ts'
 import { gateDecisionCapability, getFlowAdapter } from '@openbooks/engine/src/flows/index.ts'
 import { loadFlowSubjectSubsidiary, requireFlowsSession } from '../_lib'
 import { can, guardSubsidiaryScope } from '../../../../lib/authz'

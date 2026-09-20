@@ -30,13 +30,13 @@ registerHooks({
 });
 
 const { sql } = await import("drizzle-orm");
-const { db } = await import("@openbooks/engine/src/db.ts");
+const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const {
   createScratchOrg,
   dropScratchOrgReporting,
   seedFlowActors,
-} = await import("@openbooks/engine/src/test-fixtures.ts");
-const { createPayRun } = await import("@openbooks/engine/src/payroll-run.ts");
+} = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { createPayRun } = await import("@openbooks/engine/src/payroll/run.ts");
 const {
   createSetupRecord,
   updateSetupRecord,

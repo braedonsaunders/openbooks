@@ -67,9 +67,9 @@
  *
  * Money discipline: decimal strings at 1e4 scale in and out ("254.8300"),
  * never floats. Rounding helpers mirror engine/src/payroll/canada/
- * decimal.ts and are built on engine/src/money.ts only.
+ * decimal.ts and are built on engine/src/money/money.ts only.
  */
-import { fromUnits, roundDiv, toUnits } from "../../money.ts";
+import { fromUnits, roundDiv, toUnits } from "../../money/money.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import {
   prsiPeriodBands,

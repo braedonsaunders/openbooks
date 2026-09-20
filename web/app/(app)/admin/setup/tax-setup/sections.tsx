@@ -3,7 +3,7 @@ import 'server-only'
 import Link from 'next/link'
 import { ArrowRight, BadgeCheck, MapPin } from 'lucide-react'
 import { Button, Card, CardContent } from '@openbooks/ui'
-import type { SupportedCountry } from '@openbooks/engine/src/tax-pack-provisioning.ts'
+import type { SupportedCountry } from '@openbooks/engine/src/tax/pack-provisioning.ts'
 import { TaxSetupGuide } from './TaxSetupGuide'
 
 /**

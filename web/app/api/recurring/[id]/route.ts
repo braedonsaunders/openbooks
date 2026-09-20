@@ -2,8 +2,8 @@ import { isoDate, uuidId, parseJsonBody } from "@/lib/api/json";
 import { z } from "zod";
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
-import { db, type SqlExecutor } from "@openbooks/engine/src/db.ts";
-import { RecurringError, runScheduleNow, recurringTemplateScopeFilter } from "@openbooks/engine/src/recurring.ts";
+import { db, type SqlExecutor } from "@openbooks/engine/src/platform/db.ts";
+import { RecurringError, runScheduleNow, recurringTemplateScopeFilter } from "@openbooks/engine/src/billing/recurring.ts";
 import { can, guardPermission, type Authz } from "../../../../lib/authz";
 import { isDocKindEnabled } from "../../../../lib/documents";
 

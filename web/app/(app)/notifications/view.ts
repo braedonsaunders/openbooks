@@ -3,7 +3,7 @@ import 'server-only'
 import { redirect } from 'next/navigation'
 import { sql } from 'drizzle-orm'
 import { getFormatter, getTranslations } from 'next-intl/server'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
   grid,
   page,

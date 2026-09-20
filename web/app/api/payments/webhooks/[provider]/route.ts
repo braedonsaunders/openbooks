@@ -4,7 +4,7 @@ import {
   PaymentWebhookBatchError,
   type AcceptanceProvider,
   type ProviderWebhookResult,
-} from "@openbooks/engine/src/payment-acceptance.ts";
+} from "@openbooks/engine/src/payments/acceptance.ts";
 import { readBoundedBodyText } from "../../../../../lib/bounded-body";
 
 export const runtime = "nodejs";

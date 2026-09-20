@@ -4,15 +4,15 @@ import {
   db,
   orgContext,
   withOrgTransaction,
-} from "@openbooks/engine/src/db.ts";
-import { runTriggerScripts } from "@openbooks/engine/src/scripting.ts";
-import { postDocument, PostingError } from "@openbooks/engine/src/posting.ts";
-import { ControlAccountsIncompleteError } from "@openbooks/engine/src/control-accounts.ts";
+} from "@openbooks/engine/src/platform/db.ts";
+import { runTriggerScripts } from "@openbooks/engine/src/scripting/scripting.ts";
+import { postDocument, PostingError } from "@openbooks/engine/src/ledger/posting.ts";
+import { ControlAccountsIncompleteError } from "@openbooks/engine/src/records/control-accounts.ts";
 import { submitAndReleaseIfUngated } from "@openbooks/engine/src/flows/index.ts";
 import {
   deleteDocument,
   DeleteError,
-} from "@openbooks/engine/src/document-delete.ts";
+} from "@openbooks/engine/src/ledger/document-delete.ts";
 import {
   resolveDefaultValue,
   type FieldValueMap,
@@ -20,7 +20,7 @@ import {
 } from "@openbooks/forms-core";
 import type { SessionUser } from "../auth";
 import { nextDocumentNumber } from "../bills";
-import { businessToday } from "@openbooks/engine/src/business-date.ts";
+import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from "../custom-fields";
 import { allowedSubsidiaryIds as loadAllowedSubsidiaryIds } from "../subsidiaries";
 import {
@@ -53,7 +53,7 @@ import {
   type DocumentEditInput,
 } from "../documents";
 import { isFeatureEnabled } from "../features";
-import { isDocumentRevisionToken } from "@openbooks/engine/src/document-revision.ts";
+import { isDocumentRevisionToken } from "@openbooks/engine/src/records/revision.ts";
 import { auditSetupChange } from "../setup/audit";
 import { validateEntityBody } from "./validate";
 import { ITEM_EQUIPMENT_KINDS } from "./registry-data";

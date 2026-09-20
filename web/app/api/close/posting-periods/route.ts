@@ -4,8 +4,8 @@ import {
   commitPostingPeriodAssignment,
   PostingPeriodAssignmentError,
   previewPostingPeriodAssignment,
-} from "@openbooks/engine/src/close-posting-periods.ts";
-import { CloseError } from "@openbooks/engine/src/close.ts";
+} from "@openbooks/engine/src/close/posting-periods.ts";
+import { CloseError } from "@openbooks/engine/src/close/close.ts";
 import { guardPermission } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
 

@@ -12,11 +12,11 @@
 
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "../../db.ts";
+import { db } from "../../platform/db.ts";
 import {
   postProjectGlEntry,
   reverseProjectGlEntry,
-} from "../../project-recognition.ts";
+} from "../../projects/recognition.ts";
 import { capture } from "../ledger-helpers.ts";
 import type { CaseContext } from "../types.ts";
 import type { ControlCase } from "../controls.ts";

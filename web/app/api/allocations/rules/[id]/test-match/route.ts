@@ -1,13 +1,13 @@
 import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
-import { fromUnits, toUnits } from '../../../../../../../engine/src/money.ts'
+import { fromUnits, toUnits } from '../../../../../../../engine/src/money/money.ts'
 import {
   getRuleDetail,
   getRuleVersion,
   matchLine,
   type AccountGroupResolver,
 } from '../../../../../../../engine/src/allocations/index.ts'
-import { resolveAccountGroups } from '../../../../../../../engine/src/account-groups.ts'
+import { resolveAccountGroups } from '../../../../../../../engine/src/records/account-groups.ts'
 import { guardAllocations } from '../../../../../../lib/allocations-gate'
 import { allocationErrorResponse, requireRuleId } from '../../../_lib.ts'
 

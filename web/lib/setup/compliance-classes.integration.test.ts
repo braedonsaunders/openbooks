@@ -10,8 +10,8 @@ registerHooks({
 })
 
 const { sql } = await import('drizzle-orm')
-const { db, withBypass } = await import('@openbooks/engine/src/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
+const { db, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { createSetupRecord, updateSetupRecord } = await import('./write.ts')
 const { SETUP_ENTITY_BY_KEY } = await import('./registry.ts')
 

@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
-import { actorHasPermission, actorIdentity } from "../actor-permissions.ts";
-import { actorAllowedSubsidiaryIds } from "../actor-subsidiaries.ts";
-import type { SqlExecutor } from "../db.ts";
+import { actorHasPermission, actorIdentity } from "../organization/actor-permissions.ts";
+import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
+import type { SqlExecutor } from "../platform/db.ts";
 
 /**
  * Foundational HRM employment authorization.

@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
-import { createScriptJournal } from "../journal-writes.ts";
-import { postProjectLaborCost } from "../project-recognition.ts";
+import { db } from "../platform/db.ts";
+import { createScriptJournal } from "../ledger/journal-writes.ts";
+import { postProjectLaborCost } from "../projects/recognition.ts";
 import { logTime, logCrewDay } from "./ops-tm.ts";
 import { mark, type SimContext } from "./context.ts";
 import { isWeekend } from "./manifest.ts";

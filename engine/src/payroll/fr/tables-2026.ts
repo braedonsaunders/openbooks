@@ -1,4 +1,4 @@
-import { toUnits } from "../../money.ts";
+import { toUnits } from "../../money/money.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 
 /**

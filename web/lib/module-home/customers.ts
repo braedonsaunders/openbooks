@@ -2,9 +2,9 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import {
   addCalendarDays, businessToday, calendarQuarterBounds, weekStartsEndingOn,
-} from '@openbooks/engine/src/business-date.ts'
-import { db } from '@openbooks/engine/src/db.ts'
-import { add, mulDecimal } from '@openbooks/engine/src/money.ts'
+} from '@openbooks/engine/src/platform/business-date.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { add, mulDecimal } from '@openbooks/engine/src/money/money.ts'
 import { flowRates, lineFunctional, presentationCurrency, presentationRates, translateFlows } from '../fx-presentation'
 import { calculateForecast, type ForecastRow } from '../crm'
 import { crmOpportunityScope } from '../crm-scope'

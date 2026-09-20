@@ -17,8 +17,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withOrg } from "../db.ts";
-import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../test-fixtures.ts";
+import { db, withOrg } from "../platform/db.ts";
+import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { loadEntities, type PartyMirrorOutcome } from "./migrate.ts";
 import type { EntityStream, MigrationSource, SourceEntity } from "./source.ts";
 import { PARTY_MERGE_REF_COVERAGE } from "./party-merges.ts";

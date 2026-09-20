@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
 import { isFeatureEnabled } from "../features";
 import { can } from "../authz";
 import { approvalWorklistForAuthz } from "../application/approvals";

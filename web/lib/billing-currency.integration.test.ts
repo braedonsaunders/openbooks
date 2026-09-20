@@ -6,9 +6,9 @@ registerHooks({resolve(specifier,context,next){
   if (specifier === 'server-only') return {shortCircuit:true,url:'data:text/javascript,export {}'}
   return next(specifier,context)
 }})
-const { db, withBypassContext } = await import('@openbooks/engine/src/db.ts')
+const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
+const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { generateInvoiceFromBillingRequest } = await import('./billing')
 const { createBillingRequest } = await import('./billing-requests')
 

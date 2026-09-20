@@ -6,11 +6,11 @@ import {
   renderPasswordExpression,
   type PasswordTokenCatalog,
 } from '@openbooks/pdf'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import type { Authz } from './authz'
-import { PayrollError } from '@openbooks/engine/src/payroll-error.ts'
-import { payrollSubsidiaryInScope } from '@openbooks/engine/src/payroll-scope.ts'
-import { issuePayRunCheques } from '@openbooks/engine/src/payroll-cheques.ts'
+import { PayrollError } from '@openbooks/engine/src/payroll/error.ts'
+import { payrollSubsidiaryInScope } from '@openbooks/engine/src/payroll/scope.ts'
+import { issuePayRunCheques } from '@openbooks/engine/src/payroll/cheques.ts'
 import { mergeAndPrintPdf } from './pdf-templates/render'
 import { resolvePdfTemplate } from './pdf-templates/store'
 import { loadPdfRecordValues } from './pdf-templates/values'

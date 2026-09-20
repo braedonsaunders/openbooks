@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { rollbackPaymentRun } from '@openbooks/engine/src/payment-operations.ts'
+import { rollbackPaymentRun } from '@openbooks/engine/src/payments/operations.ts'
 import { isUuid } from '@/lib/list-params'
 import { parseJsonBody } from '@/lib/api/json'
 import { guardPaymentRunPermission, paymentErrorResponse } from '@/app/api/payments/lib'

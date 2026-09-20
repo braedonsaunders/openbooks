@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { filingArtifact } from '@openbooks/engine/src/payroll-yearend-amendments.ts'
-import { orgYearEndFilings } from '@openbooks/engine/src/payroll-yearend.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { filingArtifact } from '@openbooks/engine/src/payroll/yearend-amendments.ts'
+import { orgYearEndFilings } from '@openbooks/engine/src/payroll/yearend.ts'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { guardPayrollFilingData, guardPayrollFilingRowIds } from '../../../subsidiary-scope'
 

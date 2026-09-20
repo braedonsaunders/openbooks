@@ -8,17 +8,17 @@
 
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "../../db.ts";
-import { fromUnits, toUnits } from "../../money.ts";
+import { db } from "../../platform/db.ts";
+import { fromUnits, toUnits } from "../../money/money.ts";
 import {
   applyInventoryIssuesForInvoice,
   applyInventoryReceiptsForBill,
   getOnHand,
   postLandedCostVoucher,
-} from "../../inventory.ts";
-import { reverseInventoryWritedown, writeDownInventoryToNrv } from "../../inventory-nrv.ts";
+} from "../../inventory/inventory.ts";
+import { reverseInventoryWritedown, writeDownInventoryToNrv } from "../../inventory/nrv.ts";
 import { capture, deps, type DraftDocumentInput } from "../ledger-helpers.ts";
-import { postDocument } from "../../posting.ts";
+import { postDocument } from "../../ledger/posting.ts";
 import type { CaseContext, ConformanceCase } from "../types.ts";
 
 /** Receive stock the way the product does: an approved vendor bill, then the

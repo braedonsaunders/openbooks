@@ -1,7 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
   FX_PROVIDER_MANIFESTS,
   FxProviderError,
@@ -10,7 +10,7 @@ import {
   saveFxProviderConfig,
   type FxProviderKey,
   type FxSyncSchedule,
-} from '@openbooks/engine/src/fx-providers.ts'
+} from '@openbooks/engine/src/fx/providers.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 
 export const runtime = 'nodejs'

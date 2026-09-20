@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { guardPermission, guardSubsidiaryScope } from '../../../../../lib/authz'
 import { DOC_KIND_FEATURE } from '../../../../../lib/document-kinds'
 import { isDocKindEnabled } from '../../../../../lib/documents'

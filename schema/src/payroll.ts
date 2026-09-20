@@ -341,7 +341,7 @@ export const employeePayrollProfiles = pgTable(
     /**
      * Payroll-owned override of how this employee's net pay leaves the bank.
      * NULL = inherit `parties.payment_method` (see
-     * engine/src/payroll-payment-method.ts for the full resolution ladder).
+     * engine/src/payroll/payment-method.ts for the full resolution ladder).
      * Payroll keeps its own column because the party-level enum is shared with
      * AP/party maintenance and carries values that are not payroll rails
      * (card/cash/other), and because moving wages onto a different rail is a
@@ -702,7 +702,7 @@ export const payStubLines = pgTable(
  * This row is the anchor of ONE carry-in event for one employee in one tax
  * year: the statutory year-to-date lives in its columns, the component-level
  * year-to-date in `payroll_opening_balance_components` beneath it, and both are
- * frozen by the same committed run (engine/src/payroll-opening-balances.ts).
+ * frozen by the same committed run (engine/src/payroll/opening-balances.ts).
  */
 export const payrollOpeningBalances = pgTable(
   "payroll_opening_balances",
@@ -743,7 +743,7 @@ export const payrollOpeningBalances = pgTable(
      * DEPRECATED (2026-08-17). No pay run reads this any more: an opening
      * vacation balance is an `entitlement_ledger` row with `kind = 'opening'`
      * against the org's vacation plan, loaded through
-     * engine/src/payroll-entitlements.ts.
+     * engine/src/payroll/entitlements.ts.
      *
      * Retained rather than dropped, and deliberately not offered as an editable
      * field, for one reason that outranks tidiness: it is the INPUT to

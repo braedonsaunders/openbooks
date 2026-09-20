@@ -65,12 +65,12 @@ registerHooks({
   },
 })
 
-const { db, withBypass } = await import('@openbooks/engine/src/db.ts')
-const { withOrgContext } = await import('@openbooks/engine/src/db.ts')
+const { db, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
+const { withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import(
-  '@openbooks/engine/src/test-fixtures.ts'
+  '@openbooks/engine/src/testing/fixtures.ts'
 )
-const { env } = await import('@openbooks/engine/src/db.ts')
+const { env } = await import('@openbooks/engine/src/platform/db.ts')
 
 const DB = !!env.OPENBOOKS_DB_URL
 
@@ -93,7 +93,7 @@ type Fixture = {
 async function makeFixture(): Promise<Fixture> {
   const org = await withBypass(async () => {
     const created = await createScratchOrg()
-    const { seedFlowActors } = await import('@openbooks/engine/src/test-fixtures.ts')
+    const { seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
     return { created, actors: await seedFlowActors(created.orgId) }
   })
   const childSub = randomUUID()

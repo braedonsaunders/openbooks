@@ -1,12 +1,12 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
-import { loadWorkSchedules } from '@openbooks/engine/src/work-schedules.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { loadWorkSchedules } from '@openbooks/engine/src/payroll/work-schedules.ts'
 import { guardFeaturePermission } from '../../../lib/feature-gates'
 import { isUuid } from '../../../lib/list-params'
 import { parseCycleDays } from '../../../lib/work-schedule-days'
-import { isIsoCalendarDate } from '@openbooks/engine/src/business-date.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,7 +23,7 @@ export const dynamic = 'force-dynamic'
  *
  * Not a generic setup-registry entity, deliberately: the registry does
  * single-table CRUD, and a pattern is a parent plus a repeating list of hours
- * that must be written together. See engine/src/work-schedules.ts for the
+ * that must be written together. See engine/src/payroll/work-schedules.ts for the
  * model.
  *
  * Scheduled hours are ordinary workforce configuration rather than confidential

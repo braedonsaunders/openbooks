@@ -15,7 +15,7 @@
  * convivencias) the ALGORITMO prices have no certificate channel yet — the
  * pure calculators serve those cases directly.
  */
-import { fromUnits, roundDiv, toUnits } from "../../money.ts";
+import { fromUnits, roundDiv, toUnits } from "../../money/money.ts";
 import { empFact } from "../employee-facts.ts";
 // Side effect: registers ES_EMPLOYEE_FACTS, so every read below resolves
 // through the declaration in every import graph — never via a transitive

@@ -40,9 +40,9 @@ registerHooks({
   },
 })
 const { sql } = await import('drizzle-orm')
-const { db, withOrgContext } = await import('@openbooks/engine/src/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
-const { documentRevisionCounterSql } = await import('@openbooks/engine/src/document-revision.ts')
+const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { documentRevisionCounterSql } = await import('@openbooks/engine/src/records/revision.ts')
 const { POST } = await import('./route.ts')
 // The route's web/lib chain (documents → org-scope → auth → request-org)
 // registers the app RLS resolver at import time, replacing the preloaded
@@ -50,7 +50,7 @@ const { POST } = await import('./route.ts')
 // web imports so scratch fixtures keep their documented cross-org authority;
 // the route calls under test scope themselves explicitly (withOrgContext /
 // withOrgTransaction) and are unaffected.
-const { installTrustedTestDatabaseBypass } = await import('@openbooks/engine/src/test-database-bypass.ts')
+const { installTrustedTestDatabaseBypass } = await import('@openbooks/engine/src/testing/database-bypass.ts')
 installTrustedTestDatabaseBypass()
 const DB = !!process.env.OPENBOOKS_DB_URL
 

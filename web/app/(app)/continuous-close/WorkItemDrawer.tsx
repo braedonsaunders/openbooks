@@ -1,6 +1,6 @@
 'use client'
 
-import type { ContinuousCloseAgentKey } from '@openbooks/engine/src/continuous-close-config.ts'
+import type { ContinuousCloseAgentKey } from '@openbooks/engine/src/agents/continuous-close-config.ts'
 import { useMoney } from '@/components/money-provider'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'

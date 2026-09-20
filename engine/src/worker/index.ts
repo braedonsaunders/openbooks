@@ -2,11 +2,11 @@
  * OpenBooks background worker — a standalone process (run: `tsx
  * engine/src/worker/index.ts`, or the `worker` compose service). Consumes the
  * BullMQ queues (emails, reports) and owns ALL scheduled ticks: the full
- * scheduled-work scan set (engine/src/scheduler.ts) plus the report, sandbox,
+ * scheduled-work scan set (engine/src/scheduling/scheduler.ts) plus the report, sandbox,
  * overhead, mirror, and backup schedulers. This is the durable,
  * horizontally-scalable home for scheduled work — the web process never
  * schedules unless explicitly opted in for single-process installs (see
- * engine/src/scheduler-mode.ts). N replicas still run each tick once via the
+ * engine/src/scheduling/mode.ts). N replicas still run each tick once via the
  * shared Postgres claim locks.
  */
 import { closeJobConnections, markWorkerHeartbeat } from "@openbooks/jobs";
@@ -23,10 +23,10 @@ import { startOverheadScheduler } from "./overhead-scheduler.ts";
 import { createApCaptureWorker } from "./ap-capture-worker.ts";
 import { createBackupWorker } from "./backup-worker.ts";
 import { startBackupScheduler } from "./backup-scheduler.ts";
-import { ensureScheduler } from "../scheduler.ts";
-import { assertSafeRuntimeDatabaseRole, pool } from "../db.ts";
-import { assertS3Ready, s3Enabled } from "../file-storage.ts";
-import { startTelemetry, stopTelemetry } from "../telemetry.ts";
+import { ensureScheduler } from "../scheduling/scheduler.ts";
+import { assertSafeRuntimeDatabaseRole, pool } from "../platform/db.ts";
+import { assertS3Ready, s3Enabled } from "../platform/file-storage.ts";
+import { startTelemetry, stopTelemetry } from "../platform/telemetry.ts";
 
 const ALIVE_FILE = process.env.OPENBOOKS_WORKER_ALIVE_FILE || "/tmp/openbooks-worker-alive";
 const READY_FILE = process.env.OPENBOOKS_WORKER_READY_FILE || "/tmp/openbooks-worker-ready";
@@ -81,7 +81,7 @@ async function main(): Promise<void> {
   startOverheadScheduler();
   startBackupScheduler();
   // The worker owns scheduled ticks: scripts, feeds, billing, outbox, flows,
-  // and close scans (engine/src/scheduler.ts), claimed once across replicas
+  // and close scans (engine/src/scheduling/scheduler.ts), claimed once across replicas
   // by the shared Postgres lock. The web process schedules only on explicit
   // single-process opt-in.
   ensureScheduler();

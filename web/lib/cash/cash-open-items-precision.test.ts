@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import test from 'node:test'
-import { add, cmp, formatMoney, normalizeMoney, sum } from '../../../engine/src/money.ts'
+import { add, cmp, formatMoney, normalizeMoney, sum } from '../../../engine/src/money/money.ts'
 
 const cashRoot = join(import.meta.dirname)
 const source = (name: string) => readFileSync(join(cashRoot, name), 'utf8')

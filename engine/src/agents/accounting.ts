@@ -1,12 +1,12 @@
 import { sql } from "drizzle-orm";
-import { reconciliationTotals, SYSTEM_ACTOR_ID } from "../banking.ts";
-import { addCalendarDays, businessToday, parseIsoDate } from "../business-date.ts";
-import { db } from "../db.ts";
-import { toUnits } from "../money.ts";
+import { reconciliationTotals, SYSTEM_ACTOR_ID } from "../banking/banking.ts";
+import { addCalendarDays, businessToday, parseIsoDate } from "../platform/business-date.ts";
+import { db } from "../platform/db.ts";
+import { toUnits } from "../money/money.ts";
 import {
   effectiveDetectorMateriality,
   type ContinuousCloseDetectorPolicy,
-} from "../continuous-close-config.ts";
+} from "./continuous-close-config.ts";
 import { absoluteUnits, classifyUnmatchedBankActivity, moneyAbs } from "./measure.ts";
 import type { AgentFinding } from "./types.ts";
 

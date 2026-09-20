@@ -25,9 +25,9 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, pool, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts')
+const { db, pool, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { POST: postDraft } = await import('../../parties/draft/route')
 const { GET: getParty, PATCH: patchParty } = await import('../../parties/[id]/route')
 const { GET: getProfiles, POST: postProfile } = await import('./route')

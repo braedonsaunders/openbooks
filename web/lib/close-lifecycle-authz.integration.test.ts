@@ -27,10 +27,10 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
-const { startCloseRun } = await import('@openbooks/engine/src/close.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { startCloseRun } = await import('@openbooks/engine/src/close/close.ts')
 const { POST: create } = await import('../app/api/close/runs/route')
 const { POST: action } = await import('../app/api/close/runs/[id]/route')
 const { GET: binder } = await import('../app/api/close/runs/[id]/binder/route')

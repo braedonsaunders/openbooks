@@ -1,5 +1,5 @@
 import { and, eq, gte, sql } from "drizzle-orm";
-import { db, schema } from "../db.ts";
+import { db, schema } from "../platform/db.ts";
 import { verifyUser, type ResolvedUser } from "./targets.ts";
 
 /**

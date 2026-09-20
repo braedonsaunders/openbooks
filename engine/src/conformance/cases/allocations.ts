@@ -29,9 +29,9 @@ import {
   updateDraftVersion,
 } from "../../allocations/rules.ts";
 import type { AllocationRuleTarget, RuleInEffect } from "../../allocations/types.ts";
-import { db } from "../../db.ts";
-import { fromUnits, toUnits } from "../../money.ts";
-import { postProjectGlEntry } from "../../project-recognition.ts";
+import { db } from "../../platform/db.ts";
+import { fromUnits, toUnits } from "../../money/money.ts";
+import { postProjectGlEntry } from "../../projects/recognition.ts";
 import { capture } from "../ledger-helpers.ts";
 import type { ActualOutcome, CaseContext } from "../types.ts";
 import type { ControlCase } from "../controls.ts";

@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
+import { db } from "../platform/db.ts";
 import { getConnection, listConnections } from "./connection.ts";
 import { buildSource } from "./connection.ts";
 import { preflightFullSync, runFullMigration, runSync } from "./sync.ts";

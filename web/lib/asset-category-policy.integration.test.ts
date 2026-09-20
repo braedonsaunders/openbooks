@@ -5,10 +5,10 @@ import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import pg from 'pg';
 import { sql } from 'drizzle-orm';
-import { db, env, withOrgTransaction } from '@openbooks/engine/src/db.ts';
-import { buildSchedule, runDepreciation } from '@openbooks/engine/src/depreciation.ts';
-import { remeasureAsset, disposeAsset, reverseAssetLifecycleEvent } from '@openbooks/engine/src/asset-lifecycle.ts';
-import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/src/test-fixtures.ts';
+import { db, env, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts';
+import { buildSchedule, runDepreciation } from '@openbooks/engine/src/assets/depreciation.ts';
+import { remeasureAsset, disposeAsset, reverseAssetLifecycleEvent } from '@openbooks/engine/src/assets/asset-lifecycle.ts';
+import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts';
 
 const state: { gate: { user: { orgId: string; id: string } } | null } = { gate: null };
 Object.assign(globalThis, { __assetCategoryPolicy: state });

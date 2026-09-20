@@ -19,9 +19,9 @@ registerHooks({
   },
 });
 
-const { db } = await import(root + "engine/src/db.ts");
+const { db } = await import(root + "engine/src/platform/db.ts");
 const { sql } = await import(root + "node_modules/drizzle-orm/index.js");
-const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(root + "engine/src/test-fixtures.ts");
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(root + "engine/src/testing/fixtures.ts");
 const { createSandbox, deleteSandbox } = await import(root + "engine/src/sandbox/lifecycle.ts");
 const { setScheduleAction } = await import(root + "web/app/(app)/admin/sandboxes/actions.ts");
 

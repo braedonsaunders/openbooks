@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
 import {
   attestOwnerManagedClose,
   closeApprovedRun,
@@ -12,12 +12,12 @@ import {
   requestPeriodReopen,
   startCloseRun,
   type CloseModule,
-} from "@openbooks/engine/src/close.ts";
+} from "@openbooks/engine/src/close/close.ts";
 import {
   RevaluationError,
   RevaluationFeatureDisabledError,
   runRevaluation,
-} from "@openbooks/engine/src/fx-revaluation.ts";
+} from "@openbooks/engine/src/close/fx-revaluation.ts";
 import type { ApplicationContext } from "./context";
 import { assertApplicationPermission, assertSubsidiaryAccess } from "./context";
 import { ApplicationError, notFound } from "./errors";

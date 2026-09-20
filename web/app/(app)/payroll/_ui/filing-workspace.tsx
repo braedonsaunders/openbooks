@@ -19,8 +19,8 @@ import {
   Skeleton,
   cn,
 } from '@openbooks/ui'
-import type { YearEndFilingSection } from '@openbooks/engine/src/payroll-yearend.ts'
-import type { PayrollFilingSlipData } from '@openbooks/engine/src/payroll-filing-registry.ts'
+import type { YearEndFilingSection } from '@openbooks/engine/src/payroll/yearend.ts'
+import type { PayrollFilingSlipData } from '@openbooks/engine/src/payroll/filing-registry.ts'
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
 import { useMoney } from '../../../../components/money-provider'
 import { payrollSlipFacsimile } from '../../../../lib/payroll-slip-facsimile'

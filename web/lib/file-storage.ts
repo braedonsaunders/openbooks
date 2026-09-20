@@ -6,4 +6,4 @@ export {
   getS3Blob,
   putS3Blob,
   s3Enabled,
-} from '@openbooks/engine/src/file-storage.ts'
+} from '@openbooks/engine/src/platform/file-storage.ts'

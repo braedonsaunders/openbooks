@@ -1,4 +1,4 @@
-import { add, cmp, mulPercent, neg, sum } from "../money.ts";
+import { add, cmp, mulPercent, neg, sum } from "../money/money.ts";
 import { PayrollPackError } from "./packs.ts";
 import type { PayrollEmployerAggregateLevy } from "./packs.ts";
 

@@ -4,8 +4,8 @@ import test from 'node:test';
 registerHooks({resolve(specifier,context,next){if(specifier==='server-only')return{shortCircuit:true,url:'data:text/javascript,export {}'};return next(specifier,context)}});
 const {sql}=await import('drizzle-orm');
 const {pathToFileURL}=await import('node:url');
-const {db}=await import('@openbooks/engine/src/db.ts');
-const {createScratchOrg,dropScratchOrg,seedFlowActors}=await import('@openbooks/engine/src/test-fixtures.ts');
+const {db}=await import('@openbooks/engine/src/platform/db.ts');
+const {createScratchOrg,dropScratchOrg,seedFlowActors}=await import('@openbooks/engine/src/testing/fixtures.ts');
 const {setupResource}=await import('./setup-resources.ts');
 const {SETUP_ENTITY_BY_KEY}=await import('../setup/registry.ts');
 

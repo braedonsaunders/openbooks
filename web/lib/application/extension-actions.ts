@@ -1,7 +1,7 @@
 import 'server-only'
 import { z } from 'zod'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction, withTransactionSavepoint } from '@openbooks/engine/src/db.ts'
+import { db, withOrgTransaction, withTransactionSavepoint } from '@openbooks/engine/src/platform/db.ts'
 import { can } from '../authz'
 import { featureGateLockKey, isFeatureEnabled } from '../features'
 import { getAppByKey, runBridgeMethod } from '../apps/store'

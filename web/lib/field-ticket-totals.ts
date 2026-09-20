@@ -8,7 +8,7 @@
  * Client-safe (pure decimal math) for drawer and unit tests; the loader in
  * web/lib/field-tickets.ts applies it to the entry rows it selects.
  */
-import { sum } from '@openbooks/engine/src/money.ts'
+import { sum } from '@openbooks/engine/src/money/money.ts'
 
 export interface PricedLaborEntry {
   bill_rate: string | number | null | undefined

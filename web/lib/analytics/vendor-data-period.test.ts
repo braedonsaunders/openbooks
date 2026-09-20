@@ -97,8 +97,8 @@ const hooks = registerHooks({
     }
     const mockUrl = new Map([
       ["drizzle-orm", "mock:drizzle-orm"],
-      ["@openbooks/engine/src/business-date.ts", "mock:business-date"],
-      ["@openbooks/engine/src/db.ts", "mock:db"],
+      ["@openbooks/engine/src/platform/business-date.ts", "mock:business-date"],
+      ["@openbooks/engine/src/platform/db.ts", "mock:db"],
     ]).get(specifier);
     if (mockUrl) return { url: mockUrl, shortCircuit: true };
     return nextResolve(specifier, context);

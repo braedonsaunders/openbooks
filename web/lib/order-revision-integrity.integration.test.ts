@@ -14,9 +14,9 @@ registerHooks({ resolve(specifier, context, next) {
   if (specifier.startsWith("@/")) return next(root+"web/"+specifier.slice(2)+".ts",context);
   return next(specifier,context);
 }});
-const { db, withBypassContext, withOrg, withOrgContext } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrg, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { makeGET, makePATCH, makeDELETE, makeConvertPOST } = await import("../app/api/_order/handlers");
 const request = (method: string, body?: unknown) => new Request("http://audit.local/api/sales-orders", { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 

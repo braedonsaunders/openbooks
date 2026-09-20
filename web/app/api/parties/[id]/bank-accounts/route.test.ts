@@ -169,8 +169,8 @@ const mockUrls = new Map<string, string>([
   ['../../../../../lib/features', mockUrl('features')],
   ['../../../../../lib/list-params', mockUrl('list-params')],
   ['../../../../../lib/countries', mockUrl('countries')],
-  ['@openbooks/engine/src/db.ts', mockUrl('db')],
-  ['@openbooks/engine/src/payments.ts', mockUrl('payments')],
+  ['@openbooks/engine/src/platform/db.ts', mockUrl('db')],
+  ['@openbooks/engine/src/payments/payments.ts', mockUrl('payments')],
   ['@openbooks/engine/src/flows/run.ts', mockUrl('flows')],
   ['@openbooks/engine/src/flows/bank-accounts-adapter.ts', mockUrl('bank-account-adapter')],
 ])

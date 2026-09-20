@@ -1,8 +1,8 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db, schema } from "@openbooks/engine/src/db.ts";
-import { sealJson } from "@openbooks/engine/src/secrets.ts";
+import { db, schema } from "@openbooks/engine/src/platform/db.ts";
+import { sealJson } from "@openbooks/engine/src/platform/secrets.ts";
 import {
   listConnections,
   sourceType,
@@ -10,7 +10,7 @@ import {
   validateSourceConfig,
   validateSourceSecret,
 } from "@openbooks/engine/src/sync/connection.ts";
-import { businessToday } from "@openbooks/engine/src/business-date.ts";
+import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { connectionAuditChanges } from "@openbooks/schema/src/connections.ts";
 import { guardPermission } from "../../../../lib/authz";
 

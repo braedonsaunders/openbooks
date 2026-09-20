@@ -1,8 +1,8 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
-import { db, pool } from "../db.ts";
-import { runId, sourceSha } from "../provenance.ts";
+import { db, pool } from "../platform/db.ts";
+import { runId, sourceSha } from "../platform/provenance.ts";
 import { runScenario } from "./scenario.ts";
 
 /**

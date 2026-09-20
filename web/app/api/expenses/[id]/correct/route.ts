@@ -1,11 +1,11 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import {
   DocumentVoidError,
   requestDocumentVoid,
-} from '@openbooks/engine/src/document-void.ts'
+} from '@openbooks/engine/src/ledger/document-void.ts'
 import { can, guardSubsidiaryScope } from '../../../../../lib/authz'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import {

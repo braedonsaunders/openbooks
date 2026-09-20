@@ -1,5 +1,5 @@
 import 'server-only'
-import { db, type SqlExecutor } from '@openbooks/engine/src/db.ts'
+import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 
 /**
  * Industry registry — the single source of truth for the vertical presets the

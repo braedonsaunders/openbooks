@@ -1,8 +1,8 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
-import { resolveStoredHref } from "@openbooks/engine/src/modules/nav-registry.ts";
-import type { ContinuousCloseAgentKey } from "@openbooks/engine/src/continuous-close-config.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
+import { resolveStoredHref } from "@openbooks/engine/src/navigation/nav-registry.ts";
+import type { ContinuousCloseAgentKey } from "@openbooks/engine/src/agents/continuous-close-config.ts";
 import type { ContinuousCloseWorkItem } from "../../app/(app)/continuous-close/WorkItemDrawer";
 
 type WorkItemDetailRow = {

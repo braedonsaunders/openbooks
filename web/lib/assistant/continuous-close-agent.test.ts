@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import type { ContinuousCloseAgentKey } from "@openbooks/engine/src/continuous-close-config.ts";
+import type { ContinuousCloseAgentKey } from "@openbooks/engine/src/agents/continuous-close-config.ts";
 import {
   packMissionBrief,
   packNarrativeTitle,

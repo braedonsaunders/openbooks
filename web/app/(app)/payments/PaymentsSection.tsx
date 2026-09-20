@@ -2,13 +2,13 @@ import { can, type Authz } from '@/lib/authz'
 import { paymentSharedSubsidiaryFilter } from '@/lib/payment-run-access'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
   loadPaymentDocument,
   openItemsForParty,
   PAYMENT_KIND_SIDE,
   type PaymentKind,
-} from '@openbooks/engine/src/payments.ts'
+} from '@openbooks/engine/src/payments/payments.ts'
 import { RecordListView } from '../../../components/record-list-view'
 import { isUuid } from '../../../lib/list-params'
 import { NewPaymentButton } from './NewPaymentButton'

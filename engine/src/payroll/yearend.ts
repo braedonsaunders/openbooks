@@ -1,0 +1,1415 @@
+import { assertPayrollCountryKnown } from "./country.ts";
+import { sql } from "drizzle-orm";
+import { db } from "../platform/db.ts";
+import { add, cmp, mulRate, neg, normalizeMoney } from "../money/money.ts";
+import { ratesForPayDate } from "./us/rates.ts";
+import {
+  effectiveFilingAccountSql,
+  assertPayrollFilingAccountKnown,
+  filingAccountRef,
+  filingAccountsById,
+  type FilingAccountRef,
+} from "./filing.ts";
+import {
+  declaredPayrollFilings,
+  separationPaymentKeys,
+  type PayrollFilingCadence,
+  type PayrollFilingData,
+  type PayrollFilingIssue,
+} from "./filing-registry.ts";
+import { RATES_2026_JAN } from "./canada/rates.ts";
+import { payrollFilingYearOptions, payrollTaxYearProblem } from "./packs.ts";
+import { PayrollError } from "./error.ts";
+
+/**
+ * Year-end payroll artifacts, built from committed stubs (the payroll
+ * subledger of record):
+ *
+ * - Canada: T4 slip box data per employee + the T4 Summary totals, and the
+ *   ROE insurable-earnings worksheet (block 15A/15B/15C source data).
+ * - US: Form 941 quarterly worksheet + W-2 box data per employee.
+ *
+ * These are DATA builders — the UI renders slips/printables and the numbers
+ * always reconcile to stub factors, so every box is explainable line by
+ * line. Filing-record integration (CRA XML / SSA EFW2 transmission) layers
+ * on later without changing the math here.
+ *
+ * A T4 return is filed per payroll program account and a W-2 set per EIN, so
+ * every slip carries its filing account and `t4Returns` assembles one
+ * slips+summary return per account. Orgs with no filing accounts configured
+ * produce exactly one unassigned return — the previous behaviour.
+ */
+
+const num = (value: unknown): string => (value == null ? "0" : String(value));
+
+/**
+ * Statutory caps per tax year (extend each January alongside the engines).
+ *
+ * REFUSES an unknown year rather than returning null. Boxes 24 and 26 are
+ * capped at the year's MIE and YAMPE; with no caps the cap became a no-op and
+ * the slips went out UNCAPPED and silently — a 2025 restatement, or anything
+ * filed once the calendar turned to 2027, would misstate insurable and
+ * pensionable earnings on every slip. The country pack's own
+ * `ratesForPayDate` throws for an unknown pay date; this local copy of the same
+ * constants must fail the same way, not the opposite way.
+ */
+function caYearCaps(taxYear: number): { mie: string; yampe: string; qpipMie: string } {
+  if (taxYear === 2026) {
+    return {
+      mie: RATES_2026_JAN.ei.mie,
+      yampe: RATES_2026_JAN.cpp.yampe,
+      qpipMie: RATES_2026_JAN.qpip.mie,
+    };
+  }
+  throw new PayrollError(
+    `no CRA maximums for tax year ${taxYear} — T4 boxes 24 and 26 cannot be capped. `
+    + "Add the year to engine/src/payroll/canada/rates.ts",
+  );
+}
+
+/**
+ * Box 24 and box 26 are capped at the year's MIE and YAMPE PER EMPLOYEE, not
+ * per slip — and an employee who moved province mid-year now gets one slip per
+ * province, because the CRA requires a separate T4 for each province of
+ * employment.
+ *
+ * Capping each of those slips independently would report up to N × the annual
+ * maximum for one person. So the room is consumed across the employee's slips
+ * in chronological order: the first slip fills first, and a later one gets only
+ * what is left. Pure, and exact — `add`/`cmp`/`neg` from money.ts, no floats.
+ */
+export function capAnnualEarnings(
+  rows: readonly { employeePartyId: string; insurable: string; pensionable: string }[],
+  caps: { mie: string; yampe: string },
+): { box24EiInsurable: string; box26CppPensionable: string }[] {
+  const usedInsurable = new Map<string, string>();
+  const usedPensionable = new Map<string, string>();
+  const consume = (used: Map<string, string>, key: string, value: string, cap: string): string => {
+    const already = used.get(key);
+    if (already === undefined) {
+      // First slip of the employee's year — byte-for-byte the previous
+      // per-employee cap, so a single-province employee's boxes do not move.
+      const taken = cmp(value, cap) > 0 ? cap : value;
+      used.set(key, taken);
+      return taken;
+    }
+    const room = cmp(cap, already) > 0 ? add(cap, neg(already)) : "0";
+    const taken = cmp(value, room) > 0 ? room : value;
+    used.set(key, add(already, taken));
+    return taken;
+  };
+  return rows.map((row) => ({
+    box24EiInsurable: consume(usedInsurable, row.employeePartyId, row.insurable, caps.mie),
+    box26CppPensionable: consume(usedPensionable, row.employeePartyId, row.pensionable, caps.yampe),
+  }));
+}
+
+export interface T4Slip {
+  employeePartyId: string;
+  employeeName: string;
+  province: string;
+  isQuebec: boolean;
+  /** Payroll program account the slip is filed under; null = unassigned. */
+  filingAccountId: string | null;
+  /** T4 boxes (QPP amounts land in the QPP boxes for Quebec on the render). */
+  box14EmploymentIncome: string;
+  box16Cpp: string;
+  box16aCpp2: string;
+  box18Ei: string;
+  box22IncomeTax: string;
+  box24EiInsurable: string;
+  box26CppPensionable: string;
+  box44UnionDues: string;
+  box55Qpip: string;
+  /** Box 56 — QPIP insurable earnings, capped at the year's QPIP maximum. */
+  box56QpipInsurable: string;
+  stubCount: number;
+}
+
+/**
+ * The statutory year-to-date carried in when payroll adopts OpenBooks
+ * mid-year. These are per-employee facts (one row in
+ * `payroll_opening_balances`) and map directly to the year-end slip boxes.
+ *
+ * Keep this shape in lockstep with `OPENING_BALANCE_FIELDS`: omitting one of
+ * the statutory columns here makes it impossible for a year-end return to
+ * reconcile to the prior provider's YTD report.
+ */
+export interface OpeningYearEndYtd {
+  /** pensionable_ytd — T4 box 26 / W-2 boxes 3 and 5 wage bases. */
+  pensionableYtd: string;
+  /** insurable_ytd — T4 box 24 EI-insurable earnings. */
+  insurableYtd: string;
+  /** cpp_ytd — T4 box 16 CPP/QPP contributions. */
+  cppYtd: string;
+  /** cpp2_ytd — T4 box 16A second additional CPP contributions. */
+  cpp2Ytd: string;
+  /** ei_ytd — T4 box 18 EI premiums. */
+  eiYtd: string;
+  /** qpip_ytd — T4 box 55 QPIP premiums. */
+  qpipYtd: string;
+  /** taxable_ytd — T4 box 14 / W-2 box 1 earnings paid before adoption. */
+  taxableYtd: string;
+  /** tax_ytd — income tax withheld before adoption (box 22 / W-2 box 2). */
+  taxYtd: string;
+  /** fica_withheld_ytd — combined SS/Medicare tax withheld before adoption (W-2 boxes 4/6). */
+  ficaWithheldYtd: string;
+}
+
+/**
+ * Fold each employee's pre-adoption year-to-date into exactly ONE of their
+ * slips — the first the list carries.
+ *
+ * An opening balance is a PER-EMPLOYEE fact (one row per org, employee and
+ * tax year) while a slip is per province and filing account, so folding it
+ * into every slip would multiply it by the employee's slip count and
+ * overstate box 14 twice over for a mid-year mover. It is also ADDITIVE with
+ * the committed stubs, never either/or — `coalesce(opening, 0) + sum(stubs)`
+ * is the established pattern (`employeeYtd` in payroll-run.ts). Which single
+ * slip carries it is a declaration, not a discovery: the prior provider's
+ * records do not say which province or program account the money was earned
+ * under, so this follows the only attribution convention the module already
+ * has — `capAnnualEarnings` consumes per-employee annual amounts across slips
+ * in chronological order, and the first slip fills first. Callers must pass
+ * slips in that order (both builders order by employee, then earliest pay
+ * date).
+ *
+ * Pure, so the once-per-employee rule is verifiable without a database.
+ */
+/**
+ * Mid-year adopters can have opening YTD and no committed stub in this
+ * system. `carryOpeningYearEndYtd` only folds onto existing slips, so those
+ * employees would otherwise disappear from T4/W-2. Seed a zero slip for
+ * each opening employee the stub query did not produce; the carry-in then
+ * lands on it.
+ */
+export function seedOpeningOnlySlips<S extends { employeePartyId: string }>(
+  slips: readonly S[],
+  openingEmployeeIds: Iterable<string>,
+  seed: (employeePartyId: string) => S,
+): S[] {
+  const have = new Set(slips.map((s) => s.employeePartyId));
+  const extra: S[] = [];
+  for (const id of openingEmployeeIds) {
+    if (!have.has(id)) extra.push(seed(id));
+  }
+  return extra.length ? [...extra, ...slips] : [...slips];
+}
+
+export function carryOpeningYearEndYtd<S extends { employeePartyId: string }>(
+  slips: readonly S[],
+  openings: ReadonlyMap<string, OpeningYearEndYtd>,
+  into: (slip: S, opening: OpeningYearEndYtd) => S,
+): S[] {
+  const carried = new Set<string>();
+  return slips.map((slip) => {
+    const opening = openings.get(slip.employeePartyId);
+    if (!opening || carried.has(slip.employeePartyId)) return slip;
+    carried.add(slip.employeePartyId);
+    return into(slip, opening);
+  });
+}
+
+/**
+ * T4 boxes a carry-in lands in: 14, 16, 16A, 18, 22, 24 and 26. Box 56 is
+ * deliberately absent: `insurable_ytd` is the EI base and the model has no
+ * distinct QPIP-insurable earnings source, so inventing one would misstate a
+ * Quebec return.
+ */
+export function openingYtdIntoT4Slip(slip: T4Slip, opening: OpeningYearEndYtd): T4Slip {
+  return {
+    ...slip,
+    box14EmploymentIncome: add(slip.box14EmploymentIncome, opening.taxableYtd),
+    box16Cpp: add(slip.box16Cpp, opening.cppYtd),
+    box16aCpp2: add(slip.box16aCpp2, opening.cpp2Ytd),
+    box18Ei: add(slip.box18Ei, opening.eiYtd),
+    box22IncomeTax: add(slip.box22IncomeTax, opening.taxYtd),
+    box24EiInsurable: add(slip.box24EiInsurable, opening.insurableYtd),
+    box26CppPensionable: add(slip.box26CppPensionable, opening.pensionableYtd),
+    box55Qpip: add(slip.box55Qpip, opening.qpipYtd),
+  };
+}
+
+/**
+ * The statutory carry-ins for one org-year, keyed by employee. Employees
+ * whose row carries no statutory amount are left out entirely, so a
+ * population with no opening balances produces byte-identical slips.
+ */
+async function openingYearEndYtdByEmployee(
+  orgId: string,
+  taxYear: number,
+  country: string,
+): Promise<Map<string, OpeningYearEndYtd>> {
+  const rows = (await db.execute<{
+    employee_party_id: string;
+    pensionable_ytd: unknown; insurable_ytd: unknown;
+    cpp_ytd: unknown; cpp2_ytd: unknown; ei_ytd: unknown; qpip_ytd: unknown;
+    taxable_ytd: unknown; tax_ytd: unknown; fica_withheld_ytd: unknown;
+  }>(sql`
+    select b.employee_party_id,
+           b.pensionable_ytd, b.insurable_ytd, b.cpp_ytd, b.cpp2_ytd, b.ei_ytd, b.qpip_ytd,
+           b.taxable_ytd, b.tax_ytd, b.fica_withheld_ytd
+      from payroll_opening_balances b
+      join employee_payroll_profiles prof
+        on prof.org_id = b.org_id and prof.employee_party_id = b.employee_party_id
+       and coalesce(prof.country, 'CA') = ${country}
+     where b.org_id = ${orgId} and b.tax_year = ${taxYear}
+       and (
+         coalesce(b.pensionable_ytd, 0) <> 0 or coalesce(b.insurable_ytd, 0) <> 0
+         or coalesce(b.cpp_ytd, 0) <> 0 or coalesce(b.cpp2_ytd, 0) <> 0
+         or coalesce(b.ei_ytd, 0) <> 0 or coalesce(b.qpip_ytd, 0) <> 0
+         or coalesce(b.taxable_ytd, 0) <> 0 or coalesce(b.tax_ytd, 0) <> 0
+         or coalesce(b.fica_withheld_ytd, 0) <> 0
+       )
+  `));
+  return new Map(rows.rows.map((row) => [row.employee_party_id, {
+    pensionableYtd: normalizeMoney(String(row.pensionable_ytd ?? "0")),
+    insurableYtd: normalizeMoney(String(row.insurable_ytd ?? "0")),
+    cppYtd: normalizeMoney(String(row.cpp_ytd ?? "0")),
+    cpp2Ytd: normalizeMoney(String(row.cpp2_ytd ?? "0")),
+    eiYtd: normalizeMoney(String(row.ei_ytd ?? "0")),
+    qpipYtd: normalizeMoney(String(row.qpip_ytd ?? "0")),
+    taxableYtd: normalizeMoney(String(row.taxable_ytd ?? "0")),
+    taxYtd: normalizeMoney(String(row.tax_ytd ?? "0")),
+    ficaWithheldYtd: normalizeMoney(String(row.fica_withheld_ytd ?? "0")),
+  }]));
+}
+
+async function openingEmployeeProfiles(
+  orgId: string,
+  employeeIds: readonly string[],
+  country: string,
+): Promise<Map<string, { name: string; province: string; filingAccountId: string | null }>> {
+  if (employeeIds.length === 0) return new Map();
+  const rows = (await db.execute<{
+    employee_party_id: string; display_name: string; province: string | null; filing_account_id: string | null;
+  }>(sql`
+    select p.id as employee_party_id, p.display_name,
+           coalesce(prof.province, '') as province,
+           ${effectiveFilingAccountSql("prof")} as filing_account_id
+      from parties p
+      left join employee_payroll_profiles prof
+        on prof.org_id = p.org_id and prof.employee_party_id = p.id
+       and coalesce(prof.country, 'CA') = ${country}
+     where p.org_id = ${orgId} and p.id in (${sql.join(employeeIds.map((id) => sql`${id}`), sql`, `)})
+  `));
+  return new Map(rows.rows.map((row) => [row.employee_party_id, {
+    name: row.display_name,
+    province: row.province ?? "",
+    filingAccountId: row.filing_account_id,
+  }]));
+}
+
+export interface T4SummaryTotals {
+  slips: number;
+  employmentIncome: string;
+  employeeCpp: string;
+  employeeCpp2: string;
+  employerCpp: string;
+  employeeEi: string;
+  employerEi: string;
+  incomeTax: string;
+  /** Posted payroll-remittance bills to the CRA vendor in the year. */
+  remitted: string;
+}
+
+/**
+ * One T4 slip per employee, per payroll program account, PER PROVINCE OF
+ * EMPLOYMENT.
+ *
+ * `pay_stubs.province` is a per-stub snapshot precisely so a mid-year move is
+ * representable, and `max(c.province)` threw that away: a BC→ON mover and an
+ * ON→BC mover both collapsed to 'ON', the lexically largest code, which was
+ * then stamped into `<EMPT_PROV_CD>` as the CRA's provincial attribution — the
+ * field that decides which province's tax the employer is credited with
+ * remitting. The CRA's own instruction is a separate slip per province, which
+ * is also the only shape in which the data is not a lie.
+ */
+export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]> {
+  await assertPayrollCountryKnown(db, orgId, taxYear);
+  await assertPayrollFilingAccountKnown(db, orgId, { taxYear });
+  const caps = caYearCaps(taxYear);
+  const rows = (await db.execute<Record<string, unknown>>(sql`
+    with committed as (
+      select s.*
+        from pay_stubs s
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
+     where s.org_id = ${orgId} and s.tax_year = ${taxYear}
+       and s.country = 'CA'
+    )
+    select c.employee_party_id, p.display_name, c.filing_account_id,
+           c.province as province,
+           min(c.pay_date) as first_pay_date,
+           count(*)::int as stub_count,
+           sum(c.pensionable_earnings) as pensionable,
+           sum(c.insurable_earnings) as insurable,
+           sum((c.factors->>'C')::numeric) as cpp,
+           sum(coalesce((c.factors->>'C2')::numeric, 0)) as cpp2,
+           sum((c.factors->>'EI')::numeric) as ei,
+           sum(coalesce((c.factors->>'QPIP')::numeric, 0)) as qpip,
+           sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+                where l.org_id = ${orgId} and l.stub_id = c.id and l.kind = 'earning'
+                  and coalesce(pc.taxable, true))) as taxable_income,
+           sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+                where l.org_id = ${orgId} and l.stub_id = c.id and l.kind = 'deduction'
+                  and pc.system_key = 'income_tax')) as income_tax,
+           sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+                where l.org_id = ${orgId} and l.stub_id = c.id and l.kind = 'deduction'
+                  and pc.tax_treatment = 'union_dues')) as union_dues
+      from committed c
+      join parties p on p.id = c.employee_party_id and p.org_id = ${orgId}
+     group by c.employee_party_id, p.display_name, c.filing_account_id, c.province
+     order by p.display_name, min(c.pay_date), c.province
+  `));
+
+  const capMoney = (value: string, cap: string) => (cmp(value, cap) > 0 ? cap : value);
+  const openings = await openingYearEndYtdByEmployee(orgId, taxYear, "CA");
+  const stubSlips = rows.rows.map((row) => {
+      const province = String(row.province ?? "");
+      const isQuebec = province === "QC";
+      return {
+        employeePartyId: String(row.employee_party_id),
+        employeeName: String(row.display_name),
+        province,
+        isQuebec,
+        filingAccountId: (row.filing_account_id as string | null) ?? null,
+        box14EmploymentIncome: num(row.taxable_income),
+        box16Cpp: num(row.cpp),
+        box16aCpp2: num(row.cpp2),
+        box18Ei: num(row.ei),
+        box22IncomeTax: num(row.income_tax),
+        // Keep the uncapped bases here. The opening carry-in is folded into
+        // these same boxes below, then the annual maxima are consumed across
+        // the complete (opening + committed) year-to-date.
+        box24EiInsurable: num(row.insurable),
+        box26CppPensionable: num(row.pensionable),
+        box44UnionDues: num(row.union_dues),
+        box55Qpip: num(row.qpip),
+        // Box 56 is only reported for Quebec employment, and only up to the
+        // QPIP maximum insurable earnings — a different ceiling from EI's MIE.
+        box56QpipInsurable: isQuebec ? capMoney(num(row.insurable), caps.qpipMie) : "0",
+        stubCount: Number(row.stub_count ?? 0),
+      };
+    });
+  const profiles = await openingEmployeeProfiles(orgId, [...openings.keys()], "CA");
+  const seeded = seedOpeningOnlySlips(stubSlips, openings.keys(), (employeePartyId) => {
+    const profile = profiles.get(employeePartyId);
+    const province = profile?.province ?? "";
+    return {
+      employeePartyId,
+      employeeName: profile?.name ?? employeePartyId,
+      province,
+      isQuebec: province === "QC",
+      filingAccountId: profile?.filingAccountId ?? null,
+      box14EmploymentIncome: "0",
+      box16Cpp: "0",
+      box16aCpp2: "0",
+      box18Ei: "0",
+      box22IncomeTax: "0",
+      box24EiInsurable: "0",
+      box26CppPensionable: "0",
+      box44UnionDues: "0",
+      box55Qpip: "0",
+      box56QpipInsurable: "0",
+      stubCount: 0,
+    };
+  });
+  const carried = carryOpeningYearEndYtd(seeded, openings, openingYtdIntoT4Slip);
+  // The annual maxima are per EMPLOYEE, so they are consumed across that
+  // employee's slips in the chronological order the query (and seeded
+  // opening-only rows) supplies. Folding first is important: an adopter who
+  // already used part of the annual EI/CPP base with the prior provider must
+  // have only the remaining room on OpenBooks' slips.
+  const capped = capAnnualEarnings(
+    carried.map((slip) => ({
+      employeePartyId: slip.employeePartyId,
+      insurable: slip.box24EiInsurable,
+      pensionable: slip.box26CppPensionable,
+    })),
+    caps,
+  );
+  return carried.map((slip, index) => ({
+    ...slip,
+    box24EiInsurable: capped[index]!.box24EiInsurable,
+    box26CppPensionable: capped[index]!.box26CppPensionable,
+  }));
+}
+
+/**
+ * T4 Summary totals. `filingAccountId` restricts the return to one payroll
+ * program account (undefined = every account, the org-wide view); pass null
+ * for the unassigned bucket.
+ *
+ * `employeePartyIds` narrows the summary further, to the named employees. An
+ * AMENDED or CANCELLED return carries only the slips being corrected, and its
+ * summary must total THOSE slips — including the employer-side CPP/EI, which
+ * is not a slip box and so cannot be derived from the filtered slips alone.
+ * Undefined means every employee, which is what an original return files.
+ */
+export async function t4Summary(
+  orgId: string,
+  taxYear: number,
+  filingAccountId?: string | null,
+  employeePartyIds?: readonly string[],
+): Promise<T4SummaryTotals> {
+  const scoped = filingAccountId !== undefined;
+  const account = filingAccountId ?? null;
+  const allSlips = await t4Slips(orgId, taxYear);
+  const byAccount = scoped ? allSlips.filter((slip) => slip.filingAccountId === account) : allSlips;
+  const employees = employeePartyIds ? new Set(employeePartyIds) : null;
+  const slips = employees
+    ? byAccount.filter((slip) => employees.has(slip.employeePartyId))
+    : byAccount;
+  // Empty fragment keeps an unnarrowed summary's SQL identical to before.
+  const employeeFilter = employees
+    ? sql`and s.employee_party_id = any(${`{${[...employees].join(",")}}`}::uuid[])`
+    : sql``;
+  // Empty fragments keep the org-wide summary's SQL identical to before.
+  const employerAccountFilter = scoped
+    ? sql`and s.filing_account_id is not distinct from ${account}`
+    : sql``;
+  const billAccountFilter = scoped
+    ? sql`and (custom->'payrollRemittance'->>'filingAccountId') is not distinct from ${account}`
+    : sql``;
+  const employer = (await db.execute<{ employer_cpp: string | null; employer_ei: string | null }>(sql`
+    select
+      sum(case when pc.system_key in ('cpp', 'cpp2') then l.amount else 0 end) as employer_cpp,
+      sum(case when pc.system_key = 'ei' then l.amount else 0 end) as employer_ei
+      from pay_stub_lines l
+      join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
+      join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+     where l.org_id = ${orgId} and s.tax_year = ${taxYear}
+       and l.kind = 'employer_contribution' and coalesce(pc.country, 'CA') = 'CA'
+       ${employerAccountFilter}
+       ${employeeFilter}
+  `));
+  // NOT narrowed by employee: a posted remittance bill covers an ACCOUNT for a
+  // period and carries no employee dimension, so there is no honest way to
+  // attribute part of it to the slips of an amended return. It is an on-screen
+  // reconciliation figure and never appears in the transmitted XML.
+  const remitted = (await db.execute<{ amount: string }>(sql`
+    select coalesce(sum(total), 0) as amount from documents
+     where org_id = ${orgId} and kind = 'vendor_bill' and status = 'posted'
+       and custom ? 'payrollRemittance'
+       and custom->'payrollRemittance'->>'to' like ${`${taxYear}-%`}
+       and party_id::text = (
+         select settings->'payroll'->>'craRemittancePartyId'
+           from orgs where id = ${orgId}
+       )
+       ${billAccountFilter}
+  `));
+  const total = (pick: (slip: T4Slip) => string) =>
+    slips.reduce((acc, slip) => add(acc, pick(slip)), "0");
+  return {
+    slips: slips.length,
+    employmentIncome: total((s) => s.box14EmploymentIncome),
+    employeeCpp: total((s) => s.box16Cpp),
+    employeeCpp2: total((s) => s.box16aCpp2),
+    employerCpp: num(employer.rows[0]?.employer_cpp),
+    employeeEi: total((s) => s.box18Ei),
+    employerEi: num(employer.rows[0]?.employer_ei),
+    incomeTax: total((s) => s.box22IncomeTax),
+    remitted: num(remitted.rows[0]?.amount),
+  };
+}
+
+/** One filed T4 return: the slips of one payroll program account + its summary. */
+export interface T4Return {
+  filingAccount: FilingAccountRef;
+  slips: T4Slip[];
+  summary: T4SummaryTotals;
+}
+
+/**
+ * The year's T4 returns, one per payroll program account the year's employees
+ * were filed under (accounts with no slips are not returned, and an org with
+ * no filing accounts yields exactly one unassigned return).
+ */
+export async function t4Returns(orgId: string, taxYear: number): Promise<T4Return[]> {
+  const slips = await t4Slips(orgId, taxYear);
+  if (slips.length === 0) return [];
+  const accounts = await filingAccountsById(orgId);
+  const accountIds = [...new Set(slips.map((slip) => slip.filingAccountId))];
+  const returns: T4Return[] = [];
+  for (const accountId of accountIds) {
+    returns.push({
+      filingAccount: filingAccountRef(accountId, accounts),
+      slips: slips.filter((slip) => slip.filingAccountId === accountId),
+      summary: await t4Summary(orgId, taxYear, accountId),
+    });
+  }
+  return returns.sort((a, b) =>
+    (a.filingAccount.accountNumber ?? "").localeCompare(b.filingAccount.accountNumber ?? ""));
+}
+
+export interface RoePeriod {
+  payDate: string;
+  periodStart: string;
+  periodEnd: string;
+  insurableEarnings: string;
+  insurableHours: string;
+}
+
+/** ROE worksheet: recent committed periods, newest first (blocks 15A–15C). */
+export async function roeWorksheet(
+  orgId: string,
+  employeePartyId: string,
+  limit = 27,
+): Promise<{ periods: RoePeriod[]; totalInsurableEarnings: string; totalInsurableHours: string }> {
+  const rows = (await db.execute<{ pay_date: string; period_start: string; period_end: string; insurable_earnings: string; hours: string }>(sql`
+    select s.pay_date, r.period_start, r.period_end, s.insurable_earnings,
+           (select coalesce(sum(l.hours), 0) from pay_stub_lines l
+             where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'earning') as hours
+      from pay_stubs s
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
+     where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
+     order by s.pay_date desc, s.id desc
+     limit ${limit}
+  `));
+  const periods = rows.rows.map((row) => ({
+    payDate: row.pay_date, periodStart: row.period_start, periodEnd: row.period_end,
+    insurableEarnings: row.insurable_earnings, insurableHours: num(row.hours),
+  }));
+  return {
+    periods,
+    totalInsurableEarnings: periods.reduce((acc, p) => add(acc, p.insurableEarnings), "0"),
+    totalInsurableHours: periods.reduce((acc, p) => add(acc, p.insurableHours), "0"),
+  };
+}
+
+/**
+ * Block 15C consecutive-pay-period count by pay-period type, per the Service
+ * Canada ROE instructions. Block 15A's insurable hours are reported over the
+ * same window.
+ */
+const ROE_PERIODS_BY_FREQUENCY: Record<string, number> = {
+  weekly: 53,
+  biweekly: 27,
+  semi_monthly: 25,
+  monthly: 13,
+};
+
+/** Ownership inputs for the exact ROE earnings window and current header.
+ * The frequency declaration is shared with roeRecord. Block 17 reads every
+ * committed stub on the final pay date, including ties outside Block 15's
+ * period count, so those sources must also be authorized.
+ */
+export async function roeSourceScope(orgId: string, employeeIds: readonly string[]): Promise<{
+  employeeId: string;
+  filingAccountId: string | null;
+  sourceDocumentId: string | null;
+  sourceSubsidiaryId: string | null;
+}[]> {
+  if (employeeIds.length === 0) return [];
+  const periodCount = sql`case sched.frequency ${sql.join(
+    Object.entries(ROE_PERIODS_BY_FREQUENCY).map(([frequency, count]) => sql`when ${frequency} then ${count}::int`),
+    sql` `,
+  )} else 0 end`;
+  return (await db.execute<{
+    employeeId: string; filingAccountId: string | null;
+    sourceDocumentId: string | null; sourceSubsidiaryId: string | null;
+  }>(sql`
+    select prof.employee_party_id as "employeeId", prof.filing_account_id as "filingAccountId",
+           source.document_id as "sourceDocumentId", source.subsidiary_id as "sourceSubsidiaryId"
+      from employee_payroll_profiles prof
+      left join pay_schedules sched on sched.org_id = prof.org_id and sched.id = prof.pay_schedule_id
+      left join lateral (
+        select distinct history.document_id, d.subsidiary_id
+          from (
+            select s.pay_run_document_id as document_id, s.pay_date,
+                   row_number() over (order by s.pay_date desc, s.id desc) as position,
+                   max(s.pay_date) over () as final_pay_date
+              from pay_stubs s
+              join pay_runs r on r.org_id = s.org_id and r.document_id = s.pay_run_document_id
+             where s.org_id = prof.org_id and s.employee_party_id = prof.employee_party_id
+               and r.run_status = 'committed'
+          ) history
+          left join documents d on d.org_id = prof.org_id and d.id = history.document_id
+         where history.position <= ${periodCount} or history.pay_date = history.final_pay_date
+      ) source on true
+     where prof.org_id = ${orgId}
+       and prof.employee_party_id in (${sql.join(employeeIds.map(id => sql`${id}`), sql`, `)})
+  `)).rows;
+}
+
+/** ROE Block 6 pay-period type codes. */
+const ROE_PERIOD_TYPE: Record<string, string> = {
+  weekly: "W",
+  biweekly: "B",
+  semi_monthly: "S",
+  monthly: "M",
+};
+
+/**
+ * ROE Block 16 reason-for-issue codes (Service Canada). The reason is the
+ * employer's declaration about WHY earnings stopped, so it is always an input:
+ * nothing in the payroll data can infer it, and guessing it would be a false
+ * statutory statement.
+ */
+export const ROE_REASON_CODES = [
+  "A", // shortage of work / end of contract or season
+  "B", // strike or lockout
+  "D", // illness or injury
+  "E", // quit
+  "F", // maternity
+  "G", // retirement
+  "H", // work sharing
+  "J", // apprenticeship training
+  "K", // other (comment required)
+  "M", // dismissal or suspension
+  "N", // leave of absence
+  "P", // parental
+  "Z", // compassionate care / family caregiver
+] as const;
+
+export type RoeReasonCode = (typeof ROE_REASON_CODES)[number];
+
+/** One employee's complete ROE, block by block. */
+export interface RoeRecord {
+  employeePartyId: string;
+  employeeName: string;
+  /**
+   * The employee's payroll country. Required, and carried all the way to the
+   * XML builder, so the "only a Canadian employee gets an ROE" rule is enforced
+   * where the file is written and not only where the list is queried.
+   */
+  country: string;
+  /** Block 4 — the employer's own payroll reference for the employee. */
+  payrollReference: string | null;
+  /** Block 5 — the payroll program account the employee is filed under. */
+  filingAccount: FilingAccountRef;
+  /** Block 6 — W | B | S | M. */
+  payPeriodType: string;
+  /** Block 8 — present only on the XML build (sealed until then). */
+  sinLast3: string | null;
+  /** Block 10 / 11 / 12. */
+  firstDayWorked: string | null;
+  lastDayPaid: string | null;
+  finalPayPeriodEnd: string | null;
+  /** Block 13. */
+  occupation: string | null;
+  /** Block 15A / 15B / 15C — newest period first (P1 = final pay period). */
+  totalInsurableHours: string;
+  totalInsurableEarnings: string;
+  periods: RoePeriod[];
+  /** Block 17A — vacation pay in the final pay period. */
+  vacationPayOnSeparation: string;
+  /** Block 17C — other monies (bonus/retiring allowance) in the final period. */
+  otherMoniesOnSeparation: string;
+}
+
+/**
+ * Assemble one employee's ROE from committed stubs and the employee record.
+ * Every block that the payroll data cannot supply (reason for issue, comments,
+ * expected recall) stays an input on the caller — this builder never invents a
+ * statutory declaration.
+ *
+ * CANADA ONLY, like `t4Slips` above. A Record of Employment is a Service Canada
+ * return filed under a CRA payroll program account against a SIN; a US employee
+ * of a CA/US org has neither. Without this predicate a terminated US employee
+ * appeared in the year-end "ROE due" list and could be filed — a false
+ * statutory return that also discloses their SSN. Returns null for a non-CA
+ * employee so every caller (including the XML builder) fails closed.
+ */
+export async function roeRecord(orgId: string, employeePartyId: string): Promise<RoeRecord | null> {
+  const header = (await db.execute<{
+      display_name: string; employee_number: string | null; job_title: string | null;
+      hired_on: string | null; terminated_on: string | null; sin_last3: string | null;
+      frequency: string | null; country: string; filing_account_id: string | null;
+    }>(sql`
+    select p.display_name, er.employee_number, er.job_title,
+           er.hired_on::text as hired_on, er.terminated_on::text as terminated_on,
+           prof.sin_last3, sched.frequency, coalesce(prof.country, 'CA') as country,
+           ${effectiveFilingAccountSql("prof")} as filing_account_id
+      from parties p
+      left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
+      left join employee_payroll_profiles prof
+        on prof.org_id = p.org_id and prof.employee_party_id = p.id
+      left join pay_schedules sched on sched.id = prof.pay_schedule_id and sched.org_id = prof.org_id
+     where p.org_id = ${orgId} and p.id = ${employeePartyId}
+       and coalesce(prof.country, 'CA') = 'CA'
+  `));
+  const row = header.rows[0];
+  if (!row) return null;
+
+  // Block 6 and the Block 15 window are STATUTORY declarations derived from
+  // the employee's pay-period type. An employee with no pay schedule used to
+  // get `?? "biweekly"` / `?? 27` / `?? "B"` — an invented filing. Refuse by
+  // name instead: nothing in the payroll data can stand in for a pay-period
+  // type that was never configured.
+  const frequency = row.frequency;
+  if (!frequency) {
+    throw new PayrollError(
+      `${row.display_name} has no pay schedule on their payroll profile — Block 6 `
+      + "(pay-period type) and the Block 15 reporting window cannot be declared without one; "
+      + "assign a pay schedule before issuing the ROE",
+    );
+  }
+  const periodCount = ROE_PERIODS_BY_FREQUENCY[frequency];
+  const periodType = ROE_PERIOD_TYPE[frequency];
+  if (!periodCount || !periodType) {
+    throw new PayrollError(
+      `${row.display_name}'s pay schedule frequency "${frequency}" has no ROE pay-period `
+      + "type — Service Canada accepts weekly, biweekly, semi-monthly and monthly ROEs",
+    );
+  }
+  const worksheet = await roeWorksheet(orgId, employeePartyId, periodCount);
+  const finalPeriod = worksheet.periods[0] ?? null;
+
+  // Block 17: monies paid because employment ended, taken from the final
+  // committed stub's own lines. WHICH component system_keys count as
+  // vacation pay vs other monies is the pack's declaration
+  // (engine/src/payroll/canada/filings.ts), not a literal in this query — a
+  // pack with different keys must refuse or declare, never silently file 0.00.
+  const separation17 = separationPaymentKeys("CA");
+  const separation = (await db.execute<{ vacation: string; other: string }>(sql`
+    select
+      coalesce(sum(case when pc.system_key = any(${`{${separation17.vacationPay.join(",")}}`}::text[]) then l.amount else 0 end), 0) as vacation,
+      coalesce(sum(case when pc.system_key = any(${`{${separation17.otherMonies.join(",")}}`}::text[]) then l.amount else 0 end), 0) as other
+      from pay_stub_lines l
+      join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
+      left join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+     where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
+       and l.kind = 'earning'
+       and (${finalPeriod?.payDate ?? null}::date is null or s.pay_date = ${finalPeriod?.payDate ?? null})
+  `));
+
+  const accounts = await filingAccountsById(orgId);
+  return {
+    employeePartyId,
+    employeeName: row.display_name,
+    country: row.country ?? "CA",
+    payrollReference: row.employee_number,
+    filingAccount: filingAccountRef(row.filing_account_id, accounts),
+    payPeriodType: periodType,
+    sinLast3: row.sin_last3,
+    firstDayWorked: row.hired_on,
+    // The last day for which paid: the employee's termination date when the
+    // record carries one, else the final committed period end.
+    lastDayPaid: row.terminated_on ?? finalPeriod?.periodEnd ?? null,
+    finalPayPeriodEnd: finalPeriod?.periodEnd ?? null,
+    occupation: row.job_title,
+    totalInsurableHours: worksheet.totalInsurableHours,
+    totalInsurableEarnings: worksheet.totalInsurableEarnings,
+    periods: worksheet.periods,
+    vacationPayOnSeparation: num(separation.rows[0]?.vacation),
+    otherMoniesOnSeparation: num(separation.rows[0]?.other),
+  };
+}
+
+/**
+ * Employees an ROE is due for in the tax year: anyone with a termination date
+ * in the year, plus anyone paid by a termination run. Drives the year-end
+ * page's ROE list — issuing the ROE itself is still an explicit act.
+ *
+ * Canadian employees only — the same predicate `t4Slips` and `roeRecord` use.
+ * A US employee has no Record of Employment and must never be offered as one.
+ */
+export async function roeCandidates(orgId: string, taxYear: number): Promise<{
+  employeePartyId: string;
+  employeeName: string;
+  terminatedOn: string | null;
+  lastPayDate: string | null;
+}[]> {
+  const rows = (await db.execute<{ id: string; display_name: string; terminated_on: string | null; last_pay_date: string | null }>(sql`
+    select p.id, p.display_name, er.terminated_on::text as terminated_on,
+           max(s.pay_date)::text as last_pay_date
+      from parties p
+      join pay_stubs s on s.employee_party_id = p.id and s.org_id = p.org_id
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
+      join employee_payroll_profiles prof
+        on prof.org_id = p.org_id and prof.employee_party_id = p.id
+      left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
+     where p.org_id = ${orgId} and s.tax_year = ${taxYear}
+       and coalesce(prof.country, 'CA') = 'CA'
+       and (extract(year from er.terminated_on)::int = ${taxYear} or r.run_type = 'termination')
+     group by p.id, p.display_name, er.terminated_on
+     order by p.display_name
+  `));
+  return rows.rows.map((row) => ({
+    employeePartyId: row.id,
+    employeeName: row.display_name,
+    terminatedOn: row.terminated_on,
+    lastPayDate: row.last_pay_date,
+  }));
+}
+
+export interface Form941Quarter {
+  quarter: 1 | 2 | 3 | 4;
+  /** EIN the quarter's return is filed under; null = unassigned. */
+  filingAccountId: string | null;
+  wages: string;
+  federalIncomeTax: string;
+  ssWages: string;
+  ssTax: string; // employee + employer
+  medicareWages: string;
+  medicareTax: string; // employee + employer, incl. Additional Medicare
+}
+
+/**
+ * Form 941 is filed BY EIN, quarterly — one return per (EIN, quarter).
+ *
+ * This grouped by quarter alone and never joined the filing account, so an
+ * employer holding two EINs got one merged worksheet: wages and FICA from both
+ * entities added together, reported under whichever EIN the operator happened
+ * to file it as, understating one return and overstating the other. `t4Returns`
+ * and `w2Slips` both scope per account; this is the same scoping, and
+ * `form941Returns` below is the same per-account assembly `t4Returns` does.
+ */
+export async function form941Worksheet(orgId: string, taxYear: number): Promise<Form941Quarter[]> {
+  await assertPayrollCountryKnown(db, orgId, taxYear);
+  await assertPayrollFilingAccountKnown(db, orgId, { taxYear });
+  const rows = (await db.execute<Record<string, unknown>>(sql`
+    select extract(quarter from s.pay_date)::int as quarter,
+           s.filing_account_id as filing_account_id,
+           sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+                where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'earning' and coalesce(pc.taxable, true))) as wages,
+           sum(coalesce((s.factors->>'SS_TAXABLE')::numeric, 0)) as ss_wages,
+           sum(s.pensionable_earnings) as medicare_wages,
+           sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+                where l.org_id = ${orgId} and l.stub_id = s.id and pc.system_key = 'fit')) as fit,
+           sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+                where l.org_id = ${orgId} and l.stub_id = s.id and pc.system_key = 'ss')) as ss_tax,
+           sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+                where l.org_id = ${orgId} and l.stub_id = s.id and pc.system_key in ('medicare', 'medicare_addl'))) as medicare_tax
+      from pay_stubs s
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
+     where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'US'
+     group by 1, 2 order by 2 nulls first, 1
+  `));
+  return rows.rows.map((row) => ({
+    quarter: Number(row.quarter) as 1 | 2 | 3 | 4,
+    filingAccountId: (row.filing_account_id as string | null) ?? null,
+    wages: num(row.wages),
+    federalIncomeTax: num(row.fit),
+    ssWages: num(row.ss_wages),
+    ssTax: num(row.ss_tax),
+    medicareWages: num(row.medicare_wages),
+    medicareTax: num(row.medicare_tax),
+  }));
+}
+
+/** One filed Form 941 set: the quarters of a single EIN. */
+export interface Form941Return {
+  filingAccount: FilingAccountRef;
+  quarters: Form941Quarter[];
+}
+
+/**
+ * The year's 941 returns, one per EIN the year's US employees were filed
+ * under. The same assembly `t4Returns` performs for CRA program accounts, for
+ * the same reason: the return is the unit that gets transmitted, so it is the
+ * unit the builder produces.
+ */
+export async function form941Returns(orgId: string, taxYear: number): Promise<Form941Return[]> {
+  const quarters = await form941Worksheet(orgId, taxYear);
+  if (quarters.length === 0) return [];
+  const accounts = await filingAccountsById(orgId);
+  const accountIds = [...new Set(quarters.map((q) => q.filingAccountId))];
+  return accountIds
+    .map((accountId) => ({
+      filingAccount: filingAccountRef(accountId, accounts),
+      quarters: quarters.filter((q) => q.filingAccountId === accountId),
+    }))
+    .sort((a, b) =>
+      (a.filingAccount.accountNumber ?? "").localeCompare(b.filingAccount.accountNumber ?? ""));
+}
+
+export interface W2Slip {
+  employeePartyId: string;
+  employeeName: string;
+  /**
+   * State(s) of employment. A W-2 carries ONE federal wage set and a state
+   * line per state, so unlike the T4 the federal boxes must NOT be split — but
+   * `max(s.province)` reported a single lexically-largest state, which for a
+   * mid-year mover names the wrong state's revenue department. Both are
+   * reported: `states` is the fact, `state` renders it.
+   */
+  states: string[];
+  /** Display form of `states`; the sole state, or all of them joined. */
+  state: string;
+  /** EIN account the W-2 is filed under; null = unassigned. */
+  filingAccountId: string | null;
+  box1Wages: string;
+  box2FederalIncomeTax: string;
+  box3SsWages: string;
+  box4SsTax: string;
+  box5MedicareWages: string;
+  box6MedicareTax: string;
+  /**
+   * Boxes 15–20, one entry per work state that withheld state or local income
+   * tax on committed stubs — the paper W-2's own shape is a repeating state
+   * group on the one copy, so the federal boxes above stay whole while each
+   * state below carries its own wages and withholding. A state with stubs but
+   * no state or local withholding gets NO entry (never zeros pretending to be
+   * filed); a mid-year mover gets one entry per state, never a smashed total.
+   */
+  stateLines: W2StateLine[];
+}
+
+/** One locality's boxes 18–20 within a state's W-2 group. */
+export interface W2LocalLine {
+  /**
+   * Box 20 — the locality name in the subledger's own vocabulary: the
+   * withheld stub line's description (e.g. "Philadelphia wage tax"), which
+   * names the jurisdiction's tax rather than inventing a short code for it.
+   */
+  locality: string;
+  /**
+   * Box 18 — the taxable earnings of the stubs in this state that carry this
+   * locality's tax line, i.e. the wages the locality's withholding was
+   * assessed on.
+   */
+  box18LocalWages: string;
+  /** Box 19 — the locality's income tax withheld on those stubs. */
+  box19LocalIncomeTax: string;
+}
+
+/** One work state's boxes 15–17, plus its localities' boxes 18–20. */
+export interface W2StateLine {
+  /** Box 15 — the two-letter work-state abbreviation from the stubs. */
+  state: string;
+  /**
+   * Box 15 — the employer's state-assigned ID number: the org's SUI filing
+   * account number for this state, null where no SUI account is configured
+   * (the slip then names the state with no ID rather than inventing one).
+   */
+  employerStateId: string | null;
+  /**
+   * Box 16 — state wages, tips, etc.: the same taxable-earnings sum as box 1,
+   * restricted to this state's stubs (the subledger carries no separate state
+   * wage base, so this is the attributable figure, stated as such).
+   */
+  box16StateWages: string;
+  /** Box 17 — the state's income tax withheld on this state's stubs. */
+  box17StateIncomeTax: string;
+  /** Boxes 18–20, one entry per locality that withheld on this state's stubs. */
+  localLines: W2LocalLine[];
+}
+
+/** FICA rates a W-2 box 4/6 split is computed from. */
+export interface UsFicaSplitRates {
+  ssRate: string;
+  ssWageBase: string;
+}
+
+/**
+ * Split combined prior-provider FICA withholding into W-2 boxes 4 and 6.
+ *
+ * Wage-implied: Social Security is the SS rate on FICA wages up to the wage
+ * base; Medicare is the withheld remainder (Box 6 includes Additional
+ * Medicare, so the remainder lands in the right box even when the prior
+ * employer withheld the 0.9%). Clamped so Box 4 never exceeds what was
+ * actually withheld — the two boxes always account for every withheld dollar
+ * exactly. Pure, exact-decimal, no floats.
+ */
+export function splitFicaWithheld(
+  ficaWithheldYtd: string,
+  pensionableYtd: string,
+  rates: UsFicaSplitRates,
+): { ssTax: string; medicareTax: string } {
+  const capped = cmp(pensionableYtd, rates.ssWageBase) > 0 ? rates.ssWageBase : pensionableYtd;
+  const implied = mulRate(capped, rates.ssRate);
+  const ssTax = cmp(implied, ficaWithheldYtd) > 0 ? ficaWithheldYtd : implied;
+  return { ssTax, medicareTax: add(ficaWithheldYtd, neg(ssTax)) };
+}
+
+/**
+ * The year's published US FICA rates for the box 4/6 split. REFUSES an
+ * untranscribed year rather than returning null — with no rates the split
+ * would be a guess, and a guessed split files wrong boxes silently (the
+ * caYearCaps doctrine: fail the same way, not the opposite way).
+ */
+function usFicaSplitRates(taxYear: number): UsFicaSplitRates {
+  try {
+    const { ssRate, ssWageBase } = ratesForPayDate(`${taxYear}-07-01`).fica;
+    return { ssRate, ssWageBase };
+  } catch (error) {
+    throw new PayrollError(
+      `no published US FICA rates for tax year ${taxYear} — W-2 boxes 4 and 6 cannot split `
+      + `the FICA tax withheld carry-in. ${(error as Error).message}`,
+    );
+  }
+}
+
+/**
+ * W-2 boxes a carry-in lands in: 1 (wages), 2 (federal income tax), 3 (Social
+ * Security wages), 5 (Medicare wages), and — via the wage-implied split of
+ * the combined FICA carry-in — 4 (Social Security tax) and 6 (Medicare tax).
+ * `pensionable_ytd` is the prior provider's FICA wage base for the wage
+ * boxes. A null rate set leaves boxes 4/6 as the committed FICA taxes (the
+ * pre-split behavior for callers with no year to split under).
+ */
+export function openingYtdIntoW2Slip(
+  slip: W2Slip,
+  opening: OpeningYearEndYtd,
+  ficaRates: UsFicaSplitRates | null = null,
+): W2Slip {
+  const split = ficaRates && cmp(opening.ficaWithheldYtd, "0") !== 0
+    ? splitFicaWithheld(opening.ficaWithheldYtd, opening.pensionableYtd, ficaRates)
+    : null;
+  return {
+    ...slip,
+    box1Wages: add(slip.box1Wages, opening.taxableYtd),
+    box2FederalIncomeTax: add(slip.box2FederalIncomeTax, opening.taxYtd),
+    box3SsWages: add(slip.box3SsWages, opening.pensionableYtd),
+    box4SsTax: split ? add(slip.box4SsTax, split.ssTax) : slip.box4SsTax,
+    box5MedicareWages: add(slip.box5MedicareWages, opening.pensionableYtd),
+    box6MedicareTax: split ? add(slip.box6MedicareTax, split.medicareTax) : slip.box6MedicareTax,
+  };
+}
+
+/**
+ * One employee's boxes 15–20 from their per-state stub groups — pure, so the
+ * multi-state assembly is verifiable without a database.
+ *
+ * A state earns an entry when its stubs withheld state income tax OR a
+ * locality did; a state with stubs but no state or local withholding gets NO
+ * entry (never zeros pretending to be filed). Entries keep their own wages
+ * and withholding — two states are never totalled into one row.
+ */
+export function buildW2StateLines(
+  groups: readonly { province: string; wages: string; stateTax: string }[],
+  localsOf: (province: string) => W2LocalLine[],
+  stateIdOf: (province: string) => string | null,
+): W2StateLine[] {
+  return groups
+    // A group with no work-state code names no revenue department: its wages
+    // stay in the federal boxes and it earns no state entry.
+    .filter((group) => group.province !== "")
+    .filter((group) => cmp(group.stateTax, "0") !== 0 || localsOf(group.province).length > 0)
+    .map((group) => ({
+      state: group.province,
+      employerStateId: stateIdOf(group.province),
+      box16StateWages: group.wages,
+      box17StateIncomeTax: group.stateTax,
+      localLines: localsOf(group.province),
+    }));
+}
+
+/**
+ * The employer's state-assigned ID numbers for W-2 box 15: the org's active
+ * SUI filing accounts (`us_state_sui`, which requires a region) keyed by
+ * state code. A state with no SUI account on file has no ID to print — the
+ * slip names the state with no ID rather than inventing one.
+ */
+async function usEmployerStateIds(orgId: string): Promise<Map<string, string>> {
+  const rows = (await db.execute<{ state_code: string | null; account_number: string }>(sql`
+    select state_code, account_number
+      from payroll_filing_accounts
+     where org_id = ${orgId} and country = 'US' and program_type = 'us_state_sui'
+       and is_active and state_code is not null
+  `));
+  return new Map(rows.rows.map((row) => [row.state_code!, row.account_number]));
+}
+
+export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]> {
+  await assertPayrollCountryKnown(db, orgId, taxYear);
+  await assertPayrollFilingAccountKnown(db, orgId, { taxYear });
+  // Per (employee, EIN account, work state): the federal boxes aggregate up to
+  // the slip, while boxes 15–17 stay per state — the paper W-2's own shape is
+  // a repeating state group on the one copy, so grouping here is what keeps a
+  // mid-year mover's two states from being smashed into one row.
+  const rows = (await db.execute<Record<string, unknown>>(sql`
+    select s.employee_party_id, p.display_name,
+           s.province as province,
+           s.filing_account_id as filing_account_id,
+           min(s.pay_date) as first_pay_date,
+           sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+                where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'earning' and coalesce(pc.taxable, true))) as wages,
+           sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+                where l.org_id = ${orgId} and l.stub_id = s.id and pc.system_key = 'fit')) as fit,
+           sum(coalesce((s.factors->>'SS_TAXABLE')::numeric, 0)) as ss_wages,
+           sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+                where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'deduction' and pc.system_key = 'ss')) as ss_tax,
+           sum(s.pensionable_earnings) as medicare_wages,
+           sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+                where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'deduction'
+                  and pc.system_key in ('medicare', 'medicare_addl'))) as medicare_tax,
+           sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+                where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'deduction'
+                  and pc.system_key = 'state_income_tax')) as state_tax
+      from pay_stubs s
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
+      join parties p on p.id = s.employee_party_id and p.org_id = ${orgId}
+     where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'US'
+      group by s.employee_party_id, p.display_name, s.filing_account_id, s.province
+      -- The carry-in lands on the employee's FIRST slip, so an employee filed
+      -- under more than one EIN needs a deterministic order, not just name.
+     order by p.display_name, min(s.pay_date), s.province
+   `));
+  // Boxes 18–20, one row per (employee, EIN account, work state, locality):
+  // the locality is the withheld line's own description and the wages are the
+  // taxable earnings of the stubs in this state carrying that locality's line.
+  const localRows = (await db.execute<Record<string, unknown>>(sql`
+    with stub_wages as (
+      select s.id as stub_id, s.employee_party_id, s.filing_account_id, s.province,
+             (select coalesce(sum(l.amount), 0) from pay_stub_lines l
+               join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+              where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'earning'
+                and coalesce(pc.taxable, true)) as wages
+        from pay_stubs s
+        join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
+       where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'US'
+    )
+    select w.employee_party_id, w.filing_account_id, w.province, l.description,
+           sum(l.amount) as local_tax,
+           sum(case when coalesce(line_tax.line_tax, 0) <> 0 then w.wages else 0 end) as local_wages
+      from stub_wages w
+      join pay_stub_lines l on l.org_id = ${orgId} and l.stub_id = w.stub_id and l.kind = 'deduction'
+      join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+       and pc.system_key = 'local_income_tax'
+      join lateral (
+        select coalesce(sum(l2.amount), 0) as line_tax
+          from pay_stub_lines l2
+         where l2.org_id = ${orgId} and l2.stub_id = w.stub_id and l2.kind = 'deduction'
+           and l2.description = l.description
+      ) line_tax on true
+     group by w.employee_party_id, w.filing_account_id, w.province, l.description
+     order by l.description
+   `));
+  const stateIds = await usEmployerStateIds(orgId);
+  const localByGroup = new Map<string, W2LocalLine[]>();
+  for (const row of localRows.rows) {
+    const tax = num(row.local_tax);
+    if (cmp(tax, "0") === 0) continue;
+    const key = `${String(row.employee_party_id)}:${String(row.filing_account_id ?? "")}:${String(row.province ?? "")}`;
+    const list = localByGroup.get(key) ?? [];
+    list.push({
+      locality: String(row.description),
+      box18LocalWages: num(row.local_wages),
+      box19LocalIncomeTax: tax,
+    });
+    localByGroup.set(key, list);
+  }
+  // The carry-in lands on boxes 1 / 2 / 3 / 5. The SS and Medicare wage bases
+  // are explicitly stored as `pensionable_ytd` for US openings, and the
+  // combined FICA carry-in splits into boxes 4/6 under the year's published
+  // rates — resolved only when some opening actually carries FICA
+  // withholding, so years and orgs without one see zero behavior change.
+  // State lines come from committed stubs only: an opening balance carries no
+  // state attribution, so pre-adoption state wages and withholding stay in the
+  // federal boxes (the slip says so).
+  const openings = await openingYearEndYtdByEmployee(orgId, taxYear, "US");
+  const ficaRates = [...openings.values()].some((o) => cmp(o.ficaWithheldYtd, "0") !== 0)
+    ? usFicaSplitRates(taxYear)
+    : null;
+  type StateGroup = {
+    province: string; wages: string; fit: string; ssWages: string; ssTax: string;
+    medicareWages: string; medicareTax: string; stateTax: string;
+  };
+  const groupsBySlip = new Map<string, {
+    employeePartyId: string; employeeName: string; filingAccountId: string | null;
+    groups: StateGroup[];
+  }>();
+  for (const row of rows.rows) {
+    const key = `${String(row.employee_party_id)}:${String(row.filing_account_id ?? "")}`;
+    const slip = groupsBySlip.get(key) ?? {
+      employeePartyId: String(row.employee_party_id),
+      employeeName: String(row.display_name),
+      filingAccountId: (row.filing_account_id as string | null) ?? null,
+      groups: [],
+    };
+    slip.groups.push({
+      province: String(row.province ?? ""),
+      wages: num(row.wages),
+      fit: num(row.fit),
+      ssWages: num(row.ss_wages),
+      ssTax: num(row.ss_tax),
+      medicareWages: num(row.medicare_wages),
+      medicareTax: num(row.medicare_tax),
+      stateTax: num(row.state_tax),
+    });
+    groupsBySlip.set(key, slip);
+  }
+  const total = (groups: StateGroup[], pick: (group: StateGroup) => string) =>
+    groups.reduce((acc, group) => add(acc, pick(group)), "0");
+  const toStateLines = (employeePartyId: string, filingAccountId: string | null, groups: StateGroup[]): W2StateLine[] =>
+    buildW2StateLines(
+      groups,
+      (province) => localByGroup.get(`${employeePartyId}:${filingAccountId ?? ""}:${province}`) ?? [],
+      (province) => stateIds.get(province) ?? null,
+    );
+  const stubSlips: W2Slip[] = [...groupsBySlip.values()].map((slip) => {
+    // Sorted, like the previous `array_agg(distinct s.province order by
+    // s.province)` — the display string must not move for multi-state slips.
+    const provinces = [...new Set(slip.groups.map((group) => group.province))].filter(Boolean).sort();
+    return {
+      employeePartyId: slip.employeePartyId,
+      employeeName: slip.employeeName,
+      states: provinces,
+      state: provinces.join(" / "),
+      filingAccountId: slip.filingAccountId,
+      box1Wages: total(slip.groups, (group) => group.wages),
+      box2FederalIncomeTax: total(slip.groups, (group) => group.fit),
+      box3SsWages: total(slip.groups, (group) => group.ssWages),
+      box4SsTax: total(slip.groups, (group) => group.ssTax),
+      box5MedicareWages: total(slip.groups, (group) => group.medicareWages),
+      box6MedicareTax: total(slip.groups, (group) => group.medicareTax),
+      stateLines: toStateLines(slip.employeePartyId, slip.filingAccountId, slip.groups),
+    };
+  });
+  const profiles = await openingEmployeeProfiles(orgId, [...openings.keys()], "US");
+  const seeded = seedOpeningOnlySlips(stubSlips, openings.keys(), (employeePartyId) => {
+    const profile = profiles.get(employeePartyId);
+    const states = profile?.province ? [profile.province] : [];
+    return {
+      employeePartyId,
+      employeeName: profile?.name ?? employeePartyId,
+      states,
+      state: states.join(" / "),
+      filingAccountId: profile?.filingAccountId ?? null,
+      box1Wages: "0",
+      box2FederalIncomeTax: "0",
+      box3SsWages: "0",
+      box4SsTax: "0",
+      box5MedicareWages: "0",
+      box6MedicareTax: "0",
+      stateLines: [],
+    };
+  });
+  return carryOpeningYearEndYtd(seeded, openings, (slip, opening) => openingYtdIntoW2Slip(slip, opening, ficaRates));
+}
+
+// ---------------------------------------------------------------------------
+// The year-end enumeration — the generic surface's ONLY entry point
+// ---------------------------------------------------------------------------
+
+/** One declared filing, populated for the org-year, ready to render. */
+export interface YearEndFilingSection {
+  country: string;
+  key: string;
+  label: string;
+  /** The pack's declared deadline class — the surfaces split on it. */
+  cadence: PayrollFilingCadence;
+  description: string | null;
+  emptyText: string | null;
+  /** The filing's pack is on the org's installed payroll countries. */
+  installed: boolean;
+  data: PayrollFilingData;
+  /** The filing declares a per-row slip render (the surface may open one). */
+  hasSlip: boolean;
+  /**
+   * The population could not be built for this org-year, in the builder's own
+   * words (e.g. "no CRA maximums for tax year 2025 …"). The refusal is a
+   * named state the surface renders in place of the rows — one filing's
+   * refusal must not take down every other pack's section.
+   */
+  populationRefusal: string | null;
+  /** Present when the pack declares an electronic file for this filing. */
+  download: { label: string; note: string | null } | null;
+  /** Why there is no file, when the pack says so explicitly. */
+  downloadRefusal: string | null;
+  issue: PayrollFilingIssue | null;
+}
+
+/**
+ * Every declared pack's year-end filings, populated for the org and year.
+ *
+ * This is the whole de-Canadianization: the page and the JSON route iterate
+ * THIS, and a pack that registers a new filing (a P60, an RL-1, an STP
+ * report) appears here with no change to any generic file. Which sections a
+ * surface shows is its choice — the convention is `installed || rows > 0`,
+ * so an org sees the filings of its installed packs plus anything its
+ * imported history actually populates.
+ */
+export async function orgYearEndFilings(
+  orgId: string,
+  taxYear: number,
+): Promise<YearEndFilingSection[]> {
+  const installedRow = (await db.execute<{ countries: unknown }>(sql`
+    select settings#>'{payroll,countries}' as countries from orgs where id = ${orgId}
+  `));
+  const raw = installedRow.rows[0]?.countries;
+  const installed = new Set(Array.isArray(raw) ? raw.map(String) : []);
+
+  const sections: YearEndFilingSection[] = [];
+  for (const pack of declaredPayrollFilings()) {
+    // A year whose statutory tables were never loaded refuses UNIFORMLY, for
+    // every filing of the pack, on the pack's own declaration
+    // (engine/src/payroll/tax-years.ts) — rather than one filing at a time
+    // wherever a builder happened to reach for a capped constant. The CA T4
+    // already refused 2027 through `caYearCaps`; the W-2 would have filed a
+    // year the engine cannot withhold for without saying so.
+    const yearProblem = payrollTaxYearProblem(pack.country, taxYear);
+    for (const filing of pack.yearEnd) {
+      // A population that refuses (an unknown year's caps, an undeclared
+      // mapping) becomes THAT filing's named refusal, not a page-wide crash:
+      // the CA pack's 2025 refusal must not hide the US pack's 2025 data.
+      let data: PayrollFilingData = { rowKey: "rowId", columns: [], rows: [] };
+      let populationRefusal: string | null = yearProblem?.message ?? null;
+      try {
+        if (!yearProblem) data = await filing.population(orgId, taxYear);
+      } catch (error) {
+        if (!(error instanceof PayrollError)) throw error;
+        populationRefusal = error.message;
+      }
+      sections.push({
+        country: pack.country,
+        key: filing.key,
+        label: filing.label,
+        cadence: filing.cadence,
+        description: filing.description ?? null,
+        emptyText: filing.emptyText ?? null,
+        installed: installed.has(pack.country),
+        data,
+        hasSlip: filing.slip != null,
+        populationRefusal,
+        download: filing.download
+          ? { label: filing.download.label, note: filing.download.note ?? null }
+          : null,
+        downloadRefusal: filing.downloadRefusal ?? null,
+        issue: filing.issue ?? null,
+      });
+    }
+  }
+  return sections;
+}
+
+/**
+ * Tax years actually present in the org's payroll data: posted pay stubs plus
+ * opening-balance carry-ins, which the year-end populations read as inputs
+ * alongside the stubs. The filing-year picker unions these with the packs'
+ * declared editions, so the tax year of any posted run is offered even when
+ * it falls outside the picker's window — a September pay date in a 1-July
+ * fiscal pack posts to a tax year ahead of the calendar year.
+ */
+export async function orgPayrollDataYears(orgId: string): Promise<number[]> {
+  const rows = await db.execute<{ tax_year: number }>(sql`
+    select distinct tax_year from pay_stubs where org_id = ${orgId}
+    union
+    select distinct tax_year from payroll_opening_balances where org_id = ${orgId}
+    order by 1 desc
+  `);
+  return rows.rows.map((row) => row.tax_year);
+}
+
+/**
+ * The tax years the org's filing surfaces (year-end, separations) may offer,
+ * and the default (the first element): the packs' current tax year for the
+ * org's business day, never the calendar year. Installed countries are read
+ * from the same settings blob the year-end enumeration reads, so the picker
+ * and the page can never disagree about which packs are in scope.
+ */
+export async function orgFilingYearOptions(orgId: string, today: string): Promise<number[]> {
+  const installedRow = await db.execute<{ countries: unknown }>(sql`
+    select settings#>'{payroll,countries}' as countries from orgs where id = ${orgId}
+  `);
+  const raw = installedRow.rows[0]?.countries;
+  const countries = Array.isArray(raw) ? raw.map(String) : [];
+  return payrollFilingYearOptions({ today, countries, dataYears: await orgPayrollDataYears(orgId) });
+}

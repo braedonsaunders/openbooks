@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { generatePaymentFileArtifact } from '@openbooks/engine/src/payment-operations.ts'
+import { generatePaymentFileArtifact } from '@openbooks/engine/src/payments/operations.ts'
 import { isUuid } from '@/lib/list-params'
 import { guardPaymentRunPermission, paymentErrorResponse } from '@/app/api/payments/lib'
 

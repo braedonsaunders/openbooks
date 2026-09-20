@@ -20,7 +20,7 @@ import test from 'node:test'
  */
 
 const READINESS = join(
-  import.meta.dirname, '..', '..', 'engine', 'src', 'payroll-readiness.ts',
+  import.meta.dirname, '..', '..', 'engine', 'src', 'payroll', 'readiness.ts',
 )
 const MESSAGES = join(import.meta.dirname, '..', 'messages', 'en', 'payroll.json')
 

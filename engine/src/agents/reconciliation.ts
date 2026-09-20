@@ -1,12 +1,12 @@
 import { sql } from "drizzle-orm";
-import { reconciliationTotals, SYSTEM_ACTOR_ID } from "../banking.ts";
-import { businessToday } from "../business-date.ts";
-import { db } from "../db.ts";
-import { fromUnits, toUnits } from "../money.ts";
+import { reconciliationTotals, SYSTEM_ACTOR_ID } from "../banking/banking.ts";
+import { businessToday } from "../platform/business-date.ts";
+import { db } from "../platform/db.ts";
+import { fromUnits, toUnits } from "../money/money.ts";
 import {
   effectiveDetectorMateriality,
   type ContinuousCloseDetectorPolicy,
-} from "../continuous-close-config.ts";
+} from "./continuous-close-config.ts";
 import { absoluteUnits, moneyAbs } from "./measure.ts";
 import type { AgentFinding } from "./types.ts";
 
@@ -16,7 +16,7 @@ import type { AgentFinding } from "./types.ts";
  *
  * Reuse map:
  * - bank_line_match_candidate is a read-only dry run of the engine
- *   auto-matcher (`engine/src/banking.ts` `autoMatch`): exact signed amount,
+ *   auto-matcher (`engine/src/banking/banking.ts` `autoMatch`): exact signed amount,
  *   closest date wins, one-to-one consumption, confidence 0.90 at <= 3 days
  *   else 0.70, silent past 14 days. The pack NEVER calls autoMatch itself —
  *   that would write matches. It proposes `match_bank_line` commands (an

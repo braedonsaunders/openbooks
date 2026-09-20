@@ -8,16 +8,16 @@
 
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "../../db.ts";
-import { add, fromUnits, toUnits } from "../../money.ts";
-import { postDocument } from "../../posting.ts";
+import { db } from "../../platform/db.ts";
+import { add, fromUnits, toUnits } from "../../money/money.ts";
+import { postDocument } from "../../ledger/posting.ts";
 import {
   allocateByRelativeSSP,
   computeRecognitionSchedule,
   estimateVariableConsideration,
   runRevenueRecognition,
   separateFinancingComponent,
-} from "../../revenue-recognition.ts";
+} from "../../revenue/recognition.ts";
 import { capture, deps, type DraftDocumentInput } from "../ledger-helpers.ts";
 import type { CaseContext, ConformanceCase } from "../types.ts";
 

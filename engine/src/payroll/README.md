@@ -88,7 +88,7 @@ wrong. Run:
 
 ```
 OPENBOOKS_TRUSTED_TEST_BYPASS=1 node --import tsx \
-  --import ./engine/src/test-database-bypass.ts --test --test-force-exit \
+  --import ./engine/src/testing/database-bypass.ts --test --test-force-exit \
   'engine/src/payroll*.test.ts' 'engine/src/payroll/**/*.test.ts'
 ```
 

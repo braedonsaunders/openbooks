@@ -8,7 +8,7 @@ import {
   parallelComparisons,
   parallelTolerances,
   priorRegisters,
-} from '@openbooks/engine/src/payroll-parallel-run-store.ts'
+} from '@openbooks/engine/src/payroll/parallel-run-store.ts'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { groupTabs } from '../../../../components/module-home/group-tabs'

@@ -2,7 +2,7 @@
 
 import { useTranslations } from 'next-intl'
 import { InsightChart } from '@openbooks/analytics/viz'
-import { neg as moneyNeg } from '@openbooks/engine/src/money.ts'
+import { neg as moneyNeg } from '@openbooks/engine/src/money/money.ts'
 import { boundChartNumber, toChartNumber, useAnalyticsMoney } from './format'
 
 /** Loose ECharts option shape — mirrors the analytics package's own alias. */

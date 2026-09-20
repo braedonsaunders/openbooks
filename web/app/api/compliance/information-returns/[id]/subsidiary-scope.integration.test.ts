@@ -49,10 +49,10 @@ const { GET: copies } = (await import(copiesUrl)) as typeof import('./copies/rou
 const { PATCH: editRecipient } = (await import(recipientUrl)) as typeof import('./recipients/[recipientId]/route.ts')
 hooks.deregister()
 
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
-const { ensureFiling } = await import('@openbooks/engine/src/information-returns.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { ensureFiling } = await import('@openbooks/engine/src/compliance/information-returns.ts')
 
 const DB = !!process.env.OPENBOOKS_DB_URL
 

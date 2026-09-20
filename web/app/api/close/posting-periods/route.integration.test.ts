@@ -80,9 +80,9 @@ const routeUrl = "./route.ts?close-posting-periods-route-test";
 const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
-const { db } = await import("../../../../../engine/src/db.ts");
+const { db } = await import("../../../../../engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } =
-  await import("../../../../../engine/src/test-fixtures.ts");
+  await import("../../../../../engine/src/testing/fixtures.ts");
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 

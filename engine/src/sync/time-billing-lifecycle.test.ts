@@ -11,7 +11,7 @@ const financialSync = readFileSync(
   "utf8",
 );
 const projectFinancials = readFileSync(
-  "engine/src/project-financials.ts",
+  "engine/src/projects/financials.ts",
   "utf8",
 );
 

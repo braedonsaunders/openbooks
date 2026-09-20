@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
-import { fromUnits, normalizeDecimal, toUnits } from "../money.ts";
+import { db } from "../platform/db.ts";
+import { fromUnits, normalizeDecimal, toUnits } from "../money/money.ts";
 import type {
   MigrationSource,
 } from "./source.ts";

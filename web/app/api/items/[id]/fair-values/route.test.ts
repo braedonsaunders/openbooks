@@ -67,9 +67,9 @@ const { PATCH, DELETE } = (await import(
 )) as typeof import("./route.ts");
 hooks.deregister();
 
-const { db, pool } = await import("@openbooks/engine/src/db.ts");
+const { db, pool } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } =
-  await import("@openbooks/engine/src/test-fixtures.ts");
+  await import("@openbooks/engine/src/testing/fixtures.ts");
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 

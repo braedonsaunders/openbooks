@@ -1,6 +1,6 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { isContinuousCloseAgentKey } from '@openbooks/engine/src/continuous-close.ts'
+import { isContinuousCloseAgentKey } from '@openbooks/engine/src/continuous-close/continuous-close.ts'
 import { guardPermission } from '../../../../../../lib/authz'
 import { saveOrgAiAgentSettings } from '../../../../../../lib/assistant/ai-config'
 

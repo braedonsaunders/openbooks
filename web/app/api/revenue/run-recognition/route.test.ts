@@ -101,9 +101,9 @@ const mockUrl = (name: string) => `${selfUrl}?recognition-mock=${name}`
 const mockUrls = new Map<string, string>([
   ['../../../../lib/authz', mockUrl('authz')],
   ['../../../../lib/features', mockUrl('features')],
-  ['@openbooks/engine/src/business-date.ts', mockUrl('business-date')],
-  ['@openbooks/engine/src/project-revenue.ts', mockUrl('project-revenue')],
-  ['@openbooks/engine/src/revenue-recognition.ts', mockUrl('revenue-recognition')],
+  ['@openbooks/engine/src/platform/business-date.ts', mockUrl('business-date')],
+  ['@openbooks/engine/src/projects/revenue.ts', mockUrl('project-revenue')],
+  ['@openbooks/engine/src/revenue/recognition.ts', mockUrl('revenue-recognition')],
   ['@/lib/api/json', mockUrl('json')],
 ])
 

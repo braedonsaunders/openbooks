@@ -4,7 +4,7 @@ import test from 'node:test'
 
 const ui = readFileSync('web/app/(app)/payroll/_ui/filing-amendments.tsx', 'utf8')
 const route = readFileSync('web/app/api/payroll/year-end/amendments/route.ts', 'utf8')
-const engine = readFileSync('engine/src/payroll-yearend-amendments.ts', 'utf8')
+const engine = readFileSync('engine/src/payroll/yearend-amendments.ts', 'utf8')
 
 test('cancellation cannot issue from an accidental click without reviewed evidence', () => {
   assert.match(ui, /import \{ confirmDialog \} from .*lib\/confirm/)

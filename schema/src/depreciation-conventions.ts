@@ -5,9 +5,9 @@
  * depreciation are different computations for different readers and their
  * DIFFERENCE is the deferred-tax temporary difference:
  *
- *   - the BOOK engine (engine/src/depreciation.ts) is per-asset, monthly, and
+ *   - the BOOK engine (engine/src/assets/depreciation.ts) is per-asset, monthly, and
  *     posts to the general ledger;
- *   - the TAX engine (engine/src/tax-depreciation-pool.ts) is per class pool or
+ *   - the TAX engine (engine/src/tax-returns/depreciation-pool.ts) is per class pool or
  *     MACRS class, annual, never touches the ledger, and owns recapture,
  *     terminal loss and immediate expensing.
  *
@@ -19,7 +19,7 @@
  * of six. Nothing could catch that, because nothing connected the two spellings.
  *
  * The names live here, once. Semantics live in
- * engine/src/depreciation-conventions.ts, which is the only place either engine
+ * engine/src/assets/depreciation-conventions.ts, which is the only place either engine
  * may derive a first-year fraction from.
  *
  * These tuples are ALSO the source of each column's CHECK constraint, so their
@@ -60,6 +60,6 @@ export type DepreciationConvention =
 /**
  * Conventions whose first-year share is fixed by the rule itself rather than by
  * the in-service date. These are the ones both engines must agree on exactly —
- * see the cross-engine test in engine/src/depreciation-conventions.test.ts.
+ * see the cross-engine test in engine/src/assets/depreciation-conventions.test.ts.
  */
 export const DATE_INDEPENDENT_CONVENTIONS = ["full_month", "half_year"] as const;

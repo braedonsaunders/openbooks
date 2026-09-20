@@ -11,7 +11,7 @@ import {
 import {
   remittanceDueDateExplained,
   scheduledRemittanceDueDateExplained,
-} from "../../../payroll-remittance.ts";
+} from "../../remittance.ts";
 import { CRA_REMITTANCE_SCHEDULE } from "./remittance.ts";
 
 /**

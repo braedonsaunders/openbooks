@@ -9,8 +9,8 @@ registerHooks({ resolve(specifier, context, next) {
 } })
 
 const { sql } = await import('drizzle-orm')
-const { db } = await import('@openbooks/engine/src/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
+const { db } = await import('@openbooks/engine/src/platform/db.ts')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { projectCostSummary } = await import('./project-costing.ts')
 
 test('project cost actuals and account detail stay in the primary book', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {

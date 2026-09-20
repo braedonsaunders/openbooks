@@ -15,7 +15,7 @@
  * what makes the generic API safe — see api/admin/setup/[entity]/route.ts.
  */
 
-import { MAX_DEPRECIATION_PERIODS } from '@openbooks/engine/src/depreciation-limits.ts'
+import { MAX_DEPRECIATION_PERIODS } from '@openbooks/engine/src/assets/depreciation-limits.ts'
 import { PAY_DERIVED_RULE_ENTITIES } from './payroll-derived-rules'
 import { PAYROLL_HOLIDAYS_ENTITY } from './payroll-holidays'
 
@@ -638,7 +638,7 @@ const INFORMATION_RETURN_FORMS_OPTIONS = [
 /**
  * Statutory boxes across all three forms, flattened for the box-rule picker.
  * Kept in sync with INFORMATION_RETURN_FORMS in
- * engine/src/information-returns.ts (asserted by registry.test.ts) — the boxes
+ * engine/src/compliance/information-returns.ts (asserted by registry.test.ts) — the boxes
  * are law, so they live in code; which ACCOUNT feeds which box is the org's
  * configuration and lives in the table.
  */

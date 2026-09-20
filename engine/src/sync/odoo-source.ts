@@ -1,6 +1,6 @@
-import { businessToday } from "../business-date.ts";
-import { OdooClient, m2oId, type OdooCreds } from "../odoo.ts";
-import { formatMoney, fromUnits, toUnits } from "../money.ts";
+import { businessToday } from "../platform/business-date.ts";
+import { OdooClient, m2oId, type OdooCreds } from "../connectors/odoo.ts";
+import { formatMoney, fromUnits, toUnits } from "../money/money.ts";
 import { buildNativeFromOdoo, type OdooMove, type OdooMoveLine } from "./odoo-native.ts";
 import type { NativeContext, NativeDocument } from "./native.ts";
 import type {

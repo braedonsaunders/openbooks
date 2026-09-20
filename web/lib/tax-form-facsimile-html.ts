@@ -1,4 +1,4 @@
-import type { TaxReturnResult, TaxReturnBox } from '@openbooks/engine/src/tax-return.ts'
+import type { TaxReturnResult, TaxReturnBox } from '@openbooks/engine/src/tax-returns/return.ts'
 
 /**
  * Self-authored, form-faithful facsimiles of government indirect-tax returns —

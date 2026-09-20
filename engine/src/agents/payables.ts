@@ -1,11 +1,11 @@
 import { sql } from "drizzle-orm";
-import { businessToday } from "../business-date.ts";
-import { db } from "../db.ts";
-import { fromUnits, toUnits } from "../money.ts";
+import { businessToday } from "../platform/business-date.ts";
+import { db } from "../platform/db.ts";
+import { fromUnits, toUnits } from "../money/money.ts";
 import {
   effectiveDetectorMateriality,
   type ContinuousCloseDetectorPolicy,
-} from "../continuous-close-config.ts";
+} from "./continuous-close-config.ts";
 import { absoluteUnits, moneyAbs } from "./measure.ts";
 import type { AgentFinding } from "./types.ts";
 
@@ -27,7 +27,7 @@ import type { AgentFinding } from "./types.ts";
  *   finding summary IS the pay-run review card (no pay-run application tool
  *   exists to propose — the user confirms in the cockpit, where caps apply).
  * - bills_missing_approval mirrors the gateless-document predicate of
- *   `engine/src/approval-worklist.ts` `worklistDocuments` (stale
+ *   `engine/src/flows/approval-worklist.ts` `worklistDocuments` (stale
  *   draft/pending_approval, no void request, no pending flow gate), minus the
  *   per-user self-submission exclusion, which has no meaning for a
  *   background agent.

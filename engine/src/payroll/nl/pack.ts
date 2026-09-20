@@ -21,8 +21,8 @@
  * the pack registered nothing and was imported by nothing outside
  * `engine/src/payroll/nl/`; both of those statements are now false.)
  */
-import { PayrollError } from "../../payroll-error.ts";
-import type { PayrollFilingData, PayrollPackFilings } from "../../payroll-filing-registry.ts";
+import { PayrollError } from "../error.ts";
+import type { PayrollFilingData, PayrollPackFilings } from "../filing-registry.ts";
 import type {
   PayrollCountryPack,
   PayrollRemittanceSchedule,

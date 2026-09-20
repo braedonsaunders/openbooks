@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withOrg } from "../db.ts";
+import { db, withOrg } from "../platform/db.ts";
 import { worklistGates } from "./gates.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
   seedFlowActors,
-} from "../test-fixtures.ts";
+} from "../testing/fixtures.ts";
 
 /**
  * Worklist subsidiary isolation: a restricted caller must not see approval

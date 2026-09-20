@@ -14,8 +14,8 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier,context);
 }});
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import("@openbooks/engine/src/db.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/test-fixtures.ts");
+const { db, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { GET, PUT } = await import("../app/api/items/[id]/costing/route");
 for (const operation of ['read', 'stale', 'current', 'missing', 'null-existing', 'create-race', 'invalid-basis', 'invalid-boolean', 'invalid-account', 'scope-empty', 'scope-visible', 'scope-all']) {
   test(`item costing revision: ${operation}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -27,7 +27,7 @@ for (const operation of ['read', 'stale', 'current', 'missing', 'null-existing',
       const scoped = operation.startsWith('scope-');
       const id = scoped ? org.items.standard : org.items.fifo;
       if (scoped) {
-        const { receiveInventory } = await import('@openbooks/engine/src/inventory.ts');
+        const { receiveInventory } = await import('@openbooks/engine/src/inventory/inventory.ts');
         await receiveInventory(org.orgId,actor,{itemId:id,stockLocationId:org.stockLocationId,quantity:'5',unitCost:'2',subsidiaryId:org.subsidiaryId,offsetAccountId:org.accounts.clearing,date:org.date});
         if(operation!=='scope-all') await db.execute(sql`update app_roles set subsidiary_restriction=${JSON.stringify({mode:'list',subsidiaryIds:operation==='scope-visible'?[org.subsidiaryId]:[]})}::jsonb where org_id=${org.orgId} and key='reviewer'`);
       }
@@ -52,7 +52,7 @@ for (const operation of ['read', 'stale', 'current', 'missing', 'null-existing',
       if(operation==='invalid-boolean') body.allowNegativeInventory='true';
       if(operation==='invalid-account') body.adjustmentAccountId='not-an-account';
       if(scoped) { body.costingMethod='standard'; body.standardCost='3'; }
-      const { withSimClock } = await import('@openbooks/engine/src/clock.ts');
+      const { withSimClock } = await import('@openbooks/engine/src/platform/clock.ts');
       const put=()=>withSimClock(org.date,()=>withOrgContext(org.orgId,()=>PUT(new Request(url,{method:'PUT',body:JSON.stringify(body)}),params)));
       if(operation==='create-race') {
         await db.execute(sql`delete from item_inventory_profiles where item_id=${id}`);

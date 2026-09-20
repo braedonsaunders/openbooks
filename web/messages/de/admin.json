@@ -399,7 +399,7 @@
     "builtIn": "Integriert",
     "custom": "Benutzerdefiniert",
     "emptyTitle": "Noch keine Rollen",
-    "emptyDescription": "Führen Sie das Rollen-Seed-Skript (engine/src/seed-roles.ts) aus, um die integrierten Rollen zu erstellen, oder erstellen Sie eine benutzerdefinierte Rolle.",
+    "emptyDescription": "Führen Sie das Rollen-Seed-Skript (engine/src/provisioning/seed-roles.ts) aus, um die integrierten Rollen zu erstellen, oder erstellen Sie eine benutzerdefinierte Rolle.",
     "noMatchTitle": "Keine passenden Rollen",
     "noMatchDescription": "Passen Sie die Suche oder den Typfilter an.",
     "table": {

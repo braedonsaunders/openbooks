@@ -10,7 +10,7 @@ import { Badge, Button, FieldHelp, Input, Select, cn } from '@openbooks/ui'
 import type {
   OpeningBalanceRow,
   OpeningBalanceYear,
-} from '@openbooks/engine/src/payroll-opening-balances.ts'
+} from '@openbooks/engine/src/payroll/opening-balances.ts'
 
 interface FieldDescriptor {
   key: string

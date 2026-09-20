@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { fromUnits, toUnits } from "../money.ts";
+import { fromUnits, toUnits } from "../money/money.ts";
 import type { AllocationMode, AllocationRuleTarget, AllocationRuleVersion } from "./types.ts";
 
 /** One machine-readable reason a rule version cannot publish. */

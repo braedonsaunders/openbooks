@@ -4,7 +4,7 @@ import { loadExtensionSettingRows, extensionSettingDrawerEntity } from '../../..
 import Link from 'next/link'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { Badge, Button } from '@openbooks/ui'
 import { requirePermission } from '../../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../../lib/feature-gates'

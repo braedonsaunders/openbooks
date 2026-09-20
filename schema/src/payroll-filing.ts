@@ -21,7 +21,7 @@ import { auditColumns, id, orgRef } from "./helpers";
  *   remittance summaries, PD7A worksheets, and the year-end returns group by it.
  * - `country` and `program_type` are OPEN text, validated at the API boundary
  *   against the pack's declared filing program types
- *   (engine/src/payroll-filing-registry.ts `filingAccountProblem`). They were
+ *   (engine/src/payroll/filing-registry.ts `filingAccountProblem`). They were
  *   CHECK-constrained to CA/US literals, which made the deliberately open pack
  *   registry a lie: a registered pack's accounts were unrepresentable. A DB
  *   CHECK cannot enumerate an open registry, so the pack declaration is the

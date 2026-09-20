@@ -1,7 +1,7 @@
 import 'server-only'
 import { createHash } from 'node:crypto'
 import { sql, type SQL } from 'drizzle-orm'
-import { db, inDbTransaction, type SqlExecutor } from '@openbooks/engine/src/db.ts'
+import { db, inDbTransaction, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 import { activeStorageKind, deleteS3Blobs, getS3Blob, putS3Blob } from './file-storage'
 import { recordFileEvent } from './file-audit'
 

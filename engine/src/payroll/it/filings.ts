@@ -15,12 +15,12 @@
  * refuses by name instead of printing zeros an employer might file. Row
  * grammars and slips arrive with the builders, never ahead of them.
  */
-import { PayrollError } from "../../payroll-error.ts";
+import { PayrollError } from "../error.ts";
 import type {
   PayrollFilingData,
   PayrollFilingRowScope,
   PayrollPackFilings,
-} from "../../payroll-filing-registry.ts";
+} from "../filing-registry.ts";
 
 export class ItFilingRefusal extends PayrollError {}
 

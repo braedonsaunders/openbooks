@@ -116,7 +116,7 @@ import {
   subRegionLevy,
 } from "./withholding-jurisdictions.ts";
 import { type PayrollReciprocityAgreement, reciprocityAgreement } from "./reciprocity.ts";
-import { PayrollError } from "../payroll-error.ts";
+import { PayrollError } from "./error.ts";
 
 export class PayrollWithholdingResolutionError extends PayrollError {}
 

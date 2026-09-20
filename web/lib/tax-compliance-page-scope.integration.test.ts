@@ -44,10 +44,10 @@ registerHooks({
   },
 })
 const { sql } = await import('drizzle-orm')
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
-const { computeProvisionRun, getProvisionRun } = await import('@openbooks/engine/src/income-tax-provision.ts')
-const { ensureFiling } = await import('@openbooks/engine/src/information-returns.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { computeProvisionRun, getProvisionRun } = await import('@openbooks/engine/src/tax-returns/income-tax-provision.ts')
+const { ensureFiling } = await import('@openbooks/engine/src/compliance/information-returns.ts')
 const { default: TaxPage } = await import('../app/(app)/tax/page')
 // The page LOADER. Every fact this test checks — which entities' totals the
 // run projects to, and whether Post is offered — is decided in the loader;

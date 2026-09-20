@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
-import { env } from "@openbooks/engine/src/db.ts";
+import { env } from "@openbooks/engine/src/platform/db.ts";
 
 test(
   "statements answer per accounting book across summary, raw, and trial-balance paths",
@@ -12,13 +12,13 @@ test(
       import { randomUUID } from "node:crypto";
       import { readFileSync } from "node:fs";
       import { sql } from "drizzle-orm";
-      import { db, pool, withBypass, withBypassContext, withOrg } from "./engine/src/db.ts";
-      import { installTrustedTestDatabaseBypass } from "./engine/src/test-database-bypass.ts";
+      import { db, pool, withBypass, withBypassContext, withOrg } from "./engine/src/platform/db.ts";
+      import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
       import {
         createScratchOrg,
         createScratchUser,
         dropScratchOrg,
-      } from "./engine/src/test-fixtures.ts";
+      } from "./engine/src/testing/fixtures.ts";
 
       // Web modules install the normal request resolver during evaluation.
       // Re-establish the explicit test-only trusted boundary afterwards.

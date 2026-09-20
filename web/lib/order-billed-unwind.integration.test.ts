@@ -9,18 +9,18 @@ registerHooks({ resolve(specifier, context, next) {
 }});
 
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-} = await import("@openbooks/engine/src/test-fixtures.ts");
-import type { ScratchOrg } from "@openbooks/engine/src/test-fixtures.ts";
+} = await import("@openbooks/engine/src/testing/fixtures.ts");
+import type { ScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
 const { convertOrder } = await import("./order-cycle.ts");
-const { requestDocumentVoid } = await import("@openbooks/engine/src/document-void.ts");
-const { deleteDocument } = await import("@openbooks/engine/src/document-delete.ts");
-const { postDocument } = await import("@openbooks/engine/src/posting.ts");
-const { materializeCapture } = await import("@openbooks/engine/src/ap-capture-service.ts");
+const { requestDocumentVoid } = await import("@openbooks/engine/src/ledger/document-void.ts");
+const { deleteDocument } = await import("@openbooks/engine/src/ledger/document-delete.ts");
+const { postDocument } = await import("@openbooks/engine/src/ledger/posting.ts");
+const { materializeCapture } = await import("@openbooks/engine/src/payables/ap-capture-service.ts");
 
 async function seedOrder(
   org: ScratchOrg,

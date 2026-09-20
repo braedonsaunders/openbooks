@@ -9,7 +9,7 @@ import {
   type EmploymentVersionRow,
 } from "./employment-read.ts";
 import { HrmAuthorizationError } from "./authorization.ts";
-import type { SqlExecutor } from "../db.ts";
+import type { SqlExecutor } from "../platform/db.ts";
 import {
   AmbiguousRevisionError,
   InvalidCivilDateError,

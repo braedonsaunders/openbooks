@@ -26,8 +26,8 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { withOrgContext } = await import('@openbooks/engine/src/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/test-fixtures.ts')
+const { withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { PATCH, DELETE } = await import('./route.ts')
 const { POST: runPost } = await import('./run/route.ts')
 const { POST: testPost } = await import('./test/route.ts')

@@ -3,14 +3,14 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext, withOrgContext } from "@openbooks/engine/src/db.ts";
-import { saveOpeningBalances } from "@openbooks/engine/src/payroll-opening-balances.ts";
-import { commitPayRun } from "@openbooks/engine/src/payroll-run.ts";
-import { dropScratchOrgReporting } from "@openbooks/engine/src/test-fixtures.ts";
+import { db, withBypassContext, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
+import { saveOpeningBalances } from "@openbooks/engine/src/payroll/opening-balances.ts";
+import { commitPayRun } from "@openbooks/engine/src/payroll/run.ts";
+import { dropScratchOrgReporting } from "@openbooks/engine/src/testing/fixtures.ts";
 import {
   calculatedRun,
   seedAdoption,
-} from "@openbooks/engine/src/payroll-filing-test-fixtures.ts";
+} from "@openbooks/engine/src/payroll/filing-test-fixtures.ts";
 import type { Authz } from "./authz";
 
 /**

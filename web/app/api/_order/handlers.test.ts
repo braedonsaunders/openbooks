@@ -574,22 +574,22 @@ const mockSources = new Map<string, string>([
 const resolutionMocks = new Map<string, string>([
   ['next/server', 'mock:next-server'],
   ['drizzle-orm', 'mock:drizzle'],
-  ['@openbooks/engine/src/db.ts', 'mock:db'],
-  ['@openbooks/engine/src/document-delete.ts', 'mock:document-delete'],
+  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
+  ['@openbooks/engine/src/ledger/document-delete.ts', 'mock:document-delete'],
   ['../../../lib/feature-gates', 'mock:feature-gates'],
   ['../../../lib/authz', 'mock:authz'],
   ['../../../lib/order-cycle', 'mock:order-cycle'],
   ['./lib', 'mock:order-lib'],
-  ['@openbooks/engine/src/money.ts', 'mock:money'],
+  ['@openbooks/engine/src/money/money.ts', 'mock:money'],
   ['../../../lib/exact-decimal', 'mock:exact-decimal'],
   ['../../../lib/bills', 'mock:bills'],
   ['../../../lib/stock-locations', 'mock:stock-locations'],
   ['../../../lib/segments', 'mock:segments'],
-  ['@openbooks/engine/src/crm.ts', 'mock:crm'],
+  ['@openbooks/engine/src/crm/crm.ts', 'mock:crm'],
   ['../../../lib/features', 'mock:features'],
   ['@openbooks/engine/src/flows/index.ts', 'mock:flows'],
-  ['@openbooks/engine/src/sales-orders.ts', 'mock:sales-orders'],
-  ['@openbooks/engine/src/document-void.ts', 'mock:document-void'],
+  ['@openbooks/engine/src/sales/sales-orders.ts', 'mock:sales-orders'],
+  ['@openbooks/engine/src/ledger/document-void.ts', 'mock:document-void'],
   ['@/lib/api/json', 'mock:json'],
 ])
 
@@ -1071,8 +1071,8 @@ const poolHarness = new IssuePoolHarness()
 const poolStateExpression = `globalThis[Symbol.for('openbooks.order-issue-pool-contention-test')]`
 const poolHandlerUrl = new URL('./handlers.ts?order-issue-pool-contention-test', import.meta.url).href
 const poolSubmitUrl = new URL('../../../../engine/src/flows/submit.ts?order-issue-pool-contention-test', import.meta.url).href
-const poolScriptingUrl = new URL('../../../../engine/src/scripting.ts?order-issue-pool-contention-test', import.meta.url).href
-const poolSqlapiUrl = new URL('../../../../engine/src/sqlapi.ts?order-issue-pool-contention-test', import.meta.url).href
+const poolScriptingUrl = new URL('../../../../engine/src/scripting/scripting.ts?order-issue-pool-contention-test', import.meta.url).href
+const poolSqlapiUrl = new URL('../../../../engine/src/platform/sqlapi.ts?order-issue-pool-contention-test', import.meta.url).href
 
 const poolMockSources = new Map<string, string>([
   ['pool:drizzle', `
@@ -1160,28 +1160,28 @@ const poolMockSources = new Map<string, string>([
 const poolHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === 'drizzle-orm') return { url: 'pool:drizzle', shortCircuit: true }
-    if (specifier === '@openbooks/engine/src/db.ts') return { url: 'pool:db', shortCircuit: true }
+    if (specifier === '@openbooks/engine/src/platform/db.ts') return { url: 'pool:db', shortCircuit: true }
     if (specifier === '@openbooks/engine/src/flows/index.ts') {
       return { url: poolSubmitUrl, shortCircuit: true }
     }
-    if (specifier === '@openbooks/engine/src/document-delete.ts') {
+    if (specifier === '@openbooks/engine/src/ledger/document-delete.ts') {
       return { url: 'pool:document-delete', shortCircuit: true }
     }
-    if (specifier === '@openbooks/engine/src/document-void.ts') {
+    if (specifier === '@openbooks/engine/src/ledger/document-void.ts') {
       return { url: 'pool:document-void', shortCircuit: true }
     }
     if (specifier === './lib' && context.parentURL === poolHandlerUrl) {
       return { url: 'pool:order-lib', shortCircuit: true }
     }
     if (context.parentURL === poolSubmitUrl) {
-      if (specifier === '../db.ts') return { url: 'pool:db', shortCircuit: true }
-      if (specifier === '../scripting.ts') return { url: poolScriptingUrl, shortCircuit: true }
+      if (specifier === '../platform/db.ts') return { url: 'pool:db', shortCircuit: true }
+      if (specifier === '../scripting/scripting.ts') return { url: poolScriptingUrl, shortCircuit: true }
       if (specifier === './run.ts') return { url: 'pool:flow-run', shortCircuit: true }
     }
     if (context.parentURL === poolScriptingUrl) {
-      if (specifier === './db.ts') return { url: 'pool:db', shortCircuit: true }
-      if (specifier === './sqlapi.ts') return { url: poolSqlapiUrl, shortCircuit: true }
-      if (specifier === './journal-writes.ts') return { url: 'pool:journal-writes', shortCircuit: true }
+      if (specifier === '../platform/db.ts') return { url: 'pool:db', shortCircuit: true }
+      if (specifier === '../platform/sqlapi.ts') return { url: poolSqlapiUrl, shortCircuit: true }
+      if (specifier === '../ledger/journal-writes.ts') return { url: 'pool:journal-writes', shortCircuit: true }
     }
     if (context.parentURL === poolSqlapiUrl && specifier === './db.ts') {
       return { url: 'pool:db', shortCircuit: true }

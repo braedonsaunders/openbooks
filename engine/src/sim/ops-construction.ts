@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
+import { db } from "../platform/db.ts";
 import {
   createPayApplication,
   submitPayApplication,
@@ -8,8 +8,8 @@ import {
   generatePayApplicationInvoice,
   releaseRetainage,
   type PayApplicationLineUpdate,
-} from "../construction-billing.ts";
-import { add, cmp, mulDecimal, sum } from "../money.ts";
+} from "../projects/construction-billing.ts";
+import { add, cmp, mulDecimal, sum } from "../money/money.ts";
 import { postDraftDocument, createAndPostDocument } from "./activities/documents.ts";
 import type { SimOrg } from "./world.ts";
 

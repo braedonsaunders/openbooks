@@ -68,10 +68,10 @@ const mockUrls = new Map<string, string>([
   ['@/lib/api/json', 'mock:json'],
   ['../../../../../lib/feature-gates', 'mock:feature-gates'],
   ['../../subsidiary-scope', 'mock:subsidiary-scope'],
-  ['@openbooks/engine/src/payroll-yearend.ts', 'mock:yearend'],
-  ['@openbooks/engine/src/payroll-filing-registry.ts', 'mock:registry'],
+  ['@openbooks/engine/src/payroll/yearend.ts', 'mock:yearend'],
+  ['@openbooks/engine/src/payroll/filing-registry.ts', 'mock:registry'],
   ['@openbooks/engine/src/payroll/packs.ts', 'mock:packs'],
-  ['@openbooks/engine/src/payroll-run.ts', 'mock:payroll-error'],
+  ['@openbooks/engine/src/payroll/run.ts', 'mock:payroll-error'],
 ])
 
 type FileRouteTestState = { sections: unknown[]; roeCalls: string[][] }

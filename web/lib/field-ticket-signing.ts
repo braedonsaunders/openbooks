@@ -1,8 +1,8 @@
 import 'server-only'
 import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
-import { businessToday } from '@openbooks/engine/src/business-date.ts'
-import { db } from '@openbooks/engine/src/db.ts'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { db } from '@openbooks/engine/src/platform/db.ts'
 import { deriveEmailDeliveryKey, sendVia } from '@openbooks/emails'
 import {
   insertEmailLog,
@@ -10,7 +10,7 @@ import {
   markEmailUncertain,
   markEmailSent,
   resolveOrgEmailTransport,
-} from '@openbooks/engine/src/email-config.ts'
+} from '@openbooks/engine/src/delivery/email-config.ts'
 import { mintSigningToken, signingTokenDigest } from './field-ticket-token'
 import { FieldTicketError } from './field-tickets'
 import { resolvePdfTemplate } from './pdf-templates/store'

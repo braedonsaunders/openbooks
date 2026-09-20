@@ -1,7 +1,7 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withBypass } from "@openbooks/engine/src/db.ts";
+import { db, withBypass } from "@openbooks/engine/src/platform/db.ts";
 import { deriveEmailDeliveryKey, passwordResetEmail, sendVia, type EmailTransport } from "@openbooks/emails";
 import {
   insertEmailLog,
@@ -9,7 +9,7 @@ import {
   markEmailUncertain,
   markEmailSent,
   resolveOrgEmailTransport,
-} from "@openbooks/engine/src/email-config.ts";
+} from "@openbooks/engine/src/delivery/email-config.ts";
 import { appBaseUrl } from "@openbooks/engine/src/flows/email-tokens.ts";
 import { authContextHashes, hashPassword } from "./auth";
 import { normalizeLoginEmail, type AuthRequestContext } from "./auth-policy";

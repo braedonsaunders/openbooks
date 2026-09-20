@@ -33,7 +33,7 @@ import {
   type UnbilledClient,
   type EffectiveInvoicingClient,
 } from './tabs/BillingSection'
-import { formatMoney } from '@openbooks/engine/src/money.ts'
+import { formatMoney } from '@openbooks/engine/src/money/money.ts'
 import { useMoney } from '@/components/money-provider'
 import { ReadOnlyValue } from '../../../components/read-only-value'
 

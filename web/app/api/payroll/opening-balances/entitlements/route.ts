@@ -1,13 +1,13 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { normalizeMoney } from '@openbooks/engine/src/money.ts'
-import { PayrollError } from '@openbooks/engine/src/payroll-run.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { PayrollError } from '@openbooks/engine/src/payroll/run.ts'
 import {
   assertMovementDate,
   EntitlementOpeningSaveError,
   saveEntitlementOpenings,
   type EntitlementOpeningWrite,
-} from '@openbooks/engine/src/payroll-entitlements.ts'
+} from '@openbooks/engine/src/payroll/entitlements.ts'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { scopedEntitlementOpenings } from '../../../../../lib/payroll-scoped-views'

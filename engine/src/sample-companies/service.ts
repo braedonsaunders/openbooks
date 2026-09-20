@@ -9,7 +9,7 @@ import {
   withBypassContext,
   withOrgContext,
   withOrgTransaction,
-} from "../db.ts";
+} from "../platform/db.ts";
 import { createSandbox, deleteSandbox } from "../sandbox/lifecycle.ts";
 import { autopilotRunToEnd, provisionRun } from "../sim/runner.ts";
 import { SAMPLE_COMPANY_BY_INDUSTRY, SAMPLE_COMPANY_PROFILES } from "./catalog.ts";

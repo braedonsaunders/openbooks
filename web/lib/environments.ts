@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext } from "@openbooks/engine/src/db.ts";
+import { db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
 import { can, type Authz } from "./authz";
 import { accessibleProductionOrgs } from "./org-access";
 

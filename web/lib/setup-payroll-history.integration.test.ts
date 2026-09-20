@@ -4,8 +4,8 @@ import { registerHooks } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { sql } from 'drizzle-orm';
-import { db } from '@openbooks/engine/src/db.ts';
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from '@openbooks/engine/src/test-fixtures.ts';
+import { db } from '@openbooks/engine/src/platform/db.ts';
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from '@openbooks/engine/src/testing/fixtures.ts';
 
 const state: {gate: {user: {orgId: string; id: string}} | null} = {gate: null};
 Object.assign(globalThis, {__payrollPolicySetup: state});
