@@ -252,7 +252,7 @@ export async function getAutomationRun(orgId: string, actorId: string, runId: st
 const approvalSettingsBody = z.object({
   subjectKind: z.string().min(1),
   exceptionOnly: z.boolean(),
-  thresholds: z.record(z.unknown()).default({}),
+  thresholds: z.record(z.string(), z.unknown()).default({}),
   autoApproveWhenNoRule: z.boolean().default(false),
   delegateAfterDays: z.number().int().min(1).nullish(),
   excludeInitiator: z.boolean().default(true),

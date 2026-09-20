@@ -1,6 +1,7 @@
-import { CronExpressionParser } from "cron-parser";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrg } from "../platform/db.ts";
+import { withTickClaim } from "../scheduling/lock.ts";
+import { lastCronOccurrenceBetween } from "../flows/scheduled.ts";
 import { executeAutomation } from "./execute.ts";
 import { parseAutomationTrigger, type AutomationTrigger } from "./triggers.ts";
 
@@ -32,6 +33,40 @@ export type TickSummary = {
   eventsDrained: number;
   errors: string[];
 };
+
+/** Cross-replica identity for the automation scan (distinct from the web
+ *  scheduler's key so the two duty sets never suppress each other). */
+export const AUTOMATION_TICK_LOCK_KEY = "openbooks:automation-tick";
+
+let timer: ReturnType<typeof setInterval> | null = null;
+let running = false;
+
+/**
+ * Start the automation scan on the 60-second topology beside the flows
+ * scheduler (called from web/instrumentation.node.ts under the same
+ * OPENBOOKS_RUN_SCHEDULER mode decision — never a new scheduler
+ * infrastructure: the claim primitive, the interval shape, and the cron
+ * semantics are the scheduler's own). No engine module imports this —
+ * the tick is web-composed so the pinned dependency cycle never grows.
+ */
+export function ensureAutomationTick(intervalMs = 60_000): void {
+  if (timer) return;
+  timer = setInterval(() => {
+    void runAutomationTickClaimed().catch((e) => console.error("[automations] tick failed:", e));
+  }, intervalMs);
+  timer.unref?.();
+  void runAutomationTickClaimed().catch((e) => console.error("[automations] tick failed:", e));
+}
+
+export async function runAutomationTickClaimed(now: Date = new Date()): Promise<TickSummary | null> {
+  if (running) return null;
+  running = true;
+  try {
+    return await withTickClaim(AUTOMATION_TICK_LOCK_KEY, () => runAutomationTick(now));
+  } finally {
+    running = false;
+  }
+}
 
 /** Org civil date (YYYY-MM-DD) in the org's timezone. DST-safe: the zone's
  *  calendar day, not now() minus N×24h. */
@@ -110,16 +145,14 @@ async function fireSchedule(
   now: Date,
 ): Promise<boolean> {
   const after = automation.lastRunAt ? new Date(automation.lastRunAt) : new Date(automation.createdAt);
-  let occurrence: Date | null = null;
+  // The flows scheduler's own occurrence function (same (after, now]
+  // window, same catch-up-to-one semantics) — cron semantics reused,
+  // cursor per automation row. flow_scheduled_occurrences rows are FK-bound
+  // to flows graph nodes and cannot host non-graph recipes without shadow
+  // flows, so the cursor lives on the automation row instead.
+  let occurrence: Date | null;
   try {
-    const it = CronExpressionParser.parse(trigger.cron, { currentDate: after, tz: trigger.timezone });
-    let last: Date | null = null;
-    for (let i = 0; i < 366; i++) {
-      const next = it.next().toDate();
-      if (next > now) break;
-      last = next;
-    }
-    occurrence = last;
+    occurrence = lastCronOccurrenceBetween(trigger.cron, after, now, trigger.timezone);
   } catch {
     throw new Error(`schedule trigger has an invalid cron '${trigger.cron}' — fix the trigger and save again`);
   }
