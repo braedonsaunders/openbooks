@@ -13,6 +13,10 @@ import { RecruitingDrawer } from '../../app/(app)/hrm/recruiting/sections'
 import { ChangeRequestRowActions, HrmVerbChip } from '../../app/(app)/hrm/change-requests/ChangeRequestRowActions'
 import { ProposeChangeDialog } from '../../app/(app)/hrm/change-requests/ProposeChangeDialog'
 import { LeaveDialog } from '../../app/(app)/hrm/leave/LeaveDialog'
+// HR-13 begin: construction-compliance islands (verbatim adapters only).
+import { ComplianceActions } from '../../app/(app)/hrm/compliance/ComplianceActions'
+import { GenerateDialog } from '../../app/(app)/hrm/compliance/GenerateDialog'
+// HR-13 end
 import { EnrollmentRowActions } from '../../app/(app)/hrm/benefits/EnrollmentRowActions'
 import { WindowDialog } from '../../app/(app)/hrm/benefits/WindowDialog'
 import { WindowDrawer } from '../../app/(app)/hrm/benefits/WindowDrawer'
@@ -310,6 +314,38 @@ export const HRM_WIDGETS = {
       canManage={props.canManage === true}
     />
   ),
+  // HR-13 begin: construction-compliance islands. One row-action island
+  // per table (findings, per-diem entries, certified runs) driven by the
+  // row's own status, and the certified-generate dialog driven by the
+  // `generate` search param — @openbooks/ui primitives only.
+  'hrm-compliance-actions': (props) => (
+    <ComplianceActions
+      actionKind={(str(props, 'actionKind') as 'finding' | 'entry' | 'run') ?? 'finding'}
+      rowId={str(props, 'rowId') ?? ''}
+      rowStatus={str(props, 'rowStatus') ?? ''}
+      entryKind={str(props, 'entryKind') ?? 'per_diem'}
+      canManage={props.canManage === true}
+      acknowledgeLabel={str(props, 'acknowledgeLabel') ?? ''}
+      resolveLabel={str(props, 'resolveLabel') ?? ''}
+      approveLabel={str(props, 'approveLabel') ?? ''}
+      voidLabel={str(props, 'voidLabel') ?? ''}
+      submitLabel={str(props, 'submitLabel') ?? ''}
+    />
+  ),
+  'hrm-compliance-generate': (props) => (
+    <GenerateDialog
+      projects={(props.projects as ComponentProps<typeof GenerateDialog>['projects']) ?? []}
+      formats={(props.formats as ComponentProps<typeof GenerateDialog>['formats']) ?? []}
+      title={str(props, 'title') ?? ''}
+      projectLabel={str(props, 'projectLabel') ?? ''}
+      weekLabel={str(props, 'weekLabel') ?? ''}
+      formatLabel={str(props, 'formatLabel') ?? ''}
+      generateLabel={str(props, 'generateLabel') ?? ''}
+      cancelLabel={str(props, 'cancelLabel') ?? ''}
+      closeHref={str(props, 'closeHref') ?? '/hrm/compliance'}
+    />
+  ),
+  // HR-13 end
 
   /** Recruiting funnel figures beside the queue link: open requisitions,
    *  offers awaiting response, interviews this week — loader-resolved.
