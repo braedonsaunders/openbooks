@@ -4,6 +4,7 @@ import {
   computePoolYear,
   computeMacrsYear,
   computeMacrsThroughYear,
+  placedAndDisposedInSameTaxYear,
   resolvePoolClass,
   TAX_DEPRECIATION_REGIMES,
   type PoolYearInput,
@@ -231,6 +232,76 @@ test("U.S. MACRS short year uses Pub 946 deemed dates, not a scaled calendar sch
   assert.equal(walked.deemedPlacedOn, "2023-08-01");
   assert.equal(walked.firstYearMonthsInService, 5);
   assert.equal(walked.allocationFollowYear, true);
+});
+
+test("Pub 946 excepted property: taxable same-tax-year place and dispose takes no MACRS service", () => {
+  const placedSold = {
+    basis: "10000",
+    placedInServiceOn: "2025-03-01",
+    taxYear: 2025,
+    recoveryPeriodYears: 5 as const,
+    method: "200_db" as const,
+    convention: "half_year" as const,
+    disposedOn: "2025-09-15",
+  };
+  assert.equal(computeMacrsYear(placedSold).allowance, "0.00");
+  assert.equal(computeMacrsYear(placedSold).remainingBasis, "0.00");
+  // A nontaxable step-in-shoes transfer in the same year keeps convention continuity.
+  assert.equal(
+    computeMacrsYear({ ...placedSold, dispositionRecognition: "nontaxable" }).allowance,
+    "2000.00",
+  );
+});
+
+test("same-tax-year excepted property uses the fiscal window, not equal YYYY", () => {
+  assert.equal(
+    placedAndDisposedInSameTaxYear({
+      placedInServiceOn: "2025-10-01",
+      disposedOn: "2026-03-01",
+      yearStart: "2025-07-01",
+      yearEnd: "2026-06-30",
+      taxYear: 2025,
+    }),
+    true,
+  );
+  assert.equal(
+    placedAndDisposedInSameTaxYear({
+      placedInServiceOn: "2025-03-01",
+      disposedOn: "2026-03-01",
+      yearStart: "2025-01-01",
+      yearEnd: "2025-12-31",
+      taxYear: 2025,
+    }),
+    false,
+  );
+  const fiscal = computeMacrsYear({
+    basis: "10000",
+    placedInServiceOn: "2025-10-01",
+    disposedOn: "2026-03-01",
+    taxYear: 2025,
+    yearStart: "2025-07-01",
+    yearEnd: "2026-06-30",
+    recoveryPeriodYears: 5,
+    method: "200_db",
+    convention: "half_year",
+  });
+  assert.equal(fiscal.allowance, "0.00");
+});
+
+test("a placement after the tax-year window takes no deemed first-year service", () => {
+  const future = computeMacrsYear({
+    basis: "10000",
+    placedInServiceOn: "2026-10-01",
+    taxYear: 2026,
+    yearStart: "2026-01-01",
+    yearEnd: "2026-06-30",
+    recoveryPeriodYears: 5,
+    method: "200_db",
+    convention: "half_year",
+    shortYearFactor: "0.5",
+  });
+  assert.equal(future.allowance, "0.00");
+  assert.equal(future.remainingBasis, "10000.00");
 });
 
 test("regimes that disallow recapture (Canada Class 10.1) just zero the pool", () => {

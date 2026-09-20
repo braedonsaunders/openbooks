@@ -2,17 +2,21 @@ import { lockAssetTaxLifecycle } from "../organization/asset-tax-fence.ts";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
-import { add, formatMoney, fromUnits, neg, normalizeDecimal, normalizeMoney, toUnits } from "../money/money.ts";
+import { add, cmp, formatMoney, fromUnits, neg, normalizeDecimal, normalizeMoney, toUnits } from "../money/money.ts";
 import {
   computeMacrsThroughYear,
   computeMacrsYear,
   computePoolYear,
+  placedAndDisposedInSameTaxYear,
   type MacrsYearWindow,
   type PoolClassDef,
   type PoolYearResult,
   TAX_DEPRECIATION_REGIMES,
 } from "./depreciation-pool.ts";
 import { MacrsShortYearError, assertShortYearFactorAgrees } from "./macrs-short-year.ts";
+import { MacrsVintageError, resolveMacrsVintages, type MacrsWorkpaperEvent } from "./macrs-vintages.ts";
+import { nzPooledDepreciationRate } from "./asset-basis-policy.ts";
+import { effectiveClasses, regimeClassAttribute } from "./tax-classification.ts";
 import { legacyPoolDisposition, taxEventRequiresTaxWorkpaper } from "./pool-run-legacy.ts";
 
 export { legacyPoolDisposition, taxEventRequiresTaxWorkpaper } from "./pool-run-legacy.ts";
@@ -92,6 +96,12 @@ type LiveWorkpaper = {
   disposed_unadjusted_basis: string | null;
   related_person: string | null;
   recovery_period_years: string | null;
+  relationship: string | null;
+  associated_person_equivalent_rate: string | null;
+  buyer_placed_in_service_on: string | null;
+  buyer_recovery_period_years: string | null;
+  buyer_method: string | null;
+  buyer_convention: string | null;
 };
 
 function classifiedClassSql(
@@ -205,7 +215,14 @@ async function liveWorkpapers(
              w.computed->>'recognition' as recognition,
              w.computed->>'disposedUnadjustedBasis' as disposed_unadjusted_basis,
              w.facts->>'relatedPerson' as related_person,
-             w.facts->>'recoveryPeriodYears' as recovery_period_years
+             w.facts->>'recoveryPeriodYears' as recovery_period_years,
+             w.facts->>'relationship' as relationship,
+             coalesce(w.computed->>'associatedPersonEquivalentRate', w.facts->>'associatedPersonEquivalentRate')
+               as associated_person_equivalent_rate,
+             w.computed->>'buyerPlacedInServiceOn' as buyer_placed_in_service_on,
+             w.computed->>'buyerRecoveryPeriodYears' as buyer_recovery_period_years,
+             w.computed->>'buyerMethod' as buyer_method,
+             w.computed->>'buyerConvention' as buyer_convention
         from tax_asset_basis_workpapers w
         join fixed_assets seller on seller.org_id=w.org_id and seller.id=w.asset_id
         join asset_categories seller_c on seller_c.org_id=seller.org_id and seller_c.id=seller.category_id
@@ -319,42 +336,10 @@ async function firstYearRule(
   return { firstYearFraction: row.fraction, enhancedMultiplier: row.mult ?? undefined };
 }
 
-/** The asset-category tax_attributes key that carries a class code for a regime.
- *  An org regime row can override it; Canadian configurations use "ca_cca_class". */
-async function regimeClassAttribute(tx: SqlExecutor, orgId: string, regime: string): Promise<string> {
-  const r = (await tx.execute<{ class_attribute: string }>(sql`
-    select class_attribute from tax_regimes where org_id = ${orgId} and code = ${regime} and is_active limit 1`));
-  return r.rows[0]?.class_attribute ?? TAX_DEPRECIATION_REGIMES[regime]?.classAttribute ?? "tax_pool_class";
-}
-
 async function regimeModel(tx: SqlExecutor, orgId: string, regime: string): Promise<"pool" | "macrs"> {
   const r = (await tx.execute<{ calculation_model: "pool" | "macrs" }>(sql`
     select calculation_model from tax_regimes where org_id = ${orgId} and code = ${regime} and is_active limit 1`));
   return r.rows[0]?.calculation_model ?? TAX_DEPRECIATION_REGIMES[regime]?.calculationModel ?? "pool";
-}
-
-/** Effective class definitions for a regime: built-in defaults with org
- *  tax_pool_classes rows merged on top (org wins). */
-async function effectiveClasses(tx: SqlExecutor, orgId: string, regime: string): Promise<Map<string, PoolClassDef>> {
-  const map = new Map<string, PoolClassDef>();
-  for (const [code, def] of Object.entries(TAX_DEPRECIATION_REGIMES[regime]?.classes ?? {})) map.set(code, def);
-  const rows = (await tx.execute<{ class_code: string; name: string; rate: string; method: "declining" | "straight_line"; fyf: string; allow_recapture: boolean; allow_terminal_loss: boolean; cost_cap: string | null; depreciation_system: "gds" | "ads" | null; macrs_method: "200_db" | "150_db" | "straight_line" | null; recovery_period_years: string | null; convention: "half_year" | "mid_quarter" | "mid_month" | null }>(sql`
-    select class_code, name, rate::text as rate, method, first_year_fraction::text as fyf,
-           allow_recapture, allow_terminal_loss, cost_cap::text as cost_cap,
-           depreciation_system, macrs_method, recovery_period_years::text as recovery_period_years, convention
-      from tax_pool_classes where org_id = ${orgId} and regime = ${regime} and is_active`));
-  for (const r of rows.rows) {
-    map.set(r.class_code, {
-      code: r.class_code, rate: r.rate, method: r.method, firstYearFraction: r.fyf,
-      allowRecapture: r.allow_recapture, allowTerminalLoss: r.allow_terminal_loss,
-      costCap: r.cost_cap ?? undefined, name: r.name,
-      depreciationSystem: r.depreciation_system ?? undefined,
-      macrsMethod: r.macrs_method ?? undefined,
-      recoveryPeriodYears: r.recovery_period_years ?? undefined,
-      convention: r.convention ?? undefined,
-    });
-  }
-  return map;
 }
 
 /** Regimes available for a run/picker: company-country built-ins plus matching
@@ -679,7 +664,7 @@ async function runPools(
       openingBalance,
       additions: row.additions,
       dispositions,
-      rate: classDef.rate,
+      rate: nzYearRate(run, classCode, classDef, papers),
       firstYearFraction: rule.firstYearFraction,
       enhancedFirstYearMultiplier: rule.enhancedMultiplier,
       shortYearFactor: run.shortYearFactor,
@@ -732,123 +717,62 @@ async function runPools(
   return { regime: run.regime, taxYear, lines, totals: { allowance: totAllow, recapture: totRecap, terminalLoss: totTerm } };
 }
 
-type MacrsVintage = {
-  basis: string;
-  placedInServiceOn: string;
-  recoveryPeriodYears: string;
-  method: "200_db" | "150_db" | "straight_line";
-  convention: "half_year" | "mid_quarter" | "mid_month";
-  disposedOn: string | null;
-  section179: string;
-  bonusPercent: string;
-  businessUsePercent: string;
-  shortYearMethod: "simplified" | "allocation";
-  role: "seller" | "buyer";
-  transferOn: string | null;
-};
-
-function resolveMacrsVintages(
-  asset: MacrsAssetRow,
-  papers: LiveWorkpaper[],
+function nzYearRate(
   run: TaxPoolRun,
+  classCode: string,
   classDef: PoolClassDef,
-  convention: "half_year" | "mid_quarter" | "mid_month",
-  config: Record<string, unknown>,
-): MacrsVintage[] {
-  const defaults = {
-    recoveryPeriodYears: classDef.recoveryPeriodYears!,
-    method: classDef.macrsMethod!,
-    convention,
-    section179: String(config.section179 ?? "0"),
-    bonusPercent: decimalOr(config.bonusPercent, "0"),
-    businessUsePercent: decimalOr(config.businessUsePercent, "100"),
-    shortYearMethod: "simplified" as const,
-  };
-  const seller = papers.filter((paper) => paper.asset_id === asset.id);
-  const receiver = papers.filter((paper) => paper.receiving_asset_id === asset.id);
-  const latestReceiver = receiver.at(-1);
-  const latestSeller = seller.at(-1);
-  if (latestReceiver && latestReceiver.buyer_subsidiary_id === run.subsidiaryId) {
-    const placed = latestReceiver.placed_in_service_on ?? latestReceiver.effective_on;
-    const method = (latestReceiver.macrs_method as MacrsVintage["method"]) ?? defaults.method;
-    const recConvention = (latestReceiver.macrs_convention as MacrsVintage["convention"]) ?? defaults.convention;
-    const related = latestReceiver.related_person === "true";
-    const shortYearMethod = latestReceiver.short_year_method === "allocation" ? "allocation" : "simplified";
-    const vintages: MacrsVintage[] = [];
-    if (latestReceiver.recognition === "nontaxable" && latestReceiver.carryover_basis) {
-      vintages.push({
-        ...defaults,
-        basis: latestReceiver.carryover_basis,
-        placedInServiceOn: placed,
-        method,
-        convention: recConvention,
-        disposedOn: null,
-        section179: related ? "0" : defaults.section179,
-        shortYearMethod,
-        role: "buyer",
-        transferOn: latestReceiver.effective_on,
-      });
+  papers: LiveWorkpaper[],
+): string | number {
+  if (run.regime !== "nz_pool") return classDef.rate;
+  const associated: string[] = [];
+  for (const paper of papers) {
+    if (paper.effective_on < run.yearStart || paper.effective_on > run.yearEnd) continue;
+    if (paper.buyer_subsidiary_id !== run.subsidiaryId || paper.buyer_class !== classCode) continue;
+    if (paper.relationship !== "non_arms_length") continue;
+    if (!paper.associated_person_equivalent_rate) {
+      throw new TaxPoolError(
+        `NZ associated-person transfer into class ${classCode} is missing associatedPersonEquivalentRate; reverse and re-propose the workpaper — do not depreciate at the class rate`,
+      );
     }
-    if (latestReceiver.recognition === "nontaxable" && latestReceiver.excess_basis && cmpMoney(latestReceiver.excess_basis)) {
-      vintages.push({
-        ...defaults,
-        basis: latestReceiver.excess_basis,
-        placedInServiceOn: latestReceiver.effective_on,
-        disposedOn: null,
-        section179: related ? "0" : defaults.section179,
-        shortYearMethod,
-        role: "buyer",
-        transferOn: latestReceiver.effective_on,
-      });
-    }
-    if (latestReceiver.recognition === "taxable" && latestReceiver.buyer_cost) {
-      vintages.push({
-        ...defaults,
-        basis: latestReceiver.buyer_cost,
-        placedInServiceOn: latestReceiver.placed_in_service_on ?? latestReceiver.effective_on,
-        disposedOn: null,
-        shortYearMethod,
-        role: "buyer",
-        transferOn: latestReceiver.effective_on,
-      });
-    }
-    if (vintages.length > 0) return vintages;
+    associated.push(paper.associated_person_equivalent_rate);
   }
-  if (latestSeller && latestSeller.seller_subsidiary_id === run.subsidiaryId) {
-    const vintages: MacrsVintage[] = [];
-    const shortYearMethod = latestSeller.short_year_method === "allocation" ? "allocation" : "simplified";
-    const placed = latestSeller.placed_in_service_on ?? asset.placed_on;
-    const method = (latestSeller.macrs_method as MacrsVintage["method"]) ?? defaults.method;
-    const recConvention = (latestSeller.macrs_convention as MacrsVintage["convention"]) ?? defaults.convention;
-    if (latestSeller.effective_on < run.yearStart) {
-      if (latestSeller.remaining_basis && cmpMoney(latestSeller.remaining_basis)) {
-        vintages.push({
-          ...defaults,
-          basis: latestSeller.remaining_basis,
-          placedInServiceOn: placed,
-          method,
-          convention: recConvention,
-          disposedOn: null,
-          shortYearMethod,
-          role: "seller",
-          transferOn: null,
-        });
-      }
-      return vintages;
-    }
-  }
-  return [{
-    ...defaults,
-    basis: asset.acquisition_cost,
-    placedInServiceOn: asset.placed_on,
-    disposedOn: asset.disposed_on,
-    role: "seller",
-    transferOn: null,
-  }];
+  return nzPooledDepreciationRate(classDef.rate, associated);
 }
 
-function cmpMoney(value: string): boolean {
-  return toUnits(value) > 0n;
+function asMacrsEvents(papers: LiveWorkpaper[]): MacrsWorkpaperEvent[] {
+  return papers.map((paper) => ({
+    asset_id: paper.asset_id,
+    receiving_asset_id: paper.receiving_asset_id,
+    effective_on: paper.effective_on,
+    seller_subsidiary_id: paper.seller_subsidiary_id,
+    buyer_subsidiary_id: paper.buyer_subsidiary_id,
+    remaining_basis: paper.remaining_basis,
+    disposed_unadjusted_basis: paper.disposed_unadjusted_basis,
+    carryover_basis: paper.carryover_basis,
+    excess_basis: paper.excess_basis,
+    buyer_cost: paper.buyer_cost,
+    recognition: paper.recognition,
+    related_person: paper.related_person,
+    recovery_period_years: paper.recovery_period_years,
+    placed_in_service_on: paper.placed_in_service_on,
+    macrs_method: paper.macrs_method,
+    macrs_convention: paper.macrs_convention,
+    short_year_method: paper.short_year_method,
+    buyer_placed_in_service_on: paper.buyer_placed_in_service_on,
+    buyer_recovery_period_years: paper.buyer_recovery_period_years,
+    buyer_method: paper.buyer_method,
+    buyer_convention: paper.buyer_convention,
+  }));
+}
+
+function lastThreeMonthsStart(yearEnd: string): string {
+  const year = Number(yearEnd.slice(0, 4));
+  const month = Number(yearEnd.slice(5, 7));
+  const startMonth = month - 2;
+  if (startMonth <= 0) {
+    return `${year - 1}-${String(startMonth + 12).padStart(2, "0")}-01`;
+  }
+  return `${year}-${String(startMonth).padStart(2, "0")}-01`;
 }
 
 type MacrsAssetRow = {
@@ -897,6 +821,7 @@ async function runMacrs(
      where a.org_id = ${orgId} and a.subsidiary_id = ${run.subsidiaryId}
        and not exists(select 1 from asset_transfer_bases t where t.org_id=a.org_id and t.receiving_asset_id=a.id and t.reversed_on<=${run.yearEnd})
        and coalesce(a.in_service_on, a.acquired_on) is not null
+       and coalesce(a.in_service_on, a.acquired_on) <= ${run.yearEnd}
        and coalesce(a.custom->'taxDepreciation'->${run.regime}->>'classCode', c.tax_attributes->>${attr}, '') <> ''`));
 
   const unknownClasses = [...new Set(assets.rows
@@ -914,12 +839,25 @@ async function runMacrs(
   const vintageBasis = new Map<number, { total: bigint; q4: bigint }>();
   for (const asset of assets.rows) {
     const def = classes.get(asset.class_code);
-    if (!def || def.convention !== "half_year" || asset.disposed_on?.slice(0, 4) === asset.placed_on.slice(0, 4)) continue;
+    if (!def || def.convention !== "half_year") continue;
+    if (asset.placed_on > run.yearEnd) continue;
+    if (
+      asset.disposed_on &&
+      placedAndDisposedInSameTaxYear({
+        placedInServiceOn: asset.placed_on,
+        disposedOn: asset.disposed_on,
+        yearStart: run.yearStart,
+        yearEnd: run.yearEnd,
+        taxYear: run.taxYear,
+      })
+    ) {
+      continue;
+    }
     const year = Number(asset.placed_on.slice(0, 4));
     const amount = toUnits(asset.acquisition_cost);
     const v = vintageBasis.get(year) ?? { total: 0n, q4: 0n };
     v.total += amount;
-    if (Number(asset.placed_on.slice(5, 7)) >= 10) v.q4 += amount;
+    if (asset.placed_on >= lastThreeMonthsStart(`${year}-12-31`)) v.q4 += amount;
     vintageBasis.set(year, v);
   }
 
@@ -950,122 +888,103 @@ async function runMacrs(
         : group.def.convention!;
       const sellerPapers = papers.filter((paper) => paper.asset_id === asset.id);
       const receiverPapers = papers.filter((paper) => paper.receiving_asset_id === asset.id);
-      const latestSeller = sellerPapers.at(-1);
       const latestReceiver = receiverPapers.at(-1);
       const yearPapers = [...sellerPapers, ...receiverPapers].filter(
         (paper) => paper.effective_on >= run.yearStart && paper.effective_on <= run.yearEnd,
       );
-      const vintages = resolveMacrsVintages(asset, papers, run, group.def, convention, config);
-      const splitThisYear = latestSeller
-        && latestSeller.seller_subsidiary_id === run.subsidiaryId
-        && latestSeller.effective_on >= run.yearStart
-        && latestSeller.effective_on <= run.yearEnd
-        && latestSeller.remaining_basis
-        && latestSeller.disposed_unadjusted_basis;
-      if (splitThisYear && latestSeller) {
-        const original = add(latestSeller.remaining_basis!, latestSeller.disposed_unadjusted_basis!);
+      let vintages;
+      try {
+        vintages = resolveMacrsVintages({
+          assetId: asset.id,
+          subsidiaryId: run.subsidiaryId,
+          placedOn: asset.placed_on,
+          acquisitionCost: asset.acquisition_cost,
+          disposedOn: asset.disposed_on,
+          papers: asMacrsEvents([...sellerPapers, ...receiverPapers]),
+          defaults: {
+            recoveryPeriodYears: String(group.def.recoveryPeriodYears!),
+            method: group.def.macrsMethod!,
+            convention,
+            section179: String(config.section179 ?? "0"),
+            bonusPercent: decimalOr(config.bonusPercent, "0"),
+            businessUsePercent: decimalOr(config.businessUsePercent, "100"),
+            shortYearMethod: "simplified",
+          },
+        });
+      } catch (error) {
+        throw error instanceof MacrsVintageError ? new TaxPoolError(error.message) : error;
+      }
+      for (const vintage of vintages) {
+        if (vintage.placedInServiceOn > run.yearEnd) continue;
         const walked = computeMacrsThroughYear({
-          basis: original,
-          placedInServiceOn: latestSeller.placed_in_service_on ?? asset.placed_on,
+          basis: vintage.basis,
+          placedInServiceOn: vintage.placedInServiceOn,
           taxYear,
-          recoveryPeriodYears: group.def.recoveryPeriodYears!,
-          method: group.def.macrsMethod!,
-          convention,
-          section179: String(config.section179 ?? "0"),
-          bonusPercent: decimalOr(config.bonusPercent, "0"),
-          businessUsePercent: decimalOr(config.businessUsePercent, "100"),
+          recoveryPeriodYears: vintage.recoveryPeriodYears,
+          method: vintage.method,
+          convention: vintage.convention,
+          disposedOn: vintage.disposedOn,
+          dispositionRecognition: vintage.recognition,
+          section179: vintage.section179,
+          bonusPercent: vintage.bonusPercent,
+          businessUsePercent: vintage.businessUsePercent,
           shortYearFactor: run.shortYearFactor,
-          shortYearMethod: latestSeller.short_year_method === "allocation" ? "allocation" : "simplified",
+          shortYearMethod: vintage.shortYearMethod,
         }, windows);
-        if (placedYear < taxYear) opening += toUnits(walked.prior.remainingBasis);
-        const disposed = computeMacrsYear({
-          basis: latestSeller.disposed_unadjusted_basis!,
-          placedInServiceOn: latestSeller.placed_in_service_on ?? asset.placed_on,
-          taxYear,
-          yearStart: run.yearStart,
-          yearEnd: run.yearEnd,
-          recoveryPeriodYears: group.def.recoveryPeriodYears!,
-          method: group.def.macrsMethod!,
-          convention,
-          disposedOn: latestSeller.effective_on,
-          shortYearFactor: run.shortYearFactor,
-          shortYearMethod: latestSeller.short_year_method === "allocation" ? "allocation" : "simplified",
-          afterShortYear: walked.deemedPlacedOn != null && walked.deemedPlacedOn < run.yearStart,
-          allocationFollowYear: walked.allocationFollowYear,
-          firstYearMonthsInService: walked.firstYearMonthsInService ?? undefined,
-          deemedPlacedOn: walked.deemedPlacedOn ?? undefined,
-        });
-        const remaining = computeMacrsYear({
-          basis: latestSeller.remaining_basis!,
-          placedInServiceOn: latestSeller.placed_in_service_on ?? asset.placed_on,
-          taxYear,
-          yearStart: run.yearStart,
-          yearEnd: run.yearEnd,
-          recoveryPeriodYears: group.def.recoveryPeriodYears!,
-          method: group.def.macrsMethod!,
-          convention,
-          shortYearFactor: run.shortYearFactor,
-          shortYearMethod: latestSeller.short_year_method === "allocation" ? "allocation" : "simplified",
-          afterShortYear: walked.deemedPlacedOn != null && walked.deemedPlacedOn < run.yearStart,
-          allocationFollowYear: walked.allocationFollowYear,
-          firstYearMonthsInService: walked.firstYearMonthsInService ?? undefined,
-          deemedPlacedOn: walked.deemedPlacedOn ?? undefined,
-        });
-        allowance += toUnits(disposed.allowance) + toUnits(remaining.allowance);
-        closing += toUnits(remaining.remainingBasis);
-      } else {
-        for (const vintage of vintages) {
-          const walked = computeMacrsThroughYear({
+        let current = walked.current;
+        if (
+          vintage.role === "buyer" &&
+          vintage.recognition === "nontaxable" &&
+          vintage.transferOn &&
+          vintage.transferOn >= run.yearStart &&
+          vintage.transferOn <= run.yearEnd &&
+          vintage.placedInServiceOn < vintage.transferOn
+        ) {
+          const sellerShare = computeMacrsYear({
             basis: vintage.basis,
             placedInServiceOn: vintage.placedInServiceOn,
             taxYear,
+            yearStart: run.yearStart,
+            yearEnd: run.yearEnd,
             recoveryPeriodYears: vintage.recoveryPeriodYears,
             method: vintage.method,
             convention: vintage.convention,
-            disposedOn: vintage.disposedOn,
+            disposedOn: vintage.transferOn,
+            dispositionRecognition: "nontaxable",
             section179: vintage.section179,
             bonusPercent: vintage.bonusPercent,
             businessUsePercent: vintage.businessUsePercent,
             shortYearFactor: run.shortYearFactor,
             shortYearMethod: vintage.shortYearMethod,
-          }, windows);
-          let current = walked.current;
-          if (
-            vintage.role === "buyer" &&
-            vintage.transferOn &&
-            vintage.transferOn >= run.yearStart &&
-            vintage.transferOn <= run.yearEnd &&
-            latestReceiver?.recognition === "nontaxable" &&
-            vintage.placedInServiceOn < vintage.transferOn
-          ) {
-            const sellerShare = computeMacrsYear({
-              basis: vintage.basis,
-              placedInServiceOn: vintage.placedInServiceOn,
-              taxYear,
-              yearStart: run.yearStart,
-              yearEnd: run.yearEnd,
-              recoveryPeriodYears: vintage.recoveryPeriodYears,
-              method: vintage.method,
-              convention: vintage.convention,
-              disposedOn: vintage.transferOn,
-              shortYearFactor: run.shortYearFactor,
-              shortYearMethod: vintage.shortYearMethod,
-            });
-            const residual = formatMoney(add(current.allowance, neg(sellerShare.allowance)), 2);
-            current = { ...current, allowance: residual, macrs: residual };
+          });
+          const residual = formatMoney(add(current.allowance, neg(sellerShare.allowance)), 2);
+          if (cmp(residual, "0") < 0) {
+            throw new TaxPoolError(
+              `nontaxable MACRS transfer-year allocation for asset ${asset.id} produced a negative buyer residual; reverse and re-propose the workpaper — do not invent a split`,
+            );
           }
-          const vintagePlacedYear = Number(vintage.placedInServiceOn.slice(0, 4));
-          if (vintagePlacedYear < taxYear) opening += toUnits(walked.prior.remainingBasis);
-          if (vintagePlacedYear === taxYear && vintage.role === "buyer") {
-            additions += toUnits(vintage.basis);
-          } else if (vintagePlacedYear === taxYear && vintage.role === "seller" && !receivers.has(asset.id)) {
-            additions += toUnits(asset.acquisition_cost);
-          }
-          allowance += toUnits(current.allowance);
-          closing += toUnits(current.remainingBasis);
+          current = { ...current, allowance: residual, macrs: residual };
         }
+        const vintagePlacedThisYear =
+          vintage.placedInServiceOn >= run.yearStart && vintage.placedInServiceOn <= run.yearEnd;
+        const vintagePlacedBeforeYear = vintage.placedInServiceOn < run.yearStart;
+        if (vintagePlacedBeforeYear) opening += toUnits(walked.prior.remainingBasis);
+        if (vintagePlacedThisYear && vintage.role === "buyer") {
+          additions += toUnits(vintage.basis);
+        } else if (vintagePlacedThisYear && vintage.role === "seller" && !receivers.has(asset.id)) {
+          additions += toUnits(asset.acquisition_cost);
+        }
+        allowance += toUnits(current.allowance);
+        closing += toUnits(current.remainingBasis);
       }
-      if (placedYear === taxYear && receivers.has(asset.id) && !latestReceiver?.buyer_addition && !latestReceiver?.carryover_basis && !latestReceiver?.buyer_cost) {
+      if (
+        asset.placed_on >= run.yearStart &&
+        asset.placed_on <= run.yearEnd &&
+        receivers.has(asset.id) &&
+        !latestReceiver?.buyer_addition &&
+        !latestReceiver?.carryover_basis &&
+        !latestReceiver?.buyer_cost
+      ) {
         throw new TaxPoolError(
           `receiving asset ${asset.id} has no frozen buyer tax basis; record the ${run.regime} workpaper — do not use book cost`,
         );

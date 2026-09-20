@@ -225,7 +225,8 @@ BEGIN
  IF TG_OP='UPDATE' THEN
   IF OLD.reversed_by_change_id IS NOT NULL OR NEW.reversed_by_change_id IS NULL OR NEW.reversed_on IS NULL
      OR NEW.reversed_on<>OLD.effective_on
-     OR (to_jsonb(NEW)-ARRAY['reversed_by_change_id','reversed_on']) IS DISTINCT FROM (to_jsonb(OLD)-ARRAY['reversed_by_change_id','reversed_on'])
+     OR (to_jsonb(NEW)-ARRAY['reversed_by_change_id','reversed_on','seller_disposition','buyer_addition','remaining_basis'])
+        IS DISTINCT FROM (to_jsonb(OLD)-ARRAY['reversed_by_change_id','reversed_on','seller_disposition','buyer_addition','remaining_basis'])
      OR NOT EXISTS(
        SELECT 1 FROM financial_changes f
         WHERE f.org_id=OLD.org_id AND f.id=NEW.reversed_by_change_id
