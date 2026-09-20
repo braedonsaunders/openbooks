@@ -964,7 +964,9 @@
     "allocations_run": "Prévisualiser, comptabiliser, contre-passer et réexécuter les répartitions",
     "payroll_manage": "Configurer la paie et les profils des employés",
     "payroll_read": "Consulter les cycles et les bulletins de paie",
-    "payroll_run": "Créer, calculer et valider les cycles de paie"
+    "payroll_run": "Créer, calculer et valider les cycles de paie",
+    "hrm_process_read": "Voir les listes de processus",
+    "hrm_process_manage": "Ouvrir, terminer et annuler les listes de processus"
   },
   "ai": {
     "metaTitle": "Fournisseurs d'IA",
@@ -2623,7 +2625,17 @@
       "dateBasis": "Base de dates",
       "unitsTotal": "Unités totales",
       "network": "Réseau",
-      "lastFour": "Quatre derniers"
+      "lastFour": "Quatre derniers",
+      "templateId": "Modèle",
+      "position": "Position",
+      "title": "Titre",
+      "ownerKind": "Responsable",
+      "ownerPartyId": "Partie responsable",
+      "dueOffsetDays": "Décalage d'échéance (jours)",
+      "required": "Requis",
+      "evidenceKind": "Preuve",
+      "appliesEmployerSubsidiaryId": "Filiale concernée",
+      "appliesDepartmentId": "Service concerné"
     },
     "fieldHelp": {
       "gapless": "Sans rupture signifie que chaque numéro de la séquence doit être justifié, sans aucun numéro sauté. Activez cette option uniquement si vos obligations légales ou d’audit imposent une numérotation ininterrompue.",
@@ -2675,7 +2687,9 @@
       "protectionBase": "Ce contre quoi le plafond de la retenue est mesuré. La paie nette est la paie après toute autre retenue. Les gains disponibles ne comptent que les gains et retenues marqués dans l’assiette ci-dessous : c’est ainsi qu’une allocation ou un avantage reste hors de la part.",
       "protectionMaxPercent": "Le maximum que cette retenue peut prélever de cette assiette — 20 % pour une saisie-arrêt ordinaire en Ontario, 50 % pour une pension alimentaire, 25 % sous le CCPA américain. Ce qui ne tient pas est signalé comme manque à gagner sur le cycle de paie.",
       "protectionPriority": "Quel ordre l’emporte quand plusieurs retenues protégées se disputent la même paie. Au plus petit d’abord ; les ordonnances alimentaires priment normalement sur les créanciers ordinaires.",
-      "stateCode": "Requis pour, et seulement pour, les types de programme inscrits par État ou région (comme les comptes d’assurance-chômage d’État) — validé contre la déclaration de l’ensemble réglementaire du pays quand le compte est enregistré."
+      "stateCode": "Requis pour, et seulement pour, les types de programme inscrits par État ou région (comme les comptes d’assurance-chômage d’État) — validé contre la déclaration de l’ensemble réglementaire du pays quand le compte est enregistré.",
+      "hrmProcessAppliesSubsidiary": "Vide : le modèle s'applique à toutes les filiales.",
+      "hrmProcessAppliesDepartment": "Vide : le modèle s'applique à tous les services."
     },
     "options": {
       "timeClassification": {
@@ -3012,6 +3026,22 @@
         "qst": "TVQ",
         "salesUse": "Taxe de vente et d’utilisation",
         "vat": "TVA"
+      },
+      "hrmProcessKind": {
+        "onboarding": "Intégration",
+        "offboarding": "Départ",
+        "transfer": "Transfert"
+      },
+      "hrmStepOwner": {
+        "manager": "Manager",
+        "hr": "RH",
+        "employee": "Employé",
+        "namedParty": "Personne désignée"
+      },
+      "hrmStepEvidence": {
+        "none": "Aucune",
+        "acknowledgement": "Accusé de réception",
+        "attachment": "Pièce jointe"
       }
     },
     "laborCosting": {

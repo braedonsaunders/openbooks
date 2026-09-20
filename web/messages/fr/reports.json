@@ -646,6 +646,10 @@
       "hrm_positions": {
         "label": "Postes",
         "description": "Une ligne par poste établi à la date du rapport : code, intitulé, statut, service, employeur et ETP prévus, financés et pourvus. Requiert la permission des postes RH."
+      },
+      "hrm_processes": {
+        "label": "Listes de processus",
+        "description": "Une ligne par étape de liste de processus — type et statut du processus, employé, modèle, responsable de l’étape, échéance, type de preuve, et statut de l’étape avec sa preuve. Requiert la permission de processus RH."
       }
     },
     "columns": {
@@ -1224,6 +1228,23 @@
         "filled_fte": "ETP pourvus",
         "vacant_fte": "ETP vacants",
         "position_id": "Poste (id)"
+      },
+      "hrm_processes": {
+        "process_kind": "Type de processus",
+        "process_status": "Statut du processus",
+        "effective_date": "Date d’effet",
+        "employee": "Employé",
+        "employer": "Employeur",
+        "template": "Modèle",
+        "step": "Étape",
+        "step_status": "Statut de l’étape",
+        "owner": "Responsable",
+        "due_on": "Échéance",
+        "evidence": "Preuve",
+        "done_at": "Terminé le",
+        "skip_reason": "Motif",
+        "process_id": "Processus (id)",
+        "employment_id": "Emploi (id)"
       }
     },
     "enumValues": {
