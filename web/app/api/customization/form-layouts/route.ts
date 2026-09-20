@@ -10,6 +10,7 @@ import {
   type FormLayoutConfig,
 } from "@openbooks/customization";
 import { refuseDisabledRecordType } from "../../../../lib/customization/gates";
+import { refuseInactiveDefault } from "../../../../lib/customization/active-default";
 
 export const runtime = "nodejs";
 
@@ -75,6 +76,13 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
+  const isDefault = !!body.isDefault;
+  const isActive = body.isActive ?? true;
+  // resolveFormLayout only sees is_active rows before picking isDefault.
+  // Creating an inactive default clears the prior default and then hides
+  // the new one, so forms fall through to the system layout.
+  const inactiveDefault = refuseInactiveDefault({ kind: "form", isDefault, isActive });
+  if (!inactiveDefault.ok) return NextResponse.json({ error: inactiveDefault.error }, { status: 400 });
   const parsed = parseFormLayout(body.layout ?? { schemaVersion: 1, recordType: body.recordType });
   if (!parsed.success)
     return NextResponse.json({ error: "invalid layout", issues: parsed.issues }, { status: 400 });
@@ -86,7 +94,7 @@ export async function POST(req: Request) {
     // db.execute goes through the pool (each statement may land on a different
     // connection), so BEGIN/COMMIT must use db.transaction to actually be atomic.
     const row = await db.transaction(async (tx) => {
-      if (body.isDefault)
+      if (isDefault)
         await tx.execute(sql`
           update form_layouts set is_default = false, updated_at = now()
            where org_id = ${user.orgId} and record_type = ${body.recordType} and is_default`);
@@ -94,7 +102,7 @@ export async function POST(req: Request) {
         insert into form_layouts (org_id, record_type, name, description, is_default, is_active,
                                   allowed_roles, layout, created_by, updated_by)
         values (${user.orgId}, ${body.recordType}, ${body.name!.trim()}, ${body.description ?? null},
-                ${!!body.isDefault}, ${body.isActive ?? true},
+                ${isDefault}, ${isActive},
                 ${body.allowedRoles ? JSON.stringify(body.allowedRoles) : null}, ${layout}, ${user.id}, ${user.id})
         returning id, name
       `));

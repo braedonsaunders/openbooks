@@ -7,6 +7,7 @@ import { getAuthz, can } from "../../../../../lib/authz";
 import { parseListView, stripSeededDefaultMark } from "@openbooks/customization";
 import { refuseDisabledRecordType } from "../../../../../lib/customization/gates";
 import { isUuid } from "../../../../../lib/list-params";
+import { nextDefaultFlags, refuseInactiveDefault } from "../../../../../lib/customization/active-default";
 
 export const runtime = "nodejs";
 
@@ -114,6 +115,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     sets.push(sql`is_active = ${body.isActive}`);
     changes.isActive = body.isActive;
   }
+  // resolveListView selects only is_active rows before picking isDefault.
+  // Next-state default+inactive is a save no resolve can observe.
+  const nextFlags = nextDefaultFlags(existing, { isDefault: body.isDefault, isActive: body.isActive });
+  const inactiveDefault = refuseInactiveDefault({ kind: "view", ...nextFlags });
+  if (!inactiveDefault.ok) return NextResponse.json({ error: inactiveDefault.error }, { status: 400 });
   if (sets.length === 0) return NextResponse.json({ ok: true, changed: false });
 
   try {
