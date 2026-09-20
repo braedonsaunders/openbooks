@@ -25,58 +25,8 @@
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
-    "path": "web/app/(app)/admin/apps/AppDefinitions.tsx",
-    "fn": "AppDefinitions",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/admin/apps/AppHistory.tsx",
-    "fn": "AppHistory",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/admin/apps/AppPackageEditor.tsx",
-    "fn": "save",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/admin/apps/ExtensionDrawer.tsx",
-    "fn": "request",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/admin/apps/ExtensionDrawer.tsx",
-    "fn": "edit",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/admin/apps/ExtensionReview.tsx",
-    "fn": "activate",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/admin/apps/ExtensionReview.tsx",
-    "fn": "previewPage",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
     "path": "web/app/(app)/admin/custom-fields/FieldDrawer.tsx",
     "fn": "save",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/admin/customization/FormDesigner.tsx",
-    "fn": "remove",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/admin/customization/ListViewDesigner.tsx",
-    "fn": "save",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/admin/customization/ListViewDesigner.tsx",
-    "fn": "remove",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
@@ -197,11 +147,6 @@
   {
     "path": "web/app/(app)/ap/capture/sections.tsx",
     "fn": "act",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/apps/[key]/NativeActionForm.tsx",
-    "fn": "submit",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
@@ -572,11 +517,6 @@
   {
     "path": "web/app/(app)/records/types/NewTypeButton.tsx",
     "fn": "create",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/records/types/TypeBuilderDrawer.tsx",
-    "fn": "TypeBuilderDrawer",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
