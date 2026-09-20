@@ -90,7 +90,11 @@ test('field-ticket work tabs share the transaction drawer tab state', () => {
   assert.match(fieldTicket, /activeTab=\{activeSection\}/)
   assert.match(fieldTicket, /onActiveTabChange=\{setActiveSection\}/)
   assert.match(transactionDrawer, /controlledActiveTab \?\? localActiveTab/)
-  assert.match(transactionDrawer, /onActiveTabChange\?\.\(tab\.key\)/)
+  // The contract: the strip's selection reaches the parent callback. The
+  // strip itself is exercised for real in components/drawer-tab-strip.test.tsx
+  // (a click notifies onSelect with the tab key); here the drawer must
+  // forward whatever the strip selected, under any local variable name.
+  assert.match(transactionDrawer, /onSelect=\{\((\w+)\) => \{[\s\S]*?onActiveTabChange\?\.\(\1\)/)
 })
 
 test('cost-budget presentation follows capped project-type semantics', () => {
