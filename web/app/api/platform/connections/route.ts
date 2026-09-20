@@ -16,6 +16,44 @@ import { guardPermission } from "../../../../lib/authz";
 
 export const runtime = "nodejs";
 
+const CONNECTOR_URL_REFUSED =
+  "Connector URL must be a public http:// or https:// address. Loopback, link-local, metadata, and non-http(s) URLs are refused.";
+
+/** Tenant-supplied connector URL/host. Same refusal set as bank-feed metadata hosts. */
+function connectorUrlRefusal(value: unknown): string | null {
+  if (value == null) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return CONNECTOR_URL_REFUSED;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return CONNECTOR_URL_REFUSED;
+  }
+  const host = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  const ipv4 = host.startsWith("::ffff:") ? host.slice(7) : host;
+  if (
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host === "::1" ||
+    host.startsWith("fe80:") ||
+    /^127(?:\.\d{1,3}){3}$/.test(ipv4) ||
+    /^169\.254(?:\.\d{1,3}){2}$/.test(ipv4)
+  ) {
+    return CONNECTOR_URL_REFUSED;
+  }
+  return null;
+}
+
+function connectionConfigUrlRefusal(config: unknown): string | null {
+  if (!config || typeof config !== "object" || Array.isArray(config)) return null;
+  const row = config as Record<string, unknown>;
+  return connectorUrlRefusal(row.url) ?? connectorUrlRefusal(row.host);
+}
+
 /** Strip the sealed credential blob before anything leaves the server. */
 function toClient(c: Awaited<ReturnType<typeof listConnections>>[number]) {
   return {
@@ -138,6 +176,13 @@ export async function POST(req: Request) {
   const displayName =
     String(body.displayName ?? "").trim() || manifest.displayName;
   const config = body.config ?? {};
+  const urlError = connectionConfigUrlRefusal(config);
+  if (urlError) {
+    return NextResponse.json(
+      { error: urlError, errorCode: "CONNECTOR_URL_REFUSED" },
+      { status: 400 },
+    );
+  }
 
   const configError = validateSourceConfig(manifest, config, { today: await businessToday(orgId) });
   if (configError)
