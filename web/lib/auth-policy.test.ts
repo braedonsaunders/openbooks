@@ -17,6 +17,16 @@ test("session cookies are always secure in production", () => {
   assert.equal(useSecureCookies({ NODE_ENV: "development", OPENBOOKS_COOKIE_SECURE: "true" }), true);
 });
 
+test("session cookies are Secure unless a non-production environment is named", () => {
+  assert.equal(useSecureCookies({}), true);
+  assert.equal(useSecureCookies({ OPENBOOKS_COOKIE_SECURE: "0" }), true);
+  assert.equal(useSecureCookies({ NODE_ENV: "", OPENBOOKS_COOKIE_SECURE: "0" }), true);
+  assert.equal(useSecureCookies({ NODE_ENV: "prodction" }), true);
+  assert.equal(useSecureCookies({ NODE_ENV: "Production" }), true);
+  assert.equal(useSecureCookies({ NODE_ENV: "test" }), false);
+  assert.equal(useSecureCookies({ NODE_ENV: "test", OPENBOOKS_COOKIE_SECURE: "true" }), true);
+});
+
 test("sliding-window retry time is based on the oldest real attempt", () => {
   const now = new Date("2026-08-04T12:15:00Z");
   assert.equal(
