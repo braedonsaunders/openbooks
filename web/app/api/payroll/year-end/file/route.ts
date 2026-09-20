@@ -6,6 +6,7 @@ import { PayrollError } from '@openbooks/engine/src/payroll-run.ts'
 import { orgYearEndFilings } from '@openbooks/engine/src/payroll-yearend.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { payrollYearRefusal } from '../../../../../lib/payroll-year'
+import { isUuid } from '../../../../../lib/list-params'
 import type { Authz } from '../../../../../lib/authz'
 import { guardPayrollRoeEmployees, guardPayrollFilingData } from '../../subsidiary-scope'
 
@@ -68,6 +69,10 @@ async function serveFile(gate: Authz, input: FileInput) {
       return NextResponse.json({ error: 'invalid employee selection' }, { status: 422 })
     }
     const ids = entries.map((entry) => entry.split(':', 1)[0]!)
+    // Shape is settled here, for every caller, before any scope guard runs.
+    if (ids.some((id) => !isUuid(id))) {
+      return NextResponse.json({ error: 'invalid employee selection' }, { status: 422 })
+    }
     const denied = await guardPayrollRoeEmployees(gate, ids)
     if (denied) return denied
   }
