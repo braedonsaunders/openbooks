@@ -70,20 +70,19 @@ test("the loader's scoped display queries stay org-predicated and scope-filtered
   assert.match(loader, /loadQueueLabels\(/, "name resolution reuses the queue's shared resolver, never a second join");
 });
 
-test("cockpit hero is a table block; the shared headcount widget now serves departments", () => {
-  // The cockpit hero moved onto the shared `table` block. The
-  // hrm-headcount-table widget stays registered because the departments
-  // board (another shard's page) still renders through it — deleting it
-  // here would break a live page, so its shard removes it when it converts.
+test("cockpit hero is a table block; the bespoke headcount table is gone with the departments page", () => {
+  // The cockpit hero renders through the shared `table` block over
+  // loader-resolved rows; the hand-rolled HrmHeadcountTable and its widget
+  // left with the Departments page (departments live in Company setup).
   assert.match(view, /table\(\{/, "cockpit hero composes a table block");
   assert.match(view, /f\('groups'\)/, "hero binds the loader-resolved headcount rows");
+  assert.match(view, /empty: \{ title: f\('groupsEmpty'\) \}/, "zero headcount renders the resolved empty state");
   assert.match(loader, /departmentLabel/, "department display resolves in the loader, never in render");
   assert.match(loader, /totalValue/, "the totals row resolves formatted strings in the loader");
-  assert.match(sections, /groups\.length === 0/, "zero headcount renders the resolved empty state");
-  assert.match(sections, /unassigned/, "assignments without a department stay explicitly unattributed");
-  assert.match(widgets, /'hrm-headcount-table'/, "widget renders the shared section departments still use");
-  assert.match(contracts, /'hrm-headcount-table': \{ props: \[/, "widget contract pins the prop surface");
-  assert.match(names, /'hrm-headcount-table'/, "widget name is registered");
+  assert.match(loader, /unassigned/, "assignments without a department stay explicitly unattributed");
+  assert.doesNotMatch(widgets, /'hrm-headcount-table'/, "no bespoke headcount widget remains");
+  assert.doesNotMatch(contracts, /'hrm-headcount-table'/, "no contract for a widget nobody renders");
+  assert.ok(!sections.includes('<table'), "no hand-rolled table remains in the cockpit sections");
 });
 
 test("the cockpit keeps its hero and adds the workspace panels", () => {
