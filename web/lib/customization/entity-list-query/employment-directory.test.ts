@@ -21,7 +21,7 @@ registerHooks({
   },
 });
 
-const { db } = await import("@openbooks/engine/src/db.ts");
+const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const {
   employeeBaseJoins,
   employeeBuiltInExpr,
