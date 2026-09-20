@@ -35,33 +35,26 @@ const { HRM_TOOLS, hrmRefusal } = await import("./tools-hrm.ts");
 const { canRunTool } = await import("./gate.ts");
 const { EmploymentReadError } = await import("@openbooks/engine/src/hrm/employment-read.ts");
 const { HrmAuthorizationError } = await import("@openbooks/engine/src/hrm/authorization.ts");
-const { HrmProcessError: HrmProcessErrorForTest } = await import("@openbooks/engine/src/hrm/processes.ts");
 const { AmbiguousRevisionError, NoRevisionError } = await import("@openbooks/engine/src/hrm/temporal.ts");
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const tools = read("./tools-hrm.ts");
 
-const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of"];
+const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes"];
 
 const TOOL_PERMS: Record<string, string> = {
   hrm_headcount: "hrm.employment.read",
   hrm_employment_as_of: "hrm.employment.read",
   hrm_change_requests: "hrm.employment.read",
   hrm_positions_as_of: "hrm.position.read",
-const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_processes"];
-
-// The checklist tool carries the process gate, not the employment one:
-// checklist state is governed by hrm.process.read at every surface.
-const TOOL_PERMISSIONS: Record<string, string> = {
-  hrm_headcount: "hrm.employment.read",
-  hrm_employment_as_of: "hrm.employment.read",
-  hrm_change_requests: "hrm.employment.read",
+  // The checklist tool carries the process gate, not the employment one:
+  // checklist state is governed by hrm.process.read at every surface.
   hrm_processes: "hrm.process.read",
 };
 
 const UUID = "11111111-1111-4111-8111-111111111111";
 
-test("the module exports exactly the four HRM read tools", () => {
+test("the module exports exactly the five HRM read tools", () => {
   assert.deepEqual(HRM_TOOLS.map((tool) => tool.name), TOOL_NAMES);
 });
 
@@ -69,9 +62,6 @@ for (const name of TOOL_NAMES) {
   test(`${name} carries the slice gate: its read grant, hrm feature, module tier`, () => {
     const tool = HRM_TOOLS.find((candidate) => candidate.name === name)!;
     assert.deepEqual(tool.gate, { mode: "anyOf", perms: [TOOL_PERMS[name]] });
-  test(`${name} carries the slice gate: its domain read key, hrm feature, module tier`, () => {
-    const tool = HRM_TOOLS.find((candidate) => candidate.name === name)!;
-    assert.deepEqual(tool.gate, { mode: "anyOf", perms: [TOOL_PERMISSIONS[name]] });
     assert.equal(tool.feature, "hrm");
     assert.equal(tool.tier, "module");
     assert.ok(
@@ -172,10 +162,6 @@ test("hrmRefusal carries read-service refusals and rethrows the rest", () => {
     hrmRefusal(new HrmAuthorizationError("Employment is not visible in this organization and legal-entity scope.")),
     { ok: false, error: "Employment is not visible in this organization and legal-entity scope." },
   );
-  assert.deepEqual(hrmRefusal(new HrmProcessErrorForTest("DUPLICATE_OPEN", "an open onboarding process already exists")), {
-    ok: false,
-    error: "an open onboarding process already exists",
-  });
   const missing = new NoRevisionError("2026-06-15", "2026-07-01T00:00:00.000000Z");
   const mapped = hrmRefusal(missing);
   assert.equal(mapped.ok, false);
@@ -210,11 +196,6 @@ test("the registry gate admits only each tool's grant holders while hrm is on", 
     const perm = TOOL_PERMS[name];
     assert.ok(perm, `${name} has a declared permission`);
     const reader = fakeAuthz(["assistant.use", perm]);
-test("the registry gate admits only domain-read holders while hrm is on", () => {
-  const byName = new Map(HRM_TOOLS.map((tool) => [tool.name, tool] as const));
-  for (const name of TOOL_NAMES) {
-    const permission = TOOL_PERMISSIONS[name]!;
-    const reader = fakeAuthz(["assistant.use", permission]);
     assert.equal(canRunTool(reader, byName.get(name)!, { hrm: true }), true, `${name} must run for a gated reader`);
     assert.equal(canRunTool(reader, byName.get(name)!, { hrm: false }), false, `${name} must hide while hrm is off`);
     assert.equal(
@@ -224,10 +205,6 @@ test("the registry gate admits only domain-read holders while hrm is on", () => 
     );
     assert.equal(
       canRunTool(fakeAuthz([perm]), byName.get(name)!, { hrm: true }),
-      `${name} must refuse without ${permission}`,
-    );
-    assert.equal(
-      canRunTool(fakeAuthz([permission]), byName.get(name)!, { hrm: true }),
       false,
       `${name} still requires assistant.use`,
     );

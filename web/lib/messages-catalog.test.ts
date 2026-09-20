@@ -2993,8 +2993,7 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   ])
   const source = flattenCatalog('en')
   const wanted = [...source.keys()].filter((key) => key.startsWith('admin.'))
-  assert.equal(wanted.length, 3394, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
-  assert.equal(wanted.length, 3416, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  assert.equal(wanted.length, 3418, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3331,10 +3330,8 @@ test('admin copy ships translated in de and ja (i2)', () => {
     'ja:admin.setup.paymentProviders.webhookUrl',
     'ja:admin.setup.wizard.company.namePlaceholder',
   ])
-  const ADMIN_I2_SOURCE_COUNT = 3394
-  const ADMIN_I2_SOURCE_HASH = '20f04046f2524eacd02ff2fb2c89be076030c727ce1fbb2c3d7d34ea71d10e52'
-  const ADMIN_I2_SOURCE_COUNT = 3416
-  const ADMIN_I2_SOURCE_HASH = '1e0e0feb2afc04456f25e6fc4758e45551746e64a61fe1343303389b84779b57'
+  const ADMIN_I2_SOURCE_COUNT = 3418
+  const ADMIN_I2_SOURCE_HASH = '967677a1aaa665c32afb8e616d2c72dbe90fa6c867ddc9aab86fd3040bc0e64d'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))
@@ -5096,7 +5093,7 @@ const I14_IDENTICAL_BY_FACT = new Set([
 const I14_FILE_COUNTS: Record<string, number> = {
   "items": 161,
   "inventory": 104,
-  "reports": 1260,
+  "reports": 1277,
   "sync": 172,
   "login": 33,
   "accounts": 82,

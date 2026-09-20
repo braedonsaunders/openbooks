@@ -48,6 +48,8 @@ export const HRM_POSITION_PERMISSIONS = [
 ] as const;
 
 export type HrmPositionPermission = (typeof HRM_POSITION_PERMISSIONS)[number];
+
+/**
  * Process checklist duties (0193): read sees processes and steps, manage
  * opens, completes, and cancels them. Granted to the same built-in roles as
  * the employment read/manage keys (admin only, via the catalogue spread —

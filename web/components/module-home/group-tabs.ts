@@ -170,12 +170,10 @@ export async function customerGroupTabs(
 /** The permission each HRM-strip destination enforces. The cockpit tab needs
  * nothing beyond the page's own hrm.employment.read gate; the queue and
  * departments tabs sit behind the same grant, the reports tab behind the
- * reports grant the builder uses, and the positions tab behind the
- * headcount-plan read grant. A tab present in the list but absent here would
- * render a destination the viewer cannot open. */
-/** The permission behind the HRM strip's native-list tab. The cockpit tab
- * needs nothing beyond the page's own hrm.employment.read gate; the
- * processes tab carries its own hrm.process.read gate. */
+ * reports grant the builder uses, the positions tab behind the headcount-plan
+ * read grant, and the processes tab behind its own hrm.process.read gate. A
+ * tab present in the list but absent here would render a destination the
+ * viewer cannot open. */
 const HRM_TAB_PERMISSION: Record<string, string> = {
   '/hrm/processes': 'hrm.process.read',
   '/entities/employees': 'parties.read',

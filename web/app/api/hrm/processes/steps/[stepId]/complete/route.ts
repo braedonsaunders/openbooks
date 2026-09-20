@@ -1,9 +1,9 @@
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { completeProcessStep } from "@openbooks/engine/src/hrm/processes.ts";
-import { guardPermission } from "../../../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../../../lib/features";
-import { isUuid } from "../../../../../../lib/list-params";
+import { guardPermission } from "../../../../../../../lib/authz";
+import { isFeatureEnabled } from "../../../../../../../lib/features";
+import { isUuid } from "../../../../../../../lib/list-params";
 import { processErrorResponse } from "../../../_lib";
 import { completeStepBody } from "../../../bodies";
 
