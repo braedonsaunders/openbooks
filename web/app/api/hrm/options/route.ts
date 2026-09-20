@@ -22,38 +22,29 @@ export const runtime = "nodejs";
  * for the line-manager picker, `source=locations` names active native
  * locations, `source=positions` names the funded establishment for the
  * position-assignment picker (behind hrm.position.read, never the
- * employment grant). The drawer submits ids, never labels; unknown or
- * out-of-scope ids stay absent rather than leaking existence. GET carries
- * no body, so no JSON boundary parser runs here.
- * Authoring pickers for employment change requests and leave requests. GET
- * lists bounded, org- and subsidiary-scoped option pages behind the HRM
- * feature switch and the read grant (the same double gate as the record
- * route): `source=employments` names people holding an employment for the
- * line-manager picker, `source=locations` names active native locations,
- * `source=leave-types` names active leave types for the leave filing
- * drawer (filers hold hrm.leave.request, so that source admits the request
- * grant where the employment sources require the read grant). The drawer
- * submits ids, never labels; unknown or out-of-scope ids stay absent rather
- * than leaking existence. GET carries no body, so no JSON boundary parser
- * runs here.
+ * employment grant), and `source=leave-types` names active leave types for
+ * the leave filing drawer (filers hold hrm.leave.request, so that source
+ * admits the request grant where the employment sources require the read
+ * grant). The drawer submits ids, never labels; unknown or out-of-scope ids
+ * stay absent rather than leaking existence. GET carries no body, so no
+ * JSON boundary parser runs here.
  */
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const source = url.searchParams.get("source");
-  if (source !== "employments" && source !== "locations" && source !== "positions") {
-    return NextResponse.json({ error: "source must be one of employments, locations, positions" }, { status: 400 });
+  if (source !== "employments" && source !== "locations" && source !== "positions" && source !== "leave-types") {
+    return NextResponse.json(
+      { error: "source must be one of employments, locations, positions, leave-types" },
+      { status: 400 },
+    );
   }
-  const gate = await guardFeaturePermission(
-    source === "positions" ? "hrm.position.read" : "hrm.employment.read",
-    "hrm",
-  );
-  if (source !== "employments" && source !== "locations" && source !== "leave-types") {
-    return NextResponse.json({ error: "source must be one of employments, locations, leave-types" }, { status: 400 });
-  }
+  // One gate per source: the establishment behind its own read grant, leave
+  // types behind the request grant (the filer's), everything else behind
+  // the employment read grant.
   const gate =
     source === "leave-types"
       ? await guardLeaveOptions()
-      : await guardFeaturePermission("hrm.employment.read", "hrm");
+      : await guardFeaturePermission(source === "positions" ? "hrm.position.read" : "hrm.employment.read", "hrm");
   if (gate instanceof NextResponse) return gate;
   const rawLimit = url.searchParams.get("limit");
   if (rawLimit !== null && !/^\d+$/.test(rawLimit)) {

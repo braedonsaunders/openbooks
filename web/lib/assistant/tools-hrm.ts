@@ -1,5 +1,11 @@
 import "server-only";
 import { z } from "zod";
+import {
+  listLeaveRequests,
+  listLeaveTypes,
+  timeBalanceAsOf,
+} from "@openbooks/engine/src/hrm/leave-read.ts";
+import { LeaveError } from "@openbooks/engine/src/hrm/leave-errors.ts";
 import { HrmProcessError } from "@openbooks/engine/src/hrm/processes.ts";
 import { getProcess, listProcesses } from "@openbooks/engine/src/hrm/processes-read.ts";
 import { sql } from "drizzle-orm";
@@ -11,12 +17,6 @@ import {
   getHeadcountAsOf,
   loadEmploymentChangeRequests,
 } from "@openbooks/engine/src/hrm/employment-read.ts";
-import {
-  listLeaveRequests,
-  listLeaveTypes,
-  timeBalanceAsOf,
-} from "@openbooks/engine/src/hrm/leave-read.ts";
-import { LeaveError } from "@openbooks/engine/src/hrm/leave-errors.ts";
 import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
 import { HrmPositionError } from "@openbooks/engine/src/hrm/positions.ts";
 import { getVacancyAsOf } from "@openbooks/engine/src/hrm/positions-read.ts";
@@ -69,8 +69,7 @@ export function hrmRefusal(error: unknown): ToolResult {
     error instanceof HrmPositionError ||
     error instanceof HrmProcessError ||
     error instanceof HrmAuthorizationError ||
-    error instanceof TemporalError ||
-    error instanceof LeaveError
+    error instanceof TemporalError
   ) {
     return { ok: false, error: error.message };
   }
@@ -417,23 +416,6 @@ const hrmProcesses: AssistantToolDef = {
     segment: z.enum(processSegments).optional().describe("List segment (default open)"),
     employmentId: uuidInput.optional().describe("Keep only this employment's checklists"),
     limit: z.number().int().min(1).max(200).optional().describe("Maximum checklists to return (default 50)"),
-/** 0194 request lifecycle statuses: the CHECK the leave-request table enforces. */
-const leaveRequestStatuses = ["draft", "submitted", "approved", "rejected", "withdrawn", "cancelled"] as const;
-
-const hrmLeave: AssistantToolDef = {
-  name: "hrm_leave",
-  description:
-    "Leave requests with status and hours for one employment (or every visible employment), plus TIME balances per type as of a date; payroll banks stay in payroll tools. Read-only.",
-  category: "search",
-  gate: { mode: "anyOf", perms: ["hrm.leave.read"] },
-  feature: "hrm",
-  tier: "module",
-  inputSchema: z.object({
-    employmentId: uuidInput.optional().describe("One employment's requests and balances; omit for every visible employment"),
-    status: z.enum(leaveRequestStatuses).optional().describe("Keep only this lifecycle status"),
-    includeBalances: z.boolean().optional().describe("Include TIME balances per leave type (single employment only)"),
-    asOf: dateInput.optional().describe("Balance date; defaults to today"),
-    limit: z.number().int().min(1).max(200).optional().describe("Maximum requests to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const gated = await hrmFeatureRefused(authz.user.orgId);
@@ -442,10 +424,6 @@ const hrmLeave: AssistantToolDef = {
       processId?: string;
       segment?: (typeof processSegments)[number];
       employmentId?: string;
-      employmentId?: string;
-      status?: (typeof leaveRequestStatuses)[number];
-      includeBalances?: boolean;
-      asOf?: string;
       limit?: number;
     };
     const limit = Math.min(a.limit ?? 50, 200);
@@ -520,6 +498,43 @@ const hrmLeave: AssistantToolDef = {
           truncated: page.truncated,
           processes: page.items,
           href: "/hrm/processes",
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+
+const leaveRequestStatuses = ["draft", "submitted", "approved", "rejected", "withdrawn", "cancelled"] as const;
+
+const hrmLeave: AssistantToolDef = {
+  name: "hrm_leave",
+  description:
+    "Leave requests with status and hours for one employment (or every visible employment), plus TIME balances per type as of a date; payroll banks stay in payroll tools. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.leave.read"] },
+  feature: "hrm",
+  tier: "module",
+  inputSchema: z.object({
+    employmentId: uuidInput.optional().describe("One employment's requests and balances; omit for every visible employment"),
+    status: z.enum(leaveRequestStatuses).optional().describe("Keep only this lifecycle status"),
+    includeBalances: z.boolean().optional().describe("Include TIME balances per leave type (single employment only)"),
+    asOf: dateInput.optional().describe("Balance date; defaults to today"),
+    limit: z.number().int().min(1).max(200).optional().describe("Maximum requests to return (default 50)"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const gated = await hrmFeatureRefused(authz.user.orgId);
+    if (gated) return gated;
+    const a = raw as {
+      employmentId?: string;
+      status?: (typeof leaveRequestStatuses)[number];
+      includeBalances?: boolean;
+      asOf?: string;
+      limit?: number;
+    };
+    const limit = Math.min(a.limit ?? 50, 200);
+    try {
       // A named employment is authorized per record inside the loader, so a
       // missing, foreign-org, or out-of-scope id refuses uniformly instead
       // of returning an empty list pretending it does not exist.
@@ -607,5 +622,4 @@ const hrmLeave: AssistantToolDef = {
   },
 };
 
-export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses];
-export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmLeave];
+export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave];

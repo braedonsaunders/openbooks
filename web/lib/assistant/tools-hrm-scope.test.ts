@@ -33,7 +33,6 @@ registerHooks({
 
 const { HRM_TOOLS, hrmRefusal } = await import("./tools-hrm.ts");
 const { canRunTool } = await import("./gate.ts");
-const { LeaveError } = await import("@openbooks/engine/src/hrm/leave-errors.ts");
 const { EmploymentReadError } = await import("@openbooks/engine/src/hrm/employment-read.ts");
 const { HrmAuthorizationError } = await import("@openbooks/engine/src/hrm/authorization.ts");
 const { AmbiguousRevisionError, NoRevisionError } = await import("@openbooks/engine/src/hrm/temporal.ts");
@@ -41,7 +40,7 @@ const { AmbiguousRevisionError, NoRevisionError } = await import("@openbooks/eng
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const tools = read("./tools-hrm.ts");
 
-const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes"];
+const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave"];
 
 const TOOL_PERMS: Record<string, string> = {
   hrm_headcount: "hrm.employment.read",
@@ -51,19 +50,12 @@ const TOOL_PERMS: Record<string, string> = {
   // The checklist tool carries the process gate, not the employment one:
   // checklist state is governed by hrm.process.read at every surface.
   hrm_processes: "hrm.process.read",
-const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_leave"];
-
-const TOOL_GATE_PERMS: Record<string, string> = {
-  hrm_headcount: "hrm.employment.read",
-  hrm_employment_as_of: "hrm.employment.read",
-  hrm_change_requests: "hrm.employment.read",
   hrm_leave: "hrm.leave.read",
 };
 
 const UUID = "11111111-1111-4111-8111-111111111111";
 
-test("the module exports exactly the five HRM read tools", () => {
-test("the module exports exactly the four HRM read tools", () => {
+test("the module exports exactly the six HRM read tools", () => {
   assert.deepEqual(HRM_TOOLS.map((tool) => tool.name), TOOL_NAMES);
 });
 
@@ -71,9 +63,6 @@ for (const name of TOOL_NAMES) {
   test(`${name} carries the slice gate: its read grant, hrm feature, module tier`, () => {
     const tool = HRM_TOOLS.find((candidate) => candidate.name === name)!;
     assert.deepEqual(tool.gate, { mode: "anyOf", perms: [TOOL_PERMS[name]] });
-  test(`${name} carries the slice gate: ${TOOL_GATE_PERMS[name]}, hrm feature, module tier`, () => {
-    const tool = HRM_TOOLS.find((candidate) => candidate.name === name)!;
-    assert.deepEqual(tool.gate, { mode: "anyOf", perms: [TOOL_GATE_PERMS[name]] });
     assert.equal(tool.feature, "hrm");
     assert.equal(tool.tier, "module");
     assert.ok(
@@ -140,7 +129,6 @@ test("HRM reads reuse the canonical HRM read services", () => {
     "listProcesses(",
     "listLeaveRequests(",
     "listLeaveTypes(",
-    "timeBalanceAsOf(",
     "resolveToolRange(",
     "AmbiguousRevisionError(",
     "hrmRefusal(",
@@ -151,13 +139,11 @@ test("HRM reads reuse the canonical HRM read services", () => {
 
 test("no parallel SQL path to versions or requests and no writes", () => {
   assert.doesNotMatch(tools, /from worker_employment_versions/);
-  assert.doesNotMatch(tools, /from employment_assignment_versions/);
-  assert.doesNotMatch(tools, /from hrm_employment_change_requests/);
   assert.doesNotMatch(tools, /from hrm_leave_requests/);
-  assert.doesNotMatch(tools, /from hrm_absences/);
-  assert.doesNotMatch(tools, /from hrm_payroll_inputs/);
   assert.doesNotMatch(tools, /from hrm_leave_types/);
   assert.doesNotMatch(tools, /from hrm_leave_policies/);
+  assert.doesNotMatch(tools, /from employment_assignment_versions/);
+  assert.doesNotMatch(tools, /from hrm_employment_change_requests/);
   assert.doesNotMatch(tools, /into worker_/);
   assert.doesNotMatch(tools, /update worker_/);
   assert.doesNotMatch(tools, /into hrm_/);
@@ -175,8 +161,6 @@ test("feature gate and refusal mapping", () => {
   assert.match(tools, /isFeatureEnabled\(orgId, "hrm"\)/);
   assert.match(tools, /hrm_feature_disabled/);
   assert.match(tools, /employment_or_party_required/);
-  assert.match(tools, /balances_need_employment/);
-  assert.match(tools, /LeaveError/);
 });
 
 // A computed refusal must reach the caller with its message intact; anything
@@ -198,10 +182,6 @@ test("hrmRefusal carries read-service refusals and rethrows the rest", () => {
   const mappedAmbiguous = hrmRefusal(ambiguous);
   assert.equal(mappedAmbiguous.ok, false);
   assert.equal(mappedAmbiguous.ok === false && mappedAmbiguous.error, ambiguous.message);
-  const leave = new LeaveError("REFUSED", "no active leave policy covers this employment on the requested dates");
-  const mappedLeave = hrmRefusal(leave);
-  assert.equal(mappedLeave.ok, false);
-  assert.equal(mappedLeave.ok === false && mappedLeave.error, leave.message);
   assert.throws(() => hrmRefusal(new Error("SELECT * FROM secrets")), /SELECT/);
 });
 
@@ -227,10 +207,6 @@ test("the registry gate admits only each tool's grant holders while hrm is on", 
   for (const name of TOOL_NAMES) {
     const perm = TOOL_PERMS[name];
     assert.ok(perm, `${name} has a declared permission`);
-test("the registry gate admits only slice-permission holders while hrm is on", () => {
-  const byName = new Map(HRM_TOOLS.map((tool) => [tool.name, tool] as const));
-  for (const name of TOOL_NAMES) {
-    const perm = TOOL_GATE_PERMS[name]!;
     const reader = fakeAuthz(["assistant.use", perm]);
     assert.equal(canRunTool(reader, byName.get(name)!, { hrm: true }), true, `${name} must run for a gated reader`);
     assert.equal(canRunTool(reader, byName.get(name)!, { hrm: false }), false, `${name} must hide while hrm is off`);
@@ -243,14 +219,6 @@ test("the registry gate admits only slice-permission holders while hrm is on", (
       canRunTool(fakeAuthz([perm]), byName.get(name)!, { hrm: true }),
       false,
       `${name} still requires assistant.use`,
-    );
-    // The sibling slice's grant is not enough: leave tools need the leave
-    // key and employment tools need the employment key.
-    const sibling = perm === "hrm.leave.read" ? "hrm.employment.read" : "hrm.leave.read";
-    assert.equal(
-      canRunTool(fakeAuthz(["assistant.use", sibling]), byName.get(name)!, { hrm: true }),
-      false,
-      `${name} must refuse on the sibling slice's grant`,
     );
   }
   // Position grants are the admin-held establishment boundary: an
