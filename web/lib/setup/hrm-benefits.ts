@@ -127,3 +127,33 @@ export const BENEFIT_PLAN_LEVELS_ENTITY: SetupEntity = {
     { key: 'position', kind: 'integer', required: true },
   ],
 }
+
+/**
+ * Pure plan-body shape check (no server imports, so unit tests run it
+ * directly like hrm-process-template.ts). The drawer forces prorationBasis
+ * with no default; this refuses a missing or unknown rule, unknown bases,
+ * non-ISO currency, and negative waiting periods by field name. Org
+ * visibility and component-kind proofs stay in validateEntityIntegrity in
+ * write.ts, beside the database they need.
+ */
+export function benefitPlanShapeProblem(body: Record<string, unknown>): string | null {
+  const proration = (body.prorationBasis ?? null) as string | null
+  if (proration !== 'full_month' && proration !== 'daily') {
+    return 'Declare how partial months pay: full_month carries the whole month, daily scales by covered days — the plan cannot save without it'
+  }
+  for (const side of ['employeeCostBasis', 'employerCostBasis'] as const) {
+    const basis = (body[side] ?? null) as string | null
+    if (basis !== 'per_period' && basis !== 'per_month' && basis !== 'per_year' && basis !== 'percent_of_pay') {
+      return 'Price each side as per_period, per_month, per_year, or percent_of_pay'
+    }
+  }
+  const currency = (body.currency ?? null) as string | null
+  if (currency !== null && !/^[A-Z]{3}$/.test(currency)) {
+    return 'Currency is a 3-letter ISO code in capitals — HR never converts it, the run refuses a mismatch'
+  }
+  const waiting = (body.waitingPeriodDays ?? null) as number | null
+  if (waiting !== null && (!Number.isInteger(waiting) || waiting < 0)) {
+    return 'The waiting period is a non-negative whole number of days'
+  }
+  return null
+}
