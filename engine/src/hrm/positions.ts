@@ -458,6 +458,10 @@ async function livePositionVersions(
            effective_to::text as effective_to,
            to_char(recorded_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as recorded_at,
            to_char(recorded_until at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as recorded_until,
+           -- The before-image is the row EXACTLY as to_jsonb renders it: the
+           -- 0192 closure guard compares closed_versions[].before against the
+           -- same expression, so numerics arrive as JSON numbers (scale is a
+           -- presentation concern; the live row keeps it).
            to_jsonb(position_versions) as before
       from position_versions
      where org_id = ${orgId} and position_id = ${positionId}
@@ -526,6 +530,32 @@ async function insertPositionChange(
     );
   }
   return inserted.id;
+}
+
+/**
+ * Serialize writers on the aggregate BEFORE any version row is touched.
+ * Without this lock two revisers interleave on the version rows and the
+ * positions row in opposite orders and Postgres resolves it as a deadlock:
+ * a raw driver error, not a refusal, and one contender is killed for no
+ * data reason. With it the second writer waits for the first to commit,
+ * then re-reads a fresh aggregate and either applies cleanly on top or
+ * refuses by name (STALE_REVISION / REFUSED). Returns the revision as of the
+ * lock, which is the revision every optimistic check below must use.
+ */
+async function lockPositionAggregate(
+  exec: SqlExecutor,
+  orgId: string,
+  positionId: string,
+): Promise<{ revision: number }> {
+  const row = (await exec.execute<{ revision: number }>(sql`
+    select revision from positions
+     where org_id = ${orgId} and id = ${positionId}
+       for update
+  `)).rows[0];
+  if (!row) {
+    throw new HrmPositionError("NOT_FOUND", "the position is not visible in this organization — check the position id");
+  }
+  return { revision: Number(row.revision) };
 }
 
 async function bumpPositionRevision(
@@ -705,7 +735,8 @@ export async function revisePosition(query: RevisePositionQuery): Promise<Positi
   }
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeature(db, orgId);
-    const subject = await requireHrmPositionManage(db, orgId, actorId, positionId);
+    const authorized = await requireHrmPositionManage(db, orgId, actorId, positionId);
+    const subject = { ...authorized, ...(await lockPositionAggregate(db, orgId, positionId)) };
     await db.execute(sql`
       set constraints position_versions_change_tenant_fkey deferred
     `);
@@ -773,6 +804,10 @@ export async function revisePosition(query: RevisePositionQuery): Promise<Positi
       status: status ?? base.status,
     };
     for (const version of overlapping) {
+      // A revision that carries the current status forward is not a
+      // transition: content or dates change, the lifecycle stays put. Only a
+      // real move is checked against the table (closed is terminal).
+      if (version.status === successor.status) continue;
       const allowed = POSITION_TRANSITIONS[version.status as Exclude<PositionStatus, "closed">];
       if (!allowed || !allowed.includes(successor.status as PositionStatus)) {
         throw new HrmPositionError(
@@ -893,7 +928,8 @@ export async function closePosition(query: ClosePositionQuery): Promise<Position
   const reason = requireReason(query.reason);
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeature(db, orgId);
-    const subject = await requireHrmPositionManage(db, orgId, actorId, positionId);
+    const authorized = await requireHrmPositionManage(db, orgId, actorId, positionId);
+    const subject = { ...authorized, ...(await lockPositionAggregate(db, orgId, positionId)) };
     // Serialize against concurrent assignment applications on this row.
     const locked = (await db.execute(sql`
       select revision from positions
@@ -1109,7 +1145,8 @@ export async function writePositionFunding(query: WritePositionFundingQuery): Pr
   const reason = requireReason(query.reason);
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeature(db, orgId);
-    const subject = await requireHrmPositionManage(db, orgId, actorId, positionId);
+    const authorized = await requireHrmPositionManage(db, orgId, actorId, positionId);
+    const subject = { ...authorized, ...(await lockPositionAggregate(db, orgId, positionId)) };
     await assertPositionRefs(db, { orgId, periodId });
     const period = (await db.execute<{ starts_on: string; ends_on: string }>(sql`
       select starts_on::text as starts_on, ends_on::text as ends_on

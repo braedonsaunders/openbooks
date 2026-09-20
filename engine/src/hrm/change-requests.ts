@@ -1101,9 +1101,13 @@ async function applyApprovedRequest(
   await bumpGraphRevision(exec, orgId);
   // One clock for the handoff: every recorded_until closed here equals the
   // recorded_at of its successor (seamless, no gap or overlap).
-  const nowRow = (await exec.execute<{ now: Date }>(sql`select now() as now`)).rows[0];
+  const nowRow = (await exec.execute<{ now: DbInstant; now_iso: string }>(sql`
+    select now() as now,
+           to_char(now() at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as now_iso
+  `)).rows[0];
   const recordedAt = nowRow?.now;
-  if (!recordedAt) {
+  const recordedAtIso = nowRow?.now_iso;
+  if (!recordedAt || typeof recordedAtIso !== "string" || recordedAtIso.length === 0) {
     throw new HrmChangeRequestError("REFUSED", "the database clock is unreadable — retry the decision");
   }
 
@@ -1116,7 +1120,7 @@ async function applyApprovedRequest(
   } else if (payload.kind === "status_change" || payload.kind === "termination") {
     await applyEmploymentVersionChange(exec, { orgId, actorId, request, payload, newRevision, recordedAt });
   } else if (payload.kind === "position_assignment") {
-    await applyPositionAssignment(exec, { orgId, actorId, request, payload, newRevision, recordedAt });
+    await applyPositionAssignment(exec, { orgId, actorId, request, payload, newRevision, recordedAt, recordedAtIso });
   } else {
     await applyAssignmentChange(exec, { orgId, actorId, request, payload, newRevision, recordedAt });
   }
@@ -1134,7 +1138,7 @@ async function applyHire(
     request: RequestRow;
     payload: HirePayload;
     newRevision: number;
-    recordedAt: Date;
+    recordedAt: DbInstant;
   },
 ): Promise<void> {
   const { orgId, actorId, request, payload, newRevision, recordedAt } = args;
@@ -1182,7 +1186,7 @@ async function applyEmploymentVersionChange(
     request: RequestRow;
     payload: StatusChangePayload | TerminationPayload;
     newRevision: number;
-    recordedAt: Date;
+    recordedAt: DbInstant;
   },
 ): Promise<void> {
   const { orgId, actorId, request, payload, newRevision, recordedAt } = args;
@@ -1281,7 +1285,7 @@ async function applyAssignmentChange(
     request: RequestRow;
     payload: AssignmentChangePayload;
     newRevision: number;
-    recordedAt: Date;
+    recordedAt: DbInstant;
   },
 ): Promise<void> {
   const { orgId, actorId, request, payload, newRevision, recordedAt } = args;
@@ -1469,10 +1473,12 @@ async function applyPositionAssignment(
     request: RequestRow;
     payload: PositionAssignmentPayload;
     newRevision: number;
-    recordedAt: Date;
+    recordedAt: DbInstant;
+    /** The same clock as recordedAt, as a UTC ISO instant for as-of reads. */
+    recordedAtIso: string;
   },
 ): Promise<void> {
-  const { orgId, actorId, request, payload, newRevision, recordedAt } = args;
+  const { orgId, actorId, request, payload, newRevision, recordedAt, recordedAtIso } = args;
   // Lock the target position first (when there is one): the revision read
   // here feeds the position-side event, and the row lock serializes against
   // concurrent closes and assignments on the same establishment.
@@ -1541,7 +1547,7 @@ async function applyPositionAssignment(
       orgId,
       target,
       windowStart,
-      recordedAt,
+      asKnown: recordedAtIso,
       assignment: { title: null, departmentId: null, locationId: null },
     });
     const changeId = await insertEmploymentChange(exec, {
@@ -1638,7 +1644,7 @@ async function applyPositionAssignment(
     orgId,
     target,
     windowStart,
-    recordedAt,
+    asKnown: recordedAtIso,
     assignment: { title: base.job_title, departmentId: base.department_id, locationId: base.location_id },
   });
   const changeId = await insertEmploymentChange(exec, {
@@ -1719,13 +1725,25 @@ async function applyPositionAssignment(
  * HrmPositionError and are rehomed here so the change-request boundary
  * speaks one error type with the message intact.
  */
+/**
+ * The database clock as the driver hands it back: timestamptz arrives as
+ * TEXT in this codebase, not a Date. It is bound straight back into SQL for
+ * every recorded_at / recorded_until write (one clock, one value) and never
+ * has Date methods called on it; a caller that needs an ISO instant takes
+ * the to_char text selected beside it (recordedAtIso). Typing this as Date
+ * once let `.toISOString()` reach runtime on an approval and fail with a
+ * remedy that said "retry".
+ */
+type DbInstant = Date | string;
+
 async function positionLinkWarnings(
   exec: SqlExecutor,
   args: {
     orgId: string;
     target: { id: string; position_code: string; revision: number } | null;
     windowStart: string;
-    recordedAt: Date;
+    /** UTC ISO instant of the application clock (recordedAtIso), never the raw driver value. */
+    asKnown: string;
     assignment: { title: string | null; departmentId: string | null; locationId: string | null };
   },
 ): Promise<string[]> {
@@ -1765,7 +1783,7 @@ async function positionLinkWarnings(
           recordedUntil: row.recorded_until,
           payload: row,
         })),
-        { effective: args.windowStart, asKnown: args.recordedAt.toISOString() },
+        { effective: args.windowStart, asKnown: args.asKnown },
       );
     } catch (resolveError) {
       if (resolveError instanceof NoRevisionError) {
@@ -1801,7 +1819,7 @@ async function issueAssignmentSlot(
     request: RequestRow;
     payload: AssignmentChangePayload;
     newRevision: number;
-    recordedAt: Date;
+    recordedAt: DbInstant;
   },
 ): Promise<void> {
   const { orgId, actorId, request, payload, newRevision, recordedAt } = args;
@@ -2070,7 +2088,7 @@ async function closeLineManagerChange(
     request: RequestRow;
     reporting: LineManagerPlan;
     changeId: string;
-    recordedAt: Date;
+    recordedAt: DbInstant;
   },
 ): Promise<void> {
   if (!args.reporting.change) return;
