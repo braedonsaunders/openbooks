@@ -135,6 +135,11 @@ test("migration 0031 freezes legacy empty scope sets into the explicit current c
     // rest of HRM.
     "hrm.recruiting.read",
     "hrm.recruiting.manage",
+    // 0196 HRM performance and retention: post-snapshot like the rest of
+    // HRM — reviews carry assessments of named people.
+    "hrm.performance.read",
+    "hrm.performance.manage",
+    "hrm.retention.read",
   ]);
   for (const key of addedAfter0031) {
     assert.ok((PERMISSION_CATALOGUE as readonly string[]).includes(key), `${key} must exist in the catalogue`);

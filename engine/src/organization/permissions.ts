@@ -153,6 +153,15 @@ export const PERMISSION_CATALOGUE = [
   // (email, phone, resume) is returned only to hrm.recruiting.read holders.
   "hrm.recruiting.read",
   "hrm.recruiting.manage",
+  // HR-7 performance and retention (0196) — the same confidentiality
+  // rule as employment: reviews carry assessments of named people, so
+  // read = see cycles and reviews through the privacy scope (HR grant,
+  // subject-on-shared, manager-on-own-reports); manage = run cycles,
+  // calibrate and share. Retention is HR-only: hrm.retention.read sees
+  // exit records and turnover. Admin-only like the employment keys above.
+  "hrm.performance.read",
+  "hrm.performance.manage",
+  "hrm.retention.read",
   // Custom records — user-defined record types + their generated modules
   "records.read",
   "records.create",
@@ -405,6 +414,9 @@ export const PERMISSION_GROUPS: {
       { key: "hrm.leave.manage", labelKey: permissionLabelKey("hrm.leave.manage") },
       { key: "hrm.recruiting.read", labelKey: permissionLabelKey("hrm.recruiting.read") },
       { key: "hrm.recruiting.manage", labelKey: permissionLabelKey("hrm.recruiting.manage") },
+      { key: "hrm.performance.read", labelKey: permissionLabelKey("hrm.performance.read") },
+      { key: "hrm.performance.manage", labelKey: permissionLabelKey("hrm.performance.manage") },
+      { key: "hrm.retention.read", labelKey: permissionLabelKey("hrm.retention.read") },
     ],
   },
   {

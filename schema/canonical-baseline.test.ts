@@ -388,6 +388,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0193_hrm_employment_processes.sql",
     "0194_hrm_leave_attendance.sql",
     "0195_hrm_recruiting.sql",
+    "0196_hrm_performance_retention.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -1829,6 +1830,16 @@ test("API keys state their scopes explicitly: legacy empty sets freeze to the ca
     // write. Admin-only like the employment keys above.
     "hrm.recruiting.read",
     "hrm.recruiting.manage",
+    // HR-7 performance and retention (migration 0196): added after the
+    // snapshot, so a LEGACY API key with an empty scope set does NOT gain
+    // them — reviews carry assessments of named people. performance.read
+    // sees cycles and reviews through the privacy scope, performance.manage
+    // runs cycles, calibrates and shares, retention.read sees exit records
+    // and turnover. Deliberate: this is an authorization decision, not a
+    // snapshot bump.
+    "hrm.performance.read",
+    "hrm.performance.manage",
+    "hrm.retention.read",
   ];
   assert.deepEqual(
     snapshot,

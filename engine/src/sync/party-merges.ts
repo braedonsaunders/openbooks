@@ -122,6 +122,14 @@ const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] =
   // composite tenant FKs keep the re-point inside the org.
   ["hrm_candidates", "party_id"],
   ["hrm_requisitions", "hiring_manager_party_id"],
+  // 0196: review subjects and exit interviewers follow the merge
+  // wholesale. SIMPLE, not GUARDED: the review uniqueness is
+  // (org, cycle, employment, kind, reviewer) and carries no subject
+  // column, and the exit record is unique on (org, employment) with no
+  // party column, so re-pointing the subject or the interviewer cannot
+  // duplicate. The composite tenant FKs keep the re-point inside the org.
+  ["hrm_reviews", "subject_party_id"],
+  ["hrm_exit_records", "interviewer_party_id"],
 ];
 
 /**
@@ -260,6 +268,17 @@ const GUARDED_PARTY_REFS: readonly GuardedPartyRef[] = [
     table: "hrm_interview_panel",
     column: "party_id",
     conflict: "s.interview_id = d.interview_id",
+    // 0196: the review uniqueness is (org, cycle, employment, kind,
+    // reviewer) — re-pointing the reviewer collides exactly when the
+    // survivor already reviewed the same employment in the same cycle
+    // and kind. The conflicting row stays on the absorbed party
+    // (retained with cause), never silently absorbed into the
+    // survivor's review.
+    table: "hrm_reviews",
+    column: "reviewer_party_id",
+    conflict:
+      "s.org_id = d.org_id and s.cycle_id = d.cycle_id and s.employment_id = d.employment_id" +
+      " and s.kind = d.kind",
   },
 ];
 

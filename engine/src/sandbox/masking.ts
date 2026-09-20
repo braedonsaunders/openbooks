@@ -137,6 +137,12 @@ const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "users", columnName: "email", transform: "faker_email" },
   { tableName: "users", columnName: "name", transform: "faker_name" },
   { tableName: "users", columnName: "password_hash", transform: "reseal_secret" },
+  // 0196: review answers and exit records assess named people in free
+  // text, so a masked sandbox redacts the prose (ratings, scales and
+  // status codes carry no PII and copy verbatim on purpose).
+  { tableName: "hrm_review_answers", columnName: "text", transform: "redact" },
+  { tableName: "hrm_exit_records", columnName: "destination", transform: "redact" },
+  { tableName: "hrm_exit_records", columnName: "notes", transform: "redact" },
 ];
 
 /** Make sure every default policy exists for the org. Idempotent: a policy the
