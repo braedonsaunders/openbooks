@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cmp } from "../money/money.ts";
+import { add, cmp, formatMoney, neg } from "../money/money.ts";
 import {
   MacrsShortYearError,
   assertShortYearFactorAgrees,
@@ -140,6 +140,65 @@ test("both recovery methods conserve basis across a half-month final recovery pe
   assert.equal(
     subsequentRecoveryDeduction({ ...input, shortYearMethod: "allocation" }),
     "10.00",
+  );
+});
+
+test("Rev. Proc. 89-15 tables 3 and 4 switch in the taxable year, preserving every year's allowance", () => {
+  // Original primary source, printed pp. 820–822:
+  // https://www.govinfo.gov/content/pkg/GOVPUB-T22-aaf296b1f844da19743e7a36ca791ec6/pdf/GOVPUB-T22-aaf296b1f844da19743e7a36ca791ec6-1.pdf
+  // $100, 5-year 200DB, deemed placed August 1, 1988. Table 3's
+  // recovery-year DB allocations are compared to TAX-year opening-basis SL.
+  for (const shortYearMethod of ["allocation", "simplified"] as const) {
+    const allowances = [
+      shortYearPlacementDeduction({
+        basis: "100",
+        rate: "0.4",
+        monthsInService: 5,
+      }),
+    ];
+    let adjustedBasis = formatMoney(add("100", neg(allowances[0]!)), 2);
+    for (const elapsedMonths of [5, 17, 29, 41, 53]) {
+      const allowance = subsequentRecoveryDeduction({
+        originalMacrsBasis: "100",
+        adjustedBasis,
+        method: "200_db",
+        recoveryPeriodYears: "5",
+        elapsedMonths,
+        monthsThisYear: 12,
+        shortYearMethod,
+      });
+      allowances.push(allowance);
+      adjustedBasis = formatMoney(add(adjustedBasis, neg(allowance)), 2);
+    }
+    assert.deepEqual(
+      allowances,
+      ["16.67", "33.33", "20.00", "12.00", "11.37", "6.63"],
+      shortYearMethod,
+    );
+    assert.equal(adjustedBasis, "0.00", shortYearMethod);
+  }
+});
+
+test("Rev. Proc. 89-15 subsequent short year preserves the allocation/simplified distinction", () => {
+  // §5.03 example (2) / §5.04 example (2): $100 placed in the May–Dec
+  // short year is deemed placed September 1. The next year is Jan–Jun.
+  const input = {
+    originalMacrsBasis: "100",
+    adjustedBasis: "86.67",
+    method: "200_db" as const,
+    recoveryPeriodYears: "5",
+    elapsedMonths: 4,
+    monthsThisYear: 6,
+  };
+  assert.equal(
+    subsequentRecoveryDeduction({ ...input, shortYearMethod: "allocation" }),
+    "20.00",
+  );
+  // This follows the published worked amount, including rounding the annual
+  // allowance to cents before allocating the half year.
+  assert.equal(
+    subsequentRecoveryDeduction({ ...input, shortYearMethod: "simplified" }),
+    "17.34",
   );
 });
 
