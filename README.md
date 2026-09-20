@@ -46,8 +46,9 @@ financial data in your hands, add users and companies without software licensing
 tiers, and adapt the code to the way your business actually works.
 
 This is more than a general ledger with a few add-ons. Customer invoices,
-vendor bills, projects and job costing, inventory, assets, banking, reporting,
-approvals, and audit history operate as one connected business system.
+vendor bills, projects and job costing, inventory, assets, banking, payroll and
+HR, reporting, approvals, and audit history operate as one connected business
+system.
 
 ## See OpenBooks in action
 
@@ -313,6 +314,9 @@ Settings → Features**.
 
 - Inventory receipts, issues, transfers, returns, warehouses, lots, batches,
   serial tracking, and stock availability controls
+- Cycle counting and physical inventory: counts scoped to one legal entity,
+  expected quantities snapshotted from the same layer math the posting check
+  re-reads, and variances posted as ordinary inventory adjustments
 - FIFO, moving-average, and standard-cost valuation
 - Purchase-price variance, landed-cost allocation, COGS, and inventory-to-GL
   reconciliation
@@ -341,23 +345,62 @@ Settings → Features**.
 - Sales-tax nexus monitoring
 - Tax filings, return boxes, mappings, adjustments, review states, exports, and
   filing evidence
-- A 49-pack return-workpaper library covering examples for Canada, the United
-  States, the United Kingdom, Australia, New Zealand, several EU countries,
-  India, Singapore, South Africa, the UAE, and Japan
+- A 49-pack return-workpaper library across 41 installable country packs, one
+  per country: Argentina, Australia, Austria, Belgium, Canada, Chile,
+  Colombia, Czechia, Denmark, Finland, France, Germany, Greece, Hungary,
+  Iceland, India, Ireland, Italy, Japan, Kenya, Mexico, the Netherlands, New
+  Zealand, Norway, the Philippines, Poland, Portugal, Romania, Saudi Arabia,
+  Singapore, South Africa, South Korea, Spain, Sweden, Switzerland, Thailand,
+  Turkey, the UAE, the United Kingdom, the United States, and Vietnam
+- An installation registry that records which pack version an organization is
+  on and reports drift when installed content no longer matches the declared
+  pack — drift is reported, never silently repaired
 - Official-PDF field mapping where a compatible AcroForm is supplied
 
 Tax packs are configurable calculation and preparation workpapers. They are not
 a promise of direct electronic filing, government approval, or complete local
 statutory compliance in every jurisdiction.
 
+### Human resources
+
+Off by default behind the optional `hrm` feature.
+
+- Employment records as effective-dated episodes and assignments, so a rehire,
+  transfer or promotion is a new fact on a timeline rather than an overwrite of
+  the previous one
+- Positions and headcount plans, with department and entity scoping
+- Recruiting: requisitions, applicants, stages, and hiring decisions
+- Onboarding and offboarding as configurable processes with per-step owners,
+  checklists, and completion evidence
+- Performance: review cycles, goals, and retention signals
+- Benefits: plans, eligibility, enrolment windows, and per-plan cost sharing
+- Leave and attendance on the same entitlement ledger payroll consumes, so a
+  booked absence and the pay it affects cannot disagree
+- Employee self-service (`/me`): profile, checklists, and team views, with
+  change requests that route through approvals rather than editing records
+  directly
+- An HR overview cockpit with headcount vitals, trend, and a work-queue rail
+
+HR shares one employee record with payroll and projects. An employee is a party
+in the same ledger-backed model as customers and vendors, so job costing,
+timesheets and pay all resolve to the same person without a synchronisation
+step.
+
 ### Payroll
 
 Off by default behind the optional `payroll` feature.
 
-- Versioned statutory engines with penny-exact conformance corpora: CRA T4127
-  for Canada (income tax, CPP, CPP2, EI, QPIP, claim codes, bonus method) and
-  IRS Publication 15-T for the United States (federal withholding, Social
-  Security, Medicare and Additional Medicare, FUTA, SUTA)
+- Versioned statutory engines with penny-exact conformance corpora and cited
+  primary sources. Fourteen country packs ship: Australia, Brazil, Canada,
+  France, Germany, Ireland, Italy, Japan, Netherlands, Poland, Singapore,
+  Spain, the United Kingdom, and the United States
+- Canada is CRA T4127 (income tax, CPP, CPP2, EI, QPIP, claim codes, bonus
+  method) with Revenu Québec TP-1015 for Quebec; the United States is IRS
+  Publication 15-T (federal withholding, Social Security, Medicare and
+  Additional Medicare, FUTA, SUTA) plus 40 state withholding engines
+- No country receives built-in or fallback treatment. Each pack declares its
+  own levies, bases, calendars and rounding, and the generic layer branches on
+  nothing — adding a country is a pack, not a change to the engine
 - Statutory amounts are engine-computed and never user-authored formulas; each
   country pack declares whether a levy is assessed on earnings or on taxable
   income, so a recalculation cannot silently restate one that should not move
@@ -486,9 +529,10 @@ OpenBooks does not currently include a complete:
   engine; US state withholding covers 49 supported states: 40 taxing engines
   plus the nine no-tax states AK, FL, NV, NH, SD, TN, TX, WA, WY — DC and NM
   are refused pending official goldens rather than estimated);
-- human-capital-management suite — payroll pays people, but there is no
-  applicant tracking, onboarding, performance, benefits-administration or
-  employee self-service;
+- certified benefits-carrier or job-board integrations — the HR module manages
+  applicants, onboarding, performance, benefits enrolment and employee
+  self-service natively, but it does not exchange data with external carriers,
+  job boards or background-check providers;
 - full manufacturing/MRP and production-order suite beyond the light
   bill-of-materials assembly-build workflow;
 - point-of-sale or e-commerce storefront;
@@ -735,12 +779,13 @@ checked-in suite and release workflow are authoritative.
 
 ## Project status
 
-`v0.1.0-alpha.17` is the current community preview. It keeps the
-version-tag release path. This release widens payroll to ten installable
-countries, adds a notifications inbox and a per-customer Pulse cockpit,
-enforces tenant isolation across the integration suite, and takes lint
-warnings and explicit `any` to zero. See the changelog for the areas
-touched.
+`v0.1.0-alpha.21` is the current community preview. It keeps the
+version-tag release path. This release adds the human-resources module
+(recruiting, performance, benefits, leave, and employee self-service on one
+effective-dated employment record), widens payroll to fourteen installable
+countries with prior-year US federal editions, adds cycle counting and a tax
+pack installation registry that reports drift, and repairs two connection
+leaks in the database layer. See the changelog for the areas touched.
 
 Good uses today:
 
