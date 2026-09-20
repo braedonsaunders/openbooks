@@ -114,6 +114,10 @@ export const revenueContracts = pgTable(
     id: id(),
     orgId: orgRef(),
     customerId: uuid("customer_id").notNull(), // → parties
+    subsidiaryId: uuid("subsidiary_id"),
+    revision: integer("revision").notNull().default(1),
+    lastChangeId: uuid("last_change_id"),
+    parentContractId: uuid("parent_contract_id"),
     /** Set when the contract IS a fixed-price project's revenue contract
      *  (percent-complete over-time recognition); null for invoice bundles. */
     projectId: uuid("project_id"),
@@ -163,6 +167,7 @@ export const performanceObligations = pgTable(
     id: id(),
     orgId: orgRef(),
     contractId: uuid("contract_id").notNull(),
+    lastChangeId: uuid("last_change_id"),
     documentLineId: uuid("document_line_id"),
     /** Stable source-effect identity; null for directly managed obligations. */
     idempotencyKey: text("idempotency_key"),
@@ -219,6 +224,8 @@ export const recognitionSchedules = pgTable(
     id: id(),
     orgId: orgRef(),
     obligationId: uuid("obligation_id").notNull(),
+    revision: integer("revision").notNull().default(1),
+    changeBasis: jsonb("change_basis"),
     bookId: uuid("book_id").notNull(),
     status: text("status", {
       enum: ["planned", "in_progress", "complete", "cancelled"],
@@ -284,6 +291,10 @@ export const recognitionScheduleLines = pgTable(
     id: id(),
     orgId: orgRef(),
     scheduleId: uuid("schedule_id").notNull(),
+    revision: integer("revision").notNull().default(1),
+    supersededByChangeId: uuid("superseded_by_change_id"),
+    modificationAdjustment: boolean("modification_adjustment").notNull().default(false),
+    recognitionOn: date("recognition_on"),
     periodId: uuid("period_id").notNull(),
     sequence: integer("sequence").notNull(),
     plannedAmount: money("planned_amount").notNull(),

@@ -12,6 +12,7 @@ import { groupTabs } from "@/components/module-home/group-tabs";
 import { can, getAuthz } from "@/lib/authz";
 import { isUuid } from "@/lib/list-params";
 import { subsidiaryVisibleFilter } from "@/lib/subsidiaries";
+import { ChangeEvidence } from "./ChangeEvidence";
 import { ChangeActions } from "./ChangeActions";
 export const dynamic = "force-dynamic";
 const fieldNames: Record<string, string> = {
@@ -111,6 +112,30 @@ export default async function AccountingChanges({
     where fc.org_id=${orgId} and fc.id=${id} and ${scopePredicate} ${subsidiaryVisibleFilter(sql`fc.subsidiary_id`, auth.allowedSubsidiaryIds)}`)
       ).rows[0]
     : null;
+  const referenceIds = new Set<string>();
+  const collect = (v: unknown): void => {
+    if (typeof v === "string" && isUuid(v)) referenceIds.add(v);
+    else if (Array.isArray(v)) v.forEach(collect);
+    else if (v && typeof v === "object") Object.values(v).forEach(collect);
+  };
+  if (row) {
+    collect(row.payload);
+    collect(row.before_state.preview);
+  }
+  const references = referenceIds.size
+    ? (
+        await db.execute<{ id: string; label: string }>(sql`
+    select id,number||' — '||name as label from accounts where org_id=${orgId} and id in(select jsonb_array_elements_text(${JSON.stringify([...referenceIds])}::jsonb)::uuid)
+    union all select id,name from accounting_books where org_id=${orgId} and id in(select jsonb_array_elements_text(${JSON.stringify([...referenceIds])}::jsonb)::uuid)
+    union all select id,name from recognition_rules where org_id=${orgId} and id in(select jsonb_array_elements_text(${JSON.stringify([...referenceIds])}::jsonb)::uuid)
+    union all select id,description from performance_obligations where org_id=${orgId} and id in(select jsonb_array_elements_text(${JSON.stringify([...referenceIds])}::jsonb)::uuid)
+    union all select id,name from subsidiaries where org_id=${orgId} and id in(select jsonb_array_elements_text(${JSON.stringify([...referenceIds])}::jsonb)::uuid)
+  `)
+      ).rows
+    : [];
+  const referenceNames = Object.fromEntries(
+    references.map((r) => [r.id, r.label]),
+  );
   const permission =
     row?.domain === "revenue"
       ? "ar.post"
@@ -154,7 +179,8 @@ export default async function AccountingChanges({
                   <p>Independent decision by {row.approver_name}</p>
                 ) : null}
                 {row.before_state.preview &&
-                typeof row.before_state.preview === "object" ? (
+                typeof row.before_state.preview === "object" &&
+                !Array.isArray(row.before_state.preview) ? (
                   <section className="space-y-2">
                     <h3 className="font-semibold">
                       Proposed accounting impact
@@ -166,24 +192,18 @@ export default async function AccountingChanges({
                     />
                   </section>
                 ) : null}
-                <Facts value={row.payload} />
-                {row.payload.remainingTerms &&
-                typeof row.payload.remainingTerms === "object" ? (
+                <section className="space-y-2">
+                  <h3 className="font-semibold">
+                    Proposed terms and assessment
+                  </h3>
+                  <ChangeEvidence value={row.payload} names={referenceNames} />
+                </section>
+                {row.domain === "revenue" ? (
                   <section className="space-y-2">
-                    <Facts
-                      value={
-                        row.payload.remainingTerms as Record<string, unknown>
-                      }
-                    />
-                    <h3 className="font-semibold">Classification assessment</h3>
-                    <Facts
-                      value={
-                        (
-                          row.payload.remainingTerms as {
-                            classificationInputs?: Record<string, unknown>;
-                          }
-                        ).classificationInputs ?? {}
-                      }
+                    <h3 className="font-semibold">Book-specific allocations</h3>
+                    <ChangeEvidence
+                      value={row.before_state.preview}
+                      names={referenceNames}
                     />
                   </section>
                 ) : null}
@@ -204,6 +224,14 @@ export default async function AccountingChanges({
                         ))
                       : null}
                   </section>
+                ) : null}
+                {row.domain === "revenue" ? (
+                  <Link
+                    className="underline"
+                    href={`/revenue?contract=${row.subject_id}`}
+                  >
+                    Open revenue contract
+                  </Link>
                 ) : null}
                 {row.domain === "lease" ? (
                   <Link
