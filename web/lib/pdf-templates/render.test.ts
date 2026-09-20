@@ -41,9 +41,9 @@ registerHooks({
       return {
         format: 'module',
         source: `
-          import { renderTemplate, sanitizeRenderedHtml } from ${JSON.stringify(templateUrl)}
+          import { renderTemplate, sanitizeRenderedHtml, sanitizeTokenizedFragment } from ${JSON.stringify(templateUrl)}
           const state = globalThis[Symbol.for('openbooks.pdf-render-sanitization-test')]
-          export { renderTemplate, sanitizeRenderedHtml }
+          export { renderTemplate, sanitizeRenderedHtml, sanitizeTokenizedFragment }
           export function renderHtmlDocumentPdf(input) {
             state.input = input
             return Promise.resolve(Buffer.from('%PDF-1.4 test'))
@@ -112,10 +112,31 @@ test('header and footer escape record values while keeping the live page counter
   )
 
   const captured = readCapturedInput()
-  assert.equal(captured.headerHtml, '<div>Ada &amp; Co · &lt;img src=&quot;https://attacker.example/pixel&quot; onerror=&quot;steal()&quot;&gt;Visible note</div>')
-  assert.equal(captured.footerHtml, '<div>Page {{page}} of {{pages}} — &lt;img src=&quot;https://attacker.example/pixel&quot; onerror=&quot;steal()&quot;&gt;Visible note</div>')
+  // Chrome sanitization re-serializes text quotes; the img stays escaped text.
+  assert.equal(captured.headerHtml, '<div>Ada &amp; Co · &lt;img src="https://attacker.example/pixel" onerror="steal()"&gt;Visible note</div>')
+  assert.equal(captured.footerHtml, '<div>Page {{page}} of {{pages}} — &lt;img src="https://attacker.example/pixel" onerror="steal()"&gt;Visible note</div>')
   assert.doesNotMatch(String(captured.headerHtml), /<img/i)
   assert.doesNotMatch(String(captured.footerHtml), /<img/i)
+})
+
+test('header and footer chrome cannot pass network resource URLs to the printer', async () => {
+  state.input = null
+  await mergeAndPrintPdf(
+    {
+      compiledHtml: '<p>x</p>',
+      paperSize: 'letter',
+      orientation: 'portrait',
+      marginMm: 14,
+      headerHtml: '<img src="https://static.example/logo.png" alt="mark">{{org}}',
+      footerHtml: '<link rel="stylesheet" href="https://static.example/sheet.css">Page {{page}}',
+    },
+    { org: 'Acme' },
+  )
+  const captured = readCapturedInput()
+  assert.match(String(captured.headerHtml), /Acme/)
+  assert.match(String(captured.footerHtml), /\{\{page\}\}/)
+  assert.doesNotMatch(String(captured.headerHtml), /static\.example|https?:\/\//i)
+  assert.doesNotMatch(String(captured.footerHtml), /static\.example|https?:\/\//i)
 })
 
 test('a record value cannot set an attribute scheme in the printed body', async () => {
