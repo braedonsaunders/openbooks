@@ -407,6 +407,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0216_flow_run_effects_tenant_coherence.sql",
     "0217_pay_run_holiday_assertions_run_tenant_coherence.sql",
     "0218_pay_run_adjustments_component_tenant_coherence.sql",
+    "0219_list_views_one_live_personal_default.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
