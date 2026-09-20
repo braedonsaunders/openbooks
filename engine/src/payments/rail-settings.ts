@@ -419,3 +419,229 @@ export async function loadBacsSettings(orgId: string, runId?: string) {
   `));
   return validateBacsSettings(unsealJson<Partial<BacsSettings>>(r.rows[0]?.originator_secrets_encrypted));
 }
+
+// ---------------------------------------------------------------------------
+// Zengin (Japan) counterparty coordinates — SHAPE ONLY
+// ---------------------------------------------------------------------------
+
+/**
+ * A Japanese bank code (金融機関コード / 統一金融機関番号): exactly 4 digits.
+ *
+ * Shape only: whether the code is allocated lives in the JBA-published
+ * code tables, which are not transcribed here — a shaped-but-unallocated
+ * code passes and the bank refuses it loudly. Never the IBAN validator:
+ * a Japanese bank code plus branch code plus account number is not an IBAN.
+ */
+export function normalizeBankCode(value: string): string | null {
+  const digits = value.replace(/[\s-]/g, "");
+  if (!/^\d{4}$/.test(digits)) return null;
+  return digits;
+}
+
+export function isValidBankCode(value: string): boolean {
+  return normalizeBankCode(value) !== null;
+}
+
+/**
+ * A Japanese branch code (支店コード / 統一店番号): exactly 3 digits.
+ *
+ * Same shape-only rule as the bank code: the allocation directory is the
+ * bank's, not a transcription here.
+ */
+export function normalizeBranchCode(value: string): string | null {
+  const digits = value.replace(/[\s-]/g, "");
+  if (!/^\d{3}$/.test(digits)) return null;
+  return digits;
+}
+
+export function isValidBranchCode(value: string): boolean {
+  return normalizeBranchCode(value) !== null;
+}
+
+/**
+ * A Japanese account number as the Zengin data record carries it: 1–7
+ * digits, right-justified zero-filled to 7 (N(7)). Spaces and hyphens are
+ * formatting and edit out; shorter numbers pad ("123456" → "0123456");
+ * longer than seven digits even with hyphens edited out cannot be expressed
+ * in the 7-character field and are refused, never truncated (truncation
+ * pays a stranger). All zeros is not an account.
+ */
+export function normalizeZenginAccount(value: string): string | null {
+  const stripped = value.replace(/[-\s]/g, "");
+  if (stripped === "" || stripped.length > 7 || !/^\d+$/.test(stripped)) return null;
+  if (/^0+$/.test(stripped)) return null;
+  return stripped.padStart(7, "0");
+}
+
+/**
+ * The Zengin kana channel: half-width katakana, ASCII capitals, digits and
+ * a small symbol set — the only characters encodable in one Shift_JIS byte
+ * each, which is what keeps every fixed-width field exactly its published
+ * width on the wire.
+ *
+ * Mechanical, lossless mappings only: full-width alphanumerics fold to
+ * half-width capitals, hiragana folds through full katakana to half-width
+ * (が → ｶﾞ, two half-width characters, the JIS X 0201 form), full-width
+ * katakana folds to half-width (ー → ｰ), and bank-documented symbols fold
+ * to their half-width forms. Anything without a mechanical reading — kanji
+ * above all — has NO mapping and returns null: a kanji name's reading is a
+ * human-supplied フリガナ, not a derivable byte string, and guessing it
+ * writes a stranger's name on the payee record. The caller refuses by name
+ * with the remedy (register the payee's katakana name on the bank row).
+ */
+export function toZenginKana(value: string): string | null {
+  const KATA_OFFSET = 0x30a1 - 0x3041; // ァ..ン minus ぁ..ん
+  const halfKatakana: Record<string, string> = {
+    "ァ": "ｧ", "ア": "ｱ", "ィ": "ｨ", "イ": "ｲ", "ゥ": "ｩ", "ウ": "ｳ",
+    "ェ": "ｪ", "エ": "ｴ", "ォ": "ｫ", "オ": "ｵ", "カ": "ｶ", "ガ": "ｶﾞ",
+    "キ": "ｷ", "ギ": "ｷﾞ", "ク": "ｸ", "グ": "ｸﾞ", "ケ": "ｹ", "ゲ": "ｹﾞ",
+    "コ": "ｺ", "ゴ": "ｺﾞ", "サ": "ｻ", "ザ": "ｻﾞ", "シ": "ｼ", "ジ": "ｼﾞ",
+    "ス": "ｽ", "ズ": "ｽﾞ", "セ": "ｾ", "ゼ": "ｾﾞ", "ソ": "ｿ", "ゾ": "ｿﾞ",
+    "タ": "ﾀ", "ダ": "ﾀﾞ", "チ": "ﾁ", "ヂ": "ﾁﾞ", "ッ": "ｯ", "ツ": "ﾂ",
+    "ヅ": "ﾂﾞ", "テ": "ﾃ", "デ": "ﾃﾞ", "ト": "ﾄ", "ド": "ﾄﾞ", "ナ": "ﾅ",
+    "ニ": "ﾆ", "ヌ": "ﾇ", "ネ": "ﾈ", "ノ": "ﾉ", "ハ": "ﾊ", "バ": "ﾊﾞ",
+    "パ": "ﾊﾟ", "ヒ": "ﾋ", "ビ": "ﾋﾞ", "ピ": "ﾋﾟ", "フ": "ﾌ", "ブ": "ﾌﾞ",
+    "プ": "ﾌﾟ", "ヘ": "ﾍ", "ベ": "ﾍﾞ", "ペ": "ﾍﾟ", "ホ": "ﾎ", "ボ": "ﾎﾞ",
+    "ポ": "ﾎﾟ", "マ": "ﾏ", "ミ": "ﾐ", "ム": "ﾑ", "メ": "ﾒ", "モ": "ﾓ",
+    "ャ": "ｬ", "ヤ": "ﾔ", "ュ": "ｭ", "ユ": "ﾕ", "ョ": "ｮ", "ヨ": "ﾖ",
+    "ラ": "ﾗ", "リ": "ﾘ", "ル": "ﾙ", "レ": "ﾚ", "ロ": "ﾛ", "ヮ": "ﾜ",
+    "ワ": "ﾜ", "ヰ": "ｲ", "ヱ": "ｴ", "ヲ": "ｦ", "ン": "ﾝ", "ヴ": "ｳﾞ",
+    "ー": "ｰ", "。": "｡", "、": "､", "・": "･", "「": "｢", "」": "｣",
+  };
+  const symbols: Record<string, string> = {
+    "－": "-", "／": "/", "．": ".", "，": ",", "（": "(", "）": ")",
+    "＆": "&", "＄": "$", "％": "%", "＋": "+", "；": ";", "＝": "=",
+    "＊": "*", "＠": "@", "　": " ",
+    // JIS X 0201 0x5C renders as the yen mark on Japanese systems; the
+    // full-width yen sign folds there, never to a two-byte Shift_JIS form
+    // that would shift every field after it.
+    "￥": "\\", "¥": "\\",
+  };
+  const asciiPunct = new Set([" ", "-", "/", ".", ",", "(", ")", "&", "$", "%", "+", ";", "=", "*", "@", "\\"]);
+  let out = "";
+  for (const ch of value) {
+    const code = ch.codePointAt(0)!;
+    if (ch >= "a" && ch <= "z") { out += ch.toUpperCase(); continue; }
+    if ((ch >= "A" && ch <= "Z") || (ch >= "0" && ch <= "9")) { out += ch; continue; }
+    if (asciiPunct.has(ch)) { out += ch; continue; }
+    // Half-width katakana (U+FF61–FF9F) already on the channel.
+    if (code >= 0xff61 && code <= 0xff9f) { out += ch; continue; }
+    // Full-width alphanumerics fold to half-width capitals.
+    if (code >= 0xff21 && code <= 0xff3a) { out += String.fromCodePoint(code - 0xff21 + 0x41); continue; }
+    if (code >= 0xff41 && code <= 0xff5a) { out += String.fromCodePoint(code - 0xff41 + 0x41); continue; }
+    if (code >= 0xff10 && code <= 0xff19) { out += String.fromCodePoint(code - 0xff10 + 0x30); continue; }
+    // Hiragana folds through full katakana first (ぁ..ん → ァ..ン).
+    const kata = code >= 0x3041 && code <= 0x3096
+      ? String.fromCodePoint(code + KATA_OFFSET)
+      : ch;
+    const half = halfKatakana[kata] ?? symbols[kata];
+    if (half !== undefined) { out += half; continue; }
+    return null;
+  }
+  return out;
+}
+
+// NOTE: Zengin originator settings ARE shaped here (unlike counterparty-only
+// rails) because the writer needs exactly the bank-assigned values — the
+// 10-digit 委託者コード, the kana 委託者名, and the originating bank/branch/
+// 種目/account — and each is validated to its channel shape below. The file
+// LAYOUT they populate is transcribed in `buildZenginFile`
+// (engine/src/payments/rail-formatters.ts) with per-field source notes.
+export interface ZenginSettings {
+  /** 10-digit client code (委託者コード) assigned by the bank. */
+  clientCode: string;
+  /** Originator kana name (委託者名, ≤40 half-width chars after mapping). */
+  clientName: string;
+  /** Originating bank code (仕向銀行番号), 4 digits. */
+  bankCode: string;
+  /** Originating branch code (仕向支店番号), 3 digits. */
+  branchCode: string;
+  /** Originator deposit type (預金種目): 1 = 普通, 2 = 当座. */
+  depositType: string;
+  /** Originator account number (口座番号), 7 digits zero-filled. */
+  accountNumber: string;
+  /** Originating bank kana name (仕向銀行名, ≤15), blank when omitted. */
+  bankName: string;
+  /** Originating branch kana name (仕向支店名, ≤15), blank when omitted. */
+  branchName: string;
+}
+
+const ZENGIN_REQUIRED: (keyof ZenginSettings)[] = [
+  "clientCode", "clientName", "bankCode", "branchCode", "depositType", "accountNumber",
+];
+
+const kanaField = (value: string, len: number): string | null => {
+  const mapped = toZenginKana(value.trim());
+  if (mapped === null || mapped === "") return null;
+  if (mapped.length > len) return null;
+  return mapped;
+};
+
+// Optional kana names: blank, missing, or the unconfigured sentinel all mean
+// "omitted" (all spaces on the wire) — never emitted as a bank name.
+const isBlankish = (value: unknown): boolean =>
+  typeof value !== "string" || value.trim() === "" || value.includes("FILL-ME");
+
+export function validateZenginSettings(raw: Partial<ZenginSettings> | null): { ok: true; settings: ZenginSettings } | { ok: false; missing: string[] } {
+  const s = raw ?? {};
+  const missing: string[] = ZENGIN_REQUIRED.filter((k) => {
+    const v = s[k];
+    return typeof v !== "string" || v.trim() === "" || v.includes("FILL-ME");
+  });
+  if (!missing.includes("clientCode") && !/^\d{10}$/.test(s.clientCode!.trim())) {
+    missing.push("clientCode (10-digit client code assigned by your bank)");
+  }
+  if (!missing.includes("clientName") && kanaField(s.clientName!, 40) === null) {
+    missing.push("clientName (katakana originator name, max 40 half-width characters; kanji has no mechanical reading — register the kana name)");
+  }
+  if (!missing.includes("bankCode") && !isValidBankCode(s.bankCode!)) {
+    missing.push("bankCode (4-digit originating bank code)");
+  }
+  if (!missing.includes("branchCode") && !isValidBranchCode(s.branchCode!)) {
+    missing.push("branchCode (3-digit originating branch code)");
+  }
+  // Every salary-transfer manual prices the originator 種目 as 1 (普通) or
+  // 2 (当座) only; the 貯蓄/その他 values appear solely in 総合振込 tables.
+  if (!missing.includes("depositType") && s.depositType!.trim() !== "1" && s.depositType!.trim() !== "2") {
+    missing.push("depositType (1 = 普通, 2 = 当座)");
+  }
+  if (!missing.includes("accountNumber") && normalizeZenginAccount(s.accountNumber!) === null) {
+    missing.push("accountNumber (1–7 digits, zero-filled to 7)");
+  }
+  for (const key of ["bankName", "branchName"] as const) {
+    const v = s[key];
+    // Optional on every manual (省略可): absent means all spaces. A supplied
+    // name must still be kana-mappable and fit its 15-char field.
+    if (typeof v === "string" && v.trim() !== "" && !v.includes("FILL-ME") && kanaField(v, 15) === null) {
+      missing.push(`${key} (katakana, max 15 half-width characters, or blank)`);
+    }
+  }
+  if (missing.length) return { ok: false, missing: [...new Set(missing)] };
+  return {
+    ok: true,
+    settings: {
+      clientCode: s.clientCode!.trim(),
+      clientName: kanaField(s.clientName!, 40)!,
+      bankCode: normalizeBankCode(s.bankCode!)!,
+      branchCode: normalizeBranchCode(s.branchCode!)!,
+      depositType: s.depositType!.trim(),
+      accountNumber: normalizeZenginAccount(s.accountNumber!)!,
+      bankName: isBlankish(s.bankName) ? "" : kanaField(s.bankName!, 15)!,
+      branchName: isBlankish(s.branchName) ? "" : kanaField(s.branchName!, 15)!,
+    },
+  };
+}
+
+export async function loadZenginSettings(orgId: string, runId?: string) {
+  const r = (await db.execute<{ originator_secrets_encrypted: string | null }>(sql`
+    select p.originator_secrets_encrypted
+      from payment_bank_profiles p
+      join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
+      left join payment_runs r on r.payment_bank_profile_id = p.id and r.org_id = p.org_id
+     where p.org_id = ${orgId} and p.is_active and f.rail = 'zengin_credit'
+       and (${runId ?? null}::uuid is null or r.id = ${runId ?? null})
+     order by case when r.id is not null then 0 else 1 end, p.created_at
+     limit 1
+  `));
+  return validateZenginSettings(unsealJson<Partial<ZenginSettings>>(r.rows[0]?.originator_secrets_encrypted));
+}

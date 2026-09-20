@@ -1,6 +1,6 @@
 import { formatMoney, sum, toUnits } from "../money/money.ts";
 import { PaymentError } from "./payment-errors.ts";
-import { isValidBic, isValidIban, normalizeBsb, normalizeCemtexAccount, normalizeGbAccountNumber, normalizeSortCode, validateBacsSettings, validateCemtexSettings, validateSepaSettings, type BacsSettings, type CemtexSettings, type EftSettings, type NachaSettings, type SepaSettings } from "./rail-settings.ts";
+import { isValidBic, isValidIban, normalizeBankCode, normalizeBranchCode, normalizeBsb, normalizeCemtexAccount, normalizeGbAccountNumber, normalizeSortCode, normalizeZenginAccount, toZenginKana, validateBacsSettings, validateCemtexSettings, validateSepaSettings, validateZenginSettings, type BacsSettings, type CemtexSettings, type EftSettings, type NachaSettings, type SepaSettings, type ZenginSettings } from "./rail-settings.ts";
 
 export interface Cpa005Payment {
   /** Amount in cents (positive integer, max 10 digits). */
@@ -861,4 +861,302 @@ export function buildBacsFile(run: BacsRun): string {
   }
 
   return [vol1, hdr1, hdr2, uhl1, ...details, contra, eof1, eof2, utl1].join("\r\n") + "\r\n";
+}
+
+export interface ZenginPayment {
+  /** Amount in yen (positive integer, max 10 digits — JPY has no minor unit). */
+  amountYen: bigint;
+  /** Destination bank code (金融機関コード), 4 digits. */
+  bankCode: string;
+  /** Destination branch code (支店コード), 3 digits. */
+  branchCode: string;
+  /** Destination deposit type (預金種目): "1" = 普通, "2" = 当座. */
+  depositType: string;
+  /** Destination account number, 1–7 digits (zero-filled on the wire). */
+  accountNumber: string;
+  /**
+   * Payee name; mapped to half-width katakana on the wire. Kanji has no
+   * mechanical reading and is refused — register the フリガナ instead.
+   */
+  payeeName: string;
+  /** Employer-side employee number for the 社員番号 field (≤10 chars). */
+  employeeNumber: string;
+}
+
+export interface ZenginRun {
+  settings: ZenginSettings;
+  /** The salary transfer date (振込指定日): emitted as MMDD. */
+  transferDate: Date;
+  /** Detail payments — all salary transfers (種別コード 11, 給与振込). */
+  payments: ZenginPayment[];
+}
+
+/**
+ * Build a Zengin (全銀協規定形式) salary-transfer file — 給与振込, 種別コード
+ * 11: one 120-byte header (データ区分 1), one 120-byte data record
+ * (データ区分 2) per payment, one 120-byte trailer (8) and one 120-byte end
+ * record (9), joined with CRLF. The returned string is the logical text
+ * (half-width katakana + ASCII); `encodeZenginFile` renders the Shift_JIS
+ * bytes the bank reads.
+ *
+ * EVIDENCE. The unreachable primary is the JBA's own fixed-width 規定
+ * (every bank manual below cites 「全銀協規定フォーマットに準拠」; the
+ * JBA-published document retrieved, 全国銀行協会 平成29年8月, specifies the
+ * XML family, not this layout). The layout below is transcribed from SEVEN
+ * concordant bank-published sources plus one vendor guide, retrieved
+ * 2026-09-20, which agree on every field boundary (each source's widths sum
+ * to exactly 120 per record):
+ *
+ * 1. MUFG Bank BizStation, 「給与・賞与振込（全銀形式）レコードフォーマット」
+ *    — header (種別 11/12, 委託者コード N10, 委託者名 C40, 取組日 MMDD,
+ *    仕向銀行/支店/種目/口座, ダミー C17), data (被仕向銀行 N4 + 銀行名 C15
+ *    + 支店 N3 + 支店名 C15 + 手形交換所 N4 + 種目 N1 + 口座 N7 + 受取人 C30
+ *    + 金額 N10 + 新規 N1 + 社員番号 N10 + 所属コード N10 + ダミー C9),
+ *    trailer (件数 N6 + 金額 N12), end; the Shift_JIS-or-EBCDIC charset
+ *    clause with its kana/character conversion tables; the 200,000-record
+ *    cap; 新規コード fixed "0".
+ * 2. Chiba Bank, 「給与・賞与振込（全銀協規定形式）」 — the same four
+ *    records with 社員番号/所属コード as C(10) and ダミー C(9); CRLF after
+ *    each 120 bytes; JIS-or-EBCDIC; 手形交換所 all zeros; 新規 "0".
+ * 3. Tajima Bank, 「給与振込（全銀協規定形式）」 — 種別 11/12, the same
+ *    data shape with 社員番号/所属コード C(10), ダミー C(9).
+ * 4. Kiraboshi Bank, 「給与・賞与振込 振込依頼ファイル・フォーマット
+ *    （全銀協規定形式）」(20241202) — the same four records, 社員番号/
+ *    所属コード C(10) marked optional, CR+LF/CR/LF accepted, コード区分
+ *    0…JIS 1…EBCDIC.
+ * 5. Tsuruga Shinkin, 「全銀ファイル フォーマット」 — 種別コード 総合:21、
+ *    給与:11、賞与:12; the shared header/trailer/end; the note that
+ *    識別表示 Y (EDI) is 無効 for 給与・賞与振込 — salary records carry no
+ *    EDI block, hence the 9-char ダミー.
+ * 6. MUFG Trust, 「総合振込（全銀協規定形式）」(manual05) — the shared
+ *    header/trailer/end shapes and the N/C justification rules (N 右詰0埋め,
+ *    C 左詰スペース埋め); its data record is the 総合振込 variant
+ *    (顧客コード/振込区分/識別表示/EDI), which salary does NOT carry.
+ * 7. Docomo SMTB Net Bank, 「全銀協規定形式（振込ファイル）」 — the shared
+ *    shapes with the explicit tie コード区分「0」 = シフトJIS and
+ *    CR+LF terminators on 120-byte records.
+ * 8. Yamada-tools, 「全銀フォーマット完全ガイド【2026年版】」(vendor
+ *    secondary, 2026-03-27) — 1-indexed byte positions for the shared
+ *    header/data skeleton, the kana-only rule, Shift_JIS, and zero-padding
+ *    short account numbers; asserts 種別 11/12 for salary/bonus.
+ *
+ * Corroboration gradient, stated plainly: every MONEY byte (data-record
+ * positions 1–91 and the trailer counts/totals) is 7-bank-unanimous with
+ * 1-indexed positions cross-checked; the salary tail (社員番号/所属コード/
+ * ダミー at 92–120) is 4-bank-unanimous on offsets with ONE attribute
+ * disagreement — MUFG prints N(10) zero-filled, Chiba/Tajima/Kiraboshi print
+ * C(10) — resolved to C(10) left-justified space-filled by 3-to-1 majority,
+ * safe because MUFG itself accepts space remainders there and the field is
+ * reconciliation-only (it cannot address money). No published byte artifact
+ * (an accepted file's bytes) was reachable; no bank publishes one.
+ *
+ * Rejected with reason: the vendor guide's aside that salary may also use
+ * 種別 71 (and bonus 72) — no bank manual among (1)–(7) lists 71/72 for the
+ * header 種別コード, so the file emits 11 (給与振込) and a bonus-only file is
+ * a future variant, not a silent 12. The 賞与 code 12 differs from 11 in
+ * exactly those two bytes (sources (1)–(4) share one layout table for both).
+ *
+ * Why the residual single-attribute point is shippable: the 社員番号 field
+ * is informational — banks match and settle on bank/branch/種目/account plus
+ * the trailer totals, all unanimous. A wrong 社員番号 justification cannot
+ * redirect a credit; at worst an employer's reconciliation match needs the
+ * documented form.
+ *
+ * ENCODING (part of the format, not an implementation detail): text fields
+ * are half-width katakana in Shift_JIS (sources (1), (7), (8) state Shift_JIS
+ * outright; (2)–(4) state JIS-or-EBCDIC with コード区分, and (7) ties
+ * コード区分「0」 to シフトJIS — hence コード区分 "0", contentType
+ * `text/plain; charset=Shift_JIS`, and bytes via `encodeZenginFile`). The
+ * file is NEVER valid UTF-8: uploading the logical string as UTF-8 makes
+ * every payee name unreadable and shifts every field after it.
+ *
+ * JPY has no minor unit: amounts are whole yen, N(10) per credit
+ * (max 9,999,999,999) and N(12) in the trailer. Sub-yen values are refused,
+ * never rounded — rounding a net pay changes what the employee is owed.
+ *
+ * The transfer date is MMDD only (the 規定 has no year field); the bank
+ * interprets it inside its processing window, so a file generated far from
+ * its transfer date is the bank's loud rejection, never a silent misdate.
+ */
+export function buildZenginFile(run: ZenginRun): string {
+  const checked = validateZenginSettings(run.settings);
+  if (!checked.ok) {
+    throw new PaymentError(`Zengin originator settings are invalid: ${checked.missing.join(", ")}`);
+  }
+  const s = checked.settings;
+  if (run.payments.length === 0) throw new PaymentError("run has no payments to export");
+  // MUFG BizStation caps one transmission at 200,000 data records. Past the
+  // cap is a named refusal, never a silently over-long file the bank rejects.
+  if (run.payments.length > 200_000) {
+    throw new PaymentError(
+      `Zengin file holds at most 200,000 detail records but the run has ${run.payments.length} — split the pay run`,
+    );
+  }
+
+  const num = (value: string, len: number, what: string): string => {
+    if (value.length > len || !/^\d*$/.test(value)) {
+      throw new PaymentError(`Zengin ${what} "${value}" does not fit in ${len} digits`);
+    }
+    return value.padStart(len, "0");
+  };
+  const text = (value: string, len: number, what: string): string => {
+    if (value.length > len) {
+      throw new PaymentError(`Zengin ${what} does not fit in ${len} characters`);
+    }
+    return value.padEnd(len, " ");
+  };
+  const yen = (value: bigint, len: number, what: string): string => {
+    const digits = String(value);
+    if (value <= 0n) throw new PaymentError("payment amounts must be positive");
+    if (digits.length > len) {
+      throw new PaymentError(`Zengin ${what} ${digits} yen does not fit in ${len} digits — split the pay run`);
+    }
+    return digits.padStart(len, "0");
+  };
+  const bank = (value: string, what: string): string => {
+    const normal = normalizeBankCode(value);
+    if (!normal) throw new PaymentError(`Zengin ${what} "${value}" is not a 4-digit bank code`);
+    return normal;
+  };
+  const branch = (value: string, what: string): string => {
+    const normal = normalizeBranchCode(value);
+    if (!normal) throw new PaymentError(`Zengin ${what} "${value}" is not a 3-digit branch code`);
+    return normal;
+  };
+  const account = (value: string, what: string): string => {
+    const normal = normalizeZenginAccount(value);
+    if (normal === null) {
+      throw new PaymentError(`Zengin ${what} "${value}" is not a 1–7 digit account number`);
+    }
+    return normal;
+  };
+  const depositType = (value: string, what: string): string => {
+    // Four salary-transfer manuals price the payee 種目 as 1 (普通) or 2
+    // (当座) only; 4 (貯蓄) and 9 (その他) appear solely in 総合振込 tables,
+    // so they are refused here rather than emitted into an account-address
+    // byte the salary channel does not define.
+    if (value !== "1" && value !== "2") {
+      throw new PaymentError(`Zengin ${what} "${value}" must be 1 (普通) or 2 (当座)`);
+    }
+    return value;
+  };
+  // Transfer date MMDD: the 規定 carries month and day only.
+  const mmdd = (d: Date): string => {
+    if (Number.isNaN(d.getTime())) throw new PaymentError("Zengin transfer date is not a calendar date");
+    const m = d.getMonth() + 1;
+    const day = d.getDate();
+    return `${String(m).padStart(2, "0")}${String(day).padStart(2, "0")}`;
+  };
+
+  const transferDay = mmdd(run.transferDate);
+
+  // -- 1: header (120) ----------------------------------------------------
+  // 1(1) + 種別 11(2–3) + コード区分 0(4) + 委託者コード(5–14) +
+  // 委託者名(15–54) + 取組日 MMDD(55–58) + 仕向銀行番号(59–62) +
+  // 仕向銀行名(63–77) + 仕向支店番号(78–80) + 仕向支店名(81–95) +
+  // 預金種目(96) + 口座番号(97–103) + ダミー(104–120).
+  const header =
+    "1" +
+    "11" + // 種別コード: 給与振込 (賞与 12 differs in these bytes only)
+    "0" + // コード区分: JIS (Shift_JIS bytes via encodeZenginFile)
+    num(s.clientCode, 10, "client code") +
+    text(s.clientName, 40, "client name") +
+    transferDay +
+    bank(s.bankCode, "originating bank code") +
+    text(s.bankName, 15, "originating bank name") +
+    branch(s.branchCode, "originating branch code") +
+    text(s.branchName, 15, "originating branch name") +
+    depositType(s.depositType, "originating deposit type") +
+    account(s.accountNumber, "originating account number") +
+    " ".repeat(17);
+  if (header.length !== 120) throw new PaymentError("internal error: Zengin header record is not 120 characters");
+
+  // -- 2: details (120 each) ------------------------------------------------
+  // 2(1) + 被仕向銀行番号(2–5) + 被仕向銀行名(6–20) + 被仕向支店番号(21–23) +
+  // 被仕向支店名(24–38) + 手形交換所番号(39–42) + 預金種目(43) +
+  // 口座番号(44–50) + 受取人名(51–80) + 振込金額(81–90) + 新規コード(91) +
+  // 社員番号(92–101) + 所属コード(102–111) + ダミー(112–120).
+  const details = run.payments.map((p) => {
+    const payee = toZenginKana(p.payeeName);
+    if (payee === null || payee.trim() === "") {
+      throw new PaymentError(
+        `Zengin payee name "${p.payeeName}" cannot be expressed in half-width katakana — register the payee's katakana name (フリガナ) on the employee's approved bank account`,
+      );
+    }
+    // 社員番号 rides the channel too: an unmappable number refuses by
+    // employee name here (not as an anonymous encoder error later), while
+    // an empty one is legal — every manual marks the field optional.
+    const empRaw = toZenginKana(p.employeeNumber);
+    if (empRaw === null) {
+      throw new PaymentError(
+        `Zengin employee number "${p.employeeNumber}" for ${p.payeeName} cannot be expressed in half-width katakana`,
+      );
+    }
+    const record =
+      "2" +
+      bank(p.bankCode, `destination bank code for ${p.payeeName}`) +
+      " ".repeat(15) + // 被仕向銀行名: optional (省略可) on every manual
+      branch(p.branchCode, `destination branch code for ${p.payeeName}`) +
+      " ".repeat(15) + // 被仕向支店名: optional (省略可) on every manual
+      "0000" + // 手形交換所番号: all zeros (unused)
+      depositType(p.depositType, `deposit type for ${p.payeeName}`) +
+      account(p.accountNumber, `destination account for ${p.payeeName}`) +
+      // 受取人名: the bank matches on account coordinates, not the name —
+      // over-length display names truncate (cf. CPA-005 30, Bacs 18),
+      // unmappable ones (kanji) refuse above, never guess a reading.
+      payee.slice(0, 30).padEnd(30, " ") +
+      yen(p.amountYen, 10, `transfer to ${p.payeeName}`) +
+      "0" + // 新規コード: "0" fixed for salary on every manual
+      // 社員番号 C(10): reconciliation-only; the employer's number as-is,
+      // truncated to the field (never re-justified into a new identifier).
+      empRaw.slice(0, 10).padEnd(10, " ") +
+      " ".repeat(10) + // 所属コード: no department code is carried
+      " ".repeat(9); // ダミー: salary carries no EDI block
+    if (record.length !== 120) throw new PaymentError("internal error: Zengin data record is not 120 characters");
+    return record;
+  });
+
+  // -- 8: trailer (120) -----------------------------------------------------
+  // 8(1) + 合計件数 N6(2–7) + 合計金額 N12 yen(8–19) + ダミー(20–120).
+  const total = run.payments.reduce((acc, p) => acc + p.amountYen, 0n);
+  const trailer =
+    "8" +
+    num(String(run.payments.length), 6, "detail count") +
+    yen(total, 12, "trailer total") +
+    " ".repeat(101);
+  if (trailer.length !== 120) throw new PaymentError("internal error: Zengin trailer record is not 120 characters");
+
+  // -- 9: end (120) ---------------------------------------------------------
+  const end = "9" + " ".repeat(119);
+  if (end.length !== 120) throw new PaymentError("internal error: Zengin end record is not 120 characters");
+
+  return [header, ...details, trailer, end].join("\r\n") + "\r\n";
+}
+
+/**
+ * Render the logical Zengin text as the Shift_JIS bytes the bank reads.
+ *
+ * Hand-rolled JIS X 0201 (not iconv): the channel alphabet is exactly ASCII
+ * printable + half-width katakana, each one Shift_JIS byte, so the encoder
+ * is a small total table — and anything outside it (a kanji that slipped
+ * past validation, a full-width character, an emoji) is a thrown refusal,
+ * never a `?` replacement byte that would silently shift every field after
+ * it. CRLF passes through as 0x0D 0x0A.
+ */
+export function encodeZenginFile(text: string): Buffer {
+  const bytes: number[] = [];
+  for (const ch of text) {
+    const code = ch.codePointAt(0)!;
+    if (ch === "\r") { bytes.push(0x0d); continue; }
+    if (ch === "\n") { bytes.push(0x0a); continue; }
+    // JIS X 0201 Roman: ASCII printable; 0x5C is the yen mark (¥) on
+    // Japanese systems and the kana-channel backslash folds there.
+    if (code >= 0x20 && code <= 0x7e) { bytes.push(code); continue; }
+    // JIS X 0201 katakana: U+FF61–FF9F → 0xA1–0xDF.
+    if (code >= 0xff61 && code <= 0xff9f) { bytes.push(code - 0xff61 + 0xa1); continue; }
+    throw new PaymentError(
+      `Zengin file contains U+${code.toString(16).toUpperCase().padStart(4, "0")} "${ch}", which has no Shift_JIS single-byte form — names must be half-width katakana before encoding`,
+    );
+  }
+  return Buffer.from(bytes);
 }
