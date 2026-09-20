@@ -51,10 +51,19 @@ registerHooks({
 const { GET } = (await import("./route.ts")) as {
   GET: (req: Request) => Promise<Response>;
 };
+const { sql } = await import("drizzle-orm");
+const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg } = (await import(
   "../../../../../engine/src/testing/fixtures.ts"
 )) as typeof import("../../../../../engine/src/testing/fixtures.ts");
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+test("scripts delivery refuses an unauthenticated caller", async () => {
+  routeState.authz = null;
+  const res = await GET(new Request("http://localhost/api/scripts/client?documentKind=transfer"));
+  assert.equal(res.status, 401);
+  assert.deepEqual(await res.json(), { error: "unauthorized" });
+});
 
 test("scripts delivery answers the empty set with the feature off", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -68,5 +77,33 @@ test("scripts delivery answers the empty set with the feature off", { skip: !DB 
   } finally {
     routeState.authz = null;
     await dropScratchOrg(org.orgId);
+  }
+});
+
+test("scripts delivery never returns another organization's client source", { skip: !DB }, async () => {
+  const home = await createScratchOrg();
+  const other = await createScratchOrg();
+  try {
+    await db.execute(sql`
+      update orgs set settings = jsonb_set(settings, '{features,scripts}', 'true'::jsonb)
+       where id = ${home.orgId} or id = ${other.orgId}`);
+    await db.execute(sql`
+      insert into user_scripts (org_id, name, trigger_point, document_kind, source, is_active)
+      values
+        (${home.orgId}, 'home-client', 'client', 'transfer', 'function main(ctx) { return { abort: "home" }; }', true),
+        (${other.orgId}, 'other-client', 'client', 'transfer', 'function main(ctx) { return { abort: "other" }; }', true)`);
+    routeState.authz = { user: { orgId: home.orgId, id: "00000000-0000-4000-8000-000000000001" } };
+    const res = await GET(new Request("http://localhost/api/scripts/client?documentKind=transfer"));
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as { scripts: Array<{ name: string; source: string }> };
+    assert.deepEqual(
+      body.scripts.map((s) => s.name),
+      ["home-client"],
+    );
+    assert.equal(body.scripts.some((s) => s.source.includes("other")), false);
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(home.orgId);
+    await dropScratchOrg(other.orgId);
   }
 });
