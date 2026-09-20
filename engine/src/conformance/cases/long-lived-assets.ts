@@ -11,7 +11,8 @@ import { sql } from "drizzle-orm";
 import { computeDisposal, computeRemeasurement, remeasurementPolicy } from "../../assets/asset-lifecycle.ts";
 import { db } from "../../platform/db.ts";
 import { buildSchedule, runDepreciation } from "../../assets/depreciation.ts";
-import { add } from "../../money/money.ts";
+import { generateAccountingPeriods } from "../../close/calendar.ts";
+import { add, sum } from "../../money/money.ts";
 import type { ConformanceCase } from "../types.ts";
 
 export const LONG_LIVED_ASSET_CASES: readonly ConformanceCase[] = [
@@ -410,21 +411,63 @@ export const LONG_LIVED_ASSET_CASES: readonly ConformanceCase[] = [
           "The cost of a long-lived asset, less any salvage value, is depreciated in a systematic and rational manner over the asset's useful life.",
       },
     ],
-    support: "not-implemented",
-    tier: "computation",
+    support: "partial",
+    tier: "ledger",
     assertion:
-      "An entity reporting on a 4-4-5 retail calendar depreciates week-based periods — four weeks, four weeks, five weeks — with each period carrying its share of the annual charge, so the full useful life is covered with nothing skipped and nothing doubled.",
+      "Native monthly depreciation maps into a 4-4-5 fiscal calendar without dropping or duplicating a charge: months sharing a fiscal period are summed into one schedule line.",
     facts: [
-      "A retail entity reports on a 4-4-5 calendar anchored 2026-02-01: the 2026 year runs 2026-02-01 to 2027-01-30 in twelve week-based periods.",
-      "A 5-week period such as 2026-06-28 to 2026-08-01 spans two calendar month-starts, so two native monthly charges map onto one accounting period.",
-      "The book engine plans one charge per calendar month and refuses when two months land in one period — the schedule cannot be built on this calendar at all.",
+      "The retail calendar is anchored 2026-02-02, with twelve 4-4-5 fiscal periods.",
+      "A 1,200.00 asset placed in service 2026-07-01 has six straight-line monthly charges of 200.00 and no salvage value.",
+      "July/August and October/November each share a fiscal period. The four resulting schedule lines are 400.00, 200.00, 400.00 and 200.00, totaling 1,200.00.",
     ],
-    gap: "Book depreciation is monthly-native: computeSchedule plans per calendar month and buildSchedule throws 'multiple native depreciation months map to one accounting period' on any 4-4-5, 4-5-4, 5-4-4, or thirteen-period calendar whose week-based periods span month-starts. Entities on retail calendars cannot schedule depreciation.",
+    limitation: "The book policy remains monthly-native. Mapping monthly charges into fiscal periods is implemented; this case does not claim depreciation weighted by the number of weeks in each period.",
     expected: {
       values: {
         periodsIn445Year: "12",
-        scheduleBuildable: "false",
+        scheduleLines: "4", uniquePeriods: "4", plannedTotal: "1200.0000",
+        plannedAmounts: "400.0000,200.0000,400.0000,200.0000",
       },
+    },
+    run: async (ctx) => {
+      const ledger = ctx.ledger!;
+      const calendarId = randomUUID(), categoryId = randomUUID(), assetId = randomUUID();
+      const previousDefaults = (await db.execute<{ id: string }>(sql`
+        select id from fiscal_calendars where org_id=${ledger.orgId} and is_default`)).rows;
+      try {
+        await db.execute(sql`insert into fiscal_calendars
+          (id, org_id, name, cadence, year_start_month, week_starts_on, anchor_date, time_zone, is_default, is_active, config)
+          values (${calendarId}, ${ledger.orgId}, 'Conformance retail 4-4-5', 'four_four_five', 2, 1,
+                  '2026-02-02', 'UTC', false, true, '{"anchorFiscalYear":2026}'::jsonb)`);
+        await db.execute(sql`update fiscal_calendars set is_default=false where org_id=${ledger.orgId} and is_default`);
+        await db.execute(sql`update fiscal_calendars set is_default=true where org_id=${ledger.orgId} and id=${calendarId}`);
+        const periods = await generateAccountingPeriods(ledger.orgId, calendarId, 2026, ledger.actorId);
+        await db.execute(sql`insert into asset_categories
+          (id, org_id, name, asset_account_id, accumulated_depreciation_account_id, depreciation_expense_account_id,
+           default_method, default_life_months, default_convention)
+          values (${categoryId}, ${ledger.orgId}, 'Conformance retail asset', ${ctx.roles.fixedAsset},
+                  ${ctx.roles.accumulatedDepreciation}, ${ctx.roles.impairmentLoss}, 'straight_line', 6, 'full_month')`);
+        await db.execute(sql`insert into fixed_assets
+          (id, org_id, subsidiary_id, category_id, asset_number, name, status, acquired_on, in_service_on,
+           acquisition_cost, salvage_value, depreciation_method, useful_life_months, depreciation_convention)
+          values (${assetId}, ${ledger.orgId}, ${ledger.subsidiaryId}, ${categoryId}, ${`CONF-445-${assetId}`},
+                  'Retail-calendar asset', 'in_service', '2026-07-01', '2026-07-01', 1200, 0, 'straight_line', 6, 'full_month')`);
+        await buildSchedule(assetId, ledger.orgId, ledger.actorId, ledger.bookId);
+        const lines = (await db.execute<{ period_id: string; planned: string }>(sql`
+          select l.period_id, l.planned_amount::text as planned from depreciation_schedule_lines l
+          join depreciation_schedules s on s.id=l.schedule_id and s.org_id=l.org_id
+          where s.org_id=${ledger.orgId} and s.asset_id=${assetId} and s.book_id=${ledger.bookId}
+          order by l.sequence`)).rows;
+        return { values: {
+          periodsIn445Year: String(periods.periods.length), scheduleLines: String(lines.length),
+          uniquePeriods: String(new Set(lines.map((line) => line.period_id)).size),
+          plannedTotal: sum(lines.map((line) => line.planned)), plannedAmounts: lines.map((line) => line.planned).join(","),
+        } };
+      } finally {
+        await db.execute(sql`update fiscal_calendars set is_default=false where org_id=${ledger.orgId} and id=${calendarId}`);
+        for (const previous of previousDefaults) {
+          await db.execute(sql`update fiscal_calendars set is_default=true where org_id=${ledger.orgId} and id=${previous.id}`);
+        }
+      }
     },
   },
 
