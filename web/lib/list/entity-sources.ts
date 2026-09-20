@@ -75,6 +75,7 @@ import {
   bankRuleWhere,
   activityWhere,
   customerWhere,
+  employeeBaseJoins,
   employeeWhere,
   fixedAssetWhere,
   itemWhere,
@@ -321,12 +322,42 @@ const SOURCES: Record<string, EntityListSource> = {
     table: 'parties',
     alias: 'p',
     customFieldTable: 'parties',
-    baseJoins: sql``,
+    // HRM on by default here (the CRM-on twin of CUSTOMER_BASE_JOINS):
+    // entity-list-view overrides with the request's feature state, and the
+    // where builder fails directory filters closed while the switch is off.
+    baseJoins: (allowedSubsidiaryIds, today) => employeeBaseJoins(true, today!, allowedSubsidiaryIds),
     builtInExpr: PARTY_BUILT_IN_EXPR,
     sorts: PARTY_SORTS,
     defaultSort: sql`p.display_name`,
     statusExpr: PARTY_ACTIVE_STATUS_EXPR,
-    quickFilters: [],
+    quickFilters: [
+      {
+        paramKey: 'department',
+        filterKey: 'department',
+        loadOptions: async (orgId) => {
+          const result = await db.execute<EntityQuickFilterOption & Record<string, unknown>>(sql`
+            select id::text as value, name as label
+              from departments
+             where org_id = ${orgId} and is_active
+             order by name`)
+          return result.rows
+        },
+      },
+      { paramKey: 'employmentStatus', filterKey: 'employment_status' },
+      {
+        paramKey: 'employer',
+        filterKey: 'employer',
+        loadOptions: async (orgId, allowedSubsidiaryIds) => {
+          const result = await db.execute<EntityQuickFilterOption & Record<string, unknown>>(sql`
+            select id::text as value, name as label
+              from subsidiaries
+             where org_id = ${orgId} and is_active
+               ${subsidiaryVisibleFilter(sql`id`, allowedSubsidiaryIds ?? null)}
+             order by name`)
+          return result.rows
+        },
+      },
+    ],
     where: employeeWhere,
     drawerParam: 'party',
     basePath: '/entities/employees',

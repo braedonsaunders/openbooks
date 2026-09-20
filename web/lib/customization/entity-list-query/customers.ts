@@ -186,7 +186,7 @@ export function customerWhere(
   return sql.join(parts, sql` `)
 }
 
-function rolePartyWhere(
+export function rolePartyWhere(
   role: 'vendor' | 'employee',
   view: ListViewConfig,
   adhoc: EntityAdhoc,
@@ -218,9 +218,4 @@ export const vendorWhere = (
   allowedSubsidiaryIds?: Set<string> | null,
 ) => rolePartyWhere('vendor', view, adhoc, orgId, allowedSubsidiaryIds)
 
-export const employeeWhere = (
-  view: ListViewConfig,
-  adhoc: EntityAdhoc,
-  orgId: string,
-  allowedSubsidiaryIds?: Set<string> | null,
-) => rolePartyWhere('employee', view, adhoc, orgId, allowedSubsidiaryIds)
+/** Employee-list WHERE lives in ./employment-directory (HR-2b): the role base above plus the as-of directory predicates. */

@@ -1197,7 +1197,39 @@ const EMPLOYEE: RecordTypeMeta = {
   ],
   lineFields: [],
   listColumns: PARTY_LIST_COLUMNS,
-  listFilters: [],
+  // HR-2b directory filters. The department and employer value sets are
+  // tenant data, so they arrive through the list's quick-filter loaders and
+  // the unassigned employment states ride as static options. Saved views
+  // filter the same keys through the employee where builder.
+  listFilters: [
+    {
+      key: "department",
+      labelKey: "common.labels.department",
+      kind: "select",
+      operators: OPERATORS_BY_KIND.select,
+      options: [{ value: "unassigned", labelKey: "hrm.home.groups.unassigned" }],
+    },
+    {
+      key: "employment_status",
+      labelKey: "hrm.directory.employmentStatus",
+      kind: "select",
+      operators: OPERATORS_BY_KIND.select,
+      options: [
+        { value: "offered", labelKey: "hrm.employment.status.offered" },
+        { value: "active", labelKey: "hrm.employment.status.active" },
+        { value: "on_leave", labelKey: "hrm.employment.status.on_leave" },
+        { value: "suspended", labelKey: "hrm.employment.status.suspended" },
+        { value: "terminated", labelKey: "hrm.employment.status.terminated" },
+        { value: "no_employment", labelKey: "hrm.directory.noEmployment" },
+      ],
+    },
+    {
+      key: "employer",
+      labelKey: "hrm.home.groups.employer",
+      kind: "select",
+      operators: OPERATORS_BY_KIND.select,
+    },
+  ],
   defaultSort: { sortKey: "name", dir: "asc" },
 };
 

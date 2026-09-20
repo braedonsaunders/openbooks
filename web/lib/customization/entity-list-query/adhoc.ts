@@ -8,4 +8,6 @@ export interface EntityAdhoc {
   showInactive?: boolean
   /** When false, customer lists must not read or filter on CRM lifecycle — stored profiles stay. */
   crmEnabled?: boolean
+  /** When false, the employee list must not read or filter on employment — stored versions stay. */
+  hrmEnabled?: boolean
 }

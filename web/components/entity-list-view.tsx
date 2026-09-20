@@ -26,6 +26,8 @@ import {
   customerBuiltInExpr,
   customerSorts,
   customerStatusExpr,
+  employeeBaseJoins,
+  EMPLOYEE_HRM_FILTER_KEYS,
 } from '../lib/customization/entity-list-query'
 import { entityListSource, entityOrderClause, plannedPageClauses } from '../lib/list/entity-sources'
 
@@ -56,6 +58,9 @@ const STATUS_VARIANT: Record<string, 'default' | 'success' | 'secondary' | 'warn
 /** Quick filters that read the CRM profile joins (see customerBaseJoins). */
 const CUSTOMER_CRM_QUICK_FILTERS = new Set(['status_id', 'owner_user_id', 'territory_id'])
 
+/** Quick filters that read the employment joins (see employeeBaseJoins). */
+const EMPLOYEE_HRM_QUICK_FILTERS = new Set<string>(EMPLOYEE_HRM_FILTER_KEYS)
+
 export async function EntityListView({
   recordType,
   orgId,
@@ -66,6 +71,7 @@ export async function EntityListView({
   emptyAction,
   formatValue,
   crmAccountsVisible = true,
+  hrmEmploymentVisible = true,
 }: {
   recordType: string
   orgId: string
@@ -80,6 +86,14 @@ export async function EntityListView({
    * inside tests and background paths where `cookies()` has no request scope.
    */
   crmAccountsVisible?: boolean
+  /**
+   * `hrm.employment.read`, resolved by the slot. The employee list's
+   * employment filters and columns belong to the HRM read surface: a
+   * viewer holding only `parties.read` sees the roster without them.
+   * Resolved by the caller rather than read here, the way
+   * `crmAccountsVisible` already is.
+   */
+  hrmEmploymentVisible?: boolean
   sp: Record<string, string | string[] | undefined>
   drawer?: ReactNode
   emptyAction?: ReactNode
@@ -88,11 +102,16 @@ export async function EntityListView({
   const { money } = await getMoneyFormatter()
   const source = entityListSource(recordType)
   const catalog = getRecordType(recordType)
-  const [inventoryOn, crmFeatureOn] = await Promise.all([
+  const [inventoryOn, crmFeatureOn, hrmFeatureOn] = await Promise.all([
     isFeatureEnabled(orgId, 'inventory'),
     recordType === 'customer' ? isFeatureEnabled(orgId, 'crm') : Promise.resolve(true),
+    recordType === 'employee' ? isFeatureEnabled(orgId, 'hrm') : Promise.resolve(true),
   ])
   const crmOn = recordType === 'customer' ? crmFeatureOn && crmAccountsVisible : crmFeatureOn
+  // The employment filters and columns belong to the HRM read surface: the
+  // feature switch plus the employment read grant. Either off, they are
+  // absent from the roster — never rendered empty.
+  const hrmOn = recordType === 'employee' ? hrmFeatureOn && hrmEmploymentVisible : true
   const meta = catalog
     ? recordTypeForFeatureState(catalog, { inventory: inventoryOn, crm: crmOn })
     : catalog
@@ -158,9 +177,12 @@ export async function EntityListView({
   // The CRM segments/filters vanish with the lifecycle they read — their
   // option loaders would query crm_account_statuses for an org that has no
   // CRM, and their predicates would reference joins that are not in the FROM.
+  // The employment filters vanish the same way while HRM is off.
   const quickFilterDefs = recordType === 'customer' && !crmOn
     ? source.quickFilters.filter((quick) => !CUSTOMER_CRM_QUICK_FILTERS.has(quick.filterKey))
-    : source.quickFilters
+    : recordType === 'employee' && !hrmOn
+      ? source.quickFilters.filter((quick) => !EMPLOYEE_HRM_QUICK_FILTERS.has(quick.filterKey))
+      : source.quickFilters
 
   const quickValues: Record<string, string | undefined> = {}
   const quickDefaults: Record<string, string | undefined> = {}
@@ -190,6 +212,7 @@ export async function EntityListView({
     filters: quickValues,
     showInactive,
     crmEnabled: recordType === 'customer' ? crmOn : undefined,
+    hrmEnabled: recordType === 'employee' ? hrmOn : undefined,
   }
   const where = source.where(view, adhoc, orgId, allowedSubs)
   // Counts ignore the ad-hoc status selection so every status remains visible
@@ -203,7 +226,7 @@ export async function EntityListView({
   // emits a predicate over joins the CRM-off FROM never made.
   const countWhere = source.where(
     countView,
-    { showInactive, filters: {}, crmEnabled: adhoc.crmEnabled },
+    { showInactive, filters: {}, crmEnabled: adhoc.crmEnabled, hrmEnabled: adhoc.hrmEnabled },
     orgId,
     allowedSubs,
   )
@@ -218,11 +241,15 @@ export async function EntityListView({
     : (source.statusExpr ?? sql`${aliasSql}.status`)
   const baseJoins = recordType === 'customer'
     ? customerBaseJoins(crmOn)
-    : (typeof source.baseJoins === 'function' ? source.baseJoins(allowedSubs, today) : source.baseJoins)
+    : recordType === 'employee'
+      ? employeeBaseJoins(hrmOn, today, allowedSubs)
+      : (typeof source.baseJoins === 'function' ? source.baseJoins(allowedSubs, today) : source.baseJoins)
   const countJoinsSource = source.countJoins ?? source.baseJoins
   const countJoins = recordType === 'customer'
     ? customerBaseJoins(crmOn)
-    : (typeof countJoinsSource === 'function' ? countJoinsSource(allowedSubs, today) : countJoinsSource)
+    : recordType === 'employee'
+      ? employeeBaseJoins(hrmOn, today, allowedSubs)
+      : (typeof countJoinsSource === 'function' ? countJoinsSource(allowedSubs, today) : countJoinsSource)
 
   // Planned page ids for sorts SQL cannot serve without a per-row scan (see
   // `orderedPageIds`): the page reads by id membership ordered by array

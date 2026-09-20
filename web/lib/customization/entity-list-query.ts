@@ -28,8 +28,18 @@ export {
   CUSTOMER_SORTS,
   customerWhere,
   vendorWhere,
-  employeeWhere,
+  rolePartyWhere,
 } from "./entity-list-query/customers"
+
+export {
+  EMPLOYMENT_STATUS_VALUES,
+  NO_EMPLOYMENT,
+  UNASSIGNED_DEPARTMENT,
+  EMPLOYEE_HRM_FILTER_KEYS,
+  liveVersionAsOf,
+  employeeBaseJoins,
+  employeeWhere,
+} from "./entity-list-query/employment-directory"
 
 export {
   PROJECT_BASE_JOINS,
