@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { add, cmp, isZero, neg } from "../money/money.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
-import { assertPeriodModulesOpen, CloseError } from "../close/close.ts";
+import { assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
 import { adjustInventory } from "./movements.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
 import { getOnHandWith, periodForDate, persistReceiptMoney, primaryBookId } from "./position.ts";
