@@ -287,6 +287,7 @@ export async function listLeaveTypes(exec: SqlExecutor, orgId: string): Promise<
 export interface LeaveRequestSummary {
   readonly id: string;
   readonly employmentId: string;
+  readonly workerPartyId: string;
   readonly leaveTypeId: string;
   readonly leaveTypeCode: string;
   readonly startsOn: string;
@@ -299,7 +300,8 @@ export interface LeaveRequestSummary {
   readonly decisionReason: string | null;
 }
 
-const SUMMARY_COLUMNS = sql`r.id, r.employment_id, r.leave_type_id, t.code as leave_type_code,
+const SUMMARY_COLUMNS = sql`r.id, r.employment_id, e.worker_party_id as worker_party_id,
+  r.leave_type_id, t.code as leave_type_code,
   r.starts_on::text as starts_on, r.ends_on::text as ends_on, r.hours::text as hours,
   r.reason, r.status, r.decided_by, r.decided_at::text as decided_at, r.decision_reason`;
 
@@ -307,6 +309,7 @@ function toSummary(row: Record<string, unknown>): LeaveRequestSummary {
   return {
     id: String(row.id),
     employmentId: String(row.employment_id),
+    workerPartyId: String(row.worker_party_id),
     leaveTypeId: String(row.leave_type_id),
     leaveTypeCode: String(row.leave_type_code),
     startsOn: String(row.starts_on).slice(0, 10),
@@ -320,16 +323,49 @@ function toSummary(row: Record<string, unknown>): LeaveRequestSummary {
   };
 }
 
+async function loadSummaryRow(exec: SqlExecutor, orgId: string, requestId: string): Promise<Record<string, unknown>> {
+  const row = (await exec.execute<Record<string, unknown>>(sql`
+    select ${SUMMARY_COLUMNS} from hrm_leave_requests r
+      join hrm_leave_types t on t.id = r.leave_type_id and t.org_id = r.org_id
+      join worker_employments e on e.id = r.employment_id and e.org_id = r.org_id
+     where r.org_id = ${orgId} and r.id = ${requestId}
+  `)).rows[0];
+  if (!row) throw new LeaveError("NOT_FOUND", "leave request not found in this organization — check the request id");
+  return row;
+}
+
 /** One request, gated on its employment — never by a caller-supplied party. */
 export async function getLeaveRequest(query: { orgId: string; actorId: string; requestId: string }): Promise<LeaveRequestSummary> {
   return withOrgTransaction(query.orgId, async () => {
-    const row = (await db.execute<Record<string, unknown>>(sql`
-      select ${SUMMARY_COLUMNS} from hrm_leave_requests r
-        join hrm_leave_types t on t.id = r.leave_type_id and t.org_id = r.org_id
-       where r.org_id = ${query.orgId} and r.id = ${query.requestId}
-    `)).rows[0];
-    if (!row) throw new LeaveError("NOT_FOUND", "leave request not found in this organization — check the request id");
+    const row = await loadSummaryRow(db, query.orgId, query.requestId);
     await requireHrmLeaveRead(db, query.orgId, query.actorId, String(row.employment_id));
+    return toSummary(row);
+  });
+}
+
+/**
+ * One of the actor's OWN requests. The second self-service touch, beside the
+ * inbox: proof of ownership is the employment behind the login, never a
+ * caller-supplied worker — anything else refuses without saying whether the
+ * id exists.
+ */
+export async function getOwnLeaveRequest(query: { orgId: string; actorId: string; requestId: string }): Promise<LeaveRequestSummary> {
+  return withOrgTransaction(query.orgId, async () => {
+    const may =
+      (await actorHasPermission(db, query.orgId, query.actorId, "hrm.leave.request")) ||
+      (await actorHasPermission(db, query.orgId, query.actorId, "hrm.leave.read"));
+    if (!may) {
+      throw new HrmAuthorizationError(
+        "Leave access requires the hrm.leave.request permission — ask an administrator to grant it in /admin/roles.",
+      );
+    }
+    const row = await loadSummaryRow(db, query.orgId, query.requestId);
+    const own = await loadOwnEmploymentIds(db, query.orgId, query.actorId);
+    if (!own.includes(String(row.employment_id))) {
+      throw new HrmAuthorizationError(
+        "this leave request is not on your employment — open it from your own inbox",
+      );
+    }
     return toSummary(row);
   });
 }
@@ -343,6 +379,7 @@ export async function listLeaveRequests(query: {
     const rows = (await db.execute<Record<string, unknown>>(sql`
       select ${SUMMARY_COLUMNS} from hrm_leave_requests r
         join hrm_leave_types t on t.id = r.leave_type_id and t.org_id = r.org_id
+        join worker_employments e on e.id = r.employment_id and e.org_id = r.org_id
        where r.org_id = ${query.orgId} and r.employment_id = ${query.employmentId}
          and (${query.status ?? null}::text is null or r.status = ${query.status ?? null}::text)
        order by r.starts_on desc, r.created_at desc
@@ -371,6 +408,7 @@ export async function myLeaveRequests(query: { orgId: string; actorId: string })
     const rows = (await db.execute<Record<string, unknown>>(sql`
       select ${SUMMARY_COLUMNS} from hrm_leave_requests r
         join hrm_leave_types t on t.id = r.leave_type_id and t.org_id = r.org_id
+        join worker_employments e on e.id = r.employment_id and e.org_id = r.org_id
        where r.org_id = ${query.orgId}
          and r.employment_id in (select jsonb_array_elements_text(${JSON.stringify(own)}::jsonb)::uuid)
        order by r.starts_on desc, r.created_at desc
