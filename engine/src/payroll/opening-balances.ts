@@ -9,7 +9,7 @@ import {
   takeEmployeeTaxYearFences,
   takeEmployerLevyFences,
 } from "./fences.ts";
-import type { type PayrollSubsidiaryScope } from "./scope.ts";
+import type { PayrollSubsidiaryScope } from "./scope.ts";
 import { PACK_OPENING_BALANCE_FIELDS } from "./opening-ytd-registry.ts";
 
 function openingSubsidiaryScopeFilter(

@@ -6,13 +6,15 @@ import { assertGeneratedBillingPostable, BillingSourceIntegrityError } from "../
 import { type ContributedLineWithSource } from "../allocations/post.ts";
 
 import { assertPeriodModulesOpen, closeModuleForDocument, CloseError } from "../close/period-policy.ts";
-import { applyBillInventoryReceipts, applyVendorCreditInventoryReturns } from "../inventory/inventory.ts";
+import { applyBillInventoryReceipts } from "../inventory/documents-purchasing.ts";
+import { applyVendorCreditInventoryReturns } from "../inventory/documents-vendor-credits.ts";
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from "../records/transaction-audit.ts";
 
 import { allocateEntryNumber, nextFreeEntryNumber } from "../records/entry-number.ts";
 import { assertPayrollRemittanceBillCurrent } from "../payroll/remittance.ts";
 import { enqueuePostingEffects } from "./posting-effects.ts";
-import { PostingError, assertFinalKernelBalance } from "./posting-rules.ts";
+import { PostingError } from "./posting-contracts.ts";
+import { assertFinalKernelBalance } from "./posting-invariants.ts";
 import { validateRequiredDimensions } from "./posting-accounts.ts";
 
 import { applySubsidiaries } from "./posting-subsidiaries.ts";

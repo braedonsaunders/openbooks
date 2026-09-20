@@ -7,7 +7,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { readApiErrorMessage } from '../../../../../lib/api-error'
 import { Button, Label, Select } from '@openbooks/ui'
-import type { type PayrollSettings } from "@openbooks/engine/src/payroll/run-setup.ts";
+import type { PayrollSettings } from "@openbooks/engine/src/payroll/run-setup.ts";
 
 // Generic, jurisdiction-free slots only. Statutory liabilities (CPP/EI/income
 // tax/…) are declared by the installed country packs and rendered from

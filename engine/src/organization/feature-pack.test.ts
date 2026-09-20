@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { quoteFromRate, sumComponentTax } from "../tax/rate-providers.ts";
 import { summarizeSettlement, parseStripeBalanceTransactions, parseRecurlySettlement } from "../payments/psp-settlement.ts";
-import { assertTracking } from "../inventory/inventory.ts";
-import { InventoryError } from "../inventory/inventory.ts";
+import { assertTracking } from "../inventory/tracking.ts";
+import { InventoryError } from "../inventory/contracts.ts";
 import { prorate } from "../billing/subscription-billing.ts";
 
 test("quoteFromRate builds component evidence", () => {

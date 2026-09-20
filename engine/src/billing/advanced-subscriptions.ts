@@ -1,7 +1,7 @@
 import { sql, type SQL } from "drizzle-orm";
 import { db, withOrg } from "../platform/db.ts";
 import { SYSTEM_ACTOR_ID } from "../banking/banking.ts";
-import { inventoryFeatureEnabled } from "../inventory/inventory.ts";
+import { inventoryFeatureEnabled } from "../inventory/profile-policy.ts";
 import { add, mul, normalizeMoney, toUnits } from "../money/money.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 

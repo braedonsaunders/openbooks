@@ -41,7 +41,9 @@ test("every shared payroll engine entry point carries the caller scope to its bo
     "retro-store.ts",
     "payment.ts",
     "readiness.ts",
-    "run.ts",
+    "run-lifecycle.ts",
+    "run-calculation.ts",
+    "run-commit.ts",
   ];
   for (const file of files) {
     const text = source(file);

@@ -23,12 +23,10 @@ import {
 } from './order-cycle-math'
 import { isFeatureEnabled } from './features'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
-import { applyPurchaseReceiptInventory, applySalesFulfillmentInventoryIssues } from '@openbooks/engine/src/inventory/inventory.ts'
-import {
-  assertStockLocationAdmitsSubsidiary,
-  InventoryError,
-  InventoryOwnershipError,
-} from '@openbooks/engine/src/inventory/inventory.ts'
+import { applyPurchaseReceiptInventory } from "@openbooks/engine/src/inventory/documents-purchasing.ts";
+import { applySalesFulfillmentInventoryIssues } from "@openbooks/engine/src/inventory/documents-sales.ts";
+import { assertStockLocationAdmitsSubsidiary } from "@openbooks/engine/src/inventory/profile-policy.ts";
+import { InventoryError, InventoryOwnershipError } from "@openbooks/engine/src/inventory/contracts.ts";
 import { loadSubsidiaryContext } from '@openbooks/engine/src/organization/subsidiaries.ts'
 import { issueSalesOrder } from '@openbooks/engine/src/sales/sales-orders.ts'
 import { activeStockLocations, resolveLineStockLocation } from './stock-locations'

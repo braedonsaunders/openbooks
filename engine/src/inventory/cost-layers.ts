@@ -63,7 +63,7 @@ export function planQuantityConsumption(
   return out;
 }
 
-interface Consumption {
+export interface Consumption {
   originalCost?: string | null;
   layerId: string;
   quantity: string;

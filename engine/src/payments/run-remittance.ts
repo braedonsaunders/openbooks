@@ -2,7 +2,6 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { PaymentRunPostingClaimFencedError } from "./payment-errors.ts";
 import { type PostingClaim, assertPostingClaimLive } from "./run-claim.ts";
-export { type PostingClaim, assertPostingClaimLive } from "./run-claim.ts";
 /**
  * Queue the payee's automatic remittance advice for one instruction the
  * worker just posted under its posting claim.

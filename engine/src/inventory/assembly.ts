@@ -10,9 +10,9 @@ import { inventoryRequestHash } from "./action-idempotency.ts";
 import { assertStockLocationAdmitsSubsidiary, assertNoForeignOnHand, resolveProfile, assertMovementOwner, assertInventoryFeature } from "./profile-policy.ts";
 import { stockLocationDim, postInventoryEntry, inventoryOffsetAccountProblem, type JournalLineInput } from "./journal.ts";
 import { primaryBookId, periodForDate, subsidiaryCurrency, getOnHandWith, lockInventoryPosition, persistReceiptMoney, assertInventoryDate } from "./position.ts";
-import { consumeLayers, recordConsumptions, addLayerAtCost } from "./cost-layers.ts";
+import { consumeLayers, recordConsumptions, addLayerAtCost, type Consumption } from "./cost-layers.ts";
 import { type MovementResult } from "./movements.ts";
-import { type ReverseInventoryInput, type ReverseInventoryResult } from "./reversal.ts";
+import { type ReverseInventoryInput, type ReverseInventoryResult, type ReversibleMovement, removeInboundLayer, restoreIssueLayers, reverseInventoryJournal } from "./reversal.ts";
 
 // ---------------------------------------------------------------------------
 // Assembly build (light manufacturing / kits)

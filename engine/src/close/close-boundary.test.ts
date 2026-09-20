@@ -1,21 +1,18 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
 
-const files = ["close.ts", "calendar.ts", "defaults.ts", "readiness.ts", "task-dependencies.ts", "run-automation.ts", "period-locks.ts", "run-start.ts", "tasks.ts", "approvals.ts", "run-completion.ts", "reopening.ts", "period-policy.ts", "features.ts", "automations.ts"];
+const files = ["calendar.ts", "defaults.ts", "readiness.ts", "task-dependencies.ts", "run-automation.ts", "period-locks.ts", "run-start.ts", "tasks.ts", "approvals.ts", "run-completion.ts", "reopening.ts", "period-policy.ts", "features.ts", "automations.ts"];
 const source = (name: string) => readFileSync(new URL(name, import.meta.url), "utf8");
 const parse = (name: string) => ts.createSourceFile(name, source(name), ts.ScriptTarget.Latest, true);
 
-test("close has a thin compatibility facade and focused implementation modules", () => {
-  assert.ok(source("close.ts").split("\n").length <= 200);
+test("close uses direct operation modules with no legacy entrypoint", () => {
+  assert.equal(existsSync(new URL("close.ts", import.meta.url)), false, "legacy entrypoint must be deleted");
   for (const file of files.filter((file) => file !== "close.ts")) {
     assert.ok(source(file).split("\n").length <= 800, `${file} must remain a focused operation or policy`);
   }
-  for (const statement of parse("close.ts").statements) {
-    assert.ok(ts.isExportDeclaration(statement),
-      "the public API owns compatibility exports, not lifecycle work");
-  }
+
 });
 
 test("close implementation dependencies have no facade backimports or static cycles", () => {

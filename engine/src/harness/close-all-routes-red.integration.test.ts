@@ -6,7 +6,8 @@ import { db, withBypassContext, withOrgTransaction } from "../platform/db.ts";
 import { CLOSE_MODULES } from "../close/period-policy.ts";
 import { setPeriodLockState } from "../close/period-locks.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
-import { receiveInventory, InventoryError } from "../inventory/inventory.ts";
+import { receiveInventory } from "../inventory/movements.ts";
+import { InventoryError } from "../inventory/contracts.ts";
 import { PostingError } from "../ledger/posting-contracts.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import {

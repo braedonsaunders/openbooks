@@ -1,3 +1,4 @@
+import { reverseInventoryJournal } from "./reversal.ts";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
@@ -9,7 +10,7 @@ import { assertStockLocationAdmitsSubsidiary, resolveProfile, assertMovementOwne
 import { stockLocationDim, postInventoryEntry, inventoryOffsetAccountProblem, type JournalLineInput } from "./journal.ts";
 import { primaryBookId, periodForDate, subsidiaryCurrency, lockInventoryPosition, persistReceiptMoney, assertInventoryDate } from "./position.ts";
 import { revalueLayerExactly, devalueLayerExactly, apportionUnits, type RevaluableLayer } from "./revaluation.ts";
-import { nextSequenceNumber } from "./transfer-orders.ts";
+import { nextSequenceNumber } from "./document-numbering.ts";
 
 // ---------------------------------------------------------------------------
 // Landed cost vouchers — one freight/duty amount spread across many targets

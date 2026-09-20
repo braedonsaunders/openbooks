@@ -10,11 +10,16 @@ import { postDriverResolver } from "../allocations/report-runner.ts";
 import { assertDocumentMutationRefsOwned } from "../records/mutation-refs.ts";
 import { runRecordFlows } from "../flows/run.ts";
 
-import { assertBillReceiptsPostable, assertInvoiceIssuesPostable, assertVendorCreditInventoryReturnsPostable, resolveBillInventoryAccounts, resolveVendorCreditInventoryAccounts } from "../inventory/inventory.ts";
+import { assertBillReceiptsPostable, resolveBillInventoryAccounts } from "../inventory/documents-purchasing.ts";
+import { assertInvoiceIssuesPostable } from "../inventory/documents-sales.ts";
+import { assertVendorCreditInventoryReturnsPostable, resolveVendorCreditInventoryAccounts } from "../inventory/documents-vendor-credits.ts";
 
 import { assertBillPostingAllowed, ComplianceError } from "../compliance/compliance.ts";
 
-import { type KernelLine, type PostingDeps, validateTaxControlAccounts, RULES, PostingError, assertFinalKernelBalance, assertCreditMemoDirection } from "./posting-rules.ts";
+import { type KernelLine, type PostingDeps, PostingError } from "./posting-contracts.ts";
+import { validateTaxControlAccounts } from "./posting-tax-policy.ts";
+import { RULES } from "./posting-rules.ts";
+import { assertFinalKernelBalance, assertCreditMemoDirection } from "./posting-invariants.ts";
 import { resolveDeferralAccounts, resolveTaxAccounts, resolveExpenseReceivableDeps, resolveOrgTaxAccounts, resolveTaxComponents, validateRequiredDimensions, resolveOpenItemAccounts } from "./posting-accounts.ts";
 import { resolveProviderTaxPlans } from "./posting-provider-tax.ts";
 import { applySubsidiaries } from "./posting-subsidiaries.ts";

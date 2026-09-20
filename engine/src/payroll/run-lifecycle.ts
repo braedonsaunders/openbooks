@@ -13,8 +13,6 @@ import { resolvePayrollRunContext } from "./packs.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import { type ScheduleRow, DAY, iso, at, nextPeriodAfter } from "./run-calendar.ts";
 import { type PayRunType } from "./run-contracts.ts";
-export { type PayRunType } from "./run-contracts.ts";
-export { payrollSubsidiaryInScope, payrollSubsidiaryScopeFilter, payrollSubsidiaryOutsideScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
 
 const RUN_TYPE_MEMO: Record<PayRunType, string> = {
   regular: "Pay run",

@@ -5,7 +5,9 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { toUnits } from "../money/money.ts";
 import { postDocument } from "./posting-document.ts";
-import { applyInventoryIssuesForInvoice, applyInventoryReceiptsForBill, getOnHand } from "../inventory/inventory.ts";
+import { applyInventoryIssuesForInvoice } from "../inventory/documents-sales.ts";
+import { applyInventoryReceiptsForBill } from "../inventory/documents-purchasing.ts";
+import { getOnHand } from "../inventory/position.ts";
 import { runRevenueRecognition } from "../revenue/recognition.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 

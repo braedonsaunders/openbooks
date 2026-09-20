@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { revenueRecognitionFeatureEnabled } from "../revenue/recognition.ts";
-import { type Doc, type KernelLine, type PostingDeps, type TaxPostingComponent, PostingError } from "./posting-rules.ts";
+import { type Doc, type KernelLine, type PostingDeps, type TaxPostingComponent, PostingError } from "./posting-contracts.ts";
 /** document_line id → deferred-revenue account for rev-rec invoice lines. */
 export async function resolveDeferralAccounts(
   runner: Pick<typeof db, "execute">,

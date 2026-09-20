@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
-import { inventoryFeatureEnabled } from "../inventory/inventory.ts";
+import { inventoryFeatureEnabled } from "../inventory/profile-policy.ts";
 import { cmp, fromUnits, sum, toUnits } from "../money/money.ts";
 import {
   extractAzureInvoice,

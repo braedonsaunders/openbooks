@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
 
 const files = [
-  "posting.ts", "posting-document.ts", "posting-prepare.ts", "posting-commit.ts",
+  "posting-document.ts", "posting-prepare.ts", "posting-commit.ts",
   "posting-replay.ts", "posting-projection.ts", "posting-dispatch.ts", "posting-accounts.ts",
   "posting-provider-tax.ts", "posting-subsidiaries.ts", "posting-period.ts",
   "posting-contracts.ts", "posting-rules.ts", "posting-tax-policy.ts", "posting-invariants.ts",
@@ -12,15 +12,12 @@ const files = [
 const source = (name: string) => readFileSync(new URL(name, import.meta.url), "utf8");
 const parse = (name: string) => ts.createSourceFile(name, source(name), ts.ScriptTarget.Latest, true);
 
-test("posting has a thin compatibility facade and focused implementation modules", () => {
-  assert.ok(source("posting.ts").split("\n").length <= 200);
+test("posting uses direct operation modules with no legacy entrypoint", () => {
+  assert.equal(existsSync(new URL("posting.ts", import.meta.url)), false, "legacy entrypoint must be deleted");
   for (const file of files.filter((file) => file !== "posting.ts")) {
     assert.ok(source(file).split("\n").length <= 800, `${file} must remain a focused operation or policy`);
   }
-  for (const statement of parse("posting.ts").statements) {
-    assert.ok(ts.isExportDeclaration(statement) || ts.isClassDeclaration(statement),
-      "the public API owns compatibility exports and the legacy error type, not posting work");
-  }
+
 });
 
 test("posting implementation dependencies have no facade backimports or static cycles", () => {

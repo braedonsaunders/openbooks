@@ -10,12 +10,10 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
 import { fromUnits, toUnits } from "../../money/money.ts";
-import {
-  applyInventoryIssuesForInvoice,
-  applyInventoryReceiptsForBill,
-  getOnHand,
-  postLandedCostVoucher,
-} from "../../inventory/inventory.ts";
+import { applyInventoryIssuesForInvoice } from "../../inventory/documents-sales.ts";
+import { applyInventoryReceiptsForBill } from "../../inventory/documents-purchasing.ts";
+import { getOnHand } from "../../inventory/position.ts";
+import { postLandedCostVoucher } from "../../inventory/landed-cost.ts";
 import { reverseInventoryWritedown, writeDownInventoryToNrv } from "../../inventory/nrv.ts";
 import { capture, deps, type DraftDocumentInput } from "../ledger-helpers.ts";
 import { postDocument } from "../../ledger/posting-document.ts";

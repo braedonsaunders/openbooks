@@ -4,7 +4,7 @@ import { db } from "../platform/db.ts";
 import { add, cmp, fromUnits, neg, sum, toUnits } from "../money/money.ts";
 import { extendCost } from "./costing.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
-import { assertPeriodModulesOpen, CloseError } from "../close/close.ts";
+import { assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
 import { assertInventoryAccountsPostable } from "./journal.ts";
 import { lockInventoryPosition, assertInventoryDate } from "./position.ts";
@@ -25,7 +25,7 @@ export interface ReverseInventoryResult {
   entryId: string | null;
   alreadyReversed: boolean;
 }
-type ReversibleMovement = {
+export type ReversibleMovement = {
   id: string;
   org_id: string;
   subsidiary_id: string;
@@ -43,7 +43,7 @@ type ReversibleMovement = {
   status: string;
 };
 
-async function restoreIssueLayers(
+export async function restoreIssueLayers(
   tx: Runner,
   orgId: string,
   movement: ReversibleMovement,
@@ -115,7 +115,7 @@ async function restoreIssueLayers(
   }
 }
 
-async function removeInboundLayer(
+export async function removeInboundLayer(
   tx: Runner,
   orgId: string,
   movement: ReversibleMovement,
@@ -191,7 +191,7 @@ async function removeInboundLayer(
 
 }
 
-async function reverseInventoryJournal(
+export async function reverseInventoryJournal(
   tx: Runner,
   orgId: string,
   actorId: string,

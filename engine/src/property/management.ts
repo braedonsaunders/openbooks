@@ -8,7 +8,7 @@ import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { apportion } from "../revenue/recognition.ts";
 import { createSubscriptionInvoice } from "../billing/subscription-billing.ts";
 import type { AdvancedBillingLine } from "../billing/advanced-subscriptions.ts";
-import { inventoryFeatureEnabled } from "../inventory/inventory.ts";
+import { inventoryFeatureEnabled } from "../inventory/profile-policy.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";

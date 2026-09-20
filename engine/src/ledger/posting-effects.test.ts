@@ -99,7 +99,7 @@ test("posting-effect completions are fenced by the active per-claim lease", () =
 });
 
 test("downstream posting effects carry storage-enforced idempotency keys", () => {
-  const inventory = source("../inventory/inventory.ts");
+  const inventory = ["../inventory/document-lines.ts", "../inventory/documents-purchasing.ts", "../inventory/documents-sales.ts", "../inventory/movements.ts"].map(source).join("\n");
   assert.match(inventory, /inventoryPostingEffectKey/);
   assert.match(inventory, /idempotency_key/);
   assert.match(inventory, /idempotencyKey: inventoryPostingEffectKey\((?:line|l)\.lineId, "receipt"\)/);
