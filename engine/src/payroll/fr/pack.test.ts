@@ -11,6 +11,11 @@ import {
 } from "../packs.ts";
 import { FR_TAX_YEARS } from "./rates.ts";
 import { frPasEditionForVersement } from "./tables-2026.ts";
+import {
+  jurisdictionKey,
+  payrollJurisdictionDeclared,
+} from "../packs.ts";
+import { undeclaredJurisdictionHolidayConflict } from "../holidays.ts";
 
 /** Minimal adapter context: no certificates answered, June versement. */
 function makeCtx(taxYear: number): PayrollStatutoryComputeContext {
@@ -222,10 +227,31 @@ test("FR tenant-declared rates: AT/MP and versement mobilité ride the SIRET acc
 
 test("FR employment calendars: 11 national holidays, 13 in Alsace-Moselle", () => {
   const byKey = new Map(FR_PAYROLL_PACK.jurisdictions.map((j) => [j.key, j]));
-  assert.equal(byKey.get("FR")?.holidays.length, 11);
+  assert.equal(byKey.get("FR-FR")?.holidays.length, 11);
   assert.equal(byKey.get("FR-AM")?.holidays.length, 13);
   assert.ok(
     byKey.get("FR-AM")?.holidays.some((h) => h.key === "fr_good_friday"),
   );
   assert.equal(FR_PAYROLL_PACK.jurisdictions.every((j) => j.holidayPay === null), true);
+});
+
+test("FR profile jurisdiction resolves to a declared employment calendar", () => {
+  // The profile always names the single national region, so the engine
+  // resolves jurisdictionKey("FR", "FR") = "FR-FR". A bare "FR" key
+  // declares a calendar no employee reaches, and the undeclared-jurisdiction
+  // gate then refuses every period containing a mandatory holiday (proven:
+  // a January 2026 run refused both stubs over Jour de l'An). Alsace-Moselle
+  // stays reachable explicitly through labour_jurisdiction.
+  assert.equal(jurisdictionKey("FR", "FR"), "FR-FR");
+  assert.equal(payrollJurisdictionDeclared("FR-FR"), true);
+  assert.equal(
+    undeclaredJurisdictionHolidayConflict({
+      country: "FR",
+      jurisdiction: "FR-FR",
+      from: "2026-01-01",
+      to: "2026-01-31",
+    }),
+    null,
+  );
+  assert.equal(payrollJurisdictionDeclared("FR-AM"), true);
 });
