@@ -501,6 +501,9 @@ export const payRuns = pgTable(
     ...auditColumns,
   },
   (t) => [
+    // Tenant pair required by composite child FKs (0208/0209). document_id is
+    // the PK, not id, so 0044 never installed this key.
+    uniqueIndex("pay_runs_org_id_document_id_unique").on(t.orgId, t.documentId),
     index("pay_runs_org_period").on(t.orgId, t.periodStart, t.periodEnd),
     // One live REGULAR run per schedule period; a voided run remains immutable
     // history but releases the period so an exact replacement can be opened.
@@ -968,6 +971,11 @@ export const payRunAdjustments = pgTable(
     ...auditColumns,
   },
   (t) => [
+    foreignKey({
+      name: "pay_run_adjustments_run_fkey",
+      columns: [t.orgId, t.payRunDocumentId],
+      foreignColumns: [payRuns.orgId, payRuns.documentId],
+    }).onDelete("cascade"),
     foreignKey({
       name: "pay_run_adjustments_employment_tenant_fkey",
       columns: [t.orgId, t.employmentId],
