@@ -4,6 +4,7 @@ import {
   AmbiguousListViewDefaultError,
   assertSingleListViewDefault,
   listViewDefaultLockKey,
+  type ListViewDefaultExecutor,
 } from './list-view-default.ts'
 
 test('personal default lock keys are per owner, not per org', () => {
@@ -23,7 +24,7 @@ test('personal default lock keys are per owner, not per org', () => {
 
 test('assertSingleListViewDefault refuses overlapping defaults by name', async () => {
   const tx = {
-    execute: async () => ({ rows: [{ n: 2 }] }),
+    execute: (async () => ({ rows: [{ n: 2 }] })) as unknown as ListViewDefaultExecutor['execute'],
   }
   await assert.rejects(
     () =>
