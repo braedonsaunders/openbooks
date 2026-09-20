@@ -23,13 +23,6 @@ const routeState: RouteState = { ownedSubsidiaryId: 'sub-1', discardCalls: [], d
 
 const mockSources = new Map<string, string>([
   [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody() { return { ok: true, data: {} } }
-    `,
-  ],
-  [
     'mock:db',
     `
       const state = globalThis[Symbol.for('openbooks.payroll-run-delete-test')]
@@ -71,7 +64,7 @@ const mockSources = new Map<string, string>([
     'mock:payroll-run',
     `
       const state = globalThis[Symbol.for('openbooks.payroll-run-delete-test')]
-      export class PayrollError extends Error {}
+      import { PayrollError } from ${JSON.stringify(import.meta.resolve("@openbooks/engine/src/payroll/error.ts"))}
       export async function calculatePayRun() { throw new Error('not under test') }
       export async function commitPayRun() { throw new Error('not under test') }
       export async function previewPayRunGl() { throw new Error('not under test') }
@@ -98,9 +91,8 @@ const hooks = registerHooks({
     if (specifier === 'server-only') {
       return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
     }
-    if (specifier === '@/lib/api/json') return { url: 'mock:json', shortCircuit: true }
     if (specifier === '@openbooks/engine/src/platform/db.ts') return { url: 'mock:db', shortCircuit: true }
-    if (['@openbooks/engine/src/payroll/error.ts', '@openbooks/engine/src/payroll/fences.ts', '@openbooks/engine/src/payroll/run-allocation.ts', '@openbooks/engine/src/payroll/run-calculation-evidence.ts', '@openbooks/engine/src/payroll/run-calculation.ts', '@openbooks/engine/src/payroll/run-calendar.ts', '@openbooks/engine/src/payroll/run-commit.ts', '@openbooks/engine/src/payroll/run-contracts.ts', '@openbooks/engine/src/payroll/run-lifecycle.ts', '@openbooks/engine/src/payroll/run-protection.ts', '@openbooks/engine/src/payroll/run-setup.ts', '@openbooks/engine/src/payroll/run-stub-records.ts', '@openbooks/engine/src/payroll/scope.ts'].includes(specifier)) {
+    if (['@openbooks/engine/src/payroll/run-calculation.ts', '@openbooks/engine/src/payroll/run-commit.ts', '@openbooks/engine/src/payroll/run-lifecycle.ts'].includes(specifier)) {
       return { url: 'mock:payroll-run', shortCircuit: true }
     }
     if (specifier.endsWith('/lib/feature-gates')) return { url: 'mock:feature-gates', shortCircuit: true }
