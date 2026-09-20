@@ -86,5 +86,6 @@ export * from "./hrm-benefits";
 export * from "./hrm-automations";
 // HR-13: construction-compliance drizzle mirror (0223/0224).
 export * from "./hrm-construction";
+export * from "./hrm-compensation";
 
 export * from './extension-drafts';
