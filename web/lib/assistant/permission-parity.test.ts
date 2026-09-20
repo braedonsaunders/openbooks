@@ -303,6 +303,16 @@ const NARROWED_ROWS: { tool: string; file: string; markers: string[]; note: stri
     markers: ["readableContinuousCloseAgents(authz)", "row.agent_key"],
     note: "single-finding read checks the row's agent against the shared reader",
   },
+  {
+    tool: "explain_allocation", file: "./tools-allocations.ts",
+    markers: [
+      "entryDetail(authz.user.orgId, anchor.id, authz.allowedSubsidiaryIds)",
+      "subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)",
+      'error: "entry_not_found"',
+      'error: "document_not_found"',
+    ],
+    note: "journal/document anchors use the same visibility as get_journal_entry / get_document before queryLineage",
+  },
 ];
 
 test("broad-doorway tools narrow to the caller's grant inside execute", () => {
