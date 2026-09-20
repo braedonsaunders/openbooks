@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
-import { isTaxProvisionSelection, PACK_DEFAULT_CODES, supportedTaxCountries, TAX_SUBDIVISION_CATALOG } from "./pack-provisioning.ts";
+import { classifyPackInstallation, comparePackVersions, countryPackHash, isTaxProvisionSelection, PACK_DEFAULT_CODES, supportedTaxCountries, TAX_SUBDIVISION_CATALOG } from "./pack-provisioning.ts";
 import { TAX_RETURN_PACKS } from "./seed-tax-forms.ts";
 import {
   assertPackCodeRateSchedule,
@@ -403,4 +403,93 @@ test("the per-return code-set field is read only through packTaxCodesForReturn",
   };
   for (const root of ["engine", "web", "scripts", "schema"]) walk(root);
   assert.deepEqual(offenders, []);
+});
+
+test("pack content checksums are stable sha256 hex over the declared pack", () => {
+  const pack = COUNTRY_TAX_PACKS.find((entry) => entry.code === "CA_INDIRECT_TAX");
+  assert.ok(pack, "CA_INDIRECT_TAX pack is missing from the catalog");
+  const first = countryPackHash(pack);
+  assert.match(first, /^[0-9a-f]{64}$/);
+  assert.equal(countryPackHash(pack), first);
+  // Any content change — even with the version stamp untouched — moves the checksum.
+  const edited = { ...pack, name: `${pack.name} (edited)` };
+  assert.notEqual(countryPackHash(edited), first);
+});
+
+test("pack versions compare numerically by date stamp", () => {
+  assert.equal(comparePackVersions("2026.07.31", "2026.07.31"), 0);
+  assert.ok(comparePackVersions("2026.07.31", "2026.08.01") < 0);
+  assert.ok(comparePackVersions("2026.08.01", "2026.07.31") > 0);
+  assert.ok(comparePackVersions("2025.12.31", "2026.01.01") < 0);
+});
+
+test("the registry classifier answers installed-vs-declared with a usable remedy", () => {
+  const pack = COUNTRY_TAX_PACKS.find((entry) => entry.code === "CA_INDIRECT_TAX");
+  assert.ok(pack, "CA_INDIRECT_TAX pack is missing from the catalog");
+  const declared = {
+    code: pack.code,
+    country: pack.country,
+    name: pack.name,
+    version: pack.version,
+    contentHash: countryPackHash(pack),
+  };
+  const installedAt = "2026-08-01T00:00:00.000Z";
+
+  const current = classifyPackInstallation(
+    { version: pack.version, contentHash: declared.contentHash, installedAt },
+    declared,
+  );
+  assert.equal(current.status, "current");
+  assert.equal(current.remedy, null);
+  assert.equal(current.installedVersion, pack.version);
+  assert.equal(current.installedAt, installedAt);
+
+  const missing = classifyPackInstallation(null, declared);
+  assert.equal(missing.status, "not-installed");
+  assert.equal(missing.installedVersion, null);
+  assert.ok(missing.remedy?.includes(pack.code), "remedy must name the pack it installs");
+  assert.ok(missing.remedy?.includes("POST /api/tax/provision"), "remedy must name the real install action");
+
+  const upgraded = classifyPackInstallation(
+    { version: "2020.01.01", contentHash: "0".repeat(64), installedAt },
+    declared,
+  );
+  assert.equal(upgraded.status, "upgrade-available");
+  assert.ok(upgraded.remedy?.includes(pack.version), "remedy must name the declared version to install");
+
+  // RED-PROOF: same version but different bytes is drift, never current, and
+  // the remedy forbids hand-editing the installed rates.
+  const drifted = classifyPackInstallation(
+    { version: pack.version, contentHash: "0".repeat(64), installedAt },
+    declared,
+  );
+  assert.notEqual(drifted.status, "current");
+  assert.equal(drifted.status, "drift-detected");
+  assert.ok(drifted.remedy?.includes(pack.code), "remedy must name the drifted pack");
+  assert.ok(drifted.remedy?.includes("publish a new pack version"), "remedy must name the way out");
+  assert.ok(drifted.remedy?.includes("do not edit installed rates by hand"), "remedy must forbid hand repair");
+
+  const ahead = classifyPackInstallation(
+    { version: "2999.01.01", contentHash: "0".repeat(64), installedAt },
+    declared,
+  );
+  assert.equal(ahead.status, "ahead-of-declared");
+  assert.ok(ahead.remedy?.includes(pack.code), "remedy must name the pack");
+});
+
+test("drift remedies tell two packs apart", () => {
+  // A SYNTHETIC collision proves the assertion fires; REALISTIC inputs prove
+  // the message reads — the remedy must name its own pack, not the other's.
+  const ca = COUNTRY_TAX_PACKS.find((entry) => entry.code === "CA_INDIRECT_TAX");
+  const us = COUNTRY_TAX_PACKS.find((entry) => entry.code === "US_INDIRECT_TAX");
+  assert.ok(ca && us, "expected CA and US packs in the catalog");
+  const drift = (pack: typeof ca) =>
+    classifyPackInstallation(
+      { version: pack.version, contentHash: "0".repeat(64), installedAt: null },
+      { code: pack.code, country: pack.country, name: pack.name, version: pack.version, contentHash: countryPackHash(pack) },
+    );
+  const caRemedy = drift(ca).remedy ?? "";
+  const usRemedy = drift(us).remedy ?? "";
+  assert.ok(caRemedy.includes("CA_INDIRECT_TAX") && !caRemedy.includes("US_INDIRECT_TAX"));
+  assert.ok(usRemedy.includes("US_INDIRECT_TAX") && !usRemedy.includes("CA_INDIRECT_TAX"));
 });

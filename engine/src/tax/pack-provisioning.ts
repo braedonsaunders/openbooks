@@ -273,7 +273,18 @@ async function refreshPackCodeRatesIfUnused(args: PackCodeRateRefreshArgs): Prom
   return null;
 }
 
-function countryPackHash(pack: CountryTaxPackDefinition): string {
+/**
+ * Content checksum for the pack-installation registry (`tax_country_pack_installations`).
+ *
+ * SHA-256 hex over the UTF-8 bytes of `JSON.stringify(pack)` — the whole
+ * declared `CountryTaxPackDefinition`, not just its version string — so any
+ * edited rate, renamed code, added jurisdiction, or reshaped schedule changes
+ * the checksum even when the version stamp does not. The function is
+ * intentionally byte-stable: stored hashes are compared with this exact
+ * computation, so changing it would mark every installed pack drifted. Never
+ * alter it; publish a new pack version instead.
+ */
+export function countryPackHash(pack: CountryTaxPackDefinition): string {
   return createHash("sha256").update(JSON.stringify(pack)).digest("hex");
 }
 
@@ -287,9 +298,13 @@ function countryPacksForSelections(selections: readonly string[]): CountryTaxPac
   return [...packs.values()];
 }
 
-async function assertCountryPackVersionIntegrity(orgId: string, packs: readonly CountryTaxPackDefinition[]): Promise<void> {
+async function assertCountryPackVersionIntegrity(
+  tx: TaxPackExecutor,
+  orgId: string,
+  packs: readonly CountryTaxPackDefinition[],
+): Promise<void> {
   for (const pack of packs) {
-    const existing = (await db.execute<{ status: "active" | "superseded"; contentHash: string }>(sql`
+    const existing = (await tx.execute<{ status: "active" | "superseded"; contentHash: string }>(sql`
       select status, content_hash as "contentHash"
         from tax_country_pack_installations
        where org_id = ${orgId} and pack_code = ${pack.code} and version = ${pack.version}
@@ -300,7 +315,10 @@ async function assertCountryPackVersionIntegrity(orgId: string, packs: readonly 
       throw new Error(`country pack ${pack.code} version ${pack.version} changed after installation; publish a new version`);
     }
     if (row?.status === "superseded") {
-      throw new Error(`country pack ${pack.code} version ${pack.version} is superseded and cannot be reactivated`);
+      throw new Error(
+        `country pack ${pack.code} version ${pack.version} is superseded by a newer installation and cannot be reactivated; ` +
+          `publish a new pack version and re-run tax provisioning`,
+      );
     }
   }
 }
@@ -323,7 +341,10 @@ async function recordCountryPackInstallations(
       `));
       if (active.rows[0]?.version === pack.version) {
         if (active.rows[0].contentHash !== hash) {
-          throw new Error(`country pack ${pack.code} version ${pack.version} content hash mismatch`);
+          throw new Error(
+            `country pack ${pack.code} version ${pack.version} installed content does not match the repository declaration for that version; ` +
+              `publish a new pack version instead of editing the declared one, then re-run tax provisioning`,
+          );
         }
         continue;
       }
@@ -355,6 +376,145 @@ async function recordCountryPackInstallations(
                 ${actorId})`);
     }
   });
+}
+
+/**
+ * Registry read surface: which pack version is installed in this org, as of
+ * when, and whether its content still matches what was installed.
+ *
+ * One row per declared country pack, sorted by pack code. `installedVersion`
+ * is the version stamp on the org's active installation row (null when the
+ * pack was never provisioned here); `installedAt` is when that row was
+ * recorded — the same transaction that installed the pack's content, so the
+ * two can never disagree. `storedContentHash` is the checksum captured at
+ * install time; `declaredContentHash` is recomputed from the repository right
+ * now. Drift is REPORTED here and refused at install time — never silently
+ * repaired: a same-version hash mismatch means the declaration changed under
+ * an installed version, and only a new published version may replace it.
+ */
+export type PackInstallationStatusCode =
+  | "current"
+  | "upgrade-available"
+  | "ahead-of-declared"
+  | "drift-detected"
+  | "not-installed";
+
+export interface PackInstallationStatus {
+  packCode: string;
+  country: string;
+  name: string;
+  installedVersion: string | null;
+  /** ISO timestamp of the active installation row, or null when never installed. */
+  installedAt: string | null;
+  storedContentHash: string | null;
+  declaredVersion: string;
+  declaredContentHash: string;
+  status: PackInstallationStatusCode;
+  /** The action that resolves a non-current status; null when current. */
+  remedy: string | null;
+}
+
+/** Numeric YYYY.MM.DD compare: negative when a < b, positive when a > b. */
+export function comparePackVersions(a: string, b: string): number {
+  const parts = (version: string) => version.split(".").map((n) => Number(n));
+  const [pa, pb] = [parts(a), parts(b)];
+  if (pa.some((n) => !Number.isInteger(n)) || pb.some((n) => !Number.isInteger(n))) {
+    return a < b ? -1 : a > b ? 1 : 0;
+  }
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const diff = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
+/** Pure drift classifier behind the registry read surface — no I/O, so unit tests pin it directly. */
+export function classifyPackInstallation(
+  installed: { version: string; contentHash: string; installedAt: string | null } | null,
+  declared: { code: string; country: string; name: string; version: string; contentHash: string },
+): PackInstallationStatus {
+  const base = {
+    packCode: declared.code,
+    country: declared.country,
+    name: declared.name,
+    installedVersion: installed?.version ?? null,
+    installedAt: installed?.installedAt ?? null,
+    storedContentHash: installed?.contentHash ?? null,
+    declaredVersion: declared.version,
+    declaredContentHash: declared.contentHash,
+  };
+  if (!installed) {
+    return {
+      ...base,
+      status: "not-installed",
+      remedy:
+        `pack ${declared.code} version ${declared.version} was never provisioned in this organization; ` +
+          `provision ${declared.name} from tax setup (POST /api/tax/provision) to install it`,
+    };
+  }
+  if (installed.version === declared.version) {
+    if (installed.contentHash === declared.contentHash) {
+      return { ...base, status: "current", remedy: null };
+    }
+    return {
+      ...base,
+      status: "drift-detected",
+      remedy:
+        `pack ${declared.code} version ${declared.version} installed content no longer matches the repository declaration; ` +
+          `do not edit installed rates by hand — publish a new pack version and re-run tax provisioning`,
+    };
+  }
+  if (comparePackVersions(declared.version, installed.version) > 0) {
+    return {
+      ...base,
+      status: "upgrade-available",
+      remedy:
+        `pack ${declared.code} version ${installed.version} is installed but the repository declares ${declared.version}; ` +
+          `re-run tax provisioning to install the newer statutory rates`,
+    };
+  }
+  return {
+    ...base,
+    status: "ahead-of-declared",
+    remedy:
+      `installed pack ${declared.code} version ${installed.version} is newer than the repository declaration ${declared.version}; ` +
+        `publish a new pack version and re-run tax provisioning rather than reinstalling the older content`,
+  };
+}
+
+/**
+ * Answer the auditor's question for every declared pack: installed version,
+ * install time, stored checksum vs recomputed checksum, and the remedy when
+ * they disagree. Read-only — classifying drift here never writes, supersedes,
+ * or repairs anything.
+ */
+export async function packInstallationStatuses(orgId: string): Promise<PackInstallationStatus[]> {
+  const installed = (await db.execute<{
+    packCode: string;
+    version: string;
+    contentHash: string;
+    installedAt: Date | string;
+  }>(sql`
+    select pack_code as "packCode", version, content_hash as "contentHash", installed_at as "installedAt"
+      from tax_country_pack_installations
+     where org_id = ${orgId} and status = 'active'
+  `));
+  const byPack = new Map(installed.rows.map((row) => [row.packCode, row]));
+  return [...COUNTRY_TAX_PACKS]
+    .sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0))
+    .map((pack) => {
+      const row = byPack.get(pack.code);
+      return classifyPackInstallation(
+        row
+          ? {
+            version: row.version,
+            contentHash: row.contentHash,
+            installedAt: row.installedAt instanceof Date ? row.installedAt.toISOString() : String(row.installedAt),
+          }
+          : null,
+        { code: pack.code, country: pack.country, name: pack.name, version: pack.version, contentHash: countryPackHash(pack) },
+      );
+    });
 }
 
 export function isTaxProvisionSelection(code: string): boolean {
@@ -435,10 +595,13 @@ export async function provisionTaxPacks(
 
 /**
  * Entire country-pack installation participates in one tenant-scoped database
- * transaction. The nested helpers reuse the pinned transaction, so a failure
- * in rates, return forms, registrations, audit evidence, or the manifest rolls
- * back the complete installation instead of leaving a partially configured
- * tax stack.
+ * transaction. The `db` handle joins every nested `db.transaction` (content,
+ * return forms, registrations, and the installation-manifest recording) into
+ * the transaction `provisionTaxPacks` pins — see the `db` proxy in
+ * `platform/db.ts` — so a failure in rates, return forms, registrations,
+ * audit evidence, or the manifest rolls back the complete installation
+ * instead of leaving a partially configured tax stack. The manifest row is
+ * therefore never written outside the transaction that installed the pack.
  */
 async function provisionTaxPacksInTenant(
   orgId: string,
@@ -460,7 +623,6 @@ async function provisionTaxPacksInTenant(
   });
   const codes = [...new Set([...requestedCodes, ...requiredParentReturnPacks])];
   const localizedCountryPacks = countryPacksForSelections(codes);
-  await assertCountryPackVersionIntegrity(orgId, localizedCountryPacks);
   const packs = codes.map((c) => taxReturnPack(c)).filter((p) => p !== undefined);
   const subdivisions = codes.map((c) => taxSubdivisionSelection(c)).filter((s) => s !== undefined);
   if (packs.length + subdivisions.length !== codes.length) {
@@ -478,6 +640,11 @@ async function provisionTaxPacksInTenant(
   //    installing packs, so each pack's boxes map to the jurisdiction's own code.
   await db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`openbooks:tax-setup:${orgId}`}, 0))`);
+    // Version-integrity check runs under the same advisory lock and the same
+    // pinned transaction as the content install and the manifest recording
+    // below, so a concurrent provision cannot slip a conflicting version
+    // between the check and the write.
+    await assertCountryPackVersionIntegrity(tx, orgId, localizedCountryPacks);
     const subdivisionCountries = new Set([
       ...packs
         .filter((pack) => pack.jurisdiction.level === "state")

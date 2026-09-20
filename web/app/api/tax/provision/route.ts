@@ -1,9 +1,20 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { isTaxProvisionSelection, provisionTaxPacks } from '@openbooks/engine/src/tax/pack-provisioning.ts'
+import { isTaxProvisionSelection, packInstallationStatuses, provisionTaxPacks } from '@openbooks/engine/src/tax/pack-provisioning.ts'
 import { guardPermission } from '../../../../lib/authz'
 
 export const runtime = 'nodejs'
+
+/** Registry read surface: installed pack version, install time, and stored vs
+ *  declared checksum for every country pack, with drift reported (never
+ *  repaired). Gated on reports.read — like the return-library GET — so an
+ *  auditor without setup-manage rights can still answer what is installed. */
+export async function GET() {
+  const gate = await guardPermission('reports.read')
+  if (gate instanceof NextResponse) return gate
+  const packs = await packInstallationStatuses(gate.user.orgId)
+  return NextResponse.json({ packs })
+}
 
 /** Provision the full indirect-tax stack (jurisdiction, code + rate, return form,
  *  nexus) for the selected country/state packs. */
