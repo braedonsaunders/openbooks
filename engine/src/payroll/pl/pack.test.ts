@@ -5,10 +5,13 @@ import type { PayrollCertificateField } from "../certificates.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { PL_PAYROLL_PACK } from "./pack.ts";
 import {
+  jurisdictionKey,
+  payrollJurisdictionDeclared,
   payrollTaxYearProblem,
   registerPayrollTaxYears,
   unregisterPayrollTaxYears,
 } from "../packs.ts";
+import { undeclaredJurisdictionHolidayConflict } from "../holidays.ts";
 import { PL_TAX_YEARS } from "./rates.ts";
 
 /** Minimal adapter context: PIT-2 filed, KUP 250, birth year 1990. */
@@ -222,9 +225,28 @@ test("PL tenant-declared rate: wypadkowe rides the org", () => {
 
 test("PL employment calendar: 12 statutory days off, no pay computation", () => {
   const byKey = new Map(PL_PAYROLL_PACK.jurisdictions.map((j) => [j.key, j]));
-  assert.equal(byKey.get("PL")?.holidays.length, 12);
+  assert.equal(byKey.get("PL-PL")?.holidays.length, 12);
   assert.ok(
-    byKey.get("PL")?.holidays.some((h) => h.key === "pl_corpus_christi"),
+    byKey.get("PL-PL")?.holidays.some((h) => h.key === "pl_corpus_christi"),
   );
   assert.equal(PL_PAYROLL_PACK.jurisdictions.every((j) => j.holidayPay === null), true);
+});
+
+test("PL profile jurisdiction resolves to a declared employment calendar", () => {
+  // The profile always names the single national region, so the engine
+  // resolves jurisdictionKey("PL", "PL") = "PL-PL". A bare "PL" key
+  // declares a calendar no employee reaches, and the undeclared-jurisdiction
+  // gate then refuses every period containing a mandatory holiday (FR/IE
+  // precedent: one region, one-line key fix).
+  assert.equal(jurisdictionKey("PL", "PL"), "PL-PL");
+  assert.equal(payrollJurisdictionDeclared("PL-PL"), true);
+  assert.equal(
+    undeclaredJurisdictionHolidayConflict({
+      country: "PL",
+      jurisdiction: "PL-PL",
+      from: "2026-01-01",
+      to: "2026-01-31",
+    }),
+    null,
+  );
 });
