@@ -34,7 +34,7 @@ import Link from 'next/link'
 import { str, type WidgetRenderer } from './widget-props'
 
 /** Commerce adapters. Compose native components without changing their props or boundaries. */
-export const COMMERCE_WIDGETS: Record<string, WidgetRenderer> = {
+export const COMMERCE_WIDGETS = {
 
   /* --- subcontracts ----------------------------------------------------------------- */
   /** SIX FLAT props (`projects`, `vendors`, `expenseAccounts`, `parties`,
@@ -288,4 +288,4 @@ export const COMMERCE_WIDGETS: Record<string, WidgetRenderer> = {
     const { remountKey, ...rest } = drawer
     return <ProjectDrawer key={remountKey} {...rest} />
   },
-}
+} satisfies Record<string, WidgetRenderer>
