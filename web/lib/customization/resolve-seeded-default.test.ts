@@ -182,6 +182,119 @@ test('explicit pick of an untouched seed resolves live as explicit', async () =>
   assert.equal(resolved.row?.id, seed.id)
 })
 
+// A designer "default for its scope" on a personal view writes isDefault on
+// the user-scope row. That flag is the personal default: when no explicit
+// preference is set it must win over the org default, or the save stored a
+// flag no resolve can observe.
+test('a personal isDefault is the user default when no preference is set', async () => {
+  const personal = {
+    id: '22222222-2222-4222-8222-222222222222',
+    name: 'Mine',
+    recordType: 'employee',
+    scope: 'user',
+    ownerId: 'user-1',
+    isDefault: true,
+    isActive: true,
+    config: { ...seedShape, perPage: 50, sort: { column: 'short_code', dir: 'desc' } },
+    createdAt: AT,
+    updatedAt: AT,
+  }
+  const resolved = await resolve({ viewRows: [seedRow(), personal] }, 'org-case-9')
+  assert.equal(resolved.source, 'user')
+  assert.equal(resolved.row?.id, personal.id)
+  assert.equal(resolved.view.perPage, 50)
+  assert.deepEqual(resolved.view.sort, { column: 'short_code', dir: 'desc' })
+})
+
+// The views-menu preference is the more specific "I chose this view" write
+// and still outranks a personal isDefault (it can point at an org view).
+test('an explicit list preference outranks a personal isDefault', async () => {
+  const personal = {
+    id: '22222222-2222-4222-8222-222222222222',
+    name: 'Mine',
+    recordType: 'employee',
+    scope: 'user',
+    ownerId: 'user-1',
+    isDefault: true,
+    isActive: true,
+    config: { ...seedShape, perPage: 50 },
+    createdAt: AT,
+    updatedAt: AT,
+  }
+  const orgDefault = seedRow()
+  const resolved = await resolve(
+    { viewRows: [orgDefault, personal], prefViewId: orgDefault.id as string },
+    'org-case-10',
+  )
+  assert.equal(resolved.source, 'org')
+  assert.equal(resolved.row?.id, orgDefault.id)
+})
+
+// A personal default with no org default must still apply — otherwise the
+// only observable read is the system registry, and the stored flag is dead.
+test('a personal isDefault is applied when no org default exists', async () => {
+  const personal = {
+    id: '44444444-4444-4444-8444-444444444444',
+    name: 'Mine only',
+    recordType: 'employee',
+    scope: 'user',
+    ownerId: 'user-1',
+    isDefault: true,
+    isActive: true,
+    config: { ...seedShape, perPage: 75 },
+    createdAt: AT,
+    updatedAt: AT,
+  }
+  const resolved = await resolve({ viewRows: [personal] }, 'org-case-11')
+  assert.equal(resolved.source, 'user')
+  assert.equal(resolved.row?.id, personal.id)
+  assert.equal(resolved.view.perPage, 75)
+})
+
+// A personal view that is not the scope default must not steal the org
+// default — otherwise any saved personal view would silently become the list.
+test('a non-default personal view does not outrank the org default', async () => {
+  const personal = {
+    id: '55555555-5555-4555-8555-555555555555',
+    name: 'Just mine',
+    recordType: 'employee',
+    scope: 'user',
+    ownerId: 'user-1',
+    isDefault: false,
+    isActive: true,
+    config: { ...seedShape, perPage: 50 },
+    createdAt: AT,
+    updatedAt: AT,
+  }
+  const orgDefault = seedRow()
+  const resolved = await resolve({ viewRows: [orgDefault, personal] }, 'org-case-12')
+  assert.equal(resolved.source, 'org')
+  assert.equal(resolved.row?.id, orgDefault.id)
+})
+
+// An explicit ?view= still wins over a personal isDefault.
+test('an explicit view outranks a personal isDefault', async () => {
+  const personal = {
+    id: '22222222-2222-4222-8222-222222222222',
+    name: 'Mine',
+    recordType: 'employee',
+    scope: 'user',
+    ownerId: 'user-1',
+    isDefault: true,
+    isActive: true,
+    config: { ...seedShape, perPage: 50 },
+    createdAt: AT,
+    updatedAt: AT,
+  }
+  const orgDefault = seedRow()
+  const resolved = await resolve(
+    { viewRows: [orgDefault, personal], viewId: orgDefault.id as string },
+    'org-case-13',
+  )
+  assert.equal(resolved.source, 'explicit')
+  assert.equal(resolved.row?.id, orgDefault.id)
+})
+
 // The full PATCH round trip: a seeded default edited only in sort direction
 // is stored by PATCH without the mark (stripped explicitly in the route) and
 // with a bumped updated_at — so resolution keeps the edited direction even
