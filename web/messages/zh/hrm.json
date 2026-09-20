@@ -803,6 +803,8 @@
       "profile": "档案",
       "leave": "休假",
       "checklists": "清单",
+      "reviews": "考核",
+      "benefits": "福利",
       "team": "团队"
     },
     "refusedTitle": "自助服务不可用",
@@ -934,7 +936,8 @@
         "title": "职位",
         "department": "部门",
         "status": "状态",
-        "serviceStart": "入职日期"
+        "serviceStart": "入职日期",
+        "cycle": "周期"
       },
       "rosterEmpty": "暂无直接下属",
       "stepsTitle": "分配给我的步骤",
@@ -943,7 +946,107 @@
       "leaveEmpty": "暂无待决定的休假申请。",
       "decideInApprovals": "前往审批决定",
       "changesTitle": "待定变更申请",
-      "changesEmpty": "暂无待决定的变更申请。"
+      "changesEmpty": "暂无待决定的变更申请。",
+      "owedTitle": "待办考核",
+      "owedEmpty": "当前开放周期内无待办考核。",
+      "openReview": "打开考核"
+    },
+    "reviewStatus": {
+      "pending": "草稿",
+      "submitted": "已提交",
+      "calibrated": "已校准",
+      "shared": "已共享",
+      "acknowledged": "已确认"
+    },
+    "goalStatus": {
+      "active": "进行中",
+      "achieved": "已达成",
+      "missed": "未达成",
+      "cancelled": "已取消"
+    },
+    "enrollmentStatus": {
+      "elected": "已选择",
+      "waived": "已放弃",
+      "pending_approval": "待审批",
+      "active": "生效中",
+      "ended": "已结束",
+      "cancelled": "已取消"
+    },
+    "windowKinds": {
+      "open_enrollment": "开放投保",
+      "new_hire": "新员工入职",
+      "life_event": "生活事件"
+    },
+    "reviews": {
+      "title": "我的考核",
+      "description": "待提交的自评、共享给我的考核以及我的目标。",
+      "selfTitle": "自评",
+      "columns": {
+        "cycle": "周期",
+        "period": "期间",
+        "status": "状态",
+        "rating": "评分",
+        "shared": "共享",
+        "goal": "目标",
+        "progress": "进度"
+      },
+      "selfEmpty": "暂无自评",
+      "selfEmptyDescription": "周期开始后，应提交的自评将显示在这里。",
+      "answerInDrawer": "前往人事页面作答",
+      "sharedTitle": "共享给我的考核",
+      "sharedEmpty": "暂无共享",
+      "sharedEmptyDescription": "共享给我的经理考核将显示在这里。",
+      "acknowledge": "确认",
+      "acknowledgeFailed": "无法确认该考核。",
+      "goalsTitle": "我的目标",
+      "goalsEmpty": "暂无目标",
+      "goalsEmptyDescription": "雇佣关系的目标将连同进度显示在这里。",
+      "goalDialogTitle": "更新目标进度",
+      "goalDialogDescription": "附备注记录进度 — 将作为目标的证据。",
+      "goalNoteLabel": "备注",
+      "goalNotePlaceholder": "自上次更新以来的进展",
+      "goalSubmit": "保存进度",
+      "goalUpdate": "更新",
+      "goalFailed": "无法保存进度。"
+    },
+    "benefits": {
+      "title": "我的福利",
+      "description": "我的参保、开放的投保窗口和家属。",
+      "electionsTitle": "我的参保",
+      "columns": {
+        "plan": "计划",
+        "coverage": "保障",
+        "status": "状态",
+        "effective": "有效期",
+        "monthly": "扣款 / 周期",
+        "window": "窗口",
+        "kind": "类型",
+        "range": "日期",
+        "dependent": "家属",
+        "relationship": "关系"
+      },
+      "electionsEmpty": "暂无参保",
+      "electionsEmptyDescription": "所选保障将显示在这里。",
+      "monthlyHint": "工资每周期扣除的存储金额 — 不会重新计算。",
+      "windowsTitle": "开放中的投保窗口",
+      "windowsEmpty": "暂无开放窗口",
+      "windowsEmptyDescription": "雇主的窗口在开放期间显示在这里。",
+      "dependentsTitle": "家属",
+      "dependentsEmpty": "未登记家属。",
+      "elect": "选择保障",
+      "electTitle": "选择保障",
+      "electDescription": "在雇主开放窗口内选择 — 或记录生活事件。",
+      "fromLabel": "生效日期",
+      "lifeEventLabel": "生活事件原因（代替窗口）",
+      "lifeEventPlaceholder": "发生了什么变化，供人事审批人参考",
+      "electSubmit": "选择",
+      "electFailed": "无法记录该选择。",
+      "change": "变更",
+      "changeTitle": "变更保障",
+      "changeDescription": "从开放窗口内的日期起变更 — 旧记录于前一日结束。",
+      "changeReasonPlaceholder": "保障变更的原因",
+      "changeSubmit": "保存变更",
+      "changeFailed": "无法记录该变更。"
     }
   }
 }

@@ -159,6 +159,32 @@ export function meTeamSpec(data: MeTeamData): PageSpec {
               }),
             ],
           }),
+          panel({
+            title: f('owedTitle'),
+            iconKey: 'star',
+            bodyClassName: 'min-h-0 overflow-y-auto p-0',
+            blocks: [
+              table({
+                variant: 'app',
+                rows: f('owedReviews'),
+                rowKey: item('reviewId'),
+                columns: [
+                  column(f('owedColumns.employee'), text(item('workerName'))),
+                  column(f('owedColumns.cycle'), text(item('cycleName'))),
+                  column(
+                    f('owedColumns.status'),
+                    badge(item('statusLabel'), { variant: item('statusVariant') }),
+                  ),
+                  column(
+                    f('owedColumns.due'),
+                    text(item('dueOn'), { className: 'tabular-nums' }),
+                  ),
+                  column('', link(item('openLabel'), item('openHref'))),
+                ],
+                empty: { title: f('owedEmpty') },
+              }),
+            ],
+          }),
         ]),
         when: f('hasContent'),
       },

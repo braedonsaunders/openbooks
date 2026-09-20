@@ -803,6 +803,8 @@
       "profile": "Perfil",
       "leave": "Ausencias",
       "checklists": "Listas",
+      "reviews": "Evaluaciones",
+      "benefits": "Prestaciones",
       "team": "Equipo"
     },
     "refusedTitle": "El autoservicio no está disponible",
@@ -934,7 +936,8 @@
         "title": "Puesto",
         "department": "Departamento",
         "status": "Estado",
-        "serviceStart": "Inicio del servicio"
+        "serviceStart": "Inicio del servicio",
+        "cycle": "Ciclo"
       },
       "rosterEmpty": "Sin reportes directos",
       "stepsTitle": "Pasos asignados a mí",
@@ -943,7 +946,107 @@
       "leaveEmpty": "Sin solicitudes de ausencia por decidir.",
       "decideInApprovals": "Decidir en Aprobaciones",
       "changesTitle": "Solicitudes de cambio pendientes",
-      "changesEmpty": "Sin solicitudes de cambio por decidir."
+      "changesEmpty": "Sin solicitudes de cambio por decidir.",
+      "owedTitle": "Evaluaciones que debo",
+      "owedEmpty": "Ninguna evaluación pendiente en el ciclo abierto.",
+      "openReview": "Abrir evaluación"
+    },
+    "reviewStatus": {
+      "pending": "Borrador",
+      "submitted": "Enviada",
+      "calibrated": "Calibrada",
+      "shared": "Compartida",
+      "acknowledged": "Confirmada"
+    },
+    "goalStatus": {
+      "active": "Activo",
+      "achieved": "Logrado",
+      "missed": "No logrado",
+      "cancelled": "Cancelado"
+    },
+    "enrollmentStatus": {
+      "elected": "Elegido",
+      "waived": "Renunciado",
+      "pending_approval": "Aprobación pendiente",
+      "active": "Activo",
+      "ended": "Finalizado",
+      "cancelled": "Cancelado"
+    },
+    "windowKinds": {
+      "open_enrollment": "Inscripción abierta",
+      "new_hire": "Nueva contratación",
+      "life_event": "Evento de vida"
+    },
+    "reviews": {
+      "title": "Mis evaluaciones",
+      "description": "Autoevaluaciones pendientes, evaluaciones compartidas y tus objetivos.",
+      "selfTitle": "Autoevaluaciones",
+      "columns": {
+        "cycle": "Ciclo",
+        "period": "Período",
+        "status": "Estado",
+        "rating": "Calificación",
+        "shared": "Compartida",
+        "goal": "Objetivo",
+        "progress": "Progreso"
+      },
+      "selfEmpty": "Sin autoevaluaciones",
+      "selfEmptyDescription": "Tus autoevaluaciones pendientes aparecen aquí cuando se abre un ciclo.",
+      "answerInDrawer": "Responder en RR. HH.",
+      "sharedTitle": "Compartidas conmigo",
+      "sharedEmpty": "Nada compartido aún",
+      "sharedEmptyDescription": "Las evaluaciones compartidas contigo aparecen aquí.",
+      "acknowledge": "Confirmar",
+      "acknowledgeFailed": "No se pudo confirmar la evaluación.",
+      "goalsTitle": "Mis objetivos",
+      "goalsEmpty": "Sin objetivos aún",
+      "goalsEmptyDescription": "Los objetivos de tu empleo aparecen aquí con su progreso.",
+      "goalDialogTitle": "Actualizar el progreso",
+      "goalDialogDescription": "Registra el progreso con una nota — queda como evidencia del objetivo.",
+      "goalNoteLabel": "Nota",
+      "goalNotePlaceholder": "Qué avanzó desde la última actualización",
+      "goalSubmit": "Guardar progreso",
+      "goalUpdate": "Actualizar",
+      "goalFailed": "No se pudo guardar el progreso."
+    },
+    "benefits": {
+      "title": "Mis prestaciones",
+      "description": "Tus elecciones, ventanas de inscripción abiertas y dependientes.",
+      "electionsTitle": "Mis elecciones",
+      "columns": {
+        "plan": "Plan",
+        "coverage": "Cobertura",
+        "status": "Estado",
+        "effective": "Vigencia",
+        "monthly": "Descuento / período",
+        "window": "Ventana",
+        "kind": "Tipo",
+        "range": "Fechas",
+        "dependent": "Dependiente",
+        "relationship": "Parentesco"
+      },
+      "electionsEmpty": "Sin elecciones",
+      "electionsEmptyDescription": "La cobertura que elijas aparece aquí.",
+      "monthlyHint": "El importe guardado que la nómina descuenta cada período — nunca se recalcula.",
+      "windowsTitle": "Ventanas de inscripción abiertas",
+      "windowsEmpty": "Ninguna ventana abierta",
+      "windowsEmptyDescription": "Las ventanas de tu empleador aparecen aquí mientras estén abiertas.",
+      "dependentsTitle": "Dependientes",
+      "dependentsEmpty": "Sin dependientes registrados.",
+      "elect": "Elegir cobertura",
+      "electTitle": "Elegir cobertura",
+      "electDescription": "Elige dentro de una ventana abierta de tu empleador — o registra un evento de vida.",
+      "fromLabel": "Vigente desde",
+      "lifeEventLabel": "Motivo del evento de vida (en lugar de ventana)",
+      "lifeEventPlaceholder": "Qué cambió, para el responsable de RR. HH.",
+      "electSubmit": "Elegir",
+      "electFailed": "No se pudo registrar la elección.",
+      "change": "Cambiar",
+      "changeTitle": "Cambiar cobertura",
+      "changeDescription": "Cambia desde una fecha dentro de una ventana abierta — la fila anterior termina el día anterior.",
+      "changeReasonPlaceholder": "Por qué cambia la cobertura",
+      "changeSubmit": "Guardar cambio",
+      "changeFailed": "No se pudo registrar el cambio."
     }
   }
 }

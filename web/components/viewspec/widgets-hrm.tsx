@@ -17,7 +17,7 @@ import { EnrollmentRowActions } from '../../app/(app)/hrm/benefits/EnrollmentRow
 import { WindowDialog } from '../../app/(app)/hrm/benefits/WindowDialog'
 import { WindowDrawer } from '../../app/(app)/hrm/benefits/WindowDrawer'
 import { HrmFacts } from '../../app/(app)/me/sections'
-import { ProfileDialog, StepCompleteButton } from '../../app/(app)/me/islands'
+import { BenefitChangeDialog, BenefitElectDialog, GoalProgressDialog, ProfileDialog, ReviewAcknowledgeButton, StepCompleteButton } from '../../app/(app)/me/islands'
 import { ProcessDrawer } from '../../app/(app)/hrm/processes/sections'
 import { LeaveCalendar } from '../../app/(app)/hrm/leave/LeaveCalendar'
 import {
@@ -200,6 +200,41 @@ export const HRM_WIDGETS = {
     <ProfileDialog
       dialog={(props.dialog as ComponentProps<typeof ProfileDialog>['dialog']) ?? null}
       closeHref={str(props, 'closeHref') ?? '/me/profile'}
+    />
+  ),
+  /** One shared review's acknowledge action inside the Me reviews table:
+   *  posts to the Me acknowledge route, rendering the service refusal
+   *  inline. Rows that cannot acknowledge render nothing. */
+  'hrm-review-acknowledge': (props) => (
+    <ReviewAcknowledgeButton
+      reviewId={str(props, 'reviewId') ?? ''}
+      label={str(props, 'label') ?? ''}
+      canAcknowledge={props.canAcknowledge === true}
+      failedLabel={str(props, 'failedLabel') ?? ''}
+    />
+  ),
+  /** Goal progress dialog, opened from the goals table through the
+   *  `goal` search param; submit posts progress with a note. */
+  'hrm-goal-dialog': (props) => (
+    <GoalProgressDialog
+      dialog={(props.dialog as ComponentProps<typeof GoalProgressDialog>['dialog']) ?? null}
+      closeHref={str(props, 'closeHref') ?? '/me/reviews'}
+    />
+  ),
+  /** Elect-coverage dialog, opened from the benefits header through the
+   *  `elect` search param; submit elects inside an open window. */
+  'hrm-benefit-dialog': (props) => (
+    <BenefitElectDialog
+      dialog={(props.dialog as ComponentProps<typeof BenefitElectDialog>['dialog']) ?? null}
+      closeHref={str(props, 'closeHref') ?? '/me/benefits'}
+    />
+  ),
+  /** Change-coverage dialog, opened from an active election row through
+   *  the `change` search param; submit changes inside an open window. */
+  'hrm-benefit-change-dialog': (props) => (
+    <BenefitChangeDialog
+      dialog={(props.dialog as ComponentProps<typeof BenefitChangeDialog>['dialog']) ?? null}
+      closeHref={str(props, 'closeHref') ?? '/me/benefits'}
     />
   ),
   /** Department leave calendar: loader-resolved absence days grouped by

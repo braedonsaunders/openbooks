@@ -804,6 +804,8 @@
       "profile": "Profile",
       "leave": "Leave",
       "checklists": "Checklists",
+      "reviews": "Reviews",
+      "benefits": "Benefits",
       "team": "Team"
     },
     "refusedTitle": "Self-service is unavailable",
@@ -935,7 +937,8 @@
         "title": "Title",
         "department": "Department",
         "status": "Status",
-        "serviceStart": "Service start"
+        "serviceStart": "Service start",
+        "cycle": "Cycle"
       },
       "rosterEmpty": "No direct reports",
       "stepsTitle": "Steps assigned to me",
@@ -944,7 +947,107 @@
       "leaveEmpty": "No leave requests awaiting decision.",
       "decideInApprovals": "Decide in Approvals",
       "changesTitle": "Pending change requests",
-      "changesEmpty": "No change requests awaiting decision."
+      "changesEmpty": "No change requests awaiting decision.",
+      "owedTitle": "Reviews I owe",
+      "owedEmpty": "No reviews owed in the open cycle.",
+      "openReview": "Open review"
+    },
+    "reviewStatus": {
+      "pending": "Draft",
+      "submitted": "Submitted",
+      "calibrated": "Calibrated",
+      "shared": "Shared",
+      "acknowledged": "Acknowledged"
+    },
+    "goalStatus": {
+      "active": "Active",
+      "achieved": "Achieved",
+      "missed": "Missed",
+      "cancelled": "Cancelled"
+    },
+    "enrollmentStatus": {
+      "elected": "Elected",
+      "waived": "Waived",
+      "pending_approval": "Pending approval",
+      "active": "Active",
+      "ended": "Ended",
+      "cancelled": "Cancelled"
+    },
+    "windowKinds": {
+      "open_enrollment": "Open enrollment",
+      "new_hire": "New hire",
+      "life_event": "Life event"
+    },
+    "reviews": {
+      "title": "My reviews",
+      "description": "Self-assessments you owe, reviews shared with you, and your goals.",
+      "selfTitle": "Self-assessments",
+      "columns": {
+        "cycle": "Cycle",
+        "period": "Period",
+        "status": "Status",
+        "rating": "Rating",
+        "shared": "Shared",
+        "goal": "Goal",
+        "progress": "Progress"
+      },
+      "selfEmpty": "No self-assessments",
+      "selfEmptyDescription": "Reviews you owe list here once a cycle opens.",
+      "answerInDrawer": "Answer in HR",
+      "sharedTitle": "Shared with me",
+      "sharedEmpty": "Nothing shared yet",
+      "sharedEmptyDescription": "Manager reviews shared with you list here.",
+      "acknowledge": "Acknowledge",
+      "acknowledgeFailed": "The review could not be acknowledged.",
+      "goalsTitle": "My goals",
+      "goalsEmpty": "No goals yet",
+      "goalsEmptyDescription": "Goals for your employment list here with progress.",
+      "goalDialogTitle": "Update goal progress",
+      "goalDialogDescription": "Record progress with a note — it becomes part of the goal's evidence.",
+      "goalNoteLabel": "Note",
+      "goalNotePlaceholder": "What moved since the last update",
+      "goalSubmit": "Save progress",
+      "goalUpdate": "Update",
+      "goalFailed": "Progress could not be saved."
+    },
+    "benefits": {
+      "title": "My benefits",
+      "description": "Your elections, open enrollment windows, and dependents.",
+      "electionsTitle": "My elections",
+      "columns": {
+        "plan": "Plan",
+        "coverage": "Coverage",
+        "status": "Status",
+        "effective": "Effective",
+        "monthly": "Deduction / period",
+        "window": "Window",
+        "kind": "Kind",
+        "range": "Dates",
+        "dependent": "Dependent",
+        "relationship": "Relationship"
+      },
+      "electionsEmpty": "No elections",
+      "electionsEmptyDescription": "Coverage you elect lists here.",
+      "monthlyHint": "The stored amount payroll deducts each period — never recomputed here.",
+      "windowsTitle": "Open enrollment windows",
+      "windowsEmpty": "No open window",
+      "windowsEmptyDescription": "Windows covering your employer list here while open.",
+      "dependentsTitle": "Dependents",
+      "dependentsEmpty": "No dependents on file.",
+      "elect": "Elect coverage",
+      "electTitle": "Elect coverage",
+      "electDescription": "Elect inside an open window covering your employer — or record a life event.",
+      "fromLabel": "Effective from",
+      "lifeEventLabel": "Life event reason (instead of a window)",
+      "lifeEventPlaceholder": "What changed, for the HR approver",
+      "electSubmit": "Elect",
+      "electFailed": "The election could not be recorded.",
+      "change": "Change",
+      "changeTitle": "Change coverage",
+      "changeDescription": "Change from a date inside an open window — the old row ends the day before.",
+      "changeReasonPlaceholder": "Why the coverage changes",
+      "changeSubmit": "Save change",
+      "changeFailed": "The change could not be recorded."
     }
   }
 }

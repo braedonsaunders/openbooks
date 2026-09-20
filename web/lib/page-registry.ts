@@ -1564,6 +1564,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/me/benefits': {
+    route: '/me/benefits',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/me/benefits/view')
+      return {
+        load: (input) => m.loadMeBenefitsPage(input.searchParams ?? {}),
+        spec: (data) => m.meBenefitsSpec(data as never),
+      }
+    },
+  },
   '/me/checklists': {
     route: '/me/checklists',
     segments: [],
@@ -1585,6 +1597,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: (input) => m.loadMeProfilePage(input.searchParams ?? {}),
         spec: (data) => m.meProfileSpec(data as never),
+      }
+    },
+  },
+  '/me/reviews': {
+    route: '/me/reviews',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/me/reviews/view')
+      return {
+        load: (input) => m.loadMeReviewsPage(input.searchParams ?? {}),
+        spec: (data) => m.meReviewsSpec(data as never),
       }
     },
   },

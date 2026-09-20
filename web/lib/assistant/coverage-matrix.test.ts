@@ -169,7 +169,7 @@ const MATRIX: Entry[] = [
   { prefix: "hrm/enrollments", tools: ["hrm_benefits"], note: "electing, approving, changing, ending, and dependent linking are human-attested HR actions with no assistant write surface by design" },
   { prefix: "hrm/dependents", tools: ["hrm_benefits"], note: "dependent authoring is a human-attested HR action with no assistant write surface by design" },
   { prefix: "hrm/retention", tools: ["hrm_turnover"], note: "the retention overview and turnover table read through the retention read service; exit recording is a human-attested HR action with no assistant write surface by design" },
-  { prefix: "me", tools: ["hrm_me"], note: "the Me workspace reads only the caller's own employment summary through the self-service read service; profile filing and step completion are human-attested actions with no assistant write surface by design" },
+  { prefix: "me", tools: ["hrm_me"], note: "the Me workspace reads only the caller's own employment summary, review cycles, and benefits through the self-service read services; profile filing, step completion, review answers, and elections are human-attested actions with no assistant write surface by design" },
   { prefix: "admin/fx-provider", tools: ["list_currencies", "list_fx_rates"] },
   { prefix: "admin/navigation", uncovered: "no application service: nav config persists inline" },
   { prefix: "admin/payment-operations", uncovered: "no application service: bank-profile/format/schedule config persists inline" },

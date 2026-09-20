@@ -13,6 +13,10 @@ import {
 import { LeaveError } from "@openbooks/engine/src/hrm/leave-errors.ts";
 import { SelfServiceError } from "@openbooks/engine/src/hrm/self-service/actor.ts";
 import { getMyProfile } from "@openbooks/engine/src/hrm/self-service/self-read.ts";
+import {
+  getMyBenefitsWorkspace,
+  getMyReviewWorkspace,
+} from "@openbooks/engine/src/hrm/self-service/my-work.ts";
 import { HrmProcessError } from "@openbooks/engine/src/hrm/processes.ts";
 import { getProcess, listProcesses } from "@openbooks/engine/src/hrm/processes-read.ts";
 import { sql } from "drizzle-orm";
@@ -986,7 +990,7 @@ const hrmBenefits: AssistantToolDef = {
 const hrmMe: AssistantToolDef = {
   name: "hrm_me",
   description:
-    "The caller's own employment summary: status, title, department, employer, manager, and service start per own employment. Read-only.",
+    "The caller's own employment, reviews, and benefits: summary per own employment, owed self-assessments with shared reviews and goals, elections with open windows and dependents. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["hrm.self.read"] },
   feature: "hrm",
@@ -1000,6 +1004,13 @@ const hrmMe: AssistantToolDef = {
       // party behind the login, so a second person's rows can never be
       // returned no matter what the model puts in the (empty) input.
       const profile = await getMyProfile({ orgId: authz.user.orgId, actorId: authz.user.id });
+      // Own reviews and benefits ride the same privacy scope as the Me
+      // pages (shared reviews only, calibration stripped, own elections
+      // with stored amounts) — a second person's rows can never appear.
+      const [reviews, benefits] = await Promise.all([
+        getMyReviewWorkspace({ orgId: authz.user.orgId, actorId: authz.user.id }),
+        getMyBenefitsWorkspace({ orgId: authz.user.orgId, actorId: authz.user.id }),
+      ]);
       return {
         ok: true,
         data: {
@@ -1013,6 +1024,45 @@ const hrmMe: AssistantToolDef = {
             managerNames: [...summary.managerNames],
             serviceStart: summary.serviceStart,
           })),
+          reviews: {
+            cycles: reviews.cycles.map((group) => ({
+                  name: group.name,
+                  status: group.status,
+                  selfOwed: group.mySelf
+                    ? { status: group.mySelf.status, dueOn: group.mySelf.selfDueOn }
+                    : null,
+                  shared: group.sharedWithMe.map((shared) => ({
+                    status: shared.status,
+                    overallRating: shared.overallRating,
+                  })),
+                })),
+                goals: reviews.goals.map((goal) => ({
+                  title: goal.title,
+                  status: goal.status,
+                  progressPercent: goal.progressPercent,
+                })),
+                href: "/me/reviews",
+              },
+          benefits: {
+                elections: benefits.elections.map((election) => ({
+                  planCode: election.planCode,
+                  planName: election.planName,
+                  coverageLabel: election.coverageLabel,
+                  status: election.status,
+                  employeeAmountPerPeriod: election.employeeAmountPerPeriod,
+                  currency: election.currency,
+                })),
+                openWindows: benefits.openWindows.map((window) => ({
+                  name: window.name,
+                  kind: window.kind,
+                  closesOn: window.closesOn,
+                })),
+                dependents: benefits.dependents.map((dependent) => ({
+                  displayName: dependent.displayName,
+                  relationship: dependent.relationship,
+                })),
+                href: "/me/benefits",
+              },
           href: "/me",
         },
       };
