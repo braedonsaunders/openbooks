@@ -163,26 +163,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
      ${apCaptureSubsidiaryScope(gate.allowedSubsidiaryIds)}
   `))
   if (!current.rows[0]) return NextResponse.json({ error: 'not_found' }, { status: 404 })
-  if (nextVendorId) {
-    const vendor = (await db.execute<{ subsidiaryId: string | null }>(sql`
-      select subsidiary_id as "subsidiaryId" from parties
-       where org_id = ${gate.user.orgId} and id = ${nextVendorId}
-    `)).rows[0]
-    if (vendor) {
-      const denied = guardSubsidiaryScope(gate, vendor.subsidiaryId, { orgWideNull: true })
-      if (denied) return denied
-    }
-  }
-  if (nextPurchaseOrderId) {
-    const purchaseOrder = (await db.execute<{ subsidiaryId: string | null }>(sql`
-      select subsidiary_id as "subsidiaryId" from documents
-       where org_id = ${gate.user.orgId} and id = ${nextPurchaseOrderId}
-    `)).rows[0]
-    if (purchaseOrder) {
-      const denied = guardSubsidiaryScope(gate, purchaseOrder.subsidiaryId, { orgWideNull: true })
-      if (denied) return denied
-    }
-  }
   if (['materialized', 'rejected', 'extracting', 'queued'].includes(current.rows[0].status)) {
     return NextResponse.json({ error: 'not_editable' }, { status: 409 })
   }
@@ -258,6 +238,27 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         confidenceThreshold: settings.confidenceThreshold,
         vendorId: nextVendorId, purchaseOrderId: nextPurchaseOrderId, documentKind: kind,
     })
+    // Omitted vendorId/purchaseOrderId lets resolveAndValidateCapture pick
+    // org-wide. The pre-update exists() fence cannot see those new ids, so
+    // the associations that will be written must pass the inbox rule here.
+    if (resolved.vendorId) {
+      const vendor = (await tx.execute<{ subsidiaryId: string | null }>(sql`
+        select subsidiary_id as "subsidiaryId" from parties
+         where org_id = ${gate.user.orgId} and id = ${resolved.vendorId}
+      `)).rows[0]
+      if (!vendor || guardSubsidiaryScope(gate, vendor.subsidiaryId, { orgWideNull: true })) {
+        throw new Error('capture_not_found')
+      }
+    }
+    if (resolved.purchaseOrderId) {
+      const purchaseOrder = (await tx.execute<{ subsidiaryId: string | null }>(sql`
+        select subsidiary_id as "subsidiaryId" from documents
+         where org_id = ${gate.user.orgId} and id = ${resolved.purchaseOrderId}
+      `)).rows[0]
+      if (!purchaseOrder || guardSubsidiaryScope(gate, purchaseOrder.subsidiaryId, { orgWideNull: true })) {
+        throw new Error('capture_not_found')
+      }
+    }
     const before = live.normalized
     const headerKeys = ['vendorName', 'vendorTaxId', 'invoiceNumber', 'invoiceDate', 'dueDate', 'purchaseOrderNumber', 'currency', 'subtotal', 'taxTotal', 'total', 'memo'] as const
     for (const key of headerKeys) {
