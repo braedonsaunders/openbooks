@@ -41,7 +41,8 @@
       "employeesHint": "今日在职",
       "positionsHint": "开放中",
       "processesHint": "{count, plural, other {# 步已逾期}}",
-      "leaveHint": "{count, plural, other {# 项待审批}}"
+      "leaveHint": "{count, plural, other {# 项待审批}}",
+      "recruitingHint": "{count, plural, other {# 份录用通知待回复}}"
     },
     "vacancy": {
       "title": "按部门统计的空缺",

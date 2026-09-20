@@ -2996,7 +2996,7 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   ])
   const source = flattenCatalog('en')
   const wanted = [...source.keys()].filter((key) => key.startsWith('admin.'))
-  assert.equal(wanted.length, 3466, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  assert.equal(wanted.length, 3475, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3337,8 +3337,8 @@ test('admin copy ships translated in de and ja (i2)', () => {
     'ja:admin.setup.paymentProviders.webhookUrl',
     'ja:admin.setup.wizard.company.namePlaceholder',
   ])
-  const ADMIN_I2_SOURCE_COUNT = 3466
-  const ADMIN_I2_SOURCE_HASH = 'd21a8ea2ac6bc0f4f9faca5bf0f5308e9ba780e3915a6751b3e0865bc1ba1015'
+  const ADMIN_I2_SOURCE_COUNT = 3475
+  const ADMIN_I2_SOURCE_HASH = '395c82918b7cc0aecac328ef43ab41a5bae574c58d6d429671546f66730ed63c'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))
@@ -5104,7 +5104,7 @@ const I14_IDENTICAL_BY_FACT = new Set([
 const I14_FILE_COUNTS: Record<string, number> = {
   "items": 161,
   "inventory": 104,
-  "reports": 1290,
+  "reports": 1314,
   "sync": 172,
   "login": 33,
   "accounts": 82,

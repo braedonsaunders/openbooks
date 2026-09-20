@@ -41,7 +41,8 @@
       "employeesHint": "本日在籍",
       "positionsHint": "募集中",
       "processesHint": "{count, plural, other {期限超過 # 件}}",
-      "leaveHint": "{count, plural, other {承認待ち # 件}}"
+      "leaveHint": "{count, plural, other {承認待ち # 件}}",
+      "recruitingHint": "{count, plural, other {回答待ちのオファー # 件}}"
     },
     "vacancy": {
       "title": "部門別の欠員",
