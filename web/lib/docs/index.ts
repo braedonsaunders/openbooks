@@ -24,6 +24,9 @@ import { positionsAndHeadcount } from './articles/positions-and-headcount'
 import { leaveTimeVersusValue } from './articles/leave-time-versus-value'
 import { recruitingFunnel } from './articles/recruiting-funnel'
 import { benefitsEnrollment } from './articles/benefits-enrollment'
+// HR-13 begin: construction-compliance article.
+import { certifiedPayrollPrevailingWagePerDiem } from './articles/certified-payroll-prevailing-wage-per-diem'
+// HR-13 end
 import { taxConfiguration } from './articles/tax-configuration'
 import { taxJurisdictionsAndNexus, taxReturnsAndBoxes } from './articles/taxes'
 import { fieldTickets } from './articles/field-tickets'
@@ -256,6 +259,11 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   bankingAndReconciliation,
   periodClose,
   projectTypes, overheadCosting, laborCosting, laborPricing, payroll, employmentMigration, positionsAndHeadcount, hrmProcesses, inboxAndHome, automations, correctingAndRescinding, performanceAndRetention, selfService, leaveTimeVersusValue, recruitingFunnel, benefitsEnrollment, fieldTickets, subcontractorCompliance,
+  projectTypes, overheadCosting, laborCosting, laborPricing, payroll, employmentMigration, positionsAndHeadcount, hrmProcesses, performanceAndRetention, selfService, leaveTimeVersusValue, recruitingFunnel, benefitsEnrollment,
+  // HR-13 begin
+  certifiedPayrollPrevailingWagePerDiem,
+  // HR-13 end
+  fieldTickets, subcontractorCompliance,
   itemRates,
   financialReports,
   analyticsAndSavedViews,

@@ -30,6 +30,11 @@ import {
 } from "@openbooks/engine/src/hrm/employment-read.ts";
 import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
 import { HrmPositionError } from "@openbooks/engine/src/hrm/positions.ts";
+// HR-13 begin: construction read services for the two compliance tools.
+import { listFindings } from "@openbooks/engine/src/hrm/construction/findings.ts";
+import { listRuns } from "@openbooks/engine/src/hrm/construction/certified.ts";
+import { HrmConstructionError } from "@openbooks/engine/src/hrm/construction/errors.ts";
+// HR-13 end
 import { HrmPerformanceError } from "@openbooks/engine/src/hrm/performance/errors.ts";
 import {
   getCycleDetail,
@@ -96,6 +101,10 @@ export function hrmRefusal(error: unknown): ToolResult {
     error instanceof LeaveError ||
     error instanceof RecruitingError ||
     error instanceof HrmPerformanceError ||
+    // HR-13 begin: construction refusals reach the caller with their
+    // message intact, like every other read-service refusal above.
+    error instanceof HrmConstructionError ||
+    // HR-13 end
     error instanceof BenefitsError ||
     error instanceof HrmAuthorizationError ||
     error instanceof TemporalError ||
@@ -1150,6 +1159,45 @@ const inboxItems: AssistantToolDef = {
             actions: item.actions.map((action) => action.key),
           })),
           href: "/inbox",
+// HR-13 begin: read-only construction-compliance tools. Generating a
+// report, approving per-diem, and transitioning a finding are
+// human-attested HR actions with no assistant write surface by design —
+// these two tools read the flags and the frozen runs through the same
+// services and gates as the Compliance page.
+const HRM_CONSTRUCTION_FEATURE_OFF = "hrm_construction_feature_disabled";
+
+async function constructionFeatureRefused(orgId: string): Promise<ToolResult | null> {
+  if (!(await isFeatureEnabled(orgId, "hrmConstructionCompliance")))
+    return { ok: false, error: HRM_CONSTRUCTION_FEATURE_OFF };
+  return null;
+}
+
+const hrmComplianceFindings: AssistantToolDef = {
+  name: "hrm_compliance_findings",
+    "Construction-compliance pre-run flags by kind: ratio breaches, missing rates, unresolved comp classes, missing registrations, and fringe mismatches with lifecycle status. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.construction.read"] },
+  feature: "hrmConstructionCompliance",
+    status: z.enum(["open", "acknowledged", "resolved"]).optional().describe("Keep only this lifecycle status"),
+    kind: z
+      .enum(["ratio_breach", "missing_rate", "class_unresolved", "registration_missing", "fringe_mismatch"])
+      .optional()
+      .describe("Keep only this finding kind"),
+    limit: z.number().int().min(1).max(200).optional().describe("Maximum findings to return (default 50)"),
+    const gated = await constructionFeatureRefused(authz.user.orgId);
+    if (gated) return gated;
+    const a = raw as { status?: string; kind?: string; limit?: number };
+      const findings = await listFindings(db, authz.user.orgId, authz.user.id, a.status ?? null);
+      const kept = (a.kind ? findings.filter((finding) => finding.kind === a.kind) : findings).slice(0, Math.min(a.limit ?? 50, 200));
+          findings: kept.map((finding) => ({
+            id: finding.id,
+            kind: finding.kind,
+            projectId: finding.projectId,
+            workedOn: finding.workedOn,
+            employmentId: finding.employmentId,
+            status: finding.status,
+            recordedAt: finding.recordedAt,
+          href: "/hrm/compliance",
         },
       };
     } catch (error) {
@@ -1211,3 +1259,47 @@ const automationsStatus: AssistantToolDef = {
 export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting, hrmPerformanceCycles, hrmTurnover, hrmBenefits, hrmMe, automationsStatus];
 // HR-15: the core own-scope inbox tool rides after every slice tool.
 HRM_TOOLS.push(inboxItems);
+const hrmCertifiedPayroll: AssistantToolDef = {
+  name: "hrm_certified_payroll",
+  description:
+    "Frozen certified payroll runs by project and week: pack format, lifecycle status, and amendment links. Read-only.",
+  gate: { mode: "anyOf", perms: ["hrm.construction.read"] },
+  feature: "hrmConstructionCompliance",
+  tier: "module",
+  inputSchema: z.object({
+    projectId: z.string().optional().describe("Keep only this project's runs"),
+    limit: z.number().int().min(1).max(200).optional().describe("Maximum runs to return (default 50)"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const gated = await constructionFeatureRefused(authz.user.orgId);
+    if (gated) return gated;
+    const a = raw as { projectId?: string; limit?: number };
+    try {
+      const runs = await listRuns(db, authz.user.orgId, authz.user.id, a.projectId ?? null);
+      return {
+        ok: true,
+        data: {
+          runs: runs.slice(0, Math.min(a.limit ?? 50, 200)).map((run) => ({
+            id: run.id,
+            projectId: run.projectId,
+            weekEnding: run.weekEnding,
+            status: run.status,
+            formatKey: run.formatKey,
+            amendsRunId: run.amendsRunId,
+          })),
+          href: "/hrm/compliance?section=certified",
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+// HR-13 end
+
+export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting, hrmPerformanceCycles, hrmTurnover, hrmBenefits, hrmMe,
+  // HR-13 begin: read-only construction-compliance tools (generation,
+  // approval, and finding transitions stay human-attested).
+  hrmComplianceFindings, hrmCertifiedPayroll,
+  // HR-13 end
+];
