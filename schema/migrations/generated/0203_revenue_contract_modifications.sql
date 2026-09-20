@@ -1,3 +1,5 @@
+-- OpenBooks forward migration 0203_revenue_contract_modifications.
+--
 -- Approved amendments retain every posted journal and superseded future plan.
 SET search_path=public,pg_catalog;
 ALTER TABLE revenue_contracts

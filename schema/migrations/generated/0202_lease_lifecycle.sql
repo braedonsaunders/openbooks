@@ -1,4 +1,6 @@
--- 0202: versioned lessee schedules and immutable, independently approved
+-- OpenBooks forward migration 0202_lease_lifecycle.
+--
+-- Versioned lessee schedules and immutable, independently approved
 -- financial-change evidence. No posted journal is rewritten by this migration.
 SET search_path = public, pg_catalog;
 

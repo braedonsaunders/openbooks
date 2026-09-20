@@ -1,3 +1,5 @@
+-- OpenBooks forward migration 0204_asset_lifecycle_changes.
+--
 -- Append-only, independently approved book-basis changes. Historical cost and
 -- posted depreciation retain their identities; all carrying reads net these.
 SET search_path=public,pg_catalog;
