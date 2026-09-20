@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { applyLeaseChange } from "@openbooks/engine/src/revenue/lease-changes.ts";
+import { applyRevenueModification } from "@openbooks/engine/src/revenue/contract-modifications.ts";
 import { authorizeChange } from "../../_authorization";
 export const runtime = "nodejs";
 export async function POST(
@@ -10,6 +11,14 @@ export async function POST(
     gate = await authorizeChange(id);
   if (gate instanceof NextResponse) return gate;
   try {
+    if (gate.domain === "revenue")
+      return NextResponse.json(
+        await applyRevenueModification(
+          gate.auth.user.orgId,
+          id,
+          gate.auth.user.id,
+        ),
+      );
     if (gate.domain !== "lease")
       return NextResponse.json(
         { error: "no matching lifecycle action" },
