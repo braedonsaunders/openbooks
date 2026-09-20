@@ -31,6 +31,13 @@ export interface CalendarDay {
   day: number;
 }
 
+/** Derived from adjacent statutory windows, never an operator election.
+ * Rev. Proc. 89-15 §4.01(1)(a)(i) allocates a shared calendar month to
+ * the second short year for the half-year convention. */
+export interface MacrsShortYearContext {
+  excludedTerminalMonth?: boolean;
+}
+
 export function parseCalendarDay(value: string): CalendarDay | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (!match) return null;
@@ -126,7 +133,11 @@ export function addCalendarDays(start: CalendarDay, days: number): CalendarDay {
 }
 
 /** Pub 946 month count when the year starts on the 1st or ends on the last day. */
-export function shortTaxYearMonths(yearStart: string, yearEnd: string): number {
+export function shortTaxYearMonths(
+  yearStart: string,
+  yearEnd: string,
+  context?: MacrsShortYearContext,
+): number {
   const start = parseCalendarDay(yearStart);
   const end = parseCalendarDay(yearEnd);
   if (!start || !end) {
@@ -137,6 +148,14 @@ export function shortTaxYearMonths(yearStart: string, yearEnd: string): number {
   if (utc(end) < utc(start)) {
     throw new MacrsShortYearError(
       `short-year window ${yearStart}–${yearEnd} ends before it starts`,
+    );
+  }
+  if (
+    context?.excludedTerminalMonth &&
+    (!startsOnFirst(start) || endsOnLast(end))
+  ) {
+    throw new MacrsShortYearError(
+      "a shared terminal month requires a month-based short year ending within that month; derive the exclusion from consecutive statutory windows",
     );
   }
   if (!startsOnFirst(start) && !endsOnLast(end)) {
@@ -156,14 +175,15 @@ export function shortTaxYearMonths(yearStart: string, yearEnd: string): number {
       `short-year MACRS computed ${months} months from ${yearStart} to ${yearEnd}; expected 1-12`,
     );
   }
-  return months;
+  return months - (context?.excludedTerminalMonth ? 1 : 0);
 }
 
 export function impliedShortYearFactor(
   yearStart: string,
   yearEnd: string,
+  context?: MacrsShortYearContext,
 ): string {
-  const months = shortTaxYearMonths(yearStart, yearEnd);
+  const months = shortTaxYearMonths(yearStart, yearEnd, context);
   return rateRatio(halfMonths(months), 24n);
 }
 
@@ -209,9 +229,10 @@ export function assertShortYearFactorAgrees(
   yearStart: string,
   yearEnd: string,
   declared?: string | number | null,
+  context?: MacrsShortYearContext,
 ): string {
-  const months = shortTaxYearMonths(yearStart, yearEnd);
-  const implied = impliedShortYearFactor(yearStart, yearEnd);
+  const months = shortTaxYearMonths(yearStart, yearEnd, context);
+  const implied = impliedShortYearFactor(yearStart, yearEnd, context);
   if (declared == null || String(declared).trim() === "") return implied;
   const exact = normalizeDecimal(declared, 10);
   if (!factorsAgree(exact, implied)) {
@@ -239,10 +260,13 @@ function addMonthsFirst(start: CalendarDay, months: number): CalendarDay {
 export function halfYearDeemedServiceDate(
   yearStart: string,
   yearEnd: string,
+  context?: MacrsShortYearContext,
 ): CalendarDay {
   const { start, end } = taxYearWindow(yearStart, yearEnd);
+  if (context?.excludedTerminalMonth)
+    shortTaxYearMonths(yearStart, yearEnd, context);
   if (startsOnFirst(start) || endsOnLast(end)) {
-    const months = shortTaxYearMonths(yearStart, yearEnd);
+    const months = shortTaxYearMonths(yearStart, yearEnd, context);
     const origin = { year: start.year, month: start.month, day: 1 };
     if (months % 2 === 0) return addMonthsFirst(origin, months / 2);
     return { ...addMonthsFirst(origin, Math.floor(months / 2)), day: 15 };
@@ -317,9 +341,15 @@ export function deemedPlacedInServiceOn(
   yearStart: string,
   yearEnd: string,
   placedOn: string,
+  context?: MacrsShortYearContext,
 ): CalendarDay {
+  if (context?.excludedTerminalMonth && convention !== "half_year") {
+    throw new MacrsShortYearError(
+      "the shared-month half-year context must not change a mid-quarter or mid-month convention",
+    );
+  }
   if (convention === "half_year")
-    return halfYearDeemedServiceDate(yearStart, yearEnd);
+    return halfYearDeemedServiceDate(yearStart, yearEnd, context);
   if (convention === "mid_quarter")
     return midQuarterDeemedServiceDate(yearStart, yearEnd, placedOn);
   return midMonthDeemedServiceDate(placedOn);
@@ -329,8 +359,9 @@ export function deemedPlacedInServiceOn(
 export function monthsTreatedInService(
   deemed: CalendarDay,
   yearEnd: string,
+  context?: MacrsShortYearContext,
 ): number {
-  const end = parseCalendarDay(yearEnd);
+  let end = parseCalendarDay(yearEnd);
   if (
     !end ||
     !parseCalendarDay(formatCalendarDay(deemed)) ||
@@ -339,6 +370,16 @@ export function monthsTreatedInService(
     throw new MacrsShortYearError(
       "MACRS service requires a valid first-of-month or midpoint deemed date and a calendar year-end",
     );
+  }
+  if (context?.excludedTerminalMonth) {
+    if (endsOnLast(end)) {
+      throw new MacrsShortYearError(
+        "a terminal month ending on its last day cannot be shared with the next statutory window",
+      );
+    }
+    // The original legal year-end is preserved by the caller. Only the
+    // month allocation ends at the preceding month boundary.
+    end = fromUtc(new Date(Date.UTC(end.year, end.month - 1, 0)));
   }
   if (utc(end) < utc(deemed)) return 0;
   return (
