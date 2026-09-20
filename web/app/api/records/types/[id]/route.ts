@@ -1,10 +1,11 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
-import { loadRecordTypeById } from '../../../../../lib/records'
+import { hasSubsidiaryField, loadRecordTypeById } from '../../../../../lib/records'
 import {
   describeIssue,
   lintRecordFields,
@@ -14,6 +15,25 @@ import {
 export const runtime = 'nodejs'
 
 const ICON_KEY_RE = /^[a-z0-9-]{1,32}$/
+const TYPE_REVISION_SQL = documentRevisionSql(sql`updated_at`)
+const TYPE_REVISION_CONFLICT = {
+  error: 'This record type changed after you opened it; reload the type and try again',
+  code: 'revision_conflict',
+} as const
+
+function typeDeclaresSubsidiary(fields: unknown, name: string): boolean {
+  const lint = lintRecordFields(fields, name)
+  return lint.success && hasSubsidiaryField(lint.sections)
+}
+
+async function loadTypeRevision(orgId: string, id: string): Promise<string | null> {
+  const row = (await db.execute<{ updated_at: string }>(sql`
+    select ${TYPE_REVISION_SQL} as updated_at
+      from custom_record_types
+     where id = ${id} and org_id = ${orgId}
+  `)).rows[0]
+  return row?.updated_at ?? null
+}
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('records.manage_types')
@@ -22,7 +42,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const type = await loadRecordTypeById(gate.user.orgId, id)
   if (!type) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  return NextResponse.json({ type })
+  const updatedAt = await loadTypeRevision(gate.user.orgId, id)
+  if (!updatedAt) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  return NextResponse.json({ type: { ...type, updated_at: updatedAt } })
 }
 
 /**
@@ -54,6 +76,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     showInNav?: boolean
     allowedRoles?: string[] | null
     sortOrder?: number
+    expectedUpdatedAt?: unknown
   }
 
   if (body.name !== undefined && (typeof body.name !== 'string' || !body.name.trim() || body.name.length > 200)) {
@@ -129,28 +152,69 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // Persist the validated SECTION structure (not the flattened field list).
     fieldsJson = JSON.stringify(lint.sections)
     issues = lint.issues
+    const fence = gate.allowedSubsidiaryIds ?? null
+    if (fence !== null && typeDeclaresSubsidiary(type.fields, type.name) && !hasSubsidiaryField(lint.sections)) {
+      return NextResponse.json(
+        {
+          error:
+            'Keep the subsidiary_id field; removing it would expose records from subsidiaries outside your scope',
+        },
+        { status: 422 },
+      )
+    }
   } else {
     // Re-lint the stored fields so a rename etc. still refreshes the issue list.
     issues = lintRecordFields(type.fields, body.name ?? type.name).issues
   }
 
-  await db.execute(sql`
-    update custom_record_types set
-      name = coalesce(${body.name ?? null}, name),
-      plural_name = coalesce(${body.pluralName ?? null}, plural_name),
-      key = coalesce(${key ?? null}, key),
-      icon_key = coalesce(${body.iconKey ?? null}, icon_key),
-      description = ${body.description !== undefined ? body.description : sql`description`},
-      fields = coalesce(${fieldsJson ?? null}::jsonb, fields),
-      show_in_nav = coalesce(${body.showInNav ?? null}, show_in_nav),
-      allowed_roles = ${body.allowedRoles !== undefined ? (body.allowedRoles === null ? null : JSON.stringify(body.allowedRoles)) : sql`allowed_roles`}${body.allowedRoles !== undefined ? sql`::jsonb` : sql``},
-      sort_order = coalesce(${body.sortOrder ?? null}, sort_order),
-      updated_at = now(), updated_by = ${user.id}
-    where id = ${id} and org_id = ${user.orgId}
-  `)
+  if (body.expectedUpdatedAt !== undefined && !isDocumentRevisionToken(body.expectedUpdatedAt)) {
+    return NextResponse.json(TYPE_REVISION_CONFLICT, { status: 409 })
+  }
+
+  const openedRevision = await loadTypeRevision(user.orgId, id)
+  if (!openedRevision) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  // Tokenless builder autosaves echo the revision this request just read.
+  // Concurrent builders that opened the same snapshot lose with 409.
+  const expectedRevision = isDocumentRevisionToken(body.expectedUpdatedAt)
+    ? body.expectedUpdatedAt
+    : openedRevision
+
+  const outcome = await withOrgTransaction(user.orgId, async () => {
+    const locked = (await db.execute<{ updated_at: string }>(sql`
+      select ${TYPE_REVISION_SQL} as updated_at
+        from custom_record_types
+       where id = ${id} and org_id = ${user.orgId}
+       for update
+    `)).rows[0]
+    if (!locked) return { kind: 'not_found' as const }
+    if (locked.updated_at !== expectedRevision) return { kind: 'conflict' as const }
+    const updated = await db.execute(sql`
+      update custom_record_types set
+        name = coalesce(${body.name ?? null}, name),
+        plural_name = coalesce(${body.pluralName ?? null}, plural_name),
+        key = coalesce(${key ?? null}, key),
+        icon_key = coalesce(${body.iconKey ?? null}, icon_key),
+        description = ${body.description !== undefined ? body.description : sql`description`},
+        fields = coalesce(${fieldsJson ?? null}::jsonb, fields),
+        show_in_nav = coalesce(${body.showInNav ?? null}, show_in_nav),
+        allowed_roles = ${body.allowedRoles !== undefined ? (body.allowedRoles === null ? null : JSON.stringify(body.allowedRoles)) : sql`allowed_roles`}${body.allowedRoles !== undefined ? sql`::jsonb` : sql``},
+        sort_order = coalesce(${body.sortOrder ?? null}, sort_order),
+        updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'),
+        updated_by = ${user.id}
+      where id = ${id} and org_id = ${user.orgId}
+        and ${TYPE_REVISION_SQL} = ${expectedRevision}
+      returning id
+    `)
+    if (updated.rows.length === 0) return { kind: 'conflict' as const }
+    return { kind: 'ok' as const }
+  })
+  if (outcome.kind === 'not_found') return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (outcome.kind === 'conflict') return NextResponse.json(TYPE_REVISION_CONFLICT, { status: 409 })
 
   const updated = await loadRecordTypeById(user.orgId, id)
-  return NextResponse.json({ type: updated, issues })
+  const updatedAt = updated ? await loadTypeRevision(user.orgId, id) : null
+  if (!updated || !updatedAt) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  return NextResponse.json({ type: { ...updated, updated_at: updatedAt }, issues })
 }
 
 /** Delete a type — drafts only, and only before any record exists. */
@@ -161,17 +225,68 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const type = await loadRecordTypeById(user.orgId, id)
-  if (!type) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  if (type.status !== 'draft') {
-    return NextResponse.json({ error: 'Only draft types can be deleted — archive published types instead' }, { status: 422 })
-  }
-  const records = ((await db.execute(sql`
-    select 1 from custom_records where org_id = ${user.orgId} and type_id = ${id} limit 1
-  `)))
-  if (records.rows.length > 0) {
-    return NextResponse.json({ error: 'This type already has records and cannot be deleted' }, { status: 422 })
-  }
-  await db.execute(sql`delete from custom_record_types where id = ${id} and org_id = ${user.orgId}`)
+  const outcome = await withOrgTransaction(user.orgId, async () => {
+    const locked = (await db.execute<{ status: string }>(sql`
+      select status from custom_record_types
+       where id = ${id} and org_id = ${user.orgId}
+       for update
+    `)).rows[0]
+    if (!locked) return { kind: 'not_found' as const }
+    if (locked.status !== 'draft') {
+      return {
+        kind: 'response' as const,
+        response: NextResponse.json(
+          { error: 'Only draft types can be deleted — archive published types instead' },
+          { status: 422 },
+        ),
+      }
+    }
+    const records = await db.execute(sql`
+      select 1 from custom_records where org_id = ${user.orgId} and type_id = ${id} limit 1
+    `)
+    if (records.rows.length > 0) {
+      return {
+        kind: 'response' as const,
+        response: NextResponse.json(
+          { error: 'This type already has records and cannot be deleted' },
+          { status: 422 },
+        ),
+      }
+    }
+    const deleted = await db.execute(sql`
+      delete from custom_record_types
+       where id = ${id} and org_id = ${user.orgId} and status = 'draft'
+         and not exists (
+           select 1 from custom_records where org_id = ${user.orgId} and type_id = ${id}
+         )
+      returning id
+    `)
+    if (deleted.rows.length === 0) {
+      const live = (await db.execute<{ status: string }>(sql`
+        select status from custom_record_types
+         where id = ${id} and org_id = ${user.orgId}
+      `)).rows[0]
+      if (!live) return { kind: 'not_found' as const }
+      if (live.status !== 'draft') {
+        return {
+          kind: 'response' as const,
+          response: NextResponse.json(
+            { error: 'Only draft types can be deleted — archive published types instead' },
+            { status: 422 },
+          ),
+        }
+      }
+      return {
+        kind: 'response' as const,
+        response: NextResponse.json(
+          { error: 'This type already has records and cannot be deleted' },
+          { status: 422 },
+        ),
+      }
+    }
+    return { kind: 'ok' as const }
+  })
+  if (outcome.kind === 'not_found') return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (outcome.kind === 'response') return outcome.response
   return NextResponse.json({ ok: true })
 }
