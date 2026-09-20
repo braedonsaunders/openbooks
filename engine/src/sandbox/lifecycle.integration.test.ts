@@ -454,18 +454,53 @@ test("a masked sandbox carries no bank routing, taxpayer ids or org tax ids", { 
   const sandboxName = `Masking coverage ${randomUUID()}`;
   await withSandboxCleanup(org, sandboxName, async (handle) => {
     const partyId = randomUUID();
+    const employeeId = randomUUID();
     const bankId = randomUUID();
+    const scheduleId = randomUUID();
+    const filingId = randomUUID();
+    // Distinctive production identifiers: the masked clone must drop the
+    // ciphertext, the last-three, and the frozen filing TIN — not merely the
+    // vendor-role last-four the older assertion already covered.
+    const employeeSinCipher = "sealed-employee-sin-ciphertext";
+    const employeeSinLast3 = "321";
+    const filingTin = "987654321";
     await db.execute(sql`update orgs set tax_ids = '{"CA_BN":"123456789RT0001"}'::jsonb where id = ${org.orgId}`);
     await db.execute(sql`update subsidiaries set tax_ids = '{"CA_BN":"123456789RT0001"}'::jsonb where id = ${org.subsidiaryId}`);
     await db.execute(sql`
       insert into parties (id, org_id, kind, display_name, tax_ids)
       values (${partyId}, ${org.orgId}, 'vendor', 'Masked Vendor', '{"US_EIN":"12-3456789"}'::jsonb)`);
     await db.execute(sql`
+      insert into parties (id, org_id, kind, display_name)
+      values (${employeeId}, ${org.orgId}, 'person', 'Masked Employee')`);
+    await db.execute(sql`
       insert into vendor_roles (org_id, party_id, tin_encrypted, tin_last4, tin_type)
       values (${org.orgId}, ${partyId}, 'sealed-tin', '6789', 'ein')`);
     await db.execute(sql`
       insert into party_bank_accounts (id, org_id, party_id, bank_name, routing, account_number_encrypted, account_last_four)
       values (${bankId}, ${org.orgId}, ${partyId}, 'Bank', '{"institution":"001","transit":"12345"}'::jsonb, 'sealed-account', '4321')`);
+    await db.execute(sql`
+      insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end)
+      values (${scheduleId}, ${org.orgId}, 'Masking schedule', 'biweekly', 26, '2026-07-18')`);
+    await db.execute(sql`
+      insert into employee_payroll_profiles
+        (org_id, employee_party_id, pay_schedule_id, country, province, pay_basis, sin_encrypted, sin_last3)
+      values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'hourly', ${employeeSinCipher}, ${employeeSinLast3})`);
+    await db.execute(sql`
+      insert into information_return_filings
+        (id, org_id, tax_year, form_type, status, threshold, currency, finalized_at, payer_snapshot)
+      values (${filingId}, ${org.orgId}, 2026, '1099-NEC', 'finalized', '600', 'CAD', now(),
+              '{"name":"Main Co","taxIds":{"CA_BN":"123456789RT0001"}}'::jsonb)`);
+    await db.execute(sql`
+      insert into information_return_recipients
+        (org_id, filing_id, party_id, recipient_snapshot, tin_last4, tin_type)
+      values (${org.orgId}, ${filingId}, ${partyId},
+              ${JSON.stringify({
+                legalName: "Masked Vendor",
+                tin: filingTin,
+                tinType: "ssn",
+                address: { line1: "123 Filing Street" },
+              })}::jsonb,
+              '4321', 'ssn')`);
 
     const created = await createSandbox({ productionOrgId: org.orgId, name: sandboxName, tier: "masked", masked: true });
     handle.sandboxId = created.sandboxId;
@@ -482,11 +517,27 @@ test("a masked sandbox carries no bank routing, taxpayer ids or org tax ids", { 
                (select count(*)::int from party_bank_accounts where org_id = ${created.sandboxOrgId}
                  and (routing <> '{}'::jsonb or account_number_encrypted is not null or account_last_four is not null)) as routable_accounts,
                (select count(*)::int from party_bank_accounts where org_id = ${created.sandboxOrgId}) as bank_accounts,
+               (select count(*)::int from employee_payroll_profiles where org_id = ${created.sandboxOrgId}
+                 and (sin_encrypted is not null or sin_last3 is not null)) as identified_sins,
+               (select count(*)::int from employee_payroll_profiles where org_id = ${created.sandboxOrgId}) as payroll_profiles,
+               (select count(*)::int from information_return_recipients where org_id = ${created.sandboxOrgId}
+                 and (recipient_snapshot <> '{}'::jsonb or tin_last4 is not null or tin_type is not null)) as identified_recipients,
+               (select count(*)::int from information_return_recipients where org_id = ${created.sandboxOrgId}) as recipients,
+               (select count(*)::int from employee_payroll_profiles where org_id = ${created.sandboxOrgId}
+                 and (sin_encrypted = ${employeeSinCipher} or sin_last3 = ${employeeSinLast3})) as sin_ciphertext_leaks,
+               (select count(*)::int from information_return_recipients where org_id = ${created.sandboxOrgId}
+                 and recipient_snapshot::text like ${`%${filingTin}%`}) as filing_tin_leaks,
+               (select count(*)::int from information_return_filings where org_id = ${created.sandboxOrgId}
+                 and (payer_snapshot ? 'taxIds' or payer_snapshot::text like '%123456789RT0001%')) as identified_payer_snapshots,
+               (select count(*)::int from information_return_filings where org_id = ${created.sandboxOrgId}) as filings,
                (select status from sandboxes where id = ${created.sandboxId}) as status`)).rows[0] as Record<string, unknown>;
 
     const expected = {
       org_tax_ids: {}, identified_parties: 0, identified_vendors: 0, identified_subsidiaries: 0,
-      routable_accounts: 0, bank_accounts: 1, status: "ready",
+      routable_accounts: 0, bank_accounts: 1, identified_sins: 0, payroll_profiles: 1,
+      identified_recipients: 0, recipients: 1, sin_ciphertext_leaks: 0, filing_tin_leaks: 0,
+      identified_payer_snapshots: 0, filings: 1,
+      status: "ready",
     };
     assert.deepEqual(await masked(), expected);
 
