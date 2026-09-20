@@ -13,11 +13,15 @@ export const runtime = "nodejs";
  * Complete one checklist step. Managers (hrm.process.manage) and the step's
  * own employee owner both arrive here — the service tells them apart, so
  * this route gates on the read grant and lets the service refuse strangers
- * with the remedy intact.
+ * with the remedy intact. Self-service readers (hrm.self.read) pass the
+ * gate too: the /me checklists surface completes through this same
+ * endpoint, and the service's ownership check (not this gate) is what
+ * refuses a stranger — a widened gate with an unchanged refusal.
  */
 export async function POST(req: Request, ctx: { params: Promise<{ stepId: string }> }) {
-  const gate = await guardPermission("hrm.process.read");
-  if (gate instanceof NextResponse) return gate;
+  const processGate = await guardPermission("hrm.process.read");
+  const gate = processGate instanceof NextResponse ? await guardPermission("hrm.self.read") : processGate;
+  if (gate instanceof NextResponse) return processGate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
