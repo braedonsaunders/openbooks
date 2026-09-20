@@ -9,10 +9,16 @@ export async function generateMetadata() {
 
 /**
  * Process checklists — employment starts, ends, and transfers with owners,
- * due dates, and evidence. Renders only when the hrm feature gate is on
- * and the actor holds hrm.process.read — the view 404s otherwise.
+ * due dates, and evidence. Segments filter server-side; a row opens the
+ * checklist drawer through the URL. Renders only when the hrm feature gate
+ * is on and the actor holds hrm.process.read — the view 404s otherwise.
  */
-export default async function ProcessesPage() {
-  const data = await loadProcessesRoute()
-  return <ModuleView spec={processesSpec(data)} data={data} searchParams={{}} trusted />
+export default async function ProcessesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>
+}) {
+  const sp = await searchParams
+  const data = await loadProcessesRoute(sp)
+  return <ModuleView spec={processesSpec(data)} data={data} searchParams={sp} trusted />
 }
