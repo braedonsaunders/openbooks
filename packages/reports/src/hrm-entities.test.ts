@@ -255,15 +255,16 @@ test('workforce entities scope to one org and one legal-entity boundary', () => 
   for (const key of HRM_KEYS) {
     const entity = REPORT_ENTITY_MAP[key]!
     assert.equal(entity.orgColumn, orgColumns[key], `${key} org column`)
-    // HR-16 begin: org-wide configuration entities carry no subsidiary scope.
-    // HR-14 begin: pre-existing red on the stacked base — HR-13 declares
-    // the absence explicitly (`subsidiaryScope: null`, which the
-    // ReportEntity type allows) while HR-16 omits it (`undefined`), and
-    // the strict equal below accepts only the latter. Both spellings
-    // mean "no clamp", so the pin accepts both.
+    // Org-wide configuration entities carry no subsidiary clamp, but the
+    // policy must still be DECLARED as null. compileSubsidiaryScope throws
+    // "has no subsidiary policy" when the key is absent, so an omitted
+    // policy refuses the report to exactly the subsidiary-scoped readers it
+    // is meant to serve — the two spellings are not equivalent and this
+    // pin no longer accepts undefined.
     const scope = scopeColumns[key]
     if (scope === null) {
-      assert.ok(entity.subsidiaryScope === undefined || entity.subsidiaryScope === null, `${key} carries no subsidiary scope`)
+      assert.ok('subsidiaryScope' in entity, `${key} must DECLARE its subsidiary policy; an absent key throws at query time`)
+      assert.equal(entity.subsidiaryScope, null, `${key} carries no subsidiary clamp`)
     } else {
       // HR-14 begin: pre-existing red on the stacked base — gap snapshots
       // carry sharedNull, which this branch did not expect (previously
