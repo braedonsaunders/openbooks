@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { ACTIVE_ENV_COOKIE_NAME, makeEnvToken, SESSION_TTL_S } from "./auth";
-import { useSecureCookies } from "./auth-policy";
+import { secureCookiesEnabled } from "./auth-policy";
 import { getAuthz } from "./authz";
 import { isUuid } from "./list-params";
 import { resolveActiveEnv } from "./org-access";
@@ -41,9 +41,7 @@ export async function enterOrg(orgId: string, returnTo = "/"): Promise<void> {
     jar.set(ACTIVE_ENV_COOKIE_NAME, makeEnvToken(resolved.orgId), {
       httpOnly: true,
       sameSite: "lax",
-      // Not a React hook: the shared cookie policy (see login/oidc routes).
-      // eslint-disable-next-line react-hooks/rules-of-hooks
-      secure: useSecureCookies(),
+      secure: secureCookiesEnabled(),
       path: "/",
       maxAge: SESSION_TTL_S,
     });

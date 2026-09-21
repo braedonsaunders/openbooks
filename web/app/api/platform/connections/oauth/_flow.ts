@@ -2,7 +2,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { appBaseUrl } from "@openbooks/engine/src/flows/email-tokens.ts";
 import { sealJson, unsealJson } from "@openbooks/engine/src/platform/secrets.ts";
-import { useSecureCookies } from "../../../../../lib/auth-policy";
+import { secureCookiesEnabled } from "../../../../../lib/auth-policy";
 
 /**
  * Connection OAuth CSRF follows the house OIDC cookie+nonce pattern
@@ -44,7 +44,7 @@ export function attachConnectionOauthCookie(response: NextResponse, nonce: strin
   response.cookies.set(CONNECTION_OAUTH_COOKIE, nonce, {
     httpOnly: true,
     sameSite: "lax",
-    secure: useSecureCookies(),
+    secure: secureCookiesEnabled(),
     maxAge: CONNECTION_OAUTH_TTL_S,
     path: COOKIE_PATH,
   });
@@ -54,7 +54,7 @@ export function attachConnectionOauthCookie(response: NextResponse, nonce: strin
 export function clearConnectionOauthCookie(response: NextResponse): void {
   response.cookies.set(CONNECTION_OAUTH_COOKIE, "", {
     httpOnly: true,
-    secure: useSecureCookies(),
+    secure: secureCookiesEnabled(),
     maxAge: 0,
     path: COOKIE_PATH,
   });
