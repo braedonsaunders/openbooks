@@ -55,7 +55,7 @@ const routeUrl = "./route.ts?payment-links-expiry-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
-const { db, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { sealJson } = await import("@openbooks/engine/src/platform/secrets.ts");
 const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
@@ -64,41 +64,43 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture() {
-  const org = await createScratchOrg();
-  const actorId = await createScratchUser(org.orgId, "Payment links", "admin");
-  await db.execute(sql`
+  return withBypassContext(async () => {
+    const org = await createScratchOrg();
+    const actorId = await createScratchUser(org.orgId, "Payment links", "admin");
+    await db.execute(sql`
     update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}',
       coalesce(settings->'features', '{}'::jsonb) || '{"onlinePayments":true}'::jsonb)
      where id = ${org.orgId}
   `);
-  const invoiceId = randomUUID();
-  await db.execute(sql`
+    const invoiceId = randomUUID();
+    await db.execute(sql`
     insert into documents
       (id, org_id, kind, status, document_number, subsidiary_id, party_id,
        document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
     values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-EXPIRY',
             ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '1',
             '100', '0', '100', ${actorId})`);
-  await db.execute(sql`
+    await db.execute(sql`
     insert into document_lines
       (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
     values (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '1', '100', '100', '0', '0')`);
-  await db.execute(sql`
+    await db.execute(sql`
     update documents set status = 'approved', updated_at = now()
      where id = ${invoiceId} and org_id = ${org.orgId}`);
-  await withOrgContext(org.orgId, () => postDocument(invoiceId, {
-    control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
-  }));
-  await db.execute(sql`
+    await withOrgContext(org.orgId, () => postDocument(invoiceId, {
+      control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+    }));
+    await db.execute(sql`
     insert into psp_provider_configs
       (org_id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id, secrets, created_by, updated_by)
     values (${org.orgId}, 'stripe', 'Stripe', true, true, ${org.accounts.bank},
             ${sealJson({ apiKey: "sk_test_itest", webhookSecret: "whsec_expiry" })}, ${actorId}, ${actorId})`);
-  const state = (globalThis as typeof globalThis & Record<symbol, unknown>)[routeState] as {
-    authz: { user: { orgId: string; id: string } } | null;
-  };
-  state.authz = { user: { orgId: org.orgId, id: actorId } };
-  return { org, invoiceId };
+    const state = (globalThis as typeof globalThis & Record<symbol, unknown>)[routeState] as {
+      authz: { user: { orgId: string; id: string } } | null;
+    };
+    state.authz = { user: { orgId: org.orgId, id: actorId } };
+    return { org, invoiceId };
+  });
 }
 
 async function post(orgId: string, body: unknown): Promise<{ status: number; json: unknown }> {
