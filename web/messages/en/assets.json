@@ -45,7 +45,15 @@
       "closing": "Closing balance",
       "recapture": "Recapture",
       "terminalLoss": "Terminal loss"
-    }
+    },
+    "legalEntity": "Legal entity",
+    "window": "Registered tax year",
+    "chooseWindow": "Select a tax-year window",
+    "noWindows": "No tax-year windows are registered for this legal entity and regime.",
+    "configureYears": "Configure tax years",
+    "windowLabel": "{filingYear}: {start} – {end}",
+    "loadingWindows": "Loading tax years…",
+    "loadWindowsFailed": "Could not load tax years."
   },
   "list": {
     "title": "Fixed Assets",

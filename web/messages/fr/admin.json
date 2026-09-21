@@ -1417,7 +1417,8 @@
         "firstYear": "Règles de première année",
         "cessation": "Activité admissible",
         "methods": "Méthodes",
-        "books": "Politiques par livre"
+        "books": "Politiques par livre",
+        "years": "Exercices fiscaux"
       },
       "packsTitle": "Packs d’amortissement par pays",
       "packsDescription": "L’installation d’un pack crée une configuration locataire modifiable. Les remplacements existants ne sont jamais remplacés.",
@@ -1459,6 +1460,10 @@
         "assignments": {
           "title": "Affectations par catégorie d’actifs",
           "description": "Affectez chaque catégorie d’actifs à une classe de régime dans les attributs fiscaux."
+        },
+        "years": {
+          "title": "Exercices fiscaux",
+          "description": "Déclarez les dates et le motif de chaque exercice par entité juridique et régime."
         }
       }
     },
@@ -2367,6 +2372,11 @@
       "extension-settings": {
         "title": "Paramètres des applications",
         "description": "Configurez les paramètres déclarés par les applications installées. Les modifications conservent les valeurs antérieures et leurs dates d’effet."
+      },
+      "tax-year-windows": {
+        "title": "Exercices fiscaux",
+        "singularTitle": "Exercice fiscal",
+        "description": "Déclarez les dates des exercices par entité juridique et régime, y compris les exercices courts. Indiquez leur motif ; les dates déjà utilisées dans un calcul sont conservées."
       }
     },
     "fields": {
@@ -2633,7 +2643,10 @@
       "dateBasis": "Base de dates",
       "unitsTotal": "Unités totales",
       "network": "Réseau",
-      "lastFour": "Quatre derniers"
+      "lastFour": "Quatre derniers",
+      "yearStart": "Début de l’exercice",
+      "yearEnd": "Fin de l’exercice",
+      "filingYear": "Libellé de l’année déclarative"
     },
     "fieldHelp": {
       "gapless": "Sans rupture signifie que chaque numéro de la séquence doit être justifié, sans aucun numéro sauté. Activez cette option uniquement si vos obligations légales ou d’audit imposent une numérotation ininterrompue.",

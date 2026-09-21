@@ -29,6 +29,9 @@ const TAX_DEPRECIATION_PREFIX = 'admin.setup.taxDepreciationSetup.'
 // this guard fails until every locale is reviewed instead of silently treating
 // an old English translation as complete.
 const TAX_DEPRECIATION_SOURCE_HASHES = {
+  [`${TAX_DEPRECIATION_PREFIX}tabs.years`]: 'd9996f84e8fff316ad5afd3da21370b0884e13065afbe33560d64be63b5fd36e',
+  [`${TAX_DEPRECIATION_PREFIX}links.years.title`]: 'd9996f84e8fff316ad5afd3da21370b0884e13065afbe33560d64be63b5fd36e',
+  [`${TAX_DEPRECIATION_PREFIX}links.years.description`]: '425bbe65e7e9bd20a068a927b207890c1c3bd828c31c5ca34caadd09c606644a',
   [`${TAX_DEPRECIATION_PREFIX}navTitle`]: 'f1920719940087cf0fdae8c5d4778b0abc3d267a387775229dc737bff5bc1365',
   [`${TAX_DEPRECIATION_PREFIX}title`]: 'f1920719940087cf0fdae8c5d4778b0abc3d267a387775229dc737bff5bc1365',
   [`${TAX_DEPRECIATION_PREFIX}description`]: '998dd3bd88bc4ffd1cad2f84b66017a70236de00f05502a1da7706219f273f75',

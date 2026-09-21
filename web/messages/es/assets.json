@@ -45,7 +45,15 @@
       "closing": "Saldo final",
       "recapture": "Recuperación",
       "terminalLoss": "Pérdida final"
-    }
+    },
+    "legalEntity": "Entidad jurídica",
+    "window": "Ejercicio fiscal registrado",
+    "chooseWindow": "Seleccione un período fiscal",
+    "noWindows": "No hay períodos fiscales registrados para esta entidad jurídica y régimen.",
+    "configureYears": "Configurar ejercicios fiscales",
+    "windowLabel": "{filingYear}: {start} – {end}",
+    "loadingWindows": "Cargando ejercicios fiscales…",
+    "loadWindowsFailed": "No se pudieron cargar los ejercicios fiscales."
   },
   "list": {
     "title": "Activos fijos",

@@ -218,7 +218,7 @@ export const ASSETS_TAX_WIDGETS = {
       canRun={props.canRun === true}
       canConfigure={props.canConfigure === true}
       regimes={(props.regimes as ComponentProps<typeof TaxPoolsView>['regimes']) ?? []}
-      defaultTaxYear={typeof props.defaultTaxYear === 'number' ? props.defaultTaxYear : 0}
+      subsidiaries={(props.subsidiaries as ComponentProps<typeof TaxPoolsView>['subsidiaries']) ?? []}
     />
   ),
 } satisfies Record<string, WidgetRenderer>

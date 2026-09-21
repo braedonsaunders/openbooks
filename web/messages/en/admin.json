@@ -1462,7 +1462,8 @@
         "firstYear": "First-year rules",
         "cessation": "Qualifying activity",
         "methods": "Methods",
-        "books": "Book policies"
+        "books": "Book policies",
+        "years": "Tax years"
       },
       "packsTitle": "Country depreciation packs",
       "packsDescription": "Installing a pack creates editable tenant configuration. Existing overrides are never replaced.",
@@ -1504,6 +1505,10 @@
         "assignments": {
           "title": "Asset-category assignments",
           "description": "Assign each asset category to a regime class in Tax attributes."
+        },
+        "years": {
+          "title": "Tax years",
+          "description": "Declare tax-year dates and the reason for each legal entity and regime."
         }
       }
     },
@@ -2412,6 +2417,11 @@
       "extension-settings": {
         "title": "App settings",
         "description": "Configure settings declared by installed apps. Changes preserve prior values and their effective dates."
+      },
+      "tax-year-windows": {
+        "title": "Tax years",
+        "singularTitle": "Tax year",
+        "description": "Declare tax-year dates for each legal entity and regime, including short years. Give the reason for each window; dates already used in a run are preserved."
       }
     },
     "fields": {
@@ -2678,7 +2688,10 @@
       "dateBasis": "Date basis",
       "unitsTotal": "Total units",
       "network": "Network",
-      "lastFour": "Last four"
+      "lastFour": "Last four",
+      "yearStart": "Year start",
+      "yearEnd": "Year end",
+      "filingYear": "Filing-year label"
     },
     "fieldHelp": {
       "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",

@@ -1734,7 +1734,8 @@
         "firstYear": "Erstjahresregeln",
         "cessation": "Qualifizierende Tätigkeit",
         "methods": "Methoden",
-        "books": "Buchrichtlinien"
+        "books": "Buchrichtlinien",
+        "years": "Steuerjahre"
       },
       "packsTitle": "Länderspezifische Abschreibungspakete",
       "packsDescription": "Durch die Installation eines Pakets wird eine bearbeitbare Mandantenkonfiguration erstellt. Vorhandene Überschreibungen werden nie ersetzt.",
@@ -1776,6 +1777,10 @@
         "assignments": {
           "title": "Zuordnungen für Anlagekategorien",
           "description": "Ordnen Sie jede Anlagekategorie in den Steuerattributen einer Regimeklasse zu."
+        },
+        "years": {
+          "title": "Steuerjahre",
+          "description": "Erfassen Sie die Steuerjahresdaten und ihre Begründung je Rechtsträger und Steuerregime."
         }
       }
     },
@@ -2480,6 +2485,11 @@
       "extension-settings": {
         "title": "App-Einstellungen",
         "description": "Konfigurieren Sie Einstellungen, die von installierten Apps deklariert werden. Änderungen erhalten frühere Werte und deren Wirksamkeitsdaten."
+      },
+      "tax-year-windows": {
+        "title": "Steuerjahre",
+        "singularTitle": "Steuerjahr",
+        "description": "Erfassen Sie die Steuerjahreszeiträume je Rechtsträger und Steuerregime, einschließlich Rumpfjahren. Begründen Sie jeden Zeitraum; bereits verwendete Daten bleiben erhalten."
       }
     },
     "fields": {
@@ -2746,7 +2756,10 @@
       "dateBasis": "Datumsbasis",
       "unitsTotal": "Gesamteinheiten",
       "network": "Netzwerk",
-      "lastFour": "Letzte vier"
+      "lastFour": "Letzte vier",
+      "yearStart": "Jahresbeginn",
+      "yearEnd": "Jahresende",
+      "filingYear": "Bezeichnung des Erklärungsjahres"
     },
     "fieldHelp": {
       "gapless": "Lückenlos bedeutet, dass jede Nummer in der Folge belegt sein muss und keine Nummer übersprungen wird. Aktivieren Sie dies nur, wenn gesetzliche oder prüfungsbezogene Vorgaben eine ununterbrochene Nummerierung verlangen.",
