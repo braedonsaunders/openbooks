@@ -539,39 +539,22 @@ export function deemedPlacedInServiceOn(
   return midMonthDeemedServiceDate(placedOn);
 }
 
-/** Months treated as in service from the deemed date through year-end, including parts of a month. */
+/** Compatibility adapter for callers whose duration is a whole or half
+ * month. It must not truncate an actual partial month; such callers use the
+ * exact helper and retain its rational throughout financial arithmetic. */
 export function monthsTreatedInService(
   deemed: CalendarDay,
   yearEnd: string,
   context?: MacrsShortYearContext,
 ): number {
-  let end = parseCalendarDay(yearEnd);
-  if (
-    !end ||
-    !parseCalendarDay(formatCalendarDay(deemed)) ||
-    ![1, 15].includes(deemed.day)
-  ) {
+  const exact = monthsTreatedInServiceExact(deemed, yearEnd, context);
+  const halfUnits = exact.numerator * 2n;
+  if (halfUnits % exact.denominator !== 0n) {
     throw new MacrsShortYearError(
-      "MACRS service requires a valid first-of-month or midpoint deemed date and a calendar year-end",
+      "MACRS service through this partial year-end requires exact month fractions; use monthsTreatedInServiceExact rather than rounding to a whole or half month",
     );
   }
-  if (context?.excludedTerminalMonth) {
-    if (endsOnLast(end)) {
-      throw new MacrsShortYearError(
-        "a terminal month ending on its last day cannot be shared with the next statutory window",
-      );
-    }
-    // The original legal year-end is preserved by the caller. Only the
-    // month allocation ends at the preceding month boundary.
-    end = fromUtc(new Date(Date.UTC(end.year, end.month - 1, 0)));
-  }
-  if (utc(end) < utc(deemed)) return 0;
-  return (
-    (end.year - deemed.year) * 12 +
-    (end.month - deemed.month) +
-    1 -
-    (deemed.day === 15 ? 0.5 : 0)
-  );
+  return Number(halfUnits / exact.denominator) / 2;
 }
 
 export function decliningBalanceRate(
