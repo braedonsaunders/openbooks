@@ -2,11 +2,17 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { authorizeChange } from "@/app/api/accounting/changes/_authorization";
 import { parseJsonBody } from "@/lib/api/json";
+import { guardFeaturePermission } from "@/lib/feature-gates";
 import { proposeLossOfControlReversal } from "@openbooks/engine/src/consolidation/loss-of-control.ts";
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const capability = await guardFeaturePermission(
+    "close.run",
+    "multiSubsidiary",
+  );
+  if (capability instanceof NextResponse) return capability;
   const { id } = await params,
     gate = await authorizeChange(id);
   if (gate instanceof NextResponse) return gate;

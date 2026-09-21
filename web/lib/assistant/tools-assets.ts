@@ -185,8 +185,8 @@ const searchLeaseAgreements: AssistantToolDef = {
   gate: assetGate(),
   feature: "fixedAssets",
   inputSchema: z.object({
-    query: z.string().max(100).optional(),
-    limit: z.number().int().min(1).max(50).optional(),
+    query: z.string().max(100).optional().describe("Optional text to match against the lease number or description"),
+    limit: z.number().int().min(1).max(50).optional().describe("Maximum number of lease agreements to return, from 1 to 50; defaults to 20"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "fixedAssets")))
