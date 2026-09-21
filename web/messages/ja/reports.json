@@ -577,6 +577,18 @@
         "label": "タイムシート週",
         "description": "週次タイムシート、提出日と承認日、および合計時間。"
       },
+      "field_clock_events": {
+        "label": "フィールド打刻",
+        "description": "モバイルとキオスクの打刻操作 — 誰が、いつ、ジオフェンス判定付きで、ペアがどう単価付けされたか。判定フラグのみ。生の座標には人事雇用権限が必要。"
+      },
+      "field_clock_coordinates": {
+        "label": "打刻座標",
+        "description": "打刻ごとの生座標 — 作業者の位置情報。人事雇用権限でのみ表示。その他の判定フラグはフィールド打刻にある。"
+      },
+      "crew_time_batches": {
+        "label": "クルーバッチ",
+        "description": "職長が作るプロジェクト・日ごとのクルーバッチ — 承認段階ごとのステータス、時間と人数。"
+      },
       "fixed_assets": {
         "label": "固定資産",
         "description": "固定資産台帳 — ステータス、取得、原価、管理者、ディメンション。"
@@ -988,6 +1000,9 @@
         "department": "部門",
         "memo": "摘要",
         "created_at": "作成日時",
+        "equipment_unit": "設備ユニット",
+        "equipment_hours": "設備時間",
+        "cost_code_ref": "コストコード",
         "id": "作業時間入力（ID）"
       },
       "timesheet_weeks": {
@@ -1003,6 +1018,39 @@
         "approved_at": "承認日時",
         "rejection_reason": "却下理由",
         "id": "週 (id)"
+      },
+      "field_clock_events": {
+        "employee_name": "従業員",
+        "kind": "操作",
+        "occurred_at": "端末時刻",
+        "project": "プロジェクト",
+        "cost_code_ref": "コストコード",
+        "geo_check": "ジオフェンス",
+        "accuracy_m": "測位精度（m）",
+        "source": "取得元",
+        "status": "ステータス",
+        "auto_closed": "自動クローズ",
+        "has_photo": "写真添付",
+        "id": "打刻（ID）"
+      },
+      "field_clock_coordinates": {
+        "employee_name": "従業員",
+        "occurred_at": "端末時刻",
+        "latitude": "緯度",
+        "longitude": "経度",
+        "accuracy_m": "測位精度（m）",
+        "id": "打刻（ID）"
+      },
+      "crew_time_batches": {
+        "foreman_name": "職長",
+        "project": "プロジェクト",
+        "worked_on": "作業日",
+        "status": "ステータス",
+        "total_hours": "合計時間",
+        "worker_count": "作業員",
+        "line_count": "明細行",
+        "submitted_at": "提出日時",
+        "id": "クルーバッチ（ID）"
       },
       "fixed_assets": {
         "asset_number": "資産番号",

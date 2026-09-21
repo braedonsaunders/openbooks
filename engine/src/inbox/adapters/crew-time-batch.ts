@@ -12,8 +12,10 @@ import { sql } from "drizzle-orm";
 import { CREW_TIME_BATCH_SUBJECT_KIND } from "../../flows/crew-batches-adapter.ts";
 import { decideGate, delegateGate } from "../../flows/gates.ts";
 import { worklistApprovals } from "../../flows/approval-worklist.ts";
+import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
+import { FIELD_TIME_CREW_ENTRY_FEATURE } from "../../hrm/field-time/settings.ts";
 import { actorPartyId, toWorklistScope } from "../guard.ts";
-import { db } from "../../platform/db.ts";
+import { db, type SqlExecutor } from "../../platform/db.ts";
 import type { InboxAdapter } from "../registry.ts";
 import type { InboxItem, InboxListContext } from "../types.ts";
 import { inboxItemId, priorityForDueDate } from "../types.ts";
@@ -28,6 +30,10 @@ type OwnBatchRow = {
 export const crewTimeBatchAdapter: InboxAdapter = {
   kind: "crew_time_batch",
   async list(ctx: InboxListContext): Promise<InboxItem[]> {
+    // Gate first: with crew entry off the inbox must not touch crew tables
+    // at all — no worklist scan for crew gates, no own-batch query.
+    const exec: SqlExecutor = ctx.exec ?? db;
+    if (!(await lockAndCheckOrgFeature(exec, ctx.orgId, FIELD_TIME_CREW_ENTRY_FEATURE))) return [];
     const out: InboxItem[] = [];
     const approvals = await worklistApprovals(ctx.orgId, ctx.actorId, toWorklistScope(ctx));
     for (const item of approvals) {
@@ -53,7 +59,7 @@ export const crewTimeBatchAdapter: InboxAdapter = {
     }
     const partyId = await actorPartyId(ctx.orgId, ctx.actorId);
     if (partyId) {
-      const batches = (await db.execute<OwnBatchRow>(sql`
+      const batches = (await exec.execute<OwnBatchRow>(sql`
         select b.id::text as id, b.worked_on::text as worked_on, b.status,
                p.name as project_name
           from crew_time_batches b

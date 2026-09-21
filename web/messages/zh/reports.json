@@ -577,6 +577,18 @@
         "label": "工时表周",
         "description": "每周工时表、提交和审批日期，以及总工时。"
       },
+      "field_clock_events": {
+        "label": "外勤打卡",
+        "description": "移动端和考勤机的打卡操作 — 谁、何时、围栏判定，以及配对如何计价。仅含判定标志；原始坐标需要人事雇用权限。"
+      },
+      "field_clock_coordinates": {
+        "label": "打卡坐标",
+        "description": "每次打卡的原始坐标 — 工人位置，仅有人事雇用权限才可见。其他人的判定标志在外勤打卡中。"
+      },
+      "crew_time_batches": {
+        "label": "班组批次",
+        "description": "工头按项目按日提交的班组批次 — 各审批阶段的状态、工时和人数。"
+      },
       "fixed_assets": {
         "label": "固定资产",
         "description": "固定资产台账——状态、购置、成本、保管人和维度。"
@@ -988,6 +1000,9 @@
         "department": "部门",
         "memo": "备注",
         "created_at": "创建时间",
+        "equipment_unit": "设备单元",
+        "equipment_hours": "设备工时",
+        "cost_code_ref": "成本代码",
         "id": "工时记录（ID）"
       },
       "timesheet_weeks": {
@@ -1003,6 +1018,39 @@
         "approved_at": "批准时间",
         "rejection_reason": "拒绝原因",
         "id": "周 (id)"
+      },
+      "field_clock_events": {
+        "employee_name": "员工",
+        "kind": "操作",
+        "occurred_at": "设备时间",
+        "project": "项目",
+        "cost_code_ref": "成本代码",
+        "geo_check": "地理围栏",
+        "accuracy_m": "定位精度（米）",
+        "source": "来源",
+        "status": "状态",
+        "auto_closed": "自动关闭",
+        "has_photo": "已附照片",
+        "id": "打卡（ID）"
+      },
+      "field_clock_coordinates": {
+        "employee_name": "员工",
+        "occurred_at": "设备时间",
+        "latitude": "纬度",
+        "longitude": "经度",
+        "accuracy_m": "定位精度（米）",
+        "id": "打卡（ID）"
+      },
+      "crew_time_batches": {
+        "foreman_name": "工头",
+        "project": "项目",
+        "worked_on": "工作日期",
+        "status": "状态",
+        "total_hours": "总工时",
+        "worker_count": "工人",
+        "line_count": "明细行",
+        "submitted_at": "提交时间",
+        "id": "班组批次（ID）"
       },
       "fixed_assets": {
         "asset_number": "资产编号",

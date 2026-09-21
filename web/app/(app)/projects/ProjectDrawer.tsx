@@ -98,6 +98,9 @@ export interface ProjectCockpitData {
   time: CostTimeData
   // HR-20: crew-today rows for the cockpit (empty when fieldTime is off).
   crewToday: { employeePartyId: string; employeeName: string | null; since: string; costCodeRef: string | null; geoCheck: string }[]
+  // HR-20: the geofence section renders only when fieldTime is on — off
+  // must not even mount it, or it fires a 404 probe fetch on every open.
+  showFieldTime: boolean
   unbilled: UnbilledClient
   billingRequests: BillingRequestClient[]
   billableFieldTickets: BillableFieldTicketClient[]
@@ -712,8 +715,9 @@ export function ProjectDrawer({
             <RateBookAssignmentSection scope="project" scopeId={String(pr.id)} editable={editable} />
           ) : null}
 
-          {/* HR-20: the clock enforcement place, rehomed onto the project page. */}
-          {!isPlaceholderName ? (
+          {/* HR-20: the clock enforcement place, rehomed onto the project page.
+              Off never mounts — the section probes its API on mount. */}
+          {!isPlaceholderName && cockpit.showFieldTime ? (
             <GeofenceSection projectId={String(pr.id)} initial={[]} canManage={editable} />
           ) : null}
 
