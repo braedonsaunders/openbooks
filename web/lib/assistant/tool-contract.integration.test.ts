@@ -335,6 +335,19 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
         // an absent fixture fails validation before the read service is
         // ever called -- the harness must exercise the service, not zod.
         hrm_survey_results: { surveyId: randomUUID() },
+        // HR-21: the same rule for the five AI-rails tools. Each carries
+        // required inputs, so without a fixture the contract harness
+        // measures zod rather than the tool.
+        hrm_explain_pay: { employmentId: randomUUID() },
+        payroll_anomalies: { action: "list" },
+        ai_draft: { kind: "job_description", subjectId: randomUUID() },
+        nl_report: {
+          action: "preview",
+          question: "how many employees are active",
+          // A syntactically valid definition naming a real entity: the
+          // point is to reach the validator, not to pass it.
+          definitionJson: JSON.stringify({ entity: "hrm_headcount", mode: "rows", columns: ["id"] }),
+        },
         get_lease: { leaseId: randomUUID() },
         get_timesheet_week: { employeePartyId: randomUUID(), week: "2026-09-16" },
         project_time: { projectId: randomUUID(), dimension: "employee" },
