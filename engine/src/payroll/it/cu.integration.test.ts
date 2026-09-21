@@ -302,6 +302,15 @@ test(
     const boxesB = new Map(slipB.boxes.map((box) => [box.code, box.value]));
     assert.equal(boxesB.get("2"), String(byId.get(empB)!.redditi));
     assert.ok(!boxesB.has("1"));
+    // The slip states the conguaglio boundary on its face: punto 21 is the
+    // withheld sum, and the art. 23 year-end conguaglio is the employer's
+    // operation, not a computed figure — no silent filing.
+    for (const slip of [slipA, slipB]) {
+      assert.ok(
+        (slip.notes ?? []).some((note) => /conguaglio/i.test(note)),
+        "the slip names the conguaglio boundary",
+      );
+    }
     await assert.rejects(
       filing.slip.build(orgId, TAX_YEAR, "00000000-0000-0000-0000-000000000000"),
       /no 2025 Certificazione Unica/,
