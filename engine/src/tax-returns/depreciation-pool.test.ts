@@ -24,6 +24,7 @@ import {
   shortYearMathEnd,
   placedAndDisposedInSameTaxYear,
   section168i7HeldMonths,
+  twelveMonthPeriodEnd,
   resolvePoolClass,
   TAX_DEPRECIATION_REGIMES,
   type PoolYearInput,
@@ -34,6 +35,7 @@ import {
   macrsMonthRatio,
   macrsMonths,
   remainingAfter,
+  remainingAfterExact,
   shortTaxYearMonthsExact,
   subsequentRecoveryDeduction,
 } from "./macrs-short-year.ts";
@@ -431,7 +433,7 @@ test("a later year after disposal records zero remaining, not the original basis
     dispositionRecognition: "taxable",
   }, windows);
   assert.equal(after.current.allowance, "0.00");
-  assert.equal(after.current.remainingBasis, "0.00");
+  assert.equal(after.current.remainingBasis, "0.0000");
   assert.notEqual(after.current.remainingBasis, "10000.00");
 });
 
@@ -507,7 +509,7 @@ test("declared adjusted carryover is the buyer checkpoint; pre-transfer years do
   // Year 3 of original 10000 is 1920. Checkpoint 6400 is not the walked 4800.
   assert.equal(walked.prior.remainingBasis, "6400.0000");
   assert.equal(walked.current.allowance, "1920.00");
-  assert.equal(walked.current.remainingBasis, "4480.00");
+  assert.equal(walked.current.remainingBasis, "4480.0000");
 });
 
 test("transfer-year buyer residual is stored in the walk so next year's opening matches the persisted close", () => {
@@ -531,7 +533,7 @@ test("transfer-year buyer residual is stored in the walk so next year's opening 
   // Year 3 full table amount is 1920; mid-year HY seller share is 960; buyer residual 960.
   // Checkpoint 6400 − 960 = 5440. Subtracting the full 1920 would leave 4480.
   assert.equal(transferYear.current.allowance, "960.00");
-  assert.equal(transferYear.current.remainingBasis, "5440.00");
+  assert.equal(transferYear.current.remainingBasis, "5440.0000");
   assert.equal(nextYear.prior.remainingBasis, transferYear.current.remainingBasis);
   assert.equal(nextYear.prior.allowance, transferYear.current.allowance);
   assert.notEqual(nextYear.prior.remainingBasis, "4480.00");
@@ -686,6 +688,7 @@ test("macrsWindowsPreservingAppliedContext seals successor absence only on the c
   const frozenWalk = computeMacrsThroughYear(input, [calculated]);
   const liveWalk = computeMacrsThroughYear(input, [calculated, successor]);
   assert.notEqual(liveWalk.current.allowance, frozenWalk.current.allowance);
+  assert.notEqual(liveWalk.current.remainingBasis, frozenWalk.current.remainingBasis);
   const preserved = macrsWindowsPreservingAppliedContext(
     [{ throughOn: "2024-03-10", windows: [calculated] }],
     [successor],
@@ -706,9 +709,9 @@ test("macrsWindowsPreservingAppliedContext seals successor absence only on the c
     refreshOpenMacrsVintageThrough(vintage, preserved, "2024-03-10"),
     refreshOpenMacrsVintageThrough(vintage, [calculated], "2024-03-10"),
   );
-  assert.notDeepEqual(
-    refreshOpenMacrsVintageThrough(vintage, [calculated, successor], "2024-03-10"),
-    refreshOpenMacrsVintageThrough(vintage, [calculated], "2024-03-10"),
+  assert.notEqual(
+    computeMacrsThroughYear(input, [calculated, successor]).current.allowance,
+    computeMacrsThroughYear(input, preserved).current.allowance,
   );
 });
 
@@ -836,7 +839,7 @@ test("a 2026 transfer does not reuse a 2023 paper remaining as the buyer checkpo
   }, windows);
   assert.equal(
     dated.adjustedCarryover,
-    formatMoney(remainingAfter(walked.prior.remainingBasis, walked.current.allowance), 4),
+    remainingAfterExact(walked.prior.remainingBasis, walked.current.allowance),
   );
   assert.equal(cmp(dated.priorDepreciation, "2000.0000") > 0, true);
   assert.notEqual(dated.adjustedCarryover, "0.0000");
@@ -936,8 +939,14 @@ test("1.1502-13 Example 4 consolidated later-year transfer continues the origina
   }, windows);
   assert.equal(next.currentRecoveryYearIndex, originalNext.currentRecoveryYearIndex);
   assert.equal(next.current.allowance, originalNext.current.allowance);
-  assert.equal(next.current.remainingBasis, originalNext.current.remainingBasis);
-  assert.equal(next.prior.remainingBasis, originalNext.prior.remainingBasis);
+  assert.equal(
+    formatMoney(next.current.remainingBasis, 4),
+    formatMoney(originalNext.current.remainingBasis, 4),
+  );
+  assert.equal(
+    formatMoney(next.prior.remainingBasis, 4),
+    formatMoney(originalNext.prior.remainingBasis, 4),
+  );
 });
 
 test("§168(i)(7) 9000 bonus split 5250/3750 dates without a negative prior", () => {
@@ -1017,7 +1026,7 @@ test("a later-year transfer with an intervening short year continues the origina
   }, originalCalendar);
   assert.equal(
     dated.adjustedCarryover,
-    formatMoney(remainingAfter(originalAtTransfer.prior.remainingBasis, originalAtTransfer.current.allowance), 4),
+    remainingAfterExact(originalAtTransfer.prior.remainingBasis, originalAtTransfer.current.allowance),
   );
   const walk = macrsLineageRecoveryWindows({
     windows: lineage,
@@ -1026,11 +1035,15 @@ test("a later-year transfer with an intervening short year continues the origina
     asOf: "2026-12-31",
     ownerSubsidiaryId: "B",
   });
-  assert.deepEqual(walk.map((row) => `${row.subsidiaryId}:${row.yearStart}:${row.yearEnd}`), [
+  assert.deepEqual(walk.recoveryYears.map((row) => `${row.subsidiaryId}:${row.yearStart}:${row.yearEnd}`), [
     "A:2023-01-01:2023-12-31",
     "A:2024-01-01:2024-06-30",
     "A:2024-07-01:2024-12-31",
     "A:2025-01-01:2025-12-31",
+    "A:2026-01-01:2026-12-31",
+  ]);
+  assert.deepEqual(walk.reportingWindows.map((row) => `${row.subsidiaryId}:${row.yearStart}:${row.yearEnd}`), [
+    "B:2025-01-01:2025-12-31",
     "B:2026-01-01:2026-12-31",
   ]);
   const continued = {
@@ -1048,7 +1061,7 @@ test("a later-year transfer with an intervening short year continues the origina
     section168i7Kind: "nonrecognition" as const,
   };
   const originalContinued = computeMacrsThroughYear(continued, originalCalendar);
-  const receivedContinued = computeMacrsThroughYear(continued, walk);
+  const receivedContinued = computeMacrsThroughYear(continued, walk.recoveryYears, walk.reportingWindows);
   assert.equal(receivedContinued.currentRecoveryYearIndex, originalContinued.currentRecoveryYearIndex);
   assert.equal(receivedContinued.current.allowance, originalContinued.current.allowance);
   assert.equal(receivedContinued.current.remainingBasis, originalContinued.current.remainingBasis);
@@ -1080,6 +1093,259 @@ test("a later-year transfer with an intervening short year continues the origina
       ownerSubsidiaryId: "B",
     }),
     /no tax year window covers 2025-08-20|gap between/,
+  );
+});
+
+test("a receiver fiscal year overlapping the transferor recovery year is kept on its own timeline", () => {
+  const transferor = [
+    { subsidiaryId: "A", regime: "us_macrs", taxYear: 2023, yearStart: "2023-01-01", yearEnd: "2023-12-31" },
+    { subsidiaryId: "A", regime: "us_macrs", taxYear: 2024, yearStart: "2024-01-01", yearEnd: "2024-12-31" },
+    { subsidiaryId: "A", regime: "us_macrs", taxYear: 2025, yearStart: "2025-01-01", yearEnd: "2025-12-31" },
+  ];
+  const receiver = [
+    { subsidiaryId: "B", regime: "us_macrs", taxYear: 2026, yearStart: "2025-07-01", yearEnd: "2026-06-30" },
+    { subsidiaryId: "B", regime: "us_macrs", taxYear: 2027, yearStart: "2026-07-01", yearEnd: "2027-06-30" },
+  ];
+  const timelines = macrsLineageRecoveryWindows({
+    windows: [...transferor, ...receiver],
+    placedInServiceOn: "2023-01-01",
+    transferOn: "2025-08-20",
+    asOf: "2026-06-30",
+    ownerSubsidiaryId: "B",
+  });
+  assert.deepEqual(timelines.reportingWindows.map((row) => `${row.yearStart}:${row.yearEnd}`), [
+    "2025-07-01:2026-06-30",
+  ]);
+  assert.ok(timelines.recoveryYears.some((row) => row.yearStart === "2025-01-01" && row.yearEnd === "2025-12-31"));
+  assert.ok(timelines.recoveryYears.some((row) =>
+    "2026-06-30" >= row.yearStart && "2026-06-30" <= row.yearEnd,
+  ), "original recovery years must continue through the receiver asOf");
+  assert.equal(
+    timelines.recoveryYears.some((row) => row.yearStart === "2025-07-01"),
+    false,
+    "the receiver reporting year is not merged into the recovery calendar",
+  );
+  const asset = {
+    placedInServiceOn: "2023-01-01",
+    unadjustedBasis: "10000.0000",
+    recoveryPeriodYears: "5",
+    method: "200_db" as const,
+    convention: "half_year" as const,
+    section179: "0.0000",
+    bonusPercent: "0",
+    businessUsePercent: "100",
+    adjustedCarryover: null as string | null,
+    priorDepreciation: null as string | null,
+    transferOn: null as string | null,
+    section168i7Kind: "nonrecognition" as const,
+  };
+  const atTransfer = refreshOpenMacrsVintageThrough(asset, transferor, "2025-08-20");
+  const received = {
+    ...asset,
+    checkpointKind: atTransfer.checkpointKind,
+    section179: atTransfer.section179,
+    takenBonus: atTransfer.takenBonus,
+    priorDepreciation: atTransfer.priorDepreciation,
+    adjustedCarryover: atTransfer.adjustedCarryover,
+    transferOn: "2025-08-20",
+  };
+  const dated = refreshOpenMacrsVintageThrough(received, [...transferor, ...receiver], "2026-06-30", {
+    ownerSubsidiaryId: "B",
+  });
+  const buyer2025 = computeMacrsThroughYear({
+    basis: "10000.0000",
+    placedInServiceOn: "2023-01-01",
+    taxYear: 2025,
+    yearStart: "2025-01-01",
+    yearEnd: "2025-12-31",
+    recoveryPeriodYears: 5,
+    method: "200_db",
+    convention: "half_year",
+    adjustedCarryover: atTransfer.adjustedCarryover,
+    carryoverOn: "2025-08-20",
+    section168i7Kind: "nonrecognition",
+  }, transferor);
+  const buyer2026 = computeMacrsThroughYear({
+    basis: "10000.0000",
+    placedInServiceOn: "2023-01-01",
+    taxYear: 2026,
+    yearStart: "2026-01-01",
+    yearEnd: "2026-12-31",
+    recoveryPeriodYears: 5,
+    method: "200_db",
+    convention: "half_year",
+    adjustedCarryover: atTransfer.adjustedCarryover,
+    carryoverOn: "2025-08-20",
+    section168i7Kind: "nonrecognition",
+  }, [...transferor, {
+    subsidiaryId: "A",
+    regime: "us_macrs",
+    taxYear: 2026,
+    yearStart: "2026-01-01",
+    yearEnd: "2026-12-31",
+  }]);
+  const half2026 = formatMoney(mulRatio(buyer2026.current.macrs, 6n, 12n), 2);
+  const expected = remainingAfterExact(
+    atTransfer.adjustedCarryover,
+    formatMoney(add(buyer2025.current.macrs, half2026), 2),
+  );
+  assert.equal(dated.adjustedCarryover, expected);
+  assert.equal(
+    formatMoney(sum([
+      dated.section179,
+      dated.takenBonus,
+      dated.priorDepreciation,
+      dated.adjustedCarryover,
+    ]), 4),
+    "10000.0000",
+  );
+});
+
+test("a short transferor placement year uses a full 12-month year for §168(i)(7) allocation", () => {
+  const short = { taxYear: 2018, yearStart: "2018-01-01", yearEnd: "2018-06-30" };
+  const heldShort = section168i7HeldMonths({
+    placedInServiceOn: "2018-02-05",
+    transferredOn: "2018-05-20",
+    yearStart: short.yearStart,
+    yearEnd: short.yearEnd,
+  });
+  const heldFull = section168i7HeldMonths({
+    placedInServiceOn: "2018-02-05",
+    transferredOn: "2018-05-20",
+    yearStart: "2018-01-01",
+    yearEnd: twelveMonthPeriodEnd("2018-01-01"),
+  });
+  assert.equal(heldShort.inServiceMonths, 5);
+  assert.equal(heldFull.inServiceMonths, 11);
+  assert.equal(heldFull.sellerMonths, 3);
+  assert.notEqual(heldShort.inServiceMonths, heldFull.inServiceMonths);
+  const windows = [short, { taxYear: 2018, yearStart: "2018-07-01", yearEnd: "2018-12-31" }];
+  const seller = computeMacrsThroughYear({
+    basis: "9000",
+    placedInServiceOn: "2018-02-05",
+    taxYear: 2018,
+    yearStart: "2018-01-01",
+    yearEnd: "2018-06-30",
+    recoveryPeriodYears: 5,
+    method: "200_db",
+    convention: "half_year",
+    bonusPercent: 100,
+    disposedOn: "2018-05-20",
+    dispositionRecognition: "nontaxable",
+    section168i7Kind: "nonrecognition",
+  }, windows);
+  const fullYear = computeMacrsThroughYear({
+    basis: "9000",
+    placedInServiceOn: "2018-02-05",
+    taxYear: 2018,
+    yearStart: "2018-01-01",
+    yearEnd: "2018-12-31",
+    recoveryPeriodYears: 5,
+    method: "200_db",
+    convention: "half_year",
+    bonusPercent: 100,
+    disposedOn: "2018-05-20",
+    dispositionRecognition: "nontaxable",
+    section168i7Kind: "nonrecognition",
+  }, [{ taxYear: 2018, yearStart: "2018-01-01", yearEnd: "2018-12-31" }]);
+  assert.equal(seller.current.bonus, fullYear.current.bonus);
+  assert.equal(seller.current.bonus, formatMoney(mulRatio("9000.00", 3n, 11n), 2));
+});
+
+test("a split 4dp checkpoint survives refresh without rounding remaining to 2dp", () => {
+  const windows = [
+    { taxYear: 2023, yearStart: "2023-01-01", yearEnd: "2023-12-31" },
+    { taxYear: 2024, yearStart: "2024-01-01", yearEnd: "2024-12-31" },
+    { taxYear: 2025, yearStart: "2025-01-01", yearEnd: "2025-12-31" },
+  ];
+  const dated = refreshOpenMacrsVintageThrough({
+    placedInServiceOn: "2023-01-01",
+    unadjustedBasis: "1250.0000",
+    recoveryPeriodYears: "5",
+    method: "200_db",
+    convention: "half_year",
+    section179: "416.6667",
+    bonusPercent: "0",
+    businessUsePercent: "100",
+    adjustedCarryover: "416.6667",
+    priorDepreciation: "0.0000",
+    takenBonus: "416.6666",
+    checkpointKind: "taken_components",
+    transferOn: "2025-08-20",
+    section168i7Kind: "consolidated_group",
+  }, windows, "2025-08-20");
+  assert.equal(dated.adjustedCarryover, "416.6667");
+  assert.equal(dated.section179, "416.6667");
+  assert.equal(dated.takenBonus, "416.6666");
+  assert.equal(dated.priorDepreciation, "0.0000");
+  assert.equal(
+    formatMoney(sum([
+      dated.section179,
+      dated.takenBonus,
+      dated.priorDepreciation,
+      dated.adjustedCarryover,
+    ]), 4),
+    "1250.0000",
+  );
+  assert.notEqual(remainingAfter("416.6667", "0"), "416.6667");
+  assert.equal(remainingAfterExact("416.6667", "0"), "416.6667");
+});
+
+test("a rounded statutory deduction cannot overclaim a 4dp checkpoint remaining", () => {
+  const statutory = subsequentRecoveryDeduction({
+    method: "200_db",
+    recoveryPeriodYears: "5",
+    originalMacrsBasis: "1250.0000",
+    adjustedBasis: "416.6667",
+    elapsedMonths: 48,
+    monthsThisYear: 12,
+    shortYearMethod: "simplified",
+  });
+  assert.equal(statutory, "416.67");
+  assert.equal(cmp(statutory, "416.6667") > 0, true);
+  const year = computeMacrsYear({
+    basis: "1250.0000",
+    placedInServiceOn: "2020-01-01",
+    taxYear: 2025,
+    yearStart: "2025-01-01",
+    yearEnd: "2025-12-31",
+    recoveryPeriodYears: 5,
+    method: "200_db",
+    convention: "half_year",
+    afterShortYear: true,
+    adjustedBasisAtYearStart: "416.6667",
+    elapsedRecoveryMonths: 48,
+  });
+  assert.equal(year.allowance, "416.6667");
+  assert.equal(year.macrs, "416.6667");
+  assert.equal(year.remainingBasis, "0.0000");
+  assert.equal(formatMoney(add(year.allowance, year.remainingBasis), 4), "416.6667");
+  const windows = [
+    { taxYear: 2023, yearStart: "2023-01-01", yearEnd: "2023-12-31" },
+    { taxYear: 2024, yearStart: "2024-01-01", yearEnd: "2024-06-30" },
+    { taxYear: 2024, yearStart: "2024-07-01", yearEnd: "2024-12-31" },
+  ];
+  const walked = computeMacrsThroughYear({
+    basis: "1250.0000",
+    placedInServiceOn: "2023-01-01",
+    taxYear: 2024,
+    yearStart: "2024-07-01",
+    yearEnd: "2024-12-31",
+    recoveryPeriodYears: 5,
+    method: "200_db",
+    convention: "half_year",
+    adjustedCarryover: "416.6667",
+    carryoverOn: "2024-03-15",
+    section168i7Kind: "nonrecognition",
+  }, windows);
+  assert.equal(cmp(walked.current.allowance, walked.prior.remainingBasis) <= 0, true);
+  assert.equal(
+    formatMoney(add(walked.current.allowance, walked.current.remainingBasis), 4),
+    formatMoney(walked.prior.remainingBasis, 4),
+  );
+  assert.notEqual(
+    remainingAfter("416.6667", "416.67"),
+    remainingAfterExact("416.6667", "416.6667"),
   );
 });
 
@@ -1186,7 +1452,7 @@ test("§168(i)(7) placement-year bonus is allocated by months held, not ordinary
   assert.equal(buyer.current.section179, "0.00");
   assert.equal(buyer.current.macrs, "0.00");
   assert.equal(buyer.current.allowance, "3750.00");
-  assert.equal(buyer.current.remainingBasis, "0.00");
+  assert.equal(buyer.current.remainingBasis, "0.0000");
   assert.equal(
     formatMoney(add(add(buyer.current.section179, buyer.current.bonus), buyer.current.macrs), 2),
     buyer.current.allowance,
@@ -1279,7 +1545,7 @@ test("after a short year a later-year transfer reuses beginning-of-window remain
     shortYearMethod: "simplified",
   });
   const residual = formatMoney(add(annual, neg(seller)), 2);
-  const nextOpening = remainingAfter("7500.00", residual);
+  const nextOpening = remainingAfterExact("7500.00", residual);
   const nextAnnual = subsequentRecoveryDeduction({
     method: "straight_line",
     recoveryPeriodYears: "5",
