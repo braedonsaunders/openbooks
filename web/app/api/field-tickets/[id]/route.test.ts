@@ -97,6 +97,7 @@ const mockSources = new Map<string, string>([
       export function ambientTenantOrgId() { return null }
       export const pool = {}
       export const env = {}
+      export function currentRequestOrgResolver() { return null }
     `,
   ],
   [

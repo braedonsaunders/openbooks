@@ -53,6 +53,11 @@ export const INBOX_FILTER_KINDS: Record<string, InboxKind[]> = {
     "hrm_benefit_enrollment_window",
     "hrm_qualification_alert",
     "timesheet_week",
+    // HR-21: blocking payroll checks (payroll managers) and overdue AI
+    // capability reviews (ledger admins) — no actions; the work happens
+    // in the checks queue and the ledger behind the subject hrefs.
+    "payroll_anomaly_block",
+    "ai_capability_review",
   ],
   signatures: ["field_ticket_signature", "document_signature"],
   notices: ["notification"],

@@ -11,6 +11,7 @@ import {
 } from '@openbooks/engine/src/hrm/processes-read.ts'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import type { Authz } from '../authz'
+import { loadAiDraftButton, loadAiDraftDrawer, type AiDraftDrawerData } from './ai-rails'
 
 /**
  * Process checklists page loader — tabs, server-side segments, the active
@@ -81,12 +82,17 @@ export interface ProcessesPageData {
   detail: ProcessDetail | null
   missingDetail: string | null
   drawerOpen: boolean
+  /** HR-21: the shared evidence-draft drawer (?draft=<kind>:<id>). */
+  draftDrawer: AiDraftDrawerData | null
+  draftDrawerOpen: boolean
   drawer: {
     closeHref: string
     title: string
     description: string | null
     detail: ProcessDetail | null
     missingDetail: string | null
+    /** HR-21 "Draft from evidence" link (onboarding_plan kind). */
+    draft: { href: string; label: string } | null
   } | null
 }
 
@@ -195,6 +201,16 @@ export async function loadProcessesPage(
 
   const title = t('processes.title')
   const drawerOpen = detail !== null || missingDetail !== null
+  // HR-21: "Draft from evidence" on the process drawer (onboarding_plan
+  // from the process's template). The checklist has no editable plan
+  // field, so Insert copies to the clipboard (the drawer's own fallback).
+  const draftLabel = detail ? await loadAiDraftButton(authz.user.orgId) : null
+  const processHref = processId !== null ? hrefFor(segment, processId) : null
+  const draftDrawer = await loadAiDraftDrawer({
+    draftParam: typeof sp.draft === 'string' ? sp.draft : null,
+    closeHref: processHref ?? hrefFor(segment, null),
+    fieldId: '',
+  })
   return {
     title,
     description: t('processes.description'),
@@ -221,6 +237,8 @@ export async function loadProcessesPage(
     detail,
     missingDetail,
     drawerOpen,
+    draftDrawer,
+    draftDrawerOpen: draftDrawer !== null,
     drawer: drawerOpen
       ? {
           closeHref: hrefFor(segment, null),
@@ -228,6 +246,9 @@ export async function loadProcessesPage(
           description: null,
           detail,
           missingDetail,
+          draft: draftLabel && processId && processHref
+            ? { href: `${processHref}&draft=onboarding_plan:${processId}`, label: draftLabel }
+            : null,
         }
       : null,
   }

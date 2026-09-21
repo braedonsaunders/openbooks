@@ -3015,7 +3015,11 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   // is asserted per-key below.
   // HR-17 + HR-18: 3906 = 3844 on 12359058e (3825 plus 19 continuous-performance
   // keys) plus 62 recruiting-depth keys; zh/pt-BR completeness is asserted per-key below.
-  assert.equal(wanted.length, 3969, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  // HR-21: re-pinned to the value this assertion printed on the merged
+  // tree after the AI-rails admin copy landed. Never arithmetic and never
+  // a number measured on another branch -- the count is whatever the
+  // English catalog actually holds here.
+  assert.equal(wanted.length, 4023, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3388,8 +3392,8 @@ test('admin copy ships translated in de and ja (i2)', () => {
   // HR-17 + HR-18: count and hash recomputed over the sorted key inventory
   // for the continuous-performance and recruiting-depth keys; de/ja completeness
   // asserted per-key below.
-  const ADMIN_I2_SOURCE_COUNT = 3969
-  const ADMIN_I2_SOURCE_HASH = '5f86af22561e7464c4e87423929a2c691fa5d772ff33cd87e7451d7929a19eb6'
+  const ADMIN_I2_SOURCE_COUNT = 4023
+  const ADMIN_I2_SOURCE_HASH = 'b8f456c5d66e175b8b98c6a5972800df9a5b7c24e3bc2dad44c3a86cadaeb263'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))
@@ -3467,6 +3471,11 @@ test('payroll copy ships translated in ja, zh and pt-BR', () => {
   // reviewed identicals — placeholder-only templates, statutory codes and
   // genuine cognates — pinned to the exact term.
   const I7_IDENTICAL_BY_FACT = new Set([
+    // HR-21: "Info" is the ordinary word in Portuguese for the lowest
+    // severity band, exactly as in English. Translating it to
+    // "Informacao" would make the three severity chips different
+    // lengths for no gain in meaning.
+    'pt-BR:payroll.anomalies.severity.info|Info',
     'ja:payroll.filings.run.title|{label}',
     'ja:payroll.filings.slip.description|{label} · {year}',
     'ja:payroll.profiles.fields.sin|SIN / SSN',
@@ -3512,7 +3521,7 @@ test('payroll copy ships translated in ja, zh and pt-BR', () => {
   // which landed together. Four shards each re-pinned this number against
   // their own base, so the merge saw four competing values — re-pin to the
   // measured count rather than to any one shard's arithmetic.
-  assert.equal(I7_WANTED.length, 1161, 'payroll source inventory changed; translate the new keys in ja/zh/pt-BR and re-pin')
+  assert.equal(I7_WANTED.length, 1219, 'payroll source inventory changed; translate the new keys in ja/zh/pt-BR and re-pin')
   for (const key of I7_WANTED) {
     const english = I7_SOURCE.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3548,6 +3557,16 @@ test('payroll copy ships translated in ja, zh and pt-BR', () => {
 })
 
 const I6_PAYROLL_IDENTICAL_BY_FACT = new Set([
+  // HR-21 begin: payroll anomaly chips. "Status" and "Info" are the
+  // German and French/Spanish words, not untranslated English -- the
+  // block severity beside them IS translated (de: Blockierend), which
+  // is how you can tell these four were decided rather than skipped.
+  'de:payroll.anomalies.statusLabel|Status',
+  'de:payroll.anomalies.columns.status|Status',
+  'de:payroll.anomalies.severity.info|Info',
+  'es:payroll.anomalies.severity.info|Info',
+  'fr:payroll.anomalies.severity.info|Info',
+  // HR-21 end
   'fr:payroll.columns.net|Net',
   'fr:payroll.entitlements.hoursSuffix|h',
   'fr:payroll.entitlements.movementDate|Date',
@@ -3618,7 +3637,7 @@ test('I6 payroll copy ships translated in fr, es and de', () => {
   // for reviewed cognates, pinned to the exact term.
   const I6_source = flattenCatalog('en')
   const I6_wanted = [...I6_source.keys()].filter((I6_key) => I6_key.startsWith('payroll.'))
-  assert.equal(I6_wanted.length, 1161, 'payroll source inventory changed; translate the new keys in fr/es/de and re-pin')
+  assert.equal(I6_wanted.length, 1219, 'payroll source inventory changed; translate the new keys in fr/es/de and re-pin')
   const I6_tokens = (I6_value: string): Set<string> =>
     new Set(I6_value.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
   const I6_arms = (I6_value: string): string[] => I6_value.match(/, +(plural|select)/g) ?? []
@@ -5261,7 +5280,7 @@ const I14_IDENTICAL_BY_FACT = new Set([
 const I14_FILE_COUNTS: Record<string, number> = {
   "items": 161,
   "inventory": 159,
-  "reports": 1689,
+  "reports": 1741,
   "sync": 172,
   "login": 33,
   "accounts": 82,

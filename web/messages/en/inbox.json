@@ -32,7 +32,9 @@
     "field_ticket_signature": "Signature",
     "timesheet_week": "Timesheet",
     "expense_report": "Expense",
-    "document_signature": "Signature"
+    "document_signature": "Signature",
+    "payroll_anomaly_block": "Payroll check",
+    "ai_capability_review": "AI review"
   },
   "emptyTitle": "All clear",
   "emptyDescription": "Nothing waits on you right now.",

@@ -179,3 +179,28 @@ test("assistant credential fetches refuse a cross-origin redirect without leakin
   );
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
+
+describe("aiRailsPromptLines", () => {
+  // HR-21: the prompt gains one line per ENABLED capability stating its
+  // autonomy; disabled capabilities contribute nothing (their tools are
+  // absent too). The realistic red is a state where only the parent
+  // hrmAiAssist is on but the child hrmDrafting is off: the child line
+  // must not leak.
+  it("emits the drafting line when hrm, hrmAiAssist and hrmDrafting are on", async () => {
+    const { aiRailsPromptLines } = await import("./system-prompt.ts");
+    const lines = aiRailsPromptLines({ hrm: true, hrmAiAssist: true, hrmDrafting: true });
+    assert.ok(lines.some((line) => /hrmDrafting \(draft\)/.test(line)), `drafting line missing in ${JSON.stringify(lines)}`);
+  });
+
+  it("omits the drafting line when the chain is on but the child is off", async () => {
+    const { aiRailsPromptLines } = await import("./system-prompt.ts");
+    const lines = aiRailsPromptLines({ hrm: true, hrmAiAssist: true, hrmDrafting: false });
+    assert.ok(lines.every((line) => !line.startsWith("hrmDrafting ")), `drafting line leaked in ${JSON.stringify(lines)}`);
+  });
+
+  it("omits the drafting line when the hrm root gate is off", async () => {
+    const { aiRailsPromptLines } = await import("./system-prompt.ts");
+    const lines = aiRailsPromptLines({ hrm: false, hrmAiAssist: true, hrmDrafting: true });
+    assert.ok(lines.every((line) => !line.startsWith("hrmDrafting ")), `drafting line leaked in ${JSON.stringify(lines)}`);
+  });
+});

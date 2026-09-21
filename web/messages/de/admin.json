@@ -3023,7 +3023,12 @@
       "question": "Frage",
       "ratingScale": "Bewertungsskala",
       "regionScope": "Region",
-      "retainMonths": "Aufbewahrung (Monate)"
+      "retainMonths": "Aufbewahrung (Monate)",
+      "zThreshold": "Z-Wert-Schwelle",
+      "retroThreshold": "Rückrechnungsschwelle",
+      "cohortKey": "Kohorte",
+      "biasTerms": "Sprachliste",
+      "reviewMonths": "Prüfrhythmus (Monate)"
     },
     "fieldHelp": {
       "gapless": "Lückenlos bedeutet, dass jede Nummer in der Folge belegt sein muss und keine Nummer übersprungen wird. Aktivieren Sie dies nur, wenn gesetzliche oder prüfungsbezogene Vorgaben eine ununterbrochene Nummerierung verlangen.",
@@ -3118,7 +3123,12 @@
       "hrmRetentionLeadDays": "Tage vor Ablauf, an denen um Verlängerung gebeten wird; leer ohne E-Mail.",
       "hrmRetentionScope": "Region als JSON: applies_to all oder countries mit Ländern.",
       "hrmTemplateBody": "Angebotstext mit Platzhaltern für die Angebotsdaten.",
-      "hrmTemplateClauses": "Bausteine als JSON-Liste mit key, label, body und default_on für die Textbausteine."
+      "hrmTemplateClauses": "Bausteine als JSON-Liste mit key, label, body und default_on für die Textbausteine.",
+      "aiRailsZThreshold": "Erträge markieren, die mehr als so viele Standardabweichungen vom Kohortenmittel abweichen (Standard 3).",
+      "aiRailsRetroThreshold": "Rückrechnungen ab diesem Betrag markieren (Standard 500).",
+      "aiRailsCohort": "Mitarbeiter für Basiswerte nach Gesellschaft, Abteilung, Lohnturnus oder Stufe gruppieren.",
+      "aiRailsBiasTerms": "Organisationsweite Wörter und Wendungen, die die Entwurfsprüfung wortgenau markiert, eine pro Zeile.",
+      "aiRailsReviewMonths": "Prüfrhythmus in Monaten (1–36); überfällige Fähigkeiten melden sich im Setup-Postfach."
     },
     "options": {
       "timeClassification": {
@@ -3592,6 +3602,12 @@
       "hrmRetentionBasis": {
         "consent": "Einwilligung",
         "inactivity": "Inaktivität"
+      },
+      "aiRailsCohort": {
+        "subsidiary": "Tochtergesellschaft",
+        "department": "Abteilung",
+        "paySchedule": "Lohnturnus",
+        "jobLevel": "Karrierestufe"
       }
     },
     "bankFeeds": {
@@ -4957,6 +4973,34 @@
     "hrmTalentPool": {
       "title": "Talentpool",
       "description": "Pools früherer Kandidaten, abgeglichen mit offenen Stellen."
+    },
+    "hrmAiAssist": {
+      "title": "AI-Assistenz",
+      "description": "Hauptschalter für deterministische HRM-KI-Fähigkeiten. Nichts hier reicht ein, genehmigt oder zahlt selbstständig."
+    },
+    "hrmExplainPay": {
+      "title": "Abrechnungserklärungen",
+      "description": "Deterministische Abrechnungsspuren mit Vorperiodendifferenz, in der Me-Lohn-Schublade."
+    },
+    "hrmPayrollAnomalies": {
+      "title": "Lohnanomalien",
+      "description": "Vorlauf-Hinweise mit Lebenszyklus; die Stufe Block verweigert die Lohnfreigabe."
+    },
+    "hrmTimeAnomalies": {
+      "title": "Zeitanomalien",
+      "description": "Stundenzettel-Hinweise als Freigabe-Chips und Inbox-Einträge."
+    },
+    "hrmDrafting": {
+      "title": "Beleggestütztes Entwerfen",
+      "description": "Entwürfe aus genannten Belegen mit Sprachhinweisen; Entwürfe werden nie automatisch übernommen."
+    },
+    "hrmNlReports": {
+      "title": "Berichte in natürlicher Sprache",
+      "description": "Geprüfte Berichtsdefinitionen aus Fragen, mit Vorschau und Speichern als Ansicht."
+    },
+    "aiGovernanceLedger": {
+      "title": "KI-Governance-Protokoll",
+      "description": "Fähigkeitsspiegel, unveränderliches Entscheidungsprotokoll, Hinweise und Prüfrhythmus."
     }
   },
   "extensions": {
@@ -5362,6 +5406,36 @@
       "approvalYes": "Ja",
       "approvalNo": "Nein",
       "approvalSave": "Einstellungen speichern"
+    }
+  },
+  "aiLedger": {
+    "title": "KI-Governance",
+    "description": "Fähigkeiten, ihre Autonomiestufen und der unveränderliche Nachweis jeder KI-gestützten Antwort.",
+    "capabilitiesTitle": "Fähigkeiten",
+    "decisionsTitle": "Entscheidungen",
+    "overdueTitle": "Überfällige Prüfungen",
+    "overdueDescription": "Diese Fähigkeiten haben ihren Prüfturnus überschritten",
+    "export": "CSV exportieren",
+    "sync": "Register abgleichen",
+    "syncDone": "Register abgeglichen.",
+    "review": "Prüfung vermerken",
+    "save": "Speichern",
+    "failed": "Die Änderung konnte nicht gespeichert werden.",
+    "enabled": "Aktiviert",
+    "disabled": "Deaktiviert",
+    "all": "Alle",
+    "noticeRequired": "Hinweis erforderlich",
+    "neverReviewed": "Nie geprüft",
+    "columns": {
+      "autonomy": "Autonomie",
+      "capability": "Fähigkeit",
+      "enabled": "Aktiviert",
+      "notice": "Hinweis",
+      "outcome": "Ergebnis",
+      "reviewed": "Geprüft",
+      "reviewer": "Prüfer",
+      "summary": "Zusammenfassung",
+      "when": "Wann"
     }
   }
 }

@@ -471,6 +471,26 @@
       "deliveryEvidence": "{sent}/{total} enviados · {failed} fallidos · {suppressed} bloqueados",
       "pdf": "Evidencia PDF",
       "csv": "CSV"
+    },
+    "nl": {
+      "title": "Preguntar sobre informes",
+      "description": "Pregunte en lenguaje llano — el asistente redacta una definición validada, usted la previsualiza y la guarda como vista.",
+      "placeholder": "p. ej. plantilla por departamento del T3",
+      "ask": "Preguntar",
+      "draftsTitle": "Sus borradores",
+      "empty": "Sin borradores — pregunte arriba y guarde el borrador del asistente.",
+      "question": "Pregunta",
+      "entity": "Entidad",
+      "status": "Estado",
+      "created": "Creado",
+      "saveAsView": "Guardar como vista",
+      "discard": "Descartar",
+      "failed": "No se pudieron cargar los borradores.",
+      "statuses": {
+        "drafted": "Borrador",
+        "saved": "Guardado",
+        "discarded": "Descartado"
+      }
     }
   },
   "schedule": {
@@ -808,6 +828,18 @@
       "hrm_scorecards": {
         "description": "Una fila por entrevista con los agregados del panel: enviados y tamaño más la distribución global. El detalle por evaluador nunca sale por informes.",
         "label": "Veredictos"
+      },
+      "payroll_anomaly_flags": {
+        "label": "Avisos de anomalías de nómina",
+        "description": "Una fila por aviso determinista previo: tipo, nivel, estado, período, empleo y explicación."
+      },
+      "ai_decisions": {
+        "label": "Decisiones de IA",
+        "description": "Una fila por respuesta asistida: capacidad, asunto, fuentes citadas, resumen sin PII y resultado. Digests y prompts nunca se proyectan."
+      },
+      "ai_capabilities": {
+        "label": "Capacidades de IA",
+        "description": "Una fila por capacidad: techo de autonomía, revisor, aviso, estado y última revisión."
       }
     },
     "columns": {
@@ -1811,6 +1843,42 @@
         "strong_yes": "Sí rotundo",
         "submitted": "Enviados",
         "yes": "Sí"
+      },
+      "payroll_anomaly_flags": {
+        "kind": "Tipo",
+        "severity": "Nivel",
+        "status": "Estado",
+        "pay_period_from": "Período desde",
+        "pay_period_to": "Período hasta",
+        "employee": "Empleado",
+        "explanation": "Explicación",
+        "reason": "Motivo del cambio",
+        "resolved_at": "Resuelto el",
+        "flag_id": "Aviso (id)",
+        "employment_id": "Empleo (id)"
+      },
+      "ai_decisions": {
+        "recorded_at": "Registrado el",
+        "capability": "Capacidad",
+        "subject_kind": "Tipo de asunto",
+        "subject_id": "Asunto (id)",
+        "summary": "Resumen",
+        "outcome": "Resultado",
+        "reviewer_id": "Revisor (id)",
+        "reviewed_at": "Revisado el",
+        "model": "Modelo",
+        "decision_id": "Decisión (id)"
+      },
+      "ai_capabilities": {
+        "capability": "Capacidad",
+        "name": "Nombre",
+        "purpose": "Propósito",
+        "autonomy": "Autonomía",
+        "reviewer": "Revisor",
+        "notice_required": "Aviso requerido",
+        "enabled": "Activada",
+        "last_reviewed_at": "Última revisión",
+        "reviewed_by": "Revisado por"
       }
     },
     "enumValues": {

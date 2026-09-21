@@ -99,6 +99,7 @@ export function ReviewDrawerBody({ review }: { review: NonNullable<PerformancePa
           textLabel={review.answerTextLabel}
           requiredLabel={review.requiredLabel}
           failed={review.failed}
+          draft={review.draft}
         />
       ) : (
         <div>

@@ -90,6 +90,7 @@ const mockSources = new Map<string, string>([
       export function registerRequestOrgResolver() {}
       export function currentRequestOrgResolver() { return null }
       export function ambientTenantOrgId() { return null }
+      export function currentRequestOrgResolver() { return null }
     `,
   ],
   [

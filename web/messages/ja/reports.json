@@ -471,6 +471,26 @@
       "deliveryEvidence": "{sent}/{total} 送信済み · {failed} 失敗 · {suppressed} 抑止",
       "pdf": "PDF証跡",
       "csv": "CSV"
+    },
+    "nl": {
+      "title": "レポートに質問",
+      "description": "日常の言葉で質問 — アシスタントが検証済み定義を起草し、ビルダーでプレビューしてビュー保存します。",
+      "placeholder": "例：第3四半期の部門別人員",
+      "ask": "質問",
+      "draftsTitle": "あなたの下書き",
+      "empty": "下書きはまだありません — 上で質問し、アシスタントの下書きを保存してください。",
+      "question": "質問",
+      "entity": "エンティティ",
+      "status": "状態",
+      "created": "作成",
+      "saveAsView": "ビューとして保存",
+      "discard": "破棄",
+      "failed": "下書きを読み込めませんでした。",
+      "statuses": {
+        "drafted": "下書き",
+        "saved": "保存済み",
+        "discarded": "破棄済み"
+      }
     }
   },
   "schedule": {
@@ -808,6 +828,18 @@
       "hrm_scorecards": {
         "description": "面接を1行ずつ。提出数・人数と総合分布の集計のみ。評価者ごとの明細は出ない。",
         "label": "評価集計"
+      },
+      "payroll_anomaly_flags": {
+        "label": "給与異常フラグ",
+        "description": "確定的実行前チェック1件につき1行：種類・重要度・状態・期間・雇用・説明。"
+      },
+      "ai_decisions": {
+        "label": "AIの判断",
+        "description": "AI支援の回答1件につき1行：能力・対象・引用記録・PIIなし概要・結果。ダイジェストとプロンプトは出力しません。"
+      },
+      "ai_capabilities": {
+        "label": "AI能力",
+        "description": "能力1件につき1行：自律性上限・レビュー担当・通知・有効状態・最終レビュー。"
       }
     },
     "columns": {
@@ -1811,6 +1843,42 @@
         "strong_yes": "強い採用",
         "submitted": "提出数",
         "yes": "採用"
+      },
+      "payroll_anomaly_flags": {
+        "kind": "種類",
+        "severity": "重要度",
+        "status": "状態",
+        "pay_period_from": "期間自",
+        "pay_period_to": "期間至",
+        "employee": "従業員",
+        "explanation": "説明",
+        "reason": "遷移理由",
+        "resolved_at": "解決日時",
+        "flag_id": "フラグ（ID）",
+        "employment_id": "雇用（ID）"
+      },
+      "ai_decisions": {
+        "recorded_at": "記録日時",
+        "capability": "能力",
+        "subject_kind": "対象種別",
+        "subject_id": "対象（ID）",
+        "summary": "概要",
+        "outcome": "結果",
+        "reviewer_id": "レビュー担当（ID）",
+        "reviewed_at": "レビュー日時",
+        "model": "モデル",
+        "decision_id": "判断（ID）"
+      },
+      "ai_capabilities": {
+        "capability": "能力",
+        "name": "名称",
+        "purpose": "目的",
+        "autonomy": "自律性",
+        "reviewer": "レビュー担当",
+        "notice_required": "通知が必要",
+        "enabled": "有効",
+        "last_reviewed_at": "最終レビュー",
+        "reviewed_by": "レビュー者"
       }
     },
     "enumValues": {

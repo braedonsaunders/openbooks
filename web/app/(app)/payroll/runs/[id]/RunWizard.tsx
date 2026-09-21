@@ -359,6 +359,10 @@ export function RunWizard(props: {
    * status; never a second switch, flag, or permission-only check.
    */
   approval: PayRunApprovalState
+  /** HR-21: open block-severity anomaly flags overlapping this run's
+   *  period. The commit button stays off while nonzero; the commit route
+   *  refuses regardless. Zero while hrmPayrollAnomalies is off. */
+  anomalyBlocks: number
 }) {
   const t = useTranslations('payroll')
   const router = useRouter()
@@ -449,6 +453,8 @@ export function RunWizard(props: {
   const canCommit =
     props.canRun && commitDocOpen && run.run_status === 'calculated' && !props.staleness.stale
     && (refusals.length === 0 || refusalsAcked)
+    props.canRun && docDraft && run.run_status === 'calculated' && !props.staleness.stale
+    && (refusals.length === 0 || refusalsAcked) && props.anomalyBlocks === 0
   const canPost =
     props.canRun && committed && (run.document_status === 'draft' || run.document_status === 'approved')
   // Discarding is the escape hatch for a run frozen to the wrong entity: it
@@ -930,6 +936,7 @@ export function RunWizard(props: {
           regionLabel={props.regionLabel}
           traceEngines={props.traceEngines}
           factorLabels={props.factorLabels}
+          anomalyBlocks={props.anomalyBlocks}
           fmt={fmt}
         />
       )}
@@ -949,6 +956,7 @@ export function RunWizard(props: {
           refusals={refusals}
           acknowledgement={acknowledgement}
           refusalsAcked={refusalsAcked}
+          anomalyBlocks={props.anomalyBlocks}
           onAcknowledge={() => void acknowledgeRefusals()}
           onSubmitApproval={() => void submitApproval()}
           onRetry={() => {
@@ -1530,6 +1538,7 @@ function ReviewStep({
   canAdjust,
   onAdjust,
   onAnswered,
+  anomalyBlocks,
 }: {
   runId: string
   roster: RosterRow[]
@@ -1549,6 +1558,8 @@ function ReviewStep({
   canAdjust: boolean
   onAdjust: (body: Record<string, unknown>) => Promise<void>
   onAnswered: () => void
+  /** HR-21: open block-severity anomaly flags — the banner with the link. */
+  anomalyBlocks: number
 }) {
   const t = useTranslations('payroll')
   const [openStub, setOpenStub] = useState<StubRow | null>(null)
@@ -1607,6 +1618,19 @@ function ReviewStep({
             {t('wizard.review.allRefusedTitle', { count: refusedCount })}
           </p>
           <p className="mt-1">{t('wizard.review.allRefusedHint')}</p>
+        </div>
+      )}
+      {anomalyBlocks > 0 && (
+        <div className="rounded-xl border border-red-200/80 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-300">
+          <p className="flex items-center gap-2 font-semibold">
+            <AlertTriangle size={15} aria-hidden />
+            {t('anomalies.wizardNotice', { count: anomalyBlocks })}
+          </p>
+          <p className="mt-1">
+            <a href="/payroll/anomalies" className="font-medium underline">
+              {t('anomalies.wizardLink')}
+            </a>
+          </p>
         </div>
       )}
       {excludedRows.length > 0 && (
@@ -2251,6 +2275,7 @@ function GlStep({
   refusals,
   acknowledgement,
   refusalsAcked,
+  anomalyBlocks,
   onAcknowledge,
   onRetry,
   onCommit,
@@ -2273,6 +2298,8 @@ function GlStep({
   refusals: PayRunCalculationError[]
   acknowledgement: PayRunRefusalAcknowledgement | null
   refusalsAcked: boolean
+  /** HR-21: open block-severity anomaly flags — commit stays off. */
+  anomalyBlocks: number
   onAcknowledge: () => void
   onRetry: () => void
   onCommit: () => void
@@ -2409,6 +2436,13 @@ function GlStep({
           <span className="text-sm text-amber-600 dark:text-amber-400">{t('wizard.gl.staleBlocked')}</span>
         ) : refusals.length > 0 && !refusalsAcked && !committed ? (
           <span className="text-sm text-red-600 dark:text-red-400">{t('wizard.gl.refusedBlocked', { count: refusals.length })}</span>
+        ) : anomalyBlocks > 0 && !committed ? (
+          <span className="text-sm text-red-600 dark:text-red-400">
+            {t('anomalies.wizardNotice', { count: anomalyBlocks })}{' '}
+            <a href="/payroll/anomalies" className="font-medium underline">
+              {t('anomalies.wizardLink')}
+            </a>
+          </span>
         ) : null}
         {committed && (
           <Badge variant="default">{t('status.committed')}</Badge>

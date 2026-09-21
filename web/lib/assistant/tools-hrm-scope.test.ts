@@ -110,7 +110,7 @@ const TOOL_PERMS: Record<string, string> = {
 const UUID = "11111111-1111-4111-8111-111111111111";
 
 test("the module exports exactly the slice tools plus the core inbox tool", () => {
-  assert.deepEqual(HRM_TOOLS.map((tool) => tool.name), [...TOOL_NAMES, "inbox_items"]);
+  assert.deepEqual(HRM_TOOLS.map((tool) => tool.name), [...TOOL_NAMES, "inbox_items", ...HR21_TOOL_NAMES]);
 });
 
 test("inbox_items is the core own-scope tool: self grant, no feature, read-only", () => {
@@ -566,3 +566,77 @@ test("hrm_recruiting depth inputs parse and reuse the depth services", () => {
   }
 });
 // HR-18 end
+// HR-21 begin: AI rails tools — gates, features, schemas, ledger logging.
+const HR21_TOOL_NAMES = ["hrm_explain_pay", "payroll_anomalies", "ai_draft", "nl_report"];
+
+const HR21_TOOL_GATES: Record<string, string[]> = {
+  hrm_explain_pay: ["hrm.self.read", "hrm.employment.read", "payroll.manage"],
+  payroll_anomalies: ["payroll.manage", "time.approve", "hrm.employment.read"],
+  ai_draft: ["hrm.self.read", "hrm.performance.manage", "hrm.recruiting.read", "hrm.recruiting.manage", "hrm.process.read"],
+  nl_report: ["reports.read"],
+};
+
+const HR21_TOOL_FEATURES: Record<string, string> = {
+  hrm_explain_pay: "hrmExplainPay",
+  payroll_anomalies: "hrmPayrollAnomalies",
+  ai_draft: "hrmDrafting",
+  nl_report: "hrmNlReports",
+};
+
+test("HR-21 tools carry their grant, feature switch and module tier", () => {
+  const byName = new Map(HRM_TOOLS.map((tool) => [tool.name, tool] as const));
+  const matrix = read("./coverage-matrix.test.ts");
+  const entry = matrix.split("\n").find((line) => line.includes('prefix: "hrm"'));
+  assert.ok(entry, "coverage matrix needs an hrm entry");
+  const skills = read("../mcp/skills.ts");
+  for (const name of HR21_TOOL_NAMES) {
+    const tool = byName.get(name);
+    assert.ok(tool, `${name} must be registered`);
+    assert.deepEqual(tool.gate, { mode: "anyOf", perms: HR21_TOOL_GATES[name] });
+    assert.equal(tool.feature, HR21_TOOL_FEATURES[name]);
+    assert.equal(tool.tier, "module");
+    assert.ok(entry.includes(`"${name}"`), `matrix hrm entry must cover ${name}`);
+    assert.ok(skills.includes(name), `playbook must mention ${name}`);
+  }
+});
+
+test("HR-21 tools admit grant holders and hide while their switch is off", () => {
+  const byName = new Map(HRM_TOOLS.map((tool) => [tool.name, tool] as const));
+  const HR21_FEATURE_STATE: Record<string, Record<string, boolean>> = {
+    hrm_explain_pay: { hrm: true, hrmAiAssist: true, payroll: true, hrmExplainPay: true },
+    payroll_anomalies: { hrm: true, hrmAiAssist: true, payroll: true, hrmPayrollAnomalies: true },
+    ai_draft: { hrm: true, hrmAiAssist: true, hrmDrafting: true },
+    nl_report: { hrm: true, hrmAiAssist: true, hrmNlReports: true },
+  };
+  for (const name of HR21_TOOL_NAMES) {
+    const tool = byName.get(name)!;
+    const perm = HR21_TOOL_GATES[name]![0]!;
+    const reader = fakeAuthz(["assistant.use", perm]);
+    assert.equal(canRunTool(reader, tool, HR21_FEATURE_STATE[name]), true, `${name} must run for a gated reader`);
+    assert.equal(
+      canRunTool(reader, tool, { ...HR21_FEATURE_STATE[name], [HR21_TOOL_FEATURES[name]!]: false }),
+      false,
+      `${name} must hide while its switch is off`,
+    );
+    assert.equal(
+      canRunTool(fakeAuthz(["assistant.use"]), tool, HR21_FEATURE_STATE[name]),
+      false,
+      `${name} must refuse without ${perm}`,
+    );
+  }
+});
+
+test("HR-21 tool inputs parse; refusals stay tool errors, never throws", () => {
+  const byName = new Map(HRM_TOOLS.map((tool) => [tool.name, tool] as const));
+  byName.get("hrm_explain_pay")!.inputSchema.parse({ employmentId: UUID });
+  byName.get("payroll_anomalies")!.inputSchema.parse({ action: "list", status: "open" });
+  assert.throws(() => byName.get("payroll_anomalies")!.inputSchema.parse({ action: "levitate" }));
+  byName.get("ai_draft")!.inputSchema.parse({ kind: "review_self", subjectId: UUID });
+  assert.throws(() => byName.get("ai_draft")!.inputSchema.parse({ kind: "sonnet", subjectId: UUID }));
+  byName.get("nl_report")!.inputSchema.parse({
+    action: "preview",
+    question: "total net pay by month",
+    definitionJson: '{"entity":"x","columns":[]}',
+  });
+});
+// HR-21 end

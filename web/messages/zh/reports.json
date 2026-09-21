@@ -471,6 +471,26 @@
       "deliveryEvidence": "已发送 {sent}/{total} · 失败 {failed} · 已阻止 {suppressed}",
       "pdf": "PDF 凭证",
       "csv": "CSV"
+    },
+    "nl": {
+      "title": "询问报表",
+      "description": "用日常语言提问 — 助手起草经验证的定义，您在构建器中预览并另存为视图。",
+      "placeholder": "例如第三季度各部门人数",
+      "ask": "提问",
+      "draftsTitle": "您的草稿",
+      "empty": "暂无草稿 — 请在上方提问并保存助手的草稿。",
+      "question": "问题",
+      "entity": "实体",
+      "status": "状态",
+      "created": "创建于",
+      "saveAsView": "另存为视图",
+      "discard": "舍弃",
+      "failed": "无法加载草稿。",
+      "statuses": {
+        "drafted": "草稿",
+        "saved": "已保存",
+        "discarded": "已舍弃"
+      }
     }
   },
   "schedule": {
@@ -808,6 +828,18 @@
       "hrm_scorecards": {
         "description": "每次面试一行，含小组评价汇总：已提交数、人数与总体分布。评价人明细绝不外流。",
         "label": "评价汇总"
+      },
+      "payroll_anomaly_flags": {
+        "label": "薪资异常标记",
+        "description": "每个确定性运行前检查一行：类型、级别、状态、期间、雇佣关系及说明。"
+      },
+      "ai_decisions": {
+        "label": "AI 决策",
+        "description": "每个 AI 辅助答复一行：能力、对象、引用来源、无 PII 摘要及结果。从不输出摘要与提示。"
+      },
+      "ai_capabilities": {
+        "label": "AI 能力",
+        "description": "每项能力一行：自主性上限、评审人、提示、启用状态及上次评审。"
       }
     },
     "columns": {
@@ -1811,6 +1843,42 @@
         "strong_yes": "明确赞成",
         "submitted": "已提交数",
         "yes": "赞成"
+      },
+      "payroll_anomaly_flags": {
+        "kind": "类型",
+        "severity": "级别",
+        "status": "状态",
+        "pay_period_from": "期间自",
+        "pay_period_to": "期间至",
+        "employee": "员工",
+        "explanation": "说明",
+        "reason": "流转原因",
+        "resolved_at": "解决时间",
+        "flag_id": "标记（ID）",
+        "employment_id": "雇佣（ID）"
+      },
+      "ai_decisions": {
+        "recorded_at": "记录时间",
+        "capability": "能力",
+        "subject_kind": "对象类型",
+        "subject_id": "对象（ID）",
+        "summary": "摘要",
+        "outcome": "结果",
+        "reviewer_id": "评审人（ID）",
+        "reviewed_at": "评审时间",
+        "model": "模型",
+        "decision_id": "决策（ID）"
+      },
+      "ai_capabilities": {
+        "capability": "能力",
+        "name": "名称",
+        "purpose": "用途",
+        "autonomy": "自主性",
+        "reviewer": "评审人",
+        "notice_required": "需要提示",
+        "enabled": "已启用",
+        "last_reviewed_at": "上次评审",
+        "reviewed_by": "评审者"
       }
     },
     "enumValues": {
