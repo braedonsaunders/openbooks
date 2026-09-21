@@ -6,7 +6,7 @@ import {
 import type { listOpenMacrsVintages } from "@openbooks/engine/src/tax-returns/macrs-vintages.ts";
 import { canonicalDecimal } from "@openbooks/engine/src/money/exact-decimal.ts";
 import { add, cmp, sum } from "@openbooks/engine/src/money/money.ts";
-import { decimalNullRefusal } from "@/lib/payroll-decimal-refusal";
+import { decimalNullRefusal } from "../../../lib/payroll-decimal-refusal";
 
 export type OpenMacrsVintage = ReturnType<typeof listOpenMacrsVintages>[number];
 export type MacrsAllocationAmounts = Pick<

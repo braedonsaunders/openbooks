@@ -126,6 +126,7 @@ test("carryover and excess replay preserve one paper opening through both posted
       `${row.vintageKey} ${row.yearStart}: actual plus seller must equal recomputed`);
     assert.equal(sum([row.sellerMatchingAmount, row.deferredClosing]), row.deferredOpening,
       `${row.vintageKey} ${row.yearStart}: opening must equal matched plus closing`);
+    assert.ok(row.yearStart, `${row.vintageKey}: a cited historical row must carry its year start`);
     assert.equal(row.priorMatchingPeriodId, `${row.yearStart.slice(0, 4)}:${row.vintageKey}`,
       `${row.vintageKey} ${row.yearStart}: keep the exact cited historical row`);
   }

@@ -110,9 +110,9 @@ const hrmTransparencyMigrationPath = "schema/migrations/generated/0222_hrm_headc
 // HR-12 end
 // HR-17 begin
 const hrmContinuousMigrationPath = "schema/migrations/generated/0228_hrm_continuous_performance.sql";
-// HR-17 end
 const jlCheckAccountEvidenceStampMigrationPath =
   "schema/migrations/generated/0236_jl_check_account_evidence_stamp.sql";
+// HR-17 end
 
 test("payroll opening-balance migration rebuilds its widened governed view safely", () => {
   const migration = readFileSync(payrollOpeningBalanceSecondOrderMigrationPath, "utf8");
@@ -462,21 +462,21 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // HR-21 begin: AI on the rails — capabilities ledger, decisions log,
     // payroll anomaly flags and baselines, NL report drafts (0232).
     "0232_hrm_ai_rails.sql",
+    "0233_tax_asset_basis_workpapers.sql",
+    "0234_tax_year_windows.sql",
+    "0235_tax_year_window_citations.sql",
+    "0236_jl_check_account_evidence_stamp.sql",
     "0237_non_gl_depreciation_recognition.sql",
     // HR-21 end
     // HR-18 follow-up: the offer signing link had no stored hash and so
     // could never be revoked (0240, allocated by the integrator — 0233
     // through 0239 belong to the tax, accounting and payroll lanes).
+    "0239_tax_consolidated_matching_periods.sql",
     "0240_hrm_offer_token_revocation.sql",
     // Eleven HRM party columns had no foreign key at all, so a party
     // merge would have orphaned them (0241, allocated by the integrator;
     // 0238 is a HOLE reserved for the payroll giro renumber, not free).
     "0241_hrm_party_reference_integrity.sql",
-    "0236_jl_check_account_evidence_stamp.sql",
-    "0233_tax_asset_basis_workpapers.sql",
-    "0234_tax_year_windows.sql",
-    "0235_tax_year_window_citations.sql",
-    "0239_tax_consolidated_matching_periods.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -968,60 +968,6 @@ test("effective-date overlap guards are exclusion constraints, not racy triggers
   assert.ok(firstRepair >= 0 && firstRepair < firstConstraint);
   assert.match(migration, /consolidation-used policies % and % overlap/);
   assert.match(migration, /RAISE NOTICE 'fair_value_prices repair/);
-});
-
-test("tax year windows exclude overlapping dates per legal entity and regime", () => {
-  const migration = readFileSync("schema/migrations/generated/0234_tax_year_windows.sql", "utf8");
-  assert.match(migration, /CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA public/);
-  assert.match(migration, /ADD CONSTRAINT tax_year_windows_no_overlap\s+EXCLUDE USING gist/);
-  assert.match(migration, /org_id WITH =/);
-  assert.match(migration, /subsidiary_id WITH =/);
-  assert.match(migration, /regime WITH =/);
-  assert.match(migration, /daterange\(year_start, year_end, '\[\]'\) WITH &&/);
-  assert.match(migration, /UNIQUE \(org_id, subsidiary_id, regime, year_start\)/);
-  assert.match(migration, /DROP INDEX IF EXISTS tax_pool_periods_identity/);
-  assert.match(migration, /ON tax_pool_periods \(org_id, pool_id, tax_year_window_id\)/);
-  assert.doesNotMatch(migration, /fiscal_calendars|accounting_periods|tax_provision_runs/);
-});
-
-test("1.1502-13 matching periods are unique per receiving workpaper, vintage and tax year", () => {
-  const migration = readFileSync("schema/migrations/generated/0239_tax_consolidated_matching_periods.sql", "utf8");
-  assert.match(migration, /UNIQUE \(org_id, workpaper_id, vintage_key, tax_year_window_id\)/);
-  assert.match(
-    migration,
-    /ON tax_consolidated_matching_periods\(org_id,workpaper_id,vintage_key,tax_year_window_id\)/,
-  );
-  assert.doesNotMatch(migration, /UNIQUE \(org_id, vintage_key, tax_year_window_id\)/);
-  assert.doesNotMatch(
-    migration,
-    /ON tax_consolidated_matching_periods\(org_id,vintage_key,tax_year_window_id\)/,
-  );
-  assert.match(migration, /replay_change_id uuid/);
-  assert.match(
-    migration,
-    /CHECK \(\(prior_matching_period_id IS NULL\)=\(replay_change_id IS NULL\)\)/,
-  );
-  assert.match(migration, /NEW\.id,NEW\.org_id,NEW\.created_at,NEW\.created_by/);
-  assert.match(migration, /OLD\.id,OLD\.org_id,OLD\.created_at,OLD\.created_by/);
-  assert.match(
-    migration,
-    /SELECT DISTINCT x FROM unnest\(ARRAY\[\s*NEW\.seller_subsidiary_id,\s*NEW\.buyer_subsidiary_id,\s*window_owner\s*\]\)/,
-  );
-  assert.match(migration, /ORDER BY 1/);
-  assert.match(migration, /OpenBooks forward migration 0239_tax_consolidated_matching_periods/);
-  assert.match(migration, /payload->>'replacementWorkpaperId'/);
-  assert.match(migration, /payload->>'replacementWorkpaperChangeId'/);
-  assert.match(migration, /citedHistoricalPeriodIds/);
-  assert.match(migration, /before_state->'replayedPeriods'/);
-  assert.match(migration, /before_state->'membership'->>'groupKey'/);
-  assert.match(migration, /before_state->'membership'->>'sellerSubsidiaryId'/);
-  assert.match(migration, /before_state->'membership'->>'buyerSubsidiaryId'/);
-  assert.match(migration, /prior_row.parent_key IS DISTINCT FROM NEW.parent_key/);
-  assert.match(migration, /registered.regime IS DISTINCT FROM 'us_macrs'/);
-  assert.match(migration, /registered.subsidiary_id IS DISTINCT FROM NEW.buyer_subsidiary_id/);
-  assert.match(migration, /tax_matching_generation_repair/);
-  assert.match(migration, /reversed_by_change_id IS NOT NULL/);
-  assert.match(migration, /same-org unrelated approved replay is not authorization/);
 });
 
 test("one effective tax-rate window per tax code is enforced by storage, not by the racy trigger read", () => {
@@ -2307,36 +2253,6 @@ test("hrm compensation carries versioned bands with org isolation", () => {
   assert.match(migration, /openbooks:org_isolation:v1/);
   assert.match(migration, /openbooks\.amend/);
   assert.match(migration, /a pushed line already moved payroll/);
-test("jl_check_account admits evidence-only stamps without weakening posting rules", () => {
-  // 0236: the connector's cleared-date mirror stamps source_cleared_date /
-  // source_cleared_connector on posted lines. The stamp changes no
-  // posting-relevant field, so jl_check_account returns early exactly when
-  // every non-evidence column is byte-identical — under the SAME column set
-  // jl_guard carves out. Any other UPDATE still faces the full posting
-  // checks, and append-only legality of the stamp itself stays jl_guard's.
-  const migration = readFileSync(jlCheckAccountEvidenceStampMigrationPath, "utf8");
-  const evidenceKeys =
-    "to_jsonb(new) - 'reconciled_at' - 'reconciliation_id' - 'source_cleared_date' - 'source_cleared_connector'";
-  assert.ok(
-    migration.includes(evidenceKeys),
-    "0236 carves out exactly the jl_guard evidence columns",
-  );
-  const guard = readFileSync(
-    "schema/migrations/generated/0165_jl_guard_original_parent_immutability.sql",
-    "utf8",
-  );
-  assert.ok(
-    guard.includes(evidenceKeys),
-    "0236 drifts from jl_guard: the two guards must agree on what an evidence-only stamp is",
-  );
-  assert.match(migration, /if tg_op = 'UPDATE'/);
-  // Posting rules keep their teeth for every non-evidence write.
-  assert.match(migration, /is a summary account and cannot be posted to/);
-  assert.match(migration, /is inactive/);
-  assert.match(migration, /only accepts % postings/);
-  assert.match(migration, /does not exist in organization/);
-  assert.match(migration, /for share/);
-  assert.match(migration, /openbooks\.migration/);
   assert.doesNotMatch(migration, /on conflict do nothing/i);
   assert.doesNotMatch(migration, /SELECT public\.openbooks_refresh_query_catalog\(\)/);
   assert.doesNotMatch(migration, /0001_baseline/);
@@ -2424,3 +2340,94 @@ test("hrm continuous performance carries 1:1s, feedback, calibration and success
   assert.doesNotMatch(migration, /\n\n$/);
 });
 // HR-17 end
+
+test("jl_check_account admits evidence-only stamps without weakening posting rules", () => {
+  // 0236: the connector's cleared-date mirror stamps source_cleared_date /
+  // source_cleared_connector on posted lines. The stamp changes no
+  // posting-relevant field, so jl_check_account returns early exactly when
+  // every non-evidence column is byte-identical — under the SAME column set
+  // jl_guard carves out. Any other UPDATE still faces the full posting
+  // checks, and append-only legality of the stamp itself stays jl_guard's.
+  const migration = readFileSync(jlCheckAccountEvidenceStampMigrationPath, "utf8");
+  const evidenceKeys =
+    "to_jsonb(new) - 'reconciled_at' - 'reconciliation_id' - 'source_cleared_date' - 'source_cleared_connector'";
+  assert.ok(
+    migration.includes(evidenceKeys),
+    "0236 carves out exactly the jl_guard evidence columns",
+  );
+  const guard = readFileSync(
+    "schema/migrations/generated/0165_jl_guard_original_parent_immutability.sql",
+    "utf8",
+  );
+  assert.ok(
+    guard.includes(evidenceKeys),
+    "0236 drifts from jl_guard: the two guards must agree on what an evidence-only stamp is",
+  );
+  assert.match(migration, /if tg_op = 'UPDATE'/);
+  // Posting rules keep their teeth for every non-evidence write.
+  assert.match(migration, /is a summary account and cannot be posted to/);
+  assert.match(migration, /is inactive/);
+  assert.match(migration, /only accepts % postings/);
+  assert.match(migration, /does not exist in organization/);
+  assert.match(migration, /for share/);
+  assert.match(migration, /openbooks\.migration/);
+  assert.doesNotMatch(migration, /on conflict do nothing/i);
+  assert.doesNotMatch(migration, /SELECT public\.openbooks_refresh_query_catalog\(\)/);
+  assert.doesNotMatch(migration, /0001_baseline/);
+  assert.match(migration, /[^\n]\n$/);
+  assert.doesNotMatch(migration, /\n\n$/);
+});
+
+test("tax year windows exclude overlapping dates per legal entity and regime", () => {
+  const migration = readFileSync("schema/migrations/generated/0234_tax_year_windows.sql", "utf8");
+  assert.match(migration, /CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA public/);
+  assert.match(migration, /ADD CONSTRAINT tax_year_windows_no_overlap\s+EXCLUDE USING gist/);
+  assert.match(migration, /org_id WITH =/);
+  assert.match(migration, /subsidiary_id WITH =/);
+  assert.match(migration, /regime WITH =/);
+  assert.match(migration, /daterange\(year_start, year_end, '\[\]'\) WITH &&/);
+  assert.match(migration, /UNIQUE \(org_id, subsidiary_id, regime, year_start\)/);
+  assert.match(migration, /DROP INDEX IF EXISTS tax_pool_periods_identity/);
+  assert.match(migration, /ON tax_pool_periods \(org_id, pool_id, tax_year_window_id\)/);
+  assert.doesNotMatch(migration, /fiscal_calendars|accounting_periods|tax_provision_runs/);
+});
+
+test("1.1502-13 matching periods are unique per receiving workpaper, vintage and tax year", () => {
+  const migration = readFileSync("schema/migrations/generated/0239_tax_consolidated_matching_periods.sql", "utf8");
+  assert.match(migration, /UNIQUE \(org_id, workpaper_id, vintage_key, tax_year_window_id\)/);
+  assert.match(
+    migration,
+    /ON tax_consolidated_matching_periods\(org_id,workpaper_id,vintage_key,tax_year_window_id\)/,
+  );
+  assert.doesNotMatch(migration, /UNIQUE \(org_id, vintage_key, tax_year_window_id\)/);
+  assert.doesNotMatch(
+    migration,
+    /ON tax_consolidated_matching_periods\(org_id,vintage_key,tax_year_window_id\)/,
+  );
+  assert.match(migration, /replay_change_id uuid/);
+  assert.match(
+    migration,
+    /CHECK \(\(prior_matching_period_id IS NULL\)=\(replay_change_id IS NULL\)\)/,
+  );
+  assert.match(migration, /NEW\.id,NEW\.org_id,NEW\.created_at,NEW\.created_by/);
+  assert.match(migration, /OLD\.id,OLD\.org_id,OLD\.created_at,OLD\.created_by/);
+  assert.match(
+    migration,
+    /SELECT DISTINCT x FROM unnest\(ARRAY\[\s*NEW\.seller_subsidiary_id,\s*NEW\.buyer_subsidiary_id,\s*window_owner\s*\]\)/,
+  );
+  assert.match(migration, /ORDER BY 1/);
+  assert.match(migration, /OpenBooks forward migration 0239_tax_consolidated_matching_periods/);
+  assert.match(migration, /payload->>'replacementWorkpaperId'/);
+  assert.match(migration, /payload->>'replacementWorkpaperChangeId'/);
+  assert.match(migration, /citedHistoricalPeriodIds/);
+  assert.match(migration, /before_state->'replayedPeriods'/);
+  assert.match(migration, /before_state->'membership'->>'groupKey'/);
+  assert.match(migration, /before_state->'membership'->>'sellerSubsidiaryId'/);
+  assert.match(migration, /before_state->'membership'->>'buyerSubsidiaryId'/);
+  assert.match(migration, /prior_row.parent_key IS DISTINCT FROM NEW.parent_key/);
+  assert.match(migration, /registered.regime IS DISTINCT FROM 'us_macrs'/);
+  assert.match(migration, /registered.subsidiary_id IS DISTINCT FROM NEW.buyer_subsidiary_id/);
+  assert.match(migration, /tax_matching_generation_repair/);
+  assert.match(migration, /reversed_by_change_id IS NOT NULL/);
+  assert.match(migration, /same-org unrelated approved replay is not authorization/);
+});

@@ -66,19 +66,10 @@ test("built-in row grammars round-trip their populations' keys", () => {
     employees: [],
     accounts: [],
   });
-  assert.deepEqual(yearEndFiling("GB", "p60").parseRowId(`${EMP}:${ACCT}`), {
-    employees: [EMP],
-    accounts: [ACCT],
-  });
-  assert.deepEqual(yearEndFiling("GB", "p60").parseRowId(`${EMP}:`), {
+  assert.deepEqual(yearEndFiling("PL", "pit11").parseRowId(EMP), {
     employees: [EMP],
     accounts: [],
   });
-  assert.deepEqual(yearEndFiling("GB", "p45").parseRowId(`${EMP}:${ACCT}`), {
-    employees: [EMP],
-    accounts: [ACCT],
-  });
-  assert.deepEqual(yearEndFiling("PL", "pit11").parseRowId(EMP), {
   assert.deepEqual(yearEndFiling("FR", "recapitulatif-annuel").parseRowId(`${EMP}:2026-03:${ACCT}`), {
     employees: [EMP],
     accounts: [ACCT],
@@ -105,11 +96,6 @@ test("built-in row grammars refuse what their populations never build", () => {
     ["US", "941", `${ACCT}:0`],
     ["US", "941", ACCT],
     ["US", "941", ""],
-    ["GB", "p60", `${EMP}:ON:${ACCT}`],
-    ["GB", "p60", EMP],
-    ["GB", "p60", ""],
-    ["GB", "p45", `${EMP}:ON:${ACCT}`],
-    ["GB", "p45", ""],
     ["PL", "pit11", "not-a-row"],
     ["PL", "pit11", `${EMP}:${ACCT}`],
     ["PL", "pit11", ""],

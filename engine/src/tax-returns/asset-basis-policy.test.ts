@@ -674,8 +674,11 @@ test("buyer-only nontaxable carryover requires transferor history and allocated 
     },
     { sourceOperation: "intercompany_transfer", applicable: "buyer" },
   );
-  assert.equal(row.carryoverBasis, "6400.00");
-  assert.equal(row.section179, "0");
+  // validateTaxRegimeBasis returns the union; this fixture declares a US MACRS
+  // basis, so read it as one rather than reaching into the union blind.
+  const macrs = row as UsMacrsRegimeBasis;
+  assert.equal(macrs.carryoverBasis, "6400.00");
+  assert.equal(macrs.section179, "0");
 });
 
 test("validateTaxRegimeBasis refuses a negative declared CA original capital cost", () => {

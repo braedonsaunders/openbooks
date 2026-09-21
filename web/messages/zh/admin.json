@@ -2983,7 +2983,10 @@
       "reviewMonths": "评审周期（月）",
       "yearStart": "年度开始日期",
       "yearEnd": "年度结束日期",
-      "filingYear": "申报年度标签"
+      "filingYear": "申报年度标签",
+      "ceasedOn": "终止日期",
+      "resumedOn": "恢复日期",
+      "evidence": "证据"
     },
     "fieldHelp": {
       "gapless": "无间隔表示序列中的每个编号都必须有记录，不能跳号。仅在法律或审计要求必须连续编号时启用。",

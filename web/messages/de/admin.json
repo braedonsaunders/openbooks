@@ -3051,7 +3051,10 @@
       "reviewMonths": "Prüfrhythmus (Monate)",
       "yearStart": "Jahresbeginn",
       "yearEnd": "Jahresende",
-      "filingYear": "Bezeichnung des Erklärungsjahres"
+      "filingYear": "Bezeichnung des Erklärungsjahres",
+      "ceasedOn": "Eingestellt am",
+      "resumedOn": "Wieder aufgenommen am",
+      "evidence": "Nachweis"
     },
     "fieldHelp": {
       "gapless": "Lückenlos bedeutet, dass jede Nummer in der Folge belegt sein muss und keine Nummer übersprungen wird. Aktivieren Sie dies nur, wenn gesetzliche oder prüfungsbezogene Vorgaben eine ununterbrochene Nummerierung verlangen.",

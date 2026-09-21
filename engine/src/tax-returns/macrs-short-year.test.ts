@@ -454,7 +454,7 @@ test("Rev. Proc. 89-15 table 2 gives December 16 the third quarter of a one-mont
         midQuarterDeemedServiceDate("1988-12-01", "1988-12-31", placed!),
       ),
       deemed,
-      placed,
+      String(placed),
     );
   }
 });
@@ -475,7 +475,7 @@ test("Rev. Proc. 89-15 table 1 preserves all 73-day quarter boundaries", () => {
         midQuarterDeemedServiceDate("1988-03-15", "1988-12-31", placed!),
       ),
       deemed,
-      placed,
+      String(placed),
     );
   }
 });

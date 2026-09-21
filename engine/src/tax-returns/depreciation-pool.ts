@@ -574,7 +574,7 @@ export function computeMacrsYear(input: MacrsYearInput): MacrsYearResult {
     method: input.method,
     convention: input.convention,
   });
-  let macrs = schedule.get(recoveryYearIndex) ?? "0.0000";
+  const macrs = schedule.get(recoveryYearIndex) ?? "0.0000";
   const priorBeforeThisYear = sum(
     [...schedule.entries()].filter(([year]) => year < recoveryYearIndex).map(([, amount]) => amount),
   );
@@ -1815,7 +1815,7 @@ export function computeMacrsThroughYear(
       reporting: reportingSlice,
       appliedYears,
       checkpoint,
-      disposedOn: input.disposedOn,
+      disposedOn: input.disposedOn ?? undefined,
     });
     current = allocated.current;
     prior = allocated.prior;

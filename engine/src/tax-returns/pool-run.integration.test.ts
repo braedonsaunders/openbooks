@@ -713,10 +713,6 @@ test("runTaxPool persists carryover+excess matching and freezes the cited window
           statutoryProceeds: "130.00",
           amountRealizedRule: "amount_realized",
           buyerCost: "130.00",
-          buyerPlacedInServiceOn: "2025-08-20",
-          buyerRecoveryPeriodYears: "5",
-          buyerMethod: "200_db",
-          buyerConvention: "half_year",
           consolidatedGroupMembership: {
             groupKey: "example-4-group",
             sellerSubsidiaryId: org.subsidiaryId,
@@ -816,10 +812,6 @@ test("runTaxPool persists carryover+excess matching and freezes the cited window
           statutoryProceeds: "130.00",
           amountRealizedRule: "amount_realized",
           buyerCost: "130.00",
-          buyerPlacedInServiceOn: "2025-08-20",
-          buyerRecoveryPeriodYears: "5",
-          buyerMethod: "200_db",
-          buyerConvention: "half_year",
           consolidatedGroupMembership: {
             groupKey: "example-4-group",
             sellerSubsidiaryId: org.subsidiaryId,

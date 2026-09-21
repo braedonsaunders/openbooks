@@ -35,6 +35,17 @@ export default defineConfig([
   // - prefer-const / no-html-link-for-pages: small tracked debt, same ratchet.
   {
     rules: {
+      // The codebase already marks a deliberate discard with a leading
+      // underscore -- rest-sibling strips, unused callback positions, imports
+      // kept for their type side. Honour that convention instead of leaving
+      // ~20 warnings that say nothing about correctness.
+      "@typescript-eslint/no-unused-vars": ["warn", {
+        argsIgnorePattern: "^_",
+        varsIgnorePattern: "^_",
+        caughtErrorsIgnorePattern: "^_",
+        destructuredArrayIgnorePattern: "^_",
+        ignoreRestSiblings: true,
+      }],
       "@typescript-eslint/no-explicit-any": "warn",
       "prefer-const": "warn",
       "@next/next/no-html-link-for-pages": "warn",

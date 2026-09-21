@@ -195,12 +195,14 @@ test(
       const filings = esPackFilings();
       const byKey = new Map(filings.yearEnd.map((f) => [f.key, f]));
       const data190 = await byKey.get("190")!.population(fx.orgId, 2026);
+      assert.ok(data190.rows.length > 0, 'data190.rows must emit rows for this round-trip to mean anything');
       for (const row of data190.rows) {
         const scope = byKey.get("190")!.parseRowId(String(row.rowId));
         assert.ok(scope, `190 must parse its own row ${row.rowId}`);
         assert.equal(scope!.employees.length, 1);
       }
       const data111 = await byKey.get("111")!.population(fx.orgId, 2026);
+      assert.ok(data111.rows.length > 0, 'data111.rows must emit rows for this round-trip to mean anything');
       for (const row of data111.rows) {
         const scope = byKey.get("111")!.parseRowId(String(row.rowId));
         assert.ok(scope, `111 must parse its own row ${row.rowId}`);

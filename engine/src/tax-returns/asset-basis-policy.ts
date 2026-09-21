@@ -1411,7 +1411,7 @@ export const DERIVED_TAX_REGIME_FACT_KEYS = [
 ] as const;
 
 export function declaredTaxRegimeFacts<T extends TaxRegimeBasis>(row: T): T {
-  return stripDerivedTaxRegimeFacts(row as TaxBasisDraft) as T;
+  return stripDerivedTaxRegimeFacts(row as unknown as TaxBasisDraft) as unknown as T;
 }
 
 function stripDerivedTaxRegimeFacts(draft: TaxBasisDraft): TaxBasisDraft {

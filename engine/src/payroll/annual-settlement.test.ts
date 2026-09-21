@@ -140,7 +140,7 @@ test("settlement push refuses a negative amount — direction rides the kind", (
 
 test("settlement push passes a positive refund credit through", () => {
   const seen: { kind: string; amount: string }[] = [];
-  const push = createSettlementPush((systemKey, kind, _d, amount, _s) => {
+  const push = createSettlementPush((systemKey, kind, _d, amount) => {
     seen.push({ kind, amount });
     assert.equal(systemKey, "income_tax");
   });

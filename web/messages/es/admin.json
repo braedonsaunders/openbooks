@@ -2938,7 +2938,10 @@
       "reviewMonths": "Cadencia (meses)",
       "yearStart": "Inicio del ejercicio",
       "yearEnd": "Fin del ejercicio",
-      "filingYear": "Etiqueta del año de declaración"
+      "filingYear": "Etiqueta del año de declaración",
+      "ceasedOn": "Cesó el",
+      "resumedOn": "Se reanudó el",
+      "evidence": "Evidencia"
     },
     "fieldHelp": {
       "gapless": "Sin huecos significa que cada número de la secuencia debe quedar contabilizado, sin números omitidos. Actívelo solo cuando los requisitos legales o de auditoría exijan una numeración ininterrumpida.",

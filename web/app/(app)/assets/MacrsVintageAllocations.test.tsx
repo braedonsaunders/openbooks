@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { NextIntlClientProvider } from "next-intl";
+import { readFileSync } from "node:fs";
 import { macrsVintageKey } from "@openbooks/engine/src/tax-returns/asset-basis-policy.ts";
 import { MacrsVintageAllocations } from "./MacrsVintageAllocations";
 import type {
@@ -29,14 +31,26 @@ const vintage: OpenMacrsVintage = {
   bonusPercent: "0",
   businessUsePercent: "100",
 };
+const common = JSON.parse(
+  readFileSync(new URL("../../../messages/en/common.json", import.meta.url), "utf8"),
+);
+const ui = JSON.parse(
+  readFileSync(new URL("../../../messages/en/ui.json", import.meta.url), "utf8"),
+);
+
 function render(edits: MacrsAllocationEdits = {}, disabled = false) {
   return renderToStaticMarkup(
-    <MacrsVintageAllocations
-      vintages={[vintage]}
-      edits={edits}
-      disabled={disabled}
-      onChange={() => {}}
-    />,
+    // FieldLabel reads ui.fieldHelp through useTranslations, so the component
+    // cannot render outside a message provider -- the same wrapper its sibling
+    // field tests use.
+    <NextIntlClientProvider locale="en" timeZone="UTC" messages={{ common, ui }}>
+      <MacrsVintageAllocations
+        vintages={[vintage]}
+        edits={edits}
+        disabled={disabled}
+        onChange={() => {}}
+      />
+    </NextIntlClientProvider>,
   );
 }
 
@@ -69,7 +83,9 @@ test("same-date receiver slices retain distinct source history references", () =
     }),
   );
   const markup = renderToStaticMarkup(
-    <MacrsVintageAllocations vintages={rows} edits={{}} onChange={() => {}} />,
+    <NextIntlClientProvider locale="en" timeZone="UTC" messages={{ common, ui }}>
+      <MacrsVintageAllocations vintages={rows} edits={{}} onChange={() => {}} />
+    </NextIntlClientProvider>,
   );
   for (const row of rows)
     assert.ok(markup.includes(row.parentKey), row.parentKey);

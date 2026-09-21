@@ -298,7 +298,7 @@ test(
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const _actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
       const filing = DE_PAYROLL_PACK.filings().yearEnd.find((candidate) => candidate.key === "lohnsteuerbescheinigung")!;
       await assert.rejects(

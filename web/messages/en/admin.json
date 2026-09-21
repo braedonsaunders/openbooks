@@ -2983,7 +2983,10 @@
       "reviewMonths": "Review cadence (months)",
       "yearStart": "Year start",
       "yearEnd": "Year end",
-      "filingYear": "Filing-year label"
+      "filingYear": "Filing-year label",
+      "ceasedOn": "Ceased on",
+      "resumedOn": "Resumed on",
+      "evidence": "Evidence"
     },
     "fieldHelp": {
       "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",
