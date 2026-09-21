@@ -13,7 +13,9 @@ import type {
   PayrollRegionWithholding,
 } from "../withholding-jurisdictions.ts";
 import { PayrollPackError } from "../payroll-error.ts";
+import { deAnnualSettlement } from "./annual-settlement.ts";
 import { computeDeStatutory, DE_FACTOR_LABELS } from "./compute-statutory.ts";
+import { DE_EMPLOYEE_FACTS } from "./employee-facts.ts";
 import { DE_PACK_RATES, DE_TAX_YEARS } from "./rates.ts";
 
 /**
@@ -475,8 +477,24 @@ export const DE_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & {
   ],
   computeStatutory: computeDeStatutory,
   statutoryEngineLabel: "Programmablaufplan (EStG §39b)",
-  factorLabels: { ...DE_FACTOR_LABELS },
-  // No `emp` facts: the engine reads Steuerklasse and factors off the
-  // certificate answers, never off bare profile keys.
-  employeeFacts: [],
+  factorLabels: {
+    ...DE_FACTOR_LABELS,
+    // The settlement's own trace factors (de/annual-settlement.ts): the
+    // recomputed annual tax and its three refund lines. The edition test asserts
+    // every factor the settlement returns is named here.
+    JAHRESLST: "Jahreslohnsteuer (§42b EStG)",
+    LST_AUSGLEICH: "Lohnsteuer-Jahresausgleich — Erstattung",
+    SOLI_AUSGLEICH: "Solidaritätszuschlag zum Jahresausgleich — Erstattung",
+    KIST_AUSGLEICH: "Kirchenlohnsteuer zum Jahresausgleich — Erstattung",
+  },
+  // The monthly engine reads Steuerklasse and factors off the certificate
+  // answers, never off bare profile keys; the §42b settlement additionally
+  // reads the three attestation facts declared in ./employee-facts.ts
+  // (required: false, so the monthly path stays untouched).
+  employeeFacts: DE_EMPLOYEE_FACTS,
+  // The 2026 Lohnsteuer-Jahresausgleich (§42b EStG): one edition per
+  // transcribed year, null for every untranscribed year. Absent a published
+  // December program for 2026, the December monthly pass stands and this
+  // supplements it (adjustment_line) — see ./annual-settlement.ts.
+  annualSettlement: deAnnualSettlement,
 };
