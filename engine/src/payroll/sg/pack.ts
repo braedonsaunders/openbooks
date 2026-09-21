@@ -36,9 +36,10 @@
  *
  * REGISTERED and installable: the pack computes CPF end to end for Table 1
  * citizens (and 3rd-year SPRs, same table) at 55 and below, plus SDL, for
- * the single national region — installable even while IR21, the
- * foreign-worker levy, IR8A/AIS population and the OA/SA/MA split are
- * refused by name.
+ * the single national region, and populates Form IR8A from committed pay
+ * runs under the Auto-Inclusion Scheme (see `./filings.ts`) — installable
+ * even while IR21, the foreign-worker levy, the AIS submission file and
+ * the OA/SA/MA split are refused by name.
  */
 import { PayrollError } from "../error.ts";
 import type { PayrollFilingData, PayrollPackFilings } from "../filing-registry.ts";
@@ -49,6 +50,7 @@ import type {
 import type { PayrollPackWithholding } from "../withholding-jurisdictions.ts";
 import { SG_CERTIFICATES } from "./certificates.ts";
 import { computeSgStatutory, SG_FACTOR_LABELS } from "./cpf.ts";
+import { ir8aFiling } from "./filings.ts";
 import { SG_PACK_RATES, SG_TAX_YEARS } from "./rates.ts";
 
 // ---------------------------------------------------------------------------
@@ -115,31 +117,11 @@ function sgPackFilings(): PayrollPackFilings {
       { key: "sg_cpf", label: "CPF Submission Number" },
     ],
     yearEnd: [
-      {
-        key: "ir8a",
-        label: "Form IR8A (Auto-Inclusion Scheme)",
-        cadence: "annual",
-        description:
-          "The employer's annual REPORT of each employee's employment income to IRAS "
-          + "(\"Employers are responsible for reporting the employment income of all individuals "
-          + "who have worked for them\"), pre-filled into the employee's electronic return — "
-          + "a report, not a withholding, and not yet populated by this pack.",
-        population: async (): Promise<PayrollFilingData> => {
-          throw new PayrollError(
-            "the SG payroll pack populates no Form IR8A — no IR8A/AIS file builder exists "
-            + "(the 2026 CPF/SDL figures it would sit beside are transcribed; the file is not)",
-          );
-        },
-        parseRowId: () => null,
-        downloadRefusal:
-          "the SG payroll pack produces no Form IR8A file — no IR8A/AIS file builder exists",
-        amendment: {
-          supported: false,
-          refusal:
-            "a wrong IR8A is corrected by resubmitting the employment-income record to IRAS — "
-            + "no in-product correction file is built",
-        },
-      },
+      // Form IR8A is populated from committed pay runs (see `./filings.ts`
+      // for the box set, its IRAS citations, and the AIS model it serves).
+      // The declaration object itself lives beside its builder so the
+      // subsidiary-scope guard parses the same grammar the builder emits.
+      ir8aFiling(),
       {
         key: "ir21",
         label: "Form IR21 (tax clearance)",
