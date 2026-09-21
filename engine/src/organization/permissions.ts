@@ -174,7 +174,6 @@ export const PERMISSION_CATALOGUE = [
   "hrm.construction.read",
   "hrm.construction.manage",
   // HR-13 end
-  // HR-9 self-service — the person's own view and the manager's team.
   // HR-12 compensation (0221/0222) — the same confidentiality rule as
   // employment: who is paid what, and whether pay is equitable, are
   // never riders on time.*, payroll.*, or parties.*. read = bands,

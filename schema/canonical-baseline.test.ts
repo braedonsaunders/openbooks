@@ -395,6 +395,11 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0196_hrm_performance_retention.sql",
     "0197_hrm_benefits.sql",
     "0198_hrm_self_service_profile.sql",
+    // HR-12 begin: compensation architecture/bands/cycles (0221) and
+    // headcount plans/transparency (0222).
+    "0221_hrm_compensation_architecture.sql",
+    "0222_hrm_headcount_plans_transparency.sql",
+    // HR-12 end
     "0199_drop_form_response_steps.sql",
     "0200_stock_count_subsidiary.sql",
     "0201_pay_run_bank_file_sepa_cemtex.sql",
@@ -407,11 +412,6 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0223_hrm_construction_rates.sql",
     "0224_hrm_construction_certified.sql",
     // HR-13 end
-    // HR-12 begin: compensation architecture/bands/cycles (0221) and
-    // headcount plans/transparency (0222).
-    "0221_hrm_compensation_architecture.sql",
-    "0222_hrm_headcount_plans_transparency.sql",
-    // HR-12 end
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -1877,6 +1877,16 @@ test("API keys state their scopes explicitly: legacy empty sets freeze to the ca
     "hrm.self.request",
     "hrm.team.read",
     "hrm.team.manage",
+    // HR-12 compensation (migrations 0221/0222): read sees bands,
+    // architecture and cycle reads; manage runs cycles, pushes rates,
+    // authors plans and computes snapshots; approve holds the Flows
+    // gate on cycle decisions. Admin-only like the employment keys
+    // above.
+    // HR-12 begin
+    "hrm.compensation.read",
+    "hrm.compensation.manage",
+    "hrm.compensation.approve",
+    // HR-12 end
     // HR-16 automations on Flows (migration 0226): read sees recipes and
     // the run log, manage authors recipes and tunes approval settings, run
     // fires a recipe. Admin-only via the catalogue spread (recipes can
@@ -1894,16 +1904,6 @@ test("API keys state their scopes explicitly: legacy empty sets freeze to the ca
     "hrm.construction.read",
     "hrm.construction.manage",
     // HR-13 end
-    // HR-12 compensation (migrations 0221/0222): read sees bands,
-    // architecture and cycle reads; manage runs cycles, pushes rates,
-    // authors plans and computes snapshots; approve holds the Flows
-    // gate on cycle decisions. Admin-only like the employment keys
-    // above.
-    // HR-12 begin
-    "hrm.compensation.read",
-    "hrm.compensation.manage",
-    "hrm.compensation.approve",
-    // HR-12 end
   ];
   assert.deepEqual(
     snapshot,

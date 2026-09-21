@@ -83,16 +83,16 @@ const GROUP_TABS: Record<TabGroup, { href: string; ns: string; key: string }[]> 
     // Plans, windows, elections, and the monthly payroll-input seam —
     // behind hrm.benefits.read (HRM_TAB_PERMISSION).
     { href: '/hrm/benefits', ns: 'hrm', key: 'home.tabs.benefits' },
-    // HR-13 begin: prevailing wage, certified payroll, comp classes and
-    // per-diem — behind hrm.construction.read (HRM_TAB_PERMISSION) and
-    // the hrmConstructionCompliance switch (TAB_FEATURE).
-    { href: '/hrm/compliance', ns: 'hrm', key: 'home.tabs.compliance' },
-    // HR-13 end
     // HR-12 begin: job architecture, bands, merit cycles, headcount
     // plans and pay transparency — behind hrm.compensation.read
     // (HRM_TAB_PERMISSION) with the hrmCompensation switch (TAB_FEATURE).
     { href: '/hrm/compensation', ns: 'hrm', key: 'home.tabs.compensation' },
     // HR-12 end
+    // HR-13 begin: prevailing wage, certified payroll, comp classes and
+    // per-diem — behind hrm.construction.read (HRM_TAB_PERMISSION) and
+    // the hrmConstructionCompliance switch (TAB_FEATURE).
+    { href: '/hrm/compliance', ns: 'hrm', key: 'home.tabs.compliance' },
+    // HR-13 end
     // NOT tabs, by review: the change-request queue is a working surface
     // reached from the cockpit's pending panel and the employee drawer, not
     // a top-level destination; self-service leave is a quick action on the
@@ -124,12 +124,12 @@ const TAB_FEATURE: Record<string, string> = {
   '/hrm/recruiting': 'hrm',
   '/hrm/performance': 'hrm',
   '/hrm/benefits': 'hrm',
-  // HR-13 begin
-  '/hrm/compliance': 'hrmConstructionCompliance',
-  // HR-13 end
   // HR-12 begin
   '/hrm/compensation': 'hrmCompensation',
   // HR-12 end
+  // HR-13 begin
+  '/hrm/compliance': 'hrmConstructionCompliance',
+  // HR-13 end
   '/hrm/positions': 'hrm',
   '/hrm/processes': 'hrm',
   '/close': 'continuousClose',
@@ -211,12 +211,12 @@ const HRM_TAB_PERMISSION: Record<string, string> = {
   '/hrm/leave': 'hrm.leave.read',
   '/hrm/recruiting': 'hrm.recruiting.read',
   '/hrm/benefits': 'hrm.benefits.read',
-  // HR-13 begin
-  '/hrm/compliance': 'hrm.construction.read',
-  // HR-13 end
   // HR-12 begin
   '/hrm/compensation': 'hrm.compensation.read',
   // HR-12 end
+  // HR-13 begin
+  '/hrm/compliance': 'hrm.construction.read',
+  // HR-13 end
 }
 
 /**

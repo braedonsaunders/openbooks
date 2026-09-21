@@ -129,10 +129,8 @@ test("hrm route tabs keep the native employee list as the sibling tab", () => {
   assert.match(groupTabs, /hrmGroupTabs/, "permission exclusions stay at one call site");
 });
 
-test("hrm route tabs are the working surfaces, each behind its own gate", () => {
-  for (const href of ['/hrm', '/entities/employees', '/hrm/positions', '/hrm/processes', '/hrm/leave', '/hrm/recruiting', '/hrm/performance', '/hrm/benefits', '/hrm/compliance']) {
-test("hrm route tabs are the seven working surfaces, each behind its own gate", () => {
-  for (const href of ['/hrm', '/entities/employees', '/hrm/positions', '/hrm/processes', '/hrm/leave', '/hrm/recruiting', '/hrm/performance', '/hrm/benefits', '/hrm/compensation']) {
+test("hrm route tabs are the ten working surfaces, each behind its own gate", () => {
+  for (const href of ['/hrm', '/entities/employees', '/hrm/positions', '/hrm/processes', '/hrm/leave', '/hrm/recruiting', '/hrm/performance', '/hrm/benefits', '/hrm/compliance', '/hrm/compensation']) {
     assert.match(groupTabs, new RegExp(`href: '${href.replace(/\//g, '\\/')}'`), `strip lands on ${href}`);
   }
   // Demoted by review: the queue is reached from the cockpit and the employee

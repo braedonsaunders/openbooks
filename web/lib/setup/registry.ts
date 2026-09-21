@@ -21,6 +21,7 @@ import { PAYROLL_HOLIDAYS_ENTITY } from './payroll-holidays'
 import { LEAVE_POLICIES_ENTITY, LEAVE_TYPES_ENTITY } from './hrm-leave'
 import { ACTION_REASONS_ENTITY } from './hrm-action-reasons'
 import { BENEFIT_PLANS_ENTITY, BENEFIT_PLAN_LEVELS_ENTITY } from './hrm-benefits'
+import { JOB_FAMILIES_ENTITY, JOB_LEVELS_ENTITY, PAY_BANDS_ENTITY } from './hrm-compensation'
 // HR-13 begin: construction-compliance Setup entities (rehomed onto the
 // Compliance page, never the setup rail).
 import {
@@ -31,7 +32,6 @@ import {
   CONSTRUCTION_RATIO_RULES_ENTITY,
 } from './hrm-construction'
 // HR-13 end
-import { JOB_FAMILIES_ENTITY, JOB_LEVELS_ENTITY, PAY_BANDS_ENTITY } from './hrm-compensation'
 
 export type SetupFieldKind =
   | 'text'
@@ -1786,6 +1786,14 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   // ./hrm-benefits.ts; ordinary registry entities behind the hrm switch.
   BENEFIT_PLANS_ENTITY,
   BENEFIT_PLAN_LEVELS_ENTITY,
+  // HRM compensation architecture (0221, HR-12): job families, levels
+  // and versioned pay bands behind the hrmCompensation switch, rehomed
+  // as sections onto the Compensation page.
+  // HR-12 begin
+  JOB_FAMILIES_ENTITY,
+  JOB_LEVELS_ENTITY,
+  PAY_BANDS_ENTITY,
+  // HR-12 end
   // HR-13 begin: construction classifications, rate schedules, comp
   // classes, per-diem policies and ratio rules. Declared in
   // ./hrm-construction.ts; rehomed onto the HRM Compliance page.
@@ -1795,14 +1803,6 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   CONSTRUCTION_PER_DIEM_POLICIES_ENTITY,
   CONSTRUCTION_RATIO_RULES_ENTITY,
   // HR-13 end
-  // HRM compensation architecture (0221, HR-12): job families, levels
-  // and versioned pay bands behind the hrmCompensation switch, rehomed
-  // as sections onto the Compensation page.
-  // HR-12 begin
-  JOB_FAMILIES_ENTITY,
-  JOB_LEVELS_ENTITY,
-  PAY_BANDS_ENTITY,
-  // HR-12 end
   {
     key: 'pay-schedules',
     table: 'pay_schedules',

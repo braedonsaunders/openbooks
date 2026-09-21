@@ -481,16 +481,6 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
     let second = ''
     await withBypass(async () => {
       await enableHrm(scratch.orgId)
-      // HR-13 begin: the construction switch needs its payroll, projects
-      // and time-tracking requirements resolved before the new entities
-      // run for the permitted reader below.
-      await db.execute(sql`
-        update orgs set settings = coalesce(settings, '{}'::jsonb)
-          || jsonb_build_object('features', coalesce(settings->'features', '{}'::jsonb)
-            || '{"payroll": true, "projects": true, "timeTracking": true, "hrmConstructionCompliance": true}'::jsonb)
-         where id = ${scratch.orgId}
-      `)
-      // HR-13 end
       await enableCompensation(scratch.orgId)
       second = await mkSubsidiary(scratch.orgId, 'Second Co', scratch.subsidiaryId)
       const empA = await mkEmployment(scratch.orgId, await mkWorker(scratch.orgId, 'Worker Ada'), scratch.subsidiaryId)
@@ -541,36 +531,34 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
     // ambient test bypass.
     // A reader holding every HRM read grant sees every HRM entity: scope
     // clamping bounds ROWS, never the catalogue.
-    const reader = fakeAuthz(scratch.orgId, ['reports.read', 'hrm.employment.read', 'hrm.position.read', 'hrm.process.read', 'hrm.leave.read', 'hrm.recruiting.read', 'hrm.performance.read', 'hrm.retention.read', 'hrm.benefits.read',
-      // HR-13 begin: the construction grant, so the five new entities run.
-      'hrm.construction.read',
-      // HR-13 end
-    ], null)
+    const reader = fakeAuthz(scratch.orgId, ['reports.read', 'automations.read', 'hrm.benefits.read', 'hrm.compensation.read', 'hrm.construction.read', 'hrm.employment.read', 'hrm.leave.read', 'hrm.performance.read', 'hrm.position.read', 'hrm.process.read', 'hrm.recruiting.read', 'hrm.retention.read'], null)
     await withOrgContext(scratch.orgId, async () => {
       for (const key of [
-      'hrm_headcount',
-      'hrm_employment_history',
-      'hrm_change_requests',
-      'hrm_positions',
-      'hrm_processes',
-      'hrm_leave_absences',
-      'hrm_requisitions',
-      'hrm_applications',
-      'hrm_reviews',
-      'hrm_goals',
-      'hrm_turnover',
-      'hrm_benefit_enrollments',
-      'automations',
-      'automation_runs',
-      'hrm_action_reasons',
-      'hrm_rate_schedule_lines',
-      'hrm_per_diem_entries',
-      'hrm_comp_class_split',
-      'hrm_certified_runs',
-      'hrm_compliance_findings',
-    ] as const) {
-    const reader = fakeAuthz(scratch.orgId, ['reports.read', 'hrm.employment.read', 'hrm.position.read', 'hrm.process.read', 'hrm.leave.read', 'hrm.recruiting.read', 'hrm.performance.read', 'hrm.retention.read', 'hrm.benefits.read', 'hrm.compensation.read'], null)
-      for (const key of ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests', 'hrm_positions', 'hrm_processes', 'hrm_leave_absences', 'hrm_requisitions', 'hrm_applications', 'hrm_reviews', 'hrm_goals', 'hrm_turnover', 'hrm_benefit_enrollments', 'hrm_pay_bands', 'hrm_comp_cycle_lines', 'hrm_headcount_plan_lines', 'hrm_pay_gap_snapshots'] as const) {
+        'hrm_headcount',
+        'hrm_employment_history',
+        'hrm_change_requests',
+        'hrm_positions',
+        'hrm_processes',
+        'hrm_leave_absences',
+        'hrm_requisitions',
+        'hrm_applications',
+        'hrm_reviews',
+        'hrm_goals',
+        'hrm_turnover',
+        'hrm_benefit_enrollments',
+        'automations',
+        'automation_runs',
+        'hrm_action_reasons',
+        'hrm_rate_schedule_lines',
+        'hrm_per_diem_entries',
+        'hrm_comp_class_split',
+        'hrm_certified_runs',
+        'hrm_compliance_findings',
+        'hrm_pay_bands',
+        'hrm_comp_cycle_lines',
+        'hrm_headcount_plan_lines',
+        'hrm_pay_gap_snapshots',
+      ] as const) {
         assert.equal(await canRunReportEntity(reader, { entity: key }), true, `${key} runs for a permitted reader`)
       }
       assert.ok(!(await hiddenReportEntityKeys(reader)).some((key) => key.startsWith('hrm_')), 'hrm entities stay listed')
@@ -581,28 +569,25 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
     await withOrgContext(scratch.orgId, async () => {
       const hiddenHrm = (await hiddenReportEntityKeys(employmentOnly)).filter((key) => key.startsWith('hrm_')).sort()
       assert.deepEqual(hiddenHrm, [
-      'hrm_headcount',
-      'hrm_employment_history',
-      'hrm_change_requests',
-      'hrm_positions',
-      'hrm_processes',
-      'hrm_leave_absences',
-      'hrm_requisitions',
-      'hrm_applications',
-      'hrm_reviews',
-      'hrm_goals',
-      'hrm_turnover',
-      'hrm_benefit_enrollments',
-      'automations',
-      'automation_runs',
-      'hrm_action_reasons',
-      'hrm_rate_schedule_lines',
-      'hrm_per_diem_entries',
-      'hrm_comp_class_split',
-      'hrm_certified_runs',
-      'hrm_compliance_findings',
-    ], 'only the entities whose grants are missing hide')
-      assert.deepEqual(hiddenHrm, ['hrm_applications', 'hrm_benefit_enrollments', 'hrm_comp_cycle_lines', 'hrm_goals', 'hrm_headcount_plan_lines', 'hrm_leave_absences', 'hrm_pay_bands', 'hrm_pay_gap_snapshots', 'hrm_positions', 'hrm_processes', 'hrm_requisitions', 'hrm_reviews', 'hrm_turnover'], 'only the entities whose grants are missing hide')
+        'hrm_applications',
+        'hrm_benefit_enrollments',
+        'hrm_certified_runs',
+        'hrm_comp_class_split',
+        'hrm_comp_cycle_lines',
+        'hrm_compliance_findings',
+        'hrm_goals',
+        'hrm_headcount_plan_lines',
+        'hrm_leave_absences',
+        'hrm_pay_bands',
+        'hrm_pay_gap_snapshots',
+        'hrm_per_diem_entries',
+        'hrm_positions',
+        'hrm_processes',
+        'hrm_rate_schedule_lines',
+        'hrm_requisitions',
+        'hrm_reviews',
+        'hrm_turnover',
+      ], 'only the entities whose grants are missing hide')
     })
 
     const noPerm = fakeAuthz(scratch.orgId, ['reports.read'], null)
@@ -615,50 +600,29 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
       assert.deepEqual(
         (await hiddenReportEntityKeys(noPerm)).filter((key) => key.startsWith('hrm_')).sort(),
         [
-      'hrm_headcount',
-      'hrm_employment_history',
-      'hrm_change_requests',
-      'hrm_positions',
-      'hrm_processes',
-      'hrm_leave_absences',
-      'hrm_requisitions',
-      'hrm_applications',
-      'hrm_reviews',
-      'hrm_goals',
-      'hrm_turnover',
-      'hrm_benefit_enrollments',
-      'automations',
-      'automation_runs',
-      'hrm_action_reasons',
-      'hrm_rate_schedule_lines',
-      'hrm_per_diem_entries',
-      'hrm_comp_class_split',
-      'hrm_certified_runs',
-      'hrm_compliance_findings',
-    ],
-        [
-      'hrm_headcount',
-      'hrm_employment_history',
-      'hrm_change_requests',
-      'hrm_positions',
-      'hrm_processes',
-      'hrm_leave_absences',
-      'hrm_requisitions',
-      'hrm_applications',
-      'hrm_reviews',
-      'hrm_goals',
-      'hrm_turnover',
-      'hrm_benefit_enrollments',
-      'automations',
-      'automation_runs',
-      'hrm_action_reasons',
-      'hrm_rate_schedule_lines',
-      'hrm_per_diem_entries',
-      'hrm_comp_class_split',
-      'hrm_certified_runs',
-      'hrm_compliance_findings',
-    ],
-        ['hrm_applications', 'hrm_benefit_enrollments', 'hrm_change_requests', 'hrm_comp_cycle_lines', 'hrm_employment_history', 'hrm_goals', 'hrm_headcount', 'hrm_headcount_plan_lines', 'hrm_leave_absences', 'hrm_pay_bands', 'hrm_pay_gap_snapshots', 'hrm_positions', 'hrm_processes', 'hrm_requisitions', 'hrm_reviews', 'hrm_turnover'],
+        'hrm_action_reasons',
+        'hrm_applications',
+        'hrm_benefit_enrollments',
+        'hrm_certified_runs',
+        'hrm_change_requests',
+        'hrm_comp_class_split',
+        'hrm_comp_cycle_lines',
+        'hrm_compliance_findings',
+        'hrm_employment_history',
+        'hrm_goals',
+        'hrm_headcount',
+        'hrm_headcount_plan_lines',
+        'hrm_leave_absences',
+        'hrm_pay_bands',
+        'hrm_pay_gap_snapshots',
+        'hrm_per_diem_entries',
+        'hrm_positions',
+        'hrm_processes',
+        'hrm_rate_schedule_lines',
+        'hrm_requisitions',
+        'hrm_reviews',
+        'hrm_turnover',
+      ],
       )
     })
 
@@ -671,50 +635,29 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
       assert.deepEqual(
         (await hiddenReportEntityKeys(darkReader)).filter((key) => key.startsWith('hrm_')).sort(),
         [
-      'hrm_headcount',
-      'hrm_employment_history',
-      'hrm_change_requests',
-      'hrm_positions',
-      'hrm_processes',
-      'hrm_leave_absences',
-      'hrm_requisitions',
-      'hrm_applications',
-      'hrm_reviews',
-      'hrm_goals',
-      'hrm_turnover',
-      'hrm_benefit_enrollments',
-      'automations',
-      'automation_runs',
-      'hrm_action_reasons',
-      'hrm_rate_schedule_lines',
-      'hrm_per_diem_entries',
-      'hrm_comp_class_split',
-      'hrm_certified_runs',
-      'hrm_compliance_findings',
-    ],
-        [
-      'hrm_headcount',
-      'hrm_employment_history',
-      'hrm_change_requests',
-      'hrm_positions',
-      'hrm_processes',
-      'hrm_leave_absences',
-      'hrm_requisitions',
-      'hrm_applications',
-      'hrm_reviews',
-      'hrm_goals',
-      'hrm_turnover',
-      'hrm_benefit_enrollments',
-      'automations',
-      'automation_runs',
-      'hrm_action_reasons',
-      'hrm_rate_schedule_lines',
-      'hrm_per_diem_entries',
-      'hrm_comp_class_split',
-      'hrm_certified_runs',
-      'hrm_compliance_findings',
-    ],
-        ['hrm_applications', 'hrm_benefit_enrollments', 'hrm_change_requests', 'hrm_comp_cycle_lines', 'hrm_employment_history', 'hrm_goals', 'hrm_headcount', 'hrm_headcount_plan_lines', 'hrm_leave_absences', 'hrm_pay_bands', 'hrm_pay_gap_snapshots', 'hrm_positions', 'hrm_processes', 'hrm_requisitions', 'hrm_reviews', 'hrm_turnover'],
+        'hrm_action_reasons',
+        'hrm_applications',
+        'hrm_benefit_enrollments',
+        'hrm_certified_runs',
+        'hrm_change_requests',
+        'hrm_comp_class_split',
+        'hrm_comp_cycle_lines',
+        'hrm_compliance_findings',
+        'hrm_employment_history',
+        'hrm_goals',
+        'hrm_headcount',
+        'hrm_headcount_plan_lines',
+        'hrm_leave_absences',
+        'hrm_pay_bands',
+        'hrm_pay_gap_snapshots',
+        'hrm_per_diem_entries',
+        'hrm_positions',
+        'hrm_processes',
+        'hrm_rate_schedule_lines',
+        'hrm_requisitions',
+        'hrm_reviews',
+        'hrm_turnover',
+      ],
       )
     })
   } finally {
