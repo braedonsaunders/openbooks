@@ -26,6 +26,14 @@ function msg(labels: Record<string, string>, key: string): string {
   return labels[key] ?? key
 }
 
+function flattenNodes(nodes: Node[], acc: Node[]): Node[] {
+  for (const node of nodes) {
+    acc.push(node)
+    flattenNodes(node.children, acc)
+  }
+  return acc
+}
+
 const DEPARTMENT_HUES: Record<string, string> = {}
 
 function departmentColor(department: string | null): string {
@@ -181,14 +189,7 @@ export function OrgChartTree({
   // above stays usable at 390px (horizontal scroll within its panel);
   // the stack is the narrow-screen reading order. Both render from the
   // same loader rows — no second source.
-  function flatten(nodes: Node[], acc: Node[]): Node[] {
-    for (const node of nodes) {
-      acc.push(node)
-      flatten(node.children, acc)
-    }
-    return acc
-  }
-  const flat = useMemo(() => flatten(chart.roots, []), [chart])
+  const flat = useMemo(() => flattenNodes(chart.roots, []), [chart])
   const visible = query.length === 0 ? flat : flat.filter((n) => expandMatched.has(n.employmentId ?? `vacant:${n.positionId}`))
 
   return (
