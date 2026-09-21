@@ -66,6 +66,18 @@ test("built-in row grammars round-trip their populations' keys", () => {
     employees: [],
     accounts: [],
   });
+  assert.deepEqual(yearEndFiling("GB", "p60").parseRowId(`${EMP}:${ACCT}`), {
+    employees: [EMP],
+    accounts: [ACCT],
+  });
+  assert.deepEqual(yearEndFiling("GB", "p60").parseRowId(`${EMP}:`), {
+    employees: [EMP],
+    accounts: [],
+  });
+  assert.deepEqual(yearEndFiling("GB", "p45").parseRowId(`${EMP}:${ACCT}`), {
+    employees: [EMP],
+    accounts: [ACCT],
+  });
 });
 
 test("built-in row grammars refuse what their populations never build", () => {
@@ -84,6 +96,11 @@ test("built-in row grammars refuse what their populations never build", () => {
     ["US", "941", `${ACCT}:0`],
     ["US", "941", ACCT],
     ["US", "941", ""],
+    ["GB", "p60", `${EMP}:ON:${ACCT}`],
+    ["GB", "p60", EMP],
+    ["GB", "p60", ""],
+    ["GB", "p45", `${EMP}:ON:${ACCT}`],
+    ["GB", "p45", ""],
   ];
   for (const [country, key, rowId] of cases) {
     assert.equal(
