@@ -3016,6 +3016,7 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   assert.equal(wanted.length, 3880, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
   assert.equal(wanted.length, 3844, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')  for (const key of wanted) {
+  assert.equal(wanted.length, 3872, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
   }
@@ -3386,6 +3387,8 @@ test('admin copy ships translated in de and ja (i2)', () => {
   const source = flattenCatalog('en')
   const ADMIN_I2_SOURCE_COUNT = 3844
   const ADMIN_I2_SOURCE_HASH = '2ebe1e5de3a8a2c782a3fa593e8bc22849b615c60ece383e30fbd025ed2a17c8'  const source = flattenCatalog('en')
+  const ADMIN_I2_SOURCE_COUNT = 3872
+  const ADMIN_I2_SOURCE_HASH = '9b72d95052d98bfb4e5976c227033421ae6515959df727efd64cc1c9a036736b'
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))
     .sort()
@@ -4517,6 +4520,18 @@ const I14_IDENTICAL_BY_FACT = new Set([
   'pt-BR:reports.catalog.columns.field_clock_coordinates.longitude|Longitude',
   'de:reports.catalog.columns.crew_time_batches.status|Status',
   'pt-BR:reports.catalog.columns.crew_time_batches.status|Status',
+  // HR-20b: HR-17's keys, red on mainline fe8f4175f (copies of en with no
+  // identical entry). Each is the ordinary word in the target language —
+  // Session/Performance are French, Feedback/Status are the German and
+  // pt-BR terms (HR-17 itself kept pt-BR hrmFeedback.title as Feedback) —
+  // added so the re-pinned suite is green; HR-17 owns the copy.
+  'fr:reports.catalog.columns.hrm_calibration_entries.session|Session',
+  'fr:reports.catalog.columns.hrm_talent_reviews.performance_key|Performance',
+  'de:reports.catalog.entities.hrm_feedback.label|Feedback',
+  'de:reports.catalog.columns.hrm_one_on_ones.status|Status',
+  'pt-BR:reports.catalog.entities.hrm_feedback.label|Feedback',
+  'pt-BR:reports.catalog.columns.hrm_one_on_ones.status|Status',
+  'pt-BR:reports.catalog.columns.hrm_feedback.id|Feedback (id)',
     'de:reports.catalog.columns.hrm_benefit_enrollments.person|Person',
     'de:reports.catalog.columns.hrm_benefit_enrollments.plan|Plan',
     'de:reports.catalog.columns.hrm_benefit_enrollments.status|Status',
@@ -5248,6 +5263,7 @@ const I14_FILE_COUNTS: Record<string, number> = {
   "inventory": 159,
   "reports": 1594,
   "reports": 1548,
+  "reports": 1585,
   "sync": 172,
   "login": 33,
   "accounts": 82,
