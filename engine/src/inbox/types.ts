@@ -19,6 +19,7 @@ export type InboxKind =
   | "hrm_leave_request"
   | "hrm_change_request"
   | "hrm_review"
+  | "hrm_feedback_request"
   | "hrm_benefit_enrollment_window"
   | "hrm_qualification_alert"
   | "field_ticket_signature"

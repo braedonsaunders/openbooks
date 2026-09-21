@@ -77,6 +77,18 @@ export const FEATURES: FeatureDef[] = [
   { key: 'hrmHeadcountPlans', defaultEnabled: false, category: 'operations', parentKey: 'hrmCompensation' },
   { key: 'hrmPayTransparency', defaultEnabled: false, category: 'operations', parentKey: 'hrmCompensation' },
   // HR-12 end
+  // HR-17 begin: continuous performance. hrmPerformance is the parent
+  // gate for the whole review-and-growth surface (HR-7's cycles, reviews
+  // and goals move under it additively); 1:1s, feedback, competencies,
+  // calibration and succession are opt-in sub-features. Off hides the
+  // tab, widgets, tools and setup — never data.
+  { key: 'hrmPerformance', defaultEnabled: true, category: 'operations', parentKey: 'hrm' },
+  { key: 'hrmOneOnOnes', defaultEnabled: false, category: 'operations', parentKey: 'hrmPerformance' },
+  { key: 'hrmFeedback', defaultEnabled: false, category: 'operations', parentKey: 'hrmPerformance' },
+  { key: 'hrmCompetencies', defaultEnabled: false, category: 'operations', parentKey: 'hrmPerformance' },
+  { key: 'hrmCalibration', defaultEnabled: false, category: 'operations', parentKey: 'hrmPerformance' },
+  { key: 'hrmSuccession', defaultEnabled: false, category: 'operations', parentKey: 'hrmPerformance' },
+  // HR-17 end
   // HR-15 begin: optional persona-home complexity. The inbox and the persona
   // homes are core; only these widgets gate. Off hides the widget, never data.
   { key: 'hrmCelebrations', defaultEnabled: false, category: 'operations', parentKey: 'hrm' },

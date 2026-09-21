@@ -152,6 +152,15 @@ const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "hrm_review_answers", columnName: "text", transform: "redact" },
   { tableName: "hrm_exit_records", columnName: "destination", transform: "redact" },
   { tableName: "hrm_exit_records", columnName: "notes", transform: "redact" },
+  // HR-17 begin: 1:1 agenda prose, feedback bodies, calibration
+  // justifications and talent notes assess named people in free text —
+  // same redact as review answers above.
+  { tableName: "hrm_one_on_one_items", columnName: "body", transform: "redact" },
+  { tableName: "hrm_feedback", columnName: "body", transform: "redact" },
+  { tableName: "hrm_calibration_entries", columnName: "justification", transform: "redact" },
+  { tableName: "hrm_talent_reviews", columnName: "notes", transform: "redact" },
+  { tableName: "hrm_succession_candidates", columnName: "notes", transform: "redact" },
+  // HR-17 end
 ];
 
 /** Make sure every default policy exists for the org. Idempotent: a policy the
