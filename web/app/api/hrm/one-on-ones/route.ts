@@ -70,7 +70,11 @@ export async function POST(req: Request) {
       managerEmploymentId: body.managerEmploymentId,
       reportEmploymentId: body.reportEmploymentId,
       scheduledAt: body.scheduledAt,
-      recurrence: body.recurrence ?? null,
+      recurrence: body.recurrence === undefined
+        ? null
+        : body.recurrence === null
+          ? null
+          : { every_weeks: body.recurrence.every_weeks, weekday: body.recurrence.weekday, time: body.recurrence.time ?? undefined },
     });
     return NextResponse.json({ oneOnOne: one }, { status: 201 });
   } catch (e) {

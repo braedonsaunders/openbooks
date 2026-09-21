@@ -3,10 +3,10 @@ import {
   addCompetencyLevel,
   createCompetency,
 } from "@openbooks/engine/src/hrm/performance/competencies.ts";
-import { getAuthz } from "../../../lib/authz";
-import { isFeatureEnabled } from "../../../lib/features";
+import { getAuthz } from "../../../../lib/authz";
+import { isFeatureEnabled } from "../../../../lib/features";
 import { performanceErrorResponse } from "../review-cycles/_lib";
-import { addCompetencyLevelBody, createCompetencyBody } from "./bodies";
+import { addCompetencyLevelBody, createCompetencyBody } from "../competency-frameworks/bodies";
 
 export const runtime = "nodejs";
 

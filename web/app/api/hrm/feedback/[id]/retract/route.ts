@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { retractFeedback } from "@openbooks/engine/src/hrm/performance/feedback.ts";
-import { getAuthz } from "../../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../../lib/features";
-import { performanceErrorResponse } from "../../review-cycles/_lib";
+import { getAuthz } from "../../../../../../lib/authz";
+import { isFeatureEnabled } from "../../../../../../lib/features";
+import { performanceErrorResponse } from "../../../review-cycles/_lib";
 
 export const runtime = "nodejs";
 

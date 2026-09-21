@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
+import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import {
   loadApprovalPerson,
@@ -43,20 +43,20 @@ function requireId(field: string, value: unknown): string {
   return value;
 }
 
-async function assertCompetenciesFeature(exec: SqlExecutor, orgId: string): Promise<void> {
-  if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_FEATURE_KEY))) {
+async function assertCompetenciesFeature(db: SqlExecutor, orgId: string): Promise<void> {
+  if (!(await lockAndCheckOrgFeature(db, orgId, HRM_FEATURE_KEY))) {
     throw new HrmPerformanceError(
       "FEATURE_OFF",
       "hrm feature is disabled: enable it on Company Settings → Features before opening competency frameworks",
     );
   }
-  if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_PERFORMANCE_CONTINUOUS_KEY))) {
+  if (!(await lockAndCheckOrgFeature(db, orgId, HRM_PERFORMANCE_CONTINUOUS_KEY))) {
     throw new HrmPerformanceError(
       "FEATURE_OFF",
       "hrmPerformance feature is disabled: enable it on Company Settings → Features before opening competency frameworks",
     );
   }
-  if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_COMPETENCIES_KEY))) {
+  if (!(await lockAndCheckOrgFeature(db, orgId, HRM_COMPETENCIES_KEY))) {
     throw new HrmPerformanceError(
       "FEATURE_OFF",
       "hrmCompetencies feature is disabled: enable it on Company Settings → Features before opening competency frameworks",
@@ -64,9 +64,9 @@ async function assertCompetenciesFeature(exec: SqlExecutor, orgId: string): Prom
   }
 }
 
-async function requireCompetenciesRead(exec: SqlExecutor, orgId: string, actorId: string): Promise<void> {
+async function requireCompetenciesRead(db: SqlExecutor, orgId: string, actorId: string): Promise<void> {
   try {
-    await requireAggregatePerformanceRead(exec, orgId, actorId);
+    await requireAggregatePerformanceRead(db, orgId, actorId);
     return;
   } catch {
     throw new HrmPerformanceError(
@@ -113,10 +113,10 @@ export async function createFramework(args: {
   if (typeof args.name !== "string" || args.name.trim().length === 0) {
     throw new HrmPerformanceError("INVALID_INPUT", "a competency framework needs a name — say which workforce it describes");
   }
-  return withOrgTransaction(orgId, async (exec) => {
-    await assertCompetenciesFeature(exec, orgId);
-    await requireAggregatePerformanceManage(exec, orgId, actorId);
-    const inserted = (await exec.execute<{ id: string }>(sql`
+  return withOrgTransaction(orgId, async () => {
+    await assertCompetenciesFeature(db, orgId);
+    await requireAggregatePerformanceManage(db, orgId, actorId);
+    const inserted = (await db.execute<{ id: string }>(sql`
       insert into hrm_competency_frameworks (org_id, name, applies_to, created_by, updated_by)
       values (${orgId}, ${args.name.trim()}, ${JSON.stringify(args.appliesTo ?? {})}::jsonb, ${actorId}, ${actorId})
       returning id
@@ -137,10 +137,10 @@ export async function setFrameworkActive(args: {
   const orgId = requireId("orgId", args.orgId);
   const actorId = requireId("actorId", args.actorId);
   const id = requireId("id", args.id);
-  await withOrgTransaction(orgId, async (exec) => {
-    await assertCompetenciesFeature(exec, orgId);
-    await requireAggregatePerformanceManage(exec, orgId, actorId);
-    const updated = (await exec.execute<{ id: string }>(sql`
+  await withOrgTransaction(orgId, async () => {
+    await assertCompetenciesFeature(db, orgId);
+    await requireAggregatePerformanceManage(db, orgId, actorId);
+    const updated = (await db.execute<{ id: string }>(sql`
       update hrm_competency_frameworks set is_active = ${args.isActive}, updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${id}
       returning id
@@ -159,10 +159,10 @@ export async function getFramework(args: {
   const orgId = requireId("orgId", args.orgId);
   const actorId = requireId("actorId", args.actorId);
   const id = requireId("id", args.id);
-  return withOrgTransaction(orgId, async (exec) => {
-    await assertCompetenciesFeature(exec, orgId);
-    await requireCompetenciesRead(exec, orgId, actorId);
-    const frameworks = (await exec.execute<{ id: string; name: string; applies_to: unknown; is_active: boolean }>(sql`
+  return withOrgTransaction(orgId, async () => {
+    await assertCompetenciesFeature(db, orgId);
+    await requireCompetenciesRead(db, orgId, actorId);
+    const frameworks = (await db.execute<{ id: string; name: string; applies_to: unknown; is_active: boolean }>(sql`
       select id, name, applies_to, is_active from hrm_competency_frameworks where org_id = ${orgId} and id = ${id}
     `)).rows;
     const framework = frameworks[0];
@@ -172,7 +172,7 @@ export async function getFramework(args: {
       name: framework.name,
       appliesTo: (framework.applies_to ?? {}) as Record<string, unknown>,
       isActive: framework.is_active,
-      competencies: await loadCompetencies(exec, orgId, framework.id),
+      competencies: await loadCompetencies(db, orgId, framework.id),
     };
   });
 }
@@ -180,10 +180,10 @@ export async function getFramework(args: {
 export async function listFrameworks(args: { orgId: string; actorId: string }): Promise<readonly CompetencyFrameworkDTO[]> {
   const orgId = requireId("orgId", args.orgId);
   const actorId = requireId("actorId", args.actorId);
-  return withOrgTransaction(orgId, async (exec) => {
-    await assertCompetenciesFeature(exec, orgId);
-    await requireCompetenciesRead(exec, orgId, actorId);
-    const frameworks = (await exec.execute<{ id: string; name: string; applies_to: unknown; is_active: boolean }>(sql`
+  return withOrgTransaction(orgId, async () => {
+    await assertCompetenciesFeature(db, orgId);
+    await requireCompetenciesRead(db, orgId, actorId);
+    const frameworks = (await db.execute<{ id: string; name: string; applies_to: unknown; is_active: boolean }>(sql`
       select id, name, applies_to, is_active from hrm_competency_frameworks where org_id = ${orgId} order by name
     `)).rows;
     const out: CompetencyFrameworkDTO[] = [];
@@ -193,15 +193,15 @@ export async function listFrameworks(args: { orgId: string; actorId: string }): 
         name: framework.name,
         appliesTo: (framework.applies_to ?? {}) as Record<string, unknown>,
         isActive: framework.is_active,
-        competencies: await loadCompetencies(exec, orgId, framework.id),
+        competencies: await loadCompetencies(db, orgId, framework.id),
       });
     }
     return out;
   });
 }
 
-async function loadCompetencies(exec: SqlExecutor, orgId: string, frameworkId: string): Promise<CompetencyDTO[]> {
-  const rows = (await exec.execute<{
+async function loadCompetencies(db: SqlExecutor, orgId: string, frameworkId: string): Promise<CompetencyDTO[]> {
+  const rows = (await db.execute<{
     id: string; framework_id: string; code: string; name: string;
     description: string | null; category: string | null; position: number;
   }>(sql`
@@ -211,7 +211,7 @@ async function loadCompetencies(exec: SqlExecutor, orgId: string, frameworkId: s
   `)).rows;
   const out: CompetencyDTO[] = [];
   for (const row of rows) {
-    const levels = (await exec.execute<{ id: string; level_rank: number; label: string; expectation: string }>(sql`
+    const levels = (await db.execute<{ id: string; level_rank: number; label: string; expectation: string }>(sql`
       select id, level_rank, label, expectation from hrm_competency_levels
        where org_id = ${orgId} and competency_id = ${row.id} order by level_rank
     `)).rows;
@@ -242,27 +242,27 @@ export async function createCompetency(args: {
   if (typeof args.name !== "string" || args.name.trim().length === 0) {
     throw new HrmPerformanceError("INVALID_INPUT", "a competency needs a name — say what the skill is");
   }
-  return withOrgTransaction(orgId, async (exec) => {
-    await assertCompetenciesFeature(exec, orgId);
-    await requireAggregatePerformanceManage(exec, orgId, actorId);
-    const framework = (await exec.execute<{ id: string }>(sql`
+  return withOrgTransaction(orgId, async () => {
+    await assertCompetenciesFeature(db, orgId);
+    await requireAggregatePerformanceManage(db, orgId, actorId);
+    const framework = (await db.execute<{ id: string }>(sql`
       select id from hrm_competency_frameworks where org_id = ${orgId} and id = ${frameworkId}
     `)).rows[0];
     if (!framework) {
       throw new HrmPerformanceError("NOT_FOUND", "competency framework was not found — create the competency under an existing framework");
     }
-    const maxPos = (await exec.execute<{ max: number }>(sql`
+    const maxPos = (await db.execute<{ max: number }>(sql`
       select coalesce(max(position), -1) as max from hrm_competencies where org_id = ${orgId} and framework_id = ${frameworkId}
     `)).rows[0]?.max ?? -1;
     try {
-      const inserted = (await exec.execute<{ id: string }>(sql`
+      const inserted = (await db.execute<{ id: string }>(sql`
         insert into hrm_competencies (org_id, framework_id, code, name, description, category, position, created_by, updated_by)
         values (${orgId}, ${frameworkId}, ${args.code.trim()}, ${args.name.trim()},
                 ${args.description ?? null}, ${args.category ?? null}, ${maxPos + 1}, ${actorId}, ${actorId})
         returning id
       `)).rows[0];
       if (!inserted) throw new HrmPerformanceError("REFUSED", "the competency was not stored — no row was written; retry the action");
-      const all = await loadCompetencies(exec, orgId, frameworkId);
+      const all = await loadCompetencies(db, orgId, frameworkId);
       const created = all.find((c) => c.id === inserted.id);
       if (!created) throw new HrmPerformanceError("REFUSED", "the competency was not stored — no row can be read back; retry the action");
       return created;
@@ -295,17 +295,17 @@ export async function addCompetencyLevel(args: {
   if (typeof args.expectation !== "string" || args.expectation.trim().length === 0) {
     throw new HrmPerformanceError("INVALID_INPUT", "a competency level needs an expectation — say what good looks like at this rank");
   }
-  return withOrgTransaction(orgId, async (exec) => {
-    await assertCompetenciesFeature(exec, orgId);
-    await requireAggregatePerformanceManage(exec, orgId, actorId);
-    const competency = (await exec.execute<{ id: string }>(sql`
+  return withOrgTransaction(orgId, async () => {
+    await assertCompetenciesFeature(db, orgId);
+    await requireAggregatePerformanceManage(db, orgId, actorId);
+    const competency = (await db.execute<{ id: string }>(sql`
       select id from hrm_competencies where org_id = ${orgId} and id = ${competencyId}
     `)).rows[0];
     if (!competency) {
       throw new HrmPerformanceError("NOT_FOUND", "competency was not found — add the level under an existing competency");
     }
     try {
-      const inserted = (await exec.execute<{ id: string }>(sql`
+      const inserted = (await db.execute<{ id: string }>(sql`
         insert into hrm_competency_levels (org_id, competency_id, level_rank, label, expectation)
         values (${orgId}, ${competencyId}, ${args.levelRank}, ${args.label.trim()}, ${args.expectation.trim()})
         returning id
@@ -338,10 +338,10 @@ export async function linkCompetency(args: {
   if (!["job_level", "position", "review_template_section"].includes(args.targetKind)) {
     throw new HrmPerformanceError("INVALID_INPUT", "link target must be job_level, position, or review_template_section");
   }
-  await withOrgTransaction(orgId, async (exec) => {
-    await assertCompetenciesFeature(exec, orgId);
-    await requireAggregatePerformanceManage(exec, orgId, actorId);
-    const competency = (await exec.execute<{ id: string }>(sql`
+  await withOrgTransaction(orgId, async () => {
+    await assertCompetenciesFeature(db, orgId);
+    await requireAggregatePerformanceManage(db, orgId, actorId);
+    const competency = (await db.execute<{ id: string }>(sql`
       select id from hrm_competencies where org_id = ${orgId} and id = ${competencyId}
     `)).rows[0];
     if (!competency) {
@@ -352,10 +352,10 @@ export async function linkCompetency(args: {
     // query per kind (no dynamic table names cross this boundary).
     const target =
       args.targetKind === "job_level"
-        ? (await exec.execute<{ id: string }>(sql`select id from hrm_job_levels where org_id = ${orgId} and id = ${targetId}`)).rows[0]
+        ? (await db.execute<{ id: string }>(sql`select id from hrm_job_levels where org_id = ${orgId} and id = ${targetId}`)).rows[0]
         : args.targetKind === "position"
-          ? (await exec.execute<{ id: string }>(sql`select id from positions where org_id = ${orgId} and id = ${targetId}`)).rows[0]
-          : (await exec.execute<{ id: string }>(sql`select id from hrm_review_template_sections where org_id = ${orgId} and id = ${targetId}`)).rows[0];
+          ? (await db.execute<{ id: string }>(sql`select id from positions where org_id = ${orgId} and id = ${targetId}`)).rows[0]
+          : (await db.execute<{ id: string }>(sql`select id from hrm_review_template_sections where org_id = ${orgId} and id = ${targetId}`)).rows[0];
     if (!target) {
       const remedy =
         args.targetKind === "job_level"
@@ -365,8 +365,8 @@ export async function linkCompetency(args: {
             : "pick a section from an existing review template";
       throw new HrmPerformanceError("NOT_FOUND", `${args.targetKind} was not found in this organization — ${remedy}`);
     }
-    const person = await loadApprovalPerson(exec, orgId, actorId);
-    await exec.execute(sql`
+    const person = await loadApprovalPerson(db, orgId, actorId);
+    await db.execute(sql`
       insert into hrm_competency_links (org_id, competency_id, target_kind, target_id, created_by)
       values (${orgId}, ${competencyId}, ${args.targetKind}, ${targetId}, ${person.partyId ?? actorId})
       on conflict do nothing
@@ -375,7 +375,7 @@ export async function linkCompetency(args: {
     // idempotent vocabulary wiring, and the unique (org, competency,
     // kind, target) makes a repeat exactly the same row. The read below
     // proves the effect — a save no read can observe is not a save.
-    const linked = (await exec.execute<{ id: string }>(sql`
+    const linked = (await db.execute<{ id: string }>(sql`
       select id from hrm_competency_links
        where org_id = ${orgId} and competency_id = ${competencyId} and target_kind = ${args.targetKind} and target_id = ${targetId}
     `)).rows[0];
@@ -395,24 +395,24 @@ export async function setSectionCompetency(args: {
   const actorId = requireId("actorId", args.actorId);
   const sectionId = requireId("sectionId", args.sectionId);
   if (args.competencyId !== null) requireId("competencyId", args.competencyId);
-  await withOrgTransaction(orgId, async (exec) => {
-    await assertCompetenciesFeature(exec, orgId);
-    await requireAggregatePerformanceManage(exec, orgId, actorId);
-    const section = (await exec.execute<{ id: string }>(sql`
+  await withOrgTransaction(orgId, async () => {
+    await assertCompetenciesFeature(db, orgId);
+    await requireAggregatePerformanceManage(db, orgId, actorId);
+    const section = (await db.execute<{ id: string }>(sql`
       select id from hrm_review_template_sections where org_id = ${orgId} and id = ${sectionId}
     `)).rows[0];
     if (!section) {
       throw new HrmPerformanceError("NOT_FOUND", "review template section was not found — attach the competency to an existing section");
     }
     if (args.competencyId) {
-      const competency = (await exec.execute<{ id: string }>(sql`
+      const competency = (await db.execute<{ id: string }>(sql`
         select id from hrm_competencies where org_id = ${orgId} and id = ${args.competencyId}
       `)).rows[0];
       if (!competency) {
         throw new HrmPerformanceError("NOT_FOUND", "competency was not found — attach an existing competency");
       }
     }
-    const updated = (await exec.execute<{ id: string }>(sql`
+    const updated = (await db.execute<{ id: string }>(sql`
       update hrm_review_template_sections set competency_id = ${args.competencyId}, updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${sectionId}
       returning id
@@ -445,10 +445,10 @@ export async function competencyProfileForEmployment(args: {
   const orgId = requireId("orgId", args.orgId);
   const actorId = requireId("actorId", args.actorId);
   const employmentId = requireId("employmentId", args.employmentId);
-  return withOrgTransaction(orgId, async (exec) => {
-    await assertCompetenciesFeature(exec, orgId);
-    await requireCompetenciesRead(exec, orgId, actorId);
-    const reviews = (await exec.execute<{ id: string; cycle_id: string }>(sql`
+  return withOrgTransaction(orgId, async () => {
+    await assertCompetenciesFeature(db, orgId);
+    await requireCompetenciesRead(db, orgId, actorId);
+    const reviews = (await db.execute<{ id: string; cycle_id: string }>(sql`
       select r.id, r.cycle_id
         from hrm_reviews r
         join hrm_review_cycles c on c.org_id = r.org_id and c.id = r.cycle_id
@@ -459,7 +459,7 @@ export async function competencyProfileForEmployment(args: {
     `)).rows;
     const review = reviews[0];
     if (!review) return [];
-    const answers = (await exec.execute<{ section_title: string; rating: string | null }>(sql`
+    const answers = (await db.execute<{ section_title: string; rating: string | null }>(sql`
       select section_title, rating::text as rating from hrm_review_answers
        where org_id = ${orgId} and review_id = ${review.id}
     `)).rows;
@@ -467,11 +467,11 @@ export async function competencyProfileForEmployment(args: {
     for (const answer of answers) {
       if (!assessed.has(answer.section_title)) assessed.set(answer.section_title, answer.rating);
     }
-    const cycle = (await exec.execute<{ template_id: string }>(sql`
+    const cycle = (await db.execute<{ template_id: string }>(sql`
       select template_id from hrm_review_cycles where org_id = ${orgId} and id = ${review.cycle_id}
     `)).rows[0];
     if (!cycle) return [];
-    const sections = (await exec.execute<{ id: string; title: string; competency_id: string | null; competency_name: string | null }>(sql`
+    const sections = (await db.execute<{ id: string; title: string; competency_id: string | null; competency_name: string | null }>(sql`
       select s.id, s.title, s.competency_id::text as competency_id, c.name as competency_name
         from hrm_review_template_sections s
         left join hrm_competencies c on c.org_id = s.org_id and c.id = s.competency_id
@@ -480,7 +480,7 @@ export async function competencyProfileForEmployment(args: {
     `)).rows;
     const out: CompetencyProfileRow[] = [];
     for (const section of sections) {
-      const levels = (await exec.execute<{ id: string; level_rank: number; label: string; expectation: string }>(sql`
+      const levels = (await db.execute<{ id: string; level_rank: number; label: string; expectation: string }>(sql`
         select id, level_rank, label, expectation from hrm_competency_levels
          where org_id = ${orgId} and competency_id = ${section.competency_id} order by level_rank
       `)).rows;
@@ -507,14 +507,14 @@ export async function levelExpectationsForSection(args: {
   const orgId = requireId("orgId", args.orgId);
   const actorId = requireId("actorId", args.actorId);
   const sectionId = requireId("sectionId", args.sectionId);
-  return withOrgTransaction(orgId, async (exec) => {
-    await assertCompetenciesFeature(exec, orgId);
-    await requireCompetenciesRead(exec, orgId, actorId);
-    const section = (await exec.execute<{ competency_id: string | null }>(sql`
+  return withOrgTransaction(orgId, async () => {
+    await assertCompetenciesFeature(db, orgId);
+    await requireCompetenciesRead(db, orgId, actorId);
+    const section = (await db.execute<{ competency_id: string | null }>(sql`
       select competency_id::text as competency_id from hrm_review_template_sections where org_id = ${orgId} and id = ${sectionId}
     `)).rows[0];
     if (!section?.competency_id) return [];
-    const levels = (await exec.execute<{ id: string; level_rank: number; label: string; expectation: string }>(sql`
+    const levels = (await db.execute<{ id: string; level_rank: number; label: string; expectation: string }>(sql`
       select id, level_rank, label, expectation from hrm_competency_levels
        where org_id = ${orgId} and competency_id = ${section.competency_id} order by level_rank
     `)).rows;

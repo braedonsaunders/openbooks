@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
+import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
 import { businessToday } from "../../platform/business-date.ts";
@@ -60,15 +60,15 @@ export const DEFAULT_FEEDBACK_SETTINGS: FeedbackSettings = { publicPraiseBy: "an
 export async function getFeedbackSettings(args: { orgId: string; actorId: string }): Promise<FeedbackSettings> {
   const orgId = requireId("orgId", args.orgId);
   const actorId = requireId("actorId", args.actorId);
-  return withOrgTransaction(orgId, async (exec) => {
-    await assertFeedbackFeature(exec, orgId);
-    if (!(await hasPerformanceManage(exec, orgId, actorId))) {
+  return withOrgTransaction(orgId, async () => {
+    await assertFeedbackFeature(db, orgId);
+    if (!(await hasPerformanceManage(db, orgId, actorId))) {
       throw new HrmPerformanceError(
         "FORBIDDEN",
         "feedback settings are HR-owned — ask an administrator to grant hrm.performance.manage in /admin/roles",
       );
     }
-    const row = (await exec.execute<{ settings: unknown }>(sql`
+    const row = (await db.execute<{ settings: unknown }>(sql`
       select settings from orgs where id = ${orgId}
     `)).rows[0];
     const stored = ((row?.settings ?? {}) as { hrm_feedback?: unknown }).hrm_feedback;
@@ -90,15 +90,15 @@ export async function setFeedbackSettings(args: {
   if (!["anyone", "managers_and_hr"].includes(args.publicPraiseBy)) {
     throw new HrmPerformanceError("INVALID_INPUT", "public praise may be opened to anyone or limited to managers_and_hr");
   }
-  return withOrgTransaction(orgId, async (exec) => {
-    await assertFeedbackFeature(exec, orgId);
-    if (!(await hasPerformanceManage(exec, orgId, actorId))) {
+  return withOrgTransaction(orgId, async () => {
+    await assertFeedbackFeature(db, orgId);
+    if (!(await hasPerformanceManage(db, orgId, actorId))) {
       throw new HrmPerformanceError(
         "FORBIDDEN",
         "feedback settings are HR-owned — ask an administrator to grant hrm.performance.manage in /admin/roles",
       );
     }
-    const updated = (await exec.execute<{ id: string }>(sql`
+    const updated = (await db.execute<{ id: string }>(sql`
       update orgs
          set settings = coalesce(settings, '{}'::jsonb) || ${JSON.stringify({ hrm_feedback: { public_praise_by: args.publicPraiseBy } })}::jsonb
        where id = ${orgId}
@@ -111,8 +111,8 @@ export async function setFeedbackSettings(args: {
   });
 }
 
-async function readFeedbackSettings(exec: SqlExecutor, orgId: string): Promise<FeedbackSettings> {
-  const row = (await exec.execute<{ settings: unknown }>(sql`
+async function readFeedbackSettings(db: SqlExecutor, orgId: string): Promise<FeedbackSettings> {
+  const row = (await db.execute<{ settings: unknown }>(sql`
     select settings from orgs where id = ${orgId}
   `)).rows[0];
   const stored = ((row?.settings ?? {}) as { hrm_feedback?: unknown }).hrm_feedback;
@@ -135,20 +135,20 @@ function requireId(field: string, value: unknown): string {
   return value;
 }
 
-async function assertFeedbackFeature(exec: SqlExecutor, orgId: string): Promise<void> {
-  if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_FEATURE_KEY))) {
+async function assertFeedbackFeature(db: SqlExecutor, orgId: string): Promise<void> {
+  if (!(await lockAndCheckOrgFeature(db, orgId, HRM_FEATURE_KEY))) {
     throw new HrmPerformanceError(
       "FEATURE_OFF",
       "hrm feature is disabled: enable it on Company Settings → Features before writing feedback",
     );
   }
-  if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_PERFORMANCE_CONTINUOUS_KEY))) {
+  if (!(await lockAndCheckOrgFeature(db, orgId, HRM_PERFORMANCE_CONTINUOUS_KEY))) {
     throw new HrmPerformanceError(
       "FEATURE_OFF",
       "hrmPerformance feature is disabled: enable it on Company Settings → Features before writing feedback",
     );
   }
-  if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_FEEDBACK_KEY))) {
+  if (!(await lockAndCheckOrgFeature(db, orgId, HRM_FEEDBACK_KEY))) {
     throw new HrmPerformanceError(
       "FEATURE_OFF",
       "hrmFeedback feature is disabled: enable it on Company Settings → Features before writing feedback",
@@ -156,18 +156,18 @@ async function assertFeedbackFeature(exec: SqlExecutor, orgId: string): Promise<
   }
 }
 
-async function hasPerformanceRead(exec: SqlExecutor, orgId: string, actorId: string): Promise<boolean> {
+async function hasPerformanceRead(db: SqlExecutor, orgId: string, actorId: string): Promise<boolean> {
   try {
-    await requireAggregatePerformanceRead(exec, orgId, actorId);
+    await requireAggregatePerformanceRead(db, orgId, actorId);
     return true;
   } catch {
     return false;
   }
 }
 
-async function hasPerformanceManage(exec: SqlExecutor, orgId: string, actorId: string): Promise<boolean> {
+async function hasPerformanceManage(db: SqlExecutor, orgId: string, actorId: string): Promise<boolean> {
   try {
-    await requireAggregatePerformanceManage(exec, orgId, actorId);
+    await requireAggregatePerformanceManage(db, orgId, actorId);
     return true;
   } catch {
     return false;
@@ -202,22 +202,22 @@ type StoredFeedback = {
   recorded_at: string;
 };
 
-async function subjectParty(exec: SqlExecutor, orgId: string, employmentId: string): Promise<string | null> {
-  const rows = (await exec.execute<{ worker_party_id: string | null }>(sql`
+async function subjectParty(db: SqlExecutor, orgId: string, employmentId: string): Promise<string | null> {
+  const rows = (await db.execute<{ worker_party_id: string | null }>(sql`
     select worker_party_id from worker_employments where org_id = ${orgId} and id = ${employmentId}
   `)).rows;
   return rows[0]?.worker_party_id ?? null;
 }
 
 async function isManagerOf(
-  exec: SqlExecutor,
+  db: SqlExecutor,
   orgId: string,
   actorId: string,
   subjectEmploymentId: string,
 ): Promise<boolean> {
-  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.self.read"))) return false;
+  if (!(await actorHasPermission(db, orgId, actorId, "hrm.self.read"))) return false;
   const today = await businessToday(orgId);
-  const team = await loadManagedEmploymentIds(exec, orgId, actorId, today);
+  const team = await loadManagedEmploymentIds(db, orgId, actorId, today);
   return team.includes(subjectEmploymentId);
 }
 
@@ -252,14 +252,14 @@ export function feedbackVisibleTo(args: {
 }
 
 async function toDTO(
-  exec: SqlExecutor,
+  db: SqlExecutor,
   orgId: string,
   actorId: string,
   row: StoredFeedback,
 ): Promise<FeedbackDTO | null> {
-  const hr = await hasPerformanceRead(exec, orgId, actorId);
-  const person = await loadApprovalPerson(exec, orgId, actorId);
-  const manages = await isManagerOf(exec, orgId, actorId, row.subject_employment_id);
+  const hr = await hasPerformanceRead(db, orgId, actorId);
+  const person = await loadApprovalPerson(db, orgId, actorId);
+  const manages = await isManagerOf(db, orgId, actorId, row.subject_employment_id);
   if (
     !feedbackVisibleTo({
       visibility: row.visibility,
@@ -287,8 +287,8 @@ async function toDTO(
   };
 }
 
-async function retractedIds(exec: SqlExecutor, orgId: string): Promise<Set<string>> {
-  const rows = (await exec.execute<{ id: string }>(sql`
+async function retractedIds(db: SqlExecutor, orgId: string): Promise<Set<string>> {
+  const rows = (await db.execute<{ id: string }>(sql`
     select retracts_feedback_id as id from hrm_feedback
      where org_id = ${orgId} and kind = 'retraction' and retracts_feedback_id is not null
   `)).rows;
@@ -329,22 +329,22 @@ export async function writeFeedback(args: {
   if (args.kind === "request" && !args.requestedFromPartyId) {
     throw new HrmPerformanceError("INVALID_INPUT", "a feedback request must name the party it is requested from");
   }
-  return withOrgTransaction(orgId, async (exec) => {
-    await assertFeedbackFeature(exec, orgId);
-    const person = await loadApprovalPerson(exec, orgId, actorId);
+  return withOrgTransaction(orgId, async () => {
+    await assertFeedbackFeature(db, orgId);
+    const person = await loadApprovalPerson(db, orgId, actorId);
     if (!person.partyId) {
       throw new HrmPerformanceError("FORBIDDEN", "your user has no person identity in this organization — ask an administrator to link it before writing feedback");
     }
     // Any employee with self read (or HR) may write; the subject must exist.
-    if (!(await hasPerformanceManage(exec, orgId, actorId))) {
-      if (!(await actorHasPermission(exec, orgId, actorId, "hrm.self.read"))) {
+    if (!(await hasPerformanceManage(db, orgId, actorId))) {
+      if (!(await actorHasPermission(db, orgId, actorId, "hrm.self.read"))) {
         throw new HrmPerformanceError(
           "FORBIDDEN",
           "writing feedback needs hrm.self.read — ask an administrator to grant it in /admin/roles",
         );
       }
     }
-    const party = await subjectParty(exec, orgId, subjectEmploymentId);
+    const party = await subjectParty(db, orgId, subjectEmploymentId);
     if (!party) {
       throw new HrmPerformanceError(
         "NOT_FOUND",
@@ -355,9 +355,9 @@ export async function writeFeedback(args: {
     // public praise is limited to managers and HR, anyone else's public
     // praise is refused by name (never silently downgraded).
     if (args.kind === "praise" && args.visibility === "public") {
-      const settings = await readFeedbackSettings(exec, orgId);
-      if (settings.publicPraiseBy === "managers_and_hr" && !(await hasPerformanceManage(exec, orgId, actorId))) {
-        const manages = await isManagerOf(exec, orgId, actorId, subjectEmploymentId);
+      const settings = await readFeedbackSettings(db, orgId);
+      if (settings.publicPraiseBy === "managers_and_hr" && !(await hasPerformanceManage(db, orgId, actorId))) {
+        const manages = await isManagerOf(db, orgId, actorId, subjectEmploymentId);
         if (!manages) {
           throw new HrmPerformanceError(
             "FORBIDDEN",
@@ -366,7 +366,7 @@ export async function writeFeedback(args: {
         }
       }
     }
-    const inserted = (await exec.execute<{ id: string }>(sql`
+    const inserted = (await db.execute<{ id: string }>(sql`
       insert into hrm_feedback (org_id, subject_employment_id, author_party_id, kind, visibility, body, context, requested_from_party_id, created_by)
       values (${orgId}, ${subjectEmploymentId}, ${person.partyId}, ${args.kind}, ${args.visibility},
               ${args.body.trim()}, ${JSON.stringify(args.context ?? {})}::jsonb,
@@ -380,11 +380,11 @@ export async function writeFeedback(args: {
       // writes — inline here because the hrm module cannot import the
       // inbox module). The request row itself is the durable artifact;
       // users resolve from the live users table, never caller input.
-      const users = (await exec.execute<{ id: string }>(sql`
+      const users = (await db.execute<{ id: string }>(sql`
         select id from users where org_id = ${orgId} and party_id = ${args.requestedFromPartyId}
       `)).rows;
       for (const user of users) {
-        await exec.execute(sql`
+        await db.execute(sql`
           insert into notifications (org_id, user_id, kind, title, body, href, created_by, updated_by)
           values (${orgId}, ${user.id}, 'hrm_feedback_request',
                   'Feedback requested',
@@ -393,7 +393,7 @@ export async function writeFeedback(args: {
         `);
       }
     }
-    const rows = (await exec.execute<StoredFeedback>(sql`
+    const rows = (await db.execute<StoredFeedback>(sql`
       select f.id, f.subject_employment_id, e.worker_party_id as subject_party_id,
              coalesce(p.display_name, '—') as subject_name,
              f.author_party_id, f.kind, f.visibility, f.body, f.context,
@@ -404,7 +404,7 @@ export async function writeFeedback(args: {
         left join parties p on p.org_id = f.org_id and p.id = e.worker_party_id
        where f.org_id = ${orgId} and f.id = ${inserted.id}
     `)).rows;
-    const dto = rows[0] ? await toDTO(exec, orgId, actorId, rows[0]) : null;
+    const dto = rows[0] ? await toDTO(db, orgId, actorId, rows[0]) : null;
     if (!dto) throw new HrmPerformanceError("REFUSED", "the feedback was not stored — no row can be read back; retry the action");
     return dto;
   });
@@ -414,9 +414,9 @@ export async function retractFeedback(args: { orgId: string; actorId: string; id
   const orgId = requireId("orgId", args.orgId);
   const actorId = requireId("actorId", args.actorId);
   const id = requireId("id", args.id);
-  await withOrgTransaction(orgId, async (exec) => {
-    await assertFeedbackFeature(exec, orgId);
-    const rows = (await exec.execute<StoredFeedback>(sql`
+  await withOrgTransaction(orgId, async () => {
+    await assertFeedbackFeature(db, orgId);
+    const rows = (await db.execute<StoredFeedback>(sql`
       select f.id, f.subject_employment_id, e.worker_party_id as subject_party_id,
              coalesce(p.display_name, '—') as subject_name,
              f.author_party_id, f.kind, f.visibility, f.body, f.context,
@@ -431,15 +431,15 @@ export async function retractFeedback(args: { orgId: string; actorId: string; id
     if (!original || original.kind === "retraction") {
       throw new HrmPerformanceError("NOT_FOUND", "feedback was not found — it may belong to another organization or already be retracted");
     }
-    const person = await loadApprovalPerson(exec, orgId, actorId);
-    const hr = await hasPerformanceManage(exec, orgId, actorId);
+    const person = await loadApprovalPerson(db, orgId, actorId);
+    const hr = await hasPerformanceManage(db, orgId, actorId);
     if (!hr && person.partyId !== original.author_party_id) {
       throw new HrmPerformanceError(
         "FORBIDDEN",
         "only the author or HR may retract feedback — ask the author to retract it",
       );
     }
-    const already = (await exec.execute<{ id: string }>(sql`
+    const already = (await db.execute<{ id: string }>(sql`
       select id from hrm_feedback where org_id = ${orgId} and kind = 'retraction' and retracts_feedback_id = ${id}
     `)).rows;
     if (already.length > 0) {
@@ -447,7 +447,7 @@ export async function retractFeedback(args: { orgId: string; actorId: string; id
     }
     // A retraction is a new row linking the original; the read hides
     // both. The row is never updated or deleted (0228 trigger).
-    const inserted = (await exec.execute<{ id: string }>(sql`
+    const inserted = (await db.execute<{ id: string }>(sql`
       insert into hrm_feedback (org_id, subject_employment_id, author_party_id, kind, visibility, body, context, retracts_feedback_id, created_by)
       values (${orgId}, ${original.subject_employment_id}, ${person.partyId ?? original.author_party_id},
               'retraction', 'subject_only', 'retracted', '{}'::jsonb, ${id}, ${actorId})
@@ -464,10 +464,10 @@ export async function listFeedback(args: {
 }): Promise<readonly FeedbackDTO[]> {
   const orgId = requireId("orgId", args.orgId);
   const actorId = requireId("actorId", args.actorId);
-  return withOrgTransaction(orgId, async (exec) => {
-    await assertFeedbackFeature(exec, orgId);
+  return withOrgTransaction(orgId, async () => {
+    await assertFeedbackFeature(db, orgId);
     const subjectFilter = args.subjectEmploymentId ? sql` and f.subject_employment_id = ${args.subjectEmploymentId}` : sql``;
-    const rows = (await exec.execute<StoredFeedback>(sql`
+    const rows = (await db.execute<StoredFeedback>(sql`
       select f.id, f.subject_employment_id, e.worker_party_id as subject_party_id,
              coalesce(p.display_name, '—') as subject_name,
              f.author_party_id, f.kind, f.visibility, f.body, f.context,
@@ -479,11 +479,11 @@ export async function listFeedback(args: {
        where f.org_id = ${orgId}${subjectFilter}
        order by f.recorded_at desc
     `)).rows;
-    const hidden = await retractedIds(exec, orgId);
+    const hidden = await retractedIds(db, orgId);
     const out: FeedbackDTO[] = [];
     for (const row of rows) {
       if (hidden.has(row.id)) continue;
-      const dto = await toDTO(exec, orgId, actorId, row);
+      const dto = await toDTO(db, orgId, actorId, row);
       if (dto) out.push(dto);
     }
     return out;
@@ -501,11 +501,11 @@ export async function listOpenRequestsForParty(args: {
 }): Promise<readonly FeedbackDTO[]> {
   const orgId = requireId("orgId", args.orgId);
   const actorId = requireId("actorId", args.actorId);
-  return withOrgTransaction(orgId, async (exec) => {
-    await assertFeedbackFeature(exec, orgId);
-    const person = await loadApprovalPerson(exec, orgId, actorId);
+  return withOrgTransaction(orgId, async () => {
+    await assertFeedbackFeature(db, orgId);
+    const person = await loadApprovalPerson(db, orgId, actorId);
     if (!person.partyId) return [];
-    const rows = (await exec.execute<StoredFeedback>(sql`
+    const rows = (await db.execute<StoredFeedback>(sql`
       select f.id, f.subject_employment_id, e.worker_party_id as subject_party_id,
              coalesce(p.display_name, '—') as subject_name,
              f.author_party_id, f.kind, f.visibility, f.body, f.context,
@@ -517,7 +517,7 @@ export async function listOpenRequestsForParty(args: {
        where f.org_id = ${orgId} and f.kind = 'request' and f.requested_from_party_id = ${person.partyId}
        order by f.recorded_at desc
     `)).rows;
-    const hidden = await retractedIds(exec, orgId);
+    const hidden = await retractedIds(db, orgId);
     const out: FeedbackDTO[] = [];
     for (const row of rows) {
       if (hidden.has(row.id)) continue;
@@ -554,13 +554,13 @@ export async function fulfillRequest(args: {
   if (!["manager_and_subject", "manager_only", "subject_only"].includes(args.visibility)) {
     throw new HrmPerformanceError("INVALID_INPUT", "a fulfilment answers a request — visibility must be manager_and_subject, manager_only, or subject_only");
   }
-  return withOrgTransaction(orgId, async (exec) => {
-    await assertFeedbackFeature(exec, orgId);
+  return withOrgTransaction(orgId, async () => {
+    await assertFeedbackFeature(db, orgId);
     // Append-only rows cannot be updated (0228 trigger refuses it), so
     // fulfilment links forward: the new feedback row's context carries
     // fulfills_request_id, written in the SAME transaction as the check
     // that the request is still open. The request row is never touched.
-    const req = (await exec.execute<StoredFeedback>(sql`
+    const req = (await db.execute<StoredFeedback>(sql`
       select f.id, f.subject_employment_id, e.worker_party_id as subject_party_id,
              coalesce(p.display_name, '—') as subject_name,
              f.author_party_id, f.kind, f.visibility, f.body, f.context,
@@ -572,22 +572,22 @@ export async function fulfillRequest(args: {
        where f.org_id = ${orgId} and f.id = ${requestId} and f.kind = 'request'
     `)).rows[0];
     if (!req) throw new HrmPerformanceError("NOT_FOUND", "feedback request was not found — it may already be retracted");
-    const hidden = await retractedIds(exec, orgId);
+    const hidden = await retractedIds(db, orgId);
     if (hidden.has(requestId)) {
       throw new HrmPerformanceError("BAD_STATE", "this request was retracted — there is nothing left to fulfil");
     }
-    const person = await loadApprovalPerson(exec, orgId, actorId);
-    if (req.requested_from_party_id !== person.partyId && !(await hasPerformanceManage(exec, orgId, actorId))) {
+    const person = await loadApprovalPerson(db, orgId, actorId);
+    if (req.requested_from_party_id !== person.partyId && !(await hasPerformanceManage(db, orgId, actorId))) {
       throw new HrmPerformanceError("FORBIDDEN", "only the requested party or HR may fulfil a feedback request");
     }
-    const inserted = (await exec.execute<{ id: string }>(sql`
+    const inserted = (await db.execute<{ id: string }>(sql`
       insert into hrm_feedback (org_id, subject_employment_id, author_party_id, kind, visibility, body, context, created_by)
       values (${orgId}, ${req.subject_employment_id}, ${person.partyId}, 'feedback', ${args.visibility},
               ${args.body.trim()}, ${JSON.stringify({ fulfills_request_id: requestId })}::jsonb, ${actorId})
       returning id
     `)).rows[0];
     if (!inserted) throw new HrmPerformanceError("REFUSED", "the fulfilment was not stored — no row was written; retry the action");
-    const rows = (await exec.execute<StoredFeedback>(sql`
+    const rows = (await db.execute<StoredFeedback>(sql`
       select f.id, f.subject_employment_id, e.worker_party_id as subject_party_id,
              coalesce(p.display_name, '—') as subject_name,
              f.author_party_id, f.kind, f.visibility, f.body, f.context,
@@ -598,7 +598,7 @@ export async function fulfillRequest(args: {
         left join parties p on p.org_id = f.org_id and p.id = e.worker_party_id
        where f.org_id = ${orgId} and f.id = ${inserted.id}
     `)).rows;
-    const dto = rows[0] ? await toDTO(exec, orgId, actorId, rows[0]) : null;
+    const dto = rows[0] ? await toDTO(db, orgId, actorId, rows[0]) : null;
     if (!dto) throw new HrmPerformanceError("REFUSED", "the fulfilment was not stored — no row can be read back; retry the action");
     return dto;
   });

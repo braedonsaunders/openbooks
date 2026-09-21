@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
+import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { requireAggregatePerformanceManage } from "../authorization.ts";
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
@@ -42,20 +42,20 @@ function requireId(field: string, value: unknown): string {
   return value;
 }
 
-async function assertTalentFeature(exec: SqlExecutor, orgId: string): Promise<void> {
-  if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_FEATURE_KEY))) {
+async function assertTalentFeature(db: SqlExecutor, orgId: string): Promise<void> {
+  if (!(await lockAndCheckOrgFeature(db, orgId, HRM_FEATURE_KEY))) {
     throw new HrmPerformanceError(
       "FEATURE_OFF",
       "hrm feature is disabled: enable it on Company Settings → Features before opening talent reviews",
     );
   }
-  if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_PERFORMANCE_CONTINUOUS_KEY))) {
+  if (!(await lockAndCheckOrgFeature(db, orgId, HRM_PERFORMANCE_CONTINUOUS_KEY))) {
     throw new HrmPerformanceError(
       "FEATURE_OFF",
       "hrmPerformance feature is disabled: enable it on Company Settings → Features before opening talent reviews",
     );
   }
-  if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_TALENT_KEY))) {
+  if (!(await lockAndCheckOrgFeature(db, orgId, HRM_TALENT_KEY))) {
     throw new HrmPerformanceError(
       "FEATURE_OFF",
       "hrmSuccession feature is disabled: enable it on Company Settings → Features before opening talent reviews",
@@ -103,17 +103,17 @@ export async function recordTalentReview(args: {
   if (!["low", "medium", "high"].includes(args.impactOfLoss) || !["low", "medium", "high"].includes(args.riskOfLoss)) {
     throw new HrmPerformanceError("INVALID_INPUT", "impact and risk of loss must be low, medium, or high");
   }
-  return withOrgTransaction(orgId, async (exec) => {
-    await assertTalentFeature(exec, orgId);
-    await requireAggregatePerformanceManage(exec, orgId, actorId);
-    const employment = (await exec.execute<{ id: string }>(sql`
+  return withOrgTransaction(orgId, async () => {
+    await assertTalentFeature(db, orgId);
+    await requireAggregatePerformanceManage(db, orgId, actorId);
+    const employment = (await db.execute<{ id: string }>(sql`
       select id from worker_employments where org_id = ${orgId} and id = ${employmentId}
     `)).rows[0];
     if (!employment) {
       throw new HrmPerformanceError("NOT_FOUND", "employment was not found — record the talent review against a directory employment");
     }
     if (cycleId) {
-      const cycle = (await exec.execute<{ id: string }>(sql`
+      const cycle = (await db.execute<{ id: string }>(sql`
         select id from hrm_review_cycles where org_id = ${orgId} and id = ${cycleId}
       `)).rows[0];
       if (!cycle) {
@@ -121,7 +121,7 @@ export async function recordTalentReview(args: {
       }
     }
     try {
-      const inserted = (await exec.execute<{ id: string }>(sql`
+      const inserted = (await db.execute<{ id: string }>(sql`
         insert into hrm_talent_reviews (org_id, employment_id, cycle_id, performance_key, potential_key,
           impact_of_loss, risk_of_loss, promotion_ready, notes, reviewed_by, reviewed_at, created_by, updated_by)
         values (${orgId}, ${employmentId}, ${cycleId}, ${args.performanceKey.trim()}, ${args.potentialKey.trim()},
@@ -130,7 +130,7 @@ export async function recordTalentReview(args: {
         returning id
       `)).rows[0];
       if (!inserted) throw new HrmPerformanceError("REFUSED", "the talent review was not stored — no row was written; retry the action");
-      const dto = await readTalentReview(exec, orgId, inserted.id);
+      const dto = await readTalentReview(db, orgId, inserted.id);
       if (!dto) throw new HrmPerformanceError("REFUSED", "the talent review was not stored — no row can be read back; retry the action");
       return dto;
     } catch (e) {
@@ -148,8 +148,8 @@ export async function recordTalentReview(args: {
   });
 }
 
-async function readTalentReview(exec: SqlExecutor, orgId: string, id: string): Promise<TalentReviewDTO | null> {
-  const rows = (await exec.execute<{
+async function readTalentReview(db: SqlExecutor, orgId: string, id: string): Promise<TalentReviewDTO | null> {
+  const rows = (await db.execute<{
     id: string; employment_id: string; employee_name: string; cycle_id: string | null; performance_key: string;
     potential_key: string; impact_of_loss: LossLevel; risk_of_loss: LossLevel;
     promotion_ready: boolean; notes: string | null; reviewed_by: string | null; reviewed_at: string | null;
@@ -181,12 +181,12 @@ export async function listTalentReviews(args: {
 }): Promise<readonly TalentReviewDTO[]> {
   const orgId = requireId("orgId", args.orgId);
   const actorId = requireId("actorId", args.actorId);
-  return withOrgTransaction(orgId, async (exec) => {
-    await assertTalentFeature(exec, orgId);
+  return withOrgTransaction(orgId, async () => {
+    await assertTalentFeature(db, orgId);
     // HR-only: the subject never sees these rows. A non-HR actor gets
     // the uniform refusal, never a filtered list that leaks existence.
     try {
-      await requireAggregatePerformanceManage(exec, orgId, actorId);
+      await requireAggregatePerformanceManage(db, orgId, actorId);
     } catch {
       throw new HrmPerformanceError(
         "FORBIDDEN",
@@ -194,12 +194,12 @@ export async function listTalentReviews(args: {
       );
     }
     const cycleFilter = args.cycleId ? sql` and cycle_id = ${args.cycleId}` : sql``;
-    const rows = (await exec.execute<{ id: string }>(sql`
+    const rows = (await db.execute<{ id: string }>(sql`
       select id from hrm_talent_reviews where org_id = ${orgId}${cycleFilter} order by created_at
     `)).rows;
     const out: TalentReviewDTO[] = [];
     for (const row of rows) {
-      const dto = await readTalentReview(exec, orgId, row.id);
+      const dto = await readTalentReview(db, orgId, row.id);
       if (dto) out.push(dto);
     }
     return out;
@@ -221,17 +221,17 @@ export async function resolveTalentScales(args: {
   const orgId = requireId("orgId", args.orgId);
   const actorId = requireId("actorId", args.actorId);
   const cycleId = requireId("cycleId", args.cycleId);
-  return withOrgTransaction(orgId, async (exec) => {
-    await assertTalentFeature(exec, orgId);
+  return withOrgTransaction(orgId, async () => {
+    await assertTalentFeature(db, orgId);
     try {
-      await requireAggregatePerformanceManage(exec, orgId, actorId);
+      await requireAggregatePerformanceManage(db, orgId, actorId);
     } catch {
       throw new HrmPerformanceError(
         "FORBIDDEN",
         "talent reviews are HR-only — ask an administrator to grant hrm.performance.manage in /admin/roles",
       );
     }
-    const cycle = (await exec.execute<{ template_id: string | null; applies_to: unknown }>(sql`
+    const cycle = (await db.execute<{ template_id: string | null; applies_to: unknown }>(sql`
       select template_id::text as template_id, applies_to from hrm_review_cycles where org_id = ${orgId} and id = ${cycleId}
     `)).rows[0];
     if (!cycle) throw new HrmPerformanceError("NOT_FOUND", "review cycle was not found — open the grid over an existing cycle");
@@ -245,7 +245,7 @@ export async function resolveTalentScales(args: {
         : null;
     let performance: string[] | null = null;
     if (cycle.template_id) {
-      const template = (await exec.execute<{ rating_scale: unknown }>(sql`
+      const template = (await db.execute<{ rating_scale: unknown }>(sql`
         select rating_scale from hrm_review_templates where org_id = ${orgId} and id = ${cycle.template_id}
       `)).rows[0];
       const scale = (template?.rating_scale ?? {}) as { labels?: unknown };
@@ -274,17 +274,17 @@ export async function listTalentDirectory(args: {
 }): Promise<{ employments: readonly { id: string; name: string }[]; positions: readonly { id: string; code: string; title: string }[] }> {
   const orgId = requireId("orgId", args.orgId);
   const actorId = requireId("actorId", args.actorId);
-  return withOrgTransaction(orgId, async (exec) => {
-    await assertTalentFeature(exec, orgId);
-    await requireAggregatePerformanceManage(exec, orgId, actorId);
-    const employments = (await exec.execute<{ id: string; name: string }>(sql`
+  return withOrgTransaction(orgId, async () => {
+    await assertTalentFeature(db, orgId);
+    await requireAggregatePerformanceManage(db, orgId, actorId);
+    const employments = (await db.execute<{ id: string; name: string }>(sql`
       select e.id, coalesce(p.display_name, '—') as name
         from worker_employments e
         left join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
        where e.org_id = ${orgId}
        order by name
     `)).rows;
-    const positions = (await exec.execute<{ id: string; code: string; title: string }>(sql`
+    const positions = (await db.execute<{ id: string; code: string; title: string }>(sql`
       select pos.id, pos.position_code as code,
              coalesce((select v.title from position_versions v
                         where v.org_id = pos.org_id and v.position_id = pos.id
@@ -325,7 +325,7 @@ export function buildNineBox(args: {
       unplaced += 1;
       continue;
     }
-    row[placement.potentialKey] += 1;
+    row[placement.potentialKey] = (row[placement.potentialKey] ?? 0) + 1;
   }
   return { performance: args.performance, potential: args.potential, cells, unplaced };
 }
@@ -376,23 +376,23 @@ export async function createSuccessionPlan(args: {
   if (args.incumbentEmploymentId !== undefined && args.incumbentEmploymentId !== null) {
     requireId("incumbentEmploymentId", args.incumbentEmploymentId);
   }
-  return withOrgTransaction(orgId, async (exec) => {
-    await assertTalentFeature(exec, orgId);
-    await requireAggregatePerformanceManage(exec, orgId, actorId);
-    const position = (await exec.execute<{ id: string }>(sql`
+  return withOrgTransaction(orgId, async () => {
+    await assertTalentFeature(db, orgId);
+    await requireAggregatePerformanceManage(db, orgId, actorId);
+    const position = (await db.execute<{ id: string }>(sql`
       select id from positions where org_id = ${orgId} and id = ${positionId}
     `)).rows[0];
     if (!position) {
       throw new HrmPerformanceError("NOT_FOUND", "position was not found — plan succession for a directory position");
     }
     try {
-      const inserted = (await exec.execute<{ id: string }>(sql`
+      const inserted = (await db.execute<{ id: string }>(sql`
         insert into hrm_succession_plans (org_id, position_id, incumbent_employment_id, status, created_by, updated_by)
         values (${orgId}, ${positionId}, ${args.incumbentEmploymentId ?? null}, 'draft', ${actorId}, ${actorId})
         returning id
       `)).rows[0];
       if (!inserted) throw new HrmPerformanceError("REFUSED", "the succession plan was not stored — no row was written; retry the action");
-      const plan = await readSuccessionPlan(exec, orgId, inserted.id);
+      const plan = await readSuccessionPlan(db, orgId, inserted.id);
       if (!plan) throw new HrmPerformanceError("REFUSED", "the succession plan was not stored — no row can be read back; retry the action");
       return plan;
     } catch (e) {
@@ -419,10 +419,10 @@ export async function setSuccessionPlanStatus(args: {
   if (!["draft", "active", "archived"].includes(args.status)) {
     throw new HrmPerformanceError("INVALID_INPUT", "succession plan status must be draft, active, or archived");
   }
-  await withOrgTransaction(orgId, async (exec) => {
-    await assertTalentFeature(exec, orgId);
-    await requireAggregatePerformanceManage(exec, orgId, actorId);
-    const updated = (await exec.execute<{ id: string }>(sql`
+  await withOrgTransaction(orgId, async () => {
+    await assertTalentFeature(db, orgId);
+    await requireAggregatePerformanceManage(db, orgId, actorId);
+    const updated = (await db.execute<{ id: string }>(sql`
       update hrm_succession_plans set status = ${args.status}, updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${id}
       returning id
@@ -433,8 +433,8 @@ export async function setSuccessionPlanStatus(args: {
   });
 }
 
-async function readSuccessionPlan(exec: SqlExecutor, orgId: string, id: string): Promise<SuccessionPlanDTO | null> {
-  const plans = (await exec.execute<{
+async function readSuccessionPlan(db: SqlExecutor, orgId: string, id: string): Promise<SuccessionPlanDTO | null> {
+  const plans = (await db.execute<{
     id: string; position_id: string; incumbent_employment_id: string | null; status: SuccessionPlanStatus;
   }>(sql`
     select id, position_id, incumbent_employment_id::text as incumbent_employment_id, status
@@ -442,7 +442,7 @@ async function readSuccessionPlan(exec: SqlExecutor, orgId: string, id: string):
   `)).rows;
   const plan = plans[0];
   if (!plan) return null;
-  const candidates = (await exec.execute<{
+  const candidates = (await db.execute<{
     id: string; employment_id: string; employee_name: string; readiness: CandidateReadiness; candidate_order: number; notes: string | null;
   }>(sql`
     select c.id, c.employment_id, coalesce(p.display_name, '—') as employee_name,
@@ -453,7 +453,7 @@ async function readSuccessionPlan(exec: SqlExecutor, orgId: string, id: string):
      where c.org_id = ${orgId} and c.plan_id = ${id}
      order by c.candidate_order, c.created_at
   `)).rows;
-  const position = (await exec.execute<{ position_code: string; title: string | null }>(sql`
+  const position = (await db.execute<{ position_code: string; title: string | null }>(sql`
     select pos.position_code,
            (select v.title from position_versions v
              where v.org_id = pos.org_id and v.position_id = pos.id
@@ -461,7 +461,7 @@ async function readSuccessionPlan(exec: SqlExecutor, orgId: string, id: string):
       from positions pos where pos.org_id = ${orgId} and pos.id = ${plan.position_id}
   `)).rows[0];
   const incumbent = plan.incumbent_employment_id
-    ? (await exec.execute<{ name: string }>(sql`
+    ? (await db.execute<{ name: string }>(sql`
         select coalesce(p.display_name, '—') as name
           from worker_employments e
           left join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
@@ -480,24 +480,24 @@ async function readSuccessionPlan(exec: SqlExecutor, orgId: string, id: string):
 export async function listSuccessionPlans(args: { orgId: string; actorId: string }): Promise<readonly SuccessionPlanDTO[]> {
   const orgId = requireId("orgId", args.orgId);
   const actorId = requireId("actorId", args.actorId);
-  return withOrgTransaction(orgId, async (exec) => {
-    await assertTalentFeature(exec, orgId);
+  return withOrgTransaction(orgId, async () => {
+    await assertTalentFeature(db, orgId);
     // HR-only: a candidate's own view never exists. Non-HR actors get
     // the uniform refusal, never a filtered list.
     try {
-      await requireAggregatePerformanceManage(exec, orgId, actorId);
+      await requireAggregatePerformanceManage(db, orgId, actorId);
     } catch {
       throw new HrmPerformanceError(
         "FORBIDDEN",
         "succession plans are HR-only — ask an administrator to grant hrm.performance.manage in /admin/roles",
       );
     }
-    const rows = (await exec.execute<{ id: string }>(sql`
+    const rows = (await db.execute<{ id: string }>(sql`
       select id from hrm_succession_plans where org_id = ${orgId} order by created_at
     `)).rows;
     const out: SuccessionPlanDTO[] = [];
     for (const row of rows) {
-      const plan = await readSuccessionPlan(exec, orgId, row.id);
+      const plan = await readSuccessionPlan(db, orgId, row.id);
       if (plan) out.push(plan);
     }
     return out;
@@ -519,32 +519,32 @@ export async function addSuccessionCandidate(args: {
   if (!["ready_now", "one_to_two_years", "three_plus"].includes(args.readiness)) {
     throw new HrmPerformanceError("INVALID_INPUT", "candidate readiness must be ready_now, one_to_two_years, or three_plus");
   }
-  return withOrgTransaction(orgId, async (exec) => {
-    await assertTalentFeature(exec, orgId);
-    await requireAggregatePerformanceManage(exec, orgId, actorId);
-    const plan = (await exec.execute<{ id: string }>(sql`
+  return withOrgTransaction(orgId, async () => {
+    await assertTalentFeature(db, orgId);
+    await requireAggregatePerformanceManage(db, orgId, actorId);
+    const plan = (await db.execute<{ id: string }>(sql`
       select id from hrm_succession_plans where org_id = ${orgId} and id = ${planId}
     `)).rows[0];
     if (!plan) {
       throw new HrmPerformanceError("NOT_FOUND", "succession plan was not found — add the candidate to an existing plan");
     }
-    const employment = (await exec.execute<{ id: string }>(sql`
+    const employment = (await db.execute<{ id: string }>(sql`
       select id from worker_employments where org_id = ${orgId} and id = ${employmentId}
     `)).rows[0];
     if (!employment) {
       throw new HrmPerformanceError("NOT_FOUND", "employment was not found — name a directory employment as the candidate");
     }
-    const maxOrder = (await exec.execute<{ max: number }>(sql`
+    const maxOrder = (await db.execute<{ max: number }>(sql`
       select coalesce(max(candidate_order), -1) as max from hrm_succession_candidates where org_id = ${orgId} and plan_id = ${planId}
     `)).rows[0]?.max ?? -1;
     try {
-      const inserted = (await exec.execute<{ id: string }>(sql`
+      const inserted = (await db.execute<{ id: string }>(sql`
         insert into hrm_succession_candidates (org_id, plan_id, employment_id, readiness, candidate_order, notes, created_by, updated_by)
         values (${orgId}, ${planId}, ${employmentId}, ${args.readiness}, ${maxOrder + 1}, ${args.notes ?? null}, ${actorId}, ${actorId})
         returning id
       `)).rows[0];
       if (!inserted) throw new HrmPerformanceError("REFUSED", "the candidate was not stored — no row was written; retry the action");
-      const named = (await exec.execute<{ name: string }>(sql`
+      const named = (await db.execute<{ name: string }>(sql`
         select coalesce(p.display_name, '—') as name
           from worker_employments e
           left join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
@@ -576,12 +576,12 @@ export async function removeSuccessionCandidate(args: {
   const actorId = requireId("actorId", args.actorId);
   const planId = requireId("planId", args.planId);
   const candidateId = requireId("candidateId", args.candidateId);
-  await withOrgTransaction(orgId, async (exec) => {
-    await assertTalentFeature(exec, orgId);
-    await requireAggregatePerformanceManage(exec, orgId, actorId);
+  await withOrgTransaction(orgId, async () => {
+    await assertTalentFeature(db, orgId);
+    await requireAggregatePerformanceManage(db, orgId, actorId);
     // Draft candidates may be removed; the plan itself is retained
     // history. A delete that matches zero rows is a failure.
-    const deleted = (await exec.execute<{ id: string }>(sql`
+    const deleted = (await db.execute<{ id: string }>(sql`
       delete from hrm_succession_candidates where org_id = ${orgId} and id = ${candidateId} and plan_id = ${planId}
       returning id
     `)).rows;

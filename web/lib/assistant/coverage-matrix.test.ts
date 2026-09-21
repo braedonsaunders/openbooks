@@ -174,7 +174,10 @@ const MATRIX: Entry[] = [
   // (1:1s, feedback) and the manage grant (calibration); scheduling,
   // rating decisions, talent records and succession writes are
   // human-attested HR actions with no assistant write surface by design.
-  { prefix: "hrm/continuous", tools: ["hrm_one_on_ones", "hrm_feedback", "hrm_calibration"], note: "1:1s read the caller's own and their reports' meetings with private items author-only, feedback reads through the visibility matrix, and calibration reads the HR grid with the missing list; writes stay human-attested with no assistant write surface by design" },
+  { prefix: "hrm/one-on-ones", tools: ["hrm_one_on_ones"], note: "1:1s read the caller's own and their reports' meetings with private items author-only; scheduling, agenda writes and carry-forward are human-attested with no assistant write surface by design" },
+  { prefix: "hrm/feedback", tools: ["hrm_feedback"], note: "feedback reads through the visibility matrix; giving, fulfilling and retracting are human-attested with no assistant write surface by design" },
+  { prefix: "hrm/calibration-sessions", tools: ["hrm_calibration"], note: "calibration reads the HR grid with the missing list; opening, deciding, reverting and closing are human-attested with no assistant write surface by design" },
+  { prefix: "hrm/calibration-entries", tools: ["hrm_calibration"], note: "entry reads go through the session grid; deciding an entry is a human-attested HR action with no assistant write surface by design" },
   // HR-17 end
   { prefix: "hrm/benefits", tools: ["hrm_benefits"], note: "windows, elections, and monthly inputs read through the benefits read service; electing, approving, and input generation are human-attested HR actions with no assistant write surface by design" },
   // HR-13 begin: the Compliance tab reads flags and frozen runs through
