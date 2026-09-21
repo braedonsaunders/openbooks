@@ -5,14 +5,14 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { sealJson } from "../platform/secrets.ts";
 import { createScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
-import { buildBacsFile } from "../payments/rail-formatters.ts";
 import { PaymentError } from "../payments/payment-errors.ts";
 import {
+  buildBacsFile,
   isValidSortCode,
   normalizeGbAccountNumber,
   normalizeSortCode,
   validateBacsSettings,
-} from "../payments/rail-settings.ts";
+} from "../payments/rail-bacs.ts";
 import {
   PAYROLL_BANK_FILE_FORMATS,
   payrollBankProfiles,
@@ -31,7 +31,7 @@ import { PayrollError } from "./error.ts";
  * The name is `bacs`, the rail `bacs_credit`, the currency GBP; GB bank
  * details are a 6-digit sort code plus an 8-digit account number, never an
  * IBAN. The writer is the shared AP builder (`buildBacsFile`,
- * engine/src/payments/rail-formatters.ts), whose evidence log names every
+ * engine/src/payments/rail-bacs.ts), whose evidence log names every
  * source with publisher, edition and date: Bacs' own Translation Guide v1.1
  * (2017), The Access Group's position-level transcription (retrieved
  * 2026-09-20), PayBatch's open-source implementation with asserted field

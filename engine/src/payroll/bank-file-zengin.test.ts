@@ -7,9 +7,10 @@ import { db } from "../platform/db.ts";
 import { sealJson } from "../platform/secrets.ts";
 import { ensureBuiltInPaymentFormats } from "../payments/operations.ts";
 import { createScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
-import { buildZenginFile, encodeZenginFile } from "../payments/rail-formatters.ts";
 import { PaymentError } from "../payments/payment-errors.ts";
 import {
+  buildZenginFile,
+  encodeZenginFile,
   isValidBankCode,
   isValidBranchCode,
   normalizeBankCode,
@@ -17,7 +18,7 @@ import {
   normalizeZenginAccount,
   toZenginKana,
   validateZenginSettings,
-} from "../payments/rail-settings.ts";
+} from "../payments/rail-zengin.ts";
 import {
   PAYROLL_BANK_FILE_FORMATS,
   payrollBankProfiles,
@@ -38,7 +39,7 @@ import { PayrollError } from "./error.ts";
  * bank details are a 4-digit bank code plus a 3-digit branch code plus a
  * 7-digit account number, never an IBAN. The writer is the shared AP builder
  * (`buildZenginFile` + `encodeZenginFile`,
- * engine/src/payments/rail-formatters.ts), whose evidence log names every
+ * engine/src/payments/rail-zengin.ts), whose evidence log names every
  * source with publisher and date: MUFG Bank BizStation, Chiba Bank, Tajima
  * Bank and Kiraboshi Bank salary-transfer manuals (all 種別 11/12 with full
  * 120-byte tables), the Tsuruga Shinkin / MUFG Trust / Docomo SMTB Net Bank
