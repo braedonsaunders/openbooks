@@ -1554,5 +1554,184 @@ const hrmDispatchCheck: AssistantToolDef = {
 // HR-14 end
 
 // HR-15: the core own-scope inbox tool rides after every slice tool.
-export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting, hrmPerformanceCycles, hrmTurnover, hrmBenefits, hrmMe, automationsStatus, hrmComplianceFindings, hrmCertifiedPayroll, hrmCompensation, hrmPayEquity, hrmQualifications, hrmDispatchCheck, inboxItems];
+export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting, hrmPerformanceCycles, hrmTurnover, hrmBenefits, hrmMe, automationsStatus, hrmComplianceFindings, hrmCertifiedPayroll, hrmCompensation, hrmPayEquity, hrmQualifications, hrmDispatchCheck, hrmOneOnOnes, hrmFeedback, hrmCalibration, inboxItems];
+// HR-17 begin: continuous-performance read tools. 1:1s and feedback read
+// through the structural scope (own and reports) with the HR grant as
+// the widening leg; calibration reads through the manage grant. Each
+// sits behind its own sub-switch — off means the tool is absent, never
+// an empty answer.
+async function continuousFeatureRefused(orgId: string, key: string): Promise<ToolResult | null> {
+  if (!(await isFeatureEnabled(orgId, "hrm"))) return { ok: false, error: HRM_FEATURE_OFF };
+  if (!(await isFeatureEnabled(orgId, "hrmPerformance"))) return { ok: false, error: HRM_FEATURE_OFF };
+  if (!(await isFeatureEnabled(orgId, key))) return { ok: false, error: HRM_FEATURE_OFF };
+  return null;
+}
+
+const oneOnOneStatuses = ["scheduled", "held", "skipped", "cancelled"] as const;
+
+const hrmOneOnOnes: AssistantToolDef = {
+  name: "hrm_one_on_ones",
+  description:
+    "1:1 meetings for the caller and their reports: schedule, agenda, and status. Private items stay author-only. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.performance.read", "hrm.self.read"] },
+  feature: "hrmOneOnOnes",
+  tier: "module",
+  inputSchema: z.object({
+    employmentId: uuidInput.optional().describe("Keep only meetings touching this employment"),
+    status: z.enum(oneOnOneStatuses).optional().describe("Keep only this meeting status"),
+    limit: z.number().int().min(1).max(200).optional().describe("Maximum meetings to return (default 50)"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const gated = await continuousFeatureRefused(authz.user.orgId, "hrmOneOnOnes");
+    if (gated) return gated;
+    const a = raw as { employmentId?: string; status?: (typeof oneOnOneStatuses)[number]; limit?: number };
+    const limit = Math.min(a.limit ?? 50, 200);
+    try {
+      const { listOneOnOnes } = await import(
+        "@openbooks/engine/src/hrm/performance/one-on-ones.ts"
+      );
+      const ones = await listOneOnOnes({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        ...(a.employmentId ? { employmentId: a.employmentId } : {}),
+        ...(a.status ? { status: a.status } : {}),
+      });
+      return {
+        ok: true,
+        data: {
+          oneOnOnes: ones.slice(0, limit).map((one) => ({
+            id: one.id,
+            managerName: one.managerName,
+            reportName: one.reportName,
+            scheduledAt: one.scheduledAt,
+            status: one.status,
+            openItems: one.items.filter((item) => item.status === "open").length,
+            href: "/me/one-on-ones",
+          })),
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+
+const feedbackKinds = ["praise", "feedback", "request"] as const;
+
+const hrmFeedback: AssistantToolDef = {
+  name: "hrm_feedback",
+  description:
+    "Feedback in the caller's scope: praise, feedback, and requests filtered by the visibility matrix. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.performance.read", "hrm.self.read"] },
+  feature: "hrmFeedback",
+  tier: "module",
+  inputSchema: z.object({
+    subjectEmploymentId: uuidInput.optional().describe("Keep only feedback about this employment"),
+    kind: z.enum(feedbackKinds).optional().describe("Keep only this feedback kind"),
+    limit: z.number().int().min(1).max(200).optional().describe("Maximum rows to return (default 50)"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const gated = await continuousFeatureRefused(authz.user.orgId, "hrmFeedback");
+    if (gated) return gated;
+    const a = raw as { subjectEmploymentId?: string; kind?: (typeof feedbackKinds)[number]; limit?: number };
+    const limit = Math.min(a.limit ?? 50, 200);
+    try {
+      const { listFeedback } = await import("@openbooks/engine/src/hrm/performance/feedback.ts");
+      const rows = await listFeedback({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        ...(a.subjectEmploymentId ? { subjectEmploymentId: a.subjectEmploymentId } : {}),
+      });
+      return {
+        ok: true,
+        data: {
+          feedback: rows
+            .filter((row) => !a.kind || row.kind === a.kind)
+            .slice(0, limit)
+            .map((row) => ({
+              id: row.id,
+              subjectName: row.subjectName,
+              kind: row.kind,
+              visibility: row.visibility,
+              body: row.body,
+              recordedAt: row.recordedAt,
+              href: "/me/one-on-ones",
+            })),
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+
+const hrmCalibration: AssistantToolDef = {
+  name: "hrm_calibration",
+  description:
+    "Calibration sessions over review cycles: entries with proposed beside calibrated ratings, and the missing list. HR-only. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.performance.manage"] },
+  feature: "hrmCalibration",
+  tier: "module",
+  inputSchema: z.object({
+    sessionId: uuidInput.optional().describe("One session in full; omit for the session list"),
+    cycleId: uuidInput.optional().describe("Keep only sessions over this cycle"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const gated = await continuousFeatureRefused(authz.user.orgId, "hrmCalibration");
+    if (gated) return gated;
+    const a = raw as { sessionId?: string; cycleId?: string };
+    try {
+      const { getCalibrationSession, listCalibrationSessions } = await import(
+        "@openbooks/engine/src/hrm/performance/calibration.ts"
+      );
+      if (a.sessionId) {
+        const session = await getCalibrationSession({
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          id: a.sessionId,
+        });
+        return {
+          ok: true,
+          data: {
+            id: session.id,
+            name: session.name,
+            status: session.status,
+            entries: session.entries.map((entry) => ({
+              subjectName: entry.subjectName,
+              proposedRating: entry.proposedRating,
+              calibratedRating: entry.calibratedRating,
+              potentialKey: entry.potentialKey,
+            })),
+            missing: session.missing.map((missing) => ({ status: missing.status, reason: missing.reason })),
+            href: "/hrm/performance?tab=calibration",
+          },
+        };
+      }
+      const sessions = await listCalibrationSessions({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        ...(a.cycleId ? { cycleId: a.cycleId } : {}),
+      });
+      return {
+        ok: true,
+        data: {
+          sessions: sessions.map((session) => ({
+            id: session.id,
+            name: session.name,
+            status: session.status,
+            href: "/hrm/performance?tab=calibration",
+          })),
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+// HR-17 end
+
+
 // HR-12 end

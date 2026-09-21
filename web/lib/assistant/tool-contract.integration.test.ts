@@ -109,6 +109,10 @@ const READER_PERMS = [
   // read grant so every read tool runs rather than refusing.
   "hrm.performance.read",
   "hrm.retention.read",
+  // HR-17 begin: the calibration read tool rides the manage grant; the
+  // harness reader holds it so the tool runs rather than refusing.
+  "hrm.performance.manage",
+  // HR-17 end
   // Benefits elections (0197) read through the benefits read service;
   // the harness reader holds the grant so the read tool runs.
   "hrm.benefits.read",

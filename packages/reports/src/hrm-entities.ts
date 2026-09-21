@@ -1082,4 +1082,129 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     defaultSort: { column: 'due_on', direction: 'asc' },
   },
   // HR-14 end
+  // HR-17 begin: continuous-performance entities (0228). 1:1s, feedback,
+  // calibration entries and talent reviews read through the HR grant
+  // (hrm.performance.read) with the report engine's run-path gate — the
+  // same reader-grant pattern as hrm_reviews — each behind its own
+  // sub-feature switch. Feedback applies the service's visibility scope:
+  // only HR runners reach this entity, and retracted originals plus
+  // retraction rows never read (the read hides both, exactly like the
+  // service). Talent and succession rows are HR-only by the same gate.
+  {
+    key: 'hrm_one_on_ones',
+    label: 'One-on-ones',
+    category: 'hrm',
+    description:
+      'One row per 1:1 meeting — manager, report, scheduled and held dates, and status. Requires the HRM performance permission.',
+    from: `hrm_one_on_ones o
+      JOIN worker_employments m ON m.id = o.manager_employment_id AND m.org_id = o.org_id
+      JOIN worker_employments r ON r.id = o.report_employment_id AND r.org_id = o.org_id
+      JOIN parties mp ON mp.id = m.worker_party_id AND mp.org_id = o.org_id
+      JOIN parties rp ON rp.id = r.worker_party_id AND rp.org_id = o.org_id
+      JOIN subsidiaries sub ON sub.id = r.employer_subsidiary_id AND sub.org_id = o.org_id`,
+    orgColumn: 'o.org_id',
+    subsidiaryScope: { column: 'r.employer_subsidiary_id' },
+    requiredPermission: HRM_PERFORMANCE_READ_PERMISSION,
+    featureKey: 'hrmOneOnOnes',
+    defaultPeriodField: 'scheduled_at',
+    columns: [
+      { key: 'scheduled_at', label: 'Scheduled', kind: 'date', expr: 'o.scheduled_at' },
+      { key: 'held_at', label: 'Held', kind: 'date', expr: 'o.held_at' },
+      { key: 'manager', label: 'Manager', kind: 'text', expr: 'mp.display_name' },
+      { key: 'report', label: 'Report', kind: 'text', expr: 'rp.display_name' },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
+      { key: 'status', label: 'Status', kind: 'text', expr: 'o.status' },
+      { key: 'id', label: 'Meeting (id)', kind: 'uuid', expr: 'o.id' },
+    ],
+    defaultSort: { column: 'scheduled_at', direction: 'desc' },
+  },
+  {
+    key: 'hrm_feedback',
+    label: 'Feedback',
+    category: 'hrm',
+    description:
+      'One row per praise, feedback, or request — subject, kind, visibility, and recorded date. HR-only runners (the service visibility matrix lives at the write/read service); retracted rows and retractions never read. Requires the HRM performance permission.',
+    // Retractions hide both rows, exactly like listFeedback: the
+    // retraction rows themselves never read, and neither do the
+    // originals they link.
+    from: `(SELECT * FROM hrm_feedback f0
+       WHERE f0.kind <> 'retraction'
+         AND NOT EXISTS (SELECT 1 FROM hrm_feedback r0
+                          WHERE r0.org_id = f0.org_id AND r0.kind = 'retraction'
+                            AND r0.retracts_feedback_id = f0.id)) f
+      JOIN worker_employments e ON e.id = f.subject_employment_id AND e.org_id = f.org_id
+      JOIN parties w ON w.id = e.worker_party_id AND w.org_id = f.org_id
+      JOIN subsidiaries sub ON sub.id = e.employer_subsidiary_id AND sub.org_id = f.org_id`,
+    orgColumn: 'f.org_id',
+    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
+    requiredPermission: HRM_PERFORMANCE_READ_PERMISSION,
+    featureKey: 'hrmFeedback',
+    defaultPeriodField: 'recorded_at',
+    columns: [
+      { key: 'recorded_at', label: 'Recorded', kind: 'date', expr: 'f.recorded_at' },
+      { key: 'employee', label: 'Employee', kind: 'text', expr: 'w.display_name' },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
+      { key: 'kind', label: 'Kind', kind: 'text', expr: 'f.kind' },
+      { key: 'visibility', label: 'Visibility', kind: 'text', expr: 'f.visibility' },
+      { key: 'id', label: 'Feedback (id)', kind: 'uuid', expr: 'f.id' },
+    ],
+    defaultSort: { column: 'recorded_at', direction: 'desc' },
+  },
+  {
+    key: 'hrm_calibration_entries',
+    label: 'Calibration entries',
+    category: 'hrm',
+    description:
+      'One row per calibrated review — session, employee, proposed beside calibrated rating, potential, and the decider. Requires the HRM performance permission.',
+    from: `hrm_calibration_entries e
+      JOIN hrm_calibration_sessions s ON s.id = e.session_id AND s.org_id = e.org_id
+      JOIN hrm_reviews r ON r.id = e.review_id AND r.org_id = e.org_id
+      JOIN worker_employments emp ON emp.id = r.employment_id AND emp.org_id = e.org_id
+      JOIN parties w ON w.id = emp.worker_party_id AND w.org_id = e.org_id
+      JOIN subsidiaries sub ON sub.id = emp.employer_subsidiary_id AND sub.org_id = e.org_id`,
+    orgColumn: 'e.org_id',
+    subsidiaryScope: { column: 'emp.employer_subsidiary_id' },
+    requiredPermission: HRM_PERFORMANCE_READ_PERMISSION,
+    featureKey: 'hrmCalibration',
+    defaultPeriodField: 'decided_at',
+    columns: [
+      { key: 'session', label: 'Session', kind: 'text', expr: 's.name' },
+      { key: 'employee', label: 'Employee', kind: 'text', expr: 'w.display_name' },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
+      { key: 'proposed_rating', label: 'Proposed', kind: 'number', expr: 'e.proposed_rating' },
+      { key: 'calibrated_rating', label: 'Calibrated', kind: 'number', expr: 'e.calibrated_rating' },
+      { key: 'potential_key', label: 'Potential', kind: 'text', expr: 'e.potential_key' },
+      { key: 'decided_at', label: 'Decided', kind: 'date', expr: 'e.decided_at' },
+      { key: 'id', label: 'Entry (id)', kind: 'uuid', expr: 'e.id' },
+    ],
+    defaultSort: { column: 'decided_at', direction: 'desc' },
+  },
+  {
+    key: 'hrm_talent_reviews',
+    label: 'Talent reviews',
+    category: 'hrm',
+    description:
+      'One row per talent review — employee, performance and potential keys, loss impact and risk, and promotion readiness. HR-only, never visible to the subject. Requires the HRM performance permission.',
+    from: `hrm_talent_reviews t
+      JOIN worker_employments e ON e.id = t.employment_id AND e.org_id = t.org_id
+      JOIN parties w ON w.id = e.worker_party_id AND w.org_id = t.org_id
+      JOIN subsidiaries sub ON sub.id = e.employer_subsidiary_id AND sub.org_id = t.org_id`,
+    orgColumn: 't.org_id',
+    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
+    requiredPermission: HRM_PERFORMANCE_READ_PERMISSION,
+    featureKey: 'hrmSuccession',
+    defaultPeriodField: 'reviewed_at',
+    columns: [
+      { key: 'reviewed_at', label: 'Reviewed', kind: 'date', expr: 't.reviewed_at' },
+      { key: 'employee', label: 'Employee', kind: 'text', expr: 'w.display_name' },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
+      { key: 'performance_key', label: 'Performance', kind: 'text', expr: 't.performance_key' },
+      { key: 'potential_key', label: 'Potential', kind: 'text', expr: 't.potential_key' },
+      { key: 'impact_of_loss', label: 'Impact of loss', kind: 'text', expr: 't.impact_of_loss' },
+      { key: 'risk_of_loss', label: 'Risk of loss', kind: 'text', expr: 't.risk_of_loss' },
+      { key: 'id', label: 'Review (id)', kind: 'uuid', expr: 't.id' },
+    ],
+    defaultSort: { column: 'reviewed_at', direction: 'desc' },
+  },
+  // HR-17 end
 ]

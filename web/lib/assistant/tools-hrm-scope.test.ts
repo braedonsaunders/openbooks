@@ -42,7 +42,7 @@ const { HrmQualificationError } = await import("@openbooks/engine/src/hrm/qualif
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const tools = read("./tools-hrm.ts");
 
-const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave", "hrm_recruiting", "hrm_performance_cycles", "hrm_turnover", "hrm_benefits", "hrm_me", "automations_status", "hrm_compliance_findings", "hrm_certified_payroll", "hrm_compensation", "hrm_pay_equity", "hrm_qualifications", "hrm_dispatch_check"];
+const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave", "hrm_recruiting", "hrm_performance_cycles", "hrm_turnover", "hrm_benefits", "hrm_me", "automations_status", "hrm_compliance_findings", "hrm_certified_payroll", "hrm_compensation", "hrm_pay_equity", "hrm_qualifications", "hrm_dispatch_check", "hrm_one_on_ones", "hrm_feedback", "hrm_calibration"];
 
 const TOOL_PERMS: Record<string, string> = {
   // Elections and windows read through the benefits read service under
@@ -88,6 +88,13 @@ const TOOL_PERMS: Record<string, string> = {
   hrm_qualifications: "hrm.certifications.read",
   hrm_dispatch_check: "hrm.certifications.read",
   // HR-14 end
+  // HR-17 begin: 1:1s and feedback read through the structural scope
+  // (HR grant or self grant); calibration reads through the manage
+  // grant. Private 1:1 items and talent rows never leave through tools.
+  hrm_one_on_ones: "hrm.performance.read",
+  hrm_feedback: "hrm.performance.read",
+  hrm_calibration: "hrm.performance.manage",
+  // HR-17 end
 };
 
 const UUID = "11111111-1111-4111-8111-111111111111";
@@ -126,13 +133,27 @@ const TOOL_FEATURES: Record<string, string> = {
   hrm_qualifications: "hrmCertifications",
   hrm_dispatch_check: "hrmDispatchGating",
   // HR-14 end
+  // HR-17 begin: continuous tools sit behind their own sub-switches —
+  // off means the tool is absent, never an empty answer.
+  hrm_one_on_ones: "hrmOneOnOnes",
+  hrm_feedback: "hrmFeedback",
+  hrm_calibration: "hrmCalibration",
+  // HR-17 end
 };
 // HR-13 end
 
 for (const name of TOOL_NAMES) {
   test(`${name} carries the slice gate: its read grant, feature, module tier`, () => {
     const tool = HRM_TOOLS.find((candidate) => candidate.name === name)!;
-    assert.deepEqual(tool.gate, { mode: "anyOf", perms: [TOOL_PERMS[name]] });
+    // HR-17 begin: 1:1 and feedback tools admit the HR grant OR the self
+    // grant (structural own-and-reports scope); every other tool admits
+    // exactly its slice grant.
+    const expectedPerms =
+      name === "hrm_one_on_ones" || name === "hrm_feedback"
+        ? ["hrm.performance.read", "hrm.self.read"]
+        : [TOOL_PERMS[name]];
+    assert.deepEqual(tool.gate, { mode: "anyOf", perms: expectedPerms });
+    // HR-17 end
     // HR-12/HR-13 merged: construction and automations tools carry
     // their own switch (TOOL_FEATURES above); compensation tools gate
     // on their sub-switches; everything else rides hrm alone.
@@ -222,6 +243,23 @@ test("minimal valid inputs parse; addressing is runtime-enforced with stable cod
   assert.throws(() => byName.get("hrm_dispatch_check")!.inputSchema.parse({ subjectId: "nope" }));
   assert.throws(() => byName.get("hrm_dispatch_check")!.inputSchema.parse({ on: "tomorrow" }));
   // HR-14 end
+  // HR-17 begin: continuous tools parse minimal inputs; genuinely invalid values throw.
+  byName.get("hrm_one_on_ones")!.inputSchema.parse({});
+  byName.get("hrm_one_on_ones")!.inputSchema.parse({ employmentId: UUID });
+  byName.get("hrm_one_on_ones")!.inputSchema.parse({ status: "held", limit: 10 });
+  assert.throws(() => byName.get("hrm_one_on_ones")!.inputSchema.parse({ status: "archived" }));
+  assert.throws(() => byName.get("hrm_one_on_ones")!.inputSchema.parse({ employmentId: "nope" }));
+  assert.throws(() => byName.get("hrm_one_on_ones")!.inputSchema.parse({ limit: 0 }));
+  byName.get("hrm_feedback")!.inputSchema.parse({});
+  byName.get("hrm_feedback")!.inputSchema.parse({ subjectEmploymentId: UUID });
+  byName.get("hrm_feedback")!.inputSchema.parse({ kind: "praise", limit: 10 });
+  assert.throws(() => byName.get("hrm_feedback")!.inputSchema.parse({ kind: "rumor" }));
+  assert.throws(() => byName.get("hrm_feedback")!.inputSchema.parse({ limit: 0 }));
+  byName.get("hrm_calibration")!.inputSchema.parse({});
+  byName.get("hrm_calibration")!.inputSchema.parse({ sessionId: UUID });
+  byName.get("hrm_calibration")!.inputSchema.parse({ cycleId: UUID });
+  assert.throws(() => byName.get("hrm_calibration")!.inputSchema.parse({ sessionId: "nope" }));
+  // HR-17 end
 });
 
 // Every tool reuses the canonical read loaders the HRM tabs read
@@ -257,6 +295,12 @@ test("HRM reads reuse the canonical HRM read services", () => {
     "listQualifications(",
     "checkAssignment(",
     // HR-14 end
+    // HR-17 begin: continuous tools reuse the governed 0228 services.
+    "listOneOnOnes(",
+    "listFeedback(",
+    "getCalibrationSession(",
+    "listCalibrationSessions(",
+    // HR-17 end
   ]) {
     assert.ok(tools.includes(service), `tools-hrm.ts must reuse ${service}`);
   }
@@ -355,6 +399,12 @@ test("the registry gate admits only each tool's grant holders while its feature 
     hrm_qualifications: { hrm: true, hrmCertifications: true },
     hrm_dispatch_check: { hrm: true, hrmCertifications: true, projects: true, projectScheduling: true, hrmDispatchGating: true },
     // HR-14 end
+    // HR-17 begin: continuous tools need the hrmPerformance parent on
+    // top of hrm plus their own sub-switch.
+    hrm_one_on_ones: { hrm: true, hrmPerformance: true, hrmOneOnOnes: true },
+    hrm_feedback: { hrm: true, hrmPerformance: true, hrmFeedback: true },
+    hrm_calibration: { hrm: true, hrmPerformance: true, hrmCalibration: true },
+    // HR-17 end
   };
   // HR-13 end
   for (const name of TOOL_NAMES) {

@@ -44,6 +44,12 @@ const HRM_KEYS = [
   'hrm_qualifications',
   'hrm_qualification_alerts',
   // HR-14 end
+  // HR-17 begin
+  'hrm_one_on_ones',
+  'hrm_feedback',
+  'hrm_calibration_entries',
+  'hrm_talent_reviews',
+  // HR-17 end
 ] as const
 
 const HRM_PERMISSIONS: Record<(typeof HRM_KEYS)[number], string> = {
@@ -83,6 +89,13 @@ const HRM_PERMISSIONS: Record<(typeof HRM_KEYS)[number], string> = {
   hrm_qualifications: 'hrm.certifications.read',
   hrm_qualification_alerts: 'hrm.certifications.read',
   // HR-14 end
+  // HR-17 begin: continuous-performance entities read through the HR
+  // performance grant — the same reader-grant pattern as hrm_reviews.
+  hrm_one_on_ones: 'hrm.performance.read',
+  hrm_feedback: 'hrm.performance.read',
+  hrm_calibration_entries: 'hrm.performance.read',
+  hrm_talent_reviews: 'hrm.performance.read',
+  // HR-17 end
 }
 
 test('workforce entities are registered on the shared catalog exactly once', () => {
@@ -120,6 +133,9 @@ test('workforce entities refuse without their gate and their own read permission
     // exact pin above compared against undefined. They ride
     // hrmCompensation, matching their declarations.
     // HR-14 end
+    // HR-17: continuous-performance entities ride their own sub-switches.
+    hrm_one_on_ones: 'hrmOneOnOnes', hrm_feedback: 'hrmFeedback',
+    hrm_calibration_entries: 'hrmCalibration', hrm_talent_reviews: 'hrmSuccession',
   }
   for (const key of HRM_KEYS) {
     const entity = REPORT_ENTITY_MAP[key]!
@@ -184,6 +200,12 @@ test('workforce entities scope to one org and one legal-entity boundary', () => 
     hrm_qualifications: 'q.org_id',
     hrm_qualification_alerts: 'a.org_id',
     // HR-14 end
+    // HR-17 begin
+    hrm_one_on_ones: 'o.org_id',
+    hrm_feedback: 'f.org_id',
+    hrm_calibration_entries: 'e.org_id',
+    hrm_talent_reviews: 't.org_id',
+    // HR-17 end
   }
   const scopeColumns: Record<(typeof HRM_KEYS)[number], string | null> = {
     hrm_headcount: 'hc.employer_subsidiary_id',
@@ -223,6 +245,12 @@ test('workforce entities scope to one org and one legal-entity boundary', () => 
     hrm_qualifications: 'e.employer_subsidiary_id',
     hrm_qualification_alerts: 'e.employer_subsidiary_id',
     // HR-14 end
+    // HR-17 begin: employment-anchored rows clamp to the employer subsidiary.
+    hrm_one_on_ones: 'r.employer_subsidiary_id',
+    hrm_feedback: 'e.employer_subsidiary_id',
+    hrm_calibration_entries: 'emp.employer_subsidiary_id',
+    hrm_talent_reviews: 'e.employer_subsidiary_id',
+    // HR-17 end
   }
   for (const key of HRM_KEYS) {
     const entity = REPORT_ENTITY_MAP[key]!
