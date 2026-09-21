@@ -407,10 +407,12 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0203_revenue_contract_modifications.sql",
     "0204_asset_lifecycle_changes.sql",
     "0205_consolidation_loss_of_control.sql",
+    "0206_pay_run_bank_file_bacs.sql",
     "0207_allocation_kernel_tenant_fks.sql",
     "0208_pay_run_adjustments_run_tenant_coherence.sql",
     "0209_pay_stubs_pay_run_tenant_coherence.sql",
     "0210_payment_runs_source_schedule_tenant_coherence.sql",
+    "0211_pay_run_bank_file_zengin_cnab240.sql",
     "0212_payment_schedules_last_payment_run_tenant_coherence.sql",
     "0213_flow_runs_flow_tenant_coherence.sql",
     "0214_flow_gates_tenant_coherence.sql",
@@ -419,8 +421,6 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0217_pay_run_holiday_assertions_run_tenant_coherence.sql",
     "0218_pay_run_adjustments_component_tenant_coherence.sql",
     "0219_list_views_one_live_personal_default.sql",
-    "0206_pay_run_bank_file_bacs.sql",
-    "0211_pay_run_bank_file_zengin_cnab240.sql",
     // HR-12 begin: compensation architecture/bands/cycles (0221) and
     // headcount plans/transparency (0222). The pin lists migrations in
     // readdir sort order (0199-0201 sort before 0221+), not landing order.
@@ -443,7 +443,6 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // calibration, talent review and succession (0228).
     "0228_hrm_continuous_performance.sql",
     // HR-17 end
-    "0237_non_gl_depreciation_recognition.sql",
     // HR-18 begin: recruiting depth — kits, scorecards, slots, templates,
     // postings, retention, pools (0229). This entry sat at the END of the
     // list until now, which cannot match: the assertion compares against
@@ -461,6 +460,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // HR-21 begin: AI on the rails — capabilities ledger, decisions log,
     // payroll anomaly flags and baselines, NL report drafts (0232).
     "0232_hrm_ai_rails.sql",
+    "0237_non_gl_depreciation_recognition.sql",
     // HR-21 end
     // HR-18 follow-up: the offer signing link had no stored hash and so
     // could never be revoked (0240, allocated by the integrator — 0233

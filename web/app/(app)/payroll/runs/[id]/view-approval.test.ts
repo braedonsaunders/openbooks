@@ -22,5 +22,8 @@ test('approval resolves alongside the other engine reads', () => {
 test('the approval state reaches the wizard widget as data', () => {
   assert.match(source, /approval: PayRunApprovalState/)
   assert.match(source, /approval: data\.approval/)
-  assert.match(source, /approval,\n    \}\n  \}\)/)
+  // approval is IN the object the loader returns, not necessarily its last
+  // key -- pinning it last means the next property added after it breaks a
+  // test about approval, naming the wrong culprit.
+  assert.match(source, /approval,\n(?:\s+[\w.]+,\n)*    \}\n  \}\)/)
 })

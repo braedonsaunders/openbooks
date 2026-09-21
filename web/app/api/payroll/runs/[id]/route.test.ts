@@ -45,7 +45,6 @@ const mockSources = new Map<string, string>([
       export async function withOrgContext(_orgId, fn) { return fn() }
       export async function withOrg(_orgId, fn) { return fn() }
       export async function withBypass(fn) { return fn() }
-      export function currentRequestOrgResolver() { return null }
     `,
   ],
   [

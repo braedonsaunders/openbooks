@@ -152,7 +152,11 @@ test("the scaffold produces a DRAFT edition whose conformance stub fails until f
   const generated = runGenerator("US");
   assert.equal(generated.status, 0, generated.out);
   assert.match(generated.out, /created  engine\/src\/payroll\/us\/rates-2099\.ts/); // source-path: synthetic
-  assert.match(generated.out, /wired    engine\/src\/payroll\/us\/editions\.ts → 2099/);
+  // The barrel lists every wired year, derived from the directory rather than
+  // a hand-maintained list, so the line grows as prior-year editions land.
+  // Assert 2099 is among them, not that it is alone -- pinning the whole list
+  // makes this fail the day a pack gains a year that has nothing to do with it.
+  assert.match(generated.out, /wired    engine\/src\/payroll\/us\/editions\.ts → (?:[\d, ]*\b)?2099\b/);
   // The instructions are the pack's own, in order, and they name the sources.
   assert.match(generated.out, /Pub 15-T/);
   assert.match(generated.out, /goldens/);

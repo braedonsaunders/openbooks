@@ -45,6 +45,11 @@ const mockSources = new Map<string, string>([
         execute() { return Promise.resolve({ rows: state.ownedSubsidiaryId ? [{ subsidiaryId: state.ownedSubsidiaryId }] : [] }) },
       }
       export async function withOrgTransaction(_orgId, fn) { return fn() }
+      export async function withBypass(work) { return work() }
+      export async function withBypassContext(_opts, work) { return work() }
+      export function registerRequestOrgResolver() {}
+      export function currentRequestOrgResolver() { return null }
+      export function ambientTenantOrgId() { return null }
     `,
   ],
   [
