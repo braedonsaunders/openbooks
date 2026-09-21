@@ -19,7 +19,23 @@ import { MAX_DEPRECIATION_PERIODS } from '@openbooks/engine/src/assets/depreciat
 import { PAY_DERIVED_RULE_ENTITIES } from './payroll-derived-rules'
 import { PAYROLL_HOLIDAYS_ENTITY } from './payroll-holidays'
 import { LEAVE_POLICIES_ENTITY, LEAVE_TYPES_ENTITY } from './hrm-leave'
+import { ACTION_REASONS_ENTITY } from './hrm-action-reasons'
 import { BENEFIT_PLANS_ENTITY, BENEFIT_PLAN_LEVELS_ENTITY } from './hrm-benefits'
+import { JOB_FAMILIES_ENTITY, JOB_LEVELS_ENTITY, PAY_BANDS_ENTITY } from './hrm-compensation'
+// HR-13 begin: construction-compliance Setup entities (rehomed onto the
+// Compliance page, never the setup rail).
+import {
+  CONSTRUCTION_CLASSIFICATIONS_ENTITY,
+  CONSTRUCTION_COMP_CLASSES_ENTITY,
+  CONSTRUCTION_PER_DIEM_POLICIES_ENTITY,
+  CONSTRUCTION_RATE_SCHEDULES_ENTITY,
+  CONSTRUCTION_RATIO_RULES_ENTITY,
+} from './hrm-construction'
+// HR-13 end
+// HR-14 begin: qualification taxonomy and vocabulary (rehomed onto the
+// Qualifications page, never the setup rail).
+import { QUALIFICATION_SETTINGS_ENTITY, QUALIFICATION_TYPES_ENTITY } from './hrm-qualifications'
+// HR-14 end
 
 export type SetupFieldKind =
   | 'text'
@@ -232,7 +248,7 @@ export interface SetupEntity {
   /** Declaration-backed settings permit editing values but cannot be created/deleted here. */
   allowCreate?: boolean
   allowDelete?: boolean
-  dataSource?: 'extension-settings'
+  dataSource?: 'extension-settings' | 'home-announcements'
   /** Documentation-center article slug — renders a "Learn more" link on the tab. */
   docSlug?: string
   /** Parent setup entity that owns this configuration surface. Nested entities
@@ -719,6 +735,13 @@ const CONSOLIDATION_METHODS = [
   { value: 'equity', labelKey: 'options.consolidationMethod.equity' },
 ]
 
+// HR-15: home announcement audience scope options.
+const HOME_ANNOUNCEMENT_AUDIENCES = [
+  { value: 'all', labelKey: 'options.announcementAudience.all' },
+  { value: 'managers', labelKey: 'options.announcementAudience.managers' },
+  { value: 'employees', labelKey: 'options.announcementAudience.employees' },
+]
+
 const NCI_MEASUREMENTS = [
   { value: 'proportionate', labelKey: 'options.nciMeasurement.proportionate' },
   { value: 'fair_value', labelKey: 'options.nciMeasurement.fairValue' },
@@ -739,6 +762,21 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     ],
   },
   // --- Company -------------------------------------------------------------
+  // HR-15 begin: admin-authored home announcements (org settings JSON, not a
+  // table) with audience scope and dates. Gated on homeAnnouncements.
+  {
+    key: 'home-announcements', table: 'orgs', dataSource: 'home-announcements', groupKey: 'company', iconKey: 'megaphone',
+    orgScoped: true, hasActive: false, featureKey: 'homeAnnouncements',
+    columns: [{ key: 'title', kind: 'text' }, { key: 'audience', kind: 'badge' }, { key: 'startsOn', kind: 'date' }],
+    fields: [
+      { key: 'title', kind: 'text', required: true },
+      { key: 'body', kind: 'textarea' },
+      { key: 'audience', kind: 'select', options: HOME_ANNOUNCEMENT_AUDIENCES, required: true, keepDefault: true },
+      { key: 'startsOn', kind: 'date', required: true },
+      { key: 'endsOn', kind: 'date' },
+    ],
+  },
+  // HR-15 end
   {
     // Subsidiaries form the organization's legal-entity tree.
     // baseCurrency is the entity's functional currency: locked after create so
@@ -1743,10 +1781,38 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   // ./hrm-leave.ts; ordinary registry entities behind the hrm switch.
   LEAVE_TYPES_ENTITY,
   LEAVE_POLICIES_ENTITY,
+  // HR action/reason codes. Declared in ./hrm-action-reasons.ts; rehomed
+  // onto /hrm/change-requests (never a standalone setup page).
+  // HR-16 begin
+  ACTION_REASONS_ENTITY,
+  // HR-16 end
   // HRM benefit plans and ordered pricing tiers. Declared in
   // ./hrm-benefits.ts; ordinary registry entities behind the hrm switch.
   BENEFIT_PLANS_ENTITY,
   BENEFIT_PLAN_LEVELS_ENTITY,
+  // HRM compensation architecture (0221, HR-12): job families, levels
+  // and versioned pay bands behind the hrmCompensation switch, rehomed
+  // as sections onto the Compensation page.
+  // HR-12 begin
+  JOB_FAMILIES_ENTITY,
+  JOB_LEVELS_ENTITY,
+  PAY_BANDS_ENTITY,
+  // HR-12 end
+  // HR-13 begin: construction classifications, rate schedules, comp
+  // classes, per-diem policies and ratio rules. Declared in
+  // ./hrm-construction.ts; rehomed onto the HRM Compliance page.
+  CONSTRUCTION_CLASSIFICATIONS_ENTITY,
+  CONSTRUCTION_RATE_SCHEDULES_ENTITY,
+  CONSTRUCTION_COMP_CLASSES_ENTITY,
+  CONSTRUCTION_PER_DIEM_POLICIES_ENTITY,
+  CONSTRUCTION_RATIO_RULES_ENTITY,
+  // HR-13 end
+  // HR-14 begin: qualification taxonomy and extended vocabulary.
+  // Declared in ./hrm-qualifications.ts; rehomed onto the HRM
+  // Qualifications page.
+  QUALIFICATION_TYPES_ENTITY,
+  QUALIFICATION_SETTINGS_ENTITY,
+  // HR-14 end
   {
     key: 'pay-schedules',
     table: 'pay_schedules',
@@ -2350,6 +2416,52 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'required', kind: 'boolean' },
     ],
   },
+  // HR-17 begin: competency frameworks (0228) — the org's reusable skill
+  // vocabulary with ranked levels. Setup-owned; deactivation preserves
+  // history. Hidden while hrmCompetencies is off.
+  {
+    key: 'hrm-competency-frameworks',
+    table: 'hrm_competency_frameworks',
+    actorCols: true,
+    groupKey: 'workforce',
+    featureKey: 'hrmCompetencies',
+    iconKey: 'award',
+    orgScoped: true,
+    orderBy: 'name',
+    hasActive: true,
+    columns: [
+      { key: 'name', kind: 'text' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'name', kind: 'text', required: true },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
+    key: 'hrm-competencies',
+    table: 'hrm_competencies',
+    actorCols: true,
+    groupKey: 'workforce',
+    featureKey: 'hrmCompetencies',
+    iconKey: 'award',
+    orgScoped: true,
+    orderBy: 'position',
+    hasActive: false,
+    columns: [
+      { key: 'frameworkId', kind: 'ref', ref: 'hrm-competency-frameworks' },
+      { key: 'code', kind: 'text' },
+      { key: 'name', kind: 'text' },
+    ],
+    fields: [
+      { key: 'frameworkId', kind: 'ref', ref: 'hrm-competency-frameworks', required: true },
+      { key: 'code', kind: 'text', required: true },
+      { key: 'name', kind: 'text', required: true },
+      { key: 'description', kind: 'textarea' },
+      { key: 'category', kind: 'text' },
+    ],
+  },
+  // HR-17 end
   // --- Assets --------------------------------------------------------------
   {
     key: 'asset-categories',

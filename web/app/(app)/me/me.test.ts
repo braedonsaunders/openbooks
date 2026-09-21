@@ -41,3 +41,23 @@ test("the overview loader scopes every row to the login", () => {
   assert.match(view, /requirePermission\('hrm\.self\.read'\)/, "page requires the self-service grant");
   assert.match(view, /isFeatureEnabled\(authz\.user\.orgId, 'hrm'\)/, "page requires the hrm feature");
 });
+
+// HR-14 begin: the viewer's own certifications needing action ride the
+// same shared table block — type, expiry, and a status badge — resolved
+// per own employment through the canonical qualification read, never an
+// org list and never license numbers.
+test("the overview carries the viewer's expiring certifications", () => {
+  assert.match(view, /f\('qualificationsTitle'\)/, "the panel titles from the loader");
+  assert.match(view, /rows: f\('qualifications'\)/, "rows read the loader-resolved qualifications");
+  assert.match(view, /badge\(item\('statusLabel'\), \{ variant: item\('statusVariant'\) \}\)/, "status rides the shared badge");
+  assert.match(view, /f\('qualificationsEmpty'\)/, "the empty state resolves from the loader");
+  assert.match(loader, /listQualifications\(db, \{\s*orgId, actorId: authz\.user\.id, employmentId/, "qualifications read per own employment through the canonical service");
+});
+
+test("the qualifications panel never pulls license numbers or notes", () => {
+  const panel = view.slice(view.indexOf("f('qualificationsTitle')"), view.indexOf("f('qualificationsTitle')") + 1500);
+  assert.doesNotMatch(panel, /identifier/, "license numbers stay on the HR page, never the me panel");
+  assert.doesNotMatch(panel, /notes/, "free-text notes stay on the HR page, never the me panel");
+  assert.match(loader, /q\.status === 'expiring' \|\| q\.status === 'expired'/, "only action-needed rows reach the viewer");
+});
+// HR-14 end

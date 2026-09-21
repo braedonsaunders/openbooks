@@ -109,12 +109,33 @@ const READER_PERMS = [
   // read grant so every read tool runs rather than refusing.
   "hrm.performance.read",
   "hrm.retention.read",
+  // HR-17 begin: the calibration read tool rides the manage grant; the
+  // harness reader holds it so the tool runs rather than refusing.
+  "hrm.performance.manage",
+  // HR-17 end
   // Benefits elections (0197) read through the benefits read service;
   // the harness reader holds the grant so the read tool runs.
   "hrm.benefits.read",
   // HR-9 self-service: the harness reader holds the self read grant so
   // the own-employment summary tool runs rather than refusing.
   "hrm.self.read",
+  // HR-12 begin: compensation bands/cycles/plans and equity snapshots
+  // read through the compensation read grant at every surface.
+  "hrm.compensation.read",
+  // HR-12 end
+  // HR-16 begin: the harness reader holds the automations read grant so
+  // the automation status tool runs rather than refusing.
+  "automations.read",
+  // HR-16 end
+  // HR-13 begin: construction reads run through the construction read
+  // service; the harness reader holds the grant so both tools run.
+  "hrm.construction.read",
+  // HR-13 end
+  // HR-14 begin: the register and readiness tools run through the
+  // certifications read grant; the scratch org leaves the switches off
+  // so both refuse with the documented hrm_feature_disabled.
+  "hrm.certifications.read",
+  // HR-14 end
 ];
 
 /** Empty-store refusals: stable error codes on an org with no transactions. */
@@ -157,7 +178,14 @@ const FEATURE_OFF = new Set([
   "budgets_feature_disabled",
   "allocations_feature_disabled",
   "hrm_feature_disabled",
+  // HR-13 begin: the construction switch is its own documented off-code —
+  // pack-has-none and feature-off are never collapsed.
+  "hrm_construction_feature_disabled",
+  // HR-13 end
   "api_access_feature_disabled",
+  // HR-16 begin: the contract scratch org never enables automations.
+  "automations_feature_disabled",
+  // HR-16 end
 ]);
 
 function readerAuthz(orgId: string): Authz {

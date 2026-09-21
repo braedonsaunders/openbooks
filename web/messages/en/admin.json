@@ -981,7 +981,17 @@
     "hrm_self_read": "View own employment summary",
     "hrm_self_request": "File profile changes for own party",
     "hrm_team_read": "View direct reports as of today",
-    "hrm_team_manage": "Work manager-assigned team steps"
+    "hrm_team_manage": "Work manager-assigned team steps",
+    "automations_read": "See automation recipes and the run log",
+    "automations_manage": "Author automations and approval settings",
+    "automations_run": "Run automations now",
+    "hrm_construction_read": "See construction compliance",
+    "hrm_construction_manage": "Manage construction compliance",
+    "hrm_compensation_read": "View bands, architecture, and cycles",
+    "hrm_compensation_manage": "Run cycles, push rates, and author plans and snapshots",
+    "hrm_compensation_approve": "Decide cycle lines through the approval run",
+    "hrm_certifications_read": "View certifications and dispatch readiness",
+    "hrm_certifications_manage": "Manage certification types, requirements, and renewals"
   },
   "ai": {
     "metaTitle": "AI providers",
@@ -2464,6 +2474,60 @@
         "title": "Benefit tiers",
         "singularTitle": "Benefit tier",
         "description": "Coverage tiers per plan — employee-only, family — with the tier costs copied onto elections at elect time."
+      },
+      "home-announcements": {
+        "title": "Announcements",
+        "description": "Company announcements for the home page, with audience scope and dates."
+      },
+      "construction-classifications": {
+        "title": "Work classifications",
+        "singularTitle": "Work classification",
+        "description": "Trade taxonomy for prevailing-wage pricing: journey and apprentice classes with the journey class each apprentice ratio counts against."
+      },
+      "construction-rate-schedules": {
+        "title": "Rate schedules",
+        "singularTitle": "Rate schedule",
+        "description": "Prevailing-wage, union-agreement, and org-declared tables with project, location, and subsidiary scope plus the reciprocity the resolver applies."
+      },
+      "construction-comp-classes": {
+        "title": "Comp classes",
+        "singularTitle": "Comp class",
+        "description": "Workers'-comp premium classes with the rate per 100 where declared; priority rules below decide which class prices each hour."
+      },
+      "construction-per-diem-policies": {
+        "title": "Per-diem policies",
+        "singularTitle": "Per-diem policy",
+        "description": "Per-diem computation rules per basis. Taxability lives on the linked pay component, never here."
+      },
+      "construction-ratio-rules": {
+        "title": "Ratio rules",
+        "singularTitle": "Ratio rule",
+        "description": "Journey-to-apprentice ratios per schedule, measured daily or weekly. A breach reprices apprentice hours at the journey line."
+      },
+      "hrm-job-families": {
+        "title": "Job families",
+        "singularTitle": "Job family",
+        "description": "The org's crafts — stable per-org codes grouping job levels into ladders."
+      },
+      "hrm-job-levels": {
+        "title": "Job levels",
+        "singularTitle": "Job level",
+        "description": "One rung per ladder with rank and the declared equal-value criteria."
+      },
+      "hrm-pay-bands": {
+        "title": "Pay bands",
+        "singularTitle": "Pay band",
+        "description": "Versioned SHOULD-pay rows per scope: a band change is a new row, never an overwrite."
+      },
+      "hrm-competency-frameworks": {
+        "title": "Competency frameworks",
+        "singularTitle": "Competency framework",
+        "description": "The org's reusable skill vocabulary with ranked levels."
+      },
+      "hrm-competencies": {
+        "title": "Competencies",
+        "singularTitle": "Competency",
+        "description": "One skill in a framework, linkable to reviews, job levels, and positions."
       }
     },
     "fields": {
@@ -2774,7 +2838,45 @@
       "employerPayComponentId": "Employer component",
       "waitingPeriodDays": "Waiting period (days)",
       "requiresApproval": "Requires approval",
-      "levelKey": "Tier key"
+      "levelKey": "Tier key",
+      "body": "Body",
+      "audience": "Audience",
+      "startsOn": "Starts on",
+      "endsOn": "Ends on",
+      "action": "Action",
+      "reasonCode": "Reason code",
+      "requiresComment": "Requires comment",
+      "trade": "Trade",
+      "isApprentice": "Apprentice",
+      "apprenticeProgramRef": "Program ref",
+      "journeyClassificationId": "Journey class",
+      "apprenticeClassificationId": "Apprentice class",
+      "sourceRef": "Source ref",
+      "jurisdictionCode": "Jurisdiction",
+      "reciprocity": "Reciprocity",
+      "ratePer100": "Rate / 100",
+      "lodgingOffset": "Lodging offset",
+      "payComponentId": "Pay component",
+      "scheduleId": "Schedule",
+      "ratioJourney": "Journey",
+      "ratioApprentice": "Apprentice",
+      "measured": "Measured",
+      "rank": "Rank",
+      "familyId": "Family",
+      "skillsWeight": "Skills weight",
+      "effortWeight": "Effort weight",
+      "responsibilityWeight": "Responsibility weight",
+      "workingConditionsWeight": "Working conditions weight",
+      "levelId": "Level",
+      "min": "Min",
+      "target": "Target",
+      "max": "Max",
+      "validityMonths": "Validity (months)",
+      "issuingBody": "Issuing body",
+      "renewalLeadDays": "Renewal lead (days)",
+      "requiresEvidence": "Requires evidence",
+      "extraCategories": "Extra categories",
+      "frameworkId": "Framework"
     },
     "fieldHelp": {
       "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",
@@ -2853,7 +2955,12 @@
       "benefitEmployerComponent": "Employer-contribution component pricing the employer rows. Required when the plan prices an employer cost.",
       "benefitWaitingPeriod": "Days of service before the plan may be elected.",
       "benefitRequiresApproval": "Elections land pending until a manager approves them.",
-      "benefitLevelKey": "Tier key the election names — single, family — stable across repricings."
+      "benefitLevelKey": "Tier key the election names — single, family — stable across repricings.",
+      "rateScheduleSource": "Determination number or agreement id behind this schedule.",
+      "rateScheduleJurisdiction": "Pack vocabulary, free text at the generic layer — the pack interprets it.",
+      "perDiemComponent": "Earning component the amounts cross through. Its tax treatment is the single taxability declaration.",
+      "hrmQualificationValidity": "Leave empty for qualifications that never expire.",
+      "hrmQualificationExtraCategories": "Org-declared category vocabulary beyond the six built-ins, one per line in the editor."
     },
     "options": {
       "payFrequency": {
@@ -3250,6 +3357,58 @@
       "benefitProrationBasis": {
         "full_month": "Full month — the whole month whatever the dates",
         "daily": "Daily — scaled by covered days"
+      },
+      "announcementAudience": {
+        "all": "Everyone",
+        "managers": "Managers",
+        "employees": "Employees"
+      },
+      "hrmAction": {
+        "hire": "Hire",
+        "rehire": "Rehire",
+        "transfer": "Transfer",
+        "promotion": "Promotion",
+        "demotion": "Demotion",
+        "pay_change": "Pay change",
+        "manager_change": "Manager change",
+        "location_change": "Location change",
+        "schedule_change": "Schedule change",
+        "leave_of_absence": "Leave of absence",
+        "return": "Return",
+        "termination": "Termination",
+        "profile_change": "Profile change",
+        "other": "Other"
+      },
+      "hrmScheduleKind": {
+        "prevailingWage": "Prevailing wage",
+        "unionAgreement": "Union agreement",
+        "orgDeclared": "Org declared"
+      },
+      "hrmReciprocity": {
+        "homeLocal": "Home local",
+        "jobsiteLocal": "Jobsite local",
+        "higherOf": "Higher of"
+      },
+      "hrmPerDiemBasis": {
+        "flatDaily": "Flat daily",
+        "distanceBrackets": "Distance brackets",
+        "hoursThreshold": "Hours threshold"
+      },
+      "hrmRatioMeasured": {
+        "daily": "Daily",
+        "weekly": "Weekly"
+      },
+      "payBandBasis": {
+        "annual": "Annual",
+        "hourly": "Hourly"
+      },
+      "hrmQualificationCategory": {
+        "certification": "Certification",
+        "license": "License",
+        "training": "Training",
+        "medical": "Medical",
+        "clearance": "Clearance",
+        "other": "Other"
       }
     },
     "payroll": {
@@ -4372,6 +4531,18 @@
       "title": "Human resources",
       "description": "Employment records with as-of history, headcount, and change-request tracking. Reads the HRM foundation; it never drives payroll."
     },
+    "hrmCelebrations": {
+      "title": "Workplace celebrations",
+      "description": "Birthdays, work anniversaries, and new joiners on the employee home."
+    },
+    "hrmManagerNudges": {
+      "title": "Manager nudges",
+      "description": "Attrition and 1:1 prompts on the manager home, scoped to the manager's team."
+    },
+    "homeAnnouncements": {
+      "title": "Home announcements",
+      "description": "Admin-authored announcements card on the home page, with audience scope and dates."
+    },
     "projectScheduling": {
       "title": "Project Scheduling",
       "description": "Gantt charts, critical path, and resource leveling for project schedules."
@@ -4483,6 +4654,114 @@
     "allocationsAtPosting": {
       "title": "Allocations at posting",
       "description": "Let allocation rules and authorized scripts contribute extra GL lines to a transaction's own journal entry at posting."
+    },
+    "automations": {
+      "title": "Automations",
+      "description": "Trigger-based recipes on Flows: schedule, date, field-change, event, document, and manual triggers firing ordered actions."
+    },
+    "automationDateTriggers": {
+      "title": "Date triggers",
+      "description": "Fire recipes relative to entity dates, such as days before an employment starts."
+    },
+    "automationFieldTriggers": {
+      "title": "Field triggers",
+      "description": "Fire recipes when a watched field changes."
+    },
+    "automationWebhooks": {
+      "title": "Webhook actions",
+      "description": "Call org-declared signed webhook endpoints from recipes."
+    },
+    "automationSimulator": {
+      "title": "Simulator",
+      "description": "Dry-run recipes against real subjects with no writes."
+    },
+    "hrmActionReasons": {
+      "title": "Action and reason codes",
+      "description": "Require an HR action and reason code on every change request."
+    },
+    "hrmEventVerbs": {
+      "title": "Change event verbs",
+      "description": "Cancel, rescind, and correct employment changes as appended events."
+    },
+    "hrmConstructionCompliance": {
+      "title": "Construction compliance",
+      "description": "Prevailing-wage and union rate tables, certified payroll, workers'-comp class splits, apprentice ratios, and per-diem for self-performed construction. Needs payroll, projects, and time tracking."
+    },
+    "hrmPrevailingWage": {
+      "title": "Prevailing wage",
+      "description": "Resolve the wage by project location, classification, and date from declared rate schedules."
+    },
+    "hrmCertifiedPayroll": {
+      "title": "Certified payroll",
+      "description": "Frozen weekly certified reports rendered through the payroll pack's declared files."
+    },
+    "hrmWorkersCompClasses": {
+      "title": "Workers'-comp classes",
+      "description": "Split costed hours across premium classes by priority match rules."
+    },
+    "hrmApprenticeRatios": {
+      "title": "Apprentice ratios",
+      "description": "Enforce journey-to-apprentice ratios daily; breaches reprice at the journey line."
+    },
+    "hrmPerDiem": {
+      "title": "Per diem",
+      "description": "Compute per-diem and travel pay from approved time into the payroll seam."
+    },
+    "hrmCompensation": {
+      "title": "Compensation",
+      "description": "Job architecture and pay bands: what roles should pay and where people sit in range."
+    },
+    "hrmMeritCycles": {
+      "title": "Merit cycles",
+      "description": "merit rounds that snapshot payroll truth, decide raises, and push approved rates to payroll."
+    },
+    "hrmHeadcountPlans": {
+      "title": "Headcount plans",
+      "description": "Workforce scenarios costed from bands before approval, opening requisitions on approval."
+    },
+    "hrmPayTransparency": {
+      "title": "Pay transparency",
+      "description": "Frozen equity snapshots from payroll truth and worker pay-information requests."
+    },
+    "hrmCertifications": {
+      "title": "Certifications and licenses",
+      "description": "The worker qualification ledger: taxonomy, held credentials, dispatch requirements, and expiry alerts. Toggling never deletes data."
+    },
+    "hrmDispatchGating": {
+      "title": "Dispatch gating",
+      "description": "Refuse schedule assignments for workers missing required qualifications. Needs projects and scheduling."
+    },
+    "hrmEquipmentQualifications": {
+      "title": "Equipment qualifications",
+      "description": "Declare required qualification types on equipment records. Needs equipment."
+    },
+    "hrmCertificationAlerts": {
+      "title": "Certification alerts",
+      "description": "Daily expiry notices to holders and their managers through the inbox."
+    },
+    "hrmPerformance": {
+      "title": "Performance",
+      "description": "The parent switch for reviews, goals, 1:1s, feedback, calibration, talent, and succession."
+    },
+    "hrmOneOnOnes": {
+      "title": "1:1s",
+      "description": "Scheduled manager-report conversations with agendas that carry over."
+    },
+    "hrmFeedback": {
+      "title": "Feedback",
+      "description": "Praise, feedback, and requests captured when they happen."
+    },
+    "hrmCompetencies": {
+      "title": "Competencies",
+      "description": "Reusable skill vocabulary with ranked levels, linked to reviews and job levels."
+    },
+    "hrmCalibration": {
+      "title": "Calibration",
+      "description": "The rating grid over a review cycle with an audit trail."
+    },
+    "hrmSuccession": {
+      "title": "Talent & succession",
+      "description": "Talent reviews and ranked succession plans per position."
     }
   },
   "backupsManager": {
@@ -4764,6 +5043,130 @@
       "previewAction": "Form preview only. Backend actions run after activation, using the installed version and your permissions.",
       "previewRecords": "Form preview using the proposed record definition. After activation, this workspace uses the shared record list, filters, and drawers.",
       "existingRecordsPreview": "This screen references an existing record type. Live records are available after activation to users with access."
+    }
+  },
+  "automations": {
+    "title": "Automations",
+    "description": "Trigger-based recipes on Flows — schedule, date, field-change, event, document, and manual triggers firing ordered actions.",
+    "backToFlows": "Back to Flows",
+    "backToList": "Back to automations",
+    "list": {
+      "newButton": "New automation",
+      "newTitle": "New automation",
+      "nameLabel": "Name",
+      "namePlaceholder": "e.g. Welcome tasks before start",
+      "nameRequired": "Give the automation a name.",
+      "triggerLabel": "Trigger",
+      "createFailed": "Could not create the automation.",
+      "create": "Create",
+      "cancel": "Cancel",
+      "neverRan": "Never ran",
+      "statusLabel": "Status",
+      "emptyTitle": "No automations yet",
+      "emptyDescription": "Automations fire ordered actions from schedule, date, field-change, event, document, or manual triggers.",
+      "columnAutomation": "Automation",
+      "columnStatus": "Status",
+      "columnTrigger": "Trigger",
+      "columnLastRun": "Last run",
+      "columnError": "Error",
+      "columnActions": "Actions",
+      "runNow": "Run now",
+      "enable": "Enable",
+      "disable": "Disable",
+      "actionFailed": "The action failed.",
+      "recipeLabel": "Start from a recipe",
+      "recipeBlank": "Blank recipe"
+    },
+    "status": {
+      "enabled": "Enabled",
+      "draft": "Draft",
+      "disabled": "Disabled",
+      "error": "Error"
+    },
+    "triggerKinds": {
+      "schedule": "Schedule",
+      "date_relative": "Date relative",
+      "field_change": "Field change",
+      "event": "Event",
+      "document": "Document",
+      "manual": "Manual"
+    },
+    "builder": {
+      "pageTitle": "Automation builder",
+      "description": "Trigger, who and when, actions, simulation, and the run log.",
+      "buildTab": "Build",
+      "runsTab": "Runs",
+      "saved": "Saved.",
+      "saveFailed": "Could not save.",
+      "nameTitle": "Name",
+      "saveName": "Save name",
+      "triggerTitle": "Trigger",
+      "saveTrigger": "Save trigger",
+      "cronLabel": "Cron",
+      "timezoneLabel": "Timezone",
+      "entityLabel": "Entity",
+      "dateFieldLabel": "Date field",
+      "offsetLabel": "Offset (days)",
+      "directionLabel": "Direction",
+      "before": "Before",
+      "after": "After",
+      "atTimeLabel": "At (HH:MM)",
+      "fieldLabel": "Field",
+      "changedToLabel": "Changed to (blank = any)",
+      "subjectKindLabel": "Subject kind",
+      "eventKindLabel": "Event",
+      "documentUploaded": "Uploaded",
+      "documentSigned": "Signed",
+      "documentTemplated": "From template",
+      "whoWhenTitle": "Who and When",
+      "whoWhenHelp": "Scope filters narrow who the recipe applies to; the condition tree decides when it fires.",
+      "rule_subsidiaryId": "Subsidiary",
+      "rule_departmentId": "Department",
+      "rule_locationId": "Location",
+      "rule_workerType": "Worker type",
+      "rule_positionId": "Position",
+      "ruleBlank": "Blank = all",
+      "conditionsMode": "Conditions",
+      "conditionsAll": "All must match",
+      "conditionsAny": "Any may match",
+      "opLabel": "Op",
+      "valueLabel": "Value",
+      "remove": "Remove",
+      "addCondition": "Add condition",
+      "saveWhoWhen": "Save who and when",
+      "actionsTitle": "Actions",
+      "actionKindLabel": "Action kind",
+      "actionJsonLabel": "Action JSON",
+      "addAction": "Add action",
+      "saveActions": "Save actions",
+      "simulateTitle": "Simulate",
+      "simulateHelp": "Dry-run with no writes — pick entity:id or leave blank to sample.",
+      "simulateSubjectLabel": "Subject",
+      "simulateSubjectPlaceholder": "leave_request:<id>",
+      "simulateButton": "Simulate",
+      "stepKind": "Step",
+      "stepStatus": "Status",
+      "stepDetail": "Detail",
+      "runStatus": "Status",
+      "runsEmpty": "No runs yet.",
+      "runVersion": "Version",
+      "runSubject": "Subject",
+      "runCreated": "Created",
+      "runSteps": "Steps",
+      "viewSteps": "Steps",
+      "stepsTitle": "Run steps",
+      "runLoadFailed": "Could not load the run.",
+      "closeSteps": "Close",
+      "approvalTitle": "Approval settings",
+      "approvalHelp": "Exception-only approval tunes the existing Flows gates per subject kind — within thresholds the gate auto-approves as a system decision naming every check; outside them the human route runs.",
+      "approvalException": "Exception-only approval",
+      "approvalThresholds": "Thresholds (JSON)",
+      "approvalAuto": "Auto-approve when no rule",
+      "approvalDelegate": "Delegate after days (blank = never)",
+      "approvalExclude": "Exclude the initiator",
+      "approvalYes": "Yes",
+      "approvalNo": "No",
+      "approvalSave": "Save settings"
     }
   }
 }

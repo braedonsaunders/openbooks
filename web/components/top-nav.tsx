@@ -21,6 +21,7 @@ import { useTranslations } from 'next-intl'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Popover, cn } from '@openbooks/ui'
 import { NavIcon, toBlocks, type SidebarNavGroup, type SidebarNavItem } from './sidebar-nav'
+import { NavCountBadge } from './nav-count-badge'
 import { findActiveNavHref } from './sidebar-nav-active'
 import { useNavGroups } from './use-platform-nav'
 import { visibleTopNavGroupCount } from '../lib/top-nav-overflow'
@@ -409,6 +410,7 @@ function MenuItemLink({ item, active }: { item: SidebarNavItem; active: boolean 
         )}
       />
       <span className="truncate">{item.label}</span>
+      {item.badgeCountHref ? <NavCountBadge source={item.badgeCountHref} /> : null}
     </>
   )
   return item.href.startsWith('https://') ? (

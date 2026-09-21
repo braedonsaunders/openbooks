@@ -981,7 +981,17 @@
     "hrm_self_read": "Ver o resumo do próprio vínculo",
     "hrm_self_request": "Apresentar alterações do próprio perfil",
     "hrm_team_read": "Ver subordinados diretos hoje",
-    "hrm_team_manage": "Trabalhar etapas atribuídas pelo gestor"
+    "hrm_team_manage": "Trabalhar etapas atribuídas pelo gestor",
+    "automations_read": "Ver receitas de automação e o histórico",
+    "automations_manage": "Criar automações e ajustes de aprovação",
+    "automations_run": "Executar automações agora",
+    "hrm_construction_read": "Ver conformidade de construção",
+    "hrm_construction_manage": "Gerenciar conformidade de construção",
+    "hrm_compensation_read": "Ver faixas, arquitetura e ciclos",
+    "hrm_compensation_manage": "Executar ciclos, transferir taxas e criar planos e medições",
+    "hrm_compensation_approve": "Decidir linhas pelo fluxo de aprovação",
+    "hrm_certifications_read": "Ver certificações e prontidão de despacho",
+    "hrm_certifications_manage": "Gerenciar tipos de certificação, requisitos e renovações"
   },
   "ai": {
     "metaTitle": "Configurações de IA",
@@ -2464,6 +2474,60 @@
         "title": "Níveis de benefícios",
         "singularTitle": "Nível de benefícios",
         "description": "Níveis de cobertura por plano — só empregado, família — com os custos do nível."
+      },
+      "home-announcements": {
+        "title": "Avisos",
+        "description": "Avisos da empresa para a página inicial, com público e datas."
+      },
+      "construction-classifications": {
+        "title": "Classificações de trabalho",
+        "singularTitle": "Classificação de trabalho",
+        "description": "Taxonomia de ofícios para salário vigente: classes de oficiais e aprendizes com a classe oficial de cada proporção."
+      },
+      "construction-rate-schedules": {
+        "title": "Tabelas salariais",
+        "singularTitle": "Tabela salarial",
+        "description": "Tabelas vigentes, sindicais e declaradas com escopo de projeto, local e filial mais reciprocidade."
+      },
+      "construction-comp-classes": {
+        "title": "Classes de compensação",
+        "singularTitle": "Classe de compensação",
+        "description": "Classes de prêmio com taxa por 100 onde declarada; regras de prioridade decidem o preço de cada hora."
+      },
+      "construction-per-diem-policies": {
+        "title": "Políticas de diárias",
+        "singularTitle": "Política de diárias",
+        "description": "Regras de cálculo de diárias por base. A tributação vive no componente salarial, nunca aqui."
+      },
+      "construction-ratio-rules": {
+        "title": "Regras de proporção",
+        "singularTitle": "Regra de proporção",
+        "description": "Proporções oficial-aprendiz por tabela, medidas diária ou semanalmente. A violação é precificada a oficial."
+      },
+      "hrm-job-families": {
+        "title": "Famílias de cargos",
+        "singularTitle": "Família de cargos",
+        "description": "Os ofícios da organização — códigos estáveis que agrupam níveis."
+      },
+      "hrm-job-levels": {
+        "title": "Níveis",
+        "singularTitle": "Nível",
+        "description": "Um degrau por escala com posto e critérios de igual valor declarados."
+      },
+      "hrm-pay-bands": {
+        "title": "Faixas",
+        "singularTitle": "Faixa",
+        "description": "Linhas versionadas de salário DEVE por escopo: mudanças são linhas novas."
+      },
+      "hrm-competency-frameworks": {
+        "title": "Matrizes de competências",
+        "singularTitle": "Matriz",
+        "description": "O vocabulário reutilizável de habilidades com níveis."
+      },
+      "hrm-competencies": {
+        "title": "Competências",
+        "singularTitle": "Competência",
+        "description": "Uma habilidade de uma matriz, vinculável a avaliações, níveis e cargos."
       }
     },
     "fields": {
@@ -2774,7 +2838,45 @@
       "employerPayComponentId": "Componente do empregador",
       "waitingPeriodDays": "Carência (dias)",
       "requiresApproval": "Requer aprovação",
-      "levelKey": "Chave do nível"
+      "levelKey": "Chave do nível",
+      "body": "Corpo",
+      "audience": "Público",
+      "startsOn": "Começa em",
+      "endsOn": "Termina em",
+      "action": "Ação",
+      "reasonCode": "Código de motivo",
+      "requiresComment": "Exige comentário",
+      "trade": "Ofício",
+      "isApprentice": "Aprendiz",
+      "apprenticeProgramRef": "Ref programa",
+      "journeyClassificationId": "Classe oficial",
+      "apprenticeClassificationId": "Classe aprendiz",
+      "sourceRef": "Ref fonte",
+      "jurisdictionCode": "Jurisdição",
+      "reciprocity": "Reciprocidade",
+      "ratePer100": "Taxa / 100",
+      "lodgingOffset": "Desconto hospedagem",
+      "payComponentId": "Componente salarial",
+      "scheduleId": "Tabela",
+      "ratioJourney": "Oficial",
+      "ratioApprentice": "Aprendiz",
+      "measured": "Medição",
+      "rank": "Posto",
+      "familyId": "Família",
+      "skillsWeight": "Peso de habilidades",
+      "effortWeight": "Peso de esforço",
+      "responsibilityWeight": "Peso de responsabilidade",
+      "workingConditionsWeight": "Peso de condições",
+      "levelId": "Nível",
+      "min": "Mínimo",
+      "target": "Meta",
+      "max": "Máximo",
+      "validityMonths": "Validade (meses)",
+      "issuingBody": "Órgão emissor",
+      "renewalLeadDays": "Antecedência de renovação (dias)",
+      "requiresEvidence": "Exige evidência",
+      "extraCategories": "Categorias extras",
+      "frameworkId": "Matriz"
     },
     "fieldHelp": {
       "gapless": "Sem lacunas significa que todos os números da sequência devem ser contabilizados, sem números pulados. Ative somente quando exigências legais ou de auditoria determinarem uma numeração ininterrupta.",
@@ -2853,7 +2955,12 @@
       "benefitEmployerComponent": "Componente de contribuição do empregador que tarifa suas linhas. Obrigatório se o plano tarifa custo do empregador.",
       "benefitWaitingPeriod": "Dias de serviço antes de poder aderir ao plano.",
       "benefitRequiresApproval": "As inscrições aguardam até um gerente aprová-las.",
-      "benefitLevelKey": "Chave do nível nomeada pela inscrição — single, family — estável ante reajustes."
+      "benefitLevelKey": "Chave do nível nomeada pela inscrição — single, family — estável ante reajustes.",
+      "rateScheduleSource": "Número de determinação ou id de acordo por trás desta tabela.",
+      "rateScheduleJurisdiction": "Vocabulário do pack, texto livre na camada genérica — o pack interpreta.",
+      "perDiemComponent": "Componente de ganho pelo qual cruzam os valores. Seu tratamento fiscal é a única declaração.",
+      "hrmQualificationValidity": "Deixe vazio para qualificações que não vencem.",
+      "hrmQualificationExtraCategories": "Vocabulário de categorias próprio além das seis integradas."
     },
     "options": {
       "payFrequency": {
@@ -3250,6 +3357,58 @@
       "benefitProrationBasis": {
         "full_month": "Mês cheio — o mês inteiro sejam quais forem as datas",
         "daily": "Diário — rateado pelos dias cobertos"
+      },
+      "announcementAudience": {
+        "all": "Todos",
+        "managers": "Gestores",
+        "employees": "Funcionários"
+      },
+      "hrmAction": {
+        "hire": "Admissão",
+        "rehire": "Readmissão",
+        "transfer": "Transferência",
+        "promotion": "Promoção",
+        "demotion": "Rebaixamento",
+        "pay_change": "Alteração salarial",
+        "manager_change": "Troca de gestor",
+        "location_change": "Troca de unidade",
+        "schedule_change": "Alteração de jornada",
+        "leave_of_absence": "Licença",
+        "return": "Retorno",
+        "termination": "Desligamento",
+        "profile_change": "Alteração de perfil",
+        "other": "Outro"
+      },
+      "hrmScheduleKind": {
+        "prevailingWage": "Salário vigente",
+        "unionAgreement": "Acordo sindical",
+        "orgDeclared": "Declarado"
+      },
+      "hrmReciprocity": {
+        "homeLocal": "Local de origem",
+        "jobsiteLocal": "Local da obra",
+        "higherOf": "O maior"
+      },
+      "hrmPerDiemBasis": {
+        "flatDaily": "Diária fixa",
+        "distanceBrackets": "Faixas de distância",
+        "hoursThreshold": "Limiar de horas"
+      },
+      "hrmRatioMeasured": {
+        "daily": "Diária",
+        "weekly": "Semanal"
+      },
+      "payBandBasis": {
+        "annual": "Anual",
+        "hourly": "Por hora"
+      },
+      "hrmQualificationCategory": {
+        "certification": "Certificação",
+        "license": "Licença",
+        "training": "Treinamento",
+        "medical": "Médica",
+        "clearance": "Autorização",
+        "other": "Outra"
       }
     },
     "payroll": {
@@ -4344,6 +4503,18 @@
       "title": "Recursos humanos",
       "description": "Registros de emprego com histórico por data, headcount e acompanhamento de solicitações de alteração. Lê a base de RH; nunca conduz a folha de pagamento."
     },
+    "hrmCelebrations": {
+      "title": "Celebrações da equipe",
+      "description": "Aniversários, aniversários de empresa e novos colegas na página inicial."
+    },
+    "hrmManagerNudges": {
+      "title": "Lembretes do gestor",
+      "description": "Alertas de rotatividade e de 1:1 na página inicial do gestor, limitados à sua equipe."
+    },
+    "homeAnnouncements": {
+      "title": "Avisos na página inicial",
+      "description": "Cartão de avisos redigidos pela administração na página inicial, com público e datas."
+    },
     "crm": {
       "title": "CRM",
       "description": "Leads, prospects, oportunidades, atividades e previsões de vendas."
@@ -4483,6 +4654,114 @@
     "allocationsAtPosting": {
       "title": "Rateios na contabilização",
       "description": "Deixe regras de rateio e scripts autorizados contribuírem linhas extras no razão para o lançamento contábil da transação na contabilização."
+    },
+    "automations": {
+      "title": "Automações",
+      "description": "Receitas baseadas em gatilhos sobre Flows — gatilhos de agenda, data, mudança de campo, evento, documento e manuais que executam ações ordenadas."
+    },
+    "automationDateTriggers": {
+      "title": "Gatilhos de data",
+      "description": "Executar receitas em datas relativas da entidade, como dias antes do início."
+    },
+    "automationFieldTriggers": {
+      "title": "Gatilhos de campo",
+      "description": "Executar receitas quando um campo monitorado muda."
+    },
+    "automationWebhooks": {
+      "title": "Ações webhook",
+      "description": "Chamar webhooks assinados declarados pela organização a partir das receitas."
+    },
+    "automationSimulator": {
+      "title": "Simulador",
+      "description": "Testar receitas contra assuntos reais sem gravações."
+    },
+    "hrmActionReasons": {
+      "title": "Códigos de ação e motivo",
+      "description": "Exigir ação de RH e código de motivo em cada solicitação de alteração."
+    },
+    "hrmEventVerbs": {
+      "title": "Verbos de evento de alteração",
+      "description": "Cancelar, rescindir e corrigir alterações de vínculo como eventos anexados."
+    },
+    "hrmConstructionCompliance": {
+      "title": "Conformidade de construção",
+      "description": "Tabelas de salário vigente, folhas certificadas, classes de compensação, proporções de aprendizes e diárias para obra própria. Requer folha, projetos e ponto."
+    },
+    "hrmPrevailingWage": {
+      "title": "Salário vigente",
+      "description": "Resolver o salário por local, classificação e data a partir de tabelas declaradas."
+    },
+    "hrmCertifiedPayroll": {
+      "title": "Folha certificada",
+      "description": "Relatórios semanais congelados renderizados pelos arquivos declarados do pack."
+    },
+    "hrmWorkersCompClasses": {
+      "title": "Classes de compensação",
+      "description": "Dividir horas custeadas entre classes por regras de prioridade."
+    },
+    "hrmApprenticeRatios": {
+      "title": "Proporções de aprendizes",
+      "description": "Exigir proporções oficial-aprendiz diariamente; a violação é precificada a oficial."
+    },
+    "hrmPerDiem": {
+      "title": "Diárias",
+      "description": "Calcular diárias e viagens do tempo aprovado para a folha."
+    },
+    "hrmCompensation": {
+      "title": "Remuneração",
+      "description": "Arquitetura e faixas: o que os cargos devem pagar e onde cada pessoa está."
+    },
+    "hrmMeritCycles": {
+      "title": "Ciclos de mérito",
+      "description": "Rodadas que congelam a verdade da folha, decidem aumentos e transferem taxas."
+    },
+    "hrmHeadcountPlans": {
+      "title": "Planos de headcount",
+      "description": "Cenários custeados das faixas que abrem requisições ao aprovar."
+    },
+    "hrmPayTransparency": {
+      "title": "Transparência salarial",
+      "description": "Medições congeladas da folha e pedidos de informação."
+    },
+    "hrmCertifications": {
+      "title": "Certificações e licenças",
+      "description": "Registro de qualificações: taxonomia, credenciais, requisitos de alocação e alertas de vencimento. Desativar nunca apaga dados."
+    },
+    "hrmDispatchGating": {
+      "title": "Controle de alocações",
+      "description": "Recusa alocações sem as qualificações exigidas. Requer projetos e programação."
+    },
+    "hrmEquipmentQualifications": {
+      "title": "Qualificações de equipamentos",
+      "description": "Declare tipos exigidos nos equipamentos. Requer equipamentos."
+    },
+    "hrmCertificationAlerts": {
+      "title": "Alertas de certificação",
+      "description": "Avisos diários de vencimento a titulares e gestores pela caixa de entrada."
+    },
+    "hrmPerformance": {
+      "title": "Desempenho",
+      "description": "O interruptor principal de avaliações, metas, 1:1, feedback, calibração, talento e sucessão."
+    },
+    "hrmOneOnOnes": {
+      "title": "1:1",
+      "description": "Conversas agendadas entre gestor e colaborador com pauta contínua."
+    },
+    "hrmFeedback": {
+      "title": "Feedback",
+      "description": "Elogios, feedbacks e solicitações capturados quando acontecem."
+    },
+    "hrmCompetencies": {
+      "title": "Competências",
+      "description": "Vocabulário reutilizável de habilidades com níveis, ligado a avaliações e níveis."
+    },
+    "hrmCalibration": {
+      "title": "Calibração",
+      "description": "A matriz de notas sobre um ciclo de avaliação com auditoria."
+    },
+    "hrmSuccession": {
+      "title": "Talento e sucessão",
+      "description": "Avaliações de talento e planos de sucessão por cargo."
     }
   },
   "backupsManager": {
@@ -4764,6 +5043,130 @@
       "previewAction": "Só prévia do formulário. Ações de backend rodam após a ativação, usando a versão instalada e suas permissões.",
       "previewRecords": "Prévia do formulário usando a definição de registro proposta. Após a ativação, este workspace usa a lista compartilhada, filtros e painéis laterais.",
       "existingRecordsPreview": "Esta tela referencia um tipo de registro existente. Registros reais ficam disponíveis após a ativação para usuários com acesso."
+    }
+  },
+  "automations": {
+    "title": "Automações",
+    "description": "Receitas baseadas em gatilhos sobre Flows — gatilhos de agenda, data, mudança de campo, evento, documento e manuais que executam ações ordenadas.",
+    "backToFlows": "Voltar aos fluxos",
+    "backToList": "Voltar às automações",
+    "list": {
+      "newButton": "Nova automação",
+      "newTitle": "Nova automação",
+      "nameLabel": "Nome",
+      "namePlaceholder": "ex. Tarefas de boas-vindas antes do início",
+      "nameRequired": "Dê um nome à automação.",
+      "triggerLabel": "Gatilho",
+      "createFailed": "Não foi possível criar a automação.",
+      "create": "Criar",
+      "cancel": "Cancelar",
+      "neverRan": "Nunca executada",
+      "statusLabel": "Status",
+      "emptyTitle": "Sem automações ainda",
+      "emptyDescription": "Automações executam ações ordenadas a partir de gatilhos de agenda, data, mudança de campo, evento, documento ou manuais.",
+      "columnAutomation": "Automação",
+      "columnStatus": "Status",
+      "columnTrigger": "Gatilho",
+      "columnLastRun": "Última execução",
+      "columnError": "Erro",
+      "columnActions": "Ações",
+      "runNow": "Executar agora",
+      "enable": "Ativar",
+      "disable": "Desativar",
+      "actionFailed": "A ação falhou.",
+      "recipeLabel": "Começar de uma receita",
+      "recipeBlank": "Receita em branco"
+    },
+    "status": {
+      "enabled": "Ativada",
+      "draft": "Rascunho",
+      "disabled": "Desativada",
+      "error": "Erro"
+    },
+    "triggerKinds": {
+      "schedule": "Agenda",
+      "date_relative": "Relativo a data",
+      "field_change": "Mudança de campo",
+      "event": "Evento",
+      "document": "Documento",
+      "manual": "Manual"
+    },
+    "builder": {
+      "pageTitle": "Editor de automação",
+      "description": "Gatilho, quem e quando, ações, simulação e histórico.",
+      "buildTab": "Construir",
+      "runsTab": "Execuções",
+      "saved": "Salvo.",
+      "saveFailed": "Não foi possível salvar.",
+      "nameTitle": "Nome",
+      "saveName": "Salvar nome",
+      "triggerTitle": "Gatilho",
+      "saveTrigger": "Salvar gatilho",
+      "cronLabel": "Cron",
+      "timezoneLabel": "Fuso horário",
+      "entityLabel": "Entidade",
+      "dateFieldLabel": "Campo de data",
+      "offsetLabel": "Deslocamento (dias)",
+      "directionLabel": "Direção",
+      "before": "Antes",
+      "after": "Depois",
+      "atTimeLabel": "Às (HH:MM)",
+      "fieldLabel": "Campo",
+      "changedToLabel": "Mudou para (vazio = qualquer)",
+      "subjectKindLabel": "Tipo de assunto",
+      "eventKindLabel": "Evento",
+      "documentUploaded": "Enviado",
+      "documentSigned": "Assinado",
+      "documentTemplated": "De modelo",
+      "whoWhenTitle": "Quem e quando",
+      "whoWhenHelp": "Filtros de escopo limitam a quem a receita se aplica; a árvore de condições decide quando dispara.",
+      "rule_subsidiaryId": "Filial",
+      "rule_departmentId": "Departamento",
+      "rule_locationId": "Unidade",
+      "rule_workerType": "Tipo de vínculo",
+      "rule_positionId": "Cargo",
+      "ruleBlank": "Vazio = todos",
+      "conditionsMode": "Condições",
+      "conditionsAll": "Todas devem valer",
+      "conditionsAny": "Basta uma",
+      "opLabel": "Op",
+      "valueLabel": "Valor",
+      "remove": "Remover",
+      "addCondition": "Adicionar condição",
+      "saveWhoWhen": "Salvar quem e quando",
+      "actionsTitle": "Ações",
+      "actionKindLabel": "Tipo de ação",
+      "actionJsonLabel": "JSON da ação",
+      "addAction": "Adicionar ação",
+      "saveActions": "Salvar ações",
+      "simulateTitle": "Simular",
+      "simulateHelp": "Teste sem gravações — informe entidade:id ou deixe vazio para amostrar.",
+      "simulateSubjectLabel": "Assunto",
+      "simulateSubjectPlaceholder": "leave_request:<id>",
+      "simulateButton": "Simular",
+      "stepKind": "Etapa",
+      "stepStatus": "Status",
+      "stepDetail": "Detalhe",
+      "runStatus": "Status",
+      "runsEmpty": "Sem execuções.",
+      "runVersion": "Versão",
+      "runSubject": "Assunto",
+      "runCreated": "Criada",
+      "runSteps": "Etapas",
+      "viewSteps": "Etapas",
+      "stepsTitle": "Etapas da execução",
+      "runLoadFailed": "Não foi possível carregar a execução.",
+      "closeSteps": "Fechar",
+      "approvalTitle": "Ajustes de aprovação",
+      "approvalHelp": "A aprovação por exceção ajusta as portas de Flows existentes por tipo de assunto — dentro dos limites a porta aprova como decisão do sistema nomeando cada verificação; fora, segue a via humana.",
+      "approvalException": "Aprovação por exceção",
+      "approvalThresholds": "Limites (JSON)",
+      "approvalAuto": "Aprovar sem regra",
+      "approvalDelegate": "Delegar após dias (vazio = nunca)",
+      "approvalExclude": "Excluir o iniciador",
+      "approvalYes": "Sim",
+      "approvalNo": "Não",
+      "approvalSave": "Salvar ajustes"
     }
   }
 }

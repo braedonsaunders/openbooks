@@ -18,6 +18,7 @@ import type { DirectoryItem } from '../../components/module-home/ui'
 import { loadQueueLabels } from './change-requests'
 import { loadLeavePanel, type LeavePanelData } from './leave'
 import { loadBenefitsPanel, type BenefitsPanelData } from './benefits'
+import { loadQualificationAttention } from './qualifications'
 
 /**
  * Human Resources module home — one read for the workspace landing cockpit:
@@ -530,6 +531,10 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
 
   const leavePanel = await loadLeavePanel(authz)
   const recruiting = await loadRecruitingPanel(authz)
+  // HR-14 begin: expiring and expired certifications join the attention
+  // list — null without the grant or while the switch is off.
+  const qualificationAttention = await loadQualificationAttention(authz)
+  // HR-14 end
   const leavePending = leavePanel?.pendingCount ?? 0
   const overdueSteps = onboarding?.overdue.length ?? 0
   const openPositions = positions ? Number(positions.openPositionsValue) : 0
@@ -599,6 +604,15 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   if (leavePending > 0) {
     attention.push({ tone: 'warning', text: t('home.attention.leavePending', { count: leavePending }), href: '/hrm/leave?segment=pending' })
   }
+  // HR-14 begin: lapsed certifications refuse dispatch, expiring ones
+  // warn it — both link into the pre-filtered ledger segment.
+  if (qualificationAttention && qualificationAttention.expired > 0) {
+    attention.push({ tone: 'negative', text: t('home.attention.expiredQualifications', { count: qualificationAttention.expired }), href: '/hrm/qualifications?segment=expired' })
+  }
+  if (qualificationAttention && qualificationAttention.expiring > 0) {
+    attention.push({ tone: 'warning', text: t('home.attention.expiringQualifications', { count: qualificationAttention.expiring }), href: '/hrm/qualifications?segment=expiring' })
+  }
+  // HR-14 end
   if (positions && unfundedFte > 0) {
     attention.push({ tone: 'warning', text: t('home.attention.unfunded', { fte: fte(positions.unfundedFteValue) }), href: '/hrm/positions' })
   }

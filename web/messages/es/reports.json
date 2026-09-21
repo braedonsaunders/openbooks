@@ -680,6 +680,78 @@
       "hrm_benefit_enrollments": {
         "label": "Inscripciones de beneficios",
         "description": "Una fila por inscripción de beneficios — persona, empleador, departamento al inscribirse, plan y nivel de cobertura, estado e importes guardados por período. Requiere el permiso de beneficios."
+      },
+      "automations": {
+        "label": "Automatizaciones",
+        "description": "Una fila por receta de automatización: tipo de desencadenante, estado, versión y última ejecución. Requiere el permiso de automatizaciones."
+      },
+      "automation_runs": {
+        "label": "Ejecuciones de automatización",
+        "description": "Una fila por ejecución: versión ejecutada, sujeto, estado, pasos y error. Requiere el permiso de automatizaciones."
+      },
+      "hrm_action_reasons": {
+        "label": "Motivos de acción",
+        "description": "Una fila por código de motivo y acción de RR. HH.: el vocabulario de las solicitudes de cambio. Requiere el permiso de empleo de RR. HH."
+      },
+      "hrm_rate_schedule_lines": {
+        "label": "Tablas salariales",
+        "description": "Una fila por tabla, clasificación y fecha: base resoluble, beneficios en efectivo, acreditable y horas extra."
+      },
+      "hrm_per_diem_entries": {
+        "label": "Dietas",
+        "description": "Una fila por empleo, proyecto y día: dietas y viajes calculados con estado."
+      },
+      "hrm_comp_class_split": {
+        "label": "Reparto de clases",
+        "description": "Reglas de prioridad con sus clases: qué clase tasa cada hora y su tasa por 100."
+      },
+      "hrm_certified_runs": {
+        "label": "Ejecuciones certificadas",
+        "description": "Nóminas certificadas por proyecto y semana: datos congelados con formato y archivo."
+      },
+      "hrm_compliance_findings": {
+        "label": "Hallazgos",
+        "description": "Marcas previas solo-agregar por tipo: proporciones, tarifas faltantes, clases sin resolver."
+      },
+      "hrm_pay_bands": {
+        "label": "Bandas",
+        "description": "Una fila por banda vigente: nivel, ámbito, moneda, base y mínimo/objetivo/máximo."
+      },
+      "hrm_comp_cycle_lines": {
+        "label": "Líneas de mérito",
+        "description": "Una fila por decisión: persona, empleador, tarifa congelada, propuesta y estado."
+      },
+      "hrm_headcount_plan_lines": {
+        "label": "Líneas del plan",
+        "description": "Una fila por movimiento: plan, tipo, título, ETC, coste calculado y estado."
+      },
+      "hrm_pay_gap_snapshots": {
+        "label": "Mediciones de brecha",
+        "description": "Una fila por medición y categoría: nivel, personas, brechas y marca."
+      },
+      "hrm_qualifications": {
+        "label": "Cualificaciones",
+        "description": "Una fila por certificación o licencia poseída: titular, empleador, tipo y categoría, emisión y vencimiento, y estado guardado con su verificación."
+      },
+      "hrm_qualification_alerts": {
+        "label": "Alertas de cualificaciones",
+        "description": "Una fila por alerta de renovación de certificación: titular, tipo, vencimiento, el programa de antelación con el que se activó y si fue enviada."
+      },
+      "hrm_one_on_ones": {
+        "label": "Reuniones individuales",
+        "description": "Una fila por reunión individual: responsable, persona a cargo, fechas programada y celebrada, y estado. Requiere el permiso de desempeño de RR. HH."
+      },
+      "hrm_feedback": {
+        "label": "Comentarios",
+        "description": "Una fila por reconocimiento, comentario o solicitud: persona, tipo, visibilidad y fecha de registro. Requiere el permiso de desempeño de RR. HH."
+      },
+      "hrm_calibration_entries": {
+        "label": "Entradas de calibración",
+        "description": "Una fila por evaluación calibrada: sesión, empleado, calificación propuesta junto a la calibrada, potencial y quien decide. Requiere el permiso de desempeño de RR. HH."
+      },
+      "hrm_talent_reviews": {
+        "label": "Evaluaciones de talento",
+        "description": "Una fila por evaluación de talento: empleado, desempeño y potencial, impacto y riesgo de pérdida, y preparación para ascender. Requiere el permiso de desempeño de RR. HH."
       }
     },
     "columns": {
@@ -1248,7 +1320,9 @@
         "reason": "Motivo",
         "created_at": "Creado el",
         "id": "Solicitud (id)",
-        "employment_id": "Empleo (id)"
+        "employment_id": "Empleo (id)",
+        "action": "Acción",
+        "reason_code": "Código de motivo"
       },
       "hrm_positions": {
         "code": "Código",
@@ -1362,6 +1436,185 @@
         "effective_to": "Vigente hasta",
         "employment_id": "Empleo (id)",
         "id": "Inscripción (id)"
+      },
+      "hrm_rate_schedule_lines": {
+        "schedule": "Tabla",
+        "classification": "Clasificación",
+        "base_rate": "Tarifa base",
+        "fringe_rate": "Beneficios",
+        "currency": "Moneda",
+        "effective_from": "Vigente desde"
+      },
+      "hrm_per_diem_entries": {
+        "worked_on": "Día",
+        "amount": "Importe",
+        "currency": "Moneda",
+        "status": "Estado",
+        "employment_id": "Empleo (id)"
+      },
+      "hrm_comp_class_split": {
+        "class": "Clase",
+        "priority": "Prioridad",
+        "rate": "Tasa / 100"
+      },
+      "hrm_certified_runs": {
+        "week_ending": "Semana hasta",
+        "format_key": "Formato",
+        "status": "Estado",
+        "project_id": "Proyecto (id)"
+      },
+      "hrm_compliance_findings": {
+        "kind": "Tipo",
+        "worked_on": "Día",
+        "status": "Estado",
+        "project_id": "Proyecto (id)"
+      },
+      "hrm_pay_bands": {
+        "level": "Nivel",
+        "family": "Familia",
+        "employer": "Empleador",
+        "currency": "Moneda",
+        "basis": "Base",
+        "min": "Mínimo",
+        "target": "Objetivo",
+        "max": "Máximo",
+        "effective_from": "Vigencia",
+        "effective_to": "Fin",
+        "id": "Banda (id)"
+      },
+      "hrm_comp_cycle_lines": {
+        "cycle": "Ciclo",
+        "person": "Persona",
+        "employer": "Empleador",
+        "current_rate": "Tarifa actual",
+        "currency": "Moneda",
+        "compa_ratio": "Ratio compa",
+        "proposed_pct": "Propuesto %",
+        "proposed_rate": "Tarifa propuesta",
+        "status": "Estado",
+        "effective_on": "Vigencia",
+        "employment_id": "Empleo (id)",
+        "id": "Línea (id)"
+      },
+      "hrm_headcount_plan_lines": {
+        "plan": "Programa",
+        "kind": "Tipo",
+        "title": "Título",
+        "employer": "Empleador",
+        "planned_fte": "ETC planificado",
+        "start_on": "Inicio",
+        "est_annual_cost": "Coste anual est.",
+        "currency": "Moneda",
+        "status": "Estado",
+        "id": "Línea (id)"
+      },
+      "hrm_pay_gap_snapshots": {
+        "as_of": "Fecha",
+        "employer": "Empleador",
+        "level": "Nivel",
+        "count_a": "Personas A",
+        "count_b": "Personas B",
+        "mean_gap_pct": "Brecha media %",
+        "median_gap_pct": "Brecha mediana %",
+        "unexplained_gap_pct": "Brecha sin explicar %",
+        "method": "Método",
+        "joint_assessment_due": "Evaluación conjunta",
+        "id": "Medición (id)"
+      },
+      "hrm_qualifications": {
+        "employee": "Empleado",
+        "employer": "Empleador",
+        "type_code": "Código de tipo",
+        "type_name": "Tipo",
+        "category": "Categoría",
+        "identifier": "N.º de licencia",
+        "issued_on": "Fecha de emisión",
+        "expires_on": "Fecha de vencimiento",
+        "status": "Estado",
+        "verified_at": "Verificado el",
+        "qualification_id": "Cualificación (id)",
+        "employment_id": "Empleo (id)"
+      },
+      "hrm_qualification_alerts": {
+        "employee": "Empleado",
+        "type_code": "Código de tipo",
+        "type_name": "Tipo",
+        "expires_on": "Fecha de vencimiento",
+        "due_on": "Vencimiento",
+        "lead_days": "Días de antelación",
+        "sent_at": "Enviado el",
+        "channel": "Canal",
+        "alert_id": "Alerta (id)",
+        "qualification_id": "Cualificación (id)"
+      },
+      "automations": {
+        "name": "Nombre",
+        "status": "Estado",
+        "trigger_kind": "Desencadenador",
+        "version": "Versión",
+        "priority": "Prioridad",
+        "last_run_at": "Última ejecución",
+        "error_message": "Error",
+        "created_at": "Creado el",
+        "id": "Automatización (id)"
+      },
+      "automation_runs": {
+        "automation": "Automatización",
+        "status": "Estado",
+        "version": "Versión",
+        "subject_kind": "Tipo de objeto",
+        "subject_id": "Objeto (id)",
+        "started_at": "Iniciado el",
+        "finished_at": "Finalizado el",
+        "error": "Error",
+        "created_at": "Creado el",
+        "id": "Ejecución (id)"
+      },
+      "hrm_action_reasons": {
+        "action": "Acción",
+        "reason_code": "Código",
+        "label": "Etiqueta",
+        "requires_comment": "Requiere comentario",
+        "is_active": "Activo",
+        "created_at": "Creado el",
+        "id": "Motivo (id)"
+      },
+      "hrm_one_on_ones": {
+        "scheduled_at": "Programada",
+        "held_at": "Celebrada",
+        "manager": "Responsable",
+        "report": "Persona a cargo",
+        "employer": "Empleador",
+        "status": "Estado",
+        "id": "Reunión (id)"
+      },
+      "hrm_feedback": {
+        "recorded_at": "Registrado",
+        "employee": "Empleado",
+        "employer": "Empleador",
+        "kind": "Tipo",
+        "visibility": "Visibilidad",
+        "id": "Comentario (id)"
+      },
+      "hrm_calibration_entries": {
+        "session": "Sesión",
+        "employee": "Empleado",
+        "employer": "Empleador",
+        "proposed_rating": "Propuesta",
+        "calibrated_rating": "Calibrada",
+        "potential_key": "Potencial",
+        "decided_at": "Decidida",
+        "id": "Entrada (id)"
+      },
+      "hrm_talent_reviews": {
+        "reviewed_at": "Evaluado",
+        "employee": "Empleado",
+        "employer": "Empleador",
+        "performance_key": "Desempeño",
+        "potential_key": "Potencial",
+        "impact_of_loss": "Impacto de pérdida",
+        "risk_of_loss": "Riesgo de pérdida",
+        "id": "Evaluación (id)"
       }
     },
     "enumValues": {
@@ -1444,7 +1697,12 @@
       "filled": "Cubierto",
       "open": "Abierto",
       "planned": "Planificado",
-      "position_assignment": "Asignación de puesto"
+      "position_assignment": "Asignación de puesto",
+      "valid": "Válida",
+      "revoked": "Revocada",
+      "pending_verification": "Verificación pendiente",
+      "inbox": "Bandeja de entrada",
+      "email": "Correo electrónico"
     }
   },
   "operators": {

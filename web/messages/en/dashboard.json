@@ -40,7 +40,23 @@
     "topCustomers": "Top customers",
     "topVendors": "Top vendors",
     "openCount": "{count, plural, one {# open} other {# open}}",
-    "runway": "Cash runway"
+    "runway": "Cash runway",
+    "inboxList": "My tasks",
+    "payTile": "Pay",
+    "balanceTile": "Time-off balances",
+    "whosOut": "Who's out",
+    "homeUpcoming": "Upcoming",
+    "celebrations": "Celebrations",
+    "announcements": "Announcements",
+    "homeAsk": "Ask",
+    "teamApprovals": "Team approvals",
+    "teamSteps": "Team steps overdue",
+    "teamNudges": "1:1 and attention",
+    "teamHeadcount": "Team headcount",
+    "teamQuals": "Qualifications expiring",
+    "adminAttention": "Needs attention",
+    "workflowErrors": "Workflow errors",
+    "adminCalendar": "Compliance calendar"
   },
   "metricContext": {
     "today": "Posted today",
@@ -100,7 +116,23 @@
     "expectedPayments": "Predicted vendor payments in the next 30 days, in base currency.",
     "topCustomers": "Largest open customer balances, top five.",
     "topVendors": "Largest open vendor balances, top five.",
-    "runway": "Projected cash and runway over the coming weeks, in base currency."
+    "runway": "Projected cash and runway over the coming weeks, in base currency.",
+    "inboxList": "Your top tasks with a link to the inbox.",
+    "payTile": "Next pay date and last payslip.",
+    "balanceTile": "Time-off balances with a request link.",
+    "whosOut": "Who is out this week.",
+    "homeUpcoming": "Holidays and reviews due.",
+    "celebrations": "Birthdays, anniversaries, and joiners.",
+    "announcements": "Admin announcements.",
+    "homeAsk": "Ask the assistant.",
+    "teamApprovals": "Approvals awaiting you.",
+    "teamSteps": "Overdue team checklist steps.",
+    "teamNudges": "1:1 prompts and attention items.",
+    "teamHeadcount": "Headcount of your team.",
+    "teamQuals": "Expiring team qualifications.",
+    "adminAttention": "Cockpit attention rolled up.",
+    "workflowErrors": "Flows runs in error.",
+    "adminCalendar": "Report and remittance dates."
   },
   "grid": {
     "customizing": "Customizing your dashboard",
@@ -181,5 +213,21 @@
     "personalBadge": "Your board",
     "roleBadge": "Role default",
     "systemBadge": "Company default"
+  },
+  "persona": {
+    "nothingWaiting": "Nothing waits on you.",
+    "noBalances": "No computable balances.",
+    "nobodyOut": "Nobody out this week.",
+    "nothingUpcoming": "Nothing upcoming.",
+    "noCelebrations": "No celebrations.",
+    "noAnnouncements": "No announcements.",
+    "askHint": "Ask about pay, time off, or policies.",
+    "noOverdueSteps": "No overdue steps.",
+    "noNudges": "No nudges.",
+    "noExpiringQuals": "No expiring qualifications.",
+    "allClear": "All clear.",
+    "needsAttention": "Needs attention.",
+    "requestTimeOff": "Request time off",
+    "lastSlip": "Last slip {date}"
   }
 }

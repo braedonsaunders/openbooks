@@ -1,0 +1,39 @@
+{
+  "title": "Inicio",
+  "greeting": "Qué bueno verle, {name}",
+  "sections": {
+    "myTasks": "Mis tareas",
+    "openInbox": "Abrir la bandeja",
+    "pay": "Nómina",
+    "timeOff": "Vacaciones",
+    "requestTimeOff": "Solicitar vacaciones",
+    "whosOut": "Quién falta esta semana",
+    "upcoming": "Próximo",
+    "celebrations": "Celebraciones",
+    "announcements": "Anuncios",
+    "ask": "Preguntar",
+    "askPlaceholder": "Pregunte sobre nómina, vacaciones o políticas…",
+    "teamApprovals": "Aprobaciones que me esperan",
+    "teamOut": "Equipo ausente",
+    "teamSteps": "Pasos del equipo vencidos",
+    "teamQualifications": "Cualificaciones por vencer",
+    "oneOnOnes": "Avisos de 1:1",
+    "headcount": "Mi equipo",
+    "attention": "Requiere atención",
+    "workflows": "Errores de flujo",
+    "compliance": "Calendario de cumplimiento"
+  },
+  "empty": {
+    "tasks": "Nada le espera.",
+    "out": "Nadie falta esta semana.",
+    "upcoming": "Nada próximo.",
+    "celebrations": "Sin celebraciones esta semana.",
+    "announcements": "Sin anuncios.",
+    "attention": "Todo al día."
+  },
+  "pay": {
+    "nextPay": "Próxima nómina",
+    "lastSlip": "Último recibo",
+    "viewSlip": "Ver recibo"
+  }
+}

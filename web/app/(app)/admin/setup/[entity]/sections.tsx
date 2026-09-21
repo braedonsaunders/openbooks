@@ -1,5 +1,6 @@
 import 'server-only'
 import { loadExtensionSettingRows, extensionSettingDrawerEntity } from '../../../../../lib/setup/extension-settings'
+import { loadHomeAnnouncementRows } from '../../../../../lib/setup/home-announcements'
 
 import Link from 'next/link'
 import { sql } from 'drizzle-orm'
@@ -165,6 +166,13 @@ export async function SetupDrawerSlot({
     const row = (await loadExtensionSettingRows(orgId)).find((candidate) => candidate.id === rowParam)
     if (!row) return null
     return <SetupDrawer entity={extensionSettingDrawerEntity(entity, row)} row={row} members={[]} refOptions={{}} closeHref={closeHref} />
+  }
+  // HR-15: announcement rows come from org settings JSON, not a table.
+  if (entity.dataSource === 'home-announcements') {
+    if (!rowParam || rowParam === 'new') return null
+    const row = (await loadHomeAnnouncementRows(orgId)).find((candidate) => candidate.id === rowParam)
+    if (!row) return null
+    return <SetupDrawer entity={entity} row={row as unknown as Record<string, unknown>} members={[]} refOptions={{}} closeHref={closeHref} />
   }
   if (rowParam === 'new' && entity.allowCreate === false) return null
   const refOptions = await loadRefOptions(entity, orgId, authz.allowedSubsidiaryIds)

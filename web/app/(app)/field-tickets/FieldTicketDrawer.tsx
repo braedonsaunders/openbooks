@@ -839,7 +839,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
       case 'approval':
         return ticket.status === 'pending_approval' ? (
           <Button variant="outline" asChild>
-            <Link href="/approvals">{tCommon('actions.view')} {tNav('approvals')}</Link>
+            <Link href="/inbox">{tCommon('actions.view')} {tNav('approvals')}</Link>
           </Button>
         ) : null
       case 'submit':

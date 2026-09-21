@@ -223,7 +223,7 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
 
     deepLink(subjectId: string): string {
       const build = RECORD_ROUTES[kind];
-      return build ? build(subjectId) : "/approvals";
+      return build ? build(subjectId) : "/inbox";
     },
 
     async getStatus(subjectId: string): Promise<string | null> {

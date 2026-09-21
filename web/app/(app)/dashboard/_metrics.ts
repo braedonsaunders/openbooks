@@ -4,6 +4,7 @@ import { businessToday, startOfMonth } from '@openbooks/engine/src/platform/busi
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { type Authz, can } from '@/lib/authz'
 import { approvalWorklistForAuthz, type ApprovalWorklistItem } from '@/lib/application/approvals'
+import { loadPersonaMetrics, type PersonaMetrics } from './_persona'
 import { randomUUID } from 'node:crypto'
 import { readableContinuousCloseAgents } from '@/lib/continuous-close'
 import { bankingHome } from '@/lib/module-home/banking'
@@ -171,7 +172,7 @@ export type DashboardMetrics = {
   }>
   /**
    * Top-5 of the caller's actionable unified worklist — the same reader as
-   * the tile and the /approvals tabs, so all three tie by construction.
+   * the tile and the /inbox tabs, so all three tie by construction.
    */
   myApprovalList: Array<{
     id: string
@@ -191,6 +192,25 @@ export type DashboardMetrics = {
     total: string
     status: string
   }>
+  // HR-15 persona-home fields (see _persona.ts). Each widget reads only
+  // its own; null means absent (feature off, no source rows, or no grant)
+  // and the tile renders the honest empty card, never a zero as a fact.
+  inboxTasksTop: PersonaMetrics['inboxTasksTop']
+  inboxApprovalsTop: PersonaMetrics['inboxApprovalsTop']
+  inboxCount: PersonaMetrics['inboxCount']
+  payTile: PersonaMetrics['payTile']
+  balances: PersonaMetrics['balances']
+  whosOut: PersonaMetrics['whosOut']
+  upcoming: PersonaMetrics['upcoming']
+  celebrations: PersonaMetrics['celebrations']
+  announcements: PersonaMetrics['announcements']
+  teamSteps: PersonaMetrics['teamSteps']
+  teamNudges: PersonaMetrics['teamNudges']
+  teamHeadcount: PersonaMetrics['teamHeadcount']
+  teamQuals: PersonaMetrics['teamQuals']
+  adminAttention: PersonaMetrics['adminAttention']
+  workflowErrors: PersonaMetrics['workflowErrors']
+  adminCalendar: PersonaMetrics['adminCalendar']
 }
 
 /**
@@ -292,7 +312,7 @@ export async function loadDashboardMetrics(
   const need = (...fields: (keyof DashboardMetrics)[]): boolean =>
     fields.some((f) => needed.has(f))
 
-  // The tile links to /approvals?tab=all, so its number is the unified
+  // The tile links to /inbox?tab=all, so its number is the unified
   // worklist (Flows gates + gateless document approvals + pending pay runs),
   // counted through the same reader as the worklist page and get_vitals —
   // never a gates-only subquery. Same doorway as get_vitals: a caller who
@@ -533,6 +553,18 @@ export async function loadDashboardMetrics(
       }
     })
   const agent = (agentFindings as unknown as { rows: Array<{ open: number; proposals: number; last_run: string | Date | null }> }).rows[0]!
+  // HR-15 persona fields: only the fields the visible widgets render are
+  // queried — a denied widget's reader never runs.
+  const personaKeys = [
+    'inboxTasksTop', 'inboxApprovalsTop', 'inboxCount', 'payTile', 'balances',
+    'whosOut', 'upcoming', 'celebrations', 'announcements', 'teamSteps',
+    'teamNudges', 'teamHeadcount', 'teamQuals', 'adminAttention',
+    'workflowErrors', 'adminCalendar',
+  ] as const
+  const personaNeeded = new Set<keyof PersonaMetrics>(
+    personaKeys.filter((key) => needed.has(key)),
+  )
+  const persona = await loadPersonaMetrics(authz, personaNeeded)
   return {
     baseCurrency,
     journalLineCount: Number(t.journal_lines),
@@ -588,6 +620,7 @@ export async function loadDashboardMetrics(
       total: r.total,
       status: r.status,
     })),
+    ...persona,
   }
 }
 
@@ -620,6 +653,23 @@ const WIDGET_METRIC_FIELDS: Record<string, readonly (keyof DashboardMetrics)[]> 
   'personal-in-progress': ['draftDocuments'],
   'personal-inbox': ['myApprovalList'],
   'personal-actions': [],
+  // HR-15 persona-home tiles (see _persona.ts for the readers).
+  'inbox-list': ['inboxTasksTop', 'inboxCount'],
+  'pay-tile': ['payTile'],
+  'balance-tile': ['balances'],
+  'whos-out-strip': ['whosOut'],
+  'home-upcoming': ['upcoming'],
+  'celebrations-list': ['celebrations'],
+  'announcements-card': ['announcements'],
+  'home-ask': [],
+  'team-approvals': ['inboxApprovalsTop'],
+  'team-steps': ['teamSteps'],
+  'team-nudges': ['teamNudges'],
+  'team-headcount': ['teamHeadcount'],
+  'team-quals': ['teamQuals'],
+  'admin-attention': ['adminAttention'],
+  'workflow-errors': ['workflowErrors'],
+  'admin-calendar': ['adminCalendar'],
 }
 
 const EMPTY_METRICS: DashboardMetrics = {
@@ -660,6 +710,22 @@ const EMPTY_METRICS: DashboardMetrics = {
   pendingApprovalList: [],
   myApprovalList: [],
   draftDocuments: [],
+  inboxTasksTop: null,
+  inboxApprovalsTop: null,
+  inboxCount: null,
+  payTile: null,
+  balances: null,
+  whosOut: null,
+  upcoming: null,
+  celebrations: null,
+  announcements: null,
+  teamSteps: null,
+  teamNudges: null,
+  teamHeadcount: null,
+  teamQuals: null,
+  adminAttention: null,
+  workflowErrors: null,
+  adminCalendar: null,
 }
 
 /**

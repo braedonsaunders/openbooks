@@ -68,6 +68,33 @@ export const FEATURES: FeatureDef[] = [
   // exist before the cockpit says anything true). Stands alone: it reads
   // the HRM foundation but never drives payroll.
   { key: 'hrm', defaultEnabled: false, category: 'operations', navModules: ['hrm'] },
+  // HR-12 begin: compensation — job architecture and bands ride the
+  // parent; merit cycles, headcount plans and pay transparency are
+  // opt-in sub-features. Merit cycles push to payroll and read pay
+  // truth, so hrmMeritCycles additionally requires payroll.
+  { key: 'hrmCompensation', defaultEnabled: false, category: 'operations', parentKey: 'hrm' },
+  { key: 'hrmMeritCycles', defaultEnabled: false, category: 'operations', parentKey: 'hrmCompensation', requiresAll: ['payroll'] },
+  { key: 'hrmHeadcountPlans', defaultEnabled: false, category: 'operations', parentKey: 'hrmCompensation' },
+  { key: 'hrmPayTransparency', defaultEnabled: false, category: 'operations', parentKey: 'hrmCompensation' },
+  // HR-12 end
+  // HR-17 begin: continuous performance. hrmPerformance is the parent
+  // gate for the whole review-and-growth surface (HR-7's cycles, reviews
+  // and goals move under it additively); 1:1s, feedback, competencies,
+  // calibration and succession are opt-in sub-features. Off hides the
+  // tab, widgets, tools and setup — never data.
+  { key: 'hrmPerformance', defaultEnabled: true, category: 'operations', parentKey: 'hrm' },
+  { key: 'hrmOneOnOnes', defaultEnabled: false, category: 'operations', parentKey: 'hrmPerformance' },
+  { key: 'hrmFeedback', defaultEnabled: false, category: 'operations', parentKey: 'hrmPerformance' },
+  { key: 'hrmCompetencies', defaultEnabled: false, category: 'operations', parentKey: 'hrmPerformance' },
+  { key: 'hrmCalibration', defaultEnabled: false, category: 'operations', parentKey: 'hrmPerformance' },
+  { key: 'hrmSuccession', defaultEnabled: false, category: 'operations', parentKey: 'hrmPerformance' },
+  // HR-17 end
+  // HR-15 begin: optional persona-home complexity. The inbox and the persona
+  // homes are core; only these widgets gate. Off hides the widget, never data.
+  { key: 'hrmCelebrations', defaultEnabled: false, category: 'operations', parentKey: 'hrm' },
+  { key: 'hrmManagerNudges', defaultEnabled: false, category: 'operations', parentKey: 'hrm' },
+  { key: 'homeAnnouncements', defaultEnabled: true, category: 'platform' },
+  // HR-15 end
   { key: 'fieldTickets', defaultEnabled: false, category: 'operations', navModules: ['field-tickets'], parentKey: 'projects' },
   // Project scheduling: critical-path Gantt, working calendars, baselines and
   // resource levelling. Off by default — a schedule is a planning instrument,
@@ -136,11 +163,52 @@ export const FEATURES: FeatureDef[] = [
   { key: 'allocationsAtPosting', defaultEnabled: true, category: 'accounting', parentKey: 'allocations' },
   // Platform
   { key: 'flows', defaultEnabled: true, category: 'platform', navModules: ['flows', 'approvals'] },
+  // HR-16 automations on Flows (0226): trigger/rule/condition/action recipes
+  // over the existing Flows gates. The builder is platform-nav under Flows;
+  // exception-only approval is a per-flow SETTING, not a feature.
+  // HR-16 begin
+  { key: 'automations', defaultEnabled: false, category: 'platform', parentKey: 'flows', navModules: ['automations'] },
+  { key: 'automationDateTriggers', defaultEnabled: false, category: 'platform', parentKey: 'automations' },
+  { key: 'automationFieldTriggers', defaultEnabled: false, category: 'platform', parentKey: 'automations' },
+  { key: 'automationWebhooks', defaultEnabled: false, category: 'platform', parentKey: 'automations' },
+  { key: 'automationSimulator', defaultEnabled: false, category: 'platform', parentKey: 'automations' },
+  // HR-16 end
+  // HR-16 action/reason codes (0227): cheap, every enterprise suite has
+  // them — default ON. Event verbs (cancel/rescind/correct) on completed
+  // employment changes.
+  // HR-16 begin
+  { key: 'hrmActionReasons', defaultEnabled: true, category: 'operations', parentKey: 'hrm' },
+  { key: 'hrmEventVerbs', defaultEnabled: false, category: 'operations', parentKey: 'hrm' },
+  // HR-16 end
   { key: 'apps', defaultEnabled: true, category: 'platform', navModules: ['apps'] },
   { key: 'scripts', defaultEnabled: false, category: 'platform', navModules: ['admin-scripts'] },
   { key: 'apiAccess', defaultEnabled: false, category: 'platform', navModules: ['admin-api-keys', 'api-docs'] },
   { key: 'mcpAccess', defaultEnabled: false, category: 'platform', requiresAll: ['apiAccess'] },
   { key: 'queryConsole', defaultEnabled: false, category: 'platform', navModules: ['sql'] },
+  // HR-13 begin: construction compliance — prevailing-wage and union rate
+  // tables, certified payroll, workers'-comp class splits, apprentice
+  // ratios, per-diem and travel pay. A general-business org never sees
+  // any of this: the parent needs payroll, projects and time tracking,
+  // and every complexity below it is a sub-feature that hides and
+  // switches off independently. Toggling never deletes data.
+  { key: 'hrmConstructionCompliance', defaultEnabled: false, category: 'operations', navModules: ['hrm-compliance'], parentKey: 'hrm', requiresAll: ['payroll', 'projects', 'timeTracking'] },
+  { key: 'hrmPrevailingWage', defaultEnabled: false, category: 'operations', parentKey: 'hrmConstructionCompliance' },
+  { key: 'hrmCertifiedPayroll', defaultEnabled: false, category: 'operations', parentKey: 'hrmConstructionCompliance', requiresAll: ['hrmPrevailingWage'] },
+  { key: 'hrmWorkersCompClasses', defaultEnabled: false, category: 'operations', parentKey: 'hrmConstructionCompliance' },
+  { key: 'hrmApprenticeRatios', defaultEnabled: false, category: 'operations', parentKey: 'hrmConstructionCompliance', requiresAll: ['hrmPrevailingWage'] },
+  { key: 'hrmPerDiem', defaultEnabled: false, category: 'operations', parentKey: 'hrmConstructionCompliance' },
+  // HR-13 end
+  // HR-14 begin: certifications, licenses and dispatch gating — the worker
+  // qualification ledger. Dispatch gating refuses unqualified assignments
+  // on the projectScheduling board (needs projects + projectScheduling);
+  // equipment qualifications gate machine assignments (needs equipment);
+  // certification alerts are the daily expiry scan (needs nothing else).
+  // Toggling any of these never deletes data.
+  { key: 'hrmCertifications', defaultEnabled: false, category: 'operations', parentKey: 'hrm' },
+  { key: 'hrmDispatchGating', defaultEnabled: false, category: 'operations', parentKey: 'hrmCertifications', requiresAll: ['projects', 'projectScheduling'] },
+  { key: 'hrmEquipmentQualifications', defaultEnabled: false, category: 'operations', parentKey: 'hrmCertifications', requiresAll: ['equipment'] },
+  { key: 'hrmCertificationAlerts', defaultEnabled: false, category: 'operations', parentKey: 'hrmCertifications' },
+  // HR-14 end
 ]
 
 export const FEATURE_BY_KEY = new Map(FEATURES.map((f) => [f.key, f]))

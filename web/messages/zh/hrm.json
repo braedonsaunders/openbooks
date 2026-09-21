@@ -10,7 +10,10 @@
       "myLeave": "我的休假",
       "recruiting": "招聘",
       "performance": "绩效",
-      "benefits": "福利"
+      "benefits": "福利",
+      "compliance": "合规",
+      "compensation": "薪酬",
+      "qualifications": "资质"
     },
     "recruiting": {
       "title": "招聘",
@@ -78,7 +81,9 @@
       "pending": "{count, plural, other {# 项变更申请待决定}}",
       "overdueSteps": "{count, plural, other {# 项清单步骤已逾期}}",
       "leavePending": "{count, plural, other {# 项休假申请待审批}}",
-      "unfunded": "{fte} 个已填补FTE缺少预算"
+      "unfunded": "{fte} 个已填补FTE缺少预算",
+      "expiringQualifications": "{count, plural, other {# 项认证即将到期}}",
+      "expiredQualifications": "{count, plural, other {# 项认证已到期 — 续期前拒绝派工}}"
     }
   },
   "overview": {
@@ -160,7 +165,9 @@
       "kind": "变更",
       "effective": "生效",
       "requester": "申请人",
-      "submitted": "已提交"
+      "submitted": "已提交",
+      "action": "操作",
+      "verb": "动词"
     },
     "emptyTitle": "此处没有变更申请",
     "emptyDescription": "该视图为空 — 此分段中尚未提出任何申请。",
@@ -172,7 +179,14 @@
     "proposeFailed": "雇佣列表加载失败。",
     "draftBadge": "操作",
     "openEmployee": "打开员工档案",
-    "notAvailable": "不可用"
+    "notAvailable": "不可用",
+    "reasonsButton": "原因代码",
+    "verbs": {
+      "apply": "应用",
+      "cancel": "取消",
+      "rescind": "撤销",
+      "correct": "更正"
+    }
   },
   "employment": {
     "episodes": {
@@ -220,7 +234,7 @@
       "binding": "绑定",
       "bindingValue": "申请修订 {request}（对应雇用修订 {expected}）",
       "submitted": "已提交",
-      "viewInApprovals": "在审批中查看",
+      "viewInApprovals": "在收件箱中查看",
       "noRun": "草稿——尚无审批流程。",
       "empty": "尚无变更申请。",
       "statusNames": {
@@ -290,7 +304,18 @@
       "positionHint": "此任命所占据的拨款编制。任命保留其自身的职务、部门和地点。",
       "positionRequired": "请选择一个职位，或将该任命标记为未任命。",
       "unassignLabel": "解除职位任命",
-      "unassignHint": "记录显式空链接：该槽位保留其内容，但不占据编制。"
+      "unassignHint": "记录显式空链接：该槽位保留其内容，但不占据编制。",
+      "actionLabel": "操作",
+      "actionPlaceholder": "选择操作",
+      "actionRequired": "请选择本次变更的HR操作。",
+      "reasonCodeLabel": "原因",
+      "reasonCodePlaceholder": "选择原因",
+      "rescindAction": "撤销",
+      "correctAction": "更正",
+      "rescindTitle": "撤销变更",
+      "correctTitle": "更正变更",
+      "rescindToast": "已撤销变更。",
+      "correctToast": "已记录更正。"
     },
     "exit": {
       "title": "离职记录",
@@ -301,6 +326,14 @@
       "empty": "暂无福利参保或家属。",
       "viewAll": "福利",
       "dependents": "家属（{count}人）：{names}"
+    },
+    "qualifications": {
+      "title": "资质",
+      "viewAll": "查看全部",
+      "empty": "尚未记录资质。"
+    },
+    "continuous": {
+      "title": "反馈与能力"
     }
   },
   "directory": {
@@ -714,7 +747,95 @@
     "exitDestination": "去向",
     "exitNotes": "备注",
     "saveExit": "保存离职记录",
-    "recordExit": "记录离职"
+    "recordExit": "记录离职",
+    "continuous": {
+      "tabs": {
+        "cycles": "周期",
+        "calibration": "校准",
+        "talent": "人才与继任"
+      },
+      "calibration": {
+        "title": "校准",
+        "description": "评估周期上的评分矩阵:提案值与校准值对照,并附审计轨迹。",
+        "newSession": "新建会话",
+        "sessionsEmpty": "暂无校准会话。",
+        "colSession": "会话",
+        "colStatus": "状态",
+        "colOpened": "已开始",
+        "gridTitle": "校准矩阵",
+        "gridEmpty": "此会话暂无已提交的主管评估。",
+        "colReview": "评估",
+        "colProposed": "提案值",
+        "colDecide": "裁定",
+        "distributionTitle": "评分分布",
+        "unrated": "未评分",
+        "missingTitle": "本会话缺失项",
+        "openSession": "开始会话",
+        "closeSession": "结束会话",
+        "sessionName": "会话名称",
+        "sessionCycle": "评估周期",
+        "createSession": "创建会话",
+        "ratingLabel": "校准后评分",
+        "potentialLabel": "潜力",
+        "justificationLabel": "依据",
+        "saveLabel": "保存评分",
+        "revertLabel": "撤销",
+        "revertReasonLabel": "撤销原因"
+      },
+      "talent": {
+        "title": "人才与继任",
+        "description": "基于既定量表的九宫格、人才表和继任计划。",
+        "newRecord": "新建记录",
+        "cycleLabel": "评估周期",
+        "gridTitle": "人才矩阵",
+        "gridEmpty": "此周期暂无既定量表。",
+        "unplacedNote": "有{count}项落定超出既定量表",
+        "colEmployee": "员工",
+        "colPerformance": "绩效",
+        "colPotential": "潜力",
+        "colLoss": "流失影响 / 风险",
+        "colReady": "可晋升",
+        "readyYes": "是",
+        "readyNo": "暂否",
+        "reviewsEmpty": "此周期暂无人才评估。",
+        "plansTitle": "继任计划",
+        "plansEmpty": "暂无继任计划。",
+        "colPosition": "职位",
+        "colIncumbent": "现任者",
+        "colCandidates": "候选人",
+        "colStatus": "状态",
+        "impactLabel": "流失影响",
+        "riskLabel": "流失风险",
+        "promotionLabel": "可晋升",
+        "notesLabel": "备注",
+        "submitLabel": "保存记录",
+        "modeLabel": "记录",
+        "modeTalentLabel": "人才评估",
+        "modeSuccessionLabel": "继任计划",
+        "employeeLabel": "员工",
+        "positionLabel": "职位"
+      },
+      "feedback": {
+        "settingsTitle": "反馈设置",
+        "anyoneLabel": "组织内所有人",
+        "managersLabel": "仅主管和人事",
+        "saveLabel": "保存设置",
+        "praise": "表扬",
+        "feedbackKind": "反馈",
+        "request": "请求",
+        "kindLabel": "类型",
+        "visibilityLabel": "可见范围",
+        "publicVis": "公开",
+        "managerAndSubject": "主管与本人",
+        "managerOnly": "仅主管",
+        "subjectOnly": "仅本人",
+        "bodyLabel": "内容",
+        "bodyPlaceholder": "请具体说明发生了什么",
+        "submitLabel": "发送",
+        "praiseAction": "表扬",
+        "respondLabel": "回复"
+      }
+    }
   },
   "retention": {
     "title": "留任",
@@ -803,7 +924,11 @@
       "profile": "档案",
       "leave": "休假",
       "checklists": "清单",
-      "team": "团队"
+      "reviews": "考核",
+      "benefits": "福利",
+      "team": "团队",
+      "compensation": "薪酬",
+      "oneOnOnes": "1:1"
     },
     "refusedTitle": "自助服务不可用",
     "overview": {
@@ -829,7 +954,10 @@
       "balancesTitle": "余额",
       "balancesEmpty": "没有启用的休假类型。",
       "viewLeave": "打开休假",
-      "extensionsTitle": "更多"
+      "extensionsTitle": "更多",
+      "qualificationsTitle": "需要处理的认证",
+      "qualificationsEmpty": "没有即将到期",
+      "qualificationsEmptyDescription": "您的认证均有效 — 续期将在到期前显示在这里。"
     },
     "profile": {
       "title": "我的档案",
@@ -934,16 +1062,534 @@
         "title": "职位",
         "department": "部门",
         "status": "状态",
-        "serviceStart": "入职日期"
+        "serviceStart": "入职日期",
+        "cycle": "周期",
+        "oneOnOne": "1:1",
+        "feedback": "反馈"
       },
       "rosterEmpty": "暂无直接下属",
       "stepsTitle": "分配给我的步骤",
       "stepsEmpty": "该团队中暂无分配给您的步骤。",
       "leaveTitle": "待定休假",
       "leaveEmpty": "暂无待决定的休假申请。",
-      "decideInApprovals": "前往审批决定",
+      "decideInApprovals": "前往收件箱决定",
       "changesTitle": "待定变更申请",
-      "changesEmpty": "暂无待决定的变更申请。"
+      "changesEmpty": "暂无待决定的变更申请。",
+      "owedTitle": "待办考核",
+      "owedEmpty": "当前开放周期内无待办考核。",
+      "openReview": "打开考核",
+      "oneOnOneLink": "打开1:1"
+    },
+    "reviewStatus": {
+      "pending": "草稿",
+      "submitted": "已提交",
+      "calibrated": "已校准",
+      "shared": "已共享",
+      "acknowledged": "已确认"
+    },
+    "goalStatus": {
+      "active": "进行中",
+      "achieved": "已达成",
+      "missed": "未达成",
+      "cancelled": "已取消"
+    },
+    "enrollmentStatus": {
+      "elected": "已选择",
+      "waived": "已放弃",
+      "pending_approval": "待审批",
+      "active": "生效中",
+      "ended": "已结束",
+      "cancelled": "已取消"
+    },
+    "windowKinds": {
+      "open_enrollment": "开放投保",
+      "new_hire": "新员工入职",
+      "life_event": "生活事件"
+    },
+    "reviews": {
+      "title": "我的考核",
+      "description": "待提交的自评、共享给我的考核以及我的目标。",
+      "selfTitle": "自评",
+      "columns": {
+        "cycle": "周期",
+        "period": "期间",
+        "status": "状态",
+        "rating": "评分",
+        "shared": "共享",
+        "goal": "目标",
+        "progress": "进度"
+      },
+      "selfEmpty": "暂无自评",
+      "selfEmptyDescription": "周期开始后，应提交的自评将显示在这里。",
+      "answerInDrawer": "前往人事页面作答",
+      "sharedTitle": "共享给我的考核",
+      "sharedEmpty": "暂无共享",
+      "sharedEmptyDescription": "共享给我的经理考核将显示在这里。",
+      "acknowledge": "确认",
+      "acknowledgeFailed": "无法确认该考核。",
+      "goalsTitle": "我的目标",
+      "goalsEmpty": "暂无目标",
+      "goalsEmptyDescription": "雇佣关系的目标将连同进度显示在这里。",
+      "goalDialogTitle": "更新目标进度",
+      "goalDialogDescription": "附备注记录进度 — 将作为目标的证据。",
+      "goalNoteLabel": "备注",
+      "goalNotePlaceholder": "自上次更新以来的进展",
+      "goalSubmit": "保存进度",
+      "goalUpdate": "更新",
+      "goalFailed": "无法保存进度。"
+    },
+    "benefits": {
+      "title": "我的福利",
+      "description": "我的参保、开放的投保窗口和家属。",
+      "electionsTitle": "我的参保",
+      "columns": {
+        "plan": "计划",
+        "coverage": "保障",
+        "status": "状态",
+        "effective": "有效期",
+        "monthly": "扣款 / 周期",
+        "window": "窗口",
+        "kind": "类型",
+        "range": "日期",
+        "dependent": "家属",
+        "relationship": "关系"
+      },
+      "electionsEmpty": "暂无参保",
+      "electionsEmptyDescription": "所选保障将显示在这里。",
+      "monthlyHint": "工资每周期扣除的存储金额 — 不会重新计算。",
+      "windowsTitle": "开放中的投保窗口",
+      "windowsEmpty": "暂无开放窗口",
+      "windowsEmptyDescription": "雇主的窗口在开放期间显示在这里。",
+      "dependentsTitle": "家属",
+      "dependentsEmpty": "未登记家属。",
+      "elect": "选择保障",
+      "electTitle": "选择保障",
+      "electDescription": "在雇主开放窗口内选择 — 或记录生活事件。",
+      "fromLabel": "生效日期",
+      "lifeEventLabel": "生活事件原因（代替窗口）",
+      "lifeEventPlaceholder": "发生了什么变化，供人事审批人参考",
+      "electSubmit": "选择",
+      "electFailed": "无法记录该选择。",
+      "change": "变更",
+      "changeTitle": "变更保障",
+      "changeDescription": "从开放窗口内的日期起变更 — 旧记录于前一日结束。",
+      "changeReasonPlaceholder": "保障变更的原因",
+      "changeSubmit": "保存变更",
+      "changeFailed": "无法记录该变更。"
+    },
+    "qualifications": {
+      "columns": {
+        "type": "认证",
+        "expires": "到期日",
+        "status": "状态"
+      }
+    },
+    "oneOnOnes": {
+      "title": "1:1",
+      "description": "您即将进行和过往的1:1面谈及其议程。",
+      "upcoming": "即将进行",
+      "past": "过往",
+      "requests": "反馈请求",
+      "colWhen": "时间",
+      "colWith": "对象",
+      "colStatus": "状态",
+      "upcomingEmpty": "暂无安排的1:1。",
+      "pastEmpty": "暂无过往1:1。",
+      "requestsEmpty": "暂无待处理的反馈请求。",
+      "scheduled": "已安排",
+      "held": "已进行",
+      "skipped": "已跳过",
+      "cancelled": "已取消",
+      "talkingPoint": "话题",
+      "actionItem": "行动项",
+      "note": "备注",
+      "shared": "共享",
+      "private": "私密",
+      "privateNote": "私密 — 仅您可见",
+      "kindLabel": "类型",
+      "bodyLabel": "议程项",
+      "bodyPlaceholder": "请说明要点",
+      "addItem": "添加议程项",
+      "hold": "进行1:1",
+      "skip": "跳过",
+      "skipReason": "跳过原因",
+      "cancelMeeting": "取消",
+      "carryNote": "进行后,未完成项将以副本形式结转 — 原件作为历史保留在此。",
+      "done": "完成",
+      "reopen": "重新打开",
+      "carriedForward": "已结转",
+      "actionFailed": "1:1操作失败。"
+    }
+  },
+  "options": {
+    "hrmAction": {
+      "hire": "入职",
+      "rehire": "重新入职",
+      "transfer": "调动",
+      "promotion": "晋升",
+      "demotion": "降职",
+      "pay_change": "薪酬变更",
+      "manager_change": "上级变更",
+      "location_change": "地点变更",
+      "schedule_change": "班次变更",
+      "leave_of_absence": "休假",
+      "return": "返岗",
+      "termination": "离职",
+      "profile_change": "档案变更",
+      "other": "其他"
+    }
+  },
+  "compliance": {
+    "title": "合规",
+    "description": "现行工资、认证工资、工伤类别、学徒比例和每日津贴 — 基于相同的考勤、项目和工资记录处理建筑合规。",
+    "refused": "合规功能不可用",
+    "needRead": "打开此工作区需要建筑合规读取权限。",
+    "generate": "生成报告",
+    "findingsTitle": "发现项",
+    "ratesTitle": "工资表",
+    "certifiedTitle": "认证工资",
+    "classesTitle": "类别",
+    "perdiemTitle": "每日津贴",
+    "empty": "此处暂无内容。",
+    "emptyAction": "请在下方“设置”中配置。",
+    "active": "启用",
+    "retired": "停用",
+    "sections": {
+      "findings": "发现项",
+      "rates": "工资表",
+      "certified": "认证工资",
+      "classes": "类别",
+      "perdiem": "每日津贴"
+    },
+    "kinds": {
+      "ratio_breach": "比例违规",
+      "missing_rate": "缺少工资标准",
+      "class_unresolved": "类别未解决",
+      "registration_missing": "缺少登记",
+      "fringe_mismatch": "附加福利不符"
+    },
+    "findingStatus": {
+      "open": "待处理",
+      "acknowledged": "已确认",
+      "resolved": "已解决"
+    },
+    "runStatus": {
+      "draft": "草稿",
+      "generated": "已生成",
+      "submitted": "已提交",
+      "amended": "已修订"
+    },
+    "entryStatus": {
+      "computed": "已计算",
+      "approved": "已批准",
+      "voided": "已作废",
+      "consumed": "已使用"
+    },
+    "scheduleKind": {
+      "prevailing_wage": "现行工资",
+      "union_agreement": "工会协议",
+      "org_declared": "企业自定"
+    },
+    "reciprocity": {
+      "home_local": "属地标准",
+      "jobsite_local": "工地标准",
+      "higher_of": "取较高者"
+    },
+    "scope": {
+      "project": "个项目",
+      "location": "个地点",
+      "subsidiary": "子公司",
+      "org": "全公司"
+    },
+    "columns": {
+      "kind": "类型",
+      "project": "项目",
+      "day": "日期",
+      "status": "状态",
+      "recorded": "记录时间",
+      "schedule": "工资表",
+      "scope": "范围",
+      "reciprocity": "互惠规则",
+      "window": "有效期",
+      "run": "运行",
+      "week": "周",
+      "format": "格式",
+      "code": "编码",
+      "name": "名称",
+      "rate": "费率 / 100",
+      "rules": "规则",
+      "amount": "金额",
+      "actions": "操作"
+    },
+    "stats": {
+      "openFindings": "待处理发现项",
+      "openFindingsSub": "下次运行前处理",
+      "dueReports": "待提交报告",
+      "dueReportsSub": "截至 {week} 当周无报告的项目",
+      "unresolvedClasses": "未解决类别",
+      "unresolvedClassesSub": "无匹配规则的工时",
+      "perdiemWaiting": "待审批津贴",
+      "perdiemWaitingSub": "待审批的已计算条目"
+    },
+    "actions": {
+      "acknowledge": "确认",
+      "resolve": "解决",
+      "approve": "批准",
+      "void": "作废",
+      "submit": "提交"
+    },
+    "generateDialog": {
+      "title": "生成认证报告",
+      "project": "项目",
+      "week": "截至周",
+      "format": "格式",
+      "generate": "生成",
+      "cancel": "取消"
+    }
+  },
+  "compensation": {
+    "title": "薪酬",
+    "description": "岗位应付薪酬、人员是否在带宽内以及加薪如何决定。",
+    "tiles": {
+      "belowMin": "低于带宽下限",
+      "openCyclePacing": "周期进度",
+      "awaitingPlans": "待批计划",
+      "jointFlags": "联合评估"
+    },
+    "bandsTitle": "按级别划分的薪酬带宽",
+    "bandsEmpty": "暂无带宽 — 请为级别设定带宽。",
+    "cyclesTitle": "调薪周期",
+    "cyclesEmpty": "暂无周期 — 请开启一轮调薪。",
+    "plansTitle": "人力规划",
+    "plansEmpty": "暂无规划 — 请起草人力方案。",
+    "architectureTitle": "岗位体系",
+    "newCycle": "新建周期",
+    "newPlan": "新建规划",
+    "equity": "薪酬公平",
+    "back": "返回",
+    "pacing": "预算进度",
+    "pacingNone": "未设定预算额度",
+    "pacingNote": "已提议额度的{pct}%",
+    "linesTitle": "团队表",
+    "linesEmpty": "暂无明细 — 请开启周期以快照团队。",
+    "totalCost": "测算合计",
+    "planLinesTitle": "规划明细",
+    "planLinesEmpty": "暂无明细。",
+    "approveLine": "批准",
+    "columns": {
+      "level": "级别",
+      "range": "带宽",
+      "headcount": "人数",
+      "placement": "位置",
+      "name": "名称",
+      "status": "状态",
+      "effective": "生效日",
+      "cost": "成本",
+      "employee": "员工",
+      "current": "现行",
+      "rating": "考评",
+      "guideline": "指引",
+      "proposed": "提议",
+      "title": "标题",
+      "kind": "类型",
+      "fte": "全职当量",
+      "start": "开始"
+    },
+    "placement": {
+      "below_min": "低于下限",
+      "in_range": "带宽内",
+      "above_max": "高于上限",
+      "no_band": "无带宽"
+    },
+    "cycleKind": {
+      "merit": "绩效调薪",
+      "promotion": "晋升",
+      "adjustment": "调整",
+      "cola": "生活成本"
+    },
+    "cycleStatus": {
+      "draft": "草稿",
+      "open": "进行中",
+      "in_review": "审核中",
+      "approved": "已批准",
+      "pushed": "已推送",
+      "closed": "已关闭",
+      "cancelled": "已取消"
+    },
+    "lineStatus": {
+      "pending": "待处理",
+      "proposed": "已提议",
+      "approved": "已批准",
+      "rejected": "已拒绝",
+      "pushed": "已推送"
+    },
+    "planStatus": {
+      "draft": "草稿",
+      "submitted": "已提交",
+      "approved": "已批准",
+      "closed": "已关闭"
+    },
+    "planLineStatus": {
+      "proposed": "已提议",
+      "approved": "已批准",
+      "rejected": "已拒绝",
+      "opened": "招聘中",
+      "filled": "已到岗",
+      "cancelled": "已取消"
+    },
+    "lineKind": {
+      "create": "新增",
+      "backfill": "补员",
+      "change": "变更",
+      "terminate": "撤销"
+    },
+    "eventKind": {
+      "opened": "已开启",
+      "proposed": "已提议",
+      "reopened": "已重开",
+      "approved": "已批准",
+      "rejected": "已拒绝",
+      "budget_changed": "预算已变更",
+      "pushed": "已推送",
+      "closed": "已关闭",
+      "cancelled": "已取消"
+    },
+    "drawer": {
+      "proposeTitle": "提议",
+      "decideTitle": "审批",
+      "historyTitle": "历史",
+      "pctLabel": "涨幅 %",
+      "rateLabel": "新标准",
+      "reasonLabel": "原因",
+      "failed": "变更被拒绝",
+      "submit": "保存",
+      "cancel": "取消",
+      "approve": "批准",
+      "reject": "拒绝",
+      "reopen": "重开"
+    },
+    "historyColumns": {
+      "event": "事件",
+      "reason": "原因",
+      "at": "时间"
+    },
+    "emptyHistory": "暂无事件。"
+  },
+  "equity": {
+    "title": "薪酬公平",
+    "description": "按等值类别、根据薪酬事实计算的冻结差距指标。",
+    "meanGap": "平均差距",
+    "medianGap": "中位差距",
+    "variableGap": "浮动薪酬差距",
+    "jointFlags": "需联合评估",
+    "categoriesTitle": "按类别划分的差距",
+    "categoriesEmpty": "暂无已测类别。",
+    "columns": {
+      "category": "类别",
+      "counts": "人数 A / B",
+      "mean": "平均差距",
+      "median": "中位差距",
+      "unexplained": "未解释部分",
+      "flag": "标记"
+    },
+    "jointDue": "联合评估",
+    "generate": "生成快照",
+    "emptyTitle": "暂无快照",
+    "emptyDescription": "生成快照以衡量差距。"
+  },
+  "myComp": {
+    "title": "我的薪酬",
+    "description": "您的带宽位置、薪酬单和薪酬信息。",
+    "placement": "带宽位置",
+    "statementsTitle": "薪酬单",
+    "columns": {
+      "period": "期间",
+      "generated": "生成时间"
+    },
+    "statementsEmpty": "暂无薪酬单。",
+    "requestPayInfo": "请求薪酬信息",
+    "requestFailed": "请求被拒绝",
+    "requestSubmit": "保存",
+    "requestCancel": "取消",
+    "requestStatus": {
+      "open": "处理中"
+    }
+  },
+  "qualifications": {
+    "title": "资质",
+    "description": "按员工划分的执照、认证和证书——今日谁可以上岗，以及哪些即将到期。",
+    "record": "记录资质",
+    "recordTitle": "记录资质",
+    "drawerTitle": "资质",
+    "settings": "资质设置",
+    "sectionLabel": "部分",
+    "sections": {
+      "ledger": "台账",
+      "requirements": "要求",
+      "alerts": "提醒"
+    },
+    "segmentsLabel": "状态",
+    "allLabel": "全部",
+    "typesLabel": "类型",
+    "typesAll": "全部类型",
+    "listTitle": "按员工划分的资质",
+    "open": "打开",
+    "columns": {
+      "worker": "员工",
+      "type": "类型",
+      "status": "状态",
+      "expiry": "到期",
+      "subject": "对象",
+      "severity": "严重度",
+      "window": "有效期",
+      "due": "到期日",
+      "sent": "已发送"
+    },
+    "statusNames": {
+      "valid": "有效",
+      "expiring": "即将到期",
+      "expired": "已到期",
+      "revoked": "已撤销",
+      "pending_verification": "待验证"
+    },
+    "emptyTitle": "尚未记录资质",
+    "emptyDescription": "记录班组的执照和认证以管理派工。",
+    "requirementsTitle": "派工要求",
+    "requirementsEmpty": "尚未声明要求。",
+    "coverageTitle": "项目覆盖情况",
+    "coverageProjectLabel": "项目",
+    "coverageProjectAll": "选择项目",
+    "coverageEmpty": "该项目尚未安排人员。",
+    "coverage": {
+      "qualified": "具备资质",
+      "missing": "缺失",
+      "expired": "已到期",
+      "pending": "待定"
+    },
+    "alertsTitle": "到期提醒",
+    "alertsEmpty": "暂无提醒。",
+    "alertDue": "待发送",
+    "taxonomyTitle": "资质分类",
+    "windowOpen": "{from} – 有效",
+    "verify": "验证",
+    "renew": "续期",
+    "revoke": "撤销",
+    "revokePrompt": "撤销此资质？请输入原因：",
+    "renewPrompt": "续期资质的签发日期（YYYY-MM-DD）：",
+    "drawer": {
+      "issued": "签发日期",
+      "identifier": "执照编号",
+      "notes": "备注",
+      "evidence": "查看证明",
+      "events": "历史"
+    },
+    "recordForm": {
+      "employment": "雇佣关系",
+      "type": "资质类型",
+      "issuedOn": "签发日期",
+      "expiresOn": "到期日期",
+      "identifier": "执照编号",
+      "notes": "备注"
     }
   }
 }

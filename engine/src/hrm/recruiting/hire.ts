@@ -203,6 +203,11 @@ export async function acceptOfferAsHire(query: AcceptOfferAsHireQuery): Promise<
       requisitionId: requisition.id,
       expectedRevision: requisition.revision,
     });
+    // HR-12: a hire against a headcount-plan requisition marks the plan
+    // line filled — informational workforce tracking, never an employment
+    // write. Runs in the hire transaction, so a hire refusal unmarks.
+    const { markPlanLineFilledForRequisition } = await import("../compensation/headcount-plans.ts");
+    await markPlanLineFilledForRequisition(orgId, requisition.id);
     return {
       offerId,
       applicationId: application.id,

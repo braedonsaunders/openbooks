@@ -286,9 +286,54 @@ export async function decideGate(args: {
   return decideGateCore(args);
 }
 
-async function decideGateCore(args: Parameters<typeof decideGate>[0]): Promise<DecideGateResult> {
+/**
+ * System gate decision (HR-16 exception-only approval).
+ *
+ * The org's own configured policy — not a human — approves a gate that
+ * scored within its exception thresholds. Fail-closed by construction:
+ * the caller must name the policy (reason) and EVERY threshold checked
+ * (checked, non-empty); signature-required gates refuse (an attestation
+ * only a human can give); the decision records decided_by NULL with an
+ * audit actor of kind 'system' carrying the reason and checks — never a
+ * bare "auto-approved", never impersonating a user. All mechanics
+ * (serialized decision, quorum, resume, release) are decideGateCore's;
+ * only the authority differs, and the authority is the stored org
+ * policy the caller re-verified before calling.
+ */
+export async function decideGateAsSystem(args: {
+  gateId: string;
+  reason: string;
+  checked: string[];
+  allowedSubsidiaryIds?: GateSubsidiaryScope;
+}): Promise<DecideGateResult> {
+  const reason = args.reason?.trim() ?? "";
+  if (!reason) {
+    throw new GateError(
+      "a system approval needs the policy reason it enforces — pass the exception-only threshold summary",
+    );
+  }
+  if (!Array.isArray(args.checked) || args.checked.length === 0) {
+    throw new GateError(
+      "a system approval must name every threshold it checked — an empty check list never approves",
+    );
+  }
+  return decideGateCore({
+    gateId: args.gateId,
+    decision: "approved",
+    userId: "",
+    ...(args.allowedSubsidiaryIds ? { allowedSubsidiaryIds: args.allowedSubsidiaryIds } : {}),
+    comment: args.reason,
+    systemDecision: { reason, checked: args.checked },
+  });
+}
+
+async function decideGateCore(args: Parameters<typeof decideGate>[0] & {
+  /** System authority (HR-16): skips human authorization, never impersonates. */
+  systemDecision?: { reason: string; checked: string[] };
+}): Promise<DecideGateResult> {
   const { gateId, decision, userId } = args;
   const signature = args.signature?.trim() || null;
+  const asSystem = args.systemDecision ?? null;
 
   // -- Pre-flight (existence, authorization, separation of duties) -----------
   const pre = await loadGate(gateId);
@@ -303,16 +348,24 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0]): Promise<D
   // E-signature: a signature-required gate cannot be APPROVED without a typed
   // attestation. Enforced here (not just in the UI) so it holds for the bulk,
   // one-click email, and API paths alike. Rejection needs only a reason.
+  // A system decision can never supply an attestation, so signature gates
+  // always refuse the system path and wait for a human.
   if (pre.signatureRequired && decision === "approved" && !signature) {
-    throw new GateError("this approval requires your signature");
+    throw new GateError(
+      asSystem
+        ? "this approval requires a human signature — exception-only approval never decides signature gates"
+        : "this approval requires your signature",
+    );
   }
 
   let onBehalfOf: ResolvedUser | null = null;
-  if (!(await canActOnGate(pre, userId))) {
-    onBehalfOf = pre.assigneeUserId
-      ? await activeDelegationPrincipal(pre.orgId, pre.assigneeUserId, userId)
-      : null;
-    if (!onBehalfOf) throw new GateError("you are not an approver for this gate");
+  if (!asSystem) {
+    if (!(await canActOnGate(pre, userId))) {
+      onBehalfOf = pre.assigneeUserId
+        ? await activeDelegationPrincipal(pre.orgId, pre.assigneeUserId, userId)
+        : null;
+      if (!onBehalfOf) throw new GateError("you are not an approver for this gate");
+    }
   }
 
   // Separation of duties, enforced at DECISION time (not just gate creation):
@@ -363,7 +416,9 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0]): Promise<D
         .update(schema.flowGates)
         .set({
           status: decision,
-          decidedBy: userId,
+          // A system decision records NO human decider (null), with the
+          // policy provenance in the audit row below — never impersonation.
+          decidedBy: asSystem ? null : userId,
           decidedAt: new Date(),
           comment,
           // Attestation stored with the decision (only meaningful on approve).
@@ -407,7 +462,9 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0]): Promise<D
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${gate.orgId}, 'flow_gates', ${gateId}, 'update', ${JSON.stringify({
           event: decision,
-          actor: { kind: "user", userId },
+          actor: asSystem
+            ? { kind: "system", reason: asSystem.reason, checked: asSystem.checked }
+            : { kind: "user", userId },
           ...(onBehalfOf ? { onBehalfOfUserId: onBehalfOf.id } : {}),
           before: { status: "pending" },
           after: {
@@ -421,7 +478,7 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0]): Promise<D
           subjectKind: gate.subjectKind,
           subjectId: gate.subjectId,
           cancelledGateIds: outcome.cancelIds,
-        })}::jsonb, ${userId})
+        })}::jsonb, ${asSystem ? null : userId})
       `)
 
       if (!outcome.resume) {
@@ -448,7 +505,7 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0]): Promise<D
         });
       }
 
-      const ctx: FlowExecCtx = { orgId: gate.orgId, userId };
+      const ctx: FlowExecCtx = { orgId: gate.orgId, userId: asSystem ? null : userId };
       const subject = await adapter.loadContext(gate.subjectId);
 
       // The quorum is resolved — tell the requester what happened to their record
@@ -459,7 +516,9 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0]): Promise<D
           adapter,
           subject,
           branch: outcome.resume,
-          deciderUserId: userId,
+          // A system decision names no human decider to the submitter —
+          // the gate comment carries the threshold summary instead.
+          deciderUserId: asSystem ? "system" : userId,
           reason: args.comment?.trim() || null,
         });
       } catch (e) {
@@ -642,11 +701,17 @@ async function notifySubmitterOfDecision(args: {
   if (!submitterUserId || submitterUserId === args.deciderUserId) return;
   const submitter = await verifyUser(gate.orgId, submitterUserId);
   if (!submitter) return;
-  const decider = await verifyUser(gate.orgId, args.deciderUserId);
+  // The system sentinel is not a user row: never query it (an invalid uuid
+  // would abort the decision transaction inside this best-effort notify).
+  const decider = args.deciderUserId === "system" ? null : await verifyUser(gate.orgId, args.deciderUserId);
 
   const subjectLabel = subject ? adapter.label(gate.subjectId, subject.values) : gate.subjectKind;
   const verb = branch === "approve" ? "approved" : "rejected";
-  const byName = decider?.name ?? "an approver";
+  // A system (exception-only) decision names no human: the submitter learns
+  // it was automatic, with the threshold summary in the reason line.
+  const byName = args.deciderUserId === "system"
+    ? "automatically (within approval thresholds)"
+    : (decider?.name ?? "an approver");
   const title = `Your ${subjectLabel} was ${verb} by ${byName}`;
   const reasonLine = branch === "reject" && args.reason ? `Reason: ${args.reason}` : null;
   const href = adapter.deepLink(gate.subjectId);
@@ -1072,7 +1137,7 @@ export async function delegateGate(gateId: string, fromUserId: string, toUserId:
       userId: toUserId,
       kind: "approval",
       title: `Approval delegated to you: ${gate.title}`,
-      href: "/approvals",
+      href: "/inbox",
     });
 
     await db.execute(sql`
@@ -1209,7 +1274,7 @@ async function notifyGateAssignee(gate: GateRow, kind: "reminder" | "escalation"
         ? `Reminder — approval pending: ${gate.title}`
         : `Escalated approval: ${gate.title}`,
     body: subjectLabel,
-    href: "/approvals",
+    href: "/inbox",
   });
 
   try {
@@ -1314,7 +1379,7 @@ async function escalateGate(gateId: string, now: Date): Promise<boolean> {
           kind: "approval",
           title: `Overdue approval could not be escalated: ${gate.title}`,
           body: "No escalation target resolved — please review.",
-          href: "/approvals",
+          href: "/inbox",
         })),
       );
     }

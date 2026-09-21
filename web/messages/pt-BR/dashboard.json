@@ -40,7 +40,23 @@
     "topCustomers": "Principais clientes",
     "topVendors": "Principais fornecedores",
     "openCount": "{count, plural, one {# em aberto} other {# em aberto}}",
-    "runway": "Autonomia de caixa"
+    "runway": "Autonomia de caixa",
+    "inboxList": "Minhas tarefas",
+    "payTile": "Folha",
+    "balanceTile": "Saldos de férias",
+    "whosOut": "Ausentes",
+    "homeUpcoming": "Próximo",
+    "celebrations": "Celebrações",
+    "announcements": "Avisos",
+    "homeAsk": "Perguntar",
+    "teamApprovals": "Aprovações da equipe",
+    "teamSteps": "Etapas atrasadas",
+    "teamNudges": "1:1 e lembretes",
+    "teamHeadcount": "Tamanho da equipe",
+    "teamQuals": "Qualificações vencendo",
+    "adminAttention": "Precisa de atenção",
+    "workflowErrors": "Erros de fluxo",
+    "adminCalendar": "Calendário de conformidade"
   },
   "metricContext": {
     "today": "Lançado hoje",
@@ -100,7 +116,23 @@
     "expectedPayments": "Pagamentos a fornecedores previstos para os próximos 30 dias, na moeda base.",
     "topCustomers": "Os cinco maiores saldos de clientes em aberto.",
     "topVendors": "Os cinco maiores saldos de fornecedores em aberto.",
-    "runway": "Saldo projetado e autonomia das próximas semanas, na moeda base."
+    "runway": "Saldo projetado e autonomia das próximas semanas, na moeda base.",
+    "inboxList": "Suas principais tarefas com link para a caixa.",
+    "payTile": "Próximo pagamento e último holerite.",
+    "balanceTile": "Saldos com link de solicitação.",
+    "whosOut": "Quem falta esta semana.",
+    "homeUpcoming": "Feriados e avaliações.",
+    "celebrations": "Aniversários e novatos.",
+    "announcements": "Avisos da administração.",
+    "homeAsk": "Perguntar ao assistente.",
+    "teamApprovals": "Aprovações aguardando.",
+    "teamSteps": "Etapas atrasadas.",
+    "teamNudges": "Lembretes de 1:1 e alertas.",
+    "teamHeadcount": "Tamanho da sua equipe.",
+    "teamQuals": "Qualificações vencendo.",
+    "adminAttention": "Atenção acumulada.",
+    "workflowErrors": "Execuções com erro.",
+    "adminCalendar": "Datas de relatórios e remessas."
   },
   "grid": {
     "customizing": "Personalizando seu painel",
@@ -181,5 +213,21 @@
     "personalBadge": "Seu quadro",
     "roleBadge": "Padrão do papel",
     "systemBadge": "Padrão da empresa"
+  },
+  "persona": {
+    "nothingWaiting": "Nada aguarda você.",
+    "noBalances": "Sem saldos computáveis.",
+    "nobodyOut": "Ninguém ausente.",
+    "nothingUpcoming": "Nada próximo.",
+    "noCelebrations": "Sem celebrações.",
+    "noAnnouncements": "Sem avisos.",
+    "askHint": "Pergunte sobre folha, férias ou políticas.",
+    "noOverdueSteps": "Sem etapas atrasadas.",
+    "noNudges": "Sem lembretes.",
+    "noExpiringQuals": "Sem qualificações vencendo.",
+    "allClear": "Tudo em dia.",
+    "needsAttention": "Precisa de atenção.",
+    "requestTimeOff": "Solicitar férias",
+    "lastSlip": "Último holerite {date}"
   }
 }

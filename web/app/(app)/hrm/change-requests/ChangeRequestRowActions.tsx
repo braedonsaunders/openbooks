@@ -1,7 +1,17 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
+import { Badge } from '@openbooks/ui'
 import { ChangeRequestActions } from '../ChangeRequestActions'
+
+/**
+ * HR-16 (0227): the applied event's verb chip — renders only when the
+ * loader resolved a non-apply verb; unclassified rows render nothing.
+ */
+export function HrmVerbChip({ label }: { label: string | null | undefined }) {
+  if (!label) return null
+  return <Badge variant="secondary">{label}</Badge>
+}
 
 /**
  * One row's lifecycle actions inside the shared queue table: the existing
@@ -14,11 +24,13 @@ export function ChangeRequestRowActions({
   requestId,
   requestStatus,
   employmentId,
+  appliedChangeId,
   departmentOptions,
 }: {
   requestId: string
   requestStatus: string
   employmentId: string
+  appliedChangeId?: string | null
   departmentOptions: { value: string; label: string }[]
 }) {
   const router = useRouter()
@@ -26,6 +38,7 @@ export function ChangeRequestRowActions({
     <ChangeRequestActions
       request={{ id: requestId, status: requestStatus }}
       employmentId={employmentId}
+      appliedChangeId={appliedChangeId ?? null}
       departmentOptions={departmentOptions}
       onChanged={() => router.refresh()}
     />

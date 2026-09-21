@@ -981,7 +981,17 @@
     "hrm_self_read": "自分の雇用サマリーを閲覧",
     "hrm_self_request": "自分のプロフィール変更を申請",
     "hrm_team_read": "今日時点の直属の部下を閲覧",
-    "hrm_team_manage": "マネージャー割当のチームステップを処理"
+    "hrm_team_manage": "マネージャー割当のチームステップを処理",
+    "automations_read": "自動化レシピと実行ログを閲覧",
+    "automations_manage": "自動化と承認設定を作成",
+    "automations_run": "自動化を今すぐ実行",
+    "hrm_construction_read": "建設コンプライアンスを表示",
+    "hrm_construction_manage": "建設コンプライアンスを管理",
+    "hrm_compensation_read": "バンド・体系・サイクルを閲覧",
+    "hrm_compensation_manage": "サイクル実行、レート反映、プランとスナップショット作成",
+    "hrm_compensation_approve": "承認フローを通じて明細を決定",
+    "hrm_certifications_read": "認定と配車可否の表示",
+    "hrm_certifications_manage": "認定種類・要件・更新の管理"
   },
   "ai": {
     "metaTitle": "AI設定",
@@ -2532,6 +2542,60 @@
         "title": "福利厚生区分",
         "singularTitle": "福利厚生区分",
         "description": "プランごとの保障区分 — 本人のみ、家族 — 区分金額付き。"
+      },
+      "home-announcements": {
+        "title": "お知らせ",
+        "description": "対象者と期間付きの、ホーム向け会社お知らせ。"
+      },
+      "construction-classifications": {
+        "title": "作業分類",
+        "singularTitle": "作業分類",
+        "description": "標準賃金単価用の職種分類：見習い比率が紐づく熟練分類を持つ熟練・見習いクラス。"
+      },
+      "construction-rate-schedules": {
+        "title": "賃金表",
+        "singularTitle": "賃金表",
+        "description": "プロジェクト・拠点・子会社スコープと相互適用を持つ標準賃金・組合協定・自社宣言テーブル。"
+      },
+      "construction-comp-classes": {
+        "title": "労災クラス",
+        "singularTitle": "労災クラス",
+        "description": "宣言された100あたり料率を持つ労災プレミアムクラス；優先度ルールが各時間の単価を決定。"
+      },
+      "construction-per-diem-policies": {
+        "title": "日当ポリシー",
+        "singularTitle": "日当ポリシー",
+        "description": "基準別の日当計算ルール。課税区分は給与コンポーネント上にあり、ここにはない。"
+      },
+      "construction-ratio-rules": {
+        "title": "比率ルール",
+        "singularTitle": "比率ルール",
+        "description": "賃金表ごとの熟練・見習い比率を日次・週次で測定。違反は熟練単価で計算。"
+      },
+      "hrm-job-families": {
+        "title": "職種ファミリー",
+        "singularTitle": "職種ファミリー",
+        "description": "組織の職種 — レベルを束ねる安定コード。"
+      },
+      "hrm-job-levels": {
+        "title": "レベル",
+        "singularTitle": "レベル",
+        "description": "ラダーごとの段位。ランクと等価基準を宣言。"
+      },
+      "hrm-pay-bands": {
+        "title": "バンド",
+        "singularTitle": "バンド",
+        "description": "範囲別のバージョン管理された想定給与。変更は新規行。"
+      },
+      "hrm-competency-frameworks": {
+        "title": "コンピテンシーフレームワーク",
+        "singularTitle": "フレームワーク",
+        "description": "段階付きの再利用可能なスキル語彙。"
+      },
+      "hrm-competencies": {
+        "title": "コンピテンシー",
+        "singularTitle": "コンピテンシー",
+        "description": "評価・職位レベル・職位に紐づくフレームワーク内のスキル。"
       }
     },
     "fields": {
@@ -2842,7 +2906,45 @@
       "employerPayComponentId": "会社コンポーネント",
       "waitingPeriodDays": "待機期間（日）",
       "requiresApproval": "承認が必要",
-      "levelKey": "区分キー"
+      "levelKey": "区分キー",
+      "body": "本文",
+      "audience": "対象者",
+      "startsOn": "開始日",
+      "endsOn": "終了日",
+      "action": "アクション",
+      "reasonCode": "理由コード",
+      "requiresComment": "コメント必須",
+      "trade": "職種",
+      "isApprentice": "見習い",
+      "apprenticeProgramRef": "プログラム参照",
+      "journeyClassificationId": "熟練分類",
+      "apprenticeClassificationId": "見習い分類",
+      "sourceRef": "根拠参照",
+      "jurisdictionCode": "管轄",
+      "reciprocity": "相互適用",
+      "ratePer100": "率 / 100",
+      "lodgingOffset": "宿泊控除",
+      "payComponentId": "給与コンポーネント",
+      "scheduleId": "賃金表",
+      "ratioJourney": "熟練",
+      "ratioApprentice": "見習い",
+      "measured": "測定",
+      "rank": "ランク",
+      "familyId": "ファミリー",
+      "skillsWeight": "スキルの重み",
+      "effortWeight": "努力の重み",
+      "responsibilityWeight": "責任の重み",
+      "workingConditionsWeight": "労働条件の重み",
+      "levelId": "レベル",
+      "min": "最小",
+      "target": "目標",
+      "max": "最大",
+      "validityMonths": "有効期間（月）",
+      "issuingBody": "発行機関",
+      "renewalLeadDays": "更新リードタイム（日）",
+      "requiresEvidence": "証跡が必要",
+      "extraCategories": "追加カテゴリ",
+      "frameworkId": "フレームワーク"
     },
     "fieldHelp": {
       "gapless": "欠番なしとは、連番のすべての番号が記録され、番号が飛ばないことを意味します。法令または監査要件で途切れない採番が必要な場合にのみ有効にしてください。",
@@ -2921,7 +3023,12 @@
       "benefitEmployerComponent": "会社分明細に課金する会社拠出コンポーネント。会社費用がある場合は必須。",
       "benefitWaitingPeriod": "加入できるまでの勤務日数。",
       "benefitRequiresApproval": "加入は管理者の承認まで保留される。",
-      "benefitLevelKey": "加入が指定する区分キー — single、family — 改定しても安定。"
+      "benefitLevelKey": "加入が指定する区分キー — single、family — 改定しても安定。",
+      "rateScheduleSource": "この賃金表の根拠となる決定番号または協定ID。",
+      "rateScheduleJurisdiction": "パック語彙。汎用層では自由記述 — 解釈はパックが行う。",
+      "perDiemComponent": "金額が通過する支給コンポーネント。その税務処理が唯一の課税区分宣言。",
+      "hrmQualificationValidity": "期限のない資格は空欄のままにします。",
+      "hrmQualificationExtraCategories": "標準の6区分以外の自社カテゴリ語彙。"
     },
     "options": {
       "timeClassification": {
@@ -3318,6 +3425,58 @@
       "benefitProrationBasis": {
         "full_month": "満月 — 日付にかかわらず月全体",
         "daily": "日割り — 対象日数で按分"
+      },
+      "announcementAudience": {
+        "all": "全員",
+        "managers": "マネージャー",
+        "employees": "従業員"
+      },
+      "hrmAction": {
+        "hire": "採用",
+        "rehire": "再雇用",
+        "transfer": "異動",
+        "promotion": "昇進",
+        "demotion": "降格",
+        "pay_change": "給与変更",
+        "manager_change": "上長変更",
+        "location_change": "勤務地変更",
+        "schedule_change": "勤務時間変更",
+        "leave_of_absence": "休職",
+        "return": "復職",
+        "termination": "退職",
+        "profile_change": "プロフィール変更",
+        "other": "その他"
+      },
+      "hrmScheduleKind": {
+        "prevailingWage": "標準賃金",
+        "unionAgreement": "組合協定",
+        "orgDeclared": "自社宣言"
+      },
+      "hrmReciprocity": {
+        "homeLocal": "所属支部",
+        "jobsiteLocal": "現場支部",
+        "higherOf": "高い方"
+      },
+      "hrmPerDiemBasis": {
+        "flatDaily": "日額定額",
+        "distanceBrackets": "距離区分",
+        "hoursThreshold": "時間しきい値"
+      },
+      "hrmRatioMeasured": {
+        "daily": "日次",
+        "weekly": "週次"
+      },
+      "payBandBasis": {
+        "annual": "年額",
+        "hourly": "時給"
+      },
+      "hrmQualificationCategory": {
+        "certification": "認定",
+        "license": "免許",
+        "training": "研修",
+        "medical": "医療",
+        "clearance": "許可",
+        "other": "その他"
       }
     },
     "invoicing": {
@@ -4344,6 +4503,18 @@
       "title": "人事",
       "description": "時点履歴、人員数、変更申請の追跡を備えた雇用記録。HRM基盤を読み取るだけで、給与計算を動かすことはありません。"
     },
+    "hrmCelebrations": {
+      "title": "職場のお祝い",
+      "description": "ホームに従業員の誕生日・勤続記念・新しい仲間を表示します。"
+    },
+    "hrmManagerNudges": {
+      "title": "マネージャーへの促し",
+      "description": "マネージャーのホームに離職と1:1の促しを、自分のチームに限定して表示します。"
+    },
+    "homeAnnouncements": {
+      "title": "ホームのお知らせ",
+      "description": "管理者が作成したお知らせカードをホームに表示します。対象者と期間付き。"
+    },
     "bankFeeds": {
       "title": "銀行フィード",
       "description": "銀行接続の自動化です。SFTPファイル受け渡しとPlaid・GoCardless・TrueLayerのライブフィードに対応します。"
@@ -4483,6 +4654,114 @@
     "timeTracking": {
       "description": "提出と承認付きの個人週次タイムシートです。",
       "title": "工数管理"
+    },
+    "automations": {
+      "title": "自動化",
+      "description": "Flows上のトリガー型レシピ — スケジュール、日付相対、フィールド変更、イベント、ドキュメント、手動トリガーが順序付きアクションを実行します。"
+    },
+    "automationDateTriggers": {
+      "title": "日付トリガー",
+      "description": "入社数日前など、エンティティの日付を基準にレシピを実行します。"
+    },
+    "automationFieldTriggers": {
+      "title": "フィールドトリガー",
+      "description": "監視フィールドの変更時にレシピを実行します。"
+    },
+    "automationWebhooks": {
+      "title": "Webhookアクション",
+      "description": "レシピから組織が宣言した署名付きWebhookを呼び出します。"
+    },
+    "automationSimulator": {
+      "title": "シミュレーター",
+      "description": "実際のサブジェクトに対して書き込みなしでレシピを試行します。"
+    },
+    "hrmActionReasons": {
+      "title": "アクション・理由コード",
+      "description": "すべての変更申請にHRアクションと理由コードを必須にします。"
+    },
+    "hrmEventVerbs": {
+      "title": "変更イベント動詞",
+      "description": "雇用変更の取消・破棄・訂正を追加イベントとして行います。"
+    },
+    "hrmConstructionCompliance": {
+      "title": "建設コンプライアンス",
+      "description": "自社施工向けの標準賃金表、認証給与、労災クラス、見習い比率、日当。給与・プロジェクト・勤怠が必要。"
+    },
+    "hrmPrevailingWage": {
+      "title": "標準賃金",
+      "description": "宣言済み賃金表から現場・分類・日付で賃金を解決。"
+    },
+    "hrmCertifiedPayroll": {
+      "title": "認証給与",
+      "description": "パック宣言ファイルで描画する週次確定レポート。"
+    },
+    "hrmWorkersCompClasses": {
+      "title": "労災クラス",
+      "description": "優先度ルールで原価時間をプレミアムクラスに分割。"
+    },
+    "hrmApprenticeRatios": {
+      "title": "見習い比率",
+      "description": "熟練・見習い比率を日次で強制；違反は熟練単価で計算。"
+    },
+    "hrmPerDiem": {
+      "title": "日当",
+      "description": "承認済み勤怠から日当・旅費を給与シームへ計算。"
+    },
+    "hrmCompensation": {
+      "title": "報酬",
+      "description": "職務体系とバンド：役割の適正給与と各人の位置。"
+    },
+    "hrmMeritCycles": {
+      "title": "昇給サイクル",
+      "description": "給与実績を確定し昇給を決定して反映するラウンド。"
+    },
+    "hrmHeadcountPlans": {
+      "title": "人員計画",
+      "description": "バンドから積算したシナリオ。承認で求人を開く。"
+    },
+    "hrmPayTransparency": {
+      "title": "給与の透明性",
+      "description": "給与実績からの確定済み指標と従業員の情報請求。"
+    },
+    "hrmCertifications": {
+      "title": "認定・免許",
+      "description": "作業員の資格台帳：体系、保有資格、配置要件、期限アラート。無効化してもデータは削除されません。"
+    },
+    "hrmDispatchGating": {
+      "title": "配置ゲート",
+      "description": "必要な資格がない要員の割当を拒否。プロジェクトとスケジュールが必要。"
+    },
+    "hrmEquipmentQualifications": {
+      "title": "設備の資格要件",
+      "description": "設備に必要な資格種類を定義。設備管理が必要。"
+    },
+    "hrmCertificationAlerts": {
+      "title": "資格アラート",
+      "description": "保有者と上長への毎日の期限通知（受信箱経由）。"
+    },
+    "hrmPerformance": {
+      "title": "パフォーマンス",
+      "description": "評価・目標・1:1・フィードバック・キャリブレーション・タレント・後継の親スイッチ。"
+    },
+    "hrmOneOnOnes": {
+      "title": "1:1",
+      "description": "アジェンダを引き継ぐ定期的なマネージャーとメンバーの面談。"
+    },
+    "hrmFeedback": {
+      "title": "フィードバック",
+      "description": "発生時に記録する称賛・フィードバック・依頼。"
+    },
+    "hrmCompetencies": {
+      "title": "コンピテンシー",
+      "description": "評価や職位レベルに紐づく段階付きの再利用可能なスキル語彙。"
+    },
+    "hrmCalibration": {
+      "title": "キャリブレーション",
+      "description": "監査証跡付きの評価サイクルに対する格付けグリッド。"
+    },
+    "hrmSuccession": {
+      "title": "タレントと後継",
+      "description": "職位ごとのタレントレビューと後継計画。"
     }
   },
   "extensions": {
@@ -4764,6 +5043,130 @@
       "notFound": "このページはあなた向けに「見つかりません」と応答するため、読むレイアウトがありません。",
       "redirect": "このページは描画せず{href}へ転送します。通常は保持していない権限か、オフの機能が原因です。",
       "segment": "このルートの表示にはレコードが必要です。編集するにはアドレスに?param.{segment}=…を追加してください。"
+    }
+  },
+  "automations": {
+    "title": "自動化",
+    "description": "Flows上のトリガー型レシピ — スケジュール、日付相対、フィールド変更、イベント、ドキュメント、手動トリガーが順序付きアクションを実行します。",
+    "backToFlows": "フローに戻る",
+    "backToList": "自動化一覧に戻る",
+    "list": {
+      "newButton": "新規自動化",
+      "newTitle": "新規自動化",
+      "nameLabel": "名前",
+      "namePlaceholder": "例: 入社3日前のウェルカムタスク",
+      "nameRequired": "自動化に名前を付けてください。",
+      "triggerLabel": "トリガー",
+      "createFailed": "自動化を作成できませんでした。",
+      "create": "作成",
+      "cancel": "キャンセル",
+      "neverRan": "未実行",
+      "statusLabel": "ステータス",
+      "emptyTitle": "自動化はまだありません",
+      "emptyDescription": "自動化はスケジュール・日付・フィールド変更・イベント・ドキュメント・手動トリガーから順序付きアクションを実行します。",
+      "columnAutomation": "自動化",
+      "columnStatus": "ステータス",
+      "columnTrigger": "トリガー",
+      "columnLastRun": "最終実行",
+      "columnError": "エラー",
+      "columnActions": "操作",
+      "runNow": "今すぐ実行",
+      "enable": "有効化",
+      "disable": "無効化",
+      "actionFailed": "操作に失敗しました。",
+      "recipeLabel": "レシピから開始",
+      "recipeBlank": "空のレシピ"
+    },
+    "status": {
+      "enabled": "有効",
+      "draft": "下書き",
+      "disabled": "無効",
+      "error": "エラー"
+    },
+    "triggerKinds": {
+      "schedule": "スケジュール",
+      "date_relative": "日付相対",
+      "field_change": "フィールド変更",
+      "event": "イベント",
+      "document": "ドキュメント",
+      "manual": "手動"
+    },
+    "builder": {
+      "pageTitle": "自動化ビルダー",
+      "description": "トリガー、対象と条件、アクション、シミュレーション、実行ログ。",
+      "buildTab": "構築",
+      "runsTab": "実行履歴",
+      "saved": "保存しました。",
+      "saveFailed": "保存できませんでした。",
+      "nameTitle": "名前",
+      "saveName": "名前を保存",
+      "triggerTitle": "トリガー",
+      "saveTrigger": "トリガーを保存",
+      "cronLabel": "Cron",
+      "timezoneLabel": "タイムゾーン",
+      "entityLabel": "エンティティ",
+      "dateFieldLabel": "日付フィールド",
+      "offsetLabel": "オフセット（日）",
+      "directionLabel": "方向",
+      "before": "前",
+      "after": "後",
+      "atTimeLabel": "時刻（HH:MM）",
+      "fieldLabel": "フィールド",
+      "changedToLabel": "変更後（空=すべて）",
+      "subjectKindLabel": "サブジェクト種別",
+      "eventKindLabel": "イベント",
+      "documentUploaded": "アップロード済み",
+      "documentSigned": "署名済み",
+      "documentTemplated": "テンプレートから",
+      "whoWhenTitle": "対象と条件",
+      "whoWhenHelp": "スコープフィルタで適用対象を絞り、条件ツリーで実行タイミングを決めます。",
+      "rule_subsidiaryId": "子会社",
+      "rule_departmentId": "部門",
+      "rule_locationId": "拠点",
+      "rule_workerType": "雇用形態",
+      "rule_positionId": "ポジション",
+      "ruleBlank": "空=すべて",
+      "conditionsMode": "条件",
+      "conditionsAll": "すべて満たす",
+      "conditionsAny": "いずれかを満たす",
+      "opLabel": "演算子",
+      "valueLabel": "値",
+      "remove": "削除",
+      "addCondition": "条件を追加",
+      "saveWhoWhen": "対象と条件を保存",
+      "actionsTitle": "アクション",
+      "actionKindLabel": "アクション種別",
+      "actionJsonLabel": "アクションJSON",
+      "addAction": "アクションを追加",
+      "saveActions": "アクションを保存",
+      "simulateTitle": "シミュレーション",
+      "simulateHelp": "書き込みなしの試行 — entity:idを指定、空ならサンプリング。",
+      "simulateSubjectLabel": "サブジェクト",
+      "simulateSubjectPlaceholder": "leave_request:<id>",
+      "simulateButton": "シミュレーション実行",
+      "stepKind": "ステップ",
+      "stepStatus": "ステータス",
+      "stepDetail": "詳細",
+      "runStatus": "ステータス",
+      "runsEmpty": "実行履歴がありません。",
+      "runVersion": "バージョン",
+      "runSubject": "サブジェクト",
+      "runCreated": "作成",
+      "runSteps": "ステップ",
+      "viewSteps": "ステップ",
+      "stepsTitle": "実行ステップ",
+      "runLoadFailed": "実行を読み込めませんでした。",
+      "closeSteps": "閉じる",
+      "approvalTitle": "承認設定",
+      "approvalHelp": "例外のみ承認は既存Flowsゲートをサブジェクト種別ごとに調整します — 閾値内は全チェックを明示したシステム決定で自動承認、外は通常ルート。",
+      "approvalException": "例外のみ承認",
+      "approvalThresholds": "閾値（JSON）",
+      "approvalAuto": "ルールなしで自動承認",
+      "approvalDelegate": "委任までの日数（空=しない）",
+      "approvalExclude": "起案者を除外",
+      "approvalYes": "はい",
+      "approvalNo": "いいえ",
+      "approvalSave": "設定を保存"
     }
   }
 }

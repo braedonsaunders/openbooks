@@ -35,6 +35,8 @@ export const HRM_RECRUITING_READ_PERMISSION = 'hrm.recruiting.read'
 export const HRM_PERFORMANCE_READ_PERMISSION = 'hrm.performance.read'
 export const HRM_RETENTION_READ_PERMISSION = 'hrm.retention.read'
 export const HRM_BENEFITS_READ_PERMISSION = 'hrm.benefits.read'
+export const HRM_COMPENSATION_READ_PERMISSION = 'hrm.compensation.read'
+export const HRM_COMPENSATION_FEATURE_KEY = 'hrmCompensation'
 export const HRM_FEATURE_KEY = 'hrm'
 
 const HRM_POSITION_STATUSES = ['planned', 'open', 'filled', 'frozen', 'closed'] as const
@@ -58,10 +60,33 @@ const HRM_APPLICATION_STATUSES = ['active', 'rejected', 'withdrawn', 'hired'] as
 
 const HRM_PROCESS_KINDS = ['onboarding', 'offboarding', 'transfer'] as const
 const HRM_PROCESS_STATUSES = ['open', 'completed', 'cancelled'] as const
+
+// HR-16 begin: automation + reason-code report entities (0226/0227).
+export const AUTOMATIONS_READ_PERMISSION = 'automations.read'
+export const AUTOMATIONS_FEATURE_KEY = 'automations'
+export const HRM_ACTION_REASONS_FEATURE_KEY = 'hrmActionReasons'
+
+const AUTOMATION_STATUSES = ['draft', 'enabled', 'disabled', 'error'] as const
+const AUTOMATION_TRIGGER_KINDS = ['schedule', 'date_relative', 'field_change', 'event', 'document', 'manual'] as const
+const AUTOMATION_RUN_STATUSES = ['queued', 'running', 'succeeded', 'failed', 'skipped_no_match', 'simulated'] as const
+// HR-16 end
 const HRM_STEP_STATUSES = ['pending', 'done', 'skipped'] as const
 const HRM_STEP_OWNERS = ['manager', 'hr', 'employee', 'named_party'] as const
 const HRM_STEP_EVIDENCE = ['none', 'acknowledgement', 'attachment'] as const
 
+// HR-12 begin
+const HRM_COMP_LINE_STATUSES = ['pending', 'proposed', 'approved', 'rejected', 'pushed'] as const
+const HRM_PLAN_LINE_KINDS = ['create', 'backfill', 'change', 'terminate'] as const
+const HRM_PLAN_LINE_STATUSES = ['proposed', 'approved', 'rejected', 'opened', 'filled', 'cancelled'] as const
+// HR-12 end
+// HR-14 begin: certification register and alert queue report entities (0225).
+export const HRM_CERTIFICATIONS_READ_PERMISSION = 'hrm.certifications.read'
+export const HRM_CERTIFICATIONS_FEATURE_KEY = 'hrmCertifications'
+export const HRM_CERTIFICATION_ALERTS_FEATURE_KEY = 'hrmCertificationAlerts'
+
+const HRM_QUALIFICATION_STATUSES = ['valid', 'revoked', 'pending_verification'] as const
+const HRM_ALERT_CHANNELS = ['inbox', 'email'] as const
+// HR-14 end
 const HRM_REVIEW_KINDS = ['self', 'manager', 'peer'] as const
 const HRM_REVIEW_STATUSES = ['pending', 'submitted', 'calibrated', 'shared', 'acknowledged'] as const
 const HRM_GOAL_STATUSES = ['active', 'achieved', 'missed', 'cancelled'] as const
@@ -219,6 +244,10 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
       },
       { key: 'applied_at', label: 'Applied at', kind: 'timestamp', expr: 'r.applied_at' },
       { key: 'reason', label: 'Reason', kind: 'text', expr: 'r.reason' },
+      // HR-16 begin: 0227 classification carried from submit onto the event.
+      { key: 'action', label: 'Action', kind: 'text', expr: 'r.action' },
+      { key: 'reason_code', label: 'Reason code', kind: 'text', expr: 'r.reason_code' },
+      // HR-16 end
       { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'r.created_at' },
       { key: 'id', label: 'Request (id)', kind: 'uuid', expr: 'r.id' },
       { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'r.employment_id' },
@@ -631,4 +660,569 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     ],
     defaultSort: { column: 'effective_from', direction: 'desc' },
   },
+  // HR-12 begin: compensation report entities — bands, cycle lines,
+  // plan lines, and gap snapshots. All four sit behind the
+  // compensation read grant and the hrmCompensation switch; gap
+  // snapshots expose category aggregates only, never per-person pay.
+  {
+    key: 'hrm_pay_bands',
+    label: 'Pay bands',
+    category: 'hrm',
+    description:
+      'One row per live pay band version: level, scope, currency, basis, and the min/target/max SHOULD-pay figures with their effective window. Requires the HRM compensation permission.',
+    from: `hrm_pay_bands b
+  JOIN hrm_job_levels lvl ON lvl.id = b.level_id AND lvl.org_id = b.org_id
+  LEFT JOIN hrm_job_families fam ON fam.id = b.family_id AND fam.org_id = b.org_id
+  LEFT JOIN subsidiaries sub ON sub.id = b.employer_subsidiary_id AND sub.org_id = b.org_id`,
+    orgColumn: 'b.org_id',
+    subsidiaryScope: { column: 'b.employer_subsidiary_id' },
+    requiredPermission: HRM_COMPENSATION_READ_PERMISSION,
+    featureKey: HRM_COMPENSATION_FEATURE_KEY,
+    defaultPeriodField: null,
+    columns: [
+      { key: 'level', label: 'Level', kind: 'text', expr: 'lvl.code' },
+      { key: 'family', label: 'Family', kind: 'text', expr: 'fam.code' },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
+      { key: 'currency', label: 'Currency', kind: 'text', expr: 'b.currency' },
+      { key: 'basis', label: 'Basis', kind: 'text', expr: 'b.basis' },
+      { key: 'min', label: 'Min', kind: 'number', expr: 'b.min' },
+      { key: 'target', label: 'Target', kind: 'number', expr: 'b.target' },
+      { key: 'max', label: 'Max', kind: 'number', expr: 'b.max' },
+      { key: 'effective_from', label: 'Effective from', kind: 'date', expr: 'b.effective_from' },
+      { key: 'effective_to', label: 'Effective to', kind: 'date', expr: 'b.effective_to' },
+      { key: 'id', label: 'Band (id)', kind: 'uuid', expr: 'b.id' },
+    ],
+    defaultSort: { column: 'level', direction: 'asc' },
+  },
+  {
+    key: 'hrm_comp_cycle_lines',
+    label: 'Merit cycle lines',
+    category: 'hrm',
+    description:
+      'One row per cycle decision: person, employer, snapshotted current rate, stored compa-ratio, guideline range, proposal, and status. Rates here are the frozen snapshot at open, never live payroll. Requires the HRM compensation permission.',
+    from: `hrm_comp_cycle_lines l
+      JOIN hrm_comp_cycles c ON c.id = l.cycle_id AND c.org_id = l.org_id
+      JOIN worker_employments emp ON emp.id = l.employment_id AND emp.org_id = l.org_id
+      JOIN parties w ON w.id = emp.worker_party_id AND w.org_id = l.org_id
+      JOIN subsidiaries sub ON sub.id = emp.employer_subsidiary_id AND sub.org_id = l.org_id`,
+    orgColumn: 'l.org_id',
+    subsidiaryScope: { column: 'emp.employer_subsidiary_id' },
+    requiredPermission: HRM_COMPENSATION_READ_PERMISSION,
+    featureKey: HRM_COMPENSATION_FEATURE_KEY,
+    defaultPeriodField: null,
+    columns: [
+      { key: 'cycle', label: 'Cycle', kind: 'text', expr: 'c.name' },
+      { key: 'person', label: 'Person', kind: 'text', expr: 'w.display_name' },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
+      { key: 'current_rate', label: 'Current rate', kind: 'number', expr: 'l.current_rate' },
+      { key: 'currency', label: 'Currency', kind: 'text', expr: 'l.currency' },
+      { key: 'compa_ratio', label: 'Compa-ratio', kind: 'number', expr: 'l.compa_ratio' },
+      { key: 'proposed_pct', label: 'Proposed %', kind: 'number', expr: 'l.proposed_pct' },
+      { key: 'proposed_rate', label: 'Proposed rate', kind: 'number', expr: 'l.proposed_rate' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'l.status', options: HRM_COMP_LINE_STATUSES },
+      { key: 'effective_on', label: 'Effective on', kind: 'date', expr: 'c.effective_on' },
+      { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'l.employment_id' },
+      { key: 'id', label: 'Line (id)', kind: 'uuid', expr: 'l.id' },
+    ],
+    defaultSort: { column: 'cycle', direction: 'asc' },
+  },
+  {
+    key: 'hrm_headcount_plan_lines',
+    label: 'Headcount plan lines',
+    category: 'hrm',
+    description:
+      'One row per planned movement: plan, kind, title, employer, planned FTE, start, computed annual cost with its basis, and status. Costs are computed at save, never typed. Requires the HRM compensation permission.',
+    from: `hrm_headcount_plan_lines l
+      JOIN hrm_headcount_plans p ON p.id = l.plan_id AND p.org_id = l.org_id
+      JOIN subsidiaries sub ON sub.id = l.employer_subsidiary_id AND sub.org_id = l.org_id`,
+    orgColumn: 'l.org_id',
+    subsidiaryScope: { column: 'l.employer_subsidiary_id' },
+    requiredPermission: HRM_COMPENSATION_READ_PERMISSION,
+    featureKey: HRM_COMPENSATION_FEATURE_KEY,
+    defaultPeriodField: null,
+    columns: [
+      { key: 'plan', label: 'Plan', kind: 'text', expr: 'p.name' },
+      { key: 'kind', label: 'Kind', kind: 'enum', expr: 'l.kind', options: HRM_PLAN_LINE_KINDS },
+      { key: 'title', label: 'Title', kind: 'text', expr: 'l.title' },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
+      { key: 'planned_fte', label: 'Planned FTE', kind: 'number', expr: 'l.planned_fte' },
+      { key: 'start_on', label: 'Start', kind: 'date', expr: 'l.start_on' },
+      { key: 'est_annual_cost', label: 'Est. annual cost', kind: 'number', expr: 'l.est_annual_cost' },
+      { key: 'currency', label: 'Currency', kind: 'text', expr: 'l.currency' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'l.status', options: HRM_PLAN_LINE_STATUSES },
+      { key: 'id', label: 'Line (id)', kind: 'uuid', expr: 'l.id' },
+    ],
+    defaultSort: { column: 'plan', direction: 'asc' },
+  },
+  {
+    key: 'hrm_pay_gap_snapshots',
+    label: 'Pay gap snapshots',
+    category: 'hrm',
+    description:
+      'One row per frozen snapshot per equal-value category: as-of date, level, headcounts, mean/median gaps, the OLS unexplained gap, and the joint-assessment flag. Category aggregates only — no per-person pay ever leaves through reports. Requires the HRM compensation permission.',
+    // One row per snapshot × category: the categories jsonb expands in
+    // a lateral (skipped by the join-pin rule, which only governs table
+    // joins); the level join resolves the code and the subsidiary join
+    // names a subsidiary-scoped population. Every table leg carries the
+    // org pin.
+    from: `hrm_pay_gap_snapshots s
+      CROSS JOIN LATERAL jsonb_to_recordset(s.categories)
+        AS c(level_id uuid, level_code text, count_a integer, count_b integer,
+              mean_gap_pct numeric, median_gap_pct numeric, unexplained_gap_pct numeric,
+              method text, joint_assessment_due boolean)
+      LEFT JOIN hrm_job_levels lvl ON lvl.id = c.level_id AND lvl.org_id = s.org_id
+      LEFT JOIN subsidiaries sub ON sub.id = (s.scope->>'employer_subsidiary_id')::uuid AND sub.org_id = s.org_id`,
+    orgColumn: 's.org_id',
+    // Snapshots are measured populations, optionally subsidiary-scoped:
+    // org-wide snapshots stay visible to every permitted reader
+    // (sharedNull), subsidiary ones only to that subsidiary's holders.
+    subsidiaryScope: { column: `(s.scope->>'employer_subsidiary_id')::uuid`, sharedNull: true },
+    requiredPermission: HRM_COMPENSATION_READ_PERMISSION,
+    featureKey: HRM_COMPENSATION_FEATURE_KEY,
+    defaultPeriodField: 'as_of',
+    columns: [
+      { key: 'as_of', label: 'As of', kind: 'date', expr: 's.as_of' },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
+      { key: 'level', label: 'Level', kind: 'text', expr: 'coalesce(lvl.code, c.level_code)' },
+      { key: 'count_a', label: 'Headcount A', kind: 'number', expr: 'c.count_a' },
+      { key: 'count_b', label: 'Headcount B', kind: 'number', expr: 'c.count_b' },
+      { key: 'mean_gap_pct', label: 'Mean gap %', kind: 'number', expr: 'c.mean_gap_pct' },
+      { key: 'median_gap_pct', label: 'Median gap %', kind: 'number', expr: 'c.median_gap_pct' },
+      { key: 'unexplained_gap_pct', label: 'Unexplained gap %', kind: 'number', expr: 'c.unexplained_gap_pct' },
+      { key: 'method', label: 'Method', kind: 'text', expr: 'c.method' },
+      { key: 'joint_assessment_due', label: 'Joint assessment due', kind: 'boolean', expr: 'c.joint_assessment_due' },
+      { key: 'id', label: 'Snapshot (id)', kind: 'uuid', expr: 's.id' },
+    ],
+    defaultSort: { column: 'as_of', direction: 'desc' },
+  },
+  // HR-12 end
+  // HR-16 begin: the automation recipe register (0226) — one row per org
+  // recipe with its trigger kind, status, version, and last run. Recipes
+  // are platform configuration, so no subsidiary scope: visibility rides
+  // the automations.read grant and the automations switch.
+  {
+    key: 'automations',
+    label: 'Automations',
+    category: 'hrm',
+    description:
+      'One row per automation recipe — trigger kind, status, version, and last run. Requires the automations permission.',
+    from: `automations a`,
+    // Org-level configuration with no legal-entity column: the policy is
+    // declared as no-clamp rather than omitted. An omitted policy makes
+    // compileSubsidiaryScope throw for any caller that carries a
+    // subsidiary allowlist, which would refuse the report to exactly the
+    // scoped readers it is meant to serve.
+    subsidiaryScope: null,
+    orgColumn: 'a.org_id',
+    requiredPermission: AUTOMATIONS_READ_PERMISSION,
+    featureKey: AUTOMATIONS_FEATURE_KEY,
+    defaultPeriodField: 'created_at',
+    columns: [
+      { key: 'name', label: 'Name', kind: 'text', expr: 'a.name' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'a.status', options: AUTOMATION_STATUSES },
+      { key: 'trigger_kind', label: 'Trigger', kind: 'enum', expr: `(a.trigger ->> 'kind')`, options: AUTOMATION_TRIGGER_KINDS },
+      { key: 'version', label: 'Version', kind: 'number', expr: 'a.version' },
+      { key: 'priority', label: 'Priority', kind: 'number', expr: 'a.priority' },
+      { key: 'last_run_at', label: 'Last run at', kind: 'timestamp', expr: 'a.last_run_at' },
+      { key: 'error_message', label: 'Error', kind: 'text', expr: 'a.error_message' },
+      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'a.created_at' },
+      { key: 'id', label: 'Automation (id)', kind: 'uuid', expr: 'a.id' },
+    ],
+    defaultSort: { column: 'name', direction: 'asc' },
+  },
+  // HR-16 begin: the automation run log (0226) — append-only firing
+  // evidence with the executed version, subject, steps, and error.
+  {
+    key: 'automation_runs',
+    label: 'Automation runs',
+    category: 'hrm',
+    description:
+      'One row per automation firing — executed version, subject, status, steps, and error. Requires the automations permission.',
+    from: `automation_runs r JOIN automations a ON a.id = r.automation_id AND a.org_id = r.org_id`,
+    // Org-level configuration with no legal-entity column: the policy is
+    // declared as no-clamp rather than omitted. An omitted policy makes
+    // compileSubsidiaryScope throw for any caller that carries a
+    // subsidiary allowlist, which would refuse the report to exactly the
+    // scoped readers it is meant to serve.
+    subsidiaryScope: null,
+    orgColumn: 'r.org_id',
+    requiredPermission: AUTOMATIONS_READ_PERMISSION,
+    featureKey: AUTOMATIONS_FEATURE_KEY,
+    defaultPeriodField: 'created_at',
+    columns: [
+      { key: 'automation', label: 'Automation', kind: 'text', expr: 'a.name' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'r.status', options: AUTOMATION_RUN_STATUSES },
+      { key: 'version', label: 'Version', kind: 'number', expr: 'r.version' },
+      { key: 'subject_kind', label: 'Subject kind', kind: 'text', expr: 'r.subject_kind' },
+      { key: 'subject_id', label: 'Subject (id)', kind: 'uuid', expr: 'r.subject_id' },
+      { key: 'started_at', label: 'Started at', kind: 'timestamp', expr: 'r.started_at' },
+      { key: 'finished_at', label: 'Finished at', kind: 'timestamp', expr: 'r.finished_at' },
+      { key: 'error', label: 'Error', kind: 'text', expr: `(r.error ->> 'message')` },
+      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'r.created_at' },
+      { key: 'id', label: 'Run (id)', kind: 'uuid', expr: 'r.id' },
+    ],
+    defaultSort: { column: 'created_at', direction: 'desc' },
+  },
+  // HR-16 begin: the action/reason-code vocabulary (0227) — Setup-owned,
+  // read through the employment grant behind the hrmActionReasons switch.
+  {
+    key: 'hrm_action_reasons',
+    label: 'Action reasons',
+    category: 'hrm',
+    description:
+      'One row per reason code per HR action — the vocabulary change requests file under. Requires the HRM employment permission.',
+    from: `hrm_action_reasons r`,
+    // Org-level configuration with no legal-entity column: the policy is
+    // declared as no-clamp rather than omitted. An omitted policy makes
+    // compileSubsidiaryScope throw for any caller that carries a
+    // subsidiary allowlist, which would refuse the report to exactly the
+    // scoped readers it is meant to serve.
+    subsidiaryScope: null,
+    orgColumn: 'r.org_id',
+    requiredPermission: HRM_EMPLOYMENT_READ_PERMISSION,
+    featureKey: HRM_ACTION_REASONS_FEATURE_KEY,
+    defaultPeriodField: 'created_at',
+    columns: [
+      { key: 'action', label: 'Action', kind: 'text', expr: 'r.action' },
+      { key: 'reason_code', label: 'Code', kind: 'text', expr: 'r.reason_code' },
+      { key: 'label', label: 'Label', kind: 'text', expr: 'r.label' },
+      { key: 'requires_comment', label: 'Requires comment', kind: 'boolean', expr: 'r.requires_comment' },
+      { key: 'is_active', label: 'Active', kind: 'boolean', expr: 'r.is_active' },
+      { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'r.created_at' },
+      { key: 'id', label: 'Reason (id)', kind: 'uuid', expr: 'r.id' },
+    ],
+    defaultSort: { column: 'action', direction: 'asc' },
+  },
+  // HR-16 end
+  // HR-13 begin: construction-compliance report entities (0223/0224).
+  // Gated on the construction switch with the construction read grant —
+  // a general-business org never sees them, and the feature-off path
+  // hides rather than empties.
+  {
+    key: 'hrm_rate_schedule_lines',
+    label: 'Rate schedule lines',
+    category: 'hrm',
+    description:
+      'One row per schedule, classification, and effective date: the resolvable base, cash fringe, creditable fringe, and overtime multiplier the wage resolver prices from.',
+    from: `hrm_rate_schedule_lines l
+  JOIN hrm_rate_schedules s ON s.id = l.schedule_id AND s.org_id = l.org_id
+  JOIN hrm_work_classifications c ON c.id = l.classification_id AND c.org_id = l.org_id`,
+    orgColumn: 'l.org_id',
+    // Org-level rate configuration: no subsidiary boundary applies, so no
+    // clamp — the construction read grant and the feature switch are the
+    // gates, enforced generically at every run path.
+    subsidiaryScope: null,
+    requiredPermission: 'hrm.construction.read',
+    featureKey: 'hrmConstructionCompliance',
+    defaultPeriodField: null,
+    columns: [
+      { key: 'schedule', label: 'Schedule', kind: 'text', expr: 's.name' },
+      { key: 'classification', label: 'Classification', kind: 'text', expr: 'c.code' },
+      { key: 'base_rate', label: 'Base rate', kind: 'number', expr: 'l.base_rate' },
+      { key: 'fringe_rate', label: 'Cash fringe', kind: 'number', expr: 'l.fringe_rate' },
+      { key: 'currency', label: 'Currency', kind: 'text', expr: 'l.currency' },
+      { key: 'effective_from', label: 'Effective from', kind: 'date', expr: 'l.effective_from' },
+    ],
+    defaultSort: { column: 'effective_from', direction: 'desc' },
+  },
+  {
+    key: 'hrm_per_diem_entries',
+    label: 'Per-diem entries',
+    category: 'hrm',
+    description:
+      'One row per employment, project, and day: computed per-diem and travel amounts with their status across computed, approved, voided, and consumed.',
+    from: `hrm_per_diem_entries e
+  JOIN hrm_per_diem_policies p ON p.id = e.policy_id AND p.org_id = e.org_id
+  LEFT JOIN pay_components pc ON pc.id = p.pay_component_id AND pc.org_id = p.org_id
+  JOIN worker_employments w ON w.id = e.employment_id AND w.org_id = e.org_id`,
+    orgColumn: 'e.org_id',
+    // The employment's employer subsidiary is the legal-entity boundary:
+    // the executor clamps this to the reader's allowlist.
+    subsidiaryScope: { column: 'w.employer_subsidiary_id' },
+    requiredPermission: 'hrm.construction.read',
+    featureKey: 'hrmConstructionCompliance',
+    defaultPeriodField: 'worked_on',
+    columns: [
+      { key: 'worked_on', label: 'Day', kind: 'date', expr: 'e.worked_on' },
+      { key: 'amount', label: 'Amount', kind: 'number', expr: 'e.amount' },
+      { key: 'currency', label: 'Currency', kind: 'text', expr: 'e.currency' },
+      { key: 'status', label: 'Status', kind: 'text', expr: 'e.status' },
+      { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'e.employment_id' },
+    ],
+    defaultSort: { column: 'worked_on', direction: 'desc' },
+  },
+  {
+    key: 'hrm_comp_class_split',
+    label: 'Comp class split',
+    category: 'hrm',
+    description:
+      'Approved project hours priced per comp class: the daily split the resolver reports from the priority match rules.',
+    from: `hrm_comp_class_rules r
+  JOIN hrm_comp_classes c ON c.id = r.comp_class_id AND c.org_id = r.org_id
+  LEFT JOIN hrm_work_classifications cl ON cl.id::text = (r.match->>'classification_id') AND cl.org_id = r.org_id`,
+    orgColumn: 'r.org_id',
+    // Org-level match configuration: no subsidiary boundary applies, so
+    // no clamp — the construction read grant and the feature switch are
+    // the gates, enforced generically at every run path.
+    subsidiaryScope: null,
+    requiredPermission: 'hrm.construction.read',
+    featureKey: 'hrmConstructionCompliance',
+    defaultPeriodField: null,
+    columns: [
+      { key: 'class', label: 'Class', kind: 'text', expr: 'c.code' },
+      { key: 'priority', label: 'Priority', kind: 'number', expr: 'r.priority' },
+      { key: 'rate', label: 'Rate / 100', kind: 'number', expr: 'c.rate_per_100' },
+    ],
+    defaultSort: { column: 'priority', direction: 'desc' },
+  },
+  {
+    key: 'hrm_certified_runs',
+    label: 'Certified runs',
+    category: 'hrm',
+    description:
+      'Certified payroll runs by project and week: frozen payloads with their pack format, file artefact, and amendment links.',
+    from: `hrm_certified_payroll_runs r
+  LEFT JOIN projects p ON p.id = r.project_id AND p.org_id = r.org_id
+  LEFT JOIN hrm_certified_payroll_runs a ON a.id = r.amends_run_id AND a.org_id = r.org_id`,
+    orgColumn: 'r.org_id',
+    // The project's subsidiary is the legal-entity boundary: the executor
+    // clamps this to the reader's allowlist. Runs on subsidiary-less
+    // projects hide from restricted readers (fail closed), never leak.
+    subsidiaryScope: { column: 'p.subsidiary_id' },
+    requiredPermission: 'hrm.construction.read',
+    featureKey: 'hrmConstructionCompliance',
+    defaultPeriodField: 'week_ending',
+    columns: [
+      { key: 'week_ending', label: 'Week ending', kind: 'date', expr: 'r.week_ending' },
+      { key: 'format_key', label: 'Format', kind: 'text', expr: 'r.format_key' },
+      { key: 'status', label: 'Status', kind: 'text', expr: 'r.status' },
+      { key: 'project_id', label: 'Project (id)', kind: 'uuid', expr: 'r.project_id' },
+    ],
+    defaultSort: { column: 'week_ending', direction: 'desc' },
+  },
+  {
+    key: 'hrm_compliance_findings',
+    label: 'Compliance findings',
+    category: 'hrm',
+    description:
+      'Append-only pre-run flags by kind: ratio breaches, missing rates, unresolved classes, missing registrations, and fringe mismatches with their lifecycle status.',
+    from: `hrm_compliance_findings f
+  LEFT JOIN projects p ON p.id = f.project_id AND p.org_id = f.org_id
+  LEFT JOIN worker_employments w ON w.id = f.employment_id AND w.org_id = f.org_id`,
+    orgColumn: 'f.org_id',
+    // The employment's employer subsidiary is the legal-entity boundary.
+    // Employment-less flags hide from restricted readers (fail closed).
+    subsidiaryScope: { column: 'w.employer_subsidiary_id' },
+    requiredPermission: 'hrm.construction.read',
+    featureKey: 'hrmConstructionCompliance',
+    defaultPeriodField: 'worked_on',
+    columns: [
+      { key: 'kind', label: 'Kind', kind: 'text', expr: 'f.kind' },
+      { key: 'worked_on', label: 'Day', kind: 'date', expr: 'f.worked_on' },
+      { key: 'status', label: 'Status', kind: 'text', expr: 'f.status' },
+      { key: 'project_id', label: 'Project (id)', kind: 'uuid', expr: 'f.project_id' },
+    ],
+    defaultSort: { column: 'worked_on', direction: 'desc' },
+  },
+  // HR-13 end
+  // HR-14 begin: certification register (one row per held qualification)
+  // and the renewal alert queue (one row per qualification/lead-day).
+  // Both read the 0225 ledger through the same joins the engine read
+  // path uses; expiring/expired stays a viewer derivation over
+  // expires_on against the org business day — storage holds only
+  // valid/revoked/pending_verification, so the report never persists a
+  // projection either. Renewals are new rows (linked by events), so the
+  // register shows every issuance; revoked rows stay visible as history.
+  {
+    key: 'hrm_qualifications',
+    label: 'Qualifications',
+    category: 'hrm',
+    description:
+      'One row per held certification or license — holder, employer, type and category, issuance and expiry, and stored status with its verification. Requires the HRM certifications permission.',
+    from: `hrm_worker_qualifications q
+      JOIN hrm_qualification_types t ON t.id = q.type_id AND t.org_id = q.org_id
+      JOIN worker_employments e ON e.id = q.employment_id AND e.org_id = q.org_id
+      JOIN parties w ON w.id = e.worker_party_id AND w.org_id = q.org_id
+      JOIN subsidiaries sub ON sub.id = e.employer_subsidiary_id AND sub.org_id = q.org_id`,
+    orgColumn: 'q.org_id',
+    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
+    requiredPermission: HRM_CERTIFICATIONS_READ_PERMISSION,
+    featureKey: HRM_CERTIFICATIONS_FEATURE_KEY,
+    // The expiry day is the fact: the period picker narrows on it, so a
+    // register filtered to a window lists what lapses inside it.
+    defaultPeriodField: 'expires_on',
+    columns: [
+      { key: 'employee', label: 'Employee', kind: 'text', expr: 'w.display_name' },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
+      { key: 'type_code', label: 'Type code', kind: 'text', expr: 't.code' },
+      { key: 'type_name', label: 'Type', kind: 'text', expr: 't.name' },
+      { key: 'category', label: 'Category', kind: 'text', expr: 't.category' },
+      { key: 'identifier', label: 'License no.', kind: 'text', expr: 'q.identifier' },
+      { key: 'issued_on', label: 'Issued on', kind: 'date', expr: 'q.issued_on' },
+      { key: 'expires_on', label: 'Expires on', kind: 'date', expr: 'q.expires_on' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'q.status', options: HRM_QUALIFICATION_STATUSES },
+      { key: 'verified_at', label: 'Verified at', kind: 'timestamp', expr: 'q.verified_at' },
+      { key: 'qualification_id', label: 'Qualification (id)', kind: 'uuid', expr: 'q.id' },
+      { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'q.employment_id' },
+    ],
+    defaultSort: { column: 'expires_on', direction: 'asc' },
+  },
+  {
+    key: 'hrm_qualification_alerts',
+    label: 'Qualification alerts',
+    category: 'hrm',
+    description:
+      'One row per certification renewal alert — holder, type, expiry, the lead-day schedule it fired on, and whether it has been sent. Requires the HRM certifications permission.',
+    from: `hrm_qualification_alerts a
+      JOIN hrm_worker_qualifications q ON q.id = a.qualification_id AND q.org_id = a.org_id
+      JOIN hrm_qualification_types t ON t.id = q.type_id AND t.org_id = a.org_id
+      JOIN worker_employments e ON e.id = q.employment_id AND e.org_id = a.org_id
+      JOIN parties w ON w.id = e.worker_party_id AND w.org_id = a.org_id`,
+    orgColumn: 'a.org_id',
+    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
+    requiredPermission: HRM_CERTIFICATIONS_READ_PERMISSION,
+    featureKey: HRM_CERTIFICATION_ALERTS_FEATURE_KEY,
+    // The due day is the fact: the period picker narrows on it, so the
+    // queue filtered to a window lists what comes due inside it.
+    defaultPeriodField: 'due_on',
+    columns: [
+      { key: 'employee', label: 'Employee', kind: 'text', expr: 'w.display_name' },
+      { key: 'type_code', label: 'Type code', kind: 'text', expr: 't.code' },
+      { key: 'type_name', label: 'Type', kind: 'text', expr: 't.name' },
+      { key: 'expires_on', label: 'Expires on', kind: 'date', expr: 'q.expires_on' },
+      { key: 'due_on', label: 'Due on', kind: 'date', expr: 'a.due_on' },
+      { key: 'lead_days', label: 'Lead days', kind: 'number', expr: 'a.lead_days' },
+      { key: 'sent_at', label: 'Sent at', kind: 'timestamp', expr: 'a.sent_at' },
+      { key: 'channel', label: 'Channel', kind: 'enum', expr: 'a.channel', options: HRM_ALERT_CHANNELS },
+      { key: 'alert_id', label: 'Alert (id)', kind: 'uuid', expr: 'a.id' },
+      { key: 'qualification_id', label: 'Qualification (id)', kind: 'uuid', expr: 'a.qualification_id' },
+    ],
+    defaultSort: { column: 'due_on', direction: 'asc' },
+  },
+  // HR-14 end
+  // HR-17 begin: continuous-performance entities (0228). 1:1s, feedback,
+  // calibration entries and talent reviews read through the HR grant
+  // (hrm.performance.read) with the report engine's run-path gate — the
+  // same reader-grant pattern as hrm_reviews — each behind its own
+  // sub-feature switch. Feedback applies the service's visibility scope:
+  // only HR runners reach this entity, and retracted originals plus
+  // retraction rows never read (the read hides both, exactly like the
+  // service). Talent and succession rows are HR-only by the same gate.
+  {
+    key: 'hrm_one_on_ones',
+    label: 'One-on-ones',
+    category: 'hrm',
+    description:
+      'One row per 1:1 meeting — manager, report, scheduled and held dates, and status. Requires the HRM performance permission.',
+    from: `hrm_one_on_ones o
+      JOIN worker_employments m ON m.id = o.manager_employment_id AND m.org_id = o.org_id
+      JOIN worker_employments r ON r.id = o.report_employment_id AND r.org_id = o.org_id
+      JOIN parties mp ON mp.id = m.worker_party_id AND mp.org_id = o.org_id
+      JOIN parties rp ON rp.id = r.worker_party_id AND rp.org_id = o.org_id
+      JOIN subsidiaries sub ON sub.id = r.employer_subsidiary_id AND sub.org_id = o.org_id`,
+    orgColumn: 'o.org_id',
+    subsidiaryScope: { column: 'r.employer_subsidiary_id' },
+    requiredPermission: HRM_PERFORMANCE_READ_PERMISSION,
+    featureKey: 'hrmOneOnOnes',
+    defaultPeriodField: 'scheduled_at',
+    columns: [
+      { key: 'scheduled_at', label: 'Scheduled', kind: 'date', expr: 'o.scheduled_at' },
+      { key: 'held_at', label: 'Held', kind: 'date', expr: 'o.held_at' },
+      { key: 'manager', label: 'Manager', kind: 'text', expr: 'mp.display_name' },
+      { key: 'report', label: 'Report', kind: 'text', expr: 'rp.display_name' },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
+      { key: 'status', label: 'Status', kind: 'text', expr: 'o.status' },
+      { key: 'id', label: 'Meeting (id)', kind: 'uuid', expr: 'o.id' },
+    ],
+    defaultSort: { column: 'scheduled_at', direction: 'desc' },
+  },
+  {
+    key: 'hrm_feedback',
+    label: 'Feedback',
+    category: 'hrm',
+    description:
+      'One row per praise, feedback, or request — subject, kind, visibility, and recorded date. HR-only runners (the service visibility matrix lives at the write/read service); retracted rows and retractions never read. Requires the HRM performance permission.',
+    // Retractions hide both rows, exactly like listFeedback: the
+    // retraction rows themselves never read, and neither do the
+    // originals they link.
+    from: `(SELECT * FROM hrm_feedback f0
+       WHERE f0.kind <> 'retraction'
+         AND NOT EXISTS (SELECT 1 FROM hrm_feedback r0
+                          WHERE r0.org_id = f0.org_id AND r0.kind = 'retraction'
+                            AND r0.retracts_feedback_id = f0.id)) f
+      JOIN worker_employments e ON e.id = f.subject_employment_id AND e.org_id = f.org_id
+      JOIN parties w ON w.id = e.worker_party_id AND w.org_id = f.org_id
+      JOIN subsidiaries sub ON sub.id = e.employer_subsidiary_id AND sub.org_id = f.org_id`,
+    orgColumn: 'f.org_id',
+    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
+    requiredPermission: HRM_PERFORMANCE_READ_PERMISSION,
+    featureKey: 'hrmFeedback',
+    defaultPeriodField: 'recorded_at',
+    columns: [
+      { key: 'recorded_at', label: 'Recorded', kind: 'date', expr: 'f.recorded_at' },
+      { key: 'employee', label: 'Employee', kind: 'text', expr: 'w.display_name' },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
+      { key: 'kind', label: 'Kind', kind: 'text', expr: 'f.kind' },
+      { key: 'visibility', label: 'Visibility', kind: 'text', expr: 'f.visibility' },
+      { key: 'id', label: 'Feedback (id)', kind: 'uuid', expr: 'f.id' },
+    ],
+    defaultSort: { column: 'recorded_at', direction: 'desc' },
+  },
+  {
+    key: 'hrm_calibration_entries',
+    label: 'Calibration entries',
+    category: 'hrm',
+    description:
+      'One row per calibrated review — session, employee, proposed beside calibrated rating, potential, and the decider. Requires the HRM performance permission.',
+    from: `hrm_calibration_entries e
+      JOIN hrm_calibration_sessions s ON s.id = e.session_id AND s.org_id = e.org_id
+      JOIN hrm_reviews r ON r.id = e.review_id AND r.org_id = e.org_id
+      JOIN worker_employments emp ON emp.id = r.employment_id AND emp.org_id = e.org_id
+      JOIN parties w ON w.id = emp.worker_party_id AND w.org_id = e.org_id
+      JOIN subsidiaries sub ON sub.id = emp.employer_subsidiary_id AND sub.org_id = e.org_id`,
+    orgColumn: 'e.org_id',
+    subsidiaryScope: { column: 'emp.employer_subsidiary_id' },
+    requiredPermission: HRM_PERFORMANCE_READ_PERMISSION,
+    featureKey: 'hrmCalibration',
+    defaultPeriodField: 'decided_at',
+    columns: [
+      { key: 'session', label: 'Session', kind: 'text', expr: 's.name' },
+      { key: 'employee', label: 'Employee', kind: 'text', expr: 'w.display_name' },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
+      { key: 'proposed_rating', label: 'Proposed', kind: 'number', expr: 'e.proposed_rating' },
+      { key: 'calibrated_rating', label: 'Calibrated', kind: 'number', expr: 'e.calibrated_rating' },
+      { key: 'potential_key', label: 'Potential', kind: 'text', expr: 'e.potential_key' },
+      { key: 'decided_at', label: 'Decided', kind: 'date', expr: 'e.decided_at' },
+      { key: 'id', label: 'Entry (id)', kind: 'uuid', expr: 'e.id' },
+    ],
+    defaultSort: { column: 'decided_at', direction: 'desc' },
+  },
+  {
+    key: 'hrm_talent_reviews',
+    label: 'Talent reviews',
+    category: 'hrm',
+    description:
+      'One row per talent review — employee, performance and potential keys, loss impact and risk, and promotion readiness. HR-only, never visible to the subject. Requires the HRM performance permission.',
+    from: `hrm_talent_reviews t
+      JOIN worker_employments e ON e.id = t.employment_id AND e.org_id = t.org_id
+      JOIN parties w ON w.id = e.worker_party_id AND w.org_id = t.org_id
+      JOIN subsidiaries sub ON sub.id = e.employer_subsidiary_id AND sub.org_id = t.org_id`,
+    orgColumn: 't.org_id',
+    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
+    requiredPermission: HRM_PERFORMANCE_READ_PERMISSION,
+    featureKey: 'hrmSuccession',
+    defaultPeriodField: 'reviewed_at',
+    columns: [
+      { key: 'reviewed_at', label: 'Reviewed', kind: 'date', expr: 't.reviewed_at' },
+      { key: 'employee', label: 'Employee', kind: 'text', expr: 'w.display_name' },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
+      { key: 'performance_key', label: 'Performance', kind: 'text', expr: 't.performance_key' },
+      { key: 'potential_key', label: 'Potential', kind: 'text', expr: 't.potential_key' },
+      { key: 'impact_of_loss', label: 'Impact of loss', kind: 'text', expr: 't.impact_of_loss' },
+      { key: 'risk_of_loss', label: 'Risk of loss', kind: 'text', expr: 't.risk_of_loss' },
+      { key: 'id', label: 'Review (id)', kind: 'uuid', expr: 't.id' },
+    ],
+    defaultSort: { column: 'reviewed_at', direction: 'desc' },
+  },
+  // HR-17 end
 ]

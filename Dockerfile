@@ -35,8 +35,12 @@ RUN npx esbuild scripts/bootstrap.ts \
       --outfile=/out/bootstrap.mjs
 # The background worker (BullMQ consumers + schedulers) as a self-contained
 # bundle, so the same image can run either the web server (default CMD) or the
-# worker (command override in the compose `worker` service).
-RUN npx esbuild engine/src/worker/index.ts \
+# worker (command override in the compose `worker` service). The bundle source
+# is the process composition entry (scripts/worker-entry.ts), which registers
+# worker-composed duties such as the automation tick (HR-16) before booting
+# the worker — engine/src/worker/index.ts itself must not import duty modules
+# without growing the pinned engine dependency cycle.
+RUN npx esbuild scripts/worker-entry.mts \
       --bundle --platform=node --format=esm \
       --external:pg-native \
       --banner:js="import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" \

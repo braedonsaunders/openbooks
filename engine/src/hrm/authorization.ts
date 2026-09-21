@@ -5,6 +5,82 @@ import { businessToday } from "../platform/business-date.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 
 /**
+ * Compensation duties (HR-12, 0221/0222). read = bands, architecture and
+ * cycle reads; manage = cycles, push, plans and snapshots; approve =
+ * the Flows gate on cycle decisions (the service additionally requires
+ * the identity invariant over the persisted cycle revision — this key
+ * alone never decides). Structural managers propose on direct reports
+ * without the manage grant (fenced per-employment in cycles.ts); own
+ * statements and pay-information requests ride hrm.self.read/request.
+ * Admin-only like the employment keys above (granted via the catalogue
+ * spread; the role seed refreshes on re-run).
+ */
+// HR-12 begin
+export const HRM_COMPENSATION_PERMISSIONS = [
+  "hrm.compensation.read",
+  "hrm.compensation.manage",
+  "hrm.compensation.approve",
+] as const;
+
+export type HrmCompensationPermission = (typeof HRM_COMPENSATION_PERMISSIONS)[number];
+
+async function requireHrmCompensationAccess(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  permission: HrmCompensationPermission,
+): Promise<void> {
+  if (!(await actorHasPermission(exec, orgId, actorId, permission))) {
+    throw new HrmAuthorizationError(
+      `Compensation access requires the ${permission} permission — ask an administrator to grant it in /admin/roles.`,
+    );
+  }
+}
+
+/** See bands, architecture and cycle reads (org configuration). */
+export async function requireHrmCompensationRead(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<void> {
+  return requireHrmCompensationAccess(exec, orgId, actorId, "hrm.compensation.read");
+}
+
+/** Run cycles, push rates, author plans and compute snapshots. */
+export async function requireHrmCompensationManage(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<void> {
+  return requireHrmCompensationAccess(exec, orgId, actorId, "hrm.compensation.manage");
+}
+
+/** Decide cycle lines through the Flows approval run. */
+export async function requireHrmCompensationApprove(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<void> {
+  return requireHrmCompensationAccess(exec, orgId, actorId, "hrm.compensation.approve");
+}
+
+/**
+ * Aggregate compensation read for list-shaped reads that name no single
+ * employment: the hrm.compensation.read grant, then the
+ * employer-subsidiary scope for the caller to filter by (null =
+ * unrestricted), never a boolean to trust.
+ */
+export async function requireAggregateCompensationRead(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<Set<string> | null> {
+  await requireHrmCompensationRead(exec, orgId, actorId);
+  return actorAllowedSubsidiaryIds(exec, orgId, actorId);
+}
+// HR-12 end
+
+/**
  * Foundational HRM employment authorization.
  *
  * Lives behind the service layer: every exported gate takes the caller's
@@ -1110,6 +1186,37 @@ export async function requireOwnEmploymentForBenefits(
 }
 
 /**
+ * Me-workspace election gate (HR-10): hrm.self.request plus proof the
+ * employment is the actor's own. Plain employees hold no hrm.benefits.*
+ * grant, so the existing benefits gate would refuse every self-service
+ * election; this gate carries the same structural own-employment proof
+ * (subject loaded from worker_employments on the trusted runner, employer
+ * scope enforced) under the self-service request key every built-in role
+ * carries. HR callers keep the manage path — this gate never widens it.
+ */
+export async function requireOwnEmploymentForBenefitsSelf(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+): Promise<TrustedEmploymentSubject> {
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.self.request"))) {
+    throw new HrmAuthorizationError(
+      "Benefit elections from the Me workspace require the hrm.self.request permission — ask an administrator to grant it in /admin/roles.",
+    );
+  }
+  const subject = await loadTrustedEmploymentSubject(exec, orgId, employmentId);
+  await assertEmployerScope(exec, orgId, actorId, subject);
+  const own = await loadOwnEmploymentIds(exec, orgId, actorId);
+  if (!own.includes(employmentId)) {
+    throw new HrmAuthorizationError(
+      "Benefit elections from the Me workspace elect only against your own employment — ask a manager holding hrm.benefits.manage to act on your behalf.",
+    );
+  }
+  return subject;
+}
+
+/**
  * Aggregate benefits read for list-shaped reads that name no single
  * employment: the hrm.benefits.read grant, then the employer-subsidiary
  * scope for the caller to filter by (null = unrestricted), never a boolean
@@ -1284,3 +1391,90 @@ export async function requireEmploymentOrTeamSubject(
     }
   }
 }
+
+// HR-13 begin: construction-compliance duties. Read sees rate tables,
+// classifications, comp classes, per-diem policies, certified runs and
+// findings; manage authors them and runs generation, approval and voids.
+// Org-level grants (construction configuration is org-wide, never
+// per-employment): granted to the same built-in roles as
+// hrm.employment.read/manage, enforced at the service boundary on every
+// entry function — the API routes gate the same keys, never instead.
+/** Construction-compliance duties (0223/0224). */
+export const HRM_CONSTRUCTION_PERMISSIONS = [
+  "hrm.construction.read",
+  "hrm.construction.manage",
+] as const;
+
+export type HrmConstructionPermission = (typeof HRM_CONSTRUCTION_PERMISSIONS)[number];
+
+/** See construction-compliance configuration and reports. */
+export async function requireHrmConstructionRead(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<void> {
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.construction.read"))) {
+    throw new HrmAuthorizationError(
+      "Construction compliance access requires the hrm.construction.read permission — ask an administrator to grant it in /admin/roles.",
+    );
+  }
+}
+
+/** Author construction-compliance configuration, entries, runs and findings transitions. */
+export async function requireHrmConstructionManage(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<void> {
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.construction.manage"))) {
+    throw new HrmAuthorizationError(
+      "Construction compliance access requires the hrm.construction.manage permission — ask an administrator to grant it in /admin/roles.",
+    );
+  }
+}
+// HR-13 end
+
+// HR-14 begin: certification and dispatch-gating duties (0225). Read sees
+// the taxonomy, held qualifications, requirements, coverage and alerts;
+// manage records, verifies, renews, revokes and authors requirements.
+// Org-level grants like construction (qualification configuration is
+// org-wide, never per-employment): granted to the same built-in roles as
+// hrm.employment.read/manage (admin only, via the catalogue spread),
+// enforced at the service boundary on every entry function. A person
+// reads their own qualifications through hrm.self.read (loadOwnEmploymentIds
+// in the read service); managers read their reports' through
+// requireEmploymentOrTeamSubject's structural team scope.
+/** Certification and dispatch-gating duties (0225). */
+export const HRM_QUALIFICATION_PERMISSIONS = [
+  "hrm.certifications.read",
+  "hrm.certifications.manage",
+] as const;
+
+export type HrmQualificationPermission = (typeof HRM_QUALIFICATION_PERMISSIONS)[number];
+
+/** See qualification types, held qualifications, requirements and alerts. */
+export async function requireHrmCertificationsRead(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<void> {
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.certifications.read"))) {
+    throw new HrmAuthorizationError(
+      "Qualification access requires the hrm.certifications.read permission — ask an administrator to grant it in /admin/roles.",
+    );
+  }
+}
+
+/** Record, verify, renew and revoke qualifications and author requirements. */
+export async function requireHrmCertificationsManage(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<void> {
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.certifications.manage"))) {
+    throw new HrmAuthorizationError(
+      "Qualification access requires the hrm.certifications.manage permission — ask an administrator to grant it in /admin/roles.",
+    );
+  }
+}
+// HR-14 end

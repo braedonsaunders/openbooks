@@ -680,6 +680,78 @@
       "hrm_benefit_enrollments": {
         "label": "Adhésions avantages",
         "description": "Une ligne par adhésion — personne, employeur, service à l'adhésion, régime et niveau de couverture, statut et montants enregistrés par période. Exige la permission avantages."
+      },
+      "automations": {
+        "label": "Automatisations",
+        "description": "Une ligne par recette d'automatisation — type de déclencheur, statut, version et dernière exécution. Requiert la permission automatisations."
+      },
+      "automation_runs": {
+        "label": "Exécutions d'automatisation",
+        "description": "Une ligne par déclenchement — version exécutée, sujet, statut, étapes et erreur. Requiert la permission automatisations."
+      },
+      "hrm_action_reasons": {
+        "label": "Motifs d'action",
+        "description": "Une ligne par code de motif et action RH — le vocabulaire des demandes de changement. Requiert la permission emploi RH."
+      },
+      "hrm_rate_schedule_lines": {
+        "label": "Grilles salariales",
+        "description": "Une ligne par grille, classification et date : base résoluble, avantages en espèces, crédit et heures supplémentaires."
+      },
+      "hrm_per_diem_entries": {
+        "label": "Indemnités journalières",
+        "description": "Une ligne par emploi, projet et jour : journalières et déplacements calculés avec statut."
+      },
+      "hrm_comp_class_split": {
+        "label": "Répartition des classes",
+        "description": "Règles de priorité avec leurs classes : quelle classe chiffre chaque heure et son taux pour 100."
+      },
+      "hrm_certified_runs": {
+        "label": "Paies certifiées",
+        "description": "Paies certifiées par projet et semaine : données figées avec format et fichier."
+      },
+      "hrm_compliance_findings": {
+        "label": "Constats",
+        "description": "Marqueurs préalables par type : ratios, taux manquants, classes non résolues."
+      },
+      "hrm_pay_bands": {
+        "label": "Fourchettes",
+        "description": "Une ligne par fourchette active : niveau, périmètre, devise, base et min/cible/max."
+      },
+      "hrm_comp_cycle_lines": {
+        "label": "Lignes de mérite",
+        "description": "Une ligne par décision : personne, employeur, taux figé, proposition et statut."
+      },
+      "hrm_headcount_plan_lines": {
+        "label": "Lignes du plan",
+        "description": "Une ligne par mouvement : plan, nature, titre, ETP, coût chiffré et statut."
+      },
+      "hrm_pay_gap_snapshots": {
+        "label": "Mesures d'écart",
+        "description": "Une ligne par mesure et catégorie : niveau, effectifs, écarts et marque."
+      },
+      "hrm_qualifications": {
+        "label": "Qualifications",
+        "description": "Une ligne par certification ou licence détenue — titulaire, employeur, type et catégorie, délivrance et expiration, et statut enregistré avec sa vérification."
+      },
+      "hrm_qualification_alerts": {
+        "label": "Alertes de qualification",
+        "description": "Une ligne par alerte de renouvellement de certification — titulaire, type, expiration, le calendrier d’anticipation sur lequel elle s’est déclenchée, et si elle a été envoyée."
+      },
+      "hrm_one_on_ones": {
+        "label": "Entretiens individuels",
+        "description": "Une ligne par entretien individuel : responsable, collaborateur, dates prévue et tenue, et statut. Nécessite l’autorisation de performance RH."
+      },
+      "hrm_feedback": {
+        "label": "Retours",
+        "description": "Une ligne par félicitation, retour ou demande : personne concernée, type, visibilité et date d’enregistrement. Nécessite l’autorisation de performance RH."
+      },
+      "hrm_calibration_entries": {
+        "label": "Entrées de calibrage",
+        "description": "Une ligne par évaluation calibrée : session, collaborateur, note proposée face à la note calibrée, potentiel et décideur. Nécessite l’autorisation de performance RH."
+      },
+      "hrm_talent_reviews": {
+        "label": "Revues de talents",
+        "description": "Une ligne par revue de talents : collaborateur, performance et potentiel, impact et risque de départ, et aptitude à la promotion. Nécessite l’autorisation de performance RH."
       }
     },
     "columns": {
@@ -1248,7 +1320,9 @@
         "reason": "Motif",
         "created_at": "Créé le",
         "id": "Demande (id)",
-        "employment_id": "Emploi (id)"
+        "employment_id": "Emploi (id)",
+        "action": "Action",
+        "reason_code": "Code de motif"
       },
       "hrm_positions": {
         "code": "Code",
@@ -1362,6 +1436,185 @@
         "effective_to": "En vigueur jusqu'au",
         "employment_id": "Emploi (id)",
         "id": "Adhésion (id)"
+      },
+      "hrm_rate_schedule_lines": {
+        "schedule": "Grille",
+        "classification": "Classification",
+        "base_rate": "Taux de base",
+        "fringe_rate": "Avantages",
+        "currency": "Devise",
+        "effective_from": "En vigueur le"
+      },
+      "hrm_per_diem_entries": {
+        "worked_on": "Jour",
+        "amount": "Montant",
+        "currency": "Devise",
+        "status": "Statut",
+        "employment_id": "Emploi (id)"
+      },
+      "hrm_comp_class_split": {
+        "class": "Classe",
+        "priority": "Priorité",
+        "rate": "Taux / 100"
+      },
+      "hrm_certified_runs": {
+        "week_ending": "Semaine au",
+        "format_key": "Format",
+        "status": "Statut",
+        "project_id": "Projet (id)"
+      },
+      "hrm_compliance_findings": {
+        "kind": "Type",
+        "worked_on": "Jour",
+        "status": "Statut",
+        "project_id": "Projet (id)"
+      },
+      "hrm_pay_bands": {
+        "level": "Niveau",
+        "family": "Famille",
+        "employer": "Employeur",
+        "currency": "Devise",
+        "basis": "Base",
+        "min": "Minimum",
+        "target": "Cible",
+        "max": "Maximum",
+        "effective_from": "Effet",
+        "effective_to": "Fin",
+        "id": "Fourchette (id)"
+      },
+      "hrm_comp_cycle_lines": {
+        "cycle": "Campagne",
+        "person": "Personne",
+        "employer": "Employeur",
+        "current_rate": "Taux actuel",
+        "currency": "Devise",
+        "compa_ratio": "Ratio compa",
+        "proposed_pct": "Proposé %",
+        "proposed_rate": "Taux proposé",
+        "status": "Statut",
+        "effective_on": "Effet",
+        "employment_id": "Emploi (id)",
+        "id": "Ligne (id)"
+      },
+      "hrm_headcount_plan_lines": {
+        "plan": "Programme",
+        "kind": "Nature",
+        "title": "Titre",
+        "employer": "Employeur",
+        "planned_fte": "ETP prévu",
+        "start_on": "Début",
+        "est_annual_cost": "Coût annuel est.",
+        "currency": "Devise",
+        "status": "Statut",
+        "id": "Ligne (id)"
+      },
+      "hrm_pay_gap_snapshots": {
+        "as_of": "Date",
+        "employer": "Employeur",
+        "level": "Niveau",
+        "count_a": "Effectifs A",
+        "count_b": "Effectifs B",
+        "mean_gap_pct": "Écart moyen %",
+        "median_gap_pct": "Écart médian %",
+        "unexplained_gap_pct": "Écart inexpliqué %",
+        "method": "Méthode",
+        "joint_assessment_due": "Examen conjoint",
+        "id": "Mesure (id)"
+      },
+      "hrm_qualifications": {
+        "employee": "Employé",
+        "employer": "Employeur",
+        "type_code": "Code de type",
+        "type_name": "Type",
+        "category": "Catégorie",
+        "identifier": "N° de licence",
+        "issued_on": "Délivré le",
+        "expires_on": "Date d’expiration",
+        "status": "Statut",
+        "verified_at": "Vérifié le",
+        "qualification_id": "Qualification (id)",
+        "employment_id": "Emploi (id)"
+      },
+      "hrm_qualification_alerts": {
+        "employee": "Employé",
+        "type_code": "Code de type",
+        "type_name": "Type",
+        "expires_on": "Date d’expiration",
+        "due_on": "Échéance",
+        "lead_days": "Jours d’anticipation",
+        "sent_at": "Envoyé le",
+        "channel": "Canal",
+        "alert_id": "Alerte (id)",
+        "qualification_id": "Qualification (id)"
+      },
+      "automations": {
+        "name": "Nom",
+        "status": "Statut",
+        "trigger_kind": "Déclencheur",
+        "version": "Version",
+        "priority": "Priorité",
+        "last_run_at": "Dernière exécution",
+        "error_message": "Erreur",
+        "created_at": "Créé le",
+        "id": "Automatisation (id)"
+      },
+      "automation_runs": {
+        "automation": "Automatisation",
+        "status": "Statut",
+        "version": "Version",
+        "subject_kind": "Type d’objet",
+        "subject_id": "Objet (id)",
+        "started_at": "Démarré le",
+        "finished_at": "Terminé le",
+        "error": "Erreur",
+        "created_at": "Créé le",
+        "id": "Exécution (id)"
+      },
+      "hrm_action_reasons": {
+        "action": "Action",
+        "reason_code": "Code",
+        "label": "Libellé",
+        "requires_comment": "Commentaire requis",
+        "is_active": "Actif",
+        "created_at": "Créé le",
+        "id": "Motif (id)"
+      },
+      "hrm_one_on_ones": {
+        "scheduled_at": "Prévu",
+        "held_at": "Tenu",
+        "manager": "Responsable",
+        "report": "Collaborateur",
+        "employer": "Employeur",
+        "status": "Statut",
+        "id": "Entretien (id)"
+      },
+      "hrm_feedback": {
+        "recorded_at": "Enregistré",
+        "employee": "Collaborateur",
+        "employer": "Employeur",
+        "kind": "Type",
+        "visibility": "Visibilité",
+        "id": "Retour (id)"
+      },
+      "hrm_calibration_entries": {
+        "session": "Session",
+        "employee": "Collaborateur",
+        "employer": "Employeur",
+        "proposed_rating": "Proposée",
+        "calibrated_rating": "Calibrée",
+        "potential_key": "Potentiel",
+        "decided_at": "Décidée",
+        "id": "Entrée (id)"
+      },
+      "hrm_talent_reviews": {
+        "reviewed_at": "Évalué",
+        "employee": "Collaborateur",
+        "employer": "Employeur",
+        "performance_key": "Performance",
+        "potential_key": "Potentiel",
+        "impact_of_loss": "Impact du départ",
+        "risk_of_loss": "Risque de départ",
+        "id": "Revue (id)"
       }
     },
     "enumValues": {
@@ -1444,7 +1697,12 @@
       "filled": "Pourvu",
       "open": "Ouvert",
       "planned": "Prévu",
-      "position_assignment": "Affectation à un poste"
+      "position_assignment": "Affectation à un poste",
+      "valid": "Valide",
+      "revoked": "Révoquée",
+      "pending_verification": "Vérification en attente",
+      "inbox": "Boîte de réception",
+      "email": "E-mail"
     }
   },
   "operators": {

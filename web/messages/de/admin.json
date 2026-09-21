@@ -981,7 +981,17 @@
     "hrm_self_read": "Eigene Anstellungsübersicht ansehen",
     "hrm_self_request": "Profiländerungen für die eigene Person einreichen",
     "hrm_team_read": "Direkte Mitarbeitende heute ansehen",
-    "hrm_team_manage": "Schritte mit Managerzuordnung bearbeiten"
+    "hrm_team_manage": "Schritte mit Managerzuordnung bearbeiten",
+    "automations_read": "Automatisierungsrezepte und Ausführungsprotokoll sehen",
+    "automations_manage": "Automatisierungen und Genehmigungseinstellungen verfassen",
+    "automations_run": "Automatisierungen jetzt ausführen",
+    "hrm_construction_read": "Bau-Compliance einsehen",
+    "hrm_construction_manage": "Bau-Compliance verwalten",
+    "hrm_compensation_read": "Bänder, Architektur und Runden einsehen",
+    "hrm_compensation_manage": "Runden durchführen, Sätze übertragen, Pläne und Kennzahlen erstellen",
+    "hrm_compensation_approve": "Zeilen über den Genehmigungslauf entscheiden",
+    "hrm_certifications_read": "Zertifizierungen und Einsatzbereitschaft ansehen",
+    "hrm_certifications_manage": "Zertifizierungsarten, Anforderungen und Erneuerungen verwalten"
   },
   "ai": {
     "metaTitle": "KI-Einstellungen",
@@ -2532,6 +2542,60 @@
         "title": "Leistungsstufen",
         "singularTitle": "Leistungsstufe",
         "description": "Deckungsstufen je Plan — nur Mitarbeiter, Familie — mit den Stufenkosten."
+      },
+      "home-announcements": {
+        "title": "Ankündigungen",
+        "description": "Firmenankündigungen für die Startseite, mit Zielgruppe und Zeitraum."
+      },
+      "construction-classifications": {
+        "title": "Arbeitsklassifizierungen",
+        "singularTitle": "Arbeitsklassifizierung",
+        "description": "Gewerketaxonomie für die Tariflohnbewertung: Gesellen- und Azubiklassen mit der Gesellenklasse, gegen die jede Quote zählt."
+      },
+      "construction-rate-schedules": {
+        "title": "Lohntafeln",
+        "singularTitle": "Lohntafel",
+        "description": "Tarif-, Vertrags- und betriebliche Tafeln mit Projekt-, Standort- und Gesellschaftsgeltung plus Reziprozität."
+      },
+      "construction-comp-classes": {
+        "title": "Gefahrenklassen",
+        "singularTitle": "Gefahrenklasse",
+        "description": "BG-Gefahrenklassen mit Satz je 100, wo erklärt; Prioritätsregeln entscheiden die Bepreisung."
+      },
+      "construction-per-diem-policies": {
+        "title": "Tagegeldregeln",
+        "singularTitle": "Tagegeldregel",
+        "description": "Berechnungsregeln für Tagegeld je Basis. Die Steuerbarkeit liegt auf der Lohnkomponente, nie hier."
+      },
+      "construction-ratio-rules": {
+        "title": "Quotenregeln",
+        "singularTitle": "Quotenregel",
+        "description": "Geselle-zu-Azubi-Quoten je Tafel, täglich oder wöchentlich gemessen. Verstöße werden zum Gesellensatz bepreist."
+      },
+      "hrm-job-families": {
+        "title": "Berufsfamilien",
+        "singularTitle": "Berufsfamilie",
+        "description": "Die Gewerke des Unternehmens — stabile Codes, die Ebenen zu Leitern bündeln."
+      },
+      "hrm-job-levels": {
+        "title": "Ebenen",
+        "singularTitle": "Ebene",
+        "description": "Je eine Sprosse pro Leiter mit Rang und erklärten Gleichwertigkeitskriterien."
+      },
+      "hrm-pay-bands": {
+        "title": "Bänder",
+        "singularTitle": "Band",
+        "description": "Versionierte SOLL-Sätze je Geltung: Änderungen sind neue Zeilen, nie Überschreibungen."
+      },
+      "hrm-competency-frameworks": {
+        "title": "Kompetenzrahmen",
+        "singularTitle": "Kompetenzrahmen",
+        "description": "Das wiederverwendbare Skill-Vokabular der Org mit Stufen."
+      },
+      "hrm-competencies": {
+        "title": "Kompetenzen",
+        "singularTitle": "Kompetenz",
+        "description": "Eine Fähigkeit in einem Rahmen, verknüpfbar mit Beurteilungen, Job-Leveln und Positionen."
       }
     },
     "fields": {
@@ -2842,7 +2906,45 @@
       "employerPayComponentId": "Arbeitgeberkomponente",
       "waitingPeriodDays": "Wartezeit (Tage)",
       "requiresApproval": "Genehmigung erforderlich",
-      "levelKey": "Stufenschlüssel"
+      "levelKey": "Stufenschlüssel",
+      "body": "Text",
+      "audience": "Zielgruppe",
+      "startsOn": "Beginnt am",
+      "endsOn": "Endet am",
+      "action": "Aktion",
+      "reasonCode": "Grundcode",
+      "requiresComment": "Erläuterung erforderlich",
+      "trade": "Gewerk",
+      "isApprentice": "Azubi",
+      "apprenticeProgramRef": "Programmref",
+      "journeyClassificationId": "Gesellenklasse",
+      "apprenticeClassificationId": "Azubiklasse",
+      "sourceRef": "Quellenref",
+      "jurisdictionCode": "Jurisdiktion",
+      "reciprocity": "Reziprozität",
+      "ratePer100": "Satz / 100",
+      "lodgingOffset": "Unterkunftsabzug",
+      "payComponentId": "Lohnkomponente",
+      "scheduleId": "Tafel",
+      "ratioJourney": "Geselle",
+      "ratioApprentice": "Azubi",
+      "measured": "Messung",
+      "rank": "Rang",
+      "familyId": "Familie",
+      "skillsWeight": "Gewichtung Können",
+      "effortWeight": "Gewichtung Aufwand",
+      "responsibilityWeight": "Gewichtung Verantwortung",
+      "workingConditionsWeight": "Gewichtung Bedingungen",
+      "levelId": "Ebene",
+      "min": "Minimum",
+      "target": "Ziel",
+      "max": "Maximum",
+      "validityMonths": "Gültigkeit (Monate)",
+      "issuingBody": "Ausstellende Stelle",
+      "renewalLeadDays": "Vorlauf Erneuerung (Tage)",
+      "requiresEvidence": "Nachweis erforderlich",
+      "extraCategories": "Zusätzliche Kategorien",
+      "frameworkId": "Rahmen"
     },
     "fieldHelp": {
       "gapless": "Lückenlos bedeutet, dass jede Nummer in der Folge belegt sein muss und keine Nummer übersprungen wird. Aktivieren Sie dies nur, wenn gesetzliche oder prüfungsbezogene Vorgaben eine ununterbrochene Nummerierung verlangen.",
@@ -2921,7 +3023,12 @@
       "benefitEmployerComponent": "Arbeitgeberbeitrags-Komponente für die Arbeitgeberzeilen. Pflicht, wenn der Plan Arbeitgeberkosten bepreist.",
       "benefitWaitingPeriod": "Diensttage, bevor der Plan gewählt werden darf.",
       "benefitRequiresApproval": "Anmeldungen warten bis zur Genehmigung durch einen Manager.",
-      "benefitLevelKey": "Stufenschlüssel, den die Anmeldung nennt — single, family — stabil über Preisänderungen."
+      "benefitLevelKey": "Stufenschlüssel, den die Anmeldung nennt — single, family — stabil über Preisänderungen.",
+      "rateScheduleSource": "Feststellungsnummer oder Vereinbarungskennung hinter dieser Tafel.",
+      "rateScheduleJurisdiction": "Pack-Vokabular, Freitext in der generischen Schicht — das Pack interpretiert.",
+      "perDiemComponent": "Verdienstkomponente, über die Beträge laufen. Ihre Steuerbehandlung ist die einzige Steuerbarkeitsdeklaration.",
+      "hrmQualificationValidity": "Leer lassen für Qualifikationen ohne Ablauf.",
+      "hrmQualificationExtraCategories": "Organisationseigenes Kategorie-Vokabular über die sechs Standards hinaus."
     },
     "options": {
       "timeClassification": {
@@ -3318,6 +3425,58 @@
       "benefitProrationBasis": {
         "full_month": "Voller Monat — der ganze Monat unabhängig von den Daten",
         "daily": "Täglich — anteilig nach abgedeckten Tagen"
+      },
+      "announcementAudience": {
+        "all": "Alle",
+        "managers": "Führungskräfte",
+        "employees": "Mitarbeitende"
+      },
+      "hrmAction": {
+        "hire": "Einstellung",
+        "rehire": "Wiedereinstellung",
+        "transfer": "Versetzung",
+        "promotion": "Beförderung",
+        "demotion": "Herabstufung",
+        "pay_change": "Gehaltsänderung",
+        "manager_change": "Vorgesetztenwechsel",
+        "location_change": "Standortwechsel",
+        "schedule_change": "Arbeitszeitänderung",
+        "leave_of_absence": "Beurlaubung",
+        "return": "Rückkehr",
+        "termination": "Austritt",
+        "profile_change": "Profiländerung",
+        "other": "Sonstiges"
+      },
+      "hrmScheduleKind": {
+        "prevailingWage": "Tariflohn",
+        "unionAgreement": "Tarifvertrag",
+        "orgDeclared": "Betrieblich"
+      },
+      "hrmReciprocity": {
+        "homeLocal": "Heimbezirk",
+        "jobsiteLocal": "Einsatzort",
+        "higherOf": "Höherer Satz"
+      },
+      "hrmPerDiemBasis": {
+        "flatDaily": "Tagespauschale",
+        "distanceBrackets": "Entfernungsstaffel",
+        "hoursThreshold": "Stundenschwelle"
+      },
+      "hrmRatioMeasured": {
+        "daily": "Täglich",
+        "weekly": "Wöchentlich"
+      },
+      "payBandBasis": {
+        "annual": "Jährlich",
+        "hourly": "Stündlich"
+      },
+      "hrmQualificationCategory": {
+        "certification": "Zertifizierung",
+        "license": "Lizenz",
+        "training": "Schulung",
+        "medical": "Medizinisch",
+        "clearance": "Freigabe",
+        "other": "Sonstiges"
       }
     },
     "bankFeeds": {
@@ -4344,6 +4503,18 @@
       "title": "Personalwesen",
       "description": "Beschäftigungsdaten mit Stichtagshistorie, Personalbestand und Nachverfolgung von Änderungsanträgen. Liest die HRM-Grundlage; steuert nie die Lohnabrechnung."
     },
+    "hrmCelebrations": {
+      "title": "Feiern am Arbeitsplatz",
+      "description": "Geburtstage, Jubiläen und neue Kollegen auf der Startseite."
+    },
+    "hrmManagerNudges": {
+      "title": "Anstöße für Führungskräfte",
+      "description": "Fluktuations- und 1:1-Hinweise auf der Startseite für Führungskräfte, begrenzt auf das eigene Team."
+    },
+    "homeAnnouncements": {
+      "title": "Ankündigungen auf der Startseite",
+      "description": "Von Admins verfasste Ankündigungen auf der Startseite, mit Zielgruppe und Zeitraum."
+    },
     "bankFeeds": {
       "title": "Bankfeeds",
       "description": "Automatisierte Bankanbindung – SFTP-Dateiablagen und Live-Feeds von Plaid, GoCardless und TrueLayer."
@@ -4483,6 +4654,114 @@
     "timeTracking": {
       "description": "Persönliche Wochenstundenzettel mit Einreichung und Genehmigung.",
       "title": "Zeiterfassung"
+    },
+    "automations": {
+      "title": "Automatisierungen",
+      "description": "Triggerbasierte Rezepte auf Flows: Zeitplan-, Datums-, Feldänderungs-, Ereignis-, Dokument- und manuelle Trigger lösen geordnete Aktionen aus."
+    },
+    "automationDateTriggers": {
+      "title": "Datumstrigger",
+      "description": "Rezepte relativ zu Entitätsdaten auslösen, z. B. Tage vor Beschäftigungsbeginn."
+    },
+    "automationFieldTriggers": {
+      "title": "Feldtrigger",
+      "description": "Rezepte bei Änderung eines beobachteten Felds auslösen."
+    },
+    "automationWebhooks": {
+      "title": "Webhook-Aktionen",
+      "description": "Deklarierte signierte Webhook-Endpunkte der Org aus Rezepten aufrufen."
+    },
+    "automationSimulator": {
+      "title": "Simulator",
+      "description": "Rezepte ohne Schreibvorgänge an echten Subjekten testen."
+    },
+    "hrmActionReasons": {
+      "title": "Aktions- und Grundcodes",
+      "description": "Bei jedem Änderungsantrag eine HR-Aktion und einen Grundcode verlangen."
+    },
+    "hrmEventVerbs": {
+      "title": "Änderungsereignisverben",
+      "description": "Beschäftigungsänderungen als angehängte Ereignisse stornieren, zurücknehmen und korrigieren."
+    },
+    "hrmConstructionCompliance": {
+      "title": "Bau-Compliance",
+      "description": "Tariflohntabellen, zertifizierte Abrechnungen, Gefahrenklassen, Azubi-Quoten und Tagegeld für eigene Bauleistung. Benötigt Lohn, Projekte und Zeiterfassung."
+    },
+    "hrmPrevailingWage": {
+      "title": "Tariflohn",
+      "description": "Lohn nach Einsatzort, Klassifizierung und Datum aus erklärten Tafeln auflösen."
+    },
+    "hrmCertifiedPayroll": {
+      "title": "Zertifizierte Abrechnung",
+      "description": "Eingefrorene wöchentliche Berichte, gerendert über die erklärten Pack-Dateien."
+    },
+    "hrmWorkersCompClasses": {
+      "title": "Gefahrenklassen",
+      "description": "Kalkulierte Stunden per Prioritätsregeln auf Gefahrenklassen splitten."
+    },
+    "hrmApprenticeRatios": {
+      "title": "Azubi-Quoten",
+      "description": "Geselle-zu-Azubi-Quoten täglich prüfen; Verstöße werden zum Gesellensatz bepreist."
+    },
+    "hrmPerDiem": {
+      "title": "Tagegeld",
+      "description": "Tagegeld und Fahrtkosten aus genehmigten Zeiten in die Lohnschnittstelle rechnen."
+    },
+    "hrmCompensation": {
+      "title": "Vergütung",
+      "description": "Stellenarchitektur und Bänder: was Rollen zahlen sollten und wo Personen liegen."
+    },
+    "hrmMeritCycles": {
+      "title": "Meritrunden",
+      "description": "Runden, die die Abrechnungswahrheit einfrieren, Erhöhungen entscheiden und Sätze übertragen."
+    },
+    "hrmHeadcountPlans": {
+      "title": "Personalpläne",
+      "description": "Szenarien, kalkuliert aus Bändern, die bei Genehmigung Ausschreibungen öffnen."
+    },
+    "hrmPayTransparency": {
+      "title": "Entgelttransparenz",
+      "description": "Eingefrorene Kennzahlen aus der Abrechnungswahrheit und Auskunftsersuchen."
+    },
+    "hrmCertifications": {
+      "title": "Zertifizierungen und Lizenzen",
+      "description": "Qualifikationsregister der Mitarbeiter: Taxonomie, Nachweise, Einsatzanforderungen und Ablaufwarnungen. Umschalten löscht keine Daten."
+    },
+    "hrmDispatchGating": {
+      "title": "Einsatzsteuerung",
+      "description": "Verweigert Einsatzzuweisungen bei fehlenden Qualifikationen. Benötigt Projekte und Planung."
+    },
+    "hrmEquipmentQualifications": {
+      "title": "Gerätequalifikationen",
+      "description": "Erforderliche Qualifikationstypen an Geräten festlegen. Benötigt Geräte."
+    },
+    "hrmCertificationAlerts": {
+      "title": "Zertifikatswarnungen",
+      "description": "Tägliche Ablaufhinweise an Inhaber und Vorgesetzte über den Posteingang."
+    },
+    "hrmPerformance": {
+      "title": "Leistung",
+      "description": "Der Hauptschalter für Beurteilungen, Ziele, 1:1s, Feedback, Kalibrierung, Talent und Nachfolge."
+    },
+    "hrmOneOnOnes": {
+      "title": "1:1-Gespräche",
+      "description": "Geplante Gespräche zwischen Führungskraft und Mitarbeiter mit fortlaufender Agenda."
+    },
+    "hrmFeedback": {
+      "title": "Feedback",
+      "description": "Lob, Feedback und Anfragen, erfasst wenn sie entstehen."
+    },
+    "hrmCompetencies": {
+      "title": "Kompetenzen",
+      "description": "Wiederverwendbares Skill-Vokabular mit Stufen, verknüpft mit Beurteilungen und Job-Leveln."
+    },
+    "hrmCalibration": {
+      "title": "Kalibrierung",
+      "description": "Das Bewertungsraster über einen Beurteilungszyklus mit Prüfpfad."
+    },
+    "hrmSuccession": {
+      "title": "Talent & Nachfolge",
+      "description": "Talentbeurteilungen und Nachfolgepläne pro Position."
     }
   },
   "extensions": {
@@ -4764,6 +5043,130 @@
       "redirect": "Diese Seite sendet Sie stattdessen an {href}. Das ist meist eine Berechtigung, die Ihnen fehlt, oder eine Funktion, die aus ist.",
       "notFound": "Diese Seite antwortet für Sie mit „nicht gefunden“, daher gibt es kein Layout zu lesen.",
       "empty": "Diese Seite zeigt für Sie nichts, daher gibt es kein Layout zu lesen."
+    }
+  },
+  "automations": {
+    "title": "Automatisierungen",
+    "description": "Triggerbasierte Rezepte auf Flows — Zeitplan-, Datums-, Feldänderungs-, Ereignis-, Dokument- und manuelle Trigger lösen geordnete Aktionen aus.",
+    "backToFlows": "Zurück zu Flows",
+    "backToList": "Zurück zu den Automatisierungen",
+    "list": {
+      "newButton": "Neue Automatisierung",
+      "newTitle": "Neue Automatisierung",
+      "nameLabel": "Name",
+      "namePlaceholder": "z. B. Willkommensaufgaben vor Start",
+      "nameRequired": "Geben Sie der Automatisierung einen Namen.",
+      "triggerLabel": "Trigger",
+      "createFailed": "Die Automatisierung konnte nicht erstellt werden.",
+      "create": "Erstellen",
+      "cancel": "Abbrechen",
+      "neverRan": "Nie ausgeführt",
+      "statusLabel": "Status",
+      "emptyTitle": "Noch keine Automatisierungen",
+      "emptyDescription": "Automatisierungen lösen geordnete Aktionen aus Zeitplan-, Datums-, Feldänderungs-, Ereignis-, Dokument- oder manuellen Triggern aus.",
+      "columnAutomation": "Automatisierung",
+      "columnStatus": "Status",
+      "columnTrigger": "Trigger",
+      "columnLastRun": "Letzte Ausführung",
+      "columnError": "Fehler",
+      "columnActions": "Aktionen",
+      "runNow": "Jetzt ausführen",
+      "enable": "Aktivieren",
+      "disable": "Deaktivieren",
+      "actionFailed": "Die Aktion ist fehlgeschlagen.",
+      "recipeLabel": "Aus Vorlage starten",
+      "recipeBlank": "Leeres Rezept"
+    },
+    "status": {
+      "enabled": "Aktiviert",
+      "draft": "Entwurf",
+      "disabled": "Deaktiviert",
+      "error": "Fehler"
+    },
+    "triggerKinds": {
+      "schedule": "Zeitplan",
+      "date_relative": "Datumsbezogen",
+      "field_change": "Feldänderung",
+      "event": "Ereignis",
+      "document": "Dokument",
+      "manual": "Manuell"
+    },
+    "builder": {
+      "pageTitle": "Automatisierungs-Editor",
+      "description": "Trigger, Wer und Wann, Aktionen, Simulation und Ausführungsprotokoll.",
+      "buildTab": "Erstellen",
+      "runsTab": "Läufe",
+      "saved": "Gespeichert.",
+      "saveFailed": "Konnte nicht gespeichert werden.",
+      "nameTitle": "Name",
+      "saveName": "Namen speichern",
+      "triggerTitle": "Trigger",
+      "saveTrigger": "Trigger speichern",
+      "cronLabel": "Cron",
+      "timezoneLabel": "Zeitzone",
+      "entityLabel": "Entität",
+      "dateFieldLabel": "Datumsfeld",
+      "offsetLabel": "Abstand (Tage)",
+      "directionLabel": "Richtung",
+      "before": "Vor",
+      "after": "Nach",
+      "atTimeLabel": "Um (HH:MM)",
+      "fieldLabel": "Feld",
+      "changedToLabel": "Geändert zu (leer = beliebig)",
+      "subjectKindLabel": "Subjektart",
+      "eventKindLabel": "Ereignis",
+      "documentUploaded": "Hochgeladen",
+      "documentSigned": "Signiert",
+      "documentTemplated": "Aus Vorlage",
+      "whoWhenTitle": "Wer und Wann",
+      "whoWhenHelp": "Bereichsfilter grenzen ein, für wen das Rezept gilt; der Bedingungsbaum entscheidet, wann es auslöst.",
+      "rule_subsidiaryId": "Tochtergesellschaft",
+      "rule_departmentId": "Abteilung",
+      "rule_locationId": "Standort",
+      "rule_workerType": "Beschäftigungsart",
+      "rule_positionId": "Position",
+      "ruleBlank": "Leer = alle",
+      "conditionsMode": "Bedingungen",
+      "conditionsAll": "Alle müssen zutreffen",
+      "conditionsAny": "Eine genügt",
+      "opLabel": "Op",
+      "valueLabel": "Wert",
+      "remove": "Entfernen",
+      "addCondition": "Bedingung hinzufügen",
+      "saveWhoWhen": "Wer und Wann speichern",
+      "actionsTitle": "Aktionen",
+      "actionKindLabel": "Aktionsart",
+      "actionJsonLabel": "Aktions-JSON",
+      "addAction": "Aktion hinzufügen",
+      "saveActions": "Aktionen speichern",
+      "simulateTitle": "Simulieren",
+      "simulateHelp": "Testlauf ohne Schreibvorgänge — Entität:ID wählen oder leer lassen für eine Stichprobe.",
+      "simulateSubjectLabel": "Subjekt",
+      "simulateSubjectPlaceholder": "leave_request:<ID>",
+      "simulateButton": "Simulieren",
+      "stepKind": "Schritt",
+      "stepStatus": "Status",
+      "stepDetail": "Detail",
+      "runStatus": "Status",
+      "runsEmpty": "Noch keine Läufe.",
+      "runVersion": "Version",
+      "runSubject": "Subjekt",
+      "runCreated": "Erstellt",
+      "runSteps": "Schritte",
+      "viewSteps": "Schritte",
+      "stepsTitle": "Laufschritte",
+      "runLoadFailed": "Der Lauf konnte nicht geladen werden.",
+      "closeSteps": "Schließen",
+      "approvalTitle": "Genehmigungseinstellungen",
+      "approvalHelp": "Die ausnahmebasierte Genehmigung stimmt die bestehenden Flows-Gates je Subjektart ab — innerhalb der Schwellen genehmigt das Gate als Systementscheidung mit allen Prüfungen; außerhalb läuft der normale Weg.",
+      "approvalException": "Ausnahmebasierte Genehmigung",
+      "approvalThresholds": "Schwellen (JSON)",
+      "approvalAuto": "Ohne Regel automatisch genehmigen",
+      "approvalDelegate": "Delegieren nach Tagen (leer = nie)",
+      "approvalExclude": "Initiator ausschließen",
+      "approvalYes": "Ja",
+      "approvalNo": "Nein",
+      "approvalSave": "Einstellungen speichern"
     }
   }
 }

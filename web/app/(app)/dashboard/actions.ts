@@ -6,7 +6,6 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { can, getAuthz } from '@/lib/authz'
 import { NAV_MODULES } from '@/lib/nav/registry'
-import { getUserRoleTier } from './_role-tier'
 import { hiddenQuickActionIdsForOrg, resolveDashboardDefault } from './_load-layout'
 import { canSeeWidget, canSeeInsightCards } from './_widget-access'
 import { WIDGETS } from './_widget-registry'
@@ -48,8 +47,7 @@ export async function saveDashboardLayout(input: unknown) {
     allowAnyInsightCardUuid: canSeeInsightCards(authz),
   })
 
-  const role = getUserRoleTier(authz)
-  const dashboardDefault = await resolveDashboardDefault(authz, role)
+  const dashboardDefault = await resolveDashboardDefault(authz)
   const sourceRole = dashboardDefault.sourceKey
 
   const layout: DashboardLayoutData = { widgets }
@@ -109,8 +107,7 @@ export async function saveQuickActions(input: unknown) {
     return { ok: false as const, error: parsed.error.issues[0]?.message ?? 'Invalid quick actions' }
   }
 
-  const role = getUserRoleTier(authz)
-  const dashboardDefault = await resolveDashboardDefault(authz, role)
+  const dashboardDefault = await resolveDashboardDefault(authz)
   const sourceRole = dashboardDefault.sourceKey
   const hiddenIds = new Set(await hiddenQuickActionIdsForOrg(authz.user.orgId))
   const normalized = normalizeQuickActions(parsed.data)

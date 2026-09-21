@@ -981,7 +981,17 @@
     "hrm_self_read": "查看本人的雇佣摘要",
     "hrm_self_request": "提交本人的档案变更",
     "hrm_team_read": "查看今日直接下属",
-    "hrm_team_manage": "处理经理分配的团队步骤"
+    "hrm_team_manage": "处理经理分配的团队步骤",
+    "automations_read": "查看自动化配方和运行日志",
+    "automations_manage": "编写自动化和审批设置",
+    "automations_run": "立即运行自动化",
+    "hrm_construction_read": "查看建筑合规",
+    "hrm_construction_manage": "管理建筑合规",
+    "hrm_compensation_read": "查看带宽、体系与周期",
+    "hrm_compensation_manage": "运行周期、推送标准、编写规划与快照",
+    "hrm_compensation_approve": "经审批流决定明细",
+    "hrm_certifications_read": "查看认证与派工就绪情况",
+    "hrm_certifications_manage": "管理认证类型、要求与续期"
   },
   "ai": {
     "metaTitle": "AI 设置",
@@ -2464,6 +2474,60 @@
         "title": "福利档次",
         "singularTitle": "福利档次",
         "description": "每个计划的保障档次 — 仅本人、家庭 — 含档次金额。"
+      },
+      "home-announcements": {
+        "title": "公告",
+        "description": "面向首页的公司公告，可设置受众与日期。"
+      },
+      "construction-classifications": {
+        "title": "工作分类",
+        "singularTitle": "工作分类",
+        "description": "现行工资定价的工种分类：熟练工与学徒类别，以及每个学徒比例对应的熟练工类别。"
+      },
+      "construction-rate-schedules": {
+        "title": "工资表",
+        "singularTitle": "工资表",
+        "description": "现行工资、工会协议和企业自定工资表，含项目、地点和子公司范围及互惠规则。"
+      },
+      "construction-comp-classes": {
+        "title": "工伤类别",
+        "singularTitle": "工伤类别",
+        "description": "已申报每100费率的工伤保险类别；优先级规则决定每小时的定价类别。"
+      },
+      "construction-per-diem-policies": {
+        "title": "每日津贴政策",
+        "singularTitle": "每日津贴政策",
+        "description": "按基数计算每日津贴的规则。应税性位于工资组成部分中，不在此处。"
+      },
+      "construction-ratio-rules": {
+        "title": "比例规则",
+        "singularTitle": "比例规则",
+        "description": "每个工资表的熟练工与学徒比例，按日或按周衡量。违规按熟练工标准计价。"
+      },
+      "hrm-job-families": {
+        "title": "岗位族",
+        "singularTitle": "岗位族",
+        "description": "组织的工种 — 将级别分组的稳定编码。"
+      },
+      "hrm-job-levels": {
+        "title": "级别",
+        "singularTitle": "级别",
+        "description": "每条阶梯的一级，含排序与等值标准声明。"
+      },
+      "hrm-pay-bands": {
+        "title": "薪酬带宽",
+        "singularTitle": "薪酬带宽",
+        "description": "按范围版本化的应付标准：变更一律新增行。"
+      },
+      "hrm-competency-frameworks": {
+        "title": "能力框架",
+        "singularTitle": "能力框架",
+        "description": "组织复用的分级技能词汇。"
+      },
+      "hrm-competencies": {
+        "title": "能力项",
+        "singularTitle": "能力项",
+        "description": "框架中的一项技能,可关联评估、职级与职位。"
       }
     },
     "fields": {
@@ -2774,7 +2838,45 @@
       "employerPayComponentId": "公司组成部分",
       "waitingPeriodDays": "等待期（天）",
       "requiresApproval": "需要批准",
-      "levelKey": "档次键"
+      "levelKey": "档次键",
+      "body": "正文",
+      "audience": "受众",
+      "startsOn": "开始于",
+      "endsOn": "结束于",
+      "action": "操作",
+      "reasonCode": "原因代码",
+      "requiresComment": "需要说明",
+      "trade": "工种",
+      "isApprentice": "学徒",
+      "apprenticeProgramRef": "项目编号",
+      "journeyClassificationId": "熟练工类别",
+      "apprenticeClassificationId": "学徒类别",
+      "sourceRef": "依据编号",
+      "jurisdictionCode": "管辖区",
+      "reciprocity": "互惠规则",
+      "ratePer100": "费率 / 100",
+      "lodgingOffset": "住宿抵扣",
+      "payComponentId": "工资组成部分",
+      "scheduleId": "工资表",
+      "ratioJourney": "熟练工",
+      "ratioApprentice": "学徒",
+      "measured": "衡量方式",
+      "rank": "排序",
+      "familyId": "岗位族",
+      "skillsWeight": "技能权重",
+      "effortWeight": "努力权重",
+      "responsibilityWeight": "责任权重",
+      "workingConditionsWeight": "条件权重",
+      "levelId": "级别",
+      "min": "下限",
+      "target": "目标",
+      "max": "上限",
+      "validityMonths": "有效期（月）",
+      "issuingBody": "签发机构",
+      "renewalLeadDays": "续期提前期（天）",
+      "requiresEvidence": "需要证明",
+      "extraCategories": "附加类别",
+      "frameworkId": "框架"
     },
     "fieldHelp": {
       "gapless": "无间隔表示序列中的每个编号都必须有记录，不能跳号。仅在法律或审计要求必须连续编号时启用。",
@@ -2853,7 +2955,12 @@
       "benefitEmployerComponent": "为公司行计价的公司缴款组成部分。计划有公司费用时必填。",
       "benefitWaitingPeriod": "可参保前的服务天数。",
       "benefitRequiresApproval": "参保需经经理批准后生效。",
-      "benefitLevelKey": "参保指定的档次键 — single、family — 调价后保持稳定。"
+      "benefitLevelKey": "参保指定的档次键 — single、family — 调价后保持稳定。",
+      "rateScheduleSource": "该工资表依据的裁定编号或协议ID。",
+      "rateScheduleJurisdiction": "工资包词汇，通用层为自由文本 — 由工资包解释。",
+      "perDiemComponent": "金额通过的所得组成部分。其税务处理是唯一的应税性声明。",
+      "hrmQualificationValidity": "永不过期的资质请留空。",
+      "hrmQualificationExtraCategories": "除六个内置类别外的自有类别词汇。"
     },
     "options": {
       "payFrequency": {
@@ -3250,6 +3357,58 @@
       "benefitProrationBasis": {
         "full_month": "整月 — 无论日期均为整月",
         "daily": "按日 — 按覆盖天数分摊"
+      },
+      "announcementAudience": {
+        "all": "所有人",
+        "managers": "管理者",
+        "employees": "员工"
+      },
+      "hrmAction": {
+        "hire": "入职",
+        "rehire": "重新入职",
+        "transfer": "调动",
+        "promotion": "晋升",
+        "demotion": "降职",
+        "pay_change": "薪酬变更",
+        "manager_change": "上级变更",
+        "location_change": "地点变更",
+        "schedule_change": "班次变更",
+        "leave_of_absence": "休假",
+        "return": "返岗",
+        "termination": "离职",
+        "profile_change": "档案变更",
+        "other": "其他"
+      },
+      "hrmScheduleKind": {
+        "prevailingWage": "现行工资",
+        "unionAgreement": "工会协议",
+        "orgDeclared": "企业自定"
+      },
+      "hrmReciprocity": {
+        "homeLocal": "属地标准",
+        "jobsiteLocal": "工地标准",
+        "higherOf": "取较高者"
+      },
+      "hrmPerDiemBasis": {
+        "flatDaily": "每日定额",
+        "distanceBrackets": "距离分档",
+        "hoursThreshold": "工时门槛"
+      },
+      "hrmRatioMeasured": {
+        "daily": "按日",
+        "weekly": "按周"
+      },
+      "payBandBasis": {
+        "annual": "年薪",
+        "hourly": "时薪"
+      },
+      "hrmQualificationCategory": {
+        "certification": "认证",
+        "license": "执照",
+        "training": "培训",
+        "medical": "医疗",
+        "clearance": "许可",
+        "other": "其他"
       }
     },
     "payroll": {
@@ -4344,6 +4503,18 @@
       "title": "人力资源",
       "description": "带有时点历史、人员数量和变更申请跟踪的雇用记录。仅读取人力资源基础数据，绝不驱动薪资。"
     },
+    "hrmCelebrations": {
+      "title": "团队庆祝",
+      "description": "在首页显示生日、入职周年和新成员。"
+    },
+    "hrmManagerNudges": {
+      "title": "管理者提醒",
+      "description": "在管理者首页显示离职与1:1提醒，仅限其团队。"
+    },
+    "homeAnnouncements": {
+      "title": "首页公告",
+      "description": "在首页显示管理员编写的公告卡片，可设置受众与日期。"
+    },
     "crm": {
       "title": "CRM",
       "description": "线索、潜在客户、商机、活动与销售预测。"
@@ -4483,6 +4654,114 @@
     "allocationsAtPosting": {
       "title": "过账时分摊",
       "description": "让分摊规则与授权脚本在过账时为交易自有日记账分录贡献额外总账明细。"
+    },
+    "automations": {
+      "title": "自动化",
+      "description": "基于Flows的触发器配方 — 计划、日期相对、字段变更、事件、文档和手动触发器按序执行操作。"
+    },
+    "automationDateTriggers": {
+      "title": "日期触发器",
+      "description": "按实体日期相对触发配方，如入职前几天。"
+    },
+    "automationFieldTriggers": {
+      "title": "字段触发器",
+      "description": "监视字段变更时触发配方。"
+    },
+    "automationWebhooks": {
+      "title": "Webhook操作",
+      "description": "从配方调用组织声明的签名Webhook端点。"
+    },
+    "automationSimulator": {
+      "title": "模拟器",
+      "description": "对真实主体无写入试运行配方。"
+    },
+    "hrmActionReasons": {
+      "title": "操作与原因代码",
+      "description": "每个变更申请必须填写HR操作和原因代码。"
+    },
+    "hrmEventVerbs": {
+      "title": "变更事件动词",
+      "description": "以追加事件取消、撤销和更正雇佣变更。"
+    },
+    "hrmConstructionCompliance": {
+      "title": "建筑合规",
+      "description": "自营施工的现行工资表、认证工资、工伤类别、学徒比例和每日津贴。需要工资、项目和考勤。"
+    },
+    "hrmPrevailingWage": {
+      "title": "现行工资",
+      "description": "根据已申报工资表按地点、分类和日期确定工资。"
+    },
+    "hrmCertifiedPayroll": {
+      "title": "认证工资",
+      "description": "通过工资包申报文件渲染的每周冻结报告。"
+    },
+    "hrmWorkersCompClasses": {
+      "title": "工伤类别",
+      "description": "按优先级规则将成本工时拆分到保险类别。"
+    },
+    "hrmApprenticeRatios": {
+      "title": "学徒比例",
+      "description": "按日执行熟练工与学徒比例；违规按熟练工标准计价。"
+    },
+    "hrmPerDiem": {
+      "title": "每日津贴",
+      "description": "根据已批准考勤计算每日津贴和差旅费并传入工资。"
+    },
+    "hrmCompensation": {
+      "title": "薪酬",
+      "description": "岗位体系与带宽：岗位应付薪酬与人员位置。"
+    },
+    "hrmMeritCycles": {
+      "title": "调薪周期",
+      "description": "冻结薪酬事实、决定加薪并推送标准的轮次。"
+    },
+    "hrmHeadcountPlans": {
+      "title": "人力规划",
+      "description": "按带宽测算的方案，批准后开启招聘。"
+    },
+    "hrmPayTransparency": {
+      "title": "薪酬透明",
+      "description": "根据薪酬事实冻结的指标与员工信息请求。"
+    },
+    "hrmCertifications": {
+      "title": "认证与执照",
+      "description": "员工资质台账：分类、所持证书、派工要求与到期提醒。关闭功能不会删除数据。"
+    },
+    "hrmDispatchGating": {
+      "title": "派工门禁",
+      "description": "拒绝缺少所需资质人员的排班指派。需要项目与排程。"
+    },
+    "hrmEquipmentQualifications": {
+      "title": "设备资质要求",
+      "description": "在设备档案上声明所需的资质类型。需要设备管理。"
+    },
+    "hrmCertificationAlerts": {
+      "title": "认证提醒",
+      "description": "通过收件箱向持有人及其主管发送每日到期通知。"
+    },
+    "hrmPerformance": {
+      "title": "绩效",
+      "description": "评估、目标、1:1、反馈、校准、人才与继任的总开关。"
+    },
+    "hrmOneOnOnes": {
+      "title": "1:1",
+      "description": "主管与下属的定期面谈,议程自动结转。"
+    },
+    "hrmFeedback": {
+      "title": "反馈",
+      "description": "在发生时记录的表扬、反馈与请求。"
+    },
+    "hrmCompetencies": {
+      "title": "能力",
+      "description": "与评估和职级挂钩的分级复用技能词汇。"
+    },
+    "hrmCalibration": {
+      "title": "校准",
+      "description": "评估周期上的评分矩阵,并附审计轨迹。"
+    },
+    "hrmSuccession": {
+      "title": "人才与继任",
+      "description": "各职位的人才评估与继任计划。"
     }
   },
   "backupsManager": {
@@ -4764,6 +5043,130 @@
       "previewAction": "仅表单预览。后端操作在激活后运行，使用已安装版本与您的权限。",
       "previewRecords": "使用拟议记录定义的表单预览。激活后，此工作区使用共享记录列表、筛选与抽屉。",
       "existingRecordsPreview": "此界面引用现有记录类型。激活后，有访问权限的用户可使用正式记录。"
+    }
+  },
+  "automations": {
+    "title": "自动化",
+    "description": "基于Flows的触发器配方 — 计划、日期相对、字段变更、事件、文档和手动触发器按序执行操作。",
+    "backToFlows": "返回流程",
+    "backToList": "返回自动化列表",
+    "list": {
+      "newButton": "新建自动化",
+      "newTitle": "新建自动化",
+      "nameLabel": "名称",
+      "namePlaceholder": "例如：入职前3天的欢迎任务",
+      "nameRequired": "请为自动化命名。",
+      "triggerLabel": "触发器",
+      "createFailed": "无法创建自动化。",
+      "create": "创建",
+      "cancel": "取消",
+      "neverRan": "从未运行",
+      "statusLabel": "状态",
+      "emptyTitle": "暂无自动化",
+      "emptyDescription": "自动化通过计划、日期、字段变更、事件、文档或手动触发器按序执行操作。",
+      "columnAutomation": "自动化",
+      "columnStatus": "状态",
+      "columnTrigger": "触发器",
+      "columnLastRun": "上次运行",
+      "columnError": "错误",
+      "columnActions": "操作",
+      "runNow": "立即运行",
+      "enable": "启用",
+      "disable": "禁用",
+      "actionFailed": "操作失败。",
+      "recipeLabel": "从配方开始",
+      "recipeBlank": "空白配方"
+    },
+    "status": {
+      "enabled": "已启用",
+      "draft": "草稿",
+      "disabled": "已禁用",
+      "error": "错误"
+    },
+    "triggerKinds": {
+      "schedule": "计划",
+      "date_relative": "日期相对",
+      "field_change": "字段变更",
+      "event": "事件",
+      "document": "文档",
+      "manual": "手动"
+    },
+    "builder": {
+      "pageTitle": "自动化构建器",
+      "description": "触发器、对象与条件、操作、模拟和运行日志。",
+      "buildTab": "构建",
+      "runsTab": "运行记录",
+      "saved": "已保存。",
+      "saveFailed": "保存失败。",
+      "nameTitle": "名称",
+      "saveName": "保存名称",
+      "triggerTitle": "触发器",
+      "saveTrigger": "保存触发器",
+      "cronLabel": "Cron",
+      "timezoneLabel": "时区",
+      "entityLabel": "实体",
+      "dateFieldLabel": "日期字段",
+      "offsetLabel": "偏移（天）",
+      "directionLabel": "方向",
+      "before": "之前",
+      "after": "之后",
+      "atTimeLabel": "时间（HH:MM）",
+      "fieldLabel": "字段",
+      "changedToLabel": "变更为（空=任意）",
+      "subjectKindLabel": "主体类型",
+      "eventKindLabel": "事件",
+      "documentUploaded": "已上传",
+      "documentSigned": "已签署",
+      "documentTemplated": "来自模板",
+      "whoWhenTitle": "对象与条件",
+      "whoWhenHelp": "范围过滤器限定配方适用对象；条件树决定触发时机。",
+      "rule_subsidiaryId": "子公司",
+      "rule_departmentId": "部门",
+      "rule_locationId": "地点",
+      "rule_workerType": "用工类型",
+      "rule_positionId": "职位",
+      "ruleBlank": "空=全部",
+      "conditionsMode": "条件",
+      "conditionsAll": "全部满足",
+      "conditionsAny": "满足其一",
+      "opLabel": "运算符",
+      "valueLabel": "值",
+      "remove": "删除",
+      "addCondition": "添加条件",
+      "saveWhoWhen": "保存对象与条件",
+      "actionsTitle": "操作",
+      "actionKindLabel": "操作类型",
+      "actionJsonLabel": "操作JSON",
+      "addAction": "添加操作",
+      "saveActions": "保存操作",
+      "simulateTitle": "模拟",
+      "simulateHelp": "无写入试运行 — 填写 entity:id，留空则抽样。",
+      "simulateSubjectLabel": "主体",
+      "simulateSubjectPlaceholder": "leave_request:<id>",
+      "simulateButton": "模拟运行",
+      "stepKind": "步骤",
+      "stepStatus": "状态",
+      "stepDetail": "详情",
+      "runStatus": "状态",
+      "runsEmpty": "暂无运行记录。",
+      "runVersion": "版本",
+      "runSubject": "主体",
+      "runCreated": "创建时间",
+      "runSteps": "步骤",
+      "viewSteps": "步骤",
+      "stepsTitle": "运行步骤",
+      "runLoadFailed": "无法加载运行记录。",
+      "closeSteps": "关闭",
+      "approvalTitle": "审批设置",
+      "approvalHelp": "例外审批按主体类型调整现有Flows关卡 — 阈值内以系统决策自动批准并列出每项检查，阈值外走人工流程。",
+      "approvalException": "例外审批",
+      "approvalThresholds": "阈值（JSON）",
+      "approvalAuto": "无规则时自动批准",
+      "approvalDelegate": "委托天数（空=从不）",
+      "approvalExclude": "排除发起人",
+      "approvalYes": "是",
+      "approvalNo": "否",
+      "approvalSave": "保存设置"
     }
   }
 }

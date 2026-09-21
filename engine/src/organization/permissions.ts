@@ -167,7 +167,29 @@ export const PERMISSION_CATALOGUE = [
   // elections and generates inputs. Admin-only like the employment keys.
   "hrm.benefits.read",
   "hrm.benefits.manage",
-  // HR-9 self-service — the person's own view and the manager's team.
+  // HR-13 begin: construction compliance — read sees rate tables,
+  // classifications, comp classes, per-diem policies, certified runs and
+  // findings; manage authors them and runs generation, approval, voids
+  // and finding transitions. Admin-only like the employment keys above.
+  "hrm.construction.read",
+  "hrm.construction.manage",
+  // HR-13 end
+  // HR-14 begin: certifications and dispatch gating — read sees the
+  // taxonomy, held qualifications, requirements and alerts; manage
+  // records, verifies, renews, revokes and authors requirements.
+  // Admin-only like the employment keys above.
+  "hrm.certifications.read",
+  "hrm.certifications.manage",
+  // HR-14 end
+  // HR-12 compensation (0221/0222) — the same confidentiality rule as
+  // employment: who is paid what, and whether pay is equitable, are
+  // never riders on time.*, payroll.*, or parties.*. read = bands,
+  // architecture and cycle reads; manage = cycles, push, plans,
+  // snapshots; approve = the Flows gate on cycle decisions.
+  // Admin-only like the employment keys above.
+  "hrm.compensation.read",
+  "hrm.compensation.manage",
+  "hrm.compensation.approve",
   // self.read sees only the actor's own employment summary, requests and
   // steps (every read scopes by the party behind the login, never by a
   // caller-supplied id); self.request files profile-change proposals for
@@ -205,6 +227,15 @@ export const PERMISSION_CATALOGUE = [
   // (assignees can always act on their OWN gates regardless of this key).
   "flows.manage",
   "flows.approve",
+  // HR-16 automations on Flows (0226) — the trigger side. read sees recipes
+  // and the run log; manage authors/enables recipes and tunes approval
+  // settings; run fires a recipe now. Built-in admin roles, not HR roles:
+  // recipes can start processes, write fields and call webhooks.
+  // HR-16 begin
+  "automations.read",
+  "automations.manage",
+  "automations.run",
+  // HR-16 end
   // Apps — installable packages (sandboxed frontend + governed backend).
   // `apps.use` runs an installed App; `apps.manage` installs/upgrades/removes.
   "apps.use",
@@ -438,8 +469,23 @@ export const PERMISSION_GROUPS: {
       { key: "hrm.benefits.manage", labelKey: permissionLabelKey("hrm.benefits.manage") },
       { key: "hrm.self.read", labelKey: permissionLabelKey("hrm.self.read") },
       { key: "hrm.self.request", labelKey: permissionLabelKey("hrm.self.request") },
+      // HR-12 begin
+      { key: "hrm.compensation.read", labelKey: permissionLabelKey("hrm.compensation.read") },
+      { key: "hrm.compensation.manage", labelKey: permissionLabelKey("hrm.compensation.manage") },
+      { key: "hrm.compensation.approve", labelKey: permissionLabelKey("hrm.compensation.approve") },
+      // HR-12 end
       { key: "hrm.team.read", labelKey: permissionLabelKey("hrm.team.read") },
       { key: "hrm.team.manage", labelKey: permissionLabelKey("hrm.team.manage") },
+      // HR-13 begin: appended after the team keys so the pinned group
+      // order (admin keys, self keys, team keys, construction keys) holds.
+      { key: "hrm.construction.read", labelKey: permissionLabelKey("hrm.construction.read") },
+      { key: "hrm.construction.manage", labelKey: permissionLabelKey("hrm.construction.manage") },
+      // HR-13 end
+      // HR-14 begin: appended after construction; group order pins admin,
+      // self, team, construction, then certifications keys.
+      { key: "hrm.certifications.read", labelKey: permissionLabelKey("hrm.certifications.read") },
+      { key: "hrm.certifications.manage", labelKey: permissionLabelKey("hrm.certifications.manage") },
+      // HR-14 end
     ],
   },
   {
@@ -491,6 +537,11 @@ export const PERMISSION_GROUPS: {
     permissions: [
       { key: "flows.manage", labelKey: permissionLabelKey("flows.manage") },
       { key: "flows.approve", labelKey: permissionLabelKey("flows.approve") },
+      // HR-16 begin
+      { key: "automations.read", labelKey: permissionLabelKey("automations.read") },
+      { key: "automations.manage", labelKey: permissionLabelKey("automations.manage") },
+      { key: "automations.run", labelKey: permissionLabelKey("automations.run") },
+      // HR-16 end
     ],
   },
   {

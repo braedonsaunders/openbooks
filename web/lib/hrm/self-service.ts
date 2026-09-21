@@ -2,13 +2,18 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import { actorHasTeam, findTeamEmploymentIdsForParty } from '@openbooks/engine/src/hrm/self-service/team-read.ts'
-import {
-  getMyProfile,
+import { getMyProfile,
   getMyRequests,
   getMySteps,
   type MyRequest,
   type MyStep,
 } from '@openbooks/engine/src/hrm/self-service/self-read.ts'
+import {
+  getMyBenefitsWorkspace,
+  getMyReviewWorkspace,
+  loadManagerOwedReviews,
+  selfWorkspaceCapabilities,
+} from '@openbooks/engine/src/hrm/self-service/my-work.ts'
 import { getTeamView, type TeamView } from '@openbooks/engine/src/hrm/self-service/team-read.ts'
 import { HrmAuthorizationError } from '@openbooks/engine/src/hrm/authorization.ts'
 import { SelfServiceError } from '@openbooks/engine/src/hrm/self-service/actor.ts'
@@ -16,6 +21,8 @@ import { can, type Authz } from '../authz'
 import type { DirectoryItem } from '../../components/module-home/ui'
 import type { ModuleHomeTab } from '../../components/module-home/ui'
 import { loadMyLeave, type MyLeaveBalance } from './leave'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { listQualifications } from '@openbooks/engine/src/hrm/qualifications/qualifications.ts'
 
 /**
  * Me workspace loaders — the person's own view of their employment and the
@@ -36,9 +43,14 @@ export interface SelfServiceExtension {
   /** hrm-namespace message key for the label. */
   labelKey: string
   iconKey: string
+  /** Tab capability gating the rail entry: hidden is a fact, never a refusal. */
+  capability?: 'reviews' | 'benefits'
 }
 
-export const SELF_SERVICE_EXTENSIONS: SelfServiceExtension[] = []
+export const SELF_SERVICE_EXTENSIONS: SelfServiceExtension[] = [
+  { href: '/me/reviews', labelKey: 'me.tabs.reviews', iconKey: 'star', capability: 'reviews' },
+  { href: '/me/benefits', labelKey: 'me.tabs.benefits', iconKey: 'heart', capability: 'benefits' },
+]
 
 export type StatusVariant = 'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
 
@@ -61,24 +73,43 @@ function statusLabel(t: Catalog, prefix: string, status: string): string {
 }
 
 /** The Me strip: Overview, Profile, Leave (the /hrm/my-leave inbox as its
- * route), Checklists, and Team only when the actor holds direct reports. */
+ * route), Checklists, Reviews and Benefits only when the org holds review
+ * cycles / benefit plans at all, and Team only when the actor holds direct
+ * reports. Hidden tabs are facts, never refusals. */
 export async function meTabs(authz: Authz, activeHref: string): Promise<ModuleHomeTab[]> {
   const t = await getTranslations('hrm')
-  let hasTeam = false
-  try {
-    hasTeam = await actorHasTeam({ orgId: authz.user.orgId, actorId: authz.user.id })
-  } catch {
-    hasTeam = false
-  }
+  const [hasTeam, caps] = await Promise.all([
+    actorHasTeam({ orgId: authz.user.orgId, actorId: authz.user.id }).catch(() => false),
+    selfWorkspaceCapabilities(authz.user.orgId).catch(() => ({ hasReviewCycles: false, hasBenefitPlans: false })),
+  ])
   const tabs: ModuleHomeTab[] = [
     { href: '/me', label: t('me.tabs.overview'), active: activeHref === '/me' },
     { href: '/me/profile', label: t('me.tabs.profile'), active: activeHref === '/me/profile' },
     { href: '/hrm/my-leave', label: t('me.tabs.leave'), active: activeHref === '/hrm/my-leave' },
     { href: '/me/checklists', label: t('me.tabs.checklists'), active: activeHref === '/me/checklists' },
   ]
+  if (caps.hasReviewCycles || activeHref === '/me/reviews') {
+    tabs.push({ href: '/me/reviews', label: t('me.tabs.reviews'), active: activeHref === '/me/reviews' })
+  }
+  if (caps.hasBenefitPlans || activeHref === '/me/benefits') {
+    tabs.push({ href: '/me/benefits', label: t('me.tabs.benefits'), active: activeHref === '/me/benefits' })
+  }
   if (hasTeam || activeHref === '/me/team') {
     tabs.push({ href: '/me/team', label: t('me.tabs.team'), active: activeHref === '/me/team' })
   }
+  // HR-17 begin: the 1:1s tab shows only while hrmOneOnOnes is on — the
+  // page itself re-checks and 404s otherwise.
+  if (activeHref === '/me/one-on-ones' || (await meHasOneOnOnes(authz))) {
+    tabs.push({ href: '/me/one-on-ones', label: t('me.tabs.oneOnOnes'), active: activeHref === '/me/one-on-ones' })
+  }
+  // HR-17 end
+  // HR-12 begin: the Compensation tab shows only when the feature is on
+  // and the person has something to see (a band or a statement) — the
+  // page itself re-checks and 404s otherwise.
+  if (activeHref === '/me/compensation' || (await meHasCompensation(authz))) {
+    tabs.push({ href: '/me/compensation', label: t('me.tabs.compensation'), active: activeHref === '/me/compensation' })
+  }
+  // HR-12 end
   return tabs
 }
 
@@ -86,6 +117,53 @@ export interface MeRefusal {
   title: string
   message: string
 }
+
+// HR-12 begin: Me Compensation tab visibility — the person has a band
+// (an architected position with a covering band) or a statement. Read
+// failures resolve to false (the tab hides) rather than denying the
+// whole Me strip.
+async function meHasCompensation(authz: Authz): Promise<boolean> {
+  try {
+    const { isFeatureEnabled } = await import('../features')
+    if (!(await isFeatureEnabled(authz.user.orgId, 'hrmCompensation'))) return false
+    const { loadMyCompensation } = await import('./compensation')
+    const data = await loadMyCompensation(authz)
+    return data?.hasContent === true
+  } catch {
+    return false
+  }
+}
+// HR-12 end
+
+// HR-17 begin: Me 1:1s tab visibility — the hrmOneOnOnes switch. Read
+// failures resolve to false (the tab hides) rather than denying the
+// whole Me strip.
+async function meHasOneOnOnes(authz: Authz): Promise<boolean> {
+  try {
+    const { isFeatureEnabled } = await import('../features')
+    return await isFeatureEnabled(authz.user.orgId, 'hrmOneOnOnes')
+  } catch {
+    return false
+  }
+}
+// HR-17 end
+
+// HR-17 begin: Me team roster 1:1 column (hrmOneOnOnes) and per-report
+// praise action (hrmFeedback). Read failures resolve to hidden rather
+// than denying the whole team page.
+async function meContinuousOn(orgId: string): Promise<{ oneOnOnes: boolean; feedback: boolean }> {
+  try {
+    const { isFeatureEnabled } = await import('../features')
+    const [oneOnOnes, feedback] = await Promise.all([
+      isFeatureEnabled(orgId, 'hrmOneOnOnes'),
+      isFeatureEnabled(orgId, 'hrmFeedback'),
+    ])
+    return { oneOnOnes, feedback }
+  } catch {
+    return { oneOnOnes: false, feedback: false }
+  }
+}
+// HR-17 end
 
 function toRefusal(t: Catalog, error: unknown): MeRefusal | null {
   if (error instanceof SelfServiceError || error instanceof HrmAuthorizationError) {
@@ -153,6 +231,13 @@ export interface MeOverviewData {
   balancesTitle: string
   balances: MyLeaveBalance[]
   balancesEmpty: string
+  // HR-14 begin: the viewer's own certifications needing action.
+  qualificationsTitle: string
+  qualifications: MeQualificationRow[]
+  qualificationsEmpty: string
+  qualificationsEmptyDescription: string
+  qualificationsColumns: { type: string; expires: string; status: string }
+  // HR-14 end
   timeKindLabel: string
   valueKindLabel: string
   unlimitedLabel: string
@@ -188,6 +273,24 @@ function requestRows(t: Catalog, requests: MyRequest[]): MeRequestRow[] {
   }))
 }
 
+// HR-14 begin: the viewer's own certifications needing action —
+// expiring or expired rows across their employments, newest lapse
+// first. Status labels resolve from the shared qualification catalog,
+// never inline English.
+export interface MeQualificationRow {
+  id: string
+  typeName: string
+  expiresOn: string | null
+  statusLabel: string
+  statusVariant: StatusVariant
+}
+
+function qualificationVariant(status: string): StatusVariant {
+  if (status === 'expired') return 'destructive'
+  return 'warning'
+}
+// HR-14 end
+
 /** The Me overview: employment summary, open steps, pending requests,
  * balances, and the extension rail. Leave details ride the shared
  * self-service inbox loader so the numbers always agree. */
@@ -220,6 +323,16 @@ export async function loadMeOverview(authz: Authz): Promise<MeOverviewData> {
     },
     balancesTitle: t('me.overview.balancesTitle'),
     balancesEmpty: t('me.overview.balancesEmpty'),
+    // HR-14 begin
+    qualificationsTitle: t('me.overview.qualificationsTitle'),
+    qualificationsEmpty: t('me.overview.qualificationsEmpty'),
+    qualificationsEmptyDescription: t('me.overview.qualificationsEmptyDescription'),
+    qualificationsColumns: {
+      type: t('me.qualifications.columns.type'),
+      expires: t('me.qualifications.columns.expires'),
+      status: t('me.qualifications.columns.status'),
+    },
+    // HR-14 end
     timeKindLabel: t('myLeave.timeKind'),
     valueKindLabel: t('myLeave.valueKind'),
     unlimitedLabel: t('myLeave.unlimited'),
@@ -241,14 +354,20 @@ export async function loadMeOverview(authz: Authz): Promise<MeOverviewData> {
     employmentsEmptyDescription: t('me.overview.employmentsEmptyDescription'),
   }
   try {
-    const [profile, steps, requests, inbox, hasTeam] = await Promise.all([
+    const [profile, steps, requests, inbox, hasTeam, caps] = await Promise.all([
       getMyProfile({ orgId, actorId: authz.user.id }),
       getMySteps({ orgId, actorId: authz.user.id }),
       getMyRequests({ orgId, actorId: authz.user.id }),
       loadMyLeave(authz, {}).catch(() => null),
       actorHasTeam({ orgId, actorId: authz.user.id }).catch(() => false),
+      selfWorkspaceCapabilities(orgId).catch(() => ({ hasReviewCycles: false, hasBenefitPlans: false })),
     ])
-    const extensions: DirectoryItem[] = SELF_SERVICE_EXTENSIONS.map((extension) => ({
+    const visible = SELF_SERVICE_EXTENSIONS.filter(
+      (extension) =>
+        extension.capability === undefined ||
+        (extension.capability === 'reviews' ? caps.hasReviewCycles : caps.hasBenefitPlans),
+    )
+    const extensions: DirectoryItem[] = visible.map((extension) => ({
       href: extension.href,
       label: t.has(extension.labelKey) ? t(extension.labelKey) : extension.labelKey,
       iconKey: extension.iconKey,
@@ -272,6 +391,31 @@ export async function loadMeOverview(authz: Authz): Promise<MeOverviewData> {
       steps: stepRows(t, steps.slice(0, 5)),
       requests: requestRows(t, requests.filter((row) => row.status === 'draft' || row.status === 'pending_approval').slice(0, 5)),
       balances: inbox?.balances ?? [],
+      // HR-14 begin: the viewer's own expiring and expired
+      // certifications across their employments, lapsed first. A
+      // refusal or an off-switch resolves to the empty state, never a
+      // blank panel — the empty copy says nothing needs action.
+      qualifications: (
+        await Promise.all(
+          profile.employments.map((summary) =>
+            listQualifications(db, { orgId, actorId: authz.user.id, employmentId: summary.employmentId }).catch(() => []),
+          ),
+        )
+      )
+        .flat()
+        .filter((q) => q.status === 'expiring' || q.status === 'expired')
+        .sort((a, b) => (a.status === b.status ? (a.expiresOn ?? '').localeCompare(b.expiresOn ?? '') : a.status === 'expired' ? -1 : 1))
+        .slice(0, 5)
+        .map((q) => ({
+          id: q.id,
+          typeName: q.type.name,
+          expiresOn: q.expiresOn,
+          statusLabel: t.has(`qualifications.statusNames.${q.status}`)
+            ? (t(`qualifications.statusNames.${q.status}`) as string)
+            : q.status,
+          statusVariant: qualificationVariant(q.status),
+        })),
+      // HR-14 end
       extensions,
       hasExtensions: extensions.length > 0,
     }
@@ -287,6 +431,9 @@ export async function loadMeOverview(authz: Authz): Promise<MeOverviewData> {
       steps: [],
       requests: [],
       balances: [],
+      // HR-14 begin
+      qualifications: [],
+      // HR-14 end
       extensions: [],
       hasExtensions: false,
     }
@@ -519,6 +666,24 @@ export interface MeTeamReportRow {
   employmentId: string
   workerName: string
   workerHref: string | null
+  oneOnOneHref: string | null
+  oneOnOneLabel: string | null
+  feedback: {
+    subjectEmploymentId: string
+    requestedFromPartyId: string
+    subjectLabel: string
+    kinds: { value: string; label: string }[]
+    kindLabel: string
+    visibilities: { value: string; label: string }[]
+    visibilityLabel: string
+    bodyLabel: string
+    bodyPlaceholder: string
+    submitLabel: string
+    cancelLabel: string
+    closeHref: string
+    failed: string
+    openLabel: string
+  } | null
   title: string
   department: string
   employer: string
@@ -555,7 +720,8 @@ export interface MeTeamData {
   hasContent: boolean
   asOf: string
   rosterTitle: string
-  rosterColumns: { name: string; title: string; department: string; status: string; serviceStart: string }
+  rosterColumns: { name: string; title: string; department: string; status: string; serviceStart: string; oneOnOne: string; feedback: string }
+  continuousOn: boolean
   roster: MeTeamReportRow[]
   rosterEmpty: string
   stepsTitle: string
@@ -572,6 +738,11 @@ export interface MeTeamData {
   changesColumns: { employee: string; kind: string; status: string }
   pendingChanges: MeTeamChangeRow[]
   changesEmpty: string
+  owedTitle: string
+  owedColumns: { employee: string; cycle: string; status: string; due: string }
+  owedReviews: MeTeamOwedRow[]
+  owedEmpty: string
+  openReview: string
 }
 
 /** The manager's team: roster, steps assigned to the manager, pending
@@ -592,7 +763,14 @@ export async function loadMeTeam(authz: Authz): Promise<MeTeamData> {
       department: t('me.team.columns.department'),
       status: t('me.team.columns.status'),
       serviceStart: t('me.team.columns.serviceStart'),
+      oneOnOne: t('me.team.columns.oneOnOne'),
+      feedback: t('me.team.columns.feedback'),
     },
+    // HR-17 begin: the roster's 1:1 column and per-report praise action
+    // render only while their switches are on — rows never promise a
+    // surface that 404s. Resolved beside the roster below.
+    continuousOn: false,
+    // HR-17 end
     rosterEmpty: t('me.team.rosterEmpty'),
     stepsTitle: t('me.team.stepsTitle'),
     stepsColumns: {
@@ -609,7 +787,7 @@ export async function loadMeTeam(authz: Authz): Promise<MeTeamData> {
       hours: t('leave.columns.hours'),
     },
     leaveEmpty: t('me.team.leaveEmpty'),
-    approvalsHref: '/approvals',
+    approvalsHref: '/inbox',
     decideInApprovals: t('me.team.decideInApprovals'),
     changesTitle: t('me.team.changesTitle'),
     changesColumns: {
@@ -618,18 +796,67 @@ export async function loadMeTeam(authz: Authz): Promise<MeTeamData> {
       status: t('me.requests.columns.status'),
     },
     changesEmpty: t('me.team.changesEmpty'),
+    owedTitle: t('me.team.owedTitle'),
+    owedColumns: {
+      employee: t('me.team.columns.name'),
+      cycle: t('me.team.columns.cycle'),
+      status: t('me.team.columns.status'),
+      due: t('me.checklists.columns.due'),
+    },
+    owedEmpty: t('me.team.owedEmpty'),
+    openReview: t('me.team.openReview'),
   }
   try {
-    const team = await getTeamView({ orgId, actorId: authz.user.id })
+    const [team, owed] = await Promise.all([
+      getTeamView({ orgId, actorId: authz.user.id }),
+      // A report-less manager refuses inside getTeamView; the owed read
+      // answers empty on its own, so the refusal below still names NO_TEAM.
+      loadManagerOwedReviews({ orgId, actorId: authz.user.id }).catch(() => []),
+    ])
     const canOpenDrawer = can(authz, 'parties.read')
+    const continuous = await meContinuousOn(orgId).catch(() => ({ oneOnOnes: false, feedback: false }))
+    const feedbackKinds = [
+      { value: 'praise', label: t('performance.continuous.feedback.praise') },
+      { value: 'feedback', label: t('performance.continuous.feedback.feedbackKind') },
+      { value: 'request', label: t('performance.continuous.feedback.request') },
+    ]
+    const feedbackVisibilities = [
+      { value: 'public', label: t('performance.continuous.feedback.publicVis') },
+      { value: 'manager_and_subject', label: t('performance.continuous.feedback.managerAndSubject') },
+      { value: 'manager_only', label: t('performance.continuous.feedback.managerOnly') },
+      { value: 'subject_only', label: t('performance.continuous.feedback.subjectOnly') },
+    ]
     return {
       ...base,
       refusal: null,
       hasContent: true,
       asOf: team.asOf,
+      continuousOn: continuous.oneOnOnes || continuous.feedback,
       roster: team.reports.map((report) => ({
         employmentId: report.employmentId,
         workerName: report.workerName,
+        oneOnOneHref: continuous.oneOnOnes
+          ? `/me/one-on-ones?report=${encodeURIComponent(report.employmentId)}`
+          : null,
+        oneOnOneLabel: continuous.oneOnOnes ? t('me.team.oneOnOneLink') : null,
+        feedback: continuous.feedback
+          ? {
+              subjectEmploymentId: report.employmentId,
+              requestedFromPartyId: report.workerPartyId,
+              subjectLabel: report.workerName,
+              kinds: feedbackKinds,
+              kindLabel: t('performance.continuous.feedback.kindLabel'),
+              visibilities: feedbackVisibilities,
+              visibilityLabel: t('performance.continuous.feedback.visibilityLabel'),
+              bodyLabel: t('performance.continuous.feedback.bodyLabel'),
+              bodyPlaceholder: t('performance.continuous.feedback.bodyPlaceholder'),
+              submitLabel: t('performance.continuous.feedback.submitLabel'),
+              cancelLabel: t('performance.cancel'),
+              closeHref: '/me/team',
+              failed: t('performance.actionFailed'),
+              openLabel: t('performance.continuous.feedback.praiseAction'),
+            }
+          : null,
         // The employee drawer opens on the Employment tab only; a viewer
         // who cannot open the drawer (no parties.read) gets plain names.
         workerHref: canOpenDrawer
@@ -653,7 +880,7 @@ export async function loadMeTeam(authz: Authz): Promise<MeTeamData> {
         rangeLabel: `${request.startsOn} → ${request.endsOn}`,
         hours: request.hours,
         decideLabel: t('me.team.decideInApprovals'),
-        decideHref: '/approvals',
+        decideHref: '/inbox',
       })),
       pendingChanges: team.pendingChanges.map((request) => ({
         id: request.id,
@@ -662,7 +889,17 @@ export async function loadMeTeam(authz: Authz): Promise<MeTeamData> {
         statusLabel: statusLabel(t, 'me.requestStatus', request.status),
         statusVariant: statusVariant(request.status),
         decideLabel: t('me.team.decideInApprovals'),
-        decideHref: '/approvals',
+        decideHref: '/inbox',
+      })),
+      owedReviews: owed.map((row) => ({
+        reviewId: row.reviewId,
+        workerName: row.workerName,
+        cycleName: row.cycleName,
+        statusLabel: statusLabel(t, 'me.reviewStatus', row.status),
+        statusVariant: statusVariant(row.status),
+        dueOn: row.managerDueOn,
+        openLabel: t('me.team.openReview'),
+        openHref: row.drawerHref,
       })),
     }
   } catch (error) {
@@ -676,6 +913,453 @@ export async function loadMeTeam(authz: Authz): Promise<MeTeamData> {
       teamSteps: [],
       pendingLeave: [],
       pendingChanges: [],
+      owedReviews: [],
+    }
+  }
+}
+
+export interface MeTeamOwedRow {
+  reviewId: string
+  workerName: string
+  cycleName: string
+  statusLabel: string
+  statusVariant: StatusVariant
+  dueOn: string | null
+  openLabel: string
+  openHref: string
+}
+
+export interface MeReviewSelfRow {
+  reviewId: string
+  cycleName: string
+  periodLabel: string
+  dueOn: string | null
+  statusLabel: string
+  statusVariant: StatusVariant
+  openLabel: string
+  openHref: string
+}
+
+export interface MeReviewSharedRow {
+  reviewId: string
+  cycleName: string
+  statusLabel: string
+  statusVariant: StatusVariant
+  ratingLabel: string
+  sharedOn: string | null
+  canAcknowledge: boolean
+  acknowledgeLabel: string
+}
+
+export interface MeGoalRowData {
+  id: string
+  title: string
+  dueOn: string | null
+  statusLabel: string
+  statusVariant: StatusVariant
+  progressPercent: number
+  progressLabel: string
+  updateLabel: string
+  updateHref: string
+}
+
+export interface MeReviewsData {
+  title: string
+  description: string
+  tabs: ModuleHomeTab[]
+  refusal: MeRefusal | null
+  hasContent: boolean
+  selfTitle: string
+  selfColumns: { cycle: string; period: string; due: string; status: string }
+  selfRows: MeReviewSelfRow[]
+  selfEmpty: string
+  selfEmptyDescription: string
+  answerInDrawer: string
+  sharedTitle: string
+  sharedColumns: { cycle: string; status: string; rating: string; shared: string }
+  sharedRows: MeReviewSharedRow[]
+  sharedEmpty: string
+  sharedEmptyDescription: string
+  acknowledgeFailed: string
+  goalsTitle: string
+  goalsColumns: { title: string; due: string; status: string; progress: string }
+  goalRows: MeGoalRowData[]
+  goalsEmpty: string
+  goalsEmptyDescription: string
+  goalDialogOpen: boolean
+  goalDialogCloseHref: string
+  goalDialog: {
+    goalId: string
+    title: string
+    description: string
+    percentLabel: string
+    noteLabel: string
+    notePlaceholder: string
+    submitLabel: string
+    cancelLabel: string
+    submitFailed: string
+  } | null
+}
+
+/** The person's own review cycles: owed self-assessments, shared manager
+ * reviews with the acknowledge action, and their own goals with progress.
+ * Answering rides the existing performance drawer (rows deep-link there);
+ * acknowledge and goal progress post to the Me API routes, which refuse
+ * with the service message intact. */
+export async function loadMeReviews(
+  authz: Authz,
+  sp: Record<string, string | undefined> = {},
+): Promise<MeReviewsData> {
+  const orgId = authz.user.orgId
+  const t = (await getTranslations('hrm')) as unknown as Catalog
+  const base = {
+    title: t('me.reviews.title'),
+    description: t('me.reviews.description'),
+    tabs: await meTabs(authz, '/me/reviews'),
+    selfTitle: t('me.reviews.selfTitle'),
+    selfColumns: {
+      cycle: t('me.reviews.columns.cycle'),
+      period: t('me.reviews.columns.period'),
+      due: t('me.checklists.columns.due'),
+      status: t('me.reviews.columns.status'),
+    },
+    selfEmpty: t('me.reviews.selfEmpty'),
+    selfEmptyDescription: t('me.reviews.selfEmptyDescription'),
+    answerInDrawer: t('me.reviews.answerInDrawer'),
+    sharedTitle: t('me.reviews.sharedTitle'),
+    sharedColumns: {
+      cycle: t('me.reviews.columns.cycle'),
+      status: t('me.reviews.columns.status'),
+      rating: t('me.reviews.columns.rating'),
+      shared: t('me.reviews.columns.shared'),
+    },
+    sharedEmpty: t('me.reviews.sharedEmpty'),
+    sharedEmptyDescription: t('me.reviews.sharedEmptyDescription'),
+    acknowledgeFailed: t('me.reviews.acknowledgeFailed'),
+    goalsTitle: t('me.reviews.goalsTitle'),
+    goalsColumns: {
+      title: t('me.reviews.columns.goal'),
+      due: t('me.checklists.columns.due'),
+      status: t('me.reviews.columns.status'),
+      progress: t('me.reviews.columns.progress'),
+    },
+    goalsEmpty: t('me.reviews.goalsEmpty'),
+    goalsEmptyDescription: t('me.reviews.goalsEmptyDescription'),
+    goalDialogCloseHref: '/me/reviews',
+  }
+  try {
+    const workspace = await getMyReviewWorkspace({ orgId, actorId: authz.user.id })
+    const selfRows: MeReviewSelfRow[] = []
+    const sharedRows: MeReviewSharedRow[] = []
+    for (const group of workspace.cycles) {
+      if (group.mySelf) {
+        selfRows.push({
+          reviewId: group.mySelf.id,
+          cycleName: group.name,
+          periodLabel: `${group.periodStartOn} → ${group.periodEndOn}`,
+          dueOn: group.mySelf.selfDueOn,
+          statusLabel: statusLabel(t, 'me.reviewStatus', group.mySelf.status),
+          statusVariant: statusVariant(group.mySelf.status),
+          openLabel: t('me.reviews.answerInDrawer'),
+          openHref: group.mySelf.drawerHref,
+        })
+      }
+      for (const shared of group.sharedWithMe) {
+        sharedRows.push({
+          reviewId: shared.id,
+          cycleName: group.name,
+          statusLabel: statusLabel(t, 'me.reviewStatus', shared.status),
+          statusVariant: statusVariant(shared.status),
+          ratingLabel: shared.overallRating ?? t('me.overview.notAvailable'),
+          sharedOn: shared.sharedAt,
+          canAcknowledge: shared.status === 'shared',
+          acknowledgeLabel: t('me.reviews.acknowledge'),
+        })
+      }
+    }
+    const goalId = typeof sp.goal === 'string' && sp.goal.length > 0 ? sp.goal : null
+    const goalDialog =
+      goalId && workspace.goals.some((goal) => goal.id === goalId)
+        ? {
+            goalId,
+            title: t('me.reviews.goalDialogTitle'),
+            description: t('me.reviews.goalDialogDescription'),
+            percentLabel: t('me.reviews.columns.progress'),
+            noteLabel: t('me.reviews.goalNoteLabel'),
+            notePlaceholder: t('me.reviews.goalNotePlaceholder'),
+            submitLabel: t('me.reviews.goalSubmit'),
+            cancelLabel: t('me.profile.cancel'),
+            submitFailed: t('me.reviews.goalFailed'),
+          }
+        : null
+    return {
+      ...base,
+      refusal: null,
+      hasContent: true,
+      selfRows,
+      sharedRows,
+      goalRows: workspace.goals.map((goal) => ({
+        id: goal.id,
+        title: goal.title,
+        dueOn: goal.dueOn,
+        statusLabel: statusLabel(t, 'me.goalStatus', goal.status),
+        statusVariant: statusVariant(goal.status),
+        progressPercent: goal.progressPercent,
+        progressLabel: `${goal.progressPercent}%`,
+        updateLabel: t('me.reviews.goalUpdate'),
+        updateHref: `/me/reviews?goal=${encodeURIComponent(goal.id)}`,
+      })),
+      goalDialogOpen: goalDialog !== null,
+      goalDialog,
+    }
+  } catch (error) {
+    const refusal = toRefusal(t, error)
+    return {
+      ...base,
+      refusal,
+      hasContent: refusal === null,
+      selfRows: [],
+      sharedRows: [],
+      goalRows: [],
+      goalDialogOpen: false,
+      goalDialog: null,
+    }
+  }
+}
+
+export interface MeElectionRow {
+  id: string
+  planCode: string
+  planName: string
+  coverageLabel: string | null
+  statusLabel: string
+  statusVariant: StatusVariant
+  effectiveLabel: string
+  employeeAmount: string | null
+  changeHref: string | null
+  changeLabel: string
+}
+
+export interface MeWindowRow {
+  id: string
+  name: string
+  kindLabel: string
+  rangeLabel: string
+}
+
+export interface MeDependentRow {
+  displayName: string
+  relationship: string
+}
+
+export interface MeBenefitPlanOption {
+  value: string
+  label: string
+  levels: { value: string; label: string }[]
+}
+
+export interface MeBenefitsData {
+  title: string
+  description: string
+  tabs: ModuleHomeTab[]
+  refusal: MeRefusal | null
+  hasContent: boolean
+  electionsTitle: string
+  electionsColumns: { plan: string; coverage: string; status: string; effective: string; monthly: string }
+  elections: MeElectionRow[]
+  electionsEmpty: string
+  electionsEmptyDescription: string
+  monthlyHint: string
+  windowsTitle: string
+  windowsColumns: { name: string; kind: string; range: string }
+  windows: MeWindowRow[]
+  windowsEmpty: string
+  windowsEmptyDescription: string
+  dependentsTitle: string
+  dependentsColumns: { name: string; relationship: string }
+  dependents: MeDependentRow[]
+  dependentsEmpty: string
+  electLabel: string
+  electHref: string
+  dialogOpen: boolean
+  dialogCloseHref: string
+  dialog: {
+    title: string
+    description: string
+    employmentLabel: string
+    employments: { value: string; label: string }[]
+    planLabel: string
+    plans: MeBenefitPlanOption[]
+    levelLabel: string
+    windowLabel: string
+    windows: { value: string; label: string }[]
+    fromLabel: string
+    lifeEventLabel: string
+    lifeEventPlaceholder: string
+    submitLabel: string
+    cancelLabel: string
+    submitFailed: string
+  } | null
+  changeDialogOpen: boolean
+  changeDialog: {
+    enrollmentId: string
+    planName: string
+    title: string
+    description: string
+    levelLabel: string
+    levels: { value: string; label: string }[]
+    dateLabel: string
+    reasonLabel: string
+    reasonPlaceholder: string
+    submitLabel: string
+    cancelLabel: string
+    submitFailed: string
+  } | null
+}
+
+/** The person's benefits: current elections with the stored payroll
+ * amounts, the open windows covering their employer, dependents on file,
+ * and the elect/change dialogs. Amounts render the stored per-period
+ * figures — never a recomputed number. */
+export async function loadMeBenefits(
+  authz: Authz,
+  sp: Record<string, string | undefined> = {},
+): Promise<MeBenefitsData> {
+  const orgId = authz.user.orgId
+  const t = (await getTranslations('hrm')) as unknown as Catalog
+  const base = {
+    title: t('me.benefits.title'),
+    description: t('me.benefits.description'),
+    tabs: await meTabs(authz, '/me/benefits'),
+    electionsTitle: t('me.benefits.electionsTitle'),
+    electionsColumns: {
+      plan: t('me.benefits.columns.plan'),
+      coverage: t('me.benefits.columns.coverage'),
+      status: t('me.benefits.columns.status'),
+      effective: t('me.benefits.columns.effective'),
+      monthly: t('me.benefits.columns.monthly'),
+    },
+    monthlyHint: t('me.benefits.monthlyHint'),
+    electionsEmpty: t('me.benefits.electionsEmpty'),
+    electionsEmptyDescription: t('me.benefits.electionsEmptyDescription'),
+    windowsTitle: t('me.benefits.windowsTitle'),
+    windowsColumns: {
+      name: t('me.benefits.columns.window'),
+      kind: t('me.benefits.columns.kind'),
+      range: t('me.benefits.columns.range'),
+    },
+    windowsEmpty: t('me.benefits.windowsEmpty'),
+    windowsEmptyDescription: t('me.benefits.windowsEmptyDescription'),
+    dependentsTitle: t('me.benefits.dependentsTitle'),
+    dependentsColumns: {
+      name: t('me.benefits.columns.dependent'),
+      relationship: t('me.benefits.columns.relationship'),
+    },
+    dependentsEmpty: t('me.benefits.dependentsEmpty'),
+    electLabel: t('me.benefits.elect'),
+    electHref: '/me/benefits?elect=1',
+    dialogCloseHref: '/me/benefits',
+  }
+  try {
+    const [workspace, profile] = await Promise.all([
+      getMyBenefitsWorkspace({ orgId, actorId: authz.user.id }),
+      getMyProfile({ orgId, actorId: authz.user.id }),
+    ])
+    const employments = profile.employments.map((summary) => ({
+      value: summary.employmentId,
+      label: `${summary.employerName} — ${summary.jobTitle ?? t('me.overview.notAvailable')}`,
+    }))
+    const electOpen = sp.elect === '1'
+    const changeId = typeof sp.change === 'string' && sp.change.length > 0 ? sp.change : null
+    const changeTarget = changeId ? workspace.elections.find((row) => row.id === changeId) : undefined
+    return {
+      ...base,
+      refusal: null,
+      hasContent: true,
+      elections: workspace.elections.map((row) => ({
+        id: row.id,
+        planCode: row.planCode,
+        planName: `${row.planCode} — ${row.planName}`,
+        coverageLabel: row.coverageLabel,
+        statusLabel: statusLabel(t, 'me.enrollmentStatus', row.status),
+        statusVariant: statusVariant(row.status),
+        effectiveLabel: row.effectiveTo ? `${row.effectiveFrom} → ${row.effectiveTo}` : `${row.effectiveFrom} → …`,
+        employeeAmount:
+          row.employeeAmountPerPeriod != null ? `${row.employeeAmountPerPeriod} ${row.currency}` : null,
+        changeHref: row.status === 'active' ? `/me/benefits?change=${encodeURIComponent(row.id)}` : null,
+        changeLabel: t('me.benefits.change'),
+      })),
+      windows: workspace.openWindows.map((window) => ({
+        id: window.id,
+        name: window.name,
+        kindLabel: statusLabel(t, 'me.windowKinds', window.kind),
+        rangeLabel: `${window.opensOn} → ${window.closesOn}`,
+      })),
+      dependents: workspace.dependents.map((row) => ({
+        displayName: row.displayName,
+        relationship: row.relationship,
+      })),
+      dialogOpen: electOpen,
+      dialog: electOpen
+        ? {
+            title: t('me.benefits.electTitle'),
+            description: t('me.benefits.electDescription'),
+            employmentLabel: t('me.profile.employment'),
+            employments,
+            planLabel: t('me.benefits.columns.plan'),
+            plans: workspace.plans.map((plan) => ({
+              value: plan.id,
+              label: `${plan.code} — ${plan.name}`,
+              levels: plan.levels.map((level) => ({ value: level.levelKey, label: level.label })),
+            })),
+            levelLabel: t('me.benefits.columns.coverage'),
+            windowLabel: t('me.benefits.columns.window'),
+            windows: workspace.openWindows.map((window) => ({
+              value: window.id,
+              label: `${window.name} (${window.opensOn} → ${window.closesOn})`,
+            })),
+            fromLabel: t('me.benefits.fromLabel'),
+            lifeEventLabel: t('me.benefits.lifeEventLabel'),
+            lifeEventPlaceholder: t('me.benefits.lifeEventPlaceholder'),
+            submitLabel: t('me.benefits.electSubmit'),
+            cancelLabel: t('me.profile.cancel'),
+            submitFailed: t('me.benefits.electFailed'),
+          }
+        : null,
+      changeDialogOpen: changeTarget !== undefined,
+      changeDialog:
+        changeTarget !== undefined
+          ? {
+              enrollmentId: changeTarget.id,
+              planName: `${changeTarget.planCode} — ${changeTarget.planName}`,
+              title: t('me.benefits.changeTitle'),
+              description: t('me.benefits.changeDescription'),
+              levelLabel: t('me.benefits.columns.coverage'),
+              levels: (
+                workspace.plans.find((plan) => plan.code === changeTarget.planCode)?.levels ?? []
+              ).map((level) => ({ value: level.levelKey, label: level.label })),
+              dateLabel: t('me.benefits.fromLabel'),
+              reasonLabel: t('me.profile.reason'),
+              reasonPlaceholder: t('me.benefits.changeReasonPlaceholder'),
+              submitLabel: t('me.benefits.changeSubmit'),
+              cancelLabel: t('me.profile.cancel'),
+              submitFailed: t('me.benefits.changeFailed'),
+            }
+          : null,
+    }
+  } catch (error) {
+    const refusal = toRefusal(t, error)
+    return {
+      ...base,
+      refusal,
+      hasContent: refusal === null,
+      elections: [],
+      windows: [],
+      dependents: [],
+      dialogOpen: false,
+      dialog: null,
+      changeDialogOpen: false,
+      changeDialog: null,
     }
   }
 }

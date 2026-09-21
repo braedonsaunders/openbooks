@@ -981,7 +981,17 @@
     "hrm_self_read": "Voir son résumé d'emploi",
     "hrm_self_request": "Déposer ses modifications de profil",
     "hrm_team_read": "Voir ses subordonnés directs aujourd'hui",
-    "hrm_team_manage": "Traiter les étapes assignées par le responsable"
+    "hrm_team_manage": "Traiter les étapes assignées par le responsable",
+    "automations_read": "Voir les recettes d'automatisation et le journal",
+    "automations_manage": "Créer des automatisations et régler les approbations",
+    "automations_run": "Exécuter les automatisations",
+    "hrm_construction_read": "Voir la conformité construction",
+    "hrm_construction_manage": "Gérer la conformité construction",
+    "hrm_compensation_read": "Voir fourchettes, architecture et cycles",
+    "hrm_compensation_manage": "Mener les cycles, transférer les taux, créer plans et mesures",
+    "hrm_compensation_approve": "Décider les lignes via le circuit d'approbation",
+    "hrm_certifications_read": "Voir les certifications et l’aptitude à la répartition",
+    "hrm_certifications_manage": "Gérer les types de certification, les exigences et les renouvellements"
   },
   "ai": {
     "metaTitle": "Fournisseurs d'IA",
@@ -2419,6 +2429,60 @@
         "title": "Niveaux de régime",
         "singularTitle": "Niveau de régime",
         "description": "Niveaux de couverture par régime — employé seul, famille — avec les coûts du niveau."
+      },
+      "home-announcements": {
+        "title": "Annonces",
+        "description": "Annonces de l'entreprise pour l'accueil, avec audience et dates."
+      },
+      "construction-classifications": {
+        "title": "Classifications de métier",
+        "singularTitle": "Classification de métier",
+        "description": "Taxonomie des métiers pour la paie en vigueur : classes de compagnons et d'apprentis avec la classe de compagnon de chaque ratio."
+      },
+      "construction-rate-schedules": {
+        "title": "Grilles salariales",
+        "singularTitle": "Grille salariale",
+        "description": "Grilles en vigueur, syndicales et déclarées avec portée projet, site et filiale plus réciprocité."
+      },
+      "construction-comp-classes": {
+        "title": "Classes d'indemnisation",
+        "singularTitle": "Classe d'indemnisation",
+        "description": "Classes de prime avec taux pour 100 là où déclaré ; les règles de priorité fixent le prix de chaque heure."
+      },
+      "construction-per-diem-policies": {
+        "title": "Règles journalières",
+        "singularTitle": "Règle journalière",
+        "description": "Règles de calcul des indemnités par base. La fiscalité vit sur la composante de paie, jamais ici."
+      },
+      "construction-ratio-rules": {
+        "title": "Règles de ratio",
+        "singularTitle": "Règle de ratio",
+        "description": "Ratios compagnon-apprenti par grille, mesurés quotidiennement ou hebdomadairement. L'écart se paie au taux compagnon."
+      },
+      "hrm-job-families": {
+        "title": "Familles d'emplois",
+        "singularTitle": "Famille d'emplois",
+        "description": "Les métiers de l'organisation — codes stables regroupant les niveaux."
+      },
+      "hrm-job-levels": {
+        "title": "Niveaux",
+        "singularTitle": "Niveau",
+        "description": "Un échelon par grille avec rang et critères d'égale valeur déclarés."
+      },
+      "hrm-pay-bands": {
+        "title": "Fourchettes",
+        "singularTitle": "Fourchette",
+        "description": "Lignes versionnées de salaire CIBLE par périmètre : tout changement est une ligne nouvelle."
+      },
+      "hrm-competency-frameworks": {
+        "title": "Référentiels de compétences",
+        "singularTitle": "Référentiel",
+        "description": "Le vocabulaire de compétences réutilisable avec niveaux."
+      },
+      "hrm-competencies": {
+        "title": "Compétences",
+        "singularTitle": "Compétence",
+        "description": "Une compétence d'un référentiel, liable aux évaluations, niveaux et postes."
       }
     },
     "fields": {
@@ -2729,7 +2793,45 @@
       "employerPayComponentId": "Composante de l'employeur",
       "waitingPeriodDays": "Attente (jours)",
       "requiresApproval": "Approbation requise",
-      "levelKey": "Clé du niveau"
+      "levelKey": "Clé du niveau",
+      "body": "Corps",
+      "audience": "Audience",
+      "startsOn": "Début le",
+      "endsOn": "Fin le",
+      "action": "Action",
+      "reasonCode": "Code de motif",
+      "requiresComment": "Commentaire requis",
+      "trade": "Métier",
+      "isApprentice": "Apprenti",
+      "apprenticeProgramRef": "Réf programme",
+      "journeyClassificationId": "Classe compagnon",
+      "apprenticeClassificationId": "Classe apprenti",
+      "sourceRef": "Réf source",
+      "jurisdictionCode": "Juridiction",
+      "reciprocity": "Réciprocité",
+      "ratePer100": "Taux / 100",
+      "lodgingOffset": "Déduction logement",
+      "payComponentId": "Composante de paie",
+      "scheduleId": "Grille",
+      "ratioJourney": "Compagnon",
+      "ratioApprentice": "Apprenti",
+      "measured": "Mesure",
+      "rank": "Rang",
+      "familyId": "Famille",
+      "skillsWeight": "Poids des compétences",
+      "effortWeight": "Poids de l'effort",
+      "responsibilityWeight": "Poids des responsabilités",
+      "workingConditionsWeight": "Poids des conditions",
+      "levelId": "Niveau",
+      "min": "Minimum",
+      "target": "Cible",
+      "max": "Maximum",
+      "validityMonths": "Validité (mois)",
+      "issuingBody": "Organisme délivreur",
+      "renewalLeadDays": "Préavis de renouvellement (jours)",
+      "requiresEvidence": "Justificatif requis",
+      "extraCategories": "Catégories supplémentaires",
+      "frameworkId": "Référentiel"
     },
     "fieldHelp": {
       "gapless": "Sans rupture signifie que chaque numéro de la séquence doit être justifié, sans aucun numéro sauté. Activez cette option uniquement si vos obligations légales ou d’audit imposent une numérotation ininterrompue.",
@@ -2808,7 +2910,12 @@
       "benefitEmployerComponent": "Composante de contribution employeur tarifant ses lignes. Obligatoire si le régime tarife un coût employeur.",
       "benefitWaitingPeriod": "Jours de service avant de pouvoir adhérer au régime.",
       "benefitRequiresApproval": "Les adhésions attendent l'approbation d'un gestionnaire.",
-      "benefitLevelKey": "Clé du niveau nommée par l'adhésion — single, family — stable malgré les retarifications."
+      "benefitLevelKey": "Clé du niveau nommée par l'adhésion — single, family — stable malgré les retarifications.",
+      "rateScheduleSource": "Numéro de décision ou identifiant de convention derrière cette grille.",
+      "rateScheduleJurisdiction": "Vocabulaire du pack, texte libre dans la couche générique — le pack l'interprète.",
+      "perDiemComponent": "Composante de gain par laquelle transitent les montants. Son traitement fiscal est l'unique déclaration.",
+      "hrmQualificationValidity": "Laisser vide pour les qualifications sans expiration.",
+      "hrmQualificationExtraCategories": "Vocabulaire de catégories propre au-delà des six intégrées."
     },
     "options": {
       "timeClassification": {
@@ -3205,6 +3312,58 @@
       "benefitProrationBasis": {
         "full_month": "Mois complet — tout le mois quelles que soient les dates",
         "daily": "Quotidien — au prorata des jours couverts"
+      },
+      "announcementAudience": {
+        "all": "Tous",
+        "managers": "Managers",
+        "employees": "Employés"
+      },
+      "hrmAction": {
+        "hire": "Embauche",
+        "rehire": "Réembauche",
+        "transfer": "Mutation",
+        "promotion": "Promotion",
+        "demotion": "Rétrogradation",
+        "pay_change": "Changement de salaire",
+        "manager_change": "Changement de manager",
+        "location_change": "Changement de site",
+        "schedule_change": "Changement d'horaire",
+        "leave_of_absence": "Congé",
+        "return": "Retour",
+        "termination": "Départ",
+        "profile_change": "Changement de profil",
+        "other": "Autre"
+      },
+      "hrmScheduleKind": {
+        "prevailingWage": "Salaire en vigueur",
+        "unionAgreement": "Convention syndicale",
+        "orgDeclared": "Déclaré"
+      },
+      "hrmReciprocity": {
+        "homeLocal": "Section d'origine",
+        "jobsiteLocal": "Lieu du chantier",
+        "higherOf": "Le plus élevé"
+      },
+      "hrmPerDiemBasis": {
+        "flatDaily": "Forfait journalier",
+        "distanceBrackets": "Tranches de distance",
+        "hoursThreshold": "Seuil d'heures"
+      },
+      "hrmRatioMeasured": {
+        "daily": "Quotidienne",
+        "weekly": "Hebdomadaire"
+      },
+      "payBandBasis": {
+        "annual": "Annuel",
+        "hourly": "Horaire"
+      },
+      "hrmQualificationCategory": {
+        "certification": "Certification",
+        "license": "Licence",
+        "training": "Formation",
+        "medical": "Médicale",
+        "clearance": "Habilitation",
+        "other": "Autre"
       }
     },
     "laborCosting": {
@@ -4344,6 +4503,18 @@
       "title": "Ressources humaines",
       "description": "Dossiers d'emploi avec historique à date, effectifs et suivi des demandes de changement. Lit le socle RH ; ne pilote jamais la paie."
     },
+    "hrmCelebrations": {
+      "title": "Célébrations d'équipe",
+      "description": "Anniversaires, anniversaires de travail et nouveaux arrivants sur la page d'accueil."
+    },
+    "hrmManagerNudges": {
+      "title": "Rappels manager",
+      "description": "Alertes d'attrition et de 1:1 sur l'accueil manager, limitées à son équipe."
+    },
+    "homeAnnouncements": {
+      "title": "Annonces d'accueil",
+      "description": "Carte d'annonces rédigées par l'administration sur la page d'accueil, avec audience et dates."
+    },
     "crm": {
       "title": "CRM",
       "description": "Prospects, opportunités, activités et prévisions de ventes."
@@ -4483,6 +4654,114 @@
     "wipBilling": {
       "title": "Travaux en cours et préfacturation",
       "description": "Révisez les travaux de projet facturables, bloquez ou ajustez des lignes avec preuves, approuvez les préfactures et suivez l’ancienneté des travaux en cours, la réalisation et les pertes."
+    },
+    "automations": {
+      "title": "Automatisations",
+      "description": "Recettes déclenchées sur Flows : déclencheurs planifiés, relatifs à une date, sur changement de champ, événement, document et manuels qui exécutent des actions ordonnées."
+    },
+    "automationDateTriggers": {
+      "title": "Déclencheurs de date",
+      "description": "Exécuter les recettes relativement aux dates d'entité, par ex. jours avant une embauche."
+    },
+    "automationFieldTriggers": {
+      "title": "Déclencheurs de champ",
+      "description": "Exécuter les recettes quand un champ surveillé change."
+    },
+    "automationWebhooks": {
+      "title": "Actions webhook",
+      "description": "Appeler des webhooks signés déclarés par l'organisation depuis les recettes."
+    },
+    "automationSimulator": {
+      "title": "Simulateur",
+      "description": "Tester les recettes sur des sujets réels sans écriture."
+    },
+    "hrmActionReasons": {
+      "title": "Codes d'action et de motif",
+      "description": "Exiger une action RH et un code de motif sur chaque demande de changement."
+    },
+    "hrmEventVerbs": {
+      "title": "Verbes d'événement de changement",
+      "description": "Annuler, rescinder et corriger les changements d'emploi en événements ajoutés."
+    },
+    "hrmConstructionCompliance": {
+      "title": "Conformité construction",
+      "description": "Grilles de salaires en vigueur, paies certifiées, classes d'indemnisation, ratios d'apprentis et journalières pour travaux propres. Requiert paie, projets et suivi du temps."
+    },
+    "hrmPrevailingWage": {
+      "title": "Salaire en vigueur",
+      "description": "Résoudre le salaire par lieu, classification et date depuis des grilles déclarées."
+    },
+    "hrmCertifiedPayroll": {
+      "title": "Paie certifiée",
+      "description": "Rapports hebdomadaires figés rendus via les fichiers déclarés du pack."
+    },
+    "hrmWorkersCompClasses": {
+      "title": "Classes d'indemnisation",
+      "description": "Répartir les heures chiffrées entre classes par règles de priorité."
+    },
+    "hrmApprenticeRatios": {
+      "title": "Ratios d'apprentis",
+      "description": "Exiger les ratios compagnon-apprenti au quotidien ; l'écart se paie au taux compagnon."
+    },
+    "hrmPerDiem": {
+      "title": "Journalières",
+      "description": "Calculer journalières et déplacements depuis les temps approuvés vers la paie."
+    },
+    "hrmCompensation": {
+      "title": "Rémunération",
+      "description": "Architecture et fourchettes : ce que les rôles devraient payer et où chacun se situe."
+    },
+    "hrmMeritCycles": {
+      "title": "Cycles de mérite",
+      "description": "Tours qui figent la vérité de paie, décident les hausses et transfèrent les taux."
+    },
+    "hrmHeadcountPlans": {
+      "title": "Plans d'effectifs",
+      "description": "Scénarios chiffrés depuis les fourchettes, ouvrant des requisitions à l'approbation."
+    },
+    "hrmPayTransparency": {
+      "title": "Transparence salariale",
+      "description": "Mesures figées depuis la paie et demandes d'information des salariés."
+    },
+    "hrmCertifications": {
+      "title": "Certifications et licences",
+      "description": "Registre des qualifications : taxonomie, titres détenus, exigences d'affectation et alertes d'expiration. Désactiver ne supprime jamais les données."
+    },
+    "hrmDispatchGating": {
+      "title": "Contrôle des affectations",
+      "description": "Refuse les affectations sans les qualifications requises. Nécessite projets et planification."
+    },
+    "hrmEquipmentQualifications": {
+      "title": "Qualifications des équipements",
+      "description": "Déclarez les types requis sur les fiches d'équipement. Nécessite équipements."
+    },
+    "hrmCertificationAlerts": {
+      "title": "Alertes de certification",
+      "description": "Avis quotidiens d'expiration aux titulaires et responsables via la boîte de réception."
+    },
+    "hrmPerformance": {
+      "title": "Performance",
+      "description": "L'interrupteur parent des évaluations, objectifs, 1:1, retours, calibrage, talents et succession."
+    },
+    "hrmOneOnOnes": {
+      "title": "1:1",
+      "description": "Conversations planifiées manager-collaborateur avec ordre du jour reporté."
+    },
+    "hrmFeedback": {
+      "title": "Retours",
+      "description": "Éloges, retours et demandes capturés quand ils surviennent."
+    },
+    "hrmCompetencies": {
+      "title": "Compétences",
+      "description": "Vocabulaire de compétences réutilisable avec niveaux, lié aux évaluations et niveaux de poste."
+    },
+    "hrmCalibration": {
+      "title": "Calibrage",
+      "description": "La grille des notes sur un cycle d'évaluation avec piste d'audit."
+    },
+    "hrmSuccession": {
+      "title": "Talents & succession",
+      "description": "Revues de talent et plans de succession par poste."
     }
   },
   "backupsManager": {
@@ -4765,5 +5044,129 @@
       "installed": "Installé"
     },
     "title": "Applications"
+  },
+  "automations": {
+    "title": "Automatisations",
+    "description": "Recettes déclenchées sur Flows — déclencheurs planifiés, relatifs à une date, sur changement de champ, événement, document et manuels qui exécutent des actions ordonnées.",
+    "backToFlows": "Retour aux flux",
+    "backToList": "Retour aux automatisations",
+    "list": {
+      "newButton": "Nouvelle automatisation",
+      "newTitle": "Nouvelle automatisation",
+      "nameLabel": "Nom",
+      "namePlaceholder": "p. ex. Tâches d'accueil avant l'arrivée",
+      "nameRequired": "Donnez un nom à l'automatisation.",
+      "triggerLabel": "Déclencheur",
+      "createFailed": "L'automatisation n'a pas pu être créée.",
+      "create": "Créer",
+      "cancel": "Annuler",
+      "neverRan": "Jamais exécutée",
+      "statusLabel": "Statut",
+      "emptyTitle": "Aucune automatisation",
+      "emptyDescription": "Les automatisations exécutent des actions ordonnées depuis des déclencheurs planifiés, relatifs à une date, sur changement de champ, événement, document ou manuels.",
+      "columnAutomation": "Automatisation",
+      "columnStatus": "Statut",
+      "columnTrigger": "Déclencheur",
+      "columnLastRun": "Dernière exécution",
+      "columnError": "Erreur",
+      "columnActions": "Actions",
+      "runNow": "Exécuter",
+      "enable": "Activer",
+      "disable": "Désactiver",
+      "actionFailed": "L'action a échoué.",
+      "recipeLabel": "Partir d'une recette",
+      "recipeBlank": "Recette vierge"
+    },
+    "status": {
+      "enabled": "Activée",
+      "draft": "Brouillon",
+      "disabled": "Désactivée",
+      "error": "Erreur"
+    },
+    "triggerKinds": {
+      "schedule": "Planifié",
+      "date_relative": "Relatif à une date",
+      "field_change": "Changement de champ",
+      "event": "Événement",
+      "document": "Document",
+      "manual": "Manuel"
+    },
+    "builder": {
+      "pageTitle": "Éditeur d'automatisation",
+      "description": "Déclencheur, qui et quand, actions, simulation et journal.",
+      "buildTab": "Construire",
+      "runsTab": "Exécutions",
+      "saved": "Enregistré.",
+      "saveFailed": "Enregistrement impossible.",
+      "nameTitle": "Nom",
+      "saveName": "Enregistrer le nom",
+      "triggerTitle": "Déclencheur",
+      "saveTrigger": "Enregistrer le déclencheur",
+      "cronLabel": "Cron",
+      "timezoneLabel": "Fuseau horaire",
+      "entityLabel": "Entité",
+      "dateFieldLabel": "Champ de date",
+      "offsetLabel": "Décalage (jours)",
+      "directionLabel": "Direction",
+      "before": "Avant",
+      "after": "Après",
+      "atTimeLabel": "À (HH:MM)",
+      "fieldLabel": "Champ",
+      "changedToLabel": "Devenu (vide = tout)",
+      "subjectKindLabel": "Type de sujet",
+      "eventKindLabel": "Événement",
+      "documentUploaded": "Téléversé",
+      "documentSigned": "Signé",
+      "documentTemplated": "Depuis modèle",
+      "whoWhenTitle": "Qui et quand",
+      "whoWhenHelp": "Les filtres de portée limitent à qui s'applique la recette ; l'arbre de conditions décide quand elle se déclenche.",
+      "rule_subsidiaryId": "Filiale",
+      "rule_departmentId": "Département",
+      "rule_locationId": "Site",
+      "rule_workerType": "Type de travailleur",
+      "rule_positionId": "Poste",
+      "ruleBlank": "Vide = tous",
+      "conditionsMode": "Conditions",
+      "conditionsAll": "Toutes requises",
+      "conditionsAny": "Une suffit",
+      "opLabel": "Op",
+      "valueLabel": "Valeur",
+      "remove": "Retirer",
+      "addCondition": "Ajouter une condition",
+      "saveWhoWhen": "Enregistrer qui et quand",
+      "actionsTitle": "Actions",
+      "actionKindLabel": "Type d'action",
+      "actionJsonLabel": "JSON d'action",
+      "addAction": "Ajouter une action",
+      "saveActions": "Enregistrer les actions",
+      "simulateTitle": "Simuler",
+      "simulateHelp": "Essai sans écriture — choisissez entité:id ou laissez vide pour échantillonner.",
+      "simulateSubjectLabel": "Sujet",
+      "simulateSubjectPlaceholder": "leave_request:<id>",
+      "simulateButton": "Simuler",
+      "stepKind": "Étape",
+      "stepStatus": "Statut",
+      "stepDetail": "Détail",
+      "runStatus": "Statut",
+      "runsEmpty": "Aucune exécution.",
+      "runVersion": "Version",
+      "runSubject": "Sujet",
+      "runCreated": "Créée",
+      "runSteps": "Étapes",
+      "viewSteps": "Étapes",
+      "stepsTitle": "Étapes de l'exécution",
+      "runLoadFailed": "L'exécution n'a pas pu être chargée.",
+      "closeSteps": "Fermer",
+      "approvalTitle": "Réglages d'approbation",
+      "approvalHelp": "L'approbation par exception règle les grilles Flows existantes par type de sujet — dans les seuils, la grille approuve comme décision système en nommant chaque contrôle ; hors seuils, la voie humaine s'applique.",
+      "approvalException": "Approbation par exception",
+      "approvalThresholds": "Seuils (JSON)",
+      "approvalAuto": "Approuver sans règle",
+      "approvalDelegate": "Déléguer après jours (vide = jamais)",
+      "approvalExclude": "Exclure l'initiateur",
+      "approvalYes": "Oui",
+      "approvalNo": "Non",
+      "approvalSave": "Enregistrer"
+    }
   }
 }

@@ -680,6 +680,78 @@
       "hrm_benefit_enrollments": {
         "label": "Leistungsanmeldungen",
         "description": "Eine Zeile je Leistungsanmeldung — Person, Arbeitgeber, Abteilung bei Anmeldung, Plan und Deckungsstufe, Status und gespeicherte Beträge je Periode. Erfordert die Leistungsberechtigung."
+      },
+      "automations": {
+        "label": "Automatisierungen",
+        "description": "Eine Zeile pro Automatisierungsrezept — Triggerart, Status, Version und letzte Ausführung. Erfordert die Automatisierungsberechtigung."
+      },
+      "automation_runs": {
+        "label": "Automatisierungsläufe",
+        "description": "Eine Zeile pro Automatisierungsauslösung — ausgeführte Version, Subjekt, Status, Schritte und Fehler. Erfordert die Automatisierungsberechtigung."
+      },
+      "hrm_action_reasons": {
+        "label": "Aktionsgründe",
+        "description": "Eine Zeile pro Grundcode und HR-Aktion — das Vokabular der Änderungsanträge. Erfordert die HR-Beschäftigungsberechtigung."
+      },
+      "hrm_rate_schedule_lines": {
+        "label": "Lohntafeln",
+        "description": "Eine Zeile je Tafel, Klassifizierung und Stichtag: auflösbarer Basis-, Barzulagen-, Anrechnungs- und Überstundensatz."
+      },
+      "hrm_per_diem_entries": {
+        "label": "Tagegelder",
+        "description": "Eine Zeile je Beschäftigung, Projekt und Tag: berechnete Tagegeld- und Fahrtbeträge mit Status."
+      },
+      "hrm_comp_class_split": {
+        "label": "Gefahrenklassen-Split",
+        "description": "Prioritätsregeln mit Gefahrenklassen: welche Klasse jede Stunde bepreist, und Satz je 100."
+      },
+      "hrm_certified_runs": {
+        "label": "Zertifizierte Läufe",
+        "description": "Zertifizierte Abrechnungsläufe je Projekt und Woche: eingefrorene Daten mit Pack-Format und Datei."
+      },
+      "hrm_compliance_findings": {
+        "label": "Feststellungen",
+        "description": "Append-only Vorlaufkennzeichen je Art: Quotenverstöße, fehlende Sätze, ungeklärte Klassen."
+      },
+      "hrm_pay_bands": {
+        "label": "Bänder",
+        "description": "Je eine Zeile pro aktivem Band: Ebene, Geltung, Währung, Basis und Minimum/Ziel/Maximum."
+      },
+      "hrm_comp_cycle_lines": {
+        "label": "Meritzeilen",
+        "description": "Je eine Zeile pro Entscheidung: Person, Arbeitgeber, eingefrorener Satz, Vorschlag und Status."
+      },
+      "hrm_headcount_plan_lines": {
+        "label": "Planzeilen",
+        "description": "Je eine Zeile pro geplanter Bewegung: Plan, Art, Titel, VZÄ, kalkulierte Kosten und Status."
+      },
+      "hrm_pay_gap_snapshots": {
+        "label": "Entgeltkennzahlen",
+        "description": "Je eine Zeile pro Kennzahl und Kategorie: Ebene, Köpfe, Lücken und Prüfkennzeichen."
+      },
+      "hrm_qualifications": {
+        "label": "Qualifikationen",
+        "description": "Eine Zeile pro vorhandener Zertifizierung oder Lizenz – Inhaber, Arbeitgeber, Typ und Kategorie, Ausstellung und Ablauf sowie gespeicherter Status mit Prüfung."
+      },
+      "hrm_qualification_alerts": {
+        "label": "Qualifikationswarnungen",
+        "description": "Eine Zeile pro Zertifizierungs-Erneuerungswarnung – Inhaber, Typ, Ablauf, der Vorlaufzeitplan, zu dem sie ausgelöst wurde, und ob sie versendet wurde."
+      },
+      "hrm_one_on_ones": {
+        "label": "Einzelgespräche",
+        "description": "Eine Zeile pro Einzelgespräch — Führungskraft, unterstellte Person, geplante und abgehaltene Termine sowie Status. Erfordert die HR-Leistungsberechtigung."
+      },
+      "hrm_feedback": {
+        "label": "Feedback",
+        "description": "Eine Zeile pro Lob, Feedback oder Anfrage — betroffene Person, Art, Sichtbarkeit und Erfassungsdatum. Erfordert die HR-Leistungsberechtigung."
+      },
+      "hrm_calibration_entries": {
+        "label": "Kalibrierungseinträge",
+        "description": "Eine Zeile pro kalibrierter Beurteilung — Sitzung, Mitarbeitende, vorgeschlagene neben kalibrierter Bewertung, Potenzial und entscheidende Person. Erfordert die HR-Leistungsberechtigung."
+      },
+      "hrm_talent_reviews": {
+        "label": "Talentbeurteilungen",
+        "description": "Eine Zeile pro Talentbeurteilung — Mitarbeitende, Leistung und Potenzial, Verlustwirkung und -risiko sowie Beförderungsreife. Erfordert die HR-Leistungsberechtigung."
       }
     },
     "columns": {
@@ -1248,7 +1320,9 @@
         "reason": "Begründung",
         "created_at": "Erstellt am",
         "id": "Antrag (ID)",
-        "employment_id": "Beschäftigung (ID)"
+        "employment_id": "Beschäftigung (ID)",
+        "action": "Aktion",
+        "reason_code": "Grundcode"
       },
       "hrm_positions": {
         "code": "Code",
@@ -1362,6 +1436,185 @@
         "effective_to": "Ende",
         "employment_id": "Beschäftigung (ID)",
         "id": "Anmeldung (ID)"
+      },
+      "hrm_rate_schedule_lines": {
+        "schedule": "Tafel",
+        "classification": "Klassifizierung",
+        "base_rate": "Basissatz",
+        "fringe_rate": "Barzulage",
+        "currency": "Währung",
+        "effective_from": "Gültig ab"
+      },
+      "hrm_per_diem_entries": {
+        "worked_on": "Tag",
+        "amount": "Betrag",
+        "currency": "Währung",
+        "status": "Status",
+        "employment_id": "Beschäftigung (ID)"
+      },
+      "hrm_comp_class_split": {
+        "class": "Klasse",
+        "priority": "Priorität",
+        "rate": "Satz / 100"
+      },
+      "hrm_certified_runs": {
+        "week_ending": "Woche bis",
+        "format_key": "Format",
+        "status": "Status",
+        "project_id": "Projekt (ID)"
+      },
+      "hrm_compliance_findings": {
+        "kind": "Art",
+        "worked_on": "Tag",
+        "status": "Status",
+        "project_id": "Projekt (ID)"
+      },
+      "hrm_pay_bands": {
+        "level": "Ebene",
+        "family": "Familie",
+        "employer": "Arbeitgeber",
+        "currency": "Währung",
+        "basis": "Grundlage",
+        "min": "Minimum",
+        "target": "Ziel",
+        "max": "Maximum",
+        "effective_from": "Gültig ab",
+        "effective_to": "Gültig bis",
+        "id": "Band (ID)"
+      },
+      "hrm_comp_cycle_lines": {
+        "cycle": "Runde",
+        "person": "Mitarbeiter",
+        "employer": "Arbeitgeber",
+        "current_rate": "Aktueller Satz",
+        "currency": "Währung",
+        "compa_ratio": "Compa-Ratio",
+        "proposed_pct": "Vorgeschlagen %",
+        "proposed_rate": "Vorgeschlagener Satz",
+        "status": "Stand",
+        "effective_on": "Wirksam",
+        "employment_id": "Anstellung (ID)",
+        "id": "Zeile (ID)"
+      },
+      "hrm_headcount_plan_lines": {
+        "plan": "Vorhaben",
+        "kind": "Art",
+        "title": "Titel",
+        "employer": "Arbeitgeber",
+        "planned_fte": "Geplante VZÄ",
+        "start_on": "Beginn",
+        "est_annual_cost": "Kalk. Jahreskosten",
+        "currency": "Währung",
+        "status": "Stand",
+        "id": "Zeile (ID)"
+      },
+      "hrm_pay_gap_snapshots": {
+        "as_of": "Stichtag",
+        "employer": "Arbeitgeber",
+        "level": "Ebene",
+        "count_a": "Köpfe A",
+        "count_b": "Köpfe B",
+        "mean_gap_pct": "Mittlere Lücke %",
+        "median_gap_pct": "Mediane Lücke %",
+        "unexplained_gap_pct": "Unerklärte Lücke %",
+        "method": "Methode",
+        "joint_assessment_due": "Gemeinsam prüfen",
+        "id": "Kennzahl (ID)"
+      },
+      "hrm_qualifications": {
+        "employee": "Mitarbeiter",
+        "employer": "Arbeitgeber",
+        "type_code": "Typcode",
+        "type_name": "Typ",
+        "category": "Kategorie",
+        "identifier": "Lizenz-Nr.",
+        "issued_on": "Ausgestellt am",
+        "expires_on": "Verfallsdatum",
+        "status": "Status",
+        "verified_at": "Verifiziert am",
+        "qualification_id": "Qualifikation (ID)",
+        "employment_id": "Beschäftigung (ID)"
+      },
+      "hrm_qualification_alerts": {
+        "employee": "Mitarbeiter",
+        "type_code": "Typcode",
+        "type_name": "Typ",
+        "expires_on": "Verfallsdatum",
+        "due_on": "Fällig am",
+        "lead_days": "Vorlauftage",
+        "sent_at": "Gesendet am",
+        "channel": "Kanal",
+        "alert_id": "Warnung (ID)",
+        "qualification_id": "Qualifikation (ID)"
+      },
+      "automations": {
+        "name": "Name",
+        "status": "Status",
+        "trigger_kind": "Auslöser",
+        "version": "Version",
+        "priority": "Priorität",
+        "last_run_at": "Letzte Ausführung",
+        "error_message": "Fehler",
+        "created_at": "Erstellt am",
+        "id": "Automatisierung (ID)"
+      },
+      "automation_runs": {
+        "automation": "Automatisierung",
+        "status": "Status",
+        "version": "Version",
+        "subject_kind": "Objektart",
+        "subject_id": "Objekt (ID)",
+        "started_at": "Gestartet am",
+        "finished_at": "Beendet am",
+        "error": "Fehler",
+        "created_at": "Erstellt am",
+        "id": "Lauf (ID)"
+      },
+      "hrm_action_reasons": {
+        "action": "Aktion",
+        "reason_code": "Code",
+        "label": "Bezeichnung",
+        "requires_comment": "Kommentar erforderlich",
+        "is_active": "Aktiv",
+        "created_at": "Erstellt am",
+        "id": "Grund (ID)"
+      },
+      "hrm_one_on_ones": {
+        "scheduled_at": "Geplant",
+        "held_at": "Abgehalten",
+        "manager": "Führungskraft",
+        "report": "Unterstellt",
+        "employer": "Arbeitgeber",
+        "status": "Status",
+        "id": "Gespräch (ID)"
+      },
+      "hrm_feedback": {
+        "recorded_at": "Erfasst",
+        "employee": "Mitarbeitende",
+        "employer": "Arbeitgeber",
+        "kind": "Art",
+        "visibility": "Sichtbarkeit",
+        "id": "Feedback (ID)"
+      },
+      "hrm_calibration_entries": {
+        "session": "Sitzung",
+        "employee": "Mitarbeitende",
+        "employer": "Arbeitgeber",
+        "proposed_rating": "Vorgeschlagen",
+        "calibrated_rating": "Kalibriert",
+        "potential_key": "Potenzial",
+        "decided_at": "Entschieden",
+        "id": "Eintrag (ID)"
+      },
+      "hrm_talent_reviews": {
+        "reviewed_at": "Beurteilt",
+        "employee": "Mitarbeitende",
+        "employer": "Arbeitgeber",
+        "performance_key": "Leistung",
+        "potential_key": "Potenzial",
+        "impact_of_loss": "Verlustwirkung",
+        "risk_of_loss": "Verlustrisiko",
+        "id": "Beurteilung (ID)"
       }
     },
     "enumValues": {
@@ -1444,7 +1697,12 @@
       "filled": "Besetzt",
       "open": "Offen",
       "planned": "Geplant",
-      "position_assignment": "Positionszuordnung"
+      "position_assignment": "Positionszuordnung",
+      "valid": "Gültig",
+      "revoked": "Widerrufen",
+      "pending_verification": "Prüfung ausstehend",
+      "inbox": "Posteingang",
+      "email": "E-Mail"
     }
   },
   "operators": {

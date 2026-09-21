@@ -36,6 +36,7 @@ export async function OnboardingWizard({ authz }: { authz: Authz }) {
   return (
     <SetupWizard
       open
+      suppressOnPaths={['/inbox']}
       industries={INDUSTRIES}
       initial={{
         name: row?.name ?? '',

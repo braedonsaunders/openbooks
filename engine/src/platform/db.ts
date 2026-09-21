@@ -208,6 +208,11 @@ export type RequestOrgResolver = () => { orgId: string | null; bypass: boolean }
 export function registerRequestOrgResolver(fn: RequestOrgResolver): void {
   dbRuntime.__openbooksRequestOrgResolver = fn;
 }
+/** The currently registered resolver, if any — so a later registration can
+ *  chain instead of silently discarding the previous boundary. */
+export function currentRequestOrgResolver(): RequestOrgResolver | null {
+  return dbRuntime.__openbooksRequestOrgResolver ?? null;
+}
 function activeOrgCtx(): OrgCtx | undefined {
   return orgContext.getStore() ?? dbRuntime.__openbooksRequestOrgResolver?.();
 }

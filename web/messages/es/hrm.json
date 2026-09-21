@@ -10,7 +10,10 @@
       "myLeave": "Mis ausencias",
       "recruiting": "Contratación",
       "performance": "Desempeño",
-      "benefits": "Beneficios"
+      "benefits": "Beneficios",
+      "compliance": "Cumplimiento",
+      "compensation": "Retribución",
+      "qualifications": "Cualificaciones"
     },
     "recruiting": {
       "title": "Contratación",
@@ -78,7 +81,9 @@
       "pending": "{count, plural, one {# solicitud de cambio pendiente de decisión} other {# solicitudes de cambio pendientes de decisión}}",
       "overdueSteps": "{count, plural, one {# paso de lista vencido} other {# pasos de lista vencidos}}",
       "leavePending": "{count, plural, one {# solicitud de permiso pendiente de aprobación} other {# solicitudes de permiso pendientes de aprobación}}",
-      "unfunded": "{fte} ETC cubiertos sin financiación"
+      "unfunded": "{fte} ETC cubiertos sin financiación",
+      "expiringQualifications": "{count, plural, one {# certificación por vencer} other {# certificaciones por vencer}}",
+      "expiredQualifications": "{count, plural, one {# certificación vencida: asignación denegada hasta renovar} other {# certificaciones vencidas: asignación denegada hasta renovar}}"
     }
   },
   "overview": {
@@ -160,7 +165,9 @@
       "kind": "Cambio",
       "effective": "Vigencia",
       "requester": "Solicitante",
-      "submitted": "Enviada"
+      "submitted": "Enviada",
+      "action": "Acción",
+      "verb": "Verbo"
     },
     "emptyTitle": "No hay solicitudes de cambio aquí",
     "emptyDescription": "Esta vista está vacía — aún no se ha propuesto nada en este segmento.",
@@ -172,7 +179,14 @@
     "proposeFailed": "La lista de empleos no se pudo cargar.",
     "draftBadge": "Acciones",
     "openEmployee": "Abrir el registro del empleado",
-    "notAvailable": "No disponible"
+    "notAvailable": "No disponible",
+    "reasonsButton": "Códigos de motivo",
+    "verbs": {
+      "apply": "Aplicar",
+      "cancel": "Cancelar",
+      "rescind": "Rescindir",
+      "correct": "Corregir"
+    }
   },
   "employment": {
     "episodes": {
@@ -220,7 +234,7 @@
       "binding": "Vinculación",
       "bindingValue": "Revisión de solicitud {request} frente a revisión de empleo {expected}",
       "submitted": "Enviada",
-      "viewInApprovals": "Ver en aprobaciones",
+      "viewInApprovals": "Ver en la Bandeja de entrada",
       "noRun": "Borrador: aún no hay ejecución de aprobación.",
       "empty": "Aún no hay solicitudes de cambio.",
       "statusNames": {
@@ -290,7 +304,18 @@
       "positionHint": "La plantilla financiada que ocupa esta asignación. La asignación conserva su propio título, departamento y ubicación.",
       "positionRequired": "Elija un puesto o marque la asignación como sin asignar.",
       "unassignLabel": "Desasignar del puesto",
-      "unassignHint": "Registra un vínculo nulo explícito: el espacio conserva su contenido pero no ocupa plantilla."
+      "unassignHint": "Registra un vínculo nulo explícito: el espacio conserva su contenido pero no ocupa plantilla.",
+      "actionLabel": "Acción",
+      "actionPlaceholder": "Seleccione una acción",
+      "actionRequired": "Elija la acción de RR. HH. de este cambio.",
+      "reasonCodeLabel": "Motivo",
+      "reasonCodePlaceholder": "Seleccione un motivo",
+      "rescindAction": "Rescindir",
+      "correctAction": "Corregir",
+      "rescindTitle": "Rescindir cambio",
+      "correctTitle": "Corregir cambio",
+      "rescindToast": "Cambio rescindido.",
+      "correctToast": "Corrección registrada."
     },
     "exit": {
       "title": "Registro de salida",
@@ -301,6 +326,14 @@
       "empty": "Aún no hay inscripciones de beneficios ni dependientes.",
       "viewAll": "Beneficios",
       "dependents": "{count, plural, one {# dependiente: {names}} other {# dependientes: {names}}}"
+    },
+    "qualifications": {
+      "title": "Cualificaciones",
+      "viewAll": "Ver todas",
+      "empty": "Sin cualificaciones registradas."
+    },
+    "continuous": {
+      "title": "Comentarios y competencias"
     }
   },
   "directory": {
@@ -714,7 +747,95 @@
     "exitDestination": "Destino",
     "exitNotes": "Notas",
     "saveExit": "Guardar registro de salida",
-    "recordExit": "Registrar salida"
+    "recordExit": "Registrar salida",
+    "continuous": {
+      "tabs": {
+        "cycles": "Ciclos",
+        "calibration": "Calibración",
+        "talent": "Talento y sucesión"
+      },
+      "calibration": {
+        "title": "Calibración",
+        "description": "La matriz de calificaciones sobre un ciclo de evaluación: propuesto frente a calibrado, con auditoría.",
+        "newSession": "Nueva sesión",
+        "sessionsEmpty": "Aún no hay sesiones de calibración.",
+        "colSession": "Sesión",
+        "colStatus": "Estado",
+        "colOpened": "Abierta",
+        "gridTitle": "Matriz de calibración",
+        "gridEmpty": "Aún no hay evaluaciones de mánager enviadas en esta sesión.",
+        "colReview": "Evaluación",
+        "colProposed": "Propuesto",
+        "colDecide": "Decidir",
+        "distributionTitle": "Distribución de calificaciones",
+        "unrated": "Sin calificar",
+        "missingTitle": "Ausentes en esta sesión",
+        "openSession": "Abrir sesión",
+        "closeSession": "Cerrar sesión",
+        "sessionName": "Nombre de la sesión",
+        "sessionCycle": "Ciclo de evaluación",
+        "createSession": "Crear sesión",
+        "ratingLabel": "Calificación calibrada",
+        "potentialLabel": "Potencial",
+        "justificationLabel": "Justificación",
+        "saveLabel": "Guardar calificación",
+        "revertLabel": "Revertir",
+        "revertReasonLabel": "Motivo de la reversión"
+      },
+      "talent": {
+        "title": "Talento y sucesión",
+        "description": "La matriz de 9 casillas sobre las escalas declaradas, la tabla de talento y los planes de sucesión.",
+        "newRecord": "Nuevo registro",
+        "cycleLabel": "Ciclo de evaluación",
+        "gridTitle": "Matriz de talento",
+        "gridEmpty": "Aún no hay escalas declaradas para este ciclo.",
+        "unplacedNote": "{count} ubicaciones fuera de las escalas declaradas",
+        "colEmployee": "Empleado",
+        "colPerformance": "Desempeño",
+        "colPotential": "Potencial",
+        "colLoss": "Impacto / riesgo de salida",
+        "colReady": "Listo para promoción",
+        "readyYes": "Sí",
+        "readyNo": "Todavía no",
+        "reviewsEmpty": "Aún no hay revisiones de talento para este ciclo.",
+        "plansTitle": "Planes de sucesión",
+        "plansEmpty": "Aún no hay planes de sucesión.",
+        "colPosition": "Puesto",
+        "colIncumbent": "Titular",
+        "colCandidates": "Candidatos",
+        "colStatus": "Estado",
+        "impactLabel": "Impacto de una salida",
+        "riskLabel": "Riesgo de una salida",
+        "promotionLabel": "Listo para promoción",
+        "notesLabel": "Notas",
+        "submitLabel": "Guardar registro",
+        "modeLabel": "Registro",
+        "modeTalentLabel": "Revisión de talento",
+        "modeSuccessionLabel": "Plan de sucesión",
+        "employeeLabel": "Empleado",
+        "positionLabel": "Puesto"
+      },
+      "feedback": {
+        "settingsTitle": "Ajustes de comentarios",
+        "anyoneLabel": "Todos en la organización",
+        "managersLabel": "Solo mánager y RR. HH.",
+        "saveLabel": "Guardar ajustes",
+        "praise": "Elogio",
+        "feedbackKind": "Comentario",
+        "request": "Solicitud",
+        "kindLabel": "Tipo",
+        "visibilityLabel": "Visibilidad",
+        "publicVis": "Público",
+        "managerAndSubject": "Mánager y evaluado",
+        "managerOnly": "Solo mánager",
+        "subjectOnly": "Solo evaluado",
+        "bodyLabel": "Mensaje",
+        "bodyPlaceholder": "Diga concretamente qué ocurrió",
+        "submitLabel": "Enviar",
+        "praiseAction": "Elogiar",
+        "respondLabel": "Responder"
+      }
+    }
   },
   "retention": {
     "title": "Retención",
@@ -803,7 +924,11 @@
       "profile": "Perfil",
       "leave": "Ausencias",
       "checklists": "Listas",
-      "team": "Equipo"
+      "reviews": "Evaluaciones",
+      "benefits": "Prestaciones",
+      "team": "Equipo",
+      "compensation": "Retribución",
+      "oneOnOnes": "1:1"
     },
     "refusedTitle": "El autoservicio no está disponible",
     "overview": {
@@ -829,7 +954,10 @@
       "balancesTitle": "Saldos",
       "balancesEmpty": "Sin tipos de ausencia activos.",
       "viewLeave": "Abrir ausencias",
-      "extensionsTitle": "Más"
+      "extensionsTitle": "Más",
+      "qualificationsTitle": "Certificaciones que requieren acción",
+      "qualificationsEmpty": "Nada por vencer",
+      "qualificationsEmptyDescription": "Sus certificaciones están vigentes; las renovaciones aparecerán aquí antes de vencer."
     },
     "profile": {
       "title": "Mi perfil",
@@ -934,16 +1062,534 @@
         "title": "Puesto",
         "department": "Departamento",
         "status": "Estado",
-        "serviceStart": "Inicio del servicio"
+        "serviceStart": "Inicio del servicio",
+        "cycle": "Ciclo",
+        "oneOnOne": "1:1",
+        "feedback": "Comentarios"
       },
       "rosterEmpty": "Sin reportes directos",
       "stepsTitle": "Pasos asignados a mí",
       "stepsEmpty": "Sin pasos asignados a usted en este equipo.",
       "leaveTitle": "Ausencias pendientes",
       "leaveEmpty": "Sin solicitudes de ausencia por decidir.",
-      "decideInApprovals": "Decidir en Aprobaciones",
+      "decideInApprovals": "Decidir en la Bandeja de entrada",
       "changesTitle": "Solicitudes de cambio pendientes",
-      "changesEmpty": "Sin solicitudes de cambio por decidir."
+      "changesEmpty": "Sin solicitudes de cambio por decidir.",
+      "owedTitle": "Evaluaciones que debo",
+      "owedEmpty": "Ninguna evaluación pendiente en el ciclo abierto.",
+      "openReview": "Abrir evaluación",
+      "oneOnOneLink": "Abrir 1:1"
+    },
+    "reviewStatus": {
+      "pending": "Borrador",
+      "submitted": "Enviada",
+      "calibrated": "Calibrada",
+      "shared": "Compartida",
+      "acknowledged": "Confirmada"
+    },
+    "goalStatus": {
+      "active": "Activo",
+      "achieved": "Logrado",
+      "missed": "No logrado",
+      "cancelled": "Cancelado"
+    },
+    "enrollmentStatus": {
+      "elected": "Elegido",
+      "waived": "Renunciado",
+      "pending_approval": "Aprobación pendiente",
+      "active": "Activo",
+      "ended": "Finalizado",
+      "cancelled": "Cancelado"
+    },
+    "windowKinds": {
+      "open_enrollment": "Inscripción abierta",
+      "new_hire": "Nueva contratación",
+      "life_event": "Evento de vida"
+    },
+    "reviews": {
+      "title": "Mis evaluaciones",
+      "description": "Autoevaluaciones pendientes, evaluaciones compartidas y tus objetivos.",
+      "selfTitle": "Autoevaluaciones",
+      "columns": {
+        "cycle": "Ciclo",
+        "period": "Período",
+        "status": "Estado",
+        "rating": "Calificación",
+        "shared": "Compartida",
+        "goal": "Objetivo",
+        "progress": "Progreso"
+      },
+      "selfEmpty": "Sin autoevaluaciones",
+      "selfEmptyDescription": "Tus autoevaluaciones pendientes aparecen aquí cuando se abre un ciclo.",
+      "answerInDrawer": "Responder en RR. HH.",
+      "sharedTitle": "Compartidas conmigo",
+      "sharedEmpty": "Nada compartido aún",
+      "sharedEmptyDescription": "Las evaluaciones compartidas contigo aparecen aquí.",
+      "acknowledge": "Confirmar",
+      "acknowledgeFailed": "No se pudo confirmar la evaluación.",
+      "goalsTitle": "Mis objetivos",
+      "goalsEmpty": "Sin objetivos aún",
+      "goalsEmptyDescription": "Los objetivos de tu empleo aparecen aquí con su progreso.",
+      "goalDialogTitle": "Actualizar el progreso",
+      "goalDialogDescription": "Registra el progreso con una nota — queda como evidencia del objetivo.",
+      "goalNoteLabel": "Nota",
+      "goalNotePlaceholder": "Qué avanzó desde la última actualización",
+      "goalSubmit": "Guardar progreso",
+      "goalUpdate": "Actualizar",
+      "goalFailed": "No se pudo guardar el progreso."
+    },
+    "benefits": {
+      "title": "Mis prestaciones",
+      "description": "Tus elecciones, ventanas de inscripción abiertas y dependientes.",
+      "electionsTitle": "Mis elecciones",
+      "columns": {
+        "plan": "Plan",
+        "coverage": "Cobertura",
+        "status": "Estado",
+        "effective": "Vigencia",
+        "monthly": "Descuento / período",
+        "window": "Ventana",
+        "kind": "Tipo",
+        "range": "Fechas",
+        "dependent": "Dependiente",
+        "relationship": "Parentesco"
+      },
+      "electionsEmpty": "Sin elecciones",
+      "electionsEmptyDescription": "La cobertura que elijas aparece aquí.",
+      "monthlyHint": "El importe guardado que la nómina descuenta cada período — nunca se recalcula.",
+      "windowsTitle": "Ventanas de inscripción abiertas",
+      "windowsEmpty": "Ninguna ventana abierta",
+      "windowsEmptyDescription": "Las ventanas de tu empleador aparecen aquí mientras estén abiertas.",
+      "dependentsTitle": "Dependientes",
+      "dependentsEmpty": "Sin dependientes registrados.",
+      "elect": "Elegir cobertura",
+      "electTitle": "Elegir cobertura",
+      "electDescription": "Elige dentro de una ventana abierta de tu empleador — o registra un evento de vida.",
+      "fromLabel": "Vigente desde",
+      "lifeEventLabel": "Motivo del evento de vida (en lugar de ventana)",
+      "lifeEventPlaceholder": "Qué cambió, para el responsable de RR. HH.",
+      "electSubmit": "Elegir",
+      "electFailed": "No se pudo registrar la elección.",
+      "change": "Cambiar",
+      "changeTitle": "Cambiar cobertura",
+      "changeDescription": "Cambia desde una fecha dentro de una ventana abierta — la fila anterior termina el día anterior.",
+      "changeReasonPlaceholder": "Por qué cambia la cobertura",
+      "changeSubmit": "Guardar cambio",
+      "changeFailed": "No se pudo registrar el cambio."
+    },
+    "qualifications": {
+      "columns": {
+        "type": "Certificación",
+        "expires": "Vence",
+        "status": "Estado"
+      }
+    },
+    "oneOnOnes": {
+      "title": "1:1",
+      "description": "Sus 1:1 próximos y pasados con sus agendas.",
+      "upcoming": "Próximos",
+      "past": "Pasados",
+      "requests": "Solicitudes de comentarios",
+      "colWhen": "Cuándo",
+      "colWith": "Con",
+      "colStatus": "Estado",
+      "upcomingEmpty": "No hay 1:1 programados.",
+      "pastEmpty": "No hay 1:1 pasados.",
+      "requestsEmpty": "No hay solicitudes abiertas.",
+      "scheduled": "Programado",
+      "held": "Realizado",
+      "skipped": "Omitido",
+      "cancelled": "Cancelado",
+      "talkingPoint": "Tema",
+      "actionItem": "Acción",
+      "note": "Nota",
+      "shared": "Compartido",
+      "private": "Privado",
+      "privateNote": "Privado — solo usted puede leerlo",
+      "kindLabel": "Tipo",
+      "bodyLabel": "Punto de agenda",
+      "bodyPlaceholder": "Diga de qué se trata",
+      "addItem": "Añadir punto",
+      "hold": "Realizar 1:1",
+      "skip": "Omitir",
+      "skipReason": "Motivo de la omisión",
+      "cancelMeeting": "Cancelar",
+      "carryNote": "Realizar traslada los puntos abiertos como copias — los originales quedan aquí como historial.",
+      "done": "Hecho",
+      "reopen": "Reabrir",
+      "carriedForward": "Trasladado",
+      "actionFailed": "La acción 1:1 falló."
+    }
+  },
+  "options": {
+    "hrmAction": {
+      "hire": "Contratación",
+      "rehire": "Recontratación",
+      "transfer": "Traslado",
+      "promotion": "Ascenso",
+      "demotion": "Descenso",
+      "pay_change": "Cambio salarial",
+      "manager_change": "Cambio de responsable",
+      "location_change": "Cambio de sede",
+      "schedule_change": "Cambio de horario",
+      "leave_of_absence": "Excedencia",
+      "return": "Reincorporación",
+      "termination": "Baja",
+      "profile_change": "Cambio de perfil",
+      "other": "Otro"
+    }
+  },
+  "compliance": {
+    "title": "Cumplimiento",
+    "description": "Salarios vigentes, nóminas certificadas, clases de compensación, proporciones de aprendices y dietas — cumplimiento de construcción desde los mismos registros de tiempo, proyecto y nómina.",
+    "refused": "Cumplimiento no disponible",
+    "needRead": "Necesita el permiso de lectura de construcción para abrir este espacio.",
+    "generate": "Generar informe",
+    "findingsTitle": "Hallazgos",
+    "ratesTitle": "Tablas salariales",
+    "certifiedTitle": "Nómina certificada",
+    "classesTitle": "Clases",
+    "perdiemTitle": "Dietas",
+    "empty": "Nada aquí todavía.",
+    "emptyAction": "Configúrelo en Ajustes abajo.",
+    "active": "Activo",
+    "retired": "Retirado",
+    "sections": {
+      "findings": "Hallazgos",
+      "rates": "Tarifas",
+      "certified": "Nómina certificada",
+      "classes": "Clases",
+      "perdiem": "Dietas"
+    },
+    "kinds": {
+      "ratio_breach": "Proporción incumplida",
+      "missing_rate": "Tarifa faltante",
+      "class_unresolved": "Clase sin resolver",
+      "registration_missing": "Registro faltante",
+      "fringe_mismatch": "Diferencia de beneficios"
+    },
+    "findingStatus": {
+      "open": "Abierto",
+      "acknowledged": "Reconocido",
+      "resolved": "Resuelto"
+    },
+    "runStatus": {
+      "draft": "Borrador",
+      "generated": "Generado",
+      "submitted": "Enviado",
+      "amended": "Modificado"
+    },
+    "entryStatus": {
+      "computed": "Calculado",
+      "approved": "Aprobado",
+      "voided": "Anulado",
+      "consumed": "Consumido"
+    },
+    "scheduleKind": {
+      "prevailing_wage": "Salario vigente",
+      "union_agreement": "Convenio sindical",
+      "org_declared": "Declarado"
+    },
+    "reciprocity": {
+      "home_local": "Local de origen",
+      "jobsite_local": "Lugar de obra",
+      "higher_of": "El mayor"
+    },
+    "scope": {
+      "project": "proyectos",
+      "location": "ubicaciones",
+      "subsidiary": "Filial",
+      "org": "Toda la empresa"
+    },
+    "columns": {
+      "kind": "Tipo",
+      "project": "Proyecto",
+      "day": "Día",
+      "status": "Estado",
+      "recorded": "Registrado",
+      "schedule": "Tabla",
+      "scope": "Alcance",
+      "reciprocity": "Reciprocidad",
+      "window": "Vigencia",
+      "run": "Ejecución",
+      "week": "Semana",
+      "format": "Formato",
+      "code": "Código",
+      "name": "Nombre",
+      "rate": "Tasa / 100",
+      "rules": "Reglas",
+      "amount": "Importe",
+      "actions": "Acciones"
+    },
+    "stats": {
+      "openFindings": "Hallazgos abiertos",
+      "openFindingsSub": "Por atender antes del próximo ciclo",
+      "dueReports": "Informes pendientes",
+      "dueReportsSub": "Proyectos sin informe para la semana hasta {week}",
+      "unresolvedClasses": "Clases sin resolver",
+      "unresolvedClassesSub": "Horas sin regla aplicable",
+      "perdiemWaiting": "Dietas en espera",
+      "perdiemWaitingSub": "Entradas calculadas por aprobar"
+    },
+    "actions": {
+      "acknowledge": "Reconocer",
+      "resolve": "Resolver",
+      "approve": "Aprobar",
+      "void": "Anular",
+      "submit": "Enviar"
+    },
+    "generateDialog": {
+      "title": "Generar informe certificado",
+      "project": "Proyecto",
+      "week": "Semana hasta",
+      "format": "Formato",
+      "generate": "Generar",
+      "cancel": "Cancelar"
+    }
+  },
+  "compensation": {
+    "title": "Retribución",
+    "description": "Lo que deben pagar los roles, si las personas están en banda y cómo se deciden los aumentos.",
+    "tiles": {
+      "belowMin": "Bajo el mínimo",
+      "openCyclePacing": "Ritmo del ciclo",
+      "awaitingPlans": "Planes por aprobar",
+      "jointFlags": "Evaluaciones conjuntas"
+    },
+    "bandsTitle": "Bandas por nivel",
+    "bandsEmpty": "Sin bandas — declare una banda para un nivel.",
+    "cyclesTitle": "Ciclos de mérito",
+    "cyclesEmpty": "Sin ciclos — abra una ronda.",
+    "plansTitle": "Planes de plantilla",
+    "plansEmpty": "Sin planes — redacte un escenario.",
+    "architectureTitle": "Arquitectura de puestos",
+    "newCycle": "Nuevo ciclo",
+    "newPlan": "Nuevo plan",
+    "equity": "Equidad salarial",
+    "back": "Atrás",
+    "pacing": "Ritmo presupuestario",
+    "pacingNone": "Sin dotación fijada",
+    "pacingNote": "{pct} % de la dotación propuesto",
+    "linesTitle": "Cuadrícula del equipo",
+    "linesEmpty": "Sin líneas — abra el ciclo.",
+    "totalCost": "Coste calculado",
+    "planLinesTitle": "Líneas del plan",
+    "planLinesEmpty": "Sin líneas.",
+    "approveLine": "Aprobar",
+    "columns": {
+      "level": "Nivel",
+      "range": "Banda",
+      "headcount": "Personas",
+      "placement": "Posición",
+      "name": "Nombre",
+      "status": "Estado",
+      "effective": "Vigencia",
+      "cost": "Coste",
+      "employee": "Persona",
+      "current": "Actual",
+      "rating": "Valoración",
+      "guideline": "Directriz",
+      "proposed": "Propuesto",
+      "title": "Título",
+      "kind": "Tipo",
+      "fte": "ETC",
+      "start": "Inicio"
+    },
+    "placement": {
+      "below_min": "Bajo el mínimo",
+      "in_range": "En banda",
+      "above_max": "Sobre el máximo",
+      "no_band": "Sin banda"
+    },
+    "cycleKind": {
+      "merit": "Mérito",
+      "promotion": "Promoción",
+      "adjustment": "Ajuste",
+      "cola": "Coste de vida"
+    },
+    "cycleStatus": {
+      "draft": "Borrador",
+      "open": "Abierto",
+      "in_review": "En revisión",
+      "approved": "Aprobado",
+      "pushed": "Trasladado",
+      "closed": "Cerrado",
+      "cancelled": "Cancelado"
+    },
+    "lineStatus": {
+      "pending": "Pendiente",
+      "proposed": "Propuesto",
+      "approved": "Aprobado",
+      "rejected": "Rechazado",
+      "pushed": "Trasladado"
+    },
+    "planStatus": {
+      "draft": "Borrador",
+      "submitted": "Presentado",
+      "approved": "Aprobado",
+      "closed": "Cerrado"
+    },
+    "planLineStatus": {
+      "proposed": "Propuesto",
+      "approved": "Aprobado",
+      "rejected": "Rechazado",
+      "opened": "Abierto",
+      "filled": "Cubierto",
+      "cancelled": "Cancelado"
+    },
+    "lineKind": {
+      "create": "Creación",
+      "backfill": "Cobertura",
+      "change": "Cambio",
+      "terminate": "Baja"
+    },
+    "eventKind": {
+      "opened": "Abierto",
+      "proposed": "Propuesto",
+      "reopened": "Reabierto",
+      "approved": "Aprobado",
+      "rejected": "Rechazado",
+      "budget_changed": "Presupuesto cambiado",
+      "pushed": "Trasladado",
+      "closed": "Cerrado",
+      "cancelled": "Cancelado"
+    },
+    "drawer": {
+      "proposeTitle": "Proponer",
+      "decideTitle": "Decidir",
+      "historyTitle": "Historial",
+      "pctLabel": "Aumento %",
+      "rateLabel": "Nueva tarifa",
+      "reasonLabel": "Motivo",
+      "failed": "El cambio fue rechazado",
+      "submit": "Guardar",
+      "cancel": "Cancelar",
+      "approve": "Aprobar",
+      "reject": "Rechazar",
+      "reopen": "Reabrir"
+    },
+    "historyColumns": {
+      "event": "Evento",
+      "reason": "Motivo",
+      "at": "Fecha"
+    },
+    "emptyHistory": "Sin eventos."
+  },
+  "equity": {
+    "title": "Equidad salarial",
+    "description": "Métricas congeladas calculadas desde la verdad de nómina, por categoría de igual valor.",
+    "meanGap": "Brecha media",
+    "medianGap": "Brecha mediana",
+    "variableGap": "Brecha variable",
+    "jointFlags": "Evaluación conjunta",
+    "categoriesTitle": "Brechas por categoría",
+    "categoriesEmpty": "Sin categorías medidas.",
+    "columns": {
+      "category": "Categoría",
+      "counts": "Personas A / B",
+      "mean": "Brecha media",
+      "median": "Brecha mediana",
+      "unexplained": "Sin explicar",
+      "flag": "Marca"
+    },
+    "jointDue": "Evaluar conjuntamente",
+    "generate": "Generar medición",
+    "emptyTitle": "Sin medición",
+    "emptyDescription": "Genere una medición para medir brechas."
+  },
+  "myComp": {
+    "title": "Mi retribución",
+    "description": "Su posición en banda, certificados e información salarial.",
+    "placement": "Posición en banda",
+    "statementsTitle": "Certificados",
+    "columns": {
+      "period": "Período",
+      "generated": "Generado"
+    },
+    "statementsEmpty": "Sin certificados.",
+    "requestPayInfo": "Solicitar información salarial",
+    "requestFailed": "La solicitud fue rechazada",
+    "requestSubmit": "Guardar",
+    "requestCancel": "Cancelar",
+    "requestStatus": {
+      "open": "Abierta"
+    }
+  },
+  "qualifications": {
+    "title": "Cualificaciones",
+    "description": "Licencias, certificaciones y credenciales por trabajador: quién puede ser asignado hoy y qué vence próximamente.",
+    "record": "Registrar cualificación",
+    "recordTitle": "Registrar cualificación",
+    "drawerTitle": "Cualificación",
+    "settings": "Ajustes de cualificaciones",
+    "sectionLabel": "Sección",
+    "sections": {
+      "ledger": "Registro",
+      "requirements": "Requisitos",
+      "alerts": "Alertas"
+    },
+    "segmentsLabel": "Estado",
+    "allLabel": "Todas",
+    "typesLabel": "Tipo",
+    "typesAll": "Todos los tipos",
+    "listTitle": "Cualificaciones por trabajador",
+    "open": "Abrir",
+    "columns": {
+      "worker": "Trabajador",
+      "type": "Tipo",
+      "status": "Estado",
+      "expiry": "Vence",
+      "subject": "Sujeto",
+      "severity": "Severidad",
+      "window": "Período",
+      "due": "Vence",
+      "sent": "Enviada"
+    },
+    "statusNames": {
+      "valid": "Válida",
+      "expiring": "Por vencer",
+      "expired": "Vencida",
+      "revoked": "Revocada",
+      "pending_verification": "Verificación pendiente"
+    },
+    "emptyTitle": "Sin cualificaciones registradas",
+    "emptyDescription": "Registre las licencias y certificaciones del equipo para controlar las asignaciones.",
+    "requirementsTitle": "Requisitos de asignación",
+    "requirementsEmpty": "Aún no hay requisitos declarados.",
+    "coverageTitle": "Cobertura del proyecto",
+    "coverageProjectLabel": "Proyecto",
+    "coverageProjectAll": "Elegir proyecto",
+    "coverageEmpty": "Aún no hay personal asignado a este proyecto.",
+    "coverage": {
+      "qualified": "Habilitado",
+      "missing": "Faltante",
+      "expired": "Vencida",
+      "pending": "Pendiente"
+    },
+    "alertsTitle": "Alertas de vencimiento",
+    "alertsEmpty": "Sin alertas emitidas.",
+    "alertDue": "Pendiente",
+    "taxonomyTitle": "Taxonomía de cualificaciones",
+    "windowOpen": "{from} – vigente",
+    "verify": "Verificar",
+    "renew": "Renovar",
+    "revoke": "Revocar",
+    "revokePrompt": "¿Revocar esta cualificación? Indique el motivo:",
+    "renewPrompt": "Fecha de emisión de la cualificación renovada (AAAA-MM-DD):",
+    "drawer": {
+      "issued": "Emitida",
+      "identifier": "N.º de licencia",
+      "notes": "Notas",
+      "evidence": "Ver evidencia",
+      "events": "Historial"
+    },
+    "recordForm": {
+      "employment": "Empleo",
+      "type": "Tipo de cualificación",
+      "issuedOn": "Emitida el",
+      "expiresOn": "Vence el",
+      "identifier": "Número de licencia",
+      "notes": "Notas"
     }
   }
 }

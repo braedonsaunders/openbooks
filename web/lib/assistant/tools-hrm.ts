@@ -4,6 +4,7 @@ import {
   listEnrollmentWindows,
   listEnrollments,
 } from "@openbooks/engine/src/hrm/benefits/benefits-read.ts";
+import { CompensationError } from "@openbooks/engine/src/hrm/compensation/errors.ts";
 import { BenefitsError } from "@openbooks/engine/src/hrm/benefits/errors.ts";
 import {
   listLeaveRequests,
@@ -11,8 +12,13 @@ import {
   timeBalanceAsOf,
 } from "@openbooks/engine/src/hrm/leave-read.ts";
 import { LeaveError } from "@openbooks/engine/src/hrm/leave-errors.ts";
+import { HrmQualificationError } from "@openbooks/engine/src/hrm/qualifications/errors.ts";
 import { SelfServiceError } from "@openbooks/engine/src/hrm/self-service/actor.ts";
 import { getMyProfile } from "@openbooks/engine/src/hrm/self-service/self-read.ts";
+import {
+  getMyBenefitsWorkspace,
+  getMyReviewWorkspace,
+} from "@openbooks/engine/src/hrm/self-service/my-work.ts";
 import { HrmProcessError } from "@openbooks/engine/src/hrm/processes.ts";
 import { getProcess, listProcesses } from "@openbooks/engine/src/hrm/processes-read.ts";
 import { sql } from "drizzle-orm";
@@ -26,6 +32,11 @@ import {
 } from "@openbooks/engine/src/hrm/employment-read.ts";
 import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
 import { HrmPositionError } from "@openbooks/engine/src/hrm/positions.ts";
+// HR-13 begin: construction read services for the two compliance tools.
+import { listFindings } from "@openbooks/engine/src/hrm/construction/findings.ts";
+import { listRuns } from "@openbooks/engine/src/hrm/construction/certified.ts";
+import { HrmConstructionError } from "@openbooks/engine/src/hrm/construction/errors.ts";
+// HR-13 end
 import { HrmPerformanceError } from "@openbooks/engine/src/hrm/performance/errors.ts";
 import {
   getCycleDetail,
@@ -40,6 +51,8 @@ import {
   listRequisitions,
 } from "@openbooks/engine/src/hrm/recruiting/recruiting-read.ts";
 import { AmbiguousRevisionError, TemporalError } from "@openbooks/engine/src/hrm/temporal.ts";
+import { listInbox } from "@openbooks/engine/src/inbox/index.ts";
+import { inboxContext } from "../inbox-context";
 import { isFeatureEnabled } from "../features";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import type { AssistantToolDef, ToolResult } from "./types";
@@ -90,7 +103,17 @@ export function hrmRefusal(error: unknown): ToolResult {
     error instanceof LeaveError ||
     error instanceof RecruitingError ||
     error instanceof HrmPerformanceError ||
+    // HR-13 begin: construction refusals reach the caller with their
+    // message intact, like every other read-service refusal above.
+    error instanceof HrmConstructionError ||
+    // HR-13 end
     error instanceof BenefitsError ||
+    error instanceof CompensationError ||
+    // HR-14 begin: qualification refusals (feature off by name, evidence
+    // required, unknown type) reach the caller with their message intact.
+    error instanceof HrmQualificationError ||
+    // HR-14 end
+
     error instanceof HrmAuthorizationError ||
     error instanceof TemporalError ||
     error instanceof SelfServiceError
@@ -257,7 +280,7 @@ async function visibleEmploymentIds(
 const hrmChangeRequests: AssistantToolDef = {
   name: "hrm_change_requests",
   description:
-    "Employment change requests with status, revision binding, and flow run: one employment's list, or every visible employment newest-first with an optional status filter. Read-only.",
+    "Employment change requests with status, action/reason codes, applied verb, revision binding, and flow run: one employment's list, or every visible employment newest-first with an optional status filter. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["hrm.employment.read"] },
   feature: "hrm",
@@ -287,6 +310,11 @@ const hrmChangeRequests: AssistantToolDef = {
         expectedEmploymentRevision: number;
         payloadSchemaVersion: string;
         reason: string | null;
+        // HR-16 begin: 0227 classification carried from submit.
+        action: string | null;
+        reasonCode: string | null;
+        appliedEmploymentChangeId: string | null;
+        // HR-16 end
         submittedBy: string | null;
         submittedAt: string | null;
         flowRunId: string | null;
@@ -316,6 +344,11 @@ const hrmChangeRequests: AssistantToolDef = {
             expectedEmploymentRevision: request.expectedEmploymentRevision,
             payloadSchemaVersion: request.payloadSchemaVersion,
             reason: request.reason,
+            // HR-16 begin
+            action: request.action,
+            reasonCode: request.reasonCode,
+            appliedEmploymentChangeId: request.appliedEmploymentChangeId,
+            // HR-16 end
             submittedBy: request.submittedBy,
             submittedAt: request.submittedAt,
             flowRunId: request.flowRunId,
@@ -330,7 +363,25 @@ const hrmChangeRequests: AssistantToolDef = {
       // Newest first across employments (created_at is microsecond UTC text,
       // so lexicographic order is chronological; id breaks ties deterministically).
       collected.sort((x, y) => (y.createdAt < x.createdAt ? -1 : y.createdAt > x.createdAt ? 1 : x.id < y.id ? -1 : 1));
-      const page = compactRows(collected, { limit });
+      // HR-16 begin: the applied event's verb (0227) resolves from the
+      // employment_changes rows the loader already authorized, labels only —
+      // one batched read, never per-row, and never the request table itself.
+      const appliedIds = [...new Set(collected.map((row) => row.appliedEmploymentChangeId).filter((id): id is string => id !== null))];
+      const verbByChange = new Map<string, string>();
+      if (appliedIds.length > 0) {
+        const verbs = (await db.execute<{ id: string; verb: string }>(sql`
+          select id::text as id, verb from employment_changes
+           where org_id = ${authz.user.orgId}::uuid and id = any(${appliedIds}::uuid[])
+        `)).rows;
+        for (const v of verbs) verbByChange.set(v.id, v.verb);
+      }
+      const page = compactRows(
+        collected.map(({ appliedEmploymentChangeId, ...row }) => ({
+          ...row,
+          appliedVerb: appliedEmploymentChangeId ? (verbByChange.get(appliedEmploymentChangeId) ?? null) : null,
+        })),
+        { limit },
+      );
       return {
         ok: true,
         data: {
@@ -986,7 +1037,7 @@ const hrmBenefits: AssistantToolDef = {
 const hrmMe: AssistantToolDef = {
   name: "hrm_me",
   description:
-    "The caller's own employment summary: status, title, department, employer, manager, and service start per own employment. Read-only.",
+    "The caller's own employment, reviews, and benefits: summary per own employment, owed self-assessments with shared reviews and goals, elections with open windows and dependents. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["hrm.self.read"] },
   feature: "hrm",
@@ -1000,6 +1051,13 @@ const hrmMe: AssistantToolDef = {
       // party behind the login, so a second person's rows can never be
       // returned no matter what the model puts in the (empty) input.
       const profile = await getMyProfile({ orgId: authz.user.orgId, actorId: authz.user.id });
+      // Own reviews and benefits ride the same privacy scope as the Me
+      // pages (shared reviews only, calibration stripped, own elections
+      // with stored amounts) — a second person's rows can never appear.
+      const [reviews, benefits] = await Promise.all([
+        getMyReviewWorkspace({ orgId: authz.user.orgId, actorId: authz.user.id }),
+        getMyBenefitsWorkspace({ orgId: authz.user.orgId, actorId: authz.user.id }),
+      ]);
       return {
         ok: true,
         data: {
@@ -1013,6 +1071,45 @@ const hrmMe: AssistantToolDef = {
             managerNames: [...summary.managerNames],
             serviceStart: summary.serviceStart,
           })),
+          reviews: {
+            cycles: reviews.cycles.map((group) => ({
+                  name: group.name,
+                  status: group.status,
+                  selfOwed: group.mySelf
+                    ? { status: group.mySelf.status, dueOn: group.mySelf.selfDueOn }
+                    : null,
+                  shared: group.sharedWithMe.map((shared) => ({
+                    status: shared.status,
+                    overallRating: shared.overallRating,
+                  })),
+                })),
+                goals: reviews.goals.map((goal) => ({
+                  title: goal.title,
+                  status: goal.status,
+                  progressPercent: goal.progressPercent,
+                })),
+                href: "/me/reviews",
+              },
+          benefits: {
+                elections: benefits.elections.map((election) => ({
+                  planCode: election.planCode,
+                  planName: election.planName,
+                  coverageLabel: election.coverageLabel,
+                  status: election.status,
+                  employeeAmountPerPeriod: election.employeeAmountPerPeriod,
+                  currency: election.currency,
+                })),
+                openWindows: benefits.openWindows.map((window) => ({
+                  name: window.name,
+                  kind: window.kind,
+                  closesOn: window.closesOn,
+                })),
+                dependents: benefits.dependents.map((dependent) => ({
+                  displayName: dependent.displayName,
+                  relationship: dependent.relationship,
+                })),
+                href: "/me/benefits",
+              },
           href: "/me",
         },
       };
@@ -1022,4 +1119,620 @@ const hrmMe: AssistantToolDef = {
   },
 };
 
-export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting, hrmPerformanceCycles, hrmTurnover, hrmBenefits, hrmMe];
+
+// HR-15 begin: the caller's own inbox items (own scope only, core surface).
+const inboxItems: AssistantToolDef = {
+  name: "inbox_items",
+  description:
+    "The caller's own inbox items: approvals, checklist steps, requests, reviews, and notices waiting on them, with links into the inbox. Read-only.",
+  category: "read",
+  gate: { mode: "anyOf", perms: ["hrm.self.read"] },
+  tier: "module",
+  inputSchema: z.object({
+    filter: z.enum(["all", "approvals", "my_tasks", "signatures", "notices", "overdue"]).optional().describe("Keep only this inbox filter (default all)"),
+    limit: z.number().int().min(1).max(50).optional().describe("Maximum items to return (default 20)"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const a = raw as { filter?: "all" | "approvals" | "my_tasks" | "signatures" | "notices" | "overdue"; limit?: number };
+    const limit = Math.min(a.limit ?? 20, 50);
+    try {
+      // No subject parameter exists to forge: the read scopes by the login,
+      // so another person's items can never be returned no matter what the
+      // model puts in the (filter-only) input.
+      const ctx = await inboxContext(authz);
+      const kinds =
+        a.filter === undefined || a.filter === "all" || a.filter === "overdue"
+          ? undefined
+          : a.filter === "approvals"
+            ? (['flows_approval', 'expense_report'] as const)
+            : a.filter === "my_tasks"
+              ? (['hrm_process_step', 'hrm_leave_request', 'hrm_change_request', 'hrm_review', 'hrm_benefit_enrollment_window', 'hrm_qualification_alert', 'timesheet_week'] as const)
+              : a.filter === "signatures"
+                ? (['field_ticket_signature', 'document_signature'] as const)
+                : (['notification'] as const);
+      const items = await listInbox(ctx, kinds ? { kinds: [...kinds] } : undefined);
+      const kept = (a.filter === "overdue" ? items.filter((item) => item.priority === "overdue") : items).slice(0, limit);
+      return {
+        ok: true,
+        data: {
+          total: kept.length,
+          items: kept.map((item) => ({
+            id: item.id,
+            kind: item.kind,
+            title: item.title,
+            subtitle: item.subtitle,
+            dueAt: item.dueAt,
+            priority: item.priority,
+            href: item.subjectHref,
+            actions: item.actions.map((action) => action.key),
+          })),
+          href: "/inbox",
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+// HR-13 begin: read-only construction-compliance tools. Generating a
+// report, approving per-diem, and transitioning a finding are
+// human-attested HR actions with no assistant write surface by design —
+// these two tools read the flags and the frozen runs through the same
+// services and gates as the Compliance page.
+const HRM_CONSTRUCTION_FEATURE_OFF = "hrm_construction_feature_disabled";
+
+async function constructionFeatureRefused(orgId: string): Promise<ToolResult | null> {
+  if (!(await isFeatureEnabled(orgId, "hrmConstructionCompliance")))
+    return { ok: false, error: HRM_CONSTRUCTION_FEATURE_OFF };
+  return null;
+}
+
+const hrmComplianceFindings: AssistantToolDef = {
+  name: "hrm_compliance_findings",
+  description:
+    "Construction-compliance pre-run flags by kind: ratio breaches, missing rates, unresolved comp classes, missing registrations, and fringe mismatches with lifecycle status. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.construction.read"] },
+  feature: "hrmConstructionCompliance",
+  tier: "module",
+  inputSchema: z.object({
+    status: z.enum(["open", "acknowledged", "resolved"]).optional().describe("Keep only this lifecycle status"),
+    kind: z
+      .enum(["ratio_breach", "missing_rate", "class_unresolved", "registration_missing", "fringe_mismatch"])
+      .optional()
+      .describe("Keep only this finding kind"),
+    limit: z.number().int().min(1).max(200).optional().describe("Maximum findings to return (default 50)"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const gated = await constructionFeatureRefused(authz.user.orgId);
+    if (gated) return gated;
+    const a = raw as { status?: string; kind?: string; limit?: number };
+    try {
+      const findings = await listFindings(db, authz.user.orgId, authz.user.id, a.status ?? null);
+      const kept = (a.kind ? findings.filter((finding) => finding.kind === a.kind) : findings).slice(0, Math.min(a.limit ?? 50, 200));
+      return {
+        ok: true,
+        data: {
+          findings: kept.map((finding) => ({
+            id: finding.id,
+            kind: finding.kind,
+            projectId: finding.projectId,
+            workedOn: finding.workedOn,
+            employmentId: finding.employmentId,
+            status: finding.status,
+            recordedAt: finding.recordedAt,
+          })),
+          href: "/hrm/compliance",
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+
+const hrmCertifiedPayroll: AssistantToolDef = {
+  name: "hrm_certified_payroll",
+  description:
+    "Frozen certified payroll runs by project and week: pack format, lifecycle status, and amendment links. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.construction.read"] },
+  feature: "hrmConstructionCompliance",
+  tier: "module",
+  inputSchema: z.object({
+    projectId: uuidInput.optional().describe("Keep only this project's runs"),
+    limit: z.number().int().min(1).max(200).optional().describe("Maximum runs to return (default 50)"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const gated = await constructionFeatureRefused(authz.user.orgId);
+    if (gated) return gated;
+    const a = raw as { projectId?: string; limit?: number };
+    try {
+      const runs = await listRuns(db, authz.user.orgId, authz.user.id, a.projectId ?? null);
+      return {
+        ok: true,
+        data: {
+          runs: runs.slice(0, Math.min(a.limit ?? 50, 200)).map((run) => ({
+            id: run.id,
+            projectId: run.projectId,
+            weekEnding: run.weekEnding,
+            status: run.status,
+            formatKey: run.formatKey,
+            amendsRunId: run.amendsRunId,
+          })),
+          href: "/hrm/compliance?section=certified",
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+// HR-13 end
+
+// HR-12 begin: compensation and pay-equity read tools. Bands and
+// placement, cycle status, and plan status ride comp.read behind the
+// hrmCompensation switch; the equity tool reports the latest frozen
+// snapshot aggregates only (never per-person pay) behind
+// hrmPayTransparency. Both absent when their switch is off.
+const hrmCompensation: AssistantToolDef = {
+  name: "hrm_compensation",
+  description:
+    "Pay bands and placement, merit cycle status, and headcount plan status: band ranges by level, where one employment sits in range, and which rounds and plans are live. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.compensation.read"] },
+  feature: "hrmCompensation",
+  tier: "module",
+  inputSchema: z.object({
+    employmentId: uuidInput.optional().describe("One employment's band placement; omit for bands and rounds only"),
+    asOf: dateInput.optional().describe("Placement as of this date; defaults to today"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    if (!(await isFeatureEnabled(authz.user.orgId, "hrmCompensation"))) return { ok: false, error: HRM_FEATURE_OFF };
+    const a = raw as { employmentId?: string; asOf?: string };
+    try {
+      const { listPayBands } = await import("@openbooks/engine/src/hrm/compensation/bands.ts");
+      const { listCycles } = await import("@openbooks/engine/src/hrm/compensation/cycles.ts");
+      const { listPlans } = await import("@openbooks/engine/src/hrm/compensation/headcount-plans.ts");
+      const { orgToday: todayOf } = await import("./tools-shared");
+      const asOf = a.asOf ?? (await todayOf(authz.user.orgId));
+      const [bands, cycles, plans] = await Promise.all([
+        listPayBands({ orgId: authz.user.orgId, actorId: authz.user.id, asOf }),
+        isFeatureEnabled(authz.user.orgId, "hrmMeritCycles").then((on) =>
+          on ? listCycles({ orgId: authz.user.orgId, actorId: authz.user.id }) : [],
+        ),
+        isFeatureEnabled(authz.user.orgId, "hrmHeadcountPlans").then((on) =>
+          on ? listPlans({ orgId: authz.user.orgId, actorId: authz.user.id }) : [],
+        ),
+      ]);
+      let placement: { employmentId: string; placement: string; compaRatio: string | null } | null = null;
+      if (a.employmentId) {
+        try {
+          const { compaRatioFor } = await import("@openbooks/engine/src/hrm/compensation/bands.ts");
+          const placed = await compaRatioFor(authz.user.orgId, authz.user.id, a.employmentId, asOf);
+          placement = { employmentId: a.employmentId, placement: placed.band ? placed.placement : "no_band", compaRatio: placed.compaRatio };
+        } catch (error) {
+          return hrmRefusal(error);
+        }
+      }
+      return {
+        ok: true,
+        data: {
+          asOf,
+          bands: bands.map((b) => ({ levelId: b.levelId, currency: b.currency, basis: b.basis, min: b.min, target: b.target, max: b.max })),
+          cycles: cycles.map((c) => ({ id: c.id, name: c.name, status: c.status, effectiveOn: c.effectiveOn })),
+          plans: plans.map((p) => ({ id: p.id, name: p.name, status: p.status })),
+          placement,
+          href: "/hrm/compensation",
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+
+const hrmPayEquity: AssistantToolDef = {
+  name: "hrm_pay_equity",
+  description:
+    "Latest frozen pay-gap snapshot: org-level mean/median gaps and per-category gaps with joint-assessment flags. Aggregates only — never per-person pay. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.compensation.read"] },
+  feature: "hrmPayTransparency",
+  tier: "module",
+  inputSchema: z.object({}),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    void raw;
+    if (!(await isFeatureEnabled(authz.user.orgId, "hrmPayTransparency"))) return { ok: false, error: HRM_FEATURE_OFF };
+    try {
+      const { latestGapSnapshot } = await import("@openbooks/engine/src/hrm/compensation/pay-transparency.ts");
+      const snapshot = await latestGapSnapshot({ orgId: authz.user.orgId, actorId: authz.user.id });
+      if (!snapshot) return { ok: true, data: { snapshot: null, href: "/hrm/compensation/equity" } };
+      return {
+        ok: true,
+        data: {
+          snapshot: {
+            asOf: snapshot.asOf,
+            meanGapPct: snapshot.metrics.meanGapPct,
+            medianGapPct: snapshot.metrics.medianGapPct,
+            headcountA: snapshot.metrics.headcountA,
+            headcountB: snapshot.metrics.headcountB,
+            categories: snapshot.categories.map((c) => ({
+              levelCode: c.levelCode,
+              countA: c.countA,
+              countB: c.countB,
+              meanGapPct: c.meanGapPct,
+              medianGapPct: c.medianGapPct,
+              unexplainedGapPct: c.unexplainedGapPct,
+              jointAssessmentDue: c.jointAssessmentDue,
+            })),
+          },
+          href: "/hrm/compensation/equity",
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+// HR-12 end
+
+// HR-16 begin: automation run/error status (0226). Read-only: recipes and
+// the run log with errors, behind the automations switch and read grant.
+const automationsStatus: AssistantToolDef = {
+  name: "automations_status",
+  description:
+    "Automation recipes with status and the run log: recent runs and errors per recipe, newest first. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["automations.read"] },
+  feature: "automations",
+  tier: "module",
+  inputSchema: z.object({
+    status: z.enum(["queued", "running", "succeeded", "failed", "skipped_no_match", "simulated"]).optional().describe("Keep only runs in this status"),
+    limit: z.number().int().min(1).max(100).optional().describe("Maximum runs to return (default 25)"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    if (!(await isFeatureEnabled(authz.user.orgId, "automations"))) {
+      return { ok: false, error: "automations_feature_disabled" };
+    }
+    const a = raw as { status?: string; limit?: number };
+    const limit = Math.min(a.limit ?? 25, 100);
+    try {
+      const { listAutomations } = await import("@openbooks/engine/src/automations/services.ts");
+      const automations = await listAutomations(authz.user.orgId, authz.user.id);
+      const runs = (
+        await db.execute<{
+          id: string;
+          automationId: string;
+          status: string;
+          version: number;
+          subjectKind: string | null;
+          error: unknown;
+          createdAt: string;
+        }>(sql`
+          select r.id::text as id, r.automation_id::text as "automationId", r.status,
+                 r.version, r.subject_kind as "subjectKind", r.error,
+                 to_char(r.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "createdAt"
+            from automation_runs r
+           where r.org_id = ${authz.user.orgId}::uuid
+             and (${a.status ?? null}::text is null or r.status = ${a.status ?? null}::text)
+           order by r.created_at desc limit ${limit}
+        `)
+      ).rows;
+      return {
+        ok: true,
+        data: {
+          automations: automations.map((recipe) => ({
+            id: recipe.id,
+            name: recipe.name,
+            status: recipe.status,
+            version: recipe.version,
+            triggerKind: (recipe.trigger as { kind?: string } | null)?.kind ?? null,
+            lastRunAt: recipe.lastRunAt,
+            errorMessage: recipe.errorMessage,
+          })),
+          runs,
+          href: "/admin/automations",
+        },
+      };
+    } catch (error) {
+      // Automation service refusals (permission, missing recipe) surface
+      // with their message intact — hrmRefusal only maps HRM reads.
+      return { ok: false, error: error instanceof Error ? error.message : "automations_status_failed" };
+    }
+  },
+};
+// HR-16 end
+
+
+// HR-14 begin: certification register and dispatch-readiness reads
+// (0225). Both reuse the canonical qualification services behind the
+// certifications read grant — never a parallel query. License numbers
+// and free-text notes stay on the page and the report: the register
+// tool answers what is held and when it lapses, which is what dispatch
+// needs, without pulling identifiers through the conversation.
+const hrmQualifications: AssistantToolDef = {
+  name: "hrm_qualifications",
+  description:
+    "Held certifications and licenses: type and category, issuance and expiry, stored status with the live expiring/expired projection, and verification. License numbers stay on the page. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.certifications.read"] },
+  feature: "hrmCertifications",
+  tier: "module",
+  inputSchema: z.object({
+    employmentId: uuidInput.optional().describe("Keep only this employment's qualifications"),
+    typeId: uuidInput.optional().describe("Keep only this qualification type"),
+    status: z
+      .enum(["valid", "revoked", "pending_verification", "expiring", "expired"])
+      .optional()
+      .describe("Keep only this read status (expiring/expired are projected at read)"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    if (!(await isFeatureEnabled(authz.user.orgId, "hrmCertifications"))) return { ok: false, error: HRM_FEATURE_OFF };
+    const a = raw as { employmentId?: string; typeId?: string; status?: string };
+    try {
+      const { listQualifications } = await import("@openbooks/engine/src/hrm/qualifications/qualifications.ts");
+      const held = await listQualifications(db, {
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        employmentId: a.employmentId,
+        typeId: a.typeId,
+        status: a.status as "valid" | "revoked" | "pending_verification" | "expiring" | "expired" | undefined,
+      });
+      return {
+        ok: true,
+        data: {
+          qualifications: held.map((q) => ({
+            id: q.id,
+            employmentId: q.employmentId,
+            typeCode: q.type.code,
+            typeName: q.type.name,
+            category: q.type.category,
+            issuedOn: q.issuedOn,
+            expiresOn: q.expiresOn,
+            status: q.status,
+            verifiedAt: q.verifiedAt,
+          })),
+          href: "/hrm/qualifications",
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+
+const hrmDispatchCheck: AssistantToolDef = {
+  name: "hrm_dispatch_check",
+  description:
+    "Dispatch readiness for one worker on one subject: which required qualifications are met, which block, and which warn, as of a date. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.certifications.read"] },
+  feature: "hrmDispatchGating",
+  tier: "module",
+  inputSchema: z.object({
+    employmentId: uuidInput.optional().describe("Worker employment to check"),
+    subjectKind: z.enum(["project", "equipment", "position", "classification"]).optional().describe("What the worker would be assigned to"),
+    subjectId: uuidInput.optional().describe("Id of the project, equipment, position, or classification"),
+    on: dateInput.optional().describe("Check as of this date; defaults to today"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    if (!(await isFeatureEnabled(authz.user.orgId, "hrmDispatchGating"))) return { ok: false, error: HRM_FEATURE_OFF };
+    const a = raw as { employmentId?: string; subjectKind?: string; subjectId?: string; on?: string };
+    if (!a.employmentId) return { ok: false, error: "employment_required" };
+    if (!a.subjectKind || !a.subjectId) return { ok: false, error: "subject_required" };
+    try {
+      const { checkAssignment } = await import("@openbooks/engine/src/hrm/qualifications/gating.ts");
+      const verdict = await checkAssignment(db, {
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        employmentId: a.employmentId,
+        subjectKind: a.subjectKind as "project" | "equipment" | "position" | "classification",
+        subjectId: a.subjectId,
+        on: a.on,
+      });
+      const findings = verdict.ok ? verdict.warnings : [...verdict.blocking, ...verdict.warnings];
+      return {
+        ok: true,
+        data: {
+          allowed: verdict.ok,
+          findings: findings.map((f) => ({
+            typeCode: f.typeCode,
+            typeName: f.typeName,
+            severity: f.severity,
+            reason: f.reason,
+            detail: f.detail,
+          })),
+          href: "/hrm/qualifications",
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+// HR-14 end
+
+// HR-17 begin: continuous-performance read tools. 1:1s and feedback read
+// through the structural scope (own and reports) with the HR grant as
+// the widening leg; calibration reads through the manage grant. Each
+// sits behind its own sub-switch — off means the tool is absent, never
+// an empty answer.
+async function continuousFeatureRefused(orgId: string, key: string): Promise<ToolResult | null> {
+  if (!(await isFeatureEnabled(orgId, "hrm"))) return { ok: false, error: HRM_FEATURE_OFF };
+  if (!(await isFeatureEnabled(orgId, "hrmPerformance"))) return { ok: false, error: HRM_FEATURE_OFF };
+  if (!(await isFeatureEnabled(orgId, key))) return { ok: false, error: HRM_FEATURE_OFF };
+  return null;
+}
+
+const oneOnOneStatuses = ["scheduled", "held", "skipped", "cancelled"] as const;
+
+const hrmOneOnOnes: AssistantToolDef = {
+  name: "hrm_one_on_ones",
+  description:
+    "1:1 meetings for the caller and their reports: schedule, agenda, and status. Private items stay author-only. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.performance.read", "hrm.self.read"] },
+  feature: "hrmOneOnOnes",
+  tier: "module",
+  inputSchema: z.object({
+    employmentId: uuidInput.optional().describe("Keep only meetings touching this employment"),
+    status: z.enum(oneOnOneStatuses).optional().describe("Keep only this meeting status"),
+    limit: z.number().int().min(1).max(200).optional().describe("Maximum meetings to return (default 50)"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const gated = await continuousFeatureRefused(authz.user.orgId, "hrmOneOnOnes");
+    if (gated) return gated;
+    const a = raw as { employmentId?: string; status?: (typeof oneOnOneStatuses)[number]; limit?: number };
+    const limit = Math.min(a.limit ?? 50, 200);
+    try {
+      const { listOneOnOnes } = await import(
+        "@openbooks/engine/src/hrm/performance/one-on-ones.ts"
+      );
+      const ones = await listOneOnOnes({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        ...(a.employmentId ? { employmentId: a.employmentId } : {}),
+        ...(a.status ? { status: a.status } : {}),
+      });
+      return {
+        ok: true,
+        data: {
+          oneOnOnes: ones.slice(0, limit).map((one) => ({
+            id: one.id,
+            managerName: one.managerName,
+            reportName: one.reportName,
+            scheduledAt: one.scheduledAt,
+            status: one.status,
+            openItems: one.items.filter((item) => item.status === "open").length,
+            href: "/me/one-on-ones",
+          })),
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+
+const feedbackKinds = ["praise", "feedback", "request"] as const;
+
+const hrmFeedback: AssistantToolDef = {
+  name: "hrm_feedback",
+  description:
+    "Feedback in the caller's scope: praise, feedback, and requests filtered by the visibility matrix. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.performance.read", "hrm.self.read"] },
+  feature: "hrmFeedback",
+  tier: "module",
+  inputSchema: z.object({
+    subjectEmploymentId: uuidInput.optional().describe("Keep only feedback about this employment"),
+    kind: z.enum(feedbackKinds).optional().describe("Keep only this feedback kind"),
+    limit: z.number().int().min(1).max(200).optional().describe("Maximum rows to return (default 50)"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const gated = await continuousFeatureRefused(authz.user.orgId, "hrmFeedback");
+    if (gated) return gated;
+    const a = raw as { subjectEmploymentId?: string; kind?: (typeof feedbackKinds)[number]; limit?: number };
+    const limit = Math.min(a.limit ?? 50, 200);
+    try {
+      const { listFeedback } = await import("@openbooks/engine/src/hrm/performance/feedback.ts");
+      const rows = await listFeedback({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        ...(a.subjectEmploymentId ? { subjectEmploymentId: a.subjectEmploymentId } : {}),
+      });
+      return {
+        ok: true,
+        data: {
+          feedback: rows
+            .filter((row) => !a.kind || row.kind === a.kind)
+            .slice(0, limit)
+            .map((row) => ({
+              id: row.id,
+              subjectName: row.subjectName,
+              kind: row.kind,
+              visibility: row.visibility,
+              body: row.body,
+              recordedAt: row.recordedAt,
+              href: "/me/one-on-ones",
+            })),
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+
+const hrmCalibration: AssistantToolDef = {
+  name: "hrm_calibration",
+  description:
+    "Calibration sessions over review cycles: entries with proposed beside calibrated ratings, and the missing list. HR-only. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.performance.manage"] },
+  feature: "hrmCalibration",
+  tier: "module",
+  inputSchema: z.object({
+    sessionId: uuidInput.optional().describe("One session in full; omit for the session list"),
+    cycleId: uuidInput.optional().describe("Keep only sessions over this cycle"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const gated = await continuousFeatureRefused(authz.user.orgId, "hrmCalibration");
+    if (gated) return gated;
+    const a = raw as { sessionId?: string; cycleId?: string };
+    try {
+      const { getCalibrationSession, listCalibrationSessions } = await import(
+        "@openbooks/engine/src/hrm/performance/calibration.ts"
+      );
+      if (a.sessionId) {
+        const session = await getCalibrationSession({
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          id: a.sessionId,
+        });
+        return {
+          ok: true,
+          data: {
+            id: session.id,
+            name: session.name,
+            status: session.status,
+            entries: session.entries.map((entry) => ({
+              subjectName: entry.subjectName,
+              proposedRating: entry.proposedRating,
+              calibratedRating: entry.calibratedRating,
+              potentialKey: entry.potentialKey,
+            })),
+            missing: session.missing.map((missing) => ({ status: missing.status, reason: missing.reason })),
+            href: "/hrm/performance?tab=calibration",
+          },
+        };
+      }
+      const sessions = await listCalibrationSessions({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        ...(a.cycleId ? { cycleId: a.cycleId } : {}),
+      });
+      return {
+        ok: true,
+        data: {
+          sessions: sessions.map((session) => ({
+            id: session.id,
+            name: session.name,
+            status: session.status,
+            href: "/hrm/performance?tab=calibration",
+          })),
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+// HR-17 end
+
+// HR-15: the core own-scope inbox tool rides after every slice tool.
+export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting, hrmPerformanceCycles, hrmTurnover, hrmBenefits, hrmMe, automationsStatus, hrmComplianceFindings, hrmCertifiedPayroll, hrmCompensation, hrmPayEquity, hrmQualifications, hrmDispatchCheck, hrmOneOnOnes, hrmFeedback, hrmCalibration, inboxItems];
+
+
+// HR-12 end

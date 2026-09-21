@@ -10,7 +10,16 @@ import { overheadCosting } from './articles/overhead-costing'
 import { laborCosting } from './articles/labor-costing'
 import { laborPricing } from './articles/labor-pricing'
 import { hrmProcesses } from './articles/hrm-processes'
+// HR-15: inbox and persona homes article.
+import { inboxAndHome } from './articles/inbox-and-home'
+// HR-16 begin
+import { automations } from './articles/automations'
+import { correctingAndRescinding } from './articles/correcting-and-rescinding'
+// HR-16 end
 import { performanceAndRetention } from './articles/performance-and-retention'
+// HR-17 begin: continuous-performance article.
+import { continuousPerformance } from './articles/continuous-performance'
+// HR-17 end
 import { selfService } from './articles/self-service'
 import { payroll } from './articles/payroll'
 import { employmentMigration } from './articles/employment-migration'
@@ -18,6 +27,13 @@ import { positionsAndHeadcount } from './articles/positions-and-headcount'
 import { leaveTimeVersusValue } from './articles/leave-time-versus-value'
 import { recruitingFunnel } from './articles/recruiting-funnel'
 import { benefitsEnrollment } from './articles/benefits-enrollment'
+// HR-13 begin: construction-compliance article.
+import { certifiedPayrollPrevailingWagePerDiem } from './articles/certified-payroll-prevailing-wage-per-diem'
+// HR-13 end
+import { compensationAndTransparency } from './articles/compensation-transparency'
+// HR-14 begin: certifications, licenses, and dispatch gating article.
+import { certificationsLicensesDispatch } from './articles/certifications-licenses-dispatch'
+// HR-14 end
 import { taxConfiguration } from './articles/tax-configuration'
 import { taxJurisdictionsAndNexus, taxReturnsAndBoxes } from './articles/taxes'
 import { fieldTickets } from './articles/field-tickets'
@@ -249,7 +265,17 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   propertyManagement,
   bankingAndReconciliation,
   periodClose,
-  projectTypes, overheadCosting, laborCosting, laborPricing, payroll, employmentMigration, positionsAndHeadcount, hrmProcesses, performanceAndRetention, selfService, leaveTimeVersusValue, recruitingFunnel, benefitsEnrollment, fieldTickets, subcontractorCompliance,
+  projectTypes, overheadCosting, laborCosting, laborPricing, payroll, employmentMigration, positionsAndHeadcount, hrmProcesses, inboxAndHome, automations, correctingAndRescinding, performanceAndRetention, continuousPerformance, selfService, leaveTimeVersusValue, recruitingFunnel, benefitsEnrollment, fieldTickets, subcontractorCompliance, compensationAndTransparency,
+  // HR-13 begin
+  certifiedPayrollPrevailingWagePerDiem,
+  // HR-13 end
+  // HR-14 begin
+  certificationsLicensesDispatch,
+  // HR-14 end
+  // HR-14 begin: pre-existing red on the stacked base — the 31defe406
+  // reconciliation left fieldTickets/subcontractorCompliance listed twice
+  // (once on the long line above, once here). The duplicate line is removed.
+  // HR-14 end
   itemRates,
   financialReports,
   analyticsAndSavedViews,

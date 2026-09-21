@@ -1,0 +1,39 @@
+{
+  "title": "Accueil",
+  "greeting": "Ravi de vous voir, {name}",
+  "sections": {
+    "myTasks": "Mes tâches",
+    "openInbox": "Ouvrir la boîte",
+    "pay": "Paie",
+    "timeOff": "Congés",
+    "requestTimeOff": "Demander un congé",
+    "whosOut": "Absents cette semaine",
+    "upcoming": "À venir",
+    "celebrations": "Célébrations",
+    "announcements": "Annonces",
+    "ask": "Poser une question",
+    "askPlaceholder": "Une question sur la paie, les congés, les règles…",
+    "teamApprovals": "Approbations qui m'attendent",
+    "teamOut": "Équipe absente",
+    "teamSteps": "Étapes d'équipe en retard",
+    "teamQualifications": "Qualifications expirantes",
+    "oneOnOnes": "Rappels de 1:1",
+    "headcount": "Mon équipe",
+    "attention": "À traiter",
+    "workflows": "Erreurs de flux",
+    "compliance": "Calendrier de conformité"
+  },
+  "empty": {
+    "tasks": "Rien ne vous attend.",
+    "out": "Personne absent cette semaine.",
+    "upcoming": "Rien à venir.",
+    "celebrations": "Aucune célébration cette semaine.",
+    "announcements": "Aucune annonce.",
+    "attention": "Tout est à jour."
+  },
+  "pay": {
+    "nextPay": "Prochaine paie",
+    "lastSlip": "Dernier bulletin",
+    "viewSlip": "Voir le bulletin"
+  }
+}

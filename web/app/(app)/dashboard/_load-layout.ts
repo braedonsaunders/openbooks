@@ -2,7 +2,6 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
-  DEFAULT_DASHBOARD_LAYOUTS,
   type DashboardLayoutData,
 } from '@openbooks/schema'
 import type { Authz } from '@/lib/authz'
@@ -12,11 +11,13 @@ import {
   hiddenCuratedQuickActionIds,
 } from './_quick-actions-shared'
 import {
-  dashboardSourceKeyForTier,
   dashboardSourceKeyForRole,
   getUserRoleTier,
   type RoleTier,
 } from './_role-tier'
+import { resolvePersona } from './_persona'
+import { personaDefaultLayout } from './_persona-layout'
+import { qualificationSourceAvailable } from '@openbooks/engine/src/inbox/adapters/hrm-qualification-alert.ts'
 import { DashboardLayoutInputSchema, clampToWidgetMinimums } from './_layout-input'
 
 type DashboardDefault = {
@@ -48,15 +49,25 @@ async function loadAssignedRoleDefault(
   }
 }
 
-export async function resolveDashboardDefault(
-  authz: Authz,
-  role: RoleTier,
-): Promise<DashboardDefault> {
+export async function resolveDashboardDefault(authz: Authz): Promise<DashboardDefault> {
   const roleDefault = await loadAssignedRoleDefault(authz)
   if (roleDefault) return roleDefault
+  // HR-15 persona defaults: employee always, manager by reports or
+  // approval grant, admin by manage grants — what the actor holds, never
+  // their role name. Gated tiles join only when their source is live.
+  const orgId = authz.user.orgId
+  const [persona, payroll, hrm, celebrations, nudges, announcements, quals] = await Promise.all([
+    resolvePersona(authz),
+    isFeatureEnabled(orgId, 'payroll'),
+    isFeatureEnabled(orgId, 'hrm'),
+    isFeatureEnabled(orgId, 'hrmCelebrations'),
+    isFeatureEnabled(orgId, 'hrmManagerNudges'),
+    isFeatureEnabled(orgId, 'homeAnnouncements'),
+    qualificationSourceAvailable(),
+  ])
   return {
-    layout: DEFAULT_DASHBOARD_LAYOUTS[role] ?? DEFAULT_DASHBOARD_LAYOUTS.viewer,
-    sourceKey: dashboardSourceKeyForTier(role),
+    layout: personaDefaultLayout(persona, { payroll, hrm, celebrations, nudges, announcements, quals }),
+    sourceKey: `persona:${persona}`,
   }
 }
 
@@ -84,7 +95,7 @@ export async function loadDashboardLayout(
 }> {
   const role = getUserRoleTier(authz)
   const [fallback, hiddenQuickActionIds] = await Promise.all([
-    resolveDashboardDefault(authz, role),
+    resolveDashboardDefault(authz),
     hiddenQuickActionIdsForOrg(authz.user.orgId),
   ])
 
@@ -96,7 +107,10 @@ export async function loadDashboardLayout(
   `)
 
   const row = res.rows[0]
-  if (!row || row.source_role !== fallback.sourceKey) {
+  // A customized layout is the tenant's own: it survives default changes
+  // (HR-15 persona defaults included). Only an uncustomized row whose
+  // source no longer matches falls forward to the fresh default.
+  if (!row || (row.source_role !== fallback.sourceKey && !row.is_customised)) {
     return { layout: fallback.layout, role, isCustomised: false, hiddenQuickActionIds }
   }
   // Fail-safe read: a stored layout the registry cannot honor — malformed, or

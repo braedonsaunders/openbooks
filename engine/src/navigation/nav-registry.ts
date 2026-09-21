@@ -17,6 +17,9 @@ export interface NavModule {
   requiredPermission?: string
   /** Optional-feature gate — hidden while the org has the feature off. */
   featureKey?: string
+  /** HR-15: when set, the shell renders a live count badge on this entry,
+   *  polled from this route (which must self-scope to the actor). */
+  badgeCountHref?: string
   /** How a native list opens one of its records. Transaction links derive
    *  their path from this module-owned contract instead of copying routes. */
   recordTarget?: NavRecordTarget
@@ -82,25 +85,24 @@ export const NAV_MODULES: NavModule[] = [
     group: 'my-work',
     requiredPermission: 'assistant.use',
   },
+  // HR-15 begin: Inbox is core — every leader lands here. Unpermissioned
+  // by design (like notifications): every query self-scopes to the actor.
+  // The module key stays `approvals` (identifiers are stable); only the
+  // place label (catalog) and target changed. The /inbox route stays
+  // as a permanent redirect for deep links.
   {
     key: 'approvals',
-    href: '/approvals',
-    label: 'Approvals',
-    iconKey: 'check',
+    href: '/inbox',
+    label: 'Inbox',
+    iconKey: 'inbox',
     group: 'my-work',
-    requiredPermission: 'ap.approve',
+    badgeCountHref: '/api/inbox?count=1',
   },
-  {
-    // Deliberately ungated: the inbox shows only the signed-in user's own
-    // notifications, and every query self-scopes to (org_id, user_id). If a
-    // permission is ever added here, this comment must go with it —
-    // Notifications.scope.test.ts pins both the scoping and this shape.
-    key: 'notifications',
-    href: '/notifications',
-    label: 'Notifications',
-    iconKey: 'bell',
-    group: 'my-work',
-  },
+  // HR-15 end
+  // HR-15 rebrand: the notifications NAV ENTRY is removed — My Work shows
+  // one Inbox entry and notices surface as its Notices filter. The
+  // /notifications ROUTE, page, and API stay (deep links, hrefs, the scope
+  // test's query pins), reachable directly but no longer a nav module.
   {
     key: 'documents',
     href: '/documents',
@@ -631,6 +633,20 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'hrm.employment.read',
     featureKey: 'hrm',
   },
+  // HR-13 begin: construction compliance — the Compliance tab under HRM.
+  // Gated on the construction switch with its own read grant; hidden
+  // with the parent when a general-business org never enables it.
+  {
+    key: 'hrm-compliance',
+    href: '/hrm/compliance',
+    label: 'Compliance',
+    iconKey: 'shield-check',
+    group: 'operations',
+    subgroup: 'people',
+    requiredPermission: 'hrm.construction.read',
+    featureKey: 'hrmConstructionCompliance',
+  },
+  // HR-13 end
   // Me — the person's own workspace (HR-9 self-service), not an HR tab:
   // employment summary, profile, leave, checklists, and the manager's
   // team. Visible with the hrm feature plus hrm.self.read, which every
@@ -786,6 +802,18 @@ export const NAV_MODULES: NavModule[] = [
     subgroup: 'automate',
     requiredPermission: 'flows.manage',
   },
+  // HR-16 begin: the automation recipe builder beside Flows (platform nav
+  // under Flows; the automations feature gates it, exception-only approval
+  // is a per-flow setting).
+  {
+    key: 'automations',
+    href: '/admin/automations',
+    label: 'Automations',
+    iconKey: 'workflow',
+    group: 'settings',
+    subgroup: 'automate',
+    requiredPermission: 'automations.read',
+  },
   {
     key: 'admin-extensions',
     href: '/admin/apps',
@@ -842,6 +870,9 @@ export const ADMIN_HUB_PERMISSIONS = [
   'admin.customization.manage',
   'scripts.manage',
   'flows.manage',
+  // HR-16 begin
+  'automations.read',
+  // HR-16 end
   'apps.manage',
   'api.keys.manage',
   'sql.execute',
@@ -888,7 +919,9 @@ export function resolveStoredHref(stored: unknown): string | null {
 /** Canonical scan order inside each workspace. Kept separate from the module
  * declarations so the information architecture is reviewable in one place. */
 export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
-  'my-work': ['dashboard', 'approvals', 'notifications', 'assistant', 'documents', 'apps'],
+  // HR-15: one My Work entry (Inbox); /notifications stays a route and a
+  // Notices filter inside the inbox, but no longer a nav entry.
+  'my-work': ['dashboard', 'approvals', 'assistant', 'documents', 'apps'],
   customers: [
     'customers',
     'crm-activities',
@@ -950,6 +983,9 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'admin-page-layouts',
     'admin-pdf-templates',
     'flows',
+    // HR-16 begin
+    'automations',
+    // HR-16 end
     'admin-scripts',
     'admin-extensions',
     'sql',

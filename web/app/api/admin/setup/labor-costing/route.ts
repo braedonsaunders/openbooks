@@ -18,6 +18,10 @@ import {
   postPayrollVariance,
   type LaborCostComponent,
 } from '@openbooks/engine/src/projects/labor-costing.ts'
+import {
+  laborCostRateScopeLock,
+  supersedeLaborCostRate,
+} from '@openbooks/engine/src/projects/labor-cost-rates.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
 import { isCalendarDate } from '../../../../../lib/setup/coerce'
@@ -167,20 +171,12 @@ const RATE_ROW_COLUMNS = sql`id, rate::text as rate, currency, basis,
 type RateMutation = { ok: true } | { ok: false; response: NextResponse }
 
 /**
- * Same-scope advisory lock, taken BEFORE any read/close in the wage timeline.
- * Keyed on the hash of (org, scope tuple) — exactly the scope the close and
- * exclusion constraint arbitrate — so concurrent starts in one scope form one
- * ordered timeline. A hash collision merely serializes two unrelated scopes;
- * it can never under-serialize.
+ * Same-scope advisory lock via the canonical writer (engine
+ * service): end-rate and delete-rate serialize on the row's own scope
+ * exactly like save-rate does through the shared writer.
  */
 function scopeLock(orgId: string, scope: WageScope): SQL {
-  return sql`select pg_advisory_xact_lock(hashtextextended(
-      ${orgId} || ':labor_cost_rates:' ||
-      coalesce(${scope.employeePartyId}::text, '~') || '|' ||
-      coalesce(lower(${scope.jobTitle}::text), '~') || '|' ||
-      coalesce(${scope.tradeId}::text, '~') || '|' ||
-      coalesce(${scope.departmentId}::text, '~') || '|' ||
-      coalesce(${scope.subsidiaryId}::text, '~'), 0))`
+  return laborCostRateScopeLock(orgId, scope)
 }
 
 /** Client-supplied change reason, or a deterministic default so every audit
@@ -497,91 +493,22 @@ export async function POST(req: Request) {
         if (!(await lockAndCheckOrgFeature(db, orgId, 'projects'))) {
           return { ok: false, response: projectsDisabledResponse() }
         }
-        // Deterministic same-scope serialization BEFORE any read: a concurrent
-        // start blocks here until this scope's writer commits, so two starts
-        // can neither race the close nor double-book the timeline.
-        await db.execute(scopeLock(orgId, scope))
-
-        // Exact before-state: every active row this save will close or correct.
-        const before = await db.execute<RateRow>(sql`
-          select ${RATE_ROW_COLUMNS}
-            from labor_cost_rates
-           where org_id = ${orgId}
-             and employee_party_id is not distinct from ${employeePartyId}
-             and lower(job_title) is not distinct from lower(${jobTitle})
-             and trade_id is not distinct from ${tradeId}
-             and department_id is not distinct from ${departmentId}
-             and subsidiary_id is not distinct from ${subsidiaryId}
-             and is_active
-             and (effective_from = ${effectiveFrom}::date
-                  or (effective_from < ${effectiveFrom}::date
-                      and (effective_to is null or effective_to >= ${effectiveFrom}::date)))
-           order by effective_from`)
-
-        // Close the previous open row in this scope the day before the new
-        // start, then upsert (same scope + same start = correction in place).
-        await db.execute(sql`
-          update labor_cost_rates set effective_to = (${effectiveFrom}::date - 1), updated_at = now(), updated_by = ${userId}
-           where org_id = ${orgId}
-             and employee_party_id is not distinct from ${employeePartyId}
-             and lower(job_title) is not distinct from lower(${jobTitle})
-             and trade_id is not distinct from ${tradeId}
-             and department_id is not distinct from ${departmentId}
-             and subsidiary_id is not distinct from ${subsidiaryId}
-             and effective_from < ${effectiveFrom}::date
-             and (effective_to is null or effective_to >= ${effectiveFrom}::date)`)
-        // A mid-timeline start (a backdate) must end the day before its
-        // successor: without the cap the new row overlaps the next start and
-        // the overlap exclusion refuses the save. Forward starts have no
-        // successor, so the cap stays open — exactly the old behavior.
-        const successor = await db.execute<{ start: string }>(sql`
-          select min(effective_from)::text as start
-            from labor_cost_rates
-           where org_id = ${orgId}
-             and employee_party_id is not distinct from ${employeePartyId}
-             and lower(job_title) is not distinct from lower(${jobTitle})
-             and trade_id is not distinct from ${tradeId}
-             and department_id is not distinct from ${departmentId}
-             and subsidiary_id is not distinct from ${subsidiaryId}
-             and is_active
-             and effective_from > ${effectiveFrom}::date`)
-        const successorFrom = successor.rows[0]?.start ?? null
-        const upserted = await db.execute<RateRow>(sql`
-          insert into labor_cost_rates
-            (org_id, employee_party_id, job_title, trade_id, department_id, subsidiary_id, currency,
-             rate, basis, annual_hours, effective_from, effective_to, notes, created_by, updated_by)
-          values (${orgId}, ${employeePartyId}, ${jobTitle}, ${tradeId}, ${departmentId}, ${subsidiaryId}, ${currency},
-                  ${rate}, ${basis}, ${annualHours}, ${effectiveFrom},
-                  (case when ${successorFrom}::date is null then null else (${successorFrom}::date - 1) end),
-                  ${body.notes ? String(body.notes).slice(0, 500) : null}, ${userId}, ${userId})
-          on conflict (org_id,
-                       coalesce(employee_party_id, '00000000-0000-0000-0000-000000000000'::uuid),
-                       coalesce(lower(job_title), ''),
-                       coalesce(trade_id, '00000000-0000-0000-0000-000000000000'::uuid),
-                       coalesce(department_id, '00000000-0000-0000-0000-000000000000'::uuid),
-                       coalesce(subsidiary_id, '00000000-0000-0000-0000-000000000000'::uuid),
-                       effective_from)
-          -- A same-start correction replaces terms in place and keeps the
-          -- row's window: resetting effective_to here would reopen the row
-          -- past its successor and trip the overlap exclusion. Window edits
-          -- go through end-rate.
-          do update set rate = excluded.rate, currency = excluded.currency, basis = excluded.basis, annual_hours = excluded.annual_hours,
-                        notes = excluded.notes, is_active = true,
-                        updated_at = now(), updated_by = ${userId}
-                    where labor_cost_rates.org_id = ${orgId}
-          returning ${RATE_ROW_COLUMNS}`)
-        const after = upserted.rows[0]!
-
-        // Attributable evidence commits with the data it describes: the
-        // authenticated actor, the change reason, the audit row's own `at`
-        // timestamp, and the exact before/after row state — one transaction,
-        // so a failure anywhere leaves neither a gap nor an orphan audit.
-        await db.execute(sql`
-          insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-          values (${orgId}, 'labor_cost_rates', ${after.id},
-                  ${before.rows.some((row) => row.effectiveFrom === effectiveFrom) ? 'update' : 'insert'},
-                  ${JSON.stringify({ reason, scope, effectiveFrom, before: before.rows, after })},
-                  ${userId})`)
+        // The canonical writer (engine/src/projects/labor-cost-rates.ts):
+        // same-scope lock, close, upsert-or-correct, and audit evidence in
+        // one unit — the compensation push calls the same service, so the
+        // wage timeline has exactly one writer.
+        await supersedeLaborCostRate({
+          orgId,
+          actorId: userId,
+          scope,
+          effectiveFrom,
+          rate,
+          currency,
+          basis,
+          annualHours,
+          notes: body.notes ? String(body.notes).slice(0, 500) : null,
+          reason,
+        })
         return { ok: true }
       })
       if (!outcome.ok) return outcome.response
