@@ -1334,6 +1334,21 @@ async function transferTestOwnershipToRuntimeRole(
       where n.nspname in ('public', 'openbooks_query')
         and c.relkind in ('r', 'p', 'v', 'm', 'S', 'f')
         and pg_get_userbyid(c.relowner) <> $1
+        -- A serial/identity sequence is LINKED to its column: PostgreSQL
+        -- refuses ALTER SEQUENCE ... OWNER TO on it (SQLSTATE 0A000) unless
+        -- the owning table has already changed hands, and this list has no
+        -- guaranteed order. Skip them: altering the table carries its
+        -- sequences with it, so they still end up on the runtime role.
+        and not (
+          c.relkind = 'S'
+          and exists (
+            select 1 from pg_depend d
+             where d.classid = 'pg_class'::regclass
+               and d.objid = c.oid
+               and d.refclassid = 'pg_class'::regclass
+               and d.deptype in ('a', 'i')
+          )
+        )
       union all
      select 'alter function ' || p.oid::regprocedure::text
               || ' owner to ' || quote_ident($1) as stmt
