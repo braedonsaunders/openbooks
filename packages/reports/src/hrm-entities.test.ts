@@ -98,6 +98,9 @@ test('workforce entities refuse without their gate and their own read permission
     hrm_rate_schedule_lines: 'hrmConstructionCompliance', hrm_per_diem_entries: 'hrmConstructionCompliance',
     hrm_comp_class_split: 'hrmConstructionCompliance', hrm_certified_runs: 'hrmConstructionCompliance',
     hrm_compliance_findings: 'hrmConstructionCompliance',
+    // HR-12: compensation entities ride the compensation switch.
+    hrm_pay_bands: 'hrmCompensation', hrm_comp_cycle_lines: 'hrmCompensation',
+    hrm_headcount_plan_lines: 'hrmCompensation', hrm_pay_gap_snapshots: 'hrmCompensation',
   }
   for (const key of HRM_KEYS) {
     const entity = REPORT_ENTITY_MAP[key]!
