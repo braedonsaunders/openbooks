@@ -267,10 +267,29 @@ test('the restore drill provisions the owned ephemeral fixture marker', () => {
 })
 
 
+// Every workflow is DISCOVERED, not listed: a named list only guards the files
+// that existed when it was written, and the workflow most tempting to put on a
+// cron is the newest one. A long browser walk on a schedule is worse than a
+// merge gate rather than better — it spends minutes with no commit to justify
+// them, and nobody reads a green nightly.
+//
+// `mutation.yml` is the one sanctioned exception: nightly, `continue-on-error`,
+// and it gates nothing (its ratchet is an in-repo test, not this workflow). This
+// list may only SHRINK. Adding to it means arguing that some other job should
+// burn CI on unchanged source.
+const SCHEDULED_WORKFLOWS_ALLOWED = new Set(['mutation.yml'])
+
 test('CI has no scheduled runs on unchanged source', () => {
-  for (const name of ['test.yml', 'trust.yml', 'security.yml']) {
+  const workflows = readdirSync(new URL('../.github/workflows', import.meta.url))
+    .filter((file) => file.endsWith('.yml') || file.endsWith('.yaml'))
+  assert.ok(workflows.length > 0, 'no workflow files found — the glob is broken, not the repository')
+  for (const name of SCHEDULED_WORKFLOWS_ALLOWED) {
+    assert.ok(workflows.includes(name), `${name} is allow-listed for a schedule but no longer exists`)
+  }
+  for (const name of workflows) {
+    if (SCHEDULED_WORKFLOWS_ALLOWED.has(name)) continue
     const source = readFileSync(new URL(`../.github/workflows/${name}`, import.meta.url), 'utf8')
-    assert.doesNotMatch(source, /^  schedule:|^\s+- cron:/m)
+    assert.doesNotMatch(source, /^  schedule:|^\s+- cron:/m, `${name} must not run on a schedule`)
   }
 })
 

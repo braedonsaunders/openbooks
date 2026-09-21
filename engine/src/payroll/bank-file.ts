@@ -1,8 +1,11 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { cmp, formatMoney, sum, toUnits } from "../money/money.ts";
-import { buildCemtexFile, buildCpa005File, buildNachaFile, buildSepaFile, type CemtexPayment, type Cpa005Payment, type NachaEntry } from "../payments/rail-formatters.ts";
-import { decryptAccountNumber, isValidBic, isValidIban, normalizeBsb, normalizeCemtexAccount, validateCemtexSettings, validateSepaSettings, type CemtexSettings, type EftSettings, type NachaSettings, type SepaSettings } from "../payments/rail-settings.ts";
+import { buildCpa005File, type Cpa005Payment } from "../payments/rail-cpa005.ts";
+import { buildNachaFile, type NachaEntry, type NachaSettings } from "../payments/rail-nacha.ts";
+import { buildSepaFile, validateSepaSettings, type SepaSettings } from "../payments/rail-sepa.ts";
+import { buildCemtexFile, normalizeBsb, normalizeCemtexAccount, validateCemtexSettings, type CemtexPayment, type CemtexSettings } from "../payments/rail-cemtex.ts";
+import { decryptAccountNumber, isValidBic, isValidIban, type EftSettings } from "../payments/rail-settings.ts";
 import { buildBacsFile, normalizeGbAccountNumber, normalizeSortCode, validateBacsSettings, type BacsPayment, type BacsSettings } from "../payments/rail-bacs.ts";
 import { buildZenginFile, encodeZenginFile, normalizeBankCode, normalizeBranchCode, normalizeZenginAccount, toZenginKana, validateZenginSettings, type ZenginPayment, type ZenginSettings } from "../payments/rail-zengin.ts";
 import { buildCnab240BbFile, inscricaoTipoFor, isValidBancoCode, isValidContaDv, normalizeAgencia, normalizeContaNumero, normalizeCpfCnpj, validateCnab240BbSettings, type Cnab240BbPayment, type Cnab240BbSettings } from "../payments/rail-cnab240-bb.ts";
@@ -56,7 +59,7 @@ export interface PayRunBankFileFormatSpec {
 }
 
 /**
- * The three rails this product can originate payroll on, and the published
+ * The seven rails this product can originate payroll on, and the published
  * standards their layouts were verified against.
  *
  * ── CPA-005 (Canada) — ON ─────────────────────────────────────────────────
@@ -85,7 +88,7 @@ export interface PayRunBankFileFormatSpec {
  *   and "F" (69–112), filler to 1464.
  * - Appendix 1 (Data Element Dictionary) pp.6–7, ITEM TRACE NUMBER, and
  *   pp.3–4, DESTINATION DATA CENTRE / FILE CREATION NUMBER / LOGICAL RECORD
- *   COUNT — see below and `itemTraceNumber` in engine/src/payments/rail-formatters.ts.
+ *   COUNT — see below and `itemTraceNumber` in engine/src/payments/rail-cpa005.ts.
  * - Transaction codes against *Standard 007* (2026 ed., Appendix I — codes
  *   moved out of Standard 005 in 2016): 200 = Payroll Deposit, 460 = Accounts
  *   Payable.
@@ -100,7 +103,7 @@ export interface PayRunBankFileFormatSpec {
  * (b) the originating direct clearer's 5-digit allocated data centre, (c) the
  * 4-digit file creation number as per the A record, and (d) a 9-digit item
  * sequence number, where (b), (c) and (d) must each be greater than zero or
- * the transaction is REJECTED. `buildCpa005File` (engine/src/payments/rail-formatters.ts)
+ * the transaction is REJECTED. `buildCpa005File` (engine/src/payments/rail-cpa005.ts)
  * now composes exactly that via `itemTraceNumber`, shared with the AP payment
  * files. Both data centres are institution-assigned tenant configuration on
  * the payment bank profile (`dataCentre`, `originatingDataCentre`; validated
@@ -123,7 +126,7 @@ export interface PayRunBankFileFormatSpec {
  *
  * ── SEPA (Eurozone) — ON ──────────────────────────────────────────────────
  * pain.001.001.03 Customer Credit Transfer Initiation (EUR), rendered by the
- * shared AP builder (`buildSepaFile`, engine/src/payments/rail-formatters.ts)
+ * shared AP builder (`buildSepaFile`, engine/src/payments/rail-sepa.ts)
  * with the shared ISO 13616 mod-97 IBAN gate — payroll maps its EFT
  * population onto the builder's generic payment rows and adds nothing of its
  * own. The originator triple (debtor name, debtor IBAN, debtor BIC) is tenant
@@ -138,7 +141,7 @@ export interface PayRunBankFileFormatSpec {
  * The Australian direct-credit file (120-character records: descriptive type
  * 0, detail type 1, file-total type 7; BSBs as NNN-NNN; amounts in implied
  * cents; transaction code 53 = Pay), rendered by the shared AP builder
- * (`buildCemtexFile`, engine/src/payments/rail-formatters.ts) — payroll maps
+ * (`buildCemtexFile`, engine/src/payments/rail-cemtex.ts) — payroll maps
  * its EFT population onto the builder's generic payment rows and adds
  * nothing of its own, so AP can originate the same rail later with no fork.
  * The name is `cemtex`, never `aba`: ABA already means the US 9-digit
@@ -156,10 +159,12 @@ export interface PayRunBankFileFormatSpec {
  * digit account number is a named refusal, never a silent drop and never a
  * coerced account (a coerced BSB pays a stranger).
  *
- * All writers are the audited AP ones — CPA/NACHA/SEPA/Cemtex in
- * engine/src/payments/rail-formatters.ts, Bacs in rail-bacs.ts, Zengin in
- * rail-zengin.ts, CNAB 240 in rail-cnab240-bb.ts
- * (`buildCpa005File`, `buildNachaFile`, `buildSepaFile`, `buildCemtexFile`, `buildBacsFile`, `buildZenginFile`) — payroll deliberately does not fork a
+ * All seven writers are the audited AP ones in engine/src/payments/rail-cpa005.ts,
+ * engine/src/payments/rail-nacha.ts, engine/src/payments/rail-sepa.ts,
+ * engine/src/payments/rail-cemtex.ts, engine/src/payments/rail-bacs.ts,
+ * engine/src/payments/rail-zengin.ts and engine/src/payments/rail-cnab240-bb.ts
+ * (`buildCpa005File`, `buildNachaFile`, `buildSepaFile`, `buildCemtexFile`,
+ * `buildBacsFile`, `buildZenginFile`, `buildCnab240BbFile`) — payroll deliberately does not fork a
  * second implementation of a fixed-width money format.
  *
  * ── BACS (United Kingdom) — ON ────────────────────────────────────────────
@@ -415,13 +420,29 @@ type ProfileRow = {
 
 /** CPA-005 is CRLF-terminated per the bank implementation guides; NACHA is per-ODFI; SEPA pain.001 is LF-terminated XML; Cemtex files are CR/LF-delimited per the annotated sample; Bacs files are CR/LF-delimited per the byte-level implementation. */
 function lineEndingFor(row: ProfileRow, format: PayRunBankFileFormat): "lf" | "crlf" {
-  if (format === "cpa005") return "crlf";
-  if (format === "sepa") return "lf";
-  if (format === "cemtex") return "crlf";
-  if (format === "bacs") return "crlf";
-  if (format === "zengin") return "crlf";
-  if (format === "cnab240") return "crlf";
-  return String(row.settings?.lineEnding ?? "").toLowerCase() === "crlf" ? "crlf" : "lf";
+  // A switch, not a Record of constants: the NACHA arm reads per-profile
+  // settings, so there is no single value to tabulate. The never-binding in
+  // default (not just a throw) is what fails tsc when the union grows
+  // without a new case; the throw itself names the format for the
+  // JavaScript caller and the already-persisted row the type system cannot
+  // police.
+  switch (format) {
+    case "cpa005":
+      return "crlf";
+    case "sepa":
+      return "lf";
+    case "cemtex":
+    case "bacs":
+    case "zengin":
+    case "cnab240":
+      return "crlf";
+    case "nacha":
+      return String(row.settings?.lineEnding ?? "").toLowerCase() === "crlf" ? "crlf" : "lf";
+    default: {
+      const _exhaustive: never = format;
+      throw new PayrollError(`unknown payroll bank-file format "${String(_exhaustive)}"`);
+    }
+  }
 }
 
 /** Active payroll-capable originator profiles, for the operator's picker. */
@@ -798,11 +819,33 @@ function resolveCnab240Bb(row: ProfileRow): PayrollOriginatorResult {
   };
 }
 
+/**
+ * Originator validation per format — a lookup, not a chain. The Record type
+ * refuses a union member with no resolver at build time, instead of
+ * validating it as another rail's profile at generation time.
+ */
+const PAYROLL_BANK_FILE_ORIGINATOR_RESOLVERS: Record<
+  PayRunBankFileFormat,
+  (row: ProfileRow) => PayrollOriginatorResult
+> = {
+  cpa005: resolveCpa005,
+  nacha: resolveNacha,
+  sepa: resolveSepa,
+  cemtex: resolveCemtex,
+  bacs: resolveBacs,
+  zengin: resolveZengin,
+  cnab240: resolveCnab240Bb,
+};
+
 function resolveOriginator(row: ProfileRow, format: PayRunBankFileFormat): PayrollOriginatorResult {
   // Branch on the profile's rail-mapped format, never on a country: packs
   // declare which rail they settle on and this resolver only reads it.
-  const resolved =
-    format === "cpa005" ? resolveCpa005(row) : format === "sepa" ? resolveSepa(row) : format === "cemtex" ? resolveCemtex(row) : format === "bacs" ? resolveBacs(row) : format === "zengin" ? resolveZengin(row) : format === "cnab240" ? resolveCnab240Bb(row) : resolveNacha(row);
+  const resolve = PAYROLL_BANK_FILE_ORIGINATOR_RESOLVERS[format];
+  // Unreachable from TypeScript (the Record is total; noUncheckedIndexedAccess
+  // forces the check anyway) — the refusal is for the JavaScript caller and
+  // the already-persisted row the type system cannot police.
+  if (!resolve) throw new PayrollError(`unknown payroll bank-file format "${format}"`);
+  const resolved = resolve(row);
   if (!resolved.ok) return resolved;
   return { ok: true, config: { ...resolved.config, lineEnding: lineEndingFor(row, format) } };
 }
@@ -1181,117 +1224,138 @@ export async function loadCredits(
       continue;
     }
     const accountNumber = decryptAccountNumber(row.account_number_encrypted);
-    if (format === "cpa005") {
-      if (!/^\d{3}$/.test(routing.institution ?? "") || !/^\d{5}$/.test(routing.transit ?? "")) {
-        problems.push(
-          `${entry.employeeName}: CPA-005 needs a 3-digit institution and 5-digit transit number`,
-        );
+    // Exhaustive over the union: each format states how its credits are
+    // addressed, and a format with no case fails tsc at the never-binding
+    // below instead of being validated as another rail's account. A switch,
+    // not a Record: the SEPA/Cemtex arms resolve-and-push inside this loop's
+    // shared tail, which has no single value to tabulate. The default's
+    // throw names the format for the JavaScript caller and the
+    // already-persisted row the type system cannot police.
+    switch (format) {
+      case "cpa005": {
+        if (!/^\d{3}$/.test(routing.institution ?? "") || !/^\d{5}$/.test(routing.transit ?? "")) {
+          problems.push(
+            `${entry.employeeName}: CPA-005 needs a 3-digit institution and 5-digit transit number`,
+          );
+          continue;
+        }
+        break;
+      }
+      case "sepa": {
+        // A SEPA credit is addressed by IBAN, not by account number: the IBAN
+        // lives on the employee's bank row (`routing.iban`, falling back to the
+        // stored account number the way the AP rail does), and a value that
+        // fails the ISO 13616 mod-97 check is a named refusal — never silently
+        // dropped, never coerced into a differently-numbered account.
+        const resolved = resolveSepaCreditor(entry.employeeName, routing, accountNumber);
+        if (!resolved.ok) {
+          problems.push(resolved.reason);
+          continue;
+        }
+        credits.push({
+          ...entry,
+          employeeNumber: row.employee_number?.trim() || entry.employeePartyId.slice(0, 8),
+          routing,
+          accountNumber,
+          iban: resolved.iban,
+          bic: resolved.bic,
+        });
         continue;
       }
-    } else if (format === "sepa") {
-      // A SEPA credit is addressed by IBAN, not by account number: the IBAN
-      // lives on the employee's bank row (`routing.iban`, falling back to the
-      // stored account number the way the AP rail does), and a value that
-      // fails the ISO 13616 mod-97 check is a named refusal — never silently
-      // dropped, never coerced into a differently-numbered account.
-      const resolved = resolveSepaCreditor(entry.employeeName, routing, accountNumber);
-      if (!resolved.ok) {
-        problems.push(resolved.reason);
+      case "cemtex": {
+        // A Cemtex credit is addressed by BSB + account number: the BSB lives
+        // on the employee's bank row (`routing.bsb`) and the account number is
+        // the stored approved number. Either one unshaped is a named refusal —
+        // never silently dropped, never coerced into a differently-numbered
+        // account.
+        const resolved = resolveCemtexCreditor(entry.employeeName, routing, accountNumber);
+        if (!resolved.ok) {
+          problems.push(resolved.reason);
+          continue;
+        }
+        credits.push({
+          ...entry,
+          employeeNumber: row.employee_number?.trim() || entry.employeePartyId.slice(0, 8),
+          routing,
+          accountNumber: resolved.accountNumber,
+          bsb: resolved.bsb,
+        });
         continue;
       }
-      credits.push({
-        ...entry,
-        employeeNumber: row.employee_number?.trim() || entry.employeePartyId.slice(0, 8),
-        routing,
-        accountNumber,
-        iban: resolved.iban,
-        bic: resolved.bic,
-      });
-      continue;
-    } else if (format === "cemtex") {
-      // A Cemtex credit is addressed by BSB + account number: the BSB lives
-      // on the employee's bank row (`routing.bsb`) and the account number is
-      // the stored approved number. Either one unshaped is a named refusal —
-      // never silently dropped, never coerced into a differently-numbered
-      // account.
-      const resolved = resolveCemtexCreditor(entry.employeeName, routing, accountNumber);
-      if (!resolved.ok) {
-        problems.push(resolved.reason);
+      case "nacha": {
+        const aba = routing.aba ?? routing.routingNumber ?? routing.routing ?? "";
+        if (!/^\d{9}$/.test(aba)) {
+          problems.push(`${entry.employeeName}: US ACH needs a 9-digit routing number`);
+          continue;
+        }
+        break;
+      }
+      case "bacs": {
+        // A Bacs credit is addressed by sort code + account number: the sort
+        // code lives on the employee's bank row (`routing.sortCode`) and the
+        // account number is the stored approved number. Either one unshaped
+        // is a named refusal — never silently dropped, never coerced into a
+        // differently-numbered account.
+        const resolved = resolveBacsCreditor(entry.employeeName, routing, accountNumber);
+        if (!resolved.ok) {
+          problems.push(resolved.reason);
+          continue;
+        }
+        credits.push({
+          ...entry,
+          employeeNumber: row.employee_number?.trim() || entry.employeePartyId.slice(0, 8),
+          routing,
+          accountNumber: resolved.accountNumber,
+          sortCode: resolved.sortCode,
+        });
         continue;
       }
-      credits.push({
-        ...entry,
-        employeeNumber: row.employee_number?.trim() || entry.employeePartyId.slice(0, 8),
-        routing,
-        accountNumber: resolved.accountNumber,
-        bsb: resolved.bsb,
-      });
-      continue;
-    } else if (format === "bacs") {
-      // A Bacs credit is addressed by sort code + account number: the sort
-      // code lives on the employee's bank row (`routing.sortCode`) and the
-      // account number is the stored approved number. Either one unshaped
-      // is a named refusal — never silently dropped, never coerced into a
-      // differently-numbered account.
-      const resolved = resolveBacsCreditor(entry.employeeName, routing, accountNumber);
-      if (!resolved.ok) {
-        problems.push(resolved.reason);
+      case "zengin": {
+        // A Zengin credit is addressed by bank code + branch code + 種目 +
+        // account number, and named in half-width katakana. Any one of them
+        // unshaped — or a name with no kana reading — is a named refusal:
+        // never silently dropped, never coerced into a differently-numbered
+        // account, never a guessed reading.
+        const resolved = resolveZenginCreditor(entry.employeeName, routing, accountNumber);
+        if (!resolved.ok) {
+          problems.push(resolved.reason);
+          continue;
+        }
+        credits.push({
+          ...entry,
+          employeeNumber: row.employee_number?.trim() || entry.employeePartyId.slice(0, 8),
+          routing,
+          accountNumber: resolved.accountNumber,
+          bankCode: resolved.bankCode,
+          branchCode: resolved.branchCode,
+          depositType: resolved.depositType,
+          payeeKana: resolved.payeeKana,
+        });
         continue;
       }
-      credits.push({
-        ...entry,
-        employeeNumber: row.employee_number?.trim() || entry.employeePartyId.slice(0, 8),
-        routing,
-        accountNumber: resolved.accountNumber,
-        sortCode: resolved.sortCode,
-      });
-      continue;
-    } else if (format === "zengin") {
-      // A Zengin credit is addressed by bank code + branch code + 種目 +
-      // account number, and named in half-width katakana. Any one of them
-      // unshaped — or a name with no kana reading — is a named refusal:
-      // never silently dropped, never coerced into a differently-numbered
-      // account, never a guessed reading.
-      const resolved = resolveZenginCreditor(entry.employeeName, routing, accountNumber);
-      if (!resolved.ok) {
-        problems.push(resolved.reason);
+      case "cnab240": {
+        // A CNAB 240 credit is addressed by banco + agência + conta (with
+        // check digits) plus the favorecido inscription on Segmento B —
+        // never an IBAN. Anything unshaped or check-digit-invalid is a named
+        // refusal, never silently dropped and never coerced into a
+        // differently-numbered account.
+        const resolved = resolveCnab240Creditor(entry.employeeName, routing, accountNumber);
+        if (!resolved.ok) {
+          problems.push(resolved.reason);
+          continue;
+        }
+        credits.push({
+          ...entry,
+          employeeNumber: row.employee_number?.trim() || entry.employeePartyId.slice(0, 8),
+          routing,
+          accountNumber: accountNumber.replace(/\D/g, ""),
+          cnab240: resolved.address,
+        });
         continue;
       }
-      credits.push({
-        ...entry,
-        employeeNumber: row.employee_number?.trim() || entry.employeePartyId.slice(0, 8),
-        routing,
-        accountNumber: resolved.accountNumber,
-        bankCode: resolved.bankCode,
-        branchCode: resolved.branchCode,
-        depositType: resolved.depositType,
-        payeeKana: resolved.payeeKana,
-      });
-      continue;
-    } else if (format === "cnab240") {
-      // A CNAB 240 credit is addressed by banco + agência + conta (with
-      // check digits) plus the favorecido inscription on Segmento B —
-      // never an IBAN. Anything unshaped or check-digit-invalid is a named
-      // refusal, never silently dropped and never coerced into a
-      // differently-numbered account.
-      const resolved = resolveCnab240Creditor(entry.employeeName, routing, accountNumber);
-      if (!resolved.ok) {
-        problems.push(resolved.reason);
-        continue;
-      }
-      credits.push({
-        ...entry,
-        employeeNumber: row.employee_number?.trim() || entry.employeePartyId.slice(0, 8),
-        routing,
-        accountNumber: accountNumber.replace(/\D/g, ""),
-        cnab240: resolved.address,
-      });
-      continue;
-    } else {
-      const aba = routing.aba ?? routing.routingNumber ?? routing.routing ?? "";
-      if (!/^\d{9}$/.test(aba)) {
-        problems.push(`${entry.employeeName}: US ACH needs a 9-digit routing number`);
-        continue;
+      default: {
+        const _exhaustive: never = format;
+        throw new PayrollError(`unknown payroll bank-file format "${String(_exhaustive)}"`);
       }
     }
     if (toUnits(entry.amount) % 100n !== 0n) {
@@ -1326,6 +1390,179 @@ export interface TrailerTotals {
   count: number;
 }
 
+/** The produced characters, in both shapes the trailer readers need. */
+interface BankFileTrailerSource {
+  /** Non-empty records, split on either terminator. */
+  records: string[];
+  /** The raw produced characters (for the markup-delimited rails). */
+  content: string;
+}
+
+/**
+ * CPA-005 Z record: positions 47–60 total value of credit transactions (14
+ * digits, cents), positions 61–68 total number of credit transactions (8).
+ */
+function readCpa005Trailer({ records }: BankFileTrailerSource): TrailerTotals {
+  const trailer = records[records.length - 1];
+  if (!trailer || trailer[0] !== "Z" || trailer.length !== 1464) {
+    throw new PayrollError("generated CPA-005 file has no readable Z trailer record");
+  }
+  return {
+    totalCents: BigInt(trailer.slice(46, 60)),
+    count: Number(trailer.slice(60, 68)),
+  };
+}
+
+/**
+ * NACHA File Control "9" record: positions 14–21 entry/addenda count (8),
+ * positions 44–55 total credit entry dollar amount (12, cents).
+ */
+function readNachaTrailer({ records }: BankFileTrailerSource): TrailerTotals {
+  const trailer = records.find((line) => line[0] === "9" && !/^9{94}$/.test(line));
+  if (!trailer || trailer.length !== 94) {
+    throw new PayrollError("generated NACHA file has no readable file-control record");
+  }
+  return {
+    totalCents: BigInt(trailer.slice(43, 55)),
+    count: Number(trailer.slice(13, 21)),
+  };
+}
+
+/**
+ * SEPA pain.001: the GrpHdr `<NbOfTxs>` and `<CtrlSum>` the builder wrote —
+ * parsed back out of the produced XML, never assumed from the inputs.
+ */
+function readSepaTrailer({ content }: BankFileTrailerSource): TrailerTotals {
+  // GrpHdr carries the file's own totals; the FIRST NbOfTxs/CtrlSum in the
+  // document is the header's (each CdtTrfTxInf carries amounts but no
+  // counts). CtrlSum is exact 2dp euros, so whole cents by construction —
+  // and the render refuses sub-cent credits before writing, so the parse
+  // below cannot hide a fraction the ledger still carries.
+  const count = content.match(/<NbOfTxs>(\d+)<\/NbOfTxs>/);
+  const sum = content.match(/<CtrlSum>(\d+\.\d{2})<\/CtrlSum>/);
+  if (!count || !sum) {
+    throw new PayrollError("generated SEPA file has no readable GrpHdr totals");
+  }
+  return {
+    totalCents: toUnits(sum[1]!) / 100n,
+    count: Number(count[1]),
+  };
+}
+
+/**
+ * Cemtex file-total "7" record: positions 31–40 credit total (10, cents),
+ * positions 75–80 detail-record count (6).
+ */
+function readCemtexTrailer({ records }: BankFileTrailerSource): TrailerTotals {
+  // The file-total "7" record is the LAST record; the credit total sits at
+  // positions 31–40 (slice 30–40) and the detail count at 75–80 (slice
+  // 74–80). The net at 21–30 must equal the credit total on a payroll file
+  // (no debits), so the credit field alone ties to the ledger.
+  const last = records[records.length - 1];
+  if (!last || last[0] !== "7" || last.length !== 120) {
+    throw new PayrollError("generated Cemtex file has no readable file-total record");
+  }
+  return {
+    totalCents: BigInt(last.slice(30, 40)),
+    count: Number(last.slice(74, 80)),
+  };
+}
+
+/**
+ * Bacs UTL1 trailer: positions 18–30 credit monetary total (13, pence),
+ * positions 38–44 credit count (7). The debit total at 5–17 must equal the
+ * credit total on a payroll file (one contra for all credits), so the
+ * credit field alone ties to the ledger.
+ */
+function readBacsTrailer({ records }: BankFileTrailerSource): TrailerTotals {
+  // The UTL1 trailer is the LAST record; the credit monetary total sits at
+  // positions 18–30 (slice 17–30) and the credit count at 38–44 (slice
+  // 37–44). The debit total at 5–17 must equal it on a payroll file (one
+  // debit contra balancing all credits) — asserted by the builder, tied to
+  // the ledger here through the credit field.
+  const last = records[records.length - 1];
+  if (!last || last.slice(0, 4) !== "UTL1" || last.length !== 80) {
+    throw new PayrollError("generated Bacs file has no readable UTL1 trailer record");
+  }
+  return {
+    totalCents: BigInt(last.slice(17, 30)),
+    count: Number(last.slice(37, 44)),
+  };
+}
+
+/**
+ * Zengin trailer "8" record: positions 2–7 detail-record count (6),
+ * positions 8–19 total transfer value in yen (12). JPY has no minor unit,
+ * so the parsed yen total is the file's minor-unit total directly.
+ */
+function readZenginTrailer({ records }: BankFileTrailerSource): TrailerTotals {
+  // The trailer "8" record is the SECOND-TO-LAST record (the end "9"
+  // record closes the file); the detail count sits at positions 2–7
+  // (slice 1–7) and the yen total at positions 8–19 (slice 7–19).
+  const last = records[records.length - 1];
+  const trailer8 = records[records.length - 2];
+  if (!last || last[0] !== "9" || last.length !== 120) {
+    throw new PayrollError("generated Zengin file has no readable end record");
+  }
+  if (!trailer8 || trailer8[0] !== "8" || trailer8.length !== 120) {
+    throw new PayrollError("generated Zengin file has no readable trailer record");
+  }
+  return {
+    totalCents: BigInt(trailer8.slice(7, 19)),
+    count: Number(trailer8.slice(1, 7)),
+  };
+}
+
+/**
+ * CNAB 240: the value tie reads the P007 somatória at positions 24–41
+ * (slice 23–41) of each tipo-5 trailer de lote, and the count reads the
+ * Segmento A records themselves (tipo '3', 'A' at position 14). The
+ * arquivo trailer is the LAST record and must be tipo 9 / lote 9999 —
+ * asserted so a truncated file cannot pass.
+ */
+function readCnab240Trailer({ records }: BankFileTrailerSource): TrailerTotals {
+  const last = records[records.length - 1];
+  if (!last || last[7] !== "9" || last.slice(3, 7) !== "9999" || last.length !== 240) {
+    throw new PayrollError("generated CNAB 240 file has no readable trailer de arquivo record");
+  }
+  let totalCents = 0n;
+  let count = 0;
+  for (const line of records) {
+    if (line.length !== 240) {
+      throw new PayrollError(`payroll bank file record is ${line.length} characters, not 240`);
+    }
+    if (line[7] === "5") {
+      const field = line.slice(23, 41);
+      if (!/^\d{18}$/.test(field)) {
+        throw new PayrollError("generated CNAB 240 trailer de lote has no readable somatória");
+      }
+      totalCents += BigInt(field);
+    }
+    if (line[7] === "3" && line[13] === "A") count += 1;
+  }
+  if (count === 0) throw new PayrollError("generated CNAB 240 file has no Segmento A records");
+  return { totalCents, count };
+}
+
+/**
+ * The trailer reader per format — a lookup, not a chain. The Record type
+ * refuses a union member with no reader at build time, instead of parsing
+ * its bytes as another rail's trailer at generation time. A pending rail is
+ * wired by adding its reader plus one line here.
+ */
+const PAYROLL_BANK_FILE_TRAILER_READERS: Record<
+  PayRunBankFileFormat,
+  (source: BankFileTrailerSource) => TrailerTotals
+> = {
+  cpa005: readCpa005Trailer,
+  nacha: readNachaTrailer,
+  sepa: readSepaTrailer,
+  cemtex: readCemtexTrailer,
+  bacs: readBacsTrailer,
+  zengin: readZenginTrailer,
+  cnab240: readCnab240Trailer,
+};
+
 /**
  * Read the control totals back out of the generated characters.
  *
@@ -1334,135 +1571,18 @@ export interface TrailerTotals {
  * with the ledger is the single worst outcome here, because the bank settles
  * the trailer and the books carry the ledger. So the totals are PARSED from
  * the produced bytes at fixed offsets and compared against the run.
- *
- * CPA-005 Z record: positions 47–60 total value of credit transactions (14
- * digits, cents), positions 61–68 total number of credit transactions (8).
- * NACHA File Control "9" record: positions 14–21 entry/addenda count (8),
- * positions 44–55 total credit entry dollar amount (12, cents).
- * SEPA pain.001: the GrpHdr `<NbOfTxs>` and `<CtrlSum>` the builder wrote —
- * parsed back out of the produced XML, never assumed from the inputs.
- * Cemtex file-total "7" record: positions 31–40 credit total (10, cents),
- * positions 75–80 detail-record count (6).
- * Bacs UTL1 trailer: positions 18–30 credit monetary total (13, pence),
- * positions 38–44 credit count (7). The debit total at 5–17 must equal the
- * credit total on a payroll file (one contra for all credits), so the
- * credit field alone ties to the ledger.
- * Zengin trailer "8" record: positions 2–7 detail-record count (6),
- * positions 8–19 total transfer value in yen (12). JPY has no minor unit,
- * so the parsed yen total is the file's minor-unit total directly.
  */
 export function readTrailerTotals(format: PayRunBankFileFormat, content: string): TrailerTotals {
   // Split on either terminator: the terminator is per-institution and never
   // part of the record, so the parse must not depend on which one was written.
   const records = content.split(/\r?\n/).filter((line) => line.length > 0);
-  if (format === "cpa005") {
-    const trailer = records[records.length - 1];
-    if (!trailer || trailer[0] !== "Z" || trailer.length !== 1464) {
-      throw new PayrollError("generated CPA-005 file has no readable Z trailer record");
-    }
-    return {
-      totalCents: BigInt(trailer.slice(46, 60)),
-      count: Number(trailer.slice(60, 68)),
-    };
-  }
-  if (format === "sepa") {
-    // GrpHdr carries the file's own totals; the FIRST NbOfTxs/CtrlSum in the
-    // document is the header's (each CdtTrfTxInf carries amounts but no
-    // counts). CtrlSum is exact 2dp euros, so whole cents by construction —
-    // and the render refuses sub-cent credits before writing, so the parse
-    // below cannot hide a fraction the ledger still carries.
-    const count = content.match(/<NbOfTxs>(\d+)<\/NbOfTxs>/);
-    const sum = content.match(/<CtrlSum>(\d+\.\d{2})<\/CtrlSum>/);
-    if (!count || !sum) {
-      throw new PayrollError("generated SEPA file has no readable GrpHdr totals");
-    }
-    return {
-      totalCents: toUnits(sum[1]!) / 100n,
-      count: Number(count[1]),
-    };
-  }
-  const trailer = records.find((line) => line[0] === "9" && !/^9{94}$/.test(line));
-  if (format === "cemtex") {
-    // The file-total "7" record is the LAST record; the credit total sits at
-    // positions 31–40 (slice 30–40) and the detail count at 75–80 (slice
-    // 74–80). The net at 21–30 must equal the credit total on a payroll file
-    // (no debits), so the credit field alone ties to the ledger.
-    const last = records[records.length - 1];
-    if (!last || last[0] !== "7" || last.length !== 120) {
-      throw new PayrollError("generated Cemtex file has no readable file-total record");
-    }
-    return {
-      totalCents: BigInt(last.slice(30, 40)),
-      count: Number(last.slice(74, 80)),
-    };
-  }
-  if (format === "cnab240") {
-    // Every record is 240 chars; the value tie reads the P007 somatória at
-    // positions 24–41 (slice 23–41) of each tipo-5 trailer de lote, and the
-    // count reads the Segmento A records themselves (tipo '3', 'A' at
-    // position 14). The arquivo trailer is the LAST record and must be tipo
-    // 9 / lote 9999 — asserted so a truncated file cannot pass.
-    const last = records[records.length - 1];
-    if (!last || last[7] !== "9" || last.slice(3, 7) !== "9999" || last.length !== 240) {
-      throw new PayrollError("generated CNAB 240 file has no readable trailer de arquivo record");
-    }
-    let totalCents = 0n;
-    let count = 0;
-    for (const line of records) {
-      if (line.length !== 240) {
-        throw new PayrollError(`payroll bank file record is ${line.length} characters, not 240`);
-      }
-      if (line[7] === "5") {
-        const field = line.slice(23, 41);
-        if (!/^\d{18}$/.test(field)) {
-          throw new PayrollError("generated CNAB 240 trailer de lote has no readable somatória");
-        }
-        totalCents += BigInt(field);
-      }
-      if (line[7] === "3" && line[13] === "A") count += 1;
-    }
-    if (count === 0) throw new PayrollError("generated CNAB 240 file has no Segmento A records");
-    return { totalCents, count };
-  }
-  if (format === "zengin") {
-    // The trailer "8" record is the SECOND-TO-LAST record (the end "9"
-    // record closes the file); the detail count sits at positions 2–7
-    // (slice 1–7) and the yen total at positions 8–19 (slice 7–19).
-    const last = records[records.length - 1];
-    const trailer8 = records[records.length - 2];
-    if (!last || last[0] !== "9" || last.length !== 120) {
-      throw new PayrollError("generated Zengin file has no readable end record");
-    }
-    if (!trailer8 || trailer8[0] !== "8" || trailer8.length !== 120) {
-      throw new PayrollError("generated Zengin file has no readable trailer record");
-    }
-    return {
-      totalCents: BigInt(trailer8.slice(7, 19)),
-      count: Number(trailer8.slice(1, 7)),
-    };
-  }
-  if (format === "bacs") {
-    // The UTL1 trailer is the LAST record; the credit monetary total sits at
-    // positions 18–30 (slice 17–30) and the credit count at 38–44 (slice
-    // 37–44). The debit total at 5–17 must equal it on a payroll file (one
-    // debit contra balancing all credits) — asserted by the builder, tied to
-    // the ledger here through the credit field.
-    const last = records[records.length - 1];
-    if (!last || last.slice(0, 4) !== "UTL1" || last.length !== 80) {
-      throw new PayrollError("generated Bacs file has no readable UTL1 trailer record");
-    }
-    return {
-      totalCents: BigInt(last.slice(17, 30)),
-      count: Number(last.slice(37, 44)),
-    };
-  }
-  if (!trailer || trailer.length !== 94) {
-    throw new PayrollError("generated NACHA file has no readable file-control record");
-  }
-  return {
-    totalCents: BigInt(trailer.slice(43, 55)),
-    count: Number(trailer.slice(13, 21)),
-  };
+  const read = PAYROLL_BANK_FILE_TRAILER_READERS[format];
+  // Unreachable from TypeScript (the Record is total; noUncheckedIndexedAccess
+  // forces the check anyway) — the refusal names the format for the
+  // JavaScript caller and the already-persisted row the type system cannot
+  // police, even when the bytes fed in are another rail's well-formed file.
+  if (!read) throw new PayrollError(`unknown payroll bank-file format "${format}"`);
+  return read({ records, content });
 }
 
 /**
@@ -1585,6 +1705,45 @@ function localDate(iso: string): Date {
 }
 
 /**
+ * The per-format renderer — a lookup, not a chain. The Record type refuses a
+ * union member with no builder at build time, instead of handing its credits
+ * to another rail's writer at generation time. A pending rail (giro, elixir0)
+ * is wired by adding one line here once its builder exists in this tree —
+ * never by extending a ternary default.
+ */
+const PAYROLL_BANK_FILE_BUILDERS: Record<
+  PayRunBankFileFormat,
+  (input: PayRunBankFileBuildInput, credits: PayRunBankFileCredit[]) => string
+> = {
+  cpa005: buildCpa005Payroll,
+  nacha: buildNachaPayroll,
+  sepa: buildSepaPayroll,
+  cemtex: buildCemtexPayroll,
+  bacs: buildBacsPayroll,
+  zengin: buildZenginPayroll,
+  cnab240: buildCnab240Payroll,
+};
+
+/**
+ * Fixed record width each rail's characters must hold, or null when the rail
+ * is length-delimited rather than offset-delimited. SEPA pain.001 is XML, so
+ * null is the DECLARED answer for that reason — not a chain's leftover
+ * default. Bacs declares null because its file mixes 80-character labels
+ * with 100-character data records — the builder asserts each record's own
+ * width. A future delimited rail (Elixir-0 is comma-separated, not
+ * fixed-width) declares null here for that stated reason.
+ */
+export const PAYROLL_BANK_FILE_RECORD_LENGTHS: Record<PayRunBankFileFormat, number | null> = {
+  cpa005: 1464,
+  nacha: 94,
+  sepa: null,
+  cemtex: 120,
+  bacs: null,
+  zengin: 120,
+  cnab240: 240,
+};
+
+/**
  * Render the file and verify it. Pure: no database, no clock, no randomness —
  * the same inputs always produce the same characters, which is what makes the
  * stored artifact reproducible evidence and the golden tests meaningful.
@@ -1644,23 +1803,21 @@ export function renderPayRunBankFile(
     );
   }
 
+  // Lookups, not chains: a format the Records do not wire fails tsc at the
+  // Record literal instead of rendering another rail's file.
+  const build = PAYROLL_BANK_FILE_BUILDERS[format];
+  // Unreachable from TypeScript (the Record is total; noUncheckedIndexedAccess
+  // forces the check anyway) — the refusal names the format for the
+  // JavaScript caller and the already-persisted row the type system cannot
+  // police.
+  if (!build) throw new PayrollError(`unknown payroll bank-file format "${format}"`);
   const content = applyLineEnding(
-    format === "cpa005"
-      ? buildCpa005Payroll(input, credits)
-      : format === "sepa"
-        ? buildSepaPayroll(input, credits)
-        : format === "cemtex"
-          ? buildCemtexPayroll(input, credits)
-          : format === "bacs"
-            ? buildBacsPayroll(input, credits)
-            : format === "zengin"
-              ? buildZenginPayroll(input, credits)
-              : buildNachaPayroll(input, credits),
+    build(input, credits),
     input.originator.lineEnding,
-    // Mixed widths (80-char labels, 100-char data) are asserted per record
-    // by the Bacs builder itself; applyLineEnding only applies the
-    // terminator for that rail. Zengin is 120; CNAB 240 is 240.
-    format === "cpa005" ? 1464 : format === "nacha" ? 94 : format === "cemtex" || format === "zengin" ? 120 : null,
+    // The builder guard above already refused the unknown format; the
+    // `?? null` only satisfies noUncheckedIndexedAccess, which types every
+    // indexed access `T | undefined` even over a total Record.
+    PAYROLL_BANK_FILE_RECORD_LENGTHS[format] ?? null,
   );
 
   // Everything below is read back out of the produced characters.
@@ -1735,7 +1892,7 @@ function localDateTime(d: Date): string {
 
 /**
  * Render payroll credits through the SHARED AP pain.001 builder
- * (`buildSepaFile`, engine/src/payments/rail-formatters.ts) — the same
+ * (`buildSepaFile`, engine/src/payments/rail-sepa.ts) — the same
  * function, the same IBAN mod-97 gate, the same XML. Payroll only maps its
  * own population onto the builder's generic payment rows; there is no second
  * SEPA implementation here.
@@ -1778,7 +1935,7 @@ function buildSepaPayroll(
 
 /**
  * Render payroll credits through the SHARED AP Cemtex builder
- * (`buildCemtexFile`, engine/src/payments/rail-formatters.ts) — the same
+ * (`buildCemtexFile`, engine/src/payments/rail-cemtex.ts) — the same
  * function, the same BSB shape gate, the same 120-character records. Payroll
  * only maps its own population onto the builder's generic payment rows;
  * there is no second Cemtex implementation here.

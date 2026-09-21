@@ -10,7 +10,9 @@ import {
 import { fromUnits, sum, toUnits } from "../money/money.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { PaymentError } from "./payment-errors.ts";
-import { decryptAccountNumber, validateNachaSettings, validateSepaSettings, type NachaSettings, type SepaSettings } from "./rail-settings.ts";
+import { decryptAccountNumber } from "./rail-settings.ts";
+import { validateNachaSettings, type NachaSettings } from "./rail-nacha.ts";
+import { validateSepaSettings, type SepaSettings } from "./rail-sepa.ts";
 import { loadRunFile } from "./run-files.ts";
 import { reversePaymentForReturn } from "./payment-return.ts";
 import { computeNextRunAt, runScript } from "../scripting/scripting.ts";
