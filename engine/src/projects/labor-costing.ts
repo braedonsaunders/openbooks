@@ -211,6 +211,47 @@ export function convertFixedLaborComponents(
   );
 }
 
+export interface LaborFxQuote {
+  /** Oriented from→to factor: multiply once with mulRate, never invert again. */
+  readonly rate: string;
+  /** The winning quote's as-of date (evidence, not a re-query key). */
+  readonly asOf: string;
+  /** The winning quote's source, snapshotted verbatim from fx_rates. */
+  readonly source: string;
+  /** True when the factor came from the inverse direction (provenance only). */
+  readonly inverse: boolean;
+}
+
+/**
+ * Latest spot quote on or before a date, direct or inverted, with its
+ * evidence. Same contract as laborFxRate (rate_type 'spot', latest
+ * on-or-before wins, direct wins ties); null when neither direction
+ * covers the date, or when no quote is needed (same currency). The
+ * returned factor is already oriented from→to: callers multiply it once
+ * with mulRate. `inverse` is provenance for frozen evidence only.
+ */
+export async function laborFxQuote(
+  orgId: string,
+  from: string,
+  to: string,
+  workedOn: string,
+): Promise<LaborFxQuote | null> {
+  if (from === to) return null;
+  const result = (await db.execute<{ rate: string; as_of: string; source: string; inverse: string }>(sql`
+    select rate::text as rate, as_of::text as as_of, source, inverse::text as inverse from (
+      select rate, as_of, source, false as inverse from fx_rates
+       where org_id = ${orgId} and from_currency = ${from} and to_currency = ${to}
+         and rate_type = 'spot' and as_of <= ${workedOn}
+      union all
+      select (1 / rate)::numeric(19,10) as rate, as_of, source, true as inverse from fx_rates
+       where org_id = ${orgId} and from_currency = ${to} and to_currency = ${from}
+         and rate_type = 'spot' and as_of <= ${workedOn}
+    ) candidates order by as_of desc, inverse asc limit 1`));
+  const row = result.rows[0];
+  if (!row) return null;
+  return { rate: String(row.rate), asOf: String(row.as_of).slice(0, 10), source: String(row.source), inverse: row.inverse === "true" };
+}
+
 /**
  * Latest spot rate on or before a date, direct or inverted. Exported because
  * the PAY RUN needs exactly this rate: a wage row denominated in one currency
@@ -224,17 +265,7 @@ export async function laborFxRate(
   workedOn: string,
 ): Promise<string | null> {
   if (from === to) return "1";
-  const result = (await db.execute<{ rate: string }>(sql`
-    select rate::text from (
-      select rate, as_of, 0 as priority from fx_rates
-       where org_id = ${orgId} and from_currency = ${from} and to_currency = ${to}
-         and rate_type = 'spot' and as_of <= ${workedOn}
-      union all
-      select (1 / rate)::numeric(19,10) as rate, as_of, 1 as priority from fx_rates
-       where org_id = ${orgId} and from_currency = ${to} and to_currency = ${from}
-         and rate_type = 'spot' and as_of <= ${workedOn}
-    ) candidates order by as_of desc, priority asc limit 1`));
-  return result.rows[0]?.rate ?? null;
+  return (await laborFxQuote(orgId, from, to, workedOn))?.rate ?? null;
 }
 
 /**

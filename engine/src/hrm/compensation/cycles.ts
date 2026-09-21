@@ -2,9 +2,9 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../../platform/db.ts";
 import { businessToday } from "../../platform/business-date.ts";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
-import { resolveWage, laborCostingSettings } from "../../projects/labor-costing.ts";
+import { resolveWage, laborCostingSettings, laborFxQuote } from "../../projects/labor-costing.ts";
 import { supersedeLaborCostRate } from "../../projects/labor-cost-rates.ts";
-import { mul } from "../../money/money.ts";
+import { add, cmp, fromUnits, mul, mulDecimal, mulRate, normalizeDecimal, roundDiv, toUnits } from "../../money/money.ts";
 import {
   loadCompensationLens,
   loadOwnEmploymentIds,
@@ -459,7 +459,7 @@ async function resolveLineGuideline(
   employment: ScopeEmployment,
   asOf: string,
   review: ReviewRating | null,
-): Promise<ResolvedLineGuideline & { currentRate: string; currency: string; basis: BandBasis }> {
+): Promise<ResolvedLineGuideline & { currentRate: string; currency: string; basis: BandBasis; annualHours: string | null }> {
   // The payroll-side effective wage, through the wage rate service.
   const wage = await resolveWage(orgId, employment.workerPartyId, asOf, {
     departmentId: employment.departmentId,
@@ -474,8 +474,8 @@ async function resolveLineGuideline(
   const settings = await laborCostingSettings(orgId);
   // Native basis when the employee-scope row carries it, otherwise
   // annualised (resolveWage always returns hourly).
-  const native = (await db.execute<{ rate: string; basis: string; currency: string }>(sql`
-    select rate::text as rate, basis, currency
+  const native = (await db.execute<{ rate: string; basis: string; currency: string; annual_hours: string }>(sql`
+    select rate::text as rate, basis, currency, annual_hours::text as annual_hours
       from labor_cost_rates
      where org_id = ${orgId} and employee_party_id = ${employment.workerPartyId} and is_active
        and effective_from <= ${asOf}::date
@@ -485,6 +485,10 @@ async function resolveLineGuideline(
   const basis: BandBasis = native ? (native.basis === "hour" ? "hourly" : "annual") : "annual";
   const currentRate = native ? String(native.rate) : mul(wage.wage, String(settings.annualHours));
   const currency = native?.currency ?? wage.currency;
+  // The annual-hours of the same wage row that priced the line — the
+  // frozen annualization input for hourly lines (null when no native
+  // row priced them, which only happens for annual lines).
+  const annualHours = native ? String(native.annual_hours) : null;
   // The band through the position's level at the date (null = no band;
   // the line opens anyway — the UI shows "no band", never zero).
   let bandId: string | null = null;
@@ -549,7 +553,7 @@ async function resolveLineGuideline(
     guidelineMinPct = pct;
     guidelineMaxPct = pct;
   }
-  return { bandId, compaRatio: ratio, guidelineMinPct, guidelineMaxPct, currentRate, currency, basis };
+  return { bandId, compaRatio: ratio, guidelineMinPct, guidelineMaxPct, currentRate, currency, basis, annualHours };
 }
 
 /** Open a draft cycle: snapshot one line per in-service employment in scope, in one transaction. */
@@ -578,16 +582,63 @@ export async function openCycle(query: {
         "no in-service employment falls in this cycle's scope — widen the scope before opening an empty round",
       );
     }
+    // Frozen budget evidence (0243) is written once, here, beside the
+    // rate snapshot: the pricing-date/envelope/currency copies plus, for
+    // enveloped cycles, the hourly annual-hours and the oriented
+    // laborFxQuote factor. A missing required input fails the whole
+    // open atomically — the draft survives for retry once configured —
+    // so a new cycle never opens knowingly unpriceable. Null-envelope
+    // cycles acquire no unused inputs. Once open, nothing refills or
+    // reprices these copies on any path.
+    const cycleCurrency = String(cycle.currency);
+    const pricingDate = String(cycle.effective_on).slice(0, 10);
+    const enveloped = cycle.budget_total !== null;
     for (const employment of employments) {
       const review = await latestSharedRating(orgId, employment.employmentId, String(cycle.effective_on).slice(0, 10));
       const resolved = await resolveLineGuideline(orgId, cycle, employment, today, review);
+      const frozen: FrozenBudget = {
+        annualHours: null,
+        fxRate: null,
+        fxAsof: null,
+        fxSource: null,
+        fxInverse: null,
+      };
+      if (enveloped) {
+        if (resolved.basis === "hourly") {
+          if (resolved.annualHours === null) {
+            throw new CompensationError(
+              "REFUSED",
+              `cannot open: the hourly line for employment ${employment.employmentId} has no wage annual-hours to annualise with — set the employee wage annual-hours in Labor Costing, then open the same draft again; the cycle stays a draft`,
+            );
+          }
+          frozen.annualHours = resolved.annualHours;
+        }
+        if (resolved.currency !== cycleCurrency) {
+          const quote = await laborFxQuote(orgId, resolved.currency, cycleCurrency, pricingDate);
+          if (!quote) {
+            throw new CompensationError(
+              "REFUSED",
+              `cannot open: no spot rate for ${resolved.currency}→${cycleCurrency} on or before ${pricingDate} — add an FX spot rate covering the cycle's effective date, then open the same draft again; unconfigured currencies never convert at 1:1`,
+            );
+          }
+          frozen.fxRate = quote.rate;
+          frozen.fxAsof = quote.asOf;
+          frozen.fxSource = quote.source;
+          frozen.fxInverse = quote.inverse;
+        }
+      }
       await db.execute(sql`
         insert into hrm_comp_cycle_lines
           (org_id, cycle_id, employment_id, current_rate, currency, basis, band_id, compa_ratio,
-           rating_key, guideline_min_pct, guideline_max_pct, created_by, updated_by)
+           rating_key, guideline_min_pct, guideline_max_pct,
+           budget_pricing_date, budget_cycle_currency, budget_envelope,
+           budget_annual_hours, budget_fx_rate, budget_fx_asof, budget_fx_source, budget_fx_inverse,
+           created_by, updated_by)
         values (${orgId}, ${cycleId}, ${employment.employmentId}, ${resolved.currentRate},
                 ${resolved.currency}, ${resolved.basis}, ${resolved.bandId}, ${resolved.compaRatio},
                 ${review?.bucket ?? null}, ${resolved.guidelineMinPct}, ${resolved.guidelineMaxPct},
+                ${pricingDate}, ${cycleCurrency}, ${cycle.budget_total},
+                ${frozen.annualHours}, ${frozen.fxRate}, ${frozen.fxAsof}, ${frozen.fxSource}, ${frozen.fxInverse},
                 ${actorId}, ${actorId})`);
     }
     const updated = (await db.execute<CycleRow>(sql`
@@ -631,9 +682,57 @@ async function loadLineForUpdate(orgId: string, lineId: string): Promise<LineRow
 }
 
 export interface PacingRead {
-  /** Proposed + approved increase vs the cycle envelope, percent. Null = no envelope. */
+  /**
+   * Proposed + approved increase vs the cycle envelope, percent.
+   * Null = no envelope (budget_total is null), or a zero envelope whose
+   * ratio is undefined. Zero is a real envelope, not absence: a zero
+   * increase against it is not over, any positive increase is over even
+   * though no percentage can name it.
+   */
   readonly totalPct: number | null;
   readonly overBudget: boolean;
+}
+
+/** Final display ratio only: the exact comparison in computePacing decides over-budget. */
+function displayPct(increase: string, envelope: string): number | null {
+  const pct = (Number(increase) / Number(envelope)) * 100;
+  return Number.isFinite(pct) ? pct : null;
+}
+
+/**
+ * Frozen budget evidence written once at open (0243). Annual
+ * same-currency lines carry NULL inputs — the identity factor is
+ * complete evidence, not a gap. Hourly lines carry the wage row's own
+ * annual-hours; cross-currency lines carry the oriented laborFxQuote
+ * factor with its as-of/source provenance. Pacing reads these copies
+ * only: later FX re-imports, late-arriving rows, wage supersessions and
+ * settings edits cannot reprice a decided line, and a reopen carries
+ * them forward untouched.
+ */
+interface FrozenBudget {
+  annualHours: string | null;
+  fxRate: string | null;
+  fxAsof: string | null;
+  fxSource: string | null;
+  fxInverse: boolean | null;
+}
+
+/**
+ * Refusal for a decided legacy line without trustworthy frozen
+ * evidence. It names the gap as missing historical budget evidence and
+ * directs future adjustments through a new cycle: restoring a current
+ * wage row or rate cannot recreate the old evidence, and history is
+ * preserved, never deleted or rewritten.
+ */
+function missingFrozen(lineId: string, basis: string, currency: string): never {
+  throw legacyEvidenceRefusal(lineId, basis, currency);
+}
+
+function legacyEvidenceRefusal(lineId: string, basis: string, currency: string): CompensationError {
+  return new CompensationError(
+    "REFUSED",
+    `cycle line ${lineId} (${basis} ${currency}) has no frozen budget evidence — it was decided before evidence freeze, so its historical annual-hours/FX inputs cannot be reconstructed from current wages or rates; pacing refuses rather than repricing it. Carry future adjustments into a new cycle instead of rewriting this history`,
+  );
 }
 
 /**
@@ -660,9 +759,36 @@ export async function cyclePacing(orgId: string, actorId: string, cycleId: strin
 async function computePacing(orgId: string, cycleId: string, allowed: Set<string> | null): Promise<PacingRead> {
   const cycle = (await db.execute<CycleRow>(sql`
     select ${CYCLE_COLUMNS} from hrm_comp_cycles where org_id = ${orgId} and id = ${cycleId}`)).rows[0];
-  if (!cycle || cycle.budget_total === null) return { totalPct: null, overBudget: false };
-  const rows = (await db.execute<{ current_rate: string; proposed_rate: string | null; status: string }>(sql`
-    select l.current_rate::text as current_rate, l.proposed_rate::text as proposed_rate, l.status
+  if (!cycle) return { totalPct: null, overBudget: false };
+  // budget_total null is absence (no envelope, never over). Zero is a
+  // real envelope and stays in the comparison below. The cycle header
+  // is read only to discriminate legacy rows (which predate frozen
+  // evidence) and legacy identity cases — every new row's pacing math
+  // runs exclusively off its own frozen copies, so a later header,
+  // wage, FX or settings change cannot reinterpret a decided line.
+  // The lens predicate below is unchanged — only the input rows fence,
+  // never the math.
+  if (cycle.budget_total === null) return { totalPct: null, overBudget: false };
+  const cycleCurrency = String(cycle.currency);
+  const rows = (await db.execute<{
+    line_id: string;
+    current_rate: string;
+    proposed_rate: string | null;
+    status: string;
+    currency: string;
+    basis: string;
+    budget_pricing_date: string | null;
+    budget_cycle_currency: string | null;
+    budget_envelope: string | null;
+    budget_annual_hours: string | null;
+    budget_fx_rate: string | null;
+  }>(sql`
+    select l.id as line_id, l.current_rate::text as current_rate, l.proposed_rate::text as proposed_rate, l.status,
+           l.currency, l.basis,
+           l.budget_pricing_date::text as budget_pricing_date, l.budget_cycle_currency,
+           l.budget_envelope::text as budget_envelope,
+           l.budget_annual_hours::text as budget_annual_hours,
+           l.budget_fx_rate::text as budget_fx_rate
       from hrm_comp_cycle_lines l
       left join worker_employments e on e.org_id = l.org_id and e.id = l.employment_id
      where l.org_id = ${orgId} and l.cycle_id = ${cycleId}
@@ -672,15 +798,60 @@ async function computePacing(orgId: string, cycleId: string, allowed: Set<string
             or e.employer_subsidiary_id in (
               select jsonb_array_elements_text(${JSON.stringify([...(allowed ?? [])])}::jsonb)::uuid
             ))`)).rows;
-  let increase = 0;
+  let increase = "0.0000";
+  let envelope: string | null = null;
   for (const row of rows) {
-    const delta = Number(row.proposed_rate) - Number(row.current_rate);
-    if (Number.isFinite(delta) && delta > 0) increase += delta;
+    const lineId = String(row.line_id);
+    const basis = String(row.basis);
+    const currency = String(row.currency);
+    const delta = fromUnits(toUnits(String(row.proposed_rate)) - toUnits(String(row.current_rate)));
+    if (cmp(delta, "0") <= 0) continue;
+    if (row.budget_pricing_date === null) {
+      // Legacy (pre-0243) row: annual same-currency resolves its
+      // identity factor directly; anything needing historical inputs
+      // refuses rather than repricing from live data.
+      if (basis !== "hourly" && currency === cycleCurrency) {
+        increase = add(increase, delta);
+        envelope = String(cycle.budget_total);
+        continue;
+      }
+      throw legacyEvidenceRefusal(lineId, basis, currency);
+    }
+    // Frozen row: a null envelope copy means a null-envelope cycle,
+    // which never paces over regardless of decisions.
+    if (row.budget_envelope === null) continue;
+    const annual =
+      basis === "hourly"
+        ? row.budget_annual_hours === null
+          ? missingFrozen(lineId, basis, currency)
+          : mul(delta, String(row.budget_annual_hours))
+        : delta;
+    const inEnvelope =
+      currency === String(row.budget_cycle_currency)
+        ? annual
+        : row.budget_fx_rate === null
+          ? missingFrozen(lineId, basis, currency)
+          : mulRate(annual, String(row.budget_fx_rate));
+    increase = add(increase, inEnvelope);
+    envelope = String(row.budget_envelope);
   }
-  const total = Number(cycle.budget_total);
-  if (!(total > 0)) return { totalPct: null, overBudget: false };
-  const pct = (increase / total) * 100;
-  return { totalPct: pct, overBudget: pct > 100 };
+  // No positive decided increase in view: a positive envelope reads
+  // 0% (never null — scoped readers see their slice's zero), a zero or
+  // null envelope has no defined ratio.
+  if (envelope === null) {
+    if (cycle.budget_total !== null && cmp(String(cycle.budget_total), "0") > 0) {
+      return { totalPct: 0, overBudget: false };
+    }
+    return { totalPct: null, overBudget: false };
+  }
+  // The exact comparison decides over-budget; the float ratio is display
+  // only. A zero envelope has no defined ratio: a zero increase is not
+  // over, any positive increase is over with no percentage to name.
+  if (cmp(increase, envelope) <= 0) {
+    if (cmp(envelope, "0") === 0) return { totalPct: null, overBudget: false };
+    return { totalPct: displayPct(increase, envelope), overBudget: false };
+  }
+  return { totalPct: cmp(envelope, "0") === 0 ? null : displayPct(increase, envelope), overBudget: true };
 }
 
 export interface ProposeLineQuery {
@@ -691,6 +862,77 @@ export interface ProposeLineQuery {
   readonly proposedPct?: number | null;
   readonly proposedRate?: string | null;
   readonly reason?: string | null;
+}
+
+/**
+ * Canonical 6dp percent text for a typed pct input (proposed_pct is
+ * numeric(19,6)). More than 6 meaningful places refuses with a usable
+ * remedy instead of computing a wage from full precision while storing
+ * a rounded percent — the two evidences must agree.
+ */
+function pctInput6(pct: number): string {
+  const text = String(pct);
+  try {
+    return normalizeDecimal(text, 6);
+  } catch {
+    throw new CompensationError(
+      "INVALID_INPUT",
+      `proposedPct ${JSON.stringify(text)} carries more than 6 meaningful decimal places — propose at most 6 decimal places instead of guessing it`,
+    );
+  }
+}
+
+/**
+ * Exact raise off a stored rate: current × (1 + pct/100) through the
+ * shared mulDecimal (one half-away rounding, never floats). The factor
+ * is built by exact decimal shifting — a 6dp percent needs 8dp, inside
+ * mulDecimal's 10dp contract. 100.0050 + 1% stores 101.0051, and the
+ * stored percent (the input itself) always recomputes the stored rate.
+ */
+function raiseExact6(currentRate: string, pct6: string): string {
+  const digits = pct6.replace("-", "").replace(".", "");
+  const den = 100_000_000n;
+  const num = den + BigInt(digits);
+  return mulDecimal(currentRate, `${num / den}.${String(num % den).padStart(8, "0")}`);
+}
+
+/**
+ * A ≤6dp decimal as integer millionths for exact guideline comparison,
+ * converted from the canonical normalizeDecimal form — no second
+ * decimal grammar. Anything deeper or malformed refuses by name.
+ */
+function pct6Parts(value: string, what: string): bigint {
+  let canon: string;
+  try {
+    canon = normalizeDecimal(value, 6);
+  } catch {
+    throw new CompensationError(
+      "INVALID_INPUT",
+      `${what} ${JSON.stringify(value)} is not a plain decimal with at most 6 places — declare it within 6 places instead of guessing it`,
+    );
+  }
+  const neg = canon.startsWith("-");
+  const digits = canon.replace("-", "").replace(".", "");
+  const v = BigInt(digits);
+  return neg ? -v : v;
+}
+
+/**
+ * Exact 6dp percent text for a decided delta off a positive current
+ * rate (shared roundDiv). proposed_rate stays the authoritative money
+ * value: an approximate ratio cannot round-trip every large-base rate,
+ * so tests assert consistency only where the grid is exact.
+ */
+function pct6String(deltaUnits: bigint, currentUnits: bigint): string {
+  const scaled = roundDiv(deltaUnits * 100_000_000n, currentUnits);
+  const neg = scaled < 0n;
+  const abs = neg ? -scaled : scaled;
+  return `${neg ? "-" : ""}${abs / 1_000_000n}.${String(abs % 1_000_000n).padStart(6, "0")}`;
+}
+
+/** Display form of a 6dp percent ("3.000000" → "3"); string surgery only. */
+function dispPct6(pct6: string): string {
+  return pct6.includes(".") ? pct6.replace(/0+$/, "").replace(/\.$/, "") : pct6;
 }
 
 export async function proposeLine(query: ProposeLineQuery): Promise<CompCycleLineDTO> {
@@ -730,33 +972,54 @@ export async function proposeLine(query: ProposeLineQuery): Promise<CompCycleLin
         "proposals come from the employment's manager or hrm.compensation.manage — ask the direct manager to propose, or an HR administrator",
       );
     }
-    const currentRate = Number(line.current_rate);
-    const proposedRate =
-      hasRate
-        ? (query.proposedRate as string)
-        : (currentRate * (1 + (query.proposedPct as number) / 100)).toFixed(4);
-    const proposedPct =
-      hasPct
-        ? (query.proposedPct as number)
-        : Number((((Number(proposedRate) - currentRate) / currentRate) * 100).toFixed(4));
+    // Both directions derive exactly at 6dp through shared
+    // primitives: a pct raises the stored rate through raiseExact6
+    // (mulDecimal, one rounding), a typed rate derives its percent
+    // through pct6String (roundDiv). A percent off a zero current rate
+    // is undefined — it stores null and always needs its reason named,
+    // never a fabricated zero. Guideline limits are assessed on the
+    // exact ratio (cross-multiplied), so display rounding cannot hide
+    // a just-outside-guideline rate.
+    const currentUnits = toUnits(String(line.current_rate));
+    const pct6: string | null = hasPct ? pctInput6(query.proposedPct as number) : null;
+    const proposedRate = hasRate
+      ? normalizeDecimal(query.proposedRate as string, 4)
+      : raiseExact6(String(line.current_rate), pct6 as string);
+    const proposedUnits = toUnits(proposedRate);
+    const derivedPct6: string | null =
+      currentUnits === 0n
+        ? (proposedUnits === 0n ? "0.000000" : null)
+        : pct6String(proposedUnits - currentUnits, currentUnits);
+    const storedPct6: string | null = hasPct ? pct6 : derivedPct6;
     // Outside-guideline is allowed but flagged: without a reason it refuses.
     // A line with no guideline (no band) always needs its reason named.
-    const lo = line.guideline_min_pct === null ? null : Number(line.guideline_min_pct);
-    const hi = line.guideline_max_pct === null ? null : Number(line.guideline_max_pct);
-    const outside =
-      lo === null || hi === null || proposedPct < lo || proposedPct > hi;
+    const lo6 = line.guideline_min_pct === null ? null : pct6Parts(String(line.guideline_min_pct), "guideline minimum");
+    const hi6 = line.guideline_max_pct === null ? null : pct6Parts(String(line.guideline_max_pct), "guideline maximum");
+    let outside: boolean;
+    if (lo6 === null || hi6 === null || storedPct6 === null) {
+      outside = true;
+    } else if (hasPct) {
+      const p6 = pct6Parts(storedPct6, "proposed percent");
+      outside = p6 < lo6 || p6 > hi6;
+    } else {
+      const ratioScaled = (proposedUnits - currentUnits) * 100_000_000n;
+      outside = ratioScaled < lo6 * currentUnits || ratioScaled > hi6 * currentUnits;
+    }
     const reason = query.reason?.trim() ? query.reason.trim().slice(0, 2000) : null;
     if (outside && reason === null) {
+      const shown = storedPct6 === null ? null : dispPct6(storedPct6);
       throw new CompensationError(
         "REFUSED",
-        lo === null || hi === null
+        lo6 === null || hi6 === null
           ? "this line has no guideline range (no band covers it) — proposals on unbanded lines need a reason; add one instead of pricing silently"
-          : `proposed ${proposedPct}% sits outside the guideline ${lo}%–${hi}% — outside-guideline proposals need a reason; add one instead of pricing silently`,
+          : shown === null
+            ? "this raise starts from a zero current rate, so its percent is undefined — proposals off zero need a reason; add one instead of pricing silently"
+            : `proposed ${shown}% sits outside the guideline ${dispPct6(String(line.guideline_min_pct))}%–${dispPct6(String(line.guideline_max_pct))}% — outside-guideline proposals need a reason; add one instead of pricing silently`,
       );
     }
     const updated = (await db.execute<LineRow>(sql`
       update hrm_comp_cycle_lines as l
-         set proposed_pct = ${proposedPct}, proposed_rate = ${proposedRate},
+         set proposed_pct = ${storedPct6}, proposed_rate = ${proposedRate},
              proposed_by = ${actorId}, proposed_at = now(), status = 'proposed',
              reason = ${reason}, revision = revision + 1,
              updated_by = ${actorId}, updated_at = now()
@@ -777,10 +1040,13 @@ export async function proposeLine(query: ProposeLineQuery): Promise<CompCycleLin
       const lens = await loadCompensationLens(db, orgId, actorId);
       const maySeeTotals =
         lens === null && (await actorHasPermission(db, orgId, actorId, "hrm.compensation.read"));
+      // A zero envelope is over with no defined ratio: every refused
+      // proposer gets the usable numberless remedy, never 'undefined%'.
+      const pct = pacing.totalPct;
       throw new CompensationError(
         "REFUSED",
-        maySeeTotals
-          ? `this proposal takes the cycle to ${pacing.totalPct?.toFixed(1)}% of its budget envelope — over-budget pacing needs a reason; add one instead of spending silently`
+        maySeeTotals && pct !== null && Number.isFinite(pct)
+          ? `this proposal takes the cycle to ${pct.toFixed(1)}% of its budget envelope — over-budget pacing needs a reason; add one instead of spending silently`
           : "this proposal takes the cycle over its budget envelope — over-budget pacing needs a reason; add one instead of spending silently",
       );
     }
