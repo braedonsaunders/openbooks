@@ -26,7 +26,7 @@ import {
   certificateDeclarationProblem, resolveCertificate, type ResolvedCertificate,
 } from "../../certificates.ts";
 import "../../packs.ts";
-import { D, divIntCents, mulRateCents, U } from "../../canada/decimal.ts";
+import { D, mulRateCents, U } from "../../canada/decimal.ts";
 import { RATES_2026 } from "../rates.ts";
 import {
   DC_CERTIFICATE, DC_REGION, DC_RATES_2026, DC_WITHHOLDING, dcAllowancePerPeriod,
