@@ -103,14 +103,14 @@ test("0236: evidence-only stamp on a deactivated account succeeds and returns th
   try {
     const { entryId, lineId } = await postedEntryWithDeactivatedAccount(org, "EV-0236-A");
     // Pre-fix this raises 'account <uuid> is inactive' and fails the run.
-    const stamped = await mirrorClearedStamp(org, entryId, org.accounts.bank, "netsuite");
+    const stamped = await mirrorClearedStamp(org, entryId, org.accounts.bank, "external_ledger");
     assert.equal(stamped.rows.length, 1);
     assert.equal(stamped.rows[0]!.id, lineId);
     const row = (await db.execute<{ d: string; c: string }>(sql`
       select source_cleared_date::text as d, source_cleared_connector as c
         from journal_lines where id = ${lineId} and org_id = ${org.orgId}`)).rows[0]!;
     assert.equal(row.d, org.date);
-    assert.equal(row.c, "netsuite");
+    assert.equal(row.c, "external_ledger");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -193,9 +193,9 @@ test("0236: moving already-set cleared evidence is still refused append-only", {
   const org = await createScratchOrg();
   try {
     const { entryId, lineId } = await postedEntryWithDeactivatedAccount(org, "EV-0236-G");
-    await mirrorClearedStamp(org, entryId, org.accounts.bank, "netsuite");
+    await mirrorClearedStamp(org, entryId, org.accounts.bank, "external_ledger");
     await assert.rejects(
-      db.execute(sql`update journal_lines set source_cleared_date = '2026-09-21', source_cleared_connector = 'netsuite' where id = ${lineId} and org_id = ${org.orgId}`),
+      db.execute(sql`update journal_lines set source_cleared_date = '2026-09-21', source_cleared_connector = 'external_ledger' where id = ${lineId} and org_id = ${org.orgId}`),
       (e: unknown) => errorChainMatches(e, /append-only/),
     );
     await assert.rejects(

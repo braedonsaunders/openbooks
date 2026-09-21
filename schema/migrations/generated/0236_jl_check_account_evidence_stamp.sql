@@ -4,8 +4,8 @@
 -- schema/migrations/generated/*.sql in filename order inside one tracked
 -- transaction). Written defensively: every statement tolerates re-execution.
 --
--- Live defect (Rassaun NetSuite incremental sync, failing since 2026-09-20):
--- the connector's cleared-date mirror stamps source_cleared_date /
+-- Live defect (a bank-reconciliation connector's incremental sync, failing
+-- since 2026-09-20): the connector's cleared-date mirror stamps source_cleared_date /
 -- source_cleared_connector on posted lines, and jl_check_account() refused
 -- the stamp with 'account % is inactive' when the line's account had been
 -- deactivated after posting. The refusal is correct for a POSTING but wrong
