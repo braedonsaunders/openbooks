@@ -36,7 +36,7 @@ test("the pack now withholds state income tax somewhere", () => {
   // everywhere it is printed.
   assert.deepEqual(
     implementedUsStates(),
-    ["AL", "AZ", "AR", "CA", "CO", "CT", "DE", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "UT", "VT", "VA", "WV", "WI"],
+    ["AL", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "UT", "VT", "VA", "WV", "WI"],
   );
   for (const state of implementedUsStates()) {
     assert.equal(
@@ -48,7 +48,7 @@ test("the pack now withholds state income tax somewhere", () => {
 
 test("supported states are the implemented ones PLUS the genuinely no-tax ones", () => {
   const supported = supportedUsStates();
-  assert.equal(supported.length, 50); // 41 implemented + 9 no-tax
+  assert.equal(supported.length, 51); // 42 implemented + 9 no-tax
   for (const state of ["CA", "CO", "CT", "DE", "NY", "PA", "IL", "NJ", "OH", "MI", "MA", "MD", "ME", "GA", "HI", "NC",
     "AL", "AR", "AZ", "ID", "IN", "KS", "KY", "LA", "VA", "VT", "WV", "IA", "MN", "MS", "MO", "MT", "NE", "ND", "OK", "WI", "UT", "OR", "RI", "SC",
     "TX", "FL", "WA"]) {
@@ -68,22 +68,15 @@ test("supported states are the implemented ones PLUS the genuinely no-tax ones",
 /* Refusals                                                               */
 /* --------------------------------------------------------------------- */
 
-test("an untranscribed state is refused BY NAME, with the publication and the file", () => {
-  // Arkansas and Maine now compute. The District of Columbia carries the
-  // refusal: the list of states this sentence can be written about is
-  // supposed to keep shrinking.
-  assert.throws(
-    () => requireUsStateWithholding("DC"),
-    (error: unknown) => {
-      const message = (error as Error).message;
-      assert.match(message, /DC income tax withholding is not implemented/);
-      assert.match(message, /District of Columbia FR-230/);
-      assert.match(message, /engine\/src\/payroll\/us\/states\/dc\.ts/); // source-path: synthetic
-      assert.match(message, /withholding the federal amount.*would each be silently\s+wrong/s);
-      assert.match(message, /Implemented today: AL, AZ, AR, CA, CO, CT, DE, GA, HI, ID, IL, IN, IA, KS, KY, LA, ME, MD, MA, MI, MN, MS, MO, MT, NE, NJ, NM, NY, NC, ND, OH, OK, OR, PA, RI, SC, UT, VT, VA, WV, WI/);
-      return true;
-    },
-  );
+test("the fleet is complete: no wage-tax jurisdiction lacks an engine", () => {
+  // The District of Columbia was the last one: it levies a wage income tax
+  // and had no engine, so it carried the refusal below. Now it computes
+  // (see conformance-dc.test.ts), and every other wage-tax jurisdiction in
+  // US_STATES already did. The refusal branch in requireUsStateWithholding
+  // stays for the next untranscribed levy — this test fails the moment one
+  // appears without an engine, which is how the list stays honest.
+  assert.deepEqual(unimplementedUsStates(), []);
+  assert.ok(requireUsStateWithholding("DC"));
 });
 
 test("a no-tax state returns null rather than throwing — nothing to withhold", () => {
@@ -170,7 +163,7 @@ test("the W-4 reads through profile COLUMNS — one interface, two storages", ()
 
 test("state certificates store answers in ROWS, never in a new column", () => {
   for (const key of [
-    "us_ca_de4", "us_ny_it2104", "us_il_ilw4", "us_pa_rev419", "us_co_dr0004", "us_ct_ctw4",
+    "us_ca_de4", "us_ny_it2104", "us_il_ilw4", "us_pa_rev419", "us_co_dr0004", "us_ct_ctw4", "us_dc_d4",
     "us_md_mw507", "us_md_mw507_nr", "us_or_orw4", "us_de_sdw4a",
     "us_al_a4", "us_sc_scw4", "us_ar_ar4ec", "us_me_w4me", "us_ri_riw4", "us_vt_w4vt", "us_hi_hw4",
     "us_id_idw4", "us_ks_k4", "us_la_l4",

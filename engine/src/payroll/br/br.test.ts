@@ -14,6 +14,7 @@ import { BR_WITHHOLDING } from "./withholding.ts";
 import { BR_PACK_RATES, BR_TAX_YEARS } from "./rates.ts";
 import { brPackFilings } from "./filings.ts";
 import {
+  brRateLookupScope,
   computeBrStatutoryWithRates,
   type BrEmployerRates,
 } from "./compute-statutory.ts";
@@ -26,6 +27,7 @@ import {
   unregisterPayrollTaxYears,
 } from "../packs.ts";
 import { undeclaredJurisdictionHolidayConflict } from "../holidays.ts";
+import { buildResolution } from "../statutory-rates.ts";
 
 const RATES: BrEmployerRates = { ratPct: "2", fap: "1", terceirosPct: "5.8" };
 
@@ -188,4 +190,29 @@ test("BR profile jurisdiction resolves to a declared employment calendar", () =>
     }),
     null,
   );
+});
+
+test("BR rate lookup carries the region, or no saved rate resolves", () => {
+  // Every br_* row carries a region (the schema forbids an account-scoped
+  // row without one), so the scope the pack hands the resolution must carry
+  // it too: a lookup of { filingAccountId } alone matches no row and the
+  // whole pack refuses with rates on file. That was the shipped shape.
+  const account = "11111111-1111-1111-1111-111111111111";
+  const rows = [
+    { id: "r1", country: "BR", rateKey: "br_rat", region: "BR", filingAccountId: null, taxYear: 2026, values: { aliquota: "2.00" }, supersededOn: null },
+    { id: "r2", country: "BR", rateKey: "br_rat", region: "BR", filingAccountId: account, taxYear: 2026, values: { aliquota: "3.00" }, supersededOn: null },
+  ];
+  const resolution = buildResolution({ country: "BR", taxYear: 2026, pack: BR_PACK_RATES, rows, legacy: [] });
+  const scope = brRateLookupScope({ region: "BR", filingAccountId: account });
+  assert.deepEqual(scope, { region: "BR", filingAccountId: account });
+  // The establishment's own row answers first; the region-wide row covers
+  // employees on no named account.
+  assert.equal(resolution.values("br_rat", scope)?.["aliquota"], "3.00");
+  assert.equal(
+    resolution.values("br_rat", brRateLookupScope({ region: "BR", filingAccountId: null }))?.["aliquota"],
+    "2.00",
+  );
+  // The pre-fix shape — account but no region — resolves nothing, which is
+  // the refusal a live run reported with both rows on file.
+  assert.equal(resolution.values("br_rat", { filingAccountId: account }), null);
 });

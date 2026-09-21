@@ -83,8 +83,10 @@ test("slots are PAYE plus employee/employer NIC only — no loan, no pension", (
 });
 
 test("2026/27 IS transcribed with its edition stamp, and the pack is installable", () => {
-  assert.equal(GB_TAX_YEARS.editions.length, 2);
-  const [edition] = GB_TAX_YEARS.editions;
+  assert.equal(GB_TAX_YEARS.editions.length, 6);
+  const edition = GB_TAX_YEARS.editions.find(
+    (entry) => entry.year === 2026 && entry.region == null,
+  );
   assert.equal(edition!.year, 2026);
   assert.equal(edition!.effectiveFrom, "2026-04-06");
   assert.match(edition!.citation, /rates-and-thresholds-for-employers-2026-to-2027/);
@@ -92,11 +94,29 @@ test("2026/27 IS transcribed with its edition stamp, and the pack is installable
   assert.ok(GB_TAX_YEARS.regionsWithOwnTables.includes("SCT"));
   // SCT publishes separately and now HAS a 2026/27 edition naming it: a year
   // is loaded for SCT only through that edition — no silent rUK fall-through.
-  const sct = GB_TAX_YEARS.editions.find((entry) => entry.region === "SCT");
+  const sct = GB_TAX_YEARS.editions.find(
+    (entry) => entry.region === "SCT" && entry.year === 2026,
+  );
   assert.equal(sct?.year, 2026);
   assert.equal(sct?.status, "published");
   assert.equal(sct?.effectiveFrom, "2026-04-06");
   assert.match(sct?.citation ?? "", /scottish-income-tax/);
+  // Prior years publish both scopes too: each year needs its main edition
+  // AND its Scotland-bands edition, with their own citations.
+  for (const year of [2025, 2024]) {
+    const prior = GB_TAX_YEARS.editions.find(
+      (entry) => entry.year === year && entry.region == null,
+    );
+    const priorSct = GB_TAX_YEARS.editions.find(
+      (entry) => entry.year === year && entry.region === "SCT",
+    );
+    assert.equal(prior?.status, "published", `GB ${year}`);
+    assert.equal(prior?.effectiveFrom, `${year}-04-06`, `GB ${year}`);
+    assert.match(prior?.citation ?? "", new RegExp(`rates-and-thresholds-for-employers-${year}-to-${year + 1}`));
+    assert.equal(priorSct?.status, "published", `GB SCT ${year}`);
+    assert.equal(priorSct?.effectiveFrom, `${year}-04-06`, `GB SCT ${year}`);
+    assert.match(priorSct?.citation ?? "", /scottish-income-tax/);
+  }
   assert.equal(GB_PACK.installable, true);
   assert.equal(GB_PACK.statutoryCurrency, "GBP");
   assert.equal(GB_PACK_RATES.country, "GB");

@@ -39,7 +39,7 @@ interface Exclusion {
 
 interface Artifact {
   id: string
-  format: 'cpa005' | 'nacha' | 'sepa' | 'cemtex'
+  format: 'cpa005' | 'nacha' | 'sepa' | 'cemtex' | 'bacs' | 'cnab240' | 'zengin'
   sequenceNumber: number
   fileNumber: string
   fileCreationNumber: number | null
@@ -63,7 +63,7 @@ interface Artifact {
 interface Profile {
   id: string
   name: string
-  format: 'cpa005' | 'nacha' | 'sepa' | 'cemtex'
+  format: 'cpa005' | 'nacha' | 'sepa' | 'cemtex' | 'bacs' | 'cnab240' | 'zengin'
   currency: string | null
   configured: boolean
 }

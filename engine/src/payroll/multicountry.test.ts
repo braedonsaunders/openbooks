@@ -211,11 +211,11 @@ test("every T4127 province is supported, including QC and ZZ", () => {
   }
 });
 
-test("the US pack still refuses a withholding state, and an unknown one differently", () => {
+test("the US pack supports every withholding jurisdiction, and an unknown one differently", () => {
   // Preserved behaviour — this was the good precedent the CA pack now follows.
   // WHICH states are refused has moved: `supported` is now DERIVED from the
-  // registered engines, so California through South Carolina are supported
-  // (their tables are transcribed) and the District of Columbia's is not.
+  // registered engines, so California through the District of Columbia are
+  // supported (their tables are transcribed) and nothing withholding is left.
   assert.doesNotThrow(() => assertPayrollRegionSupported("US", "CA"));
   assert.doesNotThrow(() => assertPayrollRegionSupported("US", "CO"));
   assert.doesNotThrow(() => assertPayrollRegionSupported("US", "CT"));
@@ -237,23 +237,21 @@ test("the US pack still refuses a withholding state, and an unknown one differen
   assert.doesNotThrow(() => assertPayrollRegionSupported("US", "MS"));
   assert.doesNotThrow(() => assertPayrollRegionSupported("US", "NE"));
   assert.doesNotThrow(() => assertPayrollRegionSupported("US", "NM"));
-  assert.throws(
-    () => assertPayrollRegionSupported("US", "DC"),
-    /DC income tax withholding is not implemented by the US payroll pack/,
-  );
+  assert.doesNotThrow(() => assertPayrollRegionSupported("US", "DC"));
   assert.throws(
     () => assertPayrollRegionSupported("US", "ON"),
     /unknown US state "ON" on the payroll profile/,
   );
-  // Fifty: the forty-one states whose income tax the pack computes
+  // Fifty-one: the forty-two jurisdictions whose income tax the pack computes
+  // end to end, plus the nine that levy none. The old assertion pinned NINE — and
   // end to end, plus the nine that levy none. The old assertion pinned NINE — and
   // every one of those nine was a no-tax state, which is to say the pack
   // supported only the places with nothing to withhold and nothing in the
   // codebase could tell. Derived from the engine registry now, so the two
   // cannot disagree.
   assert.equal(
-    PAYROLL_COUNTRY_PACKS.US!.regions.supported.length, 50,
-    "forty-one states with an engine, nine with no wage income tax",
+    PAYROLL_COUNTRY_PACKS.US!.regions.supported.length, 51,
+    "forty-two jurisdictions with an engine, nine with no wage income tax",
   );
 });
 

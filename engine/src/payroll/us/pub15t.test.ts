@@ -18,10 +18,14 @@ const money = (value: string) => {
   return `${whole}.${(fraction + "0000").slice(0, 4)}`;
 };
 
-test("edition resolution: 2026 only, refuses unknown years", () => {
+test("edition resolution: 2026, 2025 and 2024, refuses unknown years", () => {
   assert.equal(ratesForPayDate("2026-01-01").year, 2026);
   assert.equal(ratesForPayDate("2026-12-31").year, 2026);
-  assert.throws(() => ratesForPayDate("2025-12-31"));
+  assert.equal(ratesForPayDate("2025-01-01").year, 2025);
+  assert.equal(ratesForPayDate("2025-12-31").year, 2025);
+  assert.equal(ratesForPayDate("2024-01-01").year, 2024);
+  assert.equal(ratesForPayDate("2024-12-31").year, 2024);
+  assert.throws(() => ratesForPayDate("2023-12-31"));
   assert.throws(() => ratesForPayDate("2027-01-01"));
 });
 

@@ -10,7 +10,7 @@ import { reciprocityAgreement } from "./reciprocity.ts";
 import { regionWithholding } from "./withholding-jurisdictions.ts";
 import { PAYROLL_COUNTRY_PACKS, setPackSlotAccount } from "./packs.ts";
 import {
-  CA_WITHHOLDING, MA_WITHHOLDING, NY_WITHHOLDING, NYC_WITHHOLDING, PA_WITHHOLDING,
+  CA_WITHHOLDING, DC_WITHHOLDING, MA_WITHHOLDING, NY_WITHHOLDING, NYC_WITHHOLDING, PA_WITHHOLDING,
 } from "./us/states/index.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
@@ -427,19 +427,69 @@ test(
 );
 
 /* --------------------------------------------------------------------- */
-/* 4 + 5. The refusals — never a silent zero                              */
+/* 4. District of Columbia — the last missing engine, now withholding      */
 /* --------------------------------------------------------------------- */
 
 test(
-  "an unimplemented state and an unrated Ohio municipality both REFUSE by name",
+  "a District employee's stub carries DC tax, at the amount the DC engine computes",
   { skip: !DB },
   async () => {
     const fx = await usPayrollOrg();
     try {
-      // The District of Columbia levies a wage income tax that this pack has
-      // not transcribed. Withholding the federal amount, a neighbour's amount,
-      // or nothing at all would each be silently wrong money on every stub.
-      const connecticut = await usEmployee(fx, "Hartford Hank", { state: "DC" });
+      // The defect this closes: a DC employer could not be withheld for at
+      // all — every DC pay date refused by name. Now the run withholds
+      // through the FR-230 percentage method as redirected by OTR Tax Notice
+      // 2022-08, and the stub amount equals the engine called directly.
+      const employee = await usEmployee(fx, "District Dana", {
+        state: "DC",
+        certificates: [{
+          key: "us_dc_d4", region: "DC", answers: { allowances: "1" },
+        }],
+      });
+      const { run, result } = await runPayroll(fx);
+      assert.deepEqual(result.errors, []);
+
+      const stub = await stubOf(fx, run.documentId, employee);
+      assert.ok(stub, "the District employee was paid");
+      const expected = DC_WITHHOLDING.compute({
+        payDate: PAY_DATE,
+        periodEnd: PERIOD_END,
+        periodsPerYear: 26,
+        wages: PERIOD_WAGES,
+        certificate: resolveCertificate({
+          certificate: payrollCertificate("US", "us_dc_d4"),
+          stored: [{
+            certificateKey: "us_dc_d4",
+            answers: { allowances: "1" },
+            effectiveFrom: "2026-01-01",
+          }],
+          asOf: PAY_DATE,
+        }),
+        basis: "resident",
+      });
+      assert.notEqual(expected.tax, "0.0000", "the fixture must actually be taxable");
+      assert.equal(stub!.factors.SIT_DC, expected.tax);
+      const deductions = await deductionsOf(fx, stub!.id);
+      assert.equal(
+        deductions.find((line) => line.system_key === "state_income_tax")!.description,
+        "District of Columbia income tax",
+      );
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+/* --------------------------------------------------------------------- */
+/* 5. The refusals — never a silent zero                                  */
+/* --------------------------------------------------------------------- */
+
+test(
+  "an unrated Ohio municipality REFUSES by name",
+  { skip: !DB },
+  async () => {
+    const fx = await usPayrollOrg();
+    try {
       // An Ohio municipality the employer has entered no rate for. Ohio
       // publishes no municipal withholding rate table, so the rate is
       // employer-entered — and an unentered one must stop the run, not withhold
@@ -457,12 +507,6 @@ test(
       const plainOhio = await usEmployee(fx, "Plain Ohio Pat", { state: "OH" });
 
       const { run, result } = await runPayroll(fx);
-
-      assert.equal(await stubOf(fx, run.documentId, connecticut), null);
-      const ctRefusal = result.errors.find((error) => error.employee === "Hartford Hank");
-      assert.ok(ctRefusal);
-      assert.match(ctRefusal!.message, /DC income tax withholding is not implemented/);
-      assert.match(ctRefusal!.message, /Implemented: AL, AZ, AR, CA, CO, CT, DE, GA, HI, ID, IL, IN, IA, KS, KY, LA, ME, MD, MA, MI, MN, MS, MO, MT, NE, NJ, NM, NY, NC, ND, OH, OK, OR, PA, RI, SC, UT, VT, VA, WV, WI/);
 
       assert.equal(await stubOf(fx, run.documentId, ohio), null);
       const ohRefusal = result.errors.find((error) => error.employee === "Westerville Wes");

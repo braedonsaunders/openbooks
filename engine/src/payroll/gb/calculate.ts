@@ -3,9 +3,10 @@
  * NIC (category A), no database, no floats.
  *
  * Money discipline: decimal strings at the repo's 1e4-unit scale
- * (`toUnits`/`fromUnits` from engine/src/money/money.ts). All rates here are whole
- * percents, so every multiplication is exact integer arithmetic; the only
- * rounding in the pack is the penny rounding below.
+ * (`toUnits`/`fromUnits` from engine/src/money/money.ts). Every rate is an
+ * exact decimal fraction parsed to a numerator over 10^decimals (whole
+ * percents and 2024/25's 13.8% alike), so every multiplication is exact
+ * integer arithmetic; the only rounding in the pack is the penny rounding below.
  *
  * Rounding (quoted, then implemented):
  * - NIC: SSCR 2001 Regulation 12(1) — "primary and secondary Class 1
@@ -46,33 +47,29 @@
 
 import { fromUnits, toUnits } from "../../money/money.ts";
 import { PayrollPackError } from "../payroll-error.ts";
+import type { GbNicThresholds } from "./rates.ts";
+import { GB_TAX_YEAR_START } from "./rates.ts";
 import {
-  GB_NIC_ANNUAL,
-  GB_NIC_EMPLOYEE_MAIN_RATE,
-  GB_NIC_EMPLOYEE_UPPER_RATE,
-  GB_NIC_EMPLOYER_RATE,
-  GB_NIC_MONTHLY,
-  GB_NIC_WEEKLY,
-  GB_PERSONAL_ALLOWANCE_ANNUAL,
-  GB_RUK_BANDS,
-  GB_SCT_BANDS,
-  GB_TAX_YEAR,
-  GB_TAX_YEAR_END,
-  GB_TAX_YEAR_START,
-  type GbNicThresholds,
-} from "./rates.ts";
+  GB_2024_TABLES,
+  GB_2025_TABLES,
+  GB_2026_TABLES,
+  GB_MONTH_ONE_END,
+  type GbYearTables,
+} from "./year-tables.ts";
 import type { GbTaxCode } from "./tax-codes.ts";
 
-/** Last pay date whose record is complete by definition (tax month 1). */
-export const GB_MONTH_ONE_END = "2026-05-05";
+/** The transcribed 2026/27 month-one end, re-exported from the year tables. */
+export { GB_MONTH_ONE_END };
 
-/** Refuse a pay date outside the transcribed 2026/27 year — never extrapolate. */
+/** Refuse a pay date outside the transcribed years — never extrapolate. */
 export function gbResolveTaxYear(payDate: string): number {
-  if (payDate >= GB_TAX_YEAR_START && payDate <= GB_TAX_YEAR_END) return GB_TAX_YEAR;
+  for (const tables of [GB_2026_TABLES, GB_2025_TABLES, GB_2024_TABLES]) {
+    if (payDate >= tables.yearStart && payDate <= tables.yearEnd) return tables.year;
+  }
   throw new PayrollPackError(
-    `GB payroll pack has no transcribed tables for pay date ${payDate} — 2026/27 covers `
-    + `${GB_TAX_YEAR_START}..${GB_TAX_YEAR_END} (see GB_TAX_YEARS). A pay date outside the `
-    + "transcribed year is refused, never priced from another year's tables.",
+    `GB payroll pack has no transcribed tables for pay date ${payDate} — transcribed years cover `
+    + `${GB_2024_TABLES.yearStart}..${GB_2026_TABLES.yearEnd} (see GB_TAX_YEARS). A pay date outside the `
+    + "transcribed years is refused, never priced from another year's tables.",
   );
 }
 
@@ -92,17 +89,26 @@ function annualUnits(value: string): bigint {
   return toUnits(value);
 }
 
-/** Parse a whole-percent rate string ("0.08") to its integer percent (8n). */
-function wholePercent(rate: string): bigint {
+/**
+ * Parse a rate decimal string ("0.08", "0.138") to its exact numerator
+ * over 10^decimals. The 2024/25 employer rate is 13.8% — not a whole
+ * percent — so the parser takes the fraction the authority prints (up to
+ * three decimals) rather than truncating it; every multiplication below
+ * stays exact integer arithmetic.
+ */
+function rateFraction(rate: string): { num: bigint; den: bigint } {
   const parts = rate.split(".");
-  if (parts.length !== 2 || !/^\d+$/.test(parts[1]!)) {
-    throw new PayrollPackError(`GB rate is a whole-percent decimal, got "${rate}"`);
+  const frac = parts[1];
+  if (parts.length !== 2 || parts[0] !== "0" || frac === undefined || !/^\d{1,3}$/.test(frac)) {
+    throw new PayrollPackError(`GB rate is a zero-point decimal fraction, got "${rate}"`);
   }
-  const frac = (parts[1]! + "00").slice(0, 2);
-  if (parts[0] !== "0" || !/^\d+$/.test(frac)) {
-    throw new PayrollPackError(`GB rate is a whole-percent decimal, got "${rate}"`);
-  }
-  return BigInt(Number(frac));
+  return { num: BigInt(frac), den: 10n ** BigInt(frac.length) };
+}
+
+/** Liability on a base at an exact decimal rate, still in 1e4 units. */
+function applyRate(baseUnits: bigint, rate: string): bigint {
+  const { num, den } = rateFraction(rate);
+  return (baseUnits * num) / den;
 }
 
 /**
@@ -110,20 +116,23 @@ function wholePercent(rate: string): bigint {
  * for P = 52/12/1; any other positive frequency pro-rates the annual figure
  * to the penny (half down), per the CWG2 pro-rating principle.
  */
-export function gbNicThresholdsForPeriod(periodsPerYear: number): GbNicThresholds {
+export function gbNicThresholdsForPeriod(
+  periodsPerYear: number,
+  tables: GbYearTables = GB_2026_TABLES,
+): GbNicThresholds {
   if (!Number.isInteger(periodsPerYear) || periodsPerYear <= 0) {
     throw new PayrollPackError(`GB NIC needs a positive integer periods-per-year, got ${periodsPerYear}`);
   }
-  if (periodsPerYear === 52) return GB_NIC_WEEKLY;
-  if (periodsPerYear === 12) return GB_NIC_MONTHLY;
-  if (periodsPerYear === 1) return GB_NIC_ANNUAL;
+  if (periodsPerYear === 52) return tables.nicWeekly;
+  if (periodsPerYear === 12) return tables.nicMonthly;
+  if (periodsPerYear === 1) return tables.nicAnnual;
   const prorate = (annual: string): string =>
     fromUnits(gbRoundPennyUnits(toUnits(annual) / BigInt(periodsPerYear)));
   return {
-    lel: prorate(GB_NIC_ANNUAL.lel),
-    pt: prorate(GB_NIC_ANNUAL.pt),
-    st: prorate(GB_NIC_ANNUAL.st),
-    uel: prorate(GB_NIC_ANNUAL.uel),
+    lel: prorate(tables.nicAnnual.lel),
+    pt: prorate(tables.nicAnnual.pt),
+    st: prorate(tables.nicAnnual.st),
+    uel: prorate(tables.nicAnnual.uel),
   };
 }
 
@@ -135,17 +144,20 @@ export interface GbNicResult {
 }
 
 /**
- * One period of category-A Class 1 NIC by the exact percentage method:
- * 8% of (UTL-capped earnings above PT) plus 2% above UEL for the employee,
- * 15% of earnings above ST for the employer — each share rounded once.
+ * One period of category-A Class 1 NIC by the exact percentage method, priced
+ * from the given year's tables (2026/27 when omitted): the employee main rate
+ * of UEL-capped earnings above PT plus the upper rate above UEL, and the
+ * employer rate of earnings above ST — each share rounded once.
  */
 export function calculateGbNic(input: {
   earnings: string;
   periodsPerYear: number;
+  tables?: GbYearTables;
 }): GbNicResult {
+  const tables = input.tables ?? GB_2026_TABLES;
   const base = toUnits(input.earnings);
   if (base < 0n) throw new PayrollPackError(`GB NIC needs non-negative earnings, got ${input.earnings}`);
-  const t = gbNicThresholdsForPeriod(input.periodsPerYear);
+  const t = gbNicThresholdsForPeriod(input.periodsPerYear, tables);
   const pt = toUnits(t.pt);
   const st = toUnits(t.st);
   const uel = toUnits(t.uel);
@@ -153,13 +165,10 @@ export function calculateGbNic(input: {
   const mainBase = base < pt ? 0n : (base < uel ? base : uel) - pt;
   const upperBase = base < uel ? 0n : base - uel;
   const employee = gbRoundPennyUnits(
-    (mainBase * wholePercent(GB_NIC_EMPLOYEE_MAIN_RATE)
-      + upperBase * wholePercent(GB_NIC_EMPLOYEE_UPPER_RATE)) / 100n,
+    applyRate(mainBase, tables.nicEmployeeMainRate) + applyRate(upperBase, tables.nicEmployeeUpperRate),
   );
   const employerBase = base < st ? 0n : base - st;
-  const employer = gbRoundPennyUnits(
-    (employerBase * wholePercent(GB_NIC_EMPLOYER_RATE)) / 100n,
-  );
+  const employer = gbRoundPennyUnits(applyRate(employerBase, tables.nicEmployerRate));
   return { employee: fromUnits(employee), employer: fromUnits(employer) };
 }
 
@@ -180,25 +189,25 @@ function gbBandedLiabilityUnits(
     if (remaining <= 0n) break;
     const width = band.upTo == null ? null : annualUnits(band.upTo) - lower;
     const inBand = width == null ? remaining : (remaining < width ? remaining : width);
-    liability += (inBand * wholePercent(band.rate)) / 100n;
+    liability += applyRate(inBand, band.rate);
     remaining -= inBand;
     if (width != null) lower += width;
   }
   return liability;
 }
 
-/** rUK liability on taxable pay units: 20/40/45 across the transcribed bands. */
-export function gbRukLiabilityUnits(taxableUnits: bigint): bigint {
-  return gbBandedLiabilityUnits(GB_RUK_BANDS, taxableUnits);
+/** rUK liability on taxable pay units, priced from the given year's bands. */
+export function gbRukLiabilityUnits(taxableUnits: bigint, tables: GbYearTables = GB_2026_TABLES): bigint {
+  return gbBandedLiabilityUnits(tables.rukBands, taxableUnits);
 }
 
 /**
- * Scottish liability on taxable pay units: starter 19% through top 48%
- * across GB_SCT_BANDS. NIC is untouched — it remains reserved and UK-wide,
+ * Scottish liability on taxable pay units, priced from the given year's
+ * starter..top bands. NIC is untouched — it remains reserved and UK-wide,
  * so only the PAYE entry point below selects this table (never the NIC one).
  */
-export function gbSctLiabilityUnits(taxableUnits: bigint): bigint {
-  return gbBandedLiabilityUnits(GB_SCT_BANDS, taxableUnits);
+export function gbSctLiabilityUnits(taxableUnits: bigint, tables: GbYearTables = GB_2026_TABLES): bigint {
+  return gbBandedLiabilityUnits(tables.sctBands, taxableUnits);
 }
 
 /** HMRC tax-month number (1–12) for a pay date in 2026/27. Month 1 = 6 Apr–5 May. */
@@ -211,9 +220,11 @@ export function gbTaxMonthNumber(payDate: string): number {
   return index + 1;
 }
 
-/** HMRC tax-week number (1–53) for a pay date in 2026/27. Week 1 = 6–12 Apr. */
-export function gbTaxWeekNumber(payDate: string): number {
-  const start = Date.UTC(2026, 3, 6);
+/** HMRC tax-week number (1–53) for a pay date in the given year. Week 1 = 6–12 Apr. */
+export function gbTaxWeekNumber(payDate: string, yearStart: string = GB_TAX_YEAR_START): number {
+  const start = Date.UTC(
+    Number(yearStart.slice(0, 4)), Number(yearStart.slice(5, 7)) - 1, Number(yearStart.slice(8, 10)),
+  );
   const day = Date.UTC(
     Number(payDate.slice(0, 4)), Number(payDate.slice(5, 7)) - 1, Number(payDate.slice(8, 10)),
   );
@@ -221,8 +232,12 @@ export function gbTaxWeekNumber(payDate: string): number {
 }
 
 /** Cumulative free pay for a standard-allowance code: allowance × elapsed / P, capped at annual. */
-function cumulativeFreePayUnits(periodsPerYear: number, elapsed: number): bigint {
-  const annual = annualUnits(GB_PERSONAL_ALLOWANCE_ANNUAL);
+function cumulativeFreePayUnits(
+  periodsPerYear: number,
+  elapsed: number,
+  tables: GbYearTables = GB_2026_TABLES,
+): bigint {
+  const annual = annualUnits(tables.personalAllowanceAnnual);
   const free = (annual * BigInt(elapsed)) / BigInt(periodsPerYear);
   return free > annual ? annual : free;
 }
@@ -249,12 +264,14 @@ export function resolveGbCumulativeBasis(input: {
   starterDeclaration: GbStarterDeclaration;
   hasStubs: boolean;
   minStubPayDate: string | null;
+  monthOneEnd?: string;
 }): void {
   const { payDate, starterDeclaration, hasStubs, minStubPayDate } = input;
-  if (payDate <= GB_MONTH_ONE_END) return;
+  const monthOneEnd = input.monthOneEnd ?? GB_MONTH_ONE_END;
+  if (payDate <= monthOneEnd) return;
   if (starterDeclaration === "A") return;
   if (starterDeclaration === "C" && hasStubs) return;
-  if (minStubPayDate != null && minStubPayDate <= GB_MONTH_ONE_END) return;
+  if (minStubPayDate != null && minStubPayDate <= monthOneEnd) return;
   throw new PayrollPackError(
     "GB cumulative PAYE needs the complete in-year record and it is not on file: "
     + `no starter declaration A, no in-product stubs spanning the year start (pay date ${payDate}). `
@@ -295,8 +312,10 @@ export function calculateGbPaye(input: {
   priorAddedPay: string;
   priorTaxPaid: string;
   periodGrossPay: string;
+  tables?: GbYearTables;
 }): GbPayeResult {
   const { code, payDate, periodsPerYear } = input;
+  const tables = input.tables ?? GB_2026_TABLES;
   if (!Number.isInteger(periodsPerYear) || periodsPerYear <= 0) {
     throw new PayrollPackError(`GB PAYE needs a positive integer periods-per-year, got ${periodsPerYear}`);
   }
@@ -316,7 +335,7 @@ export function calculateGbPaye(input: {
   if (code.kind === "flat") {
     // The rate rides the code itself (Tables B): SBR/SD0–SD3 carry their
     // Scottish rates, BR/D0/D1 their rUK ones — no table lookup here.
-    const tax = gbRoundPennyUnits((period * wholePercent(code.rate)) / 100n);
+    const tax = gbRoundPennyUnits(applyRate(period, code.rate));
     return { tax: fromUnits(tax), periodTaxablePay: input.periodPay, periodAddedPay: "0.0000" };
   }
   // Scottish-taxpayer status follows the S-prefix code (the employee's main
@@ -324,7 +343,12 @@ export function calculateGbPaye(input: {
   // S1257L prices through the Scottish starter..top bands, everything else
   // through rUK. The free-pay schedule is shared (£12,570 reserved
   // allowance); only the bands differ. NIC never reaches this selector.
-  const bandLiability = code.scottish ? gbSctLiabilityUnits : gbRukLiabilityUnits;
+  // The bands — and the free-pay allowance below — come from the year's
+  // tables (2026/27 when omitted), so a prior-year correction prices that
+  // year's bands, never the current year's.
+  const bandLiability = code.scottish
+    ? (units: bigint) => gbSctLiabilityUnits(units, tables)
+    : (units: bigint) => gbRukLiabilityUnits(units, tables);
 
   const cumulative = !code.nonCumulative;
   if (cumulative && periodsPerYear !== 12 && periodsPerYear !== 52) {
@@ -354,7 +378,9 @@ export function calculateGbPaye(input: {
     return { tax: fromUnits(tax), periodTaxablePay: input.periodPay, periodAddedPay: "0.0000" };
   }
 
-  const elapsed = periodsPerYear === 12 ? gbTaxMonthNumber(payDate) : gbTaxWeekNumber(payDate);
+  const elapsed = periodsPerYear === 12
+    ? gbTaxMonthNumber(payDate)
+    : gbTaxWeekNumber(payDate, tables.yearStart);
   if (code.kind === "k") {
     const addedAnnual = toUnits(code.addedAnnual);
     const addedToDate = (addedAnnual * BigInt(elapsed)) / BigInt(periodsPerYear);
@@ -372,7 +398,7 @@ export function calculateGbPaye(input: {
   }
   const free = code.allowanceAnnual === "0"
     ? 0n
-    : cumulativeFreePayUnits(periodsPerYear, elapsed);
+    : cumulativeFreePayUnits(periodsPerYear, elapsed, tables);
   const cumPay = priorPay + period;
   const cumTaxable = cumPay - free;
   const cumLiability = gbRoundPennyUnits(bandLiability(cumTaxable < 0n ? 0n : cumTaxable));

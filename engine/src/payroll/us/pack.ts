@@ -53,6 +53,9 @@ import { VT_FACTOR_LABELS } from "./states/vt.ts";
 import { WI_FACTOR_LABELS } from "./states/wi.ts";
 import { WV_FACTOR_LABELS } from "./states/wv.ts";
 import { US_LOCAL_FACTOR_LABELS } from "./withholding.ts";
+// HR-13: the US pack's declared labor-compliance artefacts (types only
+// from the pack interface; the builders are pure over a typed context).
+import { US_LABOR_COMPLIANCE_FORMATS } from "./labor-compliance.ts";
 import { US_EMPLOYEE_FACTS } from "./employee-facts.ts";
 
 /**
@@ -406,4 +409,8 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
   },
   describeFactor: usDescribeFactor,
   employeeFacts: US_EMPLOYEE_FACTS,
+  // HR-13: the federal weekly file and one state XML, declared by the
+  // pack — the generic layer lists whatever is declared here. LAZY like
+  // filings/certificates so the builders never evaluate with the pack.
+  laborComplianceFiles: () => US_LABOR_COMPLIANCE_FORMATS,
 };
