@@ -1252,6 +1252,60 @@ test("a short transferor placement year uses a full 12-month year for §168(i)(7
   assert.equal(seller.current.bonus, formatMoney(mulRatio("9000.00", 3n, 11n), 2));
 });
 
+test("a short placement year with no bonus carries the deemed 12-month first year into the next recovery year", () => {
+  const split = [
+    { taxYear: 2018, yearStart: "2018-01-01", yearEnd: "2018-06-30" },
+    { taxYear: 2018, yearStart: "2018-07-01", yearEnd: "2018-12-31" },
+    { taxYear: 2019, yearStart: "2019-01-01", yearEnd: "2019-12-31" },
+  ];
+  const full = [
+    { taxYear: 2018, yearStart: "2018-01-01", yearEnd: "2018-12-31" },
+    { taxYear: 2019, yearStart: "2019-01-01", yearEnd: "2019-12-31" },
+  ];
+  const next = {
+    basis: "10000",
+    placedInServiceOn: "2018-02-05",
+    taxYear: 2019,
+    yearStart: "2019-01-01",
+    yearEnd: "2019-12-31",
+    recoveryPeriodYears: 5 as const,
+    method: "200_db" as const,
+    convention: "half_year" as const,
+    bonusPercent: 0,
+    adjustedCarryover: "10000.00",
+    carryoverOn: "2018-05-20",
+    section168i7Kind: "nonrecognition" as const,
+  };
+  const fromSplit = computeMacrsThroughYear(next, split);
+  const fromFull = computeMacrsThroughYear(next, full);
+  assert.equal(fromSplit.current.allowance, fromFull.current.allowance);
+  assert.equal(fromSplit.current.remainingBasis, fromFull.current.remainingBasis);
+  assert.equal(fromSplit.currentRecoveryYearIndex, fromFull.currentRecoveryYearIndex);
+  assert.equal(fromSplit.current.allowance, "3200.00");
+  assert.notEqual(fromSplit.current.allowance, "1920.00");
+});
+
+test("an A-to-B-to-C citation set does not flatten overlapping former-owner calendars", () => {
+  const windows = [
+    { subsidiaryId: "A", regime: "us_macrs", taxYear: 2025, yearStart: "2025-01-01", yearEnd: "2025-12-31" },
+    { subsidiaryId: "B", regime: "us_macrs", taxYear: 2026, yearStart: "2025-07-01", yearEnd: "2026-06-30" },
+    { subsidiaryId: "C", regime: "us_macrs", taxYear: 2026, yearStart: "2026-01-01", yearEnd: "2026-12-31" },
+  ];
+  const timelines = macrsLineageRecoveryWindows({
+    windows,
+    placedInServiceOn: "2025-01-01",
+    transferOn: "2026-08-20",
+    asOf: "2026-12-31",
+    ownerSubsidiaryId: "C",
+    originSubsidiaryId: "A",
+  });
+  assert.equal(timelines.recoveryYears.some((row) => row.subsidiaryId === "B"), false);
+  assert.ok(timelines.recoveryYears.some((row) => row.yearStart === "2025-01-01" && row.yearEnd === "2025-12-31"));
+  assert.deepEqual(timelines.reportingWindows.map((row) => `${row.subsidiaryId}:${row.yearStart}:${row.yearEnd}`), [
+    "C:2026-01-01:2026-12-31",
+  ]);
+});
+
 test("a split 4dp checkpoint survives refresh without rounding remaining to 2dp", () => {
   const windows = [
     { taxYear: 2023, yearStart: "2023-01-01", yearEnd: "2023-12-31" },
