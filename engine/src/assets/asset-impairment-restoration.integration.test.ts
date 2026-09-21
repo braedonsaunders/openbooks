@@ -238,10 +238,13 @@ test(
       });
       assert.equal(deeper.delta, "-50.0000");
       snapshot = await evidence();
-      assert.deepEqual(await futurePlanned(), [
-        ...Array.from({ length: 8 }, () => "77.7777"),
-        "77.7784",
+      const deeperPlan = await futurePlanned();
+      assert.deepEqual(deeperPlan, [
+        ...Array.from({ length: 8 }, () => "77.7778"),
+        "77.7776",
       ]);
+      assert.equal(deeperPlan.reduce((total,amount) => total+toUnits(amount),0n),toUnits("700"),
+        "nearest-four-decimal installments plus the final exact residual conserve the impaired basis");
       assert.equal(snapshot.lines.find((line) => line.sequence === 0)!.posted, "100.0000");
       assert.deepEqual(snapshot.events, [{ n: 2 }]);
       assert.deepEqual(snapshot.journals, [{ n: 2 }]);

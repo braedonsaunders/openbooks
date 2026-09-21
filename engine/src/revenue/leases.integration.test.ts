@@ -444,7 +444,11 @@ for (const phase of ["commencement", "payment"] as const) {
         const run = () => phase === "commencement"
           ? commenceLease(org.orgId, leaseId, null)
           : postDueLeaseSchedules(org.orgId, "2026-07-31", null);
-        await assert.rejects(run(), /active primary posting book/);
+        await assert.rejects(run(), (error: unknown) =>
+          error instanceof LeaseError &&
+          /lease posting book is no longer active or GL-posting/.test(error.message) &&
+          /authorized administrator.*originating book.*Accounting books/.test(error.message),
+          `${phase}/${flag}: refuse the originating book and name its authorized repair path`);
         const state = (await db.execute<{ status: string; journals: number; claimed: number }>(sql`
           select status,(select count(*)::int from journal_entries where org_id=${org.orgId}) as journals,
             (select count(*)::int from lease_agreement_schedule_lines where org_id=${org.orgId}
