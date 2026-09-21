@@ -181,6 +181,17 @@ export const PERMISSION_CATALOGUE = [
   "hrm.certifications.read",
   "hrm.certifications.manage",
   // HR-14 end
+  // HR-19 begin: documents and surveys — the same confidentiality rule
+  // as employment. documents.read sees HR documents, templates, retention
+  // state and exports; documents.manage authors templates, issues/sends/
+  // voids documents and runs retention and DSAR exports. surveys.manage
+  // authors surveys and reads aggregate results (responding rides
+  // invitation tokens, never a grant). Admin-only like the employment
+  // keys above.
+  "hrm.documents.read",
+  "hrm.documents.manage",
+  "hrm.surveys.manage",
+  // HR-19 end
   // HR-12 compensation (0221/0222) — the same confidentiality rule as
   // employment: who is paid what, and whether pay is equitable, are
   // never riders on time.*, payroll.*, or parties.*. read = bands,
@@ -486,6 +497,12 @@ export const PERMISSION_GROUPS: {
       { key: "hrm.certifications.read", labelKey: permissionLabelKey("hrm.certifications.read") },
       { key: "hrm.certifications.manage", labelKey: permissionLabelKey("hrm.certifications.manage") },
       // HR-14 end
+      // HR-19 begin: appended after the construction keys so the pinned
+      // group order holds.
+      { key: "hrm.documents.read", labelKey: permissionLabelKey("hrm.documents.read") },
+      { key: "hrm.documents.manage", labelKey: permissionLabelKey("hrm.documents.manage") },
+      { key: "hrm.surveys.manage", labelKey: permissionLabelKey("hrm.surveys.manage") },
+      // HR-19 end
     ],
   },
   {

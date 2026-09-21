@@ -169,6 +169,16 @@ const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] =
   ["hrm_feedback", "requested_from_party_id"],
   ["hrm_calibration_sessions", "facilitator_party_id"],
   // HR-17 end
+  // HR-19 begin: document subjects, signer parties, and export subjects
+  // follow the merge wholesale. SIMPLE, not GUARDED: no uniqueness on
+  // those three tables involves a party column, so re-pointing cannot
+  // duplicate. Survey responses carry no party column (anonymous links
+  // are null by construction, confidential links are sealed bytes), so
+  // they need no entry — and must never gain a plain party column.
+  ["hrm_documents", "party_id"],
+  ["hrm_document_signers", "signer_party_id"],
+  ["hrm_data_subject_exports", "party_id"],
+  // HR-19 end
 ];
 
 /**
@@ -269,6 +279,16 @@ const GUARDED_PARTY_REFS: readonly GuardedPartyRef[] = [
     column: "employee_party_id",
     conflict: "s.pay_run_document_id = d.pay_run_document_id",
   },
+  // HR-19 begin: one invitation per (survey, party) — the table's own
+  // unique key minus the party being merged. Two rows collide only when
+  // both parties were invited to the SAME survey; the guarded path keeps
+  // the surviving invitation instead of forking the respondent's link.
+  {
+    table: "hrm_survey_invitations",
+    column: "party_id",
+    conflict: "s.org_id = d.org_id and s.survey_id = d.survey_id",
+  },
+  // HR-19 end
   {
     table: "payroll_opening_balances",
     column: "employee_party_id",

@@ -423,6 +423,9 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // calibration, talent review and succession (0228).
     "0228_hrm_continuous_performance.sql",
     // HR-17 end
+    // HR-19 begin: documents/e-sign/retention/DSAR/surveys (0230).
+    "0230_hrm_documents_surveys.sql",
+    // HR-19 end
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),

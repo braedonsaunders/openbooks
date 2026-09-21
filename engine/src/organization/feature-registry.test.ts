@@ -165,3 +165,36 @@ test("hrmCertifications is an opt-in hrm feature with gated sub-features", () =>
   );
 });
 // HR-14 end
+// HR-19 begin: documents ride hrm with retention and export sub-features;
+// surveys ride hrm with pulse as the sub-feature; the org chart is
+// default-on under hrm. A stale override never resurrects a child while
+// its parent is off, and toggling never deletes (no data assertions here
+// — the services own those).
+test("hrm documents, surveys, and org chart gate under hrm", () => {
+  for (const key of ["hrmDocuments", "hrmSurveys", "hrmOrgChart"]) {
+    const def = FEATURE_BY_KEY.get(key);
+    assert.ok(def, `${key} must be registered`);
+    assert.equal(def.parentKey, "hrm");
+    assert.equal(featureEnabled({ hrm: false, [key]: true }, key), false);
+  }
+  const docs = FEATURE_BY_KEY.get("hrmDocuments");
+  assert.ok(docs, "hrmDocuments must be registered");
+  assert.equal(docs.defaultEnabled, false);
+  for (const key of ["hrmDocumentRetention", "hrmDataSubjectExport"]) {
+    const sub = FEATURE_BY_KEY.get(key);
+    assert.ok(sub, `${key} must be registered`);
+    assert.equal(sub.parentKey, "hrmDocuments");
+    assert.equal(featureEnabled({ hrm: true, hrmDocuments: false, [key]: true }, key), false);
+    assert.equal(featureEnabled({ hrm: true, hrmDocuments: true, [key]: true }, key), true);
+  }
+  const pulse = FEATURE_BY_KEY.get("hrmPulseSurveys");
+  assert.ok(pulse, "hrmPulseSurveys must be registered");
+  assert.equal(pulse.parentKey, "hrmSurveys");
+  assert.equal(pulse.defaultEnabled, false);
+  const chart = FEATURE_BY_KEY.get("hrmOrgChart");
+  assert.ok(chart, "hrmOrgChart must be registered");
+  assert.equal(chart.defaultEnabled, true);
+  assert.equal(featureEnabled({ hrm: true }, "hrmOrgChart"), true);
+  assert.equal(featureEnabled({ hrm: false, hrmOrgChart: true }, "hrmOrgChart"), false);
+});
+// HR-19 end

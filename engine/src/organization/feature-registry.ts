@@ -209,6 +209,18 @@ export const FEATURES: FeatureDef[] = [
   { key: 'hrmEquipmentQualifications', defaultEnabled: false, category: 'operations', parentKey: 'hrmCertifications', requiresAll: ['equipment'] },
   { key: 'hrmCertificationAlerts', defaultEnabled: false, category: 'operations', parentKey: 'hrmCertifications' },
   // HR-14 end
+  // HR-19 begin: documents with e-sign ride the hrm parent; retention
+  // schedules with audited deletion and one-click subject-access exports
+  // are opt-in sub-features. Surveys ride hrm with pulse cadence as the
+  // opt-in complexity. The org chart is default-on: every suite has one.
+  // Toggling never deletes data — rows stay and re-render when re-on.
+  { key: 'hrmDocuments', defaultEnabled: false, category: 'operations', parentKey: 'hrm' },
+  { key: 'hrmDocumentRetention', defaultEnabled: false, category: 'operations', parentKey: 'hrmDocuments' },
+  { key: 'hrmDataSubjectExport', defaultEnabled: false, category: 'operations', parentKey: 'hrmDocuments' },
+  { key: 'hrmSurveys', defaultEnabled: false, category: 'operations', parentKey: 'hrm' },
+  { key: 'hrmPulseSurveys', defaultEnabled: false, category: 'operations', parentKey: 'hrmSurveys' },
+  { key: 'hrmOrgChart', defaultEnabled: true, category: 'operations', parentKey: 'hrm' },
+  // HR-19 end
 ]
 
 export const FEATURE_BY_KEY = new Map(FEATURES.map((f) => [f.key, f]))
