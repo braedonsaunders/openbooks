@@ -100,7 +100,7 @@ export async function appendApplicationEvent(
   exec: SqlExecutor,
   args: {
     orgId: string;
-    actorId: string;
+    actorId: string | null;
     applicationId: string;
     kind: string;
     fromStageId?: string | null;

@@ -492,7 +492,10 @@ export async function applyViaPosting(query: ApplyViaPostingQuery): Promise<{ ap
     const { appendApplicationEvent } = await import("./applications.ts");
     await appendApplicationEvent(db, {
       orgId,
-      actorId: query.actorId ?? candidateId,
+      // A public applicant is a candidate, never a user: attributing the
+      // event to the candidate id violates the users FK, so staff-less
+      // applies record a null actor and the reason names the posting.
+      actorId: query.actorId ?? null,
       applicationId: application.id,
       kind: "applied",
       toStageId: firstStage.id,
