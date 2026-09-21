@@ -524,6 +524,19 @@ export const IT_FACTOR_LABELS: Readonly<Record<string, string>> = {
   INPS_ER: "INPS — contributi IVS a carico del datore",
   TI: "Trattamento integrativo",
   SOMMA: "Somma di cui al comma 4 (L. 207/2024)",
+  CONG_IRPEF_ANNUAL: "Conguaglio — IRPEF annuale ricalcolata (art. 23 DPR 600/1973)",
+  CONG_IRPEF_YTD: "Conguaglio — IRPEF trattenuta nell'anno",
+  CONG_IRPEF_DELTA: "Conguaglio — differenza IRPEF",
+  CONG_ADDREG_ANNUAL: "Conguaglio — addizionale regionale annuale ricalcolata",
+  CONG_ADDREG_YTD: "Conguaglio — addizionale regionale trattenuta nell'anno",
+  CONG_ADDREG_DELTA: "Conguaglio — differenza addizionale regionale",
+  CONG_ADDCOM_ANNUAL: "Conguaglio — addizionale comunale annuale ricalcolata",
+  CONG_ADDCOM_YTD: "Conguaglio — addizionale comunale trattenuta nell'anno",
+  CONG_ADDCOM_DELTA: "Conguaglio — differenza addizionale comunale",
+  CONG_TI_ANNUAL: "Conguaglio — trattamento integrativo annuo verificato",
+  CONG_TI_PAID: "Conguaglio — trattamento integrativo erogato nell'anno",
+  CONG_SOMMA_ANNUAL: "Conguaglio — somma annua verificata (L. 207/2024)",
+  CONG_SOMMA_PAID: "Conguaglio — somma erogata nell'anno",
 };
 
 export async function computeItStatutoryWithRates(
