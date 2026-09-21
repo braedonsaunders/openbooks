@@ -16,7 +16,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
-import { add } from "../../money/money.ts";
+import { add, cmp } from "../../money/money.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../../testing/fixtures.ts";
 import { SG_PAYROLL_PACK } from "./pack.ts";
 import { ir8aSlips } from "./filings.ts";
@@ -84,7 +84,7 @@ async function seedIr8aYear(): Promise<Ir8aFixture> {
     await db.execute(sql`
       insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end, pay_date,
                             tax_year, run_status, calculated_at, created_by, updated_by)
-      values (${documentId}, ${org.orgId}, ${scheduleId}, ${`${payDate.slice(0, 8)}01`}, ${periodEnd},
+      values (${documentId}, ${org.orgId}, ${scheduleId}, ${`${periodEnd.slice(0, 8)}01`}, ${periodEnd},
               ${payDate}, 2026, ${status}, now(), ${actorId}, ${actorId})`);
     return documentId;
   };
@@ -158,20 +158,24 @@ test(
           (candidate) => candidate.employee_party_id === row.rowId,
         );
         assert.ok(expected, `population row ${row.rowId} ties to a committed-stub employee`);
-        assert.equal(row.employmentIncome, expected.income);
-        assert.equal(row.employeeCpf, expected.ee);
-        assert.equal(row.employerCpf, expected.er);
+        // Money ties by VALUE: the population and the raw column can carry
+        // different scales for the same amount.
+        assert.equal(cmp(String(row.employmentIncome), String(expected.income)), 0);
+        assert.equal(cmp(String(row.employeeCpf), String(expected.ee)), 0);
+        assert.equal(cmp(String(row.employerCpf), String(expected.er)), 0);
       }
 
       // Named figures: A earned 2 × $4,500 with $1,800 / $1,530 CPF;
       // B earned 2 × $3,000 with $1,200 / $1,020 CPF. March draft excluded.
       const byId = new Map(data.rows.map((row) => [row.rowId as string, row]));
-      assert.equal(byId.get(fx.employeeA)?.employmentIncome, "9000.00");
-      assert.equal(byId.get(fx.employeeA)?.employeeCpf, "1800.00");
-      assert.equal(byId.get(fx.employeeA)?.employerCpf, "1530.00");
-      assert.equal(byId.get(fx.employeeB)?.employmentIncome, "6000.00");
-      assert.equal(byId.get(fx.employeeB)?.employeeCpf, "1200.00");
-      assert.equal(byId.get(fx.employeeB)?.employerCpf, "1020.00");
+      // Compare by VALUE: the reader returns the column's own scale
+      // (9000.0000), which is the same money as 9000.00 and not a string match.
+      assert.equal(cmp(String(byId.get(fx.employeeA)?.employmentIncome), "9000.00"), 0);
+      assert.equal(cmp(String(byId.get(fx.employeeA)?.employeeCpf), "1800.00"), 0);
+      assert.equal(cmp(String(byId.get(fx.employeeA)?.employerCpf), "1530.00"), 0);
+      assert.equal(cmp(String(byId.get(fx.employeeB)?.employmentIncome), "6000.00"), 0);
+      assert.equal(cmp(String(byId.get(fx.employeeB)?.employeeCpf), "1200.00"), 0);
+      assert.equal(cmp(String(byId.get(fx.employeeB)?.employerCpf), "1020.00"), 0);
 
       // Totals tie to the same committed-stub sums, to the cent.
       const total = (pick: (row: { income: string; ee: string; er: string }) => string) =>
@@ -192,16 +196,19 @@ test(
       // The slip carries the same tied figures, box for box.
       const slip = await filing.slip!.build(fx.orgId, 2026, fx.employeeA);
       const boxes = new Map(slip.boxes.map((box) => [box.code, box.value]));
-      assert.equal(boxes.get("a–d"), "9000.00");
-      assert.equal(boxes.get("Ded(I)"), "1800.00");
-      assert.equal(boxes.get("ER-CPF"), "1530.00");
+      assert.equal(cmp(String(boxes.get("a–d")), "9000.00"), 0);
+      assert.equal(cmp(String(boxes.get("Ded(I)")), "1800.00"), 0);
+      assert.equal(cmp(String(boxes.get("ER-CPF")), "1530.00"), 0);
 
       // The builder agrees with the declaration: same rows, same figures.
       const slips = await ir8aSlips(fx.orgId, 2026);
       assert.equal(slips.length, 2);
       assert.equal(
-        slips.find((candidate) => candidate.employeePartyId === fx.employeeA)?.employmentIncome,
-        "9000.00",
+        cmp(
+          String(slips.find((candidate) => candidate.employeePartyId === fx.employeeA)?.employmentIncome),
+          "9000.00",
+        ),
+        0,
       );
     } finally {
       await dropScratchOrgReporting(fx.orgId);

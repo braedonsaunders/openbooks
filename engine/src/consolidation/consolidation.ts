@@ -74,8 +74,15 @@ export type ConsolidationCode =
 
 export class ConsolidationError extends Error {
   readonly code: ConsolidationCode;
-  constructor(message: string, code: ConsolidationCode = 'invalid') {
-    super(message);
+  /**
+   * `cause` is not decoration. Re-wrapping a caught database failure with only
+   * its MESSAGE discards the pg error underneath -- including SQLSTATE 40001,
+   * which is how a caller tells "lost a serialization race, retry" apart from
+   * "this data is invalid". Callers that classify a failure must be able to
+   * reach the original, so every construction from a caught error passes it.
+   */
+  constructor(message: string, code: ConsolidationCode = 'invalid', options?: { cause?: unknown }) {
+    super(message, options);
     this.name = 'ConsolidationError';
     this.code = code;
   }
@@ -1073,6 +1080,7 @@ async function runAutoEliminationIn(
         ? error.message
         : "Asset transfer consolidation failed",
       "invalid",
+      { cause: error },
     );
   }
   const assetLineCount = assetEntryIds.length
