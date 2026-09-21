@@ -3,19 +3,127 @@ import test from "node:test";
 import { add, cmp, formatMoney, neg } from "../money/money.ts";
 import {
   MacrsShortYearError,
+  addMacrsMonths,
+  allocationRecoveryDeduction,
   assertShortYearFactorAgrees,
+  compareMacrsMonths,
   decliningBalanceRate,
   formatCalendarDay,
   halfYearDeemedServiceDate,
   impliedShortYearFactor,
   isFullTaxYear,
   isShortTaxYear,
+  macrsMonthRatio,
+  macrsMonths,
+  maxMacrsMonths,
   midQuarterDeemedServiceDate,
   monthsTreatedInService,
   shortTaxYearMonths,
   shortYearPlacementDeduction,
+  subtractMacrsMonths,
   subsequentRecoveryDeduction,
+  subsequentSimplifiedDeduction,
 } from "./macrs-short-year.ts";
+
+test("exact month fractions conserve adjacent portions without binary or average-month rounding", () => {
+  const oneDay = macrsMonthRatio(1n, 31n);
+  const otherDays = macrsMonthRatio(30n, 31n);
+  assert.deepEqual(addMacrsMonths(oneDay, otherDays), macrsMonths(1));
+  assert.equal(compareMacrsMonths(macrsMonthRatio(2n, 62n), oneDay), 0);
+  assert.equal(compareMacrsMonths(oneDay, macrsMonthRatio(1n, 30n)), -1);
+  assert.deepEqual(macrsMonths(3.5), macrsMonthRatio(7n, 2n));
+  assert.deepEqual(subtractMacrsMonths(1, otherDays), oneDay);
+  assert.deepEqual(
+    maxMacrsMonths(0, subtractMacrsMonths(oneDay, 1)),
+    macrsMonths(0),
+  );
+  assert.throws(() => macrsMonthRatio(1n, 0n), /positive denominator/);
+  assert.throws(() => macrsMonths(1 / 31), /exact numerator and denominator/);
+  assert.throws(
+    () => macrsMonths(Number.NaN),
+    /exact numerator and denominator/,
+  );
+});
+
+test("fractional service months multiply money without first rounding the duration", () => {
+  assert.equal(
+    shortYearPlacementDeduction({
+      basis: "372000000000000.00",
+      rate: "1",
+      monthsInService: macrsMonthRatio(1n, 31n),
+    }),
+    "1000000000000.00",
+  );
+  assert.equal(
+    subsequentSimplifiedDeduction({
+      adjustedBasis: "3720.00",
+      rate: "0.4",
+      monthsInYear: macrsMonthRatio(1n, 31n),
+    }),
+    "4.00",
+  );
+  assert.throws(
+    () =>
+      shortYearPlacementDeduction({
+        basis: "3720.00",
+        rate: "0.4",
+        monthsInService: macrsMonthRatio(-1n, 31n),
+      }),
+    /cannot be negative/,
+  );
+});
+
+test("allocation crosses a recovery-year boundary at the exact fractional month", () => {
+  // Last 1/31 month of recovery year one: 1488 / (31*12) = 4.
+  // First 1/31 month of year two: 892.8 / (31*12) = 2.4.
+  const args = {
+    originalMacrsBasis: "3720.00",
+    method: "200_db" as const,
+    recoveryPeriodYears: "5",
+    elapsedMonths: macrsMonthRatio(371n, 31n),
+    monthsThisYear: macrsMonthRatio(2n, 31n),
+  };
+  assert.equal(allocationRecoveryDeduction(args), "6.40");
+  assert.equal(
+    subsequentRecoveryDeduction({
+      ...args,
+      adjustedBasis: "2500.00",
+      shortYearMethod: "allocation",
+    }),
+    "6.40",
+  );
+});
+
+test("both methods exhaust the final fractional recovery month without extending the schedule", () => {
+  for (const shortYearMethod of ["simplified", "allocation"] as const) {
+    assert.equal(
+      subsequentRecoveryDeduction({
+        method: "straight_line",
+        recoveryPeriodYears: "5",
+        originalMacrsBasis: "1200.00",
+        adjustedBasis: "10.00",
+        elapsedMonths: macrsMonthRatio(1859n, 31n),
+        monthsThisYear: 12,
+        shortYearMethod,
+      }),
+      "10.00",
+      shortYearMethod,
+    );
+    assert.equal(
+      subsequentRecoveryDeduction({
+        method: "straight_line",
+        recoveryPeriodYears: "5",
+        originalMacrsBasis: "1200.00",
+        adjustedBasis: "0.00",
+        elapsedMonths: macrsMonths(60),
+        monthsThisYear: 12,
+        shortYearMethod,
+      }),
+      "0.00",
+      shortYearMethod,
+    );
+  }
+});
 
 test("Pub 946 counts March 15–December 31 as ten months", () => {
   assert.equal(shortTaxYearMonths("2023-03-15", "2023-12-31"), 10);

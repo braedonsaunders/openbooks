@@ -38,6 +38,116 @@ export interface MacrsShortYearContext {
   excludedTerminalMonth?: boolean;
 }
 
+/** Exact recovery time. Rev. Proc. 89-15 §4.02–4.03 uses months including
+ * fractions, separately from §4.01's convention-date determination. Keep
+ * those fractions intact until they reach the existing money arithmetic.
+ * Signed differences are allowed here; deduction inputs are nonnegative. */
+export type MacrsMonths = Readonly<{
+  numerator: bigint;
+  denominator: bigint;
+}>;
+export type MacrsMonthsInput = MacrsMonths | number;
+
+export function macrsMonthRatio(
+  numerator: bigint,
+  denominator = 1n,
+): MacrsMonths {
+  if (
+    typeof numerator !== "bigint" ||
+    typeof denominator !== "bigint" ||
+    denominator <= 0n
+  ) {
+    throw new MacrsShortYearError(
+      "MACRS month fractions require integer units and a positive denominator",
+    );
+  }
+  let a = numerator < 0n ? -numerator : numerator;
+  let b = denominator;
+  while (b !== 0n) [a, b] = [b, a % b];
+  return { numerator: numerator / a, denominator: denominator / a };
+}
+
+/** Existing whole/half-month callers remain exact. Other fractions must be
+ * explicit rationals, never a rounded or binary floating-point month count. */
+export function macrsMonths(value: MacrsMonthsInput): MacrsMonths {
+  if (typeof value === "number") {
+    if (!Number.isSafeInteger(value * 2)) {
+      throw new MacrsShortYearError(
+        "MACRS fractional months require an exact numerator and denominator; numeric months must be whole or half months",
+      );
+    }
+    return macrsMonthRatio(BigInt(value * 2), 2n);
+  }
+  if (!value || typeof value !== "object") {
+    throw new MacrsShortYearError(
+      "MACRS months require a whole/half count or an exact fraction",
+    );
+  }
+  return macrsMonthRatio(value.numerator, value.denominator);
+}
+
+export function addMacrsMonths(
+  left: MacrsMonthsInput,
+  right: MacrsMonthsInput,
+): MacrsMonths {
+  const a = macrsMonths(left);
+  const b = macrsMonths(right);
+  return macrsMonthRatio(
+    a.numerator * b.denominator + b.numerator * a.denominator,
+    a.denominator * b.denominator,
+  );
+}
+
+export function subtractMacrsMonths(
+  left: MacrsMonthsInput,
+  right: MacrsMonthsInput,
+): MacrsMonths {
+  const b = macrsMonths(right);
+  return addMacrsMonths(left, {
+    numerator: -b.numerator,
+    denominator: b.denominator,
+  });
+}
+
+export function compareMacrsMonths(
+  left: MacrsMonthsInput,
+  right: MacrsMonthsInput,
+): -1 | 0 | 1 {
+  const a = macrsMonths(left);
+  const b = macrsMonths(right);
+  const difference = a.numerator * b.denominator - b.numerator * a.denominator;
+  return difference < 0n ? -1 : difference > 0n ? 1 : 0;
+}
+
+export function minMacrsMonths(
+  first: MacrsMonthsInput,
+  ...rest: MacrsMonthsInput[]
+): MacrsMonths {
+  return rest.reduce<MacrsMonths>(
+    (smallest, value) =>
+      compareMacrsMonths(value, smallest) < 0 ? macrsMonths(value) : smallest,
+    macrsMonths(first),
+  );
+}
+
+export function maxMacrsMonths(
+  first: MacrsMonthsInput,
+  ...rest: MacrsMonthsInput[]
+): MacrsMonths {
+  return rest.reduce<MacrsMonths>(
+    (largest, value) =>
+      compareMacrsMonths(value, largest) > 0 ? macrsMonths(value) : largest,
+    macrsMonths(first),
+  );
+}
+
+function nonnegativeMonths(value: MacrsMonthsInput): MacrsMonths {
+  const months = macrsMonths(value);
+  if (months.numerator < 0n)
+    throw new MacrsShortYearError("MACRS recovery months cannot be negative");
+  return months;
+}
+
 export function parseCalendarDay(value: string): CalendarDay | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (!match) return null;
@@ -406,11 +516,15 @@ export function decliningBalanceRate(
 export function shortYearPlacementDeduction(args: {
   basis: string;
   rate: string;
-  monthsInService: number;
+  monthsInService: MacrsMonthsInput;
 }): string {
+  const months = nonnegativeMonths(args.monthsInService);
   const fullYear = mulDecimal(args.basis, args.rate);
   return formatMoney(
-    roundMoney(mulRatio(fullYear, halfMonths(args.monthsInService), 24n), 2),
+    roundMoney(
+      mulRatio(fullYear, months.numerator, months.denominator * 12n),
+      2,
+    ),
     2,
   );
 }
@@ -418,12 +532,14 @@ export function shortYearPlacementDeduction(args: {
 export function subsequentSimplifiedDeduction(args: {
   adjustedBasis: string;
   rate: string;
-  monthsInYear: number;
+  monthsInYear: MacrsMonthsInput;
 }): string {
+  const months = nonnegativeMonths(args.monthsInYear);
   const annual = mulDecimal(args.adjustedBasis, args.rate);
-  if (args.monthsInYear >= 12) return formatMoney(roundMoney(annual, 2), 2);
+  if (compareMacrsMonths(months, 12) >= 0)
+    return formatMoney(roundMoney(annual, 2), 2);
   return formatMoney(
-    roundMoney(mulRatio(annual, halfMonths(args.monthsInYear), 24n), 2),
+    roundMoney(mulRatio(annual, months.numerator, months.denominator * 12n), 2),
     2,
   );
 }
@@ -443,14 +559,15 @@ export function applicableAnnualDeduction(args: {
   adjustedBasis: string;
   method: "200_db" | "150_db" | "straight_line";
   recoveryPeriodYears: string;
-  remainingMonths: number;
+  remainingMonths: MacrsMonthsInput;
 }): string {
-  if (args.remainingMonths <= 0 || cmp(args.adjustedBasis, "0") <= 0)
+  const remaining = nonnegativeMonths(args.remainingMonths);
+  if (remaining.numerator === 0n || cmp(args.adjustedBasis, "0") <= 0)
     return "0.00";
   const sl = mulRatio(
     args.adjustedBasis,
-    24n,
-    halfMonths(args.remainingMonths),
+    12n * remaining.denominator,
+    remaining.numerator,
   );
   if (args.method === "straight_line") return formatMoney(roundMoney(sl, 2), 2);
   const declining = mulDecimal(
@@ -497,28 +614,47 @@ export function allocationRecoveryDeduction(args: {
   originalMacrsBasis: string;
   method: "200_db" | "150_db" | "straight_line";
   recoveryPeriodYears: string;
-  elapsedMonths: number;
-  monthsThisYear: number;
+  elapsedMonths: MacrsMonthsInput;
+  monthsThisYear: MacrsMonthsInput;
 }): string {
   const recoveryMonths = recoveryMonthsFromYears(args.recoveryPeriodYears);
-  let remaining = Math.max(
+  let elapsed = nonnegativeMonths(args.elapsedMonths);
+  let remaining = maxMacrsMonths(
     0,
-    Math.min(args.monthsThisYear, recoveryMonths - args.elapsedMonths),
+    minMacrsMonths(
+      nonnegativeMonths(args.monthsThisYear),
+      subtractMacrsMonths(recoveryMonths, elapsed),
+    ),
   );
-  let elapsed = args.elapsedMonths;
   let total = "0";
-  while (remaining > 0 && elapsed < recoveryMonths) {
-    const intoYear = elapsed % 12;
-    const chunk = Math.min(12 - intoYear, remaining, recoveryMonths - elapsed);
+  while (
+    compareMacrsMonths(remaining, 0) > 0 &&
+    compareMacrsMonths(elapsed, recoveryMonths) < 0
+  ) {
+    // Only the integral recovery-year index becomes a Number for the loop.
+    // Recovery time and the fractions multiplying money remain BigInt.
+    const yearIndex = elapsed.numerator / (12n * elapsed.denominator);
+    const intoYear = subtractMacrsMonths(
+      elapsed,
+      macrsMonthRatio(yearIndex * 12n),
+    );
+    const chunk = minMacrsMonths(
+      subtractMacrsMonths(12, intoYear),
+      remaining,
+      subtractMacrsMonths(recoveryMonths, elapsed),
+    );
     const annual = annualForRecoveryYear({
       originalMacrsBasis: args.originalMacrsBasis,
       method: args.method,
       recoveryPeriodYears: args.recoveryPeriodYears,
-      recoveryYearIndex: Math.floor(elapsed / 12),
+      recoveryYearIndex: Number(yearIndex),
     });
-    total = add(total, mulRatio(annual, halfMonths(chunk), 24n));
-    remaining -= chunk;
-    elapsed += chunk;
+    total = add(
+      total,
+      mulRatio(annual, chunk.numerator, chunk.denominator * 12n),
+    );
+    remaining = subtractMacrsMonths(remaining, chunk);
+    elapsed = addMacrsMonths(elapsed, chunk);
   }
   return formatMoney(roundMoney(total, 2), 2);
 }
@@ -528,14 +664,16 @@ export function subsequentRecoveryDeduction(args: {
   recoveryPeriodYears: string;
   originalMacrsBasis: string;
   adjustedBasis: string;
-  elapsedMonths: number;
-  monthsThisYear: number;
+  elapsedMonths: MacrsMonthsInput;
+  monthsThisYear: MacrsMonthsInput;
   shortYearMethod: "simplified" | "allocation";
 }): string {
   const recoveryMonths = recoveryMonthsFromYears(args.recoveryPeriodYears);
-  const remainingMonths = recoveryMonths - args.elapsedMonths;
-  if (remainingMonths <= 0) return "0.00";
-  const serviceMonths = Math.min(args.monthsThisYear, remainingMonths, 12);
+  const elapsed = nonnegativeMonths(args.elapsedMonths);
+  const remainingMonths = subtractMacrsMonths(recoveryMonths, elapsed);
+  const requested = nonnegativeMonths(args.monthsThisYear);
+  if (compareMacrsMonths(remainingMonths, 0) <= 0) return "0.00";
+  const serviceMonths = minMacrsMonths(requested, remainingMonths, 12);
   if (args.shortYearMethod === "allocation") {
     const allocated = allocationRecoveryDeduction({
       originalMacrsBasis: args.originalMacrsBasis,
@@ -546,8 +684,8 @@ export function subsequentRecoveryDeduction(args: {
     });
     const straightLine = mulRatio(
       args.adjustedBasis,
-      halfMonths(serviceMonths),
-      halfMonths(remainingMonths),
+      serviceMonths.numerator * remainingMonths.denominator,
+      serviceMonths.denominator * remainingMonths.numerator,
     );
     const deduction =
       args.method === "straight_line" || cmp(straightLine, allocated) > 0
@@ -567,7 +705,11 @@ export function subsequentRecoveryDeduction(args: {
     recoveryPeriodYears: args.recoveryPeriodYears,
     remainingMonths,
   });
-  const deduction = mulRatio(annual, halfMonths(serviceMonths), 24n);
+  const deduction = mulRatio(
+    annual,
+    serviceMonths.numerator,
+    serviceMonths.denominator * 12n,
+  );
   return formatMoney(
     roundMoney(
       cmp(deduction, args.adjustedBasis) > 0 ? args.adjustedBasis : deduction,
