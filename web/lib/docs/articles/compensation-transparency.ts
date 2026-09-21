@@ -18,7 +18,7 @@ export const compensationAndTransparency: DocArticle = {
     "pay transparency",
     "guideline",
   ],
-  related: ["positionsAndHeadcount", "performanceAndRetention", "recruitingFunnel", "payroll"],
+  related: ["positions-and-headcount", "performance-and-retention", "recruiting-funnel", "payroll"],
   body: `# Compensation and pay transparency
 
 Positions carry planned and funded FTE and payroll carries what is paid.
