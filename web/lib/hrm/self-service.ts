@@ -147,18 +147,13 @@ async function meHasCompensation(authz: Authz): Promise<boolean> {
 }
 // HR-12 end
 
-// HR-17 begin: Me 1:1s tab visibility — the hrmOneOnOnes switch. Read
-// failures resolve to false (the tab hides) rather than denying the
-// whole Me strip.
-async function meHasOneOnOnes(authz: Authz): Promise<boolean> {
-  try {
-    const { isFeatureEnabled } = await import('../features')
-    return await isFeatureEnabled(authz.user.orgId, 'hrmOneOnOnes')
 // HR-19 begin: Me Documents / Open surveys tab visibility — the person
 // holds own documents (or an export) / open invitations behind the
 // feature switch. Read failures resolve to false (the tab hides)
 // rather than denying the whole Me strip.
 async function meHasDocuments(authz: Authz): Promise<boolean> {
+  try {
+    const { isFeatureEnabled } = await import('../features')
     if (!(await isFeatureEnabled(authz.user.orgId, 'hrmDocuments'))) return false
     const { listOwnDocuments } = await import('@openbooks/engine/src/hrm/documents/documents.ts')
     const { listOwnExports } = await import('@openbooks/engine/src/hrm/documents/dsar.ts')
@@ -167,6 +162,33 @@ async function meHasDocuments(authz: Authz): Promise<boolean> {
       listOwnExports({ orgId: authz.user.orgId, actorId: authz.user.id }).catch(() => null),
     ])
     return (docs?.documents.length ?? 0) > 0 || (exports?.exports.length ?? 0) > 0
+  } catch {
+    return false
+  }
+}
+
+async function meHasSurveys(authz: Authz): Promise<boolean> {
+  try {
+    const { isFeatureEnabled } = await import('../features')
+    if (!(await isFeatureEnabled(authz.user.orgId, 'hrmSurveys'))) return false
+    const { listOwnInvitations } = await import('@openbooks/engine/src/hrm/surveys/responses.ts')
+    const invitations = await listOwnInvitations({ orgId: authz.user.orgId, actorId: authz.user.id }).catch(
+      () => [],
+    )
+    return invitations.length > 0
+  } catch {
+    return false
+  }
+}
+// HR-19 end
+
+// HR-17 begin: Me 1:1s tab visibility — the hrmOneOnOnes switch. Read
+// failures resolve to false (the tab hides) rather than denying the
+// whole Me strip.
+async function meHasOneOnOnes(authz: Authz): Promise<boolean> {
+  try {
+    const { isFeatureEnabled } = await import('../features')
+    return await isFeatureEnabled(authz.user.orgId, 'hrmOneOnOnes')
   } catch {
     return false
   }
@@ -189,16 +211,6 @@ async function meContinuousOn(orgId: string): Promise<{ oneOnOnes: boolean; feed
   }
 }
 // HR-17 end
-
-async function meHasSurveys(authz: Authz): Promise<boolean> {
-    if (!(await isFeatureEnabled(authz.user.orgId, 'hrmSurveys'))) return false
-    const { listOwnInvitations } = await import('@openbooks/engine/src/hrm/surveys/responses.ts')
-    const invitations = await listOwnInvitations({ orgId: authz.user.orgId, actorId: authz.user.id }).catch(
-      () => [],
-    )
-    return invitations.length > 0
-    return false
-// HR-19 end
 
 function toRefusal(t: Catalog, error: unknown): MeRefusal | null {
   if (error instanceof SelfServiceError || error instanceof HrmAuthorizationError) {

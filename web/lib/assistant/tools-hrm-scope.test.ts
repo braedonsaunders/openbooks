@@ -43,8 +43,7 @@ const { HrmDocumentsError } = await import("@openbooks/engine/src/hrm/documents/
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const tools = read("./tools-hrm.ts");
 
-const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave", "hrm_recruiting", "hrm_performance_cycles", "hrm_turnover", "hrm_benefits", "hrm_me", "automations_status", "hrm_compliance_findings", "hrm_certified_payroll", "hrm_compensation", "hrm_pay_equity", "hrm_qualifications", "hrm_dispatch_check", "hrm_one_on_ones", "hrm_feedback", "hrm_calibration"];
-const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave", "hrm_recruiting", "hrm_performance_cycles", "hrm_turnover", "hrm_benefits", "hrm_me", "automations_status", "hrm_compliance_findings", "hrm_certified_payroll", "hrm_compensation", "hrm_pay_equity", "hrm_qualifications", "hrm_dispatch_check", "hrm_documents", "hrm_survey_results", "hrm_org_chart"];
+const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave", "hrm_recruiting", "hrm_performance_cycles", "hrm_turnover", "hrm_benefits", "hrm_me", "automations_status", "hrm_compliance_findings", "hrm_certified_payroll", "hrm_compensation", "hrm_pay_equity", "hrm_qualifications", "hrm_dispatch_check", "hrm_one_on_ones", "hrm_feedback", "hrm_calibration", "hrm_documents", "hrm_survey_results", "hrm_org_chart"];
 
 const TOOL_PERMS: Record<string, string> = {
   // Elections and windows read through the benefits read service under
@@ -90,13 +89,6 @@ const TOOL_PERMS: Record<string, string> = {
   hrm_qualifications: "hrm.certifications.read",
   hrm_dispatch_check: "hrm.certifications.read",
   // HR-14 end
-  // HR-17 begin: 1:1s and feedback read through the structural scope
-  // (HR grant or self grant); calibration reads through the manage
-  // grant. Private 1:1 items and talent rows never leave through tools.
-  hrm_one_on_ones: "hrm.performance.read",
-  hrm_feedback: "hrm.performance.read",
-  hrm_calibration: "hrm.performance.manage",
-  // HR-17 end
   // HR-19 begin: the documents and org-chart tools carry the self
   // grant (every built-in role holds it) and scope inside — own rows
   // for self-service, everything with the read grant; file bytes,
@@ -106,6 +98,13 @@ const TOOL_PERMS: Record<string, string> = {
   hrm_survey_results: "hrm.surveys.manage",
   hrm_org_chart: "hrm.self.read",
   // HR-19 end
+  // HR-17 begin: 1:1s and feedback read through the structural scope
+  // (HR grant or self grant); calibration reads through the manage
+  // grant. Private 1:1 items and talent rows never leave through tools.
+  hrm_one_on_ones: "hrm.performance.read",
+  hrm_feedback: "hrm.performance.read",
+  hrm_calibration: "hrm.performance.manage",
+  // HR-17 end
 };
 
 const UUID = "11111111-1111-4111-8111-111111111111";
@@ -144,18 +143,18 @@ const TOOL_FEATURES: Record<string, string> = {
   hrm_qualifications: "hrmCertifications",
   hrm_dispatch_check: "hrmDispatchGating",
   // HR-14 end
-  // HR-17 begin: continuous tools sit behind their own sub-switches —
-  // off means the tool is absent, never an empty answer.
-  hrm_one_on_ones: "hrmOneOnOnes",
-  hrm_feedback: "hrmFeedback",
-  hrm_calibration: "hrmCalibration",
-  // HR-17 end
   // HR-19 begin: documents ride hrmDocuments, results ride hrmSurveys,
   // the chart rides hrmOrgChart.
   hrm_documents: "hrmDocuments",
   hrm_survey_results: "hrmSurveys",
   hrm_org_chart: "hrmOrgChart",
   // HR-19 end
+  // HR-17 begin: continuous tools sit behind their own sub-switches —
+  // off means the tool is absent, never an empty answer.
+  hrm_one_on_ones: "hrmOneOnOnes",
+  hrm_feedback: "hrmFeedback",
+  hrm_calibration: "hrmCalibration",
+  // HR-17 end
 };
 // HR-13 end
 
@@ -260,6 +259,20 @@ test("minimal valid inputs parse; addressing is runtime-enforced with stable cod
   assert.throws(() => byName.get("hrm_dispatch_check")!.inputSchema.parse({ subjectId: "nope" }));
   assert.throws(() => byName.get("hrm_dispatch_check")!.inputSchema.parse({ on: "tomorrow" }));
   // HR-14 end
+  // HR-19 begin: documents filter to a declared status/category; results
+  // half-address to the survey id (addressing is runtime-enforced);
+  // the chart half-addresses to asOf/search. Genuinely invalid values
+  // throw; a missing survey id throws (the read cannot run without it).
+  byName.get("hrm_documents")!.inputSchema.parse({});
+  byName.get("hrm_documents")!.inputSchema.parse({ status: "signed", categoryKey: "contract" });
+  assert.throws(() => byName.get("hrm_documents")!.inputSchema.parse({ status: "archived" }));
+  byName.get("hrm_survey_results")!.inputSchema.parse({ surveyId: UUID });
+  assert.throws(() => byName.get("hrm_survey_results")!.inputSchema.parse({}));
+  assert.throws(() => byName.get("hrm_survey_results")!.inputSchema.parse({ surveyId: "nope" }));
+  byName.get("hrm_org_chart")!.inputSchema.parse({});
+  byName.get("hrm_org_chart")!.inputSchema.parse({ asOf: "2026-09-01", search: "Eng" });
+  assert.throws(() => byName.get("hrm_org_chart")!.inputSchema.parse({ asOf: "tomorrow" }));
+  // HR-19 end
   // HR-17 begin: continuous tools parse minimal inputs; genuinely invalid values throw.
   byName.get("hrm_one_on_ones")!.inputSchema.parse({});
   byName.get("hrm_one_on_ones")!.inputSchema.parse({ employmentId: UUID });
@@ -277,20 +290,6 @@ test("minimal valid inputs parse; addressing is runtime-enforced with stable cod
   byName.get("hrm_calibration")!.inputSchema.parse({ cycleId: UUID });
   assert.throws(() => byName.get("hrm_calibration")!.inputSchema.parse({ sessionId: "nope" }));
   // HR-17 end
-  // HR-19 begin: documents filter to a declared status/category; results
-  // half-address to the survey id (addressing is runtime-enforced);
-  // the chart half-addresses to asOf/search. Genuinely invalid values
-  // throw; a missing survey id throws (the read cannot run without it).
-  byName.get("hrm_documents")!.inputSchema.parse({});
-  byName.get("hrm_documents")!.inputSchema.parse({ status: "signed", categoryKey: "contract" });
-  assert.throws(() => byName.get("hrm_documents")!.inputSchema.parse({ status: "archived" }));
-  byName.get("hrm_survey_results")!.inputSchema.parse({ surveyId: UUID });
-  assert.throws(() => byName.get("hrm_survey_results")!.inputSchema.parse({}));
-  assert.throws(() => byName.get("hrm_survey_results")!.inputSchema.parse({ surveyId: "nope" }));
-  byName.get("hrm_org_chart")!.inputSchema.parse({});
-  byName.get("hrm_org_chart")!.inputSchema.parse({ asOf: "2026-09-01", search: "Eng" });
-  assert.throws(() => byName.get("hrm_org_chart")!.inputSchema.parse({ asOf: "tomorrow" }));
-  // HR-19 end
 });
 
 // Every tool reuses the canonical read loaders the HRM tabs read
@@ -326,12 +325,6 @@ test("HRM reads reuse the canonical HRM read services", () => {
     "listQualifications(",
     "checkAssignment(",
     // HR-14 end
-    // HR-17 begin: continuous tools reuse the governed 0228 services.
-    "listOneOnOnes(",
-    "listFeedback(",
-    "getCalibrationSession(",
-    "listCalibrationSessions(",
-    // HR-17 end
     // HR-19 begin
     "listDocuments(",
     "listOwnDocuments(",
@@ -339,6 +332,12 @@ test("HRM reads reuse the canonical HRM read services", () => {
     "loadDirectory(",
     "loadOrgChart(",
     // HR-19 end
+    // HR-17 begin: continuous tools reuse the governed 0228 services.
+    "listOneOnOnes(",
+    "listFeedback(",
+    "getCalibrationSession(",
+    "listCalibrationSessions(",
+    // HR-17 end
   ]) {
     assert.ok(tools.includes(service), `tools-hrm.ts must reuse ${service}`);
   }

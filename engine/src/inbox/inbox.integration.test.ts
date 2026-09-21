@@ -131,7 +131,12 @@ test("leave approval: inbox act and native decide leave identical rows and event
     assert.equal(items.length, 2, "both leave gates surface in the approver inbox");
     // Dedupe: flows_approval must not repeat the leave gates.
     const flowsItems = await listInbox(ctx, { kinds: ["flows_approval"] });
-    for (const gate of await Promise.all(filed.map((r) => gatesForSubject(org.orgId, HRM_LEAVE_REQUEST_SUBJECT_KIND, r.id)))) {
+    // Anchor both loops: with no gates the dedupe assertion below would pass
+    // vacuously and prove nothing about the thing it exists to prove.
+    const gateSets = await Promise.all(filed.map((r) => gatesForSubject(org.orgId, HRM_LEAVE_REQUEST_SUBJECT_KIND, r.id)))
+    assert.ok(gateSets.length > 0, "the fixture must have filed leave requests")
+    assert.ok(gateSets.every((gate) => gate.length > 0), "each filed request must carry at least one gate to dedupe against")
+    for (const gate of gateSets) {
       for (const row of gate) {
         assert.ok(!flowsItems.some((i) => i.source.id === row.id), "a leave gate is one item, owned by hrm_leave_request");
       }

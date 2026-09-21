@@ -49,27 +49,45 @@ async function enableHrm(orgId: string): Promise<void> {
      where id = ${orgId}`)
 }
 
-// HR-12 begin: compensation report entities gate on hrmCompensation.
-async function enableCompensation(orgId: string): Promise<void> {
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrmCompensation}', 'true'::jsonb, true)
-     where id = ${orgId}`)
+
+/**
+ * Every feature any HRM report entity gates on, in ONE place.
+ *
+ * The permitted-reader loop below runs the whole catalogue, so a reader
+ * holding every grant still fails on any entity whose switch is off — which
+ * is how `automations runs for a permitted reader` failed: the entity gates
+ * on the automations switch (default off, parent flows) and nothing enabled
+ * it. Derived from the entity registrations rather than maintained by hand
+ * would be better still; until the registry exposes that, this list is the
+ * single edit point and the loop names the entity that is missing one.
+ */
+async function enableEveryHrmReportFeature(orgId: string): Promise<void> {
+  const keys = [
+    'hrm',
+    'flows',
+    'automations',
+    'hrmActionReasons',
+    'hrmCompensation',
+    'hrmConstructionCompliance',
+    'hrmCertifications',
+    'hrmCertificationAlerts',
+    'hrmPerformance',
+    'hrmOneOnOnes',
+    'hrmFeedback',
+    'hrmCalibration',
+    'hrmSuccession',
+    'hrmDocuments',
+    'hrmDocumentRetention',
+    'hrmSurveys',
+    'hrmOrgChart',
+  ]
+  for (const key of keys) {
+    await db.execute(sql`
+      update orgs
+         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), ${sql.raw(`'{features,${key}}'`)}, 'true'::jsonb, true)
+       where id = ${orgId}`)
+  }
 }
-// HR-12 end
-// HR-14 begin: the register rides hrmCertifications, the alert queue
-// rides hrmCertificationAlerts.
-async function enableCertifications(orgId: string): Promise<void> {
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrmCertifications}', 'true'::jsonb, true)
-     where id = ${orgId}`)
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrmCertificationAlerts}', 'true'::jsonb, true)
-     where id = ${orgId}`)
-}
-// HR-14 end
 
 async function grantPermissions(orgId: string, userId: string, permissions: string[]): Promise<void> {
   for (const permission of permissions) {
@@ -493,11 +511,10 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
   try {
     let second = ''
     await withBypass(async () => {
-      await enableHrm(scratch.orgId)
-      await enableCompensation(scratch.orgId)
-      // HR-14 begin
-      await enableCertifications(scratch.orgId)
-      // HR-14 end
+      // The loop below runs the WHOLE catalogue for a reader holding every
+      // grant, so every entity's switch must be on or the assertion fails on
+      // the switch rather than on the gate it is testing.
+      await enableEveryHrmReportFeature(scratch.orgId)
       second = await mkSubsidiary(scratch.orgId, 'Second Co', scratch.subsidiaryId)
       const empA = await mkEmployment(scratch.orgId, await mkWorker(scratch.orgId, 'Worker Ada'), scratch.subsidiaryId)
       await addVersion(scratch.orgId, empA, 1, 'active', '2026-01-01', null, T0)

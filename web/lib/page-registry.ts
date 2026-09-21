@@ -1732,6 +1732,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/me/documents': {
+    route: '/me/documents',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/me/documents/view')
+      return {
+        load: (input) => m.loadMeDocumentsPage(input.searchParams ?? {}),
+        spec: (data) => m.meDocumentsSpec(data as never),
+      }
+    },
+  },
   '/me/one-on-ones': {
     route: '/me/one-on-ones',
     segments: [],
@@ -1741,11 +1753,6 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: (input) => m.loadMeOneOnOnesPage(input.searchParams ?? {}),
         spec: (data) => m.meOneOnOnesSpec(data as never),
-  '/me/documents': {
-    route: '/me/documents',
-      const m = await import('../app/(app)/me/documents/view')
-        load: (input) => m.loadMeDocumentsPage(input.searchParams ?? {}),
-        spec: (data) => m.meDocumentsSpec(data as never),
       }
     },
   },
