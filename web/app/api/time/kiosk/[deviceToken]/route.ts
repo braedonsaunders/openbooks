@@ -63,6 +63,44 @@ export async function GET(_req: Request, ctx: { params: Promise<{ deviceToken: s
   })
 }
 
+const PHOTO_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/heic'])
+const PHOTO_MAX_BYTES = 10 * 1024 * 1024
+
+/**
+ * Multipart photo capture from the kiosk tile: the device token (not a
+ * login) authorizes the write into the org's field-time folder, and the
+ * clock service verifies the file belongs to the org on the event.
+ */
+export async function PUT(req: Request, ctx: { params: Promise<{ deviceToken: string }> }) {
+  const { deviceToken } = await ctx.params
+  const found = await kiosk(deviceToken)
+  if (found instanceof NextResponse) return found
+  const form = await req.formData().catch(() => null)
+  if (!form) return bad('expected multipart/form-data', 400)
+  const file = form.get('file')
+  if (!(file instanceof File)) return bad('A photo file is required — capture a photo and retry', 400)
+  const contentType = file.type.split(';')[0]!.trim().toLowerCase()
+  if (!PHOTO_TYPES.has(contentType)) return bad(`Unsupported photo type ${contentType || 'unknown'} — use JPEG, PNG, WebP or HEIC`, 415)
+  if (file.size > PHOTO_MAX_BYTES || file.size === 0) return bad('The photo must be non-empty and under 10 MB', 413)
+  try {
+    const { ensureOrgClockPhotoFolder } = await import('@openbooks/engine/src/hrm/field-time/photos.ts')
+    const { createFile } = await import('../../../../../lib/file-cabinet')
+    const folderId = await ensureOrgClockPhotoFolder(found.orgId)
+    const meta = await createFile({
+      orgId: found.orgId,
+      folderId,
+      filename: file.name || 'kiosk-photo',
+      contentType,
+      bytes: Buffer.from(await file.arrayBuffer()),
+      createdBy: null,
+    })
+    return NextResponse.json({ fileId: meta.id }, { status: 201 })
+  } catch (error) {
+    if (error instanceof FieldTimeError) return bad(error.message)
+    throw error
+  }
+}
+
 export async function POST(req: Request, ctx: { params: Promise<{ deviceToken: string }> }) {
   const { deviceToken } = await ctx.params
   const found = await kiosk(deviceToken)

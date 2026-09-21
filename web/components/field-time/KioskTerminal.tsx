@@ -23,6 +23,7 @@ export function KioskTerminal({
   projectId,
   projectName,
   pinRequired,
+  photoRequired,
   workers,
   projects,
 }: {
@@ -31,6 +32,7 @@ export function KioskTerminal({
   projectId: string | null
   projectName: string | null
   pinRequired: boolean
+  photoRequired: boolean
   workers: KioskWorker[]
   projects: { id: string; name: string }[]
 }) {
@@ -40,6 +42,8 @@ export function KioskTerminal({
   const [search, setSearch] = useState('')
   const [pickedProject, setPickedProject] = useState('')
   const [projectSearch, setProjectSearch] = useState('')
+  const [photoId, setPhotoId] = useState<string | null>(null)
+  const [photoBusy, setPhotoBusy] = useState(false)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -52,6 +56,7 @@ export function KioskTerminal({
     setSearch('')
     setPickedProject('')
     setProjectSearch('')
+    setPhotoId(null)
     setMessage(null)
     setError(null)
     setIdleIn(IDLE_SECONDS)
@@ -97,6 +102,7 @@ export function KioskTerminal({
                   kind,
                   occurredAt: new Date().toISOString(),
                   projectId: projectId ?? (pickedProject || null),
+                  photoFileId: photoId,
                   clientEventId: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`,
                 },
           ),
@@ -118,7 +124,7 @@ export function KioskTerminal({
         setBusy(false)
       }
     },
-    [workerId, pin, pinRequired, deviceToken, projectId, pickedProject, reset, t],
+    [workerId, pin, pinRequired, deviceToken, projectId, pickedProject, photoId, reset, t],
   )
 
   const visible = search.trim()
@@ -213,6 +219,51 @@ export function KioskTerminal({
               ))}
             </div>
           ) : null}
+        </div>
+      ) : null}
+
+      {photoRequired ? (
+        <div>
+          <Label htmlFor="kiosk-photo">{t('field.photoRequired')}</Label>
+          <Input
+            id="kiosk-photo"
+            type="file"
+            accept="image/*"
+            capture="user"
+            disabled={photoBusy}
+            className="py-3 text-lg"
+            onChange={async (event) => {
+              const file = event.target.files?.[0]
+              if (!file) {
+                setPhotoId(null)
+                return
+              }
+              setPhotoBusy(true)
+              setError(null)
+              try {
+                const form = new FormData()
+                form.set('file', file)
+                const res = await fetch(`/api/time/kiosk/${deviceToken}`, {
+                  method: 'PUT',
+                  body: form,
+                })
+                const payload = (await res.json().catch(() => null)) as { error?: string; fileId?: string } | null
+                if (!res.ok || !payload?.fileId) {
+                  setError(payload?.error ?? t('field.photoUploadFailed'))
+                  setPhotoId(null)
+                  return
+                }
+                setPhotoId(payload.fileId)
+                poke()
+              } catch {
+                setError(t('field.photoUploadFailed'))
+                setPhotoId(null)
+              } finally {
+                setPhotoBusy(false)
+              }
+            }}
+          />
+          {photoId ? <p className="mt-1 text-sm text-teal-700">{t('field.photoAttached')}</p> : null}
         </div>
       ) : null}
 

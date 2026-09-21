@@ -45,6 +45,7 @@ export default async function KioskPage({ params }: { params: Promise<{ deviceTo
         projectId={kiosk.projectId}
         projectName={kiosk.projectId ? (projectName ?? t('field.kioskChooseProject')) : t('field.kioskChooseProject')}
         pinRequired={kiosk.pinRequired}
+        photoRequired={kiosk.photoRequired}
         workers={workers}
         projects={projects}
       />
