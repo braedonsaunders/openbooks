@@ -6,11 +6,12 @@ import { resolveWage, laborCostingSettings } from "../../projects/labor-costing.
 import { supersedeLaborCostRate } from "../../projects/labor-cost-rates.ts";
 import { mul } from "../../money/money.ts";
 import {
+  loadCompensationLens,
   loadOwnEmploymentIds,
   loadTeamEmploymentIdsForManager,
+  requireAggregateCompensationRead,
   requireHrmCompensationApprove,
   requireHrmCompensationManage,
-  requireHrmCompensationRead,
 } from "../authorization.ts";
 import { CompensationError } from "./errors.ts";
 import {
@@ -270,24 +271,54 @@ async function loadCycleForUpdate(orgId: string, cycleId: string): Promise<Cycle
   return row;
 }
 
+/**
+ * Subsidiary lens for cycle reads: the actor's allowed employer set,
+ * resolved inside the domain boundary through requireAggregateCompensationRead
+ * (null = unrestricted) — never a caller-forged set. Cycle headers carry no
+ * pay, so discovery stays useful on mixed-subsidiary rounds: a round scoped
+ * to a subsidiary the actor cannot see is NOT_FOUND (the same message as a
+ * missing round, never an existence oracle), while an unscoped round stays
+ * readable and its salaries are fenced per line. An empty allowed set sees
+ * headers only — every line and every paced amount filters to nothing.
+ */
+function cycleScopeSubsidiary(row: CycleRow): string | null {
+  const scope = row.scope as Record<string, string | null> | null;
+  return scope?.employer_subsidiary_id ?? null;
+}
+
+function assertCycleVisible(row: CycleRow, allowed: Set<string> | null): void {
+  if (allowed === null) return;
+  const subsidiary = cycleScopeSubsidiary(row);
+  if (subsidiary !== null && !allowed.has(subsidiary)) {
+    throw new CompensationError("NOT_FOUND", "compensation cycle is not visible in this organization");
+  }
+}
+
 export async function getCycle(query: { orgId: string; actorId: string; cycleId: string }): Promise<CompCycleDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const cycleId = requireId(query.cycleId, "cycleId");
-  await requireHrmCompensationRead(db, orgId, actorId);
+  const allowed = await requireAggregateCompensationRead(db, orgId, actorId);
   const row = (await db.execute<CycleRow>(sql`
     select ${CYCLE_COLUMNS} from hrm_comp_cycles where org_id = ${orgId} and id = ${cycleId}`)).rows[0];
   if (!row) throw new CompensationError("NOT_FOUND", "compensation cycle is not visible in this organization");
+  assertCycleVisible(row, allowed);
   return toCycleDTO(row);
 }
 
 export async function listCycles(query: { orgId: string; actorId: string }): Promise<readonly CompCycleDTO[]> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  await requireHrmCompensationRead(db, orgId, actorId);
+  const allowed = await requireAggregateCompensationRead(db, orgId, actorId);
   const rows = (await db.execute<CycleRow>(sql`
     select ${CYCLE_COLUMNS} from hrm_comp_cycles where org_id = ${orgId} order by effective_on desc`)).rows;
-  return rows.map(toCycleDTO);
+  return rows
+    .filter((row) => {
+      if (allowed === null) return true;
+      const subsidiary = cycleScopeSubsidiary(row);
+      return subsidiary === null || allowed.has(subsidiary);
+    })
+    .map(toCycleDTO);
 }
 
 export async function listCycleLines(query: {
@@ -298,12 +329,20 @@ export async function listCycleLines(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const cycleId = requireId(query.cycleId, "cycleId");
-  await requireHrmCompensationRead(db, orgId, actorId);
+  const allowed = await requireAggregateCompensationRead(db, orgId, actorId);
+  // The line predicate joins the trusted employment row on this runner, so
+  // the employer subsidiary is loaded from storage, never caller input. The
+  // allowlist crosses as JSON (bare JS arrays interpolate as row
+  // constructors, never PostgreSQL arrays); an empty set matches nothing.
   const rows = (await db.execute<LineRow & { worker_party_id: string }>(sql`
     select ${LINE_COLUMNS}, e.worker_party_id
       from hrm_comp_cycle_lines l
       join worker_employments e on e.org_id = l.org_id and e.id = l.employment_id
      where l.org_id = ${orgId} and l.cycle_id = ${cycleId}
+       and (${allowed === null}::boolean
+            or e.employer_subsidiary_id in (
+              select jsonb_array_elements_text(${JSON.stringify([...(allowed ?? [])])}::jsonb)::uuid
+            ))
      order by e.worker_party_id`)).rows;
   return rows.map((row) => toLineDTO(row, String((row as { worker_party_id: string }).worker_party_id)));
 }
@@ -597,17 +636,42 @@ export interface PacingRead {
   readonly overBudget: boolean;
 }
 
-/** Budget pacing is computed, never stored: the decided increase against the envelope. */
-export async function cyclePacing(orgId: string, cycleId: string): Promise<PacingRead> {
+/**
+ * Budget pacing is computed, never stored: the decided increase against the
+ * envelope. The public read carries the actor's subsidiary lens, so
+ * aggregate amounts from hidden subsidiaries cannot leak through the
+ * percentage; the monetary math is unchanged, only the input rows fence
+ * (unrestricted readers resolve the identical row set as before). The
+ * propose path runs the same math whole-cycle through computePacing
+ * directly — structural managers propose without hrm.compensation.read,
+ * so the write control demands no read grant.
+ */
+export async function cyclePacing(orgId: string, actorId: string, cycleId: string): Promise<PacingRead> {
+  const allowed = await requireAggregateCompensationRead(db, orgId, actorId);
+  return computePacing(orgId, cycleId, allowed);
+}
+
+/**
+ * Pacing math over decided lines with no permission gate: the private
+ * control behind proposeLine's over-budget refusal (whole cycle, never
+ * lens-scoped, so a restricted proposer cannot shrink the envelope by
+ * hiding subsidiaries) and behind the public cyclePacing read above.
+ */
+async function computePacing(orgId: string, cycleId: string, allowed: Set<string> | null): Promise<PacingRead> {
   const cycle = (await db.execute<CycleRow>(sql`
     select ${CYCLE_COLUMNS} from hrm_comp_cycles where org_id = ${orgId} and id = ${cycleId}`)).rows[0];
   if (!cycle || cycle.budget_total === null) return { totalPct: null, overBudget: false };
   const rows = (await db.execute<{ current_rate: string; proposed_rate: string | null; status: string }>(sql`
-    select current_rate::text, proposed_rate::text, status
-      from hrm_comp_cycle_lines
-     where org_id = ${orgId} and cycle_id = ${cycleId}
-       and status in ('proposed', 'approved', 'pushed')
-       and proposed_rate is not null`)).rows;
+    select l.current_rate::text as current_rate, l.proposed_rate::text as proposed_rate, l.status
+      from hrm_comp_cycle_lines l
+      left join worker_employments e on e.org_id = l.org_id and e.id = l.employment_id
+     where l.org_id = ${orgId} and l.cycle_id = ${cycleId}
+       and l.status in ('proposed', 'approved', 'pushed')
+       and l.proposed_rate is not null
+       and (${allowed === null}::boolean
+            or e.employer_subsidiary_id in (
+              select jsonb_array_elements_text(${JSON.stringify([...(allowed ?? [])])}::jsonb)::uuid
+            ))`)).rows;
   let increase = 0;
   for (const row of rows) {
     const delta = Number(row.proposed_rate) - Number(row.current_rate);
@@ -701,12 +765,23 @@ export async function proposeLine(query: ProposeLineQuery): Promise<CompCycleLin
     if (!updated) {
       throw new CompensationError("STALE_REVISION", "the line moved while it was proposed — reload it and propose again");
     }
-    // Over-budget pacing WARNS and requires a reason, never blocks.
-    const pacing = await cyclePacing(orgId, line.cycle_id);
+    // Over-budget pacing WARNS and requires a reason, never blocks. The
+    // control runs whole-cycle with no read grant (structural managers
+    // propose without hrm.compensation.read). The percentage names the
+    // whole-cycle total, so only a proposer who could read it through
+    // cyclePacing anyway — hrm.compensation.read with an unrestricted
+    // lens — sees the number; every other valid proposer gets the same
+    // usable numberless remedy.
+    const pacing = await computePacing(orgId, line.cycle_id, null);
     if (pacing.overBudget && reason === null) {
+      const lens = await loadCompensationLens(db, orgId, actorId);
+      const maySeeTotals =
+        lens === null && (await actorHasPermission(db, orgId, actorId, "hrm.compensation.read"));
       throw new CompensationError(
         "REFUSED",
-        `this proposal takes the cycle to ${pacing.totalPct?.toFixed(1)}% of its budget envelope — over-budget pacing needs a reason; add one instead of spending silently`,
+        maySeeTotals
+          ? `this proposal takes the cycle to ${pacing.totalPct?.toFixed(1)}% of its budget envelope — over-budget pacing needs a reason; add one instead of spending silently`
+          : "this proposal takes the cycle over its budget envelope — over-budget pacing needs a reason; add one instead of spending silently",
       );
     }
     await recordEvent(db, orgId, line.cycle_id, lineId, "proposed", actorId, reason);

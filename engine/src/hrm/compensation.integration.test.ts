@@ -33,9 +33,12 @@ import {
   createCycle,
   createPlan,
   createPlanLine,
+  cyclePacing,
   fulfilPayInformationRequest,
   generateStatement,
+  getCycle,
   listCycleLines,
+  listCycles,
   markPlanLineFilledForRequisition,
   openCycle,
   proposeLine,
@@ -732,5 +735,235 @@ test("HR-12 compensation events are append-only and RLS-isolated", { skip: !DB }
     } finally {
       await dropScratchOrg(other.orgId);
     }
+  });
+});
+
+test("HR-12 cycle reads fence salaries to the actor's subsidiary lens", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const { org } = h;
+    const { level } = await seedArchitecture(org.orgId, h.hrId);
+    // A second legal entity in the same org.
+    const subB = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+      select ${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Second entity', base_currency, country
+        from subsidiaries where id = ${org.subsidiaryId} and org_id = ${org.orgId}`);
+    const empA = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
+    const empB = await seedPositionedEmployment(org.orgId, subB, { levelId: level.id });
+    await seedWage(org.orgId, h.hrId, empA.workerPartyId, "90000");
+    await seedWage(org.orgId, h.hrId, empB.workerPartyId, "100000");
+    // A compensation reader scoped to subsidiary A only, and one scoped nowhere.
+    const readerA = await createScratchUser(org.orgId, "Comp Reader A", "comp_reader_a");
+    await db.execute(sql`
+      update app_roles
+         set permissions = '["hrm.compensation.read"]'::jsonb,
+             subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [org.subsidiaryId] })}::jsonb
+       where org_id = ${org.orgId} and key = 'comp_reader_a'`);
+    const readerNone = await createScratchUser(org.orgId, "Comp Reader None", "comp_reader_none");
+    await db.execute(sql`
+      update app_roles
+         set permissions = '["hrm.compensation.read"]'::jsonb,
+             subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [] })}::jsonb
+       where org_id = ${org.orgId} and key = 'comp_reader_none'`);
+    const guideline = {
+      rows: ["meets"], cols: ["q1", "q2", "q3", "q4"],
+      cells: { meets: { q1: { min: 3, max: 5 }, q2: { min: 2, max: 4 }, q3: { min: 1, max: 3 }, q4: { min: 0, max: 2 } } },
+      unratedRow: "meets",
+    };
+    const open = await createCycle({
+      orgId: org.orgId, actorId: h.hrId, name: "Merit 2025", kind: "merit",
+      effectiveOn: "2025-04-01", budgetBasis: "combined", budgetTotal: "10000",
+      currency: "CAD", guidelineKind: "matrix", guideline,
+    });
+    const opened = await openCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: open.id });
+    assert.equal(opened.lines, 2);
+    const scopedA = await createCycle({
+      orgId: org.orgId, actorId: h.hrId, name: "Merit A", kind: "merit",
+      effectiveOn: "2025-04-01", currency: "CAD", guidelineKind: "matrix", guideline,
+      scope: { employerSubsidiaryId: org.subsidiaryId },
+    });
+    const scopedB = await createCycle({
+      orgId: org.orgId, actorId: h.hrId, name: "Merit B", kind: "merit",
+      effectiveOn: "2025-04-01", currency: "CAD", guidelineKind: "matrix", guideline,
+      scope: { employerSubsidiaryId: subB },
+    });
+    // Lines: the unrestricted HR role sees both salaries; the A-scoped
+    // reader sees only A's line (B's pay is not observable through a
+    // read grant alone); the empty scope sees no lines at all.
+    const allLines = await listCycleLines({ orgId: org.orgId, actorId: h.hrId, cycleId: open.id });
+    assert.equal(allLines.length, 2);
+    const aLines = await listCycleLines({ orgId: org.orgId, actorId: readerA, cycleId: open.id });
+    assert.equal(aLines.length, 1);
+    assert.equal(aLines[0]!.employmentId, empA.employmentId);
+    assert.equal(aLines[0]!.currentRate, "90000.0000");
+    const noLines = await listCycleLines({ orgId: org.orgId, actorId: readerNone, cycleId: open.id });
+    assert.equal(noLines.length, 0);
+    // Discovery: scoped rounds outside the lens are not listed; the mixed
+    // (unscoped) round stays discoverable because headers carry no pay.
+    const seenA = await listCycles({ orgId: org.orgId, actorId: readerA });
+    assert.ok(seenA.some((c) => c.id === open.id));
+    assert.ok(seenA.some((c) => c.id === scopedA.id));
+    assert.ok(!seenA.some((c) => c.id === scopedB.id));
+    const seenNone = await listCycles({ orgId: org.orgId, actorId: readerNone });
+    assert.ok(seenNone.some((c) => c.id === open.id));
+    assert.ok(!seenNone.some((c) => c.id === scopedA.id));
+    assert.ok(!seenNone.some((c) => c.id === scopedB.id));
+    const seenAll = await listCycles({ orgId: org.orgId, actorId: h.hrId });
+    assert.ok(seenAll.some((c) => c.id === scopedB.id));
+    // Direct reads: a hidden scoped round refuses as not-found (the same
+    // message as a missing round, never an existence oracle).
+    await assert.rejects(
+      getCycle({ orgId: org.orgId, actorId: readerA, cycleId: scopedB.id }),
+      /not visible in this organization/,
+    );
+    await assert.rejects(
+      getCycle({ orgId: org.orgId, actorId: readerNone, cycleId: scopedA.id }),
+      /not visible in this organization/,
+    );
+    const visibleA = await getCycle({ orgId: org.orgId, actorId: readerA, cycleId: scopedA.id });
+    assert.equal(visibleA.id, scopedA.id);
+    const visibleOpen = await getCycle({ orgId: org.orgId, actorId: readerNone, cycleId: open.id });
+    assert.equal(visibleOpen.id, open.id);
+    // Cross-org: a reader from a second org cannot see this org's round.
+    const other = await createScratchOrg();
+    try {
+      const otherReader = await createScratchUser(other.orgId, "Other Reader", "other_reader");
+      await grantPermissions(other.orgId, otherReader, ["hrm.compensation.read"]);
+      await assert.rejects(
+        getCycle({ orgId: other.orgId, actorId: otherReader, cycleId: open.id }),
+        /not visible in this organization/,
+      );
+    } finally {
+      await dropScratchOrg(other.orgId);
+    }
+    // Pacing: propose 3% on both lines (A +2700, B +3000 against a 10000
+    // envelope). The unrestricted pacing reads 57%; the A-scoped pacing
+    // reads only A's 27% — B's increase cannot leak through the percent.
+    // The envelope math itself is unchanged, only the input rows fence.
+    const lineA = allLines.find((l) => l.employmentId === empA.employmentId)!;
+    const lineB = allLines.find((l) => l.employmentId === empB.employmentId)!;
+    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: lineA.id, proposedPct: 3, reason: "scope test" });
+    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: lineB.id, proposedPct: 3, reason: "scope test" });
+    const full = await cyclePacing(org.orgId, h.hrId, open.id);
+    assert.ok(Math.abs(full.totalPct! - 57) < 1e-9);
+    assert.equal(full.overBudget, false);
+    const scoped = await cyclePacing(org.orgId, readerA, open.id);
+    assert.ok(Math.abs(scoped.totalPct! - 27) < 1e-9);
+    assert.equal(scoped.overBudget, false);
+    const empty = await cyclePacing(org.orgId, readerNone, open.id);
+    assert.equal(empty.totalPct, 0);
+    assert.equal(empty.overBudget, false);
+  });
+});
+
+test("HR-12 cycle propose stays open to grant-less structural managers", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const { org } = h;
+    const { level } = await seedArchitecture(org.orgId, h.hrId);
+    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
+    await seedWage(org.orgId, h.hrId, emp.workerPartyId, "90000");
+    // A structural manager holding only team-scoped grants: no
+    // hrm.compensation.read, manage, or approve anywhere.
+    const teamMgr = await createScratchUser(org.orgId, "Team Manager", "team_manager");
+    await grantPermissions(org.orgId, teamMgr, ["hrm.self.read", "hrm.team.read"]);
+    const mgrParty = await linkPerson(org.orgId, teamMgr);
+    const mgrEmp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { workerPartyId: mgrParty, levelId: level.id });
+    await seedWage(org.orgId, h.hrId, mgrParty, "120000");
+    await seedManagerLink(org.orgId, emp.employmentId, mgrEmp.employmentId);
+    // A 1000 envelope: the manager's +2700 proposal paces 270%, so the
+    // over-budget control engages on a grant-less proposer.
+    const cycle = await createCycle({
+      orgId: org.orgId, actorId: h.hrId, name: "Merit 2025", kind: "merit",
+      effectiveOn: "2025-04-01", budgetBasis: "combined", budgetTotal: "1000",
+      currency: "CAD", guidelineKind: "matrix",
+      guideline: {
+        rows: ["meets"], cols: ["q1", "q2", "q3", "q4"],
+        cells: { meets: { q1: { min: 3, max: 5 }, q2: { min: 2, max: 4 }, q3: { min: 1, max: 3 }, q4: { min: 0, max: 2 } } },
+        unratedRow: "meets",
+      },
+    });
+    await openCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
+    const lines = await listCycleLines({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
+    const empLine = lines.find((l) => l.employmentId === emp.employmentId)!;
+    // Over budget with no reason: refused, and the refusal carries no
+    // whole-cycle percentage — the manager holds no compensation.read
+    // grant, and public cyclePacing would deny them the same number.
+    const refusal = await proposeLine({ orgId: org.orgId, actorId: teamMgr, lineId: empLine.id, proposedPct: 3 }).then(
+      () => { throw new Error("expected the over-budget proposal to refuse"); },
+      (e: unknown) => String((e as { message?: unknown }).message ?? e),
+    );
+    assert.match(refusal, /over-budget pacing needs a reason/);
+    assert.ok(!/takes the cycle to \d/.test(refusal), `refusal must not carry the hidden total: ${refusal}`);
+    // With a reason the same proposal lands: the write control demands
+    // no read grant, so a valid proposal is never rolled back on a
+    // permission refusal.
+    const proposed = await proposeLine({ orgId: org.orgId, actorId: teamMgr, lineId: empLine.id, proposedPct: 3, reason: "annual merit" });
+    assert.equal(proposed.status, "proposed");
+    assert.equal(proposed.proposedRate, "92700.0000");
+    // The read side stays gated: the same manager cannot list salaries.
+    await assert.rejects(
+      listCycleLines({ orgId: org.orgId, actorId: teamMgr, cycleId: cycle.id }),
+      /hrm\.compensation\.read/,
+    );
+  });
+});
+
+test("HR-12 restricted proposers still face the whole-cycle budget control", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const { org } = h;
+    const { level } = await seedArchitecture(org.orgId, h.hrId);
+    const subB = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+      select ${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Second entity', base_currency, country
+        from subsidiaries where id = ${org.subsidiaryId} and org_id = ${org.orgId}`);
+    const empA = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
+    const empB = await seedPositionedEmployment(org.orgId, subB, { levelId: level.id });
+    await seedWage(org.orgId, h.hrId, empA.workerPartyId, "90000");
+    await seedWage(org.orgId, h.hrId, empB.workerPartyId, "100000");
+    // A proposer with the manage grant but a subsidiary-A lens.
+    const proposerA = await createScratchUser(org.orgId, "Proposer A", "proposer_a");
+    await db.execute(sql`
+      update app_roles
+         set permissions = '["hrm.compensation.manage"]'::jsonb,
+             subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [org.subsidiaryId] })}::jsonb
+       where org_id = ${org.orgId} and key = 'proposer_a'`);
+    const guideline = {
+      rows: ["meets"], cols: ["q1", "q2", "q3", "q4"],
+      cells: { meets: { q1: { min: 3, max: 5 }, q2: { min: 2, max: 4 }, q3: { min: 1, max: 3 }, q4: { min: 0, max: 2 } } },
+      unratedRow: "meets",
+    };
+    // A +2700 then B +3000 against a 5000 envelope: A alone paces 54%,
+    // the whole cycle paces 114%.
+    const cycle = await createCycle({
+      orgId: org.orgId, actorId: h.hrId, name: "Merit 2025", kind: "merit",
+      effectiveOn: "2025-04-01", budgetBasis: "combined", budgetTotal: "5000",
+      currency: "CAD", guidelineKind: "matrix", guideline,
+    });
+    await openCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
+    const lines = await listCycleLines({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
+    const lineA = lines.find((l) => l.employmentId === empA.employmentId)!;
+    const lineB = lines.find((l) => l.employmentId === empB.employmentId)!;
+    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: lineA.id, proposedPct: 3, reason: "scope test" });
+    // The restricted proposer takes the whole cycle over budget without a
+    // reason: refused even though their visible 54% slice looks funded —
+    // the lens cannot shrink the envelope.
+    const refusal = await proposeLine({
+      orgId: org.orgId, actorId: proposerA, lineId: lineB.id, proposedPct: 3,
+    }).then(
+      () => { throw new Error("expected the over-budget proposal to refuse"); },
+      (e: unknown) => String((e as { message?: unknown }).message ?? e),
+    );
+    assert.match(refusal, /over-budget pacing needs a reason/);
+    assert.ok(!/takes the cycle to \d/.test(refusal), `refusal must not carry the hidden total: ${refusal}`);
+    // Nothing was written by the refused proposal.
+    const untouched = (await db.execute<{ status: string }>(sql`
+      select status from hrm_comp_cycle_lines where org_id = ${org.orgId} and id = ${lineB.id}`)).rows[0];
+    assert.equal(untouched?.status, "pending");
+    // With a reason the same proposal lands.
+    const proposed = await proposeLine({
+      orgId: org.orgId, actorId: proposerA, lineId: lineB.id, proposedPct: 3, reason: "market catch-up",
+    });
+    assert.equal(proposed.status, "proposed");
   });
 });

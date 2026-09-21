@@ -22,7 +22,9 @@ export const runtime = "nodejs";
 
 /**
  * One merit cycle: GET reads the round with its lines and computed
- * budget pacing; POST {action} moves it — open, submit (the Flows run),
+ * budget pacing, all fenced to the caller's subsidiary lens (hidden
+ * subsidiaries contribute no lines and no paced amounts; a round scoped
+ * to an invisible subsidiary reads as not-found); POST {action} moves it — open, submit (the Flows run),
  * push (one wage write per approved line, idempotent), close, cancel,
  * budgets. Reads ride comp.read; every move rides comp.manage (line
  * decisions additionally need comp.approve in the service). The client
@@ -39,7 +41,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   try {
     const cycle = await getCycle({ orgId: gate.user.orgId, actorId: gate.user.id, cycleId: id });
     const lines = await listCycleLines({ orgId: gate.user.orgId, actorId: gate.user.id, cycleId: id });
-    const pacing = await cyclePacing(gate.user.orgId, id);
+    const pacing = await cyclePacing(gate.user.orgId, gate.user.id, id);
     return NextResponse.json({ cycle, lines, pacing });
   } catch (e) {
     return compensationErrorResponse(e);
