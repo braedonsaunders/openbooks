@@ -163,7 +163,11 @@ const payrollYearEnd: AssistantToolDef = {
       data: {
         taxYear: a.taxYear,
         sections: sections.map((s) => {
-          const rows = capList(s.data.rows, 50);
+          // Per-SECTION cap, and the section count grows with every declared
+          // filing a pack adds -- twelve year-end filings pushed the whole
+          // result past the 24 KB per-turn budget. The cap is the knob the
+          // contract test points at; the caller pages through rowCount.
+          const rows = capList(s.data.rows, 15);
           return {
             country: s.country,
             key: s.key,
@@ -172,17 +176,21 @@ const payrollYearEnd: AssistantToolDef = {
             // A separation filing is an employee-event document — its home is
             // the Separations surface, never the year-end page.
             href: s.cadence === "separation" ? "/payroll/separations" : "/payroll/year-end",
-            description: s.description,
+            // Compacted for the per-turn budget: the section's own prose
+            // description is dropped (label + key identify it, and the tool
+            // description states the shape), and fields that carry nothing are
+            // omitted rather than emitted as null. Refusals are NEVER dropped
+            // -- they are the actionable half.
             installed: s.installed,
-            populationRefusal: s.populationRefusal,
+            ...(s.populationRefusal ? { populationRefusal: s.populationRefusal } : {}),
             hasSlip: s.hasSlip,
-            download: s.download,
-            downloadRefusal: s.downloadRefusal,
+            ...(s.download ? { download: s.download } : {}),
+            ...(s.downloadRefusal ? { downloadRefusal: s.downloadRefusal } : {}),
             columns: s.data.columns,
             rowCount: s.data.rows.length,
-            rows: rows.items,
-            truncated: rows.truncated,
-            totals: s.data.totals ?? [],
+            ...(rows.items.length ? { rows: rows.items } : {}),
+            ...(rows.truncated ? { truncated: rows.truncated } : {}),
+            ...(s.data.totals?.length ? { totals: s.data.totals } : {}),
           };
         }),
         href: "/payroll/year-end",
