@@ -32,7 +32,9 @@
     "field_ticket_signature": "署名",
     "timesheet_week": "タイムシート",
     "expense_report": "経費",
-    "document_signature": "署名"
+    "document_signature": "署名",
+    "payroll_anomaly_block": "給与チェック",
+    "ai_capability_review": "AIレビュー"
   },
   "emptyTitle": "すべて完了",
   "emptyDescription": "今あなたを待つものはありません。",

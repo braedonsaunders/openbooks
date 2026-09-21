@@ -31,7 +31,9 @@ test('run detail keeps summary, computation, lineage and house actions', () => {
     'confirmDialog',
     'pendingApprovalNotice',
     'viewApproval',
-    '/approvals',
+    // The worklist is /inbox; the rebrand left no /approvals route to
+    // fall back to, so a stale link here is a dead link, not a redirect.
+    '/inbox',
   ]) {
     assert.ok(tabSource.includes(fragment), `${fragment} must be wired`)
   }

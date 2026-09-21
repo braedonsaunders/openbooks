@@ -74,7 +74,8 @@
       "paid": "payées via une paie",
       "costed": "comptabilisées",
       "ticketed": "dans un bon de travail"
-    }
+    },
+    "checksLink": "Ouvrir les contrôles de paie"
   },
   "field": {
     "title": "Pointage terrain",

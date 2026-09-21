@@ -32,6 +32,13 @@ export function ProcessDrawer({
       closeHref={drawer.closeHref}
       title={drawer.title}
       description={drawer.description ?? undefined}
+      headerActions={
+        drawer.draft ? (
+          <a href={drawer.draft.href} className="text-sm font-medium text-teal-700 dark:text-teal-300">
+            {drawer.draft.label}
+          </a>
+        ) : undefined
+      }
     >
       {drawer.detail ? (
         <ProcessChecklistBody detail={drawer.detail} />

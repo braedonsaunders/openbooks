@@ -50,6 +50,9 @@ const GROUP_TABS: Record<TabGroup, { href: string; ns: string; key: string }[]> 
   payroll: [
     { href: '/payroll', ns: 'payroll', key: 'home.tabs.overview' },
     { href: '/payroll/runs', ns: 'payroll', key: 'home.tabs.runs' },
+    // HR-21 begin: deterministic pre-run checks (Tools/sections own the UI copy).
+    { href: '/payroll/anomalies', ns: 'payroll', key: 'home.tabs.checks' },
+    // HR-21 end
     { href: '/payroll/remittances', ns: 'payroll', key: 'home.tabs.remittances' },
     // Separation filings (the ROE, a P45) are per-event documents — their own
     // surface, deliberately NOT a year-end section.
@@ -132,6 +135,9 @@ const TAB_FEATURE: Record<string, string> = {
   '/banking/cash': 'banking',
   '/payroll': 'payroll',
   '/payroll/runs': 'payroll',
+  // HR-21 begin: the Checks tab hides while hrmPayrollAnomalies is off.
+  '/payroll/anomalies': 'hrmPayrollAnomalies',
+  // HR-21 end
   '/payroll/remittances': 'payroll',
   '/payroll/separations': 'payroll',
   '/payroll/year-end': 'payroll',

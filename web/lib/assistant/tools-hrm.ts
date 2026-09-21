@@ -1978,3 +1978,333 @@ HRM_TOOLS.push(inboxItems);
 
 
 // HR-12 end
+// HR-21 begin: AI rails tools. Every capability is a TOOL or a DETERMINISTIC
+// service — the model phrases and drafts, the services compute. Each tool
+// logs its decision to the governance ledger: mutating paths log inside
+// their service, pure-read paths log here before returning.
+import { AiRailsError as Hr21AiRailsError } from "@openbooks/engine/src/hrm/ai/errors.ts";
+
+function hr21Refusal(error: unknown): ToolResult {
+  if (error instanceof Hr21AiRailsError) return { ok: false, error: error.message };
+  return hrmRefusal(error);
+}
+
+async function hr21FeatureRefused(orgId: string, key: string): Promise<ToolResult | null> {
+  if (!(await isFeatureEnabled(orgId, key))) return { ok: false, error: HRM_FEATURE_OFF };
+  return null;
+}
+
+const hrmExplainPay: AssistantToolDef = {
+  name: "hrm_explain_pay",
+  description:
+    "Explain one payslip deterministically: gross by component with the input behind each line, deductions with treatments, employer cost, net, and the diff vs the previous payslip. Own payslips through self-service; anyone else's needs the payroll grant. Read-only; the trace cites record ids.",
+  category: "read",
+  gate: { mode: "anyOf", perms: ["hrm.self.read", "hrm.employment.read", "payroll.manage"] },
+  feature: "hrmExplainPay",
+  tier: "module",
+  inputSchema: z.object({
+    employmentId: uuidInput.describe("Employment whose payslip to explain"),
+    stubId: uuidInput.optional().describe("One stub; omit for the latest calculated payslip"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const gated = await hr21FeatureRefused(authz.user.orgId, "hrmExplainPay");
+    if (gated) return gated;
+    const a = raw as { employmentId: string; stubId?: string };
+    try {
+      const { explainPay } = await import("@openbooks/engine/src/hrm/ai/explain-pay.ts");
+      const trace = await explainPay(db, {
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        employmentId: a.employmentId,
+        stubId: a.stubId ?? null,
+      });
+      const cap = 100;
+      const lines = [...trace.earnings, ...trace.deductions, ...trace.employerContributions];
+      return {
+        ok: true,
+        data: {
+          stubId: trace.stubId,
+          payDate: trace.payDate,
+          gross: trace.gross,
+          netPay: trace.netPay,
+          employerCost: trace.employerCost,
+          lines: lines.slice(0, cap).map((l) => ({
+            kind: l.kind,
+            description: l.description,
+            hours: l.hours,
+            rate: l.rate,
+            amount: l.amount,
+            treatment: l.treatment,
+          })),
+          truncated: lines.length > cap,
+          benefitInputs: trace.benefitInputs,
+          leaveInputs: trace.leaveInputs,
+          wageRates: trace.wageRates,
+          diffVsPrevious: trace.diffVsPrevious,
+          sources: trace.sources,
+          href: "/me",
+        },
+        note: `Gross ${trace.gross}, net ${trace.netPay} — figures govern, wording explains.`,
+      };
+    } catch (error) {
+      return hr21Refusal(error);
+    }
+  },
+};
+
+const anomalyActions = ["scan", "list", "transition", "compute_baselines"] as const;
+
+const payrollAnomalies: AssistantToolDef = {
+  name: "payroll_anomalies",
+  description:
+    "Deterministic pre-run payroll and timesheet checks: scan a period for anomaly flags, list flags with severity/kind/status filters, acknowledge/resolve/false-positive a flag with a reason, or recompute cohort baselines. Block severity refuses the pay-run finalize while open. Reads are read-only; transitions are human decisions recorded to the ledger.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["payroll.manage", "time.approve", "hrm.employment.read"] },
+  feature: "hrmPayrollAnomalies",
+  tier: "module",
+  inputSchema: z.object({
+    action: z.enum(anomalyActions).describe("scan a period, list flags, transition one flag, or recompute baselines"),
+    periodFrom: dateInput.optional().describe("Scan/list period start (scan requires periodFrom and periodTo)"),
+    periodTo: dateInput.optional().describe("Scan/list period end"),
+    severity: z.enum(["info", "warn", "block"]).optional().describe("List filter: keep only this severity"),
+    kind: z.enum(["terminated_with_pay", "duplicate_bank", "retro_spike", "net_pay_spike", "zero_hours_with_pay", "hours_spike", "missing_rate", "expired_rate", "prevailing_wage_missing", "apprentice_ratio_breach", "benefit_input_orphan", "leave_input_orphan", "negative_balance", "duplicate_entry", "geofence_outside", "unrounded", "custom"]).optional().describe("List filter: keep only this anomaly kind"),
+    status: z.enum(["open", "acknowledged", "resolved", "false_positive"]).optional().describe("List filter (default open)"),
+    employmentId: uuidInput.optional().describe("Keep only this employment's flags"),
+    timeOnly: z.boolean().optional().describe("Scan timesheet-side rules only"),
+    flagId: uuidInput.optional().describe("Transition target flag"),
+    to: z.enum(["acknowledged", "resolved", "false_positive"]).optional().describe("Transition target status"),
+    reason: z.string().min(1).max(500).optional().describe("Transition reason — required, the sentence the audit needs"),
+    windowPeriods: z.number().int().min(2).max(24).optional().describe("Baseline recompute window (default 6)"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const gated = await hr21FeatureRefused(authz.user.orgId, "hrmPayrollAnomalies");
+    if (gated) return gated;
+    const a = raw as {
+      action: (typeof anomalyActions)[number];
+      periodFrom?: string;
+      periodTo?: string;
+      severity?: string;
+      kind?: string;
+      status?: string;
+      employmentId?: string;
+      timeOnly?: boolean;
+      flagId?: string;
+      to?: "acknowledged" | "resolved" | "false_positive";
+      reason?: string;
+      windowPeriods?: number;
+    };
+    try {
+      const ai = await import("@openbooks/engine/src/hrm/ai/anomalies.ts");
+      if (a.action === "scan") {
+        if (!a.periodFrom || !a.periodTo) return { ok: false, error: "periodFrom and periodTo are required to scan" };
+        const summary = await ai.scanAnomalies(db, {
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          periodFrom: a.periodFrom,
+          periodTo: a.periodTo,
+          options: a.timeOnly === true ? { timeOnly: true } : undefined,
+        });
+        return { ok: true, data: { ...summary, href: "/payroll/anomalies" } };
+      }
+      if (a.action === "list") {
+        const flags = await ai.listFlags(db, {
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          periodFrom: a.periodFrom,
+          periodTo: a.periodTo,
+          severity: a.severity,
+          kind: a.kind,
+          status: a.status ?? "open",
+          employmentId: a.employmentId,
+        });
+        const { logDecision } = await import("@openbooks/engine/src/hrm/ai/governance.ts");
+        await logDecision(db, {
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          capabilityKey: "hrmPayrollAnomalies",
+          subjectKind: "pay_period",
+          subjectId: null,
+          input: `listFlags ${a.periodFrom ?? ""}..${a.periodTo ?? ""}`,
+          output: `${flags.length} flags listed`,
+          outputSummary: `flag list shown (${flags.length} rows)`,
+          sources: [],
+          outcome: "shown",
+          model: "payroll-anomalies-tool",
+        });
+        return { ok: true, data: { total: flags.length, flags: flags.slice(0, 50), href: "/payroll/anomalies" } };
+      }
+      if (a.action === "transition") {
+        if (!a.flagId || !a.to || !a.reason) {
+          return { ok: false, error: "flagId, to and reason are required to transition a flag" };
+        }
+        const flag = await ai.transitionFlag(db, {
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          flagId: a.flagId,
+          to: a.to,
+          reason: a.reason,
+        });
+        return { ok: true, data: { flag, href: "/payroll/anomalies" } };
+      }
+      const baselines = await ai.computeBaselines(db, {
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        windowPeriods: a.windowPeriods,
+      });
+      return { ok: true, data: { ...baselines, href: "/payroll/anomalies" } };
+    } catch (error) {
+      return hr21Refusal(error);
+    }
+  },
+};
+
+const draftKinds = [
+  "job_description",
+  "review_manager",
+  "review_self",
+  "onboarding_plan",
+  "offer_letter_clauses",
+] as const;
+
+const aiDraft: AssistantToolDef = {
+  name: "ai_draft",
+  description:
+    "Draft from evidence only: a job description from its requisition, a manager or self review from cycle goals and prior calibrated ratings, an onboarding plan from its template and precedents, or offer clauses from the offer and band. Sources the actor cannot read refuse the whole draft. Drafts never auto-submit — the human edits and files through the existing form.",
+  category: "read",
+  gate: {
+    mode: "anyOf",
+    perms: ["hrm.self.read", "hrm.performance.manage", "hrm.recruiting.read", "hrm.recruiting.manage", "hrm.process.read"],
+  },
+  feature: "hrmDrafting",
+  tier: "module",
+  inputSchema: z.object({
+    kind: z.enum(draftKinds).describe("What to draft"),
+    subjectId: uuidInput.describe("Requisition, review, process template, or offer id"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const gated = await hr21FeatureRefused(authz.user.orgId, "hrmDrafting");
+    if (gated) return gated;
+    const a = raw as { kind: (typeof draftKinds)[number]; subjectId: string };
+    try {
+      const { draftWithEvidence } = await import("@openbooks/engine/src/hrm/ai/drafting.ts");
+      const draft = await draftWithEvidence({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        kind: a.kind,
+        subjectId: a.subjectId,
+      });
+      return {
+        ok: true,
+        data: {
+          kind: draft.kind,
+          subjectId: draft.subjectId,
+          text: draft.text,
+          sources: draft.sources,
+          biasFlags: draft.biasFlags,
+        },
+        note: "A draft, not a filing — edit and submit through the existing form.",
+      };
+    } catch (error) {
+      return hr21Refusal(error);
+    }
+  },
+};
+
+const nlReport: AssistantToolDef = {
+  name: "nl_report",
+  description:
+    "Answer a question with a validated report-engine definition (never SQL): preview runs it once under the caller's report permissions, save stores the draft for save-as-view. Invalid definitions are refused by name, never repaired silently.",
+  category: "read",
+  gate: { mode: "anyOf", perms: ["reports.read"] },
+  feature: "hrmNlReports",
+  tier: "module",
+  inputSchema: z.object({
+    action: z.enum(["preview", "save"]).describe("Run once as a preview, or validate, save the draft and preview"),
+    question: z.string().min(1).max(1000).describe("The question in plain language"),
+    definitionJson: z.string().min(1).max(20000).describe("Candidate report definition as JSON (entity, mode, columns, breakouts, measures, filters, sorts, limit)"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const gated = await hr21FeatureRefused(authz.user.orgId, "hrmNlReports");
+    if (gated) return gated;
+    const a = raw as { action: "preview" | "save"; question: string; definitionJson: string };
+    let candidate: unknown;
+    try {
+      candidate = JSON.parse(a.definitionJson);
+    } catch {
+      return { ok: false, error: "definitionJson must parse as JSON — resend the definition as JSON text" };
+    }
+    try {
+      const { REPORT_ENTITY_MAP } = await import("@openbooks/reports");
+      const { hiddenReportEntityKeys } = await import("../report-authz");
+      const { canRunReportEntity } = await import("../report-authz");
+      const { validateNlDefinition } = await import("@openbooks/engine/src/hrm/ai/nl-reports.ts");
+      const hidden = new Set(await hiddenReportEntityKeys(authz));
+      const catalog = Object.values(REPORT_ENTITY_MAP)
+        .filter((e) => !hidden.has(e.key))
+        .map((e) => ({
+          key: e.key,
+          columns: e.columns.map((c) => c.key),
+          requiredPermission: e.requiredPermission ?? null,
+        }));
+      const callerPermissions = [...authz.permissions];
+      // Preview-before-validate would execute an unchecked plan: validate
+      // first so an unexecutable definition refuses before it ever runs.
+      const definition = validateNlDefinition(candidate, catalog, callerPermissions);
+      if (!(await canRunReportEntity(authz, { entity: definition.entity }))) {
+        return { ok: false, error: "forbidden" };
+      }
+      const { executeReport } = await import("../custom-reports");
+      const preview = await executeReport(authz.user.orgId, {
+        entity: definition.entity,
+        mode: definition.mode,
+        columns: definition.columns,
+        breakouts: definition.breakouts,
+        measures: definition.measures,
+        filters: definition.filters as { combinator: "and" | "or"; rules: never[] } | null,
+        sorts: definition.sorts,
+        limit: definition.limit,
+      }, 5);
+      const rows = preview.groups.flatMap((g) => g.rows.slice(0, 5)).slice(0, 5);
+      if (a.action === "preview") {
+        const { logDecision } = await import("@openbooks/engine/src/hrm/ai/governance.ts");
+        await logDecision(db, {
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          capabilityKey: "hrmNlReports",
+          subjectKind: "nl_report_preview",
+          subjectId: null,
+          input: a.question,
+          output: `entity=${definition.entity} mode=${definition.mode}`,
+          outputSummary: `report preview from question (${definition.entity}, ${definition.mode})`,
+          sources: [{ kind: "report_entity", id: definition.entity }],
+          outcome: "shown",
+          model: "nl-report-tool",
+        });
+        return {
+          ok: true,
+          data: { definition, previewRows: rows, href: "/reports" },
+          note: "Preview only — nothing saved. Ask to save it as a view.",
+        };
+      }
+      const { saveNlDraft } = await import("@openbooks/engine/src/hrm/ai/nl-reports.ts");
+      const saved = await saveNlDraft(db, {
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        question: a.question,
+        candidate,
+        catalog,
+        callerPermissions,
+      });
+      return {
+        ok: true,
+        data: { draftId: saved.draftId, definition: saved.definition, previewRows: rows, href: "/reports" },
+        note: "Draft saved — save it as a view from the report builder.",
+      };
+    } catch (error) {
+      return hr21Refusal(error);
+    }
+  },
+};
+
+HRM_TOOLS.push(hrmExplainPay, payrollAnomalies, aiDraft, nlReport);
+// HR-21 end

@@ -2955,7 +2955,12 @@
       "question": "Pergunta",
       "ratingScale": "Escala de avaliação",
       "regionScope": "Âmbito regional",
-      "retainMonths": "Meses de retenção"
+      "retainMonths": "Meses de retenção",
+      "zThreshold": "Limiar Z",
+      "retroThreshold": "Limiar retroativo",
+      "cohortKey": "Coorte",
+      "biasTerms": "Termos sensíveis",
+      "reviewMonths": "Cadência (meses)"
     },
     "fieldHelp": {
       "gapless": "Sem lacunas significa que todos os números da sequência devem ser contabilizados, sem números pulados. Ative somente quando exigências legais ou de auditoria determinarem uma numeração ininterrupta.",
@@ -3050,7 +3055,12 @@
       "hrmRetentionLeadDays": "Dias antes para pedir prorrogação; vazio não envia e-mail.",
       "hrmRetentionScope": "Região como JSON: applies_to all ou countries com códigos.",
       "hrmTemplateBody": "Texto com marcadores para os dados da oferta.",
-      "hrmTemplateClauses": "Cláusulas como lista JSON com key, label, body e default_on."
+      "hrmTemplateClauses": "Cláusulas como lista JSON com key, label, body e default_on.",
+      "aiRailsZThreshold": "Sinaliza proventos além destes desvios-padrão da média (padrão 3).",
+      "aiRailsRetroThreshold": "Sinaliza retroativos a partir deste valor (padrão 500).",
+      "aiRailsCohort": "Agrupa funcionários por filial, departamento, calendário ou nível.",
+      "aiRailsBiasTerms": "Palavras e frases da organização sinalizadas no exato, uma por linha.",
+      "aiRailsReviewMonths": "Cadência em meses (1–36); capacidades vencidas avisam o inbox de setup."
     },
     "options": {
       "payFrequency": {
@@ -3524,6 +3534,12 @@
       "hrmRetentionBasis": {
         "consent": "Consentimento",
         "inactivity": "Inatividade"
+      },
+      "aiRailsCohort": {
+        "subsidiary": "Filial",
+        "department": "Departamento",
+        "paySchedule": "Calendário da folha",
+        "jobLevel": "Nível"
       }
     },
     "payroll": {
@@ -4957,6 +4973,34 @@
     "hrmTalentPool": {
       "title": "Banco de talentos",
       "description": "Grupos de candidatos anteriores comparados com vagas abertas."
+    },
+    "hrmAiAssist": {
+      "title": "Assistência de IA",
+      "description": "Chave mestra das capacidades deterministas de IA de RH. Nada aqui protocola, aprova ou paga sozinho."
+    },
+    "hrmExplainPay": {
+      "title": "Explicações de holerite",
+      "description": "Trilhas deterministas com diferença anterior, na gaveta de Folha."
+    },
+    "hrmPayrollAnomalies": {
+      "title": "Anomalias da folha",
+      "description": "Sinalizações prévias com ciclo de vida; o nível de bloqueio recusa a confirmação."
+    },
+    "hrmTimeAnomalies": {
+      "title": "Anomalias de ponto",
+      "description": "Sinalizações de ponto como selos de aprovação e inbox."
+    },
+    "hrmDrafting": {
+      "title": "Redação com evidências",
+      "description": "Rascunhos de fontes citadas com avisos de linguagem; nunca se autoenviam."
+    },
+    "hrmNlReports": {
+      "title": "Relatórios em linguagem natural",
+      "description": "Definições validadas de perguntas, com prévia e salvamento como visão."
+    },
+    "aiGovernanceLedger": {
+      "title": "Registro de governança de IA",
+      "description": "Espelho de capacidades, log imutável, avisos e cadência."
     }
   },
   "backupsManager": {
@@ -5362,6 +5406,36 @@
       "approvalYes": "Sim",
       "approvalNo": "Não",
       "approvalSave": "Salvar ajustes"
+    }
+  },
+  "aiLedger": {
+    "title": "Governança de IA",
+    "description": "Capacidades, seus tetos de autonomia e o registro imutável de cada resposta assistida por IA.",
+    "capabilitiesTitle": "Capacidades",
+    "decisionsTitle": "Decisões",
+    "overdueTitle": "Revisões vencidas",
+    "overdueDescription": "Estas capacidades passaram da cadência de revisão",
+    "export": "Exportar CSV",
+    "sync": "Sincronizar cadastro",
+    "syncDone": "Cadastro sincronizado.",
+    "review": "Registrar revisão",
+    "save": "Salvar",
+    "failed": "Não foi possível salvar a alteração.",
+    "enabled": "Ativada",
+    "disabled": "Desativada",
+    "all": "Todas",
+    "noticeRequired": "Aviso exigido",
+    "neverReviewed": "Nunca revisada",
+    "columns": {
+      "autonomy": "Autonomia",
+      "capability": "Capacidade",
+      "enabled": "Ativada",
+      "notice": "Aviso",
+      "outcome": "Resultado",
+      "reviewed": "Revisada",
+      "reviewer": "Revisor",
+      "summary": "Resumo",
+      "when": "Quando"
     }
   }
 }

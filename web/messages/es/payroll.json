@@ -1487,5 +1487,77 @@
   },
   "retro": {
     "title": "Pago retroactivo"
+  },
+  "anomalies": {
+    "title": "Controles de nómina",
+    "description": "Controles deterministas previos a la nómina con sus cifras. El nivel de bloqueo rechaza la confirmación mientras esté abierto.",
+    "listTitle": "Avisos",
+    "emptyTitle": "Sin avisos para este período",
+    "emptyDescription": "Ejecute el análisis de este período o amplíe los filtros.",
+    "scan": "Analizar período",
+    "scanBusy": "Analizando…",
+    "scanFailed": "No se pudo ejecutar el análisis.",
+    "open": "Abierto",
+    "all": "Todos",
+    "runs": "Nóminas",
+    "kindLabel": "Tipo",
+    "severityLabel": "Nivel",
+    "statusLabel": "Estado",
+    "unassigned": "Sin asignar",
+    "wizardNotice": "{count, plural, one {# aviso de bloqueo rechaza esta confirmación} other {# avisos de bloqueo rechazan esta confirmación}} — resuélvalos o márquelos como falso positivo en la cola.",
+    "wizardLink": "Abrir controles de nómina",
+    "columns": {
+      "employment": "Empleado",
+      "explanation": "Explicación",
+      "kind": "Tipo",
+      "period": "Período",
+      "severity": "Nivel",
+      "status": "Estado"
+    },
+    "tiles": {
+      "blocking": "Bloqueo",
+      "warnings": "Advertencias",
+      "acknowledged": "Aceptados",
+      "falsePositiveRate": "Tasa de falsos positivos"
+    },
+    "transitions": {
+      "acknowledge": "Aceptar",
+      "resolve": "Resolver",
+      "falsePositive": "Falso positivo",
+      "reason": "Motivo",
+      "reasonPlaceholder": "¿Qué comprobó o corrigió?",
+      "submit": "Aplicar",
+      "failed": "No se pudo guardar el cambio."
+    },
+    "severity": {
+      "block": "Bloqueo",
+      "warn": "Advertencia",
+      "info": "Info"
+    },
+    "status": {
+      "open": "Abierto",
+      "acknowledged": "Aceptado",
+      "resolved": "Resuelto",
+      "false_positive": "Falso positivo"
+    },
+    "kinds": {
+      "terminated_with_pay": "Baja con nómina",
+      "duplicate_bank": "Cuenta duplicada",
+      "retro_spike": "Pico retroactivo",
+      "net_pay_spike": "Pico de neto",
+      "zero_hours_with_pay": "Cero horas con nómina",
+      "hours_spike": "Pico de horas",
+      "missing_rate": "Tarifa ausente",
+      "expired_rate": "Tarifa vencida",
+      "prevailing_wage_missing": "Salario vigente ausente",
+      "apprentice_ratio_breach": "Cuota de aprendices incumplida",
+      "benefit_input_orphan": "Prestación sin asignar",
+      "leave_input_orphan": "Ausencia sin asignar",
+      "negative_balance": "Saldo de vacaciones negativo",
+      "duplicate_entry": "Parte duplicado",
+      "geofence_outside": "Fuera de la zona",
+      "unrounded": "Fichaje sin redondear",
+      "custom": "Personalizado"
+    }
   }
 }

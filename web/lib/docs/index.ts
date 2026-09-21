@@ -37,6 +37,9 @@ import { crewTimeEntry } from './articles/crew-time-entry'
 import { compensationAndTransparency } from './articles/compensation-transparency'
 // HR-14 begin: certifications, licenses, and dispatch gating article.
 import { certificationsLicensesDispatch } from './articles/certifications-licenses-dispatch'
+import { payslipExplanations } from './articles/payslip-explanations'
+import { payrollChecks } from './articles/payroll-checks'
+import { aiGovernanceLedger } from './articles/ai-governance-ledger'
 // HR-14 end
 // HR-19 begin: documents/signatures/retention, engagement surveys, and org
 // chart articles.
@@ -293,6 +296,11 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   // HR-18 begin
   structuredInterviewsOffersJobBoards,
   // HR-18 end
+  // HR-21 begin
+  payslipExplanations,
+  payrollChecks,
+  aiGovernanceLedger,
+  // HR-21 end
   // HR-14 begin: pre-existing red on the stacked base — the 31defe406
   // reconciliation left fieldTickets/subcontractorCompliance listed twice
   // (once on the long line above, once here). The duplicate line is removed.

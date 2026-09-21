@@ -103,11 +103,15 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/admin/ai': {
     route: '/admin/ai',
     segments: [],
-    searchParams: false,
+    // The page takes search params (the governance ledger's filters), so
+    // the registry-driven host must hand them over too -- otherwise the
+    // agent surface silently renders the unfiltered page and the caller
+    // never learns its filter was dropped.
+    searchParams: true,
     module: async () => {
       const m = await import('../app/(app)/admin/ai/view')
       return {
-        load: () => m.loadAdminAi(),
+        load: (input) => m.loadAdminAi(input.searchParams ?? {}),
         spec: (data) => m.adminAiSpec(data as never),
       }
     },
@@ -1687,11 +1691,12 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/me': {
     route: '/me',
     segments: [],
-    searchParams: false,
+    // Me takes search params too (the payslip the explain drawer opens).
+    searchParams: true,
     module: async () => {
       const m = await import('../app/(app)/me/view')
       return {
-        load: () => m.loadMePage(),
+        load: (input) => m.loadMePage(input.searchParams ?? {}),
         spec: (data) => m.meSpec(data as never),
       }
     },
@@ -1849,6 +1854,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: (input) => m.loadPayroll(input.searchParams ?? {}),
         spec: (data) => m.payrollSpec(data as never),
+      }
+    },
+  },
+  '/payroll/anomalies': {
+    route: '/payroll/anomalies',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/payroll/anomalies/view')
+      return {
+        load: (input) => m.loadAnomalyChecksPage(input.searchParams ?? {}),
+        spec: (data) => m.anomalyChecksSpec(data as never),
       }
     },
   },

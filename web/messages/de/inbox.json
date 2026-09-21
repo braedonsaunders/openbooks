@@ -32,7 +32,9 @@
     "field_ticket_signature": "Unterschrift",
     "timesheet_week": "Stundenzettel",
     "expense_report": "Spesen",
-    "document_signature": "Unterschrift"
+    "document_signature": "Unterschrift",
+    "payroll_anomaly_block": "Lohnprüfung",
+    "ai_capability_review": "KI-Prüfung"
   },
   "emptyTitle": "Alles erledigt",
   "emptyDescription": "Im Moment wartet nichts auf Sie.",

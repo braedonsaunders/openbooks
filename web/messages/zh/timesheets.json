@@ -74,7 +74,8 @@
       "paid": "通过薪资支付",
       "costed": "过账到总账",
       "ticketed": "包含在现场工单中"
-    }
+    },
+    "checksLink": "打开薪资检查"
   },
   "field": {
     "title": "外勤打卡",

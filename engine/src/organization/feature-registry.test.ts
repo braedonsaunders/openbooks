@@ -259,3 +259,68 @@ test("fieldTime rides timeTracking with six sub-features", () => {
   );
 });
 // HR-20 end
+// HR-21 begin: AI rails — parent hides the complexity, sub-features carry
+// their module requirements, the ledger is governance (on by default).
+test("hrmAiAssist is an opt-in hrm feature with subordinate AI switches", () => {
+  const def = FEATURE_BY_KEY.get("hrmAiAssist");
+  assert.ok(def, "hrmAiAssist must be registered before routes gate on it");
+  assert.equal(def.defaultEnabled, false);
+  assert.equal(def.parentKey, "hrm");
+  assert.equal(featureEnabled({}, "hrmAiAssist"), false);
+  assert.equal(featureEnabled({ hrm: false, hrmAiAssist: true }, "hrmAiAssist"), false);
+  assert.equal(featureEnabled({ hrm: true }, "hrmAiAssist"), false);
+  assert.equal(featureEnabled({ hrm: true, hrmAiAssist: true }, "hrmAiAssist"), true);
+  for (const key of [
+    "hrmExplainPay",
+    "hrmPayrollAnomalies",
+    "hrmTimeAnomalies",
+    "hrmDrafting",
+    "hrmNlReports",
+  ]) {
+    const sub = FEATURE_BY_KEY.get(key);
+    assert.ok(sub, `${key} must be registered`);
+    assert.equal(sub.parentKey, "hrmAiAssist");
+    assert.equal(featureEnabled({ hrm: true, hrmAiAssist: false, [key]: true }, key), false);
+  }
+  // Module requirements ride along: payroll-gated switches stay off
+  // without payroll even when the whole HRM chain is on.
+  assert.equal(
+    featureEnabled({ hrm: true, hrmAiAssist: true, hrmExplainPay: true }, "hrmExplainPay"),
+    false,
+  );
+  assert.equal(
+    featureEnabled(
+      { hrm: true, hrmAiAssist: true, payroll: true, hrmExplainPay: true },
+      "hrmExplainPay",
+    ),
+    true,
+  );
+  // timeTracking defaults on, so the requirement resolves true unless the
+  // org explicitly turned tracking off — the refusal that matters.
+  assert.equal(
+    featureEnabled(
+      { hrm: true, hrmAiAssist: true, timeTracking: false, hrmTimeAnomalies: true },
+      "hrmTimeAnomalies",
+    ),
+    false,
+  );
+  assert.equal(
+    featureEnabled(
+      {
+        hrm: true,
+        hrmAiAssist: true,
+        projects: true,
+        timeTracking: true,
+        hrmTimeAnomalies: true,
+      },
+      "hrmTimeAnomalies",
+    ),
+    true,
+  );
+  const ledger = FEATURE_BY_KEY.get("aiGovernanceLedger");
+  assert.ok(ledger, "aiGovernanceLedger must be registered");
+  assert.equal(ledger.defaultEnabled, true);
+  assert.equal(ledger.parentKey, undefined);
+  assert.equal(featureEnabled({}, "aiGovernanceLedger"), true);
+});
+// HR-21 end

@@ -1487,5 +1487,77 @@
   },
   "retro": {
     "title": "补发工资"
+  },
+  "anomalies": {
+    "title": "薪资检查",
+    "description": "运行前确定性检查及其数据。阻止级别在未解决期间拒绝确认薪资。",
+    "listTitle": "标记",
+    "emptyTitle": "此期间无标记",
+    "emptyDescription": "扫描此期间或放宽筛选条件。",
+    "scan": "扫描期间",
+    "scanBusy": "扫描中…",
+    "scanFailed": "无法运行扫描。",
+    "open": "待处理",
+    "all": "全部",
+    "runs": "薪资运行",
+    "kindLabel": "类型",
+    "severityLabel": "级别",
+    "statusLabel": "状态",
+    "unassigned": "未分配",
+    "wizardNotice": "{count, plural, one {有 # 个阻止标记拒绝此次确认} other {有 # 个阻止标记拒绝此次确认}} — 请在检查队列中解决或标为误报。",
+    "wizardLink": "打开薪资检查",
+    "columns": {
+      "employment": "员工",
+      "explanation": "说明",
+      "kind": "类型",
+      "period": "期间",
+      "severity": "级别",
+      "status": "状态"
+    },
+    "tiles": {
+      "blocking": "阻止",
+      "warnings": "警告",
+      "acknowledged": "已确认",
+      "falsePositiveRate": "误报率"
+    },
+    "transitions": {
+      "acknowledge": "确认",
+      "resolve": "解决",
+      "falsePositive": "误报",
+      "reason": "原因",
+      "reasonPlaceholder": "您检查或修正了什么？",
+      "submit": "应用",
+      "failed": "无法保存更改。"
+    },
+    "severity": {
+      "block": "阻止",
+      "warn": "警告",
+      "info": "提示"
+    },
+    "status": {
+      "open": "待处理",
+      "acknowledged": "已确认",
+      "resolved": "已解决",
+      "false_positive": "误报"
+    },
+    "kinds": {
+      "terminated_with_pay": "离职后发薪",
+      "duplicate_bank": "银行账户重复",
+      "retro_spike": "追溯激增",
+      "net_pay_spike": "实发激增",
+      "zero_hours_with_pay": "零工时发薪",
+      "hours_spike": "工时激增",
+      "missing_rate": "缺少费率",
+      "expired_rate": "费率过期",
+      "prevailing_wage_missing": "缺少现行工资",
+      "apprentice_ratio_breach": "学徒比例违规",
+      "benefit_input_orphan": "未关联福利",
+      "leave_input_orphan": "未关联休假",
+      "negative_balance": "休假余额为负",
+      "duplicate_entry": "重复录入",
+      "geofence_outside": "超出范围",
+      "unrounded": "未取整打卡",
+      "custom": "自定义"
+    }
   }
 }

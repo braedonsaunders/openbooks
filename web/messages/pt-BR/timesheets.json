@@ -74,7 +74,8 @@
       "paid": "pagos em uma folha",
       "costed": "lançados no razão",
       "ticketed": "em um boletim de campo"
-    }
+    },
+    "checksLink": "Abrir verificações da folha"
   },
   "field": {
     "title": "Ponto em campo",
