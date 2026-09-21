@@ -4,11 +4,92 @@ import { prepareTaxBasisRegime } from "./tax-basis-draft";
 import {
   validateTaxRegimeBasis,
   type TaxBasisSourceContext,
+  type TaxAssetBasisSourceChoice,
+  type TaxBasisDraft,
 } from "@openbooks/engine/src/tax-returns/asset-basis-policy.ts";
 import {
   prepareMacrsVintageAllocations,
   type OpenMacrsVintage,
 } from "./macrs-vintage-allocation-draft";
+
+const membershipSource: TaxAssetBasisSourceChoice = {
+  key: "transfer", sourceChangeId: "source-change", sourceEventId: null,
+  occurredOn: "2026-07-01", sourceKind: "transferred", sourceOperation: "intercompany_transfer",
+  bookLabel: "Primary", assetLabel: "FA-101", subsidiaryLabel: "Seller company",
+  receivingAssetLabel: "FA-202", receivingSubsidiaryLabel: "Buyer company",
+  sellerSubsidiaryId: "11111111-1111-4111-8111-111111111111",
+  buyerSubsidiaryId: "22222222-2222-4222-8222-222222222222",
+  regimes: [{ code: "us_macrs", name: "United States — MACRS", applicable: "both" }],
+  openMacrsVintages: { status: "original_declaration_required" }, appliedWorkpaper: null,
+};
+const membership = {
+  groupKey: "US income-tax group A",
+  sellerSubsidiaryId: membershipSource.sellerSubsidiaryId,
+  buyerSubsidiaryId: membershipSource.buyerSubsidiaryId!,
+  effectiveOn: "2026-01-01", throughOn: "2026-12-31",
+};
+const membershipContext: TaxBasisSourceContext = {
+  sourceOperation: "intercompany_transfer", applicable: "both", effectiveOn: "2026-07-01",
+  usSellerMacrs: { status: "original_declaration_required" },
+  sellerSubsidiaryId: membershipSource.sellerSubsidiaryId,
+  buyerSubsidiaryId: membershipSource.buyerSubsidiaryId,
+};
+const consolidatedSale: TaxBasisDraft = {
+  regime: "us_macrs", relationship: "non_arms_length", dispositionTrigger: "sale",
+  originalUnadjustedBasis: "100.0000", disposedUnadjustedBasis: "100.0000", remainingUnadjustedBasis: "0",
+  placedInServiceOn: "2024-01-01", recoveryPeriodYears: "10", method: "straight_line", convention: "half_year",
+  recognition: "taxable", section168i7Kind: "consolidated_group", relatedPerson: true,
+  statutoryProceeds: "130.0000", amountRealizedRule: "amount_realized", buyerCost: "130.0000",
+  carryoverBasis: "80.0000", excessBasis: "50.0000", sellerAdjustedBasis: "80.0000",
+  section179: "0", bonusPercent: "0", businessUsePercent: "100", priorDepreciation: "20.0000",
+  consolidatedGroupMembership: membership,
+};
+
+test("native taxable sale retains membership, adjusted basis and independent carryover declarations", () => {
+  const post = prepareTaxBasisRegime({
+    ...consolidatedSale,
+    consolidatedMembership: { ...membership, identity: "invented" },
+    consolidatedMatching: { deferredOpening: "0" },
+    deferredOpening: "0", sellerMatchingAmount: "999",
+  }, membershipContext, undefined, membershipSource);
+  assert.equal(post.regime, "us_macrs");
+  if (post.regime !== "us_macrs") return;
+  assert.deepEqual(post.consolidatedGroupMembership, membership);
+  assert.equal(post.recognition, "taxable");
+  assert.equal(post.section168i7Kind, "consolidated_group");
+  assert.equal(post.sellerAdjustedBasis, "80.0000");
+  assert.equal(post.carryoverBasis, "80.0000");
+  assert.equal(post.excessBasis, "50.0000");
+  const server = validateTaxRegimeBasis(JSON.parse(JSON.stringify(post)), membershipContext);
+  assert.equal(server.regime, "us_macrs");
+  if (server.regime !== "us_macrs") return;
+  assert.deepEqual(server.consolidatedGroupMembership, membership);
+  for (const derived of ["consolidatedMembership", "consolidatedMatching", "deferredOpening", "sellerMatchingAmount"])
+    assert.equal(Object.hasOwn(post, derived), false, derived);
+});
+
+test("membership is not synthesized by a consolidated depreciation election and partial input refuses", () => {
+  const absent = prepareTaxBasisRegime({ ...consolidatedSale, consolidatedGroupMembership: undefined },
+    membershipContext, undefined, membershipSource);
+  assert.equal(Object.hasOwn(absent, "consolidatedGroupMembership"), false);
+  assert.throws(() => prepareTaxBasisRegime({ ...consolidatedSale,
+    consolidatedGroupMembership: { ...membership, throughOn: "" },
+  }, membershipContext, undefined, membershipSource), /missing throughOn/);
+  assert.throws(() => prepareTaxBasisRegime({ ...consolidatedSale, sellerAdjustedBasis: "" },
+    membershipContext, undefined, membershipSource), /sellerAdjustedBasis/);
+});
+
+test("membership never follows a different source or accepts invented nested facts", () => {
+  assert.throws(() => prepareTaxBasisRegime(consolidatedSale, membershipContext), /Reload the posted transfer/);
+  assert.throws(() => prepareTaxBasisRegime(consolidatedSale, membershipContext, undefined,
+    { ...membershipSource, buyerSubsidiaryId: "33333333-3333-4333-8333-333333333333" }), /selected transfer's seller and buyer/);
+  assert.throws(() => prepareTaxBasisRegime({ ...consolidatedSale,
+    consolidatedGroupMembership: { ...membership, deferredOpening: "0" },
+  }, membershipContext, undefined, membershipSource), /unknown consolidatedGroupMembership field/);
+  assert.throws(() => prepareTaxBasisRegime({ ...consolidatedSale,
+    consolidatedGroupMembership: { ...membership, throughOn: "2025-12-31" },
+  }, membershipContext, undefined, membershipSource), /after throughOn/);
+});
 
 const seller = {
   regime: "us_macrs",
