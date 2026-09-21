@@ -372,8 +372,8 @@ test(
       const rebuilt = (await scheduleLines()).rows;
       assert.deepEqual(
         rebuilt.filter((line) => line.posted === null).map((line) => line.planned),
-        [...Array.from({ length: 8 }, () => "88.8888"), "88.8896"],
-        "future depreciation runs straight-line off the impaired basis with an exact remainder",
+        [...Array.from({ length: 8 }, () => "88.8889"), "88.8888"],
+        "future depreciation rounds equal shares to ledger precision and assigns the exact remainder to the final month",
       );
       assert.equal(rebuilt.find((line) => line.sequence === 0)!.posted, "100.0000");
       const recoveryEntry = (await db.execute<{ status: string; origin: string }>(sql`

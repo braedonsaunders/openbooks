@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "../platform/db.ts";
+import { errorChainMatches } from "../testing/error-chain.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -248,14 +249,14 @@ test(
           await db.execute(
             sql`update lease_agreement_schedule_lines set payment='99' where id=${old.id}`,
           ),
-        /immutable/,
+        (error: unknown) => errorChainMatches(error, /lease schedule measurements are immutable; append a revision/),
       );
       await assert.rejects(
         async () =>
           await db.execute(
             sql`update financial_changes set reason='Rewrite approved terms' where id=${changeId}`,
           ),
-        /immutable/,
+        (error: unknown) => errorChainMatches(error, /financial changes are immutable evidence; propose a correcting change/),
       );
     });
   },

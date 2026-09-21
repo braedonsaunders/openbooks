@@ -337,7 +337,7 @@ test(
              set planned_amount = planned_amount + 1
            where journal_entry_id = ${sourceRecognitionId}
         `),
-        (error) => errorChainMatches(error, /financial history is immutable/),
+        (error) => errorChainMatches(error, /posted revenue measurements are immutable; append an adjustment/),
       );
     } finally {
       await dropScratchOrg(org.orgId);
