@@ -5,7 +5,12 @@ import {
   computeMacrsYear,
   computeMacrsThroughYear,
   exclusiveShortYearMonths,
+  fiscalMacrsYearWindow,
   lastThreeMonthsStart,
+  macrsWindowsThroughFiscalCalendar,
+  parsePersistedMacrsMonths,
+  persistMacrsMonths,
+  refreshOpenMacrsVintageThrough,
   macrsConventionAfterMidQuarter,
   macrsMidQuarterApplies,
   macrsMidQuarterByTaxYear,
@@ -17,8 +22,16 @@ import {
   TAX_DEPRECIATION_REGIMES,
   type PoolYearInput,
 } from "./depreciation-pool.ts";
-import { remainingAfter, subsequentRecoveryDeduction } from "./macrs-short-year.ts";
-import { add, formatMoney, mulRatio, neg } from "../money/money.ts";
+import {
+  addMacrsMonths,
+  impliedShortYearFactor,
+  macrsMonthRatio,
+  macrsMonths,
+  remainingAfter,
+  shortTaxYearMonthsExact,
+  subsequentRecoveryDeduction,
+} from "./macrs-short-year.ts";
+import { add, cmp, formatMoney, mulRatio, neg } from "../money/money.ts";
 
 const run = (over: Partial<PoolYearInput>): ReturnType<typeof computePoolYear> =>
   computePoolYear({ openingBalance: "0", additions: "0", dispositions: "0", rate: 0.2, ...over });
@@ -194,11 +207,21 @@ test("U.S. MACRS short year uses Pub 946 deemed dates, not a scaled calendar sch
     yearStart: "2023-03-15",
     yearEnd: "2023-12-31",
   };
-  // Pub 946: 10-month year, half-year deemed Aug 1, 5/12 × $400. IRS rounds the
-  // printed example to $167; ledger money is two decimal places.
+  // §4.01 still counts ten touched months to place the HY midpoint on Aug 1.
+  // §4.02 recovery is the actual Mar 15–Dec 31 period (74/93), then five
+  // service months after that midpoint. IRS rounds the printed example to $167.
   const half = computeMacrsYear(tara);
   assert.equal(half.allowance, "166.67");
   assert.equal(half.remainingBasis, "833.33");
+  assert.equal(impliedShortYearFactor(tara.yearStart, tara.yearEnd), "0.7956989247");
+  assert.equal(
+    computeMacrsYear({ ...tara, shortYearFactor: "0.7956989247" }).allowance,
+    "166.67",
+  );
+  assert.throws(
+    () => computeMacrsYear({ ...tara, shortYearFactor: "0.8333333333" }),
+    /does not match/,
+  );
   // Mid-quarter Oct 16 sits in the Aug 8–Oct 19 quarter; midpoint Sep 13 snaps
   // to Sep 1, so 4/12 × $400. IRS prints $133.
   const midQuarter = computeMacrsYear({ ...tara, convention: "mid_quarter" });
@@ -240,7 +263,7 @@ test("U.S. MACRS short year uses Pub 946 deemed dates, not a scaled calendar sch
   assert.equal(walked.current.allowance, "333.33");
   assert.equal(walked.prior.allowance, "166.67");
   assert.equal(walked.deemedPlacedOn, "2023-08-01");
-  assert.equal(walked.firstYearMonthsInService, 5);
+  assert.deepEqual(walked.firstYearMonthsInService, persistMacrsMonths(5));
   assert.equal(walked.allocationFollowYear, true);
 });
 
@@ -503,13 +526,22 @@ test("transfer-year buyer residual is stored in the walk so next year's opening 
   assert.notEqual(nextYear.prior.remainingBasis, "4480.00");
 });
 
-test("successive short years that share a calendar month drop that month from the first year", () => {
+test("successive short years keep actual shared-month days in the deduction numerators", () => {
   const windows = [
     { taxYear: 1988, yearStart: "1988-06-01", yearEnd: "1988-10-15" },
     { taxYear: 1989, yearStart: "1988-10-16", yearEnd: "1989-05-31" },
   ];
-  assert.equal(exclusiveShortYearMonths(windows, 0), 4);
-  assert.equal(exclusiveShortYearMonths(windows, 1), 8);
+  const firstMonths = exclusiveShortYearMonths(windows, 0);
+  const secondMonths = exclusiveShortYearMonths(windows, 1);
+  assert.deepEqual(firstMonths, macrsMonthRatio(139n, 31n));
+  assert.deepEqual(secondMonths, macrsMonthRatio(233n, 31n));
+  assert.deepEqual(addMacrsMonths(firstMonths, secondMonths), macrsMonths(12));
+  assert.equal(impliedShortYearFactor("1988-06-01", "1988-10-15"), "0.3736559140");
+  assert.notEqual(
+    addMacrsMonths(shortTaxYearMonthsExact("1988-06-01", "1988-09-30"), secondMonths),
+    macrsMonths(12),
+    "clipping the first year-end to September 30 loses October's 15/31",
+  );
   assert.equal(shortYearMathEnd("1988-10-15", true), "1988-09-30");
   const first = computeMacrsThroughYear({
     basis: "100",
@@ -520,8 +552,135 @@ test("successive short years that share a calendar month drop that month from th
     convention: "half_year",
   }, windows);
   assert.equal(first.deemedPlacedOn, "1988-08-01");
-  assert.equal(first.firstYearMonthsInService, 2);
-  assert.notEqual(first.deemedPlacedOn, "1988-08-15");
+  assert.deepEqual(first.firstYearMonthsInService, persistMacrsMonths(macrsMonthRatio(77n, 31n)));
+  assert.notDeepEqual(first.firstYearMonthsInService, persistMacrsMonths(2));
+  assert.equal(first.current.allowance, "8.28");
+  const persisted = JSON.parse(JSON.stringify(first.firstYearMonthsInService));
+  assert.deepEqual(persisted, { numerator: "77", denominator: "31" });
+  assert.deepEqual(parsePersistedMacrsMonths(persisted), macrsMonthRatio(77n, 31n));
+  assert.throws(
+    () => JSON.stringify(macrsMonthRatio(77n, 31n)),
+    /BigInt/,
+  );
+});
+
+test("fiscal calendar windows are first-and-last day bounds, including July–June", () => {
+  assert.deepEqual(fiscalMacrsYearWindow(2026, 1), {
+    taxYear: 2026,
+    yearStart: "2026-01-01",
+    yearEnd: "2026-12-31",
+  });
+  assert.deepEqual(fiscalMacrsYearWindow(2026, 7), {
+    taxYear: 2026,
+    yearStart: "2025-07-01",
+    yearEnd: "2026-06-30",
+  });
+  assert.deepEqual(
+    macrsWindowsThroughFiscalCalendar({
+      yearStartMonth: 1,
+      fromOn: "2023-03-15",
+      throughOn: "2026-09-01",
+    }).map((row) => row.taxYear),
+    [2023, 2024, 2025, 2026],
+  );
+});
+
+test("a 2026 transfer does not reuse a 2023 paper remaining as the buyer checkpoint", () => {
+  const windows = macrsWindowsThroughFiscalCalendar({
+    yearStartMonth: 1,
+    fromOn: "2023-01-01",
+    throughOn: "2026-09-01",
+  });
+  const vintage = {
+    placedInServiceOn: "2023-01-01",
+    unadjustedBasis: "10000.0000",
+    recoveryPeriodYears: "5",
+    method: "200_db" as const,
+    convention: "half_year" as const,
+    section179: "0.0000",
+    bonusPercent: "0",
+    businessUsePercent: "100",
+    adjustedCarryover: null,
+    priorDepreciation: "2000.0000",
+    transferOn: null,
+  };
+  const dated = refreshOpenMacrsVintageThrough(vintage, windows, "2026-09-01");
+  assert.notEqual(dated.adjustedCarryover, "8000.0000");
+  assert.notEqual(dated.priorDepreciation, "2000.0000");
+  const walked = computeMacrsThroughYear({
+    basis: "10000.0000",
+    placedInServiceOn: "2023-01-01",
+    taxYear: 2026,
+    recoveryPeriodYears: 5,
+    method: "200_db",
+    convention: "half_year",
+    disposedOn: "2026-09-01",
+    dispositionRecognition: "nontaxable",
+    section168i7Kind: "nonrecognition",
+  }, windows);
+  assert.equal(
+    dated.adjustedCarryover,
+    formatMoney(remainingAfter(walked.prior.remainingBasis, walked.current.allowance), 4),
+  );
+  assert.equal(cmp(dated.priorDepreciation, "2000.0000") > 0, true);
+  assert.notEqual(dated.adjustedCarryover, "0.0000");
+});
+
+test("excess or taxable prior is not left at zero across later recovery years", () => {
+  const windows = macrsWindowsThroughFiscalCalendar({
+    yearStartMonth: 1,
+    fromOn: "2024-08-01",
+    throughOn: "2026-09-01",
+  });
+  const dated = refreshOpenMacrsVintageThrough({
+    placedInServiceOn: "2024-08-01",
+    unadjustedBasis: "400.0000",
+    recoveryPeriodYears: "7",
+    method: "straight_line",
+    convention: "mid_month",
+    section179: "0.0000",
+    bonusPercent: "0",
+    businessUsePercent: "100",
+    adjustedCarryover: null,
+    priorDepreciation: "0.0000",
+    transferOn: "2024-08-01",
+  }, windows, "2026-09-01");
+  assert.notEqual(dated.priorDepreciation, "0.0000");
+  assert.notEqual(dated.adjustedCarryover, "400.0000");
+});
+
+test("1.1502-13 Example 4 consolidated later-year transfer uses dated remaining and does not monthly-split", () => {
+  const windows = macrsWindowsThroughFiscalCalendar({
+    yearStartMonth: 1,
+    fromOn: "2023-01-01",
+    throughOn: "2026-12-31",
+  });
+  const dated = refreshOpenMacrsVintageThrough({
+    placedInServiceOn: "2023-01-01",
+    unadjustedBasis: "10000.0000",
+    recoveryPeriodYears: "5",
+    method: "200_db",
+    convention: "half_year",
+    section179: "0.0000",
+    bonusPercent: "0",
+    businessUsePercent: "100",
+    adjustedCarryover: null,
+    priorDepreciation: null,
+    transferOn: null,
+  }, windows, "2025-08-20");
+  const next = computeMacrsThroughYear({
+    basis: "10000.0000",
+    placedInServiceOn: "2023-01-01",
+    taxYear: 2026,
+    recoveryPeriodYears: 5,
+    method: "200_db",
+    convention: "half_year",
+    adjustedCarryover: dated.adjustedCarryover,
+    carryoverOn: "2025-08-20",
+    section168i7Kind: "consolidated_group",
+  }, windows);
+  assert.notEqual(next.current.allowance, "0.00");
+  assert.notEqual(next.current.remainingBasis, dated.adjustedCarryover);
 });
 
 test("mid-quarter 40% uses the tax window's last three months and vintage tax basis", () => {

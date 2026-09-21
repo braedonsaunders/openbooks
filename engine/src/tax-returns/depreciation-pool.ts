@@ -29,20 +29,88 @@ import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { taxConventionHalfMonths } from "../assets/depreciation-conventions.ts";
 import {
   MacrsShortYearError,
+  addMacrsMonths,
   assertShortYearFactorAgrees,
+  compareMacrsMonths,
   decliningBalanceRate,
   deemedPlacedInServiceOn,
   formatCalendarDay,
   impliedShortYearFactor,
   isShortTaxYear,
-  monthsTreatedInService,
+  macrsMonths,
+  maxMacrsMonths,
+  monthsTreatedInServiceExact,
+  parseCalendarDay,
   remainingAfter,
-  shortTaxYearMonths,
+  shortTaxYearMonthsExact,
   shortYearPlacementDeduction,
+  subtractMacrsMonths,
   subsequentRecoveryDeduction,
+  type MacrsMonths,
+  type MacrsMonthsInput,
 } from "./macrs-short-year.ts";
 
 type ExactDecimal = string | number;
+
+/** JSON-safe exact month evidence. Never persist BigInt or a Number fraction. */
+export type PersistedMacrsMonths = {
+  numerator: string;
+  denominator: string;
+};
+
+export function persistMacrsMonths(value: MacrsMonthsInput): PersistedMacrsMonths {
+  const months = macrsMonths(value);
+  return {
+    numerator: months.numerator.toString(),
+    denominator: months.denominator.toString(),
+  };
+}
+
+export function parsePersistedMacrsMonths(value: unknown): MacrsMonths {
+  if (typeof value === "number") return macrsMonths(value);
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(
+      "MACRS months evidence must be an exact numerator/denominator pair; do not stringify BigInt or coerce a fractional count to Number",
+    );
+  }
+  const row = value as { numerator?: unknown; denominator?: unknown };
+  if (typeof row.numerator === "bigint" || typeof row.denominator === "bigint") {
+    throw new Error(
+      "MACRS months evidence cannot carry raw BigInt; persist decimal strings",
+    );
+  }
+  if (
+    (typeof row.numerator !== "string" && typeof row.numerator !== "number") ||
+    (typeof row.denominator !== "string" && typeof row.denominator !== "number")
+  ) {
+    throw new Error(
+      "MACRS months evidence must be an exact numerator/denominator pair; do not stringify BigInt or coerce a fractional count to Number",
+    );
+  }
+  if (typeof row.numerator === "number" && !Number.isSafeInteger(row.numerator)) {
+    throw new Error(
+      "MACRS months evidence numerator must be an integer decimal string",
+    );
+  }
+  if (typeof row.denominator === "number" && !Number.isSafeInteger(row.denominator)) {
+    throw new Error(
+      "MACRS months evidence denominator must be an integer decimal string",
+    );
+  }
+  return macrsMonthRatioFromDecimal(String(row.numerator), String(row.denominator));
+}
+
+function macrsMonthRatioFromDecimal(numerator: string, denominator: string): MacrsMonths {
+  if (!/^-?\d+$/.test(numerator) || !/^\d+$/.test(denominator) || denominator === "0") {
+    throw new Error(
+      `MACRS months evidence ${numerator}/${denominator} is not an integer ratio`,
+    );
+  }
+  return macrsMonths({
+    numerator: BigInt(numerator),
+    denominator: BigInt(denominator),
+  });
+}
 
 export interface PoolClassDef {
   /** Regime class code — CA "8"/"10.1", UK "main"/"special". */
@@ -231,13 +299,14 @@ export interface MacrsYearInput {
   businessUsePercent?: ExactDecimal;
   shortYearFactor?: ExactDecimal;
   shortYearMethod?: "simplified" | "allocation";
-  shortYearMonths?: number;
+  shortYearMonths?: MacrsMonthsInput;
   /** Inclusive statutory year window. Required for a short year. */
   yearStart?: string;
   yearEnd?: string;
   /** Rev. Proc. 89-15 §4.01(1)(a)(i) shared-month exclusion. Walker-derived
-   *  from adjacent short windows only — not an operator election. Membership
-   *  still uses the actual yearStart/yearEnd. */
+   *  from adjacent short windows only — not an operator election. It selects
+   *  the half-year convention date. Deduction numerators keep the actual
+   *  yearEnd; membership still uses the actual yearStart/yearEnd. */
   excludedTerminalMonth?: boolean;
   /** True when a prior recovery year was short — tables no longer apply. */
   afterShortYear?: boolean;
@@ -245,12 +314,12 @@ export interface MacrsYearInput {
   adjustedBasisAtYearStart?: string;
   /** Frozen deemed placed-in-service date from the short year. */
   deemedPlacedOn?: string;
-  /** Months treated as in service during the short year (Aug–Dec = 5). */
-  firstYearMonthsInService?: number;
+  /** Months treated as in service during the short year after the convention. */
+  firstYearMonthsInService?: MacrsMonthsInput;
   /** True only for the tax year immediately after the first short year. */
   allocationFollowYear?: boolean;
   /** Recovery months already treated as in service before this tax year. */
-  elapsedRecoveryMonths?: number;
+  elapsedRecoveryMonths?: MacrsMonthsInput;
   /** 0-based service year of THIS vintage. Fiscal windows are not calendar years. */
   recoveryYearIndex?: number;
   /** Declared transferor adjusted basis — buyer opening/closing checkpoint. */
@@ -514,12 +583,13 @@ function computeMacrsPub946Year(input: MacrsYearInput & {
   const disposedThisYear = !!input.disposedOn && input.disposedOn >= input.yearStart && input.disposedOn <= input.yearEnd;
   if (input.afterShortYear) {
     const opening = persistMacrsBasis(input.adjustedBasisAtYearStart ?? input.macrsBasis);
-    const months = input.shortYearMonths ?? shortTaxYearMonths(input.yearStart, input.yearEnd, hyContext);
-    let serviceMonths = months;
+    let serviceMonths = macrsMonths(
+      input.shortYearMonths ?? shortTaxYearMonthsExact(input.yearStart, input.yearEnd, hyContext),
+    );
     if (disposedThisYear && input.disposedOn) {
       const deemedEnd = deemedPlacedInServiceOn(input.convention, input.yearStart, input.yearEnd, input.disposedOn, hyContext);
-      const held = monthsTreatedInService(deemedEnd, input.yearEnd, hyContext);
-      serviceMonths = Math.max(0, months - held);
+      const held = monthsTreatedInServiceExact(deemedEnd, input.yearEnd, hyContext);
+      serviceMonths = maxMacrsMonths(0, subtractMacrsMonths(serviceMonths, held));
     }
     if ((input.shortYearMethod ?? "simplified") === "allocation" && input.firstYearMonthsInService == null && input.elapsedRecoveryMonths == null) {
       throw new Error(
@@ -545,10 +615,13 @@ function computeMacrsPub946Year(input: MacrsYearInput & {
     };
   }
   const deemed = deemedPlacedInServiceOn(input.convention, input.yearStart, input.yearEnd, input.placedInServiceOn, hyContext);
-  let months = monthsTreatedInService(deemed, input.yearEnd, hyContext);
+  let months = monthsTreatedInServiceExact(deemed, input.yearEnd, hyContext);
   if (disposedThisYear && input.disposedOn && input.dispositionRecognition === "nontaxable") {
     const deemedEnd = deemedPlacedInServiceOn(input.convention, input.yearStart, input.yearEnd, input.disposedOn, hyContext);
-    months = Math.min(months, Math.max(0, monthsTreatedInService(deemed, input.yearEnd, hyContext) - monthsTreatedInService(deemedEnd, input.yearEnd, hyContext)));
+    months = maxMacrsMonths(
+      0,
+      subtractMacrsMonths(months, monthsTreatedInServiceExact(deemedEnd, input.yearEnd, hyContext)),
+    );
   }
   const macrs = shortYearPlacementDeduction({ basis: input.macrsBasis, rate, monthsInService: months });
   const used179 = input.taxYear >= input.placedYear ? input.section179Cap : "0.0000";
@@ -588,8 +661,8 @@ export function adjacentShortYearExclusion(
   );
 }
 
-/** Convention/service/factor math end when the shared month is excluded.
- *  Membership still uses the actual yearEnd. */
+/** Convention-date math end when the shared month is excluded. Deduction
+ *  numerators keep the actual yearEnd; membership still uses it. */
 export function shortYearMathEnd(yearEnd: string, excludedTerminalMonth?: boolean): string {
   if (!excludedTerminalMonth) return yearEnd;
   const year = Number(yearEnd.slice(0, 4));
@@ -598,18 +671,17 @@ export function shortYearMathEnd(yearEnd: string, excludedTerminalMonth?: boolea
   return `${String(prior.getUTCFullYear()).padStart(4, "0")}-${String(prior.getUTCMonth() + 1).padStart(2, "0")}-${String(prior.getUTCDate()).padStart(2, "0")}`;
 }
 
-/** Rev. Proc. 89-15 §4.01(1)(a)(i): Jun 1–Oct 15 then Oct 16–May 31 is 4 then
- *  8, not 5+8. The helper sees only one start/end; this applies the adjacent
- *  exclusion to month count, first-year HY deeming, and service. */
+/** Actual §4.02/§4.03 recovery months in this window. Shared-month context
+ *  validates consecutive HY windows and does not clip the legal year-end. */
 export function exclusiveShortYearMonths(
   windows: readonly MacrsYearWindow[],
   index: number,
-): number {
+): MacrsMonths {
   const window = windows[index];
   if (!window) {
     throw new Error("MACRS exclusive short-year months require an adjacent-window index");
   }
-  return shortTaxYearMonths(window.yearStart, window.yearEnd, {
+  return shortTaxYearMonthsExact(window.yearStart, window.yearEnd, {
     excludedTerminalMonth: adjacentShortYearExclusion(windows, index),
   });
 }
@@ -695,7 +767,7 @@ export function macrsMidQuarterApplies(
   window: MacrsYearWindow,
   placements: readonly { placedOn: string; basis: string }[],
 ): boolean {
-  if (shortTaxYearMonths(window.yearStart, window.yearEnd) <= 3) {
+  if (compareMacrsMonths(shortTaxYearMonthsExact(window.yearStart, window.yearEnd), 3) <= 0) {
     return placements.length > 0;
   }
   let total = 0n;
@@ -830,7 +902,7 @@ export function computeMacrsThroughYear(
   current: MacrsYearResult;
   prior: MacrsYearResult;
   deemedPlacedOn: string | null;
-  firstYearMonthsInService: number | null;
+  firstYearMonthsInService: PersistedMacrsMonths | null;
   allocationFollowYear: boolean;
   currentRecoveryYearIndex: number | null;
 } {
@@ -849,8 +921,8 @@ export function computeMacrsThroughYear(
   let vintageShortSeen = false;
   let yearsSinceVintageShort = 0;
   let deemedPlacedOn: string | null = null;
-  let firstYearMonthsInService: number | null = null;
-  let elapsedRecoveryMonths = 0;
+  let firstYearMonthsInService: MacrsMonths | null = null;
+  let elapsedRecoveryMonths = macrsMonths(0);
   let allocationFollowYear = false;
   let serviceYears = 0;
   let postTransferTaken = "0";
@@ -880,7 +952,7 @@ export function computeMacrsThroughYear(
     const excludedTerminalMonth = input.convention === "half_year" && adjacentShortYearExclusion(ordered, index);
     const hyContext = excludedTerminalMonth ? { excludedTerminalMonth: true } : undefined;
     const windowFactor = impliedShortYearFactor(window.yearStart, window.yearEnd, hyContext);
-    const exclusiveMonths = shortTaxYearMonths(window.yearStart, window.yearEnd, hyContext);
+    const exclusiveMonths = shortTaxYearMonthsExact(window.yearStart, window.yearEnd, hyContext);
     const openingCheckpoint = checkpoint && !preTransfer
       ? persistMacrsBasis(add(checkpoint, neg(postTransferTaken)))
       : undefined;
@@ -942,12 +1014,14 @@ export function computeMacrsThroughYear(
           hyContext,
         ),
       );
-      firstYearMonthsInService = monthsTreatedInService(
-        {
-          year: Number(deemedPlacedOn.slice(0, 4)),
-          month: Number(deemedPlacedOn.slice(5, 7)),
-          day: Number(deemedPlacedOn.slice(8, 10)),
-        },
+      const deemed = parseCalendarDay(deemedPlacedOn);
+      if (!deemed) {
+        throw new Error(
+          `MACRS deemed placed-in-service date ${deemedPlacedOn} is not a calendar day`,
+        );
+      }
+      firstYearMonthsInService = monthsTreatedInServiceExact(
+        deemed,
         window.yearEnd,
         hyContext,
       );
@@ -956,13 +1030,19 @@ export function computeMacrsThroughYear(
       yearsSinceVintageShort = 0;
     } else if (short && !firstServiceYear) {
       vintageShortSeen = true;
-      elapsedRecoveryMonths += exclusiveMonths;
+      elapsedRecoveryMonths = addMacrsMonths(elapsedRecoveryMonths, exclusiveMonths);
     } else if (vintageShortSeen) {
-      elapsedRecoveryMonths += short ? exclusiveMonths : 12;
+      elapsedRecoveryMonths = addMacrsMonths(
+        elapsedRecoveryMonths,
+        short ? exclusiveMonths : 12,
+      );
     } else {
-      elapsedRecoveryMonths += firstServiceYear
-        ? Number(taxConventionHalfMonths(input.convention, frozenPlacedMonth, "placed")) / 2
-        : 12;
+      elapsedRecoveryMonths = addMacrsMonths(
+        elapsedRecoveryMonths,
+        firstServiceYear
+          ? Number(taxConventionHalfMonths(input.convention, frozenPlacedMonth, "placed")) / 2
+          : 12,
+      );
     }
     if (preTransfer) {
       if (window.taxYear === input.taxYear - 1) prior = { ...zeroMacrs(checkpoint!), remainingBasis: checkpoint! };
@@ -1021,7 +1101,162 @@ export function computeMacrsThroughYear(
     }
     serviceYears += 1;
   }
-  return { current, prior, deemedPlacedOn, firstYearMonthsInService, allocationFollowYear, currentRecoveryYearIndex };
+  return {
+    current,
+    prior,
+    deemedPlacedOn,
+    firstYearMonthsInService: firstYearMonthsInService
+      ? persistMacrsMonths(firstYearMonthsInService)
+      : null,
+    allocationFollowYear,
+    currentRecoveryYearIndex,
+  };
+}
+
+export function fiscalTaxYearOf(date: string, yearStartMonth: number): number {
+  const day = parseCalendarDay(date);
+  if (!day) {
+    throw new Error(`MACRS fiscal date ${date} must be a calendar day`);
+  }
+  if (yearStartMonth < 1 || yearStartMonth > 12) {
+    throw new Error("MACRS fiscal year start month must be 1-12");
+  }
+  if (yearStartMonth === 1) return day.year;
+  return day.month >= yearStartMonth ? day.year + 1 : day.year;
+}
+
+export function fiscalMacrsYearWindow(taxYear: number, yearStartMonth: number): MacrsYearWindow {
+  if (!Number.isInteger(taxYear) || taxYear < 1900 || taxYear > 9999) {
+    throw new Error("MACRS fiscal tax year must be between 1900 and 9999");
+  }
+  if (!Number.isInteger(yearStartMonth) || yearStartMonth < 1 || yearStartMonth > 12) {
+    throw new Error("MACRS fiscal year start month must be 1-12");
+  }
+  const startYear = yearStartMonth === 1 ? taxYear : taxYear - 1;
+  const endMonth = yearStartMonth === 1 ? 12 : yearStartMonth - 1;
+  const endYear = yearStartMonth === 1 ? taxYear : taxYear;
+  const endDay = new Date(Date.UTC(endYear, endMonth, 0)).getUTCDate();
+  return {
+    taxYear,
+    yearStart: `${String(startYear).padStart(4, "0")}-${String(yearStartMonth).padStart(2, "0")}-01`,
+    yearEnd: `${String(endYear).padStart(4, "0")}-${String(endMonth).padStart(2, "0")}-${String(endDay).padStart(2, "0")}`,
+  };
+}
+
+export function macrsWindowsThroughFiscalCalendar(args: {
+  yearStartMonth: number;
+  fromOn: string;
+  throughOn: string;
+}): MacrsYearWindow[] {
+  const first = fiscalTaxYearOf(args.fromOn, args.yearStartMonth);
+  const last = fiscalTaxYearOf(args.throughOn, args.yearStartMonth);
+  if (last < first) {
+    throw new Error(`MACRS windows ${args.fromOn}–${args.throughOn} end before they start`);
+  }
+  const windows: MacrsYearWindow[] = [];
+  for (let taxYear = first; taxYear <= last; taxYear += 1) {
+    windows.push(fiscalMacrsYearWindow(taxYear, args.yearStartMonth));
+  }
+  return windows;
+}
+
+function nextCalendarDay(iso: string): string {
+  const day = parseCalendarDay(iso);
+  if (!day) {
+    throw new Error(`MACRS window date ${iso} must be a calendar day`);
+  }
+  const date = new Date(Date.UTC(day.year, day.month - 1, day.day + 1));
+  return `${String(date.getUTCFullYear()).padStart(4, "0")}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
+}
+
+export function assertMacrsWindowsCover(
+  windows: readonly MacrsYearWindow[],
+  fromOn: string,
+  throughOn: string,
+): MacrsYearWindow[] {
+  const ordered = [...windows].sort((left, right) => left.yearStart.localeCompare(right.yearStart));
+  if (ordered.length === 0) {
+    throw new Error(
+      `tax year windows covering ${fromOn} through ${throughOn} are required to date MACRS checkpoints; load them from the fiscal calendar — do not reuse a prior paper remaining basis`,
+    );
+  }
+  const span = ordered.filter((row) => row.yearEnd >= fromOn && row.yearStart <= throughOn);
+  if (!span.some((row) => fromOn >= row.yearStart && fromOn <= row.yearEnd)) {
+    throw new Error(
+      `no tax year window covers ${fromOn}; configure the fiscal calendar from that date — do not invent intervening years`,
+    );
+  }
+  if (!span.some((row) => throughOn >= row.yearStart && throughOn <= row.yearEnd)) {
+    throw new Error(
+      `no tax year window covers ${throughOn}; configure the fiscal calendar through that date — do not reuse an earlier checkpoint`,
+    );
+  }
+  for (let index = 0; index < span.length - 1; index += 1) {
+    const prev = span[index]!;
+    const next = span[index + 1]!;
+    if (nextCalendarDay(prev.yearEnd) !== next.yearStart) {
+      throw new Error(
+        `tax year windows gap between ${prev.yearEnd} and ${next.yearStart}; load the missing fiscal year — do not walk across an invented gap`,
+      );
+    }
+  }
+  return span;
+}
+
+/** Walk an open vintage to asOf. A prior paper remaining is only the opening
+ *  at its own transferOn; later years must be recovered from the calendar. */
+export function refreshOpenMacrsVintageThrough(
+  vintage: {
+    placedInServiceOn: string;
+    unadjustedBasis: string;
+    recoveryPeriodYears: string;
+    method: "200_db" | "150_db" | "straight_line";
+    convention: "half_year" | "mid_quarter" | "mid_month";
+    section179: string;
+    bonusPercent: string;
+    businessUsePercent: string;
+    adjustedCarryover: string | null;
+    priorDepreciation: string | null;
+    transferOn: string | null;
+  },
+  windows: readonly MacrsYearWindow[],
+  asOf: string,
+): { priorDepreciation: string; adjustedCarryover: string } {
+  const origin = vintage.placedInServiceOn;
+  const walkWindows = assertMacrsWindowsCover(windows, origin, asOf);
+  const covering = walkWindows.find((row) => asOf >= row.yearStart && asOf <= row.yearEnd)!;
+  const received = vintage.adjustedCarryover != null && vintage.transferOn != null;
+  const walked = computeMacrsThroughYear({
+    basis: vintage.unadjustedBasis,
+    placedInServiceOn: vintage.placedInServiceOn,
+    taxYear: covering.taxYear,
+    recoveryPeriodYears: vintage.recoveryPeriodYears,
+    method: vintage.method,
+    convention: vintage.convention,
+    section179: vintage.section179,
+    bonusPercent: vintage.bonusPercent,
+    businessUsePercent: vintage.businessUsePercent,
+    disposedOn: asOf,
+    dispositionRecognition: "nontaxable",
+    section168i7Kind: "nonrecognition",
+    adjustedCarryover: received ? vintage.adjustedCarryover ?? undefined : undefined,
+    carryoverOn: received ? vintage.transferOn ?? undefined : undefined,
+  }, walkWindows);
+  const remaining = persistMacrsBasis(
+    remainingAfter(walked.prior.remainingBasis, walked.current.allowance),
+  );
+  const original = mulPercent(persistMacrsBasis(vintage.unadjustedBasis), vintage.businessUsePercent);
+  const elected179Raw = persistMacrsSection179(vintage.section179);
+  const elected179 = cmp(elected179Raw, original) < 0 ? elected179Raw : original;
+  const after179 = add(original, neg(elected179));
+  const bonus = mulPercent(after179, vintage.bonusPercent);
+  const prior = formatMoney(add(original, neg(sum([elected179, bonus, remaining]))), 4);
+  if (cmp(prior, "0") < 0) {
+    throw new Error(
+      `dated MACRS checkpoint on ${asOf} produced priorDepreciation ${prior} from remaining ${remaining}; reverse and re-propose the earlier workpaper — do not reuse a stale ${origin} remaining`,
+    );
+  }
+  return { priorDepreciation: prior, adjustedCarryover: formatMoney(remaining, 4) };
 }
 
 function monthInTaxYear(date: string, yearStart?: string): number {

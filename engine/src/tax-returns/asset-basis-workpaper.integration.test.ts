@@ -350,6 +350,69 @@ test(
     }, "intercompany_transfer"),
 );
 
+test(
+  "CA propose then apply persists operator facts and freezes ITA 38(a) only in computed",
+  { skip: !DB },
+  () =>
+    fixture(async (f) => {
+      const proposal = input(f);
+      const id = await proposeTaxAssetBasis(
+        f.org.orgId,
+        f.assetId,
+        f.actors.submitterId,
+        proposal,
+      );
+      const change = (
+        await db.execute<{ payload: Record<string, unknown> }>(sql`
+          select payload from financial_changes
+           where org_id=${f.org.orgId} and id=${id}`)
+      ).rows[0];
+      assert.ok(change, "the proposed tax basis change must exist");
+      const regimes = change.payload.regimes;
+      assert.ok(Array.isArray(regimes) && regimes[0] && typeof regimes[0] === "object");
+      const stored = regimes[0] as Record<string, unknown>;
+      assert.equal(stored.regime, "ca_cca");
+      assert.equal(Object.hasOwn(stored, "capitalGainsInclusionRate"), false);
+      assert.equal(Object.hasOwn(stored, "capitalGainsInclusionRateCitation"), false);
+      assert.equal(stored.statutoryProceeds, "600.00");
+      await approve(f, id);
+      const result = await applyTaxAssetBasis(
+        f.org.orgId,
+        id,
+        f.actors.submitterId,
+      );
+      assert.equal(result.effectiveOn, "2026-07-01");
+      const paper = (
+        await db.execute<{
+          facts: Record<string, unknown>;
+          computed: Record<string, unknown>;
+        }>(sql`
+          select facts, computed from tax_asset_basis_workpapers
+           where org_id=${f.org.orgId} and change_id=${id} and regime='ca_cca'`)
+      ).rows[0];
+      assert.ok(paper, "apply must write the CA workpaper");
+      assert.equal(paper.computed.capitalGainsInclusionRate, "0.5");
+      assert.match(String(paper.computed.capitalGainsInclusionRateCitation ?? ""), /ITA 38\(a\)/);
+      assert.equal(paper.computed.statutoryProceeds, "600.00");
+      const persisted = (
+        await db.execute<{ payload: Record<string, unknown> }>(sql`
+          select payload from financial_changes
+           where org_id=${f.org.orgId} and id=${id}`)
+      ).rows[0];
+      const afterApply = persisted?.payload.regimes;
+      assert.ok(Array.isArray(afterApply) && afterApply[0] && typeof afterApply[0] === "object");
+      assert.equal(
+        Object.hasOwn(afterApply[0] as object, "capitalGainsInclusionRate"),
+        false,
+        "apply must not write the frozen rate back onto operator facts",
+      );
+      assert.deepEqual(
+        await applyTaxAssetBasis(f.org.orgId, id, f.actors.submitterId),
+        result,
+      );
+    }),
+);
+
 async function applyApproved(f: Fixture, proposal: TaxAssetBasisInput) {
   const id = await proposeTaxAssetBasis(
     f.org.orgId,

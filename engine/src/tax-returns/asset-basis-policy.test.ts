@@ -390,6 +390,42 @@ test("ITA 38(a) ordinary inclusion is one-half and freezes on the workpaper", ()
   assert.equal(already.capitalGainsInclusionRate, "0.5");
 });
 
+test("CA revalidation drops a frozen inclusion rate and reconstructs it from effectiveOn", () => {
+  const declared = {
+    regime: "ca_cca",
+    relationship: "arms_length",
+    originalCapitalCost: "3000.00",
+    allocationMethod: "ascertainable_fraction",
+    allocationFraction: "0.25",
+    statutoryProceeds: "600.00",
+    rolloverElection: "none",
+  };
+  const context = { sourceOperation: "partial_disposal" as const, applicable: "seller" as const };
+  const first = validateTaxRegimeBasis(declared, context);
+  assert.equal(first.regime, "ca_cca");
+  if (first.regime !== "ca_cca") return;
+  assert.equal(Object.hasOwn(first, "capitalGainsInclusionRate"), false);
+  const frozen = freezeCaRegimeBasis(first, "2026-07-01");
+  assert.equal(frozen.capitalGainsInclusionRate, "0.5");
+  assert.match(frozen.capitalGainsInclusionRateCitation ?? "", /ITA 38\(a\)/);
+  const persisted = declaredTaxRegimeFacts(frozen);
+  assert.equal(Object.hasOwn(persisted, "capitalGainsInclusionRate"), false);
+  assert.equal(Object.hasOwn(persisted, "capitalGainsInclusionRateCitation"), false);
+  const replayed = validateTaxRegimeBasis(JSON.parse(JSON.stringify(frozen)), context);
+  assert.equal(replayed.regime, "ca_cca");
+  if (replayed.regime !== "ca_cca") return;
+  assert.equal(Object.hasOwn(replayed, "capitalGainsInclusionRate"), false);
+  const invented = validateTaxRegimeBasis(
+    { ...declared, capitalGainsInclusionRate: "0.75", capitalGainsInclusionRateCitation: "operator" },
+    context,
+  );
+  assert.equal(invented.regime, "ca_cca");
+  if (invented.regime !== "ca_cca") return;
+  assert.equal(Object.hasOwn(invented, "capitalGainsInclusionRate"), false);
+  const recomputed = freezeCaRegimeBasis(invented, "2026-07-01");
+  assert.equal(recomputed.capitalGainsInclusionRate, "0.5");
+});
+
 test("nontaxable MACRS workpaper outcome does not demand Pub 544 proceeds", () => {
   const carryover: UsMacrsRegimeBasis = {
     regime: "us_macrs",
@@ -1189,7 +1225,7 @@ test("ready both-sided nontaxable freezes per-disposed-vintage receiver schedule
         },
         context,
       ),
-    /cannot be one header 5 when the disposed vintages have recoveryPeriodYears 5, 7/,
+    /cannot be one header 2023-03-15 when the disposed vintages have placedInServiceOn 2023-03-15, 2025-08-01/,
     "two disposed schedules are not one header recovery",
   );
   const computed = usRegimeWorkpaperOutcome(twoDisposed, "intercompany_transfer", "both", {

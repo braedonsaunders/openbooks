@@ -65,6 +65,8 @@ import {
   type MacrsVintageDefaults,
   type MacrsWorkpaperEvent,
 } from "./macrs-vintages.ts";
+import { refreshOpenMacrsVintageThrough } from "./depreciation-pool.ts";
+import { loadOrgMacrsWindows } from "./macrs-calendar.ts";
 
 export class TaxAssetBasisError extends Error {
   readonly name = "TaxAssetBasisError";
@@ -678,7 +680,7 @@ async function loadUsSellerMacrsVintageContext(
     sourceIndex,
     args.occurredOn,
   );
-  return sellerMacrsHistoryBeforeSource({
+  const history = sellerMacrsHistoryBeforeSource({
     assetId: args.sellerAssetId,
     subsidiaryId: seller.subsidiary_id,
     papers: priorPapers.map((paper) => paper.event),
@@ -686,6 +688,33 @@ async function loadUsSellerMacrsVintageContext(
     priorSources: orderSources.slice(0, sourceIndex),
     paperSourceKeys: priorPapers.map((paper) => paper.sourceKey),
   });
+  if (history.status !== "ready") return history;
+  try {
+    const fromOn = history.vintages.reduce(
+      (earliest, vintage) =>
+        vintage.placedInServiceOn < earliest ? vintage.placedInServiceOn : earliest,
+      args.occurredOn,
+    );
+    const windows = await loadOrgMacrsWindows(tx, orgId, fromOn, args.occurredOn);
+    return {
+      status: "ready",
+      vintages: history.vintages.map((vintage) => {
+        const dated = refreshOpenMacrsVintageThrough(vintage, windows, args.occurredOn);
+        return {
+          ...vintage,
+          priorDepreciation: dated.priorDepreciation,
+          adjustedCarryover: dated.adjustedCarryover,
+        };
+      }),
+    };
+  } catch (error) {
+    return {
+      status: "history_refused",
+      refusal: error instanceof Error
+        ? error.message
+        : "MACRS checkpoints could not be dated to the source effective date",
+    };
+  }
 }
 
 function usSellerMacrsForChoice(
