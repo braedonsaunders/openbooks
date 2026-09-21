@@ -487,7 +487,23 @@ const US_SELLER_ORIGINAL_DECLARATION: TaxBasisFieldPredicate = {
     { not: { usSellerMacrsStatus: "history_refused" } },
   ],
 };
-/** Seller vintage on first declaration, or buyer nontaxable carryover. */
+/** Seller first declaration, or buyer nontaxable carryover before seller
+ *  history is ready. Once vintages are ready the header original is derived. */
+const US_ORIGINAL_STATUTORY: TaxBasisFieldPredicate = {
+  any: [
+    US_SELLER_ORIGINAL_DECLARATION,
+    {
+      all: [
+        BUYER,
+        { fieldEquals: { name: "recognition", values: ["nontaxable"] } },
+        { not: { usSellerMacrsStatus: "ready" } },
+      ],
+    },
+  ],
+};
+/** Seller first declaration, or buyer nontaxable carryover schedule. Ready
+ *  seller history does not hide these from a both-sided carryover — the buyer
+ *  still continues a transferor date/method. */
 const US_TRANSFEROR_HISTORY: TaxBasisFieldPredicate = {
   any: [
     US_SELLER_ORIGINAL_DECLARATION,
@@ -864,9 +880,9 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     name: "originalUnadjustedBasis",
     label: "Original unadjusted depreciable basis",
     kind: "decimal",
-    visibleWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
-    requiredWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
-    help: "Required on the first seller declaration. After frozen history is ready, the server derives this as the sum of open vintage unadjusted bases — do not invent a composite vintage.",
+    visibleWhen: { all: [{ regime: "us_macrs" }, US_ORIGINAL_STATUTORY] },
+    requiredWhen: { all: [{ regime: "us_macrs" }, US_ORIGINAL_STATUTORY] },
+    help: "Required on the first seller declaration and on a buyer-only nontaxable carryover. After frozen seller history is ready, the server derives this as the sum of open vintage unadjusted bases — do not invent a composite vintage.",
   },
   {
     name: "remainingUnadjustedBasis",
@@ -890,7 +906,7 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     kind: "date",
     visibleWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
     requiredWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
-    help: "Required on the first seller declaration. After frozen history is ready, each open vintage already has its own placed-in-service date.",
+    help: "Required on the first seller declaration and on a nontaxable buyer carryover. After frozen seller history is ready, a both-sided carryover must continue the allocated vintage's placed date — do not invent one composite date across vintages with different recovery histories.",
   },
   {
     name: "recoveryPeriodYears",
@@ -898,7 +914,7 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     kind: "decimal",
     visibleWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
     requiredWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
-    help: "Required on the first seller declaration. After frozen history is ready, each open vintage already has its own recovery period.",
+    help: "Required on the first seller declaration and on a nontaxable buyer carryover. After frozen seller history is ready, continue the allocated vintage's recovery period — do not invent a composite schedule.",
   },
   {
     name: "method",
@@ -911,7 +927,7 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     }),
     visibleWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
     requiredWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
-    help: "Required on the first seller declaration. After frozen history is ready, each open vintage already has its own method.",
+    help: "Required on the first seller declaration and on a nontaxable buyer carryover. After frozen seller history is ready, continue the allocated vintage's method — do not invent a composite schedule.",
   },
   {
     name: "convention",
@@ -924,7 +940,7 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     }),
     visibleWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
     requiredWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
-    help: "Required on the first seller declaration. After frozen history is ready, each open vintage already has its own convention.",
+    help: "Required on the first seller declaration and on a nontaxable buyer carryover. After frozen seller history is ready, continue the allocated vintage's convention — do not invent a composite schedule.",
   },
   {
     name: "recognition",
@@ -1561,6 +1577,34 @@ function assertUsCarryoverCheckpoint(draft: TaxBasisDraft): void {
   }
 }
 
+function assertReadyBuyerTransferorSchedule(
+  draft: TaxBasisDraft,
+  open: readonly OpenMacrsVintage[],
+  allocations: readonly MacrsVintageAllocationInput[],
+): void {
+  const disposedKeys = allocations
+    .filter((row) => cmp(row.disposedUnadjustedBasis, "0") > 0)
+    .map((row) => macrsVintageKey(row));
+  if (disposedKeys.length === 0) {
+    throw new TaxBasisPolicyError(
+      "a nontaxable MACRS carryover requires a disposed vintage slice; allocate disposedUnadjustedBasis on the vintage whose transferor history the buyer continues — do not invent a header schedule for a zero disposal",
+    );
+  }
+  const placed = [...new Set(
+    open.filter((vintage) => disposedKeys.includes(vintage.key)).map((vintage) => vintage.placedInServiceOn),
+  )];
+  if (placed.length !== 1) {
+    throw new TaxBasisPolicyError(
+      `placedInServiceOn cannot be one transferor date when the disposed allocation covers vintages with different placed dates (${placed.join(", ") || "none"}); allocate one vintage's history — do not invent a composite carryover vintage`,
+    );
+  }
+  if (String(draft.placedInServiceOn ?? "") !== placed[0]) {
+    throw new TaxBasisPolicyError(
+      `placedInServiceOn ${String(draft.placedInServiceOn ?? "")} must equal the allocated vintage's placed-in-service date ${placed[0]}; do not invent a composite seller vintage`,
+    );
+  }
+}
+
 function validateUs(draft: TaxBasisDraft, context?: TaxBasisValidationContext): UsMacrsRegimeBasis {
   const history = context?.usSellerMacrs ?? null;
   if (taxBasisSideApplies(draft.applicable, "seller")) {
@@ -1590,13 +1634,6 @@ function validateUs(draft: TaxBasisDraft, context?: TaxBasisValidationContext): 
         }
       }
       draft.originalUnadjustedBasis = moneyExact(derivedOriginal, "originalUnadjustedBasis");
-      for (const name of ["placedInServiceOn", "recoveryPeriodYears", "method", "convention"] as const) {
-        if (draft[name] != null && draft[name] !== "") {
-          throw new TaxBasisPolicyError(
-            `${name} cannot be declared as one seller vintage when frozen MACRS history is authoritative; allocate each open vintage in vintageAllocations`,
-          );
-        }
-      }
       if (draft.vintageAllocations == null || draft.vintageAllocations === "") {
         throw new TaxBasisPolicyError(
           `vintageAllocations must name every open MACRS vintage (${history.vintages.map((row) => row.key).join(", ")}); the header remaining/disposed amounts are the sums — do not invent a composite vintage`,
@@ -1616,6 +1653,19 @@ function validateUs(draft: TaxBasisDraft, context?: TaxBasisValidationContext): 
       assertMacrsVintageAllocationTotals(allocations, disposed, remaining);
       if (history?.status === "ready") {
         assertMacrsVintageAllocationsMatchOpen(allocations, history.vintages);
+        const buyerTransferorHistory =
+          taxBasisSideApplies(draft.applicable, "buyer") && draft.recognition === "nontaxable";
+        if (buyerTransferorHistory) {
+          assertReadyBuyerTransferorSchedule(draft, history.vintages, allocations);
+        } else {
+          for (const name of ["placedInServiceOn", "recoveryPeriodYears", "method", "convention"] as const) {
+            if (draft[name] != null && draft[name] !== "") {
+              throw new TaxBasisPolicyError(
+                `${name} cannot be declared as one seller vintage when frozen MACRS history is authoritative; allocate each open vintage in vintageAllocations`,
+              );
+            }
+          }
+        }
       }
       draft.vintageAllocations = allocations;
     }

@@ -532,4 +532,17 @@ test("seller history before a source distinguishes first declaration from ready 
   if (closed.status === "history_refused") {
     assert.match(closed.refusal, /no open MACRS vintage remains/);
   }
+  const missingPaper = sellerMacrsHistoryBeforeSource({
+    assetId: "seller",
+    subsidiaryId: "sub-a",
+    papers: [],
+    defaults,
+    priorSources: [{ key: "change:earlier", occurredOn: "2026-07-01" }],
+    paperSourceKeys: [],
+  });
+  assert.equal(missingPaper.status, "history_refused");
+  if (missingPaper.status === "history_refused") {
+    assert.match(missingPaper.refusal, /2026-07-01/);
+    assert.match(missingPaper.refusal, /do not treat a missing prerequisite paper as a first original declaration/);
+  }
 });

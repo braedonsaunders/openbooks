@@ -886,6 +886,21 @@ test("ready MACRS history hides the composite seller vintage and requires identi
   );
   assert.equal(taxBasisFieldVisible(field("originalUnadjustedBasis"), refused), false);
   assert.equal(taxBasisFieldVisible(field("remainingUnadjustedBasis"), refused), false);
+
+  const bothNontaxable = attachTaxBasisSource(
+    { regime: "us_macrs", relationship: "non_arms_length", recognition: "nontaxable" },
+    {
+      sourceOperation: "intercompany_transfer",
+      applicable: "both",
+      usSellerMacrs: { status: "ready", vintages: readyVintages },
+    },
+  );
+  assert.equal(taxBasisFieldRequired(field("originalUnadjustedBasis"), bothNontaxable), false);
+  assert.equal(taxBasisFieldRequired(field("placedInServiceOn"), bothNontaxable), true);
+  assert.equal(taxBasisFieldRequired(field("method"), bothNontaxable), true);
+  assert.equal(taxBasisFieldRequired(field("convention"), bothNontaxable), true);
+  assert.equal(taxBasisFieldRequired(field("recoveryPeriodYears"), bothNontaxable), true);
+  assert.equal(taxBasisFieldRequired(field("carryoverBasis"), bothNontaxable), true);
 });
 
 test("validateUs derives the header original from ready vintages and rechecks allocation keys", () => {
@@ -1022,4 +1037,94 @@ test("validateUs derives the header original from ready vintages and rechecks al
     /empty vintage list/,
     "empty open list is not a valid match",
   );
+});
+
+test("ready both-sided nontaxable keeps buyer transferor schedule and refuses a composite placed date", () => {
+  const allocations = [
+    {
+      source: "carryover" as const,
+      placedInServiceOn: "2023-03-15",
+      transferOn: "2025-08-01",
+      disposedUnadjustedBasis: "2000.00",
+      remainingUnadjustedBasis: "8000.00",
+    },
+    {
+      source: "excess" as const,
+      placedInServiceOn: "2025-08-01",
+      transferOn: "2025-08-01",
+      disposedUnadjustedBasis: "0.00",
+      remainingUnadjustedBasis: "400.00",
+    },
+  ];
+  const context = {
+    sourceOperation: "intercompany_transfer" as const,
+    applicable: "both" as const,
+    usSellerMacrs: { status: "ready" as const, vintages: readyVintages },
+  };
+  const base = {
+    regime: "us_macrs",
+    relationship: "non_arms_length",
+    dispositionTrigger: "section_168i7b",
+    remainingUnadjustedBasis: "8400.00",
+    disposedUnadjustedBasis: "2000.00",
+    recognition: "nontaxable",
+    section168i7Kind: "nonrecognition",
+    relatedPerson: true,
+    carryoverBasis: "1280.00",
+    excessBasis: "0.00",
+    section179: "0",
+    bonusPercent: "0",
+    businessUsePercent: "100",
+    priorDepreciation: "720.00",
+    vintageAllocations: allocations,
+  };
+  throwsPolicy(
+    () =>
+      validateTaxRegimeBasis(
+        {
+          ...base,
+          placedInServiceOn: "2025-08-01",
+          recoveryPeriodYears: "5",
+          method: "200_db",
+          convention: "half_year",
+        },
+        context,
+      ),
+    /must equal the allocated vintage's placed-in-service date 2023-03-15/,
+    "buyer schedule must follow the disposed vintage",
+  );
+  throwsPolicy(
+    () =>
+      validateTaxRegimeBasis(
+        {
+          ...base,
+          disposedUnadjustedBasis: "2400.00",
+          remainingUnadjustedBasis: "8000.00",
+          placedInServiceOn: "2023-03-15",
+          recoveryPeriodYears: "5",
+          method: "200_db",
+          convention: "half_year",
+          vintageAllocations: [
+            { ...allocations[0]!, disposedUnadjustedBasis: "2000.00", remainingUnadjustedBasis: "8000.00" },
+            { ...allocations[1]!, disposedUnadjustedBasis: "400.00", remainingUnadjustedBasis: "0.00" },
+          ],
+        },
+        context,
+      ),
+    /different placed dates/,
+    "two disposed vintages are not one transferor date",
+  );
+  const row = validateTaxRegimeBasis(
+    {
+      ...base,
+      placedInServiceOn: "2023-03-15",
+      recoveryPeriodYears: "5",
+      method: "200_db",
+      convention: "half_year",
+    },
+    context,
+  ) as UsMacrsRegimeBasis;
+  assert.equal(row.originalUnadjustedBasis, "10400.0000");
+  assert.equal(row.placedInServiceOn, "2023-03-15");
+  assert.equal(row.carryoverBasis, "1280.00");
 });
