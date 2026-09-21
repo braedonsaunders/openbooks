@@ -191,17 +191,27 @@ async function seedTerminatedWithInput(orgId: string): Promise<{ employmentId: s
   await db.execute(sql`
     insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, recorded_at)
     values (${orgId}, ${employmentId}, 1, 'terminated', '2026-08-15', now())`);
-  const leaveType = (await db.execute<{ id: string }>(sql`
-    select id::text as id from hrm_leave_types where org_id = ${orgId} limit 1`)).rows[0]?.id;
-  if (leaveType) {
-    const requestId = randomUUID();
-    await db.execute(sql`
-      insert into hrm_leave_requests (id, org_id, employment_id, leave_type_id, starts_on, ends_on, hours, status)
-      values (${requestId}, ${orgId}, ${employmentId}, ${leaveType}, '2026-09-10', '2026-09-10', 8, 'approved')`);
-    await db.execute(sql`
-      insert into hrm_payroll_inputs (org_id, employee_party_id, employment_id, kind, absence_date, hours, source_leave_request_id, status)
-      values (${orgId}, ${workerPartyId}, ${employmentId}, 'payout', '2026-09-10', 8, ${requestId}, 'pending')`);
-  }
+  // The leave type is CREATED, not looked up. This used to read
+  // `if (leaveType)` against a scratch org that has none, so the pay
+  // input was never inserted at all and the scan correctly found
+  // nothing -- and the test then blamed the detector for a fixture that
+  // had quietly seeded half of itself. A fixture that can skip its own
+  // subject is not a fixture.
+  const leaveType = randomUUID();
+  await db.execute(sql`
+    insert into hrm_leave_types (id, org_id, code, name, paid)
+    values (${leaveType}, ${orgId}, 'ANOM-VAC', 'Anomaly probe vacation', true)`);
+  const requestId = randomUUID();
+  await db.execute(sql`
+    insert into hrm_leave_requests (id, org_id, employment_id, leave_type_id, starts_on, ends_on, hours, status)
+    values (${requestId}, ${orgId}, ${employmentId}, ${leaveType}, '2026-09-10', '2026-09-10', 8, 'approved')`);
+  await db.execute(sql`
+    insert into hrm_payroll_inputs (org_id, employee_party_id, employment_id, kind, absence_date, hours, source_leave_request_id, status)
+    values (${orgId}, ${workerPartyId}, ${employmentId}, 'payout', '2026-09-10', 8, ${requestId}, 'pending')`);
+  const seeded = (await db.execute<{ n: string }>(sql`
+    select count(*)::text as n from hrm_payroll_inputs
+     where org_id = ${orgId} and employment_id = ${employmentId} and status = 'pending'`)).rows[0]?.n;
+  assert.equal(seeded, "1", "the fixture must actually leave a pending pay input behind");
   return { employmentId };
 }
 

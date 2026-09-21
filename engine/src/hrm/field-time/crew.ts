@@ -599,10 +599,15 @@ export async function postBatch(input: {
         values
           (${input.orgId}, 'project_charge', ${charge.documentNumber},
            ${batch.worked_on}::date, ${batch.worked_on}::date, ${org.base_currency},
-           'approved', ${batch.project_id}, ${project.subsidiary_id},
+           'draft', ${batch.project_id}, ${project.subsidiary_id},
            ${charge.costAmount}, '0', ${charge.costAmount}, '{}'::jsonb, '{}'::jsonb)
         returning id::text as id`)).rows[0];
       if (!docId) throw new FieldTimeError("charge_not_stored", "An equipment charge produced no document — nothing was posted; retry");
+      // The header is created DRAFT and approved after its lines land.
+      // document_line_immutability (0034) refuses line writes on anything
+      // past draft, so creating the header approved made every equipment
+      // charge fail on its own first line -- the guard doing exactly its
+      // job against a writer that skipped the lifecycle.
       await db.execute(sql`
         insert into document_lines
           (org_id, document_id, line_number, item_id, account_id, description,
@@ -614,6 +619,16 @@ export async function postBatch(input: {
            ${batch.project_id}, ${charge.equipmentId}, ${charge.recoveryAccountId},
            ${charge.costRate}, ${charge.billRate}, ${charge.costAmount}, ${charge.billAmount},
            true, '{}'::jsonb, '{}'::jsonb)`);
+      const approved = (await db.execute<{ n: number }>(sql`
+        update documents set status = 'approved', updated_at = now()
+         where org_id = ${input.orgId} and id = ${docId.id} and status = 'draft'
+        returning 1 as n`)).rows[0];
+      if (!approved) {
+        throw new FieldTimeError(
+          "charge_not_approved",
+          "An equipment charge could not be approved for posting — nothing was posted; retry",
+        );
+      }
       chargeDocumentIds.push(docId.id);
     }
     const moved = (await db.execute<{ n: number }>(sql`

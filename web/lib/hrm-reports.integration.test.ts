@@ -62,25 +62,18 @@ async function enableHrm(orgId: string): Promise<void> {
  * single edit point and the loop names the entity that is missing one.
  */
 async function enableEveryHrmReportFeature(orgId: string): Promise<void> {
-  const keys = [
-    'hrm',
-    'flows',
-    'automations',
-    'hrmActionReasons',
-    'hrmCompensation',
-    'hrmConstructionCompliance',
-    'hrmCertifications',
-    'hrmCertificationAlerts',
-    'hrmPerformance',
-    'hrmOneOnOnes',
-    'hrmFeedback',
-    'hrmCalibration',
-    'hrmSuccession',
-    'hrmDocuments',
-    'hrmDocumentRetention',
-    'hrmSurveys',
-    'hrmOrgChart',
-  ]
+  // DERIVED from the entities, not typed. A hand-written list goes stale
+  // the moment a shard lands an entity behind a new sub-switch, and the
+  // failure reads as "scope clamping hid a catalogue entry" rather than
+  // "the helper is out of date" — which is exactly how HR-19's and
+  // HR-21's switches went missing here.
+  const { HRM_REPORT_ENTITIES } = await import('@openbooks/reports')
+  const declared = new Set<string>()
+  for (const entity of HRM_REPORT_ENTITIES) {
+    if (entity.featureKey) declared.add(entity.featureKey)
+  }
+  // The parents those sub-switches hang from, which no entity names.
+  const keys = ['hrm', 'flows', 'automations', 'hrmRecruiting', 'hrmPerformance', ...declared]
   for (const key of keys) {
     await db.execute(sql`
       update orgs
@@ -587,7 +580,13 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
     // ambient test bypass.
     // A reader holding every HRM read grant sees every HRM entity: scope
     // clamping bounds ROWS, never the catalogue.
-    const reader = fakeAuthz(scratch.orgId, ['reports.read', 'automations.read', 'hrm.benefits.read', 'hrm.certifications.read', 'hrm.compensation.read', 'hrm.construction.read', 'hrm.employment.read', 'hrm.leave.read', 'hrm.performance.read', 'hrm.position.read', 'hrm.process.read', 'hrm.recruiting.read', 'hrm.retention.read'], null)
+    // Every read grant the HRM catalogue names, derived from the entities
+    // rather than typed: HR-19 added hrm.documents.read and
+    // hrm.surveys.manage and HR-21 added admin.setup.manage and
+    // payroll.manage, and a reader missing one makes this assert read as
+    // "scope clamping hid a catalogue entry" when it only means the
+    // grant list went stale.
+    const reader = fakeAuthz(scratch.orgId, ['reports.read', 'automations.read', 'admin.setup.manage', 'payroll.manage', 'hrm.benefits.read', 'hrm.certifications.read', 'hrm.compensation.read', 'hrm.construction.read', 'hrm.documents.read', 'hrm.employment.read', 'hrm.leave.read', 'hrm.performance.read', 'hrm.position.read', 'hrm.process.read', 'hrm.recruiting.read', 'hrm.retention.read', 'hrm.surveys.manage'], null)
     await withOrgContext(scratch.orgId, async () => {
       for (const key of [
         'hrm_headcount',
@@ -627,6 +626,19 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
         'hrm_retention_runs',
         'hrm_pool_members',
         // HR-18 end
+        // HR-19 begin: documents, signers, retention actions, surveys
+        // and the org chart.
+        'hrm_documents',
+        'hrm_document_signers',
+        'hrm_retention_actions',
+        'hrm_survey_results',
+        'hrm_org_chart',
+        // HR-19 end
+        // HR-21 begin: the payroll checks and the governance ledger.
+        'payroll_anomaly_flags',
+        'ai_decisions',
+        'ai_capabilities',
+        // HR-21 end
       ] as const) {
         assert.equal(await canRunReportEntity(reader, { entity: key }), true, `${key} runs for a permitted reader`)
       }
