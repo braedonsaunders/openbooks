@@ -664,61 +664,19 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
     const employmentOnly = fakeAuthz(scratch.orgId, ['reports.read', 'hrm.employment.read'], null)
     await withOrgContext(scratch.orgId, async () => {
       const hiddenHrm = (await hiddenReportEntityKeys(employmentOnly)).filter((key) => key.startsWith('hrm_')).sort()
-      // Cross-check BEFORE the pin, and derived from the entity
-      // declarations rather than from this list: anything hidden from
-      // this reader must be an entity whose requiredPermission is not
-      // the one grant they hold. That catches the WRONG entity hiding,
-      // which the pin below cannot distinguish from a new entity
-      // arriving. The pin still earns its place -- it fixes the exact
-      // set, which depends on feature state as well as permission.
-      const permissionOf = new Map(declared.map((entity) => [entity.key, entity.requiredPermission]))
-      for (const key of hiddenHrm) {
-        assert.notEqual(
-          permissionOf.get(key),
-          'hrm.employment.read',
-          `${key} hid from a reader who holds exactly its declared permission`,
-        )
-      }
-      assert.deepEqual(hiddenHrm, [
-        'hrm_applications',
-        'hrm_benefit_enrollments',
-        // HR-17: calibration entries, feedback and 1:1s each name their
-        // own performance grant, so they hide from an employment-only
-        // reader like every other non-employment entity here.
-        'hrm_calibration_entries',
-        'hrm_certified_runs',
-        'hrm_comp_class_split',
-        'hrm_comp_cycle_lines',
-        'hrm_compliance_findings',
-        // HR-19: documents and their signers ride hrm.documents.read.
-        'hrm_document_signers',
-        'hrm_documents',
-        'hrm_feedback',
-        'hrm_goals',
-        'hrm_headcount_plan_lines',
-        'hrm_interview_slots',
-        'hrm_leave_absences',
-        'hrm_offers',
-        'hrm_one_on_ones',
-        'hrm_pay_bands',
-        'hrm_pay_gap_snapshots',
-        'hrm_per_diem_entries',
-        'hrm_pool_members',
-        'hrm_positions',
-        'hrm_postings',
-        'hrm_processes',
-        // HR-14 begin: the register and the alert queue hide without the
-        // certifications read grant (and on the dark org, with switches off).
-        'hrm_qualification_alerts',
-        'hrm_qualifications',
-        // HR-14 end
-        'hrm_rate_schedule_lines',
-        'hrm_requisitions',
-        'hrm_retention_runs',
-        'hrm_reviews',
-        'hrm_scorecards',
-        'hrm_turnover',
-      ], 'only the entities whose grants are missing hide')
+      // DERIVED, after two rounds of adding names to a pin that could only
+      // ever omit. Every HRM feature is enabled for this org above, so
+      // nothing here hides for a feature reason and the answer is exactly
+      // "every HRM entity whose declared permission is not the one grant
+      // this reader holds". I kept this as a pin once on the argument that
+      // it depended on feature state; that argument was wrong, because the
+      // test turns every switch on before it runs.
+      const shouldHide = declared
+        .filter((entity) => entity.key.startsWith('hrm_') && entity.requiredPermission !== 'hrm.employment.read')
+        .map((entity) => entity.key)
+        .sort()
+      assert.ok(shouldHide.length > 20, `the non-employment HRM catalogue reads as ${shouldHide.length} entities`)
+      assert.deepEqual(hiddenHrm, shouldHide, 'only the entities whose grants are missing hide')
     })
 
     const noPerm = fakeAuthz(scratch.orgId, ['reports.read'], null)
