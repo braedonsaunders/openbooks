@@ -71,6 +71,7 @@ const mockSources = new Map<string, string>([
       // that chain runs — the route's own authz boundary stays mocked — but
       // request-org registers its resolver at import time.
       export function registerRequestOrgResolver() {}
+      export function currentRequestOrgResolver() { return null }
       export const env = {}
       export async function withBypass(work) { return work() }
       export async function withOrgContext(orgId, work) { return work() }
