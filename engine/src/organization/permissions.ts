@@ -174,6 +174,13 @@ export const PERMISSION_CATALOGUE = [
   "hrm.construction.read",
   "hrm.construction.manage",
   // HR-13 end
+  // HR-14 begin: certifications and dispatch gating — read sees the
+  // taxonomy, held qualifications, requirements and alerts; manage
+  // records, verifies, renews, revokes and authors requirements.
+  // Admin-only like the employment keys above.
+  "hrm.certifications.read",
+  "hrm.certifications.manage",
+  // HR-14 end
   // HR-12 compensation (0221/0222) — the same confidentiality rule as
   // employment: who is paid what, and whether pay is equitable, are
   // never riders on time.*, payroll.*, or parties.*. read = bands,
@@ -474,6 +481,11 @@ export const PERMISSION_GROUPS: {
       { key: "hrm.construction.read", labelKey: permissionLabelKey("hrm.construction.read") },
       { key: "hrm.construction.manage", labelKey: permissionLabelKey("hrm.construction.manage") },
       // HR-13 end
+      // HR-14 begin: appended after construction; group order pins admin,
+      // self, team, construction, then certifications keys.
+      { key: "hrm.certifications.read", labelKey: permissionLabelKey("hrm.certifications.read") },
+      { key: "hrm.certifications.manage", labelKey: permissionLabelKey("hrm.certifications.manage") },
+      // HR-14 end
     ],
   },
   {

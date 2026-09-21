@@ -1425,3 +1425,48 @@ export async function requireHrmConstructionManage(
   }
 }
 // HR-13 end
+
+// HR-14 begin: certification and dispatch-gating duties (0225). Read sees
+// the taxonomy, held qualifications, requirements, coverage and alerts;
+// manage records, verifies, renews, revokes and authors requirements.
+// Org-level grants like construction (qualification configuration is
+// org-wide, never per-employment): granted to the same built-in roles as
+// hrm.employment.read/manage (admin only, via the catalogue spread),
+// enforced at the service boundary on every entry function. A person
+// reads their own qualifications through hrm.self.read (loadOwnEmploymentIds
+// in the read service); managers read their reports' through
+// requireEmploymentOrTeamSubject's structural team scope.
+/** Certification and dispatch-gating duties (0225). */
+export const HRM_QUALIFICATION_PERMISSIONS = [
+  "hrm.certifications.read",
+  "hrm.certifications.manage",
+] as const;
+
+export type HrmQualificationPermission = (typeof HRM_QUALIFICATION_PERMISSIONS)[number];
+
+/** See qualification types, held qualifications, requirements and alerts. */
+export async function requireHrmCertificationsRead(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<void> {
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.certifications.read"))) {
+    throw new HrmAuthorizationError(
+      "Qualification access requires the hrm.certifications.read permission — ask an administrator to grant it in /admin/roles.",
+    );
+  }
+}
+
+/** Record, verify, renew and revoke qualifications and author requirements. */
+export async function requireHrmCertificationsManage(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<void> {
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.certifications.manage"))) {
+    throw new HrmAuthorizationError(
+      "Qualification access requires the hrm.certifications.manage permission — ask an administrator to grant it in /admin/roles.",
+    );
+  }
+}
+// HR-14 end

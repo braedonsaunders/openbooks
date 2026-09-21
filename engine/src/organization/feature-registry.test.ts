@@ -114,3 +114,54 @@ test("hrmActionReasons defaults on, hrmEventVerbs defaults off, both under hrm",
   assert.equal(verbs.parentKey, "hrm");
   assert.equal(featureEnabled({ hrm: false, hrmActionReasons: true }, "hrmActionReasons"), false);
 });
+
+// HR-14 begin: certifications ride hrm; dispatch gating needs projects +
+// projectScheduling, equipment qualifications need equipment, alerts ride
+// the parent alone. Off hides the surface, never the data.
+test("hrmCertifications is an opt-in hrm feature with gated sub-features", () => {
+  const def = FEATURE_BY_KEY.get("hrmCertifications");
+  assert.ok(def, "hrmCertifications must be registered before routes gate on it");
+  assert.equal(def.defaultEnabled, false);
+  assert.equal(def.parentKey, "hrm");
+  assert.equal(featureEnabled({}, "hrmCertifications"), false);
+  assert.equal(featureEnabled({ hrm: false, hrmCertifications: true }, "hrmCertifications"), false);
+  assert.equal(featureEnabled({ hrm: true }, "hrmCertifications"), false);
+  assert.equal(featureEnabled({ hrm: true, hrmCertifications: true }, "hrmCertifications"), true);
+  const dispatch = FEATURE_BY_KEY.get("hrmDispatchGating");
+  assert.ok(dispatch, "hrmDispatchGating must be registered");
+  assert.equal(dispatch.parentKey, "hrmCertifications");
+  assert.deepEqual([...(dispatch.requiresAll ?? [])].sort(), ["projectScheduling", "projects"]);
+  // A stale stored override can never resurrect dispatch while scheduling is off.
+  assert.equal(
+    featureEnabled({ hrm: true, hrmCertifications: true, projects: true, hrmDispatchGating: true }, "hrmDispatchGating"),
+    false,
+  );
+  assert.equal(
+    featureEnabled(
+      { hrm: true, hrmCertifications: true, projects: true, projectScheduling: true, hrmDispatchGating: true },
+      "hrmDispatchGating",
+    ),
+    true,
+  );
+  const equipment = FEATURE_BY_KEY.get("hrmEquipmentQualifications");
+  assert.ok(equipment, "hrmEquipmentQualifications must be registered");
+  assert.equal(equipment.parentKey, "hrmCertifications");
+  assert.deepEqual([...(equipment.requiresAll ?? [])], ["equipment"]);
+  // equipment defaults on, so absence resolves true; an explicit off still kills the child.
+  assert.equal(
+    featureEnabled({ hrm: true, hrmCertifications: true, hrmEquipmentQualifications: true }, "hrmEquipmentQualifications"),
+    true,
+  );
+  assert.equal(
+    featureEnabled({ hrm: true, hrmCertifications: true, equipment: false, hrmEquipmentQualifications: true }, "hrmEquipmentQualifications"),
+    false,
+  );
+  const alerts = FEATURE_BY_KEY.get("hrmCertificationAlerts");
+  assert.ok(alerts, "hrmCertificationAlerts must be registered");
+  assert.equal(alerts.parentKey, "hrmCertifications");
+  assert.equal(
+    featureEnabled({ hrm: true, hrmCertifications: true, hrmCertificationAlerts: true }, "hrmCertificationAlerts"),
+    true,
+  );
+});
+// HR-14 end
