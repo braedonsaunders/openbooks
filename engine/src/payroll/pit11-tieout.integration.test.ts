@@ -276,13 +276,16 @@ test(
         () => pit11Population(org.orgId, 2026),
         /no committed PL pay stubs for tax year 2026/,
       );
+      // 2024 and 2025 are TRANSCRIBED now -- the PL prior-year shard landed
+      // both -- so they no longer refuse for a missing edition. Use years the
+      // pack genuinely does not cover.
       await assert.rejects(
-        () => pit11Slips(org.orgId, 2025),
-        /2025 statutory tables are not loaded for PL/,
+        () => pit11Slips(org.orgId, 2023),
+        /2023 statutory tables are not loaded for PL/,
       );
       await assert.rejects(
-        () => pit11Slips(org.orgId, 2024),
-        /2024 statutory tables are not loaded for PL/,
+        () => pit11Slips(org.orgId, 2022),
+        /2022 statutory tables are not loaded for PL/,
       );
     } finally {
       await dropScratchOrgReporting(org.orgId);

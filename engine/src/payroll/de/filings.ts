@@ -261,16 +261,30 @@ export async function lohnsteuerbescheinigungSlips(
   assertLohnsteuerbescheinigungYear(taxYear);
   await assertPayrollCountryKnown(db, orgId, taxYear);
   await assertPayrollFilingAccountKnown(db, orgId, { taxYear });
+  // A Lohnsteuerbescheinigung is a YEAR certificate: every figure is the sum
+  // across all of that employee's committed stubs, so the correlated
+  // subqueries hang off the grouped employee, not off one stub. Correlating
+  // on s.id while grouping by employee is not merely wrong arithmetic --
+  // PostgreSQL refuses it outright ("subquery uses ungrouped column s.id"),
+  // so this statement could never have run.
   const earningSum = (alias: SQL) => sql`
     (select coalesce(sum(l.amount), 0) from pay_stub_lines l
        join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
-      where l.org_id = ${orgId} and l.stub_id = ${alias}.id and l.kind = 'earning'
-        and coalesce(pc.taxable, true))`;
+       join pay_stubs es on es.id = l.stub_id and es.org_id = l.org_id
+       join pay_runs er on er.document_id = es.pay_run_document_id and er.org_id = es.org_id
+         and er.run_status = 'committed'
+      where l.org_id = ${orgId} and es.employee_party_id = ${alias}.employee_party_id
+        and es.tax_year = ${taxYear} and es.country = 'DE'
+        and l.kind = 'earning' and coalesce(pc.taxable, true))`;
   const withheldSum = (alias: SQL, systemKey: string, kind: string) => sql`
     (select coalesce(sum(l.amount), 0) from pay_stub_lines l
        join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
-      where l.org_id = ${orgId} and l.stub_id = ${alias}.id and l.kind = ${kind}
-        and pc.system_key = ${systemKey})`;
+       join pay_stubs es on es.id = l.stub_id and es.org_id = l.org_id
+       join pay_runs er on er.document_id = es.pay_run_document_id and er.org_id = es.org_id
+         and er.run_status = 'committed'
+      where l.org_id = ${orgId} and es.employee_party_id = ${alias}.employee_party_id
+        and es.tax_year = ${taxYear} and es.country = 'DE'
+        and l.kind = ${kind} and pc.system_key = ${systemKey})`;
   const s = sql.raw("s");
   const rows = (await db.execute<Record<string, unknown>>(sql`
     select s.employee_party_id, p.display_name,
