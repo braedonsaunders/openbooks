@@ -577,6 +577,18 @@
         "label": "Stundenzettel-Wochen",
         "description": "Wöchentliche Stundenzettel, Einreichungs- und Genehmigungsdaten sowie Gesamtstunden."
       },
+      "field_clock_events": {
+        "label": "Außendienst-Stempelungen",
+        "description": "Mobile und Kiosk-Stempelungen — wer, wann, mit Geozonen-Kennzeichen und wie das Paar bepreist wird. Nur Kennzeichen; Rohkoordinaten brauchen die HR-Beschäftigungsberechtigung."
+      },
+      "field_clock_coordinates": {
+        "label": "Stempelkoordinaten",
+        "description": "Rohkoordinaten je Stempelung — Aufenthaltsort des Mitarbeiters, nur mit HR-Beschäftigungsberechtigung sichtbar. Kennzeichen für alle anderen stehen in Außendienst-Stempelungen."
+      },
+      "crew_time_batches": {
+        "label": "Crew-Lose",
+        "description": "Crew-Lose des Vorarbeiters je Projekt und Tag — Stand in den Genehmigungsstufen, Stunden und Kopfzahl."
+      },
       "fixed_assets": {
         "label": "Anlagevermögen",
         "description": "Das Anlagenverzeichnis – Status, Anschaffung, Kosten, Verantwortlicher und Dimensionen."
@@ -752,6 +764,50 @@
       "hrm_talent_reviews": {
         "label": "Talentbeurteilungen",
         "description": "Eine Zeile pro Talentbeurteilung — Mitarbeitende, Leistung und Potenzial, Verlustwirkung und -risiko sowie Beförderungsreife. Erfordert die HR-Leistungsberechtigung."
+      },
+      "hrm_documents": {
+        "label": "HR-Dokumente",
+        "description": "Eine Zeile pro HR-Dokument — Titel, erklärte Kategorie, Lebenszyklusstatus, Versand/Abschluss/Ablauf und Legal Hold."
+      },
+      "hrm_document_signers": {
+        "label": "Dokumentunterzeichner",
+        "description": "Eine Zeile pro geordnetem Unterzeichner — Dokument, Reihenfolge, Rolle und Status."
+      },
+      "hrm_retention_actions": {
+        "label": "Aufbewahrungsaktionen",
+        "description": "Eine Zeile pro Aufbewahrungsaktion — Dokument, Kategorie, Fälligkeit, Endaktion, Ausführung und Legal-Hold-Blockade."
+      },
+      "hrm_survey_results": {
+        "label": "Befragungsergebnisse",
+        "description": "Eine Zeile pro Befragung — Art, Anonymitätsgrad, Status, Einladungs- und Antwortzahlen, Enddatum."
+      },
+      "hrm_org_chart": {
+        "label": "Organigramm",
+        "description": "Eine Zeile pro aktivem Beschäftigungsverhältnis zum Stichtag — Name, Titel, Abteilung und Führungskraft."
+      },
+      "hrm_interview_slots": {
+        "description": "Eine Zeile je vorgeschlagenem, gebuchtem oder abgelehntem Gesprächstermin mit Fenster und Art. Kontaktdaten und Buchungstoken verlassen das Haus nie.",
+        "label": "Gesprächstermine"
+      },
+      "hrm_offers": {
+        "description": "Eine Zeile je Angebot mit kaufmännischem Stand, Signaturstand und Version. Beträge, Schreiben und Signaturnachweise bleiben außen vor.",
+        "label": "Angebote"
+      },
+      "hrm_pool_members": {
+        "description": "Eine Zeile je Talentpool-Mitgliedschaft: Pool, Kandidatenname und Beitritt. Nur Namen, nie Kontaktdaten.",
+        "label": "Poolmitglieder"
+      },
+      "hrm_postings": {
+        "description": "Eine Zeile je Stellenbörsen-Eintrag mit Stand sowie Bewerbungs- und Rückmeldungszahlen für die Kanalwirkung (je Börse, je Stelle).",
+        "label": "Börseneinträge"
+      },
+      "hrm_retention_runs": {
+        "description": "Eine Zeile je Aufbewahrungslauf mit anonymisierten, gelöschten und verlängerten Zahlen.",
+        "label": "Aufbewahrungsläufe"
+      },
+      "hrm_scorecards": {
+        "description": "Eine Zeile je Gespräch mit den Urteilssummen des Gremiums: abgegebene und Gremiumsanzahl plus Gesamtverteilung. Einzelurteile verlassen die Berichte nie — die Blindregel gilt baulich.",
+        "label": "Urteile"
       }
     },
     "columns": {
@@ -968,6 +1024,9 @@
         "department": "Abteilung",
         "memo": "Notiz",
         "created_at": "Erstellt am",
+        "equipment_unit": "Geräteeinheit",
+        "equipment_hours": "Gerätestunden",
+        "cost_code_ref": "Kostenstelle",
         "id": "Zeiterfassung (ID)"
       },
       "timesheet_weeks": {
@@ -983,6 +1042,39 @@
         "approved_at": "Genehmigt am",
         "rejection_reason": "Ablehnungsgrund",
         "id": "Woche (id)"
+      },
+      "field_clock_events": {
+        "employee_name": "Mitarbeiter",
+        "kind": "Aktion",
+        "occurred_at": "Gerätezeit",
+        "project": "Projekt",
+        "cost_code_ref": "Kostenstelle",
+        "geo_check": "Geozone",
+        "accuracy_m": "Standortgenauigkeit (m)",
+        "source": "Quelle",
+        "status": "Status",
+        "auto_closed": "Auto geschlossen",
+        "has_photo": "Foto angehängt",
+        "id": "Stempelung (ID)"
+      },
+      "field_clock_coordinates": {
+        "employee_name": "Mitarbeiter",
+        "occurred_at": "Gerätezeit",
+        "latitude": "Latitude",
+        "longitude": "Longitude",
+        "accuracy_m": "Standortgenauigkeit (m)",
+        "id": "Stempelung (ID)"
+      },
+      "crew_time_batches": {
+        "foreman_name": "Vorarbeiter",
+        "project": "Projekt",
+        "worked_on": "Gearbeitet am",
+        "status": "Status",
+        "total_hours": "Gesamtstunden",
+        "worker_count": "Arbeitskräfte",
+        "line_count": "Zeilen",
+        "submitted_at": "Eingereicht am",
+        "id": "Crew-Los (ID)"
       },
       "fixed_assets": {
         "asset_number": "Anlagennummer",
@@ -1615,6 +1707,110 @@
         "impact_of_loss": "Verlustwirkung",
         "risk_of_loss": "Verlustrisiko",
         "id": "Beurteilung (ID)"
+      },
+      "hrm_documents": {
+        "title": "Titel",
+        "person": "Person",
+        "category": "Kategorie",
+        "status": "Status",
+        "sent_at": "Versendet am",
+        "completed_at": "Abgeschlossen am",
+        "expires_at": "Läuft ab am",
+        "legal_hold": "Legal Hold",
+        "document_id": "Dokument (ID)"
+      },
+      "hrm_document_signers": {
+        "document": "Dokument",
+        "ord": "Reihenfolge",
+        "role": "Rolle",
+        "status": "Status",
+        "signed_at": "Unterschrieben am",
+        "document_id": "Dokument (ID)"
+      },
+      "hrm_retention_actions": {
+        "document": "Dokument",
+        "category": "Kategorie",
+        "due_on": "Fällig am",
+        "action": "Aktion",
+        "executed_at": "Ausgeführt am",
+        "blocked_reason": "Blockadegrund",
+        "document_id": "Dokument (ID)"
+      },
+      "hrm_survey_results": {
+        "name": "Name",
+        "kind": "Art",
+        "anonymity": "Anonymität",
+        "status": "Status",
+        "invitations": "Einladungen",
+        "responded": "Geantwortet",
+        "closes_at": "Schließt am",
+        "survey_id": "Befragung (ID)"
+      },
+      "hrm_org_chart": {
+        "employee": "Mitarbeiter",
+        "title": "Titel",
+        "department": "Abteilung",
+        "manager": "Führungskraft",
+        "employment_id": "Beschäftigung (ID)"
+      },
+      "hrm_interview_slots": {
+        "booked_on": "Gebucht",
+        "candidate": "Kandidat",
+        "ends_at": "Ende",
+        "kind": "Art",
+        "requisition": "Ausschreibung",
+        "slot_id": "Termin (ID)",
+        "starts_at": "Beginn",
+        "timezone": "Zeitzone"
+      },
+      "hrm_offers": {
+        "candidate": "Kandidat",
+        "expires_on": "Läuft ab",
+        "job_title": "Stellenbezeichnung",
+        "offer_id": "Angebot (ID)",
+        "requisition": "Ausschreibung",
+        "sent_on": "Gesendet",
+        "signature_status": "Signatur",
+        "signed_on": "Signiert",
+        "status": "Stand",
+        "version": "Version"
+      },
+      "hrm_pool_members": {
+        "added_on": "Hinzugefügt",
+        "candidate": "Kandidat",
+        "note": "Notiz",
+        "pool": "Pool"
+      },
+      "hrm_postings": {
+        "applies": "Bewerbungen",
+        "board": "Börse",
+        "closed_on": "Geschlossen",
+        "dispositions": "Rückmeldungen",
+        "posting_id": "Börse (ID)",
+        "published_on": "Veröffentlicht",
+        "requisition": "Ausschreibung",
+        "status": "Stand"
+      },
+      "hrm_retention_runs": {
+        "anonymized": "Anonymisiert",
+        "deleted": "Gelöscht",
+        "extensions": "Verlängerungen",
+        "ran_at": "Lauf",
+        "rule": "Regel",
+        "run_id": "Lauf (ID)"
+      },
+      "hrm_scorecards": {
+        "candidate": "Kandidat",
+        "interview_id": "Gespräch (ID)",
+        "kind": "Art",
+        "no": "Nein",
+        "panel": "Gremium",
+        "requisition": "Ausschreibung",
+        "scheduled_on": "Geplant",
+        "strong_no": "Klares Nein",
+        "strong_yes": "Klares Ja",
+        "submitted": "Abgegeben",
+        "yes": "Ja"
       }
     },
     "enumValues": {

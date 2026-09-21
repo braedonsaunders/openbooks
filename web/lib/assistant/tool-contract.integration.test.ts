@@ -186,6 +186,11 @@ const FEATURE_OFF = new Set([
   // HR-16 begin: the contract scratch org never enables automations.
   "automations_feature_disabled",
   // HR-16 end
+  // HR-20 begin: the contract scratch org never enables field time —
+  // both tools prove their feature-off refusals here, never real paths.
+  "fieldTime_feature_disabled",
+  "fieldTimeCrewEntry_feature_disabled",
+  // HR-20 end
 ]);
 
 function readerAuthz(orgId: string): Authz {

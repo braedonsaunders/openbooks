@@ -13,6 +13,11 @@ import {
 } from "@openbooks/engine/src/hrm/leave-read.ts";
 import { LeaveError } from "@openbooks/engine/src/hrm/leave-errors.ts";
 import { HrmQualificationError } from "@openbooks/engine/src/hrm/qualifications/errors.ts";
+// HR-19 begin: documents/surveys refusals (feature off, undeclared
+// category, token replay, suppression) reach the caller intact — both
+// error classes live in the documents errors module.
+import { HrmDocumentsError, HrmSurveysError } from "@openbooks/engine/src/hrm/documents/errors.ts";
+// HR-19 end
 import { SelfServiceError } from "@openbooks/engine/src/hrm/self-service/actor.ts";
 import { getMyProfile } from "@openbooks/engine/src/hrm/self-service/self-read.ts";
 import {
@@ -113,6 +118,11 @@ export function hrmRefusal(error: unknown): ToolResult {
     // required, unknown type) reach the caller with their message intact.
     error instanceof HrmQualificationError ||
     // HR-14 end
+    // HR-19 begin: documents/surveys refusals reach the caller with
+    // their message intact, like every other read-service refusal.
+    error instanceof HrmDocumentsError ||
+    error instanceof HrmSurveysError ||
+    // HR-19 end
 
     error instanceof HrmAuthorizationError ||
     error instanceof TemporalError ||
@@ -121,6 +131,30 @@ export function hrmRefusal(error: unknown): ToolResult {
     return { ok: false, error: error.message };
   }
   throw error;
+}
+
+// Shared feature gates, kept beside hrmFeatureRefused and ABOVE the first
+// tool block on purpose: they are module-level helpers, and sitting between
+// two tool definitions made the feature-parity scanner read their checks as
+// belonging to whichever tool happened to follow them.
+// HR-13 begin: read-only construction-compliance tools. Generating a
+// report, approving per-diem, and transitioning a finding are
+// human-attested HR actions with no assistant write surface by design —
+// these two tools read the flags and the frozen runs through the same
+// services and gates as the Compliance page.
+const HRM_CONSTRUCTION_FEATURE_OFF = "hrm_construction_feature_disabled";
+
+async function constructionFeatureRefused(orgId: string): Promise<ToolResult | null> {
+  if (!(await isFeatureEnabled(orgId, "hrmConstructionCompliance")))
+    return { ok: false, error: HRM_CONSTRUCTION_FEATURE_OFF };
+  return null;
+}
+
+async function continuousFeatureRefused(orgId: string, key: string): Promise<ToolResult | null> {
+  if (!(await isFeatureEnabled(orgId, "hrm"))) return { ok: false, error: HRM_FEATURE_OFF };
+  if (!(await isFeatureEnabled(orgId, "hrmPerformance"))) return { ok: false, error: HRM_FEATURE_OFF };
+  if (!(await isFeatureEnabled(orgId, key))) return { ok: false, error: HRM_FEATURE_OFF };
+  return null;
 }
 
 async function hrmFeatureRefused(orgId: string): Promise<ToolResult | null> {
@@ -702,7 +736,7 @@ const requisitionSegments = ["draft", "open", "on_hold", "filled", "cancelled"] 
 const hrmRecruiting: AssistantToolDef = {
   name: "hrm_recruiting",
   description:
-    "Requisitions with headcount versus filled, the funnel per application with stages and offer state, and one opening pipeline with time-to-fill. Candidate contact PII never leaves through this tool, names only. Read-only.",
+    "Requisitions with headcount versus filled, the funnel per application, one opening with time-to-fill, scorecard summaries, offer signature state, and posting status. Names only, never candidate contact PII. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["hrm.recruiting.read"] },
   feature: "hrm",
@@ -711,19 +745,78 @@ const hrmRecruiting: AssistantToolDef = {
     requisitionId: uuidInput.optional().describe("One opening in full (pipeline, funnel, applications); omit for the segment list"),
     segment: z.enum(requisitionSegments).optional().describe("List segment (default open)"),
     limit: z.number().int().min(1).max(200).optional().describe("Maximum openings to return (default 50)"),
+    // HR-18 begin: depth reads (names and states only, never PII). Each
+    // refuses by name while its sub-switch is off.
+    interviewId: uuidInput.optional().describe("Scorecard summary for one interview: per-attribute aggregates, counts, and missing seats by name"),
+    offerId: uuidInput.optional().describe("One offer's signature state and version count"),
+    includePostings: z.boolean().optional().describe("Include board posting status beside a requisitionId detail"),
+    // HR-18 end
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const gated = await hrmFeatureRefused(authz.user.orgId);
     if (gated) return gated;
-    const a = raw as { requisitionId?: string; segment?: string; limit?: number };
+    const a = raw as {
+      requisitionId?: string;
+      segment?: string;
+      limit?: number;
+      interviewId?: string;
+      offerId?: string;
+      includePostings?: boolean;
+    };
     const limit = Math.min(a.limit ?? 50, 200);
     try {
+      // HR-18 begin: scorecard summary (aggregate only, names of missing
+      // seats — private notes never ride this shape).
+      if (a.interviewId) {
+        const { scorecardSummary } = await import(
+          "@openbooks/engine/src/hrm/recruiting/scorecards.ts"
+        );
+        const summary = await scorecardSummary({
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          interviewId: a.interviewId,
+        });
+        return { ok: true, data: { summary, href: "/hrm/recruiting" } };
+      }
+      // HR-18 end
+      // HR-18 begin: offer signature state (state only, never the letter).
+      if (a.offerId) {
+        const { offerSignatureState } = await import(
+          "@openbooks/engine/src/hrm/recruiting/offers-signing.ts"
+        );
+        const state = await offerSignatureState({
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          offerId: a.offerId,
+        });
+        return { ok: true, data: { ...state, href: "/hrm/recruiting" } };
+      }
+      // HR-18 end
       if (a.requisitionId) {
         const detail = await getRequisitionDetail({
           orgId: authz.user.orgId,
           actorId: authz.user.id,
           requisitionId: a.requisitionId,
         });
+        // HR-18 begin: board posting status beside the detail (board, board
+        // status, apply counts — never applicant PII). Refuses by name
+        // while hrmJobBoards is off.
+        let postings: { boardKey: string; status: string; applyCount: number }[] | undefined;
+        if (a.includePostings === true) {
+          const { listPostings } = await import("@openbooks/engine/src/hrm/recruiting/postings.ts");
+          postings = (
+            await listPostings({
+              orgId: authz.user.orgId,
+              actorId: authz.user.id,
+              requisitionId: a.requisitionId,
+            })
+          ).map((posting) => ({
+            boardKey: posting.boardKey,
+            status: posting.status,
+            applyCount: posting.applyCount,
+          }));
+        }
+        // HR-18 end
         return {
           ok: true,
           data: {
@@ -746,6 +839,7 @@ const hrmRecruiting: AssistantToolDef = {
               interviewsCount: application.interviewsCount,
               liveOfferStatus: application.liveOfferStatus,
             })),
+            ...(postings === undefined ? {} : { postings }),
             href: "/hrm/recruiting",
           },
         };
@@ -1174,18 +1268,6 @@ const inboxItems: AssistantToolDef = {
     }
   },
 };
-// HR-13 begin: read-only construction-compliance tools. Generating a
-// report, approving per-diem, and transitioning a finding are
-// human-attested HR actions with no assistant write surface by design —
-// these two tools read the flags and the frozen runs through the same
-// services and gates as the Compliance page.
-const HRM_CONSTRUCTION_FEATURE_OFF = "hrm_construction_feature_disabled";
-
-async function constructionFeatureRefused(orgId: string): Promise<ToolResult | null> {
-  if (!(await isFeatureEnabled(orgId, "hrmConstructionCompliance")))
-    return { ok: false, error: HRM_CONSTRUCTION_FEATURE_OFF };
-  return null;
-}
 
 const hrmComplianceFindings: AssistantToolDef = {
   name: "hrm_compliance_findings",
@@ -1298,9 +1380,16 @@ const hrmCompensation: AssistantToolDef = {
       const asOf = a.asOf ?? (await todayOf(authz.user.orgId));
       const [bands, cycles, plans] = await Promise.all([
         listPayBands({ orgId: authz.user.orgId, actorId: authz.user.id, asOf }),
+        // Merit cycles are an optional section of the compensation answer, not
+        // its subject: with the switch off the bands and placement still answer
+        // and the section is simply absent. The tool itself rides
+        // hrmCompensation and is gone when that is off, so this is never the
+        // refusal path.
+        // soft-feature: optional section only, never a refusal.
         isFeatureEnabled(authz.user.orgId, "hrmMeritCycles").then((on) =>
           on ? listCycles({ orgId: authz.user.orgId, actorId: authz.user.id }) : [],
         ),
+        // soft-feature: headcount plans are the same optional section, same reason.
         isFeatureEnabled(authz.user.orgId, "hrmHeadcountPlans").then((on) =>
           on ? listPlans({ orgId: authz.user.orgId, actorId: authz.user.id }) : [],
         ),
@@ -1553,17 +1642,168 @@ const hrmDispatchCheck: AssistantToolDef = {
 };
 // HR-14 end
 
+// HR-19 begin: documents, survey results, and org chart reads (0230).
+// hrm_documents answers own (self-service) or manage scope: titles,
+// statuses, and signer progress — never file bytes, tokens, or
+// evidence. hrm_survey_results answers aggregate results only (the
+// reader grant pattern: suppression already applied by the service),
+// never respondent links. hrm_org_chart answers names, titles, and
+// managers — never pay or private fields. All three are read-only.
+const hrmDocuments: AssistantToolDef = {
+  name: "hrm_documents",
+  description:
+    "HR documents: title, category, status, and signer progress. Own documents for self-service, everything with the read grant. File bytes, tokens, and evidence never leave. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.self.read"] },
+  feature: "hrmDocuments",
+  tier: "module",
+  inputSchema: z.object({
+    status: z
+      .enum(["draft", "sent", "viewed", "partially_signed", "signed", "acknowledged", "declined", "voided", "expired"])
+      .optional()
+      .describe("Keep only this document status"),
+    categoryKey: z.string().optional().describe("Keep only this declared category key"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    if (!(await isFeatureEnabled(authz.user.orgId, "hrmDocuments"))) return { ok: false, error: HRM_FEATURE_OFF };
+    const a = raw as { status?: string; categoryKey?: string };
+    try {
+      const { listDocuments, listOwnDocuments } = await import(
+        "@openbooks/engine/src/hrm/documents/documents.ts"
+      );
+      const manages = await import("@openbooks/engine/src/organization/actor-permissions.ts").then((m) =>
+        m.actorHasPermission(db, authz.user.orgId, authz.user.id, "hrm.documents.read"),
+      );
+      const documents = manages
+        ? await listDocuments({
+            orgId: authz.user.orgId,
+            actorId: authz.user.id,
+            ...(a.status ? { status: a.status } : {}),
+            ...(a.categoryKey ? { categoryKey: a.categoryKey } : {}),
+          })
+        : (
+            await listOwnDocuments({ orgId: authz.user.orgId, actorId: authz.user.id })
+          ).documents.filter(
+            (d) => (!a.status || d.status === a.status) && (!a.categoryKey || d.categoryKey === a.categoryKey),
+          );
+      return {
+        ok: true,
+        data: {
+          documents: documents.map((d) => ({
+            id: d.id,
+            title: d.title,
+            categoryKey: d.categoryKey,
+            status: d.status,
+            sentAt: d.sentAt,
+            completedAt: d.completedAt,
+            expiresAt: d.expiresAt,
+            legalHold: d.legalHold,
+          })),
+          href: "/hrm/documents",
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+
+const hrmSurveyResults: AssistantToolDef = {
+  name: "hrm_survey_results",
+  description:
+    "Survey aggregate results: participation, eNPS, driver scores, the suppression-marked heatmap, and the pulse trend. Aggregate only — respondent links never leave the service. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.surveys.manage"] },
+  feature: "hrmSurveys",
+  tier: "module",
+  inputSchema: z.object({
+    surveyId: uuidInput.describe("Survey to read aggregate results for"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    if (!(await isFeatureEnabled(authz.user.orgId, "hrmSurveys"))) return { ok: false, error: HRM_FEATURE_OFF };
+    const a = raw as { surveyId?: string };
+    if (!a.surveyId) return { ok: false, error: "survey_required" };
+    try {
+      const { getSurveyResults } = await import("@openbooks/engine/src/hrm/surveys/responses.ts");
+      const results = await getSurveyResults({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        surveyId: a.surveyId,
+      });
+      return {
+        ok: true,
+        data: {
+          surveyId: results.surveyId,
+          status: results.status,
+          invitations: results.invitations,
+          responded: results.responded,
+          participationPct: results.participationPct,
+          enps: results.enps,
+          drivers: results.drivers,
+          heat: results.heat,
+          trend: results.trend,
+          comments: results.comments,
+          href: "/hrm/surveys",
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+
+const hrmOrgChart: AssistantToolDef = {
+  name: "hrm_org_chart",
+  description:
+    "Org chart: the reporting tree with titles, departments, vacancies, and span of control as of a date, plus the directory. Names and titles only — never pay or private fields. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.self.read"] },
+  feature: "hrmOrgChart",
+  tier: "module",
+  inputSchema: z.object({
+    asOf: dateInput.optional().describe("Read the tree as of this date; defaults to today"),
+    search: z.string().optional().describe("Keep directory entries matching this name, title, or department"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    if (!(await isFeatureEnabled(authz.user.orgId, "hrmOrgChart"))) return { ok: false, error: HRM_FEATURE_OFF };
+    const a = raw as { asOf?: string; search?: string };
+    try {
+      const { loadDirectory, loadOrgChart } = await import("@openbooks/engine/src/hrm/org-chart.ts");
+      const { businessToday } = await import("@openbooks/engine/src/platform/business-date.ts");
+      const asOf = a.asOf ?? (await businessToday(authz.user.orgId));
+      const [chart, directory] = await Promise.all([
+        loadOrgChart({ orgId: authz.user.orgId, actorId: authz.user.id, asOf }),
+        loadDirectory({
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          ...(a.search ? { search: a.search } : {}),
+          limit: 200,
+        }),
+      ]);
+      return {
+        ok: true,
+        data: {
+          asOf: chart.asOf,
+          headcount: chart.headcount,
+          vacancies: chart.vacancies,
+          layers: chart.layers,
+          roots: chart.roots,
+          directory,
+          href: "/hrm/org-chart",
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+// HR-19 end
+
 // HR-17 begin: continuous-performance read tools. 1:1s and feedback read
 // through the structural scope (own and reports) with the HR grant as
 // the widening leg; calibration reads through the manage grant. Each
 // sits behind its own sub-switch — off means the tool is absent, never
 // an empty answer.
-async function continuousFeatureRefused(orgId: string, key: string): Promise<ToolResult | null> {
-  if (!(await isFeatureEnabled(orgId, "hrm"))) return { ok: false, error: HRM_FEATURE_OFF };
-  if (!(await isFeatureEnabled(orgId, "hrmPerformance"))) return { ok: false, error: HRM_FEATURE_OFF };
-  if (!(await isFeatureEnabled(orgId, key))) return { ok: false, error: HRM_FEATURE_OFF };
-  return null;
-}
 
 const oneOnOneStatuses = ["scheduled", "held", "skipped", "cancelled"] as const;
 
@@ -1732,7 +1972,9 @@ const hrmCalibration: AssistantToolDef = {
 // HR-17 end
 
 // HR-15: the core own-scope inbox tool rides after every slice tool.
-export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting, hrmPerformanceCycles, hrmTurnover, hrmBenefits, hrmMe, automationsStatus, hrmComplianceFindings, hrmCertifiedPayroll, hrmCompensation, hrmPayEquity, hrmQualifications, hrmDispatchCheck, hrmOneOnOnes, hrmFeedback, hrmCalibration, inboxItems];
+export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting, hrmPerformanceCycles, hrmTurnover, hrmBenefits, hrmMe, automationsStatus, hrmComplianceFindings, hrmCertifiedPayroll, hrmCompensation, hrmPayEquity, hrmQualifications, hrmDispatchCheck, hrmOneOnOnes, hrmFeedback, hrmCalibration, hrmDocuments, hrmSurveyResults, hrmOrgChart];
+// HR-15: the core own-scope inbox tool rides after every slice tool.
+HRM_TOOLS.push(inboxItems);
 
 
 // HR-12 end

@@ -991,7 +991,10 @@
     "hrm_compensation_manage": "Executar ciclos, transferir taxas e criar planos e medições",
     "hrm_compensation_approve": "Decidir linhas pelo fluxo de aprovação",
     "hrm_certifications_read": "Ver certificações e prontidão de despacho",
-    "hrm_certifications_manage": "Gerenciar tipos de certificação, requisitos e renovações"
+    "hrm_certifications_manage": "Gerenciar tipos de certificação, requisitos e renovações",
+    "time_clock": "Bater ponto em campo",
+    "time_crew_enter": "Lançar lotes de equipe",
+    "time_kiosk_manage": "Gerenciar quiosques e PINs"
   },
   "ai": {
     "metaTitle": "Configurações de IA",
@@ -2528,6 +2531,51 @@
         "title": "Competências",
         "singularTitle": "Competência",
         "description": "Uma habilidade de uma matriz, vinculável a avaliações, níveis e cargos."
+      },
+      "hrm-document-categories": {
+        "title": "Categorias de documentos",
+        "singularTitle": "Categoria de documento",
+        "description": "Vocabulário declarado pela organização para categorias de documentos de RH — contratos, políticas, ciências. Modelos e regras de retenção usam estas chaves."
+      },
+      "hrm-document-templates": {
+        "title": "Modelos de documentos",
+        "singularTitle": "Modelo de documento",
+        "description": "Modelos reutilizáveis de documentos de RH com campos de mesclagem e assinantes ordenados. Modelos de somente ciência não exigem assinaturas."
+      },
+      "hrm-retention-schedules": {
+        "title": "Regras de retenção",
+        "singularTitle": "Regra de retenção",
+        "description": "Por quanto tempo cada categoria é mantida, a partir de qual evento e se o vencimento exclui ou anonimiza. A suspensão legal bloqueia a execução nominalmente."
+      },
+      "hrm-interview-kits": {
+        "description": "Roteiros de entrevista por vaga: perguntas, atributos e escala.",
+        "singularTitle": "Roteiro de entrevista",
+        "title": "Roteiros de entrevista"
+      },
+      "hrm-interviewer-pools": {
+        "description": "Grupos de entrevistadores com disponibilidade declarada e roteiro base.",
+        "singularTitle": "Grupo de entrevistadores",
+        "title": "Grupos de entrevistadores"
+      },
+      "hrm-kit-attributes": {
+        "description": "Atributos avaliados de um roteiro; os de foco são obrigatórios.",
+        "singularTitle": "Atributo do roteiro",
+        "title": "Atributos do roteiro"
+      },
+      "hrm-kit-questions": {
+        "description": "Perguntas sugeridas por roteiro, com atributo opcional.",
+        "singularTitle": "Pergunta do roteiro",
+        "title": "Perguntas do roteiro"
+      },
+      "hrm-offer-templates": {
+        "description": "Modelos de carta de oferta com cláusulas, em PDF versionados.",
+        "singularTitle": "Modelo de oferta",
+        "title": "Modelos de oferta"
+      },
+      "hrm-retention-rules": {
+        "description": "Regras de retenção: anonimizar ou excluir conforme o calendário.",
+        "singularTitle": "Regra de retenção",
+        "title": "Regras de retenção"
       }
     },
     "fields": {
@@ -2876,7 +2924,38 @@
       "renewalLeadDays": "Antecedência de renovação (dias)",
       "requiresEvidence": "Exige evidência",
       "extraCategories": "Categorias extras",
-      "frameworkId": "Matriz"
+      "frameworkId": "Matriz",
+      "categoryKey": "Categoria",
+      "retainYears": "Retenção (anos)",
+      "fromEvent": "Início da contagem",
+      "bodyTemplate": "Modelo do corpo",
+      "mergeFields": "Campos de mesclagem",
+      "requiresSignature": "Exige assinatura",
+      "signEmployee": "A pessoa empregada assina",
+      "signManager": "A gerência assina",
+      "signHr": "O RH assina",
+      "acknowledgmentOnly": "Somente ciência",
+      "radiusM": "Raio (m)",
+      "center": "Centro",
+      "polygon": "Polígono",
+      "pinRequired": "PIN obrigatório",
+      "photoRequired": "Foto obrigatória",
+      "subjectKind": "Assunto",
+      "stages": "Etapas",
+      "approvalRequired": "Aprovação exigida",
+      "attribute": "Atributo",
+      "attributeId": "Atributo",
+      "availability": "Disponibilidade",
+      "clauses": "Cláusulas",
+      "consentExtensionLeadDays": "Antecedência da prorrogação",
+      "instructions": "Orientações",
+      "isFocusDefault": "Atributo de foco",
+      "kitId": "Roteiro",
+      "pipelineStageId": "Etapa do funil",
+      "question": "Pergunta",
+      "ratingScale": "Escala de avaliação",
+      "regionScope": "Âmbito regional",
+      "retainMonths": "Meses de retenção"
     },
     "fieldHelp": {
       "gapless": "Sem lacunas significa que todos os números da sequência devem ser contabilizados, sem números pulados. Ative somente quando exigências legais ou de auditoria determinarem uma numeração ininterrupta.",
@@ -2960,7 +3039,18 @@
       "rateScheduleJurisdiction": "Vocabulário do pack, texto livre na camada genérica — o pack interpreta.",
       "perDiemComponent": "Componente de ganho pelo qual cruzam os valores. Seu tratamento fiscal é a única declaração.",
       "hrmQualificationValidity": "Deixe vazio para qualificações que não vencem.",
-      "hrmQualificationExtraCategories": "Vocabulário de categorias próprio além das seis integradas."
+      "hrmQualificationExtraCategories": "Vocabulário de categorias próprio além das seis integradas.",
+      "hrmAttributeFocus": "Atributos de foco entram em todo veredito; o resto é opcional.",
+      "hrmKitInstructions": "Orientação ao painel, impressa em cada veredito.",
+      "hrmKitScale": "Ao menos duas das chaves strong_no, no, yes, strong_yes.",
+      "hrmKitStage": "O roteiro vale para esta etapa, ou todas se vazio.",
+      "hrmPoolAvailability": "Janelas como lista JSON com startsAt, endsAt e timezone.",
+      "hrmPoolKit": "Roteiro base para as sessões deste grupo.",
+      "hrmQuestionAttribute": "Vincula a pergunta a um atributo deste roteiro.",
+      "hrmRetentionLeadDays": "Dias antes para pedir prorrogação; vazio não envia e-mail.",
+      "hrmRetentionScope": "Região como JSON: applies_to all ou countries com códigos.",
+      "hrmTemplateBody": "Texto com marcadores para os dados da oferta.",
+      "hrmTemplateClauses": "Cláusulas como lista JSON com key, label, body e default_on."
     },
     "options": {
       "payFrequency": {
@@ -3409,6 +3499,31 @@
         "medical": "Médica",
         "clearance": "Autorização",
         "other": "Outra"
+      },
+      "hrmDocFromEvent": {
+        "completion": "Conclusão",
+        "termination": "Desligamento",
+        "creation": "Criação"
+      },
+      "hrmDocAction": {
+        "delete": "Excluir",
+        "anonymize": "Anonimizar"
+      },
+      "geofenceKind": {
+        "circle": "Círculo",
+        "polygon": "Polígono"
+      },
+      "approvalSubject": {
+        "timesheetWeek": "Semana do timesheet",
+        "crewTimeBatch": "Lote de equipe"
+      },
+      "hrmRetentionAction": {
+        "anonymize": "Anonimizar",
+        "delete": "Excluir"
+      },
+      "hrmRetentionBasis": {
+        "consent": "Consentimento",
+        "inactivity": "Inatividade"
       }
     },
     "payroll": {
@@ -4762,6 +4877,86 @@
     "hrmSuccession": {
       "title": "Talento e sucessão",
       "description": "Avaliações de talento e planos de sucessão por cargo."
+    },
+    "hrmDocuments": {
+      "title": "Documentos de RH",
+      "description": "Documentos de RH da admissão ao desligamento com assinatura eletrônica, modelos e ciências. Desativar nunca exclui dados."
+    },
+    "hrmDocumentRetention": {
+      "title": "Retenção de documentos",
+      "description": "Regras de retenção com exclusão auditada após período de carência. Desativar nunca exclui dados."
+    },
+    "hrmDataSubjectExport": {
+      "title": "Exportações de acesso",
+      "description": "Exportações de acesso com um clique para titulares. Desativar nunca exclui dados."
+    },
+    "hrmSurveys": {
+      "title": "Pesquisas de engajamento",
+      "description": "Pesquisas de engajamento e de pulso com resultados por grau de anonimato. Desativar nunca exclui dados."
+    },
+    "hrmPulseSurveys": {
+      "title": "Pesquisas de pulso",
+      "description": "Cadência de pulso recorrente com tendências. Requer pesquisas."
+    },
+    "hrmOrgChart": {
+      "title": "Organograma",
+      "description": "A árvore da organização com vagas, departamentos e amplitude de controle."
+    },
+    "fieldTime": {
+      "title": "Ponto em campo",
+      "description": "Ponto móvel e em quiosque com geocerca, foto e fila offline; lotes do encarregado; horas de equipamento nos apontamentos."
+    },
+    "fieldTimeGeofence": {
+      "title": "Cercas de ponto",
+      "description": "Conferir a posição com círculos e polígonos do projeto; fora se sinaliza, nunca se recusa."
+    },
+    "fieldTimePhoto": {
+      "title": "Fotos de ponto",
+      "description": "Exigir foto nos pontos móveis."
+    },
+    "fieldTimeKiosk": {
+      "title": "Quiosques de obra",
+      "description": "Aparelhos PIN compartilhados com volta automática."
+    },
+    "fieldTimeCrewEntry": {
+      "title": "Horas da equipe",
+      "description": "Lotes do encarregado por projeto e dia com assinatura e etapas."
+    },
+    "fieldTimeEquipment": {
+      "title": "Equipamento no tempo",
+      "description": "Horas de equipamento em apontamentos e linhas, ao preço do item. Requer equipamento."
+    },
+    "fieldTimeMultiStageApproval": {
+      "title": "Aprovação de horas por etapas",
+      "description": "Cadeia de supervisor, gerente de projeto e folha para timesheets e lotes."
+    },
+    "hrmRecruiting": {
+      "title": "Recrutamento",
+      "description": "Vagas, candidatos, entrevistas e ofertas: da vaga à contratação."
+    },
+    "hrmStructuredInterviews": {
+      "title": "Entrevistas estruturadas",
+      "description": "Roteiros de entrevista com critérios e vereditos cegos do painel."
+    },
+    "hrmInterviewScheduling": {
+      "title": "Agendamento de entrevistas",
+      "description": "Horários propostos com links de autoagendamento para candidatos."
+    },
+    "hrmOfferSigning": {
+      "title": "Assinatura de ofertas",
+      "description": "Ofertas de modelo em PDFs versionados, assinadas no produto."
+    },
+    "hrmJobBoards": {
+      "title": "Portais de vagas",
+      "description": "Página de carreiras interna e publicação com sincronização de resultados."
+    },
+    "hrmCandidateRetention": {
+      "title": "Retenção de candidatos",
+      "description": "Consentimentos e regras de retenção: anonimizar ou excluir no prazo."
+    },
+    "hrmTalentPool": {
+      "title": "Banco de talentos",
+      "description": "Grupos de candidatos anteriores comparados com vagas abertas."
     }
   },
   "backupsManager": {

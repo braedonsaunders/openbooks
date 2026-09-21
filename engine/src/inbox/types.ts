@@ -9,6 +9,8 @@
  * no materialized copy to drift.
  */
 
+import type { SqlExecutor } from "../platform/db.ts";
+
 /** Sort bucket: overdue first, then due soon, then everything else. */
 export type InboxPriority = "overdue" | "due_soon" | "normal";
 
@@ -24,6 +26,9 @@ export type InboxKind =
   | "hrm_qualification_alert"
   | "field_ticket_signature"
   | "timesheet_week"
+  // HR-20 begin
+  | "crew_time_batch"
+  // HR-20 end
   | "expense_report"
   | "notification"
   | "document_signature";
@@ -56,6 +61,12 @@ export interface InboxListContext {
   readonly orgId: string;
   readonly actorId: string;
   readonly asOf: string;
+  /**
+   * HR-20: injectable executor for the feature-off bypass proof — a test
+   * double that throws when a gated table is reached. Absent means the
+   * pooled handle; production callers never set this.
+   */
+  readonly exec?: SqlExecutor;
   /**
    * Authz-derived union scope for the flows leg (roles, subsidiary
    * boundary, budget/pay-run legs). Built by web callers from the session;

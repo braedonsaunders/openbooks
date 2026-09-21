@@ -12,6 +12,13 @@ import { payPeriodsPerYearProblem, semiMonthlyAnchorProblem } from "@openbooks/e
 import { payScheduleSubsidiaryProblem, rescopePayScheduleRuns } from "@openbooks/engine/src/payroll/run-lifecycle.ts";
 import { payComponentTreatmentProblem } from '@openbooks/engine/src/payroll/treatment-bases.ts'
 import { parseRatingScale, PerformanceMathError } from '@openbooks/engine/src/hrm/performance/performance-math.ts'
+// HR-18 begin: recruiting-depth Setup validation runs through the engine
+// owners of each shape (one implementation, two callers).
+import { CANONICAL_RATING_KEYS } from '@openbooks/engine/src/hrm/recruiting/kits.ts'
+import { RecruitingError } from '@openbooks/engine/src/hrm/recruiting/errors.ts'
+import { parseClauses } from '@openbooks/engine/src/hrm/recruiting/offers-signing.ts'
+import { validateAvailabilityWindows } from '@openbooks/engine/src/hrm/recruiting/scheduling.ts'
+// HR-18 end
 import { SETUP_ENTITY_BY_KEY, setupEntityForFeatureState, toSnake, type SetupEntity } from './registry'
 import {
   buildRow,
@@ -27,8 +34,11 @@ import { normalizeHrmProcessTemplateInput } from './hrm-process-template'
 import { normalizeHrmPipelineStageInput } from './hrm-pipeline'
 import { normalizeHrmReviewTemplateInput } from './hrm-review-template'
 import { normalizeHrmCompensationInput } from './hrm-compensation'
+import { validateCategoryKey } from '@openbooks/engine/src/hrm/documents/categories.ts'
+import { validateTemplateInput } from '@openbooks/engine/src/hrm/documents/templates.ts'
 import { benefitPlanShapeProblem } from './hrm-benefits'
 import { leavePolicyRuleProblem, normalizeHrmLeavePolicyInput } from './hrm-leave-policy'
+import { mergeTemplateSlots, normalizeHrmDocumentTemplateInput } from './hrm-document-template'
 import { applyRuleSlotColumns } from './hrm-rule-slots'
 import { normalizeTaxReturnFormInput } from './tax-return-form'
 import { saveSetupBook } from './books'
@@ -263,6 +273,23 @@ function writableSetupEntity(
     )),
   }
 }
+
+// HR-18 begin: create-time defaults for recruiting-depth Setup. A kit
+// created without a declared scale rates on the full canonical scale —
+// defaulted here (before coercion), because the generic stringArray
+// coercion would otherwise store an empty list the storage CHECK refuses
+// without naming the field. Present-but-empty stays empty so the
+// integrity check below can refuse it by name.
+function foldRecruitingSetupCreate(
+  entityKey: string,
+  rawBody: Record<string, unknown>,
+): Record<string, unknown> {
+  if (entityKey === 'hrm-interview-kits' && rawBody.ratingScale === undefined) {
+    return { ...rawBody, ratingScale: [...CANONICAL_RATING_KEYS] }
+  }
+  return rawBody
+}
+// HR-18 end
 
 /** Domain checks that cannot be expressed by the generic field coercer. */
 export async function validateEntityIntegrity(
@@ -1046,6 +1073,70 @@ export async function validateEntityIntegrity(
     // CHECK would refuse with a worse message.
     body.ratingScale = scale
   }
+  // HR-19 begin: document templates (0230) — the folded signer/merge
+  // slots are proved with the engine's own words (validateTemplateInput
+  // shares the API's validation; never a second classifier) and the
+  // category must be declared in hrm_document_categories. Edits merge
+  // the stored row first so a partial slot edit keeps the untouched
+  // signer set (review-template precedent).
+  if (entity.key === 'hrm-document-templates') {
+    let current: { signer_roles?: unknown; merge_fields?: unknown } | null = null
+    if (rowId) {
+      const rows = (await executor.execute(sql`
+        select signer_roles, merge_fields, category_key as "categoryKey", name as "name",
+               body_template as "bodyTemplate", requires_signature as "requiresSignature",
+               acknowledgment_only as "acknowledgmentOnly"
+          from hrm_document_templates where id = ${rowId} and org_id = ${orgId}`)).rows as Record<string, unknown>[]
+      if (!rows[0]) return 'Document template not found'
+      current = rows[0]
+    }
+    const merged = mergeTemplateSlots(current, body)
+    const probe = {
+      name: body.name ?? (current as Record<string, unknown> | null)?.name ?? '',
+      categoryKey: body.categoryKey ?? (current as Record<string, unknown> | null)?.categoryKey ?? '',
+      bodyTemplate: body.bodyTemplate ?? (current as Record<string, unknown> | null)?.bodyTemplate ?? '',
+      mergeFields: merged.mergeFields,
+      requiresSignature: body.requiresSignature ?? (current as Record<string, unknown> | null)?.requiresSignature ?? false,
+      signerRoles: merged.signerRoles,
+      acknowledgmentOnly: body.acknowledgmentOnly ?? (current as Record<string, unknown> | null)?.acknowledgmentOnly ?? false,
+    }
+    try {
+      validateTemplateInput(probe)
+    } catch (e) {
+      return e instanceof Error ? e.message : 'Invalid document template'
+    }
+    const declared = await executor.execute(sql`
+      select 1 from hrm_document_categories
+       where org_id = ${orgId} and key = ${String(probe.categoryKey)} and is_active`)
+    if (!declared.rows.length) {
+      return `Category ${JSON.stringify(String(probe.categoryKey))} is not declared — declare it under Setup → Workforce → Document Categories first`
+    }
+    body.signerRoles = merged.signerRoles
+    body.mergeFields = merged.mergeFields
+  }
+  // HR-19 end
+  // HR-19 begin: retention schedules (0230) — a schedule for an
+  // undeclared category would never match a document, so the save is
+  // refused against the Setup vocabulary instead of stored as a dead
+  // rule. Categories themselves prove key shape with the engine's own
+  // words (validateCategoryKey).
+  if (entity.key === 'hrm-retention-schedules') {
+    const categoryKey = String(body.categoryKey ?? '').trim()
+    const declared = await executor.execute(sql`
+      select 1 from hrm_document_categories
+       where org_id = ${orgId} and key = ${categoryKey} and is_active`)
+    if (!declared.rows.length) {
+      return `Category ${JSON.stringify(categoryKey)} is not declared — declare it under Setup → Workforce → Document Categories first`
+    }
+  }
+  if (entity.key === 'hrm-document-categories') {
+    try {
+      validateCategoryKey(body.key)
+    } catch (e) {
+      return e instanceof Error ? e.message : 'Invalid category key'
+    }
+  }
+  // HR-19 end
   if (entity.key === 'hrm-review-template-sections') {
     let values = body
     if (rowId) {
@@ -1084,6 +1175,170 @@ export async function validateEntityIntegrity(
     `)
     if (!refs.rows[0]?.section_ok) return 'The parent section is not visible in this organization'
   }
+  // HR-18 begin: recruiting-depth configuration (0229). Every structured
+  // field is validated through the engine service that owns the shape —
+  // validateAvailabilityWindows, parseClauses, CANONICAL_RATING_KEYS —
+  // and parents prove visibility in this org (the current row merges on
+  // edit, so a partial edit validates the stored remainder instead of
+  // refusing the untouched structure). Validation only: normalized values
+  // reach the columns through the pre-fold (create defaults) and the
+  // generic coercion, never by mutating the body after buildRow ran.
+  // Setup can never store a row the depth services refuse to read.
+  if (entity.key === 'hrm-interview-kits') {
+    let values = body
+    if (rowId) {
+      const current = await executor.execute(sql`
+        select pipeline_stage_id as "pipelineStageId", rating_scale as "ratingScale"
+          from hrm_interview_kits where id = ${rowId} and org_id = ${orgId}
+      `)
+      if (!current.rows[0]) return 'Interview kit not found'
+      values = { ...(current.rows[0] as Record<string, unknown>), ...body }
+    }
+    const scale = values.ratingScale
+    // Absent on create is defaulted before coercion (see
+    // foldRecruitingSetupCreate); present-but-empty is refused here, and
+    // anything outside the canonical vocabulary is refused by name — the
+    // storage CHECK would otherwise fail without naming the field.
+    if (scale !== undefined && scale !== null) {
+      const keys = Array.isArray(scale) ? scale.map(String) : []
+      const allowed = new Set<string>(CANONICAL_RATING_KEYS as readonly string[])
+      if (keys.length < 2 || keys.some((key) => !allowed.has(key))) {
+        return 'The rating scale lists at least two of strong_no, no, yes, strong_yes'
+      }
+    }
+    if (values.pipelineStageId) {
+      const stage = await executor.execute(sql`
+        select 1 from hrm_pipeline_stages where id = ${String(values.pipelineStageId)} and org_id = ${orgId}
+      `)
+      if (!stage.rows[0]) return 'The pipeline stage is not visible in this organization'
+    }
+  }
+  if (entity.key === 'hrm-kit-attributes') {
+    let values = body
+    if (rowId) {
+      const current = await executor.execute(sql`
+        select kit_id as "kitId" from hrm_scorecard_attributes where id = ${rowId} and org_id = ${orgId}
+      `)
+      if (!current.rows[0]) return 'Scorecard attribute not found'
+      values = { ...(current.rows[0] as Record<string, unknown>), ...body }
+    }
+    if (values.position !== undefined && (!Number.isInteger(Number(values.position)) || Number(values.position) < 0)) {
+      return 'Attribute position is a zero-based integer ordering the scorecard'
+    }
+    const kit = await executor.execute(sql`
+      select 1 from hrm_interview_kits where id = ${String(values.kitId ?? '')} and org_id = ${orgId}
+    `)
+    if (!kit.rows[0]) return 'The parent kit is not visible in this organization'
+  }
+  if (entity.key === 'hrm-kit-questions') {
+    let values = body
+    if (rowId) {
+      const current = await executor.execute(sql`
+        select kit_id as "kitId", attribute_id as "attributeId"
+          from hrm_interview_kit_questions where id = ${rowId} and org_id = ${orgId}
+      `)
+      if (!current.rows[0]) return 'Kit question not found'
+      values = { ...(current.rows[0] as Record<string, unknown>), ...body }
+    }
+    if (values.position !== undefined && (!Number.isInteger(Number(values.position)) || Number(values.position) < 0)) {
+      return 'Question position is a zero-based integer ordering the guide'
+    }
+    const kit = await executor.execute(sql`
+      select 1 from hrm_interview_kits where id = ${String(values.kitId ?? '')} and org_id = ${orgId}
+    `)
+    if (!kit.rows[0]) return 'The parent kit is not visible in this organization'
+    if (values.attributeId) {
+      const attribute = await executor.execute(sql`
+        select 1 from hrm_scorecard_attributes
+         where id = ${String(values.attributeId)} and org_id = ${orgId} and kit_id = ${String(values.kitId ?? '')}
+      `)
+      if (!attribute.rows[0]) return 'The attribute belongs to a different kit — pin the question to one of this kit\u2019s attributes'
+    }
+  }
+  if (entity.key === 'hrm-interviewer-pools') {
+    let values = body
+    if (rowId) {
+      const current = await executor.execute(sql`
+        select kit_id as "kitId", availability as "availability"
+          from hrm_interviewer_pools where id = ${rowId} and org_id = ${orgId}
+      `)
+      if (!current.rows[0]) return 'Interviewer pool not found'
+      values = { ...(current.rows[0] as Record<string, unknown>), ...body }
+    }
+    if (values.availability !== undefined && values.availability !== null) {
+      try {
+        validateAvailabilityWindows(values.availability)
+      } catch (e) {
+        if (e instanceof RecruitingError) return e.message
+        throw e
+      }
+    }
+    if (values.kitId) {
+      const kit = await executor.execute(sql`
+        select 1 from hrm_interview_kits where id = ${String(values.kitId)} and org_id = ${orgId}
+      `)
+      if (!kit.rows[0]) return 'The default kit is not visible in this organization'
+    }
+  }
+  if (entity.key === 'hrm-offer-templates') {
+    let values = body
+    if (rowId) {
+      const current = await executor.execute(sql`
+        select name as "name", clauses as "clauses"
+          from hrm_offer_templates where id = ${rowId} and org_id = ${orgId}
+      `)
+      if (!current.rows[0]) return 'Offer template not found'
+      values = { ...(current.rows[0] as Record<string, unknown>), ...body }
+    }
+    if (values.clauses !== undefined && values.clauses !== null) {
+      try {
+        parseClauses(values.clauses, String(values.name ?? 'template'))
+      } catch (e) {
+        if (e instanceof RecruitingError) return e.message
+        throw e
+      }
+    }
+  }
+  if (entity.key === 'hrm-retention-rules') {
+    let values = body
+    if (rowId) {
+      const current = await executor.execute(sql`
+        select region_scope as "regionScope", basis as "basis", action as "action",
+               retain_months as "retainMonths", consent_extension_lead_days as "consentExtensionLeadDays"
+          from hrm_retention_rules where id = ${rowId} and org_id = ${orgId}
+      `)
+      if (!current.rows[0]) return 'Retention rule not found'
+      values = { ...(current.rows[0] as Record<string, unknown>), ...body }
+    }
+    if (values.basis !== undefined && !['inactivity', 'consent'].includes(String(values.basis))) {
+      return 'The rule basis is inactivity or consent'
+    }
+    if (values.action !== undefined && !['anonymize', 'delete'].includes(String(values.action))) {
+      return 'The rule action is anonymize or delete'
+    }
+    if (values.retainMonths !== undefined && (!Number.isInteger(Number(values.retainMonths)) || Number(values.retainMonths) < 1)) {
+      return 'Retention months is a positive integer'
+    }
+    if (values.consentExtensionLeadDays !== undefined && values.consentExtensionLeadDays !== null
+      && (!Number.isInteger(Number(values.consentExtensionLeadDays)) || Number(values.consentExtensionLeadDays) < 1)) {
+      return 'Extension lead days is a positive integer, or empty for no extension email'
+    }
+    const scope = values.regionScope as Record<string, unknown> | null | undefined
+    if (scope !== undefined && scope !== null) {
+      if (typeof scope !== 'object' || Array.isArray(scope)) return 'The region scope is an object with applies_to all or countries'
+      const appliesTo = (scope as Record<string, unknown>).applies_to
+      if (appliesTo !== undefined && appliesTo !== 'all' && appliesTo !== 'countries') {
+        return 'The region scope applies_to is all or countries'
+      }
+      if (appliesTo === 'countries') {
+        const countries = (scope as Record<string, unknown>).countries
+        if (!Array.isArray(countries) || countries.length === 0 || countries.some((code) => typeof code !== 'string' || code.trim().length === 0)) {
+          return 'The region scope names at least one country code'
+        }
+      }
+    }
+  }
+  // HR-18 end
   // HRM compensation architecture (0221, HR-12): levels carry at least
   // one directive criterion with a positive weight (merged on edit so a
   // partial slot edit keeps the untouched weights); the family, when
@@ -1214,7 +1469,9 @@ export async function createSetupRecord(
     }
   }
 
-  const body = normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, normalizeHrmReviewTemplateInput(entity.key, normalizeHrmCompensationInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody))))))
+  // HR-18: recruiting-depth create defaults fold before the generic coercion.
+  const recruitingBody = foldRecruitingSetupCreate(entity.key, rawBody)
+  const body = normalizeHrmDocumentTemplateInput(entity.key, normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, normalizeHrmReviewTemplateInput(entity.key, normalizeHrmCompensationInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, recruitingBody)))))))
   const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
   const writableEntity = writableSetupEntity(entity, {
     multiSubsidiary: await subsidiaryFeatureEnabled(orgId),
@@ -1423,7 +1680,7 @@ export async function updateSetupRecord(
   if (!(await setupEntityEnabled(entity, orgId))) return { status: 404, body: { error: 'unknown setup entity' } }
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
 
-  const body = normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, normalizeHrmReviewTemplateInput(entity.key, normalizeHrmCompensationInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody))))))
+  const body = normalizeHrmDocumentTemplateInput(entity.key, normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, normalizeHrmReviewTemplateInput(entity.key, normalizeHrmCompensationInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody)))))))
   const id = String(body.id ?? '')
   if (!id) return { status: 400, body: { error: 'id required' } }
   if (entity.dataSource !== 'extension-settings' && idColumn(entity) === 'id' && !UUID_RE.test(id)) {

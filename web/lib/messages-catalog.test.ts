@@ -3013,7 +3013,9 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   // HR-17: 3844 = 3825 on b4b4fe256 plus 19 continuous-performance keys
   // (6 features, 2 setup entities, 1 setup field); zh/pt-BR completeness
   // is asserted per-key below.
-  assert.equal(wanted.length, 3844, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  // HR-17 + HR-18: 3906 = 3844 on 12359058e (3825 plus 19 continuous-performance
+  // keys) plus 62 recruiting-depth keys; zh/pt-BR completeness is asserted per-key below.
+  assert.equal(wanted.length, 3969, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3218,6 +3220,9 @@ test('admin copy ships translated in de and ja (i2)', () => {
     'de:admin.features.banking.title',
     'de:admin.features.budgets.title',
     'de:admin.features.crm.title',
+    // HR-18: Recruiting is the German product term (Duden-listed), not
+    // untranslated English.
+    'de:admin.features.hrmRecruiting.title',
     'de:admin.flows.gate.mode',
     'de:admin.flows.new.name',
     'de:admin.flows.runs.table.status',
@@ -3372,11 +3377,19 @@ test('admin copy ships translated in de and ja (i2)', () => {
     'ja:admin.setup.paymentOperations.schemes.sepa_core',
     'ja:admin.setup.paymentProviders.webhookUrl',
     'ja:admin.setup.wizard.company.namePlaceholder',
+    // HR-20: Polygon and Radius (m) are the ordinary German terms, not
+    // untranslated English.
+    'de:admin.setup.fields.polygon',
+    'de:admin.setup.fields.radiusM',
+    'de:admin.setup.options.geofenceKind.polygon',
   ])
   // HR-17: count and hash recomputed over the sorted key inventory for the
   // 19 continuous-performance keys; de/ja completeness asserted per-key below.
-  const ADMIN_I2_SOURCE_COUNT = 3844
-  const ADMIN_I2_SOURCE_HASH = '2ebe1e5de3a8a2c782a3fa593e8bc22849b615c60ece383e30fbd025ed2a17c8'
+  // HR-17 + HR-18: count and hash recomputed over the sorted key inventory
+  // for the continuous-performance and recruiting-depth keys; de/ja completeness
+  // asserted per-key below.
+  const ADMIN_I2_SOURCE_COUNT = 3969
+  const ADMIN_I2_SOURCE_HASH = '5f86af22561e7464c4e87423929a2c691fa5d772ff33cd87e7451d7929a19eb6'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))
@@ -4443,13 +4456,6 @@ test('I10 documents sharing trash and activity copy ships translated in every lo
   }
 })
 const I14_IDENTICAL_BY_FACT = new Set([
-    'pt-BR:reports.catalog.columns.hrm_feedback.id|Feedback (id)',
-    'pt-BR:reports.catalog.columns.hrm_one_on_ones.status|Status',
-    'pt-BR:reports.catalog.entities.hrm_feedback.label|Feedback',
-    'de:reports.catalog.columns.hrm_one_on_ones.status|Status',
-    'de:reports.catalog.entities.hrm_feedback.label|Feedback',
-    'fr:reports.catalog.columns.hrm_talent_reviews.performance_key|Performance',
-    'fr:reports.catalog.columns.hrm_calibration_entries.session|Session',
   // HR-16 report columns: these headings are the same word in the target
   // language, reviewed one by one — Version/Status/Name/Error/Action/Code
   // are borrowed or identical forms, not untranslated English.
@@ -4467,6 +4473,56 @@ const I14_IDENTICAL_BY_FACT = new Set([
   'fr:reports.catalog.columns.hrm_action_reasons.action|Action',
   'de:reports.catalog.columns.hrm_action_reasons.reason_code|Code',
   'fr:reports.catalog.columns.hrm_action_reasons.reason_code|Code',
+  // HR-19 report columns: these headings are the same word in the target
+  // language, reviewed one by one — Person/Status/Name/Document/Action/
+  // Invitations/Manager are borrowed or identical forms, not untranslated
+  // English.
+  'de:reports.catalog.columns.hrm_documents.person|Person',
+  'de:reports.catalog.columns.hrm_documents.status|Status',
+  'de:reports.catalog.columns.hrm_document_signers.status|Status',
+  'de:reports.catalog.columns.hrm_survey_results.name|Name',
+  'de:reports.catalog.columns.hrm_survey_results.status|Status',
+  'fr:reports.catalog.columns.hrm_documents.document_id|Document (id)',
+  'fr:reports.catalog.columns.hrm_document_signers.document|Document',
+  'fr:reports.catalog.columns.hrm_document_signers.document_id|Document (id)',
+  'fr:reports.catalog.columns.hrm_retention_actions.document|Document',
+  'fr:reports.catalog.columns.hrm_retention_actions.action|Action',
+  'fr:reports.catalog.columns.hrm_retention_actions.document_id|Document (id)',
+  'fr:reports.catalog.columns.hrm_survey_results.invitations|Invitations',
+  'fr:reports.catalog.columns.hrm_org_chart.manager|Manager',
+  'pt-BR:reports.catalog.columns.hrm_documents.status|Status',
+  'pt-BR:reports.catalog.columns.hrm_document_signers.status|Status',
+  'pt-BR:reports.catalog.columns.hrm_survey_results.status|Status',
+  // HR-20 report columns: these headings are the same word in the target
+  // language, reviewed one by one — Action/Source are ordinary French,
+  // Status is the ordinary German and pt-BR term, Latitude/Longitude are
+  // identical forms in fr/es/de/pt-BR, not untranslated English.
+  'fr:reports.catalog.columns.field_clock_events.kind|Action',
+  'fr:reports.catalog.columns.field_clock_events.source|Source',
+  'de:reports.catalog.columns.field_clock_events.status|Status',
+  'pt-BR:reports.catalog.columns.field_clock_events.status|Status',
+  'fr:reports.catalog.columns.field_clock_coordinates.latitude|Latitude',
+  'es:reports.catalog.columns.field_clock_coordinates.latitude|Latitude',
+  'de:reports.catalog.columns.field_clock_coordinates.latitude|Latitude',
+  'pt-BR:reports.catalog.columns.field_clock_coordinates.latitude|Latitude',
+  'fr:reports.catalog.columns.field_clock_coordinates.longitude|Longitude',
+  'es:reports.catalog.columns.field_clock_coordinates.longitude|Longitude',
+  'de:reports.catalog.columns.field_clock_coordinates.longitude|Longitude',
+  'pt-BR:reports.catalog.columns.field_clock_coordinates.longitude|Longitude',
+  'de:reports.catalog.columns.crew_time_batches.status|Status',
+  'pt-BR:reports.catalog.columns.crew_time_batches.status|Status',
+  // HR-20b: HR-17's keys, red on mainline fe8f4175f (copies of en with no
+  // identical entry). Each is the ordinary word in the target language —
+  // Session/Performance are French, Feedback/Status are the German and
+  // pt-BR terms (HR-17 itself kept pt-BR hrmFeedback.title as Feedback) —
+  // added so the re-pinned suite is green; HR-17 owns the copy.
+  'fr:reports.catalog.columns.hrm_calibration_entries.session|Session',
+  'fr:reports.catalog.columns.hrm_talent_reviews.performance_key|Performance',
+  'de:reports.catalog.entities.hrm_feedback.label|Feedback',
+  'de:reports.catalog.columns.hrm_one_on_ones.status|Status',
+  'pt-BR:reports.catalog.entities.hrm_feedback.label|Feedback',
+  'pt-BR:reports.catalog.columns.hrm_one_on_ones.status|Status',
+  'pt-BR:reports.catalog.columns.hrm_feedback.id|Feedback (id)',
     'de:reports.catalog.columns.hrm_benefit_enrollments.person|Person',
     'de:reports.catalog.columns.hrm_benefit_enrollments.plan|Plan',
     'de:reports.catalog.columns.hrm_benefit_enrollments.status|Status',
@@ -4506,6 +4562,15 @@ const I14_IDENTICAL_BY_FACT = new Set([
     'fr:reports.catalog.columns.hrm_qualifications.qualification_id|Qualification (id)',
     'fr:reports.catalog.columns.hrm_qualification_alerts.type_name|Type',
     'fr:reports.catalog.columns.hrm_qualification_alerts.qualification_id|Qualification (id)',
+    // HR-18: reviewed cognates in the recruiting-depth report columns —
+    // Signature, Version, Note (fr), No (es), Version, Pool (de) are the
+    // correct terms in those locales, not untranslated English.
+    'fr:reports.catalog.columns.hrm_offers.signature_status|Signature',
+    'fr:reports.catalog.columns.hrm_offers.version|Version',
+    'fr:reports.catalog.columns.hrm_pool_members.note|Note',
+    'es:reports.catalog.columns.hrm_scorecards.no|No',
+    'de:reports.catalog.columns.hrm_offers.version|Version',
+    'de:reports.catalog.columns.hrm_pool_members.pool|Pool',
   "de:accounts.types.assetBank|Bank",
   "de:common.actions.pdf|PDF",
   "de:common.auditTrail.systemActor|System",
@@ -5196,7 +5261,7 @@ const I14_IDENTICAL_BY_FACT = new Set([
 const I14_FILE_COUNTS: Record<string, number> = {
   "items": 161,
   "inventory": 159,
-  "reports": 1552,
+  "reports": 1689,
   "sync": 172,
   "login": 33,
   "accounts": 82,

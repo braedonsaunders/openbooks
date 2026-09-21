@@ -991,7 +991,10 @@
     "hrm_compensation_manage": "运行周期、推送标准、编写规划与快照",
     "hrm_compensation_approve": "经审批流决定明细",
     "hrm_certifications_read": "查看认证与派工就绪情况",
-    "hrm_certifications_manage": "管理认证类型、要求与续期"
+    "hrm_certifications_manage": "管理认证类型、要求与续期",
+    "time_clock": "外勤打卡",
+    "time_crew_enter": "录入班组批次",
+    "time_kiosk_manage": "管理终端与PIN"
   },
   "ai": {
     "metaTitle": "AI 设置",
@@ -2528,6 +2531,51 @@
         "title": "能力项",
         "singularTitle": "能力项",
         "description": "框架中的一项技能,可关联评估、职级与职位。"
+      },
+      "hrm-document-categories": {
+        "title": "文档类别",
+        "singularTitle": "文档类别",
+        "description": "组织自定义的人力资源文档类别词汇——合同、政策、确认书。模板和保留规则使用这些键。"
+      },
+      "hrm-document-templates": {
+        "title": "文档模板",
+        "singularTitle": "文档模板",
+        "description": "可复用的人力资源文档模板，含合并字段和有序签署人。仅确认模板无需签名。"
+      },
+      "hrm-retention-schedules": {
+        "title": "保留规则",
+        "singularTitle": "保留规则",
+        "description": "每个文档类别的保留期限、起算事件，以及到期时删除还是匿名化。法定保留会按名称阻止执行。"
+      },
+      "hrm-interview-kits": {
+        "description": "各需求的面试指南：问题、评分项与量表。",
+        "singularTitle": "面试指南",
+        "title": "面试指南"
+      },
+      "hrm-interviewer-pools": {
+        "description": "面试官分组，含已声明空闲时段与默认指南。",
+        "singularTitle": "面试官分组",
+        "title": "面试官分组"
+      },
+      "hrm-kit-attributes": {
+        "description": "指南的评分项；重点项为必评。",
+        "singularTitle": "指南评分项",
+        "title": "指南评分项"
+      },
+      "hrm-kit-questions": {
+        "description": "各指南的建议问题，可关联某一评分项。",
+        "singularTitle": "指南问题",
+        "title": "指南问题"
+      },
+      "hrm-offer-templates": {
+        "description": "录用函模板，含条款，生成版本化PDF。",
+        "singularTitle": "录用函模板",
+        "title": "录用函模板"
+      },
+      "hrm-retention-rules": {
+        "description": "保留规则：到期匿名化或删除。",
+        "singularTitle": "保留规则",
+        "title": "保留规则"
       }
     },
     "fields": {
@@ -2876,7 +2924,38 @@
       "renewalLeadDays": "续期提前期（天）",
       "requiresEvidence": "需要证明",
       "extraCategories": "附加类别",
-      "frameworkId": "框架"
+      "frameworkId": "框架",
+      "categoryKey": "类别",
+      "retainYears": "保留期限（年）",
+      "fromEvent": "起算时间",
+      "bodyTemplate": "正文模板",
+      "mergeFields": "合并字段",
+      "requiresSignature": "需要签名",
+      "signEmployee": "员工签署",
+      "signManager": "经理签署",
+      "signHr": "人力资源签署",
+      "acknowledgmentOnly": "仅确认",
+      "radiusM": "半径（米）",
+      "center": "中心",
+      "polygon": "多边形",
+      "pinRequired": "需要PIN",
+      "photoRequired": "需要拍照",
+      "subjectKind": "主题",
+      "stages": "阶段",
+      "approvalRequired": "需要审批",
+      "attribute": "评分项",
+      "attributeId": "评分项",
+      "availability": "空闲时段",
+      "clauses": "条款",
+      "consentExtensionLeadDays": "延长提前天数",
+      "instructions": "指引",
+      "isFocusDefault": "重点项",
+      "kitId": "指南",
+      "pipelineStageId": "招聘阶段",
+      "question": "问题",
+      "ratingScale": "评分量表",
+      "regionScope": "地区范围",
+      "retainMonths": "保留月数"
     },
     "fieldHelp": {
       "gapless": "无间隔表示序列中的每个编号都必须有记录，不能跳号。仅在法律或审计要求必须连续编号时启用。",
@@ -2960,7 +3039,18 @@
       "rateScheduleJurisdiction": "工资包词汇，通用层为自由文本 — 由工资包解释。",
       "perDiemComponent": "金额通过的所得组成部分。其税务处理是唯一的应税性声明。",
       "hrmQualificationValidity": "永不过期的资质请留空。",
-      "hrmQualificationExtraCategories": "除六个内置类别外的自有类别词汇。"
+      "hrmQualificationExtraCategories": "除六个内置类别外的自有类别词汇。",
+      "hrmAttributeFocus": "重点项须在每份评价中打分，其余可选。",
+      "hrmKitInstructions": "给面试小组的指引，印于每份评价顶部。",
+      "hrmKitScale": "至少包含strong_no、no、yes、strong_yes中的两项。",
+      "hrmKitStage": "该指南适用于此招聘阶段，留空则全局适用。",
+      "hrmPoolAvailability": "JSON列表，含startsAt、endsAt和timezone。",
+      "hrmPoolKit": "该分组面试的默认指南。",
+      "hrmQuestionAttribute": "将问题关联到本指南的某一评分项。",
+      "hrmRetentionLeadDays": "到期前请求延长的天数，留空则不发邮件。",
+      "hrmRetentionScope": "JSON地区：applies_to all或countries及代码。",
+      "hrmTemplateBody": "正文，含录用数据的占位符。",
+      "hrmTemplateClauses": "JSON条款列表，含key、label、body和default_on。"
     },
     "options": {
       "payFrequency": {
@@ -3409,6 +3499,31 @@
         "medical": "医疗",
         "clearance": "许可",
         "other": "其他"
+      },
+      "hrmDocFromEvent": {
+        "completion": "完成",
+        "termination": "离职",
+        "creation": "创建"
+      },
+      "hrmDocAction": {
+        "delete": "删除",
+        "anonymize": "匿名化"
+      },
+      "geofenceKind": {
+        "circle": "圆形",
+        "polygon": "多边形"
+      },
+      "approvalSubject": {
+        "timesheetWeek": "工时周",
+        "crewTimeBatch": "班组批次"
+      },
+      "hrmRetentionAction": {
+        "anonymize": "匿名化",
+        "delete": "删除"
+      },
+      "hrmRetentionBasis": {
+        "consent": "同意",
+        "inactivity": "无动态"
       }
     },
     "payroll": {
@@ -4762,6 +4877,86 @@
     "hrmSuccession": {
       "title": "人才与继任",
       "description": "各职位的人才评估与继任计划。"
+    },
+    "hrmDocuments": {
+      "title": "人力资源文档",
+      "description": "从入职到离职的人力资源文档，支持电子签名、模板和确认书。关闭功能不会删除数据。"
+    },
+    "hrmDocumentRetention": {
+      "title": "文档保留",
+      "description": "宽限期后经审计删除的保留规则。关闭功能不会删除数据。"
+    },
+    "hrmDataSubjectExport": {
+      "title": "主体访问导出",
+      "description": "面向数据主体的一键访问导出。关闭功能不会删除数据。"
+    },
+    "hrmSurveys": {
+      "title": "敬业度调查",
+      "description": "具有匿名等级结果的敬业度和脉动调查。关闭功能不会删除数据。"
+    },
+    "hrmPulseSurveys": {
+      "title": "脉动调查",
+      "description": "带趋势的定期脉动调查。需要调查功能。"
+    },
+    "hrmOrgChart": {
+      "title": "组织架构图",
+      "description": "显示空缺、部门和管理幅度的组织树。"
+    },
+    "fieldTime": {
+      "title": "外勤打卡",
+      "description": "带围栏、拍照、离线队列的手机／终端打卡，工长批次，工时附设备工时。"
+    },
+    "fieldTimeGeofence": {
+      "title": "打卡围栏",
+      "description": "按项目的圆和多边形核对位置；围栏外只标记，不拒绝。"
+    },
+    "fieldTimePhoto": {
+      "title": "打卡拍照",
+      "description": "手机打卡必须拍照。"
+    },
+    "fieldTimeKiosk": {
+      "title": "工地终端",
+      "description": "共用PIN设备，自动回到待机。"
+    },
+    "fieldTimeCrewEntry": {
+      "title": "班组工时",
+      "description": "工长按项目按日填报，签名并分阶段审批。"
+    },
+    "fieldTimeEquipment": {
+      "title": "工时附设备",
+      "description": "工时与批次行的设备工时，按设备计费品目计价。需要设备功能。"
+    },
+    "fieldTimeMultiStageApproval": {
+      "title": "工时多级审批",
+      "description": "工时单与班组批次的主管、项目经理、薪酬审批链。"
+    },
+    "hrmRecruiting": {
+      "title": "招聘",
+      "description": "需求、候选人、面试与录用：从空缺到入职的全流程。"
+    },
+    "hrmStructuredInterviews": {
+      "title": "结构化面试",
+      "description": "带评分维度的面试题库与盲审小组结论。"
+    },
+    "hrmInterviewScheduling": {
+      "title": "面试排期",
+      "description": "附候选人自助预约链接的建议时段。"
+    },
+    "hrmOfferSigning": {
+      "title": "录用函签署",
+      "description": "模板录用函生成版本化PDF并在产品内签署。"
+    },
+    "hrmJobBoards": {
+      "title": "招聘渠道",
+      "description": "内部招聘页与信息流发布，附录用结果回传。"
+    },
+    "hrmCandidateRetention": {
+      "title": "候选人保留",
+      "description": "同意采集与保留规则：到期匿名化或删除。"
+    },
+    "hrmTalentPool": {
+      "title": "人才库",
+      "description": "将往期候选人与在招职位匹配的人才池。"
     }
   },
   "backupsManager": {

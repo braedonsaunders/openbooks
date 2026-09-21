@@ -13,7 +13,10 @@
       "benefits": "福利",
       "compliance": "合规",
       "compensation": "薪酬",
-      "qualifications": "资质"
+      "qualifications": "资质",
+      "documents": "文档",
+      "surveys": "调查",
+      "orgChart": "组织架构图"
     },
     "recruiting": {
       "title": "招聘",
@@ -663,6 +666,92 @@
       "email": "邮箱",
       "phone": "电话",
       "source": "来源"
+    },
+    "consent": {
+      "future_roles": "未来职位",
+      "talent_pool": "人才库",
+      "this_application": "本次申请"
+    },
+    "depth": {
+      "applies": "{count}份申请",
+      "blinded": "您提交后他人评价可见。",
+      "bookedSlots": "已预定{count}个",
+      "close": "关闭",
+      "columns": {
+        "applies": "申请",
+        "board": "渠道",
+        "candidate": "候选人",
+        "job": "职位",
+        "kind": "形式",
+        "members": "人数",
+        "name": "名称",
+        "requisition": "需求",
+        "scorecards": "评价",
+        "signature": "签署",
+        "slots": "时段",
+        "status": "状态",
+        "versions": "版本",
+        "when": "时间"
+      },
+      "consentTitle": "同意",
+      "dispositionLog": "渠道日志",
+      "empty": "此处暂无内容。",
+      "failed": "保存失败。",
+      "kit": "题库",
+      "matchToOpening": "匹配在招职位",
+      "members": "{count}人",
+      "missing": "待提交",
+      "myScorecard": "我的评价",
+      "others": "小组评价",
+      "overall": "总体",
+      "pause": "暂停",
+      "poolMembers": "成员",
+      "proposedSlots": "已提议{count}个",
+      "proposeFromPool": "从分组提议",
+      "publish": "发布",
+      "questions": "问题",
+      "remove": "移除",
+      "retentionDate": "保留至",
+      "scorecards": "评价{submitted}/{total}",
+      "sendLink": "发送签署链接",
+      "signatureState": "签署",
+      "slots": "时段",
+      "submitScorecard": "提交评价",
+      "summary": "汇总",
+      "tagsLabel": "标签（逗号分隔）",
+      "versionHistory": "版本历史",
+      "versions": "{count}个版本",
+      "voidSignature": "作废签署"
+    },
+    "posting": {
+      "closed": "已关闭",
+      "draft": "草稿",
+      "error": "错误",
+      "paused": "已暂停",
+      "published": "已发布"
+    },
+    "postingEvent": {
+      "apply_received": "收到申请",
+      "closed": "已关闭",
+      "disposition_sent": "已回传结果",
+      "error": "错误",
+      "paused": "已暂停",
+      "published": "已发布"
+    },
+    "signature": {
+      "declined": "已拒绝",
+      "sent": "已发送",
+      "signed": "已签署",
+      "unsigned": "未签署",
+      "viewed": "已查看",
+      "voided": "已作废"
+    },
+    "tabs": {
+      "interviews": "面试",
+      "offers": "录用函",
+      "openings": "需求",
+      "pools": "人才库",
+      "postings": "渠道"
     }
   },
   "performance": {
@@ -928,7 +1017,9 @@
       "benefits": "福利",
       "team": "团队",
       "compensation": "薪酬",
-      "oneOnOnes": "1:1"
+      "oneOnOnes": "1:1",
+      "documents": "文档",
+      "openSurveys": "待填调查"
     },
     "refusedTitle": "自助服务不可用",
     "overview": {
@@ -1590,6 +1681,227 @@
       "expiresOn": "到期日期",
       "identifier": "执照编号",
       "notes": "备注"
+    }
+  },
+  "documents": {
+    "title": "人力资源文档",
+    "description": "签发、签署和保留从入职到离职的文档。",
+    "segmentsLabel": "状态",
+    "statusAll": "全部",
+    "status": {
+      "draft": "草稿",
+      "sent": "已发送",
+      "viewed": "已查看",
+      "partially_signed": "部分签署",
+      "signed": "已签署",
+      "acknowledged": "已确认",
+      "declined": "已拒绝",
+      "voided": "已作废",
+      "expired": "已过期"
+    },
+    "columns": {
+      "title": "标题",
+      "person": "人员",
+      "category": "类别",
+      "sent": "发送",
+      "expires": "到期",
+      "status": "状态"
+    },
+    "empty": "没有符合此筛选的文档。",
+    "tiles": {
+      "awaiting": "待签署",
+      "expiring": "即将到期",
+      "retentionDue": "保留到期",
+      "exportsPending": "待导出"
+    },
+    "drawer": {
+      "title": "文档",
+      "signers": "签署人",
+      "events": "事件",
+      "versions": "版本",
+      "send": "发送",
+      "remind": "提醒",
+      "void": "作废",
+      "hold": "法定保留",
+      "releaseHold": "解除保留",
+      "download": "下载",
+      "voidReason": "作废原因",
+      "voidConfirm": "作废文档",
+      "cancel": "取消",
+      "actionFailed": "此操作失败。",
+      "noSigners": "暂无签署人。",
+      "noEvents": "暂无事件。",
+      "declined": "已拒绝",
+      "signed": "已签署",
+      "pending": "待处理",
+      "viewed": "已查看",
+      "missing": "此文档已不可用。"
+    },
+    "generate": {
+      "open": "新建文档",
+      "title": "生成文档",
+      "template": "模板",
+      "person": "人员",
+      "docTitle": "文档标题",
+      "preview": "预览合并字段",
+      "submit": "生成",
+      "failed": "生成失败。",
+      "noTemplates": "没有可用模板——请先在设置中声明模板。"
+    }
+  },
+  "surveys": {
+    "title": "调查",
+    "description": "创建敬业度调查并查看汇总结果。",
+    "segmentsLabel": "状态",
+    "statusAll": "全部",
+    "status": {
+      "draft": "草稿",
+      "open": "进行中",
+      "closed": "已结束"
+    },
+    "kind": {
+      "engagement": "敬业度",
+      "pulse": "脉动",
+      "onboarding": "入职",
+      "exit": "离职",
+      "custom": "自定义"
+    },
+    "anonymity": {
+      "anonymous": "匿名",
+      "confidential": "保密",
+      "named": "记名"
+    },
+    "questionKind": {
+      "scale": "1–5分制",
+      "enps": "eNPS 0–10",
+      "text": "开放文本",
+      "single": "单选",
+      "multi": "多选"
+    },
+    "columns": {
+      "name": "名称",
+      "kind": "类型",
+      "anonymity": "匿名度",
+      "participation": "参与率",
+      "closes": "截止",
+      "status": "状态"
+    },
+    "empty": "没有符合此筛选的调查。",
+    "drawer": {
+      "title": "调查",
+      "results": "结果",
+      "participation": "参与率",
+      "enps": "eNPS",
+      "drivers": "驱动因素",
+      "heatmap": "热力图",
+      "suppressed": "已隐藏——回答数不足",
+      "comments": "留言",
+      "trend": "趋势",
+      "questions": "问题",
+      "open": "开启调查",
+      "close": "结束调查",
+      "actionFailed": "此操作失败。",
+      "invite": "受邀人",
+      "cancel": "取消",
+      "missing": "此调查已不可用。"
+    },
+    "author": {
+      "open": "新建调查",
+      "title": "创建调查",
+      "name": "名称",
+      "kind": "类型",
+      "anonymity": "匿名度",
+      "minGroup": "最小分组人数",
+      "questions": "问题",
+      "addQuestion": "添加问题",
+      "prompt": "题干",
+      "driver": "驱动因素键",
+      "options": "选项",
+      "remove": "删除",
+      "submit": "保存调查",
+      "failed": "保存失败。"
+    }
+  },
+  "orgChart": {
+    "title": "组织架构图",
+    "description": "任意日期的汇报关系树（含空缺）。",
+    "tree": "树形",
+    "directory": "通讯录",
+    "columns": {
+      "name": "姓名",
+      "title": "职位",
+      "department": "部门",
+      "manager": "经理"
+    },
+    "directoryEmpty": "没有匹配的人员。",
+    "search": "搜索",
+    "asOf": "截至",
+    "labels": {
+      "vacancies": "空缺",
+      "headcount": "人数",
+      "layers": "层级",
+      "span": "管理幅度",
+      "vacant": "空缺",
+      "department": "部门",
+      "manager": "经理",
+      "reports": "直接下属",
+      "close": "关闭",
+      "expand": "展开",
+      "collapse": "收起",
+      "noMatch": "没有匹配的人员。"
+    }
+  },
+  "meDocuments": {
+    "title": "我的文档",
+    "description": "签署您的文档并申请数据导出。",
+    "columns": {
+      "title": "标题",
+      "status": "状态",
+      "sent": "发送"
+    },
+    "empty": "您暂无文档。",
+    "signName": "您的姓名",
+    "sign": "签署",
+    "acknowledge": "确认",
+    "actionFailed": "此操作失败。",
+    "exportsTitle": "我的数据导出",
+    "exportsEmpty": "尚未申请导出。",
+    "exportsColumns": {
+      "requested": "申请时间",
+      "status": "状态"
+    },
+    "requestExport": "导出我的数据",
+    "requestExportDone": "您的导出已排队——就绪后会显示在下方。",
+    "download": "下载"
+  },
+  "meSurveys": {
+    "title": "待填调查",
+    "description": "等待您填写的调查。",
+    "columns": {
+      "name": "名称",
+      "closes": "截止"
+    },
+    "empty": "当前没有待填调查。",
+    "respond": "填写",
+    "actionFailed": "此操作失败。"
+  },
+  "public": {
+    "book": {
+      "empty": "暂无可约时段。",
+      "kicker": "面试排期",
+      "title": "{name}，请预约您的面试"
+    },
+    "careers": {
+      "empty": "目前没有在招职位。",
+      "kicker": "招聘 · {org}",
+      "title": "在招职位"
+    },
+    "offer": {
+      "alreadySigned": "已签署，谢谢。",
+      "closed": "此函件已关闭。",
+      "for": "致{name}",
+      "kicker": "录用函",
+      "version": "第{version}版"
     }
   }
 }

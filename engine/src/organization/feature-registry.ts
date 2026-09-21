@@ -57,6 +57,20 @@ export const FEATURES: FeatureDef[] = [
   // Schedule-of-values billing remains a project-type procedure, not a gate.
   { key: 'projects', defaultEnabled: true, category: 'operations', navModules: ['projects', 'field-tickets', 'lien-waivers'] },
   { key: 'timeTracking', defaultEnabled: true, category: 'operations', navModules: ['timesheets'], parentKey: 'projects' },
+  // HR-20 begin: field time capture — mobile and kiosk clock-in with
+  // geofence, photo and offline queue; foreman crew batch entry;
+  // equipment hours on entries; multi-stage approval. The parent rides
+  // timeTracking (office orgs never see a clock) and needs projects;
+  // sub-features hide optional complexity. Off stops rendering and
+  // writing, never data.
+  { key: 'fieldTime', defaultEnabled: false, category: 'operations', navModules: ['timesheets'], parentKey: 'timeTracking', requiresAll: ['projects'] },
+  { key: 'fieldTimeGeofence', defaultEnabled: false, category: 'operations', parentKey: 'fieldTime' },
+  { key: 'fieldTimePhoto', defaultEnabled: false, category: 'operations', parentKey: 'fieldTime' },
+  { key: 'fieldTimeKiosk', defaultEnabled: false, category: 'operations', parentKey: 'fieldTime' },
+  { key: 'fieldTimeCrewEntry', defaultEnabled: false, category: 'operations', parentKey: 'fieldTime' },
+  { key: 'fieldTimeEquipment', defaultEnabled: false, category: 'operations', parentKey: 'fieldTime', requiresAll: ['equipment'] },
+  { key: 'fieldTimeMultiStageApproval', defaultEnabled: false, category: 'operations', parentKey: 'fieldTime' },
+  // HR-20 end
   // Payroll — country-pack statutory engines (CA T4127, US Pub 15-T), pay
   // runs, stubs, remittance liabilities. Off by default: enabling payroll is
   // a deliberate adoption decision (TD1/W-4 profiles, control accounts,
@@ -209,6 +223,32 @@ export const FEATURES: FeatureDef[] = [
   { key: 'hrmEquipmentQualifications', defaultEnabled: false, category: 'operations', parentKey: 'hrmCertifications', requiresAll: ['equipment'] },
   { key: 'hrmCertificationAlerts', defaultEnabled: false, category: 'operations', parentKey: 'hrmCertifications' },
   // HR-14 end
+  // HR-19 begin: documents with e-sign ride the hrm parent; retention
+  // schedules with audited deletion and one-click subject-access exports
+  // are opt-in sub-features. Surveys ride hrm with pulse cadence as the
+  // opt-in complexity. The org chart is default-on: every suite has one.
+  // Toggling never deletes data — rows stay and re-render when re-on.
+  { key: 'hrmDocuments', defaultEnabled: false, category: 'operations', parentKey: 'hrm' },
+  { key: 'hrmDocumentRetention', defaultEnabled: false, category: 'operations', parentKey: 'hrmDocuments' },
+  { key: 'hrmDataSubjectExport', defaultEnabled: false, category: 'operations', parentKey: 'hrmDocuments' },
+  { key: 'hrmSurveys', defaultEnabled: false, category: 'operations', parentKey: 'hrm' },
+  { key: 'hrmPulseSurveys', defaultEnabled: false, category: 'operations', parentKey: 'hrmSurveys' },
+  { key: 'hrmOrgChart', defaultEnabled: true, category: 'operations', parentKey: 'hrm' },
+  // HR-19 end
+  // HR-18 begin: recruiting depth — the HR-6 funnel rides the parent (on
+  // wherever hrm is on); kits, scheduling, signing, boards, retention and
+  // pools are opt-in sub-features. hrmOfferSigning will requireAll
+  // hrmDocuments when HR-19 lands; until then it signs through the File
+  // Cabinet HMAC primitive the field-ticket surface uses, so no documents
+  // edge is declared here.
+  { key: 'hrmRecruiting', defaultEnabled: true, category: 'operations', parentKey: 'hrm' },
+  { key: 'hrmStructuredInterviews', defaultEnabled: false, category: 'operations', parentKey: 'hrmRecruiting' },
+  { key: 'hrmInterviewScheduling', defaultEnabled: false, category: 'operations', parentKey: 'hrmRecruiting' },
+  { key: 'hrmOfferSigning', defaultEnabled: false, category: 'operations', parentKey: 'hrmRecruiting' },
+  { key: 'hrmJobBoards', defaultEnabled: false, category: 'operations', parentKey: 'hrmRecruiting' },
+  { key: 'hrmCandidateRetention', defaultEnabled: false, category: 'operations', parentKey: 'hrmRecruiting' },
+  { key: 'hrmTalentPool', defaultEnabled: false, category: 'operations', parentKey: 'hrmRecruiting' },
+  // HR-18 end
 ]
 
 export const FEATURE_BY_KEY = new Map(FEATURES.map((f) => [f.key, f]))

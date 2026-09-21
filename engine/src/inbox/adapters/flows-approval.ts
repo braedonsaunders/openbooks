@@ -20,6 +20,7 @@
 import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-change-requests.ts";
 import { HRM_LEAVE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-leave.ts";
 import { TIMESHEET_WEEK_SUBJECT_KIND } from "../../flows/timesheet-weeks-adapter.ts";
+import { CREW_TIME_BATCH_SUBJECT_KIND } from "../../flows/crew-batches-adapter.ts";
 import {
   decideDocumentApproval,
   worklistApprovalsPage,
@@ -36,6 +37,9 @@ export const INBOX_OWNED_GATE_SUBJECTS: ReadonlySet<string> = new Set([
   HRM_CHANGE_REQUEST_SUBJECT_KIND,
   TIMESHEET_WEEK_SUBJECT_KIND,
   "expense_report",
+  // HR-20 begin: crew gates are owned by the crew adapter below.
+  CREW_TIME_BATCH_SUBJECT_KIND,
+  // HR-20 end
 ]);
 
 /** Bounded head window: the inbox is a working list, not an archive scan. */

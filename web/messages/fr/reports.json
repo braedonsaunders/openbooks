@@ -577,6 +577,18 @@
         "label": "Semaines de feuille de temps",
         "description": "Feuilles de temps hebdomadaires, dates de soumission et d’approbation, et total des heures."
       },
+      "field_clock_events": {
+        "label": "Pointages terrain",
+        "description": "Actions d’horloge mobiles et sur kiosque — qui, quand, indicateur de zone, et tarification de la paire. Indicateurs uniquement ; les coordonnées brutes exigent la permission d’emploi RH."
+      },
+      "field_clock_coordinates": {
+        "label": "Coordonnées de pointage",
+        "description": "Coordonnées brutes par pointage — localisation du travailleur, visibles uniquement avec la permission d’emploi RH. Les indicateurs pour les autres sont dans Pointages terrain."
+      },
+      "crew_time_batches": {
+        "label": "Lots d’équipe",
+        "description": "Lots d’équipe du contremaître par projet et par jour — statut dans les étapes d’approbation, heures et effectif."
+      },
       "fixed_assets": {
         "label": "Immobilisations",
         "description": "Le registre des immobilisations — statut, acquisition, coût, dépositaire et dimensions."
@@ -752,6 +764,50 @@
       "hrm_talent_reviews": {
         "label": "Revues de talents",
         "description": "Une ligne par revue de talents : collaborateur, performance et potentiel, impact et risque de départ, et aptitude à la promotion. Nécessite l’autorisation de performance RH."
+      },
+      "hrm_documents": {
+        "label": "Documents RH",
+        "description": "Une ligne par document RH — titre, catégorie déclarée, statut du cycle de vie, envoi/achèvement/expiration et suspension légale."
+      },
+      "hrm_document_signers": {
+        "label": "Signataires de documents",
+        "description": "Une ligne par signataire ordonné — document, ordre, rôle et statut."
+      },
+      "hrm_retention_actions": {
+        "label": "Actions de conservation",
+        "description": "Une ligne par action de conservation — document, catégorie, échéance, action terminale, exécution et blocage légal."
+      },
+      "hrm_survey_results": {
+        "label": "Résultats d’enquêtes",
+        "description": "Une ligne par enquête — type, degré d’anonymat, statut, nombres d’invitations et de réponses, date de clôture."
+      },
+      "hrm_org_chart": {
+        "label": "Organigramme",
+        "description": "Une ligne par emploi en service à la date du rapport — nom, titre, département et manager."
+      },
+      "hrm_interview_slots": {
+        "description": "Une ligne par créneau proposé, réservé ou refusé, avec fenêtre et type. Ni coordonnées ni jetons ne sortent d'ici.",
+        "label": "Créneaux d'entretien"
+      },
+      "hrm_offers": {
+        "description": "Une ligne par offre avec statut commercial, état de signature et version. Montants, courriers et preuves ne sortent jamais par les états.",
+        "label": "Offres"
+      },
+      "hrm_pool_members": {
+        "description": "Une ligne par membre du vivier : vivier, nom du candidat et date d'ajout. Noms uniquement, jamais de coordonnées.",
+        "label": "Membres du vivier"
+      },
+      "hrm_postings": {
+        "description": "Une ligne par annonce avec statut, candidatures et décisions transmises pour mesurer chaque site (par site, par besoin).",
+        "label": "Annonces"
+      },
+      "hrm_retention_runs": {
+        "description": "Une ligne par passage de la règle avec anonymisés, supprimés et prolongations demandées.",
+        "label": "Passages de conservation"
+      },
+      "hrm_scorecards": {
+        "description": "Une ligne par entretien avec les agrégats du jury : avis rendus et taille plus la distribution globale. Le détail par évaluateur ne sort jamais.",
+        "label": "Avis"
       }
     },
     "columns": {
@@ -968,6 +1024,9 @@
         "department": "Département",
         "memo": "Mémo",
         "created_at": "Créé le",
+        "equipment_unit": "Unité d’équipement",
+        "equipment_hours": "Heures d’équipement",
+        "cost_code_ref": "Code de coût",
         "id": "Saisie de temps (id)"
       },
       "timesheet_weeks": {
@@ -983,6 +1042,39 @@
         "approved_at": "Approuvé le",
         "rejection_reason": "Motif du rejet",
         "id": "Semaine (id)"
+      },
+      "field_clock_events": {
+        "employee_name": "Employé",
+        "kind": "Action",
+        "occurred_at": "Heure de l’appareil",
+        "project": "Projet",
+        "cost_code_ref": "Code de coût",
+        "geo_check": "Géorepérage",
+        "accuracy_m": "Précision du repère (m)",
+        "source": "Source",
+        "status": "Statut",
+        "auto_closed": "Fermé auto",
+        "has_photo": "Photo jointe",
+        "id": "Pointage (id)"
+      },
+      "field_clock_coordinates": {
+        "employee_name": "Employé",
+        "occurred_at": "Heure de l’appareil",
+        "latitude": "Latitude",
+        "longitude": "Longitude",
+        "accuracy_m": "Précision du repère (m)",
+        "id": "Pointage (id)"
+      },
+      "crew_time_batches": {
+        "foreman_name": "Contremaître",
+        "project": "Projet",
+        "worked_on": "Travaillé le",
+        "status": "Statut",
+        "total_hours": "Heures totales",
+        "worker_count": "Ouvriers",
+        "line_count": "Lignes",
+        "submitted_at": "Soumis le",
+        "id": "Lot d’équipe (id)"
       },
       "fixed_assets": {
         "asset_number": "N° d’immobilisation",
@@ -1615,6 +1707,110 @@
         "impact_of_loss": "Impact du départ",
         "risk_of_loss": "Risque de départ",
         "id": "Revue (id)"
+      },
+      "hrm_documents": {
+        "title": "Titre",
+        "person": "Personne",
+        "category": "Catégorie",
+        "status": "Statut",
+        "sent_at": "Envoyé le",
+        "completed_at": "Achevé le",
+        "expires_at": "Expire le",
+        "legal_hold": "Suspension légale",
+        "document_id": "Document (id)"
+      },
+      "hrm_document_signers": {
+        "document": "Document",
+        "ord": "Ordre",
+        "role": "Rôle",
+        "status": "Statut",
+        "signed_at": "Signé le",
+        "document_id": "Document (id)"
+      },
+      "hrm_retention_actions": {
+        "document": "Document",
+        "category": "Catégorie",
+        "due_on": "Échéance le",
+        "action": "Action",
+        "executed_at": "Exécuté le",
+        "blocked_reason": "Motif du blocage",
+        "document_id": "Document (id)"
+      },
+      "hrm_survey_results": {
+        "name": "Nom",
+        "kind": "Type",
+        "anonymity": "Anonymat",
+        "status": "Statut",
+        "invitations": "Invitations",
+        "responded": "Réponses",
+        "closes_at": "Clôture le",
+        "survey_id": "Enquête (id)"
+      },
+      "hrm_org_chart": {
+        "employee": "Salarié",
+        "title": "Titre",
+        "department": "Département",
+        "manager": "Manager",
+        "employment_id": "Emploi (id)"
+      },
+      "hrm_interview_slots": {
+        "booked_on": "Réservé",
+        "candidate": "Candidat",
+        "ends_at": "Fin",
+        "kind": "Type",
+        "requisition": "Besoin",
+        "slot_id": "Créneau (id)",
+        "starts_at": "Début",
+        "timezone": "Fuseau horaire"
+      },
+      "hrm_offers": {
+        "candidate": "Candidat",
+        "expires_on": "Expire le",
+        "job_title": "Intitulé du poste",
+        "offer_id": "Offre (id)",
+        "requisition": "Besoin",
+        "sent_on": "Envoyée",
+        "signature_status": "Signature",
+        "signed_on": "Signée",
+        "status": "Statut",
+        "version": "Version"
+      },
+      "hrm_pool_members": {
+        "added_on": "Ajouté le",
+        "candidate": "Candidat",
+        "note": "Note",
+        "pool": "Vivier"
+      },
+      "hrm_postings": {
+        "applies": "Candidatures",
+        "board": "Site",
+        "closed_on": "Fermé le",
+        "dispositions": "Décisions",
+        "posting_id": "Annonce (id)",
+        "published_on": "Publié le",
+        "requisition": "Besoin",
+        "status": "Statut"
+      },
+      "hrm_retention_runs": {
+        "anonymized": "Anonymisés",
+        "deleted": "Supprimés",
+        "extensions": "Prolongations",
+        "ran_at": "Passage",
+        "rule": "Règle",
+        "run_id": "Passage (id)"
+      },
+      "hrm_scorecards": {
+        "candidate": "Candidat",
+        "interview_id": "Entretien (id)",
+        "kind": "Type",
+        "no": "Non",
+        "panel": "Jury",
+        "requisition": "Besoin",
+        "scheduled_on": "Planifié le",
+        "strong_no": "Non franc",
+        "strong_yes": "Oui franc",
+        "submitted": "Envoyés",
+        "yes": "Oui"
       }
     },
     "enumValues": {

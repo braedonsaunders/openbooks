@@ -169,6 +169,21 @@ const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] =
   ["hrm_feedback", "requested_from_party_id"],
   ["hrm_calibration_sessions", "facilitator_party_id"],
   // HR-17 end
+  // HR-19 begin: document subjects, signer parties, and export subjects
+  // follow the merge wholesale. SIMPLE, not GUARDED: no uniqueness on
+  // those three tables involves a party column, so re-pointing cannot
+  // duplicate. Survey responses carry no party column (anonymous links
+  // are null by construction, confidential links are sealed bytes), so
+  // they need no entry — and must never gain a plain party column.
+  ["hrm_documents", "party_id"],
+  ["hrm_document_signers", "signer_party_id"],
+  ["hrm_data_subject_exports", "party_id"],
+  // HR-19 end
+  // HR-20 begin: clock events follow the merge wholesale. SIMPLE, not
+  // GUARDED: the event uniqueness is (org, client_event_id) and carries
+  // no party column, so re-pointing the worker cannot collide.
+  ["time_clock_events", "employee_party_id"],
+  // HR-20 end
 ];
 
 /**
@@ -269,6 +284,16 @@ const GUARDED_PARTY_REFS: readonly GuardedPartyRef[] = [
     column: "employee_party_id",
     conflict: "s.pay_run_document_id = d.pay_run_document_id",
   },
+  // HR-19 begin: one invitation per (survey, party) — the table's own
+  // unique key minus the party being merged. Two rows collide only when
+  // both parties were invited to the SAME survey; the guarded path keeps
+  // the surviving invitation instead of forking the respondent's link.
+  {
+    table: "hrm_survey_invitations",
+    column: "party_id",
+    conflict: "s.org_id = d.org_id and s.survey_id = d.survey_id",
+  },
+  // HR-19 end
   {
     table: "payroll_opening_balances",
     column: "employee_party_id",
@@ -321,6 +346,32 @@ const GUARDED_PARTY_REFS: readonly GuardedPartyRef[] = [
       "s.org_id = d.org_id and s.cycle_id = d.cycle_id and s.employment_id = d.employment_id" +
       " and s.kind = d.kind",
   },
+  // HR-20 begin: the foreman-day uniqueness is (org, foreman, project,
+  // worked_on) and the line uniqueness spans the nullable line key —
+  // both mirrored exactly with IS NOT DISTINCT FROM. A conflicting row
+  // stays on the absorbed party, never silently absorbed.
+  {
+    table: "crew_time_batches",
+    column: "foreman_party_id",
+    conflict:
+      "s.org_id = d.org_id and s.project_id = d.project_id and s.worked_on = d.worked_on",
+  },
+  {
+    table: "crew_time_batch_lines",
+    column: "employee_party_id",
+    conflict:
+      "s.batch_id = d.batch_id" +
+      " and s.time_type_id is not distinct from d.time_type_id" +
+      " and s.project_task_id is not distinct from d.project_task_id" +
+      " and s.cost_code_ref is not distinct from d.cost_code_ref" +
+      " and s.equipment_id is not distinct from d.equipment_id",
+  },
+  {
+    table: "worker_clock_pins",
+    column: "employee_party_id",
+    conflict: "s.org_id = d.org_id",
+  },
+  // HR-20 end
 ];
 
 type PartyRow = {

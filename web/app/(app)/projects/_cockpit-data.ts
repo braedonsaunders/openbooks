@@ -6,6 +6,9 @@ import { resolveProjectFinancials } from '../../../lib/project-financials'
 import { loadProjectType } from '../../../lib/project-type'
 import { listBillableFieldTickets, listBillingRequests } from '../../../lib/billing-requests'
 import { resolveInvoicingPreference } from '../../../lib/invoicing-preference'
+// HR-20 begin: crew-today rows for the cockpit.
+import { crewToday } from '@openbooks/engine/src/hrm/field-time/reads.ts'
+// HR-20 end
 import { isFeatureEnabled } from '../../../lib/features'
 import type { ProjectCockpitData } from './ProjectDrawer'
 import { formatMoney, mulPercent, sum } from '@openbooks/engine/src/money/money.ts'
@@ -60,16 +63,20 @@ export async function loadProjectCockpit(
   projectId: string,
   options: { includeApplicationBilling?: boolean } = {},
 ): Promise<ProjectCockpitData> {
-  const [projectType, fieldTicketsEnabled, equipmentEnabled, inventoryEnabled, today] = await Promise.all([
+  const [projectType, fieldTicketsEnabled, equipmentEnabled, inventoryEnabled, today, fieldTimeEnabled] = await Promise.all([
     loadProjectType(orgId, projectId),
     isFeatureEnabled(orgId, 'fieldTickets'),
     isFeatureEnabled(orgId, 'equipment'),
     isFeatureEnabled(orgId, 'inventory'),
     businessToday(orgId),
+    // HR-20: crew-today rides the fieldTime switch — off reads as nobody out.
+    isFeatureEnabled(orgId, 'fieldTime'),
   ])
-  const [financials, time, unbilled, billingRequests, billableFieldTickets, invoicing, chargeRes, itemRes, equipmentRes, operatorRes, recognizedRes, glRangeRes, incomeAccountRes] = await Promise.all([
+  const [financials, time, crewTodayRows, unbilled, billingRequests, billableFieldTickets, invoicing, chargeRes, itemRes, equipmentRes, operatorRes, recognizedRes, glRangeRes, incomeAccountRes] = await Promise.all([
     resolveProjectFinancials(orgId, projectId, projectType.financialProfile),
     projectTimeSummary(orgId, projectId),
+    // HR-20: who is clocked in on this project right now.
+    fieldTimeEnabled ? crewToday(orgId, projectId) : Promise.resolve([]),
     projectUnbilled(orgId, projectId),
     listBillingRequests(orgId, projectId),
     fieldTicketsEnabled ? listBillableFieldTickets(orgId, projectId) : Promise.resolve([]),
@@ -177,6 +184,9 @@ export async function loadProjectCockpit(
     },
     projectType: { key: projectType.key, name: projectType.name },
     time,
+    // HR-20: crew-today rows ride alongside the time summary.
+    crewToday: crewTodayRows,
+    showFieldTime: fieldTimeEnabled,
     unbilled,
     billingRequests: billingRequests as ProjectCockpitData['billingRequests'],
     billableFieldTickets: billableFieldTickets as ProjectCockpitData['billableFieldTickets'],

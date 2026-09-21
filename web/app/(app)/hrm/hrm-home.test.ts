@@ -129,8 +129,8 @@ test("hrm route tabs keep the native employee list as the sibling tab", () => {
   assert.match(groupTabs, /hrmGroupTabs/, "permission exclusions stay at one call site");
 });
 
-test("hrm route tabs are the eleven working surfaces, each behind its own gate", () => {
-  for (const href of ['/hrm', '/entities/employees', '/hrm/positions', '/hrm/processes', '/hrm/leave', '/hrm/recruiting', '/hrm/performance', '/hrm/benefits', '/hrm/compliance', '/hrm/compensation', '/hrm/qualifications']) {
+test("hrm route tabs are the fourteen working surfaces, each behind its own gate", () => {
+  for (const href of ['/hrm', '/entities/employees', '/hrm/positions', '/hrm/processes', '/hrm/leave', '/hrm/recruiting', '/hrm/performance', '/hrm/benefits', '/hrm/compliance', '/hrm/compensation', '/hrm/qualifications', '/hrm/documents', '/hrm/surveys', '/hrm/org-chart']) {
     assert.match(groupTabs, new RegExp(`href: '${href.replace(/\//g, '\\/')}'`), `strip lands on ${href}`);
   }
   // Demoted by review: the queue is reached from the cockpit and the employee
@@ -154,6 +154,20 @@ test("hrm route tabs are the eleven working surfaces, each behind its own gate",
   assert.match(groupTabs, /'\/hrm\/qualifications': 'hrm\.certifications\.read'/, "qualifications tab hides without the certifications read grant");
   assert.match(groupTabs, /'\/hrm\/qualifications': 'hrmCertifications'/, "qualifications tab hides while the feature switch is off");
   // HR-14 end
+  // HR-19 begin: documents and surveys tabs hide without their read
+  // grants and while their switches are off. The org chart carries no
+  // permission entry by design (employment readers and self-service
+  // alike; the page re-checks and 404s) but hides while its switch is
+  // off.
+  assert.match(groupTabs, /href: '\/hrm\/documents'/, "strip lands on /hrm/documents");
+  assert.match(groupTabs, /href: '\/hrm\/surveys'/, "strip lands on /hrm/surveys");
+  assert.match(groupTabs, /href: '\/hrm\/org-chart'/, "strip lands on /hrm/org-chart");
+  assert.match(groupTabs, /'\/hrm\/documents': 'hrm\.documents\.read'/, "documents tab hides without the documents read grant");
+  assert.match(groupTabs, /'\/hrm\/surveys': 'hrm\.surveys\.manage'/, "surveys tab hides without the surveys manage grant");
+  assert.match(groupTabs, /'\/hrm\/documents': 'hrmDocuments'/, "documents tab hides while the feature switch is off");
+  assert.match(groupTabs, /'\/hrm\/surveys': 'hrmSurveys'/, "surveys tab hides while the feature switch is off");
+  assert.match(groupTabs, /'\/hrm\/org-chart': 'hrmOrgChart'/, "org-chart tab hides while the feature switch is off");
+  // HR-19 end
   // HR-12 begin
   assert.match(groupTabs, /'\/hrm\/compensation': 'hrm\.compensation\.read'/, "compensation tab hides without the compensation read grant");
   assert.match(groupTabs, /'\/hrm\/compensation': 'hrmCompensation'/, "compensation tab hides while the feature switch is off");

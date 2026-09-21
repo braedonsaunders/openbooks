@@ -991,7 +991,10 @@
     "hrm_compensation_manage": "Run cycles, push rates, and author plans and snapshots",
     "hrm_compensation_approve": "Decide cycle lines through the approval run",
     "hrm_certifications_read": "View certifications and dispatch readiness",
-    "hrm_certifications_manage": "Manage certification types, requirements, and renewals"
+    "hrm_certifications_manage": "Manage certification types, requirements, and renewals",
+    "time_clock": "Clock in from the field",
+    "time_crew_enter": "Enter crew time batches",
+    "time_kiosk_manage": "Manage kiosk devices and PINs"
   },
   "ai": {
     "metaTitle": "AI providers",
@@ -2528,6 +2531,51 @@
         "title": "Competencies",
         "singularTitle": "Competency",
         "description": "One skill in a framework, linkable to reviews, job levels, and positions."
+      },
+      "hrm-document-categories": {
+        "title": "Document categories",
+        "singularTitle": "Document category",
+        "description": "Org-declared vocabulary for HR document categories — contracts, policies, acknowledgments. Templates and retention rules name these keys."
+      },
+      "hrm-document-templates": {
+        "title": "Document templates",
+        "singularTitle": "Document template",
+        "description": "Reusable HR document shells with merge fields and ordered signers. Acknowledgment-only templates take no signatures."
+      },
+      "hrm-retention-schedules": {
+        "title": "Retention schedules",
+        "singularTitle": "Retention schedule",
+        "description": "How long each document category is kept, from which event, and whether expiry deletes or anonymizes. Legal hold blocks execution by name."
+      },
+      "hrm-interview-kits": {
+        "description": "Interview guides per opening: questions, rated attributes, and scale.",
+        "singularTitle": "Interview kit",
+        "title": "Interview kits"
+      },
+      "hrm-interviewer-pools": {
+        "description": "Interviewer groups with declared availability windows and a default kit.",
+        "singularTitle": "Interviewer pool",
+        "title": "Interviewer pools"
+      },
+      "hrm-kit-attributes": {
+        "description": "Rated attributes of a kit; focus attributes are required verdicts.",
+        "singularTitle": "Kit attribute",
+        "title": "Kit attributes"
+      },
+      "hrm-kit-questions": {
+        "description": "Suggested questions per kit, optionally pinned to one attribute.",
+        "singularTitle": "Kit question",
+        "title": "Kit questions"
+      },
+      "hrm-offer-templates": {
+        "description": "Offer letter templates with clauses, rendered to versioned PDFs.",
+        "singularTitle": "Offer template",
+        "title": "Offer templates"
+      },
+      "hrm-retention-rules": {
+        "description": "Retention rules: anonymize or delete candidates on schedule.",
+        "singularTitle": "Retention rule",
+        "title": "Retention rules"
       }
     },
     "fields": {
@@ -2876,7 +2924,38 @@
       "renewalLeadDays": "Renewal lead (days)",
       "requiresEvidence": "Requires evidence",
       "extraCategories": "Extra categories",
-      "frameworkId": "Framework"
+      "frameworkId": "Framework",
+      "categoryKey": "Category",
+      "retainYears": "Retain (years)",
+      "fromEvent": "Clock starts",
+      "bodyTemplate": "Body template",
+      "mergeFields": "Merge fields",
+      "requiresSignature": "Requires signature",
+      "signEmployee": "Employee signs",
+      "signManager": "Manager signs",
+      "signHr": "HR signs",
+      "acknowledgmentOnly": "Acknowledgment only",
+      "radiusM": "Radius (m)",
+      "center": "Center",
+      "polygon": "Polygon",
+      "pinRequired": "PIN required",
+      "photoRequired": "Photo required",
+      "subjectKind": "Subject",
+      "stages": "Stages",
+      "approvalRequired": "Approval required",
+      "attribute": "Attribute",
+      "attributeId": "Attribute",
+      "availability": "Availability",
+      "clauses": "Clauses",
+      "consentExtensionLeadDays": "Extension lead days",
+      "instructions": "Instructions",
+      "isFocusDefault": "Focus attribute",
+      "kitId": "Kit",
+      "pipelineStageId": "Pipeline stage",
+      "question": "Question",
+      "ratingScale": "Rating scale",
+      "regionScope": "Region scope",
+      "retainMonths": "Retain months"
     },
     "fieldHelp": {
       "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",
@@ -2960,7 +3039,18 @@
       "rateScheduleJurisdiction": "Pack vocabulary, free text at the generic layer — the pack interprets it.",
       "perDiemComponent": "Earning component the amounts cross through. Its tax treatment is the single taxability declaration.",
       "hrmQualificationValidity": "Leave empty for qualifications that never expire.",
-      "hrmQualificationExtraCategories": "Org-declared category vocabulary beyond the six built-ins, one per line in the editor."
+      "hrmQualificationExtraCategories": "Org-declared category vocabulary beyond the six built-ins, one per line in the editor.",
+      "hrmAttributeFocus": "Focus attributes must be rated on every verdict; the rest are optional.",
+      "hrmKitInstructions": "Guidance for the panel, printed atop every scorecard.",
+      "hrmKitScale": "At least two of the keys strong_no, no, yes, strong_yes.",
+      "hrmKitStage": "The kit applies to this funnel stage, or everywhere when empty.",
+      "hrmPoolAvailability": "Windows as a JSON list of startsAt, endsAt, and timezone.",
+      "hrmPoolKit": "Default kit for sittings from this pool.",
+      "hrmQuestionAttribute": "Pins the question to one attribute of this kit.",
+      "hrmRetentionLeadDays": "Days before expiry to request an extension; empty sends no email.",
+      "hrmRetentionScope": "Region as JSON: applies_to all or countries with country codes.",
+      "hrmTemplateBody": "Letter body with placeholders for the offer data.",
+      "hrmTemplateClauses": "Clauses as a JSON list of key, label, body, and default_on."
     },
     "options": {
       "payFrequency": {
@@ -3409,6 +3499,31 @@
         "medical": "Medical",
         "clearance": "Clearance",
         "other": "Other"
+      },
+      "hrmDocFromEvent": {
+        "completion": "Completion",
+        "termination": "Termination",
+        "creation": "Creation"
+      },
+      "hrmDocAction": {
+        "delete": "Delete",
+        "anonymize": "Anonymize"
+      },
+      "geofenceKind": {
+        "circle": "Circle",
+        "polygon": "Polygon"
+      },
+      "approvalSubject": {
+        "timesheetWeek": "Timesheet week",
+        "crewTimeBatch": "Crew time batch"
+      },
+      "hrmRetentionAction": {
+        "anonymize": "Anonymize",
+        "delete": "Delete"
+      },
+      "hrmRetentionBasis": {
+        "consent": "Consent",
+        "inactivity": "Inactivity"
       }
     },
     "payroll": {
@@ -4762,6 +4877,86 @@
     "hrmSuccession": {
       "title": "Talent & succession",
       "description": "Talent reviews and ranked succession plans per position."
+    },
+    "hrmDocuments": {
+      "title": "HR documents",
+      "description": "Hire-to-retire HR documents with e-signature, templates, and acknowledgments. Toggling never deletes data."
+    },
+    "hrmDocumentRetention": {
+      "title": "Document retention",
+      "description": "Retention schedules with audited deletion after a grace period. Toggling never deletes data."
+    },
+    "hrmDataSubjectExport": {
+      "title": "Subject-access exports",
+      "description": "One-click subject-access exports for data subjects. Toggling never deletes data."
+    },
+    "hrmSurveys": {
+      "title": "Engagement surveys",
+      "description": "Engagement and pulse surveys with anonymity-grade results. Toggling never deletes data."
+    },
+    "hrmPulseSurveys": {
+      "title": "Pulse surveys",
+      "description": "Recurring pulse cadence with trends. Needs surveys."
+    },
+    "hrmOrgChart": {
+      "title": "Org chart",
+      "description": "The organization tree with vacancies, departments, and span of control."
+    },
+    "fieldTime": {
+      "title": "Field time capture",
+      "description": "Mobile and kiosk clock-in with geofence, photo and offline queue; foreman crew batches; equipment hours on entries."
+    },
+    "fieldTimeGeofence": {
+      "title": "Clock geofences",
+      "description": "Check clock-in location against per-project circles and polygons; outside fixes are flagged, never refused."
+    },
+    "fieldTimePhoto": {
+      "title": "Clock photos",
+      "description": "Require a photo with mobile clock events."
+    },
+    "fieldTimeKiosk": {
+      "title": "Site kiosks",
+      "description": "Shared PIN devices for crew clock-in with auto-return to idle."
+    },
+    "fieldTimeCrewEntry": {
+      "title": "Crew time entry",
+      "description": "Foreman batches per project per day with signatures and stage approvals."
+    },
+    "fieldTimeEquipment": {
+      "title": "Equipment on time",
+      "description": "Equipment hours on time entries and crew lines, priced through the unit's charge item. Needs equipment."
+    },
+    "fieldTimeMultiStageApproval": {
+      "title": "Multi-stage time approval",
+      "description": "Supervisor, project manager and payroll stage chains for timesheets and crew batches."
+    },
+    "hrmRecruiting": {
+      "title": "Recruiting",
+      "description": "Requisitions, candidates, interviews, and offers: the vacancy-to-hire funnel."
+    },
+    "hrmStructuredInterviews": {
+      "title": "Structured interviews",
+      "description": "Interview kits with scorecard attributes and blind panel verdicts."
+    },
+    "hrmInterviewScheduling": {
+      "title": "Interview scheduling",
+      "description": "Proposed slots with candidate self-booking links."
+    },
+    "hrmOfferSigning": {
+      "title": "Offer signing",
+      "description": "Template offers rendered to versioned PDFs and signed in-product."
+    },
+    "hrmJobBoards": {
+      "title": "Job boards",
+      "description": "Internal career page and feed publishing with disposition sync."
+    },
+    "hrmCandidateRetention": {
+      "title": "Candidate retention",
+      "description": "Consent capture and retention rules: anonymize or delete on schedule."
+    },
+    "hrmTalentPool": {
+      "title": "Talent pool",
+      "description": "Pools of past candidates matched to open requisitions."
     }
   },
   "backupsManager": {

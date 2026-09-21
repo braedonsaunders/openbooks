@@ -53,6 +53,13 @@ import {
   hrmCompCycleFlowAdapter,
   hrmCompCycleSubjectProfile,
 } from "./comp-cycles-adapter.ts";
+// HR-20 begin: crew time batches approve through Flows.
+import {
+  CREW_TIME_BATCH_SUBJECT_KIND,
+  crewBatchFlowAdapter,
+  crewBatchSubjectProfile,
+} from "./crew-batches-adapter.ts";
+// HR-20 end
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 
@@ -79,6 +86,9 @@ export function getFlowAdapter(subjectKind: string): FlowSubjectAdapter | null {
   // HR-12 begin: compensation cycles approve through Flows.
   if (subjectKind === HRM_COMP_CYCLE_SUBJECT_KIND) return hrmCompCycleFlowAdapter;
   // HR-12 end
+  // HR-20 begin: crew time batches approve through Flows.
+  if (subjectKind === CREW_TIME_BATCH_SUBJECT_KIND) return crewBatchFlowAdapter;
+  // HR-20 end
   // A pay run is a document, but with payroll's own authoring vocabulary; the
   // adapter is the documents adapter with those fields layered on.
   if (subjectKind === PAY_RUN_SUBJECT_KIND) return payRunsFlowAdapter;
@@ -108,6 +118,9 @@ export function listFlowSubjectProfiles(): FlowSubjectProfile[] {
     // HR-12 begin
     hrmCompCycleSubjectProfile,
     // HR-12 end
+    // HR-20 begin
+    crewBatchSubjectProfile,
+    // HR-20 end
   ];
 }
 

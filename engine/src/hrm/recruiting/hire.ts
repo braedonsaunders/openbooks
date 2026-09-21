@@ -93,6 +93,11 @@ export async function acceptOfferAsHire(query: AcceptOfferAsHireQuery): Promise<
     if (offer.status !== "sent") {
       throw new RecruitingError("BAD_STATE", `a ${offer.status} offer cannot be accepted — only sent offers accept`);
     }
+    // HR-18: with hrmOfferSigning on, an accepted+signed offer is what
+    // hire requires — refuse hire on an unsigned offer BY NAME. With the
+    // feature off this is a strict no-op and hire behaves as today.
+    const { requireSignedOfferForHire } = await import("./offers-signing.ts");
+    await requireSignedOfferForHire(db, orgId, offerId);
     const candidate = await loadCandidate(db, orgId, application.candidateId);
     if (!candidate) {
       throw new RecruitingError("NOT_FOUND", "candidate is not visible in this organization");

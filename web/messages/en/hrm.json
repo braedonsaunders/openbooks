@@ -13,7 +13,10 @@
       "benefits": "Benefits",
       "compliance": "Compliance",
       "compensation": "Compensation",
-      "qualifications": "Qualifications"
+      "qualifications": "Qualifications",
+      "documents": "Documents",
+      "surveys": "Surveys",
+      "orgChart": "Org chart"
     },
     "recruiting": {
       "title": "Recruiting",
@@ -664,6 +667,92 @@
       "email": "Email",
       "phone": "Phone",
       "source": "Source"
+    },
+    "consent": {
+      "future_roles": "Future roles",
+      "talent_pool": "Talent pool",
+      "this_application": "This application"
+    },
+    "depth": {
+      "applies": "{count} applies",
+      "blinded": "Others open after you submit yours.",
+      "bookedSlots": "{count} booked",
+      "close": "Close",
+      "columns": {
+        "applies": "Applies",
+        "board": "Board",
+        "candidate": "Candidate",
+        "job": "Role",
+        "kind": "Kind",
+        "members": "Members",
+        "name": "Name",
+        "requisition": "Opening",
+        "scorecards": "Scorecards",
+        "signature": "Signature",
+        "slots": "Slots",
+        "status": "Status",
+        "versions": "Versions",
+        "when": "When"
+      },
+      "consentTitle": "Consents",
+      "dispositionLog": "Board log",
+      "empty": "Nothing here yet.",
+      "failed": "Save failed.",
+      "kit": "Kit",
+      "matchToOpening": "Match to opening",
+      "members": "{count} members",
+      "missing": "missing",
+      "myScorecard": "My scorecard",
+      "others": "Panel verdicts",
+      "overall": "Overall",
+      "pause": "Pause",
+      "poolMembers": "Members",
+      "proposedSlots": "{count} proposed",
+      "proposeFromPool": "Propose from pool",
+      "publish": "Publish",
+      "questions": "Questions",
+      "remove": "Remove",
+      "retentionDate": "Retention due",
+      "scorecards": "{submitted}/{total} scorecards",
+      "sendLink": "Send signing link",
+      "signatureState": "Signature",
+      "slots": "Slots",
+      "submitScorecard": "Submit scorecard",
+      "summary": "Summary",
+      "tagsLabel": "Tags (comma separated)",
+      "versionHistory": "Versions",
+      "versions": "{count} versions",
+      "voidSignature": "Void signature"
+    },
+    "posting": {
+      "closed": "Closed",
+      "draft": "Draft",
+      "error": "Error",
+      "paused": "Paused",
+      "published": "Published"
+    },
+    "postingEvent": {
+      "apply_received": "application received",
+      "closed": "closed",
+      "disposition_sent": "disposition sent",
+      "error": "error",
+      "paused": "paused",
+      "published": "published"
+    },
+    "signature": {
+      "declined": "Declined",
+      "sent": "Sent",
+      "signed": "Signed",
+      "unsigned": "Unsigned",
+      "viewed": "Viewed",
+      "voided": "Voided"
+    },
+    "tabs": {
+      "interviews": "Interviews",
+      "offers": "Offers",
+      "openings": "Openings",
+      "pools": "Pools",
+      "postings": "Postings"
     }
   },
   "performance": {
@@ -929,7 +1018,9 @@
       "benefits": "Benefits",
       "team": "Team",
       "compensation": "Compensation",
-      "oneOnOnes": "1:1s"
+      "oneOnOnes": "1:1s",
+      "documents": "Documents",
+      "openSurveys": "Open surveys"
     },
     "refusedTitle": "Self-service is unavailable",
     "overview": {
@@ -1591,6 +1682,227 @@
       "expiresOn": "Expires on",
       "identifier": "License number",
       "notes": "Notes"
+    }
+  },
+  "documents": {
+    "title": "HR documents",
+    "description": "Issue, sign, and retain hire-to-retire documents.",
+    "segmentsLabel": "Status",
+    "statusAll": "All",
+    "status": {
+      "draft": "Draft",
+      "sent": "Sent",
+      "viewed": "Viewed",
+      "partially_signed": "Partially signed",
+      "signed": "Signed",
+      "acknowledged": "Acknowledged",
+      "declined": "Declined",
+      "voided": "Voided",
+      "expired": "Expired"
+    },
+    "columns": {
+      "title": "Title",
+      "person": "Person",
+      "category": "Category",
+      "sent": "Sent",
+      "expires": "Expires",
+      "status": "Status"
+    },
+    "empty": "No documents match this filter.",
+    "tiles": {
+      "awaiting": "Awaiting signature",
+      "expiring": "Expiring soon",
+      "retentionDue": "Retention due",
+      "exportsPending": "Exports pending"
+    },
+    "drawer": {
+      "title": "Document",
+      "signers": "Signers",
+      "events": "Events",
+      "versions": "Versions",
+      "send": "Send",
+      "remind": "Remind",
+      "void": "Void",
+      "hold": "Legal hold",
+      "releaseHold": "Release hold",
+      "download": "Download",
+      "voidReason": "Reason for voiding",
+      "voidConfirm": "Void document",
+      "cancel": "Cancel",
+      "actionFailed": "This action failed.",
+      "noSigners": "No signers yet.",
+      "noEvents": "No events yet.",
+      "declined": "Declined",
+      "signed": "Signed",
+      "pending": "Pending",
+      "viewed": "Viewed",
+      "missing": "This document is no longer available."
+    },
+    "generate": {
+      "open": "New document",
+      "title": "Generate document",
+      "template": "Template",
+      "person": "Person",
+      "docTitle": "Document title",
+      "preview": "Preview merge fields",
+      "submit": "Generate",
+      "failed": "Generation failed.",
+      "noTemplates": "No active templates — declare templates under Setup first."
+    }
+  },
+  "surveys": {
+    "title": "Surveys",
+    "description": "Author engagement surveys and read aggregate results.",
+    "segmentsLabel": "Status",
+    "statusAll": "All",
+    "status": {
+      "draft": "Draft",
+      "open": "Open",
+      "closed": "Closed"
+    },
+    "kind": {
+      "engagement": "Engagement",
+      "pulse": "Pulse",
+      "onboarding": "Onboarding",
+      "exit": "Exit",
+      "custom": "Custom"
+    },
+    "anonymity": {
+      "anonymous": "Anonymous",
+      "confidential": "Confidential",
+      "named": "Named"
+    },
+    "questionKind": {
+      "scale": "Scale 1–5",
+      "enps": "eNPS 0–10",
+      "text": "Free text",
+      "single": "Single choice",
+      "multi": "Multiple choice"
+    },
+    "columns": {
+      "name": "Name",
+      "kind": "Kind",
+      "anonymity": "Anonymity",
+      "participation": "Participation",
+      "closes": "Closes",
+      "status": "Status"
+    },
+    "empty": "No surveys match this filter.",
+    "drawer": {
+      "title": "Survey",
+      "results": "Results",
+      "participation": "Participation",
+      "enps": "eNPS",
+      "drivers": "Drivers",
+      "heatmap": "Heatmap",
+      "suppressed": "Suppressed — too few responses to show",
+      "comments": "Comments",
+      "trend": "Trend",
+      "questions": "Questions",
+      "open": "Open survey",
+      "close": "Close survey",
+      "actionFailed": "This action failed.",
+      "invite": "Invitees",
+      "cancel": "Cancel",
+      "missing": "This survey is no longer available."
+    },
+    "author": {
+      "open": "New survey",
+      "title": "Author survey",
+      "name": "Name",
+      "kind": "Kind",
+      "anonymity": "Anonymity",
+      "minGroup": "Minimum group size",
+      "questions": "Questions",
+      "addQuestion": "Add question",
+      "prompt": "Prompt",
+      "driver": "Driver key",
+      "options": "Options",
+      "remove": "Remove",
+      "submit": "Save survey",
+      "failed": "Saving failed."
+    }
+  },
+  "orgChart": {
+    "title": "Org chart",
+    "description": "The reporting tree with vacancies, as of any date.",
+    "tree": "Tree",
+    "directory": "Directory",
+    "columns": {
+      "name": "Name",
+      "title": "Title",
+      "department": "Department",
+      "manager": "Manager"
+    },
+    "directoryEmpty": "Nobody matches this search.",
+    "search": "Search",
+    "asOf": "As of",
+    "labels": {
+      "vacancies": "Vacancies",
+      "headcount": "Headcount",
+      "layers": "Layers",
+      "span": "Span of control",
+      "vacant": "Vacant",
+      "department": "Department",
+      "manager": "Manager",
+      "reports": "Direct reports",
+      "close": "Close",
+      "expand": "Expand",
+      "collapse": "Collapse",
+      "noMatch": "Nobody matches this search."
+    }
+  },
+  "meDocuments": {
+    "title": "My documents",
+    "description": "Sign your documents and request your data export.",
+    "columns": {
+      "title": "Title",
+      "status": "Status",
+      "sent": "Sent"
+    },
+    "empty": "You have no documents.",
+    "signName": "Your name",
+    "sign": "Sign",
+    "acknowledge": "Acknowledge",
+    "actionFailed": "This action failed.",
+    "exportsTitle": "My data exports",
+    "exportsEmpty": "No exports requested yet.",
+    "exportsColumns": {
+      "requested": "Requested",
+      "status": "Status"
+    },
+    "requestExport": "Export my data",
+    "requestExportDone": "Your export is queued — it appears below once ready.",
+    "download": "Download"
+  },
+  "meSurveys": {
+    "title": "Open surveys",
+    "description": "Surveys waiting for your response.",
+    "columns": {
+      "name": "Name",
+      "closes": "Closes"
+    },
+    "empty": "No open surveys right now.",
+    "respond": "Respond",
+    "actionFailed": "This action failed."
+  },
+  "public": {
+    "book": {
+      "empty": "No open times.",
+      "kicker": "Interview scheduling",
+      "title": "Book your interview, {name}"
+    },
+    "careers": {
+      "empty": "No open roles right now.",
+      "kicker": "Careers · {org}",
+      "title": "Open roles"
+    },
+    "offer": {
+      "alreadySigned": "Already signed. Thank you.",
+      "closed": "This letter is closed.",
+      "for": "for {name}",
+      "kicker": "Offer",
+      "version": "version {version}"
     }
   }
 }

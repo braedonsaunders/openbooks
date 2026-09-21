@@ -99,6 +99,17 @@ const GROUP_TABS: Record<TabGroup, { href: string; ns: string; key: string }[]> 
     // hrmCertifications switch (TAB_FEATURE).
     { href: '/hrm/qualifications', ns: 'hrm', key: 'home.tabs.qualifications' },
     // HR-14 end
+    // HR-19 begin: documents and surveys — behind hrm.documents.read
+    // and hrm.surveys.manage (HRM_TAB_PERMISSION) with the hrmDocuments
+    // and hrmSurveys switches (TAB_FEATURE). The org chart sits behind
+    // hrm.employment.read OR hrm.self.read at the page gate, so it
+    // deliberately carries NO HRM_TAB_PERMISSION entry below — like the
+    // performance tab, the read service narrows nothing because the
+    // shape itself is public-inside-the-org.
+    { href: '/hrm/documents', ns: 'hrm', key: 'home.tabs.documents' },
+    { href: '/hrm/surveys', ns: 'hrm', key: 'home.tabs.surveys' },
+    { href: '/hrm/org-chart', ns: 'hrm', key: 'home.tabs.orgChart' },
+    // HR-19 end
     // NOT tabs, by review: the change-request queue is a working surface
     // reached from the cockpit's pending panel and the employee drawer, not
     // a top-level destination; self-service leave is a quick action on the
@@ -139,6 +150,11 @@ const TAB_FEATURE: Record<string, string> = {
   // HR-14 begin
   '/hrm/qualifications': 'hrmCertifications',
   // HR-14 end
+  // HR-19 begin
+  '/hrm/documents': 'hrmDocuments',
+  '/hrm/surveys': 'hrmSurveys',
+  '/hrm/org-chart': 'hrmOrgChart',
+  // HR-19 end
   '/hrm/positions': 'hrm',
   '/hrm/processes': 'hrm',
   '/close': 'continuousClose',
@@ -229,6 +245,10 @@ const HRM_TAB_PERMISSION: Record<string, string> = {
   // HR-14 begin
   '/hrm/qualifications': 'hrm.certifications.read',
   // HR-14 end
+  // HR-19 begin
+  '/hrm/documents': 'hrm.documents.read',
+  '/hrm/surveys': 'hrm.surveys.manage',
+  // HR-19 end
 }
 
 /**

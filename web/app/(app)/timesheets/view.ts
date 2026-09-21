@@ -5,10 +5,13 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../lib/authz'
+import { isFeatureEnabled } from '../../../lib/features'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { isUuid, pickString } from '../../../lib/list-params'
 import { loadFieldDefs } from '../../../lib/custom-fields'
 import { loadTimePolicy } from '../../../lib/time-policy'
+// HR-20: approver flag chips over the week's clock pairs.
+import { approvalFlags } from '@openbooks/engine/src/hrm/field-time/reads.ts'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 import {
   currentWeekStart,
@@ -48,6 +51,11 @@ export interface TimesheetsData {
   currentParams: Record<string, string | string[] | undefined>
   newButton: { href: string; label: string }
   drawer: (Record<string, unknown> & { remountKey: string }) | null
+  // HR-20: field-time nav under Timesheets — office orgs never see these.
+  showClockLink: boolean
+  clockButton: { href: string; label: string }
+  showCrewLink: boolean
+  crewButton: { href: string; label: string }
 }
 
 export async function loadTimesheets(
@@ -103,6 +111,13 @@ export async function loadTimesheets(
   // fails in this file; the registry spreads the rest through untouched.
   // (`fieldDefs` keeps the native `as never`: server defs and client defs
   // are the same object at runtime.)
+  // HR-20: field flags for the drawer — geo/photo/auto-close chips over
+  // the week's clock pairs. Coordinates stay out; the drawer shows flags.
+  const fieldTimeOnEarly = await isFeatureEnabled(orgId, 'fieldTime')
+  const fieldFlags =
+    fieldTimeOnEarly && openEmployeeId && openWeek
+      ? await approvalFlags(orgId, { weekStart: openWeek, employeePartyId: openEmployeeId }).catch(() => [])
+      : []
   const gridProps =
     pickers && weekPayload && openEmployeeId && openWeek
       ? {
@@ -116,8 +131,12 @@ export async function loadTimesheets(
           requireApproval: timePolicy.requireApproval,
           fieldDefs: lineFieldDefs as never,
           closeHref,
+          fieldFlags,
         } satisfies WeeklyGridProps
       : null
+
+  const fieldTimeOn = fieldTimeOnEarly
+  const crewEntryOn = fieldTimeOn && (await isFeatureEnabled(orgId, 'fieldTimeCrewEntry'))
 
   return {
     title: t('list.title'),
@@ -125,6 +144,10 @@ export async function loadTimesheets(
     canManage,
     currentParams: sp,
     newButton: { href: newHref, label: t('list.newButton') },
+    showClockLink: fieldTimeOn && can(authz, 'time.clock'),
+    clockButton: { href: '/time/clock', label: t('field.clockTab') },
+    showCrewLink: crewEntryOn && (can(authz, 'time.crew.enter') || can(authz, 'time.read')),
+    crewButton: { href: '/time/crew', label: t('field.crewTab') },
     drawer: gridProps
       ? {
           // Remount on identity change so no state can outlive its week.
@@ -146,7 +169,12 @@ export function timesheetsSpec(data: TimesheetsData): PageSpec {
       pageHeader({
         title: f('title'),
         description: f('description'),
-        actions: [widget(newTimesheet.widget, newTimesheet.props, f('canManage'))],
+        // HR-20: field-time nav rides the header behind its own switches.
+        actions: [
+          widget(newTimesheet.widget, newTimesheet.props, f('canManage')),
+          widget('link-button', { href: f('clockButton.href'), label: f('clockButton.label'), variant: 'outline' }, f('showClockLink')),
+          widget('link-button', { href: f('crewButton.href'), label: f('crewButton.label'), variant: 'outline' }, f('showCrewLink')),
+        ],
       }),
     ],
     body: [

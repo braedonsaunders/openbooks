@@ -577,6 +577,18 @@
         "label": "タイムシート週",
         "description": "週次タイムシート、提出日と承認日、および合計時間。"
       },
+      "field_clock_events": {
+        "label": "フィールド打刻",
+        "description": "モバイルとキオスクの打刻操作 — 誰が、いつ、ジオフェンス判定付きで、ペアがどう単価付けされたか。判定フラグのみ。生の座標には人事雇用権限が必要。"
+      },
+      "field_clock_coordinates": {
+        "label": "打刻座標",
+        "description": "打刻ごとの生座標 — 作業者の位置情報。人事雇用権限でのみ表示。その他の判定フラグはフィールド打刻にある。"
+      },
+      "crew_time_batches": {
+        "label": "クルーバッチ",
+        "description": "職長が作るプロジェクト・日ごとのクルーバッチ — 承認段階ごとのステータス、時間と人数。"
+      },
       "fixed_assets": {
         "label": "固定資産",
         "description": "固定資産台帳 — ステータス、取得、原価、管理者、ディメンション。"
@@ -752,6 +764,50 @@
       "hrm_talent_reviews": {
         "label": "タレントレビュー",
         "description": "タレントレビューごとに1行 — 従業員、パフォーマンスとポテンシャル、離職時の影響とリスク、昇進準備度。HRの評価権限が必要です。"
+      },
+      "hrm_documents": {
+        "label": "HR文書",
+        "description": "HR文書ごとに1行 — 件名、宣言カテゴリ、ライフサイクル状態、送信/完了/期限、リーガルホールド。"
+      },
+      "hrm_document_signers": {
+        "label": "文書署名者",
+        "description": "順序付き署名者ごとに1行 — 文書、順序、役割、状態。"
+      },
+      "hrm_retention_actions": {
+        "label": "保持アクション",
+        "description": "保持アクションごとに1行 — 文書、カテゴリ、期限、最終アクション、実行、リーガルホールドによる停止。"
+      },
+      "hrm_survey_results": {
+        "label": "調査結果",
+        "description": "調査ごとに1行 — 種類、匿名度、状態、招待数と回答数、締切日。"
+      },
+      "hrm_org_chart": {
+        "label": "組織図",
+        "description": "基準日時点で在籍中の雇用ごとに1行 — 氏名、役職、部門、上司。"
+      },
+      "hrm_interview_slots": {
+        "description": "提案・予約・辞退の面接枠を1行ずつ。連絡先や予約トークンは外部に出ない。",
+        "label": "面接枠"
+      },
+      "hrm_offers": {
+        "description": "オファーを1行ずつ。業務状態・署名状態・版を持つ。金額・文面・署名証跡は出ない。",
+        "label": "オファー"
+      },
+      "hrm_pool_members": {
+        "description": "タレントプールの所属を1行ずつ。氏名のみ、連絡先は出ない。",
+        "label": "プール所属"
+      },
+      "hrm_postings": {
+        "description": "求人媒体の掲載を1行ずつ。応募数と結果通知数で媒体効果を測る。",
+        "label": "掲載"
+      },
+      "hrm_retention_runs": {
+        "description": "保持ルールの実行を1行ずつ。匿名化・削除・延長数を記録。",
+        "label": "保持実行"
+      },
+      "hrm_scorecards": {
+        "description": "面接を1行ずつ。提出数・人数と総合分布の集計のみ。評価者ごとの明細は出ない。",
+        "label": "評価集計"
       }
     },
     "columns": {
@@ -968,6 +1024,9 @@
         "department": "部門",
         "memo": "摘要",
         "created_at": "作成日時",
+        "equipment_unit": "設備ユニット",
+        "equipment_hours": "設備時間",
+        "cost_code_ref": "コストコード",
         "id": "作業時間入力（ID）"
       },
       "timesheet_weeks": {
@@ -983,6 +1042,39 @@
         "approved_at": "承認日時",
         "rejection_reason": "却下理由",
         "id": "週 (id)"
+      },
+      "field_clock_events": {
+        "employee_name": "従業員",
+        "kind": "操作",
+        "occurred_at": "端末時刻",
+        "project": "プロジェクト",
+        "cost_code_ref": "コストコード",
+        "geo_check": "ジオフェンス",
+        "accuracy_m": "測位精度（m）",
+        "source": "取得元",
+        "status": "ステータス",
+        "auto_closed": "自動クローズ",
+        "has_photo": "写真添付",
+        "id": "打刻（ID）"
+      },
+      "field_clock_coordinates": {
+        "employee_name": "従業員",
+        "occurred_at": "端末時刻",
+        "latitude": "緯度",
+        "longitude": "経度",
+        "accuracy_m": "測位精度（m）",
+        "id": "打刻（ID）"
+      },
+      "crew_time_batches": {
+        "foreman_name": "職長",
+        "project": "プロジェクト",
+        "worked_on": "作業日",
+        "status": "ステータス",
+        "total_hours": "合計時間",
+        "worker_count": "作業員",
+        "line_count": "明細行",
+        "submitted_at": "提出日時",
+        "id": "クルーバッチ（ID）"
       },
       "fixed_assets": {
         "asset_number": "資産番号",
@@ -1615,6 +1707,110 @@
         "impact_of_loss": "離職時の影響",
         "risk_of_loss": "離職リスク",
         "id": "レビュー (ID)"
+      },
+      "hrm_documents": {
+        "title": "件名",
+        "person": "対象者",
+        "category": "カテゴリ",
+        "status": "ステータス",
+        "sent_at": "送信日時",
+        "completed_at": "完了日時",
+        "expires_at": "期限",
+        "legal_hold": "リーガルホールド",
+        "document_id": "文書 (ID)"
+      },
+      "hrm_document_signers": {
+        "document": "文書",
+        "ord": "順序",
+        "role": "役割",
+        "status": "ステータス",
+        "signed_at": "署名日時",
+        "document_id": "文書 (ID)"
+      },
+      "hrm_retention_actions": {
+        "document": "文書",
+        "category": "カテゴリ",
+        "due_on": "期限",
+        "action": "アクション",
+        "executed_at": "実行日時",
+        "blocked_reason": "停止理由",
+        "document_id": "文書 (ID)"
+      },
+      "hrm_survey_results": {
+        "name": "名称",
+        "kind": "種類",
+        "anonymity": "匿名度",
+        "status": "ステータス",
+        "invitations": "招待数",
+        "responded": "回答数",
+        "closes_at": "締切",
+        "survey_id": "調査 (ID)"
+      },
+      "hrm_org_chart": {
+        "employee": "従業員",
+        "title": "役職",
+        "department": "部門",
+        "manager": "上司",
+        "employment_id": "雇用 (ID)"
+      },
+      "hrm_interview_slots": {
+        "booked_on": "予約日",
+        "candidate": "候補者",
+        "ends_at": "終了",
+        "kind": "形式",
+        "requisition": "求人",
+        "slot_id": "枠 (ID)",
+        "starts_at": "開始",
+        "timezone": "タイムゾーン"
+      },
+      "hrm_offers": {
+        "candidate": "候補者",
+        "expires_on": "期限",
+        "job_title": "職種",
+        "offer_id": "オファー (ID)",
+        "requisition": "求人",
+        "sent_on": "送付日",
+        "signature_status": "署名",
+        "signed_on": "署名日",
+        "status": "状態",
+        "version": "版"
+      },
+      "hrm_pool_members": {
+        "added_on": "登録日",
+        "candidate": "候補者",
+        "note": "備考",
+        "pool": "プール"
+      },
+      "hrm_postings": {
+        "applies": "応募数",
+        "board": "媒体",
+        "closed_on": "終了日",
+        "dispositions": "結果通知数",
+        "posting_id": "掲載 (ID)",
+        "published_on": "公開日",
+        "requisition": "求人",
+        "status": "状態"
+      },
+      "hrm_retention_runs": {
+        "anonymized": "匿名化数",
+        "deleted": "削除数",
+        "extensions": "延長数",
+        "ran_at": "実行日時",
+        "rule": "ルール",
+        "run_id": "実行 (ID)"
+      },
+      "hrm_scorecards": {
+        "candidate": "候補者",
+        "interview_id": "面接 (ID)",
+        "kind": "形式",
+        "no": "不採用",
+        "panel": "面接官数",
+        "requisition": "求人",
+        "scheduled_on": "予定日",
+        "strong_no": "強い不採用",
+        "strong_yes": "強い採用",
+        "submitted": "提出数",
+        "yes": "採用"
       }
     },
     "enumValues": {

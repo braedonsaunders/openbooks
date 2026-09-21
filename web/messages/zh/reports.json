@@ -577,6 +577,18 @@
         "label": "工时表周",
         "description": "每周工时表、提交和审批日期，以及总工时。"
       },
+      "field_clock_events": {
+        "label": "外勤打卡",
+        "description": "移动端和考勤机的打卡操作 — 谁、何时、围栏判定，以及配对如何计价。仅含判定标志；原始坐标需要人事雇用权限。"
+      },
+      "field_clock_coordinates": {
+        "label": "打卡坐标",
+        "description": "每次打卡的原始坐标 — 工人位置，仅有人事雇用权限才可见。其他人的判定标志在外勤打卡中。"
+      },
+      "crew_time_batches": {
+        "label": "班组批次",
+        "description": "工头按项目按日提交的班组批次 — 各审批阶段的状态、工时和人数。"
+      },
       "fixed_assets": {
         "label": "固定资产",
         "description": "固定资产台账——状态、购置、成本、保管人和维度。"
@@ -752,6 +764,50 @@
       "hrm_talent_reviews": {
         "label": "人才盘点",
         "description": "每次人才盘点一行 — 员工、绩效与潜力、流失影响与风险以及晋升准备度。需要人力资源绩效权限。"
+      },
+      "hrm_documents": {
+        "label": "人力资源文档",
+        "description": "每个 HR 文档一行——标题、声明类别、生命周期状态、发送/完成/到期和法定保留。"
+      },
+      "hrm_document_signers": {
+        "label": "文档签署人",
+        "description": "每个有序签署人一行——文档、顺序、角色和状态。"
+      },
+      "hrm_retention_actions": {
+        "label": "保留操作",
+        "description": "每个保留操作一行——文档、类别、到期日、最终操作、执行和法定保留阻止。"
+      },
+      "hrm_survey_results": {
+        "label": "调查结果",
+        "description": "每个调查一行——类型、匿名等级、状态、邀请数与回答数、截止日期。"
+      },
+      "hrm_org_chart": {
+        "label": "组织架构图",
+        "description": "报告日期每个在职雇佣一行——姓名、职位、部门和直线经理。"
+      },
+      "hrm_interview_slots": {
+        "description": "每个提议、预定或婉拒的面试时段一行，含时段与形式。联系方式与预定令牌绝不外流。",
+        "label": "面试时段"
+      },
+      "hrm_offers": {
+        "description": "每封录用函一行，含业务状态、签署状态与版本。金额、函件与签署证据绝不外流。",
+        "label": "录用函"
+      },
+      "hrm_pool_members": {
+        "description": "每位人才库成员一行：人才库、姓名与加入日期。仅姓名，无联系方式。",
+        "label": "库成员"
+      },
+      "hrm_postings": {
+        "description": "每个招聘渠道发布一行，含状态、申请数与结果回传数，用于衡量各渠道效果。",
+        "label": "渠道发布"
+      },
+      "hrm_retention_runs": {
+        "description": "每条保留规则每次执行一行，含匿名化、删除与延长数。",
+        "label": "保留执行"
+      },
+      "hrm_scorecards": {
+        "description": "每次面试一行，含小组评价汇总：已提交数、人数与总体分布。评价人明细绝不外流。",
+        "label": "评价汇总"
       }
     },
     "columns": {
@@ -968,6 +1024,9 @@
         "department": "部门",
         "memo": "备注",
         "created_at": "创建时间",
+        "equipment_unit": "设备单元",
+        "equipment_hours": "设备工时",
+        "cost_code_ref": "成本代码",
         "id": "工时记录（ID）"
       },
       "timesheet_weeks": {
@@ -983,6 +1042,39 @@
         "approved_at": "批准时间",
         "rejection_reason": "拒绝原因",
         "id": "周 (id)"
+      },
+      "field_clock_events": {
+        "employee_name": "员工",
+        "kind": "操作",
+        "occurred_at": "设备时间",
+        "project": "项目",
+        "cost_code_ref": "成本代码",
+        "geo_check": "地理围栏",
+        "accuracy_m": "定位精度（米）",
+        "source": "来源",
+        "status": "状态",
+        "auto_closed": "自动关闭",
+        "has_photo": "已附照片",
+        "id": "打卡（ID）"
+      },
+      "field_clock_coordinates": {
+        "employee_name": "员工",
+        "occurred_at": "设备时间",
+        "latitude": "纬度",
+        "longitude": "经度",
+        "accuracy_m": "定位精度（米）",
+        "id": "打卡（ID）"
+      },
+      "crew_time_batches": {
+        "foreman_name": "工头",
+        "project": "项目",
+        "worked_on": "工作日期",
+        "status": "状态",
+        "total_hours": "总工时",
+        "worker_count": "工人",
+        "line_count": "明细行",
+        "submitted_at": "提交时间",
+        "id": "班组批次（ID）"
       },
       "fixed_assets": {
         "asset_number": "资产编号",
@@ -1615,6 +1707,110 @@
         "impact_of_loss": "流失影响",
         "risk_of_loss": "流失风险",
         "id": "评估 (ID)"
+      },
+      "hrm_documents": {
+        "title": "标题",
+        "person": "人员",
+        "category": "类别",
+        "status": "状态",
+        "sent_at": "发送时间",
+        "completed_at": "完成时间",
+        "expires_at": "到期时间",
+        "legal_hold": "法定保留",
+        "document_id": "文档（ID）"
+      },
+      "hrm_document_signers": {
+        "document": "文档",
+        "ord": "顺序",
+        "role": "角色",
+        "status": "状态",
+        "signed_at": "签署时间",
+        "document_id": "文档（ID）"
+      },
+      "hrm_retention_actions": {
+        "document": "文档",
+        "category": "类别",
+        "due_on": "到期日",
+        "action": "操作",
+        "executed_at": "执行时间",
+        "blocked_reason": "阻止原因",
+        "document_id": "文档（ID）"
+      },
+      "hrm_survey_results": {
+        "name": "名称",
+        "kind": "类型",
+        "anonymity": "匿名度",
+        "status": "状态",
+        "invitations": "邀请数",
+        "responded": "回答数",
+        "closes_at": "截止时间",
+        "survey_id": "调查（ID）"
+      },
+      "hrm_org_chart": {
+        "employee": "员工",
+        "title": "职位",
+        "department": "部门",
+        "manager": "经理",
+        "employment_id": "雇佣（ID）"
+      },
+      "hrm_interview_slots": {
+        "booked_on": "已预定",
+        "candidate": "候选人",
+        "ends_at": "结束",
+        "kind": "形式",
+        "requisition": "需求",
+        "slot_id": "时段 (ID)",
+        "starts_at": "开始",
+        "timezone": "时区"
+      },
+      "hrm_offers": {
+        "candidate": "候选人",
+        "expires_on": "到期",
+        "job_title": "职位",
+        "offer_id": "录用函 (ID)",
+        "requisition": "需求",
+        "sent_on": "已发送",
+        "signature_status": "签署",
+        "signed_on": "已签署",
+        "status": "状态",
+        "version": "版本"
+      },
+      "hrm_pool_members": {
+        "added_on": "加入日期",
+        "candidate": "候选人",
+        "note": "备注",
+        "pool": "人才库"
+      },
+      "hrm_postings": {
+        "applies": "申请数",
+        "board": "渠道",
+        "closed_on": "关闭日期",
+        "dispositions": "结果回传数",
+        "posting_id": "发布 (ID)",
+        "published_on": "发布日期",
+        "requisition": "需求",
+        "status": "状态"
+      },
+      "hrm_retention_runs": {
+        "anonymized": "匿名化数",
+        "deleted": "删除数",
+        "extensions": "延长数",
+        "ran_at": "执行时间",
+        "rule": "规则",
+        "run_id": "执行 (ID)"
+      },
+      "hrm_scorecards": {
+        "candidate": "候选人",
+        "interview_id": "面试 (ID)",
+        "kind": "形式",
+        "no": "反对",
+        "panel": "面试官数",
+        "requisition": "需求",
+        "scheduled_on": "已安排",
+        "strong_no": "明确反对",
+        "strong_yes": "明确赞成",
+        "submitted": "已提交数",
+        "yes": "赞成"
       }
     },
     "enumValues": {
