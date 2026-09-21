@@ -566,7 +566,7 @@ export const payStubs = pgTable(
     taxYear: integer("tax_year").notNull(),
     federalClaim: money("federal_claim").notNull().default("0"),
     provincialClaim: money("provincial_claim").notNull().default("0"),
-    currency: currencyCode("currency").notNull(),
+    currency: currencyCode("currency_code").notNull(),
     gross: money("gross").notNull().default("0"),
     pensionableEarnings: money("pensionable_earnings").notNull().default("0"),
     insurableEarnings: money("insurable_earnings").notNull().default("0"),
