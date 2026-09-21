@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { prepareTaxBasisRegime } from "./tax-basis-draft";
 import {
+  validateTaxRegimeBasis,
+  type TaxBasisSourceContext,
+} from "@openbooks/engine/src/tax-returns/asset-basis-policy.ts";
+import {
   prepareMacrsVintageAllocations,
   type OpenMacrsVintage,
 } from "./macrs-vintage-allocation-draft";
@@ -130,18 +134,22 @@ test("changing a CA allocation choice removes the old fact while preserving zero
 });
 
 test("ready history supplies total basis and discards stale composite seller fields", () => {
-  const row = prepareTaxBasisRegime(
-    seller,
-    {
-      sourceOperation: "partial_disposal",
-      applicable: "seller",
-      usSellerMacrs: { status: "ready", vintages },
-    },
-    allocations(),
-  );
+  const context: TaxBasisSourceContext = {
+    sourceOperation: "partial_disposal",
+    applicable: "seller",
+    usSellerMacrs: { status: "ready", vintages },
+  };
+  const row = prepareTaxBasisRegime(seller, context, allocations());
   assert.equal(row.regime, "us_macrs");
   if (row.regime !== "us_macrs") return;
-  assert.equal(row.originalUnadjustedBasis, "10400.0000");
+  assert.equal(Object.hasOwn(row, "originalUnadjustedBasis"), false);
+  const server = validateTaxRegimeBasis(
+    JSON.parse(JSON.stringify(row)),
+    context,
+  );
+  assert.equal(server.regime, "us_macrs");
+  if (server.regime !== "us_macrs") return;
+  assert.equal(server.originalUnadjustedBasis, "10400.0000");
   assert.equal(row.vintageAllocations?.length, 2);
   for (const hidden of [
     "placedInServiceOn",
@@ -151,6 +159,85 @@ test("ready history supplies total basis and discards stale composite seller fie
     "usSellerMacrsStatus",
   ])
     assert.equal(Object.hasOwn(row, hidden), false, hidden);
+});
+
+test("a native onward-transfer POST contains declarations and the server derives both receiver histories", () => {
+  const context: TaxBasisSourceContext = {
+    sourceOperation: "intercompany_transfer",
+    applicable: "both",
+    effectiveOn: "2026-07-01",
+    usSellerMacrs: { status: "ready", vintages },
+  };
+  const allocated = prepareMacrsVintageAllocations(vintages, {
+    [vintages[0]!.key]: {
+      disposedUnadjustedBasis: "2000",
+      remainingUnadjustedBasis: "8000",
+    },
+    [vintages[1]!.key]: {
+      disposedUnadjustedBasis: "100",
+      remainingUnadjustedBasis: "300",
+    },
+  });
+  const post = prepareTaxBasisRegime(
+    {
+      ...seller,
+      recognition: "nontaxable",
+      section168i7Kind: "nonrecognition",
+      relatedPerson: true,
+      excessBasis: "0",
+    },
+    context,
+    allocated,
+  );
+  for (const derived of [
+    "buyerVintages",
+    "originalUnadjustedBasis",
+    "carryoverBasis",
+    "placedInServiceOn",
+    "method",
+    "convention",
+    "recoveryPeriodYears",
+    "section179",
+    "priorDepreciation",
+    "bonusPercent",
+    "businessUsePercent",
+    "sourceOperation",
+    "applicable",
+    "effectiveOn",
+    "usSellerMacrsStatus",
+  ])
+    assert.equal(Object.hasOwn(post, derived), false, derived);
+
+  // Exercise the actual receiving validator, not a permissive route double.
+  const server = validateTaxRegimeBasis(
+    JSON.parse(JSON.stringify(post)),
+    context,
+  );
+  assert.equal(server.regime, "us_macrs");
+  if (server.regime !== "us_macrs") return;
+  assert.equal(server.vintageAllocations?.length, 2);
+  assert.equal(server.buyerVintages?.length, 2);
+  assert.deepEqual(
+    server.buyerVintages?.map((row) => ({
+      parent: row.parentKey,
+      placed: row.placedInServiceOn,
+      method: row.method,
+      convention: row.convention,
+      recovery: row.recoveryPeriodYears,
+    })),
+    vintages.map((row) => ({
+      parent: row.key,
+      placed: row.placedInServiceOn,
+      method: row.method,
+      convention: row.convention,
+      recovery: row.recoveryPeriodYears,
+    })),
+  );
+  assert.equal(
+    Object.hasOwn(server, "method"),
+    false,
+    "distinct schedules stay distinct",
+  );
 });
 
 test("a server history refusal reaches the proposal action unchanged", () => {

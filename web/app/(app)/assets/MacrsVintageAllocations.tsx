@@ -2,13 +2,26 @@
 
 import { useId } from "react";
 import { Input, Label } from "@openbooks/ui";
-import { MACRS_VINTAGE_SOURCE_LABELS } from "@openbooks/engine/src/tax-returns/asset-basis-policy.ts";
+import {
+  MACRS_VINTAGE_SOURCE_LABELS,
+  TAX_BASIS_FIELDS,
+} from "@openbooks/engine/src/tax-returns/asset-basis-policy.ts";
 import {
   prepareMacrsVintageAllocations,
   type MacrsAllocationAmounts,
   type MacrsAllocationEdits,
   type OpenMacrsVintage,
 } from "./macrs-vintage-allocation-draft";
+
+const scheduleFields = new Map(
+  TAX_BASIS_FIELDS.map((field) => [field.name, field]),
+);
+function scheduleLabel(field: "method" | "convention", value: string) {
+  return (
+    scheduleFields.get(field)?.choices?.find((choice) => choice.value === value)
+      ?.label ?? value
+  );
+}
 
 /** The same native allocation controls as GroupValuationButton's dated plan,
  * inside TaxBasisButton's existing workpaper drawer. Sources are not editable. */
@@ -60,8 +73,13 @@ export function MacrsVintageAllocations({
             <p className="text-sm">
               Placed in service {vintage.placedInServiceOn}
               {vintage.transferOn ? ` · Transferred ${vintage.transferOn}` : ""}
-              {` · ${vintage.recoveryPeriodYears}-year ${vintage.method} / ${vintage.convention}`}
+              {` · ${vintage.recoveryPeriodYears}-year ${scheduleLabel("method", vintage.method)} / ${scheduleLabel("convention", vintage.convention)}`}
             </p>
+            {vintage.parentKey ? (
+              <p className="break-words text-xs text-muted-foreground">
+                Source history reference: {vintage.parentKey}
+              </p>
+            ) : null}
             <p className="text-sm">
               Open unadjusted tax basis: {vintage.unadjustedBasis}
             </p>

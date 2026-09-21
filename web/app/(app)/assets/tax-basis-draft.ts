@@ -39,5 +39,14 @@ export function prepareTaxBasisRegime(
     // their exact sums; do not let an earlier editable header override them.
     Object.assign(supplied, allocations);
   }
-  return validateTaxRegimeBasis(supplied, context);
+  const validated = validateTaxRegimeBasis(supplied, context);
+  // Validation also derives frozen receiver schedules and checkpoints. They
+  // are server-owned results, not new operator declarations. Sending the
+  // enriched object back would either fail the API's input schema or create
+  // a competing source of financial facts. Preserve only the input keys;
+  // the service reconstructs the derived values under its transaction locks.
+  const declared = validated as unknown as Record<string, unknown>;
+  return Object.fromEntries(
+    Object.keys(supplied).map((key) => [key, declared[key]]),
+  ) as unknown as TaxRegimeBasis;
 }
