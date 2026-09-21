@@ -14,11 +14,13 @@ import {
   type TaxAssetBasisSourcesResponse,
   type TaxBasisDraft,
   type TaxRegimeBasis,
+  type ConsolidatedGroupMembershipInput,
 } from "@openbooks/engine/src/tax-returns/asset-basis-policy.ts";
 import { useAppAction } from "@/lib/use-app-action";
 import { TaxBasisFields } from "./TaxBasisFields";
 import { prepareTaxBasisRegime } from "./tax-basis-draft";
 import { MacrsVintageAllocations } from "./MacrsVintageAllocations";
+import { ConsolidatedGroupMembershipFields } from "./ConsolidatedGroupMembershipFields";
 import {
   prepareMacrsVintageAllocations,
   type MacrsAllocationEdits,
@@ -94,6 +96,8 @@ export function TaxBasisButton({ assetId }: { assetId: string }) {
               usSellerMacrs:
                 code === "us_macrs" ? selected!.openMacrsVintages : null,
               effectiveOn: selected!.occurredOn,
+              sellerSubsidiaryId: selected!.sellerSubsidiaryId,
+              buyerSubsidiaryId: selected!.buyerSubsidiaryId,
             },
           ),
         ]),
@@ -121,6 +125,8 @@ export function TaxBasisButton({ assetId }: { assetId: string }) {
           applicable,
           usSellerMacrs: code === "us_macrs" ? source.openMacrsVintages : null,
           effectiveOn: source.occurredOn,
+          sellerSubsidiaryId: source.sellerSubsidiaryId,
+          buyerSubsidiaryId: source.buyerSubsidiaryId,
         });
         return prepareTaxBasisRegime(
           draft,
@@ -130,6 +136,8 @@ export function TaxBasisButton({ assetId }: { assetId: string }) {
             usSellerMacrs:
               code === "us_macrs" ? source.openMacrsVintages : null,
             effectiveOn: source.occurredOn,
+            sellerSubsidiaryId: source.sellerSubsidiaryId,
+            buyerSubsidiaryId: source.buyerSubsidiaryId,
           },
           code === "us_macrs" &&
             taxBasisSideApplies(applicable, "seller") &&
@@ -139,6 +147,7 @@ export function TaxBasisButton({ assetId }: { assetId: string }) {
                 allocationEdits,
               )
             : undefined,
+          source,
         );
       });
     } catch (error) {
@@ -285,6 +294,20 @@ export function TaxBasisButton({ assetId }: { assetId: string }) {
                         ? `Applies to ${source.receivingAssetLabel ?? "the receiving asset"}.`
                         : `Applies to ${source.assetLabel} and ${source.receivingAssetLabel ?? "the receiving asset"}.`}
                   </p>
+                  {code === "us_macrs" && source.sourceOperation === "intercompany_transfer" ? (
+                    <ConsolidatedGroupMembershipFields
+                      source={source}
+                      value={drafts[code]?.consolidatedGroupMembership as ConsolidatedGroupMembershipInput | undefined}
+                      disabled={busy}
+                      onChange={(membership) => {
+                        setDrafts((current) => ({
+                          ...current,
+                          [code]: { ...current[code], consolidatedGroupMembership: membership },
+                        }));
+                        changed();
+                      }}
+                    />
+                  ) : null}
                   {code === "us_macrs" &&
                   taxBasisSideApplies(applicable, "seller") &&
                   macrsHistoryRefusal ? null : (
@@ -301,6 +324,8 @@ export function TaxBasisButton({ assetId }: { assetId: string }) {
                                 ? source.openMacrsVintages
                                 : null,
                             effectiveOn: source.occurredOn,
+                            sellerSubsidiaryId: source.sellerSubsidiaryId,
+                            buyerSubsidiaryId: source.buyerSubsidiaryId,
                           },
                         )
                       }

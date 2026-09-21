@@ -2,10 +2,38 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { matchConsolidatedDepreciation } from "@openbooks/engine/src/tax-returns/consolidated-tax-matching.ts";
 import { ChangeEvidence } from "./ChangeEvidence";
+import { CONSOLIDATED_MEMBERSHIP_IDENTITY } from "@openbooks/engine/src/tax-returns/asset-basis-policy.ts";
 
 // The test runner uses classic JSX; the production compiler supplies it.
 Object.assign(globalThis, { React });
+
+test("membership evidence names the source entities and period separately from deferred gain and carryover", () => {
+  const sellerId = "11111111-1111-4111-8111-111111111111";
+  const buyerId = "22222222-2222-4222-8222-222222222222";
+  const markup = renderToStaticMarkup(<ChangeEvidence taxBasis
+    names={{ [sellerId]: "Seller company", [buyerId]: "Buyer company" }} value={{
+      consolidatedMembership: {
+        identity: CONSOLIDATED_MEMBERSHIP_IDENTITY, groupKey: "US income-tax group A",
+        sellerSubsidiaryId: sellerId, buyerSubsidiaryId: buyerId,
+        effectiveOn: "2026-01-01", throughOn: "2026-12-31",
+      },
+      amountRealized: "130.0000", sellerAdjustedBasis: "80.0000",
+      recognition: "taxable", section168i7Kind: "consolidated_group",
+      carryoverBasis: "80.0000", excessBasis: "50.0000",
+      consolidatedMatching: { deferredOpening: "50.0000", deferredClosing: "50.0000",
+        actualCorrespondingItems: [], recomputedCorrespondingItems: [], sellerMatchingItems: [] },
+    }} />);
+  for (const fact of ["Approved consolidated income-tax group membership", "Seller legal entity",
+    "Buyer legal entity", "Seller company", "Buyer company", "US income-tax group A",
+    "US consolidated income-tax group membership", "2026-01-01", "2026-12-31",
+    "Seller adjusted tax basis of the transferred slice", "130.0000", "80.0000", "50.0000",
+    "Deferred intercompany gain or loss and matching", "No corresponding items were taken into account"])
+    assert.ok(markup.includes(fact), fact);
+  assert.doesNotMatch(markup, /11111111|22222222|us_macrs\.consolidated_group\.membership/);
+  assert.doesNotMatch(markup, /<(?:input|select|button)\b/);
+});
 
 test("dated checkpoint evidence separates bonus actually taken from its rate and preserves per-vintage methods", () => {
   const markup = renderToStaticMarkup(<ChangeEvidence taxBasis value={{ buyerVintages: [
@@ -62,6 +90,24 @@ test("matching evidence preserves signed amounts, deferred balance and the redet
   assert.match(loss, /Ordinary income or deduction/);
   assert.match(loss, /-5\.0001/);
   assert.match(loss, /-44\.9999/);
+});
+
+test("depreciation matching evidence distinguishes nonnegative deductions from signed income effects", () => {
+  const inputs = { deferredOpening: "50.0000", actualDeduction: "15.0000", recomputedDeduction: "10.0000" };
+  const frozen = matchConsolidatedDepreciation(inputs);
+  const markup = renderToStaticMarkup(<ChangeEvidence taxBasis value={{ ...inputs, ...frozen }} />);
+  assert.match(markup, /depreciation deduction \(nonnegative magnitude\)/);
+  assert.match(markup, /recomputed depreciation deduction \(nonnegative magnitude\)/);
+  assert.match(markup, /signed effects on taxable income: deductions are negative/);
+  assert.match(markup, /Deferred amounts retain the sign of the intercompany gain or loss/);
+  for (const amount of ["15.0000", "10.0000", "-15.0000", "-10.0000", "5.0000", "45.0000"]) {
+    assert.ok(markup.includes(`>${amount}</span>`), `the frozen evidence must preserve ${amount}`);
+  }
+  assert.doesNotMatch(markup, /<(input|select|button)\b/,
+    "frozen matching evidence must not offer an operator-calculated schedule or deferred balance");
+  const ordinary = renderToStaticMarkup(<ChangeEvidence value={{ sellerMatchingItems: [] }} />);
+  assert.doesNotMatch(ordinary, /signed effects on taxable income/,
+    "the tax explanation must not reinterpret ordinary accounting evidence");
 });
 
 test("an explicitly empty matching read differs from missing evidence and retains unknown statutory attributes", () => {

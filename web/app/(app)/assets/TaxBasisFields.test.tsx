@@ -246,7 +246,7 @@ test("both classified parties receive both statutory worksheets with no applicab
   assert.doesNotMatch(markup, /-(?:applicable|sourceOperation)"/);
 });
 
-test("a nontaxable transfer requires an explicit statutory vehicle and taxable transfers hide it", () => {
+test("a nontaxable transfer requires a statutory vehicle and a taxable intercompany sale can declare carryover treatment", () => {
   const context = {
     regime: "us_macrs",
     sourceOperation: "intercompany_transfer" as const,
@@ -280,5 +280,11 @@ test("a nontaxable transfer requires an explicit statutory vehicle and taxable t
     recognition: "taxable",
     section168i7Kind: "consolidated_group",
   });
-  assert.doesNotMatch(taxable, /-section168i7Kind"/);
+  const taxableKind = taxable.match(/<select\b[^>]*>[\s\S]*?<\/select>/g)
+    ?.find((select) => select.includes('value="consolidated_group"'));
+  assert.ok(taxableKind, "a taxable group sale must be able to declare its independent carryover treatment");
+  assert.doesNotMatch(taxableKind, /^<select\b[^>]*required=""/);
+  assert.match(taxableKind, /value="consolidated_group" selected=""/);
+  assert.match(taxable, /-carryoverBasis"/);
+  assert.match(taxable, /-excessBasis"/);
 });

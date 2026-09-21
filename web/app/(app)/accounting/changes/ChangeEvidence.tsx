@@ -11,6 +11,7 @@ import {
   TAX_BASIS_REGIME_LABELS,
   MACRS_VINTAGE_SOURCE_LABELS,
   MACRS_CHECKPOINT_KIND_LABELS,
+  CONSOLIDATED_MEMBERSHIP_IDENTITY,
 } from "@openbooks/engine/src/tax-returns/asset-basis-policy.ts";
 const taxFields = new Map(TAX_BASIS_FIELDS.map((field) => [field.name, field]));
 const taxChoiceFields: Record<string, string> = {
@@ -19,6 +20,15 @@ const taxChoiceFields: Record<string, string> = {
   buyerConvention: "convention",
 };
 const taxComputedLabels: Record<string, string> = {
+  consolidatedGroupMembership: "Declared consolidated income-tax group membership",
+  consolidatedMembership: "Approved consolidated income-tax group membership",
+  consolidatedMatching: "Deferred intercompany gain or loss and matching",
+  groupKey: "Income-tax consolidated group",
+  sellerSubsidiaryId: "Seller legal entity",
+  buyerSubsidiaryId: "Buyer legal entity",
+  throughOn: "Membership through",
+  sellerAdjustedBasis: "Seller adjusted tax basis of the transferred slice",
+  identity: "Evidence type",
   taxYearWindows: "Registered tax years used by this calculation",
   filingYear: "Filing-year label",
   yearStart: "Tax year starts",
@@ -38,6 +48,8 @@ const taxComputedLabels: Record<string, string> = {
   buyerMethod: "Receiving asset MACRS method",
   buyerConvention: "Receiving asset MACRS convention",
   deferredOpening: "Opening deferred intercompany amount",
+  actualDeduction: "Buyer's depreciation deduction (nonnegative magnitude)",
+  recomputedDeduction: "Group's recomputed depreciation deduction (nonnegative magnitude)",
   actualCorrespondingItems: "Buyer's corresponding items",
   recomputedCorrespondingItems: "Recomputed corresponding items for the group",
   actualCorrespondingAmount: "Buyer's corresponding amount",
@@ -125,6 +137,9 @@ export function ChangeEvidence({
     return (
       <span className="break-words">
         {names[String(value)] ??
+          (taxBasis && field === "identity" && value === CONSOLIDATED_MEMBERSHIP_IDENTITY
+            ? "US consolidated income-tax group membership"
+            : undefined) ??
           (taxBasis && field === "checkpointKind" && Object.hasOwn(MACRS_CHECKPOINT_KIND_LABELS, String(value))
             ? MACRS_CHECKPOINT_KIND_LABELS[String(value) as keyof typeof MACRS_CHECKPOINT_KIND_LABELS]
             : undefined) ??
@@ -163,35 +178,43 @@ export function ChangeEvidence({
     );
   if (typeof value === "object")
     return (
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Assessment / measurement</TableHead>
-            <TableHead>Approved proposal</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {Object.entries(value)
-            .filter(([key]) => key !== "idempotencyKey")
-            .map(([key, v]) => (
-              <TableRow key={key}>
-                <TableCell className="align-top">
-                  {taxBasis && key === "section179" && "checkpointKind" in value && value.checkpointKind === "taken_components"
-                    ? "Section 179 depreciation taken (this slice)"
-                    : label(key, taxBasis)}
-                </TableCell>
-                <TableCell>
-                  <ChangeEvidence
-                    value={v}
-                    names={names}
-                    taxBasis={taxBasis}
-                    field={key}
-                  />
-                </TableCell>
-              </TableRow>
-            ))}
-        </TableBody>
-      </Table>
+      <div className="space-y-2">
+        {taxBasis && ("actualCorrespondingAmount" in value || "sellerMatchingItems" in value) ? (
+          <p className="text-sm text-muted-foreground">
+            Corresponding and matching amounts are signed effects on taxable income: deductions are negative.
+            Deferred amounts retain the sign of the intercompany gain or loss.
+          </p>
+        ) : null}
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Assessment / measurement</TableHead>
+              <TableHead>Approved proposal</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {Object.entries(value)
+              .filter(([key]) => key !== "idempotencyKey")
+              .map(([key, v]) => (
+                <TableRow key={key}>
+                  <TableCell className="align-top">
+                    {taxBasis && key === "section179" && "checkpointKind" in value && value.checkpointKind === "taken_components"
+                      ? "Section 179 depreciation taken (this slice)"
+                      : label(key, taxBasis)}
+                  </TableCell>
+                  <TableCell>
+                    <ChangeEvidence
+                      value={v}
+                      names={names}
+                      taxBasis={taxBasis}
+                      field={key}
+                    />
+                  </TableCell>
+                </TableRow>
+              ))}
+          </TableBody>
+        </Table>
+      </div>
     );
   return null;
 }
