@@ -292,7 +292,16 @@ test("explain-pay trace carries lines, treatments, inputs and the diff", { skip:
     const party = (await db.execute<{ partyId: string }>(sql`
       select worker_party_id::text as "partyId" from worker_employments
        where org_id = ${org.orgId} and id = ${employmentId}`)).rows[0]?.partyId;
+    // pay_stubs.pay_run_document_id is a foreign key, so the run document
+    // has to exist before its stubs do. The fixture used a bare uuid and
+    // the insert was refused -- the explain-pay trace was never the thing
+    // failing. Same document shape the payroll fixtures use.
     const runId = randomUUID();
+    await db.execute(sql`
+      insert into documents (org_id, id, kind, document_number, subsidiary_id, document_date,
+                             currency, status, created_by, updated_by)
+      values (${org.orgId}, ${runId}, 'pay_run', ${`PAY-${runId.slice(0, 8)}`},
+              ${org.subsidiaryId}, '2026-09-30', 'CAD', 'draft', ${adminId}, ${adminId})`);
     const stubPrev = randomUUID();
     const stubCur = randomUUID();
     for (const [stubId, payDate, gross, net] of [

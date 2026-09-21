@@ -782,9 +782,14 @@ export async function listFlags(
      where org_id = ${input.orgId}::uuid
        and (${input.periodFrom ?? null}::date is null or pay_period_from = ${input.periodFrom ?? null}::date)
        and (${input.periodTo ?? null}::date is null or pay_period_to = ${input.periodTo ?? null}::date)
-       and (${input.severity ?? null} is null or severity = ${input.severity ?? null})
-       and (${input.kind ?? null} is null or kind = ${input.kind ?? null})
-       and (${input.status ?? null} is null or status = ${input.status ?? null})
+       -- Every optional filter is CAST. An untyped null parameter makes
+       -- PostgreSQL refuse the whole statement with "could not determine
+       -- data type of parameter", so leaving severity, kind or status
+       -- unset threw instead of matching everything -- which is the
+       -- default state of the checks list.
+       and (${input.severity ?? null}::text is null or severity = ${input.severity ?? null}::text)
+       and (${input.kind ?? null}::text is null or kind = ${input.kind ?? null}::text)
+       and (${input.status ?? null}::text is null or status = ${input.status ?? null}::text)
        and (${input.employmentId ?? null}::uuid is null or employment_id = ${input.employmentId ?? null}::uuid)
      order by severity, pay_period_from desc, id`)).rows;
   return rows;
