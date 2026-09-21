@@ -12,7 +12,8 @@
       "performance": "Leistung",
       "benefits": "Leistungen",
       "compliance": "Compliance",
-      "compensation": "Vergütung"
+      "compensation": "Vergütung",
+      "qualifications": "Qualifikationen"
     },
     "recruiting": {
       "title": "Einstellung",
@@ -323,6 +324,11 @@
       "empty": "Noch keine Leistungsanmeldungen oder Angehörige.",
       "viewAll": "Leistungen",
       "dependents": "{count, plural, one {# Angehöriger: {names}} other {# Angehörige: {names}}}"
+    },
+    "qualifications": {
+      "title": "Qualifikationen",
+      "viewAll": "Alle ansehen",
+      "empty": "Keine Qualifikationen erfasst."
     }
   },
   "directory": {
@@ -1364,6 +1370,83 @@
     "requestCancel": "Abbrechen",
     "requestStatus": {
       "open": "Offen"
+    }
+  },
+  "qualifications": {
+    "title": "Qualifikationen",
+    "description": "Lizenzen, Zertifizierungen und Nachweise je Mitarbeiter – wer ist einsatzbereit und was läuft als Nächstes ab.",
+    "record": "Qualifikation erfassen",
+    "recordTitle": "Qualifikation erfassen",
+    "drawerTitle": "Qualifikation",
+    "settings": "Qualifikationseinstellungen",
+    "sectionLabel": "Bereich",
+    "sections": {
+      "ledger": "Register",
+      "requirements": "Anforderungen",
+      "alerts": "Warnungen"
+    },
+    "segmentsLabel": "Status",
+    "allLabel": "Alle",
+    "typesLabel": "Typ",
+    "typesAll": "Alle Typen",
+    "listTitle": "Qualifikationen je Mitarbeiter",
+    "open": "Öffnen",
+    "columns": {
+      "worker": "Mitarbeiter",
+      "type": "Typ",
+      "status": "Status",
+      "expiry": "Läuft ab",
+      "subject": "Subjekt",
+      "severity": "Schwere",
+      "window": "Zeitraum",
+      "due": "Fällig",
+      "sent": "Gesendet"
+    },
+    "statusNames": {
+      "valid": "Gültig",
+      "expiring": "Läuft ab",
+      "expired": "Abgelaufen",
+      "revoked": "Widerrufen",
+      "pending_verification": "Prüfung ausstehend"
+    },
+    "emptyTitle": "Keine Qualifikationen erfasst",
+    "emptyDescription": "Erfassen Sie Lizenzen und Zertifizierungen der Mannschaft, um Einsätze zu steuern.",
+    "requirementsTitle": "Einsatzanforderungen",
+    "requirementsEmpty": "Noch keine Anforderungen festgelegt.",
+    "coverageTitle": "Projektabdeckung",
+    "coverageProjectLabel": "Projekt",
+    "coverageProjectAll": "Projekt wählen",
+    "coverageEmpty": "Diesem Projekt ist noch keine Mannschaft zugewiesen.",
+    "coverage": {
+      "qualified": "Qualifiziert",
+      "missing": "Fehlt",
+      "expired": "Abgelaufen",
+      "pending": "Ausstehend"
+    },
+    "alertsTitle": "Ablaufwarnungen",
+    "alertsEmpty": "Keine Warnungen ausgelöst.",
+    "alertDue": "Fällig",
+    "taxonomyTitle": "Qualifikationstaxonomie",
+    "windowOpen": "{from} – laufend",
+    "verify": "Prüfen",
+    "renew": "Erneuern",
+    "revoke": "Widerrufen",
+    "revokePrompt": "Diese Qualifikation widerrufen? Grund angeben:",
+    "renewPrompt": "Ausstellungsdatum der erneuerten Qualifikation (JJJJ-MM-TT):",
+    "drawer": {
+      "issued": "Ausgestellt",
+      "identifier": "Lizenznr.",
+      "notes": "Notizen",
+      "evidence": "Nachweis ansehen",
+      "events": "Verlauf"
+    },
+    "recordForm": {
+      "employment": "Anstellung",
+      "type": "Qualifikationstyp",
+      "issuedOn": "Ausgestellt am",
+      "expiresOn": "Läuft ab am",
+      "identifier": "Lizenznummer",
+      "notes": "Notizen"
     }
   }
 }

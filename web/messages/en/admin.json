@@ -2858,7 +2858,12 @@
       "levelId": "Level",
       "min": "Min",
       "target": "Target",
-      "max": "Max"
+      "max": "Max",
+      "validityMonths": "Validity (months)",
+      "issuingBody": "Issuing body",
+      "renewalLeadDays": "Renewal lead (days)",
+      "requiresEvidence": "Requires evidence",
+      "extraCategories": "Extra categories"
     },
     "fieldHelp": {
       "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",
@@ -2940,7 +2945,9 @@
       "benefitLevelKey": "Tier key the election names — single, family — stable across repricings.",
       "rateScheduleSource": "Determination number or agreement id behind this schedule.",
       "rateScheduleJurisdiction": "Pack vocabulary, free text at the generic layer — the pack interprets it.",
-      "perDiemComponent": "Earning component the amounts cross through. Its tax treatment is the single taxability declaration."
+      "perDiemComponent": "Earning component the amounts cross through. Its tax treatment is the single taxability declaration.",
+      "hrmQualificationValidity": "Leave empty for qualifications that never expire.",
+      "hrmQualificationExtraCategories": "Org-declared category vocabulary beyond the six built-ins, one per line in the editor."
     },
     "options": {
       "payFrequency": {
@@ -3381,6 +3388,14 @@
       "payBandBasis": {
         "annual": "Annual",
         "hourly": "Hourly"
+      },
+      "hrmQualificationCategory": {
+        "certification": "Certification",
+        "license": "License",
+        "training": "Training",
+        "medical": "Medical",
+        "clearance": "Clearance",
+        "other": "Other"
       }
     },
     "payroll": {
@@ -4694,6 +4709,22 @@
     "hrmPayTransparency": {
       "title": "Pay transparency",
       "description": "Frozen equity snapshots from payroll truth and worker pay-information requests."
+    },
+    "hrmCertifications": {
+      "title": "Certifications and licenses",
+      "description": "The worker qualification ledger: taxonomy, held credentials, dispatch requirements, and expiry alerts. Toggling never deletes data."
+    },
+    "hrmDispatchGating": {
+      "title": "Dispatch gating",
+      "description": "Refuse schedule assignments for workers missing required qualifications. Needs projects and scheduling."
+    },
+    "hrmEquipmentQualifications": {
+      "title": "Equipment qualifications",
+      "description": "Declare required qualification types on equipment records. Needs equipment."
+    },
+    "hrmCertificationAlerts": {
+      "title": "Certification alerts",
+      "description": "Daily expiry notices to holders and their managers through the inbox."
     }
   },
   "backupsManager": {

@@ -2926,7 +2926,12 @@
       "levelId": "Ebene",
       "min": "Minimum",
       "target": "Ziel",
-      "max": "Maximum"
+      "max": "Maximum",
+      "validityMonths": "Gültigkeit (Monate)",
+      "issuingBody": "Ausstellende Stelle",
+      "renewalLeadDays": "Vorlauf Erneuerung (Tage)",
+      "requiresEvidence": "Nachweis erforderlich",
+      "extraCategories": "Zusätzliche Kategorien"
     },
     "fieldHelp": {
       "gapless": "Lückenlos bedeutet, dass jede Nummer in der Folge belegt sein muss und keine Nummer übersprungen wird. Aktivieren Sie dies nur, wenn gesetzliche oder prüfungsbezogene Vorgaben eine ununterbrochene Nummerierung verlangen.",
@@ -3008,7 +3013,9 @@
       "benefitLevelKey": "Stufenschlüssel, den die Anmeldung nennt — single, family — stabil über Preisänderungen.",
       "rateScheduleSource": "Feststellungsnummer oder Vereinbarungskennung hinter dieser Tafel.",
       "rateScheduleJurisdiction": "Pack-Vokabular, Freitext in der generischen Schicht — das Pack interpretiert.",
-      "perDiemComponent": "Verdienstkomponente, über die Beträge laufen. Ihre Steuerbehandlung ist die einzige Steuerbarkeitsdeklaration."
+      "perDiemComponent": "Verdienstkomponente, über die Beträge laufen. Ihre Steuerbehandlung ist die einzige Steuerbarkeitsdeklaration.",
+      "hrmQualificationValidity": "Leer lassen für Qualifikationen ohne Ablauf.",
+      "hrmQualificationExtraCategories": "Organisationseigenes Kategorie-Vokabular über die sechs Standards hinaus."
     },
     "options": {
       "timeClassification": {
@@ -3449,6 +3456,14 @@
       "payBandBasis": {
         "annual": "Jährlich",
         "hourly": "Stündlich"
+      },
+      "hrmQualificationCategory": {
+        "certification": "Zertifizierung",
+        "license": "Lizenz",
+        "training": "Schulung",
+        "medical": "Medizinisch",
+        "clearance": "Freigabe",
+        "other": "Sonstiges"
       }
     },
     "bankFeeds": {
@@ -4694,6 +4709,22 @@
     "hrmPayTransparency": {
       "title": "Entgelttransparenz",
       "description": "Eingefrorene Kennzahlen aus der Abrechnungswahrheit und Auskunftsersuchen."
+    },
+    "hrmCertifications": {
+      "title": "Zertifizierungen und Lizenzen",
+      "description": "Qualifikationsregister der Mitarbeiter: Taxonomie, Nachweise, Einsatzanforderungen und Ablaufwarnungen. Umschalten löscht keine Daten."
+    },
+    "hrmDispatchGating": {
+      "title": "Einsatzsteuerung",
+      "description": "Verweigert Einsatzzuweisungen bei fehlenden Qualifikationen. Benötigt Projekte und Planung."
+    },
+    "hrmEquipmentQualifications": {
+      "title": "Gerätequalifikationen",
+      "description": "Erforderliche Qualifikationstypen an Geräten festlegen. Benötigt Geräte."
+    },
+    "hrmCertificationAlerts": {
+      "title": "Zertifikatswarnungen",
+      "description": "Tägliche Ablaufhinweise an Inhaber und Vorgesetzte über den Posteingang."
     }
   },
   "extensions": {

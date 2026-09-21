@@ -2858,7 +2858,12 @@
       "levelId": "级别",
       "min": "下限",
       "target": "目标",
-      "max": "上限"
+      "max": "上限",
+      "validityMonths": "有效期（月）",
+      "issuingBody": "签发机构",
+      "renewalLeadDays": "续期提前期（天）",
+      "requiresEvidence": "需要证明",
+      "extraCategories": "附加类别"
     },
     "fieldHelp": {
       "gapless": "无间隔表示序列中的每个编号都必须有记录，不能跳号。仅在法律或审计要求必须连续编号时启用。",
@@ -2940,7 +2945,9 @@
       "benefitLevelKey": "参保指定的档次键 — single、family — 调价后保持稳定。",
       "rateScheduleSource": "该工资表依据的裁定编号或协议ID。",
       "rateScheduleJurisdiction": "工资包词汇，通用层为自由文本 — 由工资包解释。",
-      "perDiemComponent": "金额通过的所得组成部分。其税务处理是唯一的应税性声明。"
+      "perDiemComponent": "金额通过的所得组成部分。其税务处理是唯一的应税性声明。",
+      "hrmQualificationValidity": "永不过期的资质请留空。",
+      "hrmQualificationExtraCategories": "除六个内置类别外的自有类别词汇。"
     },
     "options": {
       "payFrequency": {
@@ -3381,6 +3388,14 @@
       "payBandBasis": {
         "annual": "年薪",
         "hourly": "时薪"
+      },
+      "hrmQualificationCategory": {
+        "certification": "认证",
+        "license": "执照",
+        "training": "培训",
+        "medical": "医疗",
+        "clearance": "许可",
+        "other": "其他"
       }
     },
     "payroll": {
@@ -4694,6 +4709,22 @@
     "hrmPayTransparency": {
       "title": "薪酬透明",
       "description": "根据薪酬事实冻结的指标与员工信息请求。"
+    },
+    "hrmCertifications": {
+      "title": "认证与执照",
+      "description": "员工资质台账：分类、所持证书、派工要求与到期提醒。关闭功能不会删除数据。"
+    },
+    "hrmDispatchGating": {
+      "title": "派工门禁",
+      "description": "拒绝缺少所需资质人员的排班指派。需要项目与排程。"
+    },
+    "hrmEquipmentQualifications": {
+      "title": "设备资质要求",
+      "description": "在设备档案上声明所需的资质类型。需要设备管理。"
+    },
+    "hrmCertificationAlerts": {
+      "title": "认证提醒",
+      "description": "通过收件箱向持有人及其主管发送每日到期通知。"
     }
   },
   "backupsManager": {

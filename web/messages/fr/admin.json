@@ -2813,7 +2813,12 @@
       "levelId": "Niveau",
       "min": "Minimum",
       "target": "Cible",
-      "max": "Maximum"
+      "max": "Maximum",
+      "validityMonths": "Validité (mois)",
+      "issuingBody": "Organisme délivreur",
+      "renewalLeadDays": "Préavis de renouvellement (jours)",
+      "requiresEvidence": "Justificatif requis",
+      "extraCategories": "Catégories supplémentaires"
     },
     "fieldHelp": {
       "gapless": "Sans rupture signifie que chaque numéro de la séquence doit être justifié, sans aucun numéro sauté. Activez cette option uniquement si vos obligations légales ou d’audit imposent une numérotation ininterrompue.",
@@ -2895,7 +2900,9 @@
       "benefitLevelKey": "Clé du niveau nommée par l'adhésion — single, family — stable malgré les retarifications.",
       "rateScheduleSource": "Numéro de décision ou identifiant de convention derrière cette grille.",
       "rateScheduleJurisdiction": "Vocabulaire du pack, texte libre dans la couche générique — le pack l'interprète.",
-      "perDiemComponent": "Composante de gain par laquelle transitent les montants. Son traitement fiscal est l'unique déclaration."
+      "perDiemComponent": "Composante de gain par laquelle transitent les montants. Son traitement fiscal est l'unique déclaration.",
+      "hrmQualificationValidity": "Laisser vide pour les qualifications sans expiration.",
+      "hrmQualificationExtraCategories": "Vocabulaire de catégories propre au-delà des six intégrées."
     },
     "options": {
       "timeClassification": {
@@ -3336,6 +3343,14 @@
       "payBandBasis": {
         "annual": "Annuel",
         "hourly": "Horaire"
+      },
+      "hrmQualificationCategory": {
+        "certification": "Certification",
+        "license": "Licence",
+        "training": "Formation",
+        "medical": "Médicale",
+        "clearance": "Habilitation",
+        "other": "Autre"
       }
     },
     "laborCosting": {
@@ -4694,6 +4709,22 @@
     "hrmPayTransparency": {
       "title": "Transparence salariale",
       "description": "Mesures figées depuis la paie et demandes d'information des salariés."
+    },
+    "hrmCertifications": {
+      "title": "Certifications et licences",
+      "description": "Registre des qualifications : taxonomie, titres détenus, exigences d'affectation et alertes d'expiration. Désactiver ne supprime jamais les données."
+    },
+    "hrmDispatchGating": {
+      "title": "Contrôle des affectations",
+      "description": "Refuse les affectations sans les qualifications requises. Nécessite projets et planification."
+    },
+    "hrmEquipmentQualifications": {
+      "title": "Qualifications des équipements",
+      "description": "Déclarez les types requis sur les fiches d'équipement. Nécessite équipements."
+    },
+    "hrmCertificationAlerts": {
+      "title": "Alertes de certification",
+      "description": "Avis quotidiens d'expiration aux titulaires et responsables via la boîte de réception."
     }
   },
   "backupsManager": {

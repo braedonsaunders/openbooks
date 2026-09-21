@@ -12,7 +12,8 @@
       "performance": "Performance",
       "benefits": "Benefits",
       "compliance": "Compliance",
-      "compensation": "Compensation"
+      "compensation": "Compensation",
+      "qualifications": "Qualifications"
     },
     "recruiting": {
       "title": "Recruiting",
@@ -323,6 +324,11 @@
       "empty": "No benefit elections or dependents yet.",
       "viewAll": "Benefits",
       "dependents": "{count, plural, one {# dependent: {names}} other {# dependents: {names}}}"
+    },
+    "qualifications": {
+      "title": "Qualifications",
+      "viewAll": "View all",
+      "empty": "No qualifications recorded."
     }
   },
   "directory": {
@@ -1365,6 +1371,83 @@
     "requestCancel": "Cancel",
     "requestStatus": {
       "open": "Open"
+    }
+  },
+  "qualifications": {
+    "title": "Qualifications",
+    "description": "Licenses, certifications, and credentials by worker — who can be dispatched today, and what expires next.",
+    "record": "Record qualification",
+    "recordTitle": "Record qualification",
+    "drawerTitle": "Qualification",
+    "settings": "Qualification settings",
+    "sectionLabel": "Section",
+    "sections": {
+      "ledger": "Ledger",
+      "requirements": "Requirements",
+      "alerts": "Alerts"
+    },
+    "segmentsLabel": "Status",
+    "allLabel": "All",
+    "typesLabel": "Type",
+    "typesAll": "All types",
+    "listTitle": "Qualifications by worker",
+    "open": "Open",
+    "columns": {
+      "worker": "Worker",
+      "type": "Type",
+      "status": "Status",
+      "expiry": "Expires",
+      "subject": "Subject",
+      "severity": "Severity",
+      "window": "Window",
+      "due": "Due",
+      "sent": "Sent"
+    },
+    "statusNames": {
+      "valid": "Valid",
+      "expiring": "Expiring",
+      "expired": "Expired",
+      "revoked": "Revoked",
+      "pending_verification": "Pending verification"
+    },
+    "emptyTitle": "No qualifications recorded",
+    "emptyDescription": "Record the crew's licenses and certifications to gate dispatch.",
+    "requirementsTitle": "Dispatch requirements",
+    "requirementsEmpty": "No requirements declared yet.",
+    "coverageTitle": "Project coverage",
+    "coverageProjectLabel": "Project",
+    "coverageProjectAll": "Choose project",
+    "coverageEmpty": "No crew assigned to this project yet.",
+    "coverage": {
+      "qualified": "Qualified",
+      "missing": "Missing",
+      "expired": "Expired",
+      "pending": "Pending"
+    },
+    "alertsTitle": "Expiry alerts",
+    "alertsEmpty": "No alerts fired.",
+    "alertDue": "Due",
+    "taxonomyTitle": "Qualification taxonomy",
+    "windowOpen": "{from} – ongoing",
+    "verify": "Verify",
+    "renew": "Renew",
+    "revoke": "Revoke",
+    "revokePrompt": "Revoke this qualification? State the reason:",
+    "renewPrompt": "Issue date of the renewed qualification (YYYY-MM-DD):",
+    "drawer": {
+      "issued": "Issued",
+      "identifier": "License no.",
+      "notes": "Notes",
+      "evidence": "View evidence",
+      "events": "History"
+    },
+    "recordForm": {
+      "employment": "Employment",
+      "type": "Qualification type",
+      "issuedOn": "Issued on",
+      "expiresOn": "Expires on",
+      "identifier": "License number",
+      "notes": "Notes"
     }
   }
 }

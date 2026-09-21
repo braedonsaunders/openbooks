@@ -12,7 +12,8 @@
       "performance": "绩效",
       "benefits": "福利",
       "compliance": "合规",
-      "compensation": "薪酬"
+      "compensation": "薪酬",
+      "qualifications": "资质"
     },
     "recruiting": {
       "title": "招聘",
@@ -323,6 +324,11 @@
       "empty": "暂无福利参保或家属。",
       "viewAll": "福利",
       "dependents": "家属（{count}人）：{names}"
+    },
+    "qualifications": {
+      "title": "资质",
+      "viewAll": "查看全部",
+      "empty": "尚未记录资质。"
     }
   },
   "directory": {
@@ -1364,6 +1370,83 @@
     "requestCancel": "取消",
     "requestStatus": {
       "open": "处理中"
+    }
+  },
+  "qualifications": {
+    "title": "资质",
+    "description": "按员工划分的执照、认证和证书——今日谁可以上岗，以及哪些即将到期。",
+    "record": "记录资质",
+    "recordTitle": "记录资质",
+    "drawerTitle": "资质",
+    "settings": "资质设置",
+    "sectionLabel": "部分",
+    "sections": {
+      "ledger": "台账",
+      "requirements": "要求",
+      "alerts": "提醒"
+    },
+    "segmentsLabel": "状态",
+    "allLabel": "全部",
+    "typesLabel": "类型",
+    "typesAll": "全部类型",
+    "listTitle": "按员工划分的资质",
+    "open": "打开",
+    "columns": {
+      "worker": "员工",
+      "type": "类型",
+      "status": "状态",
+      "expiry": "到期",
+      "subject": "对象",
+      "severity": "严重度",
+      "window": "有效期",
+      "due": "到期日",
+      "sent": "已发送"
+    },
+    "statusNames": {
+      "valid": "有效",
+      "expiring": "即将到期",
+      "expired": "已到期",
+      "revoked": "已撤销",
+      "pending_verification": "待验证"
+    },
+    "emptyTitle": "尚未记录资质",
+    "emptyDescription": "记录班组的执照和认证以管理派工。",
+    "requirementsTitle": "派工要求",
+    "requirementsEmpty": "尚未声明要求。",
+    "coverageTitle": "项目覆盖情况",
+    "coverageProjectLabel": "项目",
+    "coverageProjectAll": "选择项目",
+    "coverageEmpty": "该项目尚未安排人员。",
+    "coverage": {
+      "qualified": "具备资质",
+      "missing": "缺失",
+      "expired": "已到期",
+      "pending": "待定"
+    },
+    "alertsTitle": "到期提醒",
+    "alertsEmpty": "暂无提醒。",
+    "alertDue": "待发送",
+    "taxonomyTitle": "资质分类",
+    "windowOpen": "{from} – 有效",
+    "verify": "验证",
+    "renew": "续期",
+    "revoke": "撤销",
+    "revokePrompt": "撤销此资质？请输入原因：",
+    "renewPrompt": "续期资质的签发日期（YYYY-MM-DD）：",
+    "drawer": {
+      "issued": "签发日期",
+      "identifier": "执照编号",
+      "notes": "备注",
+      "evidence": "查看证明",
+      "events": "历史"
+    },
+    "recordForm": {
+      "employment": "雇佣关系",
+      "type": "资质类型",
+      "issuedOn": "签发日期",
+      "expiresOn": "到期日期",
+      "identifier": "执照编号",
+      "notes": "备注"
     }
   }
 }
