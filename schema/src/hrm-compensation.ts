@@ -254,6 +254,17 @@ export const compCycleLines = pgTable(
     guidelineMaxPct: numeric("guideline_max_pct", { precision: 19, scale: 6 }),
     proposedPct: numeric("proposed_pct", { precision: 19, scale: 6 }),
     proposedRate: numeric("proposed_rate", { precision: 19, scale: 4 }),
+    // Frozen budget evidence (0243): written once at open, read by
+    // pacing, never refilled. Null for identity/null-envelope cases
+    // and for pre-freeze legacy rows (which pacing refuses by name).
+    budgetPricingDate: date("budget_pricing_date"),
+    budgetCycleCurrency: text("budget_cycle_currency"),
+    budgetEnvelope: numeric("budget_envelope", { precision: 19, scale: 4 }),
+    budgetAnnualHours: numeric("budget_annual_hours", { precision: 19, scale: 4 }),
+    budgetFxRate: numeric("budget_fx_rate", { precision: 19, scale: 10 }),
+    budgetFxAsof: date("budget_fx_asof"),
+    budgetFxSource: text("budget_fx_source"),
+    budgetFxInverse: boolean("budget_fx_inverse"),
     proposedBy: uuid("proposed_by"),
     proposedAt: timestamp("proposed_at", { withTimezone: true }),
     status: text("status").notNull().default("pending"),
