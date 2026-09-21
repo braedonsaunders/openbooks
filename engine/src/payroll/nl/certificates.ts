@@ -18,7 +18,8 @@
  * employee's dated and signed request, it is allowed at exactly one employer
  * or benefits agency at a time, and the choice is recorded on the loonstaat
  * ("Gegevens voor tabeltoepassing") and on the jaaropgaaf (Handboek
- * Loonheffingen, hoofdstuk 20 Heffingskortingen and hoofdstuk 12).
+ * Loonheffingen 2026, hoofdstuk 24 Heffingskortingen and hoofdstuk 15
+ * Jaaropgaaf).
  */
 import type {
   PayrollCertificate,
@@ -47,7 +48,7 @@ const OPGAAF_LOONHEFFINGEN: PayrollCertificate = {
   purpose: "withholding",
   citation:
     "Belastingdienst, Model opgaaf gegevens voor de loonheffingen; "
-    + "Handboek Loonheffingen 2026, hoofdstuk 20 (Heffingskortingen)",
+    + "Handboek Loonheffingen 2026, hoofdstuk 24 (Heffingskortingen)",
   summary:
     "Filed on hire and whenever the employee's circumstances change. It identifies the employee "
     + "for the loonstaat and records whether the employer must apply the loonheffingskorting "

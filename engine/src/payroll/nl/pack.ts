@@ -21,14 +21,13 @@
  * the pack registered nothing and was imported by nothing outside
  * `engine/src/payroll/nl/`; both of those statements are now false.)
  */
-import { PayrollError } from "../error.ts";
-import type { PayrollFilingData, PayrollPackFilings } from "../filing-registry.ts";
 import type {
   PayrollCountryPack,
   PayrollRemittanceSchedule,
 } from "../packs.ts";
 import type { PayrollPackWithholding } from "../withholding-jurisdictions.ts";
 import { NL_CERTIFICATES } from "./certificates.ts";
+import { nlPackFilings } from "./filings.ts";
 import { computeNlStatutory, NL_FACTOR_LABELS } from "./loonheffing.ts";
 import { NL_PACK_RATES, NL_TAX_YEARS } from "./rates.ts";
 
@@ -85,41 +84,13 @@ const NL_WITHHOLDING: PayrollPackWithholding = {
  * as a remittance schedule until its due-date rule is transcribed from the
  * agency publication rather than guessed.
  */
-function nlPackFilings(): PayrollPackFilings {
-  return {
-    country: "NL",
-    programTypes: [
-      { key: "nl_loonheffingen", label: "Loonheffingen (payroll tax number)" },
-    ],
-    yearEnd: [
-      {
-        key: "jaaropgaaf",
-        label: "Jaaropgaaf",
-        cadence: "annual",
-        description:
-          "The annual statement the employer issues to the employee (Handboek Loonheffingen 2026, "
-          + "hoofdstuk 12): wages, withheld loonbelasting/premie volksverzekeringen, whether the "
-          + "loonheffingskorting was applied, and the SV wage base.",
-        population: async (): Promise<PayrollFilingData> => {
-          throw new PayrollError(
-            "the NL payroll pack populates no jaaropgaaf — no jaaropgaaf file builder exists "
-            + "(the 2026 withholding figures it would print are transcribed; the file is not)",
-          );
-        },
-        parseRowId: () => null,
-        downloadRefusal:
-          "the NL payroll pack produces no jaaropgaaf file — no jaaropgaaf file builder exists",
-        amendment: {
-          supported: false,
-          refusal:
-            "a wrong jaaropgaaf is corrected by filing a corrected loonaangifte (correctiebericht) "
-            + "with the Belastingdienst and issuing a corrected statement — no in-product correction "
-            + "file is built",
-        },
-      },
-    ],
-  };
-}
+// The filing declaration lives beside the builder that populates it
+// (`./filings.ts`), so the year-end surface enumerates the jaaropgaaf
+// wherever the pack is declared. The per-period loonaangifte return itself is
+// a filing cadence the year-end registry does not model, so the declaration
+// carries the programme and the year-end slip; the timetable is not declared
+// as a remittance schedule until its due-date rule is transcribed from the
+// agency publication rather than guessed.
 
 // ---------------------------------------------------------------------------
 // The pack

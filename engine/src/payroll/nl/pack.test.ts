@@ -123,7 +123,7 @@ test("2026 is the one published edition; every other year is refused by name", (
   }
 });
 
-test("the NL filings declare the loonaangifte programme and a jaaropgaaf that refuses", async () => {
+test("the NL filings declare the loonaangifte programme and a populated jaaropgaaf", () => {
   const filings = NL_PAYROLL_PACK.filings();
   assert.equal(filings.country, "NL");
   assert.deepEqual(
@@ -133,10 +133,17 @@ test("the NL filings declare the loonaangifte programme and a jaaropgaaf that re
   assert.equal(filings.yearEnd.length, 1);
   const jaaropgaaf = filings.yearEnd[0]!;
   assert.equal(jaaropgaaf.key, "jaaropgaaf");
+  assert.equal(jaaropgaaf.label, "Jaaropgaaf");
   assert.equal(jaaropgaaf.cadence, "annual");
   assert.equal(jaaropgaaf.parseRowId("anything"), null);
   assert.equal(jaaropgaaf.amendment.supported, false);
-  await assert.rejects(() => filings.yearEnd[0]!.population("org", 2026), /no jaaropgaaf file builder/);
+  // The population reads committed stubs (database-owned: covered in
+  // jaaropgaaf.integration.test.ts); the static refusals are asserted here.
+  assert.match(jaaropgaaf.downloadRefusal ?? "", /no jaaropgaaf file builder exists/);
+  assert.ok(jaaropgaaf.slip, "the statement the employee is owed is declared");
+  if (!jaaropgaaf.amendment.supported) {
+    assert.match(jaaropgaaf.amendment.refusal, /correctiebericht/);
+  }
 });
 
 // ---------------------------------------------------------------------------
