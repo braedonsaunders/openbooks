@@ -66,14 +66,17 @@ test("statutory slots name IRPEF, both addizionali, and both INPS shares", () =>
   }
   // The TI/somma payouts ride the IRPEF slot as generic credits: the reclaim
   // lands on the same F24 liability, so there is one account choice, not two.
+  // The conguaglio refund rides it the same way (CONG-IRPEF): the run layer
+  // pushes refunds through declared credit rows because the remittance only
+  // nets credit-KIND components.
   const irpef = byKey.get("irpef")?.components ?? [];
-  assert.deepEqual(irpef.map((c) => c.code), ["IRPEF", "TI", "SOMMA"]);
+  assert.deepEqual(irpef.map((c) => c.code), ["IRPEF", "CONG-IRPEF", "TI", "SOMMA"]);
   for (const component of irpef.slice(1)) {
     assert.equal(component.kind, "credit", component.code);
     assert.equal(component.assessedOn, "earnings", component.code);
     assert.equal(component.remittance, "tax_authority", component.code);
   }
-  assert.deepEqual(irpef.slice(1).map((c) => c.systemKey), ["ti_payout", "somma_payout"]);
+  assert.deepEqual(irpef.slice(1).map((c) => c.systemKey), ["income_tax", "ti_payout", "somma_payout"]);
 });
 
 test("tenant-entered surtax slots: regionale per region, comunale per sub-region", () => {
