@@ -3,7 +3,7 @@ import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { isFeatureEnabled } from "../features";
-import { subsidiaryScopeAllows } from "../authz";
+import { can, subsidiaryScopeAllows } from "../authz";
 import { projectUnbilled } from "../project-costing";
 import {
   loadProjectTimeEntryPage,
@@ -544,6 +544,80 @@ const getFieldTicket: AssistantToolDef = {
   },
 };
 
+// HR-20 begin: field-time reads — own clock status (self) and crew
+// batches. Both reuse the canonical field-time read services; the team
+// scope additionally requires time.read inside the tool.
+const FIELD_TIME_FEATURE_ERROR = "fieldTime_feature_disabled";
+
+const timeClockStatusSchema = z.object({
+  scope: z.enum(["own", "team"]).optional().describe("Own clock state, or the caller's team clocked-in now (needs time.read)"),
+});
+
+const timeClockStatus: AssistantToolDef = {
+  name: "time_clock_status",
+  description:
+    "Clock state now: own open pair with project and cost code plus today's pairs, or the team clocked in. Geo flags only, never raw coordinates. Read-only.",
+  category: "read",
+  gate: { mode: "anyOf", perms: ["time.clock", "time.read"] },
+  feature: "fieldTime",
+  inputSchema: timeClockStatusSchema,
+  execute: async (raw, authz): Promise<ToolResult> => {
+    if (!(await isFeatureEnabled(authz.user.orgId, "fieldTime"))) {
+      return { ok: false, error: FIELD_TIME_FEATURE_ERROR };
+    }
+    const a = raw as z.infer<typeof timeClockStatusSchema>;
+    const { myClockDay, teamClockedIn } = await import("@openbooks/engine/src/hrm/field-time/reads.ts");
+    const { orgToday } = await import("./tools-shared");
+    try {
+      if ((a.scope ?? "own") === "team") {
+        if (!can(authz, "time.read")) {
+          return { ok: false, error: "team clock status needs time.read — own scope is available with time.clock" };
+        }
+        const team = await teamClockedIn(authz.user.orgId, authz.user.id, await orgToday(authz.user.orgId));
+        return { ok: true, data: { scope: "team", clockedIn: team, href: "/time/crew" } };
+      }
+      const day = await myClockDay(authz.user.orgId, authz.user.id);
+      return { ok: true, data: { ...day, href: "/time/clock" } };
+    } catch (error) {
+      if (error instanceof Error && error.name === "FieldTimeError") return { ok: false, error: error.message };
+      throw error;
+    }
+  },
+};
+
+const crewBatchesSchema = z.object({
+  status: z.enum(["draft", "submitted", "approved_stage_1", "approved_stage_2", "rejected", "posted"]).optional().describe("Batch status segment"),
+  projectId: uuidInput.optional().describe("One project; omit for all projects"),
+});
+
+const crewBatches: AssistantToolDef = {
+  name: "crew_batches",
+  description:
+    "Foreman crew batches per project per day with approval-stage status, hours and headcount. Entries post only through the crew service. Read-only.",
+  category: "read",
+  gate: { mode: "anyOf", perms: ["time.read"] },
+  feature: "fieldTimeCrewEntry",
+  inputSchema: crewBatchesSchema,
+  execute: async (raw, authz): Promise<ToolResult> => {
+    if (!(await isFeatureEnabled(authz.user.orgId, "fieldTimeCrewEntry"))) {
+      return { ok: false, error: "fieldTimeCrewEntry_feature_disabled" };
+    }
+    const a = raw as z.infer<typeof crewBatchesSchema>;
+    const { listCrewBatches } = await import("@openbooks/engine/src/hrm/field-time/reads.ts");
+    try {
+      const batches = await listCrewBatches(authz.user.orgId, {
+        status: a.status ?? null,
+        projectId: a.projectId ?? null,
+      });
+      return { ok: true, data: { batches, href: "/time/crew" } };
+    } catch (error) {
+      if (error instanceof Error && error.name === "FieldTimeError") return { ok: false, error: error.message };
+      throw error;
+    }
+  },
+};
+// HR-20 end
+
 export const TIME_TOOLS: AssistantToolDef[] = [
   getTimesheetWeek,
   searchTimesheets,
@@ -551,4 +625,8 @@ export const TIME_TOOLS: AssistantToolDef[] = [
   unbilledTime,
   listFieldTickets,
   getFieldTicket,
+  // HR-20 begin
+  timeClockStatus,
+  crewBatches,
+  // HR-20 end
 ];

@@ -125,6 +125,8 @@ const MATRIX: Entry[] = [
   { prefix: "recurring", tools: ["list_recurring_schedules"] },
   { prefix: "property-management", tools: ["list_properties", "list_leases", "get_lease", "rent_roll", "lease_arrears", "property_deposits"] },
   { prefix: "timesheets", tools: ["get_timesheet_week", "search_timesheets", "project_time", "unbilled_time"], note: "approve/reject/reopen writes have no application service" },
+  // HR-20: field clock status and crew batches read through the field-time services; clock/crew/post writes are human-attested with no assistant write surface by design.
+  { prefix: "time", tools: ["time_clock_status", "crew_batches"], note: "own clock state plus today's pairs, the team clocked in, and crew batches with stage status reuse the field-time read services; clock events, kiosk identify, batch submit/approve/post are human-attested with no assistant write surface by design" },
   { prefix: "field-tickets", tools: ["list_field_tickets", "get_field_ticket"] },
   { prefix: "sign", uncovered: "no application service: signature capture persists inline" },
   { prefix: "expenses", tools: ["list_expense_reports", "get_expense_report", "expense_overview", "expense_approvals"] },

@@ -179,6 +179,13 @@ test("migration 0031 freezes legacy empty scope sets into the explicit current c
     "hrm.documents.manage",
     "hrm.surveys.manage",
     // HR-19 end
+    // HR-20 begin: 0231 field time capture — clock is self on every
+    // built-in role; crew entry and kiosk management stay with
+    // operations roles. Post-snapshot like the rest of time.
+    "time.clock",
+    "time.crew.enter",
+    "time.kiosk.manage",
+    // HR-20 end
   ]);
   for (const key of addedAfter0031) {
     assert.ok((PERMISSION_CATALOGUE as readonly string[]).includes(key), `${key} must exist in the catalogue`);
