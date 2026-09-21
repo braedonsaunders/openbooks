@@ -1527,6 +1527,38 @@
         "channel": "Canal",
         "alert_id": "Alerta (id)",
         "qualification_id": "Qualificação (id)"
+      },
+      "automations": {
+        "name": "Nome",
+        "status": "Status",
+        "trigger_kind": "Gatilho",
+        "version": "Versão",
+        "priority": "Prioridade",
+        "last_run_at": "Última execução",
+        "error_message": "Erro",
+        "created_at": "Criado em",
+        "id": "Automação (id)"
+      },
+      "automation_runs": {
+        "automation": "Automação",
+        "status": "Status",
+        "version": "Versão",
+        "subject_kind": "Tipo de objeto",
+        "subject_id": "Objeto (id)",
+        "started_at": "Iniciado em",
+        "finished_at": "Concluído em",
+        "error": "Erro",
+        "created_at": "Criado em",
+        "id": "Execução (id)"
+      },
+      "hrm_action_reasons": {
+        "action": "Ação",
+        "reason_code": "Código",
+        "label": "Rótulo",
+        "requires_comment": "Exige comentário",
+        "is_active": "Ativo",
+        "created_at": "Criado em",
+        "id": "Motivo (id)"
       }
     },
     "enumValues": {

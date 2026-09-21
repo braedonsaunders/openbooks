@@ -4434,6 +4434,23 @@ test('I10 documents sharing trash and activity copy ships translated in every lo
   }
 })
 const I14_IDENTICAL_BY_FACT = new Set([
+  // HR-16 report columns: these headings are the same word in the target
+  // language, reviewed one by one — Version/Status/Name/Error/Action/Code
+  // are borrowed or identical forms, not untranslated English.
+  'de:reports.catalog.columns.automations.name|Name',
+  'de:reports.catalog.columns.automations.status|Status',
+  'pt-BR:reports.catalog.columns.automations.status|Status',
+  'de:reports.catalog.columns.automations.version|Version',
+  'fr:reports.catalog.columns.automations.version|Version',
+  'es:reports.catalog.columns.automations.error_message|Error',
+  'de:reports.catalog.columns.automation_runs.status|Status',
+  'pt-BR:reports.catalog.columns.automation_runs.status|Status',
+  'de:reports.catalog.columns.automation_runs.version|Version',
+  'fr:reports.catalog.columns.automation_runs.version|Version',
+  'es:reports.catalog.columns.automation_runs.error|Error',
+  'fr:reports.catalog.columns.hrm_action_reasons.action|Action',
+  'de:reports.catalog.columns.hrm_action_reasons.reason_code|Code',
+  'fr:reports.catalog.columns.hrm_action_reasons.reason_code|Code',
     'de:reports.catalog.columns.hrm_benefit_enrollments.person|Person',
     'de:reports.catalog.columns.hrm_benefit_enrollments.plan|Plan',
     'de:reports.catalog.columns.hrm_benefit_enrollments.status|Status',
@@ -5163,7 +5180,7 @@ const I14_IDENTICAL_BY_FACT = new Set([
 const I14_FILE_COUNTS: Record<string, number> = {
   "items": 161,
   "inventory": 159,
-  "reports": 1486,
+  "reports": 1512,
   "sync": 172,
   "login": 33,
   "accounts": 82,

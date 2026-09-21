@@ -1527,6 +1527,38 @@
         "channel": "Channel",
         "alert_id": "Alert (id)",
         "qualification_id": "Qualification (id)"
+      },
+      "automations": {
+        "name": "Name",
+        "status": "Status",
+        "trigger_kind": "Trigger",
+        "version": "Version",
+        "priority": "Priority",
+        "last_run_at": "Last run at",
+        "error_message": "Error",
+        "created_at": "Created at",
+        "id": "Automation (id)"
+      },
+      "automation_runs": {
+        "automation": "Automation",
+        "status": "Status",
+        "version": "Version",
+        "subject_kind": "Subject kind",
+        "subject_id": "Subject (id)",
+        "started_at": "Started at",
+        "finished_at": "Finished at",
+        "error": "Error",
+        "created_at": "Created at",
+        "id": "Run (id)"
+      },
+      "hrm_action_reasons": {
+        "action": "Action",
+        "reason_code": "Code",
+        "label": "Label",
+        "requires_comment": "Requires comment",
+        "is_active": "Active",
+        "created_at": "Created at",
+        "id": "Reason (id)"
       }
     },
     "enumValues": {
