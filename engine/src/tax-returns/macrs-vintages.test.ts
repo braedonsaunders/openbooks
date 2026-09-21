@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { listOpenMacrsVintages, resolveMacrsVintages, sellerMacrsHistoryBeforeSource, type MacrsWorkpaperEvent, type MacrsVintageDefaults } from "./macrs-vintages.ts";
+import {
+  listOpenMacrsVintages,
+  macrsVintageReceivingPaper,
+  macrsVintageWindowPlan,
+  resolveMacrsVintages,
+  sellerMacrsHistoryBeforeSource,
+  type MacrsWorkpaperEvent,
+  type MacrsVintageDefaults,
+} from "./macrs-vintages.ts";
 
 const defaults: MacrsVintageDefaults = {
   recoveryPeriodYears: "7",
@@ -624,4 +632,77 @@ test("frozen buyer vintages reconstruct two transferor schedules instead of one 
   assert.equal(open[1]!.convention, "mid_month");
   assert.equal(open[0]!.adjustedCarryover, "1600.0000");
   assert.equal(open[1]!.adjustedCarryover, "400.0000");
+});
+
+test("same-day transfers to one entity resolve the transferor by receiving asset and parent vintage", () => {
+  const buyerA = {
+    key: "carryover:2023-03-15:2026-08-20:original:2023-03-15",
+    source: "carryover" as const,
+    parentKey: "original:2023-03-15",
+    placedInServiceOn: "2023-03-15",
+    transferOn: "2026-08-20",
+    recoveryPeriodYears: "5",
+    method: "200_db" as const,
+    convention: "half_year" as const,
+    unadjustedBasis: "9000.0000",
+    adjustedCarryover: "6000.0000",
+    section179: "0.0000",
+    priorDepreciation: "3000.0000",
+    bonusPercent: "0",
+    businessUsePercent: "100",
+  };
+  const buyerB = {
+    ...buyerA,
+    key: "carryover:2022-01-10:2026-08-20:original:2022-01-10",
+    parentKey: "original:2022-01-10",
+    placedInServiceOn: "2022-01-10",
+  };
+  const fromA = {
+    asset_id: "source-a",
+    receiving_asset_id: "recv-a",
+    effective_on: "2026-08-20",
+    seller_subsidiary_id: "sub-a",
+    buyer_vintages: [buyerA],
+  };
+  const fromB = {
+    asset_id: "source-b",
+    receiving_asset_id: "recv-b",
+    effective_on: "2026-08-20",
+    seller_subsidiary_id: "sub-b",
+    buyer_vintages: [buyerB],
+  };
+  const vintageA = {
+    source: "carryover" as const,
+    placedInServiceOn: "2023-03-15",
+    transferOn: "2026-08-20",
+    parentKey: "original:2023-03-15",
+  };
+  const vintageB = {
+    source: "carryover" as const,
+    placedInServiceOn: "2022-01-10",
+    transferOn: "2026-08-20",
+    parentKey: "original:2022-01-10",
+  };
+  assert.equal(macrsVintageReceivingPaper([fromA, fromB], "recv-a", vintageA)?.asset_id, "source-a");
+  assert.equal(macrsVintageReceivingPaper([fromA, fromB], "recv-b", vintageB)?.asset_id, "source-b");
+  assert.equal(
+    macrsVintageWindowPlan({
+      assetId: "recv-b",
+      currentSubsidiaryId: "buyer-sub",
+      asOf: "2026-09-01",
+      vintage: vintageB,
+      papers: [fromA, fromB],
+    }).transferorSubsidiaryId,
+    "sub-b",
+  );
+  assert.notEqual(
+    macrsVintageWindowPlan({
+      assetId: "recv-b",
+      currentSubsidiaryId: "buyer-sub",
+      asOf: "2026-09-01",
+      vintage: vintageB,
+      papers: [fromA, fromB],
+    }).transferorSubsidiaryId,
+    "sub-a",
+  );
 });
