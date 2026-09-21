@@ -74,6 +74,7 @@ export interface CalibrationEntryDTO {
   readonly id: string;
   readonly reviewId: string;
   readonly employmentId: string;
+  readonly subjectName: string;
   readonly reviewerPartyId: string;
   readonly proposedRating: string | null;
   readonly calibratedRating: string | null;
@@ -119,6 +120,7 @@ type StoredEntry = {
   id: string;
   review_id: string;
   employment_id: string;
+  subject_name: string;
   reviewer_party_id: string;
   proposed_rating: string | null;
   calibrated_rating: string | null;
@@ -139,12 +141,14 @@ async function loadSession(exec: SqlExecutor, orgId: string, id: string): Promis
 
 async function loadEntries(exec: SqlExecutor, orgId: string, sessionId: string): Promise<StoredEntry[]> {
   return (await exec.execute<StoredEntry>(sql`
-    select e.id, e.review_id, r.employment_id, r.reviewer_party_id,
+    select e.id, e.review_id, r.employment_id, coalesce(p.display_name, '—') as subject_name, r.reviewer_party_id,
            e.proposed_rating::text as proposed_rating, e.calibrated_rating::text as calibrated_rating,
            e.potential_key, e.justification,
            e.decided_by::text as decided_by, e.decided_at::text as decided_at
       from hrm_calibration_entries e
       join hrm_reviews r on r.org_id = e.org_id and r.id = e.review_id
+      join worker_employments we on we.org_id = e.org_id and we.id = r.employment_id
+      left join parties p on p.org_id = e.org_id and p.id = we.worker_party_id
      where e.org_id = ${orgId} and e.session_id = ${sessionId}
      order by e.created_at
   `)).rows;
@@ -197,7 +201,7 @@ function toDTO(session: StoredSession, entries: readonly StoredEntry[], missing:
     openedAt: session.opened_at,
     closedAt: session.closed_at,
     entries: entries.map((e) => ({
-      id: e.id, reviewId: e.review_id, employmentId: e.employment_id, reviewerPartyId: e.reviewer_party_id,
+      id: e.id, reviewId: e.review_id, employmentId: e.employment_id, subjectName: e.subject_name, reviewerPartyId: e.reviewer_party_id,
       proposedRating: e.proposed_rating, calibratedRating: e.calibrated_rating, potentialKey: e.potential_key,
       justification: e.justification, decidedBy: e.decided_by, decidedAt: e.decided_at,
     })),
@@ -328,12 +332,14 @@ async function requireOpenEntry(
   entryId: string,
 ): Promise<{ session: StoredSession; entry: StoredEntry }> {
   const entries = (await exec.execute<StoredEntry>(sql`
-    select e.id, e.review_id, r.employment_id, r.reviewer_party_id,
+    select e.id, e.review_id, r.employment_id, coalesce(p.display_name, '—') as subject_name, r.reviewer_party_id,
            e.proposed_rating::text as proposed_rating, e.calibrated_rating::text as calibrated_rating,
            e.potential_key, e.justification,
            e.decided_by::text as decided_by, e.decided_at::text as decided_at
       from hrm_calibration_entries e
       join hrm_reviews r on r.org_id = e.org_id and r.id = e.review_id
+      join worker_employments we on we.org_id = e.org_id and we.id = r.employment_id
+      left join parties p on p.org_id = e.org_id and p.id = we.worker_party_id
      where e.org_id = ${orgId} and e.id = ${entryId}
   `)).rows;
   const entry = entries[0];
@@ -408,6 +414,7 @@ export async function setCalibratedRating(args: {
     if (!decided) throw new HrmPerformanceError("REFUSED", "the rating change was not stored — no row can be read back; retry the action");
     return {
       id: decided.id, reviewId: decided.review_id, employmentId: decided.employment_id,
+      subjectName: decided.subject_name,
       reviewerPartyId: decided.reviewer_party_id, proposedRating: decided.proposed_rating,
       calibratedRating: decided.calibrated_rating, potentialKey: decided.potential_key,
       justification: decided.justification, decidedBy: decided.decided_by, decidedAt: decided.decided_at,

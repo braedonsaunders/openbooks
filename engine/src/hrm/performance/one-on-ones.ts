@@ -102,6 +102,8 @@ type StoredOneOnOne = {
   report_employment_id: string;
   manager_party_id: string | null;
   report_party_id: string | null;
+  manager_name: string;
+  report_name: string;
   scheduled_at: string;
   held_at: string | null;
   status: OneOnOneStatus;
@@ -114,11 +116,14 @@ async function loadOneOnOne(exec: SqlExecutor, orgId: string, id: string): Promi
   const rows = (await exec.execute<StoredOneOnOne & { recurrence: unknown }>(sql`
     select o.id, o.manager_employment_id, o.report_employment_id,
            m.worker_party_id as manager_party_id, r.worker_party_id as report_party_id,
+           coalesce(mp.display_name, '—') as manager_name, coalesce(rp.display_name, '—') as report_name,
            o.scheduled_at::text as scheduled_at, o.held_at::text as held_at,
            o.status, o.skip_reason, o.recurrence, o.series_id::text as series_id
       from hrm_one_on_ones o
       join worker_employments m on m.org_id = o.org_id and m.id = o.manager_employment_id
       join worker_employments r on r.org_id = o.org_id and r.id = o.report_employment_id
+      left join parties mp on mp.org_id = o.org_id and mp.id = m.worker_party_id
+      left join parties rp on rp.org_id = o.org_id and rp.id = r.worker_party_id
      where o.org_id = ${orgId} and o.id = ${id}
   `)).rows;
   const row = rows[0];
@@ -181,6 +186,8 @@ export interface OneOnOneDTO {
   readonly id: string;
   readonly managerEmploymentId: string;
   readonly reportEmploymentId: string;
+  readonly managerName: string;
+  readonly reportName: string;
   readonly scheduledAt: string;
   readonly heldAt: string | null;
   readonly status: OneOnOneStatus;
@@ -245,6 +252,8 @@ function toDTO(one: StoredOneOnOne, items: readonly OneOnOneItemDTO[]): OneOnOne
     id: one.id,
     managerEmploymentId: one.manager_employment_id,
     reportEmploymentId: one.report_employment_id,
+    managerName: one.manager_name,
+    reportName: one.report_name,
     scheduledAt: one.scheduled_at,
     heldAt: one.held_at,
     status: one.status,
@@ -587,6 +596,54 @@ export async function setOneOnOneItemDone(args: {
   });
 }
 
+/**
+ * Schedule-form directory: the actor's own employments plus the reports
+ * they manage as of today (with names), or everything for HR. A
+ * scheduler outside all three gets the uniform refusal, never an empty
+ * directory pretending they have nobody to meet.
+ */
+export async function listOneOnOneDirectory(args: {
+  orgId: string;
+  actorId: string;
+}): Promise<{ employments: readonly { id: string; name: string; mine: boolean }[] }> {
+  const orgId = requireId("orgId", args.orgId);
+  const actorId = requireId("actorId", args.actorId);
+  return withOrgTransaction(orgId, async (exec) => {
+    await assertOneOnOnesFeature(exec, orgId);
+    if (await hasPerformanceRead(exec, orgId, actorId)) {
+      const rows = (await exec.execute<{ id: string; name: string }>(sql`
+        select e.id, coalesce(p.display_name, '—') as name
+          from worker_employments e
+          left join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
+         where e.org_id = ${orgId}
+         order by name
+      `)).rows;
+      return { employments: rows.map((row) => ({ ...row, mine: false })) };
+    }
+    if (!(await actorHasPermission(exec, orgId, actorId, "hrm.self.read"))) {
+      throw new HrmPerformanceError(
+        "FORBIDDEN",
+        "scheduling 1:1s needs hrm.self.read — ask an administrator to grant it in /admin/roles",
+      );
+    }
+    const today = await businessToday(orgId);
+    const own = await loadOwnEmploymentIds(exec, orgId, actorId);
+    const team = await loadManagedEmploymentIds(exec, orgId, actorId, today);
+    const ids = [...new Set([...own, ...team])];
+    if (ids.length === 0) return { employments: [] };
+    const params = ids.map((id) => sql`${id}::uuid`);
+    const rows = (await exec.execute<{ id: string; name: string }>(sql`
+      select e.id, coalesce(p.display_name, '—') as name
+        from worker_employments e
+        left join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
+       where e.org_id = ${orgId} and e.id in (${sql.join(params, sql`, `)})
+       order by name
+    `)).rows;
+    const mine = new Set(own);
+    return { employments: rows.map((row) => ({ id: row.id, name: row.name, mine: mine.has(row.id) })) };
+  });
+}
+
 export async function getOneOnOne(args: { orgId: string; actorId: string; id: string }): Promise<OneOnOneDTO> {
   const orgId = requireId("orgId", args.orgId);
   const actorId = requireId("actorId", args.actorId);
@@ -624,11 +681,14 @@ export async function listOneOnOnes(args: {
     const rows = (await exec.execute<StoredOneOnOne & { recurrence: unknown }>(sql`
       select o.id, o.manager_employment_id, o.report_employment_id,
              m.worker_party_id as manager_party_id, r.worker_party_id as report_party_id,
+             coalesce(mp.display_name, '—') as manager_name, coalesce(rp.display_name, '—') as report_name,
              o.scheduled_at::text as scheduled_at, o.held_at::text as held_at,
              o.status, o.skip_reason, o.recurrence, o.series_id::text as series_id
         from hrm_one_on_ones o
         join worker_employments m on m.org_id = o.org_id and m.id = o.manager_employment_id
         join worker_employments r on r.org_id = o.org_id and r.id = o.report_employment_id
+        left join parties mp on mp.org_id = o.org_id and mp.id = m.worker_party_id
+        left join parties rp on rp.org_id = o.org_id and rp.id = r.worker_party_id
        where o.org_id = ${orgId}${statusFilter}${employmentFilter}
        order by o.scheduled_at desc
     `)).rows;

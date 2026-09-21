@@ -423,6 +423,78 @@ export async function setSectionCompetency(args: {
   });
 }
 
+export interface CompetencyProfileRow {
+  readonly sectionTitle: string;
+  readonly competencyName: string;
+  readonly assessedRating: string | null;
+  readonly levels: readonly CompetencyLevelDTO[];
+}
+
+/**
+ * Expected vs assessed for one employment from their last calibrated (or
+ * shared) manager review: each template section carrying a competency
+ * reads its level expectations beside the assessed answer rating. HR,
+ * the subject, and the line manager may read it — the same audience as
+ * the review itself.
+ */
+export async function competencyProfileForEmployment(args: {
+  orgId: string;
+  actorId: string;
+  employmentId: string;
+}): Promise<readonly CompetencyProfileRow[]> {
+  const orgId = requireId("orgId", args.orgId);
+  const actorId = requireId("actorId", args.actorId);
+  const employmentId = requireId("employmentId", args.employmentId);
+  return withOrgTransaction(orgId, async (exec) => {
+    await assertCompetenciesFeature(exec, orgId);
+    await requireCompetenciesRead(exec, orgId, actorId);
+    const reviews = (await exec.execute<{ id: string; cycle_id: string }>(sql`
+      select r.id, r.cycle_id
+        from hrm_reviews r
+        join hrm_review_cycles c on c.org_id = r.org_id and c.id = r.cycle_id
+       where r.org_id = ${orgId} and r.employment_id = ${employmentId}
+         and r.kind = 'manager' and r.status in ('calibrated', 'shared', 'acknowledged')
+       order by c.period_end_on desc, r.created_at desc
+       limit 1
+    `)).rows;
+    const review = reviews[0];
+    if (!review) return [];
+    const answers = (await exec.execute<{ section_title: string; rating: string | null }>(sql`
+      select section_title, rating::text as rating from hrm_review_answers
+       where org_id = ${orgId} and review_id = ${review.id}
+    `)).rows;
+    const assessed = new Map<string, string | null>();
+    for (const answer of answers) {
+      if (!assessed.has(answer.section_title)) assessed.set(answer.section_title, answer.rating);
+    }
+    const cycle = (await exec.execute<{ template_id: string }>(sql`
+      select template_id from hrm_review_cycles where org_id = ${orgId} and id = ${review.cycle_id}
+    `)).rows[0];
+    if (!cycle) return [];
+    const sections = (await exec.execute<{ id: string; title: string; competency_id: string | null; competency_name: string | null }>(sql`
+      select s.id, s.title, s.competency_id::text as competency_id, c.name as competency_name
+        from hrm_review_template_sections s
+        left join hrm_competencies c on c.org_id = s.org_id and c.id = s.competency_id
+       where s.org_id = ${orgId} and s.template_id = ${cycle.template_id} and s.competency_id is not null
+       order by s.position
+    `)).rows;
+    const out: CompetencyProfileRow[] = [];
+    for (const section of sections) {
+      const levels = (await exec.execute<{ id: string; level_rank: number; label: string; expectation: string }>(sql`
+        select id, level_rank, label, expectation from hrm_competency_levels
+         where org_id = ${orgId} and competency_id = ${section.competency_id} order by level_rank
+      `)).rows;
+      out.push({
+        sectionTitle: section.title,
+        competencyName: section.competency_name ?? section.title,
+        assessedRating: assessed.get(section.title) ?? null,
+        levels: levels.map((level) => ({ id: level.id, levelRank: level.level_rank, label: level.label, expectation: level.expectation })),
+      });
+    }
+    return out;
+  });
+}
+
 /**
  * Level expectations for a review template section: what the review
  * drafting renders inline beside the section's questions.

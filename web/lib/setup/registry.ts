@@ -2416,6 +2416,52 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'required', kind: 'boolean' },
     ],
   },
+  // HR-17 begin: competency frameworks (0228) — the org's reusable skill
+  // vocabulary with ranked levels. Setup-owned; deactivation preserves
+  // history. Hidden while hrmCompetencies is off.
+  {
+    key: 'hrm-competency-frameworks',
+    table: 'hrm_competency_frameworks',
+    actorCols: true,
+    groupKey: 'workforce',
+    featureKey: 'hrmCompetencies',
+    iconKey: 'award',
+    orgScoped: true,
+    orderBy: 'name',
+    hasActive: true,
+    columns: [
+      { key: 'name', kind: 'text' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'name', kind: 'text', required: true },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
+    key: 'hrm-competencies',
+    table: 'hrm_competencies',
+    actorCols: true,
+    groupKey: 'workforce',
+    featureKey: 'hrmCompetencies',
+    iconKey: 'award',
+    orgScoped: true,
+    orderBy: 'position',
+    hasActive: false,
+    columns: [
+      { key: 'frameworkId', kind: 'ref', ref: 'hrm-competency-frameworks' },
+      { key: 'code', kind: 'text' },
+      { key: 'name', kind: 'text' },
+    ],
+    fields: [
+      { key: 'frameworkId', kind: 'ref', ref: 'hrm-competency-frameworks', required: true },
+      { key: 'code', kind: 'text', required: true },
+      { key: 'name', kind: 'text', required: true },
+      { key: 'description', kind: 'textarea' },
+      { key: 'category', kind: 'text' },
+    ],
+  },
+  // HR-17 end
   // --- Assets --------------------------------------------------------------
   {
     key: 'asset-categories',

@@ -223,6 +223,18 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   // HR-16 begin
   'hrm-verb-chip',
   // HR-16 end
+  // HR-17 begin
+  'hrm-calibration-distribution',
+  'hrm-calibration-entry',
+  'hrm-calibration-missing',
+  'hrm-feedback-dialog',
+  'hrm-feedback-settings',
+  'hrm-note',
+  'hrm-one-on-one-drawer',
+  'hrm-session-actions',
+  'hrm-session-dialog',
+  'hrm-talent-dialog',
+  // HR-17 end
   'hrm-window-dialog',
   'hrm-window-drawer',
   'hrm-benefit-change-dialog',
