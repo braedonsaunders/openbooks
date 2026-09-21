@@ -776,7 +776,16 @@ export function subsequentRecoveryDeduction(args: {
   );
 }
 
-export function remainingAfter(basis: string, deduction: string): string {
+/** Preserve the approved four-decimal checkpoint while subtracting a deduction.
+ * Deduction rounding belongs to its statutory calculation, not the remaining
+ * basis. In particular, a zero deduction must not alter a split checkpoint. */
+export function remainingAfterExact(basis: string, deduction: string): string {
   const next = add(basis, neg(deduction));
-  return formatMoney(cmp(next, "0") < 0 ? "0" : next, 2);
+  return formatMoney(cmp(next, "0") < 0 ? "0" : next, 4);
+}
+
+/** Two-decimal result for existing allowance presentation callers. Internal
+ * checkpoint state must use remainingAfterExact so its components conserve. */
+export function remainingAfter(basis: string, deduction: string): string {
+  return formatMoney(remainingAfterExact(basis, deduction), 2);
 }
