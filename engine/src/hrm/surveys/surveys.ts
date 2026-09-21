@@ -309,7 +309,7 @@ export interface SurveyDeliveryIntent {
   token: string;
 }
 
-const INVITATION_TTL_MS = 60 * 24 * 3_600_000; // 60 days
+export const INVITATION_TTL_MS = 60 * 24 * 3_600_000; // 60 days
 
 /**
  * Open a draft survey: create one tokened invitation per respondent.
