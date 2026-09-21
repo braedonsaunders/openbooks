@@ -292,16 +292,30 @@ test("explain-pay trace carries lines, treatments, inputs and the diff", { skip:
     const party = (await db.execute<{ partyId: string }>(sql`
       select worker_party_id::text as "partyId" from worker_employments
        where org_id = ${org.orgId} and id = ${employmentId}`)).rows[0]?.partyId;
-    // pay_stubs.pay_run_document_id is a foreign key, so the run document
-    // has to exist before its stubs do. The fixture used a bare uuid and
-    // the insert was refused -- the explain-pay trace was never the thing
-    // failing. Same document shape the payroll fixtures use.
+    // A pay stub needs the WHOLE run to exist first, and the chain is
+    // three rows deep: pay_schedules <- pay_runs <- pay_stubs, with the
+    // document beside the run. pay_stubs.pay_run_document_id points at
+    // PAY_RUNS(document_id), not at documents, so creating the document
+    // alone still left the stub with nothing to reference. Copied from
+    // web/lib/pdf-templates/ytd-tax-cross-pack.integration.test.ts rather
+    // than re-derived.
+    const scheduleId = randomUUID();
     const runId = randomUUID();
+    await db.execute(sql`
+      insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
+                                 pay_date_offset_days, is_active)
+      values (${scheduleId}, ${org.orgId}, ${`Sched ${scheduleId.slice(0, 8)}`}, 'biweekly', 26,
+              '2026-09-30', 3, true)`);
     await db.execute(sql`
       insert into documents (org_id, id, kind, document_number, subsidiary_id, document_date,
                              currency, status, created_by, updated_by)
       values (${org.orgId}, ${runId}, 'pay_run', ${`PAY-${runId.slice(0, 8)}`},
               ${org.subsidiaryId}, '2026-09-30', 'CAD', 'draft', ${adminId}, ${adminId})`);
+    await db.execute(sql`
+      insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end,
+                            pay_date, tax_year, run_status)
+      values (${runId}, ${org.orgId}, ${scheduleId}, '2026-09-01', '2026-09-30',
+              '2026-09-30', 2026, 'committed')`);
     const stubPrev = randomUUID();
     const stubCur = randomUUID();
     for (const [stubId, payDate, gross, net] of [
