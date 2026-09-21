@@ -14,7 +14,8 @@ import {
   refreshOpenMacrsVintageThrough,
   macrsConventionAfterMidQuarter,
   macrsMidQuarterApplies,
-  macrsMidQuarterByTaxYear,
+  macrsMidQuarterByWindow,
+  macrsWindowIdentity,
   eligibleMacrsMidQuarterPlacements,
   shortYearMathEnd,
   placedAndDisposedInSameTaxYear,
@@ -751,15 +752,56 @@ test("mid-quarter 40% uses the tax window's last three months and vintage tax ba
     eligibleMacrsMidQuarterPlacements(split, fiscal),
     [{ placedOn: "2026-05-01", basis: "9000" }],
   );
-  const retained = macrsMidQuarterByTaxYear([fiscal], split);
-  assert.equal(retained.get(2026), true);
+  const retained = macrsMidQuarterByWindow([fiscal], split);
+  assert.equal(retained.get(macrsWindowIdentity(fiscal)), true);
   const convention = macrsConventionAfterMidQuarter(
     may,
     "half_year",
     [fiscal],
-    new Map([[2026, true]]),
+    new Map([[macrsWindowIdentity(fiscal), true]]),
   );
   assert.equal(convention, "mid_quarter");
+});
+
+test("same-label short years keep distinct mid-quarter determinations", () => {
+  const first = {
+    id: "win-2024a",
+    taxYear: 2024,
+    yearStart: "2024-01-01",
+    yearEnd: "2024-06-30",
+  };
+  const second = {
+    id: "win-2024b",
+    taxYear: 2024,
+    yearStart: "2024-07-01",
+    yearEnd: "2024-12-31",
+  };
+  const january = {
+    placedInServiceOn: "2024-01-15",
+    basis: "10000",
+    disposedOn: null,
+    convention: "half_year" as const,
+  };
+  const november = {
+    placedInServiceOn: "2024-11-01",
+    basis: "10000",
+    disposedOn: null,
+    convention: "half_year" as const,
+  };
+  assert.equal(macrsMidQuarterApplies(first, [{ placedOn: january.placedInServiceOn, basis: january.basis }]), false);
+  assert.equal(macrsMidQuarterApplies(second, [{ placedOn: november.placedInServiceOn, basis: november.basis }]), true);
+  const byWindow = macrsMidQuarterByWindow([first, second], [january, november]);
+  assert.equal(byWindow.get(macrsWindowIdentity(first)), false);
+  assert.equal(byWindow.get(macrsWindowIdentity(second)), true);
+  assert.notEqual(macrsWindowIdentity(first), macrsWindowIdentity(second));
+  assert.equal(
+    macrsConventionAfterMidQuarter(january, "half_year", [first, second], byWindow),
+    "half_year",
+  );
+  assert.equal(
+    macrsConventionAfterMidQuarter(november, "half_year", [first, second], byWindow),
+    "mid_quarter",
+  );
 });
 
 test("§168(i)(7) placement-year bonus is allocated by months held, not ordinary HY disposal", () => {

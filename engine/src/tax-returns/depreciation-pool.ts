@@ -784,14 +784,21 @@ export function macrsMidQuarterApplies(
   return total > 0n && lastQuarter * 100n > total * 40n;
 }
 
-export function macrsMidQuarterByTaxYear(
+/** Stable mid-quarter key. Filing-year labels may repeat; dates (and id) do not. */
+export function macrsWindowIdentity(
+  window: Pick<MacrsYearWindow, "id" | "yearStart" | "yearEnd">,
+): string {
+  return window.id ?? `${window.yearStart}/${window.yearEnd}`;
+}
+
+export function macrsMidQuarterByWindow(
   windows: readonly MacrsYearWindow[],
   vintages: readonly MacrsMidQuarterVintage[],
-): Map<number, boolean> {
-  const out = new Map<number, boolean>();
+): Map<string, boolean> {
+  const out = new Map<string, boolean>();
   windows.forEach((window) => {
     out.set(
-      window.taxYear,
+      macrsWindowIdentity(window),
       macrsMidQuarterApplies(window, eligibleMacrsMidQuarterPlacements(vintages, window)),
     );
   });
@@ -802,7 +809,7 @@ export function macrsConventionAfterMidQuarter(
   vintage: MacrsMidQuarterVintage,
   classConvention: "half_year" | "mid_quarter" | "mid_month",
   windows: readonly MacrsYearWindow[],
-  midQuarterByTaxYear: ReadonlyMap<number, boolean>,
+  midQuarterByWindow: ReadonlyMap<string, boolean>,
 ): "half_year" | "mid_quarter" | "mid_month" {
   if (classConvention !== "half_year" || vintage.convention === "mid_month") return vintage.convention;
   if (vintage.adjustedCarryover) return vintage.convention;
@@ -810,7 +817,7 @@ export function macrsConventionAfterMidQuarter(
     vintage.placedInServiceOn >= row.yearStart && vintage.placedInServiceOn <= row.yearEnd,
   );
   if (!window) return vintage.convention;
-  return midQuarterByTaxYear.get(window.taxYear) ? "mid_quarter" : vintage.convention;
+  return midQuarterByWindow.get(macrsWindowIdentity(window)) ? "mid_quarter" : vintage.convention;
 }
 
 /** 26 CFR 1.168(d)-1(b)(7)(ii): transferor includes the placement month and
