@@ -5152,7 +5152,6 @@ const I14_IDENTICAL_BY_FACT = new Set([
 
 const I14_FILE_COUNTS: Record<string, number> = {
   "items": 161,
-  "inventory": 159,
   "inventory": 104,
   "reports": 1415,
   "sync": 172,
