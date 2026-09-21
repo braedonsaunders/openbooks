@@ -62,10 +62,14 @@ function readTrackedBlobs(objectIds) {
   const uniqueObjectIds = [...new Set(objectIds)];
   if (uniqueObjectIds.length === 0) return new Map();
 
+  // The batch carries every candidate blob's CONTENT, so the ceiling scales
+  // with the repository rather than with the change under test. At 64 MB this
+  // started throwing ENOBUFS as the tree grew, and a guard that cannot run is
+  // worse than one that fails: spawnSync reports the crash, not a violation.
   const output = execFileSync("git", ["cat-file", "--batch"], {
     input: `${uniqueObjectIds.join("\n")}\n`,
     encoding: null,
-    maxBuffer: 64 * 1024 * 1024,
+    maxBuffer: 512 * 1024 * 1024,
     stdio: ["pipe", "pipe", "pipe"],
   });
   const blobs = new Map();

@@ -736,6 +736,22 @@
       "hrm_qualification_alerts": {
         "label": "Alertas de qualificações",
         "description": "Uma linha por alerta de renovação de certificação — titular, tipo, vencimento, o cronograma de antecedência em que disparou e se foi enviado."
+      },
+      "hrm_one_on_ones": {
+        "label": "Reuniões individuais",
+        "description": "Uma linha por reunião individual: gestor, liderado, datas agendada e realizada, e status. Requer a permissão de desempenho de RH."
+      },
+      "hrm_feedback": {
+        "label": "Feedback",
+        "description": "Uma linha por elogio, feedback ou solicitação: pessoa, tipo, visibilidade e data de registro. Requer a permissão de desempenho de RH."
+      },
+      "hrm_calibration_entries": {
+        "label": "Entradas de calibração",
+        "description": "Uma linha por avaliação calibrada: sessão, colaborador, nota proposta ao lado da calibrada, potencial e quem decidiu. Requer a permissão de desempenho de RH."
+      },
+      "hrm_talent_reviews": {
+        "label": "Avaliações de talento",
+        "description": "Uma linha por avaliação de talento: colaborador, desempenho e potencial, impacto e risco de perda, e prontidão para promoção. Requer a permissão de desempenho de RH."
       }
     },
     "columns": {
@@ -1559,6 +1575,43 @@
         "is_active": "Ativo",
         "created_at": "Criado em",
         "id": "Motivo (id)"
+      },
+      "hrm_one_on_ones": {
+        "scheduled_at": "Agendada",
+        "held_at": "Realizada",
+        "manager": "Gestor",
+        "report": "Liderado",
+        "employer": "Empregador",
+        "status": "Status",
+        "id": "Reunião (id)"
+      },
+      "hrm_feedback": {
+        "recorded_at": "Registrado",
+        "employee": "Colaborador",
+        "employer": "Empregador",
+        "kind": "Tipo",
+        "visibility": "Visibilidade",
+        "id": "Feedback (id)"
+      },
+      "hrm_calibration_entries": {
+        "session": "Sessão",
+        "employee": "Colaborador",
+        "employer": "Empregador",
+        "proposed_rating": "Proposta",
+        "calibrated_rating": "Calibrada",
+        "potential_key": "Potencial",
+        "decided_at": "Decidida",
+        "id": "Entrada (id)"
+      },
+      "hrm_talent_reviews": {
+        "reviewed_at": "Avaliado",
+        "employee": "Colaborador",
+        "employer": "Empregador",
+        "performance_key": "Desempenho",
+        "potential_key": "Potencial",
+        "impact_of_loss": "Impacto da perda",
+        "risk_of_loss": "Risco de perda",
+        "id": "Avaliação (id)"
       }
     },
     "enumValues": {

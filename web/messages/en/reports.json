@@ -736,6 +736,22 @@
       "hrm_qualification_alerts": {
         "label": "Qualification alerts",
         "description": "One row per certification renewal alert — holder, type, expiry, the lead-day schedule it fired on, and whether it has been sent."
+      },
+      "hrm_one_on_ones": {
+        "label": "One-on-ones",
+        "description": "One row per 1:1 meeting — manager, report, scheduled and held dates, and status. Requires the HRM performance permission."
+      },
+      "hrm_feedback": {
+        "label": "Feedback",
+        "description": "One row per praise, feedback, or request — subject, kind, visibility, and recorded date. Requires the HRM performance permission."
+      },
+      "hrm_calibration_entries": {
+        "label": "Calibration entries",
+        "description": "One row per calibrated review — session, employee, proposed beside calibrated rating, potential, and the decider. Requires the HRM performance permission."
+      },
+      "hrm_talent_reviews": {
+        "label": "Talent reviews",
+        "description": "One row per talent review — employee, performance and potential keys, loss impact and risk, and promotion readiness. Requires the HRM performance permission."
       }
     },
     "columns": {
@@ -1559,6 +1575,43 @@
         "is_active": "Active",
         "created_at": "Created at",
         "id": "Reason (id)"
+      },
+      "hrm_one_on_ones": {
+        "scheduled_at": "Scheduled",
+        "held_at": "Held",
+        "manager": "Manager",
+        "report": "Report",
+        "employer": "Employer",
+        "status": "Status",
+        "id": "Meeting (id)"
+      },
+      "hrm_feedback": {
+        "recorded_at": "Recorded",
+        "employee": "Employee",
+        "employer": "Employer",
+        "kind": "Kind",
+        "visibility": "Visibility",
+        "id": "Feedback (id)"
+      },
+      "hrm_calibration_entries": {
+        "session": "Session",
+        "employee": "Employee",
+        "employer": "Employer",
+        "proposed_rating": "Proposed",
+        "calibrated_rating": "Calibrated",
+        "potential_key": "Potential",
+        "decided_at": "Decided",
+        "id": "Entry (id)"
+      },
+      "hrm_talent_reviews": {
+        "reviewed_at": "Reviewed",
+        "employee": "Employee",
+        "employer": "Employer",
+        "performance_key": "Performance",
+        "potential_key": "Potential",
+        "impact_of_loss": "Impact of loss",
+        "risk_of_loss": "Risk of loss",
+        "id": "Review (id)"
       }
     },
     "enumValues": {

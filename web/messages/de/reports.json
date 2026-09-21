@@ -736,6 +736,22 @@
       "hrm_qualification_alerts": {
         "label": "Qualifikationswarnungen",
         "description": "Eine Zeile pro Zertifizierungs-Erneuerungswarnung – Inhaber, Typ, Ablauf, der Vorlaufzeitplan, zu dem sie ausgelöst wurde, und ob sie versendet wurde."
+      },
+      "hrm_one_on_ones": {
+        "label": "Einzelgespräche",
+        "description": "Eine Zeile pro Einzelgespräch — Führungskraft, unterstellte Person, geplante und abgehaltene Termine sowie Status. Erfordert die HR-Leistungsberechtigung."
+      },
+      "hrm_feedback": {
+        "label": "Feedback",
+        "description": "Eine Zeile pro Lob, Feedback oder Anfrage — betroffene Person, Art, Sichtbarkeit und Erfassungsdatum. Erfordert die HR-Leistungsberechtigung."
+      },
+      "hrm_calibration_entries": {
+        "label": "Kalibrierungseinträge",
+        "description": "Eine Zeile pro kalibrierter Beurteilung — Sitzung, Mitarbeitende, vorgeschlagene neben kalibrierter Bewertung, Potenzial und entscheidende Person. Erfordert die HR-Leistungsberechtigung."
+      },
+      "hrm_talent_reviews": {
+        "label": "Talentbeurteilungen",
+        "description": "Eine Zeile pro Talentbeurteilung — Mitarbeitende, Leistung und Potenzial, Verlustwirkung und -risiko sowie Beförderungsreife. Erfordert die HR-Leistungsberechtigung."
       }
     },
     "columns": {
@@ -1559,6 +1575,43 @@
         "is_active": "Aktiv",
         "created_at": "Erstellt am",
         "id": "Grund (ID)"
+      },
+      "hrm_one_on_ones": {
+        "scheduled_at": "Geplant",
+        "held_at": "Abgehalten",
+        "manager": "Führungskraft",
+        "report": "Unterstellt",
+        "employer": "Arbeitgeber",
+        "status": "Status",
+        "id": "Gespräch (ID)"
+      },
+      "hrm_feedback": {
+        "recorded_at": "Erfasst",
+        "employee": "Mitarbeitende",
+        "employer": "Arbeitgeber",
+        "kind": "Art",
+        "visibility": "Sichtbarkeit",
+        "id": "Feedback (ID)"
+      },
+      "hrm_calibration_entries": {
+        "session": "Sitzung",
+        "employee": "Mitarbeitende",
+        "employer": "Arbeitgeber",
+        "proposed_rating": "Vorgeschlagen",
+        "calibrated_rating": "Kalibriert",
+        "potential_key": "Potenzial",
+        "decided_at": "Entschieden",
+        "id": "Eintrag (ID)"
+      },
+      "hrm_talent_reviews": {
+        "reviewed_at": "Beurteilt",
+        "employee": "Mitarbeitende",
+        "employer": "Arbeitgeber",
+        "performance_key": "Leistung",
+        "potential_key": "Potenzial",
+        "impact_of_loss": "Verlustwirkung",
+        "risk_of_loss": "Verlustrisiko",
+        "id": "Beurteilung (ID)"
       }
     },
     "enumValues": {
