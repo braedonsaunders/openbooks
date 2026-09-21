@@ -88,6 +88,25 @@ test("migration tables exist with org isolation RLS", { skip: !DB }, async () =>
   }
 });
 
+/**
+ * Drizzle wraps the driver error, so the guard's message lives on the
+ * CAUSE, not on the error `assert.rejects` inspects. Matching the
+ * wrapper's own text silently passes for any query failure and fails for
+ * the refusal actually firing -- which is what happened here: the trigger
+ * raised exactly as designed and the assertion still failed.
+ * Same matcher as scheduling/outbox.integration.test.ts.
+ */
+async function assertRejectsWithCause(promise: Promise<unknown>, pattern: RegExp): Promise<void> {
+  await assert.rejects(promise, (error: unknown) => {
+    let current: unknown = error;
+    while (current instanceof Error) {
+      if (pattern.test(current.message)) return true;
+      current = (current as { cause?: unknown }).cause;
+    }
+    return false;
+  }, `no rejection matching ${pattern}`);
+}
+
 test("ai_decisions is append-only: UPDATE and DELETE refuse", { skip: !DB }, async () => {
   const { org, adminId } = await setup();
   try {
@@ -96,11 +115,11 @@ test("ai_decisions is append-only: UPDATE and DELETE refuse", { skip: !DB }, asy
       subjectKind: "employment", subjectId: null, input: "in", output: "out",
       outputSummary: "append-only probe", sources: [], outcome: "shown", model: "test",
     });
-    await assert.rejects(
+    await assertRejectsWithCause(
       db.execute(sql`update ai_decisions set outcome = 'rejected' where id = ${id}::uuid`),
       /append-only/,
     );
-    await assert.rejects(
+    await assertRejectsWithCause(
       db.execute(sql`delete from ai_decisions where id = ${id}::uuid`),
       /append-only/,
     );
@@ -128,11 +147,25 @@ test("capability sync seeds six rows; autonomy moves down only", { skip: !DB }, 
       select autonomy from ai_capabilities
        where org_id = ${org.orgId} and key = 'hrmPayrollAnomalies'`)).rows;
     assert.equal(rows[0]?.autonomy, "read_only");
-    // Raises refuse by name.
+    // The rule is a CEILING, not a ratchet. hrmPayrollAnomalies declares
+    // maxAutonomy "propose", so an org that lowered to read_only may
+    // restore it to propose -- otherwise one mistaken click would cost
+    // the capability permanently with no way back.
+    const restored = await updateCapability(db, {
+      orgId: org.orgId, actorId: adminId, key: "hrmPayrollAnomalies", autonomy: "propose",
+    });
+    assert.equal(restored.autonomy, "propose");
+    // Above the ceiling refuses by name. This is the assertion that
+    // matters: the code sets the maximum and the org cannot exceed it.
     await assert.rejects(
-      updateCapability(db, { orgId: org.orgId, actorId: adminId, key: "hrmPayrollAnomalies", autonomy: "propose" }),
+      updateCapability(db, {
+        orgId: org.orgId, actorId: adminId, key: "hrmPayrollAnomalies", autonomy: "act_with_confirmation",
+      }),
       /cannot be raised above "propose"/,
     );
+    await updateCapability(db, {
+      orgId: org.orgId, actorId: adminId, key: "hrmPayrollAnomalies", autonomy: "read_only",
+    });
     // Unknown capability refuses with the remedy.
     await assert.rejects(
       updateCapability(db, { orgId: org.orgId, actorId: adminId, key: "hrmTimeTravel", autonomy: "read_only" }),
@@ -252,7 +285,7 @@ test("explain-pay trace carries lines, treatments, inputs and the diff", { skip:
     ] as const) {
       await db.execute(sql`
         insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id,
-          province, periods_per_year, pay_date, tax_year, currency, gross, net_pay, employer_cost)
+          province, periods_per_year, pay_date, tax_year, currency_code, gross, net_pay, employer_cost)
         values (${stubId}, ${org.orgId}, ${runId}, ${party}, ${employmentId},
           'ON', 26, ${payDate}, 2026, 'CAD', ${gross}, ${net}, 800)`);
     }
