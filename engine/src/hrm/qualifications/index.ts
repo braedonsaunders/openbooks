@@ -51,13 +51,16 @@ export {
 export {
   checkAssignment,
   checkAssignmentInternal,
+  checkAssignmentTrusted,
   gateScheduleAssignment,
   noteWarnedDispatch,
   refuseBlockedDispatch,
   type CheckAssignmentInput,
+  type CheckAssignmentTrustedInput,
   type GateFinding,
   type GateVerdict,
   type GateVerdictReason,
+  type ScheduleGateInput,
   type ScheduleGateResult,
 } from "./gating.ts";
 export {

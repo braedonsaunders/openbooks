@@ -1,16 +1,18 @@
 /**
  * HR-15 hrm_qualification_alert adapter — expiring qualifications (HR-14).
  *
- * Optional adapter: HR-14 has not landed, so no table or feature key
- * exists yet. The off state is probed explicitly — an information-schema
- * existence check for the HR-14 assignment table — never by catching
- * errors. While the table is absent the adapter lists nothing and the
- * inbox stays up; when HR-14 lands, the probe finds the table and the
- * adapter reads expiring assignments through the same HRM scope the
- * qualification surface uses.
+ * Reads the real HR-14 ledger (migration 0225): hrm_worker_qualifications
+ * joined through the actor's employments, projecting the same
+ * expiring/expired derivation the qualification service uses (stored
+ * valid, dated expiry within 30 days). The off state is probed
+ * explicitly — an information-schema existence check for the HR-14
+ * table — never by catching errors. While the table is absent the
+ * adapter lists nothing and the inbox stays up.
  *
- * Expected HR-14 shape (to be pinned when it lands): a table holding one
- * row per held qualification with holder_party_id, expiry_on, and status.
+ * Delivery also flows through notifications (the alert scan writes
+ * hrm_qualification_expiry notices, which the notification adapter
+ * lists); this adapter covers holders whose scan row has not fired yet
+ * and managers reading the same ledger.
  */
 
 import { sql } from "drizzle-orm";
@@ -21,21 +23,18 @@ import type { InboxAdapter } from "../registry.ts";
 import type { InboxItem, InboxListContext } from "../types.ts";
 import { inboxItemId, priorityForDueDate } from "../types.ts";
 
-/** HR-14 assignment table, in landing-preference order. */
-const CANDIDATE_TABLES = ["hrm_qualification_assignments", "hrm_certification_assignments"] as const;
+/** HR-14 ledger table (migration 0225). */
+const HR14_TABLE = "hrm_worker_qualifications" as const;
 
-async function hr14Table(): Promise<string | null> {
-  for (const table of CANDIDATE_TABLES) {
-    const found = (await db.execute<{ exists: boolean }>(sql`
-      select to_regclass(${`public.${table}`}) is not null as exists
-    `)).rows[0]?.exists;
-    if (found) return table;
-  }
-  return null;
+async function hr14Landed(): Promise<boolean> {
+  const found = (await db.execute<{ exists: boolean }>(sql`
+    select to_regclass(${`public.${HR14_TABLE}`}) is not null as exists
+  `)).rows[0]?.exists;
+  return found === true;
 }
 
 export async function qualificationSourceAvailable(): Promise<boolean> {
-  return (await hr14Table()) !== null;
+  return hr14Landed();
 }
 
 type AlertRow = {
@@ -48,20 +47,26 @@ export const hrmQualificationAlertAdapter: InboxAdapter = {
   kind: "hrm_qualification_alert",
   async list(ctx: InboxListContext): Promise<InboxItem[]> {
     if (!(await hrmOn(db, ctx.orgId))) return [];
-    const table = await hr14Table();
-    if (!table) return [];
+    if (!(await hr14Landed())) return [];
     const partyId = await actorPartyId(ctx.orgId, ctx.actorId);
     if (!partyId) return [];
-    // Column names follow the HR-14 contract (holder_party_id, expiry_on,
-    // status, qualification name); probed shape, pinned when HR-14 lands.
+    // The HR-14 read contract: stored valid rows with a dated expiry
+    // inside the alert window, through the actor's employments (never a
+    // caller-supplied worker). Expired rows sort first — they already
+    // refuse gated work.
     const rows = (await db.execute<AlertRow>(sql`
-      select a.id, a.name, a.expiry_on::text as expiry_on
-        from ${sql.raw(`public.${table}`)} a
-       where a.org_id = ${ctx.orgId}
-         and a.holder_party_id = ${partyId}
-         and a.status = 'active'
-         and a.expiry_on <= current_date + 30
-       order by a.expiry_on, a.id
+      select q.id::text as id, t.name as name, q.expires_on::text as expiry_on
+        from public.hrm_worker_qualifications q
+        join public.worker_employments e
+          on e.org_id = q.org_id and e.id = q.employment_id
+        join public.hrm_qualification_types t
+          on t.org_id = q.org_id and t.id = q.type_id
+       where q.org_id = ${ctx.orgId}
+         and e.worker_party_id = ${partyId}
+         and q.status = 'valid'
+         and q.expires_on is not null
+         and q.expires_on <= current_date + 30
+       order by q.expires_on, q.id
        limit 20
     `)).rows;
     return rows.map((row) => {
@@ -76,7 +81,7 @@ export const hrmQualificationAlertAdapter: InboxAdapter = {
         priority: priorityForDueDate(dueAt, ctx.asOf),
         subjectHref: "/hrm/qualifications",
         actions: [],
-        source: { kind: "hrm_qualification_assignment", id: row.id },
+        source: { kind: "hrm_worker_qualification", id: row.id },
       } satisfies InboxItem;
     });
   },

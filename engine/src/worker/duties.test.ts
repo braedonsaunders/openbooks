@@ -65,6 +65,12 @@ test("the worker composition entry registers the automation tick without booting
       listWorkerDuties().includes("automation-tick"),
       "the worker registry must carry the automation tick after booting the composition entry",
     );
+    // HR-14 begin: the qualification-expiry scan rides the same tick.
+    assert.ok(
+      listWorkerDuties().includes("qualification-alerts"),
+      "the worker registry must carry the qualification-alerts scan after booting the composition entry",
+    );
+    // HR-14 end
   } finally {
     clearWorkerDuties();
   }
