@@ -25,6 +25,7 @@
  */
 
 import { add, cmp, formatMoney, fromUnits, mulDecimal, mulDecimalFactors, mulPercent, mulRatio, neg, normalizeMoney, roundDiv, roundMoney, sum, toUnits } from "../money/money.ts";
+import { splitMoneyProportionally } from "../money/allocate-proportional.ts";
 import { macrsOpeningTakenComponents } from "./asset-basis-policy.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { taxConventionHalfMonths } from "../assets/depreciation-conventions.ts";
@@ -726,6 +727,72 @@ export type MacrsLineageTimelines = {
   reportingWindows: MacrsYearWindow[];
 };
 
+function windowsForSubsidiary(
+  windows: readonly MacrsYearWindow[],
+  subsidiaryId: string | undefined,
+): MacrsYearWindow[] {
+  if (!subsidiaryId) return windows.filter((row) => !row.subsidiaryId);
+  const tagged = windows.filter((row) => row.subsidiaryId === subsidiaryId);
+  return tagged.length > 0 ? tagged : windows.filter((row) => !row.subsidiaryId);
+}
+
+function originSubsidiaryIdForRecovery(args: {
+  windows: readonly MacrsYearWindow[];
+  placedInServiceOn: string;
+  ownerSubsidiaryId?: string;
+  originSubsidiaryId?: string;
+}): string | undefined {
+  if (args.originSubsidiaryId) return args.originSubsidiaryId;
+  const covering = args.windows.filter((row) =>
+    !!row.subsidiaryId
+    && args.placedInServiceOn >= row.yearStart
+    && args.placedInServiceOn <= row.yearEnd,
+  );
+  const ids = [...new Set(covering.map((row) => row.subsidiaryId!))];
+  if (ids.length === 1) return ids[0];
+  const nonOwner = ids.filter((id) => id !== args.ownerSubsidiaryId);
+  if (nonOwner.length === 1) return nonOwner[0];
+  if (ids.length > 1) {
+    throw new Error(
+      `tax year windows from ${ids.join(" and ")} both cover the original placement ${args.placedInServiceOn}; identify the original placement subsidiary — do not flatten former-owner calendars`,
+    );
+  }
+  return args.ownerSubsidiaryId;
+}
+
+function coverSingleCalendar(
+  calendar: readonly MacrsYearWindow[],
+  fromOn: string,
+  throughOn: string,
+): MacrsYearWindow[] {
+  const ordered = [...calendar].sort((left, right) =>
+    left.yearStart.localeCompare(right.yearStart) || left.yearEnd.localeCompare(right.yearEnd),
+  );
+  const origin = ordered.find((row) => fromOn >= row.yearStart && fromOn <= row.yearEnd);
+  if (!origin) {
+    throw new Error(
+      `no tax year window covers ${fromOn}; declare the tax year for that date on Fixed Assets tax-year setup — do not invent a book fiscal year`,
+    );
+  }
+  const span = [origin];
+  let cursor = origin;
+  for (const next of ordered) {
+    if (next.yearStart < origin.yearStart) continue;
+    if (next.yearStart === cursor.yearStart && next.yearEnd === cursor.yearEnd) continue;
+    if (next.yearStart <= cursor.yearEnd) {
+      throw new Error(
+        `tax year windows overlap ${cursor.yearStart}–${cursor.yearEnd} and ${next.yearStart}–${next.yearEnd}; correct the declared years — do not min/max them together`,
+      );
+    }
+    if (nextCalendarDay(cursor.yearEnd) !== next.yearStart) break;
+    span.push(next);
+    cursor = next;
+    if (throughOn <= cursor.yearEnd) break;
+  }
+  const until = throughOn <= cursor.yearEnd ? throughOn : cursor.yearEnd;
+  return assertMacrsWindowsCover(span, fromOn, until).filter((row) => row.yearStart <= throughOn);
+}
+
 /** Recovery years from original placement through asOf, plus the receiver
  *  reporting span after transfer. Overlapping calendars stay on their own
  *  timeline; a receiver year is not discarded because it overlaps a
@@ -736,28 +803,38 @@ export function macrsLineageRecoveryWindows(args: {
   transferOn: string | null;
   asOf: string;
   ownerSubsidiaryId?: string;
+  originSubsidiaryId?: string;
 }): MacrsLineageTimelines {
   const ordered = [...args.windows].sort((left, right) =>
     left.yearStart.localeCompare(right.yearStart) || left.yearEnd.localeCompare(right.yearEnd),
   );
   const ownerId = args.ownerSubsidiaryId;
+  const originId = originSubsidiaryIdForRecovery({
+    windows: ordered,
+    placedInServiceOn: args.placedInServiceOn,
+    ownerSubsidiaryId: ownerId,
+    originSubsidiaryId: args.originSubsidiaryId,
+  });
+  const originCalendar = windowsForSubsidiary(ordered, originId);
   const ownerWindows = ownerId
-    ? ordered.filter((row) => !row.subsidiaryId || row.subsidiaryId === ownerId)
-    : ordered;
-  const historyWindows = ownerId
-    ? ordered.filter((row) => !!row.subsidiaryId && row.subsidiaryId !== ownerId)
-    : [];
-  if (!args.transferOn || historyWindows.length === 0) {
+    ? windowsForSubsidiary(ordered, ownerId)
+    : originCalendar.length > 0 ? originCalendar : ordered;
+  if (!args.transferOn) {
     const calendar = ownerWindows.length > 0 ? ownerWindows : ordered;
     const covered = assertMacrsWindowsCover(calendar, args.placedInServiceOn, args.asOf);
     return { recoveryYears: covered, reportingWindows: covered };
   }
-  const historySpan = assertMacrsWindowsCover(
-    historyWindows,
+  if (originCalendar.length === 0) {
+    const calendar = ownerWindows.length > 0 ? ownerWindows : ordered;
+    const covered = assertMacrsWindowsCover(calendar, args.placedInServiceOn, args.asOf);
+    return { recoveryYears: covered, reportingWindows: covered };
+  }
+  const historySpan = coverSingleCalendar(
+    originCalendar,
     args.placedInServiceOn,
     args.transferOn,
   ).filter((row) => row.yearStart <= args.transferOn!);
-  const recoveryYears = continueOriginalRecoveryYears(historySpan, historyWindows, args.asOf);
+  const recoveryYears = continueOriginalRecoveryYears(historySpan, originCalendar, args.asOf);
   const ownerCalendar = ownerWindows.length > 0 ? ownerWindows : ordered;
   const ownerIntersect = ownerCalendar.filter((row) =>
     row.yearEnd >= args.transferOn! && row.yearStart <= args.asOf,
@@ -766,6 +843,11 @@ export function macrsLineageRecoveryWindows(args: {
     args.transferOn! >= row.yearStart && args.transferOn! <= row.yearEnd,
   );
   const ownerFrom = ownerCoversTransfer ? args.transferOn! : ownerIntersect[0]?.yearStart;
+  if (args.asOf > args.transferOn && !ownerCoversTransfer) {
+    throw new Error(
+      `no tax year window covers ${args.transferOn} for the receiving subsidiary; declare the receiver tax year through that date — do not restart recovery from the transfer date`,
+    );
+  }
   if (args.asOf > args.transferOn && (!ownerFrom || ownerIntersect.length === 0)) {
     throw new Error(
       `no tax year window covers ${args.asOf} for the receiving subsidiary; declare the receiver tax year through that date — do not restart recovery from the transfer date`,
@@ -1202,6 +1284,23 @@ function applySameYear168i7(args: {
   };
 }
 
+function splitAppliedComponents(
+  applied: MacrsYearResult,
+  take: string,
+): { section179: string; bonus: string; macrs: string } {
+  const requested = formatMoney(take, 4);
+  if (cmp(requested, "0") === 0) {
+    return { section179: "0.0000", bonus: "0.0000", macrs: "0.0000" };
+  }
+  const parts = splitMoneyProportionally([
+    { key: "bonus", amount: formatMoney(applied.bonus, 4) },
+    { key: "macrs", amount: formatMoney(applied.macrs, 4) },
+    { key: "section179", amount: formatMoney(applied.section179, 4) },
+  ], requested);
+  const read = (key: string) => parts.find((row) => row.key === key)?.take ?? "0.0000";
+  return { section179: read("section179"), bonus: read("bonus"), macrs: read("macrs") };
+}
+
 function allocateRecoveryYearsToReporting(args: {
   reporting: MacrsYearWindow;
   appliedYears: readonly {
@@ -1223,7 +1322,7 @@ function allocateRecoveryYearsToReporting(args: {
   const years = args.appliedYears.filter((row) => !row.preTransfer);
   const endedBefore = years.filter((row) => row.window.yearEnd < args.reporting.yearStart);
   const overlapStart = years.find((row) =>
-    row.window.yearStart < args.reporting.yearStart && row.window.yearEnd >= args.reporting.yearStart,
+    row.heldStart < args.reporting.yearStart && row.heldEnd >= args.reporting.yearStart,
   );
   let priorRemaining = endedBefore.at(-1)?.applied.remainingBasis
     ?? args.checkpoint
@@ -1231,55 +1330,87 @@ function allocateRecoveryYearsToReporting(args: {
     ?? "0.00";
   if (overlapStart && args.reporting.yearStart > overlapStart.heldStart) {
     const opening = endedBefore.at(-1)?.applied.remainingBasis ?? args.checkpoint ?? priorRemaining;
-    const beforeEnd = previousCalendarDay(args.reporting.yearStart);
-    const beforeTake = allocateAmountToOverlappingMonths(
+    const beforeTake = allocateAmountThrough(
       overlapStart.applied.allowance,
       overlapStart.heldStart,
       overlapStart.heldEnd,
-      overlapStart.heldStart,
-      beforeEnd,
+      previousCalendarDay(args.reporting.yearStart),
     );
     priorRemaining = remainingAfterExact(opening, beforeTake);
   } else if (args.checkpoint && endedBefore.length === 0) {
     priorRemaining = args.checkpoint;
   }
-  const portion = (amount: string, heldStart: string, heldEnd: string, throughOn: string, fromOn: string) =>
-    allocateAmountToOverlappingMonths(amount, heldStart, heldEnd, fromOn, throughOn);
-  let section179 = "0.00";
-  let bonus = "0.00";
-  let macrs = "0.00";
-  let takenSection179 = "0";
-  let takenBonus = "0";
-  let takenMacrs = "0";
-  for (const row of years) {
-    section179 = formatMoney(add(section179, portion(
-      row.applied.section179, row.heldStart, row.heldEnd, args.reporting.yearEnd, args.reporting.yearStart,
-    )), 2);
-    bonus = formatMoney(add(bonus, portion(
-      row.applied.bonus, row.heldStart, row.heldEnd, args.reporting.yearEnd, args.reporting.yearStart,
-    )), 2);
-    macrs = formatMoney(add(macrs, portion(
-      row.applied.macrs, row.heldStart, row.heldEnd, args.reporting.yearEnd, args.reporting.yearStart,
-    )), 2);
-    takenSection179 = formatMoney(add(takenSection179, portion(
-      row.applied.section179, row.heldStart, row.heldEnd, args.reporting.yearEnd, row.heldStart,
-    )), 4);
-    takenBonus = formatMoney(add(takenBonus, portion(
-      row.applied.bonus, row.heldStart, row.heldEnd, args.reporting.yearEnd, row.heldStart,
-    )), 4);
-    takenMacrs = formatMoney(add(takenMacrs, portion(
-      row.applied.macrs, row.heldStart, row.heldEnd, args.reporting.yearEnd, row.heldStart,
-    )), 4);
+  const desired = years.map((row) => {
+    const windowTake = allocateAmountInRange(
+      row.applied.allowance,
+      row.heldStart,
+      row.heldEnd,
+      args.reporting.yearStart,
+      args.reporting.yearEnd,
+    );
+    const beforeTake = args.reporting.yearStart <= row.heldStart
+      ? formatMoney("0", 4)
+      : allocateAmountThrough(
+        row.applied.allowance,
+        row.heldStart,
+        row.heldEnd,
+        previousCalendarDay(args.reporting.yearStart),
+      );
+    return { row, windowTake, beforeTake };
+  });
+  const rawAllowance = formatMoney(sum(desired.map((item) => item.windowTake)), 4);
+  const reportingTake = cmp(rawAllowance, priorRemaining) > 0
+    ? formatMoney(priorRemaining, 4)
+    : rawAllowance;
+  let left = reportingTake;
+  let section179 = "0.0000";
+  let bonus = "0.0000";
+  let macrs = "0.0000";
+  let takenSection179 = "0.0000";
+  let takenBonus = "0.0000";
+  let takenMacrs = "0.0000";
+  for (const item of desired) {
+    const take = cmp(item.windowTake, left) <= 0 ? item.windowTake : left;
+    left = formatMoney(add(left, neg(take)), 4);
+    const windowParts = splitAppliedComponents(item.row.applied, take);
+    const throughParts = splitAppliedComponents(
+      item.row.applied,
+      formatMoney(add(item.beforeTake, take), 4),
+    );
+    section179 = formatMoney(add(section179, windowParts.section179), 4);
+    bonus = formatMoney(add(bonus, windowParts.bonus), 4);
+    macrs = formatMoney(add(macrs, windowParts.macrs), 4);
+    takenSection179 = formatMoney(add(takenSection179, throughParts.section179), 4);
+    takenBonus = formatMoney(add(takenBonus, throughParts.bonus), 4);
+    takenMacrs = formatMoney(add(takenMacrs, throughParts.macrs), 4);
   }
-  const reportingTake = statutoryDeductionCappedAtRemaining(
-    formatMoney(sum([section179, bonus, macrs]), 2),
-    priorRemaining,
+  const disposed = !!(
+    args.disposedOn
+    && args.disposedOn <= args.reporting.yearEnd
   );
-  const remaining = remainingAfterExact(priorRemaining, reportingTake);
+  const remaining = disposed
+    ? "0.0000"
+    : remainingAfterExact(priorRemaining, reportingTake);
   const current = {
-    ...composeMacrsComponents(section179, bonus, macrs, remaining),
+    section179,
+    bonus,
+    macrs,
     allowance: reportingTake,
+    remainingBasis: remaining,
   };
+  if (!disposed) {
+    const reconstructed = formatMoney(add(reportingTake, remaining), 4);
+    if (cmp(reconstructed, formatMoney(priorRemaining, 4)) !== 0) {
+      throw new Error(
+        `MACRS reporting deduction ${reportingTake} plus remaining ${remaining} must equal opening ${priorRemaining}; do not round a frozen checkpoint remaining to hide an overclaim`,
+      );
+    }
+  }
+  if (cmp(formatMoney(sum([section179, bonus, macrs]), 4), formatMoney(reportingTake, 4)) !== 0) {
+    throw new Error(
+      `MACRS reporting components ${section179}/${bonus}/${macrs} must equal allowance ${reportingTake}; do not independently round a reporting split`,
+    );
+  }
   return {
     current,
     prior: { ...zeroMacrs(priorRemaining), remainingBasis: persistMacrsBasis(priorRemaining) },
@@ -1385,6 +1516,8 @@ export function computeMacrsThroughYear(
     heldEnd: string;
     preTransfer: boolean;
   }[] = [];
+  let statutoryAllocatedThrough: string | null = null;
+  let skippedCurrentWindow: MacrsYearWindow | null = null;
   for (let index = 0; index < ordered.length; index += 1) {
     const window = ordered[index]!;
     if (reportingCurrent) {
@@ -1393,6 +1526,10 @@ export function computeMacrsThroughYear(
       break;
     }
     if (input.placedInServiceOn > window.yearEnd) continue;
+    if (statutoryAllocatedThrough && window.yearStart <= statutoryAllocatedThrough) {
+      if (index === currentIndex) skippedCurrentWindow = window;
+      continue;
+    }
     if (input.disposedOn && input.disposedOn < window.yearStart) {
       const gone = postDisposalZero();
       if (index === currentIndex - 1) prior = gone;
@@ -1427,6 +1564,15 @@ export function computeMacrsThroughYear(
       && input.placedInServiceOn < transferOn
     );
     const sameYear168i7 = !!(placementThisWindow && transferThisWindow);
+    const allocBounds = shortPlacementYearAllocationBounds(
+      input.placedInServiceOn,
+      window.yearStart,
+      window.yearEnd,
+    );
+    const usesDeemedFullPlacementYear = !!(
+      sameYear168i7
+      && (allocBounds.yearEnd !== window.yearEnd || allocBounds.yearStart !== window.yearStart)
+    );
     if (sameYear168i7 && !input.section168i7Kind) {
       throw new Error(
         "nontaxable MACRS placement-year transfer requires section168i7Kind (§168(i)(7)(B)(i) nonrecognition, a §721 prior-partner depreciable interest, or a consolidated-group member transfer); do not allocate by ordinary half-year disposal",
@@ -1464,14 +1610,17 @@ export function computeMacrsThroughYear(
           carryoverOn: undefined,
         })
       : null;
-    if (firstServiceYear && short) {
+    if (firstServiceYear && (short || usesDeemedFullPlacementYear)) {
+      const conventionStart = usesDeemedFullPlacementYear ? allocBounds.yearStart : window.yearStart;
+      const conventionEnd = usesDeemedFullPlacementYear ? allocBounds.yearEnd : window.yearEnd;
+      const conventionHy = usesDeemedFullPlacementYear ? undefined : hyContext;
       deemedPlacedOn = formatCalendarDay(
         deemedPlacedInServiceOn(
           input.convention,
-          window.yearStart,
-          window.yearEnd,
+          conventionStart,
+          conventionEnd,
           input.placedInServiceOn,
-          hyContext,
+          conventionHy,
         ),
       );
       const deemed = parseCalendarDay(deemedPlacedOn);
@@ -1482,11 +1631,11 @@ export function computeMacrsThroughYear(
       }
       firstYearMonthsInService = monthsTreatedInServiceExact(
         deemed,
-        window.yearEnd,
-        hyContext,
+        conventionEnd,
+        conventionHy,
       );
       elapsedRecoveryMonths = firstYearMonthsInService;
-      vintageShortSeen = true;
+      vintageShortSeen = !usesDeemedFullPlacementYear;
       yearsSinceVintageShort = 0;
     } else if (short && !firstServiceYear) {
       vintageShortSeen = true;
@@ -1515,11 +1664,6 @@ export function computeMacrsThroughYear(
       continue;
     }
     let applied = result;
-    const allocBounds = shortPlacementYearAllocationBounds(
-      input.placedInServiceOn,
-      window.yearStart,
-      window.yearEnd,
-    );
     if (sameYear168i7) {
       let year1 = result;
       if (allocBounds.yearEnd !== window.yearEnd || allocBounds.yearStart !== window.yearStart) {
@@ -1549,6 +1693,7 @@ export function computeMacrsThroughYear(
         ),
       });
       if (checkpoint) postTransferTaken = formatMoney(add(postTransferTaken, applied.allowance), 4);
+      if (usesDeemedFullPlacementYear) statutoryAllocatedThrough = allocBounds.yearEnd;
     } else if (checkpoint) {
       const opening = persistMacrsBasis(add(checkpoint, neg(postTransferTaken)));
       let statutory = result.macrs;
@@ -1592,9 +1737,10 @@ export function computeMacrsThroughYear(
     }
     serviceYears += 1;
   }
-  if (reportingCurrent) {
+  const reportingSlice = reportingCurrent ?? skippedCurrentWindow;
+  if (reportingSlice && (reportingCurrent || skippedCurrentWindow)) {
     const allocated = allocateRecoveryYearsToReporting({
-      reporting: reportingCurrent,
+      reporting: reportingSlice,
       appliedYears,
       checkpoint,
       disposedOn: input.disposedOn,
@@ -1716,37 +1862,46 @@ function shortPlacementYearAllocationBounds(
   return { yearStart, yearEnd };
 }
 
-function inclusiveMonthCount(fromOn: string, throughOn: string): number {
-  const start = parseIsoDate(fromOn);
-  const end = parseIsoDate(throughOn);
-  if (!start || !end || fromOn > throughOn) {
-    throw new Error(`MACRS month span ${fromOn}–${throughOn} must be a calendar range`);
-  }
-  return (end.year - start.year) * 12 + (end.month - start.month) + 1;
-}
-
-function overlappingMonthRange(
-  leftStart: string,
-  leftEnd: string,
-  rightStart: string,
-  rightEnd: string,
-): { start: string; end: string } | null {
-  const start = leftStart > rightStart ? leftStart : rightStart;
-  const end = leftEnd < rightEnd ? leftEnd : rightEnd;
-  return start <= end ? { start, end } : null;
-}
-
-function allocateAmountToOverlappingMonths(
+function allocateAmountThrough(
   amount: string,
-  sourceStart: string,
-  sourceEnd: string,
-  targetStart: string,
-  targetEnd: string,
+  heldStart: string,
+  heldEnd: string,
+  throughOn: string,
 ): string {
-  const total = inclusiveMonthCount(sourceStart, sourceEnd);
-  const hit = overlappingMonthRange(sourceStart, sourceEnd, targetStart, targetEnd);
-  if (!hit || total <= 0) return formatMoney("0", 2);
-  return formatMoney(mulRatio(amount, BigInt(inclusiveMonthCount(hit.start, hit.end)), BigInt(total)), 2);
+  if (throughOn < heldStart) return formatMoney("0", 4);
+  if (throughOn >= heldEnd) return formatMoney(amount, 4);
+  const held = shortTaxYearMonthsExact(heldStart, heldEnd);
+  if (compareMacrsMonths(held, 0) <= 0) return formatMoney("0", 4);
+  const through = shortTaxYearMonthsExact(heldStart, throughOn);
+  if (compareMacrsMonths(through, 0) <= 0) return formatMoney("0", 4);
+  if (compareMacrsMonths(through, held) >= 0) return formatMoney(amount, 4);
+  return formatMoney(
+    mulRatio(
+      amount,
+      through.numerator * held.denominator,
+      through.denominator * held.numerator,
+    ),
+    4,
+  );
+}
+
+function allocateAmountInRange(
+  amount: string,
+  heldStart: string,
+  heldEnd: string,
+  fromOn: string,
+  throughOn: string,
+): string {
+  if (fromOn > throughOn) return formatMoney("0", 4);
+  const untilEnd = allocateAmountThrough(amount, heldStart, heldEnd, throughOn);
+  if (fromOn <= heldStart) return untilEnd;
+  const untilBefore = allocateAmountThrough(
+    amount,
+    heldStart,
+    heldEnd,
+    previousCalendarDay(fromOn),
+  );
+  return formatMoney(add(untilEnd, neg(untilBefore)), 4);
 }
 
 export function assertMacrsWindowsCover(
@@ -1823,7 +1978,7 @@ export function refreshOpenMacrsVintageThrough(
   },
   windows: readonly MacrsYearWindow[],
   asOf: string,
-  opts?: { ownerSubsidiaryId?: string },
+  opts?: { ownerSubsidiaryId?: string; originSubsidiaryId?: string },
 ): {
   checkpointKind: "taken_components";
   section179: string;
@@ -1839,6 +1994,7 @@ export function refreshOpenMacrsVintageThrough(
     transferOn: received ? vintage.transferOn : null,
     asOf,
     ownerSubsidiaryId: opts?.ownerSubsidiaryId,
+    originSubsidiaryId: opts?.originSubsidiaryId,
   });
   const covering = reportingWindows.find((row) => asOf >= row.yearStart && asOf <= row.yearEnd)
     ?? recoveryYears.find((row) => asOf >= row.yearStart && asOf <= row.yearEnd);
@@ -1872,7 +2028,9 @@ export function refreshOpenMacrsVintageThrough(
     adjustedCarryover: received ? vintage.adjustedCarryover ?? undefined : undefined,
     carryoverOn: received ? vintage.transferOn ?? undefined : undefined,
   }, recoveryYears, reportingWindows);
-  const openingOfWindow = vintage.section168i7Kind === "consolidated_group" && asOf < covering.yearEnd;
+  const openingOfWindow = asOf < covering.yearEnd && (
+    vintage.section168i7Kind === "consolidated_group" || received
+  );
   const remaining = persistMacrsBasis(
     openingOfWindow
       ? walked.prior.remainingBasis
