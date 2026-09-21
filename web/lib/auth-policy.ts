@@ -32,7 +32,7 @@ export type LockoutState = {
 };
 
 /** Cookies are Secure unless the operator named a non-production environment. */
-export function useSecureCookies(environment: Record<string, string | undefined> = process.env): boolean {
+export function secureCookiesEnabled(environment: Record<string, string | undefined> = process.env): boolean {
   if (!isNamedNonProductionEnvironment(environment)) return true;
   return /^(1|true|yes)$/i.test(environment.OPENBOOKS_COOKIE_SECURE ?? "");
 }

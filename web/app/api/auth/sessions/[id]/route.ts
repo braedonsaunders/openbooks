@@ -4,7 +4,7 @@ import {
   revokeUserSession,
   SESSION_COOKIE,
 } from "../../../../../lib/auth";
-import { hasExpectedOrigin, useSecureCookies } from "../../../../../lib/auth-policy";
+import { hasExpectedOrigin, secureCookiesEnabled } from "../../../../../lib/auth-policy";
 
 export const runtime = "nodejs";
 
@@ -25,7 +25,7 @@ export async function DELETE(
   if (id === user.sessionId) {
     response.cookies.set(SESSION_COOKIE, "", {
       httpOnly: true,
-      secure: useSecureCookies(),
+      secure: secureCookiesEnabled(),
       maxAge: 0,
       path: "/",
     });

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { beginOidcAuthorization, oidcAppUrl, OIDC_FLOW_COOKIE } from "../../../../../lib/auth-oidc";
-import { safeReturnTo, useSecureCookies } from "../../../../../lib/auth-policy";
+import { safeReturnTo, secureCookiesEnabled } from "../../../../../lib/auth-policy";
 
 export const runtime = "nodejs";
 
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     response.cookies.set(OIDC_FLOW_COOKIE, flow.flowCookie, {
       httpOnly: true,
       sameSite: "lax",
-      secure: useSecureCookies(),
+      secure: secureCookiesEnabled(),
       maxAge: 10 * 60,
       path: "/api/auth/oidc",
     });

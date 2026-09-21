@@ -10,7 +10,7 @@ import {
   oidcAppUrl,
   OIDC_FLOW_COOKIE,
 } from "../../../../../lib/auth-oidc";
-import { authRequestContext, useSecureCookies } from "../../../../../lib/auth-policy";
+import { authRequestContext, secureCookiesEnabled } from "../../../../../lib/auth-policy";
 
 export const runtime = "nodejs";
 
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
     const response = NextResponse.redirect(destination);
     response.cookies.set(OIDC_FLOW_COOKIE, "", {
       httpOnly: true,
-      secure: useSecureCookies(),
+      secure: secureCookiesEnabled(),
       maxAge: 0,
       path: "/api/auth/oidc",
     });
@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
       response.cookies.set(LOGIN_CHALLENGE_COOKIE, result.challengeToken, {
         httpOnly: true,
         sameSite: "strict",
-        secure: useSecureCookies(),
+        secure: secureCookiesEnabled(),
         maxAge: 5 * 60,
         path: "/",
       });
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
       response.cookies.set(SESSION_COOKIE, result.token, {
         httpOnly: true,
         sameSite: "lax",
-        secure: useSecureCookies(),
+        secure: secureCookiesEnabled(),
         maxAge: SESSION_TTL_S,
         path: "/",
       });
@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
     const response = NextResponse.redirect(loginRedirect("sso"));
     response.cookies.set(OIDC_FLOW_COOKIE, "", {
       httpOnly: true,
-      secure: useSecureCookies(),
+      secure: secureCookiesEnabled(),
       maxAge: 0,
       path: "/api/auth/oidc",
     });
