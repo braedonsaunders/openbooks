@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { sealJson } from "../platform/secrets.ts";
 import { createScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
-import { buildSepaFile } from "../payments/rail-formatters.ts";
+import { buildSepaFile } from "../payments/rail-sepa.ts";
 import { PaymentError } from "../payments/payment-errors.ts";
 import {
   PAYROLL_BANK_FILE_FORMATS,
