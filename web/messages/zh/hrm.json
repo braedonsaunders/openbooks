@@ -81,7 +81,9 @@
       "pending": "{count, plural, other {# 项变更申请待决定}}",
       "overdueSteps": "{count, plural, other {# 项清单步骤已逾期}}",
       "leavePending": "{count, plural, other {# 项休假申请待审批}}",
-      "unfunded": "{fte} 个已填补FTE缺少预算"
+      "unfunded": "{fte} 个已填补FTE缺少预算",
+      "expiringQualifications": "{count, plural, other {# 项认证即将到期}}",
+      "expiredQualifications": "{count, plural, other {# 项认证已到期 — 续期前拒绝派工}}"
     }
   },
   "overview": {
@@ -860,7 +862,10 @@
       "balancesTitle": "余额",
       "balancesEmpty": "没有启用的休假类型。",
       "viewLeave": "打开休假",
-      "extensionsTitle": "更多"
+      "extensionsTitle": "更多",
+      "qualificationsTitle": "需要处理的认证",
+      "qualificationsEmpty": "没有即将到期",
+      "qualificationsEmptyDescription": "您的认证均有效 — 续期将在到期前显示在这里。"
     },
     "profile": {
       "title": "我的档案",
@@ -1076,6 +1081,13 @@
       "changeReasonPlaceholder": "保障变更的原因",
       "changeSubmit": "保存变更",
       "changeFailed": "无法记录该变更。"
+    },
+    "qualifications": {
+      "columns": {
+        "type": "认证",
+        "expires": "到期日",
+        "status": "状态"
+      }
     }
   },
   "options": {

@@ -81,7 +81,9 @@
       "pending": "{count, plural, one {# demande de changement en attente de décision} other {# demandes de changement en attente de décision}}",
       "overdueSteps": "{count, plural, one {# étape de liste en retard} other {# étapes de liste en retard}}",
       "leavePending": "{count, plural, one {# demande de congé en attente d'approbation} other {# demandes de congé en attente d'approbation}}",
-      "unfunded": "{fte} ETP pourvus sans financement"
+      "unfunded": "{fte} ETP pourvus sans financement",
+      "expiringQualifications": "{count, plural, one {# certification expirant bientôt} other {# certifications expirant bientôt}}",
+      "expiredQualifications": "{count, plural, one {# certification expirée — répartition refusée jusqu’au renouvellement} other {# certifications expirées — répartition refusée jusqu’au renouvellement}}"
     }
   },
   "overview": {
@@ -860,7 +862,10 @@
       "balancesTitle": "Soldes",
       "balancesEmpty": "Aucun type de congé actif.",
       "viewLeave": "Ouvrir les congés",
-      "extensionsTitle": "Plus"
+      "extensionsTitle": "Plus",
+      "qualificationsTitle": "Certifications nécessitant une action",
+      "qualificationsEmpty": "Rien n’expire",
+      "qualificationsEmptyDescription": "Vos certifications sont à jour — les renouvellements apparaîtront ici avant échéance."
     },
     "profile": {
       "title": "Mon profil",
@@ -1076,6 +1081,13 @@
       "changeReasonPlaceholder": "Pourquoi la couverture change",
       "changeSubmit": "Enregistrer la modification",
       "changeFailed": "La modification n'a pas pu être enregistrée."
+    },
+    "qualifications": {
+      "columns": {
+        "type": "Certification",
+        "expires": "Expire",
+        "status": "Statut"
+      }
     }
   },
   "options": {

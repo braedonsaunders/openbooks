@@ -7,6 +7,8 @@ import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { checkAssignmentInternal } from '@openbooks/engine/src/hrm/qualifications/gating.ts'
 import { listQualificationTypes } from '@openbooks/engine/src/hrm/qualifications/types.ts'
 import { listAlerts } from '@openbooks/engine/src/hrm/qualifications/alerts.ts'
+import { HrmQualificationError } from '@openbooks/engine/src/hrm/qualifications/errors.ts'
+import { HrmAuthorizationError } from '@openbooks/engine/src/hrm/authorization.ts'
 import {
   listQualifications,
   type WorkerQualification,
@@ -15,7 +17,7 @@ import type { DerivedQualificationStatus } from '@openbooks/engine/src/hrm/quali
 import { listRequirements } from '@openbooks/engine/src/hrm/qualifications/requirements.ts'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import { loadQueueLabels } from './change-requests'
-import type { Authz } from '../authz'
+import { can, type Authz } from '../authz'
 
 /**
  * Qualifications page loader (HR-14): the worker qualification ledger by
@@ -430,3 +432,29 @@ export async function loadQualificationsPage(
     })),
   }
 }
+
+export interface QualificationAttention {
+  expiring: number
+  expired: number
+}
+
+// HR-14 begin: cockpit attention counts — how many held qualifications
+// project as expiring or expired today. Null without the certifications
+// read grant or while the switch is off (a refusal or an off-switch is
+// an omitted item, never a zero that reads as all-clear); only
+// authorization and feature refusals degrade to null, infrastructure
+// failures propagate.
+export async function loadQualificationAttention(authz: Authz): Promise<QualificationAttention | null> {
+  if (!can(authz, 'hrm.certifications.read')) return null
+  try {
+    const held = await listQualifications(db, { orgId: authz.user.orgId, actorId: authz.user.id })
+    return {
+      expiring: held.filter((q) => q.status === 'expiring').length,
+      expired: held.filter((q) => q.status === 'expired').length,
+    }
+  } catch (error) {
+    if (error instanceof HrmQualificationError || error instanceof HrmAuthorizationError) return null
+    throw error
+  }
+}
+// HR-14 end
