@@ -135,13 +135,20 @@ test("the SG filings declare the CPF programme and refusing IR8A + IR21 filings"
     filings.yearEnd.map((filing) => filing.key),
     ["ir8a", "ir21"],
   );
+  const ir8a = filings.yearEnd.find((filing) => filing.key === "ir8a")!;
+  assert.equal(ir8a.cadence, "annual");
+  assert.ok(ir8a.slip, "IR8A renders the slip the employee is owed");
+  assert.ok(ir8a.downloadRefusal, "IR8A names the AIS file it does not build");
   const ir21 = filings.yearEnd.find((filing) => filing.key === "ir21")!;
   assert.equal(ir21.cadence, "separation");
   for (const filing of filings.yearEnd) {
     assert.equal(filing.parseRowId("anything"), null);
     assert.equal(filing.amendment.supported, false);
   }
-  await assert.rejects(() => filings.yearEnd[0]!.population("org", 2026), /no IR8A\/AIS file builder/);
+  // The 2026 population reads committed stubs (database-owned: proven in
+  // `./ir8a.integration.test.ts`). An untranscribed year refuses by name
+  // before touching the ledger, so it is assertable with no database.
+  await assert.rejects(() => ir8a.population("org", 2025), /2025/);
   await assert.rejects(() => ir21.population("org", 2026), /no IR21 builder/);
 });
 
