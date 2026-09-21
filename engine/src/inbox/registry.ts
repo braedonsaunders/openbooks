@@ -5,9 +5,9 @@
  * source's own gate (the inbox never widens visibility) and act()
  * delegates to the EXISTING write service (never a second write path).
  * Dedupe contract: a flow gate whose subject is owned by a dedicated
- * adapter (leave, change request, timesheet week, expense report) is
- * listed by that adapter and EXCLUDED from flows_approval, so one piece
- * of work is exactly one inbox item.
+ * adapter (leave, change request, timesheet week, expense report,
+ * crew batch) is listed by that adapter and EXCLUDED from flows_approval,
+ * so one piece of work is exactly one inbox item.
  */
 
 import type { InboxItem, InboxKind, InboxListContext } from "./types.ts";

@@ -24,6 +24,9 @@ export type InboxKind =
   | "hrm_qualification_alert"
   | "field_ticket_signature"
   | "timesheet_week"
+  // HR-20 begin
+  | "crew_time_batch"
+  // HR-20 end
   | "expense_report"
   | "notification"
   | "document_signature";

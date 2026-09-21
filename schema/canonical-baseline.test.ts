@@ -1925,6 +1925,13 @@ test("API keys state their scopes explicitly: legacy empty sets freeze to the ca
     "hrm.certifications.read",
     "hrm.certifications.manage",
     // HR-14 end
+    // HR-20 begin: field time capture (migration 0231): clock is self and
+    // rides every built-in role; crew entry and kiosk management stay
+    // with operations roles. Post-snapshot like the rest of time.
+    "time.clock",
+    "time.crew.enter",
+    "time.kiosk.manage",
+    // HR-20 end
   ];
   assert.deepEqual(
     snapshot,
