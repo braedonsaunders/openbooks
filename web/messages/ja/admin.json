@@ -2926,7 +2926,12 @@
       "levelId": "レベル",
       "min": "最小",
       "target": "目標",
-      "max": "最大"
+      "max": "最大",
+      "validityMonths": "有効期間（月）",
+      "issuingBody": "発行機関",
+      "renewalLeadDays": "更新リードタイム（日）",
+      "requiresEvidence": "証跡が必要",
+      "extraCategories": "追加カテゴリ"
     },
     "fieldHelp": {
       "gapless": "欠番なしとは、連番のすべての番号が記録され、番号が飛ばないことを意味します。法令または監査要件で途切れない採番が必要な場合にのみ有効にしてください。",
@@ -3008,7 +3013,9 @@
       "benefitLevelKey": "加入が指定する区分キー — single、family — 改定しても安定。",
       "rateScheduleSource": "この賃金表の根拠となる決定番号または協定ID。",
       "rateScheduleJurisdiction": "パック語彙。汎用層では自由記述 — 解釈はパックが行う。",
-      "perDiemComponent": "金額が通過する支給コンポーネント。その税務処理が唯一の課税区分宣言。"
+      "perDiemComponent": "金額が通過する支給コンポーネント。その税務処理が唯一の課税区分宣言。",
+      "hrmQualificationValidity": "期限のない資格は空欄のままにします。",
+      "hrmQualificationExtraCategories": "標準の6区分以外の自社カテゴリ語彙。"
     },
     "options": {
       "timeClassification": {
@@ -3449,6 +3456,14 @@
       "payBandBasis": {
         "annual": "年額",
         "hourly": "時給"
+      },
+      "hrmQualificationCategory": {
+        "certification": "認定",
+        "license": "免許",
+        "training": "研修",
+        "medical": "医療",
+        "clearance": "許可",
+        "other": "その他"
       }
     },
     "invoicing": {
@@ -4694,6 +4709,22 @@
     "hrmPayTransparency": {
       "title": "給与の透明性",
       "description": "給与実績からの確定済み指標と従業員の情報請求。"
+    },
+    "hrmCertifications": {
+      "title": "認定・免許",
+      "description": "作業員の資格台帳：体系、保有資格、配置要件、期限アラート。無効化してもデータは削除されません。"
+    },
+    "hrmDispatchGating": {
+      "title": "配置ゲート",
+      "description": "必要な資格がない要員の割当を拒否。プロジェクトとスケジュールが必要。"
+    },
+    "hrmEquipmentQualifications": {
+      "title": "設備の資格要件",
+      "description": "設備に必要な資格種類を定義。設備管理が必要。"
+    },
+    "hrmCertificationAlerts": {
+      "title": "資格アラート",
+      "description": "保有者と上長への毎日の期限通知（受信箱経由）。"
     }
   },
   "extensions": {

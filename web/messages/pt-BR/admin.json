@@ -2858,7 +2858,12 @@
       "levelId": "Nível",
       "min": "Mínimo",
       "target": "Meta",
-      "max": "Máximo"
+      "max": "Máximo",
+      "validityMonths": "Validade (meses)",
+      "issuingBody": "Órgão emissor",
+      "renewalLeadDays": "Antecedência de renovação (dias)",
+      "requiresEvidence": "Exige evidência",
+      "extraCategories": "Categorias extras"
     },
     "fieldHelp": {
       "gapless": "Sem lacunas significa que todos os números da sequência devem ser contabilizados, sem números pulados. Ative somente quando exigências legais ou de auditoria determinarem uma numeração ininterrupta.",
@@ -2940,7 +2945,9 @@
       "benefitLevelKey": "Chave do nível nomeada pela inscrição — single, family — estável ante reajustes.",
       "rateScheduleSource": "Número de determinação ou id de acordo por trás desta tabela.",
       "rateScheduleJurisdiction": "Vocabulário do pack, texto livre na camada genérica — o pack interpreta.",
-      "perDiemComponent": "Componente de ganho pelo qual cruzam os valores. Seu tratamento fiscal é a única declaração."
+      "perDiemComponent": "Componente de ganho pelo qual cruzam os valores. Seu tratamento fiscal é a única declaração.",
+      "hrmQualificationValidity": "Deixe vazio para qualificações que não vencem.",
+      "hrmQualificationExtraCategories": "Vocabulário de categorias próprio além das seis integradas."
     },
     "options": {
       "payFrequency": {
@@ -3381,6 +3388,14 @@
       "payBandBasis": {
         "annual": "Anual",
         "hourly": "Por hora"
+      },
+      "hrmQualificationCategory": {
+        "certification": "Certificação",
+        "license": "Licença",
+        "training": "Treinamento",
+        "medical": "Médica",
+        "clearance": "Autorização",
+        "other": "Outra"
       }
     },
     "payroll": {
@@ -4694,6 +4709,22 @@
     "hrmPayTransparency": {
       "title": "Transparência salarial",
       "description": "Medições congeladas da folha e pedidos de informação."
+    },
+    "hrmCertifications": {
+      "title": "Certificações e licenças",
+      "description": "Registro de qualificações: taxonomia, credenciais, requisitos de alocação e alertas de vencimento. Desativar nunca apaga dados."
+    },
+    "hrmDispatchGating": {
+      "title": "Controle de alocações",
+      "description": "Recusa alocações sem as qualificações exigidas. Requer projetos e programação."
+    },
+    "hrmEquipmentQualifications": {
+      "title": "Qualificações de equipamentos",
+      "description": "Declare tipos exigidos nos equipamentos. Requer equipamentos."
+    },
+    "hrmCertificationAlerts": {
+      "title": "Alertas de certificação",
+      "description": "Avisos diários de vencimento a titulares e gestores pela caixa de entrada."
     }
   },
   "backupsManager": {

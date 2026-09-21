@@ -2813,7 +2813,12 @@
       "levelId": "Nivel",
       "min": "Mínimo",
       "target": "Objetivo",
-      "max": "Máximo"
+      "max": "Máximo",
+      "validityMonths": "Validez (meses)",
+      "issuingBody": "Entidad emisora",
+      "renewalLeadDays": "Antelación de renovación (días)",
+      "requiresEvidence": "Requiere evidencia",
+      "extraCategories": "Categorías adicionales"
     },
     "fieldHelp": {
       "gapless": "Sin huecos significa que cada número de la secuencia debe quedar contabilizado, sin números omitidos. Actívelo solo cuando los requisitos legales o de auditoría exijan una numeración ininterrumpida.",
@@ -2895,7 +2900,9 @@
       "benefitLevelKey": "Clave del nivel que nombra la inscripción — single, family — estable ante cambios de precio.",
       "rateScheduleSource": "Número de determinación o id de convenio tras esta tabla.",
       "rateScheduleJurisdiction": "Vocabulario del pack, texto libre en la capa genérica — el pack lo interpreta.",
-      "perDiemComponent": "Componente de ganancia por el que cruzan los importes. Su tratamiento fiscal es la única declaración de tributación."
+      "perDiemComponent": "Componente de ganancia por el que cruzan los importes. Su tratamiento fiscal es la única declaración de tributación.",
+      "hrmQualificationValidity": "Déjelo vacío para cualificaciones que no vencen.",
+      "hrmQualificationExtraCategories": "Vocabulario de categorías propio más allá de las seis integradas."
     },
     "options": {
       "timeClassification": {
@@ -3336,6 +3343,14 @@
       "payBandBasis": {
         "annual": "Anual",
         "hourly": "Por hora"
+      },
+      "hrmQualificationCategory": {
+        "certification": "Certificación",
+        "license": "Licencia",
+        "training": "Formación",
+        "medical": "Médica",
+        "clearance": "Habilitación",
+        "other": "Otra"
       }
     },
     "laborCosting": {
@@ -4694,6 +4709,22 @@
     "hrmPayTransparency": {
       "title": "Transparencia salarial",
       "description": "Mediciones congeladas desde la nómina y solicitudes de información."
+    },
+    "hrmCertifications": {
+      "title": "Certificaciones y licencias",
+      "description": "Registro de cualificaciones: taxonomía, credenciales, requisitos de asignación y alertas de vencimiento. Desactivar nunca borra datos."
+    },
+    "hrmDispatchGating": {
+      "title": "Control de asignaciones",
+      "description": "Rechaza asignaciones sin las cualificaciones requeridas. Requiere proyectos y programación."
+    },
+    "hrmEquipmentQualifications": {
+      "title": "Cualificaciones de equipos",
+      "description": "Declare tipos de cualificación requeridos en los equipos. Requiere equipos."
+    },
+    "hrmCertificationAlerts": {
+      "title": "Alertas de certificación",
+      "description": "Avisos diarios de vencimiento a titulares y responsables por la bandeja."
     }
   },
   "backupsManager": {

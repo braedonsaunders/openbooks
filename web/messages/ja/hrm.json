@@ -12,7 +12,8 @@
       "performance": "パフォーマンス",
       "benefits": "福利厚生",
       "compliance": "コンプライアンス",
-      "compensation": "報酬"
+      "compensation": "報酬",
+      "qualifications": "資格"
     },
     "recruiting": {
       "title": "採用",
@@ -323,6 +324,11 @@
       "empty": "福利厚生の加入や扶養家族はまだありません。",
       "viewAll": "福利厚生",
       "dependents": "扶養家族（{count}人）: {names}"
+    },
+    "qualifications": {
+      "title": "資格",
+      "viewAll": "すべて見る",
+      "empty": "資格が登録されていません。"
     }
   },
   "directory": {
@@ -1364,6 +1370,83 @@
     "requestCancel": "キャンセル",
     "requestStatus": {
       "open": "受付中"
+    }
+  },
+  "qualifications": {
+    "title": "資格",
+    "description": "作業員ごとの免許・資格・証明 — 本日配置可能な要員と期限切れが近いもの。",
+    "record": "資格を登録",
+    "recordTitle": "資格を登録",
+    "drawerTitle": "資格",
+    "settings": "資格設定",
+    "sectionLabel": "セクション",
+    "sections": {
+      "ledger": "台帳",
+      "requirements": "要件",
+      "alerts": "アラート"
+    },
+    "segmentsLabel": "ステータス",
+    "allLabel": "すべて",
+    "typesLabel": "種類",
+    "typesAll": "すべての種類",
+    "listTitle": "作業員ごとの資格",
+    "open": "開く",
+    "columns": {
+      "worker": "作業員",
+      "type": "種類",
+      "status": "ステータス",
+      "expiry": "期限",
+      "subject": "対象",
+      "severity": "重大度",
+      "window": "期間",
+      "due": "期限日",
+      "sent": "送信済み"
+    },
+    "statusNames": {
+      "valid": "有効",
+      "expiring": "期限間近",
+      "expired": "期限切れ",
+      "revoked": "取消済み",
+      "pending_verification": "確認待ち"
+    },
+    "emptyTitle": "資格が登録されていません",
+    "emptyDescription": "作業員の免許・資格を登録して配置を管理します。",
+    "requirementsTitle": "配置要件",
+    "requirementsEmpty": "要件はまだ定義されていません。",
+    "coverageTitle": "プロジェクトの充足状況",
+    "coverageProjectLabel": "プロジェクト",
+    "coverageProjectAll": "プロジェクトを選択",
+    "coverageEmpty": "このプロジェクトに要員はまだ配置されていません。",
+    "coverage": {
+      "qualified": "充足",
+      "missing": "不足",
+      "expired": "期限切れ",
+      "pending": "確認待ち"
+    },
+    "alertsTitle": "期限アラート",
+    "alertsEmpty": "アラートはありません。",
+    "alertDue": "未送信",
+    "taxonomyTitle": "資格体系",
+    "windowOpen": "{from} – 継続中",
+    "verify": "確認",
+    "renew": "更新",
+    "revoke": "取消",
+    "revokePrompt": "この資格を取り消しますか？理由を入力してください：",
+    "renewPrompt": "更新後の資格の発行日（YYYY-MM-DD）：",
+    "drawer": {
+      "issued": "発行日",
+      "identifier": "免許番号",
+      "notes": "備考",
+      "evidence": "証跡を見る",
+      "events": "履歴"
+    },
+    "recordForm": {
+      "employment": "雇用",
+      "type": "資格種類",
+      "issuedOn": "発行日",
+      "expiresOn": "有効期限",
+      "identifier": "免許番号",
+      "notes": "備考"
     }
   }
 }

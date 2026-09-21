@@ -12,7 +12,8 @@
       "performance": "Desempeño",
       "benefits": "Beneficios",
       "compliance": "Cumplimiento",
-      "compensation": "Retribución"
+      "compensation": "Retribución",
+      "qualifications": "Cualificaciones"
     },
     "recruiting": {
       "title": "Contratación",
@@ -323,6 +324,11 @@
       "empty": "Aún no hay inscripciones de beneficios ni dependientes.",
       "viewAll": "Beneficios",
       "dependents": "{count, plural, one {# dependiente: {names}} other {# dependientes: {names}}}"
+    },
+    "qualifications": {
+      "title": "Cualificaciones",
+      "viewAll": "Ver todas",
+      "empty": "Sin cualificaciones registradas."
     }
   },
   "directory": {
@@ -1364,6 +1370,83 @@
     "requestCancel": "Cancelar",
     "requestStatus": {
       "open": "Abierta"
+    }
+  },
+  "qualifications": {
+    "title": "Cualificaciones",
+    "description": "Licencias, certificaciones y credenciales por trabajador: quién puede ser asignado hoy y qué vence próximamente.",
+    "record": "Registrar cualificación",
+    "recordTitle": "Registrar cualificación",
+    "drawerTitle": "Cualificación",
+    "settings": "Ajustes de cualificaciones",
+    "sectionLabel": "Sección",
+    "sections": {
+      "ledger": "Registro",
+      "requirements": "Requisitos",
+      "alerts": "Alertas"
+    },
+    "segmentsLabel": "Estado",
+    "allLabel": "Todas",
+    "typesLabel": "Tipo",
+    "typesAll": "Todos los tipos",
+    "listTitle": "Cualificaciones por trabajador",
+    "open": "Abrir",
+    "columns": {
+      "worker": "Trabajador",
+      "type": "Tipo",
+      "status": "Estado",
+      "expiry": "Vence",
+      "subject": "Sujeto",
+      "severity": "Severidad",
+      "window": "Período",
+      "due": "Vence",
+      "sent": "Enviada"
+    },
+    "statusNames": {
+      "valid": "Válida",
+      "expiring": "Por vencer",
+      "expired": "Vencida",
+      "revoked": "Revocada",
+      "pending_verification": "Verificación pendiente"
+    },
+    "emptyTitle": "Sin cualificaciones registradas",
+    "emptyDescription": "Registre las licencias y certificaciones del equipo para controlar las asignaciones.",
+    "requirementsTitle": "Requisitos de asignación",
+    "requirementsEmpty": "Aún no hay requisitos declarados.",
+    "coverageTitle": "Cobertura del proyecto",
+    "coverageProjectLabel": "Proyecto",
+    "coverageProjectAll": "Elegir proyecto",
+    "coverageEmpty": "Aún no hay personal asignado a este proyecto.",
+    "coverage": {
+      "qualified": "Habilitado",
+      "missing": "Faltante",
+      "expired": "Vencida",
+      "pending": "Pendiente"
+    },
+    "alertsTitle": "Alertas de vencimiento",
+    "alertsEmpty": "Sin alertas emitidas.",
+    "alertDue": "Pendiente",
+    "taxonomyTitle": "Taxonomía de cualificaciones",
+    "windowOpen": "{from} – vigente",
+    "verify": "Verificar",
+    "renew": "Renovar",
+    "revoke": "Revocar",
+    "revokePrompt": "¿Revocar esta cualificación? Indique el motivo:",
+    "renewPrompt": "Fecha de emisión de la cualificación renovada (AAAA-MM-DD):",
+    "drawer": {
+      "issued": "Emitida",
+      "identifier": "N.º de licencia",
+      "notes": "Notas",
+      "evidence": "Ver evidencia",
+      "events": "Historial"
+    },
+    "recordForm": {
+      "employment": "Empleo",
+      "type": "Tipo de cualificación",
+      "issuedOn": "Emitida el",
+      "expiresOn": "Vence el",
+      "identifier": "Número de licencia",
+      "notes": "Notas"
     }
   }
 }

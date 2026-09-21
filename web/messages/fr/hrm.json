@@ -12,7 +12,8 @@
       "performance": "Évaluations",
       "benefits": "Avantages",
       "compliance": "Conformité",
-      "compensation": "Rémunération"
+      "compensation": "Rémunération",
+      "qualifications": "Qualifications"
     },
     "recruiting": {
       "title": "Recrutement",
@@ -323,6 +324,11 @@
       "empty": "Aucune adhésion ni personne à charge pour l'instant.",
       "viewAll": "Avantages",
       "dependents": "{count, plural, one {# personne à charge : {names}} other {# personnes à charge : {names}}}"
+    },
+    "qualifications": {
+      "title": "Qualifications",
+      "viewAll": "Tout voir",
+      "empty": "Aucune qualification enregistrée."
     }
   },
   "directory": {
@@ -1364,6 +1370,83 @@
     "requestCancel": "Annuler",
     "requestStatus": {
       "open": "Ouverte"
+    }
+  },
+  "qualifications": {
+    "title": "Qualifications",
+    "description": "Licences, certifications et habilitations par salarié : qui peut être affecté aujourd'hui et ce qui expire prochainement.",
+    "record": "Enregistrer une qualification",
+    "recordTitle": "Enregistrer une qualification",
+    "drawerTitle": "Qualification",
+    "settings": "Paramètres des qualifications",
+    "sectionLabel": "Section",
+    "sections": {
+      "ledger": "Registre",
+      "requirements": "Exigences",
+      "alerts": "Alertes"
+    },
+    "segmentsLabel": "Statut",
+    "allLabel": "Toutes",
+    "typesLabel": "Type",
+    "typesAll": "Tous les types",
+    "listTitle": "Qualifications par salarié",
+    "open": "Ouvrir",
+    "columns": {
+      "worker": "Salarié",
+      "type": "Type",
+      "status": "Statut",
+      "expiry": "Expire",
+      "subject": "Sujet",
+      "severity": "Sévérité",
+      "window": "Période",
+      "due": "Échéance",
+      "sent": "Envoyée"
+    },
+    "statusNames": {
+      "valid": "Valide",
+      "expiring": "Expire bientôt",
+      "expired": "Expirée",
+      "revoked": "Révoquée",
+      "pending_verification": "Vérification en attente"
+    },
+    "emptyTitle": "Aucune qualification enregistrée",
+    "emptyDescription": "Enregistrez les licences et certifications de l'équipe pour contrôler les affectations.",
+    "requirementsTitle": "Exigences d'affectation",
+    "requirementsEmpty": "Aucune exigence déclarée pour le moment.",
+    "coverageTitle": "Couverture du projet",
+    "coverageProjectLabel": "Projet",
+    "coverageProjectAll": "Choisir un projet",
+    "coverageEmpty": "Aucune équipe affectée à ce projet pour le moment.",
+    "coverage": {
+      "qualified": "Qualifié",
+      "missing": "Manquante",
+      "expired": "Expirée",
+      "pending": "En attente"
+    },
+    "alertsTitle": "Alertes d'expiration",
+    "alertsEmpty": "Aucune alerte émise.",
+    "alertDue": "Due",
+    "taxonomyTitle": "Taxonomie des qualifications",
+    "windowOpen": "{from} – en cours",
+    "verify": "Vérifier",
+    "renew": "Renouveler",
+    "revoke": "Révoquer",
+    "revokePrompt": "Révoquer cette qualification ? Indiquez le motif :",
+    "renewPrompt": "Date de délivrance de la qualification renouvelée (AAAA-MM-JJ) :",
+    "drawer": {
+      "issued": "Délivrée",
+      "identifier": "N° de licence",
+      "notes": "Notes",
+      "evidence": "Voir le justificatif",
+      "events": "Historique"
+    },
+    "recordForm": {
+      "employment": "Emploi",
+      "type": "Type de qualification",
+      "issuedOn": "Délivrée le",
+      "expiresOn": "Expire le",
+      "identifier": "Numéro de licence",
+      "notes": "Notes"
     }
   }
 }
