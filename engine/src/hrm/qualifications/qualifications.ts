@@ -621,6 +621,37 @@ export async function selfAndTeamEmploymentIds(
   return [...new Set([...own, ...team])];
 }
 
+export interface LoadQualificationInput {
+  readonly orgId: string;
+  readonly actorId: string;
+  readonly qualificationId: string;
+}
+
+/**
+ * One qualification with its derived status: HR reads any row; anyone
+ * else reads own (+ team reports') rows through the structural gate.
+ * Strangers keep the not-found shape — no existence leak.
+ */
+export async function loadQualification(
+  exec: SqlExecutor,
+  input: LoadQualificationInput,
+): Promise<WorkerQualification | null> {
+  const orgId = requireId(input.orgId, "orgId");
+  const actorId = requireId(input.actorId, "actorId");
+  const qualificationId = requireId(input.qualificationId, "qualificationId");
+  await assertQualificationsFeature(exec, orgId, HRM_CERTIFICATIONS_FEATURE, "Qualifications");
+  const current = await loadLedgerRow(exec, orgId, qualificationId);
+  if (!current) return null;
+  try {
+    await requireHrmCertificationsRead(exec, orgId, actorId);
+  } catch (error) {
+    if (!(error instanceof HrmAuthorizationError)) throw error;
+    const allowed = await selfAndTeamEmploymentIds(exec, orgId, actorId);
+    if (!allowed.includes(current.employment_id)) return null;
+  }
+  return toQualification(current, await businessToday(orgId));
+}
+
 export async function listQualificationEvents(
   exec: SqlExecutor,
   input: { orgId: string; actorId: string; qualificationId: string },
