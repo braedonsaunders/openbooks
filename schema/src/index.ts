@@ -85,6 +85,9 @@ export * from "./hrm-benefits";
 export * from "./hrm-compensation";
 // HR-16 automations (0226) + action reasons and event verbs (0227).
 export * from "./hrm-automations";
+// HR-21 begin: AI rails tables (0232).
+export * from "./hrm-ai-rails";
+// HR-21 end
 // HR-13: construction-compliance drizzle mirror (0223/0224).
 export * from "./hrm-construction";
 // HR-14 begin: qualifications and dispatch gating (0225).

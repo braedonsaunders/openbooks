@@ -249,6 +249,19 @@ export const FEATURES: FeatureDef[] = [
   { key: 'hrmCandidateRetention', defaultEnabled: false, category: 'operations', parentKey: 'hrmRecruiting' },
   { key: 'hrmTalentPool', defaultEnabled: false, category: 'operations', parentKey: 'hrmRecruiting' },
   // HR-18 end
+  // HR-21 begin: AI on the rails — every capability is a tool or a
+  // deterministic service; the LLM only phrases and drafts. The parent
+  // hides all AI complexity; sub-features switch independently and
+  // turning them off preserves data and audit history. The ledger is
+  // governance: it is on whenever any AI feature is.
+  { key: 'hrmAiAssist', defaultEnabled: false, category: 'operations', parentKey: 'hrm' },
+  { key: 'hrmExplainPay', defaultEnabled: false, category: 'operations', parentKey: 'hrmAiAssist', requiresAll: ['payroll'] },
+  { key: 'hrmPayrollAnomalies', defaultEnabled: false, category: 'operations', parentKey: 'hrmAiAssist', requiresAll: ['payroll'] },
+  { key: 'hrmTimeAnomalies', defaultEnabled: false, category: 'operations', parentKey: 'hrmAiAssist', requiresAll: ['timeTracking'] },
+  { key: 'hrmDrafting', defaultEnabled: false, category: 'operations', parentKey: 'hrmAiAssist' },
+  { key: 'hrmNlReports', defaultEnabled: false, category: 'operations', parentKey: 'hrmAiAssist' },
+  { key: 'aiGovernanceLedger', defaultEnabled: true, category: 'platform' },
+  // HR-21 end
 ]
 
 export const FEATURE_BY_KEY = new Map(FEATURES.map((f) => [f.key, f]))
