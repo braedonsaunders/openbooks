@@ -105,7 +105,7 @@ for (const policy of [
   { name:'double declining', opts:{method:'double_declining' as const,julyDepreciation:'200.0000'}, ceiling:'640', refused:'690', august:'50.0000' },
   { name:'custom formula', opts:{customFormula:'((OC-RV)/AL)*2',julyDepreciation:'200.0000'}, ceiling:'600', refused:'650', august:'50.0000' },
   { name:'book policy', opts:{bookLifeMonths:5,julyDepreciation:'200.0000'}, ceiling:'600', refused:'650', august:'112.5000' },
-  { name:'salvage floor', opts:{salvage:'100',julyDepreciation:'90.0000'}, ceiling:'820', refused:'850', august:'38.8888' },
+  { name:'salvage floor', opts:{salvage:'100',julyDepreciation:'90.0000'}, ceiling:'820', refused:'850', august:'38.8889' },
 ]) {
 test(`IFRS restoration after depreciation honors ${policy.name} carrying ceiling`, {skip:!process.env.OPENBOOKS_DB_URL}, async () => {
   const org = await createScratchOrg();
@@ -122,6 +122,10 @@ test(`IFRS restoration after depreciation honors ${policy.name} carrying ceiling
     }
     await db.execute(sql`update orgs set settings=settings || '{"reportingFramework":"ifrs"}'::jsonb where id=${org.orgId}`);
     await remeasureAsset(org.orgId,assetId,{actorId,date:'2026-07-31',newCarryingValue:'450'});
+    const future = (await scheduleRows(org,assetId)).filter(line => line.posted === null);
+    assert.equal(future.reduce((total,line) => total+toUnits(line.planned),0n),
+      toUnits('450')-toUnits(policy.opts.salvage ?? '0'),
+      `${policy.name}: the rounded installments and exact final residual conserve the impaired depreciable basis`);
     assert.equal(await unimpairedAssetCarryingValue(db,assetId,org.orgId,org.bookId,'2026-08-15'),
       policy.opts.julyDepreciation === '200.0000' ? '800.0000' : policy.opts.salvage ? '910.0000' : '900.0000',
       'an unfinished accounting period does not consume a future charge');

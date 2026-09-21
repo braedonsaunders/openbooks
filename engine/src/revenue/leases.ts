@@ -1079,7 +1079,7 @@ async function postingContext(
   const row = r.rows[0];
   if (!row?.book_id)
     throw new LeaseError(
-      "the lease posting book is no longer active or GL-posting",
+      "the lease posting book is no longer active or GL-posting; ask an authorized administrator to restore the originating book's posting configuration in Accounting books before posting this lease",
     );
   if (!row.period_id)
     throw new LeaseError(`no accounting period covers ${date}`);
