@@ -519,10 +519,16 @@ test("HR-12 cross-org wage link on a pushed line halts the push", { skip: !DB },
       insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours, effective_from)
       values (${foreignOrg.orgId}, ${foreignParty}, 'CAD', 1, 'year', 2080, '2025-04-01')
       returning id`)).rows[0]!.id;
+    // approver_party_id is a PARTY, and this used to write h.hrId, which
+    // is a USER id. It stored fine until 0241 gave the column its foreign
+    // key; the service has always resolved users.party_id for it, so the
+    // forge now does the same.
+    const approverParty = (await db.execute<{ party_id: string | null }>(sql`
+      select party_id from users where id = ${h.hrId}`)).rows[0]?.party_id ?? null;
     await db.execute(sql`
       update hrm_comp_cycle_lines
          set pushed_rate_id = ${foreignRate}, status = 'pushed',
-             approver_party_id = ${h.hrId}, decided_at = now()
+             approver_party_id = ${approverParty}, decided_at = now()
        where id = ${line!.id}`);
     // Drive the cycle to approved without the gate (unit of the check under test).
     await db.execute(sql`update hrm_comp_cycles set status = 'approved' where id = ${cycle.id}`);
