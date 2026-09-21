@@ -3,22 +3,69 @@ import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from "../testing/fixtures.ts";
 import {
   freezeTaxYearWindowEvidence,
   insertTaxYearWindow,
-  taxYearWindowDeleteProblem,
+  loadTaxYearWindows,
+  normalizeTaxYearWindowEvidence,
   taxYearWindowEvidence,
+  taxYearWindowDeleteProblem,
   taxYearWindowSubsidiaryProblem,
   taxYearWindowWriteProblem,
 } from "./macrs-calendar.ts";
+import { adjacentShortYearExclusion } from "./depreciation-pool.ts";
+import { halfYearDeemedServiceDate } from "./macrs-short-year.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-test("gate off accepts the company's sole legal entity and refuses another", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+test("calendar evidence deduplicates shared history but refuses two versions of one identity", () => {
+  const original = {
+    id: randomUUID(), subsidiaryId: randomUUID(), regime: "us_macrs",
+    yearStart: "2024-01-01", yearEnd: "2024-06-30", taxYear: 2024,
+  };
+  const evidence = taxYearWindowEvidence(original);
+  assert.deepEqual(normalizeTaxYearWindowEvidence([evidence, evidence]), [evidence]);
+  assert.throws(() => normalizeTaxYearWindowEvidence([evidence, { ...evidence, yearEnd: "2024-12-31" }]), /conflicting facts/);
+  assert.throws(() => normalizeTaxYearWindowEvidence([{ ...evidence, yearStart: "2024-02-30" }]), /exact registered identity/);
+});
+
+test("the registered calendar retains its contiguous successor for the statutory shared-month convention", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
   try {
+    await withOrgContext(org.orgId, async () => {
+      const { adminId } = await seedFlowActors(org.orgId);
+      const first = await insertTaxYearWindow(db, org.orgId, adminId, {
+        subsidiaryId: org.subsidiaryId, regime: "us_macrs", yearStart: "2024-06-01", yearEnd: "2024-10-15",
+        filingYear: 2024, reason: "Approved first short tax year",
+      });
+      const next = await insertTaxYearWindow(db, org.orgId, adminId, {
+        subsidiaryId: org.subsidiaryId, regime: "us_macrs", yearStart: "2024-10-16", yearEnd: "2025-05-31",
+        filingYear: 2025, reason: "Approved consecutive short tax year",
+      });
+      const loaded = await loadTaxYearWindows(db, org.orgId, {
+        subsidiaryId: org.subsidiaryId, regime: "us_macrs", fromOn: "2024-06-01", throughOn: "2024-10-15",
+      });
+      assert.deepEqual(loaded.map((window) => window.id), [first.id, next.id]);
+      const excludedTerminalMonth = adjacentShortYearExclusion(loaded, 0);
+      assert.equal(excludedTerminalMonth, true);
+      assert.deepEqual(halfYearDeemedServiceDate(first.yearStart, first.yearEnd, { excludedTerminalMonth }), {
+        year: 2024, month: 8, day: 1,
+      });
+      assert.equal(loaded[0]!.yearEnd, "2024-10-15", "convention context must not clip actual deduction bounds");
+      assert.deepEqual(taxYearWindowEvidence(loaded[1]!), {
+        id: next.id, subsidiaryId: org.subsidiaryId, regime: "us_macrs",
+        yearStart: "2024-10-16", yearEnd: "2025-05-31", filingYear: 2025,
+      });
+    });
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
+test("gate off accepts the company's sole legal entity and refuses another", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    await withOrgContext(org.orgId, async () => {
     const { adminId } = await seedFlowActors(org.orgId);
     await db.execute(sql`
       update orgs
@@ -97,14 +144,16 @@ test("gate off accepts the company's sole legal entity and refuses another", { s
       }) ?? "",
       /overlap/,
     );
+    });
   } finally {
     await dropScratchOrg(org.orgId);
   }
 });
 
 test("gate on accepts another active non-elimination entity in the same org", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
+    await withOrgContext(org.orgId, async () => {
     const { adminId } = await seedFlowActors(org.orgId);
     await db.execute(sql`
       update orgs
@@ -128,6 +177,7 @@ test("gate on accepts another active non-elimination entity in the same org", { 
       reason: "calendar-year tax window",
     });
     assert.equal(window.subsidiaryId, child);
+    });
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -176,8 +226,9 @@ test("tax year window evidence is sorted, distinct, and refuses an unlabeled win
 });
 
 test("cited window dates stay frozen; unused windows may be deleted", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
+    await withOrgContext(org.orgId, async () => {
     const { adminId } = await seedFlowActors(org.orgId);
     const unused = await insertTaxYearWindow(db, org.orgId, adminId, {
       subsidiaryId: org.subsidiaryId,
@@ -240,6 +291,15 @@ test("cited window dates stay frozen; unused windows may be deleted", { skip: !D
     const citedDelete = await taxYearWindowDeleteProblem(db, org.orgId, cited.id);
     assert.match(citedDelete ?? "", /cannot be deleted/);
     assert.match(citedDelete ?? "", /no reversal of a computed tax year/);
+    await assert.rejects(async () => { await db.execute(sql`
+      update tax_pool_periods set tax_year_window_id=${unused.id}, year_start='2024-01-01', year_end='2024-03-31'
+       where org_id=${org.orgId} and tax_year_window_id=${cited.id}`); }, /cannot be reassigned/);
+    await assert.rejects(async () => { await db.execute(sql`
+      update tax_pool_periods set year_end='2024-11-30'
+       where org_id=${org.orgId} and tax_year_window_id=${cited.id}`); }, /must match its registered window/);
+    await assert.rejects(async () => { await db.execute(sql`
+      delete from tax_pool_periods where org_id=${org.orgId} and tax_year_window_id=${cited.id}`); }, /cannot be deleted/);
+    });
   } finally {
     await dropScratchOrg(org.orgId);
   }
