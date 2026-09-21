@@ -991,7 +991,10 @@
     "hrm_compensation_manage": "Runden durchführen, Sätze übertragen, Pläne und Kennzahlen erstellen",
     "hrm_compensation_approve": "Zeilen über den Genehmigungslauf entscheiden",
     "hrm_certifications_read": "Zertifizierungen und Einsatzbereitschaft ansehen",
-    "hrm_certifications_manage": "Zertifizierungsarten, Anforderungen und Erneuerungen verwalten"
+    "hrm_certifications_manage": "Zertifizierungsarten, Anforderungen und Erneuerungen verwalten",
+    "time_clock": "Vor Ort stempeln",
+    "time_crew_enter": "Team-Chargen erfassen",
+    "time_kiosk_manage": "Kioskgeräte und PINs verwalten"
   },
   "ai": {
     "metaTitle": "KI-Einstellungen",
@@ -3511,6 +3514,14 @@
       "hrmDocAction": {
         "delete": "Löschen",
         "anonymize": "Anonymisieren"
+      },
+      "geofenceKind": {
+        "circle": "Kreis",
+        "polygon": "Polygon"
+      },
+      "approvalSubject": {
+        "timesheetWeek": "Stundenzettelwoche",
+        "crewTimeBatch": "Team-Charge"
       }
     },
     "bankFeeds": {
@@ -4820,6 +4831,34 @@
     "hrmOrgChart": {
       "title": "Organigramm",
       "description": "Der Organisationsbaum mit Vakanzen, Abteilungen und Führungsspannen."
+    },
+    "fieldTime": {
+      "title": "Zeiterfassung vor Ort",
+      "description": "Stempeln per Telefon und Kiosk mit Geofence, Foto und Offline-Warteschlange; Vorarbeiter-Chargen; Gerätestunden auf Einträgen."
+    },
+    "fieldTimeGeofence": {
+      "title": "Stempel-Geofences",
+      "description": "Standort gegen Projektkreise und -polygone prüfen; Fixes außerhalb werden markiert, nie verweigert."
+    },
+    "fieldTimePhoto": {
+      "title": "Stempelfotos",
+      "description": "Foto bei mobilen Stempeln verlangen."
+    },
+    "fieldTimeKiosk": {
+      "title": "Baustellen-Kiosks",
+      "description": "Geteilte PIN-Geräte zum Stempeln mit automatischer Rückkehr."
+    },
+    "fieldTimeCrewEntry": {
+      "title": "Teamzeiterfassung",
+      "description": "Vorarbeiter-Chargen pro Projekt und Tag mit Unterschrift und Stufen."
+    },
+    "fieldTimeEquipment": {
+      "title": "Geräte auf Zeit",
+      "description": "Gerätestunden auf Zeiteinträgen und Chargenzeilen, bepreist über den Geräteposten. Braucht Geräte."
+    },
+    "fieldTimeMultiStageApproval": {
+      "title": "Mehrstufige Zeitgenehmigung",
+      "description": "Stufen für Vorgesetzte, Projektleitung und Lohn für Stundenzettel und Team-Chargen."
     }
   },
   "extensions": {

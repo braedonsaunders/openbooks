@@ -991,7 +991,10 @@
     "hrm_compensation_manage": "Mener les cycles, transférer les taux, créer plans et mesures",
     "hrm_compensation_approve": "Décider les lignes via le circuit d'approbation",
     "hrm_certifications_read": "Voir les certifications et l’aptitude à la répartition",
-    "hrm_certifications_manage": "Gérer les types de certification, les exigences et les renouvellements"
+    "hrm_certifications_manage": "Gérer les types de certification, les exigences et les renouvellements",
+    "time_clock": "Pointer sur le terrain",
+    "time_crew_enter": "Saisir les lots d'équipe",
+    "time_kiosk_manage": "Gérer bornes et PIN"
   },
   "ai": {
     "metaTitle": "Fournisseurs d'IA",
@@ -3398,6 +3401,14 @@
       "hrmDocAction": {
         "delete": "Supprimer",
         "anonymize": "Anonymiser"
+      },
+      "geofenceKind": {
+        "circle": "Cercle",
+        "polygon": "Polygone"
+      },
+      "approvalSubject": {
+        "timesheetWeek": "Semaine de feuille",
+        "crewTimeBatch": "Lot d'équipe"
       }
     },
     "laborCosting": {
@@ -4820,6 +4831,34 @@
     "hrmOrgChart": {
       "title": "Organigramme",
       "description": "L’arbre de l’organisation avec postes vacants, départements et portées de contrôle."
+    },
+    "fieldTime": {
+      "title": "Pointage terrain",
+      "description": "Pointage mobile et bornes avec zone, photo et file hors ligne ; lots du chef ; heures d'engins sur les saisies."
+    },
+    "fieldTimeGeofence": {
+      "title": "Zones de pointage",
+      "description": "Comparer la position aux cercles et polygones du projet ; le hors-zone est signalé, jamais refusé."
+    },
+    "fieldTimePhoto": {
+      "title": "Photos de pointage",
+      "description": "Exiger une photo avec les pointages mobiles."
+    },
+    "fieldTimeKiosk": {
+      "title": "Bornes de chantier",
+      "description": "Appareils PIN partagés avec retour automatique."
+    },
+    "fieldTimeCrewEntry": {
+      "title": "Temps d'équipe",
+      "description": "Lots du chef par projet et par jour avec signature et étapes."
+    },
+    "fieldTimeEquipment": {
+      "title": "Engins sur le temps",
+      "description": "Heures d'engins sur saisies et lignes, au tarif de l'article engin. Requiert les engins."
+    },
+    "fieldTimeMultiStageApproval": {
+      "title": "Validation du temps par étapes",
+      "description": "Chaîne superviseur, chef de projet et paie pour feuilles et lots."
     }
   },
   "backupsManager": {

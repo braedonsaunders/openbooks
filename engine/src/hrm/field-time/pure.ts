@@ -22,7 +22,7 @@ function parseTenThousandths(hours: string): bigint {
   const m = /^(\d+)(?:\.(\d{1,4}))?$/.exec(hours.trim());
   if (!m) throw new FieldTimeError("invalid_hours", `Hours ${JSON.stringify(hours)} are not a non-negative number with at most 4 decimals — re-enter the hours`);
   const frac = (m[2] ?? "").padEnd(4, "0");
-  return BigInt(m[1]) * SCALE + BigInt(frac);
+  return BigInt(m[1]!) * SCALE + BigInt(frac);
 }
 
 function formatTenThousandths(v: bigint): string {
@@ -65,19 +65,22 @@ export function roundHours(hours: string, rule: RoundingRule): string {
   return formatTenThousandths(rounded * step);
 }
 
-/** Subtract unpaid break minutes from entry hours; never below zero. */
-export function subtractBreaks(hours: string, breakMinutes: number): string {
-  if (!Number.isFinite(breakMinutes) || breakMinutes < 0) {
-    throw new FieldTimeError(
-      "invalid_break_rule",
-      `Break minutes ${String(breakMinutes)} are not declared — set unpaid break minutes to 0 or more in Timesheets setup`,
-    );
+/**
+ * Net shift milliseconds: the larger of recorded breaks and the
+ * declared unpaid rule is deducted, never below zero. The clock
+ * pairing path calls this per segment, so recorded breaks replace the
+ * auto-deduction up to their length instead of stacking on top of it.
+ */
+export function netShiftMs(grossMs: number, recordedBreakMs: number, unpaidBreakMinutes: number): number {
+  for (const [name, value] of [["gross", grossMs], ["recorded breaks", recordedBreakMs], ["unpaid rule", unpaidBreakMinutes]] as const) {
+    if (!Number.isFinite(value) || value < 0) {
+      throw new FieldTimeError(
+        "invalid_break_rule",
+        `Break ${name} ${String(value)} is not declared — set unpaid break minutes to 0 or more in Timesheets setup`,
+      );
+    }
   }
-  const value = parseTenThousandths(hours);
-  // minutes → ten-thousandths of an hour: min * 10000 / 60.
-  const deduction = (BigInt(Math.round(breakMinutes)) * SCALE) / 60n;
-  const result = value - deduction;
-  return formatTenThousandths(result < 0n ? 0n : result);
+  return Math.max(0, grossMs - Math.max(recordedBreakMs, unpaidBreakMinutes * 60_000));
 }
 
 export interface LatLng {
@@ -249,7 +252,11 @@ export function validateStages(raw: unknown): ApprovalStage[] {
         `Stage ${i + 1} approves by role but names none — set the role key in Timesheets setup`,
       );
     }
-    return { order, approverKind, roleKey: (rec.roleKey as string | null) ?? null };
+    return {
+      order,
+      approverKind: approverKind as ApprovalStage["approverKind"],
+      roleKey: (rec.roleKey as string | null) ?? null,
+    };
   });
   const orders = stages.map((s) => s.order).sort((a, b) => a - b);
   for (let i = 0; i < orders.length; i++) {

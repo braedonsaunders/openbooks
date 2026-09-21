@@ -991,7 +991,10 @@
     "hrm_compensation_manage": "サイクル実行、レート反映、プランとスナップショット作成",
     "hrm_compensation_approve": "承認フローを通じて明細を決定",
     "hrm_certifications_read": "認定と配車可否の表示",
-    "hrm_certifications_manage": "認定種類・要件・更新の管理"
+    "hrm_certifications_manage": "認定種類・要件・更新の管理",
+    "time_clock": "現場で打刻する",
+    "time_crew_enter": "班バッチを入力する",
+    "time_kiosk_manage": "キオスクとPINを管理する"
   },
   "ai": {
     "metaTitle": "AI設定",
@@ -3511,6 +3514,14 @@
       "hrmDocAction": {
         "delete": "削除",
         "anonymize": "匿名化"
+      },
+      "geofenceKind": {
+        "circle": "円",
+        "polygon": "多角形"
+      },
+      "approvalSubject": {
+        "timesheetWeek": "タイムシート週",
+        "crewTimeBatch": "班バッチ"
       }
     },
     "invoicing": {
@@ -4820,6 +4831,34 @@
     "hrmOrgChart": {
       "title": "組織図",
       "description": "欠員、部門、スパン・オブ・コントロールを示す組織ツリー。"
+    },
+    "fieldTime": {
+      "title": "現場打刻",
+      "description": "ジオフェンス・写真・オフラインキュー付きのモバイル／キオスク打刻、職長バッチ、機械時間の計上。"
+    },
+    "fieldTimeGeofence": {
+      "title": "打刻ジオフェンス",
+      "description": "プロジェクトの円・多角形と位置を照合。圏外はフラグ表示し、拒否しません。"
+    },
+    "fieldTimePhoto": {
+      "title": "打刻写真",
+      "description": "モバイル打刻に写真を必須化。"
+    },
+    "fieldTimeKiosk": {
+      "title": "現場キオスク",
+      "description": "自動復帰付きの共用PIN端末。"
+    },
+    "fieldTimeCrewEntry": {
+      "title": "班の工数入力",
+      "description": "プロジェクト×日ごとの職長バッチ（署名・段階承認付き）。"
+    },
+    "fieldTimeEquipment": {
+      "title": "工数に機械時間",
+      "description": "工数・バッチ明細に機械時間（機械チャージ品目で単価計算）。機械機能が必要。"
+    },
+    "fieldTimeMultiStageApproval": {
+      "title": "多段階の工数承認",
+      "description": "タイムシートと班バッチの上長・PM・給与の段階チェーン。"
     }
   },
   "extensions": {

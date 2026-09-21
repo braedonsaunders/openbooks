@@ -113,7 +113,7 @@ async function appendEvent(
     values (${orgId}, ${batchId}, ${kind}, ${actorId}, ${reason})`);
 }
 
-function canonicalLinesDigest(lines: CrewLineInput[]): string {
+function canonicalLinesDigest(lines: CrewLineRow[]): string {
   const canonical = [...lines]
     .map((l) => [
       l.employeePartyId,
@@ -128,6 +128,18 @@ function canonicalLinesDigest(lines: CrewLineInput[]): string {
     .sort()
     .join("\n");
   return createHash("sha256").update(canonical, "utf8").digest("hex");
+}
+
+type CrewLineRow = {
+  id?: string;
+  employeePartyId: string;
+  hours: string;
+  timeTypeId: string | null;
+  projectTaskId: string | null;
+  costCodeRef: string | null;
+  equipmentId: string | null;
+  equipmentHours: string | null;
+  memo: string | null;
 }
 
 function validHours(value: string, what: string): string {
@@ -296,7 +308,7 @@ export async function submitBatch(input: {
     if (name === "") {
       refuse("signature_required", "Sign-and-submit needs the foreman signature — sign the batch before submitting");
     }
-    const rows = (await db.execute<CrewLineInput & { hours: string }>(sql`
+    const rows = (await db.execute<CrewLineRow>(sql`
       select employee_party_id as "employeePartyId", hours::text as hours,
              time_type_id::text as "timeTypeId", project_task_id::text as "projectTaskId",
              cost_code_ref as "costCodeRef", equipment_id::text as "equipmentId",
@@ -452,7 +464,7 @@ async function planPost(orgId: string, batch: BatchStatusRow): Promise<{ lines: 
       `The batch is ${batch.status} — finish every approval stage before posting`,
     );
   }
-  const lines = (await db.execute<Array<CrewLineInput & { id: string }>>(sql`
+  const lines = (await db.execute<Required<CrewLineRow>>(sql`
     select id::text as id, employee_party_id as "employeePartyId", hours::text as hours,
            time_type_id::text as "timeTypeId", project_task_id::text as "projectTaskId",
            cost_code_ref as "costCodeRef", equipment_id::text as "equipmentId",

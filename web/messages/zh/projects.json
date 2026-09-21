@@ -230,7 +230,11 @@
     "totalJobPrice": "作业总价",
     "totalJobCost": "作业总成本",
     "committedHint": "未结采购订单承诺。",
-    "grossProfit": "毛利"
+    "grossProfit": "毛利",
+    "crewToday": "今日班组",
+    "unknownWorker": "（未知工人）",
+    "sinceTime": "自{since}",
+    "geoOutside": "围栏外"
   },
   "charges": {
     "costRecovered": "已回收成本",

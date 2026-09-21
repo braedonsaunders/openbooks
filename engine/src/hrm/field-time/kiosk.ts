@@ -35,7 +35,7 @@ async function requireKioskFeature(orgId: string): Promise<void> {
   }
 }
 
-export interface KioskRow {
+export type KioskRow = {
   id: string;
   orgId: string;
   name: string;

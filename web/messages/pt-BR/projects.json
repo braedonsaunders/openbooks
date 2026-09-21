@@ -230,7 +230,11 @@
     "totalJobPrice": "Preço total da obra",
     "totalJobCost": "Custo total da obra",
     "committedHint": "Compromissos de pedidos de compra em aberto.",
-    "grossProfit": "Lucro bruto"
+    "grossProfit": "Lucro bruto",
+    "crewToday": "Equipe hoje",
+    "unknownWorker": "(trabalhador desconhecido)",
+    "sinceTime": "desde {since}",
+    "geoOutside": "fora da cerca"
   },
   "charges": {
     "costRecovered": "Custo recuperado",

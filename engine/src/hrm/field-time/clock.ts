@@ -25,8 +25,8 @@ import {
 import {
   insideCircle,
   insidePolygon,
+  netShiftMs,
   roundHours,
-  subtractBreaks,
   validateClockSequence,
   type ClockKind,
   type LatLng,
@@ -281,9 +281,7 @@ async function pairAndPostEntries(input: {
   for (const segment of segments) {
     const grossMs = Math.max(0, segment.toMs - segment.fromMs);
     if (grossMs <= 0) continue;
-    // Deduct the larger of recorded breaks and the declared unpaid rule.
-    const declaredMs = settings.unpaidBreakMinutes * 60_000;
-    const netMs = Math.max(0, grossMs - Math.max(segment.breakMs, declaredMs));
+    const netMs = netShiftMs(grossMs, segment.breakMs, settings.unpaidBreakMinutes);
     const grossHours = (netMs / 3_600_000).toFixed(4);
     const rounded = roundHours(grossHours, settings.rounding);
     if (Number(rounded) <= 0) continue;
@@ -293,8 +291,9 @@ async function pairAndPostEntries(input: {
     for (const piece of splitMidnight(segment)) {
       const pieceGrossMs = Math.max(0, piece.toMs - piece.fromMs);
       if (pieceGrossMs <= 0) continue;
-      const pieceDeclared = Math.max(piece.breakMs, Math.round(declaredMs * (pieceGrossMs / grossMs)));
-      const pieceNet = Math.max(0, pieceGrossMs - pieceDeclared);
+      // The declared rule splits pro-rata with the midnight piece.
+      const pieceDeclaredMinutes = (settings.unpaidBreakMinutes * pieceGrossMs) / grossMs;
+      const pieceNet = netShiftMs(pieceGrossMs, piece.breakMs, pieceDeclaredMinutes);
       const pieceHours = roundHours((pieceNet / 3_600_000).toFixed(4), settings.rounding);
       if (Number(pieceHours) <= 0) continue;
       let wageRate: string | null = null;

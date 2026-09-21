@@ -230,7 +230,11 @@
     "totalJobPrice": "Gesamter Auftragspreis",
     "totalJobCost": "Gesamte Auftragskosten",
     "committedHint": "Offene Bestellverpflichtungen.",
-    "grossProfit": "Bruttogewinn"
+    "grossProfit": "Bruttogewinn",
+    "crewToday": "Team heute",
+    "unknownWorker": "(unbekannter Mitarbeiter)",
+    "sinceTime": "seit {since}",
+    "geoOutside": "außerhalb Geofence"
   },
   "charges": {
     "costRecovered": "Kosten gedeckt",
