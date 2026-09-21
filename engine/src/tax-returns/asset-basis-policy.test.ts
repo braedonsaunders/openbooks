@@ -49,6 +49,18 @@ import {
   type TaxBasisFieldPredicate,
   type UsMacrsRegimeBasis,
 } from "./asset-basis-policy.ts";
+import { CONSOLIDATED_MEMBERSHIP_IDENTITY } from "./consolidated-macrs-matching.ts";
+import { matchConsolidatedTaxItems } from "./consolidated-tax-matching.ts";
+
+const EXAMPLE4_SELLER = "00000000-0000-4000-8000-000000000001";
+const EXAMPLE4_BUYER = "00000000-0000-4000-8000-000000000002";
+const EXAMPLE4_MEMBERSHIP = {
+  groupKey: "example-4-group",
+  sellerSubsidiaryId: EXAMPLE4_SELLER,
+  buyerSubsidiaryId: EXAMPLE4_BUYER,
+  effectiveOn: "2023-01-01",
+  throughOn: "2026-12-31",
+};
 
 function field(name: string) {
   const found = TAX_BASIS_FIELDS.find((row) => row.name === name);
@@ -1650,4 +1662,192 @@ test("checkpoint conservation refuses supplied section179 above original instead
     overBasis,
     "newly placed declared 179 above its slice is refused, not reduced to original",
   );
+});
+
+const EXAMPLE4_SALE_FACTS = {
+  regime: "us_macrs" as const,
+  relationship: "non_arms_length" as const,
+  dispositionTrigger: "sale" as const,
+  originalUnadjustedBasis: "100.00",
+  remainingUnadjustedBasis: "0",
+  disposedUnadjustedBasis: "100.00",
+  placedInServiceOn: "2023-01-01",
+  recoveryPeriodYears: "5",
+  method: "200_db" as const,
+  convention: "half_year" as const,
+  recognition: "taxable" as const,
+  section168i7Kind: "consolidated_group" as const,
+  relatedPerson: true,
+  statutoryProceeds: "130.00",
+  amountRealizedRule: "amount_realized" as const,
+  buyerCost: "130.00",
+  carryoverBasis: "80.00",
+  excessBasis: "50.00",
+  sellerAdjustedBasis: "80.00",
+  consolidatedGroupMembership: EXAMPLE4_MEMBERSHIP,
+  section179: "0",
+  bonusPercent: "0",
+  businessUsePercent: "100",
+  priorDepreciation: "20.00",
+};
+
+const EXAMPLE4_SOURCE = {
+  sourceOperation: "intercompany_transfer" as const,
+  applicable: "both" as const,
+  sellerSubsidiaryId: EXAMPLE4_SELLER,
+  buyerSubsidiaryId: EXAMPLE4_BUYER,
+};
+
+test("membership-present metadata requires seller adjusted basis in human wording", () => {
+  const without = attachTaxBasisSource(
+    { regime: "us_macrs", relationship: "non_arms_length", recognition: "taxable" },
+    { sourceOperation: "intercompany_transfer", applicable: "both" },
+  );
+  assert.equal(taxBasisFieldVisible(field("sellerAdjustedBasis"), without), true);
+  assert.equal(taxBasisFieldRequired(field("sellerAdjustedBasis"), without), false);
+  const withMembership = attachTaxBasisSource(
+    {
+      regime: "us_macrs",
+      relationship: "non_arms_length",
+      recognition: "taxable",
+      consolidatedGroupMembership: EXAMPLE4_MEMBERSHIP,
+    },
+    { sourceOperation: "intercompany_transfer", applicable: "both" },
+  );
+  assert.equal(taxBasisFieldRequired(field("sellerAdjustedBasis"), withMembership), true);
+  assert.equal(taxBasisFieldRequired(field("statutoryProceeds"), withMembership), true);
+  assert.equal(taxBasisFieldRequired(field("amountRealizedRule"), withMembership), true);
+  assert.match(field("sellerAdjustedBasis").help ?? "", /consolidated-group membership is declared/);
+  assert.doesNotMatch(field("sellerAdjustedBasis").help ?? "", /consolidatedGroupMembership|sellerAdjustedBasis/);
+});
+
+test("buyer-only membership still requires amount realized; without membership proceeds stay hidden", () => {
+  const buyerOnly = attachTaxBasisSource(
+    { regime: "us_macrs", relationship: "arms_length", recognition: "taxable" },
+    { sourceOperation: "intercompany_transfer", applicable: "buyer" },
+  );
+  assert.equal(taxBasisFieldVisible(field("statutoryProceeds"), buyerOnly), false);
+  const buyerMembership = attachTaxBasisSource(
+    {
+      regime: "us_macrs",
+      relationship: "non_arms_length",
+      recognition: "taxable",
+      consolidatedGroupMembership: EXAMPLE4_MEMBERSHIP,
+    },
+    { sourceOperation: "intercompany_transfer", applicable: "buyer" },
+  );
+  assert.equal(taxBasisFieldRequired(field("statutoryProceeds"), buyerMembership), true);
+  assert.equal(taxBasisFieldRequired(field("amountRealizedRule"), buyerMembership), true);
+  assert.equal(taxBasisFieldRequired(field("sellerAdjustedBasis"), buyerMembership), true);
+});
+
+test("Example 4 sale validates 100/20/80/50/130 and freezes signed opening separately from carryover", () => {
+  const sale = validateTaxRegimeBasis(EXAMPLE4_SALE_FACTS, EXAMPLE4_SOURCE);
+  assert.equal(sale.originalUnadjustedBasis, "100.00");
+  assert.equal(sale.priorDepreciation, "20.00");
+  assert.equal(sale.carryoverBasis, "80.00");
+  assert.equal(sale.excessBasis, "50.00");
+  assert.equal(sale.statutoryProceeds, "130.00");
+  const computed = usRegimeWorkpaperOutcome(sale, "intercompany_transfer", "both", {
+    placedInServiceOn: "2025-08-20",
+    recoveryPeriodYears: "5",
+    method: "200_db",
+    convention: "half_year",
+  });
+  assert.equal(computed.recognition, "taxable");
+  assert.equal(computed.section168i7Kind, "consolidated_group");
+  assert.equal(computed.amountRealized, "130.00");
+  assert.equal(computed.sellerAdjustedBasis, "80.0000");
+  assert.equal(computed.carryoverBasis, "80.00");
+  assert.equal(computed.excessBasis, "50.00");
+  assert.deepEqual(computed.consolidatedMembership, {
+    identity: CONSOLIDATED_MEMBERSHIP_IDENTITY,
+    ...EXAMPLE4_MEMBERSHIP,
+  });
+  const expected = matchConsolidatedTaxItems({
+    deferredOpening: "50.0000",
+    actualCorrespondingItems: [],
+    recomputedCorrespondingItems: [],
+  });
+  assert.deepEqual(computed.consolidatedMatching, {
+    ...expected,
+    actualCorrespondingItems: [],
+    recomputedCorrespondingItems: [],
+  });
+  const persisted = declaredTaxRegimeFacts({
+    ...sale,
+    consolidatedMembership: computed.consolidatedMembership,
+    consolidatedMatching: computed.consolidatedMatching,
+  } as UsMacrsRegimeBasis);
+  assert.equal(Object.hasOwn(persisted, "consolidatedMembership"), false);
+  assert.equal(Object.hasOwn(persisted, "consolidatedMatching"), false);
+});
+
+test("buyer-only Example 4 membership still freezes amount realized and refuses a mismatched source entity", () => {
+  const { dispositionTrigger: _trigger, remainingUnadjustedBasis: _remaining, disposedUnadjustedBasis: _disposed, ...buyerFacts } = EXAMPLE4_SALE_FACTS;
+  const sale = validateTaxRegimeBasis(buyerFacts, {
+    sourceOperation: "intercompany_transfer",
+    applicable: "buyer",
+    sellerSubsidiaryId: EXAMPLE4_SELLER,
+    buyerSubsidiaryId: EXAMPLE4_BUYER,
+  });
+  const computed = usRegimeWorkpaperOutcome(sale, "intercompany_transfer", "buyer", {
+    placedInServiceOn: "2025-08-20",
+    recoveryPeriodYears: "5",
+    method: "200_db",
+    convention: "half_year",
+  });
+  assert.equal(computed.amountRealized, "130.00");
+  assert.equal((computed.consolidatedMatching as { deferredOpening: string }).deferredOpening, "50.0000");
+  throwsPolicy(
+    () =>
+      validateTaxRegimeBasis(buyerFacts, {
+        sourceOperation: "intercompany_transfer",
+        applicable: "buyer",
+        sellerSubsidiaryId: EXAMPLE4_BUYER,
+        buyerSubsidiaryId: EXAMPLE4_SELLER,
+      }),
+    /source transferor legal entity/,
+    "membership IDs must match the selected source",
+  );
+  throwsPolicy(
+    () =>
+      validateTaxRegimeBasis(EXAMPLE4_SALE_FACTS, {
+        sourceOperation: "partial_disposal",
+        applicable: "seller",
+        sellerSubsidiaryId: EXAMPLE4_SELLER,
+        buyerSubsidiaryId: null,
+      }),
+    /customer disposal is not a 1.1502-13 matching event/,
+    "membership on a customer disposal",
+  );
+});
+
+test("taxable MACRS without membership does not invent 1.1502-13 matching from §168(i)(7)", () => {
+  const taxable: UsMacrsRegimeBasis = {
+    regime: "us_macrs",
+    relationship: "arms_length",
+    dispositionTrigger: "sale",
+    originalUnadjustedBasis: "10000.00",
+    remainingUnadjustedBasis: "0",
+    disposedUnadjustedBasis: "10000.00",
+    placedInServiceOn: "2023-03-15",
+    recoveryPeriodYears: "5",
+    method: "200_db",
+    convention: "half_year",
+    recognition: "taxable",
+    relatedPerson: false,
+    statutoryProceeds: "8500.00",
+    amountRealizedRule: "amount_realized",
+    buyerCost: "8500.00",
+  };
+  const computed = usRegimeWorkpaperOutcome(taxable, "intercompany_transfer", "both", {
+    placedInServiceOn: "2025-08-01",
+    recoveryPeriodYears: "7",
+    method: "200_db",
+    convention: "half_year",
+  });
+  assert.equal(computed.section168i7Kind, null);
+  assert.equal(Object.hasOwn(computed, "consolidatedMembership"), false);
+  assert.equal(Object.hasOwn(computed, "consolidatedMatching"), false);
 });

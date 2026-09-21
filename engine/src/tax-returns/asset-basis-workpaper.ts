@@ -94,6 +94,8 @@ type ResolvedSource = {
   sellerAssetId: string;
   receivingAssetId: string | null;
   requiredSubsidiaryIds: string[];
+  sellerSubsidiaryId: string;
+  buyerSubsidiaryId: string | null;
   sellerOpen: boolean;
 };
 
@@ -365,6 +367,32 @@ async function sourceReversed(
   return false;
 }
 
+async function legalEntityIdsForAssets(
+  tx: SqlExecutor,
+  orgId: string,
+  sellerAssetId: string,
+  receivingAssetId: string | null,
+): Promise<{ sellerSubsidiaryId: string; buyerSubsidiaryId: string | null }> {
+  const seller = (
+    await tx.execute<{ subsidiary_id: string }>(sql`
+      select subsidiary_id from fixed_assets where org_id=${orgId} and id=${sellerAssetId}`)
+  ).rows[0];
+  if (!seller) throw new TaxAssetBasisError("asset not found");
+  if (!receivingAssetId) {
+    return { sellerSubsidiaryId: seller.subsidiary_id, buyerSubsidiaryId: null };
+  }
+  const buyer = (
+    await tx.execute<{ subsidiary_id: string }>(sql`
+      select subsidiary_id from fixed_assets where org_id=${orgId} and id=${receivingAssetId}`)
+  ).rows[0];
+  if (!buyer) {
+    throw new TaxAssetBasisError(
+      "the source transfer has no unreversed receiving asset; tax basis cannot be inferred from book buyerAmount",
+    );
+  }
+  return { sellerSubsidiaryId: seller.subsidiary_id, buyerSubsidiaryId: buyer.subsidiary_id };
+}
+
 async function resolveSource(
   tx: SqlExecutor,
   orgId: string,
@@ -429,6 +457,8 @@ async function resolveSource(
       change.subject_id,
       change.operation === "intercompany_transfer" ? "transferred" : "disposed",
     );
+    const receiving = change.operation === "intercompany_transfer" ? receivingAssetId : null;
+    const entities = await legalEntityIdsForAssets(tx, orgId, change.subject_id, receiving);
     return {
       sourceChangeId,
       sourceEventId,
@@ -436,8 +466,10 @@ async function resolveSource(
       sourceKind,
       effectiveOn: change.effective_on,
       sellerAssetId: change.subject_id,
-      receivingAssetId: change.operation === "intercompany_transfer" ? receivingAssetId : null,
-      requiredSubsidiaryIds: required,
+      receivingAssetId: receiving,
+      requiredSubsidiaryIds: [...new Set([...required, entities.sellerSubsidiaryId, ...(entities.buyerSubsidiaryId ? [entities.buyerSubsidiaryId] : [])])],
+      sellerSubsidiaryId: entities.sellerSubsidiaryId,
+      buyerSubsidiaryId: entities.buyerSubsidiaryId,
       sellerOpen: !(await sourceReversed(tx, orgId, { sourceChangeId, sourceEventId })),
     };
   }
@@ -492,6 +524,8 @@ async function resolveSource(
     sellerAssetId: event.asset_id,
     receivingAssetId: null,
     requiredSubsidiaryIds: [event.subsidiary_id],
+    sellerSubsidiaryId: event.subsidiary_id,
+    buyerSubsidiaryId: null,
     sellerOpen: !(await sourceReversed(tx, orgId, { sourceChangeId: null, sourceEventId })),
   };
 }
@@ -851,6 +885,8 @@ async function snapshot(
       applicableByRegime: applicable,
       usSellerMacrs,
       effectiveOn: source.effectiveOn,
+      sellerSubsidiaryId: source.sellerSubsidiaryId,
+      buyerSubsidiaryId: source.buyerSubsidiaryId,
     });
   } catch (error) {
     throw error instanceof Error ? new TaxAssetBasisError(error.message) : error;
@@ -933,6 +969,7 @@ export async function listTaxAssetBasisSources(
         subsidiary_label: string;
         receiving_asset_label: string | null;
         receiving_subsidiary_id: string | null;
+        receiving_subsidiary_label: string | null;
         seller_custom: unknown;
         seller_tax: unknown;
         receiving_custom: unknown;
@@ -945,6 +982,7 @@ export async function listTaxAssetBasisSources(
                a.subsidiary_id, s.name as subsidiary_label,
                rec.asset_number||' — '||rec.name as receiving_asset_label,
                rec.subsidiary_id as receiving_subsidiary_id,
+               rec_s.name as receiving_subsidiary_label,
                a.custom as seller_custom, c.tax_attributes as seller_tax,
                rec.custom as receiving_custom, rec_c.tax_attributes as receiving_tax
           from asset_events e
@@ -958,6 +996,7 @@ export async function listTaxAssetBasisSources(
             and t.reversed_by_change_id is null
           left join fixed_assets rec on rec.org_id=t.org_id and rec.id=t.receiving_asset_id
           left join asset_categories rec_c on rec_c.org_id=rec.org_id and rec_c.id=rec.category_id
+          left join subsidiaries rec_s on rec_s.org_id=rec.org_id and rec_s.id=rec.subsidiary_id
          where e.org_id=${orgId}
            and e.kind in ('partially_disposed','transferred','disposed','written_off')
            and (e.asset_id=${assetId} or rec.id=${assetId})
@@ -1055,6 +1094,9 @@ export async function listTaxAssetBasisSources(
         assetLabel: row.asset_label,
         subsidiaryLabel: row.subsidiary_label,
         receivingAssetLabel: row.receiving_asset_label,
+        sellerSubsidiaryId: row.subsidiary_id,
+        buyerSubsidiaryId: row.kind === "transferred" ? row.receiving_subsidiary_id : null,
+        receivingSubsidiaryLabel: row.kind === "transferred" ? row.receiving_subsidiary_label : null,
         appliedWorkpaper: applied
           ? { changeId: "change_id" in applied ? applied.change_id : applied.id, status: applied.status }
           : null,
@@ -1124,11 +1166,19 @@ export async function proposeTaxAssetBasis(
         if (usSellerMacrs?.status === "history_refused") {
           throw new TaxAssetBasisError(usSellerMacrs.refusal);
         }
+        const replayEntities = await legalEntityIdsForAssets(
+          db,
+          orgId,
+          String(replay.payload.sellerAssetId ?? ""),
+          (replay.payload.receivingAssetId as string | null) ?? null,
+        );
         const validated = validateTaxAssetBasisInput(input, {
           sourceOperation: sourceOperation as TaxBasisSourceOperation,
           applicableByRegime: applicable,
           usSellerMacrs,
           effectiveOn: String(replay.payload.effectiveOn ?? ""),
+          sellerSubsidiaryId: replayEntities.sellerSubsidiaryId,
+          buyerSubsidiaryId: replayEntities.buyerSubsidiaryId,
         });
         const frozen = await freezeRegimes(
           db,
@@ -1211,6 +1261,8 @@ export async function proposeTaxAssetBasis(
         applicableByRegime: applicable,
         usSellerMacrs,
         effectiveOn: source.effectiveOn,
+        sellerSubsidiaryId: source.sellerSubsidiaryId,
+        buyerSubsidiaryId: source.buyerSubsidiaryId,
       });
       const state = await snapshot(db, orgId, actorId, assetId, validated);
       if (state.existingWorkpaperChangeId) {
