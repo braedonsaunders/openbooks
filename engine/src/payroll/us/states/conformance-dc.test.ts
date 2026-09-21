@@ -73,17 +73,38 @@ test("DC 2026 allowance is the Pub 15-T (2026) line 1k federal amount", () => {
   // only because importing the federal rates would close a module cycle.
   assert.equal(DC_RATES_2026.allowanceAnnual, "4300");
   assert.equal(DC_RATES_2026.allowanceAnnual, RATES_2026.allowanceAmount);
-  // Per-period values the 2026 tables would print: 4300/52 = 82.6923…,
-  // 4300/26 = 165.3846…, 4300/24 = 179.1666…, 4300/12 = 358.333…,
-  // 4300/365 = 11.7808….
-  assert.equal(dcAllowancePerPeriod(DC_RATES_2026, "weekly", 52), U("82.69"));
-  assert.equal(dcAllowancePerPeriod(DC_RATES_2026, "biweekly", 26), U("165.38"));
-  assert.equal(dcAllowancePerPeriod(DC_RATES_2026, "semimonthly", 24), U("179.17"));
-  assert.equal(dcAllowancePerPeriod(DC_RATES_2026, "monthly", 12), U("358.33"));
-  assert.equal(dcAllowancePerPeriod(DC_RATES_2026, "daily", 365), U("11.78"));
-  assert.equal(dcAllowancePerPeriod(DC_RATES_2026, "quarterly", 4), U("1075"));
-  assert.equal(dcAllowancePerPeriod(DC_RATES_2026, "semiannual", 2), U("2150"));
-  assert.equal(dcAllowancePerPeriod(DC_RATES_2026, "annual", 1), U("4300"));
+  // Per-period values the 2026 tables would print. Named as
+  // `divIntCents(annual, D)` — the same half-up helper DE pins — not as
+  // a second literal table. The unused import of that helper was the
+  // fingerprint of this pin; dropping it would have left only the
+  // rounded cents, which any other rounder that happens to land there
+  // would also satisfy.
+  const allowances2026 = [
+    ["weekly", 52, "82.69"],
+    ["biweekly", 26, "165.38"],
+    ["semimonthly", 24, "179.17"],
+    ["monthly", 12, "358.33"],
+    ["quarterly", 4, "1075"],
+    ["semiannual", 2, "2150"],
+    ["annual", 1, "4300"],
+    ["daily", 365, "11.78"],
+  ] as const;
+  assert.equal(allowances2026.length, 8, "FR-230 Table 1 prints eight periods");
+  for (const [period, periods, printed] of allowances2026) {
+    const derived = divIntCents(U(DC_RATES_2026.allowanceAnnual), dcDivisorForPeriod(period, periods));
+    assert.equal(D(derived), money(printed), `${period} is annual÷${periods} half-up`);
+    assert.equal(
+      dcAllowancePerPeriod(DC_RATES_2026, period, periods),
+      derived,
+      `${period} helper is that division`,
+    );
+  }
+  // Daily is 365 even when the payroll runs 260 periods — the booklet
+  // prints one daily table, not a 260-day one.
+  assert.equal(
+    dcAllowancePerPeriod(DC_RATES_2026, "daily", 260),
+    divIntCents(U(DC_RATES_2026.allowanceAnnual), 365),
+  );
 });
 
 test("the scaler reproduces FR-230's printed 2018 figures from the 2018 annuals", () => {
@@ -104,24 +125,46 @@ test("the scaler reproduces FR-230's printed 2018 figures from the 2018 annuals"
       { over: "1000000", notOver: null, base: "85025", rate: pctToRate("8.95") },
     ],
   };
-  // Table 1 (p. 9) per-period allowances, exactly as printed.
-  assert.equal(dcAllowancePerPeriod(rates2018, "weekly", 52), U("79.81"));
-  assert.equal(dcAllowancePerPeriod(rates2018, "biweekly", 26), U("159.62"));
-  assert.equal(dcAllowancePerPeriod(rates2018, "semimonthly", 24), U("172.92"));
-  assert.equal(dcAllowancePerPeriod(rates2018, "monthly", 12), U("345.83"));
-  assert.equal(dcAllowancePerPeriod(rates2018, "quarterly", 4), U("1037.50"));
-  assert.equal(dcAllowancePerPeriod(rates2018, "semiannual", 2), U("2075.00"));
-  assert.equal(dcAllowancePerPeriod(rates2018, "annual", 1), U("4150.00"));
-  assert.equal(dcAllowancePerPeriod(rates2018, "daily", 365), U("11.37"));
+  // Table 1 (p. 9) per-period allowances, exactly as printed — and each
+  // printed cent is annual÷D half-up, the same `divIntCents` DE pins.
+  const table1_2018 = [
+    ["weekly", 52, "79.81"],
+    ["biweekly", 26, "159.62"],
+    ["semimonthly", 24, "172.92"],
+    ["monthly", 12, "345.83"],
+    ["quarterly", 4, "1037.50"],
+    ["semiannual", 2, "2075.00"],
+    ["annual", 1, "4150.00"],
+    ["daily", 365, "11.37"],
+  ] as const;
+  assert.equal(table1_2018.length, 8, "FR-230 Table 1 prints eight periods");
+  for (const [period, periods, printed] of table1_2018) {
+    const derived = divIntCents(U(rates2018.allowanceAnnual), dcDivisorForPeriod(period, periods));
+    assert.equal(D(derived), money(printed), `${period} printed is annual÷${periods} half-up`);
+    assert.equal(
+      dcAllowancePerPeriod(rates2018, period, periods),
+      derived,
+      `${period} helper is that division`,
+    );
+  }
   // Weekly percentage table (p. 11), second bracket and top bracket.
   const weekly = dcScaledBrackets(rates2018, "weekly", 52);
+  assert.equal(weekly[1]!.over, divIntCents(U("10000"), 52));
+  assert.equal(weekly[1]!.notOver, divIntCents(U("40000"), 52));
+  assert.equal(weekly[1]!.base, divIntCents(U("400"), 52));
   assert.equal(D(weekly[1]!.over), money("192.31"));
   assert.equal(D(weekly[1]!.notOver!), money("769.23"));
   assert.equal(D(weekly[1]!.base), money("7.69"));
+  assert.equal(weekly[5]!.over, divIntCents(U("1000000"), 52));
+  assert.equal(weekly[5]!.base, divIntCents(U("85025"), 52));
   assert.equal(D(weekly[5]!.over), money("19230.77"));
   assert.equal(D(weekly[5]!.base), money("1635.10"));
   // Daily percentage table (p. 11), first two brackets.
   const daily = dcScaledBrackets(rates2018, "daily", 365);
+  assert.equal(daily[0]!.notOver, divIntCents(U("10000"), 365));
+  assert.equal(daily[1]!.over, divIntCents(U("10000"), 365));
+  assert.equal(daily[1]!.notOver, divIntCents(U("40000"), 365));
+  assert.equal(daily[1]!.base, divIntCents(U("400"), 365));
   assert.equal(D(daily[0]!.notOver!), money("27.40"));
   assert.equal(D(daily[1]!.over), money("27.40"));
   assert.equal(D(daily[1]!.notOver!), money("109.59"));
@@ -132,6 +175,8 @@ test("the scaler reproduces FR-230's printed 2018 figures from the 2018 annuals"
   // filing status; this is the assertion that the second schedule adds
   // nothing.
   const monthly = dcScaledBrackets(rates2018, "monthly", 12);
+  assert.equal(monthly[3]!.over, divIntCents(U("60000"), 12));
+  assert.equal(monthly[3]!.base, divIntCents(U("3500"), 12));
   assert.equal(D(monthly[3]!.over), money("5000"));
   assert.equal(D(monthly[3]!.base), money("291.67"));
 });
