@@ -20,6 +20,22 @@
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { add, cmp, formatMoney, mulDecimal, mulPercent, mulRatio, neg, normalizeDecimal, normalizeMoney, sum, toUnits } from "../money/money.ts";
 import { splitMoneyProportionally } from "../money/allocate-proportional.ts";
+import {
+  assertConsolidatedMembershipMatchesSource,
+  freezeUsConsolidatedMatching,
+  parseConsolidatedGroupMembership,
+  type ConsolidatedGroupMembershipInput,
+} from "./consolidated-macrs-matching.ts";
+import { ConsolidatedTaxMatchingError } from "./consolidated-tax-matching.ts";
+
+export {
+  CONSOLIDATED_GROUP_MEMBERSHIP_KEYS,
+  CONSOLIDATED_MEMBERSHIP_IDENTITY,
+  assertConsolidatedMembershipMatchesSource,
+  parseConsolidatedGroupMembership,
+  type ConsolidatedGroupMembershipInput,
+  type ConsolidatedMembershipFact,
+} from "./consolidated-macrs-matching.ts";
 
 export class TaxBasisPolicyError extends Error {
   readonly name = "TaxBasisPolicyError";
@@ -328,6 +344,10 @@ export interface TaxBasisSourceContext {
   usSellerMacrs?: UsSellerMacrsVintageContext | null;
   /** Source occurredOn. Required to freeze buyer vintage transferOn. */
   effectiveOn?: string;
+  /** Source transferor legal entity. Server-derived — not typed. */
+  sellerSubsidiaryId?: string;
+  /** Source receiving legal entity. Null on a customer disposal. */
+  buyerSubsidiaryId?: string | null;
 }
 
 export interface TaxBasisValidationContext extends Partial<TaxBasisSourceContext> {
@@ -336,6 +356,8 @@ export interface TaxBasisValidationContext extends Partial<TaxBasisSourceContext
   usSellerMacrs?: UsSellerMacrsVintageContext | null;
   /** Source effective date. Required to freeze buyer vintage transferOn. */
   effectiveOn?: string;
+  sellerSubsidiaryId?: string;
+  buyerSubsidiaryId?: string | null;
 }
 
 /** One classified regime on a GET source row. `applicable` is server-derived. */
@@ -358,6 +380,12 @@ export interface TaxAssetBasisSourceChoice {
   assetLabel: string;
   subsidiaryLabel: string;
   receivingAssetLabel: string | null;
+  /** Source transferor legal entity. Stamp membership from this — do not type a UUID. */
+  sellerSubsidiaryId: string;
+  /** Source receiving legal entity. Null on a customer disposal. */
+  buyerSubsidiaryId: string | null;
+  /** Receiving legal-entity label. Null on a customer disposal. */
+  receivingSubsidiaryLabel: string | null;
   regimes: TaxAssetBasisSourceRegime[];
   /** Seller-side US vintage history immediately before this source.
    *  `null` when US is not seller-applicable. */
@@ -514,6 +542,10 @@ export interface UsMacrsRegimeBasis extends TaxRegimeBasisBase {
   /** Frozen per-disposed-vintage receiver schedules. Derived from ready
    *  history; not an operator-typed composite header. */
   buyerVintages?: FrozenMacrsBuyerVintage[];
+  /** Period-specific 1.1502-13 membership. Not §168(i)(7), not tax_groups. */
+  consolidatedGroupMembership?: ConsolidatedGroupMembershipInput;
+  /** Seller tax adjusted basis of the transferred slice. Gain fact. */
+  sellerAdjustedBasis?: string;
 }
 
 export type TaxBasisFieldKind = "decimal" | "boolean" | "enum" | "text" | "date";
@@ -527,6 +559,7 @@ export type TaxBasisFieldPredicate =
   | { side: "seller" | "buyer" }
   | { fieldEquals: { name: string; values: readonly string[] } }
   | { fieldTrue: string }
+  | { fieldPresent: string }
   | { usSellerMacrsStatus: UsSellerMacrsVintageStatus }
   | { all: TaxBasisFieldPredicate[] }
   | { any: TaxBasisFieldPredicate[] }
@@ -589,11 +622,39 @@ const US_SELLER_SPLIT_AMOUNTS: TaxBasisFieldPredicate = {
 };
 /** Historical elections allocated to the carried-over slice. Missing JSON is
  *  not zero. Ready seller history derives these per disposed vintage. */
+const US_SECTION_168I7: TaxBasisFieldPredicate = {
+  fieldEquals: { name: "section168i7Kind", values: [...US_SECTION_168I7_KINDS] },
+};
+/** Operator-declared 1.1502-13 membership on an intercompany transfer.
+ *  Not inferred from related-person status, §168(i)(7), or sales-tax groups. */
+const US_MEMBERSHIP_PRESENT: TaxBasisFieldPredicate = {
+  all: [
+    { regime: "us_macrs" },
+    { sourceOperation: "intercompany_transfer" },
+    { fieldPresent: "consolidatedGroupMembership" },
+  ],
+};
+const US_AMOUNT_REALIZED_FACTS: TaxBasisFieldPredicate = {
+  all: [
+    { regime: "us_macrs" },
+    {
+      any: [
+        { all: [SELLER, { fieldEquals: { name: "recognition", values: ["taxable"] } }] },
+        US_MEMBERSHIP_PRESENT,
+      ],
+    },
+  ],
+};
+/** Historical elections on a §168(i)(7) carryover slice, including Example 4
+ *  sales that keep carryover-to-seller-basis plus excess newly placed. */
 const US_CARRYOVER_ELECTIONS: TaxBasisFieldPredicate = {
   all: [
     BUYER,
-    { fieldEquals: { name: "recognition", values: ["nontaxable"] } },
     { not: { usSellerMacrsStatus: "ready" } },
+    { any: [
+      { fieldEquals: { name: "recognition", values: ["nontaxable"] } },
+      US_SECTION_168I7,
+    ] },
   ],
 };
 
@@ -685,12 +746,18 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     name: "statutoryProceeds",
     label: "Actual proceeds / amount realized",
     kind: "decimal",
-    visibleWhen: { all: [SELLER, { any: [{ regime: "ca_cca" }, { regime: "uk_wda" }, { regime: "us_macrs" }] }] },
-    requiredWhen: { all: [SELLER, { any: [
-      { all: [{ regime: "ca_cca" }, { not: { fieldEquals: { name: "rolloverElection", values: ["s85", "s97", "other"] } } }] },
-      { all: [{ regime: "uk_wda" }, { relationship: "arms_length" }] },
-      { all: [{ regime: "us_macrs" }, { fieldEquals: { name: "recognition", values: ["taxable"] } }] },
-    ] }] },
+    visibleWhen: { any: [
+      { all: [SELLER, { any: [{ regime: "ca_cca" }, { regime: "uk_wda" }, { regime: "us_macrs" }] }] },
+      US_MEMBERSHIP_PRESENT,
+    ] },
+    requiredWhen: { any: [
+      { all: [SELLER, { any: [
+        { all: [{ regime: "ca_cca" }, { not: { fieldEquals: { name: "rolloverElection", values: ["s85", "s97", "other"] } } }] },
+        { all: [{ regime: "uk_wda" }, { relationship: "arms_length" }] },
+        { all: [{ regime: "us_macrs" }, { fieldEquals: { name: "recognition", values: ["taxable"] } }] },
+      ] }] },
+      US_MEMBERSHIP_PRESENT,
+    ] },
     help: "Enter the actual proceeds. ITA 69(1)(b)(i) substitutes FMV only when CA non-arm's-length proceeds are nil or below FMV; above-FMV proceeds are not reduced. US Pub 544 amount realized is money plus FMV of other property or services plus assumed liabilities — not the FMV of the transferred asset merely because related.",
   },
   {
@@ -1042,9 +1109,20 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
       partnership_721_prior_interest: "§721(a) where another partner already had a depreciable interest — bonus stays with the transferor",
       consolidated_group: "§168(i)(7)(B)(ii) consolidated-group member transfer — no monthly split",
     }),
-    visibleWhen: { all: [{ regime: "us_macrs" }, { fieldEquals: { name: "recognition", values: ["nontaxable"] } }] },
+    visibleWhen: { any: [
+      { all: [{ regime: "us_macrs" }, { fieldEquals: { name: "recognition", values: ["nontaxable"] } }] },
+      { all: [{ regime: "us_macrs" }, { sourceOperation: "intercompany_transfer" }, { fieldEquals: { name: "recognition", values: ["taxable"] } }] },
+    ] },
     requiredWhen: { all: [{ regime: "us_macrs" }, { fieldEquals: { name: "recognition", values: ["nontaxable"] } }] },
-    help: "26 CFR 1.168(d)-1(b)(7) monthly allocation does not apply between consolidated-group members. Ordinary half-year disposal is not this allocation.",
+    help: "Depreciation treatment only. 26 CFR 1.1502-13 Example 4 applies §168(i)(7) to an intercompany SALE: carryover equals seller adjusted basis and excess is newly placed. This is not 1.1502-13 group membership and not a zero deferred gain.",
+  },
+  {
+    name: "sellerAdjustedBasis",
+    label: "Seller adjusted tax basis of the transferred slice",
+    kind: "decimal",
+    visibleWhen: { all: [{ regime: "us_macrs" }, { sourceOperation: "intercompany_transfer" }] },
+    requiredWhen: US_MEMBERSHIP_PRESENT,
+    help: "Required when consolidated-group membership is declared. The deferred opening is amount realized minus this seller adjusted basis. A §168(i)(7) carryover checkpoint is not this basis and is not a zero intercompany gain.",
   },
   {
     name: "relatedPerson",
@@ -1062,8 +1140,8 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
       section_482: "Section 482 deemed-value adjustment (evidenced)",
       other_evidenced: "Other independently evidenced deemed-value adjustment",
     }),
-    visibleWhen: { all: [{ regime: "us_macrs" }, SELLER, { fieldEquals: { name: "recognition", values: ["taxable"] } }] },
-    requiredWhen: { all: [{ regime: "us_macrs" }, SELLER, { fieldEquals: { name: "recognition", values: ["taxable"] } }] },
+    visibleWhen: US_AMOUNT_REALIZED_FACTS,
+    requiredWhen: US_AMOUNT_REALIZED_FACTS,
     help: "Related-person status does not replace amount realized with the FMV of the transferred asset. A §482 or other deemed-value adjustment must be independently evidenced.",
   },
   {
@@ -1093,8 +1171,23 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     name: "excessBasis",
     label: "Excess basis (newly placed)",
     kind: "decimal",
-    visibleWhen: { all: [{ regime: "us_macrs" }, BUYER, { fieldEquals: { name: "recognition", values: ["nontaxable"] } }] },
-    requiredWhen: { all: [{ regime: "us_macrs" }, BUYER, { fieldEquals: { name: "recognition", values: ["nontaxable"] } }] },
+    visibleWhen: { all: [
+      { regime: "us_macrs" },
+      BUYER,
+      { any: [
+        { fieldEquals: { name: "recognition", values: ["nontaxable"] } },
+        US_SECTION_168I7,
+      ] },
+    ] },
+    requiredWhen: { all: [
+      { regime: "us_macrs" },
+      BUYER,
+      { any: [
+        { fieldEquals: { name: "recognition", values: ["nontaxable"] } },
+        US_SECTION_168I7,
+      ] },
+    ] },
+    help: "The newly placed remainder after §168(i)(7) carryover. On a 1.1502-13 Example 4 sale this is amount realized minus seller adjusted basis — not a substitute for deferred opening.",
   },
   {
     name: "section179",
@@ -1200,6 +1293,10 @@ export function matchTaxBasisPredicate(predicate: TaxBasisFieldPredicate, draft:
   if ("side" in predicate) return taxBasisSideApplies(draft.applicable, predicate.side);
   if ("fieldEquals" in predicate) return predicate.fieldEquals.values.includes(String(draft[predicate.fieldEquals.name] ?? ""));
   if ("fieldTrue" in predicate) return draft[predicate.fieldTrue] === true;
+  if ("fieldPresent" in predicate) {
+    const value = draft[predicate.fieldPresent];
+    return value != null && value !== "";
+  }
   if ("usSellerMacrsStatus" in predicate) return draft.usSellerMacrsStatus === predicate.usSellerMacrsStatus;
   if ("all" in predicate) return predicate.all.every((item) => matchTaxBasisPredicate(item, draft));
   if ("any" in predicate) return predicate.any.some((item) => matchTaxBasisPredicate(item, draft));
@@ -1246,6 +1343,7 @@ const ALLOWED_KEYS: Record<TaxBasisRegime, readonly string[]> = {
     "deemedValueAdjustmentEvidence", "buyerCost", "carryoverBasis", "excessBasis",
     "section179", "bonusPercent", "businessUsePercent", "priorDepreciation",
     "shortYearMethod", "vintageAllocations",
+    "consolidatedGroupMembership", "sellerAdjustedBasis",
   ],
 };
 
@@ -1312,6 +1410,8 @@ export const DERIVED_TAX_REGIME_FACT_KEYS = [
   "capitalGainsInclusionRateCitation",
   "checkpointKind",
   "takenBonus",
+  "consolidatedMembership",
+  "consolidatedMatching",
 ] as const;
 
 export function declaredTaxRegimeFacts<T extends TaxRegimeBasis>(row: T): T {
@@ -1325,6 +1425,8 @@ function stripDerivedTaxRegimeFacts(draft: TaxBasisDraft): TaxBasisDraft {
     capitalGainsInclusionRateCitation: _capitalGainsInclusionRateCitation,
     checkpointKind: _checkpointKind,
     takenBonus: _takenBonus,
+    consolidatedMembership: _consolidatedMembership,
+    consolidatedMatching: _consolidatedMatching,
     ...declared
   } = draft;
   return declared;
@@ -2327,7 +2429,8 @@ function validateUs(draft: TaxBasisDraft, context?: TaxBasisValidationContext): 
       if (history?.status === "ready") {
         assertMacrsVintageAllocationsMatchOpen(allocations, history.vintages);
         const buyerTransferorHistory =
-          taxBasisSideApplies(draft.applicable, "buyer") && draft.recognition === "nontaxable";
+          taxBasisSideApplies(draft.applicable, "buyer")
+          && (draft.recognition === "nontaxable" || !!draft.section168i7Kind);
         if (buyerTransferorHistory) {
           const transferOn = context?.effectiveOn;
           if (!transferOn || !isTaxBasisCalendarDate(transferOn)) {
@@ -2361,7 +2464,7 @@ function validateUs(draft: TaxBasisDraft, context?: TaxBasisValidationContext): 
   }
   if (
     taxBasisSideApplies(draft.applicable, "buyer") &&
-    draft.recognition === "nontaxable" &&
+    (draft.recognition === "nontaxable" || !!draft.section168i7Kind) &&
     !(Array.isArray(draft.buyerVintages) && draft.buyerVintages.length > 0)
   ) {
     assertUsCarryoverCheckpoint(draft);
@@ -2378,6 +2481,47 @@ function validateUs(draft: TaxBasisDraft, context?: TaxBasisValidationContext): 
         "section168i7Kind is required for a nontaxable MACRS transfer; declare §168(i)(7)(B)(i) nonrecognition, a §721 prior-partner depreciable interest, or a consolidated-group member transfer — do not allocate the placement year by ordinary half-year disposal",
       );
     }
+  }
+  let consolidatedGroupMembership: ConsolidatedGroupMembershipInput | undefined;
+  try {
+    const parsed = parseConsolidatedGroupMembership(draft.consolidatedGroupMembership);
+    if (parsed) {
+      if (draft.sourceOperation !== "intercompany_transfer") {
+        throw new TaxBasisPolicyError(
+          "consolidated-group membership belongs on an intercompany transfer; a customer disposal is not a 1.1502-13 matching event — omit membership or select the intra-group transfer",
+        );
+      }
+      if (!context?.sellerSubsidiaryId || context.buyerSubsidiaryId == null) {
+        throw new TaxBasisPolicyError(
+          "consolidated-group membership must be checked against the selected source legal entities; reload the source — do not type subsidiary identifiers",
+        );
+      }
+      try {
+        assertConsolidatedMembershipMatchesSource(parsed, {
+          sellerSubsidiaryId: context.sellerSubsidiaryId,
+          buyerSubsidiaryId: context.buyerSubsidiaryId,
+          sourceOperation: "intercompany_transfer",
+        });
+      } catch (error) {
+        throw error instanceof ConsolidatedTaxMatchingError
+          ? new TaxBasisPolicyError(error.message)
+          : error;
+      }
+      if (draft.sellerAdjustedBasis == null || draft.sellerAdjustedBasis === "") {
+        throw new TaxBasisPolicyError(
+          "seller adjusted tax basis is required when consolidated-group membership is declared so the deferred opening is amount realized minus that basis; a §168(i)(7) carryover is not a zero intercompany gain",
+        );
+      }
+      validateDeclaredDecimal("sellerAdjustedBasis", draft.sellerAdjustedBasis);
+      consolidatedGroupMembership = parsed;
+    }
+  } catch (error) {
+    throw error instanceof ConsolidatedTaxMatchingError
+      ? new TaxBasisPolicyError(error.message)
+      : error;
+  }
+  if (consolidatedGroupMembership) {
+    draft.consolidatedGroupMembership = consolidatedGroupMembership;
   }
   if (
     draft.recognition === "taxable" &&
@@ -2778,8 +2922,9 @@ function freezeUsCarryoverElections(row: UsMacrsRegimeBasis): {
   };
 }
 
-/** Frozen MACRS workpaper outcome. Nontaxable carryover has no Pub 544
- *  amount realized and must not call usDispositionProceeds. */
+/** Frozen MACRS workpaper outcome. Pub 544 amount realized is a sale fact;
+ *  §168(i)(7) carryover is a depreciation fact; 1.1502-13 membership is a
+ *  third fact. Example 4 is a sale that still takes carryover + excess. */
 export function usRegimeWorkpaperOutcome(
   row: UsMacrsRegimeBasis,
   sourceOperation: TaxBasisSourceOperation,
@@ -2789,11 +2934,13 @@ export function usRegimeWorkpaperOutcome(
   const seller = taxBasisSideApplies(applicable, "seller");
   const buyer = sourceOperation === "intercompany_transfer" && taxBasisSideApplies(applicable, "buyer");
   const taxable = row.recognition === "taxable";
-  const transferorHistory = seller || (buyer && !taxable);
-  const buyerVintages = buyer && !taxable && row.buyerVintages && row.buyerVintages.length > 0
+  const section168i7Kind = row.section168i7Kind ?? null;
+  const carryoverTreatment = buyer && (!taxable || !!section168i7Kind);
+  const transferorHistory = seller || carryoverTreatment;
+  const buyerVintages = carryoverTreatment && row.buyerVintages && row.buyerVintages.length > 0
     ? parseFrozenMacrsBuyerVintages(row.buyerVintages)
     : null;
-  const carryoverElections = buyer && !taxable
+  const carryoverElections = carryoverTreatment
     ? buyerVintages
       ? {
           originalUnadjustedBasis: seller
@@ -2818,8 +2965,23 @@ export function usRegimeWorkpaperOutcome(
         businessUsePercent: null,
         priorDepreciation: null,
       };
+  const amountRealized = (seller && taxable) || row.consolidatedGroupMembership
+    ? usDispositionProceeds(row)
+    : null;
+  let consolidatedMatchingFreeze: ReturnType<typeof freezeUsConsolidatedMatching> = null;
+  try {
+    consolidatedMatchingFreeze = freezeUsConsolidatedMatching({
+      membership: row.consolidatedGroupMembership,
+      amountRealized,
+      sellerAdjustedBasis: row.sellerAdjustedBasis,
+    });
+  } catch (error) {
+    throw error instanceof ConsolidatedTaxMatchingError
+      ? new TaxBasisPolicyError(error.message)
+      : error;
+  }
   return {
-    amountRealized: seller && taxable ? usDispositionProceeds(row) : null,
+    amountRealized,
     remainingUnadjustedBasis: seller ? row.remainingUnadjustedBasis : null,
     disposedUnadjustedBasis: seller ? row.disposedUnadjustedBasis : null,
     vintageAllocations: seller && row.vintageAllocations
@@ -2831,8 +2993,12 @@ export function usRegimeWorkpaperOutcome(
     method: transferorHistory ? row.method ?? null : null,
     convention: transferorHistory ? row.convention ?? null : null,
     recognition: row.recognition,
-    section168i7Kind: !taxable ? row.section168i7Kind ?? null : null,
-    carryoverBasis: buyer && !taxable
+    section168i7Kind,
+    sellerAdjustedBasis: row.sellerAdjustedBasis != null && row.sellerAdjustedBasis !== ""
+      ? moneyExact(row.sellerAdjustedBasis, "sellerAdjustedBasis")
+      : null,
+    ...consolidatedMatchingFreeze,
+    carryoverBasis: carryoverTreatment
       ? buyerVintages
         ? formatMoney(
             buyerVintages.reduce((total, vintage) => add(total, vintage.adjustedCarryover ?? "0"), "0"),
@@ -2840,7 +3006,7 @@ export function usRegimeWorkpaperOutcome(
           )
         : row.carryoverBasis ?? null
       : null,
-    excessBasis: buyer && !taxable ? row.excessBasis ?? null : null,
+    excessBasis: carryoverTreatment ? row.excessBasis ?? null : null,
     buyerCost: buyer && taxable ? row.buyerCost ?? null : null,
     shortYearMethod: row.shortYearMethod ?? null,
     ...carryoverElections,
