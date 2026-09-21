@@ -197,24 +197,22 @@ export const taxYearWindows = pgTable(
   ],
 );
 
-/** Immutable workpaper citations of the tax year windows actually read.
- *  Frozen facts ride with the id so a later calendar edit cannot rewrite
- *  already-applied convention context. */
-export const taxYearWindowCitations = pgTable(
-  "tax_year_window_citations",
-  {
-    id: id(),
-    orgId: orgRef(),
-    workpaperId: uuid("workpaper_id").notNull(),
-    taxYearWindowId: uuid("tax_year_window_id").notNull(),
-    subsidiaryId: uuid("subsidiary_id").notNull(),
-    regime: text("regime").notNull(),
-    yearStart: date("year_start").notNull(),
-    yearEnd: date("year_end").notNull(),
-    filingYear: integer("filing_year").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [
-    uniqueIndex("tax_year_window_citations_identity").on(t.orgId, t.workpaperId, t.taxYearWindowId),
-  ],
-);
+/** Exact tax-year read set frozen by an independently approved workpaper.
+ * A checkpoint can consume several original/receiver years and convention
+ * context; a date-overlap query is not evidence of which years it used. */
+export const taxBasisWindowCitations = pgTable("tax_basis_window_citations", {
+  id: id(),
+  orgId: orgRef(),
+  workpaperId: uuid("workpaper_id").notNull(),
+  taxYearWindowId: uuid("tax_year_window_id").notNull(),
+  subsidiaryId: uuid("subsidiary_id").notNull(),
+  regime: text("regime").notNull(),
+  yearStart: date("year_start").notNull(),
+  yearEnd: date("year_end").notNull(),
+  filingYear: integer("filing_year").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  createdBy: uuid("created_by").notNull(),
+}, (table) => [
+  uniqueIndex("tax_basis_window_citations_identity").on(table.orgId, table.workpaperId, table.taxYearWindowId),
+  index("tax_basis_window_citations_window").on(table.orgId, table.taxYearWindowId),
+]);
