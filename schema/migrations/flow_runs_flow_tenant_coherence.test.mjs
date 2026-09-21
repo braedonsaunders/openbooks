@@ -79,10 +79,13 @@ test("flow_runs flow tenant-FK repair is fail-closed and does not rewrite histor
     `${repairName} must be the next free ordinal after 0212`,
   );
   assert.equal(repairName, "0213_flow_runs_flow_tenant_coherence.sql");
-  assert.equal(
-    publishedSql.filter((file) => file.startsWith("0211_")).length,
-    0,
-    "0211 is reserved for Payroll; generated/ must contain no 0211_* from this goal",
+  const unexpected211 = publishedSql.filter(
+    (file) => file.startsWith("0211_") && file !== "0211_pay_run_bank_file_zengin_cnab240.sql",
+  );
+  assert.deepEqual(
+    unexpected211,
+    [],
+    "0211 is reserved for Payroll (0211_pay_run_bank_file_zengin_cnab240.sql); this goal must not publish a 0211_* of its own",
   );
   assert.ok(
     publishedSql.includes("0200_stock_count_subsidiary.sql"),

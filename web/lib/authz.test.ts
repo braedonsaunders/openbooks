@@ -72,6 +72,7 @@ const mockSources = new Map<string, string>([
       };
       export function ambientTenantOrgId() { return null }
       export function registerRequestOrgResolver() {}
+      export function currentRequestOrgResolver() { return null }
       export async function withBypass(work) { return work() }
       export async function withBypassContext(work) { return work() }
     `,

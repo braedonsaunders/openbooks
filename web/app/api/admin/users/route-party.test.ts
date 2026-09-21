@@ -233,6 +233,7 @@ const mockSources = new Map<string, string>([
       export const env = {}
       export const schema = {}
       export function registerRequestOrgResolver() {}
+      export function currentRequestOrgResolver() { return null }
     `,
   ],
   [
