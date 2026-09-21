@@ -7,10 +7,6 @@ import { CurrencyError, updateFxRate } from '@openbooks/engine/src/fx/currencies
 import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 import { toUnits } from '@openbooks/engine/src/money/money.ts'
 import { compileFormula } from '@openbooks/engine/src/assets/depreciation-formula.ts'
-<<<<<<< Updated upstream
-=======
-import { assertTaxYearWindowWrite, lockTaxYearWindowWrite, MacrsCalendarError, taxYearWindowDeleteProblem } from '@openbooks/engine/src/tax-returns/macrs-calendar.ts'
->>>>>>> Stashed changes
 import { filingAccountProblem } from '@openbooks/engine/src/payroll/filing-registry.ts'
 import { payPeriodsPerYearProblem, semiMonthlyAnchorProblem } from "@openbooks/engine/src/payroll/run-calendar.ts";
 import { payScheduleSubsidiaryProblem, rescopePayScheduleRuns } from "@openbooks/engine/src/payroll/run-lifecycle.ts";
@@ -105,11 +101,6 @@ async function setupWriteTransaction<T>(
   return db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${featureGateLockKey(orgId)}, 0))`)
     if (!(await setupEntityEnabled(entity, orgId, tx))) throw new SetupWriteRefusal('unknown setup entity', 404)
-    if (entity.key === 'tax-year-windows') {
-      await lockTaxYearWindowWrite(tx, orgId, {
-        id: rowId, subsidiaryId: typeof body?.subsidiaryId === 'string' ? body.subsidiaryId : undefined,
-      })
-    }
     if (body) {
       const problem = await validateEntityIntegrity(entity, body, orgId, rowId, tx)
       if (problem) throw new SetupWriteRefusal(problem, problem === 'not found' ? 404 : 400)
@@ -283,7 +274,6 @@ function writableSetupEntity(
   }
 }
 
-/** Domain checks that cannot be expressed by the generic field coercer. */
 // HR-18 begin: create-time defaults for recruiting-depth Setup. A kit
 // created without a declared scale rates on the full canonical scale —
 // defaulted here (before coercion), because the generic stringArray
@@ -301,6 +291,7 @@ function foldRecruitingSetupCreate(
 }
 // HR-18 end
 
+/** Domain checks that cannot be expressed by the generic field coercer. */
 export async function validateEntityIntegrity(
   entity: SetupEntity,
   body: Record<string, unknown>,

@@ -3392,7 +3392,7 @@ test('admin copy ships translated in de and ja (i2)', () => {
   // for the continuous-performance and recruiting-depth keys; de/ja completeness
   // asserted per-key below.
   const ADMIN_I2_SOURCE_COUNT = 3906
-  const ADMIN_I2_SOURCE_HASH = 'recompute-me'
+  const ADMIN_I2_SOURCE_HASH = '0d05d2048b0352862085b7237f85b97b112d1424410fd138aaf2c391dea020b6'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))
