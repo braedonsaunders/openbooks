@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { add, formatMoney, sum } from "../money/money.ts";
 import {
   TAX_BASIS_APPLICABLE_SIDES,
   TAX_BASIS_APPLICABLE_SIDE_LABELS,
@@ -19,6 +20,7 @@ import {
   assertMacrsVintageAllocationsMatchOpen,
   deriveMacrsDisposedBuyerVintages,
   parseFrozenMacrsBuyerVintages,
+  splitMacrsVintageCheckpoint,
   caDeemedAcquisitionPayment,
   caOrdinaryCapitalGainsInclusion,
   caStatutoryProceeds,
@@ -1195,8 +1197,8 @@ test("ready both-sided nontaxable freezes per-disposed-vintage receiver schedule
     bonusPercent: "0",
     businessUsePercent: "100",
     shortYearMethod: "simplified",
-    checkpointKind: "declared_elections",
-    takenBonus: null,
+    checkpointKind: "taken_components",
+    takenBonus: "0.0000",
   });
   const twoDisposed = validateTaxRegimeBasis(
     {
@@ -1222,6 +1224,10 @@ test("ready both-sided nontaxable freezes per-disposed-vintage receiver schedule
   assert.equal(twoDisposed.buyerVintages?.[1]!.parentKey, "excess:2025-08-01:2025-08-01");
   assert.equal(twoDisposed.buyerVintages?.[0]!.shortYearMethod, "simplified");
   assert.equal(twoDisposed.buyerVintages?.[1]!.shortYearMethod, "allocation");
+  assert.equal(twoDisposed.buyerVintages?.[0]!.checkpointKind, "taken_components");
+  assert.equal(twoDisposed.buyerVintages?.[0]!.takenBonus, "0.0000");
+  assert.equal(twoDisposed.buyerVintages?.[1]!.checkpointKind, "declared_elections");
+  assert.equal(twoDisposed.buyerVintages?.[1]!.takenBonus, null);
   throwsPolicy(
     () =>
       validateTaxRegimeBasis(
@@ -1366,6 +1372,76 @@ test("a 9000 bonus split 5250/3750 dated checkpoint conserves original without n
   assert.equal(derived[0]!.section179, "0.0000");
   assert.equal(derived[0]!.bonusPercent, "100");
   assert.equal(derived[0]!.shortYearMethod, "simplified");
+});
+
+test("a one-third disposal of 3750 taken components conserves the checkpoint vector", () => {
+  const split = splitMacrsVintageCheckpoint({
+    key: "original:2018-01-05",
+    unadjustedBasis: "3750.0000",
+    businessUsePercent: "100",
+    section179: "1250.0000",
+    bonusPercent: "0",
+    priorDepreciation: "0.0000",
+    adjustedCarryover: "1250.0000",
+    checkpointKind: "taken_components",
+    takenBonus: "1250.0000",
+  }, "1250.0000");
+  assert.equal(
+    formatMoney(sum([
+      split.take.section179,
+      split.take.takenBonus,
+      split.take.priorDepreciation,
+      split.take.adjustedCarryover,
+    ]), 4),
+    "1250.0000",
+  );
+  assert.notEqual(
+    formatMoney(sum(["416.6667", "416.6667", "0.0000", "416.6667"]), 4),
+    "1250.0000",
+  );
+  assert.equal(add(split.take.section179, split.keep.section179), "1250.0000");
+  assert.equal(add(split.take.takenBonus, split.keep.takenBonus), "1250.0000");
+  assert.equal(add(split.take.priorDepreciation, split.keep.priorDepreciation), "0.0000");
+  assert.equal(add(split.take.adjustedCarryover, split.keep.adjustedCarryover), "1250.0000");
+  const derived = deriveMacrsDisposedBuyerVintages({
+    open: [{
+      key: "original:2018-01-05",
+      source: "original",
+      parentKey: null,
+      placedInServiceOn: "2018-01-05",
+      transferOn: null,
+      unadjustedBasis: "3750.0000",
+      adjustedCarryover: "1250.0000",
+      section179: "1250.0000",
+      priorDepreciation: "0.0000",
+      recoveryPeriodYears: "5",
+      method: "200_db",
+      convention: "half_year",
+      bonusPercent: "0",
+      businessUsePercent: "100",
+      shortYearMethod: "simplified",
+      checkpointKind: "taken_components",
+      takenBonus: "1250.0000",
+    }],
+    allocations: [{
+      source: "original",
+      placedInServiceOn: "2018-01-05",
+      disposedUnadjustedBasis: "1250.0000",
+      remainingUnadjustedBasis: "2500.0000",
+    }],
+    transferOn: "2018-08-20",
+  });
+  assert.equal(derived.length, 1);
+  assert.equal(derived[0]!.checkpointKind, "taken_components");
+  assert.equal(
+    formatMoney(sum([
+      derived[0]!.section179,
+      derived[0]!.takenBonus!,
+      derived[0]!.priorDepreciation!,
+      derived[0]!.adjustedCarryover!,
+    ]), 4),
+    "1250.0000",
+  );
 });
 
 test("frozen buyer vintages refuse a missing shortYearMethod instead of defaulting the paper header", () => {

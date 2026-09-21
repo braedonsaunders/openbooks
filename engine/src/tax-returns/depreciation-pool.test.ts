@@ -37,7 +37,7 @@ import {
   shortTaxYearMonthsExact,
   subsequentRecoveryDeduction,
 } from "./macrs-short-year.ts";
-import { add, cmp, formatMoney, mulRatio, neg } from "../money/money.ts";
+import { add, cmp, formatMoney, mulRatio, neg, sum } from "../money/money.ts";
 
 const run = (over: Partial<PoolYearInput>): ReturnType<typeof computePoolYear> =>
   computePoolYear({ openingBalance: "0", additions: "0", dispositions: "0", rate: 0.2, ...over });
@@ -907,6 +907,20 @@ test("1.1502-13 Example 4 consolidated later-year transfer continues the origina
     convention: "half_year",
   }, windows);
   assert.equal(dated.adjustedCarryover, formatMoney(originalYear3Open.prior.remainingBasis, 4));
+  assert.equal(dated.checkpointKind, "taken_components");
+  assert.equal(
+    formatMoney(sum([
+      dated.section179,
+      dated.takenBonus,
+      dated.priorDepreciation,
+      dated.adjustedCarryover,
+    ]), 4),
+    "10000.0000",
+  );
+  assert.equal(
+    dated.priorDepreciation,
+    formatMoney(add("10000.0000", neg(dated.adjustedCarryover)), 4),
+  );
   const next = computeMacrsThroughYear({
     basis: "10000.0000",
     placedInServiceOn: "2023-01-01",
