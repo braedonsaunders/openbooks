@@ -388,6 +388,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0205_consolidation_loss_of_control.sql",
     "0233_tax_asset_basis_workpapers.sql",
     "0234_tax_year_windows.sql",
+    "0235_tax_year_window_citations.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),

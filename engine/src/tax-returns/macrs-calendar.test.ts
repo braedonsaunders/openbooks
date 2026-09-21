@@ -6,8 +6,10 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from "../testing/fixtures.ts";
 import {
+  freezeTaxYearWindowEvidence,
   insertTaxYearWindow,
   taxYearWindowDeleteProblem,
+  taxYearWindowEvidence,
   taxYearWindowSubsidiaryProblem,
   taxYearWindowWriteProblem,
 } from "./macrs-calendar.ts";
@@ -140,6 +142,37 @@ test("tax year window refusals name a supported correction, not a reversal", () 
   assert.doesNotMatch(calendar, /reverse those years|reverse and declare/);
   assert.doesNotMatch(poolRun, /removing the later years/);
   assert.match(poolRun, /an earlier year cannot be restated after a later result exists/);
+});
+
+test("tax year window evidence is sorted, distinct, and refuses an unlabeled window", () => {
+  const first = taxYearWindowEvidence({
+    id: "11111111-1111-4111-8111-111111111111",
+    subsidiaryId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    regime: "us_macrs",
+    taxYear: 2024,
+    yearStart: "2024-07-01",
+    yearEnd: "2024-12-31",
+  });
+  const second = taxYearWindowEvidence({
+    id: "22222222-2222-4222-8222-222222222222",
+    subsidiaryId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    regime: "us_macrs",
+    taxYear: 2024,
+    yearStart: "2024-01-01",
+    yearEnd: "2024-06-30",
+  });
+  assert.deepEqual(
+    freezeTaxYearWindowEvidence([first, second, first]).map((row) => row.id),
+    [second.id, first.id],
+  );
+  assert.throws(
+    () => taxYearWindowEvidence({
+      taxYear: 2024,
+      yearStart: "2024-01-01",
+      yearEnd: "2024-12-31",
+    }),
+    /registered id/,
+  );
 });
 
 test("cited window dates stay frozen; unused windows may be deleted", { skip: !DB }, async () => {

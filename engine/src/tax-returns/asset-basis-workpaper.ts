@@ -65,8 +65,14 @@ import {
   type MacrsVintageDefaults,
   type MacrsWorkpaperEvent,
 } from "./macrs-vintages.ts";
-import { refreshOpenMacrsVintageThrough } from "./depreciation-pool.ts";
-import { loadTaxYearWindows } from "./macrs-calendar.ts";
+import { macrsOwnershipWindowLoads, refreshOpenMacrsVintageThrough } from "./depreciation-pool.ts";
+import {
+  citeTaxYearWindows,
+  freezeTaxYearWindowEvidence,
+  loadTaxYearWindows,
+  taxYearWindowEvidence,
+  type TaxYearWindowEvidence,
+} from "./macrs-calendar.ts";
 
 export class TaxAssetBasisError extends Error {
   readonly name = "TaxAssetBasisError";
@@ -251,6 +257,7 @@ async function freezeRegimes(
   applicableByRegime: Readonly<Partial<Record<TaxBasisRegime, TaxBasisApplicableSide>>>,
   receivingAssetId: string | null,
   replay?: { computed: Record<string, unknown> },
+  taxYearWindows: readonly TaxYearWindowEvidence[] = [],
 ): Promise<{ facts: TaxRegimeBasis; computed: Record<string, unknown>; applicable: TaxBasisApplicableSide }[]> {
   const needsBuyerSchedule = regimes.some(
     (row) =>
@@ -297,7 +304,12 @@ async function freezeRegimes(
     const facts = row.regime === "ca_cca" ? freezeCaRegimeBasis(row, effectiveOn) : row;
     return {
       facts,
-      computed: computeTaxRegimeOutcome(facts, sourceOperation, applicable, buyerSchedule),
+      computed: {
+        ...computeTaxRegimeOutcome(facts, sourceOperation, applicable, buyerSchedule),
+        taxYearWindows: row.regime === "us_macrs"
+          ? freezeTaxYearWindowEvidence(taxYearWindows)
+          : [],
+      },
       applicable,
     };
   });
@@ -690,27 +702,44 @@ async function loadUsSellerMacrsVintageContext(
   });
   if (history.status !== "ready") return history;
   try {
-    const fromOn = history.vintages.reduce(
-      (earliest, vintage) =>
-        vintage.placedInServiceOn < earliest ? vintage.placedInServiceOn : earliest,
-      args.occurredOn,
-    );
-    const windows = await loadTaxYearWindows(tx, orgId, {
-      subsidiaryId: seller.subsidiary_id,
-      regime: "us_macrs",
-      fromOn,
-      throughOn: args.occurredOn,
-    });
+    const windows = [];
+    const seenLoads = new Set<string>();
+    for (const vintage of history.vintages) {
+      const transferorId = priorPapers.find((paper) =>
+        paper.event.effective_on === vintage.transferOn
+        && paper.event.buyer_subsidiary_id === seller.subsidiary_id,
+      )?.event.seller_subsidiary_id ?? null;
+      for (const load of macrsOwnershipWindowLoads({
+        placedInServiceOn: vintage.placedInServiceOn,
+        transferOn: vintage.transferOn,
+        asOf: args.occurredOn,
+        currentSubsidiaryId: seller.subsidiary_id,
+        transferorSubsidiaryId: transferorId,
+      })) {
+        const key = `${load.subsidiaryId}:${load.fromOn}:${load.throughOn}`;
+        if (seenLoads.has(key)) continue;
+        seenLoads.add(key);
+        windows.push(...await loadTaxYearWindows(tx, orgId, {
+          subsidiaryId: load.subsidiaryId,
+          regime: "us_macrs",
+          fromOn: load.fromOn,
+          throughOn: load.throughOn,
+        }));
+      }
+    }
     return {
       status: "ready",
       vintages: history.vintages.map((vintage) => {
-        const dated = refreshOpenMacrsVintageThrough(vintage, windows, args.occurredOn);
+        const dated = refreshOpenMacrsVintageThrough(vintage, windows, args.occurredOn, {
+          ownerSubsidiaryId: seller.subsidiary_id,
+        });
         return {
           ...vintage,
           priorDepreciation: dated.priorDepreciation,
           adjustedCarryover: dated.adjustedCarryover,
         };
       }),
+      taxYearWindows: freezeTaxYearWindowEvidence(windows.map(taxYearWindowEvidence)),
     };
   } catch (error) {
     return {
@@ -720,6 +749,28 @@ async function loadUsSellerMacrsVintageContext(
         : "MACRS checkpoints could not be dated to the source effective date",
     };
   }
+}
+
+function lineageSubsidiaryIds(
+  required: readonly string[],
+  papers: readonly { event: { seller_subsidiary_id: string; buyer_subsidiary_id: string | null } }[],
+  extra: readonly (string | null | undefined)[] = [],
+): string[] {
+  const ids = new Set<string>(required);
+  for (const paper of papers) {
+    ids.add(paper.event.seller_subsidiary_id);
+    if (paper.event.buyer_subsidiary_id) ids.add(paper.event.buyer_subsidiary_id);
+  }
+  for (const id of extra) {
+    if (id) ids.add(id);
+  }
+  return [...ids].sort();
+}
+
+function taxYearWindowsFromContext(
+  context: UsSellerMacrsVintageContext | null,
+): TaxYearWindowEvidence[] {
+  return context?.status === "ready" ? context.taxYearWindows ?? [] : [];
 }
 
 function usSellerMacrsForChoice(
@@ -791,9 +842,12 @@ async function snapshot(
     source.effectiveOn,
     applicable,
     source.receivingAssetId,
+    undefined,
+    taxYearWindowsFromContext(usSellerMacrs),
   );
   return {
     required: source.requiredSubsidiaryIds,
+    taxYearWindows: taxYearWindowsFromContext(usSellerMacrs),
     sourceOpen: true,
     sellerAssetId: source.sellerAssetId,
     receivingAssetId: source.receivingAssetId,
@@ -1018,6 +1072,18 @@ export async function proposeTaxAssetBasis(
           permission: "assets.manage",
           feature: "fixedAssets",
         });
+        const replayComputed = (replay.payload.computed ?? {}) as Record<string, { taxYearWindows?: TaxYearWindowEvidence[] }>;
+        await lockAssetTaxLifecycle(
+          db,
+          orgId,
+          lineageSubsidiaryIds(
+            required,
+            [],
+            Object.values(replayComputed).flatMap((row) =>
+              (row?.taxYearWindows ?? []).map((window) => window.subsidiaryId),
+            ),
+          ),
+        );
         const sourceOperation = replay.payload.sourceOperation;
         if (
           typeof sourceOperation !== "string" ||
@@ -1052,6 +1118,7 @@ export async function proposeTaxAssetBasis(
           applicable,
           (replay.payload.receivingAssetId as string | null) ?? null,
           { computed: (replay.payload.computed ?? {}) as Record<string, unknown> },
+          taxYearWindowsFromContext(usSellerMacrs),
         );
         const payload = workpaperPayload(
           validated,
@@ -1086,7 +1153,15 @@ export async function proposeTaxAssetBasis(
         sourceChangeId: input.sourceChangeId,
         sourceEventId: input.sourceEventId,
       });
-      await lockAssetTaxLifecycle(db, orgId, source.requiredSubsidiaryIds);
+      const lineagePapers = await loadUsMacrsPapersForAssets(db, orgId, [
+        source.sellerAssetId,
+        ...(source.receivingAssetId ? [source.receivingAssetId] : []),
+      ]);
+      await lockAssetTaxLifecycle(
+        db,
+        orgId,
+        lineageSubsidiaryIds(source.requiredSubsidiaryIds, lineagePapers),
+      );
       for (const id of [source.sellerAssetId, ...(source.receivingAssetId ? [source.receivingAssetId] : [])].sort()) {
         await lockAssetRow(db, orgId, id);
       }
@@ -1130,6 +1205,8 @@ export async function proposeTaxAssetBasis(
         state.effectiveOn,
         state.applicable,
         state.receivingAssetId,
+        undefined,
+        state.taxYearWindows ?? [],
       );
       const payload = workpaperPayload(
         validated,
@@ -1184,14 +1261,25 @@ export async function applyTaxAssetBasis(
         feature: "fixedAssets",
       });
       if (change.status === "applied") return change.result as TaxAssetBasisApplyResult;
-      await lockAssetTaxLifecycle(db, orgId, required);
       const payload = change.payload as TaxAssetBasisInput & {
         sourceOperation: TaxBasisSourceOperation;
         effectiveOn: string;
         sellerAssetId: string;
         receivingAssetId: string | null;
         requiredSubsidiaryIds: string[];
+        computed?: Record<string, { taxYearWindows?: TaxYearWindowEvidence[] }>;
       };
+      await lockAssetTaxLifecycle(
+        db,
+        orgId,
+        lineageSubsidiaryIds(
+          required,
+          [],
+          Object.values(payload.computed ?? {}).flatMap((row) =>
+            (row?.taxYearWindows ?? []).map((window) => window.subsidiaryId),
+          ),
+        ),
+      );
       for (const id of [
         payload.sellerAssetId ?? change.subject_id,
         ...(payload.receivingAssetId ? [payload.receivingAssetId] : []),
@@ -1225,6 +1313,8 @@ export async function applyTaxAssetBasis(
         state.effectiveOn,
         state.applicable,
         state.receivingAssetId,
+        undefined,
+        state.taxYearWindows ?? [],
       );
       const workpaperIds: string[] = [];
       for (const row of frozen) {
@@ -1240,7 +1330,18 @@ export async function applyTaxAssetBasis(
         if (inserted.rows.length !== 1) {
           throw new TaxAssetBasisError(`tax basis workpaper for ${row.facts.regime} was not recorded`);
         }
-        workpaperIds.push(inserted.rows[0]!.id);
+        const workpaperId = inserted.rows[0]!.id;
+        workpaperIds.push(workpaperId);
+        try {
+          await citeTaxYearWindows(
+            db,
+            orgId,
+            workpaperId,
+            (row.computed.taxYearWindows ?? []) as TaxYearWindowEvidence[],
+          );
+        } catch (error) {
+          throw error instanceof Error ? new TaxAssetBasisError(error.message) : error;
+        }
       }
       const result: TaxAssetBasisApplyResult = {
         changeId,

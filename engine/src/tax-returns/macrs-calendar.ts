@@ -35,6 +35,50 @@ export interface TaxYearWindowWrite {
   reason?: string | null;
 }
 
+export type TaxYearWindowEvidence = {
+  id: string;
+  subsidiaryId: string;
+  regime: string;
+  yearStart: string;
+  yearEnd: string;
+  filingYear: number;
+};
+
+export function taxYearWindowEvidence(
+  window: Pick<MacrsYearWindow, "id" | "subsidiaryId" | "regime" | "taxYear" | "yearStart" | "yearEnd">,
+): TaxYearWindowEvidence {
+  if (!window.id || !window.subsidiaryId || !window.regime) {
+    throw new MacrsCalendarError(
+      "a tax year window citation requires the registered id, legal entity and regime; do not invent evidence from a filing-year label",
+    );
+  }
+  return {
+    id: window.id,
+    subsidiaryId: window.subsidiaryId,
+    regime: window.regime,
+    yearStart: window.yearStart,
+    yearEnd: window.yearEnd,
+    filingYear: window.taxYear,
+  };
+}
+
+export function freezeTaxYearWindowEvidence(
+  windows: readonly TaxYearWindowEvidence[],
+): TaxYearWindowEvidence[] {
+  const seen = new Set<string>();
+  const out: TaxYearWindowEvidence[] = [];
+  for (const row of [...windows].sort((left, right) =>
+    left.yearStart.localeCompare(right.yearStart)
+    || left.yearEnd.localeCompare(right.yearEnd)
+    || left.id.localeCompare(right.id)
+  )) {
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    out.push(row);
+  }
+  return out;
+}
+
 /** Authoritative MACRS/pool tax-year windows from the declared registry.
  * Book fiscal calendars, provision runs, and pool-period results are not
  * this calendar. */
@@ -56,23 +100,41 @@ export async function loadTaxYearWindows(
   const rows = (
     await tx.execute<{
       id: string;
+      subsidiary_id: string;
+      regime: string;
       filing_year: number;
       year_start: string;
       year_end: string;
     }>(sql`
-      select id, filing_year, year_start::text, year_end::text
-        from tax_year_windows
-       where org_id=${orgId}
-         and subsidiary_id=${args.subsidiaryId}
-         and regime=${args.regime}
-         and year_end>=${args.fromOn}
-         and year_start<=${args.throughOn}
+      with covering as (
+        select id, subsidiary_id, regime, filing_year, year_start, year_end
+          from tax_year_windows
+         where org_id=${orgId}
+           and subsidiary_id=${args.subsidiaryId}
+           and regime=${args.regime}
+           and year_end>=${args.fromOn}
+           and year_start<=${args.throughOn}
+      )
+      select id, subsidiary_id, regime, filing_year, year_start::text, year_end::text
+        from covering
+      union all
+      select tw.id, tw.subsidiary_id, tw.regime, tw.filing_year,
+             tw.year_start::text, tw.year_end::text
+        from tax_year_windows tw
+        join covering last
+          on last.year_end = (select max(year_end) from covering)
+         and tw.org_id=${orgId}
+         and tw.subsidiary_id=${args.subsidiaryId}
+         and tw.regime=${args.regime}
+         and tw.year_start = last.year_end + 1
        order by year_start, year_end`)
   ).rows;
   try {
     return assertMacrsWindowsCover(
       rows.map((row) => ({
         id: row.id,
+        subsidiaryId: row.subsidiary_id,
+        regime: row.regime,
         taxYear: row.filing_year,
         yearStart: row.year_start,
         yearEnd: row.year_end,
@@ -117,6 +179,94 @@ export async function listTaxYearWindows(
     filingYear: row.filing_year,
     reason: row.reason,
   }));
+}
+
+export async function citeTaxYearWindows(
+  tx: SqlExecutor,
+  orgId: string,
+  workpaperId: string,
+  evidence: readonly TaxYearWindowEvidence[],
+): Promise<void> {
+  if (!UUID_RE.test(workpaperId)) {
+    throw new MacrsCalendarError(
+      "citeTaxYearWindows requires the applied workpaper id; do not invent a citation without a paper",
+    );
+  }
+  const paper = (
+    await tx.execute<{ computed: Record<string, unknown> | null }>(sql`
+      select computed from tax_asset_basis_workpapers
+       where org_id=${orgId} and id=${workpaperId}
+       limit 1`)
+  ).rows[0];
+  if (!paper) {
+    throw new MacrsCalendarError(
+      "that tax basis workpaper could not be loaded; cite the applied paper in the same transaction — do not persist an orphan citation",
+    );
+  }
+  const frozen = paper.computed?.taxYearWindows;
+  if (!Array.isArray(frozen)) {
+    throw new MacrsCalendarError(
+      "the applied workpaper is missing computed.taxYearWindows; freeze the exact windows read at propose — do not cite a live calendar",
+    );
+  }
+  const expected = freezeTaxYearWindowEvidence(
+    frozen.map((row) => taxYearWindowEvidence({
+      id: String((row as TaxYearWindowEvidence).id ?? ""),
+      subsidiaryId: String((row as TaxYearWindowEvidence).subsidiaryId ?? ""),
+      regime: String((row as TaxYearWindowEvidence).regime ?? ""),
+      taxYear: Number((row as TaxYearWindowEvidence).filingYear),
+      yearStart: String((row as TaxYearWindowEvidence).yearStart ?? ""),
+      yearEnd: String((row as TaxYearWindowEvidence).yearEnd ?? ""),
+    })),
+  );
+  const supplied = freezeTaxYearWindowEvidence(evidence);
+  if (JSON.stringify(expected) !== JSON.stringify(supplied)) {
+    throw new MacrsCalendarError(
+      "tax year window citations must match the frozen computed.taxYearWindows set; do not add, drop or rewrite a cited year after approval",
+    );
+  }
+  for (const row of supplied) {
+    const live = (
+      await tx.execute<{
+        subsidiary_id: string;
+        regime: string;
+        year_start: string;
+        year_end: string;
+        filing_year: number;
+      }>(sql`
+        select subsidiary_id, regime, year_start::text, year_end::text, filing_year
+          from tax_year_windows
+         where org_id=${orgId} and id=${row.id}
+         limit 1`)
+    ).rows[0];
+    if (
+      !live
+      || live.subsidiary_id !== row.subsidiaryId
+      || live.regime !== row.regime
+      || live.year_start !== row.yearStart
+      || live.year_end !== row.yearEnd
+      || live.filing_year !== row.filingYear
+    ) {
+      throw new MacrsCalendarError(
+        `tax year window ${row.yearStart}–${row.yearEnd} is not the live same-org window ${row.id}; cite the registered facts — do not persist a rewritten calendar`,
+      );
+    }
+    const inserted = (
+      await tx.execute<{ id: string }>(sql`
+        insert into tax_year_window_citations (
+          org_id, workpaper_id, tax_year_window_id, subsidiary_id, regime,
+          year_start, year_end, filing_year
+        ) values (
+          ${orgId}, ${workpaperId}, ${row.id}, ${row.subsidiaryId}, ${row.regime},
+          ${row.yearStart}, ${row.yearEnd}, ${row.filingYear}
+        ) returning id`)
+    ).rows[0];
+    if (!inserted) {
+      throw new MacrsCalendarError(
+        `tax year window citation ${row.id} for workpaper ${workpaperId} matched no row; do not report a cite that cannot be read`,
+      );
+    }
+  }
 }
 
 export async function resolveTaxYearWindow(
