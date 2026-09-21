@@ -8,10 +8,13 @@
  * 20%, RAT × FAP, terceiros) from tenant-declared establishment rates, the
  * FGTS 8% employer obligation, the national region coverage with no
  * certificate (dependents arrive as cadastre facts), and the national
- * feriado calendar. Calendar 2026 is transcribed — the Portaria 13/2026
- * INSS brackets and the IRRF monthly table + art. 3º-A reduction live in
- * ./tax-year-2026.ts and computeStatutory prices a monthly CLT payslip
- * through them.
+ * feriado calendar. Calendars 2024–2026 are transcribed — each year's
+ * January-Portaria INSS brackets and the IRRF monthly table(s) in force
+ * that year live in ./tax-year-{2024,2025,2026}.ts (2024 and 2025 changed
+ * the IRRF table mid-year, so each carries two dated editions selected by
+ * pay month; the art. 3º-A reduction exists only from 2026) and
+ * computeStatutory prices a monthly CLT payslip through the edition in
+ * force.
  *
  * REGISTERED: `PayrollCountry` is `keyof typeof PAYROLL_COUNTRY_PACKS`, so
  * this pack is in the registry, wired to its settings keys, and installable.
