@@ -1,4 +1,5 @@
 import {
+  foreignKey,
   boolean,
   customType,
   date,
@@ -12,6 +13,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
+import { parties } from "./parties";
 
 /**
  * HRM documents with e-sign, retention, DSAR exports, surveys (migration
@@ -121,6 +123,11 @@ export const hrmDocuments = pgTable(
     ...auditColumns,
   },
   (t) => [
+    foreignKey({
+      name: "hrm_documents_party_tenant_fkey",
+      columns: [t.orgId, t.partyId],
+      foreignColumns: [parties.orgId, parties.id],
+    }),
     index("hrm_documents_org_party").on(t.orgId, t.partyId),
     index("hrm_documents_org_status").on(t.orgId, t.status),
     index("hrm_documents_retain_due").on(t.orgId, t.retainUntil),
@@ -144,6 +151,11 @@ export const hrmDocumentSigners = pgTable(
     ...auditColumns,
   },
   (t) => [
+    foreignKey({
+      name: "hrm_document_signers_signer_party_tenant_fkey",
+      columns: [t.orgId, t.signerPartyId],
+      foreignColumns: [parties.orgId, parties.id],
+    }),
     uniqueIndex("hrm_document_signers_token_unique").on(t.tokenHash),
     uniqueIndex("hrm_document_signers_document_ord").on(t.documentId, t.ord),
     index("hrm_document_signers_org_signer").on(t.orgId, t.signerPartyId, t.status),
@@ -199,6 +211,11 @@ export const hrmDataSubjectExports = pgTable(
     ...auditColumns,
   },
   (t) => [
+    foreignKey({
+      name: "hrm_data_subject_exports_party_tenant_fkey",
+      columns: [t.orgId, t.partyId],
+      foreignColumns: [parties.orgId, parties.id],
+    }),
     index("hrm_data_subject_exports_org_party").on(t.orgId, t.partyId, t.requestedAt),
     index("hrm_data_subject_exports_queued").on(t.orgId, t.requestedAt),
   ],
@@ -255,6 +272,11 @@ export const hrmSurveyInvitations = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    foreignKey({
+      name: "hrm_survey_invitations_party_tenant_fkey",
+      columns: [t.orgId, t.partyId],
+      foreignColumns: [parties.orgId, parties.id],
+    }),
     uniqueIndex("hrm_survey_invitations_token_unique").on(t.tokenHash),
     uniqueIndex("hrm_survey_invitations_survey_party").on(t.orgId, t.surveyId, t.partyId),
     index("hrm_survey_invitations_survey").on(t.orgId, t.surveyId),
