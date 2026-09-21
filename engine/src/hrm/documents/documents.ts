@@ -647,6 +647,77 @@ export async function sendDocument(input: {
   });
 }
 
+/**
+ * Manually nudge a sent document's open signers: re-mint each open
+ * signer's token (the old link dies — a reminded signer who opens the
+ * stale link meets the no-longer-available refusal and the fresh link
+ * in their inbox), record the reminded events, and return the fresh
+ * delivery intents. Refuses drafts (send them), terminal documents, and
+ * documents with nobody left to nudge. One transaction per action.
+ */
+export async function remindDocument(input: {
+  orgId: string;
+  actorId: string;
+  documentId: string;
+}): Promise<{ document: DocumentDTO; deliveries: DeliveryIntent[] }> {
+  return withOrgTransaction(input.orgId, async () => {
+    await requireHrmDocumentsManage(db, input.orgId, input.actorId);
+    await assertDocumentsFeature(db, input.orgId);
+    const doc = await loadDocument(db, input.orgId, input.documentId);
+    if (doc.status === "draft") {
+      throw new HrmDocumentsError(
+        "REFUSED",
+        "this document never sent — send it instead of reminding signers who were never asked",
+      );
+    }
+    if (!["sent", "viewed", "partially_signed"].includes(doc.status)) {
+      throw new HrmDocumentsError(
+        "REFUSED",
+        `only open documents remind — this one is ${doc.status}, so re-issue it instead`,
+      );
+    }
+    const open = (await loadSigners(db, input.orgId, doc.id)).filter((s) =>
+      ["pending", "viewed"].includes(s.status),
+    );
+    if (open.length === 0) {
+      throw new HrmDocumentsError(
+        "REFUSED",
+        "nobody is left to nudge — every signer answered or the document completed",
+      );
+    }
+    const expiresAt = new Date(Date.now() + SIGNER_TOKEN_TTL_MS);
+    const deliveries: DeliveryIntent[] = [];
+    for (const signer of open) {
+      const token = mintDocumentSignerToken(input.orgId, `${doc.id}:${signer.ord}`, expiresAt);
+      const updated = (await db.execute<{ id: string }>(sql`
+        update hrm_document_signers
+           set token_hash = ${hashHrmToken(token)}, updated_at = now(), updated_by = ${input.actorId}
+         where org_id = ${input.orgId} and id = ${signer.id}
+        returning id
+      `)).rows[0];
+      // Zero matched rows is a failure: the signer answered mid-remind.
+      if (!updated) continue;
+      const user = await loadPartyUser(db, input.orgId, signer.signer_party_id);
+      const person = await loadPerson(db, input.orgId, signer.signer_party_id);
+      deliveries.push({
+        signerId: signer.id,
+        partyId: signer.signer_party_id,
+        email: user?.email ?? person.email,
+        userId: user?.id ?? null,
+        token,
+      });
+      await recordDocumentReminded(db, input.orgId, signer.id);
+    }
+    if (deliveries.length === 0) {
+      throw new HrmDocumentsError(
+        "REFUSED",
+        "every open signer answered while the reminder was sending — nothing was re-delivered",
+      );
+    }
+    return { document: toDTO(doc), deliveries };
+  });
+}
+
 async function assertTokenSigner(
   exec: SqlExecutor,
   token: string,

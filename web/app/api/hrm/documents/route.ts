@@ -1,11 +1,17 @@
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
-import { generateDocument, listDocuments, uploadDocument } from "@openbooks/engine/src/hrm/documents/documents.ts";
+import {
+  generateDocument,
+  listDocuments,
+  resolveMergeFields,
+  uploadDocument,
+} from "@openbooks/engine/src/hrm/documents/documents.ts";
+import { db } from "@openbooks/engine/src/platform/db.ts";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { hrmDocumentsErrorResponse } from "./_lib";
-import { generateDocumentBody, uploadDocumentBody } from "./bodies";
+import { generateDocumentBody, previewMergeBody, uploadDocumentBody } from "./bodies";
 
 export async function gateDocuments(orgId: string): Promise<NextResponse | null> {
   if (!(await isFeatureEnabled(orgId, "hrm"))) return NextResponse.json({ error: "not found" }, { status: 404 });
@@ -54,6 +60,20 @@ export async function POST(req: Request) {
   const params = new URL(req.url).searchParams;
   const mode = params.get("mode") ?? "generate";
   try {
+    // Merge preview: resolve the subject's merge values without writing
+    // anything, so the generate dialog shows what the template will say.
+    if (mode === "preview") {
+      const parsedBody = await parseJsonBody(req, previewMergeBody);
+      if (!parsedBody.ok) return parsedBody.response;
+      const today = await businessToday(gate.user.orgId);
+      const mergeValues = await resolveMergeFields(
+        db,
+        gate.user.orgId,
+        { employmentId: parsedBody.data.employmentId ?? null, partyId: parsedBody.data.partyId },
+        today,
+      );
+      return NextResponse.json({ mergeValues });
+    }
     if (mode === "upload") {
       const parsedBody = await parseJsonBody(req, uploadDocumentBody);
       if (!parsedBody.ok) return parsedBody.response;

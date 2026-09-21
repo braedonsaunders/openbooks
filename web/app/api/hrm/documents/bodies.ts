@@ -29,6 +29,11 @@ export const uploadDocumentBody = z.object({
   expiresAt: z.string().datetime().nullable().optional(),
 });
 
+export const previewMergeBody = z.object({
+  employmentId: uuid.nullable().optional(),
+  partyId: uuid,
+});
+
 export const voidDocumentBody = z.object({
   reason: z.string().trim().min(1).max(500),
 });
