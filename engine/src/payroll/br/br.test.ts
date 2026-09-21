@@ -114,7 +114,7 @@ test("BR declares no withholding certificate and one eSocial program type", () =
   );
   const filings = brPackFilings();
   assert.deepEqual(filings.programTypes.map((program) => program.key), ["br_cnpj_esocial"]);
-  assert.deepEqual(filings.yearEnd, []);
+  assert.deepEqual(filings.yearEnd.map((filing) => filing.key), ["informe"]);
 });
 
 test("BR publishes 2024–2026; both sides refuse outside them", async () => {
