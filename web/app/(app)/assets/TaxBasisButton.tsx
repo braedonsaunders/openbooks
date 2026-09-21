@@ -93,6 +93,7 @@ export function TaxBasisButton({ assetId }: { assetId: string }) {
               applicable,
               usSellerMacrs:
                 code === "us_macrs" ? selected!.openMacrsVintages : null,
+              effectiveOn: selected!.occurredOn,
             },
           ),
         ]),
@@ -119,6 +120,7 @@ export function TaxBasisButton({ assetId }: { assetId: string }) {
           sourceOperation: source.sourceOperation,
           applicable,
           usSellerMacrs: code === "us_macrs" ? source.openMacrsVintages : null,
+          effectiveOn: source.occurredOn,
         });
         return prepareTaxBasisRegime(
           draft,
@@ -127,6 +129,7 @@ export function TaxBasisButton({ assetId }: { assetId: string }) {
             applicable,
             usSellerMacrs:
               code === "us_macrs" ? source.openMacrsVintages : null,
+            effectiveOn: source.occurredOn,
           },
           code === "us_macrs" &&
             taxBasisSideApplies(applicable, "seller") &&
@@ -297,6 +300,7 @@ export function TaxBasisButton({ assetId }: { assetId: string }) {
                               code === "us_macrs"
                                 ? source.openMacrsVintages
                                 : null,
+                            effectiveOn: source.occurredOn,
                           },
                         )
                       }

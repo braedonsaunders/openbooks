@@ -4,15 +4,20 @@
  * except sellerPapers.at(-1).
  *
  * Typed workpaper placedInServiceOn/method/convention/recovery describe the
- * SELLER original vintage on applicable=both. Taxable buyer cost and
- * nontaxable excess are newly placed: receiving-asset date + receiving class.
- * Carryover keeps transferor history.
+ * SELLER original vintage on a first declaration. After ready history, buyer
+ * carryover is reconstructed from frozen buyer_vintages (per disposed vintage
+ * date/method/convention/recovery and parentKey). Taxable buyer cost and
+ * nontaxable excess that are not in buyer_vintages stay newly placed on the
+ * receiving class. A missing buyer_vintages array keeps the legacy one-header
+ * carryover path for already-applied papers.
  */
 import { add, cmp, formatMoney, mulRatio, neg, toUnits } from "../money/money.ts";
 import {
   TaxBasisPolicyError,
   macrsVintageKey,
+  parseFrozenMacrsBuyerVintages,
   parseMacrsVintageAllocations,
+  type FrozenMacrsBuyerVintage,
   type MacrsVintageAllocationInput,
   type MacrsVintageSource,
   type OpenMacrsVintage,
@@ -43,6 +48,8 @@ export type MacrsVintage = {
   priorDepreciation: string | null;
   /** Stable source for vintageAllocations. Retained splits keep this key. */
   source: MacrsVintageSource;
+  /** Open vintage this carryover was split from. Null on original / new placement. */
+  parentKey: string | null;
 };
 
 export type MacrsWorkpaperEvent = {
@@ -74,6 +81,7 @@ export type MacrsWorkpaperEvent = {
   business_use_percent: string | null;
   prior_depreciation: string | null;
   vintage_allocations: MacrsVintageAllocationInput[] | null;
+  buyer_vintages: FrozenMacrsBuyerVintage[] | null;
 };
 
 export type MacrsVintageDefaults = {
@@ -232,12 +240,18 @@ export function listOpenMacrsVintages(vintages: readonly MacrsVintage[]): OpenMa
     .map((vintage) => ({
       key: macrsVintageKey(vintage),
       source: vintage.source,
+      parentKey: vintage.parentKey,
       placedInServiceOn: vintage.placedInServiceOn,
       transferOn: vintage.transferOn,
       unadjustedBasis: vintage.basis,
       adjustedCarryover: vintage.adjustedCarryover,
       section179: vintage.section179,
       priorDepreciation: vintage.priorDepreciation,
+      recoveryPeriodYears: vintage.recoveryPeriodYears,
+      method: vintage.method,
+      convention: vintage.convention,
+      bonusPercent: vintage.bonusPercent,
+      businessUsePercent: vintage.businessUsePercent,
     }));
 }
 
@@ -355,6 +369,7 @@ function seedSellerPaper(paper: MacrsWorkpaperEvent, defaults: MacrsVintageDefau
     adjustedCarryover: null,
     priorDepreciation: paper.prior_depreciation,
     source: "original",
+    parentKey: null,
   }];
 }
 
@@ -376,6 +391,7 @@ function seedAcquisition(
     adjustedCarryover: null,
     priorDepreciation: null,
     source: "original",
+    parentKey: null,
   }];
 }
 
@@ -403,6 +419,35 @@ function frozenBuyerSchedule(paper: MacrsWorkpaperEvent): {
   };
 }
 
+function receiverFromFrozenBuyerVintage(
+  paper: MacrsWorkpaperEvent,
+  defaults: MacrsVintageDefaults,
+  vintage: FrozenMacrsBuyerVintage,
+): MacrsVintage {
+  const shortYearMethod = paper.short_year_method === "allocation" ? "allocation" : defaults.shortYearMethod;
+  return {
+    ...defaults,
+    shortYearMethod,
+    role: "buyer",
+    source: vintage.source,
+    parentKey: vintage.parentKey,
+    placedInServiceOn: vintage.placedInServiceOn,
+    transferOn: vintage.transferOn,
+    recoveryPeriodYears: vintage.recoveryPeriodYears,
+    method: vintage.method,
+    convention: vintage.convention,
+    basis: vintage.unadjustedBasis,
+    section179: vintage.section179,
+    bonusPercent: vintage.bonusPercent,
+    businessUsePercent: vintage.businessUsePercent,
+    adjustedCarryover: vintage.adjustedCarryover,
+    priorDepreciation: vintage.priorDepreciation,
+    recognition: asRecognition(paper.recognition),
+    section168i7Kind: as168i7Kind(paper.section_168i7_kind),
+    disposedOn: null,
+  };
+}
+
 function receiverVintages(
   paper: MacrsWorkpaperEvent,
   defaults: MacrsVintageDefaults,
@@ -427,8 +472,47 @@ function receiverVintages(
     disposedOn: null as string | null,
     adjustedCarryover: null as string | null,
     priorDepreciation: null as string | null,
+    parentKey: null as string | null,
   };
   const vintages: MacrsVintage[] = [];
+  if (paper.buyer_vintages && paper.buyer_vintages.length > 0) {
+    let frozen: FrozenMacrsBuyerVintage[];
+    try {
+      frozen = parseFrozenMacrsBuyerVintages(paper.buyer_vintages);
+    } catch (error) {
+      throw error instanceof TaxBasisPolicyError ? new MacrsVintageError(error.message) : error;
+    }
+    vintages.push(...frozen.map((vintage) => receiverFromFrozenBuyerVintage(paper, defaults, vintage)));
+    const hasExcess = frozen.some((vintage) => vintage.source === "excess");
+    const hasTaxable = frozen.some((vintage) => vintage.source === "taxable_cost");
+    if (paper.recognition === "nontaxable" && positive(paper.excess_basis) && !hasExcess) {
+      const buyer = frozenBuyerSchedule(paper);
+      vintages.push({
+        ...shared,
+        source: "excess",
+        section179: newVintageSection179,
+        basis: paper.excess_basis!,
+        placedInServiceOn: buyer.placedInServiceOn,
+        recoveryPeriodYears: buyer.recoveryPeriodYears,
+        method: buyer.method,
+        convention: buyer.convention,
+      });
+    }
+    if (paper.recognition === "taxable" && paper.buyer_cost && !hasTaxable) {
+      const buyer = frozenBuyerSchedule(paper);
+      vintages.push({
+        ...shared,
+        source: "taxable_cost",
+        section179: newVintageSection179,
+        basis: paper.buyer_cost,
+        placedInServiceOn: buyer.placedInServiceOn,
+        recoveryPeriodYears: buyer.recoveryPeriodYears,
+        method: buyer.method,
+        convention: buyer.convention,
+      });
+    }
+    return vintages;
+  }
   if (paper.recognition === "nontaxable" && paper.carryover_basis) {
     vintages.push(carryoverVintage(paper, {
       ...shared,

@@ -88,6 +88,7 @@ export function prepareMacrsVintageAllocations(
         source: vintage.source,
         placedInServiceOn: vintage.placedInServiceOn,
         ...(vintage.transferOn ? { transferOn: vintage.transferOn } : {}),
+        ...(vintage.parentKey ? { parentKey: vintage.parentKey } : {}),
         disposedUnadjustedBasis: amounts!.disposedUnadjustedBasis,
         remainingUnadjustedBasis: amounts!.remainingUnadjustedBasis,
       };
