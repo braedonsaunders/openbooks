@@ -752,6 +752,26 @@
       "hrm_talent_reviews": {
         "label": "タレントレビュー",
         "description": "タレントレビューごとに1行 — 従業員、パフォーマンスとポテンシャル、離職時の影響とリスク、昇進準備度。HRの評価権限が必要です。"
+      },
+      "hrm_documents": {
+        "label": "HR文書",
+        "description": "HR文書ごとに1行 — 件名、宣言カテゴリ、ライフサイクル状態、送信/完了/期限、リーガルホールド。"
+      },
+      "hrm_document_signers": {
+        "label": "文書署名者",
+        "description": "順序付き署名者ごとに1行 — 文書、順序、役割、状態。"
+      },
+      "hrm_retention_actions": {
+        "label": "保持アクション",
+        "description": "保持アクションごとに1行 — 文書、カテゴリ、期限、最終アクション、実行、リーガルホールドによる停止。"
+      },
+      "hrm_survey_results": {
+        "label": "調査結果",
+        "description": "調査ごとに1行 — 種類、匿名度、状態、招待数と回答数、締切日。"
+      },
+      "hrm_org_chart": {
+        "label": "組織図",
+        "description": "基準日時点で在籍中の雇用ごとに1行 — 氏名、役職、部門、上司。"
       }
     },
     "columns": {
@@ -1612,6 +1632,51 @@
         "impact_of_loss": "離職時の影響",
         "risk_of_loss": "離職リスク",
         "id": "レビュー (ID)"
+      },
+      "hrm_documents": {
+        "title": "件名",
+        "person": "対象者",
+        "category": "カテゴリ",
+        "status": "ステータス",
+        "sent_at": "送信日時",
+        "completed_at": "完了日時",
+        "expires_at": "期限",
+        "legal_hold": "リーガルホールド",
+        "document_id": "文書 (ID)"
+      },
+      "hrm_document_signers": {
+        "document": "文書",
+        "ord": "順序",
+        "role": "役割",
+        "status": "ステータス",
+        "signed_at": "署名日時",
+        "document_id": "文書 (ID)"
+      },
+      "hrm_retention_actions": {
+        "document": "文書",
+        "category": "カテゴリ",
+        "due_on": "期限",
+        "action": "アクション",
+        "executed_at": "実行日時",
+        "blocked_reason": "停止理由",
+        "document_id": "文書 (ID)"
+      },
+      "hrm_survey_results": {
+        "name": "名称",
+        "kind": "種類",
+        "anonymity": "匿名度",
+        "status": "ステータス",
+        "invitations": "招待数",
+        "responded": "回答数",
+        "closes_at": "締切",
+        "survey_id": "調査 (ID)"
+      },
+      "hrm_org_chart": {
+        "employee": "従業員",
+        "title": "役職",
+        "department": "部門",
+        "manager": "上司",
+        "employment_id": "雇用 (ID)"
       }
     },
     "enumValues": {
