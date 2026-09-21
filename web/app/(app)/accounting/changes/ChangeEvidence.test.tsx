@@ -7,6 +7,22 @@ import { ChangeEvidence } from "./ChangeEvidence";
 // The test runner uses classic JSX; the production compiler supplies it.
 Object.assign(globalThis, { React });
 
+test("calendar evidence preserves distinct dates for equal filing labels and distinguishes an empty read set", () => {
+  const markup = renderToStaticMarkup(<ChangeEvidence taxBasis names={{ company: "Receiving company" }} value={{
+    taxYearWindows: [
+      { id: "first-window", subsidiaryId: "company", regime: "us_macrs", yearStart: "2026-01-01", yearEnd: "2026-06-30", filingYear: 2026 },
+      { id: "second-window", subsidiaryId: "company", regime: "us_macrs", yearStart: "2026-07-01", yearEnd: "2026-12-31", filingYear: 2026 },
+    ],
+  }} />);
+  for (const fact of ["Registered tax years used by this calculation", "Receiving company", "first-window", "second-window", "2026-01-01", "2026-06-30", "2026-07-01", "2026-12-31", "Filing-year label"])
+    assert.ok(markup.includes(fact), fact);
+  const empty = renderToStaticMarkup(<ChangeEvidence taxBasis value={{ taxYearWindows: [] }} />);
+  assert.match(empty, /No registered tax-year windows were read by this calculation/);
+  const missing = renderToStaticMarkup(<ChangeEvidence taxBasis value={{ taxYearWindows: null }} />);
+  assert.match(missing, /Not supplied/);
+  assert.doesNotMatch(missing, /No registered tax-year windows were read/);
+});
+
 test("tax approval evidence names statutory choices and preserves the exact assessment", () => {
   const markup = renderToStaticMarkup(
     <ChangeEvidence
