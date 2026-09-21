@@ -1134,25 +1134,18 @@ async function ensureRuntimeDatabaseRole(
   // grants. Never blanket-grant the runtime role: the public schema also holds
   // tightly controlled SECURITY DEFINER maintenance functions.
   await pool.query(`revoke execute on all functions in schema public from ${role}`);
-  // The governed-query catalog refresh is the exception the blanket revoke
-  // must not keep. The baseline revokes its PUBLIC grant (it rebuilds tenant
-  // projections), so after this revoke the function sits at an empty ACL —
-  // and PostgreSQL then denies even the owning role both EXECUTE and CREATE
-  // OR REPLACE. The constrained owner runs forward migrations (every one
-  // ends in SELECT refresh) and the migration-replay canary, so it must hold
-  // EXECUTE explicitly. This grants no new power: the role owns the function
-  // and can already drop and recreate it; it merely keeps an owned
-  // maintenance function usable by its owner.
+  // Retain the automatic mode's catalog-refresh grant for legacy constrained
+  // owners and migration-replay tooling. In host-managed mode, only the
+  // separate migration owner needs this maintenance function.
   if (!precreated) {
     await pool.query(
       `grant execute on function public.openbooks_refresh_query_catalog() to ${role}`,
     );
   }
-  // The application establishes tenant identity with connection-local GUCs.
-  // This privilege belongs to the runtime login, never to openbooks_read; the
-  // governed SQL console switches to openbooks_read before user SQL executes.
-  // A re-run over the transferred test login cannot grant on a pg_catalog
-  // function it does not own; converge by verifying the grant instead.
+  // The application needs set_config to establish tenant identity. Hosted
+  // preflight verifies EXECUTE without administering pg_catalog ACLs. In
+  // automatic mode, a transferred test owner may only verify an existing
+  // grant (including PostgreSQL's default PUBLIC grant).
   if (!precreated) {
     try {
       await pool.query(
@@ -1471,8 +1464,8 @@ async function ensureReadRole(runtimeRoleName?: string): Promise<void> {
     const runtimeRole = await quoted(runtimeRoleName, "identifier");
     const runtimeLiteral = await quoted(runtimeRoleName, "literal");
     // Conditional like the bootstrap-user grant above: a re-run over the
-    // transferred test login cannot grant role membership (that needs
-    // CREATEROLE), so skip when already a member instead of failing.
+    // transferred test login cannot administer memberships, so skip when it
+    // already has SET permission instead of requiring an ADMIN OPTION grant.
     steps.push(["grant to runtime user", `do $$ begin
          if not pg_has_role(${runtimeLiteral}, 'openbooks_read', 'SET') then
            grant openbooks_read to ${runtimeRole} with set true;

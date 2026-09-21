@@ -43,7 +43,9 @@ export async function verifyReadRoleAssumption(pool: pg.Pool, label: string): Pr
   try {
     await client.query("begin");
     await client.query("set local role openbooks_read");
-  } catch {
+  } catch (error) {
+    const code = (error as { code?: string }).code;
+    if (code !== "42501" && code !== "42704") throw error;
     throw refusal(`${label} cannot SET ROLE openbooks_read; the role must exist and membership must permit SET ROLE`);
   } finally {
     try { await client.query("rollback"); } catch { discard = true; }
