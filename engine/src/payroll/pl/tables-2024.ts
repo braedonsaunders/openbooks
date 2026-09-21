@@ -46,9 +46,9 @@
  *   poz. 1087 — art. 9b ust. 2 (same 55/60 exemption, verified verbatim;
  *   the 2024 amendments Dz.U. 2024 poz. 1089, 1635, 1871 reword neither
  *   quoted sentence, confirmed by the single-version print in the
- *   Dz.U. 2025 poz. 433 consolidation). The 2026 engine prices FGŚP
- *   unconditionally, so 2024 sets the pack's `fgspAgeBar` flag while 2026
- *   keeps its landed behaviour (reported, not changed here).
+ *   Dz.U. 2025 poz. 433 consolidation). 2024 sets the pack's `fgspAgeBar`
+ *   flag, as does 2026 under its own consolidated text (Dz.U. 2026
+ *   poz. 186 — see ./tables-2026.ts).
  * - Minimum wage 2024, TWO steps in one regulation: rozporządzenie RM
  *   z dnia 14 września 2023 r., Dz.U. 2023 poz. 1893 — "Od dnia
  *   1 stycznia 2024 r. ustala się minimalne wynagrodzenie za pracę
