@@ -154,16 +154,28 @@ test("withholding covers all Länder as implemented, ELStAM-keyed", () => {
   }
 });
 
-test("filings declare the Lohnsteuerbescheinigung and refuse ELSTER population", async () => {
+test("filings declare the Ausdruck (not the ELSTER transmission)", () => {
   const filings = DE_PAYROLL_PACK.filings();
   assert.equal(filings.country, "DE");
+  assert.deepEqual(
+    filings.programTypes.map((program) => program.key),
+    ["de_finanzamt"],
+  );
   const [slip] = filings.yearEnd;
   assert.ok(slip, "Lohnsteuerbescheinigung declared");
   assert.equal(slip.key, "lohnsteuerbescheinigung");
   assert.equal(slip.cadence, "annual");
+  assert.match(slip.label, /Ausdruck/);
+  // The row grammar is a bare employee id (see filings.test.ts for the full
+  // grammar); the transmission half is the named refusal.
   assert.equal(slip.parseRowId("anything"), null);
-  await assert.rejects(() => slip.population("org", 2026), /ELSTER/);
+  assert.ok(slip.slip, "the employee printout is declared");
+  assert.match(slip.downloadRefusal ?? "", /ELSTER/);
   assert.equal(slip.amendment.supported, false);
+  if (!slip.amendment.supported) {
+    assert.match(slip.amendment.refusal, /ELSTER/);
+    assert.match(slip.amendment.refusal, /geändert|berichtigt/i);
+  }
 });
 
 test("jurisdictions list all Länder with untranscribed calendars", () => {
