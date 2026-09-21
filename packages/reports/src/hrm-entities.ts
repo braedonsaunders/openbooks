@@ -58,6 +58,14 @@ const HRM_ENROLLMENT_STATUSES = ['elected', 'waived', 'pending_approval', 'activ
 const HRM_REQUISITION_STATUSES = ['draft', 'open', 'on_hold', 'filled', 'cancelled'] as const
 const HRM_APPLICATION_STATUSES = ['active', 'rejected', 'withdrawn', 'hired'] as const
 
+// HR-18 begin: recruiting-depth vocabularies (0229) — the commercial offer
+// statuses stay the 0195 vocabulary; signature_status rides beside it.
+const HRM_SLOT_KINDS = ['proposed', 'booked', 'declined'] as const
+const HRM_OFFER_STATUSES = ['draft', 'sent', 'accepted', 'declined', 'withdrawn', 'expired'] as const
+const HRM_OFFER_SIGNATURE_STATUSES = ['unsigned', 'sent', 'viewed', 'signed', 'declined', 'voided'] as const
+const HRM_POSTING_STATUSES = ['draft', 'published', 'paused', 'closed', 'error'] as const
+// HR-18 end
+
 const HRM_PROCESS_KINDS = ['onboarding', 'offboarding', 'transfer'] as const
 const HRM_PROCESS_STATUSES = ['open', 'completed', 'cancelled'] as const
 
@@ -87,6 +95,24 @@ export const HRM_CERTIFICATION_ALERTS_FEATURE_KEY = 'hrmCertificationAlerts'
 const HRM_QUALIFICATION_STATUSES = ['valid', 'revoked', 'pending_verification'] as const
 const HRM_ALERT_CHANNELS = ['inbox', 'email'] as const
 // HR-14 end
+// HR-19 begin: documents, signers, retention actions, survey results, org
+// chart report entities (0230).
+export const HRM_DOCUMENTS_READ_PERMISSION = 'hrm.documents.read'
+export const HRM_DOCUMENTS_FEATURE_KEY = 'hrmDocuments'
+export const HRM_DOCUMENT_RETENTION_FEATURE_KEY = 'hrmDocumentRetention'
+export const HRM_SURVEYS_MANAGE_PERMISSION = 'hrm.surveys.manage'
+export const HRM_SURVEYS_FEATURE_KEY = 'hrmSurveys'
+export const HRM_ORG_CHART_FEATURE_KEY = 'hrmOrgChart'
+
+const HRM_DOCUMENT_STATUSES = [
+  'draft', 'sent', 'viewed', 'partially_signed', 'signed', 'acknowledged', 'declined', 'voided', 'expired',
+] as const
+const HRM_SIGNER_STATUSES = ['pending', 'viewed', 'signed', 'declined'] as const
+const HRM_RETENTION_ACTIONS = ['delete', 'anonymize'] as const
+const HRM_SURVEY_KINDS = ['engagement', 'pulse', 'onboarding', 'exit', 'custom'] as const
+const HRM_SURVEY_ANONYMITY = ['anonymous', 'confidential', 'named'] as const
+const HRM_SURVEY_STATUSES = ['draft', 'open', 'closed'] as const
+// HR-19 end
 const HRM_REVIEW_KINDS = ['self', 'manager', 'peer'] as const
 const HRM_REVIEW_STATUSES = ['pending', 'submitted', 'calibrated', 'shared', 'acknowledged'] as const
 const HRM_GOAL_STATUSES = ['active', 'achieved', 'missed', 'cancelled'] as const
@@ -1100,6 +1126,202 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     defaultSort: { column: 'due_on', direction: 'asc' },
   },
   // HR-14 end
+  // HR-19 begin: the document register (one row per non-deleted
+  // document) and the signer timeline (one row per ordered signer).
+  // Both read the 0230 cabinet through the same predicates the engine
+  // read paths use: deleted documents never list; signer party ids and
+  // evidence never leave (role and status only); file bytes, tokens,
+  // and hashes have no column at all.
+  {
+    key: 'hrm_documents',
+    label: 'HR documents',
+    category: 'hrm',
+    description:
+      'One row per HR document — title, declared category, lifecycle status, send/completion/expiry, and legal hold. Requires the HRM documents permission.',
+    from: `hrm_documents d
+      LEFT JOIN parties p ON p.id = d.party_id AND p.org_id = d.org_id`,
+    // Documents hang off the PERSON, not an employment, so this source has
+    // no legal-entity column. Declared as no-clamp rather than omitted: an
+    // absent key makes compileSubsidiaryScope THROW for any reader carrying
+    // an allowlist. Clamping would need a party-to-employment join and is a
+    // question for the owning lane, not an integration-time query rewrite.
+    subsidiaryScope: null,
+    orgColumn: 'd.org_id',
+    requiredPermission: HRM_DOCUMENTS_READ_PERMISSION,
+    featureKey: HRM_DOCUMENTS_FEATURE_KEY,
+    // The creation day is the fact: the period picker narrows on it, so
+    // a register filtered to a window lists what HR issued inside it.
+    defaultPeriodField: 'created_at',
+    columns: [
+      { key: 'title', label: 'Title', kind: 'text', expr: 'd.title' },
+      { key: 'person', label: 'Person', kind: 'text', expr: 'p.display_name' },
+      { key: 'category', label: 'Category', kind: 'text', expr: 'd.category_key' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'd.status', options: HRM_DOCUMENT_STATUSES },
+      { key: 'sent_at', label: 'Sent at', kind: 'timestamp', expr: 'd.sent_at' },
+      { key: 'completed_at', label: 'Completed at', kind: 'timestamp', expr: 'd.completed_at' },
+      { key: 'expires_at', label: 'Expires at', kind: 'timestamp', expr: 'd.expires_at' },
+      { key: 'legal_hold', label: 'Legal hold', kind: 'boolean', expr: 'd.legal_hold' },
+      { key: 'document_id', label: 'Document (id)', kind: 'uuid', expr: 'd.id' },
+    ],
+    defaultSort: { column: 'created_at', direction: 'desc' },
+  },
+  {
+    key: 'hrm_document_signers',
+    label: 'Document signers',
+    category: 'hrm',
+    description:
+      'One row per ordered signer — document, signing order, role, and per-signer status. Requires the HRM documents permission.',
+    from: `hrm_document_signers s
+      JOIN hrm_documents d ON d.id = s.document_id AND d.org_id = s.org_id`,
+    // Signers inherit the document's scope; see hrm_documents above.
+    subsidiaryScope: null,
+    orgColumn: 's.org_id',
+    requiredPermission: HRM_DOCUMENTS_READ_PERMISSION,
+    featureKey: HRM_DOCUMENTS_FEATURE_KEY,
+    defaultPeriodField: 'signed_at',
+    columns: [
+      { key: 'document', label: 'Document', kind: 'text', expr: 'd.title' },
+      { key: 'ord', label: 'Order', kind: 'number', expr: 's.ord' },
+      { key: 'role', label: 'Role', kind: 'text', expr: 's.role' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 's.status', options: HRM_SIGNER_STATUSES },
+      { key: 'signed_at', label: 'Signed at', kind: 'timestamp', expr: 's.signed_at' },
+      { key: 'document_id', label: 'Document (id)', kind: 'uuid', expr: 's.document_id' },
+    ],
+    defaultSort: { column: 'signed_at', direction: 'desc' },
+  },
+  // HR-19 end
+  // HR-19 begin: the retention execution ledger (one row per flagged or
+  // executed (document, schedule) pair). executed_at null = flagged,
+  // waiting out the grace days; blocked_reason names the legal hold.
+  // Execution itself stays human-approved (HR) or scheduler-run — the
+  // report never executes anything.
+  {
+    key: 'hrm_retention_actions',
+    label: 'Retention actions',
+    category: 'hrm',
+    description:
+      'One row per retention action — document, category, due date, terminal action, execution, and any legal-hold block. Requires the HRM documents permission.',
+    from: `hrm_retention_actions a
+      JOIN hrm_documents d ON d.id = a.document_id AND d.org_id = a.org_id
+      JOIN hrm_retention_schedules s ON s.id = a.schedule_id AND s.org_id = a.org_id`,
+    // Retention actions inherit the document's scope; see hrm_documents.
+    subsidiaryScope: null,
+    orgColumn: 'a.org_id',
+    requiredPermission: HRM_DOCUMENTS_READ_PERMISSION,
+    featureKey: HRM_DOCUMENT_RETENTION_FEATURE_KEY,
+    // The due day is the fact: the period picker narrows on it, so the
+    // ledger filtered to a window lists what came due inside it.
+    defaultPeriodField: 'due_on',
+    columns: [
+      { key: 'document', label: 'Document', kind: 'text', expr: 'd.title' },
+      { key: 'category', label: 'Category', kind: 'text', expr: 's.category_key' },
+      { key: 'due_on', label: 'Due on', kind: 'date', expr: 'a.due_on' },
+      { key: 'action', label: 'Action', kind: 'enum', expr: 'a.action', options: HRM_RETENTION_ACTIONS },
+      { key: 'executed_at', label: 'Executed at', kind: 'timestamp', expr: 'a.executed_at' },
+      { key: 'blocked_reason', label: 'Blocked reason', kind: 'text', expr: 'a.blocked_reason' },
+      { key: 'document_id', label: 'Document (id)', kind: 'uuid', expr: 'a.document_id' },
+    ],
+    defaultSort: { column: 'due_on', direction: 'asc' },
+  },
+  // HR-19 end
+  // HR-19 begin: survey aggregates (one row per survey). Invitations
+  // and responses count through the invitation ledger; eNPS and
+  // participation stay viewer derivations over these counts, so the
+  // report never persists a projection. Respondent links have no
+  // column at all — anonymous surveys assert no link anywhere.
+  {
+    key: 'hrm_survey_results',
+    label: 'Survey results',
+    category: 'hrm',
+    description:
+      'One row per survey — kind, anonymity grade, status, invitation and response counts, and close date. Requires the HRM surveys permission.',
+    from: `hrm_surveys s
+      LEFT JOIN LATERAL (
+        SELECT count(*)::integer AS invitations,
+               count(*) FILTER (WHERE i.responded_at IS NOT NULL)::integer AS responded
+          FROM hrm_survey_invitations i
+         WHERE i.org_id = s.org_id AND i.survey_id = s.id
+      ) inv ON TRUE`,
+    // Survey aggregates are org-level by construction and suppressed below
+    // the declared minimum group size; no legal-entity column exists here.
+    subsidiaryScope: null,
+    orgColumn: 's.org_id',
+    requiredPermission: HRM_SURVEYS_MANAGE_PERMISSION,
+    featureKey: HRM_SURVEYS_FEATURE_KEY,
+    defaultPeriodField: 'closes_at',
+    columns: [
+      { key: 'name', label: 'Name', kind: 'text', expr: 's.name' },
+      { key: 'kind', label: 'Kind', kind: 'enum', expr: 's.kind', options: HRM_SURVEY_KINDS },
+      { key: 'anonymity', label: 'Anonymity', kind: 'enum', expr: 's.anonymity', options: HRM_SURVEY_ANONYMITY },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 's.status', options: HRM_SURVEY_STATUSES },
+      { key: 'invitations', label: 'Invitations', kind: 'number', expr: 'inv.invitations' },
+      { key: 'responded', label: 'Responded', kind: 'number', expr: 'inv.responded' },
+      { key: 'closes_at', label: 'Closes at', kind: 'timestamp', expr: 's.closes_at' },
+      { key: 'survey_id', label: 'Survey (id)', kind: 'uuid', expr: 's.id' },
+    ],
+    defaultSort: { column: 'closes_at', direction: 'desc' },
+  },
+  // HR-19 end
+  // HR-19 begin: the org-chart snapshot (one row per in-service
+  // employment at the report as-of date). The as-of join is bounded
+  // one-sided — versions effective on or before the as-of day,
+  // currently-known revisions only — with the in-service status
+  // predicate excluding the departed instead of an upper clamp, the
+  // same contract the tree read resolves through. Names, titles,
+  // departments, and managers only — never pay or private fields.
+  {
+    key: 'hrm_org_chart',
+    label: 'Org chart',
+    category: 'hrm',
+    description:
+      'One row per in-service employment at the report as-of date — name, title, department, and line manager. Requires the HRM employment permission.',
+    from: `worker_employments e
+      JOIN LATERAL (
+        SELECT ev.status
+          FROM worker_employment_versions ev
+         WHERE ev.employment_id = e.id AND ev.org_id = e.org_id
+           AND ev.recorded_until IS NULL
+           AND ev.effective_from <= ${REPORT_AS_OF}
+           AND ev.status IN ('active', 'on_leave', 'suspended')
+         ORDER BY ev.version_no DESC LIMIT 1
+      ) ev ON TRUE
+      JOIN parties w ON w.id = e.worker_party_id AND w.org_id = e.org_id
+      LEFT JOIN LATERAL (
+        SELECT a.job_title, a.department_id
+          FROM employment_assignment_versions a
+         WHERE a.org_id = e.org_id AND a.employment_id = e.id AND a.is_primary
+           AND a.recorded_until IS NULL
+           AND a.effective_from <= ${REPORT_AS_OF}
+         ORDER BY a.version_no DESC LIMIT 1
+      ) a ON TRUE
+      LEFT JOIN departments dep ON dep.id = a.department_id AND dep.org_id = e.org_id
+      LEFT JOIN LATERAL (
+        SELECT r.manager_employment_id
+          FROM reporting_relationships r
+         WHERE r.org_id = e.org_id AND r.employment_id = e.id AND r.kind = 'line'
+           AND r.recorded_until IS NULL
+           AND r.effective_from <= ${REPORT_AS_OF}
+         ORDER BY r.effective_from DESC LIMIT 1
+      ) r ON TRUE
+      LEFT JOIN worker_employments me ON me.id = r.manager_employment_id AND me.org_id = e.org_id
+      LEFT JOIN parties mw ON mw.id = me.worker_party_id AND mw.org_id = e.org_id`,
+    // The chart selects from worker_employments, which carries the legal
+    // entity, so it CLAMPS: unclamped it would show a subsidiary-scoped
+    // reader every other subsidiary's people.
+    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
+    orgColumn: 'e.org_id',
+    requiredPermission: HRM_EMPLOYMENT_READ_PERMISSION,
+    featureKey: HRM_ORG_CHART_FEATURE_KEY,
+    columns: [
+      { key: 'employee', label: 'Employee', kind: 'text', expr: 'w.display_name' },
+      { key: 'title', label: 'Title', kind: 'text', expr: 'a.job_title' },
+      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
+      { key: 'manager', label: 'Manager', kind: 'text', expr: 'mw.display_name' },
+      { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'e.id' },
+    ],
+    defaultSort: { column: 'employee', direction: 'asc' },
+  },
+  // HR-19 end
   // HR-17 begin: continuous-performance entities (0228). 1:1s, feedback,
   // calibration entries and talent reviews read through the HR grant
   // (hrm.performance.read) with the report engine's run-path gate — the
@@ -1225,4 +1447,209 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     defaultSort: { column: 'reviewed_at', direction: 'desc' },
   },
   // HR-17 end
+  // HR-18 begin: recruiting-depth report entities (0229). Scorecards read
+  // interview-level aggregates with no author columns at all — the report
+  // executor carries no reader identity, so "aggregate only for
+  // non-authors" holds structurally: per-author detail lives only behind
+  // the blind-enforced Interviews tab. Candidate contact PII never leaves
+  // through any of these (names only); slot token hashes, signed evidence
+  // and offer amounts are not columns.
+  {
+    key: 'hrm_scorecards',
+    label: 'Scorecards',
+    category: 'hrm',
+    description:
+      'One row per interview with the panel verdict aggregates: submitted and panel counts plus the overall distribution. Per-interviewer detail never leaves through reports — the blind rule holds structurally. Requires the HRM recruiting permission.',
+    // One row per interview: the verdict aggregates resolve through
+    // scalar laterals (the hired-on lateral on hrm_applications is the
+    // house precedent), so the entity stays a detail row source with no
+    // GROUP BY of its own.
+    from: `hrm_interviews i
+  JOIN hrm_applications a ON a.id = i.application_id AND a.org_id = i.org_id
+  JOIN hrm_requisitions r ON r.id = a.requisition_id AND r.org_id = a.org_id
+  JOIN hrm_candidates c ON c.id = a.candidate_id AND c.org_id = a.org_id
+  JOIN subsidiaries sub ON sub.id = r.employer_subsidiary_id AND sub.org_id = i.org_id
+  LEFT JOIN LATERAL (
+    SELECT count(*)::int AS panel
+      FROM hrm_interview_panel p
+     WHERE p.org_id = i.org_id AND p.interview_id = i.id
+  ) panel ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT count(*)::int AS submitted,
+           count(*) FILTER (WHERE s.overall = 'strong_no')::int AS strong_no,
+           count(*) FILTER (WHERE s.overall = 'no')::int AS no,
+           count(*) FILTER (WHERE s.overall = 'yes')::int AS yes,
+           count(*) FILTER (WHERE s.overall = 'strong_yes')::int AS strong_yes
+      FROM hrm_scorecards s
+     WHERE s.org_id = i.org_id AND s.interview_id = i.id AND s.submitted_at IS NOT NULL
+  ) verdicts ON TRUE`,
+    orgColumn: 'i.org_id',
+    // The opening's employer is the legal-entity boundary, as above.
+    subsidiaryScope: { column: 'r.employer_subsidiary_id' },
+    requiredPermission: HRM_RECRUITING_READ_PERMISSION,
+    featureKey: 'hrmStructuredInterviews',
+    defaultPeriodField: null,
+    columns: [
+      { key: 'requisition', label: 'Requisition', kind: 'text', expr: 'r.requisition_number' },
+      { key: 'candidate', label: 'Candidate', kind: 'text', expr: 'c.display_name' },
+      { key: 'kind', label: 'Kind', kind: 'text', expr: 'i.kind' },
+      { key: 'scheduled_on', label: 'Scheduled', kind: 'date', expr: 'i.scheduled_at' },
+      { key: 'panel', label: 'Panel', kind: 'number', expr: 'panel.panel' },
+      { key: 'submitted', label: 'Submitted', kind: 'number', expr: 'verdicts.submitted' },
+      { key: 'strong_no', label: 'Strong no', kind: 'number', expr: 'verdicts.strong_no' },
+      { key: 'no', label: 'No', kind: 'number', expr: 'verdicts.no' },
+      { key: 'yes', label: 'Yes', kind: 'number', expr: 'verdicts.yes' },
+      { key: 'strong_yes', label: 'Strong yes', kind: 'number', expr: 'verdicts.strong_yes' },
+      { key: 'interview_id', label: 'Interview (id)', kind: 'uuid', expr: 'i.id' },
+    ],
+    defaultSort: { column: 'scheduled_on', direction: 'desc' },
+  },
+  {
+    key: 'hrm_interview_slots',
+    label: 'Interview slots',
+    category: 'hrm',
+    description:
+      'One row per proposed, booked, or declined interview slot with its window and kind. Candidate contact PII and booking token hashes never leave. Requires the HRM recruiting permission.',
+    from: `hrm_interview_slots s
+  JOIN hrm_interviews i ON i.id = s.interview_id AND i.org_id = s.org_id
+  JOIN hrm_applications a ON a.id = i.application_id AND a.org_id = s.org_id
+  JOIN hrm_requisitions r ON r.id = a.requisition_id AND r.org_id = s.org_id
+  JOIN hrm_candidates c ON c.id = a.candidate_id AND c.org_id = s.org_id`,
+    orgColumn: 's.org_id',
+    // The opening's employer is the legal-entity boundary, as above.
+    subsidiaryScope: { column: 'r.employer_subsidiary_id' },
+    requiredPermission: HRM_RECRUITING_READ_PERMISSION,
+    featureKey: 'hrmInterviewScheduling',
+    defaultPeriodField: 'starts_at',
+    columns: [
+      { key: 'requisition', label: 'Requisition', kind: 'text', expr: 'r.requisition_number' },
+      { key: 'candidate', label: 'Candidate', kind: 'text', expr: 'c.display_name' },
+      { key: 'kind', label: 'Kind', kind: 'enum', expr: 's.kind', options: HRM_SLOT_KINDS },
+      { key: 'starts_at', label: 'Starts', kind: 'date', expr: 's.starts_at' },
+      { key: 'ends_at', label: 'Ends', kind: 'date', expr: 's.ends_at' },
+      { key: 'timezone', label: 'Timezone', kind: 'text', expr: 's.timezone' },
+      { key: 'booked_on', label: 'Booked', kind: 'date', expr: 's.booked_by_candidate_at' },
+      { key: 'slot_id', label: 'Slot (id)', kind: 'uuid', expr: 's.id' },
+    ],
+    defaultSort: { column: 'starts_at', direction: 'desc' },
+  },
+  {
+    key: 'hrm_offers',
+    label: 'Offers',
+    category: 'hrm',
+    description:
+      'One row per offer with its commercial status, signature state, and version. Amounts, letter bodies, and signed evidence never leave through reports. Requires the HRM recruiting permission.',
+    from: `hrm_offers o
+  JOIN hrm_applications a ON a.id = o.application_id AND a.org_id = o.org_id
+  JOIN hrm_requisitions r ON r.id = a.requisition_id AND r.org_id = o.org_id
+  JOIN hrm_candidates c ON c.id = a.candidate_id AND c.org_id = o.org_id
+  JOIN subsidiaries sub ON sub.id = r.employer_subsidiary_id AND sub.org_id = o.org_id`,
+    orgColumn: 'o.org_id',
+    // The opening's employer is the legal-entity boundary, as above.
+    subsidiaryScope: { column: 'r.employer_subsidiary_id' },
+    requiredPermission: HRM_RECRUITING_READ_PERMISSION,
+    featureKey: 'hrmOfferSigning',
+    defaultPeriodField: null,
+    columns: [
+      { key: 'candidate', label: 'Candidate', kind: 'text', expr: 'c.display_name' },
+      { key: 'requisition', label: 'Requisition', kind: 'text', expr: 'r.requisition_number' },
+      { key: 'job_title', label: 'Job title', kind: 'text', expr: 'o.job_title' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'o.status', options: HRM_OFFER_STATUSES },
+      { key: 'signature_status', label: 'Signature', kind: 'enum', expr: 'o.signature_status', options: HRM_OFFER_SIGNATURE_STATUSES },
+      { key: 'version', label: 'Version', kind: 'number', expr: 'o.version' },
+      { key: 'sent_on', label: 'Sent', kind: 'date', expr: 'o.sent_at' },
+      { key: 'signed_on', label: 'Signed', kind: 'date', expr: 'o.signed_at' },
+      { key: 'expires_on', label: 'Expires', kind: 'date', expr: 'o.expires_on' },
+      { key: 'offer_id', label: 'Offer (id)', kind: 'uuid', expr: 'o.id' },
+    ],
+    defaultSort: { column: 'sent_on', direction: 'desc' },
+  },
+  {
+    key: 'hrm_postings',
+    label: 'Postings',
+    category: 'hrm',
+    description:
+      'One row per job-board posting with its status plus the applies and dispositions-sent counts that make source effectiveness (per board, per opening). Requires the HRM recruiting permission.',
+    from: `hrm_job_postings p
+  JOIN hrm_requisitions r ON r.id = p.requisition_id AND r.org_id = p.org_id
+  JOIN subsidiaries sub ON sub.id = r.employer_subsidiary_id AND sub.org_id = p.org_id
+  LEFT JOIN LATERAL (
+    SELECT count(*)::int AS applies
+      FROM hrm_applications a
+     WHERE a.org_id = p.org_id AND a.source_posting_id = p.id
+  ) applies ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT count(*)::int AS dispositions
+      FROM hrm_posting_events e
+     WHERE e.org_id = p.org_id AND e.posting_id = p.id AND e.kind = 'disposition_sent'
+  ) dispositions ON TRUE`,
+    orgColumn: 'p.org_id',
+    // The opening's employer is the legal-entity boundary, as above.
+    subsidiaryScope: { column: 'r.employer_subsidiary_id' },
+    requiredPermission: HRM_RECRUITING_READ_PERMISSION,
+    featureKey: 'hrmJobBoards',
+    defaultPeriodField: null,
+    columns: [
+      { key: 'requisition', label: 'Requisition', kind: 'text', expr: 'r.requisition_number' },
+      { key: 'board', label: 'Board', kind: 'text', expr: 'p.board_key' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'p.status', options: HRM_POSTING_STATUSES },
+      { key: 'published_on', label: 'Published', kind: 'date', expr: 'p.published_at' },
+      { key: 'closed_on', label: 'Closed', kind: 'date', expr: 'p.closed_at' },
+      { key: 'applies', label: 'Applies', kind: 'number', expr: 'applies.applies' },
+      { key: 'dispositions', label: 'Dispositions', kind: 'number', expr: 'dispositions.dispositions' },
+      { key: 'posting_id', label: 'Posting (id)', kind: 'uuid', expr: 'p.id' },
+    ],
+    defaultSort: { column: 'published_on', direction: 'desc' },
+  },
+  {
+    key: 'hrm_retention_runs',
+    label: 'Retention runs',
+    category: 'hrm',
+    description:
+      'One row per retention-rule evaluation with the anonymized, deleted, and extension-requested counts. Requires the HRM recruiting permission.',
+    from: `hrm_retention_runs r
+  JOIN hrm_retention_rules u ON u.id = r.rule_id AND u.org_id = r.org_id`,
+    orgColumn: 'r.org_id',
+    // Rule-level aggregates declare no subsidiary clamp (org-wide under an
+    // admin-held grant), like the other configuration-faced entities.
+    subsidiaryScope: null,
+    requiredPermission: HRM_RECRUITING_READ_PERMISSION,
+    featureKey: 'hrmCandidateRetention',
+    defaultPeriodField: 'ran_at',
+    columns: [
+      { key: 'rule', label: 'Rule', kind: 'text', expr: 'u.name' },
+      { key: 'ran_at', label: 'Ran', kind: 'date', expr: 'r.ran_at' },
+      { key: 'anonymized', label: 'Anonymized', kind: 'number', expr: 'r.candidates_anonymized' },
+      { key: 'deleted', label: 'Deleted', kind: 'number', expr: 'r.candidates_deleted' },
+      { key: 'extensions', label: 'Extensions', kind: 'number', expr: 'r.extensions_requested' },
+      { key: 'run_id', label: 'Run (id)', kind: 'uuid', expr: 'r.id' },
+    ],
+    defaultSort: { column: 'ran_at', direction: 'desc' },
+  },
+  {
+    key: 'hrm_pool_members',
+    label: 'Pool members',
+    category: 'hrm',
+    description:
+      'One row per talent-pool membership: pool, candidate name, and when they joined. Contact PII never leaves through reports — names only. Requires the HRM recruiting permission.',
+    from: `hrm_talent_pool_members m
+  JOIN hrm_talent_pools p ON p.id = m.pool_id AND p.org_id = m.org_id
+  JOIN hrm_candidates c ON c.id = m.candidate_id AND c.org_id = m.org_id`,
+    orgColumn: 'm.org_id',
+    // Pool membership is org-wide under the recruiting grant (pools are not
+    // tied to one opening until rediscovery matches them), like the other
+    // candidate-faced aggregates above.
+    subsidiaryScope: null,
+    requiredPermission: HRM_RECRUITING_READ_PERMISSION,
+    featureKey: 'hrmTalentPool',
+    defaultPeriodField: null,
+    columns: [
+      { key: 'pool', label: 'Pool', kind: 'text', expr: 'p.name' },
+      { key: 'candidate', label: 'Candidate', kind: 'text', expr: 'c.display_name' },
+      { key: 'added_on', label: 'Added', kind: 'date', expr: 'm.added_at' },
+      { key: 'note', label: 'Note', kind: 'text', expr: 'm.note' },
+    ],
+    defaultSort: { column: 'added_on', direction: 'desc' },
+  },
+  // HR-18 end
 ]

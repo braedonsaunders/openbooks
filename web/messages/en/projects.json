@@ -230,7 +230,11 @@
     "totalJobPrice": "Total job price",
     "totalJobCost": "Total job cost",
     "committedHint": "Open purchase-order commitments.",
-    "grossProfit": "Gross profit"
+    "grossProfit": "Gross profit",
+    "crewToday": "Crew today",
+    "unknownWorker": "(unknown worker)",
+    "sinceTime": "since {since}",
+    "geoOutside": "outside geofence"
   },
   "charges": {
     "costRecovered": "Cost recovered",

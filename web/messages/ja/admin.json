@@ -991,7 +991,10 @@
     "hrm_compensation_manage": "サイクル実行、レート反映、プランとスナップショット作成",
     "hrm_compensation_approve": "承認フローを通じて明細を決定",
     "hrm_certifications_read": "認定と配車可否の表示",
-    "hrm_certifications_manage": "認定種類・要件・更新の管理"
+    "hrm_certifications_manage": "認定種類・要件・更新の管理",
+    "time_clock": "現場で打刻する",
+    "time_crew_enter": "班バッチを入力する",
+    "time_kiosk_manage": "キオスクとPINを管理する"
   },
   "ai": {
     "metaTitle": "AI設定",
@@ -2596,6 +2599,51 @@
         "title": "コンピテンシー",
         "singularTitle": "コンピテンシー",
         "description": "評価・職位レベル・職位に紐づくフレームワーク内のスキル。"
+      },
+      "hrm-document-categories": {
+        "title": "文書カテゴリ",
+        "singularTitle": "文書カテゴリ",
+        "description": "HR文書カテゴリの組織定義ボキャブラリ — 契約、ポリシー、確認書。テンプレートと保持ルールはこのキーを使用します。"
+      },
+      "hrm-document-templates": {
+        "title": "文書テンプレート",
+        "singularTitle": "文書テンプレート",
+        "description": "差し込みフィールドと順序付き署名者を持つ再利用可能なHR文書ひな形。確認のみテンプレートは署名不要です。"
+      },
+      "hrm-retention-schedules": {
+        "title": "保持スケジュール",
+        "singularTitle": "保持スケジュール",
+        "description": "各文書カテゴリの保持期間、起算イベント、期限到来時に削除か匿名化かを定義します。リーガルホールドは実行を停止します。"
+      },
+      "hrm-interview-kits": {
+        "description": "求人ごとの面接ガイド：質問・評価項目・尺度。",
+        "singularTitle": "面接キット",
+        "title": "面接キット"
+      },
+      "hrm-interviewer-pools": {
+        "description": "面接官グループ。宣言した空き枠と標準キットを持つ。",
+        "singularTitle": "面接官グループ",
+        "title": "面接官グループ"
+      },
+      "hrm-kit-attributes": {
+        "description": "キットの評価項目。重点項目は必須評価。",
+        "singularTitle": "キット項目",
+        "title": "キット項目"
+      },
+      "hrm-kit-questions": {
+        "description": "キットごとの推奨質問。項目へのひも付け可。",
+        "singularTitle": "キット質問",
+        "title": "キット質問"
+      },
+      "hrm-offer-templates": {
+        "description": "オファー文面テンプレート。条項付きで版管理PDF化。",
+        "singularTitle": "オファーテンプレート",
+        "title": "オファーテンプレート"
+      },
+      "hrm-retention-rules": {
+        "description": "保持ルール：期限に応じて匿名化または削除。",
+        "singularTitle": "保持ルール",
+        "title": "保持ルール"
       }
     },
     "fields": {
@@ -2944,7 +2992,38 @@
       "renewalLeadDays": "更新リードタイム（日）",
       "requiresEvidence": "証跡が必要",
       "extraCategories": "追加カテゴリ",
-      "frameworkId": "フレームワーク"
+      "frameworkId": "フレームワーク",
+      "categoryKey": "カテゴリ",
+      "retainYears": "保持期間（年）",
+      "fromEvent": "起算日",
+      "bodyTemplate": "本文テンプレート",
+      "mergeFields": "差し込みフィールド",
+      "requiresSignature": "署名が必要",
+      "signEmployee": "従業員が署名",
+      "signManager": "マネージャーが署名",
+      "signHr": "人事が署名",
+      "acknowledgmentOnly": "確認のみ",
+      "radiusM": "半径（m）",
+      "center": "中心",
+      "polygon": "多角形",
+      "pinRequired": "PIN必須",
+      "photoRequired": "写真必須",
+      "subjectKind": "対象",
+      "stages": "段階",
+      "approvalRequired": "承認が必要",
+      "attribute": "項目",
+      "attributeId": "項目",
+      "availability": "空き枠",
+      "clauses": "条項",
+      "consentExtensionLeadDays": "延長通知日数",
+      "instructions": "指針",
+      "isFocusDefault": "重点項目",
+      "kitId": "キット",
+      "pipelineStageId": "選考段階",
+      "question": "質問",
+      "ratingScale": "評価尺度",
+      "regionScope": "地域範囲",
+      "retainMonths": "保持月数"
     },
     "fieldHelp": {
       "gapless": "欠番なしとは、連番のすべての番号が記録され、番号が飛ばないことを意味します。法令または監査要件で途切れない採番が必要な場合にのみ有効にしてください。",
@@ -3028,7 +3107,18 @@
       "rateScheduleJurisdiction": "パック語彙。汎用層では自由記述 — 解釈はパックが行う。",
       "perDiemComponent": "金額が通過する支給コンポーネント。その税務処理が唯一の課税区分宣言。",
       "hrmQualificationValidity": "期限のない資格は空欄のままにします。",
-      "hrmQualificationExtraCategories": "標準の6区分以外の自社カテゴリ語彙。"
+      "hrmQualificationExtraCategories": "標準の6区分以外の自社カテゴリ語彙。",
+      "hrmAttributeFocus": "重点項目は全評価で必須。その他は任意。",
+      "hrmKitInstructions": "パネル向け指針。各評価に印字される。",
+      "hrmKitScale": "strong_no、no、yes、strong_yesのうち2件以上。",
+      "hrmKitStage": "この選考段階に適用。空欄は全体に適用。",
+      "hrmPoolAvailability": "startsAt、endsAt、timezoneのJSONリスト。",
+      "hrmPoolKit": "このグループの面接の標準キット。",
+      "hrmQuestionAttribute": "質問をこのキットの項目にひも付ける。",
+      "hrmRetentionLeadDays": "期限前に延長を求める日数。空欄は通知なし。",
+      "hrmRetentionScope": "地域をJSONで指定：applies_to allまたはcountries。",
+      "hrmTemplateBody": "オファーデータの差し込み欄付き本文。",
+      "hrmTemplateClauses": "key、label、body、default_onのJSONリスト。"
     },
     "options": {
       "timeClassification": {
@@ -3477,6 +3567,31 @@
         "medical": "医療",
         "clearance": "許可",
         "other": "その他"
+      },
+      "hrmDocFromEvent": {
+        "completion": "完了",
+        "termination": "退職",
+        "creation": "作成"
+      },
+      "hrmDocAction": {
+        "delete": "削除",
+        "anonymize": "匿名化"
+      },
+      "geofenceKind": {
+        "circle": "円",
+        "polygon": "多角形"
+      },
+      "approvalSubject": {
+        "timesheetWeek": "タイムシート週",
+        "crewTimeBatch": "班バッチ"
+      },
+      "hrmRetentionAction": {
+        "anonymize": "匿名化",
+        "delete": "削除"
+      },
+      "hrmRetentionBasis": {
+        "consent": "同意",
+        "inactivity": "無応募"
       }
     },
     "invoicing": {
@@ -4762,6 +4877,86 @@
     "hrmSuccession": {
       "title": "タレントと後継",
       "description": "職位ごとのタレントレビューと後継計画。"
+    },
+    "hrmDocuments": {
+      "title": "HR文書",
+      "description": "電子署名、テンプレート、確認書を備えた入社から退職までのHR文書。無効化してもデータは削除されません。"
+    },
+    "hrmDocumentRetention": {
+      "title": "文書の保持",
+      "description": "猶予期間後の監査付き削除を備えた保持スケジュール。無効化してもデータは削除されません。"
+    },
+    "hrmDataSubjectExport": {
+      "title": "開示請求エクスポート",
+      "description": "データ主体向けワンクリック開示エクスポート。無効化してもデータは削除されません。"
+    },
+    "hrmSurveys": {
+      "title": "エンゲージメント調査",
+      "description": "匿名度別の結果を備えたエンゲージメント・パルス調査。無効化してもデータは削除されません。"
+    },
+    "hrmPulseSurveys": {
+      "title": "パルス調査",
+      "description": "トレンド付きの定期パルス実施。調査機能が必要です。"
+    },
+    "hrmOrgChart": {
+      "title": "組織図",
+      "description": "欠員、部門、スパン・オブ・コントロールを示す組織ツリー。"
+    },
+    "fieldTime": {
+      "title": "現場打刻",
+      "description": "ジオフェンス・写真・オフラインキュー付きのモバイル／キオスク打刻、職長バッチ、機械時間の計上。"
+    },
+    "fieldTimeGeofence": {
+      "title": "打刻ジオフェンス",
+      "description": "プロジェクトの円・多角形と位置を照合。圏外はフラグ表示し、拒否しません。"
+    },
+    "fieldTimePhoto": {
+      "title": "打刻写真",
+      "description": "モバイル打刻に写真を必須化。"
+    },
+    "fieldTimeKiosk": {
+      "title": "現場キオスク",
+      "description": "自動復帰付きの共用PIN端末。"
+    },
+    "fieldTimeCrewEntry": {
+      "title": "班の工数入力",
+      "description": "プロジェクト×日ごとの職長バッチ（署名・段階承認付き）。"
+    },
+    "fieldTimeEquipment": {
+      "title": "工数に機械時間",
+      "description": "工数・バッチ明細に機械時間（機械チャージ品目で単価計算）。機械機能が必要。"
+    },
+    "fieldTimeMultiStageApproval": {
+      "title": "多段階の工数承認",
+      "description": "タイムシートと班バッチの上長・PM・給与の段階チェーン。"
+    },
+    "hrmRecruiting": {
+      "title": "採用",
+      "description": "求人、候補者、面接、オファー：欠員から採用までの流れ。"
+    },
+    "hrmStructuredInterviews": {
+      "title": "構造化面接",
+      "description": "評価項目つき面接キットとブラインド方式のパネル評価。"
+    },
+    "hrmInterviewScheduling": {
+      "title": "面接日程調整",
+      "description": "候補者向け自己予約リンクつきの提案枠。"
+    },
+    "hrmOfferSigning": {
+      "title": "オファー署名",
+      "description": "テンプレートのオファーを版管理PDF化し製品内で署名。"
+    },
+    "hrmJobBoards": {
+      "title": "求人掲示",
+      "description": "社内キャリアページとフィード配信、選考結果の同期つき。"
+    },
+    "hrmCandidateRetention": {
+      "title": "候補者データ保持",
+      "description": "同意の取得と保持ルール：期限で匿名化または削除。"
+    },
+    "hrmTalentPool": {
+      "title": "タレントプール",
+      "description": "過去の候補者を募集中の求人に照合するプール。"
     }
   },
   "extensions": {

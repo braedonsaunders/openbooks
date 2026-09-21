@@ -20,6 +20,11 @@ import { PAY_DERIVED_RULE_ENTITIES } from './payroll-derived-rules'
 import { PAYROLL_HOLIDAYS_ENTITY } from './payroll-holidays'
 import { LEAVE_POLICIES_ENTITY, LEAVE_TYPES_ENTITY } from './hrm-leave'
 import { ACTION_REASONS_ENTITY } from './hrm-action-reasons'
+import {
+  DOCUMENT_CATEGORIES_ENTITY,
+  DOCUMENT_TEMPLATES_ENTITY,
+  RETENTION_SCHEDULES_ENTITY,
+} from './hrm-documents'
 import { BENEFIT_PLANS_ENTITY, BENEFIT_PLAN_LEVELS_ENTITY } from './hrm-benefits'
 import { JOB_FAMILIES_ENTITY, JOB_LEVELS_ENTITY, PAY_BANDS_ENTITY } from './hrm-compensation'
 // HR-13 begin: construction-compliance Setup entities (rehomed onto the
@@ -36,6 +41,25 @@ import {
 // Qualifications page, never the setup rail).
 import { QUALIFICATION_SETTINGS_ENTITY, QUALIFICATION_TYPES_ENTITY } from './hrm-qualifications'
 // HR-14 end
+// HR-18 begin: recruiting-depth Setup entities (rehomed onto /hrm/recruiting,
+// never the setup rail).
+import {
+  RECRUITING_INTERVIEWER_POOLS_ENTITY,
+  RECRUITING_KIT_ATTRIBUTES_ENTITY,
+  RECRUITING_KIT_QUESTIONS_ENTITY,
+  RECRUITING_KITS_ENTITY,
+  RECRUITING_OFFER_TEMPLATES_ENTITY,
+  RECRUITING_RETENTION_RULES_ENTITY,
+} from './hrm-recruiting'
+// HR-18 end
+// HR-20 begin: field-time Setup entities (all rehomed — the project page
+// and the Timesheets setup surface — never the setup rail).
+import {
+  PROJECT_GEOFENCES_ENTITY,
+  TIME_APPROVAL_STAGES_ENTITY,
+  TIME_KIOSKS_ENTITY,
+} from './field-time'
+// HR-20 end
 
 export type SetupFieldKind =
   | 'text'
@@ -1786,6 +1810,16 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   // HR-16 begin
   ACTION_REASONS_ENTITY,
   // HR-16 end
+  // HR documents (0230, HR-19): categories, templates, and retention
+  // schedules. Rehomed as sections onto /hrm/documents (never standalone
+  // setup pages); the Setup generic write path shares the engine
+  // validation through normalizeHrmDocumentTemplateInput +
+  // validateEntityIntegrity.
+  // HR-19 begin
+  DOCUMENT_CATEGORIES_ENTITY,
+  DOCUMENT_TEMPLATES_ENTITY,
+  RETENTION_SCHEDULES_ENTITY,
+  // HR-19 end
   // HRM benefit plans and ordered pricing tiers. Declared in
   // ./hrm-benefits.ts; ordinary registry entities behind the hrm switch.
   BENEFIT_PLANS_ENTITY,
@@ -1813,6 +1847,13 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   QUALIFICATION_TYPES_ENTITY,
   QUALIFICATION_SETTINGS_ENTITY,
   // HR-14 end
+  // HR-20 begin: project geofences, kiosk devices and approval-stage
+  // chains. Declared in ./field-time.ts; rehomed onto the project page
+  // and the Timesheets setup surface.
+  PROJECT_GEOFENCES_ENTITY,
+  TIME_KIOSKS_ENTITY,
+  TIME_APPROVAL_STAGES_ENTITY,
+  // HR-20 end
   {
     key: 'pay-schedules',
     table: 'pay_schedules',
@@ -2887,6 +2928,16 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'minorUnits', kind: 'integer', required: true },
     ],
   },
+  // HR-18 begin: recruiting-depth configuration (0229), declared in
+  // ./hrm-recruiting.ts; rehomed onto /hrm/recruiting (kits + pools on the
+  // Interviews tab, offer templates on Offers, retention rules on Pools).
+  RECRUITING_KITS_ENTITY,
+  RECRUITING_KIT_ATTRIBUTES_ENTITY,
+  RECRUITING_KIT_QUESTIONS_ENTITY,
+  RECRUITING_INTERVIEWER_POOLS_ENTITY,
+  RECRUITING_OFFER_TEMPLATES_ENTITY,
+  RECRUITING_RETENTION_RULES_ENTITY,
+  // HR-18 end
 ]
 
 export const SETUP_ENTITY_BY_KEY = new Map(SETUP_ENTITIES.map((e) => [e.key, e]))

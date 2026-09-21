@@ -20,6 +20,11 @@ test("time tools declare the right gates and features", () => {
     ["unbilled_time", "projects.read", 'feature: "projects"'],
     ["list_field_tickets", "time.read", 'feature: "fieldTickets"'],
     ["get_field_ticket", "time.read", 'feature: "fieldTickets"'],
+    // HR-20 begin: own clock status is self-scoped (time.clock), the team
+    // scope additionally requires time.read; crew batches read time.read.
+    ["time_clock_status", "time.clock", 'feature: "fieldTime"'],
+    ["crew_batches", "time.read", 'feature: "fieldTimeCrewEntry"'],
+    // HR-20 end
   ] as const) {
     const start = source.indexOf(`name: "${tool}"`);
     assert.ok(start >= 0, `${tool} is registered`);
@@ -46,6 +51,11 @@ test("time tools fail closed with stable error codes", () => {
   assert.match(source, /employee_not_found/);
   assert.match(source, /project_not_found/);
   assert.match(source, /field_ticket_not_found/);
+  // HR-20 begin
+  assert.match(source, /fieldTime_feature_disabled/);
+  assert.match(source, /fieldTimeCrewEntry_feature_disabled/);
+  assert.match(source, /team clock status needs time\.read/);
+  // HR-20 end
 });
 
 test("ticket detail withholds signature images and customer email", () => {
@@ -56,5 +66,9 @@ test("ticket detail withholds signature images and customer email", () => {
 
 test("time tools are exported and registered for the playbook", () => {
   assert.match(source, /export const TIME_TOOLS: AssistantToolDef\[\]/);
-  assert.ok(source.includes("getFieldTicket,\n];"));
+  // HR-20 begin: field-time tools join the export list.
+  assert.ok(source.includes("timeClockStatus,"));
+  assert.ok(source.includes("crewBatches,"));
+  // HR-20 end
+  assert.ok(source.includes("getFieldTicket,"));
 });

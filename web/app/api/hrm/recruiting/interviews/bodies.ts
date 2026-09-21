@@ -11,6 +11,9 @@ export const scheduleInterviewBody = z.object({
   durationMinutes: z.number().int().positive().nullable().optional(),
   location: z.string().trim().min(1).max(240).nullable().optional(),
   panelPartyIds: z.array(uuid).max(20).nullable().optional(),
+  // HR-18: optional structured-interview kit plus per-panelist focus pins.
+  kitId: uuid.nullable().optional(),
+  panelFocus: z.record(z.string(), z.array(uuid).max(20)).optional(),
 });
 
 export const patchInterviewBody = z.discriminatedUnion("action", [

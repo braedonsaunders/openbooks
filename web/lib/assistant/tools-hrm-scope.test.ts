@@ -38,11 +38,12 @@ const { HrmAuthorizationError } = await import("@openbooks/engine/src/hrm/author
 const { AmbiguousRevisionError, NoRevisionError } = await import("@openbooks/engine/src/hrm/temporal.ts");
 const { HrmPerformanceError } = await import("@openbooks/engine/src/hrm/performance/errors.ts");
 const { HrmQualificationError } = await import("@openbooks/engine/src/hrm/qualifications/errors.ts");
+const { HrmDocumentsError } = await import("@openbooks/engine/src/hrm/documents/errors.ts");
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const tools = read("./tools-hrm.ts");
 
-const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave", "hrm_recruiting", "hrm_performance_cycles", "hrm_turnover", "hrm_benefits", "hrm_me", "automations_status", "hrm_compliance_findings", "hrm_certified_payroll", "hrm_compensation", "hrm_pay_equity", "hrm_qualifications", "hrm_dispatch_check", "hrm_one_on_ones", "hrm_feedback", "hrm_calibration"];
+const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave", "hrm_recruiting", "hrm_performance_cycles", "hrm_turnover", "hrm_benefits", "hrm_me", "automations_status", "hrm_compliance_findings", "hrm_certified_payroll", "hrm_compensation", "hrm_pay_equity", "hrm_qualifications", "hrm_dispatch_check", "hrm_one_on_ones", "hrm_feedback", "hrm_calibration", "hrm_documents", "hrm_survey_results", "hrm_org_chart"];
 
 const TOOL_PERMS: Record<string, string> = {
   // Elections and windows read through the benefits read service under
@@ -88,6 +89,15 @@ const TOOL_PERMS: Record<string, string> = {
   hrm_qualifications: "hrm.certifications.read",
   hrm_dispatch_check: "hrm.certifications.read",
   // HR-14 end
+  // HR-19 begin: the documents and org-chart tools carry the self
+  // grant (every built-in role holds it) and scope inside — own rows
+  // for self-service, everything with the read grant; file bytes,
+  // tokens, evidence, and pay fields never leave. Results carry the
+  // surveys manage grant; respondent links never leave.
+  hrm_documents: "hrm.self.read",
+  hrm_survey_results: "hrm.surveys.manage",
+  hrm_org_chart: "hrm.self.read",
+  // HR-19 end
   // HR-17 begin: 1:1s and feedback read through the structural scope
   // (HR grant or self grant); calibration reads through the manage
   // grant. Private 1:1 items and talent rows never leave through tools.
@@ -133,6 +143,12 @@ const TOOL_FEATURES: Record<string, string> = {
   hrm_qualifications: "hrmCertifications",
   hrm_dispatch_check: "hrmDispatchGating",
   // HR-14 end
+  // HR-19 begin: documents ride hrmDocuments, results ride hrmSurveys,
+  // the chart rides hrmOrgChart.
+  hrm_documents: "hrmDocuments",
+  hrm_survey_results: "hrmSurveys",
+  hrm_org_chart: "hrmOrgChart",
+  // HR-19 end
   // HR-17 begin: continuous tools sit behind their own sub-switches —
   // off means the tool is absent, never an empty answer.
   hrm_one_on_ones: "hrmOneOnOnes",
@@ -243,6 +259,20 @@ test("minimal valid inputs parse; addressing is runtime-enforced with stable cod
   assert.throws(() => byName.get("hrm_dispatch_check")!.inputSchema.parse({ subjectId: "nope" }));
   assert.throws(() => byName.get("hrm_dispatch_check")!.inputSchema.parse({ on: "tomorrow" }));
   // HR-14 end
+  // HR-19 begin: documents filter to a declared status/category; results
+  // half-address to the survey id (addressing is runtime-enforced);
+  // the chart half-addresses to asOf/search. Genuinely invalid values
+  // throw; a missing survey id throws (the read cannot run without it).
+  byName.get("hrm_documents")!.inputSchema.parse({});
+  byName.get("hrm_documents")!.inputSchema.parse({ status: "signed", categoryKey: "contract" });
+  assert.throws(() => byName.get("hrm_documents")!.inputSchema.parse({ status: "archived" }));
+  byName.get("hrm_survey_results")!.inputSchema.parse({ surveyId: UUID });
+  assert.throws(() => byName.get("hrm_survey_results")!.inputSchema.parse({}));
+  assert.throws(() => byName.get("hrm_survey_results")!.inputSchema.parse({ surveyId: "nope" }));
+  byName.get("hrm_org_chart")!.inputSchema.parse({});
+  byName.get("hrm_org_chart")!.inputSchema.parse({ asOf: "2026-09-01", search: "Eng" });
+  assert.throws(() => byName.get("hrm_org_chart")!.inputSchema.parse({ asOf: "tomorrow" }));
+  // HR-19 end
   // HR-17 begin: continuous tools parse minimal inputs; genuinely invalid values throw.
   byName.get("hrm_one_on_ones")!.inputSchema.parse({});
   byName.get("hrm_one_on_ones")!.inputSchema.parse({ employmentId: UUID });
@@ -295,6 +325,13 @@ test("HRM reads reuse the canonical HRM read services", () => {
     "listQualifications(",
     "checkAssignment(",
     // HR-14 end
+    // HR-19 begin
+    "listDocuments(",
+    "listOwnDocuments(",
+    "getSurveyResults(",
+    "loadDirectory(",
+    "loadOrgChart(",
+    // HR-19 end
     // HR-17 begin: continuous tools reuse the governed 0228 services.
     "listOneOnOnes(",
     "listFeedback(",
@@ -358,6 +395,16 @@ test("hrmRefusal carries read-service refusals and rethrows the rest", () => {
     },
   );
   // HR-14 end
+  // HR-19 begin: a computed documents refusal (undeclared category)
+  // reaches the caller intact — never a parse error, never silence.
+  assert.deepEqual(
+    hrmRefusal(new HrmDocumentsError("VALIDATION", 'category "offer" is not declared — declare it under Setup → Workforce → Document Categories first')),
+    {
+      ok: false,
+      error: 'category "offer" is not declared — declare it under Setup → Workforce → Document Categories first',
+    },
+  );
+  // HR-19 end
   const missing = new NoRevisionError("2026-06-15", "2026-07-01T00:00:00.000000Z");
   const mapped = hrmRefusal(missing);
   assert.equal(mapped.ok, false);
@@ -484,3 +531,38 @@ test("registrations: registry spread, scrape lists, matrix entry, playbook, cont
   assert.match(contract, /"hrm_feature_disabled",/);
   assert.match(contract, /hrm_employment_as_of: \{ employmentId: randomUUID\(\), asOf: "2026-06-15" \}/);
 });
+// HR-18 begin: recruiting depth reads ride hrm_recruiting (names and
+// states only, never PII), each refusing by name while its sub-switch is
+// off, through the canonical depth services — never parallel SQL.
+test("hrm_recruiting depth inputs parse and reuse the depth services", () => {
+  const byName = new Map(HRM_TOOLS.map((tool) => [tool.name, tool] as const));
+  const recruiting = byName.get("hrm_recruiting")!;
+  recruiting.inputSchema.parse({ interviewId: UUID });
+  recruiting.inputSchema.parse({ offerId: UUID });
+  recruiting.inputSchema.parse({ requisitionId: UUID, includePostings: true });
+  assert.throws(() => recruiting.inputSchema.parse({ interviewId: "nope" }));
+  assert.throws(() => recruiting.inputSchema.parse({ offerId: "nope" }));
+  for (const service of ["scorecardSummary(", "offerSignatureState(", "listPostings("]) {
+    assert.ok(tools.includes(service), `tools-hrm.ts must reuse ${service}`);
+  }
+  // The sub-switch gate lives in the SERVICE, not here. requireDepthFeature
+  // refuses by name for the sub-feature or its hrmRecruiting parent, and the
+  // tool propagates that refusal — so a duplicate isFeatureEnabled in the tool
+  // block was both redundant and a feature-parity violation (a tool declares
+  // one feature and cannot declare three). Assert the real gate instead of the
+  // copy: each depth service must call requireDepthFeature with its own key.
+  const depthServices: Record<string, string> = {
+    hrmStructuredInterviews: "../../../engine/src/hrm/recruiting/scorecards.ts",
+    hrmOfferSigning: "../../../engine/src/hrm/recruiting/offers-signing.ts",
+    hrmJobBoards: "../../../engine/src/hrm/recruiting/postings.ts",
+  };
+  for (const [key, path] of Object.entries(depthServices)) {
+    const source = read(path);
+    assert.match(
+      source,
+      new RegExp(`requireDepthFeature\\([^)]*"${key}"`),
+      `${path} must refuse by name when ${key} is off`,
+    );
+  }
+});
+// HR-18 end

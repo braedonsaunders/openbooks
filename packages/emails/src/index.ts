@@ -264,3 +264,79 @@ export function paymentRemittanceEmail(args: {
   })
   return { subject, html, text }
 }
+
+// --- HRM documents & surveys (HR-19) ---------------------------------------
+//
+// Invitation emails for ordered e-signatures and survey responses. Both
+// carry a possession link (HMAC token over the signer/invitation row);
+// the link opens the signing or response page, which re-validates the
+// row — the email itself never decides.
+
+/** Your signature is requested on an HR document, in signer order. */
+export function hrmSignatureRequestEmail(args: {
+  orgName: string
+  docTitle: string
+  signerName?: string
+  signUrl: string
+  expiresDate?: string
+}): EmailOut {
+  const subject = `Signature requested: ${args.docTitle} — ${args.orgName}`
+  const greeting = args.signerName ? `Hello ${args.signerName},` : 'Hello,'
+  const text =
+    `${greeting}\n\n` +
+    `${args.orgName} asks you to sign “${args.docTitle}”.\n\n` +
+    `Sign here: ${args.signUrl}\n\n` +
+    (args.expiresDate ? `The link expires ${args.expiresDate}.\n\n` : '') +
+    `If someone else must sign first, the link activates when they have signed.\n\n` +
+    `— ${args.orgName} via OpenBooks`
+  const html = shell({
+    heading: `Signature requested: ${esc(args.docTitle)}`,
+    bodyHtml: `
+      <p>${esc(greeting)}</p>
+      <p>${esc(args.orgName)} asks you to sign <strong>“${esc(args.docTitle)}”</strong>.</p>
+      <p style="margin:16px 0"><a href="${esc(args.signUrl)}" style="display:inline-block;background:#0f766e;color:#ffffff;padding:10px 18px;border-radius:10px;text-decoration:none;font-weight:600">Review and sign</a></p><p style="font-size:12px;color:#666;word-break:break-all">${esc(args.signUrl)}</p>
+      ${args.expiresDate ? `<p style="color:#666">The link expires ${esc(args.expiresDate)}.</p>` : ''}
+      <p style="color:#666">If someone else must sign first, the link activates when they have signed.</p>`,
+    footer: `Signature request from ${args.orgName}.`,
+  })
+  return { subject, html, text }
+}
+
+/** You are invited to respond to a survey (anonymous grade named). */
+export function hrmSurveyInvitationEmail(args: {
+  orgName: string
+  surveyName: string
+  anonymity: string
+  respondentName?: string
+  respondUrl: string
+  closesDate?: string
+}): EmailOut {
+  const subject = `Survey invitation: ${args.surveyName} — ${args.orgName}`
+  const greeting = args.respondentName ? `Hello ${args.respondentName},` : 'Hello,'
+  const anonymityLine =
+    args.anonymity === 'anonymous'
+      ? 'This survey is anonymous: your response is stored with no link back to you.'
+      : args.anonymity === 'confidential'
+        ? 'This survey is confidential: your identity is stored encrypted and results never show groups smaller than the minimum size.'
+        : 'This survey is named: your response is linked to you.'
+  const text =
+    `${greeting}\n\n` +
+    `${args.orgName} invites you to respond to “${args.surveyName}”.\n\n` +
+    `${anonymityLine}\n\n` +
+    `Respond here: ${args.respondUrl}\n\n` +
+    (args.closesDate ? `The survey closes ${args.closesDate}.\n\n` : '') +
+    `One response per invitation — the link works once.\n\n` +
+    `— ${args.orgName} via OpenBooks`
+  const html = shell({
+    heading: `Survey invitation: ${esc(args.surveyName)}`,
+    bodyHtml: `
+      <p>${esc(greeting)}</p>
+      <p>${esc(args.orgName)} invites you to respond to <strong>“${esc(args.surveyName)}”</strong>.</p>
+      <p style="color:#666">${esc(anonymityLine)}</p>
+      <p style="margin:16px 0"><a href="${esc(args.respondUrl)}" style="display:inline-block;background:#0f766e;color:#ffffff;padding:10px 18px;border-radius:10px;text-decoration:none;font-weight:600">Respond</a></p><p style="font-size:12px;color:#666;word-break:break-all">${esc(args.respondUrl)}</p>
+      ${args.closesDate ? `<p style="color:#666">The survey closes ${esc(args.closesDate)}.</p>` : ''}
+      <p style="color:#666">One response per invitation — the link works once.</p>`,
+    footer: `Survey invitation from ${args.orgName}.`,
+  })
+  return { subject, html, text }
+}

@@ -444,6 +444,17 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0228_hrm_continuous_performance.sql",
     // HR-17 end
     "0237_non_gl_depreciation_recognition.sql",
+    // HR-19 begin: documents/e-sign/retention/DSAR/surveys (0230).
+    "0230_hrm_documents_surveys.sql",
+    // HR-19 end
+    // HR-20 begin: field time capture — clock events, geofences, kiosks,
+    // crew batches, equipment on entries, approval stages (0231).
+    "0231_field_time_capture.sql",
+    // HR-20 end
+    // HR-18 begin: recruiting depth — kits, scorecards, slots, templates,
+    // postings, retention, pools (0229).
+    "0229_hrm_recruiting_depth.sql",
+    // HR-18 end
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -1943,6 +1954,13 @@ test("API keys state their scopes explicitly: legacy empty sets freeze to the ca
     "hrm.certifications.read",
     "hrm.certifications.manage",
     // HR-14 end
+    // HR-20 begin: field time capture (migration 0231): clock is self and
+    // rides every built-in role; crew entry and kiosk management stay
+    // with operations roles. Post-snapshot like the rest of time.
+    "time.clock",
+    "time.crew.enter",
+    "time.kiosk.manage",
+    // HR-20 end
   ];
   assert.deepEqual(
     snapshot,

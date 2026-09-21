@@ -18,6 +18,9 @@ import {
 } from '@openbooks/ui'
 import { KpiStrip, type Kpi } from '../../../../components/kpi-strip'
 import { PagedTable } from '../../../../components/paged-table'
+// HR-20 begin: crew-today section.
+import { CrewTodaySection } from '../../../../components/field-time/CrewTodaySection'
+// HR-20 end
 
 interface TimeRow {
   key: string | null
@@ -68,7 +71,16 @@ interface DrillTarget {
 
 const fmtHours = (v: number) => v.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 4 })
 
-export function CostTimeTab({ data, projectId }: { data: CostTimeData; projectId: string }) {
+export function CostTimeTab({
+  data,
+  projectId,
+  crewToday,
+}: {
+  data: CostTimeData
+  projectId: string
+  // HR-20: who is clocked in now; undefined on surfaces without cockpit data.
+  crewToday?: { employeePartyId: string; employeeName: string | null; since: string; costCodeRef: string | null; geoCheck: string }[]
+}) {
   const { money } = useMoney()
   const t = useTranslations('projects')
   const tCommon = useTranslations('common')
@@ -103,6 +115,8 @@ export function CostTimeTab({ data, projectId }: { data: CostTimeData; projectId
   return (
     <div className="space-y-6">
       <KpiStrip items={kpis} />
+      {/* HR-20: crew-today renders only when rows exist. */}
+      {crewToday && crewToday.length > 0 ? <CrewTodaySection rows={crewToday} /> : null}
       <div className="space-y-3">
         <nav className="-mb-px flex gap-1 border-b border-slate-200 dark:border-slate-800" aria-label={t('cockpit.timeBreakdownAria')}>
           {innerTabs.map((tab) => (

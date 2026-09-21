@@ -577,6 +577,18 @@
         "label": "Timesheet weeks",
         "description": "Weekly timesheets, submission and approval dates, and total hours."
       },
+      "field_clock_events": {
+        "label": "Field clock events",
+        "description": "Mobile and kiosk clock actions — who, when, where-flagged, and how the pair priced. Geo flags only; raw coordinates need the HRM employment permission."
+      },
+      "field_clock_coordinates": {
+        "label": "Field clock coordinates",
+        "description": "Raw clock coordinates per event — worker location, visible only with the HRM employment permission. Flags for everyone else live in Field clock events."
+      },
+      "crew_time_batches": {
+        "label": "Crew time batches",
+        "description": "Foreman crew batches per project per day — status across the approval stages, hours and headcount."
+      },
       "fixed_assets": {
         "label": "Fixed assets",
         "description": "The fixed-asset register — status, acquisition, cost, custodian and dimensions."
@@ -752,6 +764,50 @@
       "hrm_talent_reviews": {
         "label": "Talent reviews",
         "description": "One row per talent review — employee, performance and potential keys, loss impact and risk, and promotion readiness. Requires the HRM performance permission."
+      },
+      "hrm_documents": {
+        "label": "HR documents",
+        "description": "One row per HR document — title, declared category, lifecycle status, send/completion/expiry, and legal hold."
+      },
+      "hrm_document_signers": {
+        "label": "Document signers",
+        "description": "One row per ordered signer — document, signing order, role, and per-signer status."
+      },
+      "hrm_retention_actions": {
+        "label": "Retention actions",
+        "description": "One row per retention action — document, category, due date, terminal action, execution, and any legal-hold block."
+      },
+      "hrm_survey_results": {
+        "label": "Survey results",
+        "description": "One row per survey — kind, anonymity grade, status, invitation and response counts, and close date."
+      },
+      "hrm_org_chart": {
+        "label": "Org chart",
+        "description": "One row per in-service employment at the report as-of date — name, title, department, and line manager."
+      },
+      "hrm_interview_slots": {
+        "description": "One row per proposed, booked, or declined interview slot with its window and kind. Candidate contact PII and booking token hashes never leave.",
+        "label": "Interview slots"
+      },
+      "hrm_offers": {
+        "description": "One row per offer with its commercial status, signature state, and version. Amounts, letter bodies, and signed evidence never leave through reports.",
+        "label": "Offers"
+      },
+      "hrm_pool_members": {
+        "description": "One row per talent-pool membership: pool, candidate name, and when they joined. Contact PII never leaves through reports — names only.",
+        "label": "Pool members"
+      },
+      "hrm_postings": {
+        "description": "One row per job-board posting with its status plus the applies and dispositions-sent counts that make source effectiveness (per board, per opening).",
+        "label": "Postings"
+      },
+      "hrm_retention_runs": {
+        "description": "One row per retention-rule evaluation with the anonymized, deleted, and extension-requested counts.",
+        "label": "Retention runs"
+      },
+      "hrm_scorecards": {
+        "description": "One row per interview with the panel verdict aggregates: submitted and panel counts plus the overall distribution. Per-interviewer detail never leaves through reports — the blind rule holds structurally.",
+        "label": "Scorecards"
       }
     },
     "columns": {
@@ -968,6 +1024,9 @@
         "department": "Department",
         "memo": "Memo",
         "created_at": "Created at",
+        "equipment_unit": "Equipment unit",
+        "equipment_hours": "Equipment hours",
+        "cost_code_ref": "Cost code",
         "id": "Time entry (id)"
       },
       "timesheet_weeks": {
@@ -983,6 +1042,39 @@
         "approved_at": "Approved at",
         "rejection_reason": "Rejection reason",
         "id": "Timesheet week (id)"
+      },
+      "field_clock_events": {
+        "employee_name": "Employee",
+        "kind": "Action",
+        "occurred_at": "Device time",
+        "project": "Project",
+        "cost_code_ref": "Cost code",
+        "geo_check": "Geofence",
+        "accuracy_m": "Fix accuracy (m)",
+        "source": "Source",
+        "status": "Status",
+        "auto_closed": "Auto-closed",
+        "has_photo": "Photo attached",
+        "id": "Clock event (id)"
+      },
+      "field_clock_coordinates": {
+        "employee_name": "Employee",
+        "occurred_at": "Device time",
+        "latitude": "Latitude",
+        "longitude": "Longitude",
+        "accuracy_m": "Fix accuracy (m)",
+        "id": "Clock event (id)"
+      },
+      "crew_time_batches": {
+        "foreman_name": "Foreman",
+        "project": "Project",
+        "worked_on": "Worked on",
+        "status": "Status",
+        "total_hours": "Total hours",
+        "worker_count": "Workers",
+        "line_count": "Lines",
+        "submitted_at": "Submitted at",
+        "id": "Crew batch (id)"
       },
       "fixed_assets": {
         "asset_number": "Asset #",
@@ -1615,6 +1707,110 @@
         "impact_of_loss": "Impact of loss",
         "risk_of_loss": "Risk of loss",
         "id": "Review (id)"
+      },
+      "hrm_documents": {
+        "title": "Title",
+        "person": "Person",
+        "category": "Category",
+        "status": "Status",
+        "sent_at": "Sent at",
+        "completed_at": "Completed at",
+        "expires_at": "Expires at",
+        "legal_hold": "Legal hold",
+        "document_id": "Document (id)"
+      },
+      "hrm_document_signers": {
+        "document": "Document",
+        "ord": "Order",
+        "role": "Role",
+        "status": "Status",
+        "signed_at": "Signed at",
+        "document_id": "Document (id)"
+      },
+      "hrm_retention_actions": {
+        "document": "Document",
+        "category": "Category",
+        "due_on": "Due on",
+        "action": "Action",
+        "executed_at": "Executed at",
+        "blocked_reason": "Blocked reason",
+        "document_id": "Document (id)"
+      },
+      "hrm_survey_results": {
+        "name": "Name",
+        "kind": "Kind",
+        "anonymity": "Anonymity",
+        "status": "Status",
+        "invitations": "Invitations",
+        "responded": "Responded",
+        "closes_at": "Closes at",
+        "survey_id": "Survey (id)"
+      },
+      "hrm_org_chart": {
+        "employee": "Employee",
+        "title": "Title",
+        "department": "Department",
+        "manager": "Manager",
+        "employment_id": "Employment (id)"
+      },
+      "hrm_interview_slots": {
+        "booked_on": "Booked",
+        "candidate": "Candidate",
+        "ends_at": "Ends",
+        "kind": "Kind",
+        "requisition": "Requisition",
+        "slot_id": "Slot (id)",
+        "starts_at": "Starts",
+        "timezone": "Timezone"
+      },
+      "hrm_offers": {
+        "candidate": "Candidate",
+        "expires_on": "Expires",
+        "job_title": "Job title",
+        "offer_id": "Offer (id)",
+        "requisition": "Requisition",
+        "sent_on": "Sent",
+        "signature_status": "Signature",
+        "signed_on": "Signed",
+        "status": "Status",
+        "version": "Version"
+      },
+      "hrm_pool_members": {
+        "added_on": "Added",
+        "candidate": "Candidate",
+        "note": "Note",
+        "pool": "Pool"
+      },
+      "hrm_postings": {
+        "applies": "Applies",
+        "board": "Board",
+        "closed_on": "Closed",
+        "dispositions": "Dispositions",
+        "posting_id": "Posting (id)",
+        "published_on": "Published",
+        "requisition": "Requisition",
+        "status": "Status"
+      },
+      "hrm_retention_runs": {
+        "anonymized": "Anonymized",
+        "deleted": "Deleted",
+        "extensions": "Extensions",
+        "ran_at": "Ran",
+        "rule": "Rule",
+        "run_id": "Run (id)"
+      },
+      "hrm_scorecards": {
+        "candidate": "Candidate",
+        "interview_id": "Interview (id)",
+        "kind": "Kind",
+        "no": "No",
+        "panel": "Panel",
+        "requisition": "Requisition",
+        "scheduled_on": "Scheduled",
+        "strong_no": "Strong no",
+        "strong_yes": "Strong yes",
+        "submitted": "Submitted",
+        "yes": "Yes"
       }
     },
     "enumValues": {

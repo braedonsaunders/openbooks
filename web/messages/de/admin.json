@@ -991,7 +991,10 @@
     "hrm_compensation_manage": "Runden durchführen, Sätze übertragen, Pläne und Kennzahlen erstellen",
     "hrm_compensation_approve": "Zeilen über den Genehmigungslauf entscheiden",
     "hrm_certifications_read": "Zertifizierungen und Einsatzbereitschaft ansehen",
-    "hrm_certifications_manage": "Zertifizierungsarten, Anforderungen und Erneuerungen verwalten"
+    "hrm_certifications_manage": "Zertifizierungsarten, Anforderungen und Erneuerungen verwalten",
+    "time_clock": "Vor Ort stempeln",
+    "time_crew_enter": "Team-Chargen erfassen",
+    "time_kiosk_manage": "Kioskgeräte und PINs verwalten"
   },
   "ai": {
     "metaTitle": "KI-Einstellungen",
@@ -2596,6 +2599,51 @@
         "title": "Kompetenzen",
         "singularTitle": "Kompetenz",
         "description": "Eine Fähigkeit in einem Rahmen, verknüpfbar mit Beurteilungen, Job-Leveln und Positionen."
+      },
+      "hrm-document-categories": {
+        "title": "Dokumentkategorien",
+        "singularTitle": "Dokumentkategorie",
+        "description": "Unternehmensweites Vokabular für HR-Dokumentkategorien — Verträge, Richtlinien, Bestätigungen. Vorlagen und Aufbewahrungsregeln verwenden diese Schlüssel."
+      },
+      "hrm-document-templates": {
+        "title": "Dokumentvorlagen",
+        "singularTitle": "Dokumentvorlage",
+        "description": "Wiederverwendbare HR-Dokumentvorlagen mit Serienfeldern und geordneten Unterzeichnern. Reine Bestätigungsvorlagen erfordern keine Unterschrift."
+      },
+      "hrm-retention-schedules": {
+        "title": "Aufbewahrungsregeln",
+        "singularTitle": "Aufbewahrungsregel",
+        "description": "Wie lange jede Dokumentkategorie aufbewahrt wird, ab welchem Ereignis und ob der Ablauf löscht oder anonymisiert. Ein Legal Hold blockiert die Ausführung namentlich."
+      },
+      "hrm-interview-kits": {
+        "description": "Gesprächsleitfäden je Stelle: Fragen, Bewertungsmerkmale und Skala.",
+        "singularTitle": "Gesprächsleitfaden",
+        "title": "Gesprächsleitfäden"
+      },
+      "hrm-interviewer-pools": {
+        "description": "Befragergruppen mit festen Verfügbarkeitsfenstern und Standardleitfaden.",
+        "singularTitle": "Befragergruppe",
+        "title": "Befragergruppen"
+      },
+      "hrm-kit-attributes": {
+        "description": "Bewertungsmerkmale eines Leitfadens; Fokusmerkmale sind Pflicht.",
+        "singularTitle": "Bewertungsmerkmal",
+        "title": "Bewertungsmerkmale"
+      },
+      "hrm-kit-questions": {
+        "description": "Fragenvorschläge je Leitfaden, optional einem Merkmal zugeordnet.",
+        "singularTitle": "Gesprächsfrage",
+        "title": "Gesprächsfragen"
+      },
+      "hrm-offer-templates": {
+        "description": "Angebotsvorlagen mit Textbausteinen, versioniert und signierbar.",
+        "singularTitle": "Angebotsvorlage",
+        "title": "Angebotsvorlagen"
+      },
+      "hrm-retention-rules": {
+        "description": "Aufbewahrungsregeln: anonymisieren oder löschen nach Frist.",
+        "singularTitle": "Aufbewahrungsregel",
+        "title": "Aufbewahrungsregeln"
       }
     },
     "fields": {
@@ -2944,7 +2992,38 @@
       "renewalLeadDays": "Vorlauf Erneuerung (Tage)",
       "requiresEvidence": "Nachweis erforderlich",
       "extraCategories": "Zusätzliche Kategorien",
-      "frameworkId": "Rahmen"
+      "frameworkId": "Rahmen",
+      "categoryKey": "Kategorie",
+      "retainYears": "Aufbewahrung (Jahre)",
+      "fromEvent": "Fristbeginn",
+      "bodyTemplate": "Textvorlage",
+      "mergeFields": "Serienfelder",
+      "requiresSignature": "Unterschrift erforderlich",
+      "signEmployee": "Mitarbeiter unterschreibt",
+      "signManager": "Führungskraft unterschreibt",
+      "signHr": "HR unterschreibt",
+      "acknowledgmentOnly": "Nur Bestätigung",
+      "radiusM": "Radius (m)",
+      "center": "Mitte",
+      "polygon": "Polygon",
+      "pinRequired": "PIN erforderlich",
+      "photoRequired": "Foto erforderlich",
+      "subjectKind": "Vorgang",
+      "stages": "Stufen",
+      "approvalRequired": "Genehmigung erforderlich",
+      "attribute": "Merkmal",
+      "attributeId": "Merkmal",
+      "availability": "Verfügbarkeit",
+      "clauses": "Bausteine",
+      "consentExtensionLeadDays": "Vorlauf Verlängerung (Tage)",
+      "instructions": "Anweisungen",
+      "isFocusDefault": "Fokusmerkmal",
+      "kitId": "Leitfaden",
+      "pipelineStageId": "Funnelstufe",
+      "question": "Frage",
+      "ratingScale": "Bewertungsskala",
+      "regionScope": "Region",
+      "retainMonths": "Aufbewahrung (Monate)"
     },
     "fieldHelp": {
       "gapless": "Lückenlos bedeutet, dass jede Nummer in der Folge belegt sein muss und keine Nummer übersprungen wird. Aktivieren Sie dies nur, wenn gesetzliche oder prüfungsbezogene Vorgaben eine ununterbrochene Nummerierung verlangen.",
@@ -3028,7 +3107,18 @@
       "rateScheduleJurisdiction": "Pack-Vokabular, Freitext in der generischen Schicht — das Pack interpretiert.",
       "perDiemComponent": "Verdienstkomponente, über die Beträge laufen. Ihre Steuerbehandlung ist die einzige Steuerbarkeitsdeklaration.",
       "hrmQualificationValidity": "Leer lassen für Qualifikationen ohne Ablauf.",
-      "hrmQualificationExtraCategories": "Organisationseigenes Kategorie-Vokabular über die sechs Standards hinaus."
+      "hrmQualificationExtraCategories": "Organisationseigenes Kategorie-Vokabular über die sechs Standards hinaus.",
+      "hrmAttributeFocus": "Fokusmerkmale muss jedes Urteil bewerten; der Rest ist optional.",
+      "hrmKitInstructions": "Hinweise für das Panel, oben auf jedem Urteil abgedruckt.",
+      "hrmKitScale": "Mindestens zwei der Schlüssel strong_no, no, yes, strong_yes.",
+      "hrmKitStage": "Leitfaden gilt für diese Funnelstufe, sonst überall.",
+      "hrmPoolAvailability": "Fenster als JSON-Liste mit startsAt, endsAt und timezone.",
+      "hrmPoolKit": "Standardleitfaden für Termine aus dieser Gruppe.",
+      "hrmQuestionAttribute": "Ordnet die Frage einem Merkmal dieses Leitfadens zu.",
+      "hrmRetentionLeadDays": "Tage vor Ablauf, an denen um Verlängerung gebeten wird; leer ohne E-Mail.",
+      "hrmRetentionScope": "Region als JSON: applies_to all oder countries mit Ländern.",
+      "hrmTemplateBody": "Angebotstext mit Platzhaltern für die Angebotsdaten.",
+      "hrmTemplateClauses": "Bausteine als JSON-Liste mit key, label, body und default_on für die Textbausteine."
     },
     "options": {
       "timeClassification": {
@@ -3477,6 +3567,31 @@
         "medical": "Medizinisch",
         "clearance": "Freigabe",
         "other": "Sonstiges"
+      },
+      "hrmDocFromEvent": {
+        "completion": "Abschluss",
+        "termination": "Austritt",
+        "creation": "Erstellung"
+      },
+      "hrmDocAction": {
+        "delete": "Löschen",
+        "anonymize": "Anonymisieren"
+      },
+      "geofenceKind": {
+        "circle": "Kreis",
+        "polygon": "Polygon"
+      },
+      "approvalSubject": {
+        "timesheetWeek": "Stundenzettelwoche",
+        "crewTimeBatch": "Team-Charge"
+      },
+      "hrmRetentionAction": {
+        "anonymize": "Anonymisieren",
+        "delete": "Löschen"
+      },
+      "hrmRetentionBasis": {
+        "consent": "Einwilligung",
+        "inactivity": "Inaktivität"
       }
     },
     "bankFeeds": {
@@ -4762,6 +4877,86 @@
     "hrmSuccession": {
       "title": "Talent & Nachfolge",
       "description": "Talentbeurteilungen und Nachfolgepläne pro Position."
+    },
+    "hrmDocuments": {
+      "title": "HR-Dokumente",
+      "description": "HR-Dokumente von der Einstellung bis zum Austritt mit E-Signatur, Vorlagen und Bestätigungen. Das Umschalten löscht niemals Daten."
+    },
+    "hrmDocumentRetention": {
+      "title": "Dokumentaufbewahrung",
+      "description": "Aufbewahrungsregeln mit geprüfter Löschung nach einer Karenzzeit. Das Umschalten löscht niemals Daten."
+    },
+    "hrmDataSubjectExport": {
+      "title": "Auskunftsexporte",
+      "description": "Auskunftsexporte für Betroffene auf Knopfdruck. Das Umschalten löscht niemals Daten."
+    },
+    "hrmSurveys": {
+      "title": "Mitarbeiterbefragungen",
+      "description": "Mitarbeiter- und Pulsbefragungen mit anonymitätsgestuften Ergebnissen. Das Umschalten löscht niemals Daten."
+    },
+    "hrmPulseSurveys": {
+      "title": "Pulsbefragungen",
+      "description": "Wiederkehrende Pulstaktung mit Trends. Erfordert Befragungen."
+    },
+    "hrmOrgChart": {
+      "title": "Organigramm",
+      "description": "Der Organisationsbaum mit Vakanzen, Abteilungen und Führungsspannen."
+    },
+    "fieldTime": {
+      "title": "Zeiterfassung vor Ort",
+      "description": "Stempeln per Telefon und Kiosk mit Geofence, Foto und Offline-Warteschlange; Vorarbeiter-Chargen; Gerätestunden auf Einträgen."
+    },
+    "fieldTimeGeofence": {
+      "title": "Stempel-Geofences",
+      "description": "Standort gegen Projektkreise und -polygone prüfen; Fixes außerhalb werden markiert, nie verweigert."
+    },
+    "fieldTimePhoto": {
+      "title": "Stempelfotos",
+      "description": "Foto bei mobilen Stempeln verlangen."
+    },
+    "fieldTimeKiosk": {
+      "title": "Baustellen-Kiosks",
+      "description": "Geteilte PIN-Geräte zum Stempeln mit automatischer Rückkehr."
+    },
+    "fieldTimeCrewEntry": {
+      "title": "Teamzeiterfassung",
+      "description": "Vorarbeiter-Chargen pro Projekt und Tag mit Unterschrift und Stufen."
+    },
+    "fieldTimeEquipment": {
+      "title": "Geräte auf Zeit",
+      "description": "Gerätestunden auf Zeiteinträgen und Chargenzeilen, bepreist über den Geräteposten. Braucht Geräte."
+    },
+    "fieldTimeMultiStageApproval": {
+      "title": "Mehrstufige Zeitgenehmigung",
+      "description": "Stufen für Vorgesetzte, Projektleitung und Lohn für Stundenzettel und Team-Chargen."
+    },
+    "hrmRecruiting": {
+      "title": "Recruiting",
+      "description": "Anforderungen, Kandidaten, Interviews und Angebote: der Weg von der Stelle zur Einstellung."
+    },
+    "hrmStructuredInterviews": {
+      "title": "Strukturierte Interviews",
+      "description": "Interviewleitfäden mit Bewertungskriterien und blinden Panelurteilen."
+    },
+    "hrmInterviewScheduling": {
+      "title": "Interviewplanung",
+      "description": "Vorgeschlagene Termine mit Selbstbuchungslinks für Kandidaten."
+    },
+    "hrmOfferSigning": {
+      "title": "Angebotsunterzeichnung",
+      "description": "Vorlagenangebote als versionierte PDFs, im Produkt signiert."
+    },
+    "hrmJobBoards": {
+      "title": "Stellenbörsen",
+      "description": "Interne Karriereseite und Feed-Veröffentlichung mit Rückmeldung."
+    },
+    "hrmCandidateRetention": {
+      "title": "Kandidatenaufbewahrung",
+      "description": "Einwilligungen und Aufbewahrungsregeln: planmäßig anonymisieren oder löschen."
+    },
+    "hrmTalentPool": {
+      "title": "Talentpool",
+      "description": "Pools früherer Kandidaten, abgeglichen mit offenen Stellen."
     }
   },
   "extensions": {

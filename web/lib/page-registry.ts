@@ -1456,6 +1456,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/hrm/documents': {
+    route: '/hrm/documents',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/hrm/documents/view')
+      return {
+        load: (input) => m.loadDocumentsPage(input.searchParams ?? {}),
+        spec: (data) => m.documentsSpec(data as never),
+      }
+    },
+  },
   '/hrm/leave': {
     route: '/hrm/leave',
     segments: [],
@@ -1477,6 +1489,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: (input) => m.loadMyLeavePage(input.searchParams ?? {}),
         spec: (data) => m.myLeaveSpec(data as never),
+      }
+    },
+  },
+  '/hrm/org-chart': {
+    route: '/hrm/org-chart',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/hrm/org-chart/view')
+      return {
+        load: (input) => m.loadOrgChartPage(input.searchParams ?? {}),
+        spec: (data) => m.orgChartSpec(data as never),
       }
     },
   },
@@ -1516,6 +1540,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/hrm/qualifications': {
+    route: '/hrm/qualifications',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/hrm/qualifications/view')
+      return {
+        load: (input) => m.loadQualificationsPage(input.searchParams ?? {}),
+        spec: (data) => m.qualificationsSpec(data as never),
+      }
+    },
+  },
   '/hrm/recruiting': {
     route: '/hrm/recruiting',
     segments: [],
@@ -1525,6 +1561,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: (input) => m.loadRecruitingPage(input.searchParams ?? {}),
         spec: (data) => m.recruitingSpec(data as never),
+      }
+    },
+  },
+  '/hrm/surveys': {
+    route: '/hrm/surveys',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/hrm/surveys/view')
+      return {
+        load: (input) => m.loadSurveysPage(input.searchParams ?? {}),
+        spec: (data) => m.surveysSpec(data as never),
       }
     },
   },
@@ -1684,6 +1732,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/me/documents': {
+    route: '/me/documents',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/me/documents/view')
+      return {
+        load: (input) => m.loadMeDocumentsPage(input.searchParams ?? {}),
+        spec: (data) => m.meDocumentsSpec(data as never),
+      }
+    },
+  },
   '/me/one-on-ones': {
     route: '/me/one-on-ones',
     segments: [],
@@ -1717,6 +1777,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: (input) => m.loadMeReviewsPage(input.searchParams ?? {}),
         spec: (data) => m.meReviewsSpec(data as never),
+      }
+    },
+  },
+  '/me/surveys': {
+    route: '/me/surveys',
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/me/surveys/view')
+      return {
+        load: () => m.loadMeSurveysPage(),
+        spec: (data) => m.meSurveysSpec(data as never),
       }
     },
   },
@@ -2317,6 +2389,42 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: (input) => m.loadProvisionDetail(input.searchParams ?? {}, segment(input, 'id')),
         spec: (data) => m.provisionDetailSpec(data as never),
+      }
+    },
+  },
+  '/time/clock': {
+    route: '/time/clock',
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/time/clock/view')
+      return {
+        load: () => m.loadClockPage(),
+        spec: (data) => m.clockSpec(data as never),
+      }
+    },
+  },
+  '/time/crew': {
+    route: '/time/crew',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/time/crew/view')
+      return {
+        load: (input) => m.loadCrewPage(input.searchParams ?? {}),
+        spec: (data) => m.crewSpec(data as never),
+      }
+    },
+  },
+  '/time/setup': {
+    route: '/time/setup',
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/time/setup/view')
+      return {
+        load: () => m.loadFieldSetupPage(),
+        spec: (data) => m.fieldSetupSpec(data as never),
       }
     },
   },

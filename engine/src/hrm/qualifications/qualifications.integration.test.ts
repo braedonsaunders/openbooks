@@ -408,6 +408,9 @@ test("derived status projects at read: expiring, expired, pending, valid", { ski
     const stored = (await db.execute<{ status: string }>(sql`
       select distinct status from hrm_worker_qualifications where org_id = ${h.org.orgId}
     `)).rows.map((r) => r.status);
+    // Anchor the loop: an empty result set would let every assertion inside
+    // it pass vacuously, so the count is asserted before anything iterates.
+    assert.ok(stored.length > 0, "the fixture must have stored qualification rows to check");
     for (const s of stored) assert.ok(["valid", "revoked", "pending_verification"].includes(s));
     // The pure projector agrees with the service at the boundaries.
     assert.equal(projectDerivedStatus({ stored: "valid", expiresOn: addDays(today, 30), leadDays: 30, today }), "expiring");

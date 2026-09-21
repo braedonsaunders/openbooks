@@ -114,7 +114,6 @@ test("hrmActionReasons defaults on, hrmEventVerbs defaults off, both under hrm",
   assert.equal(verbs.parentKey, "hrm");
   assert.equal(featureEnabled({ hrm: false, hrmActionReasons: true }, "hrmActionReasons"), false);
 });
-
 // HR-14 begin: certifications ride hrm; dispatch gating needs projects +
 // projectScheduling, equipment qualifications need equipment, alerts ride
 // the parent alone. Off hides the surface, never the data.
@@ -165,3 +164,98 @@ test("hrmCertifications is an opt-in hrm feature with gated sub-features", () =>
   );
 });
 // HR-14 end
+// HR-18 begin: recruiting depth — the funnel rides the parent (on wherever
+// hrm is on); kits, scheduling, signing, boards, retention and pools are
+// opt-in sub-features that never resurrect while the parent is off.
+test("hrmRecruiting rides hrm with six opt-in sub-features", () => {
+  const def = FEATURE_BY_KEY.get("hrmRecruiting");
+  assert.ok(def, "hrmRecruiting must be registered before routes gate on it");
+  assert.equal(def.defaultEnabled, true);
+  assert.equal(def.parentKey, "hrm");
+  assert.equal(featureEnabled({}, "hrmRecruiting"), false);
+  assert.equal(featureEnabled({ hrm: false, hrmRecruiting: true }, "hrmRecruiting"), false);
+  assert.equal(featureEnabled({ hrm: true }, "hrmRecruiting"), true);
+  for (const key of [
+    "hrmStructuredInterviews",
+    "hrmInterviewScheduling",
+    "hrmOfferSigning",
+    "hrmJobBoards",
+    "hrmCandidateRetention",
+    "hrmTalentPool",
+  ]) {
+    const sub = FEATURE_BY_KEY.get(key);
+    assert.ok(sub, `${key} must be registered`);
+    assert.equal(sub.parentKey, "hrmRecruiting");
+    assert.equal(sub.defaultEnabled, false);
+    // A stale stored override can never resurrect a child while the parent is off.
+    assert.equal(featureEnabled({ hrm: true, hrmRecruiting: false, [key]: true }, key), false);
+    assert.equal(featureEnabled({ hrm: false, hrmRecruiting: true, [key]: true }, key), false);
+    assert.equal(featureEnabled({ hrm: true, hrmRecruiting: true, [key]: true }, key), true);
+  }
+});
+// HR-18 end
+// HR-19 begin: documents ride hrm with retention and export sub-features;
+// surveys ride hrm with pulse as the sub-feature; the org chart is
+// default-on under hrm. A stale override never resurrects a child while
+// its parent is off, and toggling never deletes (no data assertions here
+// — the services own those).
+test("hrm documents, surveys, and org chart gate under hrm", () => {
+  for (const key of ["hrmDocuments", "hrmSurveys", "hrmOrgChart"]) {
+    const def = FEATURE_BY_KEY.get(key);
+    assert.ok(def, `${key} must be registered`);
+    assert.equal(def.parentKey, "hrm");
+    assert.equal(featureEnabled({ hrm: false, [key]: true }, key), false);
+  }
+  const docs = FEATURE_BY_KEY.get("hrmDocuments");
+  assert.ok(docs, "hrmDocuments must be registered");
+  assert.equal(docs.defaultEnabled, false);
+  for (const key of ["hrmDocumentRetention", "hrmDataSubjectExport"]) {
+    const sub = FEATURE_BY_KEY.get(key);
+    assert.ok(sub, `${key} must be registered`);
+    assert.equal(sub.parentKey, "hrmDocuments");
+    assert.equal(featureEnabled({ hrm: true, hrmDocuments: false, [key]: true }, key), false);
+    assert.equal(featureEnabled({ hrm: true, hrmDocuments: true, [key]: true }, key), true);
+  }
+  const pulse = FEATURE_BY_KEY.get("hrmPulseSurveys");
+  assert.ok(pulse, "hrmPulseSurveys must be registered");
+  assert.equal(pulse.parentKey, "hrmSurveys");
+  assert.equal(pulse.defaultEnabled, false);
+  const chart = FEATURE_BY_KEY.get("hrmOrgChart");
+  assert.ok(chart, "hrmOrgChart must be registered");
+  assert.equal(chart.defaultEnabled, true);
+  assert.equal(featureEnabled({ hrm: true }, "hrmOrgChart"), true);
+  assert.equal(featureEnabled({ hrm: false, hrmOrgChart: true }, "hrmOrgChart"), false);
+});
+// HR-19 end
+
+// HR-20 begin: field time capture rides timeTracking (office orgs never
+// see a clock) and needs projects; sub-features hide optional
+// complexity. Off stops rendering and writing, never data.
+test("fieldTime rides timeTracking with six sub-features", () => {
+  const def = FEATURE_BY_KEY.get("fieldTime");
+  assert.ok(def, "fieldTime must be registered");
+  assert.equal(def.defaultEnabled, false);
+  assert.equal(def.parentKey, "timeTracking");
+  assert.deepEqual(def.requiresAll, ["projects"]);
+  for (const key of [
+    "fieldTimeGeofence",
+    "fieldTimePhoto",
+    "fieldTimeKiosk",
+    "fieldTimeCrewEntry",
+    "fieldTimeEquipment",
+    "fieldTimeMultiStageApproval",
+  ]) {
+    const sub = FEATURE_BY_KEY.get(key);
+    assert.ok(sub, `${key} must be registered`);
+    assert.equal(sub.parentKey, "fieldTime");
+    assert.equal(sub.defaultEnabled, false);
+    // A stale stored override can never resurrect a child while the parent is off.
+    assert.equal(featureEnabled({ fieldTime: false, [key]: true }, key), false);
+  }
+  assert.deepEqual(FEATURE_BY_KEY.get("fieldTimeEquipment")!.requiresAll, ["equipment"]);
+  assert.equal(
+    featureEnabled({ projects: true, timeTracking: true, fieldTime: true, fieldTimeKiosk: true }, "fieldTimeKiosk"),
+    true,
+  );
+});
+// HR-20 end

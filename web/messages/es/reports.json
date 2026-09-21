@@ -577,6 +577,18 @@
         "label": "Semanas de hoja de horas",
         "description": "Hojas de horas semanales, fechas de envío y aprobación y total de horas."
       },
+      "field_clock_events": {
+        "label": "Fichajes de campo",
+        "description": "Acciones de reloj móviles y de quiosco — quién, cuándo, con indicador de zona, y cómo se tarifa el par. Solo indicadores; las coordenadas brutas exigen el permiso de empleo de RR. HH."
+      },
+      "field_clock_coordinates": {
+        "label": "Coordenadas de fichaje",
+        "description": "Coordenadas brutas por fichaje — ubicación del trabajador, visibles solo con el permiso de empleo de RR. HH. Los indicadores están en Fichajes de campo."
+      },
+      "crew_time_batches": {
+        "label": "Lotes de cuadrilla",
+        "description": "Lotes de cuadrilla del capataz por proyecto y día — estado en las etapas de aprobación, horas y personal."
+      },
       "fixed_assets": {
         "label": "Activos fijos",
         "description": "El registro de activos fijos: estado, adquisición, costo, custodio y dimensiones."
@@ -752,6 +764,50 @@
       "hrm_talent_reviews": {
         "label": "Evaluaciones de talento",
         "description": "Una fila por evaluación de talento: empleado, desempeño y potencial, impacto y riesgo de pérdida, y preparación para ascender. Requiere el permiso de desempeño de RR. HH."
+      },
+      "hrm_documents": {
+        "label": "Documentos de RR. HH.",
+        "description": "Una fila por documento de RR. HH. — título, categoría declarada, estado del ciclo de vida, envío/finalización/vencimiento y retención legal."
+      },
+      "hrm_document_signers": {
+        "label": "Firmantes de documentos",
+        "description": "Una fila por firmante ordenado — documento, orden, rol y estado."
+      },
+      "hrm_retention_actions": {
+        "label": "Acciones de conservación",
+        "description": "Una fila por acción de conservación — documento, categoría, vencimiento, acción terminal, ejecución y bloqueo legal."
+      },
+      "hrm_survey_results": {
+        "label": "Resultados de encuestas",
+        "description": "Una fila por encuesta — tipo, grado de anonimato, estado, recuentos de invitaciones y respuestas, fecha de cierre."
+      },
+      "hrm_org_chart": {
+        "label": "Organigrama",
+        "description": "Una fila por empleo en servicio a la fecha del informe — nombre, cargo, departamento y responsable."
+      },
+      "hrm_interview_slots": {
+        "description": "Una fila por horario propuesto, reservado o rechazado, con ventana y tipo. Ni datos de contacto ni tokens salen de aquí.",
+        "label": "Horarios de entrevista"
+      },
+      "hrm_offers": {
+        "description": "Una fila por oferta con estado comercial, estado de firma y versión. Importes, cartas y evidencias nunca salen por informes.",
+        "label": "Ofertas"
+      },
+      "hrm_pool_members": {
+        "description": "Una fila por miembro de la reserva: reserva, nombre y alta. Solo nombres, nunca datos de contacto.",
+        "label": "Miembros de la reserva"
+      },
+      "hrm_postings": {
+        "description": "Una fila por publicación con estado más candidaturas y respuestas enviadas para medir cada portal (por portal, por vacante).",
+        "label": "Publicaciones"
+      },
+      "hrm_retention_runs": {
+        "description": "Una fila por evaluación de la regla con anonimizados, eliminados y prórrogas solicitadas.",
+        "label": "Ejecuciones de conservación"
+      },
+      "hrm_scorecards": {
+        "description": "Una fila por entrevista con los agregados del panel: enviados y tamaño más la distribución global. El detalle por evaluador nunca sale por informes.",
+        "label": "Veredictos"
       }
     },
     "columns": {
@@ -968,6 +1024,9 @@
         "department": "Departamento",
         "memo": "Nota",
         "created_at": "Creado el",
+        "equipment_unit": "Unidad de equipo",
+        "equipment_hours": "Horas de equipo",
+        "cost_code_ref": "Código de coste",
         "id": "Registro de tiempo (id)"
       },
       "timesheet_weeks": {
@@ -983,6 +1042,39 @@
         "approved_at": "Aprobado el",
         "rejection_reason": "Motivo del rechazo",
         "id": "Semana (id)"
+      },
+      "field_clock_events": {
+        "employee_name": "Empleado",
+        "kind": "Acción",
+        "occurred_at": "Hora del dispositivo",
+        "project": "Proyecto",
+        "cost_code_ref": "Código de coste",
+        "geo_check": "Geocerca",
+        "accuracy_m": "Precisión de la posición (m)",
+        "source": "Origen",
+        "status": "Estado",
+        "auto_closed": "Cierre auto",
+        "has_photo": "Foto adjunta",
+        "id": "Fichaje (id)"
+      },
+      "field_clock_coordinates": {
+        "employee_name": "Empleado",
+        "occurred_at": "Hora del dispositivo",
+        "latitude": "Latitude",
+        "longitude": "Longitude",
+        "accuracy_m": "Precisión de la posición (m)",
+        "id": "Fichaje (id)"
+      },
+      "crew_time_batches": {
+        "foreman_name": "Capataz",
+        "project": "Proyecto",
+        "worked_on": "Trabajado el",
+        "status": "Estado",
+        "total_hours": "Horas totales",
+        "worker_count": "Trabajadores",
+        "line_count": "Líneas",
+        "submitted_at": "Enviado el",
+        "id": "Lote de cuadrilla (id)"
       },
       "fixed_assets": {
         "asset_number": "N.º de activo",
@@ -1615,6 +1707,110 @@
         "impact_of_loss": "Impacto de pérdida",
         "risk_of_loss": "Riesgo de pérdida",
         "id": "Evaluación (id)"
+      },
+      "hrm_documents": {
+        "title": "Título",
+        "person": "Persona",
+        "category": "Categoría",
+        "status": "Estado",
+        "sent_at": "Enviado el",
+        "completed_at": "Finalizado el",
+        "expires_at": "Vence el",
+        "legal_hold": "Retención legal",
+        "document_id": "Documento (id)"
+      },
+      "hrm_document_signers": {
+        "document": "Documento",
+        "ord": "Orden",
+        "role": "Rol",
+        "status": "Estado",
+        "signed_at": "Firmado el",
+        "document_id": "Documento (id)"
+      },
+      "hrm_retention_actions": {
+        "document": "Documento",
+        "category": "Categoría",
+        "due_on": "Vence el",
+        "action": "Acción",
+        "executed_at": "Ejecutado el",
+        "blocked_reason": "Motivo del bloqueo",
+        "document_id": "Documento (id)"
+      },
+      "hrm_survey_results": {
+        "name": "Nombre",
+        "kind": "Tipo",
+        "anonymity": "Anonimato",
+        "status": "Estado",
+        "invitations": "Invitaciones",
+        "responded": "Respondidas",
+        "closes_at": "Cierra el",
+        "survey_id": "Encuesta (id)"
+      },
+      "hrm_org_chart": {
+        "employee": "Persona empleada",
+        "title": "Cargo",
+        "department": "Departamento",
+        "manager": "Responsable",
+        "employment_id": "Empleo (id)"
+      },
+      "hrm_interview_slots": {
+        "booked_on": "Reservado",
+        "candidate": "Candidato",
+        "ends_at": "Fin",
+        "kind": "Tipo",
+        "requisition": "Vacante",
+        "slot_id": "Horario (id)",
+        "starts_at": "Inicio",
+        "timezone": "Zona horaria"
+      },
+      "hrm_offers": {
+        "candidate": "Candidato",
+        "expires_on": "Vence",
+        "job_title": "Puesto",
+        "offer_id": "Oferta (id)",
+        "requisition": "Vacante",
+        "sent_on": "Enviada",
+        "signature_status": "Firma",
+        "signed_on": "Firmada",
+        "status": "Estado",
+        "version": "Versión"
+      },
+      "hrm_pool_members": {
+        "added_on": "Alta",
+        "candidate": "Candidato",
+        "note": "Nota",
+        "pool": "Reserva"
+      },
+      "hrm_postings": {
+        "applies": "Candidaturas",
+        "board": "Portal",
+        "closed_on": "Cierre",
+        "dispositions": "Respuestas",
+        "posting_id": "Publicación (id)",
+        "published_on": "Publicación",
+        "requisition": "Vacante",
+        "status": "Estado"
+      },
+      "hrm_retention_runs": {
+        "anonymized": "Anonimizados",
+        "deleted": "Eliminados",
+        "extensions": "Prórrogas",
+        "ran_at": "Ejecución",
+        "rule": "Regla",
+        "run_id": "Ejecución (id)"
+      },
+      "hrm_scorecards": {
+        "candidate": "Candidato",
+        "interview_id": "Entrevista (id)",
+        "kind": "Tipo",
+        "no": "No",
+        "panel": "Panel de evaluación",
+        "requisition": "Vacante",
+        "scheduled_on": "Programada",
+        "strong_no": "No rotundo",
+        "strong_yes": "Sí rotundo",
+        "submitted": "Enviados",
+        "yes": "Sí"
       }
     },
     "enumValues": {

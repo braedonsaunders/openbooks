@@ -32,6 +32,9 @@ export async function POST(req: Request) {
       durationMinutes: body.durationMinutes,
       location: body.location,
       panelPartyIds: body.panelPartyIds,
+      // HR-18: optional kit + focus pins ride the same call.
+      kitId: body.kitId,
+      panelFocus: body.panelFocus,
     });
     return NextResponse.json({ interview }, { status: 201 });
   } catch (e) {

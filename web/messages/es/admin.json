@@ -991,7 +991,10 @@
     "hrm_compensation_manage": "Ejecutar ciclos, trasladar tarifas y crear planes y mediciones",
     "hrm_compensation_approve": "Decidir líneas mediante el flujo de aprobación",
     "hrm_certifications_read": "Ver certificaciones y disponibilidad de asignación",
-    "hrm_certifications_manage": "Gestionar tipos de certificación, requisitos y renovaciones"
+    "hrm_certifications_manage": "Gestionar tipos de certificación, requisitos y renovaciones",
+    "time_clock": "Fichar en campo",
+    "time_crew_enter": "Cargar lotes de cuadrilla",
+    "time_kiosk_manage": "Gestionar quioscos y PIN"
   },
   "ai": {
     "metaTitle": "Proveedores de IA",
@@ -2483,6 +2486,51 @@
         "title": "Competencias",
         "singularTitle": "Competencia",
         "description": "Una habilidad de un marco, vinculable a evaluaciones, niveles y puestos."
+      },
+      "hrm-document-categories": {
+        "title": "Categorías de documentos",
+        "singularTitle": "Categoría de documento",
+        "description": "Vocabulario declarado por la organización para las categorías de documentos de RR. HH. — contratos, políticas, acuses. Las plantillas y reglas de conservación usan estas claves."
+      },
+      "hrm-document-templates": {
+        "title": "Plantillas de documentos",
+        "singularTitle": "Plantilla de documento",
+        "description": "Plantillas reutilizables de documentos de RR. HH. con campos combinados y firmantes ordenados. Las plantillas de solo acuse no requieren firmas."
+      },
+      "hrm-retention-schedules": {
+        "title": "Reglas de conservación",
+        "singularTitle": "Regla de conservación",
+        "description": "Cuánto se conserva cada categoría, desde qué evento y si el vencimiento elimina o anonimiza. La retención legal bloquea la ejecución por nombre."
+      },
+      "hrm-interview-kits": {
+        "description": "Guías de entrevista por vacante: preguntas, atributos y escala.",
+        "singularTitle": "Guía de entrevista",
+        "title": "Guías de entrevista"
+      },
+      "hrm-interviewer-pools": {
+        "description": "Grupos de entrevistadores con disponibilidad declarada y guía base.",
+        "singularTitle": "Grupo de entrevistadores",
+        "title": "Grupos de entrevistadores"
+      },
+      "hrm-kit-attributes": {
+        "description": "Atributos evaluados de una guía; los de enfoque son obligatorios.",
+        "singularTitle": "Atributo de la guía",
+        "title": "Atributos de la guía"
+      },
+      "hrm-kit-questions": {
+        "description": "Preguntas sugeridas por guía, con atributo opcional.",
+        "singularTitle": "Pregunta de la guía",
+        "title": "Preguntas de la guía"
+      },
+      "hrm-offer-templates": {
+        "description": "Modelos de carta de oferta con cláusulas, en PDF versionados.",
+        "singularTitle": "Modelo de oferta",
+        "title": "Modelos de oferta"
+      },
+      "hrm-retention-rules": {
+        "description": "Reglas de conservación: anonimizar o eliminar según calendario.",
+        "singularTitle": "Regla de conservación",
+        "title": "Reglas de conservación"
       }
     },
     "fields": {
@@ -2831,7 +2879,38 @@
       "renewalLeadDays": "Antelación de renovación (días)",
       "requiresEvidence": "Requiere evidencia",
       "extraCategories": "Categorías adicionales",
-      "frameworkId": "Marco"
+      "frameworkId": "Marco",
+      "categoryKey": "Categoría",
+      "retainYears": "Conservación (años)",
+      "fromEvent": "Inicio del cómputo",
+      "bodyTemplate": "Plantilla del cuerpo",
+      "mergeFields": "Campos combinados",
+      "requiresSignature": "Requiere firma",
+      "signEmployee": "Firma la persona empleada",
+      "signManager": "Firma su responsable",
+      "signHr": "Firma RR. HH.",
+      "acknowledgmentOnly": "Solo acuse",
+      "radiusM": "Radio (m)",
+      "center": "Centro",
+      "polygon": "Polígono",
+      "pinRequired": "PIN obligatorio",
+      "photoRequired": "Foto obligatoria",
+      "subjectKind": "Asunto",
+      "stages": "Etapas",
+      "approvalRequired": "Aprobación requerida",
+      "attribute": "Atributo",
+      "attributeId": "Atributo",
+      "availability": "Disponibilidad",
+      "clauses": "Cláusulas",
+      "consentExtensionLeadDays": "Antelación de prórroga",
+      "instructions": "Instrucciones",
+      "isFocusDefault": "Atributo de enfoque",
+      "kitId": "Guía",
+      "pipelineStageId": "Etapa del embudo",
+      "question": "Pregunta",
+      "ratingScale": "Escala de evaluación",
+      "regionScope": "Ámbito regional",
+      "retainMonths": "Meses de conservación"
     },
     "fieldHelp": {
       "gapless": "Sin huecos significa que cada número de la secuencia debe quedar contabilizado, sin números omitidos. Actívelo solo cuando los requisitos legales o de auditoría exijan una numeración ininterrumpida.",
@@ -2915,7 +2994,18 @@
       "rateScheduleJurisdiction": "Vocabulario del pack, texto libre en la capa genérica — el pack lo interpreta.",
       "perDiemComponent": "Componente de ganancia por el que cruzan los importes. Su tratamiento fiscal es la única declaración de tributación.",
       "hrmQualificationValidity": "Déjelo vacío para cualificaciones que no vencen.",
-      "hrmQualificationExtraCategories": "Vocabulario de categorías propio más allá de las seis integradas."
+      "hrmQualificationExtraCategories": "Vocabulario de categorías propio más allá de las seis integradas.",
+      "hrmAttributeFocus": "Los atributos de enfoque se evalúan en cada veredicto; el resto es opcional.",
+      "hrmKitInstructions": "Orientación para el panel, impresa en cada veredicto.",
+      "hrmKitScale": "Al menos dos de las claves strong_no, no, yes, strong_yes.",
+      "hrmKitStage": "La guía aplica a esta etapa, o a todas si está vacía.",
+      "hrmPoolAvailability": "Ventanas como lista JSON con startsAt, endsAt y timezone.",
+      "hrmPoolKit": "Guía base para las citas de este grupo.",
+      "hrmQuestionAttribute": "Asigna la pregunta a un atributo de esta guía.",
+      "hrmRetentionLeadDays": "Días previos para pedir prórroga; vacío no envía correo.",
+      "hrmRetentionScope": "Región como JSON: applies_to all o countries con códigos.",
+      "hrmTemplateBody": "Texto con marcadores para los datos de la oferta.",
+      "hrmTemplateClauses": "Cláusulas como lista JSON con key, label, body y default_on."
     },
     "options": {
       "timeClassification": {
@@ -3364,6 +3454,31 @@
         "medical": "Médica",
         "clearance": "Habilitación",
         "other": "Otra"
+      },
+      "hrmDocFromEvent": {
+        "completion": "Finalización",
+        "termination": "Baja",
+        "creation": "Creación"
+      },
+      "hrmDocAction": {
+        "delete": "Eliminar",
+        "anonymize": "Anonimizar"
+      },
+      "geofenceKind": {
+        "circle": "Círculo",
+        "polygon": "Polígono"
+      },
+      "approvalSubject": {
+        "timesheetWeek": "Semana del parte",
+        "crewTimeBatch": "Lote de cuadrilla"
+      },
+      "hrmRetentionAction": {
+        "anonymize": "Anonimizar",
+        "delete": "Eliminar"
+      },
+      "hrmRetentionBasis": {
+        "consent": "Consentimiento",
+        "inactivity": "Inactividad"
       }
     },
     "laborCosting": {
@@ -4762,6 +4877,86 @@
     "hrmSuccession": {
       "title": "Talento y sucesión",
       "description": "Revisiones de talento y planes de sucesión por puesto."
+    },
+    "hrmDocuments": {
+      "title": "Documentos de RR. HH.",
+      "description": "Documentos de RR. HH. de la contratación a la baja con firma electrónica, plantillas y acuses. Desactivar nunca elimina datos."
+    },
+    "hrmDocumentRetention": {
+      "title": "Conservación de documentos",
+      "description": "Reglas de conservación con eliminación auditada tras un período de gracia. Desactivar nunca elimina datos."
+    },
+    "hrmDataSubjectExport": {
+      "title": "Exportaciones de acceso",
+      "description": "Exportaciones de acceso para los interesados con un clic. Desactivar nunca elimina datos."
+    },
+    "hrmSurveys": {
+      "title": "Encuestas de compromiso",
+      "description": "Encuestas de compromiso y de pulso con resultados por grado de anonimato. Desactivar nunca elimina datos."
+    },
+    "hrmPulseSurveys": {
+      "title": "Encuestas de pulso",
+      "description": "Cadencia de pulso recurrente con tendencias. Requiere encuestas."
+    },
+    "hrmOrgChart": {
+      "title": "Organigrama",
+      "description": "El árbol de la organización con vacantes, departamentos y ámbito de control."
+    },
+    "fieldTime": {
+      "title": "Fichaje en campo",
+      "description": "Fichaje móvil y en quiosco con geocerca, foto y cola offline; lotes del capataz; horas de equipo en los partes."
+    },
+    "fieldTimeGeofence": {
+      "title": "Geocercas de fichaje",
+      "description": "Comparar la ubicación con círculos y polígonos del proyecto; lo de fuera se marca, nunca se rechaza."
+    },
+    "fieldTimePhoto": {
+      "title": "Fotos de fichaje",
+      "description": "Exigir foto en los fichajes móviles."
+    },
+    "fieldTimeKiosk": {
+      "title": "Quioscos de obra",
+      "description": "Dispositivos PIN compartidos con vuelta automática al inicio."
+    },
+    "fieldTimeCrewEntry": {
+      "title": "Tiempo de cuadrilla",
+      "description": "Lotes del capataz por proyecto y día con firma y etapas."
+    },
+    "fieldTimeEquipment": {
+      "title": "Equipo en el tiempo",
+      "description": "Horas de equipo en partes y líneas, al precio del ítem del equipo. Requiere equipo."
+    },
+    "fieldTimeMultiStageApproval": {
+      "title": "Aprobación de tiempo por etapas",
+      "description": "Cadena de supervisor, jefe de proyecto y nómina para partes y lotes."
+    },
+    "hrmRecruiting": {
+      "title": "Contratación",
+      "description": "Vacantes, candidatos, entrevistas y ofertas: el camino hasta la contratación."
+    },
+    "hrmStructuredInterviews": {
+      "title": "Entrevistas estructuradas",
+      "description": "Guías de entrevista con criterios y veredictos ciegos del panel."
+    },
+    "hrmInterviewScheduling": {
+      "title": "Programación de entrevistas",
+      "description": "Horarios propuestos con enlaces de autorreserva para candidatos."
+    },
+    "hrmOfferSigning": {
+      "title": "Firma de ofertas",
+      "description": "Ofertas de plantilla en PDF versionados, firmadas en el producto."
+    },
+    "hrmJobBoards": {
+      "title": "Portales de empleo",
+      "description": "Página de carreras interna y publicación con sincronización de resultados."
+    },
+    "hrmCandidateRetention": {
+      "title": "Retención de candidatos",
+      "description": "Consentimientos y reglas de retención: anonimizar o eliminar según programa."
+    },
+    "hrmTalentPool": {
+      "title": "Reserva de talento",
+      "description": "Grupos de candidatos anteriores comparados con vacantes abiertas."
     }
   },
   "backupsManager": {

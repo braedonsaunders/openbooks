@@ -13,7 +13,10 @@
       "benefits": "Beneficios",
       "compliance": "Cumplimiento",
       "compensation": "Retribución",
-      "qualifications": "Cualificaciones"
+      "qualifications": "Cualificaciones",
+      "documents": "Documentos",
+      "surveys": "Encuestas",
+      "orgChart": "Organigrama"
     },
     "recruiting": {
       "title": "Contratación",
@@ -663,6 +666,92 @@
       "email": "Correo",
       "phone": "Teléfono",
       "source": "Origen"
+    },
+    "consent": {
+      "future_roles": "Futuros puestos",
+      "talent_pool": "Reserva de talento",
+      "this_application": "Esta candidatura"
+    },
+    "depth": {
+      "applies": "{count} candidaturas",
+      "blinded": "Los demás se abren tras tu envío.",
+      "bookedSlots": "{count} reservados",
+      "close": "Cerrar",
+      "columns": {
+        "applies": "Candidaturas",
+        "board": "Portal",
+        "candidate": "Candidato",
+        "job": "Puesto",
+        "kind": "Tipo",
+        "members": "Miembros",
+        "name": "Nombre",
+        "requisition": "Vacante",
+        "scorecards": "Veredictos",
+        "signature": "Firma",
+        "slots": "Horarios",
+        "status": "Estado",
+        "versions": "Versiones",
+        "when": "Cuándo"
+      },
+      "consentTitle": "Consentimientos",
+      "dispositionLog": "Registro del portal",
+      "empty": "Nada aquí todavía.",
+      "failed": "No se pudo guardar.",
+      "kit": "Guía",
+      "matchToOpening": "Comparar con la vacante",
+      "members": "{count} miembros",
+      "missing": "pendiente",
+      "myScorecard": "Mi veredicto",
+      "others": "Veredictos del panel",
+      "overall": "Global",
+      "pause": "Pausar",
+      "poolMembers": "Miembros",
+      "proposedSlots": "{count} propuestos",
+      "proposeFromPool": "Proponer del grupo",
+      "publish": "Publicar",
+      "questions": "Preguntas",
+      "remove": "Quitar",
+      "retentionDate": "Conservación hasta",
+      "scorecards": "{submitted}/{total} veredictos",
+      "sendLink": "Enviar enlace de firma",
+      "signatureState": "Firma",
+      "slots": "Horarios",
+      "submitScorecard": "Enviar veredicto",
+      "summary": "Resumen",
+      "tagsLabel": "Etiquetas (separadas por comas)",
+      "versionHistory": "Versiones",
+      "versions": "{count} versiones",
+      "voidSignature": "Anular firma"
+    },
+    "posting": {
+      "closed": "Cerrada",
+      "draft": "Borrador",
+      "error": "Error",
+      "paused": "Pausada",
+      "published": "Publicada"
+    },
+    "postingEvent": {
+      "apply_received": "candidatura recibida",
+      "closed": "cerrada",
+      "disposition_sent": "resultado enviado",
+      "error": "error",
+      "paused": "pausada",
+      "published": "publicada"
+    },
+    "signature": {
+      "declined": "Rechazada",
+      "sent": "Enviada",
+      "signed": "Firmada",
+      "unsigned": "Sin firmar",
+      "viewed": "Vista",
+      "voided": "Anulada"
+    },
+    "tabs": {
+      "interviews": "Entrevistas",
+      "offers": "Ofertas",
+      "openings": "Vacantes",
+      "pools": "Reserva",
+      "postings": "Portales"
     }
   },
   "performance": {
@@ -928,7 +1017,9 @@
       "benefits": "Prestaciones",
       "team": "Equipo",
       "compensation": "Retribución",
-      "oneOnOnes": "1:1"
+      "oneOnOnes": "1:1",
+      "documents": "Documentos",
+      "openSurveys": "Encuestas abiertas"
     },
     "refusedTitle": "El autoservicio no está disponible",
     "overview": {
@@ -1590,6 +1681,227 @@
       "expiresOn": "Vence el",
       "identifier": "Número de licencia",
       "notes": "Notas"
+    }
+  },
+  "documents": {
+    "title": "Documentos de RR. HH.",
+    "description": "Emitir, firmar y conservar documentos de la contratación a la baja.",
+    "segmentsLabel": "Estado",
+    "statusAll": "Todos",
+    "status": {
+      "draft": "Borrador",
+      "sent": "Enviado",
+      "viewed": "Visto",
+      "partially_signed": "Firmado parcialmente",
+      "signed": "Firmado",
+      "acknowledged": "Acusado",
+      "declined": "Rechazado",
+      "voided": "Anulado",
+      "expired": "Vencido"
+    },
+    "columns": {
+      "title": "Título",
+      "person": "Persona",
+      "category": "Categoría",
+      "sent": "Enviado",
+      "expires": "Vence",
+      "status": "Estado"
+    },
+    "empty": "Ningún documento coincide con este filtro.",
+    "tiles": {
+      "awaiting": "Pendientes de firma",
+      "expiring": "Vencen pronto",
+      "retentionDue": "Conservación vencida",
+      "exportsPending": "Exportaciones pendientes"
+    },
+    "drawer": {
+      "title": "Documento",
+      "signers": "Firmantes",
+      "events": "Eventos",
+      "versions": "Versiones",
+      "send": "Enviar",
+      "remind": "Recordar",
+      "void": "Anular",
+      "hold": "Retención legal",
+      "releaseHold": "Levantar retención",
+      "download": "Descargar",
+      "voidReason": "Motivo de la anulación",
+      "voidConfirm": "Anular documento",
+      "cancel": "Cancelar",
+      "actionFailed": "Esta acción falló.",
+      "noSigners": "Aún sin firmantes.",
+      "noEvents": "Aún sin eventos.",
+      "declined": "Rechazado",
+      "signed": "Firmado",
+      "pending": "Pendiente",
+      "viewed": "Visto",
+      "missing": "Este documento ya no está disponible."
+    },
+    "generate": {
+      "open": "Nuevo documento",
+      "title": "Generar documento",
+      "template": "Plantilla",
+      "person": "Persona",
+      "docTitle": "Título del documento",
+      "preview": "Vista previa de campos",
+      "submit": "Generar",
+      "failed": "No se pudo generar.",
+      "noTemplates": "Sin plantillas activas — declare plantillas en Configuración primero."
+    }
+  },
+  "surveys": {
+    "title": "Encuestas",
+    "description": "Crear encuestas de compromiso y leer resultados agregados.",
+    "segmentsLabel": "Estado",
+    "statusAll": "Todos",
+    "status": {
+      "draft": "Borrador",
+      "open": "Abierta",
+      "closed": "Cerrada"
+    },
+    "kind": {
+      "engagement": "Compromiso",
+      "pulse": "Pulso",
+      "onboarding": "Incorporación",
+      "exit": "Salida",
+      "custom": "Personalizada"
+    },
+    "anonymity": {
+      "anonymous": "Anónima",
+      "confidential": "Confidencial",
+      "named": "Nominal"
+    },
+    "questionKind": {
+      "scale": "Escala 1–5",
+      "enps": "eNPS 0–10",
+      "text": "Texto libre",
+      "single": "Opción única",
+      "multi": "Opción múltiple"
+    },
+    "columns": {
+      "name": "Nombre",
+      "kind": "Tipo",
+      "anonymity": "Anonimato",
+      "participation": "Participación",
+      "closes": "Cierra",
+      "status": "Estado"
+    },
+    "empty": "Ninguna encuesta coincide con este filtro.",
+    "drawer": {
+      "title": "Encuesta",
+      "results": "Resultados",
+      "participation": "Participación",
+      "enps": "eNPS",
+      "drivers": "Motores",
+      "heatmap": "Mapa de calor",
+      "suppressed": "Suprimido — muy pocas respuestas",
+      "comments": "Comentarios",
+      "trend": "Tendencia",
+      "questions": "Preguntas",
+      "open": "Abrir encuesta",
+      "close": "Cerrar encuesta",
+      "actionFailed": "Esta acción falló.",
+      "invite": "Invitados",
+      "cancel": "Cancelar",
+      "missing": "Esta encuesta ya no está disponible."
+    },
+    "author": {
+      "open": "Nueva encuesta",
+      "title": "Crear encuesta",
+      "name": "Nombre",
+      "kind": "Tipo",
+      "anonymity": "Anonimato",
+      "minGroup": "Tamaño mínimo del grupo",
+      "questions": "Preguntas",
+      "addQuestion": "Añadir pregunta",
+      "prompt": "Pregunta",
+      "driver": "Clave de motor",
+      "options": "Opciones",
+      "remove": "Quitar",
+      "submit": "Guardar encuesta",
+      "failed": "No se pudo guardar."
+    }
+  },
+  "orgChart": {
+    "title": "Organigrama",
+    "description": "El árbol jerárquico con vacantes, a cualquier fecha.",
+    "tree": "Árbol",
+    "directory": "Directorio",
+    "columns": {
+      "name": "Nombre",
+      "title": "Cargo",
+      "department": "Departamento",
+      "manager": "Responsable"
+    },
+    "directoryEmpty": "Nadie coincide con esta búsqueda.",
+    "search": "Buscar",
+    "asOf": "A fecha de",
+    "labels": {
+      "vacancies": "Vacantes",
+      "headcount": "Plantilla",
+      "layers": "Niveles",
+      "span": "Ámbito de control",
+      "vacant": "Vacante",
+      "department": "Departamento",
+      "manager": "Responsable",
+      "reports": "Reportes directos",
+      "close": "Cerrar",
+      "expand": "Expandir",
+      "collapse": "Contraer",
+      "noMatch": "Nadie coincide con esta búsqueda."
+    }
+  },
+  "meDocuments": {
+    "title": "Mis documentos",
+    "description": "Firme sus documentos y solicite su exportación de datos.",
+    "columns": {
+      "title": "Título",
+      "status": "Estado",
+      "sent": "Enviado"
+    },
+    "empty": "No tiene documentos.",
+    "signName": "Su nombre",
+    "sign": "Firmar",
+    "acknowledge": "Acusar",
+    "actionFailed": "Esta acción falló.",
+    "exportsTitle": "Mis exportaciones de datos",
+    "exportsEmpty": "Aún no se solicitaron exportaciones.",
+    "exportsColumns": {
+      "requested": "Solicitado",
+      "status": "Estado"
+    },
+    "requestExport": "Exportar mis datos",
+    "requestExportDone": "Su exportación está en cola — aparece abajo cuando esté lista.",
+    "download": "Descargar"
+  },
+  "meSurveys": {
+    "title": "Encuestas abiertas",
+    "description": "Encuestas esperando su respuesta.",
+    "columns": {
+      "name": "Nombre",
+      "closes": "Cierra"
+    },
+    "empty": "Sin encuestas abiertas ahora.",
+    "respond": "Responder",
+    "actionFailed": "Esta acción falló."
+  },
+  "public": {
+    "book": {
+      "empty": "Sin horarios libres.",
+      "kicker": "Programación de entrevistas",
+      "title": "Reserva tu entrevista, {name}"
+    },
+    "careers": {
+      "empty": "Sin vacantes abiertas ahora.",
+      "kicker": "Empleo · {org}",
+      "title": "Puestos abiertos"
+    },
+    "offer": {
+      "alreadySigned": "Ya firmada. Gracias.",
+      "closed": "Esta carta está cerrada.",
+      "for": "para {name}",
+      "kicker": "Oferta",
+      "version": "versión {version}"
     }
   }
 }

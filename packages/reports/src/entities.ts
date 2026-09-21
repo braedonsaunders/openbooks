@@ -532,7 +532,8 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN parties emp ON emp.id = te.employee_party_id AND emp.org_id = te.org_id
       LEFT JOIN projects prj ON prj.id = te.project_id AND prj.org_id = te.org_id
       LEFT JOIN items it ON it.id = te.item_id AND it.org_id = te.org_id
-      LEFT JOIN departments dep ON dep.id = te.department_id AND dep.org_id = te.org_id`,
+      LEFT JOIN departments dep ON dep.id = te.department_id AND dep.org_id = te.org_id
+      LEFT JOIN equipment_units eq ON eq.id = te.equipment_id AND eq.org_id = te.org_id`,
     orgColumn: 'te.org_id',
     subsidiaryScope: { column: 'coalesce(prj.subsidiary_id, emp.subsidiary_id)' },
     columns: [
@@ -547,6 +548,12 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       // Private memos stay private — the search engine never surfaces them.
       { key: 'memo', label: 'Memo', kind: 'text', expr: "(case when te.memo_is_private then null else te.memo end)" },
       { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'te.created_at' },
+      // HR-20 begin: equipment hours ride the entry (0231), priced through
+      // the unit's equipment_charge item — null when no equipment ran.
+      { key: 'equipment_unit', label: 'Equipment unit', kind: 'text', expr: 'eq.unit_number' },
+      { key: 'equipment_hours', label: 'Equipment hours', kind: 'number', expr: 'te.equipment_hours' },
+      { key: 'cost_code_ref', label: 'Cost code', kind: 'text', expr: 'te.cost_code_ref' },
+      // HR-20 end
       { key: 'id', label: 'Time entry (id)', kind: 'uuid', expr: 'te.id' },
     ],
     defaultSort: { column: 'worked_on', direction: 'desc' },
@@ -1384,6 +1391,84 @@ export const REPORT_ENTITIES: ReportEntity[] = [
   // spread keeps REPORT_ENTITIES the single list every surface derives
   // from (builder, saved views, card studio).
   ...HRM_REPORT_ENTITIES,
+  // HR-20 begin: field time capture (0231). Clock events carry geo FLAGS
+  // (inside/outside/unavailable) — raw coordinates are worker location
+  // and live only in field_clock_coordinates behind hrm.employment.read.
+  {
+    key: 'field_clock_events',
+    label: 'Field clock events',
+    category: 'time',
+    featureKey: 'fieldTime',
+    requiredPermission: 'time.read',
+    description: 'Mobile and kiosk clock actions — who, when, where-flagged, and how the pair priced. Geo flags only; raw coordinates need the HRM employment permission.',
+    from: `time_clock_events ce
+      LEFT JOIN parties emp ON emp.id = ce.employee_party_id AND emp.org_id = ce.org_id
+      LEFT JOIN projects prj ON prj.id = ce.project_id AND prj.org_id = ce.org_id`,
+    orgColumn: 'ce.org_id',
+    subsidiaryScope: { column: 'coalesce(prj.subsidiary_id, emp.subsidiary_id)' },
+    columns: [
+      { key: 'employee_name', label: 'Employee', kind: 'text', expr: 'emp.display_name' },
+      { key: 'kind', label: 'Action', kind: 'enum', expr: 'ce.kind', options: ['clock_in', 'clock_out', 'break_start', 'break_end', 'switch'] },
+      { key: 'occurred_at', label: 'Device time', kind: 'timestamp', expr: 'ce.occurred_at' },
+      { key: 'project', label: 'Project', kind: 'text', expr: 'prj.name' },
+      { key: 'cost_code_ref', label: 'Cost code', kind: 'text', expr: 'ce.cost_code_ref' },
+      { key: 'geo_check', label: 'Geofence', kind: 'enum', expr: 'ce.geo_check', options: ['inside', 'outside', 'unavailable', 'not_required'] },
+      { key: 'accuracy_m', label: 'Fix accuracy (m)', kind: 'number', expr: '(ce.geo->>\'accuracy_m\')' },
+      { key: 'source', label: 'Source', kind: 'enum', expr: 'ce.source', options: ['mobile', 'kiosk', 'crew', 'api'] },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'ce.status', options: ['recorded', 'paired', 'voided'] },
+      { key: 'auto_closed', label: 'Auto-closed', kind: 'boolean', expr: 'ce.auto_closed', options: BOOLEAN_OPTIONS },
+      { key: 'has_photo', label: 'Photo attached', kind: 'boolean', expr: '(ce.photo_file_id is not null)', options: BOOLEAN_OPTIONS },
+      { key: 'id', label: 'Clock event (id)', kind: 'uuid', expr: 'ce.id' },
+    ],
+    defaultSort: { column: 'occurred_at', direction: 'desc' },
+  },
+  {
+    key: 'field_clock_coordinates',
+    label: 'Field clock coordinates',
+    category: 'time',
+    featureKey: 'fieldTime',
+    requiredPermission: 'hrm.employment.read',
+    description: 'Raw clock coordinates per event — worker location, visible only with the HRM employment permission. Flags for everyone else live in Field clock events.',
+    from: `time_clock_events ce
+      LEFT JOIN parties emp ON emp.id = ce.employee_party_id AND emp.org_id = ce.org_id`,
+    orgColumn: 'ce.org_id',
+    subsidiaryScope: { column: 'emp.subsidiary_id' },
+    columns: [
+      { key: 'employee_name', label: 'Employee', kind: 'text', expr: 'emp.display_name' },
+      { key: 'occurred_at', label: 'Device time', kind: 'timestamp', expr: 'ce.occurred_at' },
+      { key: 'latitude', label: 'Latitude', kind: 'text', expr: '(ce.geo->>\'lat\')' },
+      { key: 'longitude', label: 'Longitude', kind: 'text', expr: '(ce.geo->>\'lng\')' },
+      { key: 'accuracy_m', label: 'Fix accuracy (m)', kind: 'number', expr: '(ce.geo->>\'accuracy_m\')' },
+      { key: 'id', label: 'Clock event (id)', kind: 'uuid', expr: 'ce.id' },
+    ],
+    defaultSort: { column: 'occurred_at', direction: 'desc' },
+  },
+  {
+    key: 'crew_time_batches',
+    label: 'Crew time batches',
+    category: 'time',
+    featureKey: 'fieldTimeCrewEntry',
+    requiredPermission: 'time.read',
+    description: 'Foreman crew batches per project per day — status across the approval stages, hours and headcount.',
+    from: `crew_time_batches b
+      LEFT JOIN parties frm ON frm.id = b.foreman_party_id AND frm.org_id = b.org_id
+      LEFT JOIN projects prj ON prj.id = b.project_id AND prj.org_id = b.org_id`,
+    orgColumn: 'b.org_id',
+    subsidiaryScope: { column: 'prj.subsidiary_id' },
+    columns: [
+      { key: 'foreman_name', label: 'Foreman', kind: 'text', expr: 'frm.display_name' },
+      { key: 'project', label: 'Project', kind: 'text', expr: 'prj.name' },
+      { key: 'worked_on', label: 'Worked on', kind: 'date', expr: 'b.worked_on' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'b.status', options: ['draft', 'submitted', 'approved_stage_1', 'approved_stage_2', 'rejected', 'posted'] },
+      { key: 'total_hours', label: 'Total hours', kind: 'number', expr: '(select coalesce(sum(l.hours), 0) from crew_time_batch_lines l where l.batch_id = b.id)' },
+      { key: 'worker_count', label: 'Workers', kind: 'number', expr: '(select count(distinct l.employee_party_id) from crew_time_batch_lines l where l.batch_id = b.id)' },
+      { key: 'line_count', label: 'Lines', kind: 'number', expr: '(select count(*) from crew_time_batch_lines l where l.batch_id = b.id)' },
+      { key: 'submitted_at', label: 'Submitted at', kind: 'timestamp', expr: 'b.submitted_at' },
+      { key: 'id', label: 'Crew batch (id)', kind: 'uuid', expr: 'b.id' },
+    ],
+    defaultSort: { column: 'worked_on', direction: 'desc' },
+  },
+  // HR-20 end
 ]
 
 export const REPORT_ENTITY_MAP: Record<string, ReportEntity> = Object.assign(

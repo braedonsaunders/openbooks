@@ -21,8 +21,10 @@ import type { Coerced } from './coerce'
 interface RuleSlotEntity {
   /** Generated slot columns: readable, never written. */
   readonly generated: readonly string[]
-  /** Folded body key → jsonb column. */
-  readonly folded: readonly { key: string; column: string }[]
+  /** Folded body key → jsonb column. `kind: 'array'` persists a JSON
+   *  array (signer roles, merge keys); the default 'object' persists a
+   *  JSON object (rules, scales). */
+  readonly folded: readonly { key: string; column: string; kind?: 'object' | 'array' }[]
 }
 
 export const RULE_SLOT_ENTITIES: Readonly<Record<string, RuleSlotEntity>> = {
@@ -53,6 +55,18 @@ export const RULE_SLOT_ENTITIES: Readonly<Record<string, RuleSlotEntity>> = {
       { key: 'carryoverRule', column: 'carryover_rule' },
     ],
   },
+  // HR-19 begin: document templates (0230) — signer membership and merge
+  // keys fold from drawer slots into jsonb arrays. No generated slot
+  // columns (review-template precedent): the drawer prefills from the
+  // template row itself.
+  'hrm-document-templates': {
+    generated: [],
+    folded: [
+      { key: 'signerRoles', column: 'signer_roles', kind: 'array' },
+      { key: 'mergeFields', column: 'merge_fields', kind: 'array' },
+    ],
+  },
+  // HR-19 end
 }
 
 /**
@@ -82,6 +96,11 @@ export function applyRuleSlotColumns(
       } catch {
         return { error: `${entry.key} must be valid JSON` }
       }
+    }
+    if (entry.kind === 'array') {
+      if (!Array.isArray(value)) return { error: `${entry.key} must be a JSON array` }
+      out.push({ column: entry.column, value })
+      continue
     }
     if (value === null || typeof value !== 'object' || Array.isArray(value)) {
       return { error: `${entry.key} must be a JSON object` }

@@ -147,6 +147,8 @@ export function WeeklyGrid({
   requireApproval = true,
   fieldDefs = [],
   closeHref = '/timesheets',
+  // HR-20: destructured beside the prop it feeds.
+  fieldFlags = [],
 }: {
   employeeId: string | null
   week: string
@@ -166,6 +168,9 @@ export function WeeklyGrid({
   fieldDefs?: CustomFieldDefClient[]
   /** Where the flyout's close/escape returns to (the list, filters intact). */
   closeHref?: string
+  // HR-20: field flag chips over the week's clock pairs — geo/photo/
+  // auto-close. Coordinates stay out; the drawer shows flags only.
+  fieldFlags?: { entryId: string; workedOn: string; hours: string; geoCheck: string | null; autoClosed: boolean; hasPhoto: boolean }[]
 }) {
   const t = useTranslations('timesheets')
   const tCommon = useTranslations('common')
@@ -484,6 +489,28 @@ export function WeeklyGrid({
             <span className="text-xs text-slate-400 dark:text-slate-500">{t('grid.viewOnly')}</span>
           ) : null}
         </div>
+
+        {/* HR-20: field flag chips — an outside fix was recorded anyway
+            (a worker must be able to clock) and routes to the approver
+            here; auto-closed pairs and photo presence ride along. */}
+        {fieldFlags.filter((flag) => flag.geoCheck === 'outside' || flag.geoCheck === 'unavailable' || flag.autoClosed).length > 0 ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {fieldFlags
+              .filter((flag) => flag.geoCheck === 'outside' || flag.geoCheck === 'unavailable' || flag.autoClosed)
+              .map((flag) => (
+                <span
+                  key={flag.entryId}
+                  className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200"
+                >
+                  {flag.workedOn} · {flag.hours}h
+                  {flag.geoCheck === 'outside' ? ` ${t('field.flagOutside')}` : null}
+                  {flag.geoCheck === 'unavailable' ? ` ${t('field.flagUnavailable')}` : null}
+                  {flag.autoClosed ? ` ${t('field.flagAutoClosed')}` : null}
+                  {flag.hasPhoto ? ` ${t('field.flagPhoto')}` : null}
+                </span>
+              ))}
+          </div>
+        ) : null}
 
         {/* Say WHY the week is pinned rather than leaving a dead Reopen button.
             The same reasons the API enforces are the ones shown here. */}

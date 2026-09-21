@@ -30,10 +30,23 @@ import { benefitsEnrollment } from './articles/benefits-enrollment'
 // HR-13 begin: construction-compliance article.
 import { certifiedPayrollPrevailingWagePerDiem } from './articles/certified-payroll-prevailing-wage-per-diem'
 // HR-13 end
+// HR-20 begin: field-time articles.
+import { fieldClockIn } from './articles/field-clock-in'
+import { crewTimeEntry } from './articles/crew-time-entry'
+// HR-20 end
 import { compensationAndTransparency } from './articles/compensation-transparency'
 // HR-14 begin: certifications, licenses, and dispatch gating article.
 import { certificationsLicensesDispatch } from './articles/certifications-licenses-dispatch'
 // HR-14 end
+// HR-19 begin: documents/signatures/retention, engagement surveys, and org
+// chart articles.
+import { documentsSignaturesAndRetention } from './articles/documents-signatures-and-retention'
+import { engagementSurveys } from './articles/engagement-surveys'
+import { orgChartAndDirectory } from './articles/org-chart-and-directory'
+// HR-19 end
+// HR-18 begin: structured interviews, offers and job boards article.
+import { structuredInterviewsOffersJobBoards } from './articles/structured-interviews-offers-job-boards'
+// HR-18 end
 import { taxConfiguration } from './articles/tax-configuration'
 import { taxJurisdictionsAndNexus, taxReturnsAndBoxes } from './articles/taxes'
 import { fieldTickets } from './articles/field-tickets'
@@ -272,10 +285,24 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   // HR-14 begin
   certificationsLicensesDispatch,
   // HR-14 end
+  // HR-19 begin
+  documentsSignaturesAndRetention,
+  engagementSurveys,
+  orgChartAndDirectory,
+  // HR-19 end
+  // HR-18 begin
+  structuredInterviewsOffersJobBoards,
+  // HR-18 end
   // HR-14 begin: pre-existing red on the stacked base — the 31defe406
   // reconciliation left fieldTickets/subcontractorCompliance listed twice
   // (once on the long line above, once here). The duplicate line is removed.
   // HR-14 end
+  // HR-14 deduped fieldTickets/subcontractorCompliance (listed on the long
+  // line above) — HR-20 keeps that removal and adds only its own articles.
+  // HR-20 begin
+  fieldClockIn,
+  crewTimeEntry,
+  // HR-20 end
   itemRates,
   financialReports,
   analyticsAndSavedViews,

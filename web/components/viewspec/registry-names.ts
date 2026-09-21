@@ -181,6 +181,11 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'grant-control-cell',
   'health-hero',
   'hrm-change-request-actions',
+  // HR-20 begin: field-time islands.
+  'hrm-clock-controls',
+  'hrm-crew-workspace',
+  'hrm-field-time-setup',
+  // HR-20 end
   // HR-13 begin
   'hrm-compliance-actions',
   'hrm-compliance-generate',
@@ -188,6 +193,18 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   // HR-14 begin
   'hrm-qualification-dialog',
   // HR-14 end
+  // HR-19 begin
+  'hrm-documents-drawer',
+  'hrm-documents-generate-dialog',
+  'hrm-me-document-actions',
+  'hrm-me-export-dialog',
+  'hrm-me-export-download',
+  'hrm-me-survey-respond',
+  'hrm-org-chart-person',
+  'hrm-surveys-author-dialog',
+  'hrm-surveys-drawer',
+  'org-chart-tree',
+  // HR-19 end
   'hrm-comp-cycle-dialog',
   'hrm-comp-equity-dialog',
   'hrm-comp-line-drawer',

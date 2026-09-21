@@ -13,7 +13,10 @@
       "benefits": "Benefícios",
       "compliance": "Conformidade",
       "compensation": "Remuneração",
-      "qualifications": "Qualificações"
+      "qualifications": "Qualificações",
+      "documents": "Documentos",
+      "surveys": "Pesquisas",
+      "orgChart": "Organograma"
     },
     "recruiting": {
       "title": "Recrutamento",
@@ -663,6 +666,92 @@
       "email": "E-mail",
       "phone": "Telefone",
       "source": "Origem"
+    },
+    "consent": {
+      "future_roles": "Vagas futuras",
+      "talent_pool": "Banco de talentos",
+      "this_application": "Esta candidatura"
+    },
+    "depth": {
+      "applies": "{count} candidaturas",
+      "blinded": "Os demais abrem após o seu envio.",
+      "bookedSlots": "{count} agendados",
+      "close": "Fechar",
+      "columns": {
+        "applies": "Candidaturas",
+        "board": "Portal",
+        "candidate": "Candidato",
+        "job": "Cargo",
+        "kind": "Tipo",
+        "members": "Membros",
+        "name": "Nome",
+        "requisition": "Vaga",
+        "scorecards": "Vereditos",
+        "signature": "Assinatura",
+        "slots": "Horários",
+        "status": "Estado",
+        "versions": "Versões",
+        "when": "Quando"
+      },
+      "consentTitle": "Consentimentos",
+      "dispositionLog": "Registro do portal",
+      "empty": "Nada aqui ainda.",
+      "failed": "Não foi possível salvar.",
+      "kit": "Roteiro",
+      "matchToOpening": "Comparar com a vaga",
+      "members": "{count} membros",
+      "missing": "pendente",
+      "myScorecard": "Meu veredito",
+      "others": "Vereditos do painel",
+      "overall": "Geral",
+      "pause": "Pausar",
+      "poolMembers": "Membros",
+      "proposedSlots": "{count} propostos",
+      "proposeFromPool": "Propor do grupo",
+      "publish": "Publicar",
+      "questions": "Perguntas",
+      "remove": "Remover",
+      "retentionDate": "Retenção até",
+      "scorecards": "{submitted}/{total} vereditos",
+      "sendLink": "Enviar link de assinatura",
+      "signatureState": "Assinatura",
+      "slots": "Horários",
+      "submitScorecard": "Enviar veredito",
+      "summary": "Resumo",
+      "tagsLabel": "Marcadores (separados por vírgula)",
+      "versionHistory": "Versões",
+      "versions": "{count} versões",
+      "voidSignature": "Anular assinatura"
+    },
+    "posting": {
+      "closed": "Fechada",
+      "draft": "Rascunho",
+      "error": "Erro",
+      "paused": "Pausada",
+      "published": "Publicada"
+    },
+    "postingEvent": {
+      "apply_received": "candidatura recebida",
+      "closed": "fechada",
+      "disposition_sent": "resultado enviado",
+      "error": "erro",
+      "paused": "pausada",
+      "published": "publicada"
+    },
+    "signature": {
+      "declined": "Recusada",
+      "sent": "Enviada",
+      "signed": "Assinada",
+      "unsigned": "Sem assinatura",
+      "viewed": "Vista",
+      "voided": "Anulada"
+    },
+    "tabs": {
+      "interviews": "Entrevistas",
+      "offers": "Ofertas",
+      "openings": "Vagas",
+      "pools": "Banco",
+      "postings": "Portais"
     }
   },
   "performance": {
@@ -928,7 +1017,9 @@
       "benefits": "Benefícios",
       "team": "Equipe",
       "compensation": "Remuneração",
-      "oneOnOnes": "1:1"
+      "oneOnOnes": "1:1",
+      "documents": "Documentos",
+      "openSurveys": "Pesquisas abertas"
     },
     "refusedTitle": "O autoatendimento está indisponível",
     "overview": {
@@ -1590,6 +1681,227 @@
       "expiresOn": "Vence em",
       "identifier": "Número da licença",
       "notes": "Notas"
+    }
+  },
+  "documents": {
+    "title": "Documentos de RH",
+    "description": "Emitir, assinar e reter documentos da admissão ao desligamento.",
+    "segmentsLabel": "Status",
+    "statusAll": "Todos",
+    "status": {
+      "draft": "Rascunho",
+      "sent": "Enviado",
+      "viewed": "Visualizado",
+      "partially_signed": "Parcialmente assinado",
+      "signed": "Assinado",
+      "acknowledged": "Ciente",
+      "declined": "Recusado",
+      "voided": "Anulado",
+      "expired": "Vencido"
+    },
+    "columns": {
+      "title": "Título",
+      "person": "Pessoa",
+      "category": "Categoria",
+      "sent": "Enviado",
+      "expires": "Vence",
+      "status": "Status"
+    },
+    "empty": "Nenhum documento corresponde a este filtro.",
+    "tiles": {
+      "awaiting": "Aguardando assinatura",
+      "expiring": "Vencendo em breve",
+      "retentionDue": "Retenção devida",
+      "exportsPending": "Exportações pendentes"
+    },
+    "drawer": {
+      "title": "Documento",
+      "signers": "Assinantes",
+      "events": "Eventos",
+      "versions": "Versões",
+      "send": "Enviar",
+      "remind": "Lembrar",
+      "void": "Anular",
+      "hold": "Suspensão legal",
+      "releaseHold": "Liberar suspensão",
+      "download": "Baixar",
+      "voidReason": "Motivo da anulação",
+      "voidConfirm": "Anular documento",
+      "cancel": "Cancelar",
+      "actionFailed": "Esta ação falhou.",
+      "noSigners": "Ainda sem assinantes.",
+      "noEvents": "Ainda sem eventos.",
+      "declined": "Recusado",
+      "signed": "Assinado",
+      "pending": "Pendente",
+      "viewed": "Visualizado",
+      "missing": "Este documento não está mais disponível."
+    },
+    "generate": {
+      "open": "Novo documento",
+      "title": "Gerar documento",
+      "template": "Modelo",
+      "person": "Pessoa",
+      "docTitle": "Título do documento",
+      "preview": "Pré-visualizar campos",
+      "submit": "Gerar",
+      "failed": "Falha ao gerar.",
+      "noTemplates": "Sem modelos ativos — declare modelos em Configuração primeiro."
+    }
+  },
+  "surveys": {
+    "title": "Pesquisas",
+    "description": "Criar pesquisas de engajamento e ler resultados agregados.",
+    "segmentsLabel": "Status",
+    "statusAll": "Todos",
+    "status": {
+      "draft": "Rascunho",
+      "open": "Aberta",
+      "closed": "Encerrada"
+    },
+    "kind": {
+      "engagement": "Engajamento",
+      "pulse": "Pulso",
+      "onboarding": "Integração",
+      "exit": "Saída",
+      "custom": "Personalizada"
+    },
+    "anonymity": {
+      "anonymous": "Anônima",
+      "confidential": "Confidencial",
+      "named": "Nominal"
+    },
+    "questionKind": {
+      "scale": "Escala 1–5",
+      "enps": "eNPS 0–10",
+      "text": "Texto livre",
+      "single": "Escolha única",
+      "multi": "Escolha múltipla"
+    },
+    "columns": {
+      "name": "Nome",
+      "kind": "Tipo",
+      "anonymity": "Anonimato",
+      "participation": "Participação",
+      "closes": "Encerra",
+      "status": "Status"
+    },
+    "empty": "Nenhuma pesquisa corresponde a este filtro.",
+    "drawer": {
+      "title": "Pesquisa",
+      "results": "Resultados",
+      "participation": "Participação",
+      "enps": "eNPS",
+      "drivers": "Direcionadores",
+      "heatmap": "Mapa de calor",
+      "suppressed": "Suprimido — respostas insuficientes",
+      "comments": "Comentários",
+      "trend": "Tendência",
+      "questions": "Perguntas",
+      "open": "Abrir pesquisa",
+      "close": "Encerrar pesquisa",
+      "actionFailed": "Esta ação falhou.",
+      "invite": "Convidados",
+      "cancel": "Cancelar",
+      "missing": "Esta pesquisa não está mais disponível."
+    },
+    "author": {
+      "open": "Nova pesquisa",
+      "title": "Criar pesquisa",
+      "name": "Nome",
+      "kind": "Tipo",
+      "anonymity": "Anonimato",
+      "minGroup": "Tamanho mínimo do grupo",
+      "questions": "Perguntas",
+      "addQuestion": "Adicionar pergunta",
+      "prompt": "Pergunta",
+      "driver": "Chave direcionadora",
+      "options": "Opções",
+      "remove": "Remover",
+      "submit": "Salvar pesquisa",
+      "failed": "Falha ao salvar."
+    }
+  },
+  "orgChart": {
+    "title": "Organograma",
+    "description": "A árvore hierárquica com vagas, em qualquer data.",
+    "tree": "Árvore",
+    "directory": "Diretório",
+    "columns": {
+      "name": "Nome",
+      "title": "Cargo",
+      "department": "Departamento",
+      "manager": "Gerência"
+    },
+    "directoryEmpty": "Ninguém corresponde a esta busca.",
+    "search": "Buscar",
+    "asOf": "Em",
+    "labels": {
+      "vacancies": "Vagas",
+      "headcount": "Efetivo",
+      "layers": "Níveis",
+      "span": "Amplitude de controle",
+      "vacant": "Vago",
+      "department": "Departamento",
+      "manager": "Gerência",
+      "reports": "Subordinados diretos",
+      "close": "Fechar",
+      "expand": "Expandir",
+      "collapse": "Recolher",
+      "noMatch": "Ninguém corresponde a esta busca."
+    }
+  },
+  "meDocuments": {
+    "title": "Meus documentos",
+    "description": "Assine seus documentos e solicite sua exportação de dados.",
+    "columns": {
+      "title": "Título",
+      "status": "Status",
+      "sent": "Enviado"
+    },
+    "empty": "Você não tem documentos.",
+    "signName": "Seu nome",
+    "sign": "Assinar",
+    "acknowledge": "Dar ciência",
+    "actionFailed": "Esta ação falhou.",
+    "exportsTitle": "Minhas exportações de dados",
+    "exportsEmpty": "Nenhuma exportação solicitada ainda.",
+    "exportsColumns": {
+      "requested": "Solicitado",
+      "status": "Status"
+    },
+    "requestExport": "Exportar meus dados",
+    "requestExportDone": "Sua exportação está na fila — aparece abaixo quando pronta.",
+    "download": "Baixar"
+  },
+  "meSurveys": {
+    "title": "Pesquisas abertas",
+    "description": "Pesquisas aguardando sua resposta.",
+    "columns": {
+      "name": "Nome",
+      "closes": "Encerra"
+    },
+    "empty": "Sem pesquisas abertas agora.",
+    "respond": "Responder",
+    "actionFailed": "Esta ação falhou."
+  },
+  "public": {
+    "book": {
+      "empty": "Sem horários livres.",
+      "kicker": "Agendamento de entrevistas",
+      "title": "Agende sua entrevista, {name}"
+    },
+    "careers": {
+      "empty": "Sem vagas abertas agora.",
+      "kicker": "Carreiras · {org}",
+      "title": "Vagas abertas"
+    },
+    "offer": {
+      "alreadySigned": "Já assinada. Obrigado.",
+      "closed": "Esta carta está encerrada.",
+      "for": "para {name}",
+      "kicker": "Oferta",
+      "version": "versão {version}"
     }
   }
 }

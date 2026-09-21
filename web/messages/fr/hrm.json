@@ -13,7 +13,10 @@
       "benefits": "Avantages",
       "compliance": "Conformité",
       "compensation": "Rémunération",
-      "qualifications": "Qualifications"
+      "qualifications": "Qualifications",
+      "documents": "Documents",
+      "surveys": "Enquêtes",
+      "orgChart": "Organigramme"
     },
     "recruiting": {
       "title": "Recrutement",
@@ -663,6 +666,92 @@
       "email": "E-mail",
       "phone": "Téléphone",
       "source": "Origine"
+    },
+    "consent": {
+      "future_roles": "Futurs postes",
+      "talent_pool": "Vivier de talents",
+      "this_application": "Cette candidature"
+    },
+    "depth": {
+      "applies": "{count} candidatures",
+      "blinded": "Les autres s'ouvrent après votre envoi.",
+      "bookedSlots": "{count} réservés",
+      "close": "Fermer",
+      "columns": {
+        "applies": "Candidatures",
+        "board": "Site",
+        "candidate": "Candidat",
+        "job": "Poste",
+        "kind": "Type",
+        "members": "Membres",
+        "name": "Nom",
+        "requisition": "Besoin",
+        "scorecards": "Avis",
+        "signature": "Signature",
+        "slots": "Créneaux",
+        "status": "Statut",
+        "versions": "Versions",
+        "when": "Quand"
+      },
+      "consentTitle": "Consentements",
+      "dispositionLog": "Journal du site",
+      "empty": "Rien ici pour l'instant.",
+      "failed": "Enregistrement impossible.",
+      "kit": "Guide",
+      "matchToOpening": "Rapprocher du poste",
+      "members": "{count} membres",
+      "missing": "manquant",
+      "myScorecard": "Mon avis",
+      "others": "Avis du jury",
+      "overall": "Global",
+      "pause": "Suspendre",
+      "poolMembers": "Membres",
+      "proposedSlots": "{count} proposés",
+      "proposeFromPool": "Proposer depuis le groupe",
+      "publish": "Publier",
+      "questions": "Questions",
+      "remove": "Retirer",
+      "retentionDate": "Conservation jusqu'au",
+      "scorecards": "{submitted}/{total} avis",
+      "sendLink": "Envoyer le lien de signature",
+      "signatureState": "Signature",
+      "slots": "Créneaux",
+      "submitScorecard": "Envoyer l'avis",
+      "summary": "Synthèse",
+      "tagsLabel": "Étiquettes (séparées par des virgules)",
+      "versionHistory": "Versions",
+      "versions": "{count} versions",
+      "voidSignature": "Annuler la signature"
+    },
+    "posting": {
+      "closed": "Fermée",
+      "draft": "Brouillon",
+      "error": "Erreur",
+      "paused": "Suspendue",
+      "published": "Publiée"
+    },
+    "postingEvent": {
+      "apply_received": "candidature reçue",
+      "closed": "fermée",
+      "disposition_sent": "décision transmise",
+      "error": "erreur",
+      "paused": "suspendue",
+      "published": "publiée"
+    },
+    "signature": {
+      "declined": "Refusée",
+      "sent": "Envoyée",
+      "signed": "Signée",
+      "unsigned": "Non signée",
+      "viewed": "Vue",
+      "voided": "Annulée"
+    },
+    "tabs": {
+      "interviews": "Entretiens",
+      "offers": "Offres",
+      "openings": "Besoins",
+      "pools": "Vivier",
+      "postings": "Sites"
     }
   },
   "performance": {
@@ -928,7 +1017,9 @@
       "benefits": "Avantages",
       "team": "Équipe",
       "compensation": "Rémunération",
-      "oneOnOnes": "1:1"
+      "oneOnOnes": "1:1",
+      "documents": "Documents",
+      "openSurveys": "Enquêtes ouvertes"
     },
     "refusedTitle": "Le libre-service est indisponible",
     "overview": {
@@ -1590,6 +1681,227 @@
       "expiresOn": "Expire le",
       "identifier": "Numéro de licence",
       "notes": "Notes"
+    }
+  },
+  "documents": {
+    "title": "Documents RH",
+    "description": "Émettre, signer et conserver les documents de l’embauche au départ.",
+    "segmentsLabel": "Statut",
+    "statusAll": "Tous",
+    "status": {
+      "draft": "Brouillon",
+      "sent": "Envoyé",
+      "viewed": "Lu",
+      "partially_signed": "Partiellement signé",
+      "signed": "Signé",
+      "acknowledged": "Accusé",
+      "declined": "Refusé",
+      "voided": "Annulé",
+      "expired": "Expiré"
+    },
+    "columns": {
+      "title": "Titre",
+      "person": "Personne",
+      "category": "Catégorie",
+      "sent": "Envoyé",
+      "expires": "Expire",
+      "status": "Statut"
+    },
+    "empty": "Aucun document pour ce filtre.",
+    "tiles": {
+      "awaiting": "Signatures en attente",
+      "expiring": "Expirent bientôt",
+      "retentionDue": "Conservation due",
+      "exportsPending": "Exports en attente"
+    },
+    "drawer": {
+      "title": "Document",
+      "signers": "Signataires",
+      "events": "Événements",
+      "versions": "Versions",
+      "send": "Envoyer",
+      "remind": "Relancer",
+      "void": "Annuler",
+      "hold": "Suspension légale",
+      "releaseHold": "Lever la suspension",
+      "download": "Télécharger",
+      "voidReason": "Motif de l’annulation",
+      "voidConfirm": "Annuler le document",
+      "cancel": "Annuler",
+      "actionFailed": "Cette action a échoué.",
+      "noSigners": "Aucun signataire.",
+      "noEvents": "Aucun événement.",
+      "declined": "Refusé",
+      "signed": "Signé",
+      "pending": "En attente",
+      "viewed": "Lu",
+      "missing": "Ce document n’est plus disponible."
+    },
+    "generate": {
+      "open": "Nouveau document",
+      "title": "Générer le document",
+      "template": "Modèle",
+      "person": "Personne",
+      "docTitle": "Titre du document",
+      "preview": "Aperçu des champs",
+      "submit": "Générer",
+      "failed": "La génération a échoué.",
+      "noTemplates": "Aucun modèle actif — déclarez d’abord des modèles dans Configuration."
+    }
+  },
+  "surveys": {
+    "title": "Enquêtes",
+    "description": "Créer des enquêtes d’engagement et lire les résultats agrégés.",
+    "segmentsLabel": "Statut",
+    "statusAll": "Tous",
+    "status": {
+      "draft": "Brouillon",
+      "open": "Ouverte",
+      "closed": "Fermée"
+    },
+    "kind": {
+      "engagement": "Engagement",
+      "pulse": "Pulsée",
+      "onboarding": "Intégration",
+      "exit": "Départ",
+      "custom": "Personnalisée"
+    },
+    "anonymity": {
+      "anonymous": "Anonyme",
+      "confidential": "Confidentielle",
+      "named": "Nominative"
+    },
+    "questionKind": {
+      "scale": "Échelle 1–5",
+      "enps": "eNPS 0–10",
+      "text": "Texte libre",
+      "single": "Choix unique",
+      "multi": "Choix multiple"
+    },
+    "columns": {
+      "name": "Nom",
+      "kind": "Type",
+      "anonymity": "Anonymat",
+      "participation": "Participation",
+      "closes": "Clôture",
+      "status": "Statut"
+    },
+    "empty": "Aucune enquête pour ce filtre.",
+    "drawer": {
+      "title": "Enquête",
+      "results": "Résultats",
+      "participation": "Participation",
+      "enps": "eNPS",
+      "drivers": "Moteurs",
+      "heatmap": "Carte de chaleur",
+      "suppressed": "Masqué — trop peu de réponses",
+      "comments": "Commentaires",
+      "trend": "Tendance",
+      "questions": "Questions",
+      "open": "Ouvrir l’enquête",
+      "close": "Fermer l’enquête",
+      "actionFailed": "Cette action a échoué.",
+      "invite": "Invités",
+      "cancel": "Annuler",
+      "missing": "Cette enquête n’est plus disponible."
+    },
+    "author": {
+      "open": "Nouvelle enquête",
+      "title": "Créer l’enquête",
+      "name": "Nom",
+      "kind": "Type",
+      "anonymity": "Anonymat",
+      "minGroup": "Taille minimale du groupe",
+      "questions": "Questions",
+      "addQuestion": "Ajouter une question",
+      "prompt": "Libellé",
+      "driver": "Clé de moteur",
+      "options": "Options",
+      "remove": "Retirer",
+      "submit": "Enregistrer l’enquête",
+      "failed": "L’enregistrement a échoué."
+    }
+  },
+  "orgChart": {
+    "title": "Organigramme",
+    "description": "L’arbre hiérarchique avec postes vacants, à toute date.",
+    "tree": "Arbre",
+    "directory": "Annuaire",
+    "columns": {
+      "name": "Nom",
+      "title": "Titre",
+      "department": "Département",
+      "manager": "Manager"
+    },
+    "directoryEmpty": "Personne pour cette recherche.",
+    "search": "Rechercher",
+    "asOf": "Au",
+    "labels": {
+      "vacancies": "Postes vacants",
+      "headcount": "Effectif",
+      "layers": "Niveaux",
+      "span": "Portée de contrôle",
+      "vacant": "Vacant",
+      "department": "Département",
+      "manager": "Manager",
+      "reports": "Subordonnés directs",
+      "close": "Fermer",
+      "expand": "Déployer",
+      "collapse": "Réduire",
+      "noMatch": "Personne pour cette recherche."
+    }
+  },
+  "meDocuments": {
+    "title": "Mes documents",
+    "description": "Signez vos documents et demandez votre export de données.",
+    "columns": {
+      "title": "Titre",
+      "status": "Statut",
+      "sent": "Envoyé"
+    },
+    "empty": "Vous n’avez aucun document.",
+    "signName": "Votre nom",
+    "sign": "Signer",
+    "acknowledge": "Accuser",
+    "actionFailed": "Cette action a échoué.",
+    "exportsTitle": "Mes exports de données",
+    "exportsEmpty": "Aucun export demandé.",
+    "exportsColumns": {
+      "requested": "Demandé",
+      "status": "Statut"
+    },
+    "requestExport": "Exporter mes données",
+    "requestExportDone": "Votre export est en file — il apparaît ci-dessous une fois prêt.",
+    "download": "Télécharger"
+  },
+  "meSurveys": {
+    "title": "Enquêtes ouvertes",
+    "description": "Enquêtes en attente de votre réponse.",
+    "columns": {
+      "name": "Nom",
+      "closes": "Clôture"
+    },
+    "empty": "Aucune enquête ouverte.",
+    "respond": "Répondre",
+    "actionFailed": "Cette action a échoué."
+  },
+  "public": {
+    "book": {
+      "empty": "Aucun créneau libre.",
+      "kicker": "Planification des entretiens",
+      "title": "Réservez votre entretien, {name}"
+    },
+    "careers": {
+      "empty": "Aucun poste ouvert pour l'instant.",
+      "kicker": "Carrières · {org}",
+      "title": "Postes ouverts"
+    },
+    "offer": {
+      "alreadySigned": "Déjà signée. Merci.",
+      "closed": "Ce courrier est clos.",
+      "for": "pour {name}",
+      "kicker": "Offre",
+      "version": "version {version}"
     }
   }
 }

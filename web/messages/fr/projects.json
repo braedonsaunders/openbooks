@@ -230,7 +230,11 @@
     "totalJobPrice": "Prix total du projet",
     "totalJobCost": "Coût total du projet",
     "committedHint": "Engagements de bons de commande ouverts.",
-    "grossProfit": "Bénéfice brut"
+    "grossProfit": "Bénéfice brut",
+    "crewToday": "Équipe du jour",
+    "unknownWorker": "(ouvrier inconnu)",
+    "sinceTime": "depuis {since}",
+    "geoOutside": "hors zone"
   },
   "charges": {
     "costRecovered": "Coût récupéré",

@@ -102,6 +102,13 @@ export const PERMISSION_CATALOGUE = [
   // separation of duties. Front-line managers approve; whoever owns payroll
   // and billing decides when a locked week may be unlocked again.
   "time.reopen",
+  // HR-20 begin: field time capture — self clock-in, foreman crew entry,
+  // kiosk device management. All self-scoped or assignment-checked in
+  // the service; grants here open the route, never another worker's time.
+  "time.clock",
+  "time.crew.enter",
+  "time.kiosk.manage",
+  // HR-20 end
   // Payroll — a deliberately separate duty set: wages and deductions are
   // confidential, so none of these ride on time.* or admin.setup.manage.
   // read = see runs/stubs; manage = setup, profiles, components; run =
@@ -181,6 +188,17 @@ export const PERMISSION_CATALOGUE = [
   "hrm.certifications.read",
   "hrm.certifications.manage",
   // HR-14 end
+  // HR-19 begin: documents and surveys — the same confidentiality rule
+  // as employment. documents.read sees HR documents, templates, retention
+  // state and exports; documents.manage authors templates, issues/sends/
+  // voids documents and runs retention and DSAR exports. surveys.manage
+  // authors surveys and reads aggregate results (responding rides
+  // invitation tokens, never a grant). Admin-only like the employment
+  // keys above.
+  "hrm.documents.read",
+  "hrm.documents.manage",
+  "hrm.surveys.manage",
+  // HR-19 end
   // HR-12 compensation (0221/0222) — the same confidentiality rule as
   // employment: who is paid what, and whether pay is equitable, are
   // never riders on time.*, payroll.*, or parties.*. read = bands,
@@ -434,6 +452,11 @@ export const PERMISSION_GROUPS: {
       { key: "time.manage", labelKey: permissionLabelKey("time.manage") },
       { key: "time.approve", labelKey: permissionLabelKey("time.approve") },
       { key: "time.reopen", labelKey: permissionLabelKey("time.reopen") },
+      // HR-20 begin
+      { key: "time.clock", labelKey: permissionLabelKey("time.clock") },
+      { key: "time.crew.enter", labelKey: permissionLabelKey("time.crew.enter") },
+      { key: "time.kiosk.manage", labelKey: permissionLabelKey("time.kiosk.manage") },
+      // HR-20 end
     ],
   },
   {
@@ -486,6 +509,12 @@ export const PERMISSION_GROUPS: {
       { key: "hrm.certifications.read", labelKey: permissionLabelKey("hrm.certifications.read") },
       { key: "hrm.certifications.manage", labelKey: permissionLabelKey("hrm.certifications.manage") },
       // HR-14 end
+      // HR-19 begin: appended after the construction keys so the pinned
+      // group order holds.
+      { key: "hrm.documents.read", labelKey: permissionLabelKey("hrm.documents.read") },
+      { key: "hrm.documents.manage", labelKey: permissionLabelKey("hrm.documents.manage") },
+      { key: "hrm.surveys.manage", labelKey: permissionLabelKey("hrm.surveys.manage") },
+      // HR-19 end
     ],
   },
   {
@@ -708,6 +737,11 @@ export const BUILT_IN_ROLES: Record<
       "time.manage",
       "time.approve",
       "time.reopen",
+      // HR-20 begin: field time — self clock plus crew entry and kiosks.
+      "time.clock",
+      "time.crew.enter",
+      "time.kiosk.manage",
+      // HR-20 end
       "payroll.read",
       "payroll.manage",
       "payroll.run",
@@ -783,6 +817,11 @@ export const BUILT_IN_ROLES: Record<
       "assets.manage",
       "time.read",
       "time.manage",
+      // HR-20 begin: field time — self clock plus crew entry and kiosks.
+      "time.clock",
+      "time.crew.enter",
+      "time.kiosk.manage",
+      // HR-20 end
       "assistant.use",
       "assistant.write",
       "documents.read",
@@ -822,6 +861,9 @@ export const BUILT_IN_ROLES: Record<
       "compliance.waive",
       "time.read",
       "time.approve",
+      // HR-20 begin: self clock-in rides every employee role.
+      "time.clock",
+      // HR-20 end
       "assistant.use",
       "documents.read",
       "feedback.use",
@@ -835,7 +877,7 @@ export const BUILT_IN_ROLES: Record<
   viewer: {
     name: "Viewer",
     description: "Read-only access to the ledger, subledgers, reports, and insights.",
-    permissions: ["gl.read", "close.read", "ap.read", "ar.read", "reports.read", "budgets.read", "allocations.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request"],
+    permissions: ["gl.read", "close.read", "ap.read", "ar.read", "reports.read", "budgets.read", "allocations.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "time.clock", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request"],
   },
   sales_manager: {
     name: "Sales Manager",
@@ -849,6 +891,9 @@ export const BUILT_IN_ROLES: Record<
       "insights.read", "documents.read", "feedback.use", "data.export", "data.import", "assistant.use",
       // HR-9 self-service on every built-in role (see controller).
       "hrm.self.read", "hrm.self.request",
+      // HR-20 begin: self clock-in rides every employee role.
+      "time.clock",
+      // HR-20 end
     ],
   },
   sales_rep: {
@@ -863,6 +908,9 @@ export const BUILT_IN_ROLES: Record<
       "documents.read", "feedback.use", "data.export", "assistant.use",
       // HR-9 self-service on every built-in role (see controller).
       "hrm.self.read", "hrm.self.request",
+      // HR-20 begin: self clock-in rides every employee role.
+      "time.clock",
+      // HR-20 end
     ],
   },
 };
