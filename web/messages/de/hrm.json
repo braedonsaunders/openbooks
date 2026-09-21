@@ -81,7 +81,9 @@
       "pending": "{count, plural, one {# Änderungsantrag wartet auf Entscheidung} other {# Änderungsanträge warten auf Entscheidung}}",
       "overdueSteps": "{count, plural, one {# Checklistenschritt überfällig} other {# Checklistenschritte überfällig}}",
       "leavePending": "{count, plural, one {# Urlaubsantrag wartet auf Genehmigung} other {# Urlaubsanträge warten auf Genehmigung}}",
-      "unfunded": "{fte} besetzte VZÄ ohne Finanzierung"
+      "unfunded": "{fte} besetzte VZÄ ohne Finanzierung",
+      "expiringQualifications": "{count, plural, one {# Zertifizierung läuft bald ab} other {# Zertifizierungen laufen bald ab}}",
+      "expiredQualifications": "{count, plural, one {# Zertifizierung abgelaufen – Einsatz verweigert bis zur Erneuerung} other {# Zertifizierungen abgelaufen – Einsatz verweigert bis zur Erneuerung}}"
     }
   },
   "overview": {
@@ -860,7 +862,10 @@
       "balancesTitle": "Salden",
       "balancesEmpty": "Keine aktiven Urlaubsarten.",
       "viewLeave": "Urlaub öffnen",
-      "extensionsTitle": "Mehr"
+      "extensionsTitle": "Mehr",
+      "qualificationsTitle": "Zertifizierungen mit Handlungsbedarf",
+      "qualificationsEmpty": "Nichts läuft ab",
+      "qualificationsEmptyDescription": "Ihre Zertifizierungen sind aktuell – Erneuerungen erscheinen hier vor Ablauf."
     },
     "profile": {
       "title": "Mein Profil",
@@ -1076,6 +1081,13 @@
       "changeReasonPlaceholder": "Warum sich die Deckung ändert",
       "changeSubmit": "Änderung speichern",
       "changeFailed": "Die Änderung konnte nicht gespeichert werden."
+    },
+    "qualifications": {
+      "columns": {
+        "type": "Zertifizierung",
+        "expires": "Läuft ab",
+        "status": "Status"
+      }
     }
   },
   "options": {

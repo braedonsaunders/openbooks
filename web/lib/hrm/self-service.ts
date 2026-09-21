@@ -21,6 +21,8 @@ import { can, type Authz } from '../authz'
 import type { DirectoryItem } from '../../components/module-home/ui'
 import type { ModuleHomeTab } from '../../components/module-home/ui'
 import { loadMyLeave, type MyLeaveBalance } from './leave'
+import { db } from '@openbooks/engine/src/platform/db.ts'
+import { listQualifications } from '@openbooks/engine/src/hrm/qualifications/qualifications.ts'
 
 /**
  * Me workspace loaders — the person's own view of their employment and the
@@ -193,6 +195,13 @@ export interface MeOverviewData {
   balancesTitle: string
   balances: MyLeaveBalance[]
   balancesEmpty: string
+  // HR-14 begin: the viewer's own certifications needing action.
+  qualificationsTitle: string
+  qualifications: MeQualificationRow[]
+  qualificationsEmpty: string
+  qualificationsEmptyDescription: string
+  qualificationsColumns: { type: string; expires: string; status: string }
+  // HR-14 end
   timeKindLabel: string
   valueKindLabel: string
   unlimitedLabel: string
@@ -228,6 +237,24 @@ function requestRows(t: Catalog, requests: MyRequest[]): MeRequestRow[] {
   }))
 }
 
+// HR-14 begin: the viewer's own certifications needing action —
+// expiring or expired rows across their employments, newest lapse
+// first. Status labels resolve from the shared qualification catalog,
+// never inline English.
+export interface MeQualificationRow {
+  id: string
+  typeName: string
+  expiresOn: string | null
+  statusLabel: string
+  statusVariant: StatusVariant
+}
+
+function qualificationVariant(status: string): StatusVariant {
+  if (status === 'expired') return 'destructive'
+  return 'warning'
+}
+// HR-14 end
+
 /** The Me overview: employment summary, open steps, pending requests,
  * balances, and the extension rail. Leave details ride the shared
  * self-service inbox loader so the numbers always agree. */
@@ -260,6 +287,16 @@ export async function loadMeOverview(authz: Authz): Promise<MeOverviewData> {
     },
     balancesTitle: t('me.overview.balancesTitle'),
     balancesEmpty: t('me.overview.balancesEmpty'),
+    // HR-14 begin
+    qualificationsTitle: t('me.overview.qualificationsTitle'),
+    qualificationsEmpty: t('me.overview.qualificationsEmpty'),
+    qualificationsEmptyDescription: t('me.overview.qualificationsEmptyDescription'),
+    qualificationsColumns: {
+      type: t('me.qualifications.columns.type'),
+      expires: t('me.qualifications.columns.expires'),
+      status: t('me.qualifications.columns.status'),
+    },
+    // HR-14 end
     timeKindLabel: t('myLeave.timeKind'),
     valueKindLabel: t('myLeave.valueKind'),
     unlimitedLabel: t('myLeave.unlimited'),
@@ -318,6 +355,31 @@ export async function loadMeOverview(authz: Authz): Promise<MeOverviewData> {
       steps: stepRows(t, steps.slice(0, 5)),
       requests: requestRows(t, requests.filter((row) => row.status === 'draft' || row.status === 'pending_approval').slice(0, 5)),
       balances: inbox?.balances ?? [],
+      // HR-14 begin: the viewer's own expiring and expired
+      // certifications across their employments, lapsed first. A
+      // refusal or an off-switch resolves to the empty state, never a
+      // blank panel — the empty copy says nothing needs action.
+      qualifications: (
+        await Promise.all(
+          profile.employments.map((summary) =>
+            listQualifications(db, { orgId, actorId: authz.user.id, employmentId: summary.employmentId }).catch(() => []),
+          ),
+        )
+      )
+        .flat()
+        .filter((q) => q.status === 'expiring' || q.status === 'expired')
+        .sort((a, b) => (a.status === b.status ? (a.expiresOn ?? '').localeCompare(b.expiresOn ?? '') : a.status === 'expired' ? -1 : 1))
+        .slice(0, 5)
+        .map((q) => ({
+          id: q.id,
+          typeName: q.type.name,
+          expiresOn: q.expiresOn,
+          statusLabel: t.has(`qualifications.statusNames.${q.status}`)
+            ? (t(`qualifications.statusNames.${q.status}`) as string)
+            : q.status,
+          statusVariant: qualificationVariant(q.status),
+        })),
+      // HR-14 end
       extensions,
       hasExtensions: extensions.length > 0,
     }
@@ -333,6 +395,9 @@ export async function loadMeOverview(authz: Authz): Promise<MeOverviewData> {
       steps: [],
       requests: [],
       balances: [],
+      // HR-14 begin
+      qualifications: [],
+      // HR-14 end
       extensions: [],
       hasExtensions: false,
     }

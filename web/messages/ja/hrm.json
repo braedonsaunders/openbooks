@@ -81,7 +81,9 @@
       "pending": "{count, plural, other {決定待ちの変更申請 # 件}}",
       "overdueSteps": "{count, plural, other {期限超過のチェックリスト項目 # 件}}",
       "leavePending": "{count, plural, other {承認待ちの休暇申請 # 件}}",
-      "unfunded": "予算裏付けのない充足FTE {fte}"
+      "unfunded": "予算裏付けのない充足FTE {fte}",
+      "expiringQualifications": "{count, plural, other {まもなく期限切れの認定 # 件}}",
+      "expiredQualifications": "{count, plural, other {期限切れの認定 # 件 — 更新まで配車拒否}}"
     }
   },
   "overview": {
@@ -860,7 +862,10 @@
       "balancesTitle": "残高",
       "balancesEmpty": "有効な休暇種別がありません。",
       "viewLeave": "休暇を開く",
-      "extensionsTitle": "その他"
+      "extensionsTitle": "その他",
+      "qualificationsTitle": "対応が必要な認定",
+      "qualificationsEmpty": "期限切れなし",
+      "qualificationsEmptyDescription": "認定は有効です — 失効前に更新がここに表示されます。"
     },
     "profile": {
       "title": "マイプロフィール",
@@ -1076,6 +1081,13 @@
       "changeReasonPlaceholder": "保障を変更する理由",
       "changeSubmit": "変更を保存",
       "changeFailed": "変更を記録できませんでした。"
+    },
+    "qualifications": {
+      "columns": {
+        "type": "認定",
+        "expires": "有効期限",
+        "status": "ステータス"
+      }
     }
   },
   "options": {

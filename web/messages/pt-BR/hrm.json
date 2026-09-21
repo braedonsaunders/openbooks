@@ -81,7 +81,9 @@
       "pending": "{count, plural, one {# solicitação de mudança aguardando decisão} other {# solicitações de mudança aguardando decisão}}",
       "overdueSteps": "{count, plural, one {# etapa de checklist atrasada} other {# etapas de checklist atrasadas}}",
       "leavePending": "{count, plural, one {# solicitação de licença aguardando aprovação} other {# solicitações de licença aguardando aprovação}}",
-      "unfunded": "{fte} FTE preenchidos sem financiamento"
+      "unfunded": "{fte} FTE preenchidos sem financiamento",
+      "expiringQualifications": "{count, plural, one {# certificação vencendo em breve} other {# certificações vencendo em breve}}",
+      "expiredQualifications": "{count, plural, one {# certificação vencida — despacho recusado até renovar} other {# certificações vencidas — despacho recusado até renovar}}"
     }
   },
   "overview": {
@@ -860,7 +862,10 @@
       "balancesTitle": "Saldos",
       "balancesEmpty": "Sem tipos de licença ativos.",
       "viewLeave": "Abrir licenças",
-      "extensionsTitle": "Mais"
+      "extensionsTitle": "Mais",
+      "qualificationsTitle": "Certificações que precisam de ação",
+      "qualificationsEmpty": "Nada vencendo",
+      "qualificationsEmptyDescription": "Suas certificações estão em dia — as renovações aparecerão aqui antes de vencer."
     },
     "profile": {
       "title": "Meu perfil",
@@ -1076,6 +1081,13 @@
       "changeReasonPlaceholder": "Por que a cobertura muda",
       "changeSubmit": "Salvar alteração",
       "changeFailed": "Não foi possível registrar a alteração."
+    },
+    "qualifications": {
+      "columns": {
+        "type": "Certificação",
+        "expires": "Vence",
+        "status": "Status"
+      }
     }
   },
   "options": {

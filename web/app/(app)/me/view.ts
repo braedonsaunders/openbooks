@@ -156,6 +156,33 @@ export function meSpec(data: MeOverviewData): PageSpec {
               }),
             ],
           }),
+          // HR-14 begin: the viewer's own certifications needing action —
+          // same shared table block as every other overview panel.
+          panel({
+            title: f('qualificationsTitle'),
+            iconKey: 'clipboard-check',
+            bodyClassName: 'min-h-0 overflow-y-auto p-0',
+            blocks: [
+              table({
+                variant: 'app',
+                rows: f('qualifications'),
+                rowKey: item('id'),
+                columns: [
+                  column(f('qualificationsColumns.type'), text(item('typeName'))),
+                  column(
+                    f('qualificationsColumns.expires'),
+                    text(item('expiresOn'), { className: 'tabular-nums' }),
+                  ),
+                  column(
+                    f('qualificationsColumns.status'),
+                    badge(item('statusLabel'), { variant: item('statusVariant') }),
+                  ),
+                ],
+                empty: { title: f('qualificationsEmpty'), description: f('qualificationsEmptyDescription') },
+              }),
+            ],
+          }),
+          // HR-14 end
           widgetBlock(
             'directory-section',
             {

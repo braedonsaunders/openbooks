@@ -81,7 +81,9 @@
       "pending": "{count, plural, one {# solicitud de cambio pendiente de decisión} other {# solicitudes de cambio pendientes de decisión}}",
       "overdueSteps": "{count, plural, one {# paso de lista vencido} other {# pasos de lista vencidos}}",
       "leavePending": "{count, plural, one {# solicitud de permiso pendiente de aprobación} other {# solicitudes de permiso pendientes de aprobación}}",
-      "unfunded": "{fte} ETC cubiertos sin financiación"
+      "unfunded": "{fte} ETC cubiertos sin financiación",
+      "expiringQualifications": "{count, plural, one {# certificación por vencer} other {# certificaciones por vencer}}",
+      "expiredQualifications": "{count, plural, one {# certificación vencida: asignación denegada hasta renovar} other {# certificaciones vencidas: asignación denegada hasta renovar}}"
     }
   },
   "overview": {
@@ -860,7 +862,10 @@
       "balancesTitle": "Saldos",
       "balancesEmpty": "Sin tipos de ausencia activos.",
       "viewLeave": "Abrir ausencias",
-      "extensionsTitle": "Más"
+      "extensionsTitle": "Más",
+      "qualificationsTitle": "Certificaciones que requieren acción",
+      "qualificationsEmpty": "Nada por vencer",
+      "qualificationsEmptyDescription": "Sus certificaciones están vigentes; las renovaciones aparecerán aquí antes de vencer."
     },
     "profile": {
       "title": "Mi perfil",
@@ -1076,6 +1081,13 @@
       "changeReasonPlaceholder": "Por qué cambia la cobertura",
       "changeSubmit": "Guardar cambio",
       "changeFailed": "No se pudo registrar el cambio."
+    },
+    "qualifications": {
+      "columns": {
+        "type": "Certificación",
+        "expires": "Vence",
+        "status": "Estado"
+      }
     }
   },
   "options": {
