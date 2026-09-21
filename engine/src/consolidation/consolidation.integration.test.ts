@@ -127,14 +127,26 @@ const settleTreeUpdate = (promise: Promise<QueryResult>): Promise<TreeUpdateResu
     (reason): TreeUpdateResult => ({ status: "rejected", reason }),
   );
 
-/** Node's assert rejects-regex matches only the top message; Drizzle wraps
- * the database error in `cause`, so tests must unwrap it before matching. */
+/**
+ * Node's assert rejects-regex matches only the top message, and the database
+ * error can sit several links down: a caller's Error wraps Drizzle's
+ * `Failed query: ...`, which wraps the pg error that actually says
+ * `could not serialize access`. Unwrapping ONE level lands on Drizzle's
+ * wrapper, so a serialization failure reads as an unrecognised query error --
+ * the assertion then fails precisely when the guard it is testing WORKED.
+ *
+ * Walk the whole chain and join it, so a match finds the message at any depth.
+ */
 const errorText = (error: unknown): string => {
-  const cause = (error as { cause?: unknown })?.cause;
-  return String(
-    (cause instanceof Error ? cause.message : undefined)
-      ?? (error instanceof Error ? error.message : error),
-  );
+  const seen = new Set<unknown>();
+  const messages: string[] = [];
+  let current: unknown = error;
+  while (current !== null && current !== undefined && !seen.has(current)) {
+    seen.add(current);
+    messages.push(current instanceof Error ? current.message : String(current));
+    current = (current as { cause?: unknown }).cause;
+  }
+  return messages.join("\n");
 };
 
 async function openTreeTransaction(): Promise<{ client: PoolClient; pid: number }> {
