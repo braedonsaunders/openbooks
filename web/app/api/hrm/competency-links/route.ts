@@ -4,8 +4,8 @@ import {
   linkCompetency,
   setSectionCompetency,
 } from "@openbooks/engine/src/hrm/performance/competencies.ts";
-import { getAuthz } from "../../../lib/authz";
-import { isFeatureEnabled } from "../../../lib/features";
+import { getAuthz } from "../../../../lib/authz";
+import { isFeatureEnabled } from "../../../../lib/features";
 import { performanceErrorResponse } from "../review-cycles/_lib";
 import { linkCompetencyBody } from "../competency-frameworks/bodies";
 

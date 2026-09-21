@@ -3010,7 +3010,10 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   ])
   const source = flattenCatalog('en')
   const wanted = [...source.keys()].filter((key) => key.startsWith('admin.'))
-  assert.equal(wanted.length, 3825, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  // HR-17: 3844 = 3825 on b4b4fe256 plus 19 continuous-performance keys
+  // (6 features, 2 setup entities, 1 setup field); zh/pt-BR completeness
+  // is asserted per-key below.
+  assert.equal(wanted.length, 3844, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3370,8 +3373,10 @@ test('admin copy ships translated in de and ja (i2)', () => {
     'ja:admin.setup.paymentProviders.webhookUrl',
     'ja:admin.setup.wizard.company.namePlaceholder',
   ])
-  const ADMIN_I2_SOURCE_COUNT = 3825
-  const ADMIN_I2_SOURCE_HASH = '664edc64653c392007ca1daca237f436bd1bbdaaaa723ed351229fe11a0a2c42'
+  // HR-17: count and hash recomputed over the sorted key inventory for the
+  // 19 continuous-performance keys; de/ja completeness asserted per-key below.
+  const ADMIN_I2_SOURCE_COUNT = 3844
+  const ADMIN_I2_SOURCE_HASH = '2ebe1e5de3a8a2c782a3fa593e8bc22849b615c60ece383e30fbd025ed2a17c8'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))

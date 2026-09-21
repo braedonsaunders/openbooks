@@ -8,7 +8,7 @@ import {
   SessionCreateForm,
   TalentDialog,
 } from './continuous-islands'
-import type { MeOneOnOnesData } from '../../../me/one-on-ones/view'
+import type { MeOneOnOnesData } from '../../me/one-on-ones/view'
 import type { ContinuousData } from './continuous-view'
 
 /**

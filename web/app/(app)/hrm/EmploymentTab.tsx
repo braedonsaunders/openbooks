@@ -110,7 +110,6 @@ type DrawerCompetency = {
   assessedRating: string | null
   levels: { label: string; expectation: string }[]
 }
-}
 
 type RecordState = {
   status: 'loading' | 'ready' | 'refused' | 'error'

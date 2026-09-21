@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { competencyProfileForEmployment } from "@openbooks/engine/src/hrm/performance/competencies.ts";
-import { getAuthz } from "../../../lib/authz";
-import { isFeatureEnabled } from "../../../lib/features";
-import { isUuid } from "../../../lib/list-params";
-import { performanceErrorResponse } from "./review-cycles/_lib";
+import { getAuthz } from "../../../../lib/authz";
+import { isFeatureEnabled } from "../../../../lib/features";
+import { isUuid } from "../../../../lib/list-params";
+import { performanceErrorResponse } from "../review-cycles/_lib";
 
 export const runtime = "nodejs";
 

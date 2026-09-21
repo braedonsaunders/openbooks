@@ -1553,8 +1553,6 @@ const hrmDispatchCheck: AssistantToolDef = {
 };
 // HR-14 end
 
-// HR-15: the core own-scope inbox tool rides after every slice tool.
-export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting, hrmPerformanceCycles, hrmTurnover, hrmBenefits, hrmMe, automationsStatus, hrmComplianceFindings, hrmCertifiedPayroll, hrmCompensation, hrmPayEquity, hrmQualifications, hrmDispatchCheck, hrmOneOnOnes, hrmFeedback, hrmCalibration, inboxItems];
 // HR-17 begin: continuous-performance read tools. 1:1s and feedback read
 // through the structural scope (own and reports) with the HR grant as
 // the widening leg; calibration reads through the manage grant. Each
@@ -1732,6 +1730,9 @@ const hrmCalibration: AssistantToolDef = {
   },
 };
 // HR-17 end
+
+// HR-15: the core own-scope inbox tool rides after every slice tool.
+export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting, hrmPerformanceCycles, hrmTurnover, hrmBenefits, hrmMe, automationsStatus, hrmComplianceFindings, hrmCertifiedPayroll, hrmCompensation, hrmPayEquity, hrmQualifications, hrmDispatchCheck, hrmOneOnOnes, hrmFeedback, hrmCalibration, inboxItems];
 
 
 // HR-12 end
