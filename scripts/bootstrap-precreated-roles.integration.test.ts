@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import { promisify } from "node:util";
 import test from "node:test";
 import pg from "pg";
-import { verifyPrecreatedRoles, verifyReadRoleAssumption } from "./bootstrap-roles.ts";
+import { verifyPrecreatedRoles, verifyPrecreatedObjectAccess, verifyReadRoleAssumption } from "./bootstrap-roles.ts";
 
 const exec = promisify(execFile);
 const adminUrl = process.env.OPENBOOKS_TEST_ADMIN_DB_URL;
@@ -87,6 +87,27 @@ test("host-managed PostgreSQL installs, upgrades, and refuses broken permissions
       await bootstrap();
       assert.deepEqual((await ownerPool.query("select filename, sha256, applied_at from _applied_migrations order by filename")).rows, before.rows);
       assert.deepEqual((await ownerPool.query("select id from orgs order by id")).rows, orgs.rows);
+    });
+    await t.test("an existing installation applies a pending forward migration with the constrained owner", async () => {
+      // Reconstruct one missing forward change only in this test's new database;
+      // published migration bytes and other history remain untouched.
+      const filename = "generated/0241_hrm_party_reference_integrity.sql";
+      const before = await ownerPool.query("select filename, sha256, applied_at from _applied_migrations where filename <> $1 order by filename", [filename]);
+      await ownerPool.query("alter table public.hrm_feedback drop constraint hrm_feedback_author_party_tenant_fkey");
+      const removed = await ownerPool.query("delete from _applied_migrations where filename=$1 returning sha256", [filename]);
+      assert.equal(removed.rowCount, 1);
+      await bootstrap();
+      assert.equal((await ownerPool.query("select count(*)::int as count from pg_constraint where conrelid='public.hrm_feedback'::regclass and conname='hrm_feedback_author_party_tenant_fkey'")).rows[0].count, 1);
+      assert.equal((await ownerPool.query("select sha256 from _applied_migrations where filename=$1", [filename])).rows[0].sha256, removed.rows[0].sha256);
+      assert.deepEqual((await ownerPool.query("select filename, sha256, applied_at from _applied_migrations where filename <> $1 order by filename", [filename])).rows, before.rows);
+    });
+    await t.test("effective PUBLIC leaks and missing governed-view grants are refused", async () => {
+      await ownerPool.query("grant select on public.orgs to public");
+      try { await assert.rejects(verifyPrecreatedObjectAccess(ownerPool, config), /outside the governed read-only surface: public.orgs/); }
+      finally { await ownerPool.query("revoke select on public.orgs from public"); }
+      await ownerPool.query("revoke select on openbooks_query.accounting_books from openbooks_read");
+      try { await assert.rejects(verifyPrecreatedObjectAccess(ownerPool, config), /object grants are incomplete: openbooks_query.accounting_books/); }
+      finally { await ownerPool.query("grant select on openbooks_query.accounting_books to openbooks_read"); }
     });
     await t.test("sharing the query role does not grant access to another installation's database", async () => {
       for (const [role, target] of [[runtime, otherDatabase], [other, database]] as const) {
