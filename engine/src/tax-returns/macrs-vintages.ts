@@ -26,6 +26,7 @@ import {
 import {
   macrsOwnershipWindowLoads,
   nextCalendarDay,
+  type MacrsAppliedWindowSet,
   type MacrsYearWindow,
 } from "./depreciation-pool.ts";
 import {
@@ -125,9 +126,20 @@ function lineageKey(identity: MacrsLineageIdentity): string {
   return macrsVintageKey(identity);
 }
 
+function lineageParseError(error: unknown): never {
+  throw error instanceof TaxBasisPolicyError || error instanceof MacrsVintageError
+    ? new MacrsVintageError(error.message)
+    : error;
+}
+
 function paperBuyerIdentities(paper: MacrsLineagePaper): MacrsLineageIdentity[] | null {
   if (paper.buyer_vintages == null) return null;
-  if (!Array.isArray(paper.buyer_vintages) || paper.buyer_vintages.length === 0) return null;
+  if (!Array.isArray(paper.buyer_vintages)) {
+    lineageParseError(new TaxBasisPolicyError(
+      "buyerVintages must freeze each disposed MACRS vintage; do not invent one composite receiver schedule",
+    ));
+  }
+  if (paper.buyer_vintages.length === 0) return [];
   try {
     return parseFrozenMacrsBuyerVintages(paper.buyer_vintages).map((vintage) => ({
       source: vintage.source,
@@ -135,8 +147,8 @@ function paperBuyerIdentities(paper: MacrsLineagePaper): MacrsLineageIdentity[] 
       transferOn: vintage.transferOn,
       parentKey: vintage.parentKey,
     }));
-  } catch {
-    return null;
+  } catch (error) {
+    lineageParseError(error);
   }
 }
 
@@ -149,8 +161,8 @@ function paperSellerIdentities(paper: MacrsLineagePaper): MacrsLineageIdentity[]
       transferOn: row.transferOn ?? null,
       parentKey: row.parentKey ?? null,
     }));
-  } catch {
-    return null;
+  } catch (error) {
+    lineageParseError(error);
   }
 }
 
@@ -158,8 +170,8 @@ function paperReceivesVintage(paper: MacrsLineagePaper, vintage: MacrsLineageIde
   if (paper.receiving_asset_id == null) return false;
   if (vintage.transferOn == null || paper.effective_on !== vintage.transferOn) return false;
   const buyers = paperBuyerIdentities(paper);
-  if (buyers) return buyers.some((row) => lineageKey(row) === lineageKey(vintage));
-  return true;
+  if (buyers == null) return true;
+  return buyers.some((row) => lineageKey(row) === lineageKey(vintage));
 }
 
 function paperAllocatesSellerVintage(paper: MacrsLineagePaper, vintage: MacrsLineageIdentity): boolean {
@@ -225,15 +237,18 @@ export function macrsVintageWindowPlan(args: {
   papers: readonly MacrsFrozenLineagePaper[];
 }): {
   transferorSubsidiaryId: string | null;
-  frozenSets: MacrsYearWindow[][];
+  frozenSets: MacrsAppliedWindowSet[];
   liveLoads: { subsidiaryId: string; fromOn: string; throughOn: string }[];
 } {
   const receiving = macrsVintageReceivingPaper(args.papers, args.assetId, args.vintage);
   const dating = macrsVintageDatingPapers(args.papers, args.assetId, args.vintage);
   const frozenSets = dating
-    .filter((paper) => paper.taxYearWindows != null)
-    .map((paper) => paper.taxYearWindows!);
-  const lastFrozenOn = dating.filter((paper) => paper.taxYearWindows != null).at(-1)?.effective_on ?? null;
+    .filter((paper) => (paper.taxYearWindows?.length ?? 0) > 0)
+    .map((paper) => ({
+      throughOn: paper.effective_on,
+      windows: paper.taxYearWindows!,
+    }));
+  const lastFrozenOn = frozenSets.at(-1)?.throughOn ?? null;
   if (frozenSets.length > 0 && lastFrozenOn) {
     const laterFrom = nextCalendarDay(lastFrozenOn);
     return {

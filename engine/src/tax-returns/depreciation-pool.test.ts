@@ -656,8 +656,8 @@ test("cover keeps one convention successor and the walk stops at the requested b
   assert.equal(adjacentShortYearExclusion(withoutSuccessor, 0), false);
 });
 
-test("an applied paper without a successor is not reinterpreted after a later same-month year is declared", () => {
-  const applied = { taxYear: 2024, yearStart: "2024-01-01", yearEnd: "2024-03-15" };
+test("macrsWindowsPreservingAppliedContext seals successor absence only on the calculated year", () => {
+  const calculated = { taxYear: 2024, yearStart: "2024-01-01", yearEnd: "2024-03-15" };
   const successor = { taxYear: 2024, yearStart: "2024-03-16", yearEnd: "2024-12-31" };
   const input = {
     basis: "10000",
@@ -682,27 +682,50 @@ test("an applied paper without a successor is not reinterpreted after a later sa
     priorDepreciation: null,
     transferOn: null,
   };
-  const frozenWalk = computeMacrsThroughYear(input, [applied]);
-  const liveWalk = computeMacrsThroughYear(input, [applied, successor]);
+  const frozenWalk = computeMacrsThroughYear(input, [calculated]);
+  const liveWalk = computeMacrsThroughYear(input, [calculated, successor]);
   assert.notEqual(liveWalk.current.allowance, frozenWalk.current.allowance);
-  const preserved = macrsWindowsPreservingAppliedContext([[applied]], [successor]);
+  const preserved = macrsWindowsPreservingAppliedContext(
+    [{ throughOn: "2024-03-10", windows: [calculated] }],
+    [successor],
+  );
   assert.equal(adjacentShortYearExclusion(preserved, 0), false);
-  assert.equal(adjacentShortYearExclusion([applied, successor], 0), true);
+  assert.equal(adjacentShortYearExclusion([calculated, successor], 0), true);
   const laterWalk = computeMacrsThroughYear(input, preserved);
   assert.equal(laterWalk.current.allowance, frozenWalk.current.allowance);
-  const secondPaperStillKeepsAbsence = macrsWindowsPreservingAppliedContext(
-    [[applied], [applied, successor]],
+  const laterSetStillKeepsCalculatedAbsence = macrsWindowsPreservingAppliedContext(
+    [
+      { throughOn: "2024-03-10", windows: [calculated] },
+      { throughOn: "2024-09-01", windows: [calculated, successor] },
+    ],
     [],
   );
-  assert.equal(adjacentShortYearExclusion(secondPaperStillKeepsAbsence, 0), false);
+  assert.equal(adjacentShortYearExclusion(laterSetStillKeepsCalculatedAbsence, 0), false);
   assert.deepEqual(
     refreshOpenMacrsVintageThrough(vintage, preserved, "2024-03-10"),
-    refreshOpenMacrsVintageThrough(vintage, [applied], "2024-03-10"),
+    refreshOpenMacrsVintageThrough(vintage, [calculated], "2024-03-10"),
   );
   assert.notDeepEqual(
-    refreshOpenMacrsVintageThrough(vintage, [applied, successor], "2024-03-10"),
-    refreshOpenMacrsVintageThrough(vintage, [applied], "2024-03-10"),
+    refreshOpenMacrsVintageThrough(vintage, [calculated, successor], "2024-03-10"),
+    refreshOpenMacrsVintageThrough(vintage, [calculated], "2024-03-10"),
   );
+});
+
+test("a context-only successor does not freeze its own later convention absence", () => {
+  const first = { taxYear: 2024, yearStart: "2024-01-01", yearEnd: "2024-03-15" };
+  const context = { taxYear: 2024, yearStart: "2024-03-16", yearEnd: "2024-06-15" };
+  const later = { taxYear: 2024, yearStart: "2024-06-16", yearEnd: "2024-12-31" };
+  const preserved = macrsWindowsPreservingAppliedContext(
+    [{ throughOn: "2024-03-10", windows: [first, context] }],
+    [later],
+  );
+  assert.equal(adjacentShortYearExclusion(preserved, 0), true);
+  assert.equal(adjacentShortYearExclusion(preserved, 1), true);
+  const ifContextWereSealed = macrsWindowsPreservingAppliedContext(
+    [{ throughOn: "2024-06-15", windows: [first, context] }],
+    [later],
+  );
+  assert.equal(adjacentShortYearExclusion(ifContextWereSealed, 1), false);
 });
 
 test("a received vintage does not invent a receiver calendar before the transfer", () => {
