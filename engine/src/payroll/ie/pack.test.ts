@@ -109,13 +109,25 @@ describe("IE payroll pack", () => {
     assert.ok(IE_PAYROLL_PACK.taxYears.scaffold.steps.length > 0);
   });
 
-  it("declares a Revenue filing program and no annual return", () => {
+  it("declares a Revenue filing program and the reconciliation, not a return", () => {
     const filings = IE_PAYROLL_PACK.filings();
     assert.equal(filings.country, "IE");
     const [program] = filings.programTypes;
     assert.ok(program, "IE filing program declared");
     assert.equal(program.key, "ie_paye");
-    assert.deepEqual([...filings.yearEnd], []);
+    // One filing: the annual reconciliation. No employer slip exists to
+    // declare (P60 abolished 1 January 2019), so the declaration carries no
+    // slip — the absence states the abolition (see ./filings.ts).
+    assert.equal(filings.yearEnd.length, 1);
+    const [filing] = filings.yearEnd;
+    assert.ok(filing, "IE reconciliation filing declared");
+    assert.equal(filing.key, "paye-reconciliation");
+    assert.equal(filing.cadence, "annual");
+    assert.equal(filing.slip, undefined);
+    assert.equal(typeof filing.population, "function");
+    assert.equal(typeof filing.parseRowId, "function");
+    assert.ok((filing.downloadRefusal ?? "").length > 0, "no file without a named reason");
+    assert.equal(filing.amendment.supported, false);
   });
 
   it("declares the ten public holidays with a cited s.21 edition", () => {
