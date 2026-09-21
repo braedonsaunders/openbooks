@@ -1678,6 +1678,19 @@ function requireCarryoverElection(draft: TaxBasisDraft, name: string): string {
  *  taken_components uses the dated taken bonus amount. declared_elections
  *  uses bonus from the allocated percent. The kind is never inferred from
  *  remaining versus post-election basis. */
+function suppliedCheckpointSection179(
+  subject: string,
+  section179: string,
+  originalBasis: string,
+): string {
+  if (cmp(section179, originalBasis) > 0) {
+    throw new TaxBasisPolicyError(
+      `${subject} section179 ${section179} exceeds original unadjusted basis ${originalBasis} after business use; declare the taken or allocated section179 actually applied to this slice — do not cap the stored amount at the original`,
+    );
+  }
+  return section179;
+}
+
 function assertMacrsCheckpointConservation(args: {
   subject: string;
   originalBasis: string;
@@ -1688,7 +1701,7 @@ function assertMacrsCheckpointConservation(args: {
   checkpointKind?: MacrsCheckpointKind | null;
   takenBonus?: string | null;
 }): void {
-  const elected179 = cmp(args.section179, args.originalBasis) < 0 ? args.section179 : args.originalBasis;
+  const section179 = suppliedCheckpointSection179(args.subject, args.section179, args.originalBasis);
   const hasTakenBonus = args.takenBonus != null && args.takenBonus !== "";
   const kind = args.checkpointKind ?? (hasTakenBonus ? null : "declared_elections");
   if (hasTakenBonus && kind !== "taken_components") {
@@ -1702,10 +1715,10 @@ function assertMacrsCheckpointConservation(args: {
         `${args.subject} checkpointKind taken_components requires takenBonus; freeze the dated bonus actually taken — do not recompute it from bonusPercent`,
       );
     }
-    const reconstructed = formatMoney(sum([elected179, args.takenBonus!, args.prior, args.remaining]), 4);
+    const reconstructed = formatMoney(sum([section179, args.takenBonus!, args.prior, args.remaining]), 4);
     if (cmp(reconstructed, formatMoney(args.originalBasis, 4)) !== 0) {
       throw new TaxBasisPolicyError(
-        `${args.subject} carryover ${args.remaining} plus taken section179 ${elected179}, takenBonus ${args.takenBonus} and priorDepreciation ${args.prior} must equal original unadjusted basis ${args.originalBasis} after business use; declare the dated taken components — do not infer them from a negative classic carry`,
+        `${args.subject} carryover ${args.remaining} plus taken section179 ${section179}, takenBonus ${args.takenBonus} and priorDepreciation ${args.prior} must equal original unadjusted basis ${args.originalBasis} after business use; declare the dated taken components — do not infer them from a negative classic carry`,
       );
     }
     return;
@@ -1715,12 +1728,12 @@ function assertMacrsCheckpointConservation(args: {
       `${args.subject} checkpointKind must be taken_components or declared_elections; freeze the dated taken components or the declared elections — do not infer the kind from remaining`,
     );
   }
-  const after179 = add(args.originalBasis, neg(elected179));
+  const after179 = add(args.originalBasis, neg(section179));
   const bonus = mulPercent(after179, args.bonusPercent);
-  const reconstructed = formatMoney(sum([elected179, bonus, args.prior, args.remaining]), 4);
+  const reconstructed = formatMoney(sum([section179, bonus, args.prior, args.remaining]), 4);
   if (cmp(reconstructed, formatMoney(args.originalBasis, 4)) !== 0) {
     throw new TaxBasisPolicyError(
-      `${args.subject} carryover ${args.remaining} plus allocated section179 ${elected179}, bonus ${bonus} and priorDepreciation ${args.prior} must equal original unadjusted basis ${args.originalBasis} after business use; declare the slice elections and the adjusted checkpoint — do not copy the whole source-asset election or treat missing JSON as zero`,
+      `${args.subject} carryover ${args.remaining} plus allocated section179 ${section179}, bonus ${bonus} and priorDepreciation ${args.prior} must equal original unadjusted basis ${args.originalBasis} after business use; declare the slice elections and the adjusted checkpoint — do not copy the whole source-asset election or treat missing JSON as zero`,
     );
   }
 }
@@ -1774,22 +1787,22 @@ export function macrsOpeningTakenComponents(args: {
   adjustedCarryover: string;
 } {
   assertMacrsCheckpointConservation(args);
-  const elected179 = cmp(args.section179, args.originalBasis) < 0 ? args.section179 : args.originalBasis;
+  const section179 = formatMoney(args.section179, 4);
   const hasTakenBonus = args.takenBonus != null && args.takenBonus !== "";
   const kind = args.checkpointKind ?? (hasTakenBonus ? null : "declared_elections");
   if (kind === "taken_components") {
     return {
       checkpointKind: "taken_components",
-      section179: formatMoney(elected179, 4),
+      section179,
       takenBonus: formatMoney(args.takenBonus!, 4),
       priorDepreciation: formatMoney(args.prior, 4),
       adjustedCarryover: formatMoney(args.remaining, 4),
     };
   }
-  const after179 = add(args.originalBasis, neg(elected179));
+  const after179 = add(args.originalBasis, neg(section179));
   return {
     checkpointKind: "taken_components",
-    section179: formatMoney(elected179, 4),
+    section179,
     takenBonus: formatMoney(mulPercent(after179, args.bonusPercent), 4),
     priorDepreciation: formatMoney(args.prior, 4),
     adjustedCarryover: formatMoney(args.remaining, 4),
@@ -1929,11 +1942,11 @@ function derivedDisposedCheckpoint(
     );
   }
   const fullOriginal = mulPercent(vintage.unadjustedBasis, vintage.businessUsePercent);
-  const elected179 = cmp(vintage.section179, fullOriginal) < 0 ? vintage.section179 : fullOriginal;
+  const elected179 = suppliedCheckpointSection179(`frozen vintage ${vintage.key}`, vintage.section179, fullOriginal);
   const leftover = formatMoney(add(fullOriginal, neg(elected179)), 4);
   if (cmp(leftover, "0") < 0) {
     throw new TaxBasisPolicyError(
-      `frozen vintage ${vintage.key} cannot derive a newly placed opening from disposed ${disposed} and section179 ${elected179}; reverse and re-propose the earlier workpaper — do not invent the buyer's opening`,
+      `frozen vintage ${vintage.key} section179 ${elected179} exceeds original unadjusted basis ${fullOriginal} after business use; declare the taken or allocated section179 actually applied to this slice — do not cap the stored amount at the original`,
     );
   }
   const slice = mulPercent(disposed, vintage.businessUsePercent);
