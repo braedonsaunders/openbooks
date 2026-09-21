@@ -764,6 +764,14 @@ export async function buildScheduleWithRunner(
       !depreciationMethodId &&
       (method === "manual" || method === "units_of_production")
     ) {
+      // A method change before first recognition can leave the old formula
+      // plan behind. Those unposted estimates are not input evidence and must
+      // not reserve the entire basis against the first production reading.
+      // Posted history and every operator-supplied input remain intact.
+      await tx.execute(sql`
+        delete from depreciation_schedule_lines
+         where org_id = ${orgId} and schedule_id = ${scheduleId}
+           and source = 'formula' and posted_amount is null and journal_entry_id is null`);
       return { scheduleId, lineCount: 0, skippedMonths: [] };
     }
 

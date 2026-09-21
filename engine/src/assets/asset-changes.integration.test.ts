@@ -923,6 +923,12 @@ for (const impair of [false, true])
           f.actors.submitterId,
           f.org.bookId,
         );
+        assert.equal((await db.execute<{ count: number }>(sql`
+          select count(*)::int as count from depreciation_schedule_lines l
+          join depreciation_schedules s on s.org_id=l.org_id and s.id=l.schedule_id
+          where s.org_id=${f.org.orgId} and s.asset_id=${f.assetId}
+            and s.book_id=${f.org.bookId} and l.source='formula'
+        `)).rows[0]!.count, 0, "unposted formula estimates must not reserve production basis after a method change");
         const folderId = randomUUID();
         await db.execute(
           sql`insert into folders(id,org_id,name,record_table,record_id,created_by,updated_by) values(${folderId},${f.org.orgId},'Production evidence','fixed_assets',${f.assetId},${f.actors.submitterId},${f.actors.submitterId})`,
