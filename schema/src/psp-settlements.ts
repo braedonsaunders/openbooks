@@ -45,7 +45,7 @@ export const pspSettlementBatches = pgTable(
     status: text("status", { enum: ["draft", "posted", "void"] })
       .notNull()
       .default("draft"),
-    currency: currencyCode().notNull(),
+    currency: currencyCode("currency").notNull(),
     /** Gross charges in settlement currency. */
     grossAmount: money("gross_amount").notNull().default("0"),
     feeAmount: money("fee_amount").notNull().default("0"),
@@ -114,7 +114,7 @@ export const pspSettlementLines = pgTable(
     externalRef: text("external_ref"),
     description: text("description"),
     amount: money("amount").notNull(),
-    currency: currencyCode(),
+    currency: currencyCode("currency"),
     /** Optional link into AR open item / customer payment application. */
     partyId: uuid("party_id"),
     documentId: uuid("document_id"),
@@ -223,7 +223,7 @@ export const paymentLinks = pgTable(
     /** Invoice open balance at link creation (re-derived at checkout). */
     amount: money("amount").notNull(),
     surchargeAmount: money("surcharge_amount").notNull().default("0"),
-    currency: currencyCode().notNull(),
+    currency: currencyCode("currency").notNull(),
     status: text("status", { enum: ["active", "paid", "void", "expired"] })
       .notNull()
       .default("active"),
