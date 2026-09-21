@@ -1527,6 +1527,38 @@
         "channel": "渠道",
         "alert_id": "提醒（ID）",
         "qualification_id": "资格（ID）"
+      },
+      "automations": {
+        "name": "名称",
+        "status": "状态",
+        "trigger_kind": "触发器",
+        "version": "版本",
+        "priority": "优先级",
+        "last_run_at": "上次运行时间",
+        "error_message": "错误",
+        "created_at": "创建时间",
+        "id": "自动化 (ID)"
+      },
+      "automation_runs": {
+        "automation": "自动化",
+        "status": "状态",
+        "version": "版本",
+        "subject_kind": "对象类型",
+        "subject_id": "对象 (ID)",
+        "started_at": "开始时间",
+        "finished_at": "完成时间",
+        "error": "错误",
+        "created_at": "创建时间",
+        "id": "运行 (ID)"
+      },
+      "hrm_action_reasons": {
+        "action": "操作",
+        "reason_code": "代码",
+        "label": "标签",
+        "requires_comment": "需要备注",
+        "is_active": "启用",
+        "created_at": "创建时间",
+        "id": "原因 (ID)"
       }
     },
     "enumValues": {

@@ -1527,6 +1527,38 @@
         "channel": "Canal",
         "alert_id": "Alerte (id)",
         "qualification_id": "Qualification (id)"
+      },
+      "automations": {
+        "name": "Nom",
+        "status": "Statut",
+        "trigger_kind": "Déclencheur",
+        "version": "Version",
+        "priority": "Priorité",
+        "last_run_at": "Dernière exécution",
+        "error_message": "Erreur",
+        "created_at": "Créé le",
+        "id": "Automatisation (id)"
+      },
+      "automation_runs": {
+        "automation": "Automatisation",
+        "status": "Statut",
+        "version": "Version",
+        "subject_kind": "Type d’objet",
+        "subject_id": "Objet (id)",
+        "started_at": "Démarré le",
+        "finished_at": "Terminé le",
+        "error": "Erreur",
+        "created_at": "Créé le",
+        "id": "Exécution (id)"
+      },
+      "hrm_action_reasons": {
+        "action": "Action",
+        "reason_code": "Code",
+        "label": "Libellé",
+        "requires_comment": "Commentaire requis",
+        "is_active": "Actif",
+        "created_at": "Créé le",
+        "id": "Motif (id)"
       }
     },
     "enumValues": {

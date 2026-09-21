@@ -1527,6 +1527,38 @@
         "channel": "チャネル",
         "alert_id": "アラート（ID）",
         "qualification_id": "資格（ID）"
+      },
+      "automations": {
+        "name": "名前",
+        "status": "ステータス",
+        "trigger_kind": "トリガー",
+        "version": "バージョン",
+        "priority": "優先度",
+        "last_run_at": "最終実行日時",
+        "error_message": "エラー",
+        "created_at": "作成日時",
+        "id": "自動化 (ID)"
+      },
+      "automation_runs": {
+        "automation": "自動化",
+        "status": "ステータス",
+        "version": "バージョン",
+        "subject_kind": "対象の種類",
+        "subject_id": "対象 (ID)",
+        "started_at": "開始日時",
+        "finished_at": "終了日時",
+        "error": "エラー",
+        "created_at": "作成日時",
+        "id": "実行 (ID)"
+      },
+      "hrm_action_reasons": {
+        "action": "アクション",
+        "reason_code": "コード",
+        "label": "ラベル",
+        "requires_comment": "コメント必須",
+        "is_active": "有効",
+        "created_at": "作成日時",
+        "id": "理由 (ID)"
       }
     },
     "enumValues": {
