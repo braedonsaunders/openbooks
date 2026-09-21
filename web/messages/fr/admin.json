@@ -2501,6 +2501,36 @@
         "title": "Règles de conservation",
         "singularTitle": "Règle de conservation",
         "description": "Durée de conservation de chaque catégorie, événement de départ, et suppression ou anonymisation à l’échéance. La suspension légale bloque l’exécution nommément."
+      },
+      "hrm-interview-kits": {
+        "description": "Guides d'entretien par besoin : questions, critères et échelle.",
+        "singularTitle": "Guide d'entretien",
+        "title": "Guides d'entretien"
+      },
+      "hrm-interviewer-pools": {
+        "description": "Groupes d'évaluateurs avec disponibilités déclarées et guide par défaut.",
+        "singularTitle": "Groupe d'évaluateurs",
+        "title": "Groupes d'évaluateurs"
+      },
+      "hrm-kit-attributes": {
+        "description": "Critères notés d'un guide ; les critères prioritaires sont obligatoires.",
+        "singularTitle": "Critère du guide",
+        "title": "Critères du guide"
+      },
+      "hrm-kit-questions": {
+        "description": "Questions suggérées par guide, rattachées à un critère si besoin.",
+        "singularTitle": "Question du guide",
+        "title": "Questions du guide"
+      },
+      "hrm-offer-templates": {
+        "description": "Modèles de lettre d'offre avec clauses, en PDF versionnés.",
+        "singularTitle": "Modèle d'offre",
+        "title": "Modèles d'offre"
+      },
+      "hrm-retention-rules": {
+        "description": "Règles de conservation : anonymiser ou supprimer selon le calendrier.",
+        "singularTitle": "Règle de conservation",
+        "title": "Règles de conservation"
       }
     },
     "fields": {
@@ -2866,7 +2896,21 @@
       "pinRequired": "PIN exigé",
       "photoRequired": "Photo exigée",
       "subjectKind": "Sujet",
-      "stages": "Étapes"
+      "stages": "Étapes",
+      "approvalRequired": "Approbation requise",
+      "attribute": "Critère",
+      "attributeId": "Critère",
+      "availability": "Disponibilités",
+      "clauses": "Clauses",
+      "consentExtensionLeadDays": "Délai de prolongation",
+      "instructions": "Consignes",
+      "isFocusDefault": "Critère prioritaire",
+      "kitId": "Guide",
+      "pipelineStageId": "Étape de l'entonnoir",
+      "question": "Question",
+      "ratingScale": "Échelle de notation",
+      "regionScope": "Portée régionale",
+      "retainMonths": "Mois de conservation"
     },
     "fieldHelp": {
       "gapless": "Sans rupture signifie que chaque numéro de la séquence doit être justifié, sans aucun numéro sauté. Activez cette option uniquement si vos obligations légales ou d’audit imposent une numérotation ininterrompue.",
@@ -2950,7 +2994,18 @@
       "rateScheduleJurisdiction": "Vocabulaire du pack, texte libre dans la couche générique — le pack l'interprète.",
       "perDiemComponent": "Composante de gain par laquelle transitent les montants. Son traitement fiscal est l'unique déclaration.",
       "hrmQualificationValidity": "Laisser vide pour les qualifications sans expiration.",
-      "hrmQualificationExtraCategories": "Vocabulaire de catégories propre au-delà des six intégrées."
+      "hrmQualificationExtraCategories": "Vocabulaire de catégories propre au-delà des six intégrées.",
+      "hrmAttributeFocus": "Les critères prioritaires sont notés sur chaque avis ; le reste est facultatif.",
+      "hrmKitInstructions": "Consignes pour le jury, imprimées sur chaque avis.",
+      "hrmKitScale": "Au moins deux des clés strong_no, no, yes, strong_yes.",
+      "hrmKitStage": "Le guide s'applique à cette étape, ou partout si vide.",
+      "hrmPoolAvailability": "Créneaux en liste JSON avec startsAt, endsAt et timezone.",
+      "hrmPoolKit": "Guide par défaut pour les séances de ce groupe.",
+      "hrmQuestionAttribute": "Rattache la question à un critère de ce guide.",
+      "hrmRetentionLeadDays": "Jours avant expiration pour demander une prolongation ; vide sans courriel.",
+      "hrmRetentionScope": "Région en JSON : applies_to all ou countries avec codes.",
+      "hrmTemplateBody": "Texte avec variables pour les données de l'offre.",
+      "hrmTemplateClauses": "Clauses en liste JSON avec key, label, body et default_on."
     },
     "options": {
       "timeClassification": {
@@ -3416,6 +3471,14 @@
       "approvalSubject": {
         "timesheetWeek": "Semaine de feuille",
         "crewTimeBatch": "Lot d'équipe"
+      },
+      "hrmRetentionAction": {
+        "anonymize": "Anonymiser",
+        "delete": "Supprimer"
+      },
+      "hrmRetentionBasis": {
+        "consent": "Consentement",
+        "inactivity": "Inactivité"
       }
     },
     "laborCosting": {
@@ -4866,6 +4929,34 @@
     "fieldTimeMultiStageApproval": {
       "title": "Validation du temps par étapes",
       "description": "Chaîne superviseur, chef de projet et paie pour feuilles et lots."
+    },
+    "hrmRecruiting": {
+      "title": "Recrutement",
+      "description": "Besoins, candidats, entretiens et offres : du poste vacant à l'embauche."
+    },
+    "hrmStructuredInterviews": {
+      "title": "Entretiens structurés",
+      "description": "Guides d'entretien avec critères notés et avis de jury en aveugle."
+    },
+    "hrmInterviewScheduling": {
+      "title": "Planification des entretiens",
+      "description": "Créneaux proposés avec liens d'auto-réservation pour les candidats."
+    },
+    "hrmOfferSigning": {
+      "title": "Signature des offres",
+      "description": "Offres sur modèle en PDF versionnés, signées dans le produit."
+    },
+    "hrmJobBoards": {
+      "title": "Sites d'emploi",
+      "description": "Page carrières interne et publication avec retour des décisions."
+    },
+    "hrmCandidateRetention": {
+      "title": "Conservation des candidats",
+      "description": "Consentements et règles de conservation : anonymiser ou supprimer à échéance."
+    },
+    "hrmTalentPool": {
+      "title": "Vivier de talents",
+      "description": "Viviers d'anciens candidats rapprochés des postes ouverts."
     }
   },
   "backupsManager": {

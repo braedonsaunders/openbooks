@@ -229,3 +229,24 @@ test("fieldTime rides timeTracking with six sub-features", () => {
   );
 });
 // HR-20 end
+// HR-18 begin: recruiting depth — the funnel rides the parent (on wherever
+// hrm is on); kits, scheduling, signing, boards, retention and pools are
+// opt-in sub-features that never resurrect while the parent is off.
+test("hrmRecruiting rides hrm with six opt-in sub-features", () => {
+  const def = FEATURE_BY_KEY.get("hrmRecruiting");
+  assert.ok(def, "hrmRecruiting must be registered before routes gate on it");
+  assert.equal(def.defaultEnabled, true);
+  assert.equal(featureEnabled({}, "hrmRecruiting"), false);
+  assert.equal(featureEnabled({ hrm: false, hrmRecruiting: true }, "hrmRecruiting"), false);
+  assert.equal(featureEnabled({ hrm: true }, "hrmRecruiting"), true);
+    "hrmStructuredInterviews",
+    "hrmInterviewScheduling",
+    "hrmOfferSigning",
+    "hrmJobBoards",
+    "hrmCandidateRetention",
+    "hrmTalentPool",
+    assert.equal(sub.parentKey, "hrmRecruiting");
+    assert.equal(featureEnabled({ hrm: true, hrmRecruiting: false, [key]: true }, key), false);
+    assert.equal(featureEnabled({ hrm: false, hrmRecruiting: true, [key]: true }, key), false);
+    assert.equal(featureEnabled({ hrm: true, hrmRecruiting: true, [key]: true }, key), true);
+// HR-18 end

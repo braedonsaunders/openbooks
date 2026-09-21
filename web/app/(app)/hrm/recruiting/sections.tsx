@@ -7,9 +7,16 @@ import {
   InterviewActionsIsland,
   OfferActionsIsland,
   OfferCreateIsland,
+  OfferSigningIsland,
+  PoolRediscoverIsland,
+  PoolMemberRemoveIsland,
+  PostingActionsIsland,
+  ScorecardFormIsland,
+  SlotProposeIsland,
   type Option,
 } from './actions'
 import type { RecruitingPageData } from './view'
+import type { InterviewDrawer, OfferDrawerExtra, PostingDrawerExtra, PoolDrawer, ConsentStatus } from './depth-view'
 
 /**
  * Recruiting drawer sections (server components): the URL drawer shell
@@ -385,8 +392,212 @@ export function OfferDrawerBody({ detail }: { detail: OfferDrawerData }) {
 }
 
 /**
- * The recruiting flyout shell: a URL drawer around one of the three
- * bodies (or the create form), closing by navigation. Null payload renders
+ * HR-18 interview flyout: the kit (name, instructions, questions), the
+ * slot rows, the viewer's own scorecard form, and the blind summary after
+ * submit. Scorecard contents arrive loader-resolved through the blind
+ * read — private notes never cross into another interviewer's render.
+ */
+export function InterviewDrawerBody({ detail }: { detail: InterviewDrawer }) {
+  const { labels } = detail
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          {detail.candidate} · {detail.requisition}
+        </h3>
+      </div>
+      {detail.kit ? (
+        <div>
+          <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            {labels.kit}: {detail.kit.name}
+          </h4>
+          {detail.kit.instructions ? (
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{detail.kit.instructions}</p>
+          ) : null}
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-600 dark:text-slate-300">
+            {detail.kit.questions.map((question, index) => (
+              <li key={index}>
+                {question.question}
+                {question.attribute ? <span className="text-xs text-slate-400"> · {question.attribute}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      <div>
+        <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{labels.slots}</h4>
+        <div className="mt-2 space-y-1.5">
+          {detail.slots.map((slot) => (
+            <p key={slot.id} className="text-sm text-slate-600 dark:text-slate-300">
+              {slot.startsAt} — {slot.endsAt} <Badge variant="outline">{slot.kind}</Badge>
+            </p>
+          ))}
+        </div>
+        <div className="mt-3">
+          <SlotProposeIsland
+            interviewId={detail.id}
+            labels={{ submit: labels.submit ?? 'Propose slots', failed: labels.failed }}
+          />
+        </div>
+      </div>
+      <div>
+        <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{labels.myScorecard}</h4>
+        {detail.mine?.submittedAt ? (
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+            {labels.overall}: {detail.mine.overall} · {detail.mine.submittedAt.slice(0, 16).replace('T', ' ')}
+          </p>
+        ) : (
+          <div className="mt-2">
+            <ScorecardFormIsland
+              interviewId={detail.id}
+              labels={{ overall: labels.overall, submit: labels.submit ?? 'Submit', failed: labels.failed }}
+            />
+          </div>
+        )}
+      </div>
+      <div>
+        <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{labels.others}</h4>
+        {detail.blinded ? (
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{labels.blinded}</p>
+        ) : (
+          <div className="mt-2 space-y-1.5">
+            {detail.others.map((other, index) => (
+              <p key={index} className="text-sm text-slate-600 dark:text-slate-300">
+                {other.interviewer ?? '—'} · {other.overall ?? '—'}
+              </p>
+            ))}
+          </div>
+        )}
+      </div>
+      {detail.summary ? (
+        <div>
+          <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{labels.summary}</h4>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            {detail.summary.submittedCount}/{detail.summary.totalCount}
+            {detail.summary.missing.length > 0 ? ` · ${labels.missing}: ${detail.summary.missing.join(', ')}` : null}
+          </p>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+/** HR-18 offer signature block: state chip, version history, send/void. */
+export function OfferDepthBody({ offerId, extra }: { offerId: string; extra: OfferDrawerExtra }) {
+  return (
+    <div className="mt-6 border-t border-slate-200 pt-4 dark:border-slate-800">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{extra.labels.signature}</span>
+        <Badge variant={extra.signatureVariant}>{extra.signature}</Badge>
+      </div>
+      <h4 className="mt-3 text-sm font-semibold text-slate-900 dark:text-slate-100">{extra.labels.versions}</h4>
+      <ul className="mt-1 space-y-1 text-sm text-slate-600 dark:text-slate-300">
+        {extra.versions.map((version) => (
+          <li key={version.version}>
+            v{version.version} · {version.createdAt.slice(0, 16).replace('T', ' ')}
+          </li>
+        ))}
+      </ul>
+      <div className="mt-3">
+        <OfferSigningIsland
+          offerId={offerId}
+          labels={{ sendLink: extra.labels.sendLink, void: extra.labels.void, failed: extra.labels.failed }}
+        />
+      </div>
+    </div>
+  )
+}
+
+/** HR-18 posting flyout: board state, publish controls, disposition log. */
+export function PostingDrawerBody({
+  posting,
+  extra,
+}: {
+  posting: { id: string; boardKey: string; status: string; requisitionId: string };
+  extra: PostingDrawerExtra;
+}) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{posting.boardKey}</h3>
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{posting.status}</p>
+      </div>
+      <PostingActionsIsland
+        postingId={posting.id}
+        status={posting.status}
+        labels={{ publish: extra.labels.publish, pause: extra.labels.pause, close: extra.labels.close, failed: extra.labels.failed }}
+      />
+      <div>
+        <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{extra.labels.events}</h4>
+        <ul className="mt-2 space-y-1 text-sm text-slate-600 dark:text-slate-300">
+          {extra.events.map((event, index) => (
+            <li key={index}>
+              {event.kind} · {event.recordedAt}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  )
+}
+
+/** HR-18 pool flyout: members plus match-to-opening. */
+export function PoolDrawerBody({ detail }: { detail: PoolDrawer }) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{detail.name}</h3>
+      </div>
+      <div>
+        <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{detail.labels.members}</h4>
+        <div className="mt-2 space-y-2">
+          {detail.members.map((member) => (
+            <div key={member.candidateId} className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 p-2.5 dark:border-slate-800">
+              <span className="text-sm font-medium">{member.displayName}</span>
+              {member.tags.map((tag) => (
+                <Badge key={tag} variant="outline">{tag}</Badge>
+              ))}
+              <PoolMemberRemoveIsland poolId={detail.id} candidateId={member.candidateId} labels={{ remove: detail.labels.remove, failed: detail.labels.failed }} />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div>
+        <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{detail.labels.match}</h4>
+        <div className="mt-2">
+          <PoolRediscoverIsland poolId={detail.id} labels={{ tags: detail.labels.tags, failed: detail.labels.failed }} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** HR-18 consent block for the candidate flyout: grants, expiries, retention date. */
+export function ConsentBody({ consents }: { consents: ConsentStatus }) {
+  return (
+    <div className="mt-6 border-t border-slate-200 pt-4 dark:border-slate-800">
+      <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{consents.labels.title}</h4>
+      {consents.earliestExpiry ? (
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          {consents.labels.retentionDate}: {consents.earliestExpiry}
+        </p>
+      ) : null}
+      <ul className="mt-2 space-y-1 text-sm text-slate-600 dark:text-slate-300">
+        {consents.consents.map((consent, index) => (
+          <li key={index}>
+            {consent.purpose} · {consent.grantedAt}
+            {consent.expiresAt ? ` → ${consent.expiresAt}` : null}
+            {consent.withdrawnAt ? ` · withdrawn ${consent.withdrawnAt}` : null}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+/**
+ * The recruiting flyout shell: a URL drawer around one of the bodies (or
+ * the create form), closing by navigation. Null payload renders
  * nothing — the spec's `when` gate already omits it, so this is the second
  * half of the same guard.
  */
@@ -403,9 +614,21 @@ export function RecruitingDrawer({
       ) : drawer.requisition ? (
         <RequisitionDrawerBody detail={drawer.requisition} />
       ) : drawer.candidate ? (
-        <CandidateDrawerBody detail={drawer.candidate} />
+        <>
+          <CandidateDrawerBody detail={drawer.candidate} />
+          {drawer.consents ? <ConsentBody consents={drawer.consents} /> : null}
+        </>
       ) : drawer.offer ? (
-        <OfferDrawerBody detail={drawer.offer} />
+        <>
+          <OfferDrawerBody detail={drawer.offer} />
+          {drawer.offerExtra ? <OfferDepthBody offerId={drawer.offer.id} extra={drawer.offerExtra} /> : null}
+        </>
+      ) : drawer.interview ? (
+        <InterviewDrawerBody detail={drawer.interview} />
+      ) : drawer.postingExtra ? (
+        <PostingDrawerBody posting={drawer.postingExtra.posting} extra={drawer.postingExtra} />
+      ) : drawer.pool ? (
+        <PoolDrawerBody detail={drawer.pool} />
       ) : drawer.missingDetail ? (
         <p className="text-sm text-slate-500 dark:text-slate-400">{drawer.missingDetail}</p>
       ) : null}

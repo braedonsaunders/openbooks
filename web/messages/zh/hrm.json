@@ -666,6 +666,91 @@
       "email": "邮箱",
       "phone": "电话",
       "source": "来源"
+    },
+    "consent": {
+      "future_roles": "未来职位",
+      "talent_pool": "人才库",
+      "this_application": "本次申请"
+    },
+    "depth": {
+      "applies": "{count}份申请",
+      "blinded": "您提交后他人评价可见。",
+      "bookedSlots": "已预定{count}个",
+      "close": "关闭",
+      "columns": {
+        "applies": "申请",
+        "board": "渠道",
+        "candidate": "候选人",
+        "job": "职位",
+        "kind": "形式",
+        "members": "人数",
+        "name": "名称",
+        "requisition": "需求",
+        "scorecards": "评价",
+        "signature": "签署",
+        "slots": "时段",
+        "status": "状态",
+        "versions": "版本",
+        "when": "时间"
+      },
+      "consentTitle": "同意",
+      "dispositionLog": "渠道日志",
+      "empty": "此处暂无内容。",
+      "failed": "保存失败。",
+      "kit": "题库",
+      "matchToOpening": "匹配在招职位",
+      "members": "{count}人",
+      "missing": "待提交",
+      "myScorecard": "我的评价",
+      "others": "小组评价",
+      "overall": "总体",
+      "pause": "暂停",
+      "poolMembers": "成员",
+      "proposedSlots": "已提议{count}个",
+      "publish": "发布",
+      "questions": "问题",
+      "remove": "移除",
+      "retentionDate": "保留至",
+      "scorecards": "评价{submitted}/{total}",
+      "sendLink": "发送签署链接",
+      "signatureState": "签署",
+      "slots": "时段",
+      "submitScorecard": "提交评价",
+      "summary": "汇总",
+      "tagsLabel": "标签（逗号分隔）",
+      "versionHistory": "版本历史",
+      "versions": "{count}个版本",
+      "voidSignature": "作废签署"
+    },
+    "posting": {
+      "closed": "已关闭",
+      "draft": "草稿",
+      "error": "错误",
+      "paused": "已暂停",
+      "published": "已发布"
+    },
+    "postingEvent": {
+      "apply_received": "收到申请",
+      "closed": "已关闭",
+      "disposition_sent": "已回传结果",
+      "error": "错误",
+      "paused": "已暂停",
+      "published": "已发布"
+    },
+    "signature": {
+      "declined": "已拒绝",
+      "sent": "已发送",
+      "signed": "已签署",
+      "unsigned": "未签署",
+      "viewed": "已查看",
+      "voided": "已作废"
+    },
+    "tabs": {
+      "interviews": "面试",
+      "offers": "录用函",
+      "openings": "需求",
+      "pools": "人才库",
+      "postings": "渠道"
     }
   },
   "performance": {
@@ -1798,5 +1883,24 @@
     "empty": "当前没有待填调查。",
     "respond": "填写",
     "actionFailed": "此操作失败。"
+  },
+  "public": {
+    "book": {
+      "empty": "暂无可约时段。",
+      "kicker": "面试排期",
+      "title": "{name}，请预约您的面试"
+    },
+    "careers": {
+      "empty": "目前没有在招职位。",
+      "kicker": "招聘 · {org}",
+      "title": "在招职位"
+    },
+    "offer": {
+      "alreadySigned": "已签署，谢谢。",
+      "closed": "此函件已关闭。",
+      "for": "致{name}",
+      "kicker": "录用函",
+      "version": "第{version}版"
+    }
   }
 }

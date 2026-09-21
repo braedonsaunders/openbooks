@@ -2614,6 +2614,36 @@
         "title": "保持スケジュール",
         "singularTitle": "保持スケジュール",
         "description": "各文書カテゴリの保持期間、起算イベント、期限到来時に削除か匿名化かを定義します。リーガルホールドは実行を停止します。"
+      },
+      "hrm-interview-kits": {
+        "description": "求人ごとの面接ガイド：質問・評価項目・尺度。",
+        "singularTitle": "面接キット",
+        "title": "面接キット"
+      },
+      "hrm-interviewer-pools": {
+        "description": "面接官グループ。宣言した空き枠と標準キットを持つ。",
+        "singularTitle": "面接官グループ",
+        "title": "面接官グループ"
+      },
+      "hrm-kit-attributes": {
+        "description": "キットの評価項目。重点項目は必須評価。",
+        "singularTitle": "キット項目",
+        "title": "キット項目"
+      },
+      "hrm-kit-questions": {
+        "description": "キットごとの推奨質問。項目へのひも付け可。",
+        "singularTitle": "キット質問",
+        "title": "キット質問"
+      },
+      "hrm-offer-templates": {
+        "description": "オファー文面テンプレート。条項付きで版管理PDF化。",
+        "singularTitle": "オファーテンプレート",
+        "title": "オファーテンプレート"
+      },
+      "hrm-retention-rules": {
+        "description": "保持ルール：期限に応じて匿名化または削除。",
+        "singularTitle": "保持ルール",
+        "title": "保持ルール"
       }
     },
     "fields": {
@@ -2979,7 +3009,21 @@
       "pinRequired": "PIN必須",
       "photoRequired": "写真必須",
       "subjectKind": "対象",
-      "stages": "段階"
+      "stages": "段階",
+      "approvalRequired": "承認が必要",
+      "attribute": "項目",
+      "attributeId": "項目",
+      "availability": "空き枠",
+      "clauses": "条項",
+      "consentExtensionLeadDays": "延長通知日数",
+      "instructions": "指針",
+      "isFocusDefault": "重点項目",
+      "kitId": "キット",
+      "pipelineStageId": "選考段階",
+      "question": "質問",
+      "ratingScale": "評価尺度",
+      "regionScope": "地域範囲",
+      "retainMonths": "保持月数"
     },
     "fieldHelp": {
       "gapless": "欠番なしとは、連番のすべての番号が記録され、番号が飛ばないことを意味します。法令または監査要件で途切れない採番が必要な場合にのみ有効にしてください。",
@@ -3063,7 +3107,18 @@
       "rateScheduleJurisdiction": "パック語彙。汎用層では自由記述 — 解釈はパックが行う。",
       "perDiemComponent": "金額が通過する支給コンポーネント。その税務処理が唯一の課税区分宣言。",
       "hrmQualificationValidity": "期限のない資格は空欄のままにします。",
-      "hrmQualificationExtraCategories": "標準の6区分以外の自社カテゴリ語彙。"
+      "hrmQualificationExtraCategories": "標準の6区分以外の自社カテゴリ語彙。",
+      "hrmAttributeFocus": "重点項目は全評価で必須。その他は任意。",
+      "hrmKitInstructions": "パネル向け指針。各評価に印字される。",
+      "hrmKitScale": "strong_no、no、yes、strong_yesのうち2件以上。",
+      "hrmKitStage": "この選考段階に適用。空欄は全体に適用。",
+      "hrmPoolAvailability": "startsAt、endsAt、timezoneのJSONリスト。",
+      "hrmPoolKit": "このグループの面接の標準キット。",
+      "hrmQuestionAttribute": "質問をこのキットの項目にひも付ける。",
+      "hrmRetentionLeadDays": "期限前に延長を求める日数。空欄は通知なし。",
+      "hrmRetentionScope": "地域をJSONで指定：applies_to allまたはcountries。",
+      "hrmTemplateBody": "オファーデータの差し込み欄付き本文。",
+      "hrmTemplateClauses": "key、label、body、default_onのJSONリスト。"
     },
     "options": {
       "timeClassification": {
@@ -3529,6 +3584,14 @@
       "approvalSubject": {
         "timesheetWeek": "タイムシート週",
         "crewTimeBatch": "班バッチ"
+      },
+      "hrmRetentionAction": {
+        "anonymize": "匿名化",
+        "delete": "削除"
+      },
+      "hrmRetentionBasis": {
+        "consent": "同意",
+        "inactivity": "無応募"
       }
     },
     "invoicing": {
@@ -4866,6 +4929,34 @@
     "fieldTimeMultiStageApproval": {
       "title": "多段階の工数承認",
       "description": "タイムシートと班バッチの上長・PM・給与の段階チェーン。"
+    },
+    "hrmRecruiting": {
+      "title": "採用",
+      "description": "求人、候補者、面接、オファー：欠員から採用までの流れ。"
+    },
+    "hrmStructuredInterviews": {
+      "title": "構造化面接",
+      "description": "評価項目つき面接キットとブラインド方式のパネル評価。"
+    },
+    "hrmInterviewScheduling": {
+      "title": "面接日程調整",
+      "description": "候補者向け自己予約リンクつきの提案枠。"
+    },
+    "hrmOfferSigning": {
+      "title": "オファー署名",
+      "description": "テンプレートのオファーを版管理PDF化し製品内で署名。"
+    },
+    "hrmJobBoards": {
+      "title": "求人掲示",
+      "description": "社内キャリアページとフィード配信、選考結果の同期つき。"
+    },
+    "hrmCandidateRetention": {
+      "title": "候補者データ保持",
+      "description": "同意の取得と保持ルール：期限で匿名化または削除。"
+    },
+    "hrmTalentPool": {
+      "title": "タレントプール",
+      "description": "過去の候補者を募集中の求人に照合するプール。"
     }
   },
   "extensions": {

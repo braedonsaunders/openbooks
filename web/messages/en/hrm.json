@@ -667,6 +667,91 @@
       "email": "Email",
       "phone": "Phone",
       "source": "Source"
+    },
+    "consent": {
+      "future_roles": "Future roles",
+      "talent_pool": "Talent pool",
+      "this_application": "This application"
+    },
+    "depth": {
+      "applies": "{count} applies",
+      "blinded": "Others open after you submit yours.",
+      "bookedSlots": "{count} booked",
+      "close": "Close",
+      "columns": {
+        "applies": "Applies",
+        "board": "Board",
+        "candidate": "Candidate",
+        "job": "Role",
+        "kind": "Kind",
+        "members": "Members",
+        "name": "Name",
+        "requisition": "Opening",
+        "scorecards": "Scorecards",
+        "signature": "Signature",
+        "slots": "Slots",
+        "status": "Status",
+        "versions": "Versions",
+        "when": "When"
+      },
+      "consentTitle": "Consents",
+      "dispositionLog": "Board log",
+      "empty": "Nothing here yet.",
+      "failed": "Save failed.",
+      "kit": "Kit",
+      "matchToOpening": "Match to opening",
+      "members": "{count} members",
+      "missing": "missing",
+      "myScorecard": "My scorecard",
+      "others": "Panel verdicts",
+      "overall": "Overall",
+      "pause": "Pause",
+      "poolMembers": "Members",
+      "proposedSlots": "{count} proposed",
+      "publish": "Publish",
+      "questions": "Questions",
+      "remove": "Remove",
+      "retentionDate": "Retention due",
+      "scorecards": "{submitted}/{total} scorecards",
+      "sendLink": "Send signing link",
+      "signatureState": "Signature",
+      "slots": "Slots",
+      "submitScorecard": "Submit scorecard",
+      "summary": "Summary",
+      "tagsLabel": "Tags (comma separated)",
+      "versionHistory": "Versions",
+      "versions": "{count} versions",
+      "voidSignature": "Void signature"
+    },
+    "posting": {
+      "closed": "Closed",
+      "draft": "Draft",
+      "error": "Error",
+      "paused": "Paused",
+      "published": "Published"
+    },
+    "postingEvent": {
+      "apply_received": "application received",
+      "closed": "closed",
+      "disposition_sent": "disposition sent",
+      "error": "error",
+      "paused": "paused",
+      "published": "published"
+    },
+    "signature": {
+      "declined": "Declined",
+      "sent": "Sent",
+      "signed": "Signed",
+      "unsigned": "Unsigned",
+      "viewed": "Viewed",
+      "voided": "Voided"
+    },
+    "tabs": {
+      "interviews": "Interviews",
+      "offers": "Offers",
+      "openings": "Openings",
+      "pools": "Pools",
+      "postings": "Postings"
     }
   },
   "performance": {
@@ -1799,5 +1884,24 @@
     "empty": "No open surveys right now.",
     "respond": "Respond",
     "actionFailed": "This action failed."
+  },
+  "public": {
+    "book": {
+      "empty": "No open times.",
+      "kicker": "Interview scheduling",
+      "title": "Book your interview, {name}"
+    },
+    "careers": {
+      "empty": "No open roles right now.",
+      "kicker": "Careers · {org}",
+      "title": "Open roles"
+    },
+    "offer": {
+      "alreadySigned": "Already signed. Thank you.",
+      "closed": "This letter is closed.",
+      "for": "for {name}",
+      "kicker": "Offer",
+      "version": "version {version}"
+    }
   }
 }

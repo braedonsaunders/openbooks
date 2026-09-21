@@ -34,6 +34,18 @@ const PUBLIC_SEGMENT_ROOTS = [
   // connection's user-chosen password, then unguessable session tickets).
   // Same credential-authenticated non-browser model as /api/pay and /api/sign.
   "/api/qbd",
+  // HR-18 begin: recruiting public surface. /careers is the internal career
+  // page, /book and /offer are the candidate self-booking and offer-signing
+  // pages, and /api/recruiting carries only the sessionless token routes
+  // (book/offer/feed by HMAC token, public apply with honeypot + rate
+  // limit). Every route verifies its own credential in-route (recruiting
+  // token or apply controls, fail-closed) — candidates have no account, so
+  // the session gate would 302 every one of them to /login.
+  "/careers",
+  "/book",
+  "/offer",
+  "/api/recruiting",
+  // HR-18 end
   // Worker-to-web seam: every /api/internal route authenticates itself with
   // the shared OPENBOOKS_INTERNAL_TOKEN header and fails closed without it.
   "/api/internal",

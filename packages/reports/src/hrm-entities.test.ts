@@ -57,6 +57,14 @@ const HRM_KEYS = [
   'hrm_survey_results',
   'hrm_org_chart',
   // HR-19 end
+  // HR-18 begin: recruiting-depth entities (0229).
+  'hrm_scorecards',
+  'hrm_interview_slots',
+  'hrm_offers',
+  'hrm_postings',
+  'hrm_retention_runs',
+  'hrm_pool_members',
+  // HR-18 end
 ] as const
 
 const HRM_PERMISSIONS: Record<(typeof HRM_KEYS)[number], string> = {
@@ -95,6 +103,14 @@ const HRM_PERMISSIONS: Record<(typeof HRM_KEYS)[number], string> = {
   // certifications read grant at every surface.
   hrm_qualifications: 'hrm.certifications.read',
   hrm_qualification_alerts: 'hrm.certifications.read',
+  // HR-18 begin: depth entities read through the recruiting grant.
+  hrm_scorecards: 'hrm.recruiting.read',
+  hrm_interview_slots: 'hrm.recruiting.read',
+  hrm_offers: 'hrm.recruiting.read',
+  hrm_postings: 'hrm.recruiting.read',
+  hrm_retention_runs: 'hrm.recruiting.read',
+  hrm_pool_members: 'hrm.recruiting.read',
+  // HR-18 end
   // HR-14 end
   // HR-17 begin: continuous-performance entities read through the HR
   // performance grant — the same reader-grant pattern as hrm_reviews.
@@ -153,6 +169,11 @@ test('workforce entities refuse without their gate and their own read permission
     hrm_survey_results: 'hrmSurveys',
     hrm_org_chart: 'hrmOrgChart',
     // HR-19 end
+    // HR-18 begin: depth entities ride their own sub-switches.
+    hrm_scorecards: 'hrmStructuredInterviews', hrm_interview_slots: 'hrmInterviewScheduling',
+    hrm_offers: 'hrmOfferSigning', hrm_postings: 'hrmJobBoards',
+    hrm_retention_runs: 'hrmCandidateRetention', hrm_pool_members: 'hrmTalentPool',
+    // HR-18 end
     // HR-14 begin: pre-existing red on the stacked base — the HR-12
     // compensation entities were never added to this switch map, so the
     // exact pin above compared against undefined. They ride
@@ -224,6 +245,14 @@ test('workforce entities scope to one org and one legal-entity boundary', () => 
     // HR-14 begin
     hrm_qualifications: 'q.org_id',
     hrm_qualification_alerts: 'a.org_id',
+    // HR-18 begin
+    hrm_scorecards: 'i.org_id',
+    hrm_interview_slots: 's.org_id',
+    hrm_offers: 'o.org_id',
+    hrm_postings: 'p.org_id',
+    hrm_retention_runs: 'r.org_id',
+    hrm_pool_members: 'm.org_id',
+    // HR-18 end
     // HR-14 end
     // HR-17 begin
     hrm_one_on_ones: 'o.org_id',
@@ -297,6 +326,15 @@ test('workforce entities scope to one org and one legal-entity boundary', () => 
     // to clamp on.
     hrm_org_chart: 'e.employer_subsidiary_id',
     // HR-19 end
+    // HR-18 begin: requisition-anchored depth reads clamp to the opening's
+    // employer; rule-level runs and pool memberships are org-wide.
+    hrm_scorecards: 'r.employer_subsidiary_id',
+    hrm_interview_slots: 'r.employer_subsidiary_id',
+    hrm_offers: 'r.employer_subsidiary_id',
+    hrm_postings: 'r.employer_subsidiary_id',
+    hrm_retention_runs: null,
+    hrm_pool_members: null,
+    // HR-18 end
   }
   for (const key of HRM_KEYS) {
     const entity = REPORT_ENTITY_MAP[key]!

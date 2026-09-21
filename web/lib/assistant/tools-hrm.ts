@@ -712,7 +712,7 @@ const requisitionSegments = ["draft", "open", "on_hold", "filled", "cancelled"] 
 const hrmRecruiting: AssistantToolDef = {
   name: "hrm_recruiting",
   description:
-    "Requisitions with headcount versus filled, the funnel per application with stages and offer state, and one opening pipeline with time-to-fill. Candidate contact PII never leaves through this tool, names only. Read-only.",
+    "Requisitions with headcount versus filled, the funnel per application with stages and offer state, and one opening pipeline with time-to-fill. Depth: interview scorecard summaries (aggregates plus missing seats by name), offer signature state, and board posting status. Candidate contact PII never leaves through this tool, names only. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["hrm.recruiting.read"] },
   feature: "hrm",
@@ -721,19 +721,87 @@ const hrmRecruiting: AssistantToolDef = {
     requisitionId: uuidInput.optional().describe("One opening in full (pipeline, funnel, applications); omit for the segment list"),
     segment: z.enum(requisitionSegments).optional().describe("List segment (default open)"),
     limit: z.number().int().min(1).max(200).optional().describe("Maximum openings to return (default 50)"),
+    // HR-18 begin: depth reads (names and states only, never PII). Each
+    // refuses by name while its sub-switch is off.
+    interviewId: uuidInput.optional().describe("Scorecard summary for one interview: per-attribute aggregates, counts, and missing seats by name"),
+    offerId: uuidInput.optional().describe("One offer's signature state and version count"),
+    includePostings: z.boolean().optional().describe("Include board posting status beside a requisitionId detail"),
+    // HR-18 end
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const gated = await hrmFeatureRefused(authz.user.orgId);
     if (gated) return gated;
-    const a = raw as { requisitionId?: string; segment?: string; limit?: number };
+    const a = raw as {
+      requisitionId?: string;
+      segment?: string;
+      limit?: number;
+      interviewId?: string;
+      offerId?: string;
+      includePostings?: boolean;
+    };
     const limit = Math.min(a.limit ?? 50, 200);
     try {
+      // HR-18 begin: scorecard summary (aggregate only, names of missing
+      // seats — private notes never ride this shape).
+      if (a.interviewId) {
+        if (!(await isFeatureEnabled(authz.user.orgId, "hrmStructuredInterviews"))) {
+          return { ok: false, error: "hrm_structured_interviews_feature_disabled" };
+        }
+        const { scorecardSummary } = await import(
+          "@openbooks/engine/src/hrm/recruiting/scorecards.ts"
+        );
+        const summary = await scorecardSummary({
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          interviewId: a.interviewId,
+        });
+        return { ok: true, data: { summary, href: "/hrm/recruiting" } };
+      }
+      // HR-18 end
+      // HR-18 begin: offer signature state (state only, never the letter).
+      if (a.offerId) {
+        if (!(await isFeatureEnabled(authz.user.orgId, "hrmOfferSigning"))) {
+          return { ok: false, error: "hrm_offer_signing_feature_disabled" };
+        }
+        const { offerSignatureState } = await import(
+          "@openbooks/engine/src/hrm/recruiting/offers-signing.ts"
+        );
+        const state = await offerSignatureState({
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          offerId: a.offerId,
+        });
+        return { ok: true, data: { ...state, href: "/hrm/recruiting" } };
+      }
+      // HR-18 end
       if (a.requisitionId) {
         const detail = await getRequisitionDetail({
           orgId: authz.user.orgId,
           actorId: authz.user.id,
           requisitionId: a.requisitionId,
         });
+        // HR-18 begin: board posting status beside the detail (board, board
+        // status, apply counts — never applicant PII). Refuses by name
+        // while hrmJobBoards is off.
+        let postings: { boardKey: string; status: string; applyCount: number }[] | undefined;
+        if (a.includePostings === true) {
+          if (!(await isFeatureEnabled(authz.user.orgId, "hrmJobBoards"))) {
+            return { ok: false, error: "hrm_job_boards_feature_disabled" };
+          }
+          const { listPostings } = await import("@openbooks/engine/src/hrm/recruiting/postings.ts");
+          postings = (
+            await listPostings({
+              orgId: authz.user.orgId,
+              actorId: authz.user.id,
+              requisitionId: a.requisitionId,
+            })
+          ).map((posting) => ({
+            boardKey: posting.boardKey,
+            status: posting.status,
+            applyCount: posting.applyCount,
+          }));
+        }
+        // HR-18 end
         return {
           ok: true,
           data: {
@@ -756,6 +824,7 @@ const hrmRecruiting: AssistantToolDef = {
               interviewsCount: application.interviewsCount,
               liveOfferStatus: application.liveOfferStatus,
             })),
+            ...(postings === undefined ? {} : { postings }),
             href: "/hrm/recruiting",
           },
         };

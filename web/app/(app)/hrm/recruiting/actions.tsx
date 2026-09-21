@@ -511,3 +511,390 @@ export function OfferActionsIsland({
     </div>
   )
 }
+
+/**
+ * HR-18 depth islands: scorecard submit, slot propose, offer send/void,
+ * posting publish/pause/close, pool rediscovery and member removal. Same
+ * postJson + readApiErrorMessage + router.refresh pattern as the islands
+ * above; labels loader-resolved; @openbooks/ui inputs throughout.
+ */
+
+const RATING_KEYS = ['strong_no', 'no', 'yes', 'strong_yes'] as const
+
+/** Submit the viewer's own scorecard: overall plus per-attribute ratings. */
+export function ScorecardFormIsland({
+  interviewId,
+  labels,
+}: {
+  interviewId: string
+  labels: { overall: string; submit: string; failed: string }
+}) {
+  const refresh = useRefresh()
+  const [overall, setOverall] = useState<string>('yes')
+  const [ratings, setRatings] = useState<Record<string, string>>({})
+  const [privateNotes, setPrivateNotes] = useState('')
+  const [sharedNotes, setSharedNotes] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await postJson(`/api/hrm/recruiting/interviews/${interviewId}/scorecards`, 'POST', {
+        overall,
+        ratings,
+        privateNotes: privateNotes.trim() || null,
+        sharedNotes: sharedNotes.trim() || null,
+      })
+      if (!res.ok) {
+        setError(await readApiErrorMessage(res, labels.failed))
+        setBusy(false)
+        return
+      }
+      refresh()
+    } catch {
+      setError(labels.failed)
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form onSubmit={(event) => void submit(event)} className="space-y-3">
+      <div>
+        <Label>{labels.overall}</Label>
+        <Select value={overall} onChange={(event) => setOverall(event.target.value)}>
+          {RATING_KEYS.map((key) => (
+            <option key={key} value={key}>
+              {key}
+            </option>
+          ))}
+        </Select>
+      </div>
+      <div>
+        <Label>ratings (attribute id → key)</Label>
+        <Textarea
+          aria-label="ratings"
+          placeholder='{"<attribute-id>": "yes"}'
+          value={JSON.stringify(ratings)}
+          onChange={(event) => {
+            try {
+              setRatings(JSON.parse(event.target.value) as Record<string, string>)
+            } catch {
+              /* keep last good value while typing */
+            }
+          }}
+        />
+      </div>
+      <div>
+        <Label>private notes</Label>
+        <Textarea value={privateNotes} onChange={(event) => setPrivateNotes(event.target.value)} />
+      </div>
+      <div>
+        <Label>shared notes</Label>
+        <Textarea value={sharedNotes} onChange={(event) => setSharedNotes(event.target.value)} />
+      </div>
+      {error ? (
+        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          {error}
+        </p>
+      ) : null}
+      <Button size="sm" type="submit" disabled={busy}>
+        {labels.submit}
+      </Button>
+    </form>
+  )
+}
+
+/** Propose slots from declared windows; surfaces the booking link. */
+export function SlotProposeIsland({
+  interviewId,
+  labels,
+}: {
+  interviewId: string
+  labels: { submit: string; failed: string }
+}) {
+  const refresh = useRefresh()
+  const [startsAt, setStartsAt] = useState('')
+  const [endsAt, setEndsAt] = useState('')
+  const [timezone, setTimezone] = useState('America/Toronto')
+  const [link, setLink] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await postJson(`/api/hrm/recruiting/interviews/${interviewId}/slots`, 'POST', {
+        windows: [{ startsAt: new Date(startsAt).toISOString(), endsAt: new Date(endsAt).toISOString(), timezone }],
+      })
+      if (!res.ok) {
+        setError(await readApiErrorMessage(res, labels.failed))
+        setBusy(false)
+        return
+      }
+      const body = (await res.json()) as { bookingUrlPath: string }
+      setLink(body.bookingUrlPath)
+      refresh()
+    } catch {
+      setError(labels.failed)
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form onSubmit={(event) => void submit(event)} className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        <Input aria-label="starts" type="datetime-local" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} />
+        <Input aria-label="ends" type="datetime-local" value={endsAt} onChange={(event) => setEndsAt(event.target.value)} />
+        <Input aria-label="timezone" value={timezone} onChange={(event) => setTimezone(event.target.value)} />
+      </div>
+      {error ? (
+        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          {error}
+        </p>
+      ) : null}
+      {link ? <p className="text-xs text-slate-500">booking link: {link}</p> : null}
+      <Button size="sm" type="submit" disabled={busy || !startsAt || !endsAt}>
+        {labels.submit}
+      </Button>
+    </form>
+  )
+}
+
+/** Offer signing desk: email the signing link, or void an unsigned letter. */
+export function OfferSigningIsland({
+  offerId,
+  labels,
+}: {
+  offerId: string
+  labels: { sendLink: string; void: string; failed: string }
+}) {
+  const refresh = useRefresh()
+  const [email, setEmail] = useState('')
+  const [name, setName] = useState('')
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function act(body: unknown) {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await postJson(`/api/hrm/recruiting/offers/${offerId}/signing`, 'POST', body)
+      if (!res.ok) {
+        setError(await readApiErrorMessage(res, labels.failed))
+        setBusy(false)
+        return
+      }
+      refresh()
+    } catch {
+      setError(labels.failed)
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        <Input aria-label="email" placeholder="email" value={email} onChange={(event) => setEmail(event.target.value)} />
+        <Input aria-label="name" placeholder="name" value={name} onChange={(event) => setName(event.target.value)} />
+        <Button size="sm" disabled={busy || !email} onClick={() => void act({ action: 'send-link', candidateEmail: email, candidateName: name || undefined })}>
+          {labels.sendLink}
+        </Button>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Input aria-label="reason" placeholder="reason" value={reason} onChange={(event) => setReason(event.target.value)} />
+        <Button size="sm" variant="outline" disabled={busy || !reason.trim()} onClick={() => void act({ action: 'void', reason: reason.trim() })}>
+          {labels.void}
+        </Button>
+      </div>
+      {error ? (
+        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
+/** Posting controls: publish to a board, pause, or close. */
+export function PostingActionsIsland({
+  postingId,
+  status,
+  requisitionId,
+  labels,
+}: {
+  postingId?: string
+  status?: string
+  requisitionId?: string
+  labels: { publish: string; pause: string; close: string; failed: string }
+}) {
+  const refresh = useRefresh()
+  const [boardKey, setBoardKey] = useState('internal')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function act(url: string, body: unknown) {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await postJson(url, 'POST', body)
+      if (!res.ok) {
+        setError(await readApiErrorMessage(res, labels.failed))
+        setBusy(false)
+        return
+      }
+      refresh()
+    } catch {
+      setError(labels.failed)
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      {requisitionId ? (
+        <div className="flex flex-wrap gap-2">
+          <Select aria-label="board" value={boardKey} onChange={(event) => setBoardKey(event.target.value)}>
+            <option value="internal">internal</option>
+            <option value="feed">feed</option>
+          </Select>
+          <Button size="sm" disabled={busy} onClick={() => void act('/api/hrm/recruiting/postings', { requisitionId, boardKey })}>
+            {labels.publish}
+          </Button>
+        </div>
+      ) : null}
+      {postingId && status !== 'closed' ? (
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => void act(`/api/hrm/recruiting/postings/${postingId}`, { action: 'pause' })}>
+            {labels.pause}
+          </Button>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={() => void act(`/api/hrm/recruiting/postings/${postingId}`, { action: 'close' })}>
+            {labels.close}
+          </Button>
+        </div>
+      ) : null}
+      {error ? (
+        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
+/** Match pool members to an opening by declared tags. */
+export function PoolRediscoverIsland({
+  poolId,
+  labels,
+}: {
+  poolId: string
+  labels: { tags: string; failed: string }
+}) {
+  const [requisitionId, setRequisitionId] = useState('')
+  const [tags, setTags] = useState('')
+  const [matches, setMatches] = useState<{ candidateId: string; displayName: string; matchedTags: readonly string[] }[]>([])
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await postJson(`/api/hrm/recruiting/talent-pools/${poolId}/rediscover`, 'POST', {
+        requisitionId,
+        requisitionTags: tags.split(',').map((tag) => tag.trim()).filter((tag) => tag.length > 0),
+      })
+      if (!res.ok) {
+        setError(await readApiErrorMessage(res, labels.failed))
+        setBusy(false)
+        return
+      }
+      const body = (await res.json()) as { matches: { candidateId: string; displayName: string; matchedTags: readonly string[] }[] }
+      setMatches(body.matches)
+      setBusy(false)
+    } catch {
+      setError(labels.failed)
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form onSubmit={(event) => void submit(event)} className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        <Input aria-label="requisition" placeholder="requisition id" value={requisitionId} onChange={(event) => setRequisitionId(event.target.value)} />
+        <Input aria-label={labels.tags} placeholder={labels.tags} value={tags} onChange={(event) => setTags(event.target.value)} />
+        <Button size="sm" type="submit" disabled={busy || !requisitionId || !tags.trim()}>
+          Match
+        </Button>
+      </div>
+      {error ? (
+        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          {error}
+        </p>
+      ) : null}
+      {matches.length > 0 ? (
+        <ul className="space-y-1 text-sm">
+          {matches.map((match) => (
+            <li key={match.candidateId}>
+              {match.displayName} · {match.matchedTags.join(', ')}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </form>
+  )
+}
+
+/** Remove one pool membership. */
+export function PoolMemberRemoveIsland({
+  poolId,
+  candidateId,
+  labels,
+}: {
+  poolId: string
+  candidateId: string
+  labels: { remove: string; failed: string }
+}) {
+  const refresh = useRefresh()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function remove() {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await postJson(`/api/hrm/recruiting/talent-pools/${poolId}/members`, 'POST', {
+        action: 'remove',
+        candidateId,
+      })
+      if (!res.ok) {
+        setError(await readApiErrorMessage(res, labels.failed))
+        setBusy(false)
+        return
+      }
+      refresh()
+    } catch {
+      setError(labels.failed)
+      setBusy(false)
+    }
+  }
+
+  return (
+    <span>
+      <Button size="sm" variant="ghost" disabled={busy} onClick={() => void remove()}>
+        {labels.remove}
+      </Button>
+      {error ? (
+        <span role="alert" className="ml-2 text-sm text-red-600 dark:text-red-400">
+          {error}
+        </span>
+      ) : null}
+    </span>
+  )
+}

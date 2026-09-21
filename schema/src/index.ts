@@ -93,5 +93,8 @@ export * from "./hrm-qualifications";
 // HR-19 begin: documents/e-sign/retention/DSAR/surveys drizzle mirror (0230).
 export * from "./hrm-documents-surveys";
 // HR-19 end
+// HR-18 begin: recruiting-depth drizzle mirror (0229).
+export * from "./hrm-recruiting-depth";
+// HR-18 end
 
 export * from './extension-drafts';

@@ -145,6 +145,11 @@ export interface ScheduleInterviewQuery {
   readonly durationMinutes?: unknown;
   readonly location?: unknown;
   readonly panelPartyIds?: unknown;
+  // HR-18: the structured-interview kit this sitting runs (optional; when
+  // set, draft scorecards are created for each panel member).
+  readonly kitId?: unknown;
+  // HR-18: per-panelist focus attribute pins (party id → attribute ids).
+  readonly panelFocus?: Readonly<Record<string, readonly string[]>>;
 }
 
 /** Schedule a sitting on an active application (event recorded in the same transaction). */
@@ -197,23 +202,61 @@ export async function scheduleInterview(query: ScheduleInterviewQuery): Promise<
       );
     }
     await assertPanelVisible(db, orgId, actorId, panelPartyIds);
+    // HR-18: an optional kit pins the sitting's scorecard vocabulary. The
+    // kit must be live and visible; focus pins must name attributes of
+    // that kit (validated against the subject — the kit — not only the
+    // declaration).
+    const kitId = query.kitId == null ? null : requireId(query.kitId, "kitId");
+    if (kitId) {
+      const { loadKit, listKitAttributes } = await import("./kits.ts");
+      const kit = await loadKit(db, orgId, kitId);
+      if (!kit) {
+        throw new RecruitingError("NOT_FOUND", "interview kit is not visible in this organization");
+      }
+      if (!kit.isActive) {
+        throw new RecruitingError(
+          "REFUSED",
+          `kit ${kit.name} is retired — reactivate it in Setup or schedule without a kit instead of running a retired kit`,
+        );
+      }
+      const valid = new Set((await listKitAttributes(db, orgId, kitId)).map((attr) => attr.id));
+      for (const focusIds of Object.values(query.panelFocus ?? {})) {
+        for (const attributeId of focusIds ?? []) {
+          if (!valid.has(attributeId)) {
+            throw new RecruitingError(
+              "INVALID_INPUT",
+              `focus attribute ${attributeId} is not on kit ${kit.name} — pin the kit's attributes instead of inventing one`,
+            );
+          }
+        }
+      }
+    }
     const inserted = (await db.execute<InterviewRow>(sql`
       insert into hrm_interviews
         (org_id, application_id, kind, scheduled_at, duration_minutes, location,
-         status, created_by, updated_by)
+         kit_id, status, created_by, updated_by)
       values (${orgId}, ${applicationId}, ${query.kind as string},
               ${query.scheduledAt as string}::timestamptz, ${durationMinutes}, ${location},
-              'scheduled', ${actorId}, ${actorId})
+              ${kitId}, 'scheduled', ${actorId}, ${actorId})
       returning ${INTERVIEW_COLUMNS}
     `)).rows[0];
     if (!inserted) {
       throw new RecruitingError("REFUSED", "the interview was not stored — no row was written; retry the request");
     }
     for (const partyId of panelPartyIds) {
+      const focusIds = query.panelFocus?.[partyId] ?? null;
+      const { pgUuidArray } = await import("./depth.ts");
       await db.execute(sql`
-        insert into hrm_interview_panel (org_id, interview_id, party_id, created_by, updated_by)
-        values (${orgId}, ${inserted.id}, ${partyId}, ${actorId}, ${actorId})
+        insert into hrm_interview_panel (org_id, interview_id, party_id, focus_attribute_ids, created_by, updated_by)
+        values (${orgId}, ${inserted.id}, ${partyId}, ${focusIds === null ? null : pgUuidArray([...focusIds])}::uuid[], ${actorId}, ${actorId})
       `);
+    }
+    // HR-18: scorecard shells for every panel member, same transaction —
+    // a sitting with a kit always has its verdict rows; a sitting without
+    // a kit keeps the HR-6 shape (no shells).
+    if (kitId && panelPartyIds.length > 0) {
+      const { ensurePanelScorecards } = await import("./scorecards.ts");
+      await ensurePanelScorecards({ orgId, actorId, interviewId: inserted.id });
     }
     return toDTO(inserted, panelPartyIds);
   });

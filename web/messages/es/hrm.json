@@ -666,6 +666,91 @@
       "email": "Correo",
       "phone": "Teléfono",
       "source": "Origen"
+    },
+    "consent": {
+      "future_roles": "Futuros puestos",
+      "talent_pool": "Reserva de talento",
+      "this_application": "Esta candidatura"
+    },
+    "depth": {
+      "applies": "{count} candidaturas",
+      "blinded": "Los demás se abren tras tu envío.",
+      "bookedSlots": "{count} reservados",
+      "close": "Cerrar",
+      "columns": {
+        "applies": "Candidaturas",
+        "board": "Portal",
+        "candidate": "Candidato",
+        "job": "Puesto",
+        "kind": "Tipo",
+        "members": "Miembros",
+        "name": "Nombre",
+        "requisition": "Vacante",
+        "scorecards": "Veredictos",
+        "signature": "Firma",
+        "slots": "Horarios",
+        "status": "Estado",
+        "versions": "Versiones",
+        "when": "Cuándo"
+      },
+      "consentTitle": "Consentimientos",
+      "dispositionLog": "Registro del portal",
+      "empty": "Nada aquí todavía.",
+      "failed": "No se pudo guardar.",
+      "kit": "Guía",
+      "matchToOpening": "Comparar con la vacante",
+      "members": "{count} miembros",
+      "missing": "pendiente",
+      "myScorecard": "Mi veredicto",
+      "others": "Veredictos del panel",
+      "overall": "Global",
+      "pause": "Pausar",
+      "poolMembers": "Miembros",
+      "proposedSlots": "{count} propuestos",
+      "publish": "Publicar",
+      "questions": "Preguntas",
+      "remove": "Quitar",
+      "retentionDate": "Conservación hasta",
+      "scorecards": "{submitted}/{total} veredictos",
+      "sendLink": "Enviar enlace de firma",
+      "signatureState": "Firma",
+      "slots": "Horarios",
+      "submitScorecard": "Enviar veredicto",
+      "summary": "Resumen",
+      "tagsLabel": "Etiquetas (separadas por comas)",
+      "versionHistory": "Versiones",
+      "versions": "{count} versiones",
+      "voidSignature": "Anular firma"
+    },
+    "posting": {
+      "closed": "Cerrada",
+      "draft": "Borrador",
+      "error": "Error",
+      "paused": "Pausada",
+      "published": "Publicada"
+    },
+    "postingEvent": {
+      "apply_received": "candidatura recibida",
+      "closed": "cerrada",
+      "disposition_sent": "resultado enviado",
+      "error": "error",
+      "paused": "pausada",
+      "published": "publicada"
+    },
+    "signature": {
+      "declined": "Rechazada",
+      "sent": "Enviada",
+      "signed": "Firmada",
+      "unsigned": "Sin firmar",
+      "viewed": "Vista",
+      "voided": "Anulada"
+    },
+    "tabs": {
+      "interviews": "Entrevistas",
+      "offers": "Ofertas",
+      "openings": "Vacantes",
+      "pools": "Reserva",
+      "postings": "Portales"
     }
   },
   "performance": {
@@ -1798,5 +1883,24 @@
     "empty": "Sin encuestas abiertas ahora.",
     "respond": "Responder",
     "actionFailed": "Esta acción falló."
+  },
+  "public": {
+    "book": {
+      "empty": "Sin horarios libres.",
+      "kicker": "Programación de entrevistas",
+      "title": "Reserva tu entrevista, {name}"
+    },
+    "careers": {
+      "empty": "Sin vacantes abiertas ahora.",
+      "kicker": "Empleo · {org}",
+      "title": "Puestos abiertos"
+    },
+    "offer": {
+      "alreadySigned": "Ya firmada. Gracias.",
+      "closed": "Esta carta está cerrada.",
+      "for": "para {name}",
+      "kicker": "Oferta",
+      "version": "versión {version}"
+    }
   }
 }

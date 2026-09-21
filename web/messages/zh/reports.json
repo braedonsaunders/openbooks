@@ -784,6 +784,30 @@
       "hrm_org_chart": {
         "label": "组织架构图",
         "description": "报告日期每个在职雇佣一行——姓名、职位、部门和直线经理。"
+      },
+      "hrm_interview_slots": {
+        "description": "每个提议、预定或婉拒的面试时段一行，含时段与形式。联系方式与预定令牌绝不外流。",
+        "label": "面试时段"
+      },
+      "hrm_offers": {
+        "description": "每封录用函一行，含业务状态、签署状态与版本。金额、函件与签署证据绝不外流。",
+        "label": "录用函"
+      },
+      "hrm_pool_members": {
+        "description": "每位人才库成员一行：人才库、姓名与加入日期。仅姓名，无联系方式。",
+        "label": "库成员"
+      },
+      "hrm_postings": {
+        "description": "每个招聘渠道发布一行，含状态、申请数与结果回传数，用于衡量各渠道效果。",
+        "label": "渠道发布"
+      },
+      "hrm_retention_runs": {
+        "description": "每条保留规则每次执行一行，含匿名化、删除与延长数。",
+        "label": "保留执行"
+      },
+      "hrm_scorecards": {
+        "description": "每次面试一行，含小组评价汇总：已提交数、人数与总体分布。评价人明细绝不外流。",
+        "label": "评价汇总"
       }
     },
     "columns": {
@@ -1725,6 +1749,65 @@
         "department": "部门",
         "manager": "经理",
         "employment_id": "雇佣（ID）"
+      },
+      "hrm_interview_slots": {
+        "booked_on": "已预定",
+        "candidate": "候选人",
+        "ends_at": "结束",
+        "kind": "形式",
+        "requisition": "需求",
+        "slot_id": "时段 (ID)",
+        "starts_at": "开始",
+        "timezone": "时区"
+      },
+      "hrm_offers": {
+        "candidate": "候选人",
+        "expires_on": "到期",
+        "job_title": "职位",
+        "offer_id": "录用函 (ID)",
+        "requisition": "需求",
+        "sent_on": "已发送",
+        "signature_status": "签署",
+        "signed_on": "已签署",
+        "status": "状态",
+        "version": "版本"
+      },
+      "hrm_pool_members": {
+        "added_on": "加入日期",
+        "candidate": "候选人",
+        "note": "备注",
+        "pool": "人才库"
+      },
+      "hrm_postings": {
+        "applies": "申请数",
+        "board": "渠道",
+        "closed_on": "关闭日期",
+        "dispositions": "结果回传数",
+        "posting_id": "发布 (ID)",
+        "published_on": "发布日期",
+        "requisition": "需求",
+        "status": "状态"
+      },
+      "hrm_retention_runs": {
+        "anonymized": "匿名化数",
+        "deleted": "删除数",
+        "extensions": "延长数",
+        "ran_at": "执行时间",
+        "rule": "规则",
+        "run_id": "执行 (ID)"
+      },
+      "hrm_scorecards": {
+        "candidate": "候选人",
+        "interview_id": "面试 (ID)",
+        "kind": "形式",
+        "no": "反对",
+        "panel": "面试官数",
+        "requisition": "需求",
+        "scheduled_on": "已安排",
+        "strong_no": "明确反对",
+        "strong_yes": "明确赞成",
+        "submitted": "已提交数",
+        "yes": "赞成"
       }
     },
     "enumValues": {

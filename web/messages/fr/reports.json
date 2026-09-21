@@ -784,6 +784,30 @@
       "hrm_org_chart": {
         "label": "Organigramme",
         "description": "Une ligne par emploi en service à la date du rapport — nom, titre, département et manager."
+      },
+      "hrm_interview_slots": {
+        "description": "Une ligne par créneau proposé, réservé ou refusé, avec fenêtre et type. Ni coordonnées ni jetons ne sortent d'ici.",
+        "label": "Créneaux d'entretien"
+      },
+      "hrm_offers": {
+        "description": "Une ligne par offre avec statut commercial, état de signature et version. Montants, courriers et preuves ne sortent jamais par les états.",
+        "label": "Offres"
+      },
+      "hrm_pool_members": {
+        "description": "Une ligne par membre du vivier : vivier, nom du candidat et date d'ajout. Noms uniquement, jamais de coordonnées.",
+        "label": "Membres du vivier"
+      },
+      "hrm_postings": {
+        "description": "Une ligne par annonce avec statut, candidatures et décisions transmises pour mesurer chaque site (par site, par besoin).",
+        "label": "Annonces"
+      },
+      "hrm_retention_runs": {
+        "description": "Une ligne par passage de la règle avec anonymisés, supprimés et prolongations demandées.",
+        "label": "Passages de conservation"
+      },
+      "hrm_scorecards": {
+        "description": "Une ligne par entretien avec les agrégats du jury : avis rendus et taille plus la distribution globale. Le détail par évaluateur ne sort jamais.",
+        "label": "Avis"
       }
     },
     "columns": {
@@ -1725,6 +1749,65 @@
         "department": "Département",
         "manager": "Manager",
         "employment_id": "Emploi (id)"
+      },
+      "hrm_interview_slots": {
+        "booked_on": "Réservé",
+        "candidate": "Candidat",
+        "ends_at": "Fin",
+        "kind": "Type",
+        "requisition": "Besoin",
+        "slot_id": "Créneau (id)",
+        "starts_at": "Début",
+        "timezone": "Fuseau horaire"
+      },
+      "hrm_offers": {
+        "candidate": "Candidat",
+        "expires_on": "Expire le",
+        "job_title": "Intitulé du poste",
+        "offer_id": "Offre (id)",
+        "requisition": "Besoin",
+        "sent_on": "Envoyée",
+        "signature_status": "Signature",
+        "signed_on": "Signée",
+        "status": "Statut",
+        "version": "Version"
+      },
+      "hrm_pool_members": {
+        "added_on": "Ajouté le",
+        "candidate": "Candidat",
+        "note": "Note",
+        "pool": "Vivier"
+      },
+      "hrm_postings": {
+        "applies": "Candidatures",
+        "board": "Site",
+        "closed_on": "Fermé le",
+        "dispositions": "Décisions",
+        "posting_id": "Annonce (id)",
+        "published_on": "Publié le",
+        "requisition": "Besoin",
+        "status": "Statut"
+      },
+      "hrm_retention_runs": {
+        "anonymized": "Anonymisés",
+        "deleted": "Supprimés",
+        "extensions": "Prolongations",
+        "ran_at": "Passage",
+        "rule": "Règle",
+        "run_id": "Passage (id)"
+      },
+      "hrm_scorecards": {
+        "candidate": "Candidat",
+        "interview_id": "Entretien (id)",
+        "kind": "Type",
+        "no": "Non",
+        "panel": "Jury",
+        "requisition": "Besoin",
+        "scheduled_on": "Planifié le",
+        "strong_no": "Non franc",
+        "strong_yes": "Oui franc",
+        "submitted": "Envoyés",
+        "yes": "Oui"
       }
     },
     "enumValues": {
