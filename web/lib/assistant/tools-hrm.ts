@@ -1234,7 +1234,7 @@ const hrmCertifiedPayroll: AssistantToolDef = {
   feature: "hrmConstructionCompliance",
   tier: "module",
   inputSchema: z.object({
-    projectId: z.string().optional().describe("Keep only this project's runs"),
+    projectId: uuidInput.optional().describe("Keep only this project's runs"),
     limit: z.number().int().min(1).max(200).optional().describe("Maximum runs to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
