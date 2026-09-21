@@ -583,7 +583,8 @@
       "offer": "Offre",
       "timeToFill": "Délai de pourvoi",
       "days": "jours",
-      "missing": "Ce dossier n'est plus visible."
+      "missing": "Ce dossier n'est plus visible.",
+      "description": "Description"
     },
     "create": {
       "titleField": "Titre",
@@ -1310,6 +1311,25 @@
       "reopen": "Rouvrir",
       "carriedForward": "Reporté",
       "actionFailed": "L'action 1:1 a échoué."
+    },
+    "pay": {
+      "title": "Paie",
+      "empty": "Aucun bulletin calculé pour l'instant.",
+      "columns": {
+        "payDate": "Date de paie",
+        "gross": "Brut",
+        "netPay": "Net"
+      },
+      "explain": "Expliquer",
+      "drawerTitle": "Explication du bulletin",
+      "linesTitle": "Lignes",
+      "diffTitle": "Changements depuis le bulletin précédent",
+      "diffEmpty": "Aucun changement depuis le bulletin précédent.",
+      "inputsTitle": "Données derrière les lignes",
+      "sourcesTitle": "Pièces",
+      "missing": "Ce bulletin est introuvable ou hors de votre organisation.",
+      "close": "Fermer",
+      "failed": "L'explication n'a pas pu être chargée."
     }
   },
   "options": {
@@ -1903,5 +1923,16 @@
       "kicker": "Offre",
       "version": "version {version}"
     }
+  },
+  "aiDraft": {
+    "button": "Rédiger depuis les pièces",
+    "title": "Rédiger depuis les pièces",
+    "insert": "Insérer dans le champ",
+    "discard": "Abandonner",
+    "failed": "Le brouillon n'a pas pu être généré.",
+    "sources": "Sources",
+    "biasFlags": "Formulations à revoir",
+    "loading": "Rédaction depuis les pièces citées…",
+    "copied": "Aucun champ modifiable ici — le brouillon a été copié dans le presse-papiers."
   }
 }

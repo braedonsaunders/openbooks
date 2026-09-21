@@ -2,7 +2,8 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import { frame, grid, page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../lib/authz'
+import { can, requirePermission } from '../../../../lib/authz'
+import { loadAiLedger, type AiLedgerData } from '../../../../lib/hrm/ai-rails'
 import { AI_PROVIDER_SPECS } from '../../../../lib/assistant/client'
 import { getOrgAiSettings, type OrgAiSettings } from '../../../../lib/assistant/ai-config'
 import type { ProviderSpecLite } from './AiSettingsForm'
@@ -37,9 +38,14 @@ export interface AdminAiData {
   backLabel: string
   specs: ProviderSpecLite[]
   initial: Omit<OrgAiSettings, 'agents'>
+  /** HR-21 governance ledger: null without the setup grant — the page is
+   *  ai.manage-gated but the ledger lives under admin.setup.manage, so a
+   *  provider admin without setup scope sees the providers card alone. */
+  ledger: AiLedgerData | null
+  currentParams: Record<string, string>
 }
 
-export async function loadAdminAi(): Promise<AdminAiData> {
+export async function loadAdminAi(rawParams?: Record<string, string | string[] | undefined>): Promise<AdminAiData> {
   const authz = await requirePermission('admin.ai.manage')
   const t = await getTranslations('admin')
 
@@ -75,6 +81,12 @@ export async function loadAdminAi(): Promise<AdminAiData> {
     backLabel: t('hub.title'),
     specs,
     initial,
+    ledger: can(authz, 'admin.setup.manage') ? await loadAiLedger(authz) : null,
+    currentParams: Object.fromEntries(
+      Object.entries(rawParams ?? {}).flatMap(([key, value]) =>
+        typeof value === 'string' ? [[key, value]] as const : [],
+      ),
+    ),
   }
 }
 
@@ -109,6 +121,24 @@ export function adminAiSpec(data: AdminAiData): PageSpec {
               widgetBlock('ai-settings-form', {
                 specs: f('specs'),
                 initial: f('initial'),
+              }),
+            ]),
+          ]),
+          // HR-21 governance ledger: the section null-guards without the
+          // setup grant, so no `when` gate is needed.
+          frame('card', [
+            grid('p-6 pt-6', [
+              widgetBlock('ai-governance-ledger', { ledger: data.ledger }),
+            ]),
+          ]),
+          // HR-21 settings: thresholds, cohort, bias terms and review
+          // cadence through the shared Setup section (never a second form).
+          frame('card', [
+            grid('p-6 pt-6', [
+              widgetBlock('setup-section', {
+                entityKey: 'ai-rails-settings',
+                basePath: '/admin/ai',
+                sp: data.currentParams,
               }),
             ]),
           ]),

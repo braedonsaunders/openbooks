@@ -583,7 +583,8 @@
       "offer": "Angebot",
       "timeToFill": "Zeit bis Besetzung",
       "days": "Tage",
-      "missing": "Dieser Datensatz ist nicht mehr sichtbar."
+      "missing": "Dieser Datensatz ist nicht mehr sichtbar.",
+      "description": "Beschreibung"
     },
     "create": {
       "titleField": "Titel",
@@ -1310,6 +1311,25 @@
       "reopen": "Wieder öffnen",
       "carriedForward": "Übertragen",
       "actionFailed": "Die 1:1-Aktion ist fehlgeschlagen."
+    },
+    "pay": {
+      "title": "Lohn",
+      "empty": "Noch keine berechneten Abrechnungen.",
+      "columns": {
+        "payDate": "Zahltag",
+        "gross": "Brutto",
+        "netPay": "Netto"
+      },
+      "explain": "Erklären",
+      "drawerTitle": "Abrechnungserklärung",
+      "linesTitle": "Zeilen",
+      "diffTitle": "Änderungen seit der letzten Abrechnung",
+      "diffEmpty": "Keine Änderungen seit der letzten Abrechnung.",
+      "inputsTitle": "Eingaben hinter den Zeilen",
+      "sourcesTitle": "Belege",
+      "missing": "Diese Abrechnung fehlt oder gehört nicht zu Ihrer Organisation.",
+      "close": "Schließen",
+      "failed": "Die Erklärung konnte nicht geladen werden."
     }
   },
   "options": {
@@ -1903,5 +1923,16 @@
       "kicker": "Angebot",
       "version": "Version {version}"
     }
+  },
+  "aiDraft": {
+    "button": "Aus Belegen entwerfen",
+    "title": "Aus Belegen entwerfen",
+    "insert": "Ins Feld übernehmen",
+    "discard": "Verwerfen",
+    "failed": "Der Entwurf konnte nicht erstellt werden.",
+    "sources": "Belege",
+    "biasFlags": "Zu prüfende Sprache",
+    "loading": "Entwirft aus den genannten Belegen…",
+    "copied": "Kein bearbeitbares Feld hier — der Entwurf wurde in die Zwischenablage kopiert."
   }
 }

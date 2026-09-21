@@ -74,7 +74,8 @@
       "paid": "über einen Lauf bezahlt",
       "costed": "im Hauptbuch gebucht",
       "ticketed": "in einem Arbeitsschein"
-    }
+    },
+    "checksLink": "Lohnprüfungen öffnen"
   },
   "field": {
     "title": "Zeiterfassung vor Ort",

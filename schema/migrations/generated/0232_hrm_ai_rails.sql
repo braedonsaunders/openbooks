@@ -395,3 +395,11 @@ COMMENT ON TABLE public.nl_report_drafts IS
   'HRM AI rails (0232): natural-language report questions with their validated report-engine definitions (never SQL).';
 COMMENT ON TABLE public.ai_rails_settings IS
   'HRM AI rails (0232): org-declared thresholds, cohort key, bias terms and review cadence; Setup owns the UI.';
+
+-- One default settings row per existing org so the Setup section always has
+-- a row to edit. `on conflict do nothing` is the expected steady state on
+-- re-runs (the row is a singleton seeded here and by ensureAiRailsSettings
+-- for newer orgs), never a dropped write.
+INSERT INTO public.ai_rails_settings (org_id)
+SELECT id FROM public.orgs
+ON CONFLICT (org_id) DO NOTHING;

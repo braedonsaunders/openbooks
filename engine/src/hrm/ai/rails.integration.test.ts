@@ -283,3 +283,66 @@ test("explain-pay trace carries lines, treatments, inputs and the diff", { skip:
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("inbox adapters surface blocking checks and overdue reviews through the actor's own gates", { skip: !DB }, async () => {
+  const { org, adminId } = await setup();
+  try {
+    const { payrollAnomalyBlockAdapter, aiCapabilityReviewAdapter } = await import(
+      "../../inbox/adapters/ai-rails.ts"
+    );
+    const ctx = { orgId: org.orgId, actorId: adminId, asOf: "2026-09-30T00:00:00Z" };
+
+    // No flags yet: the block adapter lists nothing (never an error).
+    assert.deepEqual(await payrollAnomalyBlockAdapter.list(ctx), []);
+
+    // Seed + scan an open block flag.
+    await seedTerminatedWithInput(org.orgId);
+    await scanAnomalies(db, {
+      orgId: org.orgId, actorId: adminId, periodFrom: "2026-09-01", periodTo: "2026-09-30",
+    });
+    const blocks = await payrollAnomalyBlockAdapter.list(ctx);
+    assert.equal(blocks.length, 1);
+    assert.equal(blocks[0]?.kind, "payroll_anomaly_block");
+    assert.equal(blocks[0]?.priority, "overdue");
+    assert.match(blocks[0]?.subjectHref ?? "", /\/payroll\/anomalies\?flag=/);
+    assert.match(blocks[0]?.subtitle ?? "", /before the run can finalize/);
+    assert.deepEqual(blocks[0]?.actions ?? [], []);
+    await assert.rejects(
+      payrollAnomalyBlockAdapter.act(ctx, "x", "resolve"),
+      /resolve it in the checks queue/,
+    );
+
+    // Capability sync seeds unreviewed rows: the review nudge fires for the
+    // setup admin with the declared cadence in the subtitle.
+    await syncCapabilities(db, org.orgId, adminId);
+    const reviews = await aiCapabilityReviewAdapter.list(ctx);
+    assert.ok(reviews.length >= 1, "unreviewed capabilities must nudge");
+    assert.equal(reviews[0]?.kind, "ai_capability_review");
+    assert.equal(reviews[0]?.subjectHref, "/admin/ai");
+    assert.match(reviews[0]?.subtitle ?? "", /never reviewed/);
+    await assert.rejects(
+      aiCapabilityReviewAdapter.act(ctx, "x", "review"),
+      /record the review in the ledger/,
+    );
+
+    // An actor without either grant sees neither list (no leak, no error).
+    const outsider = await createScratchUser(org.orgId, "Outsider", "outsider");
+    const outsiderCtx = { orgId: org.orgId, actorId: outsider, asOf: "2026-09-30T00:00:00Z" };
+    assert.deepEqual(await payrollAnomalyBlockAdapter.list(outsiderCtx), []);
+    assert.deepEqual(await aiCapabilityReviewAdapter.list(outsiderCtx), []);
+
+    // Capability off: the hook is not registered — the adapters list nothing.
+    await db.execute(sql`
+      update orgs
+         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrmPayrollAnomalies}', 'false'::jsonb, true)
+       where id = ${org.orgId}`);
+    await db.execute(sql`
+      update orgs
+         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,aiGovernanceLedger}', 'false'::jsonb, true)
+       where id = ${org.orgId}`);
+    assert.deepEqual(await payrollAnomalyBlockAdapter.list(ctx), []);
+    assert.deepEqual(await aiCapabilityReviewAdapter.list(ctx), []);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

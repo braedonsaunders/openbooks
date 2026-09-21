@@ -74,7 +74,8 @@
       "paid": "pagadas en una nómina",
       "costed": "contabilizadas",
       "ticketed": "en un parte de trabajo"
-    }
+    },
+    "checksLink": "Abrir controles de nómina"
   },
   "field": {
     "title": "Fichaje en campo",

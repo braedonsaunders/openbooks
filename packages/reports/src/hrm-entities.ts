@@ -1652,4 +1652,99 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     defaultSort: { column: 'added_on', direction: 'desc' },
   },
   // HR-18 end
+  // HR-21 begin: deterministic pre-run payroll/timesheet anomaly flags.
+  // Employment-scoped like the checks queue (payroll.manage); flags
+  // without an employment fail closed for restricted readers (no
+  // sharedNull), exactly like the queue's own scope. The explanation is
+  // the deterministic fact string — never model prose, so it is safe to
+  // project.
+  {
+    key: 'payroll_anomaly_flags',
+    label: 'Payroll anomaly flags',
+    category: 'Payroll',
+    description:
+      'One row per deterministic pre-run payroll or timesheet check flag: kind, severity, status, period, employment and the explanation. Block severity refuses the pay-run finalize while open. Requires the payroll manager permission.',
+    from: `payroll_anomaly_flags f
+      LEFT JOIN worker_employments e ON e.id = f.employment_id AND e.org_id = f.org_id
+      LEFT JOIN parties w ON w.id = e.worker_party_id AND w.org_id = f.org_id`,
+    orgColumn: 'f.org_id',
+    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
+    requiredPermission: 'payroll.manage',
+    featureKey: 'hrmPayrollAnomalies',
+    // The period the flag was computed for is the fact: the period picker
+    // narrows on it, so the queue filtered to a window lists what blocks
+    // finalizing inside it.
+    defaultPeriodField: 'pay_period_from',
+    columns: [
+      { key: 'kind', label: 'Kind', kind: 'text', expr: 'f.kind' },
+      { key: 'severity', label: 'Severity', kind: 'enum', expr: 'f.severity', options: ['block', 'warn', 'info'] },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'f.status', options: ['open', 'acknowledged', 'resolved', 'false_positive'] },
+      { key: 'pay_period_from', label: 'Period from', kind: 'date', expr: 'f.pay_period_from' },
+      { key: 'pay_period_to', label: 'Period to', kind: 'date', expr: 'f.pay_period_to' },
+      { key: 'employee', label: 'Employee', kind: 'text', expr: 'w.display_name' },
+      { key: 'explanation', label: 'Explanation', kind: 'text', expr: 'f.explanation' },
+      { key: 'reason', label: 'Transition reason', kind: 'text', expr: 'f.reason' },
+      { key: 'resolved_at', label: 'Resolved at', kind: 'timestamp', expr: 'f.resolved_at' },
+      { key: 'flag_id', label: 'Flag (id)', kind: 'uuid', expr: 'f.id' },
+      { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'f.employment_id' },
+    ],
+    defaultSort: { column: 'pay_period_from', direction: 'desc' },
+  },
+  // HR-21: the AI governance decision ledger. Ledger-admin scoped
+  // (admin.setup.manage) with no subsidiary boundary — the ledger is
+  // org-wide by design. Digests and prompts are NEVER columns: only the
+  // PII-free summary, sources and outcome project.
+  {
+    key: 'ai_decisions',
+    label: 'AI decisions',
+    category: 'AI governance',
+    description:
+      'One row per AI-assisted answer: capability, subject, cited sources, the PII-free summary and outcome. Digests and prompts never project. Requires the ledger admin permission.',
+    from: `ai_decisions d`,
+    orgColumn: 'd.org_id',
+    requiredPermission: 'admin.setup.manage',
+    featureKey: 'aiGovernanceLedger',
+    defaultPeriodField: 'recorded_at',
+    columns: [
+      { key: 'recorded_at', label: 'Recorded at', kind: 'timestamp', expr: 'd.recorded_at' },
+      { key: 'capability', label: 'Capability', kind: 'text', expr: 'd.capability_key' },
+      { key: 'subject_kind', label: 'Subject kind', kind: 'text', expr: 'd.subject_kind' },
+      { key: 'subject_id', label: 'Subject (id)', kind: 'uuid', expr: 'd.subject_id' },
+      { key: 'summary', label: 'Summary', kind: 'text', expr: 'd.output_summary' },
+      { key: 'outcome', label: 'Outcome', kind: 'enum', expr: 'd.outcome', options: ['shown', 'accepted', 'edited', 'rejected', 'expired'] },
+      { key: 'reviewer_id', label: 'Reviewer (id)', kind: 'uuid', expr: 'd.human_reviewer' },
+      { key: 'reviewed_at', label: 'Reviewed at', kind: 'timestamp', expr: 'd.reviewed_at' },
+      { key: 'model', label: 'Model', kind: 'text', expr: 'd.model' },
+      { key: 'decision_id', label: 'Decision (id)', kind: 'uuid', expr: 'd.id' },
+    ],
+    defaultSort: { column: 'recorded_at', direction: 'desc' },
+  },
+  // HR-21: the AI capability registry mirror. Same gate as the ledger.
+  // Config rows, not events — no period field (null opts out of the
+  // fiscal window rather than acquiring one from an unrelated date).
+  {
+    key: 'ai_capabilities',
+    label: 'AI capabilities',
+    category: 'AI governance',
+    description:
+      'One row per AI capability: autonomy ceiling, reviewer, subject notice, enabled state and last review. Requires the ledger admin permission.',
+    from: `ai_capabilities c`,
+    orgColumn: 'c.org_id',
+    requiredPermission: 'admin.setup.manage',
+    featureKey: 'aiGovernanceLedger',
+    defaultPeriodField: null,
+    columns: [
+      { key: 'capability', label: 'Capability', kind: 'text', expr: 'c.key' },
+      { key: 'name', label: 'Name', kind: 'text', expr: 'c.name' },
+      { key: 'purpose', label: 'Purpose', kind: 'text', expr: 'c.purpose' },
+      { key: 'autonomy', label: 'Autonomy', kind: 'enum', expr: 'c.autonomy', options: ['read_only', 'draft', 'propose', 'act_with_confirmation'] },
+      { key: 'reviewer', label: 'Reviewer', kind: 'text', expr: 'c.reviewer_role' },
+      { key: 'notice_required', label: 'Notice required', kind: 'boolean', expr: 'c.notice_required' },
+      { key: 'enabled', label: 'Enabled', kind: 'boolean', expr: 'c.enabled' },
+      { key: 'last_reviewed_at', label: 'Last reviewed', kind: 'timestamp', expr: 'c.last_reviewed_at' },
+      { key: 'reviewed_by', label: 'Reviewed by', kind: 'text', expr: 'c.reviewed_by' },
+    ],
+    defaultSort: { column: 'capability', direction: 'asc' },
+  },
+  // HR-21 end
 ]

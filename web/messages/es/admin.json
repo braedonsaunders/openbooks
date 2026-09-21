@@ -2910,7 +2910,12 @@
       "question": "Pregunta",
       "ratingScale": "Escala de evaluación",
       "regionScope": "Ámbito regional",
-      "retainMonths": "Meses de conservación"
+      "retainMonths": "Meses de conservación",
+      "zThreshold": "Umbral Z",
+      "retroThreshold": "Umbral retroactivo",
+      "cohortKey": "Cohorte",
+      "biasTerms": "Términos sensibles",
+      "reviewMonths": "Cadencia (meses)"
     },
     "fieldHelp": {
       "gapless": "Sin huecos significa que cada número de la secuencia debe quedar contabilizado, sin números omitidos. Actívelo solo cuando los requisitos legales o de auditoría exijan una numeración ininterrumpida.",
@@ -3005,7 +3010,12 @@
       "hrmRetentionLeadDays": "Días previos para pedir prórroga; vacío no envía correo.",
       "hrmRetentionScope": "Región como JSON: applies_to all o countries con códigos.",
       "hrmTemplateBody": "Texto con marcadores para los datos de la oferta.",
-      "hrmTemplateClauses": "Cláusulas como lista JSON con key, label, body y default_on."
+      "hrmTemplateClauses": "Cláusulas como lista JSON con key, label, body y default_on.",
+      "aiRailsZThreshold": "Marca ingresos a más de estas desviaciones estándar de la media (3 por defecto).",
+      "aiRailsRetroThreshold": "Marca retroactivos desde este importe (500 por defecto).",
+      "aiRailsCohort": "Agrupa empleados por filial, departamento, calendario o nivel.",
+      "aiRailsBiasTerms": "Palabras y frases de la organización que el corrector marca exactas, una por línea.",
+      "aiRailsReviewMonths": "Cadencia en meses (1–36); las capacidades vencidas avisan al inbox de setup."
     },
     "options": {
       "timeClassification": {
@@ -3479,6 +3489,12 @@
       "hrmRetentionBasis": {
         "consent": "Consentimiento",
         "inactivity": "Inactividad"
+      },
+      "aiRailsCohort": {
+        "subsidiary": "Filial",
+        "department": "Departamento",
+        "paySchedule": "Calendario de nómina",
+        "jobLevel": "Nivel"
       }
     },
     "laborCosting": {
@@ -4957,6 +4973,34 @@
     "hrmTalentPool": {
       "title": "Reserva de talento",
       "description": "Grupos de candidatos anteriores comparados con vacantes abiertas."
+    },
+    "hrmAiAssist": {
+      "title": "Asistencia de IA",
+      "description": "Interruptor maestro de capacidades deterministas de IA de RR. HH. Nada aquí archiva, aprueba ni paga por sí solo."
+    },
+    "hrmExplainPay": {
+      "title": "Explicaciones de nómina",
+      "description": "Trazas deterministas con diferencia previa, en el cajón de Nómina."
+    },
+    "hrmPayrollAnomalies": {
+      "title": "Anomalías de nómina",
+      "description": "Avisos previos con ciclo de vida; el nivel de bloqueo rechaza la confirmación."
+    },
+    "hrmTimeAnomalies": {
+      "title": "Anomalías de tiempo",
+      "description": "Avisos de partes como insignias de aprobación e inbox."
+    },
+    "hrmDrafting": {
+      "title": "Redacción con evidencia",
+      "description": "Borradores desde fuentes citadas con avisos de lenguaje; nunca se autoenvían."
+    },
+    "hrmNlReports": {
+      "title": "Informes en lenguaje natural",
+      "description": "Definiciones validadas desde preguntas, con vista previa y guardado como vista."
+    },
+    "aiGovernanceLedger": {
+      "title": "Registro de gobernanza de IA",
+      "description": "Espejo de capacidades, registro inmutable, avisos y cadencia."
     }
   },
   "backupsManager": {
@@ -5362,6 +5406,36 @@
       "approvalYes": "Sí",
       "approvalNo": "No",
       "approvalSave": "Guardar ajustes"
+    }
+  },
+  "aiLedger": {
+    "title": "Gobernanza de IA",
+    "description": "Capacidades, sus techos de autonomía y el registro inmutable de cada respuesta asistida por IA.",
+    "capabilitiesTitle": "Capacidades",
+    "decisionsTitle": "Decisiones",
+    "overdueTitle": "Revisiones vencidas",
+    "overdueDescription": "Estas capacidades superaron su cadencia de revisión",
+    "export": "Exportar CSV",
+    "sync": "Sincronizar registro",
+    "syncDone": "Registro sincronizado.",
+    "review": "Registrar revisión",
+    "save": "Guardar",
+    "failed": "No se pudo guardar el cambio.",
+    "enabled": "Activada",
+    "disabled": "Desactivada",
+    "all": "Todas",
+    "noticeRequired": "Aviso requerido",
+    "neverReviewed": "Nunca revisada",
+    "columns": {
+      "autonomy": "Autonomía",
+      "capability": "Capacidad",
+      "enabled": "Activada",
+      "notice": "Aviso",
+      "outcome": "Resultado",
+      "reviewed": "Revisada",
+      "reviewer": "Revisor",
+      "summary": "Resumen",
+      "when": "Cuándo"
     }
   }
 }

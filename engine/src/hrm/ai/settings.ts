@@ -24,6 +24,20 @@ export const DEFAULT_AI_RAILS_SETTINGS: AiRailsSettings = {
   reviewMonths: 12,
 };
 
+/**
+ * Ensure the org's singleton settings row exists (defaults from the table).
+ * New orgs have no row until something ensures it — the ledger page calls
+ * this on view so the Setup section always has a row to edit. `on
+ * conflict do nothing` is the expected steady state (concurrent first
+ * views), never a dropped write.
+ */
+export async function ensureAiRailsSettings(exec: SqlExecutor, orgId: string): Promise<void> {
+  await exec.execute(sql`
+    insert into ai_rails_settings (org_id)
+    values (${orgId}::uuid)
+    on conflict (org_id) do nothing`);
+}
+
 export async function loadAiRailsSettings(
   exec: SqlExecutor,
   orgId: string,
