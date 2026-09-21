@@ -23,9 +23,12 @@
  * CERTIFICATE ANSWERS on `sg_cpf_status` (see `./certificates.ts`), not
  * regions: `regions` is the single national region SG.
  *
- * 2026 is transcribed in `./rates.ts` (Table 1 row "55 & below", the OW
- * ceiling, the Board's rounding rule, the SDL rate/floor/cap) and computed
- * in `./cpf.ts`, proven by `./cpf.test.ts` against the Board's own worked
+ * 2024, 2025 and 2026 are transcribed (2026 in `./rates.ts`; 2025 and 2024
+ * in `./tax-year-2025.ts` and `./tax-year-2024.ts`: Table 1 row
+ * "55 & below", the year's OW ceiling, the Board's rounding rule, the SDL
+ * rate/floor/cap) and computed in `./cpf.ts`, proven by `./cpf.test.ts`,
+ * `./tax-year-2025.test.ts`, `./tax-year-2024.test.ts` and
+ * `./tax-year-discrimination.test.ts` against the Board's own worked
  * examples. Every other year is refused by name; every status and band
  * outside citizen/3rd-year-SPR at 55-and-below is refused by name (see
  * `./certificates.ts`); Additional Wages are refused by name (the AW
@@ -276,9 +279,11 @@ export const SG_PAYROLL_PACK: PayrollCountryPack = {
   taxYears: SG_TAX_YEARS,
   certificates: () => SG_CERTIFICATES,
   withholding: () => SG_WITHHOLDING,
-  // The 2026 Table 1 pass. Refuses any other tax year by name, any status or
-  // band outside citizen/3rd-year-SPR at 55-and-below by name, any
-  // non-periodic (AW) pay by name, and any non-monthly period count by name.
+  // The 2024–2026 Table 1 pass (the year selects the OW ceiling, the OW-leg
+  // maxima and the AW-ceiling figure in the refusal). Refuses any other tax
+  // year by name, any status or band outside citizen/3rd-year-SPR at
+  // 55-and-below by name, any non-periodic (AW) pay by name, and any
+  // non-monthly period count by name.
   computeStatutory: computeSgStatutory,
   statutoryEngineLabel: "CPF",
   factorLabels: { ...SG_FACTOR_LABELS },

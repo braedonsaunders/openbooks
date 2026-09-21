@@ -4,19 +4,26 @@ import type {
   PayrollStatutoryComputeContext,
 } from "../statutory-context.ts";
 import {
+  SG_2026_AW_CEILING_AT_FULL_OW,
   SG_CPF_2026_LE55,
   SG_OW_CEILING_MONTHLY_2026,
   SG_SDL_2026,
   SG_TRANSCRIBED_YEARS,
   type SgAgeBand,
   type SgCpfStatus,
+  type SgYearTables,
 } from "./rates.ts";
+import { SG_2024_TABLES } from "./tax-year-2024.ts";
+import { SG_2025_TABLES } from "./tax-year-2025.ts";
 
 /**
- * The 2026 CPF/SDL engine: Table 1 (55 & below, OW only) plus the Skills
+ * The 2024–2026 CPF/SDL engine: Table 1 (55 & below, OW only) plus the Skills
  * Development Levy as pure functions over integer cents (bigint). No
  * floating point anywhere; every rounding below is the Board's own rule,
- * quoted at the step.
+ * quoted at the step. The tax year selects the OW ceiling, the OW-leg maxima
+ * and the SDL figures from `sgTablesForTaxYear` — nothing is carried across
+ * years except what the year modules quote from their own Table 1.
+ *
  *
  * CPF rounding (Table 1 steps 1–3): the total is "rounded to the nearest
  * dollar, i.e., to be rounded down for an amount less than 50 cents and
@@ -51,6 +58,16 @@ function parseCents(value: string, what: string): bigint {
   return cents;
 }
 
+/**
+ * Board-printed dollars from a decimal string ("13200.00" → "$13,200.00"):
+ * refusal text names money the way the authority prints it, not the way a
+ * ledger stores it.
+ */
+function formatDollars(decimal: string): string {
+  const [whole = "0", frac = "00"] = decimal.split(".");
+  return `$${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}.${frac}`;
+}
+
 /** Canonical numeric(19,4) from cents, matching the CA/US factor format. */
 function d4(cents: bigint): string {
   const sign = cents < 0n ? "-" : "";
@@ -63,14 +80,36 @@ function d4(cents: bigint): string {
 // ---------------------------------------------------------------------------
 
 /** Resolve the transcribed rates for a tax year; anything else is refused by name. */
-export function sgRatesForTaxYear(year: number): 2026 {
+export function sgRatesForTaxYear(year: number): 2024 | 2025 | 2026 {
   if (!(SG_TRANSCRIBED_YEARS as readonly number[]).includes(year)) {
     throw new PayrollError(
-      `the SG payroll pack has no transcribed CPF tables for ${year} — 2026 is transcribed `
-      + "(CPF Contribution Rate Table from 1 January 2026, Table 1); no other year is",
+      `the SG payroll pack has no transcribed CPF tables for ${year} — 2024, 2025 and 2026 are transcribed `
+      + "(CPF Contribution Rate Table from 1 January of each year, Table 1); no other year is",
     );
   }
-  return 2026;
+  return year as 2024 | 2025 | 2026;
+}
+
+/**
+ * The per-year tables the engine prices from. 2026 is composed from the
+ * `./rates.ts` constants it has always used (byte-identical figures);
+ * 2025 and 2024 come from their own transcribed year modules.
+ */
+const SG_TABLES_BY_YEAR: Record<2024 | 2025 | 2026, SgYearTables> = {
+  2024: SG_2024_TABLES,
+  2025: SG_2025_TABLES,
+  2026: {
+    year: 2026,
+    owCeilingMonthly: SG_OW_CEILING_MONTHLY_2026,
+    cpfLe55: SG_CPF_2026_LE55,
+    sdl: SG_SDL_2026,
+    awCeilingAtFullOw: SG_2026_AW_CEILING_AT_FULL_OW,
+  },
+};
+
+/** Select the transcribed tables for a tax year; anything else is refused by name. */
+export function sgTablesForTaxYear(year: number): SgYearTables {
+  return SG_TABLES_BY_YEAR[sgRatesForTaxYear(year)];
 }
 
 // ---------------------------------------------------------------------------
@@ -78,6 +117,8 @@ export function sgRatesForTaxYear(year: number): 2026 {
 // ---------------------------------------------------------------------------
 
 export interface SgStatutoryInput {
+  /** The calendar tax year selecting the CPF tables — required, never defaulted. */
+  taxYear: number;
   /** Ordinary Wages for the calendar month (OW). Additional Wages ride `nonPeriodic`. */
   ordinaryWages: string;
   /** Additional Wages for the month: always refused — the AW ceiling is year-dependent. */
@@ -149,21 +190,25 @@ export function assertSgCovered(status: SgCpfStatus, ageBand: SgAgeBand): void {
 
 export function calculateSgStatutory(input: SgStatutoryInput): SgStatutoryResult {
   assertSgCovered(input.cpfStatus, input.ageBand);
+  const tables = sgTablesForTaxYear(input.taxYear);
 
   const aw = parseCents(input.additionalWages ?? "0", "Additional Wages");
   if (aw > 0n) {
     // The AW ceiling is "$102,000 - Total Ordinary Wages (OW) subject to CPF
     // for the year" — a YEAR-dependent cap no per-month channel carries, so
     // any AW prices against a guessed ceiling. Refused, not approximated.
+    // The refusal names the calling year's own at-full-OW ceiling, so a
+    // mis-selected year is visible in the message, not just the tables.
     throw new PayrollError(
-      `the SG payroll pack refuses Additional Wages of $${input.additionalWages} by name — the AW ceiling `
-      + "($102,000 − the year's total OW subject to CPF) depends on year-to-date Ordinary Wages the "
-      + "run does not carry, and a placeholder ceiling would silently misprice the CPF on every bonus",
+      `the SG payroll pack refuses Additional Wages of $${input.additionalWages} by name — the ${tables.year} AW ceiling `
+      + `($102,000 − the year's total OW subject to CPF; ${formatDollars(tables.awCeilingAtFullOw)} at a full-OW year) depends on `
+      + "year-to-date Ordinary Wages the run does not carry, and a placeholder ceiling would silently "
+      + "misprice the CPF on every bonus",
     );
   }
 
   const ow = parseCents(input.ordinaryWages, "Ordinary Wages");
-  const ceiling = parseCents(SG_OW_CEILING_MONTHLY_2026, "OW ceiling");
+  const ceiling = parseCents(tables.owCeilingMonthly, "OW ceiling");
   const owSubject = ow > ceiling ? ceiling : ow;
 
   // Table 1, 55 & below. With no AW, TW = OW and the rows price on owSubject.
@@ -182,13 +227,15 @@ export function calculateSgStatutory(input: SgStatutoryInput): SgStatutoryResult
       totalDollars = (owSubject * 17n + over * 60n + 5000n) / 10000n;
       employeeDollars = (over * 6n) / 1000n;
     } else {
-      // "> $750: [37% (OW)]*" total ("* Max. of $2,960"), "[20% (OW)]*"
-      // employee ("* Max. of $1,600"). The maxima cap the OW leg, which is
-      // the whole contribution with no AW.
+      // "> $750: [37% (OW)]*" total ("* Max. of ..." per year), "[20%
+      // (OW)]*" employee ("* Max. of ..." per year). The maxima cap the OW
+      // leg, which is the whole contribution with no AW. The 37%/20% row
+      // shape is identical in every transcribed year (each year module
+      // quotes its own Table 1); the year selects the ceiling and maxima.
       totalDollars = (owSubject * 37n + 5000n) / 10000n;
       employeeDollars = (owSubject * 20n) / 10000n;
-      const maxTotal = parseCents(SG_CPF_2026_LE55.maxTotalOw, "maximum total on OW") / 100n;
-      const maxEmployee = parseCents(SG_CPF_2026_LE55.maxEmployeeOw, "maximum employee share on OW") / 100n;
+      const maxTotal = parseCents(tables.cpfLe55.maxTotalOw, "maximum total on OW") / 100n;
+      const maxEmployee = parseCents(tables.cpfLe55.maxEmployeeOw, "maximum employee share on OW") / 100n;
       if (totalDollars > maxTotal) totalDollars = maxTotal;
       if (employeeDollars > maxEmployee) employeeDollars = maxEmployee;
     }
@@ -207,8 +254,10 @@ export function calculateSgStatutory(input: SgStatutoryInput): SgStatutoryResult
   // cent — stated here, not hidden in arithmetic.
   const w = parseCents(input.ordinaryWages, "monthly total wages");
   let sdlCents = (w * 25n + 5000n) / 10000n;
-  if (w < parseCents(SG_SDL_2026.minWage, "SDL floor wage") && sdlCents < 200n) sdlCents = 200n;
-  if (w > parseCents(SG_SDL_2026.maxWage, "SDL cap wage") && sdlCents > 1125n) sdlCents = 1125n;
+  const sdlMin = parseCents(tables.sdl.minLevy, "SDL minimum levy");
+  const sdlMax = parseCents(tables.sdl.maxLevy, "SDL maximum levy");
+  if (w < parseCents(tables.sdl.minWage, "SDL floor wage") && sdlCents < sdlMin) sdlCents = sdlMin;
+  if (w > parseCents(tables.sdl.maxWage, "SDL cap wage") && sdlCents > sdlMax) sdlCents = sdlMax;
 
   return {
     owSubjectCents: owSubject,
@@ -257,7 +306,7 @@ export async function computeSgStatutory(
 
   if (P !== 12) {
     throw new PayrollError(
-      `the SG payroll pack cannot price ${P} periods per year — CPF contributions and the $8,000 OW `
+      `the SG payroll pack cannot price ${P} periods per year — CPF contributions and the year's OW `
       + "ceiling are per calendar month, so only 12 monthly periods compute",
     );
   }
@@ -273,6 +322,7 @@ export async function computeSgStatutory(
   const ageBand = (certificate.answers["age_band"] ?? "") as SgAgeBand;
 
   const result = calculateSgStatutory({
+    taxYear,
     ordinaryWages: income,
     additionalWages: nonPeriodic,
     cpfStatus: status,
