@@ -41,11 +41,10 @@ const REPO_ROOT = resolve(import.meta.dirname, "..", "..", "..");
  * Packs whose scaffold declares no files: the generator prints their `steps` and
  * writes nothing, so their next tax year is a hand transcription.
  *
- * GB is the proof this is fixable per pack rather than a missing mechanism — its
- * prior-year shard wrote its editions by hand and then declared a real scaffold,
- * so the next person gets the skeleton. DE, NL and SG are waiting for the same.
+ * GB declared a real scaffold when its 2025/26 and 2024/25 editions landed,
+ * and was deleted from this list. DE, NL and SG are waiting for the same.
  */
-const SCAFFOLDS_WITH_NO_FILES = new Set(["GB", "DE", "NL", "SG"]);
+const SCAFFOLDS_WITH_NO_FILES = new Set(["DE", "NL", "SG"]);
 
 /**
  * Packs whose declared path does not live in a directory that exists.
