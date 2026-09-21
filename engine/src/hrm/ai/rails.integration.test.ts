@@ -300,28 +300,34 @@ test("explain-pay trace carries lines, treatments, inputs and the diff", { skip:
     // web/lib/pdf-templates/ytd-tax-cross-pack.integration.test.ts rather
     // than re-derived.
     const scheduleId = randomUUID();
-    const runId = randomUUID();
     await db.execute(sql`
       insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
                                  pay_date_offset_days, is_active)
       values (${scheduleId}, ${org.orgId}, ${`Sched ${scheduleId.slice(0, 8)}`}, 'biweekly', 26,
               '2026-09-30', 3, true)`);
-    await db.execute(sql`
-      insert into documents (org_id, id, kind, document_number, subsidiary_id, document_date,
-                             currency, status, created_by, updated_by)
-      values (${org.orgId}, ${runId}, 'pay_run', ${`PAY-${runId.slice(0, 8)}`},
-              ${org.subsidiaryId}, '2026-09-30', 'CAD', 'draft', ${adminId}, ${adminId})`);
-    await db.execute(sql`
-      insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end,
-                            pay_date, tax_year, run_status)
-      values (${runId}, ${org.orgId}, ${scheduleId}, '2026-09-01', '2026-09-30',
-              '2026-09-30', 2026, 'committed')`);
+    // ONE RUN PER PERIOD. pay_stubs is unique on (run, employee), which is
+    // correct -- a person is paid once per run -- so the previous and
+    // current payslips the diff compares cannot share a run document.
+    // Two periods means two runs, each with its own document, which is
+    // also what the explain-pay diff is reading when it names what
+    // changed between them.
     const stubPrev = randomUUID();
     const stubCur = randomUUID();
-    for (const [stubId, payDate, gross, net] of [
-      [stubPrev, "2026-08-31", "5000", "3800"],
-      [stubCur, "2026-09-30", "5600", "4200"],
+    for (const [stubId, periodStart, payDate, gross, net] of [
+      [stubPrev, "2026-08-01", "2026-08-31", "5000", "3800"],
+      [stubCur, "2026-09-01", "2026-09-30", "5600", "4200"],
     ] as const) {
+      const runId = randomUUID();
+      await db.execute(sql`
+        insert into documents (org_id, id, kind, document_number, subsidiary_id, document_date,
+                               currency, status, created_by, updated_by)
+        values (${org.orgId}, ${runId}, 'pay_run', ${`PAY-${runId.slice(0, 8)}`},
+                ${org.subsidiaryId}, ${payDate}, 'CAD', 'draft', ${adminId}, ${adminId})`);
+      await db.execute(sql`
+        insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end,
+                              pay_date, tax_year, run_status)
+        values (${runId}, ${org.orgId}, ${scheduleId}, ${periodStart}, ${payDate},
+                ${payDate}, 2026, 'committed')`);
       await db.execute(sql`
         insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id,
           province, periods_per_year, pay_date, tax_year, currency_code, gross, net_pay, employer_cost)
