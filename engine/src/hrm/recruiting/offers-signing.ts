@@ -532,9 +532,15 @@ export async function sendOfferLink(query: {
       rowId: offerId,
       expiresAt: Date.now() + OFFER_TOKEN_TTL_MS,
     });
+    // Storing the hash IS the revocation. Overwriting it in the same
+    // statement that marks the offer sent means the previous link stops
+    // working the moment a new one is minted -- a resend replaces a
+    // link, it never adds a second one. The raw token is emailed below
+    // and never stored, so nobody reading this table can mint a link.
     const marked = (await db.execute<{ one: number }>(sql`
       update hrm_offers
-         set signature_status = 'sent', updated_by = ${actorId}, updated_at = now()
+         set signature_status = 'sent', signing_token_hash = ${hashRecruitingToken(token)},
+             updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${offerId}
          and (signature_status is null or signature_status in ('unsigned', 'sent', 'viewed'))
       returning 1 as one
@@ -573,14 +579,26 @@ async function offerScopeForToken(signingToken: string): Promise<{ orgId: string
   // offer row under bypass (the email-action route precedent), then run
   // everything else under that org. The token IS the grant for the lookup;
   // the row carries its org.
+  //
+  // The lookup matches the STORED HASH, not just the id in the token. A
+  // valid signature over a real offer id is no longer enough: the link
+  // must also be the one currently outstanding, so a superseded link
+  // fails here even though its HMAC still verifies and its expiry has
+  // not passed. This is the booking slot's rule, and it is what makes
+  // resending an offer revoke the previous link rather than add one.
+  const tokenHash = hashRecruitingToken(signingToken);
   const row = await withBypassContext(async () => {
     const found = (await db.execute<{ orgId: string }>(sql`
-      select org_id as "orgId" from hrm_offers where id = ${claims.rowId}
+      select org_id as "orgId" from hrm_offers
+       where id = ${claims.rowId} and signing_token_hash = ${tokenHash}
     `)).rows[0];
     return found ?? null;
   });
   if (!row) {
-    throw new RecruitingError("NOT_FOUND", "this offer no longer exists — ask the recruiter for the current terms");
+    throw new RecruitingError(
+      "REFUSED",
+      "this signing link is no longer the current one — ask the recruiter to resend your offer and use the newest link",
+    );
   }
   return { orgId: row.orgId, offerId: claims.rowId };
 }
@@ -690,7 +708,7 @@ export async function signOffer(query: {
     });
     const sealed = (await db.execute<{ one: number }>(sql`
       update hrm_offers
-         set signature_status = 'signed', signed_at = ${signedAt},
+         set signature_status = 'signed', signing_token_hash = null, signed_at = ${signedAt},
              signed_evidence = ${JSON.stringify({ ...evidence, seal })}::jsonb,
              rendered_file_id = coalesce(${renderedFileId}, rendered_file_id),
              updated_at = now()
@@ -717,7 +735,8 @@ export async function declineOfferSigning(query: {
   return withOrgTransaction(orgId, async () => {
     const declined = (await db.execute<{ one: number }>(sql`
       update hrm_offers
-         set signature_status = 'declined', decline_reason = ${query.reason}, updated_at = now()
+         set signature_status = 'declined', signing_token_hash = null,
+             decline_reason = ${query.reason}, updated_at = now()
        where org_id = ${orgId} and id = ${offerId}
          and (signature_status is null or signature_status in ('unsigned', 'sent', 'viewed'))
       returning 1 as one
@@ -757,7 +776,8 @@ export async function voidOfferSignature(query: {
     }
     const voided = (await db.execute<{ one: number }>(sql`
       update hrm_offers
-         set signature_status = 'voided', signed_evidence = ${JSON.stringify({ voided_reason: query.reason })}::jsonb,
+         set signature_status = 'voided', signing_token_hash = null,
+             signed_evidence = ${JSON.stringify({ voided_reason: query.reason })}::jsonb,
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${offerId}
          and (signature_status is null or signature_status in ('unsigned', 'sent', 'viewed'))

@@ -6,7 +6,7 @@ import { OrgChartPerson, OrgChartTree } from '../../app/(app)/hrm/org-chart/sect
 import { MeDocumentActions, MeExportDialog, MeExportDownload } from '../../app/(app)/me/documents/sections'
 import { MeSurveyRespond } from '../../app/(app)/me/surveys/sections'
 
-import { num, str, type WidgetRenderer } from './widget-props'
+import { str, type WidgetRenderer } from './widget-props'
 
 /** HR-19 document widgets, split out of widgets-hrm.tsx to keep each
  *  family under the 500-line composition cap. Verbatim adapters only. */

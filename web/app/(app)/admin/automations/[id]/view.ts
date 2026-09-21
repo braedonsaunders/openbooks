@@ -2,7 +2,7 @@ import 'server-only'
 
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
-import { frame, page, pageHeader, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'

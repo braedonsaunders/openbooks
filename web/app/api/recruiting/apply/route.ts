@@ -1,5 +1,6 @@
 import { parseJsonBody } from "../../../../lib/api/json";
 import { NextResponse } from "next/server";
+import { authRequestContext } from "../../../../lib/auth-policy";
 import { recruitingErrorResponse } from "../../hrm/recruiting/_lib";
 import { applyBody } from "./bodies";
 
@@ -21,8 +22,24 @@ const WINDOW_MS = 60_000;
 const MAX_PER_WINDOW = 5;
 const attempts = new Map<string, number[]>();
 
+/**
+ * The limiter's bucket key.
+ *
+ * X-Forwarded-For is client-supplied unless a reverse proxy the operator
+ * trusts overwrites it, so reading its first hop unconditionally let any
+ * caller mint a fresh bucket per request and walk straight through the
+ * window. authRequestContext applies the same OPENBOOKS_TRUST_PROXY rule
+ * the auth surface uses, and returns null when the operator has not
+ * opted in.
+ *
+ * With no trusted proxy the limit degrades to one shared window per
+ * posting rather than per address. That is deliberately the strict
+ * direction: a busy career page behind a real proxy should set
+ * OPENBOOKS_TRUST_PROXY, and an unfronted deployment gets a cap that
+ * actually caps rather than one an attacker chooses to ignore.
+ */
 function clientIp(req: Request): string {
-  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  return authRequestContext(req).networkAddress ?? "untrusted-hop";
 }
 
 function rateLimited(ip: string, postingId: string): boolean {
@@ -62,14 +79,19 @@ export async function POST(req: Request) {
     // The posting carries its org: resolve it inside the service call
     // through the posting row (no session, no org predicate from outside).
     const { applyViaPostingForOrg } = await import("./_org");
-    const result = await applyViaPostingForOrg({
+    await applyViaPostingForOrg({
       postingId: body.postingId,
       displayName: body.displayName,
       email: body.email,
       phone: body.phone,
       consentFutureRoles: body.consentFutureRoles,
     });
-    return NextResponse.json({ received: true, ...result }, { status: 201 });
+    // The applicant gets an acknowledgement, never identifiers. The
+    // application and candidate ids are internal handles; handing them to
+    // an anonymous caller invites them to be tried against other routes,
+    // and they tell the applicant nothing they can use. A duplicate apply
+    // returns this same body -- see the oracle note in applyViaPosting.
+    return NextResponse.json({ received: true }, { status: 201 });
   } catch (e) {
     return recruitingErrorResponse(e);
   }

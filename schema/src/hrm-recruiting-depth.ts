@@ -17,7 +17,6 @@ import { files } from "./file-cabinet";
 import { auditColumns, id, orgRef } from "./helpers";
 import { parties } from "./parties";
 import {
-  applications,
   candidates,
   interviews,
   offers,

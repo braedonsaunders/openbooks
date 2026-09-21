@@ -43,12 +43,19 @@ export function orgSlugFor(name: string): string {
 /**
  * Resolve an org by its career slug. Exactly one match opens the page;
  * zero or ambiguous slugs 404 — a slug must name its org, never guess it.
+ *
+ * PRODUCTION ORGS ONLY. A sandbox is a clone of real data, and cloning
+ * renames the org, so a sandbox's slug is usually unique — which made it
+ * the single match and published a copy of the tenant's live openings to
+ * the internet. Every other public recruiting surface hangs off a posting
+ * in a real org; this is the one that finds an org by guessing a string,
+ * so this is where the environment has to be checked.
  */
 export async function resolveOrgBySlug(slug: string): Promise<{ orgId: string; name: string } | null> {
   const orgs = await withBypassContext(async () => {
     const rows = (
       await db.execute<{ orgId: string; name: string }>(sql`
-        select id as "orgId", name from orgs
+        select id as "orgId", name from orgs where env_kind = 'production'
       `)
     ).rows
     return rows
