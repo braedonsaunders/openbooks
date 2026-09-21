@@ -6,7 +6,9 @@ import {
   computeMacrsYear,
   computeMacrsThroughYear,
   exclusiveShortYearMonths,
+  adjacentShortYearExclusion,
   fiscalMacrsYearWindow,
+  macrsOwnershipWindowLoads,
   lastThreeMonthsStart,
   macrsWindowsThroughFiscalCalendar,
   parsePersistedMacrsMonths,
@@ -617,6 +619,60 @@ test("two short years ending in the same calendar year both survive and prior is
       convention: "half_year",
     }, [first, second]),
     /names 2 windows/,
+  );
+});
+
+test("cover keeps one convention successor and the walk stops at the requested bound", () => {
+  const first = { taxYear: 2024, yearStart: "2024-01-01", yearEnd: "2024-03-15" };
+  const successor = { taxYear: 2024, yearStart: "2024-03-16", yearEnd: "2024-12-31" };
+  const covered = assertMacrsWindowsCover([first, successor], "2024-01-15", "2024-03-10");
+  assert.deepEqual(
+    covered.map((window) => `${window.yearStart}:${window.yearEnd}`),
+    ["2024-01-01:2024-03-15", "2024-03-16:2024-12-31"],
+  );
+  assert.equal(adjacentShortYearExclusion(covered, 0), true);
+  const walked = computeMacrsThroughYear({
+    basis: "10000",
+    placedInServiceOn: "2024-01-15",
+    taxYear: 2024,
+    yearStart: "2024-01-01",
+    yearEnd: "2024-03-15",
+    recoveryPeriodYears: 5,
+    method: "200_db",
+    convention: "half_year",
+  }, covered);
+  assert.notEqual(walked.current.allowance, "0.00");
+  const withoutSuccessor = assertMacrsWindowsCover([first], "2024-01-15", "2024-03-10");
+  assert.deepEqual(
+    withoutSuccessor.map((window) => `${window.yearStart}:${window.yearEnd}`),
+    ["2024-01-01:2024-03-15"],
+  );
+  assert.equal(adjacentShortYearExclusion(withoutSuccessor, 0), false);
+});
+
+test("a received vintage does not invent a receiver calendar before the transfer", () => {
+  assert.deepEqual(
+    macrsOwnershipWindowLoads({
+      placedInServiceOn: "2023-03-15",
+      transferOn: "2026-08-20",
+      asOf: "2026-09-01",
+      currentSubsidiaryId: "receiver",
+      transferorSubsidiaryId: "transferor",
+    }),
+    [
+      { subsidiaryId: "transferor", fromOn: "2023-03-15", throughOn: "2026-08-20" },
+      { subsidiaryId: "receiver", fromOn: "2026-08-20", throughOn: "2026-09-01" },
+    ],
+  );
+  assert.deepEqual(
+    macrsOwnershipWindowLoads({
+      placedInServiceOn: "2023-03-15",
+      transferOn: null,
+      asOf: "2026-09-01",
+      currentSubsidiaryId: "receiver",
+      transferorSubsidiaryId: null,
+    }),
+    [{ subsidiaryId: "receiver", fromOn: "2023-03-15", throughOn: "2026-09-01" }],
   );
 });
 

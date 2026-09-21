@@ -204,7 +204,20 @@ export type UsSellerMacrsVintageStatus = (typeof US_SELLER_MACRS_VINTAGE_STATUSE
  *  list and is not book acquisition cost. `null` on the source choice means
  *  US is not seller-applicable. */
 export type UsSellerMacrsVintageContext =
-  | { status: "ready"; vintages: OpenMacrsVintage[] }
+  | {
+      status: "ready";
+      vintages: OpenMacrsVintage[];
+      /** Exact registered windows consumed to date these vintages, including
+       *  one convention-only successor when the loader retained it. */
+      taxYearWindows?: Array<{
+        id: string;
+        subsidiaryId: string;
+        regime: string;
+        yearStart: string;
+        yearEnd: string;
+        filingYear: number;
+      }>;
+    }
   | { status: "original_declaration_required" }
   | { status: "history_refused"; refusal: string };
 

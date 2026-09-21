@@ -640,10 +640,46 @@ function computeMacrsPub946Year(input: MacrsYearInput & {
 export interface MacrsYearWindow {
   /** Persisted tax_year_windows.id when loaded from the registry. */
   id?: string;
+  subsidiaryId?: string;
+  regime?: string;
   /** Filing-year label. May repeat for two short years ending in the same calendar year. */
   taxYear: number;
   yearStart: string;
   yearEnd: string;
+}
+
+/** Ownership loads for one vintage. Transferor history stops at the checkpoint;
+ *  the receiver calendar is not invented for years before it owned the vintage. */
+export function macrsOwnershipWindowLoads(args: {
+  placedInServiceOn: string;
+  transferOn: string | null;
+  asOf: string;
+  currentSubsidiaryId: string;
+  transferorSubsidiaryId: string | null;
+}): { subsidiaryId: string; fromOn: string; throughOn: string }[] {
+  if (
+    args.transferOn
+    && args.transferorSubsidiaryId
+    && args.transferorSubsidiaryId !== args.currentSubsidiaryId
+  ) {
+    return [
+      {
+        subsidiaryId: args.transferorSubsidiaryId,
+        fromOn: args.placedInServiceOn,
+        throughOn: args.transferOn,
+      },
+      {
+        subsidiaryId: args.currentSubsidiaryId,
+        fromOn: args.transferOn,
+        throughOn: args.asOf,
+      },
+    ];
+  }
+  return [{
+    subsidiaryId: args.currentSubsidiaryId,
+    fromOn: args.placedInServiceOn < args.asOf ? args.placedInServiceOn : args.asOf,
+    throughOn: args.asOf,
+  }];
 }
 
 /** Rev. Proc. 89-15 §4.01(1)(a)(i): successive short years that share a
@@ -952,9 +988,9 @@ export function computeMacrsThroughYear(
   const originWindow = ordered.find((window) =>
     input.placedInServiceOn >= window.yearStart && input.placedInServiceOn <= window.yearEnd,
   );
-  const frozenPlacedMonth = originWindow
+  const frozenPlacedMonth = input.placedMonth ?? (originWindow
     ? monthInTaxYear(input.placedInServiceOn, originWindow.yearStart)
-    : monthInTaxYear(input.placedInServiceOn);
+    : monthInTaxYear(input.placedInServiceOn));
   const postDisposalZero = (): MacrsYearResult => ({
     section179: "0.00", bonus: "0.00", macrs: "0.00", allowance: "0.00", remainingBasis: "0.00",
   });
@@ -1245,7 +1281,20 @@ export function assertMacrsWindowsCover(
       );
     }
   }
-  return span;
+  const last = span[span.length - 1]!;
+  const successor = ordered.find((row) =>
+    !span.some((covered) =>
+      covered.yearStart === row.yearStart && covered.yearEnd === row.yearEnd,
+    )
+    && nextCalendarDay(last.yearEnd) === row.yearStart
+    && row.yearStart > throughOn,
+  );
+  if (successor && successor.yearStart <= last.yearEnd) {
+    throw new Error(
+      `tax year windows overlap ${last.yearStart}–${last.yearEnd} and ${successor.yearStart}–${successor.yearEnd}; correct the declared years — do not min/max them together`,
+    );
+  }
+  return successor ? [...span, successor] : span;
 }
 
 /** Walk an open vintage to asOf. A prior paper remaining is only the opening
@@ -1266,17 +1315,32 @@ export function refreshOpenMacrsVintageThrough(
   },
   windows: readonly MacrsYearWindow[],
   asOf: string,
+  opts?: { ownerSubsidiaryId?: string },
 ): { priorDepreciation: string; adjustedCarryover: string } {
   const origin = vintage.placedInServiceOn;
-  const walkWindows = assertMacrsWindowsCover(windows, origin, asOf);
-  const covering = walkWindows.find((row) => asOf >= row.yearStart && asOf <= row.yearEnd)!;
   const received = vintage.adjustedCarryover != null && vintage.transferOn != null;
+  const walkFrom = received ? vintage.transferOn! : origin;
+  const ownerWindows = opts?.ownerSubsidiaryId
+    ? windows.filter((row) => !row.subsidiaryId || row.subsidiaryId === opts.ownerSubsidiaryId)
+    : windows;
+  const walkWindows = assertMacrsWindowsCover(
+    ownerWindows.length > 0 ? ownerWindows : windows,
+    walkFrom,
+    asOf,
+  );
+  const covering = walkWindows.find((row) => asOf >= row.yearStart && asOf <= row.yearEnd)!;
+  const originWindow = windows.find((row) =>
+    vintage.placedInServiceOn >= row.yearStart && vintage.placedInServiceOn <= row.yearEnd,
+  );
   const walked = computeMacrsThroughYear({
     basis: vintage.unadjustedBasis,
     placedInServiceOn: vintage.placedInServiceOn,
     taxYear: covering.taxYear,
     yearStart: covering.yearStart,
     yearEnd: covering.yearEnd,
+    placedMonth: originWindow
+      ? monthInTaxYear(vintage.placedInServiceOn, originWindow.yearStart)
+      : monthInTaxYear(vintage.placedInServiceOn),
     recoveryPeriodYears: vintage.recoveryPeriodYears,
     method: vintage.method,
     convention: vintage.convention,

@@ -8,6 +8,7 @@ import {
   computePoolYear,
   macrsConventionAfterMidQuarter,
   macrsMidQuarterByWindow,
+  macrsOwnershipWindowLoads,
   nextCalendarDay,
   type MacrsYearWindow,
   type PoolClassDef,
@@ -433,7 +434,21 @@ export async function runTaxPool(
     await tx.execute(sql`
       select pg_advisory_xact_lock(hashtextextended(${taxPoolRunLockKey(orgId, bookId, subsidiaryId, regime)}, 0))`);
 
-    await lockAssetTaxLifecycle(tx, orgId, [subsidiaryId]);
+    const paperLineage = (
+      await tx.execute<{ seller_id: string; buyer_id: string | null }>(sql`
+        select seller.subsidiary_id as seller_id, buyer.subsidiary_id as buyer_id
+          from tax_asset_basis_workpapers w
+          join fixed_assets seller on seller.org_id=w.org_id and seller.id=w.asset_id
+          left join fixed_assets buyer on buyer.org_id=w.org_id and buyer.id=w.receiving_asset_id
+         where w.org_id=${orgId} and w.reversed_by_change_id is null
+           and w.effective_on<=${opts.yearEnd}`)
+    ).rows;
+    await lockAssetTaxLifecycle(tx, orgId, [
+      ...new Set([
+        subsidiaryId,
+        ...paperLineage.flatMap((row) => [row.seller_id, ...(row.buyer_id ? [row.buyer_id] : [])]),
+      ]),
+    ].sort());
 
     const classes = await effectiveClasses(tx, orgId, regime);
     if (classes.size === 0) throw new TaxPoolError(`unknown tax depreciation regime "${regime}"`);
@@ -900,14 +915,49 @@ async function runMacrs(
        and coalesce(a.in_service_on, a.acquired_on) <= ${run.yearEnd}
        and coalesce(a.custom->'taxDepreciation'->${run.regime}->>'classCode', c.tax_attributes->>${attr}, '') <> ''`));
 
-  const fromOn = [
-    run.yearStart,
-    ...assets.rows.map((asset) => asset.placed_on),
-    ...papers.map((paper) => paper.placed_in_service_on ?? paper.effective_on),
-  ].reduce((earliest, date) => (date < earliest ? date : earliest));
-  const windows = await macrsWindows(tx, run, fromOn);
+  const windowCache = new Map<string, MacrsYearWindow[]>();
+  const loadOwnedWindows = async (
+    subsidiaryId: string,
+    fromOn: string,
+    throughOn: string,
+  ): Promise<MacrsYearWindow[]> => {
+    const key = `${subsidiaryId}:${fromOn}:${throughOn}`;
+    const cached = windowCache.get(key);
+    if (cached) return cached;
+    try {
+      const loaded = await loadTaxYearWindows(tx, run.orgId, {
+        subsidiaryId,
+        regime: run.regime,
+        fromOn,
+        throughOn,
+      });
+      windowCache.set(key, loaded);
+      return loaded;
+    } catch (error) {
+      throw error instanceof MacrsCalendarError ? new TaxPoolError(error.message) : error;
+    }
+  };
+  const windowsForVintage = async (
+    vintage: { placedInServiceOn: string; transferOn: string | null },
+  ): Promise<MacrsYearWindow[]> => {
+    const transferorId = papers.find((paper) =>
+      paper.effective_on === vintage.transferOn
+      && paper.buyer_subsidiary_id === run.subsidiaryId,
+    )?.seller_subsidiary_id ?? null;
+    const loaded: MacrsYearWindow[] = [];
+    for (const load of macrsOwnershipWindowLoads({
+      placedInServiceOn: vintage.placedInServiceOn,
+      transferOn: vintage.transferOn,
+      asOf: run.yearEnd,
+      currentSubsidiaryId: run.subsidiaryId,
+      transferorSubsidiaryId: transferorId,
+    })) {
+      loaded.push(...await loadOwnedWindows(load.subsidiaryId, load.fromOn, load.throughOn));
+    }
+    return loaded;
+  };
 
-  const unknownClasses = [...new Set(assets.rows
+  const unknownClasses = [...new Set(assets.rows)
     .map((asset) => asset.class_code)
     .filter((classCode) => !classes.has(classCode)))].sort();
   if (unknownClasses.length > 0) {
@@ -978,6 +1028,13 @@ async function runMacrs(
       }
     }
   }
+  const vintageWindowLists: MacrsYearWindow[][] = [];
+  for (const row of resolved) {
+    for (const vintage of row.vintages) {
+      vintageWindowLists.push(await windowsForVintage(vintage));
+    }
+  }
+  const windows = vintageWindowLists.flat();
   const midQuarterByWindow = macrsMidQuarterByWindow(
     windows,
     resolved.flatMap((row) => row.vintages),
@@ -993,6 +1050,17 @@ async function runMacrs(
       const { asset, vintages, latestReceiver, yearPapers } = row;
       for (const vintage of vintages) {
         if (vintage.placedInServiceOn > run.yearEnd) continue;
+        const lineage = await windowsForVintage(vintage);
+        const received = !!(vintage.adjustedCarryover && vintage.transferOn);
+        const walkWindows = received
+          ? lineage.filter((window) =>
+            (!window.subsidiaryId || window.subsidiaryId === run.subsidiaryId)
+            || (
+              vintage.placedInServiceOn >= window.yearStart
+              && vintage.placedInServiceOn <= window.yearEnd
+            ),
+          )
+          : lineage;
         const walked = computeMacrsThroughYear({
           basis: vintage.basis,
           placedInServiceOn: vintage.placedInServiceOn,
@@ -1004,7 +1072,7 @@ async function runMacrs(
           convention: macrsConventionAfterMidQuarter(
             vintage,
             group.def.convention!,
-            windows,
+            lineage,
             midQuarterByWindow,
           ),
           disposedOn: vintage.disposedOn,
@@ -1015,9 +1083,9 @@ async function runMacrs(
           shortYearFactor: run.shortYearFactor,
           shortYearMethod: vintage.shortYearMethod,
           adjustedCarryover: vintage.adjustedCarryover ?? undefined,
-          carryoverOn: vintage.transferOn && vintage.adjustedCarryover ? vintage.transferOn : undefined,
+          carryoverOn: received ? vintage.transferOn ?? undefined : undefined,
           section168i7Kind: vintage.section168i7Kind ?? undefined,
-        }, windows);
+        }, walkWindows);
         const current = walked.current;
         const transferredThisYear = !!(
           vintage.role === "buyer" &&

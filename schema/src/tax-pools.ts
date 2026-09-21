@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, date, index, integer, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, date, index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { TAX_DEPRECIATION_CONVENTIONS } from "./depreciation-conventions";
 import { auditColumns, id, money, orgRef } from "./helpers";
 import { fxRate } from "./helpers";
@@ -194,5 +194,27 @@ export const taxYearWindows = pgTable(
   (t) => [
     uniqueIndex("tax_year_windows_org_id_id").on(t.orgId, t.id),
     uniqueIndex("tax_year_windows_identity").on(t.orgId, t.subsidiaryId, t.regime, t.yearStart),
+  ],
+);
+
+/** Immutable workpaper citations of the tax year windows actually read.
+ *  Frozen facts ride with the id so a later calendar edit cannot rewrite
+ *  already-applied convention context. */
+export const taxYearWindowCitations = pgTable(
+  "tax_year_window_citations",
+  {
+    id: id(),
+    orgId: orgRef(),
+    workpaperId: uuid("workpaper_id").notNull(),
+    taxYearWindowId: uuid("tax_year_window_id").notNull(),
+    subsidiaryId: uuid("subsidiary_id").notNull(),
+    regime: text("regime").notNull(),
+    yearStart: date("year_start").notNull(),
+    yearEnd: date("year_end").notNull(),
+    filingYear: integer("filing_year").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("tax_year_window_citations_identity").on(t.orgId, t.workpaperId, t.taxYearWindowId),
   ],
 );
