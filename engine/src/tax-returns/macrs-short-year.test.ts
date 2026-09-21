@@ -18,12 +18,176 @@ import {
   maxMacrsMonths,
   midQuarterDeemedServiceDate,
   monthsTreatedInService,
+  monthsTreatedInServiceExact,
   shortTaxYearMonths,
+  shortTaxYearMonthsExact,
   shortYearPlacementDeduction,
   subtractMacrsMonths,
   subsequentRecoveryDeduction,
   subsequentSimplifiedDeduction,
 } from "./macrs-short-year.ts";
+
+test("actual short-year months preserve both irregular boundaries and leap-month denominators", () => {
+  assert.deepEqual(
+    shortTaxYearMonthsExact("2023-01-10", "2023-02-20"),
+    macrsMonthRatio(309n, 217n),
+  );
+  assert.deepEqual(
+    shortTaxYearMonthsExact("2024-01-10", "2024-02-20"),
+    macrsMonthRatio(1258n, 899n),
+  );
+  assert.deepEqual(
+    shortTaxYearMonthsExact("2026-01-01", "2026-06-30"),
+    macrsMonths(6),
+  );
+  assert.deepEqual(
+    shortTaxYearMonthsExact("2025-07-01", "2026-06-30"),
+    macrsMonths(12),
+  );
+  assert.deepEqual(
+    shortTaxYearMonthsExact("2023-03-15", "2023-12-31"),
+    macrsMonthRatio(296n, 31n),
+  );
+  // Ten touched months locate the HY convention date; they do not turn
+  // March's actual tax-year boundary into March 1 for later-year recovery.
+  assert.equal(shortTaxYearMonths("2023-03-15", "2023-12-31"), 10);
+  assert.equal(
+    formatCalendarDay(halfYearDeemedServiceDate("2023-03-15", "2023-12-31")),
+    "2023-08-01",
+  );
+});
+
+test("an actual month split conserves one month without counting both parts as whole months", () => {
+  const first = shortTaxYearMonthsExact("2026-01-01", "2026-01-10");
+  const second = shortTaxYearMonthsExact("2026-01-11", "2026-01-31");
+  assert.deepEqual(first, macrsMonthRatio(10n, 31n));
+  assert.deepEqual(second, macrsMonthRatio(21n, 31n));
+  assert.deepEqual(addMacrsMonths(first, second), macrsMonths(1));
+});
+
+test("irregular factors use exact calendar fractions and cannot fall back to an average month", () => {
+  assert.equal(
+    impliedShortYearFactor("2023-01-10", "2023-02-20"),
+    "0.1186635945",
+  );
+  assert.equal(
+    assertShortYearFactorAgrees("2023-01-10", "2023-02-20", "0.1186635945"),
+    "0.1186635945",
+  );
+  assert.throws(
+    () =>
+      assertShortYearFactorAgrees("2023-01-10", "2023-02-20", "0.0833333333"),
+    /does not match/,
+  );
+  assert.throws(
+    () => shortTaxYearMonths("2023-01-10", "2023-02-20"),
+    /actual-day convention midpoint and exact recovery months/,
+  );
+});
+
+test("deemed first and midpoint dates retain an actual partial year-end", () => {
+  assert.deepEqual(
+    monthsTreatedInServiceExact(
+      { year: 2023, month: 1, day: 15 },
+      "2023-02-20",
+    ),
+    macrsMonthRatio(17n, 14n),
+  );
+  assert.deepEqual(
+    monthsTreatedInServiceExact({ year: 2023, month: 1, day: 1 }, "2023-01-10"),
+    macrsMonthRatio(10n, 31n),
+  );
+  assert.deepEqual(
+    monthsTreatedInServiceExact(
+      { year: 2024, month: 2, day: 10 },
+      "2024-03-20",
+    ),
+    macrsMonthRatio(1200n, 899n),
+  );
+  assert.deepEqual(
+    monthsTreatedInServiceExact(
+      { year: 2023, month: 11, day: 15 },
+      "2023-12-31",
+    ),
+    macrsMonths(1.5),
+  );
+  assert.deepEqual(
+    monthsTreatedInServiceExact(
+      { year: 2023, month: 3, day: 15 },
+      "2023-02-20",
+    ),
+    macrsMonths(0),
+  );
+  assert.equal(
+    shortYearPlacementDeduction({
+      basis: "8400",
+      rate: "0.4",
+      monthsInService: monthsTreatedInServiceExact(
+        { year: 2023, month: 1, day: 15 },
+        "2023-02-20",
+      ),
+    }),
+    "340.00",
+  );
+});
+
+test("exact recovery periods conserve the shared month independently of the HY midpoint exclusion", () => {
+  const context = { excludedTerminalMonth: true };
+  const first = shortTaxYearMonthsExact("2025-06-01", "2025-10-15", context);
+  const second = shortTaxYearMonthsExact("2025-10-16", "2026-05-31");
+  assert.deepEqual(first, macrsMonthRatio(139n, 31n));
+  assert.deepEqual(second, macrsMonthRatio(233n, 31n));
+  assert.deepEqual(addMacrsMonths(first, second), macrsMonths(12));
+  assert.deepEqual(
+    halfYearDeemedServiceDate("2025-06-01", "2025-10-15", context),
+    { year: 2025, month: 8, day: 1 },
+  );
+  assert.deepEqual(
+    monthsTreatedInServiceExact(
+      { year: 2025, month: 8, day: 1 },
+      "2025-10-15",
+      context,
+    ),
+    macrsMonthRatio(77n, 31n),
+  );
+});
+
+test("exact month helpers refuse invalid calendar facts and misplaced HY context", () => {
+  const context = { excludedTerminalMonth: true };
+  assert.throws(
+    () => shortTaxYearMonthsExact("2023-02-29", "2023-03-31"),
+    /calendar/,
+  );
+  assert.throws(
+    () => shortTaxYearMonthsExact("2023-03-31", "2023-03-01"),
+    /ends before/,
+  );
+  assert.throws(
+    () => shortTaxYearMonthsExact("2023-01-01", "2024-01-31"),
+    /exceeds twelve months/,
+  );
+  assert.throws(
+    () => shortTaxYearMonthsExact("2023-01-10", "2023-02-20", context),
+    /consecutive statutory windows/,
+  );
+  assert.throws(
+    () =>
+      monthsTreatedInServiceExact(
+        { year: 2023, month: 2, day: 29 },
+        "2023-03-31",
+      ),
+    /valid deemed date/,
+  );
+  assert.throws(
+    () =>
+      monthsTreatedInServiceExact(
+        { year: 2023, month: 2, day: 15 },
+        "2023-03-31",
+        context,
+      ),
+    /cannot be shared/,
+  );
+});
 
 test("exact month fractions conserve adjacent portions without binary or average-month rounding", () => {
   const oneDay = macrsMonthRatio(1n, 31n);
@@ -144,7 +308,7 @@ test("Rev. Proc. 89-15 consecutive short years allocate their shared October onl
   assert.equal(monthsTreatedInService(second, "2026-05-31"), 4);
   assert.equal(
     impliedShortYearFactor("2025-06-01", "2025-10-15", context),
-    "0.3333333333",
+    "0.3736559140",
   );
   assert.throws(
     () =>
@@ -295,11 +459,11 @@ test("rate and factor precision is not rounded to ledger money precision", () =>
   assert.equal(decliningBalanceRate("200_db", "7"), "0.2857142857");
   assert.equal(
     impliedShortYearFactor("2026-03-15", "2026-12-31"),
-    "0.8333333333",
+    "0.7956989247",
   );
   assert.equal(
-    assertShortYearFactorAgrees("2026-03-15", "2026-12-31", "0.8333333333"),
-    "0.8333333333",
+    assertShortYearFactorAgrees("2026-03-15", "2026-12-31", "0.7956989247"),
+    "0.7956989247",
   );
   assert.throws(
     () => assertShortYearFactorAgrees("2026-03-15", "2026-12-31", "0.8333"),
