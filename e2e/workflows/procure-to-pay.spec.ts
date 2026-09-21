@@ -524,7 +524,7 @@ test.describe("procure-to-pay workflows", () => {
     const ctx = await approverContext(browser, baseURL);
     const approverPage = await ctx.newPage();
     try {
-      await approverPage.goto("/approvals");
+      await approverPage.goto("/inbox");
       for (let attempt = 0; attempt < 6; attempt += 1) {
         const isPending = await approverPage.evaluate(async (subjectId) => {
           const res = await fetch("/api/flows/gates");

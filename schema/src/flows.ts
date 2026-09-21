@@ -287,7 +287,7 @@ export const notifications = pgTable(
     kind: text("kind").notNull().default("general"),
     title: text("title").notNull(),
     body: text("body"),
-    /** In-app link the notification opens, e.g. '/approvals'. */
+    /** In-app link the notification opens, e.g. '/inbox'. */
     href: text("href"),
     readAt: timestamp("read_at", { withTimezone: true }),
     ...auditColumns,
