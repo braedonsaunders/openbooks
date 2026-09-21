@@ -13,6 +13,9 @@ import {
 } from "./depreciation.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 import { remeasureAsset } from "./asset-lifecycle.ts";
+import { errorChainMatches } from "../testing/error-chain.ts";
+import { setPeriodLockState } from "../close/period-locks.ts";
+import { requestPeriodReopen, decidePeriodReopen } from "../close/reopening.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -90,9 +93,10 @@ async function observeFormulaEdit(
 async function seedAsset(
   method: "manual" | "units_of_production",
   unitsTotal?: string,
-): Promise<{ org: Awaited<ReturnType<typeof createScratchOrg>>; assetId: string; actorId: string; evidenceFileId: string }> {
+): Promise<{ org: Awaited<ReturnType<typeof createScratchOrg>>; assetId: string; actorId: string; approverId: string; evidenceFileId: string }> {
   const org = await createScratchOrg();
-  const actorId = (await seedFlowActors(org.orgId)).adminId;
+  const actors = await seedFlowActors(org.orgId);
+  const actorId = actors.adminId;
   const categoryId = randomUUID();
   const assetId = randomUUID();
   await db.execute(sql`
@@ -125,7 +129,7 @@ async function seedAsset(
       values (${org.orgId}, ${evidenceFileId}, 'fixed_assets', ${assetId}, ${actorId})`);
     return evidenceFileId;
   });
-  return { org, assetId, actorId, evidenceFileId };
+  return { org, assetId, actorId, approverId: actors.approver1Id, evidenceFileId };
 }
 
 test("manual evidence replacement is append-preserved and concurrent runs post once", { skip: !DB }, async () => {
@@ -399,7 +403,7 @@ test("depreciation reloads accounts and dimensions after a concurrent asset edit
 });
 
 test("custom formulas operate independently on an alternate depreciation book", { skip: !DB }, async () => {
-  const { org, assetId, actorId } = await seedAsset("manual");
+  const { org, assetId, actorId, approverId } = await seedAsset("manual");
   try {
     const formulaId = randomUUID();
     const alternateBookId = randomUUID();
@@ -433,8 +437,72 @@ test("custom formulas operate independently on an alternate depreciation book", 
         );
       },
     );
-    const nonPostingRun = await runDepreciation(org.orgId, "2026-07-31", actorId, assetId, undefined, alternateBookId);
+    const line = (await db.execute<{ id: string }>(sql`
+      select l.id from depreciation_schedule_lines l join depreciation_schedules s
+        on s.org_id=l.org_id and s.id=l.schedule_id
+       where s.org_id=${org.orgId} and s.asset_id=${assetId} and s.book_id=${alternateBookId}`)).rows[0]!;
+    await setPeriodLockState({orgId:org.orgId,periodId:org.periodId,bookId:alternateBookId,
+      module:"assets",state:"closed",actorId,reason:"Protect reporting book while close is reviewed"});
+    const closed = await runDepreciation(org.orgId, "2026-07-31", actorId, assetId, undefined, alternateBookId);
+    assert.equal(closed.recorded, 0);
+    assert.equal(closed.skipped, 1);
+    assert.match(closed.problems.join(" "), /closed/);
+    await assert.rejects(db.execute(sql`
+      update depreciation_schedule_lines set posted_amount=planned_amount,non_gl_recognized_at=now(),updated_by=${actorId}
+       where org_id=${org.orgId} and id=${line.id}`),
+      (error: unknown) => errorChainMatches(error, /closed for depreciation/),
+      "the database independently refuses no-GL recognition across a close");
+    const reopen = await requestPeriodReopen({orgId:org.orgId,periodId:org.periodId,bookId:alternateBookId,
+      modules:["assets"],actorId,reason:"Authorized reporting-book close correction"});
+    await decidePeriodReopen({orgId:org.orgId,requestId:reopen,actorId:approverId,approve:true});
+    await db.execute(sql`update accounting_books set posts_gl=true where org_id=${org.orgId} and id=${alternateBookId}`);
+    await assert.rejects(db.execute(sql`
+      update depreciation_schedule_lines set posted_amount=planned_amount,non_gl_recognized_at=now(),updated_by=${actorId}
+       where org_id=${org.orgId} and id=${line.id}`),
+      (error: unknown) => errorChainMatches(error, /active non-posting book/),
+      "a posting book cannot evade journal evidence with the reporting-book marker");
+    await db.execute(sql`update accounting_books set posts_gl=false where org_id=${org.orgId} and id=${alternateBookId}`);
+    const outsideScope = await runDepreciation(org.orgId, "2026-07-31", actorId, assetId, [], alternateBookId);
+    assert.equal(outsideScope.recorded, 0, "recognition respects the legal-entity allowlist");
+    const concurrent = await Promise.all([
+      runDepreciation(org.orgId, "2026-07-31", actorId, assetId, undefined, alternateBookId),
+      runDepreciation(org.orgId, "2026-07-31", actorId, assetId, undefined, alternateBookId),
+    ]);
+    assert.ok(concurrent.every((result) => result.problems.length === 0));
+    assert.equal(concurrent.reduce((n,result) => n + result.recorded,0),1,"concurrent runs recognize the book line exactly once");
+    const nonPostingRun = concurrent.find((result) => result.recorded === 1)!;
     assert.equal(nonPostingRun.posted, 0, "a reporting-only book never leaks entries into the GL");
+    assert.equal(nonPostingRun.recorded, 1);
+    assert.equal(nonPostingRun.recordedAmount, "833.3333");
+    assert.equal(nonPostingRun.totalAmount, "0");
+    assert.deepEqual(nonPostingRun.entries, []);
+    const recognized = (await db.execute<{ posted:string; journal_entry_id:string|null; recorded:boolean; updated_by:string }>(sql`
+      select posted_amount::text as posted,journal_entry_id,non_gl_recognized_at is not null as recorded,updated_by
+        from depreciation_schedule_lines where org_id=${org.orgId} and id=${line.id}`)).rows[0]!;
+    assert.deepEqual(recognized, {posted:"833.3333",journal_entry_id:null,recorded:true,updated_by:actorId});
+    const journalCount = (await db.execute<{ n:number }>(sql`
+      select count(*)::int as n from journal_entries where org_id=${org.orgId} and book_id=${alternateBookId}`)).rows[0]!.n;
+    assert.equal(journalCount, 0);
+    const carrying = (await db.execute<{ amount:string }>(sql`
+      select carrying_value::text as amount from asset_book_carrying_values
+       where org_id=${org.orgId} and asset_id=${assetId} and book_id=${alternateBookId}`)).rows[0]!;
+    assert.equal(carrying.amount, "11166.6667", "the observable book carrying amount includes recognition");
+    const audit = async () => (await db.execute<{ actor_id:string; before:string|null; after:string; reason:string }>(sql`
+      select actor_id,changes->'before'->>'posted_amount' as before,changes->'after'->>'posted_amount' as after,
+             changes->>'reason' as reason from audit_log
+       where org_id=${org.orgId} and table_name='depreciation_schedule_lines' and row_id=${line.id}
+         and changes->>'reason'='Recognize reporting-book depreciation without a GL journal'`)).rows;
+    assert.deepEqual(await audit(), [{actor_id:actorId,before:null,after:"833.3333",reason:"Recognize reporting-book depreciation without a GL journal"}]);
+    const repeat = await runDepreciation(org.orgId, "2026-07-31", actorId, assetId, undefined, alternateBookId);
+    assert.equal(repeat.recorded, 0);
+    assert.deepEqual(repeat.problems, []);
+    assert.equal((await audit()).length, 1, "retry does not duplicate recognition or its evidence");
+    await assert.rejects(db.execute(sql`update depreciation_schedule_lines set posted_amount=0 where org_id=${org.orgId} and id=${line.id}`),
+      (error:unknown) => errorChainMatches(error,/recognized reporting-book depreciation is immutable/));
+    await assert.rejects(db.execute(sql`delete from depreciation_schedule_lines where org_id=${org.orgId} and id=${line.id}`),
+      (error:unknown) => errorChainMatches(error,/recognized reporting-book depreciation is immutable/));
+    await buildSchedule(assetId, org.orgId, actorId, alternateBookId);
+    assert.equal((await audit()).length, 1, "rebuilding future estimates retains recognized history");
   } finally {
     await dropScratchOrg(org.orgId);
   }

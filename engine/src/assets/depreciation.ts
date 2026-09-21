@@ -1433,7 +1433,7 @@ export async function recordDepreciationInput(
 }
 
 // ---------------------------------------------------------------------------
-// runDepreciation — post due periods through the kernel
+// runDepreciation — recognize due periods in each accounting book
 // ---------------------------------------------------------------------------
 
 export interface NextDueDepreciation {
@@ -1444,14 +1444,18 @@ export interface NextDueDepreciation {
 }
 
 export interface RunDepreciationResult {
+  /** Number of GL journal entries posted. */
   posted: number;
+  /** Number of reporting-only book lines recognized without a GL entry. */
+  recorded: number;
+  recordedAmount: string;
   skipped: number;
   totalAmount: string;
   entries: { assetNumber: string; period: string; amount: string; entryId: string }[];
   problems: string[];
   /** The as-of date the run evaluated (defaults to the org business day). */
   asOfDate: string;
-  /** Earliest unposted line in scope when nothing posted, else null. */
+  /** Earliest unrecognized line in scope when nothing was recognized, else null. */
   nextDue: NextDueDepreciation | null;
 }
 
@@ -1501,13 +1505,12 @@ export async function reconcileAssetDepreciationStatusWithRunner(
 }
 
 /**
- * Post every due, unposted depreciation line whose period ends on or before
- * `asOfDate`. Each line becomes one balanced journal entry (DR expense / CR
- * accumulated) posted through the kernel draft→lines→posted, origin =
- * 'depreciation'. A closed GL period is skipped (not an error). Idempotent:
- * a line with a journal_entry_id is never reconsidered. When nothing posts,
- * the result names the as-of date and the next due line, so a mid-period run
- * explains itself instead of answering all-zero.
+ * Recognize every due depreciation line through `asOfDate`. Posting books use
+ * the kernel draft→lines→posted journal; reporting-only books freeze the same
+ * subledger measurement with database-audited non-GL evidence. Both honor the
+ * book's assets/GL close controls. The posted_amount claim makes either path
+ * idempotent, including zero amounts. When nothing is recognized, name the
+ * as-of date and next due line rather than returning unexplained zeroes.
  */
 export async function runDepreciation(
   orgId: string,
@@ -1519,6 +1522,8 @@ export async function runDepreciation(
 ): Promise<RunDepreciationResult> {
   const result: RunDepreciationResult = {
     posted: 0,
+    recorded: 0,
+    recordedAmount: "0",
     skipped: 0,
     totalAmount: "0",
     entries: [],
@@ -1542,7 +1547,7 @@ export async function runDepreciation(
     select distinct s.asset_id, s.book_id, a.asset_number
       from depreciation_schedules s
       join fixed_assets a on a.id = s.asset_id and a.org_id = s.org_id
-      join accounting_books bk on bk.id = s.book_id and bk.org_id = s.org_id and bk.posts_gl and bk.is_active
+      join accounting_books bk on bk.id = s.book_id and bk.org_id = s.org_id and bk.is_active
      where s.org_id = ${orgId}
        and a.status not in ('disposed', 'written_off')
        and (s.method not in ('manual', 'units_of_production') or s.depreciation_method_id is not null)
@@ -1580,7 +1585,7 @@ export async function runDepreciation(
            a.asset_number, p.name as period_name
       from depreciation_schedule_lines l
       join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
-      join accounting_books bk on bk.id = s.book_id and bk.org_id = s.org_id and bk.posts_gl and bk.is_active
+      join accounting_books bk on bk.id = s.book_id and bk.org_id = s.org_id and bk.is_active
       join fixed_assets a on a.id = s.asset_id and a.org_id = s.org_id
       join subsidiaries sub on sub.id = a.subsidiary_id and sub.org_id = a.org_id
       join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
@@ -1635,6 +1640,7 @@ export async function runDepreciation(
           planned_amount: string;
           period_id: string;
           book_id: string;
+          posts_gl: boolean;
           period_name: string;
           period_ends_on: string;
           asset_id: string;
@@ -1656,6 +1662,7 @@ export async function runDepreciation(
                  l.planned_amount,
                  l.period_id,
                  s.book_id,
+                 bk.posts_gl,
                  p.name as period_name,
                  p.ends_on as period_ends_on,
                  a.id as asset_id,
@@ -1674,7 +1681,7 @@ export async function runDepreciation(
                  c.depreciation_expense_account_id as cat_expense
             from depreciation_schedule_lines l
             join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
-            join accounting_books bk on bk.id = s.book_id and bk.org_id = s.org_id and bk.posts_gl and bk.is_active
+            join accounting_books bk on bk.id = s.book_id and bk.org_id = s.org_id and bk.is_active
             join fixed_assets a on a.id = s.asset_id and a.org_id = s.org_id
             join subsidiaries sub on sub.id = a.subsidiary_id and sub.org_id = a.org_id
             join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
@@ -1685,10 +1692,14 @@ export async function runDepreciation(
              and a.status not in ('disposed', 'written_off')
              and p.ends_on <= ${asOfDate}
              ${allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${`{${allowedSubsidiaryIds.join(",")}}`}::uuid[])` : sql``}
-           for update of l`));
+           for update of l for share of bk`));
         const claimed = claim.rows[0];
         if (!claimed) return null;
 
+        // Use the existing shared posting fence before the close check. A
+        // reporting-only recognition must serialize with close even though
+        // it will never reach je_guard. The storage guard takes it too.
+        await tx.execute(sql`select period_posting_fence(${orgId}, ${claimed.period_id}, ${claimed.book_id})`);
         // One period gate: the shared assets+GL check replaces the raw
         // period_module_is_closed projection. Discovery stays advisory — a
         // closed line is skipped, not fatal — and source-owned imported
@@ -1769,13 +1780,21 @@ export async function runDepreciation(
           })),
         });
         assertFinalKernelBalance(lines.map((line) => ({ amount: line.amount, subsidiaryId: claimed.subsidiary_id })));
-        if (isZero(planned)) {
-          await tx.execute(sql`
+        if (!claimed.posts_gl || isZero(planned)) {
+          // The database validates the book and close policy, freezes the
+          // non-GL timestamp and writes immutable before/after audit evidence.
+          // Do not manufacture a journal merely to complete the subledger.
+          const recorded = await tx.execute<{ id: string }>(sql`
             update depreciation_schedule_lines
-               set posted_amount = '0', updated_at = now(), updated_by = ${actorId}
-             where id = ${row.line_id} and org_id = ${orgId} and posted_amount is null`);
+               set posted_amount = ${planned},
+                   non_gl_recognized_at = ${claimed.posts_gl ? sql`null` : sql`clock_timestamp()`},
+                   updated_at = now(), updated_by = ${actorId}
+             where id = ${row.line_id} and org_id = ${orgId} and posted_amount is null
+             returning id`);
+          if (recorded.rows.length !== 1) throw new Error("depreciation recognition did not record the claimed line; reload the schedule and retry");
           return {
             entryId: null,
+            recorded: !claimed.posts_gl,
             amount: planned,
             assetNumber: claimed.asset_number,
             periodName: claimed.period_name,
@@ -1832,6 +1851,11 @@ export async function runDepreciation(
         result.problems.push(`${posted.assetNumber} ${posted.periodName}: GL period closed`);
         continue;
       }
+      if ("recorded" in posted && posted.recorded) {
+        result.recorded++;
+        result.recordedAmount = add(result.recordedAmount, posted.amount);
+        continue;
+      }
       if (!posted.entryId) {
         result.skipped++;
         continue;
@@ -1854,7 +1878,7 @@ export async function runDepreciation(
   // next: a mid-period run otherwise answers all-zero counters with an empty
   // problems list while a planned line waits in the open period (F-t07-005).
   // Same scope as the due list above, minus the ended-period filter.
-  if (result.posted === 0) {
+  if (result.posted === 0 && result.recorded === 0) {
     const next = (await db.execute<{
       asset_number: string;
       period_name: string;
@@ -1865,7 +1889,7 @@ export async function runDepreciation(
              l.planned_amount::text as amount
         from depreciation_schedule_lines l
         join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
-        join accounting_books bk on bk.id = s.book_id and bk.org_id = s.org_id and bk.posts_gl and bk.is_active
+        join accounting_books bk on bk.id = s.book_id and bk.org_id = s.org_id and bk.is_active
         join fixed_assets a on a.id = s.asset_id and a.org_id = s.org_id
         join subsidiaries sub on sub.id = a.subsidiary_id and sub.org_id = a.org_id
         join asset_categories c on c.id = a.category_id and c.org_id = a.org_id

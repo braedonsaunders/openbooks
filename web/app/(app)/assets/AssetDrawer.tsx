@@ -1,5 +1,7 @@
 'use client'
 
+import { readApiErrorMessage } from '@/lib/api-error'
+
 import { useMoney } from '@/components/money-provider'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
@@ -306,24 +308,30 @@ export function AssetDrawer({
       // A closed-period skip posts 0 with the reason in `problems` — surface
       // it like the page-level button does. A transport or parse failure must
       // also toast: try/finally alone closes the menu with zero feedback.
-      let data: { posted?: number; skipped?: number; totalAmount?: string; problems?: unknown; error?: string; asOfDate?: string; nextDue?: { assetNumber: string; period: string; endsOn: string; amount: string } | null }
+      let data: { posted?: number; recorded?: number; recordedAmount?: string; skipped?: number; totalAmount?: string; problems?: unknown; error?: string; asOfDate?: string; nextDue?: { assetNumber: string; period: string; endsOn: string; amount: string } | null }
       try {
         const res = await fetch('/api/assets/run-depreciation', {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assetId: a.id, bookId }),
         })
-        data = await res.json()
         if (!res.ok) {
-          toast.error(typeof data.error === 'string' && data.error ? data.error : t('drawer.runFailed'))
+          toast.error(await readApiErrorMessage(res, t('drawer.runFailed')))
           return
         }
+        data = await res.json()
       } catch {
         toast.error(t('drawer.runFailed'))
         return
       }
       const posted = data.posted ?? 0
+      const recorded = data.recorded ?? 0
       const skipped = data.skipped ?? 0
-      if (posted > 0) {
-        toast.success(t('run.posted', { count: posted, amount: money(data.totalAmount ?? '0') }))
+      if (posted > 0 || recorded > 0) {
+        const messages = [
+          ...(posted > 0 ? [t('run.posted', { count: posted, amount: money(data.totalAmount ?? '0') })] : []),
+          ...(recorded > 0 ? [t('run.recorded', { count: recorded, amount: money(data.recordedAmount ?? '0') })] : []),
+          ...(skipped > 0 ? [t('run.someSkipped', { count: skipped })] : []),
+        ]
+        toast.success(messages.join(' · '))
       } else if (skipped === 0 && data.nextDue) {
         // A mid-period run posts nothing while a planned line waits in the
         // open period: name the as-of date and the next due line (F-t07-005).
@@ -440,7 +448,7 @@ export function AssetDrawer({
       {forms.length > 0 ? <div className="mb-1 border-b border-slate-200 p-2 dark:border-slate-800"><Label className="mb-1 block text-xs">{t('drawer.customForm')}</Label><Select value={currentFormId ?? ''} onChange={(event) => selectForm(event.target.value)}>{forms.map((form) => <option key={form.id} value={form.id}>{form.name}</option>)}</Select></div> : null}
       <div className="space-y-0.5 [&_button]:h-8 [&_button]:w-full [&_button]:justify-start [&_button]:rounded [&_button]:border-0 [&_button]:bg-transparent [&_button]:px-2 [&_button]:text-xs [&_button]:shadow-none [&_button:hover]:bg-slate-100 dark:[&_button:hover]:bg-slate-800">
         {canManage && isDraft ? <Button variant="ghost" className={actionClass} disabled={busy} onClick={placeInService}>{t('drawer.placeInService')}</Button> : null}
-        {canManage && status === 'in_service' ? payload.books.filter((book) => book.postsGl).map((book) => <Button key={book.id} variant="ghost" className={actionClass} disabled={busy} onClick={() => runForAsset(book.id)}>{t('drawer.runForBook', { book: book.name })}</Button>) : null}
+        {canManage && ['in_service', 'fully_depreciated'].includes(status) ? payload.books.map((book) => <Button key={book.id} variant="ghost" className={actionClass} disabled={busy} onClick={() => runForAsset(book.id)}>{t('drawer.runForBook', { book: book.name })}</Button>) : null}
         {canManage && status === 'in_service' && inputSchedules.length > 0 ? <DepreciationInputButton assetId={a.id} schedules={inputSchedules} /> : null}
         {canManage && ['in_service','fully_depreciated'].includes(status) ? <>{status === 'in_service' ? <RemeasureButton assetId={a.id} /> : null}<AssetChangeButton assetId={a.id} accounts={accountOptions} categories={categories} /><GroupValuationButton assetId={a.id} /></> : null}
         {canManage && (status === 'in_service' || status === 'fully_depreciated') ? <DisposeButton assetId={a.id} accountOptions={accountOptions} /> : null}

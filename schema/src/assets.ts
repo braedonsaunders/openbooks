@@ -202,6 +202,8 @@ export const depreciationScheduleLines = pgTable(
     plannedAmount: money("planned_amount").notNull(),
     postedAmount: money("posted_amount"),
     journalEntryId: uuid("journal_entry_id"),
+    /** Frozen recognition evidence for a reporting-only book; no GL entry. */
+    nonGlRecognizedAt: timestamp("non_gl_recognized_at", { withTimezone: true }),
     /** Calculation provenance: generated formula, accountant evidence, or imported opening history. */
     source: text("source", { enum: ["formula", "manual", "production_usage", "imported"] }).notNull().default("formula"),
     inputId: uuid("input_id"),
@@ -220,7 +222,11 @@ export const depreciationScheduleLines = pgTable(
     ),
     check(
       "depr_lines_posting_evidence_pair",
-      sql`(${t.postedAmount} is null and ${t.journalEntryId} is null) or (${t.postedAmount} is not null and (${t.postedAmount} = 0 or ${t.journalEntryId} is not null or ${t.source} = 'imported'))`,
+      sql`(${t.postedAmount} is null and ${t.journalEntryId} is null) or (${t.postedAmount} is not null and (${t.postedAmount} = 0 or ${t.journalEntryId} is not null or ${t.source} = 'imported' or ${t.nonGlRecognizedAt} is not null))`,
+    ),
+    check(
+      "depr_lines_non_gl_recognition",
+      sql`${t.nonGlRecognizedAt} is null or (${t.postedAmount} is not null and ${t.journalEntryId} is null and ${t.source} <> 'imported')`,
     ),
     check(
       "depr_lines_input_provenance",

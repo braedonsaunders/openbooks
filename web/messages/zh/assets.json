@@ -194,8 +194,9 @@
   "run": {
     "asOf": "截至",
     "book": "折旧账簿",
-    "postBook": "过账 {book}",
+    "postBook": "运行折旧 — {book}",
     "posted": "已过账 {count} 笔分录，合计 {amount}",
+    "recorded": "已记录 {count} 笔不生成总账分录的折旧，合计 {amount}",
     "nothingDue": "无应提折旧",
     "nextDue": "截至 {date} 无可过账项。下一笔:{asset} {period}({amount})，结束于 {endsOn}。",
     "someSkipped": "已跳过 {count} 项"

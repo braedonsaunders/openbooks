@@ -1078,12 +1078,15 @@ test(
         f.actors.submitterId,
         secondary,
       );
-      await runDepreciation(
+      const recognized = await runDepreciation(
         f.org.orgId,
         "2026-07-31",
         f.actors.submitterId,
         f.assetId,
       );
+      assert.deepEqual(recognized.problems, []);
+      assert.equal(recognized.posted, 0, "primary July history was already posted by the fixture");
+      assert.equal(recognized.recorded, 1, "the alternate book has its own recognized history");
       const change = await proposeAssetChange(
         f.org.orgId,
         f.assetId,
@@ -1129,3 +1132,28 @@ test(
       assert.equal(basis.cost, "3000.0000");
     }),
 );
+
+
+test("later reporting-book recognition prevents an asset change reversal from erasing service", { skip: !DB }, () =>
+  fixture(async (f) => {
+    const secondary = randomUUID();
+    await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl)
+      values(${secondary},${f.org.orgId},'ALT','Reporting history',false,true,false)`);
+    await buildSchedule(f.assetId, f.org.orgId, f.actors.submitterId, secondary);
+    const july = await runDepreciation(f.org.orgId, "2026-07-31", f.actors.submitterId, f.assetId, undefined, secondary);
+    assert.deepEqual(july.problems, []);
+    assert.equal(july.recorded, 1);
+    const change = await proposeAssetChange(f.org.orgId, f.assetId, f.actors.submitterId, input(f));
+    await approve(f, change);
+    await applyAssetChange(f.org.orgId, change, f.actors.submitterId);
+    const august = await runDepreciation(f.org.orgId, "2026-08-31", f.actors.submitterId, f.assetId, undefined, secondary);
+    assert.deepEqual(august.problems, []);
+    assert.equal(august.recorded, 1);
+    assert.equal(august.posted, 0);
+    const { proposeAssetReversal } = await import("./asset-change-reversals.ts");
+    await assert.rejects(proposeAssetReversal(f.org.orgId, change, f.actors.submitterId, {
+      effectiveOn:"2026-08-01",reason:"Attempt to erase later reporting-book use",idempotencyKey:randomUUID(),
+    }), /subsequent financial history/);
+    assert.equal((await db.execute<{ n:number }>(sql`
+      select count(*)::int as n from journal_entries where org_id=${f.org.orgId} and book_id=${secondary}`)).rows[0]!.n,0);
+  }));

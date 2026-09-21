@@ -84,7 +84,7 @@ async function state(
   const boundary = basis[0]!.created_at;
   const later = (
     await tx.execute(
-      sql`select 1 from asset_events where org_id=${orgId} and asset_id in(${source.subject_id},${receiver ?? source.subject_id}) and created_at>=${boundary}::timestamptz and financial_change_id is distinct from ${source.id} union all select 1 from depreciation_schedule_lines l join depreciation_schedules s on s.org_id=l.org_id and s.id=l.schedule_id join journal_entries e on e.org_id=l.org_id and e.id=l.journal_entry_id where s.org_id=${orgId} and s.asset_id in(${source.subject_id},${receiver ?? source.subject_id}) and e.created_at>=${boundary}::timestamptz limit 1`,
+      sql`select 1 from asset_events where org_id=${orgId} and asset_id in(${source.subject_id},${receiver ?? source.subject_id}) and created_at>=${boundary}::timestamptz and financial_change_id is distinct from ${source.id} union all select 1 from depreciation_schedule_lines l join depreciation_schedules s on s.org_id=l.org_id and s.id=l.schedule_id left join journal_entries e on e.org_id=l.org_id and e.id=l.journal_entry_id where s.org_id=${orgId} and s.asset_id in(${source.subject_id},${receiver ?? source.subject_id}) and (e.created_at>=${boundary}::timestamptz or l.non_gl_recognized_at>=${boundary}::timestamptz) limit 1`,
     )
   ).rows[0];
   if (later)

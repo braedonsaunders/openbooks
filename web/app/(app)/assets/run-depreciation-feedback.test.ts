@@ -42,3 +42,16 @@ test('both run call sites explain a zero-post run with its next due line', () =>
   assert.match(run, /data\.nextDue/)
   assert.match(run, /run\.nextDue/)
 })
+
+
+test('both native run controls distinguish reporting-book recognition from GL entries', () => {
+  for (const source of [runForAsset, button]) {
+    assert.match(source, /data\.recorded/)
+    assert.match(source, /run\.recorded/)
+    assert.match(source, /data\.recordedAmount/)
+    assert.match(source, /posted > 0 \|\| recorded > 0/)
+    assert.ok(source.indexOf('if (!res.ok)') < source.indexOf('data = await res.json()'))
+    assert.match(source, /readApiErrorMessage/)
+  }
+  assert.doesNotMatch(drawer, /payload\.books\.filter\(\(book\) => book\.postsGl\)/)
+})

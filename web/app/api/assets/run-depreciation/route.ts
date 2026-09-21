@@ -10,8 +10,8 @@ export const runtime = 'nodejs'
 const runBody = z.object({ asOfDate: isoDate().optional(), assetId: uuidId.optional(), bookId: uuidId.optional() })
 
 /**
- * Run depreciation: post every due, unposted period entry through the kernel
- * (DR expense / CR accumulated, origin='depreciation'), idempotently. Optional
+ * Run depreciation: recognize due book amounts idempotently. GL-posting books
+ * use the kernel; reporting-only books retain audited subledger evidence. Optional
  * `assetId` scopes the run to one asset; `asOfDate` defaults to today.
  */
 export async function POST(req: Request) {

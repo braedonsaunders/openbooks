@@ -133,7 +133,7 @@ export async function loadAssets(
   const [multiSub, allSubsidiaries, depreciationBooks] = await Promise.all([
     isMultiSubsidiary(orgId),
     subsidiaryOptions(),
-    db.execute<AssetBookRow>(sql`select id, name, is_primary from accounting_books where org_id=${orgId} and is_active and posts_gl order by is_primary desc, code`),
+    db.execute<AssetBookRow>(sql`select id, name, is_primary from accounting_books where org_id=${orgId} and is_active order by is_primary desc, code`),
   ])
   const subsidiaries = authz.allowedSubsidiaryIds
     ? allSubsidiaries.filter((subsidiary) => authz.allowedSubsidiaryIds!.has(subsidiary.id))
