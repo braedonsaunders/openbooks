@@ -136,6 +136,12 @@ const READER_PERMS = [
   // so both refuse with the documented hrm_feature_disabled.
   "hrm.certifications.read",
   // HR-14 end
+  // HR-19: the survey results tool is gated on the MANAGE grant, the way
+  // HR-17's calibration read tool is -- aggregate engagement results are
+  // not a self-service read. The harness reader holds it so the tool
+  // reaches its feature gate and refuses with the documented
+  // hrm_feature_disabled instead of a bare "forbidden".
+  "hrm.surveys.manage",
 ];
 
 /** Empty-store refusals: stable error codes on an org with no transactions. */

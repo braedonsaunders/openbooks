@@ -176,7 +176,7 @@ test("capability sync seeds six rows; autonomy moves down only", { skip: !DB }, 
   }
 });
 
-async function seedTerminatedWithInput(orgId: string): Promise<{ employmentId: string }> {
+async function seedTerminatedWithInput(orgId: string, decidedBy: string): Promise<{ employmentId: string }> {
   const workerPartyId = randomUUID();
   await db.execute(sql`
     insert into parties (id, org_id, kind, display_name, is_active, custom)
@@ -201,10 +201,16 @@ async function seedTerminatedWithInput(orgId: string): Promise<{ employmentId: s
   await db.execute(sql`
     insert into hrm_leave_types (id, org_id, code, name, paid)
     values (${leaveType}, ${orgId}, 'ANOM-VAC', 'Anomaly probe vacation', true)`);
+  // An approved request must carry its whole decision -- who, when and
+  // why -- or hrm_leave_requests_decision refuses the row. The constraint
+  // is right: an approval with no decider is not an approval.
   const requestId = randomUUID();
   await db.execute(sql`
-    insert into hrm_leave_requests (id, org_id, employment_id, leave_type_id, starts_on, ends_on, hours, status)
-    values (${requestId}, ${orgId}, ${employmentId}, ${leaveType}, '2026-09-10', '2026-09-10', 8, 'approved')`);
+    insert into hrm_leave_requests
+      (id, org_id, employment_id, leave_type_id, starts_on, ends_on, hours, status,
+       decided_by, decided_at, decision_reason)
+    values (${requestId}, ${orgId}, ${employmentId}, ${leaveType}, '2026-09-10', '2026-09-10', 8, 'approved',
+       ${decidedBy}, now(), 'seeded for the anomaly probe')`);
   await db.execute(sql`
     insert into hrm_payroll_inputs (org_id, employee_party_id, employment_id, kind, absence_date, hours, source_leave_request_id, status)
     values (${orgId}, ${workerPartyId}, ${employmentId}, 'payout', '2026-09-10', 8, ${requestId}, 'pending')`);
@@ -218,7 +224,7 @@ async function seedTerminatedWithInput(orgId: string): Promise<{ employmentId: s
 test("scan flags terminated-with-pay as block; rescan is idempotent; finalize refuses", { skip: !DB }, async () => {
   const { org, adminId } = await setup();
   try {
-    const { employmentId } = await seedTerminatedWithInput(org.orgId);
+    const { employmentId } = await seedTerminatedWithInput(org.orgId, adminId);
     const before = await decisionCount(org.orgId);
     const first = await scanAnomalies(db, {
       orgId: org.orgId, actorId: adminId, periodFrom: "2026-09-01", periodTo: "2026-09-30",
@@ -282,7 +288,7 @@ test("scan flags terminated-with-pay as block; rescan is idempotent; finalize re
 test("explain-pay trace carries lines, treatments, inputs and the diff", { skip: !DB }, async () => {
   const { org, adminId } = await setup();
   try {
-    const { employmentId } = await seedTerminatedWithInput(org.orgId);
+    const { employmentId } = await seedTerminatedWithInput(org.orgId, adminId);
     const party = (await db.execute<{ partyId: string }>(sql`
       select worker_party_id::text as "partyId" from worker_employments
        where org_id = ${org.orgId} and id = ${employmentId}`)).rows[0]?.partyId;
@@ -339,7 +345,7 @@ test("inbox adapters surface blocking checks and overdue reviews through the act
     assert.deepEqual(await payrollAnomalyBlockAdapter.list(ctx), []);
 
     // Seed + scan an open block flag.
-    await seedTerminatedWithInput(org.orgId);
+    await seedTerminatedWithInput(org.orgId, adminId);
     await scanAnomalies(db, {
       orgId: org.orgId, actorId: adminId, periodFrom: "2026-09-01", periodTo: "2026-09-30",
     });

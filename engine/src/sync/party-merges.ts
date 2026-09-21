@@ -334,6 +334,18 @@ const GUARDED_PARTY_REFS: readonly GuardedPartyRef[] = [
     conflict: "s.interview_id = d.interview_id",
   },
   {
+    // 0229: a scorecard is unique on (org, interview, interviewer), so
+    // re-pointing the interviewer collides exactly when the survivor
+    // already scored the SAME interview. Same shape as the interview
+    // panel above, and guarded for the same reason: the conflicting row
+    // stays on the absorbed party and is counted, never folded into the
+    // survivor's scorecard -- two people's assessments of one candidate
+    // are not interchangeable.
+    table: "hrm_scorecards",
+    column: "interviewer_party_id",
+    conflict: "s.interview_id = d.interview_id",
+  },
+  {
     // 0196: the review uniqueness is (org, cycle, employment, kind,
     // reviewer) — re-pointing the reviewer collides exactly when the
     // survivor already reviewed the same employment in the same cycle
