@@ -87,5 +87,8 @@ export * from "./hrm-compensation";
 export * from "./hrm-automations";
 // HR-13: construction-compliance drizzle mirror (0223/0224).
 export * from "./hrm-construction";
+// HR-14 begin: qualifications and dispatch gating (0225).
+export * from "./hrm-qualifications";
+// HR-14 end
 
 export * from './extension-drafts';

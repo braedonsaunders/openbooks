@@ -412,6 +412,9 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0223_hrm_construction_rates.sql",
     "0224_hrm_construction_certified.sql",
     // HR-13 end
+    // HR-14 begin: qualifications and dispatch gating (0225).
+    "0225_hrm_qualifications_dispatch.sql",
+    // HR-14 end
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
