@@ -395,18 +395,15 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0196_hrm_performance_retention.sql",
     "0197_hrm_benefits.sql",
     "0198_hrm_self_service_profile.sql",
-    // HR-12 begin: compensation architecture/bands/cycles (0221) and
-    // headcount plans/transparency (0222).
-    "0221_hrm_compensation_architecture.sql",
-    "0222_hrm_headcount_plans_transparency.sql",
-    // HR-12 end
     "0199_drop_form_response_steps.sql",
     "0200_stock_count_subsidiary.sql",
     "0201_pay_run_bank_file_sepa_cemtex.sql",
-    // HR-16 begin: 0226 automations, 0227 action reasons + event verbs.
-    "0226_hrm_automations.sql",
-    "0227_hrm_action_reasons_event_verbs.sql",
-    // HR-16 end
+    // HR-12 begin: compensation architecture/bands/cycles (0221) and
+    // headcount plans/transparency (0222). The pin lists migrations in
+    // readdir sort order (0199-0201 sort before 0221+), not landing order.
+    "0221_hrm_compensation_architecture.sql",
+    "0222_hrm_headcount_plans_transparency.sql",
+    // HR-12 end
     // HR-13 begin: construction compliance rate tables (0223) and
     // certified payroll plus comp classes (0224).
     "0223_hrm_construction_rates.sql",
@@ -415,6 +412,10 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // HR-14 begin: qualifications and dispatch gating (0225).
     "0225_hrm_qualifications_dispatch.sql",
     // HR-14 end
+    // HR-16 begin: 0226 automations, 0227 action reasons + event verbs.
+    "0226_hrm_automations.sql",
+    "0227_hrm_action_reasons_event_verbs.sql",
+    // HR-16 end
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
