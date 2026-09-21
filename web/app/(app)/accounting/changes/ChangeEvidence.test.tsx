@@ -7,6 +7,79 @@ import { ChangeEvidence } from "./ChangeEvidence";
 // The test runner uses classic JSX; the production compiler supplies it.
 Object.assign(globalThis, { React });
 
+test("dated checkpoint evidence separates bonus actually taken from its rate and preserves per-vintage methods", () => {
+  const markup = renderToStaticMarkup(<ChangeEvidence taxBasis value={{ buyerVintages: [
+    {
+      checkpointKind: "taken_components", section179: "0.0000", takenBonus: "5250.0000",
+      priorDepreciation: "0.0000", adjustedCarryover: "3750.0000", bonusPercent: "100",
+      shortYearMethod: "simplified",
+    },
+    {
+      checkpointKind: "declared_elections", section179: "1000.0000", takenBonus: null,
+      priorDepreciation: "2000.0000", adjustedCarryover: "7000.0000", bonusPercent: "0",
+      shortYearMethod: "allocation",
+    },
+  ] }} />);
+  for (const fact of [
+    "Carryover checkpoint evidence", "Dated taken §179, bonus, regular MACRS, and remaining",
+    "Declared elections (bonus from allocated percent)", "Bonus depreciation taken (this slice)",
+    "Section 179 depreciation taken (this slice)", "Prior MACRS depreciation (this slice)",
+    "5250.0000", "3750.0000", "1000.0000", "2000.0000", "7000.0000",
+    "Simplified method (Pub 946)", "Allocation method (Rev. Proc. 89-15)",
+  ]) assert.ok(markup.includes(fact), fact);
+  assert.doesNotMatch(markup, />taken_components<|>declared_elections<|>simplified<|>allocation</);
+  assert.match(markup, /Not supplied/);
+});
+
+test("matching evidence preserves signed amounts, deferred balance and the redetermined tax attributes", () => {
+  const markup = renderToStaticMarkup(<ChangeEvidence taxBasis value={{
+    deferredOpening: "40.0000",
+    actualCorrespondingItems: [{ attribute: "section1245_ordinary", amount: "10.0000" }],
+    recomputedCorrespondingItems: [
+      { attribute: "section1245_ordinary", amount: "40.0000" },
+      { attribute: "section1231", amount: "10.0000" },
+    ],
+    actualCorrespondingAmount: "10.0000",
+    recomputedCorrespondingAmount: "50.0000",
+    sellerMatchingItems: [
+      { attribute: "section1245_ordinary", amount: "30.0000" },
+      { attribute: "section1231", amount: "10.0000" },
+    ],
+    sellerMatchingAmount: "40.0000",
+    deferredClosing: "0.0000",
+  }} />);
+  for (const fact of [
+    "Opening deferred intercompany amount", "Recomputed corresponding items for the group",
+    "recognized matching amount", "Closing deferred intercompany amount",
+    "Redetermined tax attribute", "Section 1245 ordinary gain", "Section 1231 gain or loss",
+    "30.0000", "40.0000", "50.0000", "0.0000",
+  ]) assert.ok(markup.includes(fact), fact);
+  assert.doesNotMatch(markup, />section1245_ordinary<|>section1231</);
+  const loss = renderToStaticMarkup(<ChangeEvidence taxBasis value={{
+    sellerMatchingItems: [{ attribute: "ordinary", amount: "-5.0001" }],
+    deferredClosing: "-44.9999",
+  }} />);
+  assert.match(loss, /Ordinary income or deduction/);
+  assert.match(loss, /-5\.0001/);
+  assert.match(loss, /-44\.9999/);
+});
+
+test("an explicitly empty matching read differs from missing evidence and retains unknown statutory attributes", () => {
+  const empty = renderToStaticMarkup(<ChangeEvidence taxBasis value={{
+    actualCorrespondingItems: [], recomputedCorrespondingItems: [], sellerMatchingItems: [],
+  }} />);
+  assert.match(empty, /No corresponding items were taken into account/);
+  assert.match(empty, /No recomputed corresponding items arose/);
+  assert.match(empty, /No seller matching items arose/);
+  const missing = renderToStaticMarkup(<ChangeEvidence taxBasis value={{ sellerMatchingItems: null }} />);
+  assert.match(missing, /Not supplied/);
+  assert.doesNotMatch(missing, /No seller matching items arose/);
+  const unknown = renderToStaticMarkup(<ChangeEvidence taxBasis value={{ attribute: "documented_special_attribute" }} />);
+  assert.match(unknown, /documented_special_attribute/);
+  const ordinaryEvidence = renderToStaticMarkup(<ChangeEvidence value={{ attribute: "section1231" }} />);
+  assert.match(ordinaryEvidence, />section1231</);
+});
+
 test("calendar evidence preserves distinct dates for equal filing labels and distinguishes an empty read set", () => {
   const markup = renderToStaticMarkup(<ChangeEvidence taxBasis names={{ company: "Receiving company" }} value={{
     taxYearWindows: [
