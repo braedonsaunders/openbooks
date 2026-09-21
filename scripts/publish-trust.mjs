@@ -44,6 +44,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { buildConformanceBadge, countsAgree, parseMatrixCounts } from "./trust-badge.mjs";
 
 function flag(name, fallback = null) {
   const index = process.argv.indexOf(`--${name}`);
@@ -198,6 +199,28 @@ if (missing.length > 0) {
 // rejection must not create or touch the output directory either.
 validateProvenance({ conformance, controls, checkpoint, sha });
 
+// The badge and the matrix header are two renderings of one derivation
+// (scripts/trust-badge.mjs): both must state the corpus totals. A matrix
+// refreshed by hand while the badge input comes from an older run — or vice
+// versa — is exactly the drift that left the public badge at 42 passing
+// while the matrix reported 77 passing with 15 gaps. Refuse it here, before
+// the output directory is created or touched, so CI fails instead of
+// publishing a badge whose counts differ from the matrix.
+if (matrixMarkdown) {
+  const header = parseMatrixCounts(matrixMarkdown);
+  if (!header || !countsAgree(header, conformance.totals)) {
+    console.error(
+      `badge/matrix drift: the conformance matrix states ` +
+        `${header ? `${header.pass} passing, ${header.fail} failing, ${header.gap} gaps, ${header.skipped} not run` : "unparseable counts"} ` +
+        `but conformance.json totals are ${conformance.totals.pass} passing, ${conformance.totals.fail} failing, ` +
+        `${conformance.totals.gap} gaps, ${conformance.totals.skipped} not run — refusing to publish a badge ` +
+        `whose counts differ from the matrix. Re-run the conformance corpus ` +
+        `(engine/src/conformance/cli.ts report) so both inputs come from one run; never hand-edit one artefact.`,
+    );
+    process.exit(1);
+  }
+}
+
 // Build the whole bundle in a staging directory next to the destination
 // (same filesystem, so the final rename is atomic). Only a complete,
 // validated bundle is ever swapped in — a crash mid-write leaves the
@@ -208,17 +231,15 @@ const stagedDir = mkdtempSync(join(dirname(outAbs), ".trust-stage-"));
 // -- badges -----------------------------------------------------------------
 // Gaps are reported in the badge message rather than folded into the colour.
 // A published gap is an honest state, not a failure — but it must stay visible.
+// The badge is the second rendering of the same totals the matrix header
+// renders (see scripts/trust-badge.mjs): one derivation, two renderings.
+// The gitSha stamp names the corpus run the badge was derived from, so a
+// later reader can check the badge against the tree instead of trusting it.
 function conformanceBadge() {
   if (!conformance) {
     return { schemaVersion: 1, label: "conformance", message: "unavailable", color: "lightgrey" };
   }
-  const { pass, fail, gap } = conformance.totals;
-  return {
-    schemaVersion: 1,
-    label: "standards conformance",
-    message: fail > 0 ? `${fail} failing` : `${pass} passing, ${gap} gaps`,
-    color: fail > 0 ? "red" : "brightgreen",
-  };
+  return buildConformanceBadge(conformance.totals, sha);
 }
 
 function invariantBadge() {
