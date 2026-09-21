@@ -103,7 +103,7 @@ export async function resolveSubject(
     name = rows[0]?.name ?? null;
   } else if (subjectKind === "position") {
     const rows = (await exec.execute<{ code: string }>(sql`
-      select code from hrm_positions where org_id = ${orgId}::uuid and id = ${subjectId}::uuid
+      select position_code as code from positions where org_id = ${orgId}::uuid and id = ${subjectId}::uuid
     `)).rows;
     name = rows[0]?.code ?? null;
   } else {
@@ -125,7 +125,7 @@ function subjectNameSql(kind: RequirementSubjectKind): ReturnType<typeof sql> {
   if (kind === "equipment") {
     return sql`(select coalesce(e.name, e.serial_number, e.id::text) from equipment_units e where e.org_id = r.org_id and e.id = r.subject_id)`;
   }
-  if (kind === "position") return sql`(select p.code from hrm_positions p where p.org_id = r.org_id and p.id = r.subject_id)`;
+  if (kind === "position") return sql`(select p.position_code from positions p where p.org_id = r.org_id and p.id = r.subject_id)`;
   return sql`(select c.code from hrm_work_classifications c where c.org_id = r.org_id and c.id = r.subject_id)`;
 }
 
