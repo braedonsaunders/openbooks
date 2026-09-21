@@ -12,6 +12,10 @@ import {
   applyTaxAssetBasisReversal,
 } from "@openbooks/engine/src/tax-returns/asset-basis-workpaper.ts";
 import { authorizeChange } from "../../_authorization";
+import {
+  applyTaxMatchingGenerationRepair,
+  applyTaxMatchingReplay,
+} from "@openbooks/engine/src/tax-returns/consolidated-matching-replay.ts";
 export const runtime = "nodejs";
 export async function POST(
   _req: Request,
@@ -38,7 +42,11 @@ export async function POST(
               ? applyTaxAssetBasis
               : gate.operation === "tax_basis_reversal"
                 ? applyTaxAssetBasisReversal
-                : applyAssetChange
+                : gate.operation === "tax_matching_replay"
+                  ? applyTaxMatchingReplay
+                  : gate.operation === "tax_matching_generation_repair"
+                    ? applyTaxMatchingGenerationRepair
+                    : applyAssetChange
         )(gate.auth.user.orgId, id, gate.auth.user.id),
       );
     if (gate.domain === "revenue")

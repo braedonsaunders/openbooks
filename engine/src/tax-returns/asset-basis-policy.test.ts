@@ -36,6 +36,7 @@ import {
   taxWorkpaperBuyerAddition,
   taxWorkpaperSellerDisposition,
   usDispositionProceeds,
+  usStatutoryAmountRealized,
   usRegimeWorkpaperOutcome,
   declaredTaxRegimeFacts,
   validateTaxRegimeBasis,
@@ -360,7 +361,7 @@ test("Pub 544 amount realized is not replaced by the transferred asset's FMV mer
     statutoryProceeds: "1200.00",
     amountRealizedRule: "amount_realized",
   };
-  assert.equal(usDispositionProceeds(related), "1200.00");
+  assert.equal(usDispositionProceeds(related), "1200.0000");
   throwsPolicy(
     () =>
       usDispositionProceeds({
@@ -378,7 +379,7 @@ test("Pub 544 amount realized is not replaced by the transferred asset's FMV mer
       adjustedAmountRealized: "1000.00",
       deemedValueAdjustmentEvidence: "Form 5472 contemporaneous 482 study ref A-19",
     }),
-    "1000.00",
+    "1000.0000",
   );
 });
 
@@ -1741,8 +1742,29 @@ test("buyer-only membership still requires amount realized; without membership p
   assert.equal(taxBasisFieldRequired(field("sellerAdjustedBasis"), buyerMembership), true);
 });
 
+test("declared 4dp proceeds freeze the matching opening before statutory cents rounding", () => {
+  const sale = validateTaxRegimeBasis({
+    ...EXAMPLE4_SALE_FACTS,
+    statutoryProceeds: "130.0001",
+  }, EXAMPLE4_SOURCE);
+  assert.equal(sale.regime, "us_macrs");
+  if (sale.regime !== "us_macrs") return;
+  assert.equal(usDispositionProceeds(sale), "130.0001");
+  assert.equal(usStatutoryAmountRealized("130.0001"), "130.00");
+  const computed = usRegimeWorkpaperOutcome(sale, "intercompany_transfer", "both", {
+    placedInServiceOn: "2025-08-20",
+    recoveryPeriodYears: "5",
+    method: "200_db",
+    convention: "half_year",
+  });
+  assert.equal(computed.amountRealized, "130.00");
+  assert.equal((computed.consolidatedMatching as { deferredOpening: string }).deferredOpening, "50.0001");
+});
+
 test("Example 4 sale validates 100/20/80/50/130 and freezes signed opening separately from carryover", () => {
   const sale = validateTaxRegimeBasis(EXAMPLE4_SALE_FACTS, EXAMPLE4_SOURCE);
+  assert.equal(sale.regime, "us_macrs");
+  if (sale.regime !== "us_macrs") return;
   assert.equal(sale.originalUnadjustedBasis, "100.00");
   assert.equal(sale.priorDepreciation, "20.00");
   assert.equal(sale.carryoverBasis, "80.00");
@@ -1791,6 +1813,8 @@ test("buyer-only Example 4 membership still freezes amount realized and refuses 
     sellerSubsidiaryId: EXAMPLE4_SELLER,
     buyerSubsidiaryId: EXAMPLE4_BUYER,
   });
+  assert.equal(sale.regime, "us_macrs");
+  if (sale.regime !== "us_macrs") return;
   const computed = usRegimeWorkpaperOutcome(sale, "intercompany_transfer", "buyer", {
     placedInServiceOn: "2025-08-20",
     recoveryPeriodYears: "5",

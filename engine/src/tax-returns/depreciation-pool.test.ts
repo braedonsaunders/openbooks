@@ -10,6 +10,7 @@ import {
   fiscalMacrsYearWindow,
   macrsLineageRecoveryWindows,
   macrsOwnershipWindowLoads,
+  originCeasedOnFromParentKey,
   macrsWindowsPreservingAppliedContext,
   lastThreeMonthsStart,
   macrsWindowsThroughFiscalCalendar,
@@ -1298,12 +1299,132 @@ test("an A-to-B-to-C citation set does not flatten overlapping former-owner cale
     asOf: "2026-12-31",
     ownerSubsidiaryId: "C",
     originSubsidiaryId: "A",
+    originCeasedOn: "2025-08-20",
   });
   assert.equal(timelines.recoveryYears.some((row) => row.subsidiaryId === "B"), false);
   assert.ok(timelines.recoveryYears.some((row) => row.yearStart === "2025-01-01" && row.yearEnd === "2025-12-31"));
   assert.deepEqual(timelines.reportingWindows.map((row) => `${row.subsidiaryId}:${row.yearStart}:${row.yearEnd}`), [
     "C:2026-01-01:2026-12-31",
   ]);
+});
+
+test("a first handoff refuses missing original-owner years instead of inventing them", () => {
+  assert.throws(
+    () => macrsLineageRecoveryWindows({
+      windows: [
+        { subsidiaryId: "A", regime: "us_macrs", taxYear: 2023, yearStart: "2023-01-01", yearEnd: "2023-12-31" },
+        { subsidiaryId: "B", regime: "us_macrs", taxYear: 2025, yearStart: "2025-01-01", yearEnd: "2025-12-31" },
+      ],
+      placedInServiceOn: "2023-01-01",
+      transferOn: "2025-08-20",
+      asOf: "2025-12-31",
+      ownerSubsidiaryId: "B",
+      originSubsidiaryId: "A",
+    }),
+    /no tax year window covers 2025-08-20|invent original-owner recovery years/,
+  );
+});
+
+test("an evidenced earlier handoff continues original recovery after the origin ceased", () => {
+  const timelines = macrsLineageRecoveryWindows({
+    windows: [
+      { subsidiaryId: "A", regime: "us_macrs", taxYear: 2023, yearStart: "2023-01-01", yearEnd: "2023-12-31" },
+      { subsidiaryId: "B", regime: "us_macrs", taxYear: 2025, yearStart: "2025-01-01", yearEnd: "2025-12-31" },
+    ],
+    placedInServiceOn: "2023-01-01",
+    transferOn: "2025-08-20",
+    asOf: "2025-12-31",
+    ownerSubsidiaryId: "B",
+    originSubsidiaryId: "A",
+    originCeasedOn: "2023-08-20",
+  });
+  assert.deepEqual(timelines.recoveryYears.map((row) => `${row.subsidiaryId}:${row.yearStart}:${row.yearEnd}`), [
+    "A:2023-01-01:2023-12-31",
+    "A:2024-01-01:2024-12-31",
+    "A:2025-01-01:2025-12-31",
+  ]);
+  assert.deepEqual(timelines.reportingWindows.map((row) => `${row.subsidiaryId}:${row.yearStart}:${row.yearEnd}`), [
+    "B:2025-01-01:2025-12-31",
+  ]);
+});
+
+test("parentKey dates identify the first handoff rather than the latest transfer", () => {
+  assert.equal(
+    originCeasedOnFromParentKey("original:2023-01-01", "2025-08-20"),
+    "2025-08-20",
+  );
+  assert.equal(
+    originCeasedOnFromParentKey(
+      "carryover:2023-01-01:2023-08-20:original:2023-01-01",
+      "2025-08-20",
+    ),
+    "2023-08-20",
+  );
+  assert.equal(
+    originCeasedOnFromParentKey(
+      "carryover:2023-01-01:2025-08-20:carryover:2023-01-01:2023-08-20:original:2023-01-01",
+      "2026-08-20",
+    ),
+    "2023-08-20",
+  );
+});
+
+test("a fiscal year straddling the deemed placement-year end continues recovery from the uncovered tail", () => {
+  const straddling = [
+    { taxYear: 2025, yearStart: "2025-01-01", yearEnd: "2025-06-30" },
+    { taxYear: 2026, yearStart: "2025-07-01", yearEnd: "2026-06-30" },
+  ];
+  const clipped = [
+    { taxYear: 2025, yearStart: "2025-01-01", yearEnd: "2025-12-31" },
+    { taxYear: 2026, yearStart: "2026-01-01", yearEnd: "2026-06-30" },
+  ];
+  const reporting = [{ taxYear: 2026, yearStart: "2026-01-01", yearEnd: "2026-12-31" }];
+  const sellerYear1 = computeMacrsThroughYear({
+    basis: "10000",
+    placedInServiceOn: "2025-01-01",
+    taxYear: 2025,
+    yearStart: "2025-01-01",
+    yearEnd: "2025-12-31",
+    recoveryPeriodYears: 5,
+    method: "200_db",
+    convention: "half_year",
+    bonusPercent: 0,
+    disposedOn: "2025-05-20",
+    dispositionRecognition: "nontaxable",
+    section168i7Kind: "nonrecognition",
+  }, [{ taxYear: 2025, yearStart: "2025-01-01", yearEnd: "2025-12-31" }]);
+  const received = {
+    basis: "10000",
+    placedInServiceOn: "2025-01-01",
+    taxYear: 2026,
+    yearStart: "2026-01-01",
+    yearEnd: "2026-12-31",
+    recoveryPeriodYears: 5 as const,
+    method: "200_db" as const,
+    convention: "half_year" as const,
+    bonusPercent: 0,
+    adjustedCarryover: remainingAfterExact("10000", sellerYear1.current.allowance),
+    carryoverOn: "2025-05-20",
+    section168i7Kind: "nonrecognition" as const,
+    shortYearMethod: "simplified" as const,
+  };
+  const fromStraddle = computeMacrsThroughYear(received, straddling, reporting);
+  const fromClipped = computeMacrsThroughYear(received, clipped, reporting);
+  const year2 = subsequentRecoveryDeduction({
+    method: "200_db",
+    recoveryPeriodYears: "5",
+    originalMacrsBasis: "10000",
+    adjustedBasis: remainingAfterExact(received.adjustedCarryover, formatMoney(mulRatio("2000.00", 8n, 12n), 2)),
+    elapsedMonths: 6,
+    monthsThisYear: 6,
+    shortYearMethod: "simplified",
+  });
+  assert.equal(sellerYear1.current.allowance, formatMoney(mulRatio("2000.00", 4n, 12n), 2));
+  assert.equal(formatMoney(fromStraddle.current.allowance, 4), formatMoney(fromClipped.current.allowance, 4));
+  assert.equal(formatMoney(fromStraddle.current.allowance, 4), formatMoney(year2, 4));
+  assert.equal(formatMoney(year2, 4), "1600.0000");
+  assert.ok(cmp(fromStraddle.current.allowance, "0") > 0,
+    "Jan–Jun 2026 is recovery year 2, not a skipped remainder of the deemed first year");
 });
 
 test("a split 4dp checkpoint survives refresh without rounding remaining to 2dp", () => {

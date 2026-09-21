@@ -25,7 +25,7 @@
  */
 
 import { add, cmp, formatMoney, fromUnits, mulDecimal, mulDecimalFactors, mulPercent, mulRatio, neg, normalizeMoney, roundDiv, roundMoney, sum, toUnits } from "../money/money.ts";
-import { splitMoneyProportionally } from "../money/allocate-proportional.ts";
+import { cumulativeMoneyAllocation } from "../money/allocate-proportional.ts";
 import { macrsOpeningTakenComponents } from "./asset-basis-policy.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { taxConventionHalfMonths } from "../assets/depreciation-conventions.ts";
@@ -779,18 +779,67 @@ function coverSingleCalendar(
   for (const next of ordered) {
     if (next.yearStart < origin.yearStart) continue;
     if (next.yearStart === cursor.yearStart && next.yearEnd === cursor.yearEnd) continue;
+    if (throughOn <= cursor.yearEnd) break;
     if (next.yearStart <= cursor.yearEnd) {
       throw new Error(
         `tax year windows overlap ${cursor.yearStart}–${cursor.yearEnd} and ${next.yearStart}–${next.yearEnd}; correct the declared years — do not min/max them together`,
       );
     }
-    if (nextCalendarDay(cursor.yearEnd) !== next.yearStart) break;
+    if (nextCalendarDay(cursor.yearEnd) !== next.yearStart) {
+      throw new Error(
+        `tax year windows gap between ${cursor.yearEnd} and ${next.yearStart}; declare the missing tax year — do not invent original-owner recovery years before the evidenced transfer`,
+      );
+    }
     span.push(next);
     cursor = next;
-    if (throughOn <= cursor.yearEnd) break;
   }
-  const until = throughOn <= cursor.yearEnd ? throughOn : cursor.yearEnd;
-  return assertMacrsWindowsCover(span, fromOn, until).filter((row) => row.yearStart <= throughOn);
+  if (throughOn > cursor.yearEnd) {
+    throw new Error(
+      `no tax year window covers ${throughOn}; declare the original-owner tax year through that date — do not invent original-owner recovery years before the evidenced transfer`,
+    );
+  }
+  return assertMacrsWindowsCover(span, fromOn, throughOn).filter((row) => row.yearStart <= throughOn);
+}
+
+/** Earliest received-vintage transfer in parentKey. That is when the original
+ *  placement subsidiary ceased; later hops keep transferOn for the current
+ *  owner. A parentKey of `original:…` is a first handoff. */
+export function originCeasedOnFromParentKey(
+  parentKey: string | null | undefined,
+  transferOn: string | null | undefined,
+): string | null {
+  if (!transferOn) return null;
+  if (!parentKey) return transferOn;
+  const prior: string[] = [];
+  const token = /(?:carryover|excess|taxable_cost):(\d{4}-\d{2}-\d{2}):(\d{4}-\d{2}-\d{2})/g;
+  for (const match of parentKey.matchAll(token)) prior.push(match[2]!);
+  if (prior.length === 0) return transferOn;
+  prior.sort();
+  return prior[0]!;
+}
+
+function originHistoryThroughOn(args: {
+  placedInServiceOn: string;
+  transferOn: string;
+  originCeasedOn?: string | null;
+}): string {
+  if (args.originCeasedOn == null || args.originCeasedOn === "") return args.transferOn;
+  if (!parseCalendarDay(args.originCeasedOn)) {
+    throw new Error(
+      `originCeasedOn ${args.originCeasedOn} must be a calendar date; identify the evidenced first handoff — do not infer it from calendar overlap`,
+    );
+  }
+  if (args.originCeasedOn < args.placedInServiceOn) {
+    throw new Error(
+      `originCeasedOn ${args.originCeasedOn} is before original placement ${args.placedInServiceOn}; identify the evidenced first handoff`,
+    );
+  }
+  if (args.originCeasedOn > args.transferOn) {
+    throw new Error(
+      `originCeasedOn ${args.originCeasedOn} is after the current transfer ${args.transferOn}; the original owner cannot cease after a later hop`,
+    );
+  }
+  return args.originCeasedOn;
 }
 
 /** Recovery years from original placement through asOf, plus the receiver
@@ -804,6 +853,12 @@ export function macrsLineageRecoveryWindows(args: {
   asOf: string;
   ownerSubsidiaryId?: string;
   originSubsidiaryId?: string;
+  /** Date the original-placement subsidiary ceased owning this vintage.
+   *  Omitted means transferOn is the first handoff and origin actual years
+   *  must cover through that date. An earlier evidenced hop allows statutory
+   *  continuation after that date without requiring former-owner years it
+   *  no longer owned. */
+  originCeasedOn?: string | null;
 }): MacrsLineageTimelines {
   const ordered = [...args.windows].sort((left, right) =>
     left.yearStart.localeCompare(right.yearStart) || left.yearEnd.localeCompare(right.yearEnd),
@@ -825,15 +880,20 @@ export function macrsLineageRecoveryWindows(args: {
     return { recoveryYears: covered, reportingWindows: covered };
   }
   if (originCalendar.length === 0) {
-    const calendar = ownerWindows.length > 0 ? ownerWindows : ordered;
-    const covered = assertMacrsWindowsCover(calendar, args.placedInServiceOn, args.asOf);
-    return { recoveryYears: covered, reportingWindows: covered };
+    throw new Error(
+      `no tax year window covers ${args.placedInServiceOn} for the original placement subsidiary; declare the transferor tax year through the evidenced ownership — do not invent original-owner recovery years or restart recovery at the transfer`,
+    );
   }
+  const historyThrough = originHistoryThroughOn({
+    placedInServiceOn: args.placedInServiceOn,
+    transferOn: args.transferOn,
+    originCeasedOn: args.originCeasedOn,
+  });
   const historySpan = coverSingleCalendar(
     originCalendar,
     args.placedInServiceOn,
-    args.transferOn,
-  ).filter((row) => row.yearStart <= args.transferOn!);
+    historyThrough,
+  ).filter((row) => row.yearStart <= historyThrough);
   const recoveryYears = continueOriginalRecoveryYears(historySpan, originCalendar, args.asOf);
   const ownerCalendar = ownerWindows.length > 0 ? ownerWindows : ordered;
   const ownerIntersect = ownerCalendar.filter((row) =>
@@ -1292,7 +1352,7 @@ function splitAppliedComponents(
   if (cmp(requested, "0") === 0) {
     return { section179: "0.0000", bonus: "0.0000", macrs: "0.0000" };
   }
-  const parts = splitMoneyProportionally([
+  const parts = cumulativeMoneyAllocation([
     { key: "bonus", amount: formatMoney(applied.bonus, 4) },
     { key: "macrs", amount: formatMoney(applied.macrs, 4) },
     { key: "section179", amount: formatMoney(applied.section179, 4) },
@@ -1531,11 +1591,18 @@ export function computeMacrsThroughYear(
       break;
     }
     if (input.placedInServiceOn > window.yearEnd) continue;
-    if (statutoryAllocatedThrough && window.yearStart <= statutoryAllocatedThrough) {
+    if (statutoryAllocatedThrough && window.yearEnd <= statutoryAllocatedThrough) {
       if (index === currentIndex) skippedCurrentWindow = window;
       continue;
     }
-    if (input.disposedOn && input.disposedOn < window.yearStart) {
+    const walkStart = statutoryAllocatedThrough && window.yearStart <= statutoryAllocatedThrough
+      ? nextCalendarDay(statutoryAllocatedThrough)
+      : window.yearStart;
+    const walkEnd = window.yearEnd;
+    if (statutoryAllocatedThrough && window.yearStart <= statutoryAllocatedThrough) {
+      statutoryAllocatedThrough = null;
+    }
+    if (input.disposedOn && input.disposedOn < walkStart) {
       const gone = postDisposalZero();
       if (index === currentIndex - 1) prior = gone;
       if (index === currentIndex) {
@@ -1546,14 +1613,14 @@ export function computeMacrsThroughYear(
     }
     const firstServiceYear = serviceYears === 0;
     if (vintageShortSeen) yearsSinceVintageShort += 1;
-    const short = isShortTaxYear(window.yearStart, window.yearEnd);
+    const short = isShortTaxYear(walkStart, walkEnd);
     const afterShortYear = vintageShortSeen || (short && !firstServiceYear);
     const followYear = yearsSinceVintageShort === 1;
-    const preTransfer = !!(checkpoint && carryoverOn && window.yearEnd < carryoverOn);
+    const preTransfer = !!(checkpoint && carryoverOn && walkEnd < carryoverOn);
     const excludedTerminalMonth = input.convention === "half_year" && adjacentShortYearExclusion(ordered, index);
     const hyContext = excludedTerminalMonth ? { excludedTerminalMonth: true } : undefined;
-    const windowFactor = impliedShortYearFactor(window.yearStart, window.yearEnd, hyContext);
-    const exclusiveMonths = shortTaxYearMonthsExact(window.yearStart, window.yearEnd, hyContext);
+    const windowFactor = impliedShortYearFactor(walkStart, walkEnd, hyContext);
+    const exclusiveMonths = shortTaxYearMonthsExact(walkStart, walkEnd, hyContext);
     const openingCheckpoint = checkpoint && !preTransfer
       ? persistMacrsBasis(add(checkpoint, neg(postTransferTaken)))
       : undefined;
@@ -1561,18 +1628,18 @@ export function computeMacrsThroughYear(
       ? carryoverOn
       : input.dispositionRecognition === "nontaxable" ? input.disposedOn ?? null : null;
     const placementThisWindow =
-      input.placedInServiceOn >= window.yearStart && input.placedInServiceOn <= window.yearEnd;
+      input.placedInServiceOn >= walkStart && input.placedInServiceOn <= walkEnd;
     const transferThisWindow = !!(
       transferOn
-      && transferOn > window.yearStart
-      && transferOn <= window.yearEnd
+      && transferOn > walkStart
+      && transferOn <= walkEnd
       && input.placedInServiceOn < transferOn
     );
     const sameYear168i7 = !!(placementThisWindow && transferThisWindow);
     const allocBounds = shortPlacementYearAllocationBounds(
       input.placedInServiceOn,
-      window.yearStart,
-      window.yearEnd,
+      walkStart,
+      walkEnd,
     );
     const usesDeemedFullPlacementYear = !!(
       sameYear168i7
@@ -1586,8 +1653,8 @@ export function computeMacrsThroughYear(
     const yearContext = {
       ...input,
       taxYear: window.taxYear,
-      yearStart: window.yearStart,
-      yearEnd: window.yearEnd,
+      yearStart: walkStart,
+      yearEnd: walkEnd,
       excludedTerminalMonth,
       recoveryYearIndex: serviceYears,
       placedMonth: frozenPlacedMonth,
@@ -1598,7 +1665,7 @@ export function computeMacrsThroughYear(
       shortYearMonths: exclusiveMonths,
       adjustedBasisAtYearStart: afterShortYear ? (openingCheckpoint ?? adjusted) : undefined,
       deemedPlacedOn: deemedPlacedOn ?? undefined,
-      shortYearFactor: excludedTerminalMonth
+      shortYearFactor: excludedTerminalMonth || walkStart !== window.yearStart
         ? windowFactor
         : index === currentIndex ? input.shortYearFactor : windowFactor,
       disposedOn: sameYear168i7 ? undefined : input.disposedOn,
@@ -1693,8 +1760,8 @@ export function computeMacrsThroughYear(
         buyer: !!checkpoint,
         fullyDisposed: !!(
           input.disposedOn
-          && input.disposedOn >= window.yearStart
-          && input.disposedOn <= window.yearEnd
+          && input.disposedOn >= walkStart
+          && input.disposedOn <= walkEnd
         ),
       });
       if (checkpoint) postTransferTaken = formatMoney(add(postTransferTaken, applied.allowance), 4);
@@ -1712,8 +1779,8 @@ export function computeMacrsThroughYear(
         statutory = residual;
       }
       const appliedTake = input.disposedOn
-        && input.disposedOn >= window.yearStart
-        && input.disposedOn <= window.yearEnd
+        && input.disposedOn >= walkStart
+        && input.disposedOn <= walkEnd
         ? { take: statutoryDeductionCappedAtRemaining(statutory, opening), remaining: "0.0000" }
         : applyStatutoryDeductionToRemaining(opening, statutory);
       applied = {
@@ -1730,8 +1797,8 @@ export function computeMacrsThroughYear(
     appliedYears.push({
       window,
       applied,
-      heldStart: checkpoint && transferThisWindow ? transferOn! : window.yearStart,
-      heldEnd: sameYear168i7 ? allocBounds.yearEnd : window.yearEnd,
+      heldStart: checkpoint && transferThisWindow ? transferOn! : walkStart,
+      heldEnd: sameYear168i7 ? allocBounds.yearEnd : walkEnd,
       preTransfer: false,
     });
     if (index === currentIndex - 1) prior = applied;
@@ -1980,10 +2047,11 @@ export function refreshOpenMacrsVintageThrough(
     section168i7Kind?: "nonrecognition" | "partnership_721_prior_interest" | "consolidated_group" | null;
     checkpointKind?: "taken_components" | "declared_elections";
     takenBonus?: string | null;
+    parentKey?: string | null;
   },
   windows: readonly MacrsYearWindow[],
   asOf: string,
-  opts?: { ownerSubsidiaryId?: string; originSubsidiaryId?: string },
+  opts?: { ownerSubsidiaryId?: string; originSubsidiaryId?: string; originCeasedOn?: string | null },
 ): {
   checkpointKind: "taken_components";
   section179: string;
@@ -2000,6 +2068,8 @@ export function refreshOpenMacrsVintageThrough(
     asOf,
     ownerSubsidiaryId: opts?.ownerSubsidiaryId,
     originSubsidiaryId: opts?.originSubsidiaryId,
+    originCeasedOn: opts?.originCeasedOn
+      ?? originCeasedOnFromParentKey(vintage.parentKey, received ? vintage.transferOn : null),
   });
   const covering = reportingWindows.find((row) => asOf >= row.yearStart && asOf <= row.yearEnd)
     ?? recoveryYears.find((row) => asOf >= row.yearStart && asOf <= row.yearEnd);
@@ -2034,20 +2104,55 @@ export function refreshOpenMacrsVintageThrough(
     carryoverOn: received ? vintage.transferOn ?? undefined : undefined,
   }, recoveryYears, reportingWindows);
   const openingOfWindow = asOf < covering.yearEnd && (
-    vintage.section168i7Kind === "consolidated_group" || received
+    vintage.section168i7Kind === "consolidated_group"
+    || (received && vintage.convention === "half_year")
   );
+  const heldStart = received && vintage.transferOn && vintage.transferOn > covering.yearStart
+    ? vintage.transferOn
+    : covering.yearStart;
+  const currentTake = openingOfWindow
+    ? formatMoney("0", 4)
+    : received && asOf < covering.yearEnd
+      ? allocateAmountThrough(
+        walked.current.allowance,
+        heldStart,
+        covering.yearEnd,
+        asOf,
+      )
+      : formatMoney(walked.current.allowance, 4);
   const remaining = persistMacrsBasis(
-    openingOfWindow
-      ? walked.prior.remainingBasis
+    received && asOf < covering.yearEnd && !openingOfWindow
+      ? remainingAfterExact(
+        walked.prior.remainingBasis,
+        cmp(currentTake, walked.prior.remainingBasis) > 0
+          ? walked.prior.remainingBasis
+          : currentTake,
+      )
       : applyStatutoryDeductionToRemaining(
         walked.prior.remainingBasis,
-        walked.current.allowance,
+        currentTake,
       ).remaining,
   );
   const original = mulPercent(persistMacrsBasis(vintage.unadjustedBasis), vintage.businessUsePercent);
-  const walkSection179 = takenThroughCutoff(walked.takenSection179, walked.current.section179, openingOfWindow);
-  const walkBonus = takenThroughCutoff(walked.takenBonus, walked.current.bonus, openingOfWindow);
-  const walkMacrs = takenThroughCutoff(walked.takenMacrs, walked.current.macrs, openingOfWindow);
+  const takeForParts = formatMoney(add(walked.prior.remainingBasis, neg(remaining)), 4);
+  const currentParts = cumulativeMoneyAllocation([
+    { key: "bonus", amount: formatMoney(walked.current.bonus, 4) },
+    { key: "macrs", amount: formatMoney(walked.current.macrs, 4) },
+    { key: "section179", amount: formatMoney(walked.current.section179, 4) },
+  ], takeForParts);
+  const takenPart = (key: string) => currentParts.find((row) => row.key === key)?.take ?? "0.0000";
+  const walkSection179 = formatMoney(add(
+    takenThroughCutoff(walked.takenSection179, walked.current.section179, true),
+    takenPart("section179"),
+  ), 4);
+  const walkBonus = formatMoney(add(
+    takenThroughCutoff(walked.takenBonus, walked.current.bonus, true),
+    takenPart("bonus"),
+  ), 4);
+  const walkMacrs = formatMoney(add(
+    takenThroughCutoff(walked.takenMacrs, walked.current.macrs, true),
+    takenPart("macrs"),
+  ), 4);
   let section179 = walkSection179;
   let takenBonus = walkBonus;
   let prior = walkMacrs;

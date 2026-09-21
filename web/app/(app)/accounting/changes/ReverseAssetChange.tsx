@@ -97,8 +97,11 @@ export function ReverseAssetChange({
           ) : taxBasis ? (
             <p>
               The correction uses the original workpaper date ({effectiveOn}).
-              Any affected tax depreciation runs must be recomputed through the
-              tax workflow after approval.
+              Apply a replacement tax basis workpaper after this reversal.
+              If earlier consolidated matching periods were posted, open the
+              replacement in Accounting changes to review and approve its tax
+              matching replay. Re-run the latest computed year from Fixed Assets
+              tax pools; earlier computed years cannot be overwritten.
             </p>
           ) : (
             <p>

@@ -16,6 +16,7 @@ import {
   existingFinancialChange,
   loadFinancialChange,
   proposeFinancialChange,
+  type FinancialChange,
 } from "../platform/financial-changes.ts";
 import {
   TAX_BASIS_SOURCE_KINDS,
@@ -80,6 +81,10 @@ import {
   taxYearWindowEvidence,
   type TaxYearWindowEvidence,
 } from "./macrs-calendar.ts";
+import {
+  assertRequiredMatchingReplayBeforeReversal,
+  TaxMatchingReplayError,
+} from "./consolidated-matching-replay.ts";
 
 export class TaxAssetBasisError extends Error {
   readonly name = "TaxAssetBasisError";
@@ -1445,6 +1450,28 @@ export async function proposeTaxAssetBasisReversal(
   }
   return withOrg(orgId, () =>
     withTransactionSavepoint(db, async () => {
+      // Seed the complete entity fence without taking the shared source row.
+      // Replay and reversal apply take this fence before that row; acquiring
+      // it here in the opposite order deadlocks those authorized operations.
+      const seed = (await db.execute<FinancialChange>(sql`
+        select *, effective_on::text as effective_on from financial_changes
+         where org_id=${orgId} and id=${sourceChangeId}`)).rows[0];
+      if (!seed) throw new TaxAssetBasisError("financial change not found");
+      if (seed.domain !== "asset" || seed.operation !== "tax_basis" || seed.status !== "applied") {
+        throw new TaxAssetBasisError("select an applied tax basis workpaper to reverse");
+      }
+      const seedRequired = (seed.payload.requiredSubsidiaryIds as string[] | undefined) ?? [
+        seed.subsidiary_id,
+      ];
+      await assertFinancialChangeAccess(db, {
+        orgId,
+        actorId,
+        subsidiaryIds: seedRequired,
+        permission: "assets.manage",
+        feature: "fixedAssets",
+      });
+      const fence = [...new Set([...seedRequired, seed.subsidiary_id])].sort();
+      await lockAssetTaxLifecycle(db, orgId, fence);
       const source = await loadFinancialChange(db, orgId, sourceChangeId);
       if (source.domain !== "asset" || source.operation !== "tax_basis" || source.status !== "applied") {
         throw new TaxAssetBasisError("select an applied tax basis workpaper to reverse");
@@ -1452,6 +1479,11 @@ export async function proposeTaxAssetBasisReversal(
       const required = (source.payload.requiredSubsidiaryIds as string[] | undefined) ?? [
         source.subsidiary_id,
       ];
+      if ([...required, source.subsidiary_id].some((id) => !fence.includes(id))) {
+        throw new TaxAssetBasisError(
+          "the tax workpaper legal-entity scope changed while preparing its reversal; reload the applied workpaper before proposing again",
+        );
+      }
       await assertFinancialChangeAccess(db, {
         orgId,
         actorId,
@@ -1459,7 +1491,6 @@ export async function proposeTaxAssetBasisReversal(
         permission: "assets.manage",
         feature: "fixedAssets",
       });
-      await lockAssetTaxLifecycle(db, orgId, required);
       const papers = (
         await db.execute<{ id: string }>(sql`
           select id from tax_asset_basis_workpapers
@@ -1493,6 +1524,12 @@ export async function proposeTaxAssetBasisReversal(
       if (already) throw new TaxAssetBasisError("this tax basis workpaper has already been reversed");
       if (!papers.length) {
         throw new TaxAssetBasisError("the original tax basis workpaper evidence is missing");
+      }
+      try {
+        await assertRequiredMatchingReplayBeforeReversal(db, orgId, papers.map((row) => row.id));
+      } catch (error) {
+        if (error instanceof TaxMatchingReplayError) throw new TaxAssetBasisError(error.message);
+        throw error;
       }
       return proposeFinancialChange(db, {
         ...args,
@@ -1556,6 +1593,12 @@ export async function applyTaxAssetBasisReversal(
       }
       if (!papers.length) {
         throw new TaxAssetBasisError("the original tax basis workpaper evidence is missing");
+      }
+      try {
+        await assertRequiredMatchingReplayBeforeReversal(db, orgId, papers.map((row) => row.id));
+      } catch (error) {
+        if (error instanceof TaxMatchingReplayError) throw new TaxAssetBasisError(error.message);
+        throw error;
       }
       const closed = await db.execute(sql`
         update tax_asset_basis_workpapers

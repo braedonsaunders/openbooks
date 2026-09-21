@@ -9,6 +9,22 @@ import { CONSOLIDATED_MEMBERSHIP_IDENTITY } from "@openbooks/engine/src/tax-retu
 // The test runner uses classic JSX; the production compiler supplies it.
 Object.assign(globalThis, { React });
 
+test("matching replay evidence shows the cited and replacement periods without computing or editing them", () => {
+  const markup = renderToStaticMarkup(<ChangeEvidence taxBasis value={{
+    replacementOpening: "50.0001", latestPoolYearStart: "2027-01-01",
+    historical: [{ yearStart: "2026-01-01", yearEnd: "2026-06-30", actualDeduction: "7.5000", recomputedDeduction: "5.0000" }],
+    replayedPeriods: [{ yearStart: "2026-01-01", yearEnd: "2026-06-30", priorMatchingPeriodId: "prior-period",
+      deferredOpening: "50.0001", sellerMatchingAmount: "2.5000", deferredClosing: "47.5001" }],
+    replayedPeriodIds: ["new-period"],
+  }} />);
+  for (const fact of ["Replacement opening deferred intercompany amount", "Cited historical matching periods",
+    "Replacement matching periods", "Original matching period reference", "Appended matching period references",
+    "50.0001", "47.5001", "2.5000", "2026-01-01", "2026-06-30", "prior-period", "new-period"]) {
+    assert.ok(markup.includes(fact), fact);
+  }
+  assert.doesNotMatch(markup, /<(?:input|select|button)\b/);
+});
+
 test("membership evidence names the source entities and period separately from deferred gain and carryover", () => {
   const sellerId = "11111111-1111-4111-8111-111111111111";
   const buyerId = "22222222-2222-4222-8222-222222222222";

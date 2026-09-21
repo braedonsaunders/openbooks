@@ -287,6 +287,20 @@ export interface TaxAssetBasisReversalInput {
   idempotencyKey: string;
 }
 
+/** tax_matching_replay has no operator-typed period UUIDs. Preview stamps
+ *  the exact earlier historical rows; POST must send that set back. */
+export const TAX_MATCHING_REPLAY_OPERATION = "tax_matching_replay";
+/** Authorized hop over an empty reversed generation. Ordinary replay still
+ *  cites only the immediately reversed paper. */
+export const TAX_MATCHING_GENERATION_REPAIR_OPERATION = "tax_matching_generation_repair";
+
+export interface TaxMatchingReplayInput {
+  replacementWorkpaperChangeId: string;
+  citedHistoricalPeriodIds: string[];
+  reason: string;
+  idempotencyKey: string;
+}
+
 /**
  * Which classified party a regime workpaper is for. Derived from the seller
  * and receiving assets' tax classification — not an operator election.
@@ -588,35 +602,6 @@ const US_SELLER_ORIGINAL_DECLARATION: TaxBasisFieldPredicate = {
     { not: { usSellerMacrsStatus: "history_refused" } },
   ],
 };
-/** Seller first declaration, or buyer nontaxable carryover before seller
- *  history is ready. Once vintages are ready the header original is derived. */
-const US_ORIGINAL_STATUTORY: TaxBasisFieldPredicate = {
-  any: [
-    US_SELLER_ORIGINAL_DECLARATION,
-    {
-      all: [
-        BUYER,
-        { fieldEquals: { name: "recognition", values: ["nontaxable"] } },
-        { not: { usSellerMacrsStatus: "ready" } },
-      ],
-    },
-  ],
-};
-/** Seller first declaration, or buyer nontaxable carryover before seller
- *  history is ready. Ready history freezes date/method/convention/recovery
- *  per disposed vintage — do not retype a composite header. */
-const US_TRANSFEROR_HISTORY: TaxBasisFieldPredicate = {
-  any: [
-    US_SELLER_ORIGINAL_DECLARATION,
-    {
-      all: [
-        BUYER,
-        { fieldEquals: { name: "recognition", values: ["nontaxable"] } },
-        { not: { usSellerMacrsStatus: "ready" } },
-      ],
-    },
-  ],
-};
 const US_SELLER_SPLIT_AMOUNTS: TaxBasisFieldPredicate = {
   all: [SELLER, { not: { usSellerMacrsStatus: "history_refused" } }],
 };
@@ -624,6 +609,30 @@ const US_SELLER_SPLIT_AMOUNTS: TaxBasisFieldPredicate = {
  *  not zero. Ready seller history derives these per disposed vintage. */
 const US_SECTION_168I7: TaxBasisFieldPredicate = {
   fieldEquals: { name: "section168i7Kind", values: [...US_SECTION_168I7_KINDS] },
+};
+/** Historical elections on a §168(i)(7) carryover slice, including Example 4
+ *  sales that keep carryover-to-seller-basis plus excess newly placed. */
+const US_CARRYOVER_ELECTIONS: TaxBasisFieldPredicate = {
+  all: [
+    BUYER,
+    { not: { usSellerMacrsStatus: "ready" } },
+    { any: [
+      { fieldEquals: { name: "recognition", values: ["nontaxable"] } },
+      US_SECTION_168I7,
+    ] },
+  ],
+};
+/** Seller first declaration, or buyer carryover (nontaxable or taxable
+ *  §168(i)(7)) before seller history is ready. Once vintages are ready the
+ *  header original is derived. */
+const US_ORIGINAL_STATUTORY: TaxBasisFieldPredicate = {
+  any: [US_SELLER_ORIGINAL_DECLARATION, US_CARRYOVER_ELECTIONS],
+};
+/** Seller first declaration, or buyer carryover before seller history is
+ *  ready. Ready history freezes date/method/convention/recovery per disposed
+ *  vintage — do not retype a composite header. */
+const US_TRANSFEROR_HISTORY: TaxBasisFieldPredicate = {
+  any: [US_SELLER_ORIGINAL_DECLARATION, US_CARRYOVER_ELECTIONS],
 };
 /** Operator-declared 1.1502-13 membership on an intercompany transfer.
  *  Not inferred from related-person status, §168(i)(7), or sales-tax groups. */
@@ -645,19 +654,6 @@ const US_AMOUNT_REALIZED_FACTS: TaxBasisFieldPredicate = {
     },
   ],
 };
-/** Historical elections on a §168(i)(7) carryover slice, including Example 4
- *  sales that keep carryover-to-seller-basis plus excess newly placed. */
-const US_CARRYOVER_ELECTIONS: TaxBasisFieldPredicate = {
-  all: [
-    BUYER,
-    { not: { usSellerMacrsStatus: "ready" } },
-    { any: [
-      { fieldEquals: { name: "recognition", values: ["nontaxable"] } },
-      US_SECTION_168I7,
-    ] },
-  ],
-};
-
 function labeledChoices<T extends string>(
   values: readonly T[],
   labels: Record<T, string>,
@@ -1028,7 +1024,7 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     kind: "decimal",
     visibleWhen: { all: [{ regime: "us_macrs" }, US_ORIGINAL_STATUTORY] },
     requiredWhen: { all: [{ regime: "us_macrs" }, US_ORIGINAL_STATUTORY] },
-    help: "Required on the first seller declaration and on a buyer-only nontaxable carryover. After frozen seller history is ready, the server derives this as the sum of open vintage unadjusted bases — do not invent a composite vintage.",
+    help: "Required on the first seller declaration and on a buyer-only carryover, including a taxable §168(i)(7) sale. After frozen seller history is ready, the server derives this as the sum of open vintage unadjusted bases — do not invent a composite vintage.",
   },
   {
     name: "remainingUnadjustedBasis",
@@ -2965,14 +2961,17 @@ export function usRegimeWorkpaperOutcome(
         businessUsePercent: null,
         priorDepreciation: null,
       };
-  const amountRealized = (seller && taxable) || row.consolidatedGroupMembership
+  const declaredAmountRealized = (seller && taxable) || row.consolidatedGroupMembership
     ? usDispositionProceeds(row)
     : null;
+  const amountRealized = declaredAmountRealized == null
+    ? null
+    : usStatutoryAmountRealized(declaredAmountRealized);
   let consolidatedMatchingFreeze: ReturnType<typeof freezeUsConsolidatedMatching> = null;
   try {
     consolidatedMatchingFreeze = freezeUsConsolidatedMatching({
       membership: row.consolidatedGroupMembership,
-      amountRealized,
+      amountRealized: declaredAmountRealized,
       sellerAdjustedBasis: row.sellerAdjustedBasis,
     });
   } catch (error) {
@@ -3079,6 +3078,9 @@ export function taxWorkpaperBuyerAddition(
 
 /** Pub 544 amount realized: money + FMV of other property/services + assumed
  *  liabilities. Related status does not substitute the transferred asset's FMV.
+ *  Returns the declared exact (≤4dp). Statutory cents rounding is
+ *  `usStatutoryAmountRealized` — the 1.1502-13 opening must not lose a
+ *  declared ten-thousandth before matching.
  *  https://www.irs.gov/publications/p544 */
 export function usDispositionProceeds(row: UsMacrsRegimeBasis): string {
   const rule = row.amountRealizedRule ?? "amount_realized";
@@ -3088,9 +3090,15 @@ export function usDispositionProceeds(row: UsMacrsRegimeBasis): string {
         "a §482 or other deemed-value adjustment requires independent evidence; related-person status is not that evidence and does not substitute the transferred asset's FMV for Pub 544 amount realized",
       );
     }
-    return formatMoney(requireMoney(row as unknown as TaxBasisDraft, "adjustedAmountRealized"), 2);
+    return formatMoney(requireMoney(row as unknown as TaxBasisDraft, "adjustedAmountRealized"), 4);
   }
-  return formatMoney(requireMoney(row as unknown as TaxBasisDraft, "statutoryProceeds"), 2);
+  return formatMoney(requireMoney(row as unknown as TaxBasisDraft, "statutoryProceeds"), 4);
+}
+
+/** Documented statutory output boundary for Pub 544 amount realized (cents).
+ *  Matching and seller-adjusted basis stay on the declared 4dp ledger. */
+export function usStatutoryAmountRealized(declared: string): string {
+  return formatMoney(declared, 2);
 }
 
 export function usBuyerSection179Allowed(row: UsMacrsRegimeBasis): boolean {

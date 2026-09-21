@@ -26,7 +26,8 @@ const hooks = registerHooks({
       specifier === "@openbooks/engine/src/assets/asset-change-reversals.ts" ||
       specifier === "@openbooks/engine/src/revenue/lease-changes.ts" ||
       specifier === "@openbooks/engine/src/revenue/contract-modifications.ts" ||
-      specifier === "@openbooks/engine/src/tax-returns/asset-basis-workpaper.ts"
+      specifier === "@openbooks/engine/src/tax-returns/asset-basis-workpaper.ts" ||
+      specifier === "@openbooks/engine/src/tax-returns/consolidated-matching-replay.ts"
     )
       return { shortCircuit: true, url: "mock:tax-basis-action-commands" };
     if (specifier === "@/lib/api/json")
@@ -64,6 +65,13 @@ const hooks = registerHooks({
         export const proposeAssetReversal=(...a)=>run('assetReverse',...a);
         export const applyLeaseChange=(...a)=>run('lease',...a);
         export const applyRevenueModification=(...a)=>run('revenue',...a);
+        export const applyTaxMatchingReplay=(...a)=>run('matchingReplay',...a);
+        export const applyTaxMatchingGenerationRepair=(...a)=>run('matchingGenerationRepair',...a);
+        export async function proposeTaxMatchingReplayReversal(){
+          const s=globalThis[Symbol.for('tax-basis-actions')];
+          s.calls.push({command:'matchingReplayReverse',args:[]});
+          throw new Error('posted matching replay cannot be unwritten; reverse the replacement tax basis workpaper');
+        }
         export const applyTaxAssetBasis=(...a)=>run('tax',...a);
         export const applyTaxAssetBasisReversal=(...a)=>run('taxReverse',...a);
         export const proposeTaxAssetBasisReversal=(...a)=>run('proposeTaxReverse',...a);
@@ -173,5 +181,38 @@ test("a tax refusal survives the boundary and denied authorization calls no comm
   state.calls = [];
   assert.equal((await apply.POST(request(), context)).status, 403);
   assert.equal((await reverse.POST(request({}), context)).status, 403);
+  assert.equal(state.calls.length, 0);
+});
+
+
+test("matching generation repair dispatch never falls through to asset changes", async () => {
+  state.operation = "tax_matching_generation_repair";
+  const response = await apply.POST(request(), context);
+  assert.equal(response.status, 200);
+  assert.deepEqual(state.calls, [{ command: "matchingGenerationRepair", args: ["org", "source-change", "actor"] }]);
+});
+
+test("matching replay dispatch never falls through to asset changes and keeps the authenticated identity", async () => {
+  state.operation = "tax_matching_replay";
+  const response = await apply.POST(request(), context);
+  assert.equal(response.status, 200);
+  assert.deepEqual(state.calls, [{ command: "matchingReplay", args: ["org", "source-change", "actor"] }]);
+  state.refusal = "Reload the replacement workpaper: historical periods changed";
+  assert.equal((await apply.POST(request(), context)).status, 422);
+});
+
+test("matching replay reversal raises its permanent-history remedy without selecting a reversal date", async () => {
+  state.operation = "tax_matching_replay";
+  const input = { reason: "Correct the replacement workpaper", idempotencyKey: "matching-reversal" };
+  const response = await reverse.POST(request(input), context);
+  assert.equal(response.status, 422);
+  assert.match((await response.json()).error, /posted matching replay cannot be unwritten; reverse the replacement tax basis workpaper/);
+  assert.deepEqual(state.calls, [{ command: "matchingReplayReverse", args: [] }]);
+  state.calls = [];
+  assert.equal((await reverse.POST(request({ ...input, effectiveOn: "2027-01-01" }), context)).status, 422);
+  assert.equal(state.calls.length, 0, "a client date cannot route a tax matching replay into ordinary asset reversal");
+  state.allowed = false;
+  assert.equal((await reverse.POST(request(input), context)).status, 403);
+  assert.equal((await apply.POST(request(), context)).status, 403);
   assert.equal(state.calls.length, 0);
 });

@@ -216,3 +216,37 @@ export const taxBasisWindowCitations = pgTable("tax_basis_window_citations", {
   uniqueIndex("tax_basis_window_citations_identity").on(table.orgId, table.workpaperId, table.taxYearWindowId),
   index("tax_basis_window_citations_window").on(table.orgId, table.taxYearWindowId),
 ]);
+
+/** Write-once 1.1502-13 matching per receiving workpaper, vintage and
+ *  registered tax year. Vintage keys are dates-and-parent within one paper. */
+export const taxConsolidatedMatchingPeriods = pgTable("tax_consolidated_matching_periods", {
+  id: id(),
+  orgId: orgRef(),
+  workpaperId: uuid("workpaper_id").notNull(),
+  workpaperChangeId: uuid("workpaper_change_id").notNull(),
+  vintageKey: text("vintage_key").notNull(),
+  parentKey: text("parent_key"),
+  taxYearWindowId: uuid("tax_year_window_id").notNull(),
+  yearStart: date("year_start").notNull(),
+  yearEnd: date("year_end").notNull(),
+  groupKey: text("group_key").notNull(),
+  sellerSubsidiaryId: uuid("seller_subsidiary_id").notNull(),
+  buyerSubsidiaryId: uuid("buyer_subsidiary_id").notNull(),
+  membershipEffectiveOn: date("membership_effective_on").notNull(),
+  membershipThroughOn: date("membership_through_on").notNull(),
+  deferredOpening: money("deferred_opening").notNull(),
+  actualDeduction: money("actual_deduction").notNull(),
+  recomputedDeduction: money("recomputed_deduction").notNull(),
+  actualCorrespondingAmount: money("actual_corresponding_amount").notNull(),
+  recomputedCorrespondingAmount: money("recomputed_corresponding_amount").notNull(),
+  sellerMatchingAmount: money("seller_matching_amount").notNull(),
+  deferredClosing: money("deferred_closing").notNull(),
+  priorMatchingPeriodId: uuid("prior_matching_period_id"),
+  replayChangeId: uuid("replay_change_id"),
+  ...auditColumns,
+}, (table) => [
+  uniqueIndex("tax_consolidated_matching_periods_identity").on(table.orgId, table.workpaperId, table.vintageKey, table.taxYearWindowId),
+  index("tax_consolidated_matching_periods_window").on(table.orgId, table.taxYearWindowId),
+  index("tax_consolidated_matching_periods_prior").on(table.orgId, table.priorMatchingPeriodId),
+  index("tax_consolidated_matching_periods_replay").on(table.orgId, table.replayChangeId),
+]);

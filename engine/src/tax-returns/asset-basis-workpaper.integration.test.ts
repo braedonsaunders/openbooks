@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
+import { db, pool, withBypassContext, withOrgContext } from "../platform/db.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -539,6 +539,82 @@ test(
         /request key.*different/,
       );
     }),
+);
+
+test(
+  "a waiting tax reversal proposal does not hold the source row ahead of the lifecycle fence",
+  { skip: !DB },
+  () => fixture(async (f) => {
+    const original = await applyApproved(f, input(f));
+    const reversalInput = {
+      reason: "Correct the independently assessed proceeds after the concurrent reader",
+      idempotencyKey: randomUUID(),
+    };
+    const holder = await pool.connect();
+    let proposal: Promise<PromiseSettledResult<string>> | undefined;
+    const observed: { result?: PromiseSettledResult<string> } = {};
+    try {
+      await holder.query("begin");
+      await holder.query(
+        "select set_config('app.current_org',$1,true), set_config('app.bypass_rls','off',true), set_config('statement_timeout','10000',true)",
+        [f.org.orgId],
+      );
+      const holderPid = (await holder.query<{ pid: number }>(
+        "select pg_backend_pid() as pid",
+      )).rows[0]!.pid;
+      await holder.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [
+        `asset-tax-lifecycle:${f.org.orgId}:${f.org.subsidiaryId}`,
+      ]);
+      proposal = proposeTaxAssetBasisReversal(
+        f.org.orgId, original.id, f.actors.submitterId, reversalInput,
+      ).then(
+        (value): PromiseFulfilledResult<string> => ({ status: "fulfilled", value }),
+        (reason): PromiseRejectedResult => ({ status: "rejected", reason }),
+      );
+      void proposal.then((result) => { observed.result = result; });
+      let parked = false;
+      for (let attempt = 0; attempt < 400; attempt += 1) {
+        if (observed.result) break;
+        const state = await pool.query<{ parked: boolean }>(
+          `select exists(select 1 from pg_stat_activity
+            where wait_event_type='Lock'
+              and $1::int=any(pg_blocking_pids(pid))
+              and query like '%pg_advisory_xact_lock%') as parked`,
+          [holderPid],
+        );
+        if (state.rows[0]?.parked) { parked = true; break; }
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      if (observed.result?.status === "rejected") throw observed.result.reason;
+      assert.equal(parked, true,
+        "the real reversal proposal must be waiting for this transaction's entity fence");
+      // NOWAIT distinguishes the old inversion deterministically: it fails
+      // with 55P03 when the waiting proposal already owns this source row.
+      const source = await holder.query<{ id: string }>(
+        "select id from financial_changes where org_id=$1 and id=$2 for update nowait",
+        [f.org.orgId, original.id],
+      );
+      assert.equal(source.rows[0]?.id, original.id,
+        "the fence owner must be able to lock the source while the proposal waits");
+      await holder.query("commit");
+      const result = await proposal;
+      if (result.status === "rejected") throw result.reason;
+      const saved = (await db.execute<{ operation: string; source_id: string }>(sql`
+        select operation, payload->>'sourceChangeId' as source_id
+          from financial_changes where org_id=${f.org.orgId} and id=${result.value}`)).rows[0];
+      assert.deepEqual(saved, { operation: "tax_basis_reversal", source_id: original.id });
+      assert.equal(await proposeTaxAssetBasisReversal(
+        f.org.orgId, original.id, f.actors.submitterId, reversalInput,
+      ), result.value, "the lock-order repair preserves proposal idempotency");
+    } finally {
+      // Release the fence before awaiting a parked proposal on every path,
+      // including a deliberately failing NOWAIT negative proof.
+      try { await holder.query("rollback"); } finally {
+        holder.release();
+        if (proposal) await proposal;
+      }
+    }
+  }),
 );
 
 test(
