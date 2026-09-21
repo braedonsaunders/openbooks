@@ -19,6 +19,7 @@ import { auditColumns, id, orgRef } from "./helpers";
 import { subsidiaries } from "./subsidiaries";
 import { workerEmployments } from "./hrm";
 import { positions } from "./hrm-positions";
+import { parties } from "./parties";
 
 /**
  * HRM compensation (migrations 0221/0222).
@@ -220,6 +221,11 @@ export const compCycleBudgets = pgTable(
     ...auditColumns,
   },
   (t) => [
+    foreignKey({
+      name: "hrm_comp_cycle_budgets_manager_party_tenant_fkey",
+      columns: [t.orgId, t.managerPartyId],
+      foreignColumns: [parties.orgId, parties.id],
+    }),
     foreignKey({ name: "hrm_comp_cycle_budgets_org_id_fkey", columns: [t.orgId], foreignColumns: [orgs.id] }),
     foreignKey({
       name: "hrm_comp_cycle_budgets_cycle_tenant_fkey",
@@ -259,6 +265,11 @@ export const compCycleLines = pgTable(
     ...auditColumns,
   },
   (t) => [
+    foreignKey({
+      name: "hrm_comp_cycle_lines_approver_party_tenant_fkey",
+      columns: [t.orgId, t.approverPartyId],
+      foreignColumns: [parties.orgId, parties.id],
+    }),
     foreignKey({ name: "hrm_comp_cycle_lines_org_id_fkey", columns: [t.orgId], foreignColumns: [orgs.id] }),
     foreignKey({
       name: "hrm_comp_cycle_lines_cycle_tenant_fkey",
