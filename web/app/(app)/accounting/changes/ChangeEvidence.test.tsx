@@ -160,3 +160,54 @@ test("tax approval evidence distinguishes the monthly allocation from the consol
     assert.doesNotMatch(markup, new RegExp(`>${kind}<`));
   }
 });
+
+test("receiver evidence preserves each frozen schedule and its parent lineage", () => {
+  const markup = renderToStaticMarkup(
+    <ChangeEvidence
+      taxBasis
+      value={{
+        buyerVintages: [
+          {
+            source: "carryover",
+            parentKey: "original:2023-03-15",
+            placedInServiceOn: "2023-03-15",
+            transferOn: "2026-07-01",
+            method: "200_db",
+            convention: "half_year",
+            recoveryPeriodYears: "5",
+            unadjustedBasis: "2000.0001",
+            adjustedCarryover: "1600.0000",
+          },
+          {
+            source: "carryover",
+            parentKey: "excess:2025-08-01:2025-08-01",
+            placedInServiceOn: "2025-08-01",
+            transferOn: "2026-07-01",
+            method: "straight_line",
+            convention: "mid_month",
+            recoveryPeriodYears: "7",
+            unadjustedBasis: "100.0000",
+            adjustedCarryover: "80.0001",
+          },
+        ],
+      }}
+    />,
+  );
+  for (const value of [
+    "original:2023-03-15",
+    "excess:2025-08-01:2025-08-01",
+    "200% declining balance",
+    "Half-year",
+    "Straight line",
+    "Mid-month",
+    "2000.0001",
+    "1600.0000",
+    "100.0000",
+    "80.0001",
+  ])
+    assert.ok(markup.includes(value), value);
+  assert.doesNotMatch(
+    markup,
+    />200_db<|>half_year<|>straight_line<|>mid_month</,
+  );
+});

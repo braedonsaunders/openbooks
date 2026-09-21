@@ -45,7 +45,8 @@ test("native allocation controls keep identities fixed and start with unanswered
   assert.match(markup, /§168\(i\)\(7\) carryover — transferor history/);
   assert.match(markup, /2024-03-15/);
   assert.match(markup, /2025-08-20/);
-  assert.match(markup, /5-year 200_db \/ half_year/);
+  assert.match(markup, /5-year 200% declining balance \/ Half-year/);
+  assert.doesNotMatch(markup, /200_db|half_year/);
   assert.match(markup, /1000.0001/);
   assert.match(markup, /850.0000/);
   const inputs = markup.match(/<input\b[^>]*>/g) ?? [];
@@ -57,6 +58,23 @@ test("native allocation controls keep identities fixed and start with unanswered
     assert.doesNotMatch(input, /type="number"|value="(?:2024|2025|0)/);
   }
   assert.doesNotMatch(markup, /<output>/);
+});
+
+test("same-date receiver slices retain distinct source history references", () => {
+  const rows = ["original:2024-03-15", "excess:2024-03-15:2024-03-15"].map(
+    (parentKey) => ({
+      ...vintage,
+      parentKey,
+      key: macrsVintageKey({ ...vintage, parentKey }),
+    }),
+  );
+  const markup = renderToStaticMarkup(
+    <MacrsVintageAllocations vintages={rows} edits={{}} onChange={() => {}} />,
+  );
+  for (const row of rows)
+    assert.ok(markup.includes(row.parentKey), row.parentKey);
+  assert.equal((markup.match(/Source history reference:/g) ?? []).length, 2);
+  assert.equal((markup.match(/<input\b/g) ?? []).length, 4);
 });
 
 test("exact totals are outputs rather than a competing editable header", () => {
