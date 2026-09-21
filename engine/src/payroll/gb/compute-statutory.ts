@@ -35,7 +35,7 @@ import {
   resolveGbCumulativeBasis,
   type GbStarterDeclaration,
 } from "./calculate.ts";
-import { GB_TAX_YEAR } from "./rates.ts";
+import { gbTablesForTaxYear } from "./year-tables.ts";
 import { parseGbTaxCode } from "./tax-codes.ts";
 
 /** Regions whose income tax this engine computes end to end (rUK + Scotland). */
@@ -136,12 +136,14 @@ export async function computeGbStatutory(
   }
 
   const payDate = run.pay_date!;
-  gbResolveTaxYear(payDate);
-  if (taxYear !== GB_TAX_YEAR) {
+  const payYear = gbResolveTaxYear(payDate);
+  if (taxYear !== payYear) {
     throw new PayrollPackError(
-      `GB payroll pack transcribed 2026/27 only — the run's tax year is ${taxYear}`,
+      `GB payroll pack cannot price a pay date in ${payYear} against the run's tax year ${taxYear}: ` +
+      "a pay date is always priced from its own year's transcribed tables, never a neighbour's.",
     );
   }
+  const tables = gbTablesForTaxYear(taxYear);
 
   const notice = certificateFor("gb_tax_code_notice");
   const rawCode = notice?.onFile ? notice.answers.tax_code : null;
@@ -195,6 +197,7 @@ export async function computeGbStatutory(
       starterDeclaration: gbStarterDeclaration({ certificateFor }),
       hasStubs: priors.hasStubs,
       minStubPayDate: priors.minPayDate,
+      monthOneEnd: tables.monthOneEnd,
     });
   }
 
@@ -207,10 +210,11 @@ export async function computeGbStatutory(
     priorAddedPay: priors.addedPay,
     priorTaxPaid: priors.taxPaid,
     periodGrossPay: periodGross,
+    tables,
   });
   // Category A: the only NIC letter with an input channel (none exists yet —
   // see the module header). Every other letter is refused by name in docs.
-  const nic = calculateGbNic({ earnings: pensionable, periodsPerYear: P });
+  const nic = calculateGbNic({ earnings: pensionable, periodsPerYear: P, tables });
 
   pushStatutory("paye", "deduction", "PAYE income tax", paye.tax, 110);
   pushStatutory("nic", "deduction", "National Insurance (employee, primary)", nic.employee, 120);

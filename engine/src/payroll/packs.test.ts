@@ -7,7 +7,9 @@ import {
 import {
   PAYROLL_COUNTRY_PACKS,
   PayrollPackError,
+  eiColumnSystemKeys,
   employmentJurisdictionsOf,
+  employeeSocialInsuranceSystemKeys,
   incomeTaxWithholdingSystemKeys,
   jurisdictionKey,
   labourJurisdictionProblem,
@@ -164,6 +166,88 @@ test("the YTD income-tax key set derives from the pack declarations", () => {
       assert.equal(owner.kind, "deduction", key);
       assert.equal(owner.assessedOn, "taxable_income", key);
     }
+  }
+});
+
+test("the register social-insurance key set derives from the pack declarations", () => {
+  // The payroll register's `cpp_fica` and `ei` columns jointly count
+  // exactly this set (`ei` takes eiColumnSystemKeys(), `cpp_fica` the
+  // structural complement). The columns once carried a CA/US factor literal
+  // (C + C2 + SS + MED + MED2, EI) that printed 0.00 for eleven packs and
+  // dropped QPIP everywhere, so this pins the derivation's CONTENT: every
+  // pack's employee social insurance is present, and nothing that is not
+  // withheld from the employee is.
+  assert.deepEqual(employeeSocialInsuranceSystemKeys(), [
+    "arrco", "av", "ceg", "cet", "cpf_ee", "cpp", "cpp2", "crds",
+    "csg", "ei", "health", "inps", "inss", "kv", "medicare",
+    "medicare_addl", "nic", "pension", "prsi", "pv", "qpip", "rv",
+    "ss", "ss_cc", "ss_des", "ss_for", "ss_mei", "usc", "vieillesse",
+    "zus_chor", "zus_emeryt", "zus_rent", "zus_zdr",
+  ]);
+  // QPIP is the named reason this set exists: the old register buckets
+  // dropped Québec parental insurance entirely — real withheld money with
+  // no column. The derivation picks it up because the CA pack declares it
+  // an earnings-assessed employee deduction.
+  assert.ok(employeeSocialInsuranceSystemKeys().includes("qpip"), "QPIP is counted");
+  // Income-tax withholding is the complement, never the content: counting
+  // any of it here would overstate social insurance exactly as far as the
+  // income-tax column would then understate it.
+  for (const key of incomeTaxWithholdingSystemKeys()) {
+    assert.ok(!employeeSocialInsuranceSystemKeys().includes(key), `${key} is income tax, not social insurance`);
+  }
+  // Employer shares accrue at employer cost and refundable credits increase
+  // net — neither is withheld from the employee, so neither counts here.
+  for (const key of ["ti_payout", "somma_payout", "wcb", "suta", "futa", "hsf", "sdl", "fgts"]) {
+    assert.ok(!employeeSocialInsuranceSystemKeys().includes(key), `${key} is not withheld social insurance`);
+  }
+  // Round trip: every returned key is put in the set by an earnings-assessed
+  // deduction at least one pack declares — the set carries no stray key no
+  // pack declares. (Several keys are shared with an employer share under
+  // the same system_key — CPP, EI, QPIP, INPS, PRSI, ARRCO … — so the
+  // quantifier is "some declarant", not "every declarant".)
+  for (const key of employeeSocialInsuranceSystemKeys()) {
+    const declarants = Object.keys(PAYROLL_COUNTRY_PACKS).flatMap((country) =>
+      packStatutoryComponents(country).filter((component) => component.systemKey === key));
+    assert.ok(declarants.length > 0, `${key} is declared by no pack`);
+    assert.ok(
+      declarants.some((owner) => owner.kind === "deduction" && owner.assessedOn === "earnings"),
+      `${key} has no earnings-assessed deduction declarant`,
+    );
+  }
+  // Jointly exhaustive: every statutory deduction lands in exactly one of
+  // the two register buckets — no withheld money invisible, none double.
+  for (const country of Object.keys(PAYROLL_COUNTRY_PACKS)) {
+    for (const component of packStatutoryComponents(country)) {
+      if (component.kind !== "deduction") continue;
+      const inIncome = incomeTaxWithholdingSystemKeys().includes(component.systemKey);
+      const inSocial = employeeSocialInsuranceSystemKeys().includes(component.systemKey);
+      assert.ok(inIncome !== inSocial, `${country}:${component.systemKey} lands in exactly one bucket`);
+    }
+  }
+});
+
+test("the register EI column rule is the stated pair, inside the derived set", () => {
+  // Labels are frozen jurisdiction names, so the EI column cannot be
+  // derived into by declaration: it keeps EI (legacy continuity) plus QPIP
+  // (the mandated fold — QPIP was in neither bucket). The pair is pinned
+  // exactly so a drift (a third key, a dropped key) fails loudly here
+  // rather than moving a statutory total silently.
+  assert.deepEqual(eiColumnSystemKeys(), ["ei", "qpip"]);
+  // Both keys resolve to earnings-assessed deductions at least one pack
+  // declares — the rule can never count money outside the derived bucket.
+  // (The subset direction is enforced again at bind time, where a stray
+  // key would invent money; this pins the content.)
+  for (const key of eiColumnSystemKeys()) {
+    assert.ok(
+      employeeSocialInsuranceSystemKeys().includes(key),
+      `${key} is inside the derived social set`,
+    );
+    const declarants = Object.keys(PAYROLL_COUNTRY_PACKS).flatMap((country) =>
+      packStatutoryComponents(country).filter((component) => component.systemKey === key));
+    assert.ok(
+      declarants.some((owner) => owner.kind === "deduction" && owner.assessedOn === "earnings"),
+      `${key} has an earnings-assessed deduction declarant`,
+    );
   }
 });
 

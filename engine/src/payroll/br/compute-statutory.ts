@@ -245,6 +245,18 @@ export const BR_FACTOR_LABELS: Readonly<Record<string, string>> = {
   BR_FGTS: "FGTS (fundo de garantia do tempo de serviço)",
 };
 
+/** The establishment scope BR rate lookups resolve at: the employee's region
+ * plus their eSocial filing account. The region is load-bearing — every
+ * br_* row carries one (the schema forbids an account-scoped row without
+ * it), so a lookup without it matches nothing and the whole pack refuses.
+ * Exported so the unit partition can hold the wiring, not just the engine. */
+export function brRateLookupScope(ctx: Pick<PayrollStatutoryComputeContext, "region" | "filingAccountId">): {
+  region: string | null;
+  filingAccountId: string | null;
+} {
+  return { region: ctx.region, filingAccountId: ctx.filingAccountId };
+}
+
 /** Phase 9 — BR pack statutory pass for 2026. Refuses every other year. */
 export async function computeBrStatutory(
   ctx: PayrollStatutoryComputeContext,
@@ -253,7 +265,7 @@ export async function computeBrStatutory(
     return computeBrStatutoryWithRates(ctx, { ratPct: null, fap: null, terceirosPct: null });
   }
   const resolution = await resolveStatutoryRates(ctx.orgId, BR_PACK_RATES, ctx.taxYear, ctx.run.pay_date);
-  const at = { filingAccountId: ctx.filingAccountId };
+  const at = brRateLookupScope(ctx);
   return computeBrStatutoryWithRates(ctx, {
     ratPct: resolution.values("br_rat", at)?.["aliquota"] ?? null,
     fap: resolution.values("br_fap", at)?.["fator"] ?? null,

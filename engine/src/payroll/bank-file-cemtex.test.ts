@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { sealJson } from "../platform/secrets.ts";
 import { createScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
-import { buildCemtexFile } from "../payments/rail-formatters.ts";
+import { buildCemtexFile } from "../payments/rail-cemtex.ts";
 import { PaymentError } from "../payments/payment-errors.ts";
 import {
   PAYROLL_BANK_FILE_FORMATS,

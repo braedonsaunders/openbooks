@@ -1,7 +1,8 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { REPORT_ENTITY_MAP, customRecordEntities, validateCustomQuery, type ReportEntity, type ReportCustomQuery } from '@openbooks/reports'
+import { REPORT_ENTITY_MAP, bindPayStubIncomeTaxKeys, bindPayStubSocialKeys, customRecordEntities, validateCustomQuery, type ReportEntity, type ReportCustomQuery } from '@openbooks/reports'
+import { eiColumnSystemKeys, employeeSocialInsuranceSystemKeys, incomeTaxWithholdingSystemKeys } from '@openbooks/engine/src/payroll/packs.ts'
 import { can, type Authz } from './authz'
 import { inTypeAudience } from './records'
 import { lintRecordFields } from './record-schema'
@@ -27,7 +28,26 @@ export async function customRecordReportCatalog(authz: Authz): Promise<Record<st
 }
 
 export async function reportEntityCatalog(authz: Authz): Promise<Record<string, ReportEntity>> {
-  return { ...REPORT_ENTITY_MAP, ...await customRecordReportCatalog(authz) }
+  const catalog = { ...REPORT_ENTITY_MAP, ...await customRecordReportCatalog(authz) }
+  // The register's income_tax column aggregates the pack-declared
+  // withholding set (every deduction assessed on taxable income) from the
+  // stub lines — never the CA/US factor labels baked into the static
+  // catalog, which print 0.00 for every other pack. The cpp_fica and ei
+  // columns aggregate the complementary pack-declared set (every deduction
+  // assessed on earnings) the same way: `ei` counts the stated EI-family
+  // pair, `cpp_fica` every other key by structural complement, so every
+  // pack's contributions land in one of the two existing columns with both
+  // labels untouched. The guard keeps a custom-record override of this key
+  // (if one ever exists) untouched.
+  const payStubs = catalog.pay_stubs
+  if (payStubs?.key === 'pay_stubs') {
+    catalog.pay_stubs = bindPayStubSocialKeys(
+      bindPayStubIncomeTaxKeys(payStubs, incomeTaxWithholdingSystemKeys()),
+      eiColumnSystemKeys(),
+      employeeSocialInsuranceSystemKeys(),
+    )
+  }
+  return catalog
 }
 
 export function validateCatalogReportQuery(query: unknown, catalog: Record<string, ReportEntity>) {

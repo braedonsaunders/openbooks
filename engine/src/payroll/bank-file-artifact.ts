@@ -512,6 +512,189 @@ export interface GeneratePayRunBankFileInput {
 }
 
 /**
+ * Per-format bank-facing numbers and labels, derived once from the artifact's
+ * own sequence allocation. Each helper is an exhaustive switch with a
+ * never-binding — not a ternary with a fall-through default — so declaring a
+ * format that needs (or must not carry) a number fails tsc until its arm is
+ * written. The default's throw names the format for the JavaScript caller
+ * and the already-persisted row the type system cannot police.
+ */
+function payrollFileCreationNumberFor(
+  format: PayRunBankFileFormat,
+  sequenceValue: number,
+): number | null {
+  switch (format) {
+    case "cpa005":
+      return ((sequenceValue - 1) % 9999) + 1;
+    case "nacha":
+    case "sepa":
+    case "cemtex":
+    case "bacs":
+    case "zengin":
+    case "cnab240":
+      return null;
+    default: {
+      const _exhaustive: never = format;
+      throw new PayrollError(`unknown payroll bank-file format "${String(_exhaustive)}"`);
+    }
+  }
+}
+
+function payrollFileIdModifierFor(
+  format: PayRunBankFileFormat,
+  sequenceValue: number,
+): string | null {
+  switch (format) {
+    case "nacha":
+      return FILE_ID_MODIFIERS[(sequenceValue - 1) % FILE_ID_MODIFIERS.length]!;
+    case "cpa005":
+    case "sepa":
+    case "cemtex":
+    case "bacs":
+    case "zengin":
+    case "cnab240":
+      return null;
+    default: {
+      const _exhaustive: never = format;
+      throw new PayrollError(`unknown payroll bank-file format "${String(_exhaustive)}"`);
+    }
+  }
+}
+
+function payrollMessageIdFor(format: PayRunBankFileFormat, fileNumber: string): string | undefined {
+  switch (format) {
+    case "sepa":
+      return fileNumber;
+    case "cpa005":
+    case "nacha":
+    case "cemtex":
+    case "bacs":
+    case "zengin":
+    case "cnab240":
+      return undefined;
+    default: {
+      const _exhaustive: never = format;
+      throw new PayrollError(`unknown payroll bank-file format "${String(_exhaustive)}"`);
+    }
+  }
+}
+
+function payrollBacsVolSerialFor(
+  format: PayRunBankFileFormat,
+  sequenceValue: number,
+): string | undefined {
+  switch (format) {
+    case "bacs":
+      // VOL1 serials cannot be blank or all zeros and are duplicate-checked
+      // over 3 months: ((seq - 1) % 999999) + 1 spans 000001–999999, never
+      // 000000.
+      return String(((sequenceValue - 1) % 999999) + 1).padStart(6, "0");
+    case "cpa005":
+    case "nacha":
+    case "sepa":
+    case "cemtex":
+    case "zengin":
+    case "cnab240":
+      return undefined;
+    default: {
+      const _exhaustive: never = format;
+      throw new PayrollError(`unknown payroll bank-file format "${String(_exhaustive)}"`);
+    }
+  }
+}
+
+function payrollBacsFileNumberFor(
+  format: PayRunBankFileFormat,
+  sequenceValue: number,
+): string | undefined {
+  switch (format) {
+    case "bacs":
+      return String(((sequenceValue - 1) % 999) + 1).padStart(3, "0");
+    case "cpa005":
+    case "nacha":
+    case "sepa":
+    case "cemtex":
+    case "zengin":
+    case "cnab240":
+      return undefined;
+    default: {
+      const _exhaustive: never = format;
+      throw new PayrollError(`unknown payroll bank-file format "${String(_exhaustive)}"`);
+    }
+  }
+}
+
+function payrollCnabNsaFor(
+  format: PayRunBankFileFormat,
+  sequenceValue: number,
+): string | undefined {
+  switch (format) {
+    case "cnab240":
+      return String(((sequenceValue - 1) % 999999) + 1).padStart(6, "0");
+    case "cpa005":
+    case "nacha":
+    case "sepa":
+    case "cemtex":
+    case "bacs":
+    case "zengin":
+      return undefined;
+    default: {
+      const _exhaustive: never = format;
+      throw new PayrollError(`unknown payroll bank-file format "${String(_exhaustive)}"`);
+    }
+  }
+}
+
+/**
+ * Whether this rail's records are offset-delimited, so a multi-byte character
+ * would shift every field after it. SEPA pain.001 is UTF-8 XML — length-
+ * delimited by markup, not by offsets — so non-ASCII names are legal there.
+ * Bacs is offset-delimited even though its record widths are mixed (80-char
+ * labels, 100-char data); a null in PAYROLL_BANK_FILE_RECORD_LENGTHS is not
+ * the same question.
+ */
+function payrollBankFileRequiresSingleByteCharacters(format: PayRunBankFileFormat): boolean {
+  switch (format) {
+    case "sepa":
+      return false;
+    case "cpa005":
+    case "nacha":
+    case "cemtex":
+    case "bacs":
+    case "zengin":
+    case "cnab240":
+      return true;
+    default: {
+      const _exhaustive: never = format;
+      throw new PayrollError(`unknown payroll bank-file format "${String(_exhaustive)}"`);
+    }
+  }
+}
+
+function payrollFilenameLabelFor(format: PayRunBankFileFormat): string {
+  switch (format) {
+    case "cpa005":
+      return "CPA005";
+    case "nacha":
+      return "NACHA";
+    case "sepa":
+      return "SEPA";
+    case "cemtex":
+      return "CEMTEX";
+    case "bacs":
+      return "BACS";
+    case "zengin":
+      return "ZENGIN";
+    case "cnab240":
+      return "CNAB240";
+    default: {
+      const _exhaustive: never = format;
+      throw new PayrollError(`unknown payroll bank-file format "${String(_exhaustive)}"`);
+    }
+  }
+}
+
+/**
  * Produce a new, immutable bank-file artifact for a committed pay run.
  *
  * Reads used to prepare the file happen before the transaction; the transaction
@@ -647,18 +830,20 @@ export async function generatePayRunBankFile(
 
     // CPA-005 carries a 4-digit file creation number (1–9999) unique per
     // originator; NACHA carries a single-character file ID modifier; SEPA
-    // carries a message identification the bank deduplicates on. All three are
-    // derived from the SAME allocation, once, and stored — so a wrap of either
-    // alphabet still produces a file the operator can trace to a sequence
-    // value that never repeats. Cemtex carries no per-file bank number: its
-    // reel sequence is the literal "01" (multi-file batches, which would
-    // advance it, are refused — a run past 500 details never becomes bytes).
-    const fileCreationNumber =
-      format === "cpa005" ? ((sequenceValue - 1) % 9999) + 1 : null;
-    const fileIdModifier =
-      format === "nacha"
-        ? FILE_ID_MODIFIERS[(sequenceValue - 1) % FILE_ID_MODIFIERS.length]!
-        : null;
+    // carries a message identification the bank deduplicates on. Cemtex
+    // carries no per-file bank number: its reel sequence is the literal "01"
+    // (multi-file batches, which would advance it, are refused — a run past
+    // 500 details never becomes bytes). Bacs carries a 6-char VOL1 serial
+    // (duplicate-checked by Bacs) and a 3-digit UHL1 file number. CNAB 240
+    // carries a 6-digit NSA. All of these are derived from the SAME
+    // allocation, once, and stored — so a wrap of either alphabet still
+    // produces a file the operator can trace to a sequence value that never
+    // repeats.
+    const fileCreationNumber = payrollFileCreationNumberFor(format, sequenceValue);
+    const fileIdModifier = payrollFileIdModifierFor(format, sequenceValue);
+    const bacsVolSerial = payrollBacsVolSerialFor(format, sequenceValue);
+    const bacsFileNumber = payrollBacsFileNumberFor(format, sequenceValue);
+    const cnabNsa = payrollCnabNsaFor(format, sequenceValue);
 
     // --- render (pure) -----------------------------------------------------
     const rendered = renderPayRunBankFile(inputs, {
@@ -668,7 +853,10 @@ export async function generatePayRunBankFile(
       originator: config,
       fileCreationNumber: fileCreationNumber ?? undefined,
       fileIdModifier: fileIdModifier ?? undefined,
-      messageId: format === "sepa" ? fileNumber : undefined,
+      messageId: payrollMessageIdFor(format, fileNumber),
+      bacsVolSerial,
+      bacsFileNumber,
+      cnabNsa,
       fundsDate: entitlement.payDate,
       createdAt: now,
     });
@@ -683,19 +871,31 @@ export async function generatePayRunBankFile(
       );
     }
 
+    // The stored bytes are the bank's bytes: Zengin files are Shift_JIS
+    // (the renderer's `contentBytes` off `encodeZenginFile`); every other
+    // rail is the UTF-8 of its logical text.
+    const bytes = rendered.contentBytes ?? Buffer.from(rendered.content, "utf8");
     // us-ascii on the fixed-width rails: the byte length must equal the
     // character length, or a name with an accent has silently shifted every
     // field after it. SEPA pain.001 is UTF-8 XML by declaration —
     // length-delimited by markup, not by offsets — so non-ASCII names are
-    // legal there and this check does not apply.
-    const bytes = Buffer.from(rendered.content, "utf8");
-    if (format !== "sepa" && bytes.length !== rendered.content.length) {
+    // legal there and this check does not apply. "Offset-delimited" is its
+    // own exhaustive helper, not `RECORD_LENGTHS != null`: Bacs mixes 80-
+    // and 100-character records (null length) and is still shifted by a
+    // multi-byte character. Zengin's Shift_JIS bytes are single-byte-per-
+    // character by construction (the encoder refuses anything else).
+    if (
+      payrollBankFileRequiresSingleByteCharacters(format) &&
+      bytes.length !== rendered.content.length
+    ) {
       throw new PayrollError(
-        "payroll bank file contains non-ASCII characters, which would shift every fixed-width field after them",
+        format === "zengin"
+          ? "payroll bank file contains characters without a Shift_JIS single-byte form, which would shift every fixed-width field after them"
+          : "payroll bank file contains non-ASCII characters, which would shift every fixed-width field after them",
       );
     }
     const contentHash = createHash("sha256").update(bytes).digest("hex");
-    const filename = `${fileNumber}-${format === "cpa005" ? "CPA005" : format === "sepa" ? "SEPA" : format === "cemtex" ? "CEMTEX" : "NACHA"}-${
+    const filename = `${fileNumber}-${payrollFilenameLabelFor(format)}-${
       entitlement.documentNumber
     }.${rendered.extension}`.replace(/[^A-Za-z0-9._-]/g, "-");
 

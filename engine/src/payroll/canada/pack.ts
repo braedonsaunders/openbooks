@@ -14,6 +14,8 @@ import { CA_OPENING_YTD_FIELDS } from "./opening-ytd.ts";
 import { RQ_REMITTANCE_SCHEDULE } from "./quebec/remittance.ts";
 import { CA_PACK_RATES, CA_TAX_YEARS, type Province } from "./rates.ts";
 import { CA_EMPLOYEE_FACTS } from "./employee-facts.ts";
+// HR-13: the CA pack's construction carve-outs (data, beside the pack).
+import { CA_CONSTRUCTION } from "./construction.ts";
 
 /**
  * The Canada payroll country pack — registered and installable.
@@ -264,4 +266,7 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
     ...CA_COMPUTE_FACTOR_LABELS,
   },
   employeeFacts: CA_EMPLOYEE_FACTS,
+  // HR-13: construction carve-outs as pack data — statute transcribed
+  // with citations, consumed by generic readers, never a generic branch.
+  construction: CA_CONSTRUCTION,
 };

@@ -22,6 +22,10 @@ import {
   type StubChange,
 } from '@openbooks/engine/src/payroll/readiness.ts'
 import {
+  payRunApprovalState,
+  type PayRunApprovalState,
+} from '@openbooks/engine/src/payroll/approval.ts'
+import {
   payrollPaymentMethodSettings,
   resolvedPaymentMethodSql,
 } from '@openbooks/engine/src/payroll/payment-method.ts'
@@ -59,8 +63,8 @@ import type {
  * uuid check, the header run query with the subsidiary scope filter, the
  * population lock check (`PayrollError` → 404), the roster/stubs/lines/
  * previous-net/remittance/adjustments/component queries, the loader-derived
- * `?step=` initial step, the register-report lookup, and the four engine
- * reads (readiness, staleness, funding, changes). Authz stays server-side:
+ * `?step=` initial step, the register-report lookup, and the five engine
+ * reads (readiness, staleness, funding, changes, approval). Authz stays server-side:
  * `canRun` (`payroll.run`) is a loader-derived boolean, never a capability
  * object, and the `finish`-step remittance rows only travel when the run is
  * committed, exactly as the native `run.run_status === 'committed' ? … : []`
@@ -115,6 +119,15 @@ export interface PayRunWizardData {
   refusalAcknowledgement: PayRunRefusalAcknowledgement | null
   /** Whether the recorded acknowledgement binds to the current refusal set. */
   refusalsAcknowledged: boolean
+  /**
+   * Flows approval state for the run, resolved server-side through the
+   * native engine — the same `payRunApprovalState` the commit boundary
+   * refuses on. The wizard renders the submit affordance only when a policy
+   * exists and the run is unsubmitted (the expenses precedent: a boolean
+   * resolved on the server, handed to the client, composed with status).
+   * With no policy there is no button and commit behaves exactly as before.
+   */
+  approval: PayRunApprovalState
 }
 
 export async function loadPayRunWizard(
@@ -390,13 +403,15 @@ export async function loadPayRunWizard(
       || (refusalAcknowledgement != null
         && refusalAcknowledgement.errorsDigest === payRunRefusalDigest(currentRefusals))
 
-    // Readiness, staleness, funding and the per-employee diff are engine-owned
-    // (one source of truth for what blocks a run, what it costs, and what moved).
-    const [readiness, staleness, funding, changes] = await Promise.all([
+    // Readiness, staleness, funding, the per-employee diff and the Flows
+    // approval state are engine-owned (one source of truth for what blocks a
+    // run, what it costs, what moved, and whether money may move yet).
+    const [readiness, staleness, funding, changes, approval] = await Promise.all([
       payRunReadiness(orgId, id, authz.allowedSubsidiaryIds),
       payRunStaleness(orgId, id, db, authz.allowedSubsidiaryIds),
       payRunFunding(orgId, id, authz.allowedSubsidiaryIds),
       payRunChanges(orgId, id, authz.allowedSubsidiaryIds),
+      payRunApprovalState(orgId, id),
     ])
     // The funding service is the authority for both the account scope and its
     // current book balances. Reuse its scoped rows for the settlement picker so
@@ -437,6 +452,7 @@ export async function loadPayRunWizard(
       calculationErrors,
       refusalAcknowledgement,
       refusalsAcknowledged,
+      approval,
     }
   })
 }
@@ -485,6 +501,7 @@ export function payRunWizardSpec(data: PayRunWizardData): PageSpec {
         calculationErrors: data.calculationErrors,
         refusalAcknowledgement: data.refusalAcknowledgement,
         refusalsAcknowledged: data.refusalsAcknowledged,
+        approval: data.approval,
       }),
     ],
   })

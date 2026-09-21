@@ -4,8 +4,9 @@ import { businessToday } from "../platform/business-date.ts";
 import { toUnits } from "../money/money.ts";
 import { assertNotSandbox } from "../organization/sandbox-guard.ts";
 import { PaymentError } from "./payment-errors.ts";
-import { loadNachaSettings, loadSepaSettings } from "./rail-settings.ts";
-import { buildCpa005File, buildNachaFile, buildSepaFile, type Cpa005Payment, type NachaEntry } from "./rail-formatters.ts";
+import { buildCpa005File, type Cpa005Payment } from "./rail-cpa005.ts";
+import { buildNachaFile, loadNachaSettings, type NachaEntry } from "./rail-nacha.ts";
+import { buildSepaFile, loadSepaSettings } from "./rail-sepa.ts";
 import { lockRunBankEvidence, paymentRunReadiness } from "./run-readiness.ts";
 // ---------------------------------------------------------------------------
 // CPA Standard 005 file

@@ -31,6 +31,7 @@ import { AZ_WITHHOLDING } from "./az.ts";
 import { CA_WITHHOLDING } from "./ca.ts";
 import { CO_WITHHOLDING } from "./co.ts";
 import { CT_WITHHOLDING } from "./ct.ts";
+import { DC_WITHHOLDING } from "./dc.ts";
 import { DE_WITHHOLDING } from "./de.ts";
 import { GA_WITHHOLDING } from "./ga.ts";
 import { HI_WITHHOLDING } from "./hi.ts";
@@ -131,6 +132,12 @@ const REGION_ENGINES: readonly UsStateWithholdingEngine[] = [
   MS_WITHHOLDING,
   NE_WITHHOLDING,
   NM_WITHHOLDING,
+  // The District of Columbia: a region-level engine, not a sub-region one.
+  // DC levies its own income tax directly — it is nobody's surcharge — so it
+  // belongs in REGION_ENGINES beside the states, exactly as US_STATES lists
+  // it beside them. SUB_REGION_ENGINES is for levies computed inside a parent
+  // region (New York City, Yonkers, Philadelphia, Detroit).
+  DC_WITHHOLDING,
 ];
 
 const SUB_REGION_ENGINES: readonly UsStateWithholdingEngine[] = [
@@ -152,10 +159,12 @@ const BY_STATE = new Map<string, UsStateWithholdingEngine>(
  * A state absent from this map and absent from `NO_WITHHOLDING_STATES` is a gap
  * in this table, and the meta-test in index.test.ts fails on it — which is how
  * the list stays honest as states are added.
+ *
+ * Empty today: the fleet is complete — every wage-tax jurisdiction in
+ * US_STATES has an engine, and the nine others levy no wage income tax.
+ * The map stays, because the next untranscribed levy re-adds its entry here.
  */
-const PUBLICATIONS: Readonly<Record<string, string>> = {
-  DC: "District of Columbia FR-230, Income Tax Withholding Instructions and Tables",
-};
+const PUBLICATIONS: Readonly<Record<string, string>> = {};
 
 /** The engines the pack carries, for the setup surface and readiness. */
 export function usStateWithholdingEngines(): readonly UsStateWithholdingEngine[] {
@@ -235,6 +244,10 @@ export { AZ_WITHHOLDING, AZ_RATES_2026, AZ_PRINTED_PERCENTS } from "./az.ts";
 export { CA_WITHHOLDING, caAnnualizedMethod, CA_RATES_2026 } from "./ca.ts";
 export { CO_WITHHOLDING, CO_RATES_2026 } from "./co.ts";
 export { CT_WITHHOLDING, CT_RATES_2026 } from "./ct.ts";
+export {
+  DC_WITHHOLDING, DC_RATES_2026, DC_TAX_YEAR_EDITIONS, dcAllowancePerPeriod,
+  dcDivisorForPeriod, dcRatesForPayDate, dcScaledBrackets,
+} from "./dc.ts";
 export { AL_WITHHOLDING, AL_RATES_2026 } from "./al.ts";
 export { AR_WITHHOLDING, AR_RATES_2026 } from "./ar.ts";
 export { DE_WITHHOLDING, DE_RATES_2026 } from "./de.ts";

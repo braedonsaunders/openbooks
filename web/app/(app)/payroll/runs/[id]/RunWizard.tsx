@@ -34,6 +34,10 @@ import type {
   PayRunCalculationError,
   PayRunRefusalAcknowledgement,
 } from '@openbooks/engine/src/payroll/run-calculation-evidence.ts'
+import type { PayRunApprovalState } from '@openbooks/engine/src/payroll/approval.ts'
+import { ApprovalActions, refreshApprovalState } from '../../../../../components/approval-actions'
+import { ApprovalHistory } from '../../../../../components/approval-history'
+import { FlowManualButtons } from '../../../../../components/flow-manual-buttons'
 import { readApiErrorMessage } from '../../../../../lib/api-error'
 import { useMoney } from '../../../../../components/money-provider'
 import { FilterChips } from '../../../../../components/filter-bar'
@@ -348,6 +352,13 @@ export function RunWizard(props: {
   refusalAcknowledgement: PayRunRefusalAcknowledgement | null
   /** Whether the recorded acknowledgement binds to the current refusal set. */
   refusalsAcknowledged: boolean
+  /**
+   * Flows approval state, resolved server-side by the loader through the
+   * native engine — the same state the commit boundary refuses on. The
+   * expenses precedent: a boolean handed to the client, composed with
+   * status; never a second switch, flag, or permission-only check.
+   */
+  approval: PayRunApprovalState
 }) {
   const t = useTranslations('payroll')
   const router = useRouter()
@@ -409,13 +420,34 @@ export function RunWizard(props: {
 
   const blocked = props.readiness.blockers > 0
   const canCalculate = props.canRun && docDraft && run.run_status !== 'committed' && !blocked
+  // After the flow releases the run its document reads 'approved', not
+  // 'draft' — but the boundary says released, so money may move and the
+  // commit affordance must say so too, or the submit button above would
+  // strand the operator one step later (approved yet uncommittable). This
+  // is a UI enablement only: the API boundary is unchanged and still
+  // refuses anything unreleased.
+  const commitDocOpen = docDraft || (run.document_status === 'approved' && props.approval.released)
+  // Submit for approval — the remedy the commit refusal names. Offered only
+  // while an approval policy covers pay runs and this run has never been
+  // submitted: "no flow configured" is a configuration question the Flows
+  // engine answers (props.approval.policyExists), never a permission or a
+  // flag, exactly as the expenses drawer composes isDraft && canSubmit.
+  // Calculated, non-stale figures only: submission parks the document (no
+  // recalculation while pending, and no recall path exists for pay runs),
+  // so submitting an uncalculated or stale run would strand it with empty
+  // or superseded evidence and no way back but a rejection. The boundary
+  // agrees — assemblePayRunEvidence refuses an uncalculated run — so this
+  // mirrors the engine's accept set rather than inviting a 422.
+  const canSubmitApproval =
+    props.canRun && docDraft && calculated && !props.staleness.stale && !committed
+    && props.approval.policyExists && !props.approval.submitted
   // Stale stubs must never be committed: recalculate first, always. And a run
   // with unacknowledged in-scope refusals must never commit silently: the
   // commit button stays off until the operator acknowledges exactly this
   // refusal set (the engine enforces the same gate, so a scripted call can
   // never slip past a stale tab either).
   const canCommit =
-    props.canRun && docDraft && run.run_status === 'calculated' && !props.staleness.stale
+    props.canRun && commitDocOpen && run.run_status === 'calculated' && !props.staleness.stale
     && (refusals.length === 0 || refusalsAcked)
   const canPost =
     props.canRun && committed && (run.document_status === 'draft' || run.document_status === 'approved')
@@ -500,6 +532,38 @@ export function RunWizard(props: {
         setStep('finish')
         toast.success(t(`run.${action}Done`))
       }
+      router.refresh()
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /**
+   * Submit the run into its Flows approval with the evidence package
+   * attached (payroll journal + register + GL preview, assembled
+   * server-side). The native engine owns the routing; this is the remedy
+   * the commit refusal names, posted to the same boundary the refusal
+   * comes from. An ungated tenant reports gated:false with the document
+   * untouched — commit stays available, there is nothing to wait for. (The
+   * button only renders when a policy exists, so that branch is the race
+   * where the policy was disabled mid-click.)
+   */
+  async function submitApproval() {
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/payroll/runs/${run.document_id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'submit-approval' }),
+      })
+      // The status is checked before the body is parsed (see act above).
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
+      const j = await res.json()
+      if (j.gated === false) toast.success(t('run.approvalNotRequired'))
+      else toast.success(t('run.approvalSubmitted'))
+      refreshApprovalState()
       router.refresh()
     } catch (e) {
       toast.error((e as Error).message)
@@ -872,10 +936,13 @@ export function RunWizard(props: {
       {step === 'gl' && (
         <GlStep
           gl={gl}
+          documentId={run.document_id}
           calculated={calculated}
           committed={committed || posted}
           canCommit={canCommit}
-          canAcknowledge={props.canRun && docDraft && run.run_status === 'calculated'}
+          canSubmitApproval={canSubmitApproval}
+          approval={props.approval}
+          canAcknowledge={props.canRun && commitDocOpen && run.run_status === 'calculated'}
           stale={props.staleness.stale}
           funding={props.funding}
           busy={busy}
@@ -883,6 +950,7 @@ export function RunWizard(props: {
           acknowledgement={acknowledgement}
           refusalsAcked={refusalsAcked}
           onAcknowledge={() => void acknowledgeRefusals()}
+          onSubmitApproval={() => void submitApproval()}
           onRetry={() => {
             setGl((g) => ({ ...g, state: 'loading' }))
             void loadGlPreview()
@@ -2170,9 +2238,12 @@ function StubDrawer({
 
 function GlStep({
   gl,
+  documentId,
   calculated,
   committed,
   canCommit,
+  canSubmitApproval,
+  approval,
   canAcknowledge,
   stale,
   funding,
@@ -2183,12 +2254,18 @@ function GlStep({
   onAcknowledge,
   onRetry,
   onCommit,
+  onSubmitApproval,
   fmt,
 }: {
   gl: { state: 'idle' | 'loading' | 'ready' | 'setup-error'; legs: GlLeg[]; debitTotal: string; error: string }
+  documentId: string
   calculated: boolean
   committed: boolean
   canCommit: boolean
+  /** A pay-run approval policy covers the org and this run is unsubmitted. */
+  canSubmitApproval: boolean
+  /** Native Flows approval state, resolved server-side by the loader. */
+  approval: PayRunApprovalState
   canAcknowledge: boolean
   stale: boolean
   funding: Funding
@@ -2199,6 +2276,7 @@ function GlStep({
   onAcknowledge: () => void
   onRetry: () => void
   onCommit: () => void
+  onSubmitApproval: () => void
   fmt: (v: string | number | null | undefined) => string
 }) {
   const t = useTranslations('payroll')
@@ -2290,9 +2368,39 @@ function GlStep({
           ) : null}
         </div>
       )}
+      {/* Submitted and awaiting a decision: no submit again, and the shared
+          Flows surfaces own the rest — approve/reject for deciders (or a
+          pending-with chip), author-defined record buttons, and the decision
+          history. Each renders nothing when it has nothing to say, so no
+          policy means no banner, exactly like the expenses drawer. No
+          submitApprovalHref: that shared path posts an empty body and the
+          payroll boundary requires the named submit-approval action (with
+          evidence assembly) — it would 400, so the wizard's own Submit
+          button below is the only submit path. The engine exposes no
+          submitter recall for pay runs, so none is wired. */}
+      {approval.policyExists && approval.pending && !committed && (
+        <div className="rounded-xl border border-blue-200/80 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-800/60 dark:bg-blue-950/40 dark:text-blue-300">
+          <p className="mb-2 font-semibold">{t('run.approvalPending', { count: approval.outstandingGates })}</p>
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <FlowManualButtons subjectKind="pay_run" subjectId={documentId} />
+            <ApprovalActions subjectKind="pay_run" subjectId={documentId} />
+          </div>
+          <ApprovalHistory subjectKind="pay_run" subjectId={documentId} />
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-slate-500 dark:text-slate-400">{t('wizard.gl.hint')}</p>
-        {canCommit ? (
+        {/* The commit refusal names submit-for-approval as its remedy, so the
+            remedy stands where the refusal fires: while the run is
+            unsubmitted in a policy org the submit button takes commit's
+            place (commit would only 422 with the not-submitted refusal).
+            No policy, no button — commit behaves exactly as before. */}
+        {canSubmitApproval ? (
+          <Button onClick={onSubmitApproval} disabled={busy} variant="outline">
+            {busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Send size={14} aria-hidden />}
+            {t('run.submitApproval')}
+          </Button>
+        ) : canCommit ? (
           <Button onClick={onCommit} disabled={busy}>
             {busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <CheckCircle2 size={14} aria-hidden />}
             {t('run.commit')}
