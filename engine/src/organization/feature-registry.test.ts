@@ -215,13 +215,17 @@ test("fieldTime rides timeTracking with six sub-features", () => {
     "fieldTimeEquipment",
     "fieldTimeMultiStageApproval",
   ]) {
+    const sub = FEATURE_BY_KEY.get(key);
+    assert.ok(sub, `${key} must be registered`);
     assert.equal(sub.parentKey, "fieldTime");
     assert.equal(sub.defaultEnabled, false);
     // A stale stored override can never resurrect a child while the parent is off.
     assert.equal(featureEnabled({ fieldTime: false, [key]: true }, key), false);
+  }
   assert.deepEqual(FEATURE_BY_KEY.get("fieldTimeEquipment")!.requiresAll, ["equipment"]);
   assert.equal(
     featureEnabled({ projects: true, timeTracking: true, fieldTime: true, fieldTimeKiosk: true }, "fieldTimeKiosk"),
     true,
   );
+});
 // HR-20 end
