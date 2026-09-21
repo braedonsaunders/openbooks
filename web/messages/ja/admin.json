@@ -2586,6 +2586,16 @@
         "title": "バンド",
         "singularTitle": "バンド",
         "description": "範囲別のバージョン管理された想定給与。変更は新規行。"
+      },
+      "hrm-competency-frameworks": {
+        "title": "コンピテンシーフレームワーク",
+        "singularTitle": "フレームワーク",
+        "description": "段階付きの再利用可能なスキル語彙。"
+      },
+      "hrm-competencies": {
+        "title": "コンピテンシー",
+        "singularTitle": "コンピテンシー",
+        "description": "評価・職位レベル・職位に紐づくフレームワーク内のスキル。"
       }
     },
     "fields": {
@@ -2933,7 +2943,8 @@
       "issuingBody": "発行機関",
       "renewalLeadDays": "更新リードタイム（日）",
       "requiresEvidence": "証跡が必要",
-      "extraCategories": "追加カテゴリ"
+      "extraCategories": "追加カテゴリ",
+      "frameworkId": "フレームワーク"
     },
     "fieldHelp": {
       "gapless": "欠番なしとは、連番のすべての番号が記録され、番号が飛ばないことを意味します。法令または監査要件で途切れない採番が必要な場合にのみ有効にしてください。",
@@ -4727,6 +4738,30 @@
     "hrmCertificationAlerts": {
       "title": "資格アラート",
       "description": "保有者と上長への毎日の期限通知（受信箱経由）。"
+    },
+    "hrmPerformance": {
+      "title": "パフォーマンス",
+      "description": "評価・目標・1:1・フィードバック・キャリブレーション・タレント・後継の親スイッチ。"
+    },
+    "hrmOneOnOnes": {
+      "title": "1:1",
+      "description": "アジェンダを引き継ぐ定期的なマネージャーとメンバーの面談。"
+    },
+    "hrmFeedback": {
+      "title": "フィードバック",
+      "description": "発生時に記録する称賛・フィードバック・依頼。"
+    },
+    "hrmCompetencies": {
+      "title": "コンピテンシー",
+      "description": "評価や職位レベルに紐づく段階付きの再利用可能なスキル語彙。"
+    },
+    "hrmCalibration": {
+      "title": "キャリブレーション",
+      "description": "監査証跡付きの評価サイクルに対する格付けグリッド。"
+    },
+    "hrmSuccession": {
+      "title": "タレントと後継",
+      "description": "職位ごとのタレントレビューと後継計画。"
     }
   },
   "extensions": {

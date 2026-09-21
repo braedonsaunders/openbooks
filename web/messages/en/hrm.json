@@ -331,6 +331,9 @@
       "title": "Qualifications",
       "viewAll": "View all",
       "empty": "No qualifications recorded."
+    },
+    "continuous": {
+      "title": "Feedback & competencies"
     }
   },
   "directory": {
@@ -745,7 +748,95 @@
     "exitDestination": "Destination",
     "exitNotes": "Notes",
     "saveExit": "Save exit record",
-    "recordExit": "Record exit"
+    "recordExit": "Record exit",
+    "continuous": {
+      "tabs": {
+        "cycles": "Cycles",
+        "calibration": "Calibration",
+        "talent": "Talent & succession"
+      },
+      "calibration": {
+        "title": "Calibration",
+        "description": "The rating grid over a review cycle: proposed beside calibrated, with the audit trail.",
+        "newSession": "New session",
+        "sessionsEmpty": "No calibration sessions yet.",
+        "colSession": "Session",
+        "colStatus": "Status",
+        "colOpened": "Opened",
+        "gridTitle": "Calibration grid",
+        "gridEmpty": "No submitted manager reviews in this session yet.",
+        "colReview": "Review",
+        "colProposed": "Proposed",
+        "colDecide": "Decide",
+        "distributionTitle": "Rating distribution",
+        "unrated": "Unrated",
+        "missingTitle": "Missing from this session",
+        "openSession": "Open session",
+        "closeSession": "Close session",
+        "sessionName": "Session name",
+        "sessionCycle": "Review cycle",
+        "createSession": "Create session",
+        "ratingLabel": "Calibrated rating",
+        "potentialLabel": "Potential",
+        "justificationLabel": "Justification",
+        "saveLabel": "Save rating",
+        "revertLabel": "Revert",
+        "revertReasonLabel": "Reason for revert"
+      },
+      "talent": {
+        "title": "Talent & succession",
+        "description": "The 9-box over the org-declared scales, the talent table, and succession plans.",
+        "newRecord": "New record",
+        "cycleLabel": "Review cycle",
+        "gridTitle": "Talent grid",
+        "gridEmpty": "No scales declared for this cycle yet.",
+        "unplacedNote": "{count} placements fall outside the declared scales",
+        "colEmployee": "Employee",
+        "colPerformance": "Performance",
+        "colPotential": "Potential",
+        "colLoss": "Impact / risk of loss",
+        "colReady": "Promotion ready",
+        "readyYes": "Yes",
+        "readyNo": "Not yet",
+        "reviewsEmpty": "No talent reviews for this cycle yet.",
+        "plansTitle": "Succession plans",
+        "plansEmpty": "No succession plans yet.",
+        "colPosition": "Position",
+        "colIncumbent": "Incumbent",
+        "colCandidates": "Candidates",
+        "colStatus": "Status",
+        "impactLabel": "Impact of loss",
+        "riskLabel": "Risk of loss",
+        "promotionLabel": "Promotion ready",
+        "notesLabel": "Notes",
+        "submitLabel": "Save record",
+        "modeLabel": "Record",
+        "modeTalentLabel": "Talent review",
+        "modeSuccessionLabel": "Succession plan",
+        "employeeLabel": "Employee",
+        "positionLabel": "Position"
+      },
+      "feedback": {
+        "settingsTitle": "Feedback settings",
+        "anyoneLabel": "Anyone in the org",
+        "managersLabel": "Managers and HR only",
+        "saveLabel": "Save settings",
+        "praise": "Praise",
+        "feedbackKind": "Feedback",
+        "request": "Request",
+        "kindLabel": "Kind",
+        "visibilityLabel": "Visibility",
+        "publicVis": "Public",
+        "managerAndSubject": "Manager and subject",
+        "managerOnly": "Manager only",
+        "subjectOnly": "Subject only",
+        "bodyLabel": "Message",
+        "bodyPlaceholder": "Say what happened, specifically",
+        "submitLabel": "Send",
+        "praiseAction": "Give praise",
+        "respondLabel": "Respond"
+      }
+    }
   },
   "retention": {
     "title": "Retention",
@@ -837,7 +928,8 @@
       "reviews": "Reviews",
       "benefits": "Benefits",
       "team": "Team",
-      "compensation": "Compensation"
+      "compensation": "Compensation",
+      "oneOnOnes": "1:1s"
     },
     "refusedTitle": "Self-service is unavailable",
     "overview": {
@@ -972,7 +1064,9 @@
         "department": "Department",
         "status": "Status",
         "serviceStart": "Service start",
-        "cycle": "Cycle"
+        "cycle": "Cycle",
+        "oneOnOne": "1:1",
+        "feedback": "Feedback"
       },
       "rosterEmpty": "No direct reports",
       "stepsTitle": "Steps assigned to me",
@@ -984,7 +1078,8 @@
       "changesEmpty": "No change requests awaiting decision.",
       "owedTitle": "Reviews I owe",
       "owedEmpty": "No reviews owed in the open cycle.",
-      "openReview": "Open review"
+      "openReview": "Open review",
+      "oneOnOneLink": "Open 1:1s"
     },
     "reviewStatus": {
       "pending": "Draft",
@@ -1089,6 +1184,42 @@
         "expires": "Expires",
         "status": "Status"
       }
+    },
+    "oneOnOnes": {
+      "title": "1:1s",
+      "description": "Your upcoming and past 1:1 conversations with their agendas.",
+      "upcoming": "Upcoming",
+      "past": "Past",
+      "requests": "Feedback requests",
+      "colWhen": "When",
+      "colWith": "With",
+      "colStatus": "Status",
+      "upcomingEmpty": "No 1:1s scheduled.",
+      "pastEmpty": "No past 1:1s.",
+      "requestsEmpty": "No open feedback requests.",
+      "scheduled": "Scheduled",
+      "held": "Held",
+      "skipped": "Skipped",
+      "cancelled": "Cancelled",
+      "talkingPoint": "Talking point",
+      "actionItem": "Action item",
+      "note": "Note",
+      "shared": "Shared",
+      "private": "Private",
+      "privateNote": "Private — only you can read this",
+      "kindLabel": "Kind",
+      "bodyLabel": "Agenda item",
+      "bodyPlaceholder": "Say what the point is",
+      "addItem": "Add item",
+      "hold": "Hold 1:1",
+      "skip": "Skip",
+      "skipReason": "Reason for skipping",
+      "cancelMeeting": "Cancel",
+      "carryNote": "Holding carries open items forward as copies — the originals stay here as history.",
+      "done": "Done",
+      "reopen": "Reopen",
+      "carriedForward": "Carried forward",
+      "actionFailed": "The 1:1 action failed."
     }
   },
   "options": {

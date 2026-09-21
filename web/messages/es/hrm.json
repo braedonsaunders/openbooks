@@ -331,6 +331,9 @@
       "title": "Cualificaciones",
       "viewAll": "Ver todas",
       "empty": "Sin cualificaciones registradas."
+    },
+    "continuous": {
+      "title": "Comentarios y competencias"
     }
   },
   "directory": {
@@ -744,7 +747,95 @@
     "exitDestination": "Destino",
     "exitNotes": "Notas",
     "saveExit": "Guardar registro de salida",
-    "recordExit": "Registrar salida"
+    "recordExit": "Registrar salida",
+    "continuous": {
+      "tabs": {
+        "cycles": "Ciclos",
+        "calibration": "Calibración",
+        "talent": "Talento y sucesión"
+      },
+      "calibration": {
+        "title": "Calibración",
+        "description": "La matriz de calificaciones sobre un ciclo de evaluación: propuesto frente a calibrado, con auditoría.",
+        "newSession": "Nueva sesión",
+        "sessionsEmpty": "Aún no hay sesiones de calibración.",
+        "colSession": "Sesión",
+        "colStatus": "Estado",
+        "colOpened": "Abierta",
+        "gridTitle": "Matriz de calibración",
+        "gridEmpty": "Aún no hay evaluaciones de mánager enviadas en esta sesión.",
+        "colReview": "Evaluación",
+        "colProposed": "Propuesto",
+        "colDecide": "Decidir",
+        "distributionTitle": "Distribución de calificaciones",
+        "unrated": "Sin calificar",
+        "missingTitle": "Ausentes en esta sesión",
+        "openSession": "Abrir sesión",
+        "closeSession": "Cerrar sesión",
+        "sessionName": "Nombre de la sesión",
+        "sessionCycle": "Ciclo de evaluación",
+        "createSession": "Crear sesión",
+        "ratingLabel": "Calificación calibrada",
+        "potentialLabel": "Potencial",
+        "justificationLabel": "Justificación",
+        "saveLabel": "Guardar calificación",
+        "revertLabel": "Revertir",
+        "revertReasonLabel": "Motivo de la reversión"
+      },
+      "talent": {
+        "title": "Talento y sucesión",
+        "description": "La matriz de 9 casillas sobre las escalas declaradas, la tabla de talento y los planes de sucesión.",
+        "newRecord": "Nuevo registro",
+        "cycleLabel": "Ciclo de evaluación",
+        "gridTitle": "Matriz de talento",
+        "gridEmpty": "Aún no hay escalas declaradas para este ciclo.",
+        "unplacedNote": "{count} ubicaciones fuera de las escalas declaradas",
+        "colEmployee": "Empleado",
+        "colPerformance": "Desempeño",
+        "colPotential": "Potencial",
+        "colLoss": "Impacto / riesgo de salida",
+        "colReady": "Listo para promoción",
+        "readyYes": "Sí",
+        "readyNo": "Todavía no",
+        "reviewsEmpty": "Aún no hay revisiones de talento para este ciclo.",
+        "plansTitle": "Planes de sucesión",
+        "plansEmpty": "Aún no hay planes de sucesión.",
+        "colPosition": "Puesto",
+        "colIncumbent": "Titular",
+        "colCandidates": "Candidatos",
+        "colStatus": "Estado",
+        "impactLabel": "Impacto de una salida",
+        "riskLabel": "Riesgo de una salida",
+        "promotionLabel": "Listo para promoción",
+        "notesLabel": "Notas",
+        "submitLabel": "Guardar registro",
+        "modeLabel": "Registro",
+        "modeTalentLabel": "Revisión de talento",
+        "modeSuccessionLabel": "Plan de sucesión",
+        "employeeLabel": "Empleado",
+        "positionLabel": "Puesto"
+      },
+      "feedback": {
+        "settingsTitle": "Ajustes de comentarios",
+        "anyoneLabel": "Todos en la organización",
+        "managersLabel": "Solo mánager y RR. HH.",
+        "saveLabel": "Guardar ajustes",
+        "praise": "Elogio",
+        "feedbackKind": "Comentario",
+        "request": "Solicitud",
+        "kindLabel": "Tipo",
+        "visibilityLabel": "Visibilidad",
+        "publicVis": "Público",
+        "managerAndSubject": "Mánager y evaluado",
+        "managerOnly": "Solo mánager",
+        "subjectOnly": "Solo evaluado",
+        "bodyLabel": "Mensaje",
+        "bodyPlaceholder": "Diga concretamente qué ocurrió",
+        "submitLabel": "Enviar",
+        "praiseAction": "Elogiar",
+        "respondLabel": "Responder"
+      }
+    }
   },
   "retention": {
     "title": "Retención",
@@ -836,7 +927,8 @@
       "reviews": "Evaluaciones",
       "benefits": "Prestaciones",
       "team": "Equipo",
-      "compensation": "Retribución"
+      "compensation": "Retribución",
+      "oneOnOnes": "1:1"
     },
     "refusedTitle": "El autoservicio no está disponible",
     "overview": {
@@ -971,7 +1063,9 @@
         "department": "Departamento",
         "status": "Estado",
         "serviceStart": "Inicio del servicio",
-        "cycle": "Ciclo"
+        "cycle": "Ciclo",
+        "oneOnOne": "1:1",
+        "feedback": "Comentarios"
       },
       "rosterEmpty": "Sin reportes directos",
       "stepsTitle": "Pasos asignados a mí",
@@ -983,7 +1077,8 @@
       "changesEmpty": "Sin solicitudes de cambio por decidir.",
       "owedTitle": "Evaluaciones que debo",
       "owedEmpty": "Ninguna evaluación pendiente en el ciclo abierto.",
-      "openReview": "Abrir evaluación"
+      "openReview": "Abrir evaluación",
+      "oneOnOneLink": "Abrir 1:1"
     },
     "reviewStatus": {
       "pending": "Borrador",
@@ -1088,6 +1183,42 @@
         "expires": "Vence",
         "status": "Estado"
       }
+    },
+    "oneOnOnes": {
+      "title": "1:1",
+      "description": "Sus 1:1 próximos y pasados con sus agendas.",
+      "upcoming": "Próximos",
+      "past": "Pasados",
+      "requests": "Solicitudes de comentarios",
+      "colWhen": "Cuándo",
+      "colWith": "Con",
+      "colStatus": "Estado",
+      "upcomingEmpty": "No hay 1:1 programados.",
+      "pastEmpty": "No hay 1:1 pasados.",
+      "requestsEmpty": "No hay solicitudes abiertas.",
+      "scheduled": "Programado",
+      "held": "Realizado",
+      "skipped": "Omitido",
+      "cancelled": "Cancelado",
+      "talkingPoint": "Tema",
+      "actionItem": "Acción",
+      "note": "Nota",
+      "shared": "Compartido",
+      "private": "Privado",
+      "privateNote": "Privado — solo usted puede leerlo",
+      "kindLabel": "Tipo",
+      "bodyLabel": "Punto de agenda",
+      "bodyPlaceholder": "Diga de qué se trata",
+      "addItem": "Añadir punto",
+      "hold": "Realizar 1:1",
+      "skip": "Omitir",
+      "skipReason": "Motivo de la omisión",
+      "cancelMeeting": "Cancelar",
+      "carryNote": "Realizar traslada los puntos abiertos como copias — los originales quedan aquí como historial.",
+      "done": "Hecho",
+      "reopen": "Reabrir",
+      "carriedForward": "Trasladado",
+      "actionFailed": "La acción 1:1 falló."
     }
   },
   "options": {

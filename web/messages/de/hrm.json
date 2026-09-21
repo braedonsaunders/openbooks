@@ -331,6 +331,9 @@
       "title": "Qualifikationen",
       "viewAll": "Alle ansehen",
       "empty": "Keine Qualifikationen erfasst."
+    },
+    "continuous": {
+      "title": "Feedback & Kompetenzen"
     }
   },
   "directory": {
@@ -744,7 +747,95 @@
     "exitDestination": "Ziel",
     "exitNotes": "Notizen",
     "saveExit": "Austrittsdatensatz speichern",
-    "recordExit": "Austritt erfassen"
+    "recordExit": "Austritt erfassen",
+    "continuous": {
+      "tabs": {
+        "cycles": "Zyklen",
+        "calibration": "Kalibrierung",
+        "talent": "Talent & Nachfolge"
+      },
+      "calibration": {
+        "title": "Kalibrierung",
+        "description": "Das Bewertungsraster über einen Beurteilungszyklus: vorgeschlagen neben kalibriert, mit Prüfpfad.",
+        "newSession": "Neue Sitzung",
+        "sessionsEmpty": "Noch keine Kalibrierungssitzungen.",
+        "colSession": "Sitzung",
+        "colStatus": "Status",
+        "colOpened": "Geöffnet",
+        "gridTitle": "Kalibrierungsraster",
+        "gridEmpty": "Noch keine eingereichten Führungsbeurteilungen in dieser Sitzung.",
+        "colReview": "Beurteilung",
+        "colProposed": "Vorgeschlagen",
+        "colDecide": "Entscheiden",
+        "distributionTitle": "Bewertungsverteilung",
+        "unrated": "Unbewertet",
+        "missingTitle": "In dieser Sitzung fehlend",
+        "openSession": "Sitzung öffnen",
+        "closeSession": "Sitzung schließen",
+        "sessionName": "Sitzungsname",
+        "sessionCycle": "Beurteilungszyklus",
+        "createSession": "Sitzung anlegen",
+        "ratingLabel": "Kalibrierte Bewertung",
+        "potentialLabel": "Potenzial",
+        "justificationLabel": "Begründung",
+        "saveLabel": "Bewertung speichern",
+        "revertLabel": "Zurücksetzen",
+        "revertReasonLabel": "Grund für das Zurücksetzen"
+      },
+      "talent": {
+        "title": "Talent & Nachfolge",
+        "description": "Das 9-Felder-Raster über die festgelegten Skalen, die Talenttabelle und Nachfolgepläne.",
+        "newRecord": "Neuer Eintrag",
+        "cycleLabel": "Beurteilungszyklus",
+        "gridTitle": "Talent-Raster",
+        "gridEmpty": "Für diesen Zyklus sind noch keine Skalen festgelegt.",
+        "unplacedNote": "{count} Einordnungen liegen außerhalb der festgelegten Skalen",
+        "colEmployee": "Mitarbeiter",
+        "colPerformance": "Leistung",
+        "colPotential": "Potenzial",
+        "colLoss": "Auswirkung / Risiko eines Weggangs",
+        "colReady": "Beförderungsreif",
+        "readyYes": "Ja",
+        "readyNo": "Noch nicht",
+        "reviewsEmpty": "Noch keine Talentbeurteilungen für diesen Zyklus.",
+        "plansTitle": "Nachfolgepläne",
+        "plansEmpty": "Noch keine Nachfolgepläne.",
+        "colPosition": "Position",
+        "colIncumbent": "Stelleninhaber",
+        "colCandidates": "Kandidaten",
+        "colStatus": "Status",
+        "impactLabel": "Auswirkung eines Weggangs",
+        "riskLabel": "Risiko eines Weggangs",
+        "promotionLabel": "Beförderungsreif",
+        "notesLabel": "Notizen",
+        "submitLabel": "Eintrag speichern",
+        "modeLabel": "Eintrag",
+        "modeTalentLabel": "Talentbeurteilung",
+        "modeSuccessionLabel": "Nachfolgeplan",
+        "employeeLabel": "Mitarbeiter",
+        "positionLabel": "Position"
+      },
+      "feedback": {
+        "settingsTitle": "Feedback-Einstellungen",
+        "anyoneLabel": "Alle in der Organisation",
+        "managersLabel": "Nur Führungskräfte und HR",
+        "saveLabel": "Einstellungen speichern",
+        "praise": "Lob",
+        "feedbackKind": "Feedback",
+        "request": "Anfrage",
+        "kindLabel": "Art",
+        "visibilityLabel": "Sichtbarkeit",
+        "publicVis": "Öffentlich",
+        "managerAndSubject": "Führungskraft und Betroffener",
+        "managerOnly": "Nur Führungskraft",
+        "subjectOnly": "Nur Betroffener",
+        "bodyLabel": "Nachricht",
+        "bodyPlaceholder": "Sagen Sie konkret, was passiert ist",
+        "submitLabel": "Senden",
+        "praiseAction": "Lob aussprechen",
+        "respondLabel": "Antworten"
+      }
+    }
   },
   "retention": {
     "title": "Bindung",
@@ -836,7 +927,8 @@
       "reviews": "Beurteilungen",
       "benefits": "Leistungen",
       "team": "Team",
-      "compensation": "Vergütung"
+      "compensation": "Vergütung",
+      "oneOnOnes": "1:1s"
     },
     "refusedTitle": "Self-Service ist nicht verfügbar",
     "overview": {
@@ -971,7 +1063,9 @@
         "department": "Abteilung",
         "status": "Status",
         "serviceStart": "Dienstbeginn",
-        "cycle": "Zyklus"
+        "cycle": "Zyklus",
+        "oneOnOne": "1:1",
+        "feedback": "Feedback"
       },
       "rosterEmpty": "Keine direkten Mitarbeitenden",
       "stepsTitle": "Mir zugewiesene Schritte",
@@ -983,7 +1077,8 @@
       "changesEmpty": "Keine Änderungsanfragen zur Entscheidung.",
       "owedTitle": "Offene Beurteilungen",
       "owedEmpty": "Keine Beurteilungen im offenen Zyklus.",
-      "openReview": "Beurteilung öffnen"
+      "openReview": "Beurteilung öffnen",
+      "oneOnOneLink": "1:1 öffnen"
     },
     "reviewStatus": {
       "pending": "Entwurf",
@@ -1088,6 +1183,42 @@
         "expires": "Läuft ab",
         "status": "Status"
       }
+    },
+    "oneOnOnes": {
+      "title": "1:1s",
+      "description": "Ihre anstehenden und vergangenen 1:1-Gespräche mit Agenda.",
+      "upcoming": "Anstehend",
+      "past": "Vergangen",
+      "requests": "Feedback-Anfragen",
+      "colWhen": "Wann",
+      "colWith": "Mit",
+      "colStatus": "Status",
+      "upcomingEmpty": "Keine 1:1 geplant.",
+      "pastEmpty": "Keine vergangenen 1:1.",
+      "requestsEmpty": "Keine offenen Feedback-Anfragen.",
+      "scheduled": "Geplant",
+      "held": "Stattgefunden",
+      "skipped": "Übersprungen",
+      "cancelled": "Abgesagt",
+      "talkingPoint": "Gesprächspunkt",
+      "actionItem": "Aufgabe",
+      "note": "Notiz",
+      "shared": "Geteilt",
+      "private": "Privat",
+      "privateNote": "Privat — nur Sie können dies lesen",
+      "kindLabel": "Art",
+      "bodyLabel": "Agendapunkt",
+      "bodyPlaceholder": "Sagen Sie, worum es geht",
+      "addItem": "Punkt hinzufügen",
+      "hold": "1:1 durchführen",
+      "skip": "Überspringen",
+      "skipReason": "Grund fürs Überspringen",
+      "cancelMeeting": "Absagen",
+      "carryNote": "Durchführen überträgt offene Punkte als Kopien — die Originale bleiben hier als Verlauf.",
+      "done": "Erledigt",
+      "reopen": "Wieder öffnen",
+      "carriedForward": "Übertragen",
+      "actionFailed": "Die 1:1-Aktion ist fehlgeschlagen."
     }
   },
   "options": {

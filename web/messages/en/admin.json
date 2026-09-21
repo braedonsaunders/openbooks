@@ -2518,6 +2518,16 @@
         "title": "Pay bands",
         "singularTitle": "Pay band",
         "description": "Versioned SHOULD-pay rows per scope: a band change is a new row, never an overwrite."
+      },
+      "hrm-competency-frameworks": {
+        "title": "Competency frameworks",
+        "singularTitle": "Competency framework",
+        "description": "The org's reusable skill vocabulary with ranked levels."
+      },
+      "hrm-competencies": {
+        "title": "Competencies",
+        "singularTitle": "Competency",
+        "description": "One skill in a framework, linkable to reviews, job levels, and positions."
       }
     },
     "fields": {
@@ -2865,7 +2875,8 @@
       "issuingBody": "Issuing body",
       "renewalLeadDays": "Renewal lead (days)",
       "requiresEvidence": "Requires evidence",
-      "extraCategories": "Extra categories"
+      "extraCategories": "Extra categories",
+      "frameworkId": "Framework"
     },
     "fieldHelp": {
       "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",
@@ -4727,6 +4738,30 @@
     "hrmCertificationAlerts": {
       "title": "Certification alerts",
       "description": "Daily expiry notices to holders and their managers through the inbox."
+    },
+    "hrmPerformance": {
+      "title": "Performance",
+      "description": "The parent switch for reviews, goals, 1:1s, feedback, calibration, talent, and succession."
+    },
+    "hrmOneOnOnes": {
+      "title": "1:1s",
+      "description": "Scheduled manager-report conversations with agendas that carry over."
+    },
+    "hrmFeedback": {
+      "title": "Feedback",
+      "description": "Praise, feedback, and requests captured when they happen."
+    },
+    "hrmCompetencies": {
+      "title": "Competencies",
+      "description": "Reusable skill vocabulary with ranked levels, linked to reviews and job levels."
+    },
+    "hrmCalibration": {
+      "title": "Calibration",
+      "description": "The rating grid over a review cycle with an audit trail."
+    },
+    "hrmSuccession": {
+      "title": "Talent & succession",
+      "description": "Talent reviews and ranked succession plans per position."
     }
   },
   "backupsManager": {

@@ -2473,6 +2473,16 @@
         "title": "Fourchettes",
         "singularTitle": "Fourchette",
         "description": "Lignes versionnées de salaire CIBLE par périmètre : tout changement est une ligne nouvelle."
+      },
+      "hrm-competency-frameworks": {
+        "title": "Référentiels de compétences",
+        "singularTitle": "Référentiel",
+        "description": "Le vocabulaire de compétences réutilisable avec niveaux."
+      },
+      "hrm-competencies": {
+        "title": "Compétences",
+        "singularTitle": "Compétence",
+        "description": "Une compétence d'un référentiel, liable aux évaluations, niveaux et postes."
       }
     },
     "fields": {
@@ -2820,7 +2830,8 @@
       "issuingBody": "Organisme délivreur",
       "renewalLeadDays": "Préavis de renouvellement (jours)",
       "requiresEvidence": "Justificatif requis",
-      "extraCategories": "Catégories supplémentaires"
+      "extraCategories": "Catégories supplémentaires",
+      "frameworkId": "Référentiel"
     },
     "fieldHelp": {
       "gapless": "Sans rupture signifie que chaque numéro de la séquence doit être justifié, sans aucun numéro sauté. Activez cette option uniquement si vos obligations légales ou d’audit imposent une numérotation ininterrompue.",
@@ -4727,6 +4738,30 @@
     "hrmCertificationAlerts": {
       "title": "Alertes de certification",
       "description": "Avis quotidiens d'expiration aux titulaires et responsables via la boîte de réception."
+    },
+    "hrmPerformance": {
+      "title": "Performance",
+      "description": "L'interrupteur parent des évaluations, objectifs, 1:1, retours, calibrage, talents et succession."
+    },
+    "hrmOneOnOnes": {
+      "title": "1:1",
+      "description": "Conversations planifiées manager-collaborateur avec ordre du jour reporté."
+    },
+    "hrmFeedback": {
+      "title": "Retours",
+      "description": "Éloges, retours et demandes capturés quand ils surviennent."
+    },
+    "hrmCompetencies": {
+      "title": "Compétences",
+      "description": "Vocabulaire de compétences réutilisable avec niveaux, lié aux évaluations et niveaux de poste."
+    },
+    "hrmCalibration": {
+      "title": "Calibrage",
+      "description": "La grille des notes sur un cycle d'évaluation avec piste d'audit."
+    },
+    "hrmSuccession": {
+      "title": "Talents & succession",
+      "description": "Revues de talent et plans de succession par poste."
     }
   },
   "backupsManager": {

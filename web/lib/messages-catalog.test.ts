@@ -3003,6 +3003,8 @@ test('admin namespace ships translated in zh and pt-BR', () => {
     'pt-BR:admin.automations.builder.simulateSubjectPlaceholder|leave_request:<id>',
     'pt-BR:admin.automations.builder.stepStatus|Status',
     'pt-BR:admin.automations.builder.runStatus|Status',
+    // HR-17: Feedback is the pt-BR product term, kept as in English.
+    'pt-BR:admin.features.hrmFeedback.title|Feedback',
     'zh:admin.automations.builder.cronLabel|Cron',
     'zh:admin.automations.builder.simulateSubjectPlaceholder|leave_request:<id>',
   ])
@@ -3168,6 +3170,8 @@ test('admin copy ships translated in de and ja (i2)', () => {
   // shared identifiers. Anything pasted back in English outside this
   // list fails.
   const ADMIN_I2_COGNATES = new Set([
+    // HR-17: Feedback is the German product term (Duden loanword), kept as in English.
+    'de:admin.features.hrmFeedback.title',
     'de:admin.users.linkPersonLabel',
     'de:admin.automations.builder.cronLabel',
     'de:admin.automations.builder.nameTitle',

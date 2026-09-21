@@ -1684,6 +1684,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/me/one-on-ones': {
+    route: '/me/one-on-ones',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/me/one-on-ones/view')
+      return {
+        load: (input) => m.loadMeOneOnOnesPage(input.searchParams ?? {}),
+        spec: (data) => m.meOneOnOnesSpec(data as never),
+      }
+    },
+  },
   '/me/profile': {
     route: '/me/profile',
     segments: [],
