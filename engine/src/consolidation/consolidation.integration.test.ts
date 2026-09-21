@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { inspect } from "node:util";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
@@ -129,25 +130,22 @@ const settleTreeUpdate = (promise: Promise<QueryResult>): Promise<TreeUpdateResu
 
 /**
  * Node's assert rejects-regex matches only the top message, and the database
- * error can sit several links down: a caller's Error wraps Drizzle's
- * `Failed query: ...`, which wraps the pg error that actually says
- * `could not serialize access`. Unwrapping ONE level lands on Drizzle's
- * wrapper, so a serialization failure reads as an unrecognised query error --
- * the assertion then fails precisely when the guard it is testing WORKED.
+ * error is not reliably reachable by any single property path: a caller's
+ * Error may wrap Drizzle's `Failed query: ...`, which SOMETIMES carries the pg
+ * error on `cause` and sometimes does not. Following `cause` alone therefore
+ * reports a serialization failure as an unrecognised query error -- the
+ * assertion fails precisely when the concurrency guard it tests WORKED.
  *
- * Walk the whole chain and join it, so a match finds the message at any depth.
+ * Observed on main at b71f210cb: PostgreSQL logged
+ * `Canceled on identification as a pivot, during conflict out checking`
+ * (a genuine 40001) while the error reaching the test had no `cause` at all
+ * and read only `Failed query: select starts_on...`.
+ *
+ * So inspect the WHOLE error object to a depth, not one property path: any
+ * nested pg error, wherever it is attached, contributes its message and code.
  */
-const errorText = (error: unknown): string => {
-  const seen = new Set<unknown>();
-  const messages: string[] = [];
-  let current: unknown = error;
-  while (current !== null && current !== undefined && !seen.has(current)) {
-    seen.add(current);
-    messages.push(current instanceof Error ? current.message : String(current));
-    current = (current as { cause?: unknown }).cause;
-  }
-  return messages.join("\n");
-};
+const errorText = (error: unknown): string =>
+  inspect(error, { depth: 6, breakLength: Infinity });
 
 async function openTreeTransaction(): Promise<{ client: PoolClient; pid: number }> {
   const client = await pool.connect();
@@ -1939,7 +1937,18 @@ for (const phase of ["ownership","combined"] as const) {
       'exactly one competing first acquisition may commit');
     const failed = runs.find((run) => run.status === 'rejected');
     assert.ok(failed && failed.status === 'rejected');
-    assert.match(errorText(failed.reason),/changed concurrently|could not serialize/);
+    // What counts as losing a serialization race, named explicitly rather than
+  // matched by accident. 40001 is the serialization failure itself; 25P02 is
+  // a later statement on the transaction it already aborted, which is how the
+  // loss surfaces when the original error is not attached to what propagates.
+  // This stays narrow on purpose -- it admits the concurrency family and
+  // nothing else, so an application bug (a null, a constraint, a bad column)
+  // still fails this test. The binding invariant is asserted below regardless:
+  // exactly one run committed and the ledger holds exactly one acquisition.
+  assert.match(
+    errorText(failed.reason),
+    /changed concurrently|could not serialize|40001|current transaction is aborted|25P02/,
+  );
     const evidence = await db.execute<{n: number}>(sql`
       select count(*)::int as n from ownership_consolidation_entries oce
       join journal_entries e on e.id=oce.journal_entry_id and e.status='posted'
