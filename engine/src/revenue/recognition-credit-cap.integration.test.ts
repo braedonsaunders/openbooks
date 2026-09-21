@@ -339,3 +339,28 @@ test(
     }
   },
 );
+
+test('credits follow prospective reallocation into an added promise rather than being lost with its missing invoice line', {skip:!DB}, async()=>{
+ const org=await createScratchOrg();
+ try {
+  const actors=await seedFlowActors(org.orgId);
+  await seedRecognitionTermPeriods(org);
+  const invoiceId=await postInvoice(org,actors.adminId,'INV-AMENDED-CREDIT');
+  const first=await runRevenueRecognition(org.orgId,'2026-09-30',actors.adminId);assert.equal(first.totalAmount,'300.0000');
+  const original=(await db.execute<{id:string;contract_id:string}>(sql`select o.id,o.contract_id from performance_obligations o join document_lines dl on dl.id=o.document_line_id and dl.org_id=o.org_id where o.org_id=${org.orgId} and dl.document_id=${invoiceId}`)).rows[0]!;
+  const {proposeRevenueModification,applyRevenueModification}=await import('./contract-modifications.ts');
+  const {submitFinancialChange}=await import('../flows/financial-changes-adapter.ts');
+  const {seedApprovalFlow}=await import('../testing/fixtures.ts');
+  const {decideGate}=await import('../flows/gates.ts');
+  await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values(${org.orgId},${actors.submitterId},'ar.post','grant')`);
+  await seedApprovalFlow(org.orgId,{subjectKind:'financial_change',assignees:[{type:'user',userId:actors.approver1Id}],mode:'any',preventSelfApproval:false});
+  const promise={description:'Remaining promise',standaloneSellingPrice:'450',recognitionRuleId:org.recognitionRuleId,recognitionEndsOn:'2027-06-30',percentComplete:'25',deferredAccountId:org.accounts.deferred,recognizedAccountId:org.accounts.recognized};
+  const {changeId}=await proposeRevenueModification(org.orgId,original.contract_id,actors.submitterId,{effectiveOn:'2026-10-01',reason:'Reallocate distinct remaining service without new consideration',idempotencyKey:randomUUID(),subsidiaryId:org.subsidiaryId,enforceableRightsEvidence:'Both parties signed the changed service scope',assessment:'Two equally priced remaining promises; unchanged CAD recognition basis',bookRates:[{bookId:org.bookId,fxRate:'1'}],groups:[{treatment:'prospective',existingObligationIds:[original.id],considerationChange:'0',remainingDistinct:true,additionsAtStandalonePrice:false,promises:[{...promise,existingId:original.id},{...promise,description:'New replacement promise',percentComplete:'0'}]}]});
+  await submitFinancialChange(org.orgId,changeId,actors.submitterId);
+  const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${changeId} and status='pending'`)).rows[0]!;
+  await decideGate({gateId:gate.id,userId:actors.approver1Id,decision:'approved'});
+  const applied=await applyRevenueModification(org.orgId,changeId,actors.submitterId);assert.equal((applied.obligationIds as string[]).length,2);
+  await postAndApplyCredit(org,actors.adminId,invoiceId,'CM-AMENDED-CREDIT','900',org.accounts.deferred);
+  const after=await runRevenueRecognition(org.orgId,'2027-06-30',actors.adminId);assert.equal(after.posted,0);assert.equal(await glBalance(org.orgId,org.accounts.recognized),'-300.0000');assert.equal(await glBalance(org.orgId,org.accounts.deferred),'0.0000');
+ } finally {await dropScratchOrg(org.orgId)}
+});

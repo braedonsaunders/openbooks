@@ -1,3 +1,5 @@
+import { measureLeaseChange } from "../../revenue/lease-changes.ts";
+import { presentValueOfLevelStream, periodRateFromAnnualPercent } from "../../money/present-value.ts";
 /**
  * Leases — ASC 842 and IFRS 16.
  *
@@ -564,7 +566,7 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
           "After commencement a lessee remeasures the lease liability for changes in future payments or the lease term and recognises the adjustment against the right-of-use asset.",
       },
     ],
-    support: "not-implemented",
+    support: "supported",
     tier: "computation",
     assertion:
       "Revised payments re-discount to a revised liability with the difference adjusting the right-of-use asset — the balance sheet keeps reflecting what is actually owed, not what was estimated at commencement.",
@@ -574,13 +576,17 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
       "The parties agree the remaining four payments rise to 22,000.00 a year; the discount rate is unchanged.",
       "The liability remeasures to the present value of four payments of 22,000.00 at 5%, which is 78,010.9111 — an increase of 7,091.9010 carried against the right-of-use asset.",
     ],
-    gap: "The lease engine measures once at commencement and posts the frozen schedule: no API re-discounts the remaining payments, adjusts the liability and right-of-use asset, or spreads the revised interest over the remaining term.",
     expected: {
       values: {
         liabilityAfterYearOne: "70919.0101",
         remeasuredLiability: "78010.9111",
         rouAdjustment: "7091.9010",
       },
+    },
+    run: () => {
+      const liability = presentValueOfLevelStream({ payment:"22000",periods:4,rate:periodRateFromAnnualPercent("5",1),timing:"arrears" });
+      const change = measureLeaseChange({liability:"70919.0101",rouAsset:"69271.6267",scopeReductionPercent:"0",newLiability:liability,settlementPayment:"0"});
+      return {values:{liabilityAfterYearOne:"70919.0101",remeasuredLiability:change.newLiability,rouAdjustment:change.rouDelta}};
     },
   },
 
@@ -603,7 +609,7 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
           "A modification that ends the lease removes both the liability and the right-of-use asset from the balance sheet, with the difference recognised in profit or loss.",
       },
     ],
-    support: "not-implemented",
+    support: "supported",
     tier: "computation",
     assertion:
       "Walking away ends the accounting: the remaining liability and the remaining right-of-use asset both leave the balance sheet, the penalty is expensed, and the net difference is a single termination gain or loss — never a stranded balance.",
@@ -613,7 +619,6 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
       "The lease terminates with a 3,000.00 penalty: the 37,188.2086 liability is derecognised, the 34,635.8133 asset is derecognised, and the penalty is paid.",
       "The net difference is a termination loss of 447.6047.",
     ],
-    gap: "The lease engine has no termination path: nothing derecognises the liability and right-of-use asset before term, books a termination penalty, or measures the termination gain or loss — an ended lease keeps its frozen schedule on the books.",
     expected: {
       values: {
         liabilityDerecognised: "37188.2086",
@@ -621,6 +626,10 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
         terminationPenalty: "3000.0000",
         terminationLoss: "447.6047",
       },
+    },
+    run: () => {
+      const change = measureLeaseChange({liability:"37188.2086",rouAsset:"34635.8133",scopeReductionPercent:"100",newLiability:"0",settlementPayment:"3000"});
+      return {values:{liabilityDerecognised:change.removedLiability,rouAssetDerecognised:change.removedRou,terminationPenalty:change.settlement,terminationLoss:neg(change.gain)}};
     },
   },
 

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { BOOK_DEPRECIATION_CONVENTIONS } from "./depreciation-conventions";
 import {
+  bigserial,
   boolean,
   check,
   date,
@@ -75,6 +76,7 @@ export const fixedAssets = pgTable(
     orgId: orgRef(),
     /** Legal entity whose books own the asset and its depreciation. */
     subsidiaryId: uuid("subsidiary_id").notNull(),
+    transferredFromAssetId: uuid("transferred_from_asset_id"),
     categoryId: uuid("category_id").notNull(),
     assetNumber: text("asset_number").notNull(),
     name: text("name").notNull(),
@@ -269,8 +271,20 @@ export const assetEvents = pgTable(
     id: id(),
     orgId: orgRef(),
     assetId: uuid("asset_id").notNull(),
+    financialChangeId: uuid("financial_change_id"),
+    bookId: uuid("book_id"),
     kind: text("kind", {
-      enum: ["acquired", "placed_in_service", "revalued", "impaired", "transferred", "disposed", "written_off", "reversed"],
+      enum: [
+        "acquired",
+        "placed_in_service",
+        "revalued",
+        "impaired",
+        "transferred",
+        "partially_disposed",
+        "disposed",
+        "written_off",
+        "reversed",
+      ],
     }).notNull(),
     occurredOn: date("occurred_on").notNull(),
     amount: money("amount"), // proceeds for disposal, delta for revaluation
@@ -313,3 +327,68 @@ export const depreciationBookPolicies = pgTable(
     check("dep_book_policies_positive_units", sql`${t.unitsTotal} is null or ${t.unitsTotal} > 0`),
   ],
 );
+
+export const assetBasisChanges = pgTable("asset_basis_changes", {
+  ordinal:bigserial("ordinal",{mode:"bigint"}).notNull(),
+  unitsRemaining:money("units_remaining"),depreciableAfter:money("depreciable_after"),
+  id: id(),
+  orgId: orgRef(),
+  assetId: uuid("asset_id").notNull(),
+  bookId: uuid("book_id").notNull(),
+  changeId: uuid("change_id").notNull(),
+  effectiveOn: date("effective_on").notNull(),
+  groupComponent: jsonb("group_component"),
+  impairmentReleased: money("impairment_released").notNull().default("0"),
+  costDelta: money("cost_delta").notNull(),
+  accumulatedDelta: money("accumulated_delta").notNull(),
+  salvageDelta: money("salvage_delta").notNull(),
+  journalEntryId: uuid("journal_entry_id"),
+  stubJournalEntryId: uuid("stub_journal_entry_id"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  createdBy: uuid("created_by").notNull(),
+});
+export const assetTransferBases = pgTable("asset_transfer_bases", {
+  reversedByChangeId: uuid("reversed_by_change_id"),
+  reversedOn: date("reversed_on"),
+  id: id(),
+  orgId: orgRef(),
+  changeId: uuid("change_id").notNull(),
+  sourceAssetId: uuid("source_asset_id").notNull(),
+  receivingAssetId: uuid("receiving_asset_id").notNull(),
+  bookId: uuid("book_id").notNull(),
+  effectiveOn: date("effective_on").notNull(),
+  sellerSubsidiaryId: uuid("seller_subsidiary_id").notNull(),
+  buyerSubsidiaryId: uuid("buyer_subsidiary_id").notNull(),
+  eliminationSubsidiaryId: uuid("elimination_subsidiary_id").notNull(),
+  groupCurrency: text("group_currency").notNull(),
+  basis: jsonb("basis").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  createdBy: uuid("created_by").notNull(),
+});
+export const assetTransferConsolidationEntries = pgTable(
+  "asset_transfer_consolidation_entries",
+  {
+    id: id(),
+    orgId: orgRef(),
+    transferId: uuid("transfer_id").notNull(),
+    periodId: uuid("period_id").notNull(),
+    journalEntryId: uuid("journal_entry_id").notNull(),
+    targetBalances: jsonb("target_balances").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdBy: uuid("created_by").notNull(),
+  },
+);
+
+/** Approved group valuation linked to the receiving legal-book event. */
+export const assetTransferMeasurements = pgTable('asset_transfer_measurements', {
+  id:id(), orgId:orgRef(), ordinal:bigserial('ordinal',{mode:'bigint'}).notNull(),
+  transferId:uuid('transfer_id').notNull(), sourceEventId:uuid('source_event_id').notNull(),
+  changeId:uuid('change_id').notNull(), effectiveOn:date('effective_on').notNull(),
+  measurement:jsonb('measurement').notNull(), createdAt:timestamp('created_at',{withTimezone:true}).notNull().defaultNow(), createdBy:uuid('created_by').notNull(),
+});

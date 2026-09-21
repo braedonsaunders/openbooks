@@ -45,8 +45,8 @@ export function RemeasureButton({ assetId }: { assetId: string }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ newCarryingValue: value.trim(), date }),
       })
-      const d = (await res.json().catch(() => ({}))) as { error?: string; kind?: string; delta?: string }
-      if (!res.ok) throw new Error(d.error)
+      if (!res.ok) { const error = await res.json().catch(() => ({})); throw new Error(error.error ?? tCommon('feedback.saveFailed')) }
+      const d = (await res.json()) as { kind?: string; delta?: string }
       const kind = t(`remeasure.kinds.${remeasurementKindKey(d.kind)}`)
       toast.success(t('remeasure.done', { kind, delta: d.delta ?? '0' }))
       setOpen(false)

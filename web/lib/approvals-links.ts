@@ -6,6 +6,7 @@
 import { moduleDrawerHref } from './txn-links'
 
 const ORDER_HREF: Record<string, (id: string) => string> = {
+  financial_change: (id) => `/accounting/changes?change=${id}`,
   quote: (id) => `/estimates?estimate=${id}`,
   sales_order: (id) => `/sales-orders?order=${id}`,
   purchase_order: (id) => `/purchase-orders?order=${id}`,

@@ -1,11 +1,18 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { isUuid, pickString } from '../../../lib/list-params'
-import { can, requirePermission } from '../../../lib/authz'
-import { loadContract } from './_lib'
-import type { ContractDrawer } from './ContractDrawer'
+import { getTranslations } from "next-intl/server";
+import {
+  page,
+  pageHeader,
+  ref,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { isUuid, pickString } from "../../../lib/list-params";
+import { can, requirePermission } from "../../../lib/authz";
+import { loadContract, revenueModificationOptions } from "./_lib";
+import type { ContractDrawer } from "./ContractDrawer";
 
 /**
  * Revenue recognition (ASC 606), split into a loader and a spec.
@@ -27,61 +34,70 @@ import type { ContractDrawer } from './ContractDrawer'
  * guard via loadContract, drawerReturn scoping).
  */
 
-type ContractDrawerProps = Parameters<typeof ContractDrawer>[0]
+type ContractDrawerProps = Parameters<typeof ContractDrawer>[0];
 
 export interface RevenueData {
-  title: string
-  description: string
-  currentParams: Record<string, string | string[] | undefined>
-  canRun: boolean
-  drawerOpen: boolean
-  drawer: ContractDrawerProps | null
+  title: string;
+  description: string;
+  currentParams: Record<string, string | string[] | undefined>;
+  canRun: boolean;
+  drawerOpen: boolean;
+  drawer: ContractDrawerProps | null;
 }
 
 export async function loadRevenue(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<RevenueData> {
-  const t = await getTranslations('revenue')
+  const t = await getTranslations("revenue");
 
-  const authz = await requirePermission('ar.read')
-  const canRun = can(authz, 'ar.post')
-  const orgId = authz.user.orgId
+  const authz = await requirePermission("ar.read");
+  const canRun = can(authz, "ar.post");
+  const orgId = authz.user.orgId;
 
-  const contractId = typeof sp.contract === 'string' ? sp.contract : undefined
+  const contractId = typeof sp.contract === "string" ? sp.contract : undefined;
   const openContract =
-    contractId && isUuid(contractId) ? await loadContract(contractId, orgId) : null
-  const requestedReturn = pickString(sp.drawerReturn)
+    contractId && isUuid(contractId)
+      ? await loadContract(contractId, orgId, authz.allowedSubsidiaryIds)
+      : null;
+  const requestedReturn = pickString(sp.drawerReturn);
 
   const drawer: ContractDrawerProps | null = openContract
     ? {
         payload: openContract,
+        modificationOptions: canRun
+          ? await revenueModificationOptions(orgId, authz.allowedSubsidiaryIds)
+          : undefined,
         canRun,
-        closeHref: requestedReturn?.startsWith('/revenue') ? requestedReturn : '/revenue',
+        closeHref: requestedReturn?.startsWith("/revenue")
+          ? requestedReturn
+          : "/revenue",
       }
-    : null
+    : null;
 
   return {
-    title: t('list.title'),
-    description: t('list.description'),
+    title: t("list.title"),
+    description: t("list.description"),
     currentParams: sp,
     canRun,
     drawerOpen: Boolean(drawer),
     drawer,
-  }
+  };
 }
 
-const f = ref<RevenueData>()
+const f = ref<RevenueData>();
 
 export function revenueSpec(data: RevenueData): PageSpec {
-  const runRecognition = { widget: 'run-recognition', props: {} }
+  const runRecognition = { widget: "run-recognition", props: {} };
   return page({
     route: '/revenue',
-    layout: 'list',
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actions: [widget(runRecognition.widget, runRecognition.props, f('canRun'))],
+        title: f("title"),
+        description: f("description"),
+        actions: [
+          widget(runRecognition.widget, runRecognition.props, f("canRun")),
+        ],
       }),
     ],
     body: [
@@ -90,11 +106,13 @@ export function revenueSpec(data: RevenueData): PageSpec {
       // a spec. The spec supplies only the record type and the URL it was
       // already rendering with. The native page passes no emptyAction, so
       // neither does the spec — the list's generic empty state renders.
-      widgetBlock('entity-list-view', {
-        recordType: 'revenue_contract',
+      widgetBlock("entity-list-view", {
+        recordType: "revenue_contract",
         sp: data.currentParams,
-        drawer: data.drawer ? { widget: 'contract-drawer', props: { drawer: data.drawer } } : null,
+        drawer: data.drawer
+          ? { widget: "contract-drawer", props: { drawer: data.drawer } }
+          : null,
       }),
     ],
-  })
+  });
 }

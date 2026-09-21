@@ -1,3 +1,4 @@
+import { lockRevenueContract } from "../revenue/recognition.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { cmp, formatMoney, mulRatio, normalizeMoney, toUnits } from "../money/money.ts";
@@ -245,21 +246,22 @@ export async function syncProjectRevenueContractsInTransaction(
     // -- ensure the contract --------------------------------------------------
     const startsOn = p.starts_on ?? asOfDate;
     let created = false;
-    const existing = (await tx.execute<{ id: string }>(sql`
-      select id from revenue_contracts where org_id = ${orgId} and project_id = ${p.id} limit 1`));
+    const existing = (await tx.execute<{ id: string; last_change_id: string | null; total_transaction_price: string }>(sql`
+      select id,last_change_id,total_transaction_price from revenue_contracts where org_id = ${orgId} and project_id = ${p.id} limit 1`));
     let contractId: string;
     if (existing.rows[0]) {
       contractId = existing.rows[0].id;
+      await lockRevenueContract(tx,orgId,contractId);
       await tx.execute(sql`
         update revenue_contracts
-           set total_transaction_price = ${p.contract_value}, customer_id = ${p.customer_id},
+           set total_transaction_price = case when last_change_id is null then ${p.contract_value} else total_transaction_price end, customer_id = ${p.customer_id},
                starts_on = coalesce(starts_on, ${startsOn}), updated_at = now(), updated_by = ${actorId}
          where id = ${contractId} and org_id = ${orgId}`);
     } else {
       const ins = (await tx.execute<{ id: string }>(sql`
         insert into revenue_contracts
-          (org_id, customer_id, project_id, contract_number, status, starts_on, currency, total_transaction_price, created_by, updated_by)
-        values (${orgId}, ${p.customer_id}, ${p.id}, ${p.code}, 'active', ${startsOn}, ${owner.base_currency}, ${p.contract_value}, ${actorId}, ${actorId})
+          (org_id, subsidiary_id, customer_id, project_id, contract_number, status, starts_on, currency, total_transaction_price, created_by, updated_by)
+        values (${orgId}, ${owner.id}, ${p.customer_id}, ${p.id}, ${p.code}, 'active', ${startsOn}, ${owner.base_currency}, ${p.contract_value}, ${actorId}, ${actorId})
         returning id`));
       contractId = ins.rows[0]!.id;
       created = true;
@@ -267,15 +269,17 @@ export async function syncProjectRevenueContractsInTransaction(
 
     // -- ensure the (single) obligation --------------------------------------
     const existingObl = (await tx.execute<{ id: string }>(sql`
-      select id from performance_obligations where org_id = ${orgId} and contract_id = ${contractId} limit 1`));
+      select id from performance_obligations where org_id = ${orgId} and contract_id = ${contractId} order by created_at,id limit 1`));
     let obligationId: string;
     if (existingObl.rows[0]) {
       obligationId = existingObl.rows[0].id;
       await tx.execute(sql`
         update performance_obligations
-           set booked_amount = ${p.contract_value}, standalone_selling_price = ${p.contract_value},
-               allocated_price = ${p.contract_value}, percent_complete = ${percent},
-               deferred_account_id = ${accts.unbilledReceivable}, recognized_account_id = ${accts.projectRevenue},
+           set booked_amount = case when last_change_id is null then ${p.contract_value} else booked_amount end,
+               standalone_selling_price = case when last_change_id is null then ${p.contract_value} else standalone_selling_price end,
+               allocated_price = case when last_change_id is null then ${p.contract_value} else allocated_price end, percent_complete = ${percent},
+               deferred_account_id = case when last_change_id is null then ${accts.unbilledReceivable} else deferred_account_id end,
+               recognized_account_id = case when last_change_id is null then ${accts.projectRevenue} else recognized_account_id end,
                updated_at = now(), updated_by = ${actorId}
          where id = ${obligationId} and org_id = ${orgId}`);
     } else {
@@ -298,7 +302,7 @@ export async function syncProjectRevenueContractsInTransaction(
       projectCode: p.code,
       contractId,
       obligationId,
-      contractValue: p.contract_value,
+      contractValue: existing.rows[0]?.last_change_id ? existing.rows[0].total_transaction_price : p.contract_value,
       percentComplete: formatMoney(percent, 4),
       overridden,
       created,

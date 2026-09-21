@@ -983,6 +983,38 @@ const BUDGET_SCENARIO: RecordTypeMeta = {
   ],
 };
 
+const LEASE_AGREEMENT: RecordTypeMeta = {
+  key: "lease_agreement", labelKey: "accounting.lifecycle.lease_agreement", category: "entity",
+  featureKey: "fixedAssets", supportsForms: false, customFieldLineTable: null,
+  headerFields: [], lineFields: [],
+  listColumns: [
+    {key:"lease_number",labelKey:"accounting.lifecycle.number",kind:"reference",sortable:true,sortKey:"number",locked:true},
+    {key:"description",labelKey:"accounting.lifecycle.description",kind:"text",sortable:true,sortKey:"description"},
+    {key:"commencement_on",labelKey:"accounting.lifecycle.date",kind:"date",sortable:true,sortKey:"date"},
+    {key:"payment_amount",labelKey:"accounting.lifecycle.payment",kind:"amount",sortable:true,sortKey:"payment"},
+    {key:"status",labelKey:"accounting.lifecycle.status",kind:"status",sortable:true,sortKey:"status"},
+    {key:"_actions",labelKey:"common.labels.actions",kind:"actions",defaultWidth:44},
+  ],
+  listFilters: [{key:"status",labelKey:"common.labels.status",kind:"select",operators:OPERATORS_BY_KIND.select,
+    options: ["draft","active","terminated","complete"].map(value=>({value,labelKey:`accounting.lifecycle.${value}`}))}],
+};
+
+const FINANCIAL_CHANGE: RecordTypeMeta = {
+  key: "financial_change", labelKey: "accounting.lifecycle.financial_change", category: "entity",
+  supportsForms: false, customFieldLineTable: null,
+  headerFields: [], lineFields: [],
+  listColumns: [
+    {key:"operation",labelKey:"accounting.lifecycle.operation",kind:"reference",sortable:true,sortKey:"operation",locked:true},
+    {key:"domain",labelKey:"accounting.lifecycle.domain",kind:"text",sortable:true,sortKey:"domain"},
+    {key:"reason",labelKey:"accounting.lifecycle.reason",kind:"text",sortable:true,sortKey:"reason"},
+    {key:"effective_on",labelKey:"accounting.lifecycle.date",kind:"date",sortable:true,sortKey:"date"},
+    {key:"status",labelKey:"accounting.lifecycle.status",kind:"status",sortable:true,sortKey:"status"},
+    {key:"_actions",labelKey:"common.labels.actions",kind:"actions",defaultWidth:44},
+  ],
+  listFilters: [{key:"status",labelKey:"common.labels.status",kind:"select",operators:OPERATORS_BY_KIND.select,
+    options: ["draft","pending","approved","rejected","applied"].map(value=>({value,labelKey:`accounting.lifecycle.${value}`}))}],
+};
+
 const REVENUE_CONTRACT: RecordTypeMeta = {
   key: "revenue_contract",
   labelKey: "customization.recordTypes.revenue_contract",
@@ -1778,6 +1810,8 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   INVENTORY_ONHAND,
   INVENTORY_MOVEMENT,
   BUDGET_SCENARIO,
+  LEASE_AGREEMENT,
+  FINANCIAL_CHANGE,
   REVENUE_CONTRACT,
   EQUIPMENT_UNIT,
   TIMESHEET_WEEK,

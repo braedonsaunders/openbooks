@@ -1,7 +1,8 @@
+import { measureCreditExposure, type CreditExposure } from "./deferred-credit-pool.ts";
 import { sql } from "drizzle-orm";
 import { canonicalDecimal, fixedDecimal } from "../money/exact-decimal.ts";
 import { db, type SqlExecutor, withOrg, withTransactionSavepoint } from "../platform/db.ts";
-import { add, cmp, fromUnits, isZero, mulPercent, neg, roundDiv, sum, toUnits } from "../money/money.ts";
+import { add, cmp, fromUnits, isZero, mulPercent, mulRate, neg, roundDiv, sum, toUnits } from "../money/money.ts";
 import {
   periodInterest,
   periodRateFromAnnualPercent,
@@ -499,8 +500,9 @@ export async function setContractPricing(
            total_transaction_price = ${transactionPrice},
            updated_at = now(), updated_by = ${actorId}
      where id = ${contractId} and org_id = ${orgId}
+       and not exists (select 1 from performance_obligations o where o.org_id=${orgId} and o.contract_id=${contractId})
      returning id`));
-  if (!updated.rows[0]) throw new TransactionPriceError("revenue contract not found");
+  if (!updated.rows[0]) throw new TransactionPriceError("contract not found or already allocated; propose a contract modification from Revenue → contract → Modify contract");
 
   return {
     contractId,
@@ -708,6 +710,17 @@ export function computeRecognitionSchedule(input: RecognitionInput): Recognition
 // Persist a schedule (plan → recognition_schedules + lines)
 // ---------------------------------------------------------------------------
 
+/** All plan writers and posting take the contract mutex before row locks.
+ * This serializes multi-obligation amendments without an obligation/contract
+ * lock inversion. The key is tenant-qualified; no organization-wide lock. */
+export async function lockRevenueContract(runner:SqlExecutor,orgId:string,contractId:string):Promise<void> {
+  await runner.execute(sql`select pg_advisory_xact_lock(hashtext(${orgId}),hashtext(${`revenue-contract:${contractId}`}))`);
+}
+async function lockObligationContract(runner:SqlExecutor,orgId:string,obligationId:string):Promise<void> {
+  const row=(await runner.execute<{contract_id:string}>(sql`select contract_id from performance_obligations where org_id=${orgId} and id=${obligationId}`)).rows[0];
+  if(row)await lockRevenueContract(runner,orgId,row.contract_id);
+}
+
 /** Primary accounting book id (schedules are book-aware). */
 async function primaryBookId(runner: SqlExecutor, orgId: string): Promise<string> {
   const res = (await runner.execute<{ id: string }>(sql`
@@ -719,11 +732,28 @@ async function primaryBookId(runner: SqlExecutor, orgId: string): Promise<string
 /** Resolve the (non-adjustment) accounting period covering a date, or null. */
 async function periodForDate(runner: SqlExecutor, orgId: string, date: string): Promise<string | null> {
   const res = (await runner.execute<{ id: string }>(sql`
-    select id from accounting_periods
-     where org_id = ${orgId} and is_adjustment = false
-       and starts_on <= ${date} and ends_on >= ${date}
-     limit 1`));
+    select p.id from accounting_periods p join fiscal_calendars c on c.id=p.fiscal_calendar_id and c.org_id=p.org_id
+     where p.org_id = ${orgId} and p.is_adjustment = false and c.is_default and c.is_active
+       and p.starts_on <= ${date} and p.ends_on >= ${date}
+     order by p.id limit 1`));
   return res.rows[0]?.id ?? null;
+}
+
+export interface RevenueChangeBasis {
+  changeId: string; effectiveOn: string; treatment: 'separate'|'prospective'|'catch_up';
+  totalAmount: string; remaining: string; targetRecognized: string; progressAtChange: string;
+  creditBaseline: string; creditExposure?: CreditExposure; excludedEventIds: string[]; retired: boolean;
+  deferredAccountId: string; recognizedAccountId: string; currency: string; fxRate: string; functionalCurrency:string; method:RecognitionMethod;
+}
+
+export function recognitionProgressTarget(total:string,percent:string,basis?:RevenueChangeBasis|null):string {
+  pctOf(0n,percent);
+  if(!basis || basis.treatment!=='prospective')return mulPercent(total,percent,4);
+  const progress=toUnits(percent),baseline=toUnits(basis.progressAtChange);
+  if(progress<baseline)throw new RevenueRecognitionError('progress is below the performance retained by the prospective amendment; propose a cumulative catch-up assessment before revising previously earned revenue');
+  const denominator=toUnits('100')-baseline;
+  const earned=denominator===0n?toUnits(basis.remaining):roundDiv(toUnits(basis.remaining)*(progress-baseline),denominator);
+  return fromUnits(toUnits(basis.targetRecognized)+earned);
 }
 
 export interface BuildRecognitionResult {
@@ -744,7 +774,7 @@ export interface BuildRecognitionResult {
  * `asOfDate` month (a percent change is a change in estimate — ASC 250 —
  * recognized in the current period, never restated to the contract start).
  */
-async function buildRecognitionScheduleOn(
+export async function buildRecognitionScheduleOn(
   runner: SqlExecutor,
   obligationId: string,
   orgId: string,
@@ -752,6 +782,7 @@ async function buildRecognitionScheduleOn(
   bookId: string,
   asOfDate?: string,
 ): Promise<BuildRecognitionResult> {
+  await lockObligationContract(runner,orgId,obligationId);
   const oblRes = (await runner.execute<{
       id: string;
       allocated_price: string;
@@ -785,17 +816,22 @@ async function buildRecognitionScheduleOn(
   const startOn = o.recognition_starts_on ?? o.contract_starts;
   if (!startOn) throw new Error("obligation has no recognition start date");
   const endOn = o.recognition_ends_on ?? (o.end_date_source === "contract" ? o.contract_ends : null);
-  const isPercentComplete = o.method === "percent_complete";
 
-  const existing = (await runner.execute<{ id: string }>(sql`
-    select id from recognition_schedules
+  const existing = (await runner.execute<{ id: string; revision: number; change_basis: RevenueChangeBasis | null }>(sql`
+    select id,revision,change_basis from recognition_schedules
      where obligation_id = ${obligationId} and org_id = ${orgId} and book_id = ${bookId} limit 1`));
+  const basis = existing.rows[0]?.change_basis;
+  const method = basis?.method ?? o.method;
+  const isPercentComplete = method === "percent_complete";
+  const revision = existing.rows[0]?.revision ?? 1;
+  const scheduleTotal = basis?.totalAmount ?? o.allocated_price;
+  if (basis?.retired) return {scheduleId:existing.rows[0]!.id,lineCount:0,skippedMonths:[]};
   let scheduleId: string;
   if (existing.rows[0]) {
     scheduleId = existing.rows[0].id;
     await runner.execute(sql`
       update recognition_schedules
-         set total_amount = ${o.allocated_price}, updated_at = now(), updated_by = ${actorId}
+         set total_amount = ${scheduleTotal}, updated_at = now(), updated_by = ${actorId}
        where id = ${scheduleId} and org_id = ${orgId}`);
     } else {
       // Concurrent replays may race on the (obligation, book) identity; lose
@@ -812,12 +848,13 @@ async function buildRecognitionScheduleOn(
            where obligation_id = ${obligationId} and org_id = ${orgId} and book_id = ${bookId} limit 1`)).rows[0]!.id;
     }
 
-  const posted = (await runner.execute<{ period_id: string; planned_amount: string; sequence: number }>(sql`
-    select period_id, planned_amount, sequence from recognition_schedule_lines
+  const posted = (await runner.execute<{ period_id: string; planned_amount: string; sequence: number; revision: number; modification_adjustment: boolean }>(sql`
+    select period_id, case when reversal_journal_entry_id is null then coalesce(recognized_amount,0) else 0 end::text as planned_amount, sequence, revision, modification_adjustment from recognition_schedule_lines
      where org_id = ${orgId} and schedule_id = ${scheduleId} and journal_entry_id is not null`));
-  const postedPeriods = new Set(posted.rows.map((r) => r.period_id));
+  const currentPosted = basis ? posted.rows.filter(r=>r.revision === revision && !r.modification_adjustment) : posted.rows;
+  const postedPeriods = new Set(currentPosted.map((r) => r.period_id));
   const postedByPeriod = new Map<string, string>();
-  for (const row of posted.rows) {
+  for (const row of currentPosted) {
     postedByPeriod.set(row.period_id, add(postedByPeriod.get(row.period_id) ?? "0", row.planned_amount));
   }
   const postedToDate = sum(posted.rows.map((r) => r.planned_amount));
@@ -826,12 +863,13 @@ async function buildRecognitionScheduleOn(
   // Milestone and usage methods recognize from recorded events rather than
   // a term. Load the obligation's persisted events so computeRecognitionSchedule
   // produces period targets that can be compared with posted recognition.
-  const isMilestoneOrUsage = o.method === "milestone" || o.method === "usage";
+  const isMilestoneOrUsage = method === "milestone" || method === "usage";
   let events: { periodMonth: string; amount: string }[] | undefined;
   if (isMilestoneOrUsage) {
     const eventRes = (await runner.execute<{ period_month: string; amount: string }>(sql`
       select period_month, amount from recognition_events
        where org_id = ${orgId} and obligation_id = ${obligationId}
+       ${basis ? sql`and id not in (select jsonb_array_elements_text(${JSON.stringify(basis.excludedEventIds)}::jsonb)::uuid)` : sql``}
        order by period_month`));
     events = eventRes.rows.map((e) => ({ periodMonth: e.period_month, amount: e.amount }));
   }
@@ -839,21 +877,27 @@ async function buildRecognitionScheduleOn(
   // Percent-complete: the catch-up delta lands in the as-of month (clamped to
   // the term start), credited for everything this schedule already posted.
   const plan = computeRecognitionSchedule({
-    total: o.allocated_price,
-    method: o.method,
-    startOn: isPercentComplete && asOfDate && asOfDate > startOn ? asOfDate : startOn,
+    total: basis && !isPercentComplete ? basis.remaining : scheduleTotal,
+    method,
+    startOn: isPercentComplete && asOfDate && asOfDate > (basis?.effectiveOn ?? startOn) ? asOfDate : (basis?.effectiveOn ?? startOn),
     endOn,
     termPeriods: o.recognition_periods,
-    startOffsetDays: o.start_offset_days,
-    initialAmountPercent: o.initial_amount_percent,
-    periodOffset: o.period_offset,
+    startOffsetDays: basis ? 0 : o.start_offset_days,
+    initialAmountPercent: basis ? '0' : o.initial_amount_percent,
+    periodOffset: basis ? 0 : o.period_offset,
     percentComplete: o.percent_complete,
     alreadyRecognized: isPercentComplete ? postedToDate : null,
     events,
   });
 
+  // For a prospective series, progress is measured over the remaining service,
+  // not reapplied to revenue earned under the previous version.
+  if (basis?.treatment === 'prospective' && isPercentComplete && plan[0]) {
+    plan[0].planned=add(recognitionProgressTarget(scheduleTotal,o.percent_complete??'0',basis),neg(postedToDate));
+  }
   await runner.execute(sql`
-    delete from recognition_schedule_lines where org_id = ${orgId} and schedule_id = ${scheduleId} and journal_entry_id is null`);
+    delete from recognition_schedule_lines where org_id = ${orgId} and schedule_id = ${scheduleId}
+     and journal_entry_id is null and superseded_by_change_id is null and not modification_adjustment`);
 
   // Events are immutable evidence; a period can receive more events after its
   // first posting. Plan the period's current total less its posted amount as
@@ -891,11 +935,11 @@ async function buildRecognitionScheduleOn(
       ? add(p.planned, neg(postedByPeriod.get(periodId) ?? "0"))
       : p.planned;
     if ((isPercentComplete || isMilestoneOrUsage) && isZero(planned)) continue;
-    const sequence = isPercentComplete || isMilestoneOrUsage ? nextSequence + lineCount : p.sequence;
+    const sequence = basis || isPercentComplete || isMilestoneOrUsage ? nextSequence + lineCount : p.sequence;
     await runner.execute(sql`
       insert into recognition_schedule_lines
-        (org_id, schedule_id, period_id, sequence, planned_amount, created_by, updated_by)
-      values (${orgId}, ${scheduleId}, ${periodId}, ${sequence}, ${planned}, ${actorId}, ${actorId})`);
+        (org_id, schedule_id, period_id, sequence, planned_amount, revision, created_by, updated_by)
+      values (${orgId}, ${scheduleId}, ${periodId}, ${sequence}, ${planned}, ${revision}, ${actorId}, ${actorId})`);
     lineCount++;
   }
   if (lineCount > 0) {
@@ -1025,6 +1069,7 @@ export async function recordRecognitionEvent(
   return await db.transaction(async (tx) => {
     await assertEnabled(tx, input.orgId);
 
+    await lockObligationContract(tx,input.orgId,input.obligationId);
     // Validate the obligation exists and uses a milestone or usage method.
     const oblRes = (await tx.execute<{ id: string; method: string; status: string }>(sql`
       select o.id, r.method, o.status
@@ -1220,9 +1265,9 @@ export async function createObligationsFromInvoice(
       const contractKey = revenueContractPostingEffectKey(documentId);
       const insertedContract = await tx.execute<{ id: string }>(sql`
         insert into revenue_contracts
-          (org_id, customer_id, contract_number, idempotency_key, status, starts_on,
+          (org_id, subsidiary_id, customer_id, contract_number, idempotency_key, status, starts_on,
            currency, total_transaction_price, created_by, updated_by)
-        values (${orgId}, ${doc.party_id}, ${doc.document_number}, ${contractKey}, 'active',
+        values (${orgId}, ${doc.subsidiary_id}, ${doc.party_id}, ${doc.document_number}, ${contractKey}, 'active',
                 ${doc.document_date}, ${doc.currency}, ${contractTotal}, ${actorId}, ${actorId})
         on conflict (org_id, idempotency_key) where idempotency_key is not null do nothing
         returning id
@@ -1389,63 +1434,30 @@ export interface RunRecognitionResult {
  * nothing and always report zero credits. Scoped per book so multi-book plans
  * behave exactly as before when no credits exist.
  */
-async function recognitionUnearnedRemaining(
-  tx: SqlExecutor,
-  input: { orgId: string; obligationId: string; bookId: string; deferredAccountId: string },
-): Promise<{ remaining: string; credited: string }> {
-  const r = (await tx.execute<{ allocated: string; recognized: string; credited: string }>(sql`
-    select o.allocated_price as allocated,
-      coalesce((
-        select sum(case when l.journal_entry_id is not null then coalesce(l.recognized_amount, 0) else 0 end)
-             - sum(case when l.reversal_journal_entry_id is not null then coalesce(l.recognized_amount, 0) else 0 end)
-          from recognition_schedule_lines l
-          join recognition_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
-         where s.org_id = ${input.orgId}
-           and s.obligation_id = ${input.obligationId}
-           and s.book_id = ${input.bookId}
-      ), 0)::text as recognized,
-      coalesce((
-        select sum(cl.amount)
-          from documents credit
-          join journal_lines cl
-            on cl.entry_id = credit.posted_entry_id
-           and cl.org_id = credit.org_id
-          join journal_entries ce
-            on ce.id = cl.entry_id
-           and ce.org_id = cl.org_id
-           and ce.book_id = ${input.bookId}
-           and ce.status = 'posted'
-         where credit.org_id = ${input.orgId}
-           and credit.kind = 'customer_credit'
-           and credit.status = 'posted'
-           and cl.account_id = ${input.deferredAccountId}
-           and cl.amount > 0
-           and exists (
-             select 1
-               from journal_lines fl
-               join applications app
-                 on app.from_line_id = fl.id
-                and app.org_id = fl.org_id
-                and app.unapplied_at is null
-               join journal_lines tl
-                 on tl.id = app.to_line_id
-                and tl.org_id = app.org_id
-              where fl.entry_id = credit.posted_entry_id
-                and fl.org_id = credit.org_id
-                and tl.entry_id = inv.posted_entry_id
-                and tl.org_id = inv.org_id
-           )
-      ), 0)::text as credited
-      from performance_obligations o
-      left join document_lines dl on dl.id = o.document_line_id and dl.org_id = o.org_id
-      left join documents inv on inv.id = dl.document_id and inv.org_id = dl.org_id
-     where o.id = ${input.obligationId} and o.org_id = ${input.orgId}`));
-  const row = r.rows[0];
-  if (!row) throw new RevenueRecognitionError("recognition obligation disappeared during posting");
-  return {
-    remaining: add(add(row.allocated, neg(row.recognized)), neg(row.credited)),
-    credited: row.credited,
-  };
+export async function recognitionUnearnedRemaining(
+ tx:SqlExecutor,input:{orgId:string;obligationId:string;bookId:string;deferredAccountId:string},
+):Promise<{remaining:string;credited:string;exposure:CreditExposure}> {
+ const row=(await tx.execute<{allocated:string;recognized:string;change_basis:RevenueChangeBasis|null;invoice_id:string|null;currency:string|null}>(sql`
+ select coalesce(s.total_amount,o.allocated_price)::text as allocated,s.change_basis,inv.id as invoice_id,inv.currency,
+   coalesce((select sum(case when l.journal_entry_id is not null and l.reversal_journal_entry_id is null then coalesce(l.recognized_amount,0) else 0 end)
+     from recognition_schedule_lines l where l.org_id=o.org_id and l.schedule_id=s.id),0)::text as recognized
+ from performance_obligations o left join recognition_schedules s on s.obligation_id=o.id and s.org_id=o.org_id and s.book_id=${input.bookId}
+ left join document_lines dl on dl.id=o.document_line_id and dl.org_id=o.org_id
+ left join documents inv on inv.id=dl.document_id and inv.org_id=dl.org_id
+ where o.org_id=${input.orgId} and o.id=${input.obligationId}`)).rows[0];
+ if(!row)throw new RevenueRecognitionError('recognition obligation disappeared during posting');
+ let exposure:CreditExposure=row.change_basis?.creditExposure??{kind:'none'};
+ if(!row.change_basis?.creditExposure && row.invoice_id && row.currency) {
+   const peers=(await tx.execute<{id:string;weight:string}>(sql`select o.id,coalesce(o.booked_amount,o.allocated_price)::text as weight
+    from performance_obligations o join document_lines dl on dl.id=o.document_line_id and dl.org_id=o.org_id
+    left join items i on i.id=o.item_id and i.org_id=o.org_id join recognition_rules r on r.id=o.recognition_rule_id and r.org_id=o.org_id
+    where o.org_id=${input.orgId} and dl.document_id=${row.invoice_id} and coalesce(o.deferred_account_id,i.deferred_account_id,r.deferred_account_id)=${input.deferredAccountId} order by o.id`)).rows;
+   const index=peers.findIndex(p=>p.id===input.obligationId);
+   if(index<0)throw new RevenueRecognitionError('the invoice credit allocation omitted this promise');
+   exposure={kind:'invoice',source:{invoiceId:row.invoice_id,deferredAccountId:input.deferredAccountId,baseline:'0',currency:row.currency,fxRate:'1'},weights:peers.map(p=>p.weight),index};
+ }
+ const credited=await measureCreditExposure(tx,input.orgId,input.bookId,exposure);
+ return {remaining:sum([row.allocated,neg(row.recognized),neg(credited)]),credited,exposure};
 }
 
 function recognitionObligationScope(orgId: string, allowedSubsidiaryIds?: readonly string[]) {
@@ -1456,13 +1468,14 @@ function recognitionObligationScope(orgId: string, allowedSubsidiaryIds?: readon
       left join documents scoped_document on scoped_document.id = scoped_line.document_id and scoped_document.org_id = o.org_id
       left join projects scoped_project on scoped_project.id = scoped_contract.project_id and scoped_project.org_id = o.org_id
      where scoped_contract.id = o.contract_id and scoped_contract.org_id = o.org_id
-       and coalesce(scoped_line.subsidiary_id, scoped_document.subsidiary_id, scoped_project.subsidiary_id,
+       and coalesce(scoped_contract.subsidiary_id, scoped_line.subsidiary_id, scoped_document.subsidiary_id, scoped_project.subsidiary_id,
          (select id from subsidiaries where org_id = ${orgId} order by created_at, id limit 1))
          = any(${`{${allowedSubsidiaryIds.join(",")}}`}::uuid[])
   )`;
 }
 
 type RecognitionPostingRow = {
+  recognition_on: string | null; recognition_currency: string | null; functional_currency:string|null; recognition_fx_rate: string;
   line_id: string; planned: string; period_id: string; sequence: number;
   book_id: string; period_name: string; period_ends_on: string;
   method: RecognitionMethod;
@@ -1491,23 +1504,27 @@ async function recognitionPostingRows(
   const obligationScope = recognitionObligationScope(orgId, allowedSubsidiaryIds);
   return (await runner.execute<RecognitionPostingRow>(sql`
     select l.id             as line_id,
+           l.recognition_on::text as recognition_on,
+           s.change_basis->>'currency' as recognition_currency,
+           s.change_basis->>'functionalCurrency' as functional_currency,
+           coalesce(s.change_basis->>'fxRate','1') as recognition_fx_rate,
            l.planned_amount as planned,
            l.period_id      as period_id,
            l.sequence       as sequence,
            s.book_id        as book_id,
            p.name           as period_name,
            p.ends_on        as period_ends_on,
-           r.method         as method,
+           coalesce(s.change_basis->>'method',r.method) as method,
            o.id             as obligation_id,
            o.description    as obligation_desc,
-           o.deferred_account_id    as obl_deferred,
-           o.recognized_account_id  as obl_recognized,
+           coalesce((s.change_basis->>'deferredAccountId')::uuid,o.deferred_account_id) as obl_deferred,
+           coalesce((s.change_basis->>'recognizedAccountId')::uuid,o.recognized_account_id) as obl_recognized,
            it.deferred_account_id   as item_deferred,
            it.income_account_id     as item_income,
            r.deferred_account_id    as rule_deferred,
            r.recognized_account_id  as rule_recognized,
            c.contract_number as contract_number,
-           coalesce(dl.subsidiary_id, doc.subsidiary_id, prj.subsidiary_id, sub0.id) as subsidiary_id,
+           coalesce(c.subsidiary_id, dl.subsidiary_id, doc.subsidiary_id, prj.subsidiary_id, sub0.id) as subsidiary_id,
            coalesce(sub.base_currency, psub.base_currency, sub0.base_currency) as base_currency,
            coalesce(dl.department_id, doc.department_id) as department_id,
            coalesce(dl.project_id, doc.project_id, c.project_id) as project_id,
@@ -1527,20 +1544,20 @@ async function recognitionPostingRows(
       left join documents doc on doc.id = dl.document_id and doc.org_id = dl.org_id
       left join projects prj on prj.id = c.project_id and prj.org_id = c.org_id
       left join items it on it.id = o.item_id and it.org_id = o.org_id
-      left join subsidiaries sub on sub.id = coalesce(dl.subsidiary_id, doc.subsidiary_id) and sub.org_id = o.org_id
+      left join subsidiaries sub on sub.id = coalesce(c.subsidiary_id, dl.subsidiary_id, doc.subsidiary_id) and sub.org_id = o.org_id
       left join subsidiaries psub on psub.id = prj.subsidiary_id and psub.org_id = prj.org_id
       left join lateral (
         select id, base_currency from subsidiaries where org_id = ${orgId} order by created_at, id limit 1
       ) sub0 on true
      where l.org_id = ${orgId}
-       and l.journal_entry_id is null
+       and l.journal_entry_id is null and l.superseded_by_change_id is null
        and o.status <> 'cancelled'
-       and not r.is_forecast
+       and (s.change_basis is not null or not r.is_forecast)
        -- Scheduled methods recognize a period once it has ENDED; percent_complete
        -- is a measurement AS OF the date, so its catch-up in the current period
        -- is due as soon as the period has started.
-       and (p.ends_on <= ${asOfDate}
-            or (r.method = 'percent_complete' and p.starts_on <= ${asOfDate}))
+       and (case when l.recognition_on is not null then l.recognition_on <= ${asOfDate}::date else (p.ends_on <= ${asOfDate}
+            or (coalesce(s.change_basis->>'method',r.method) = 'percent_complete' and p.starts_on <= ${asOfDate})) end)
        ${obligationId ? sql`and o.id = ${obligationId}` : sql``}
        and ${obligationScope}
        ${lineId ? sql`and l.id = ${lineId}` : sql``}
@@ -1569,6 +1586,8 @@ export async function runRevenueRecognition(
   await assertEnabled(db, orgId);
   const obligationScope = recognitionObligationScope(orgId, allowedSubsidiaryIds);
 
+  const effectiveMethod=sql`coalesce((select s.change_basis->>'method' from recognition_schedules s join accounting_books b on b.id=s.book_id and b.org_id=s.org_id and b.is_primary where s.obligation_id=o.id and s.org_id=o.org_id limit 1),r.method)`;
+
   const due = await recognitionPostingRows(db, orgId, asOfDate, obligationId, allowedSubsidiaryIds);
 
   const result: RunRecognitionResult = { posted: 0, skipped: 0, totalAmount: "0", entries: [], problems: [] };
@@ -1576,6 +1595,7 @@ export async function runRevenueRecognition(
   for (const candidate of due) {
     try {
       const posted = await db.transaction(async (tx) => withTransactionSavepoint(tx, async () => {
+        await lockObligationContract(tx,orgId,candidate.obligation_id);
         // Rebuilds, event writes and cancellation share this aggregate lock.
         // Nothing from the preliminary scan is a financial posting input.
         const obligation = await tx.execute<{ id: string }>(sql`
@@ -1634,14 +1654,16 @@ export async function runRevenueRecognition(
         if (!row.subsidiary_id || !row.base_currency) {
           throw new RevenueRecognitionError("recognition legal entity and functional currency are required");
         }
+        if(row.functional_currency && row.functional_currency!==row.base_currency) throw new RevenueRecognitionError("complete the legal entity functional-currency transition before posting this amended contract");
         const subsidiaryId = row.subsidiary_id;
         // Hold the legal-entity tree while validating the current account and
         // dimension restrictions; discovery-time validation is not sufficient.
         await tx.execute(sql`select id from subsidiaries where org_id = ${orgId} order by id for share`);
         const subsidiaryContext = await loadSubsidiaryContext(tx, orgId);
+        const basePosting = mulRate(posting, row.recognition_fx_rate);
         const lines = [
-          { accountId: deferredAccountId, amount: posting },
-          { accountId: recognizedAccountId, amount: neg(posting) },
+          { accountId: deferredAccountId, amount: basePosting, txnAmount: posting },
+          { accountId: recognizedAccountId, amount: neg(basePosting), txnAmount: neg(posting) },
         ];
         await validateSubsidiaryRestrictions(tx, {
           orgId, ctx: subsidiaryContext, docSubsidiaryId: subsidiaryId,
@@ -1653,8 +1675,8 @@ export async function runRevenueRecognition(
         });
         const balance = sum(lines.map(line => line.amount));
         if (!isZero(balance)) throw new RevenueRecognitionError(`unbalanced (${balance})`);
-        const postingDate = row.method === "percent_complete" && asOfDate < row.period_ends_on
-          ? asOfDate : row.period_ends_on;
+        const postingDate = row.recognition_on ?? (row.method === "percent_complete" && asOfDate < row.period_ends_on
+          ? asOfDate : row.period_ends_on);
         const entryRes = (await tx.execute<{ id: string }>(sql`
           insert into journal_entries
             (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
@@ -1679,20 +1701,20 @@ export async function runRevenueRecognition(
             insert into journal_lines
               (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate,
                department_id, project_id, location_id, class_id, equipment_unit_id, extra_dims, memo)
-            values (${orgId}, ${eid}, ${i + 1}, ${l.accountId}, ${row.subsidiary_id}, ${l.amount}, ${row.base_currency}, ${l.amount}, 1,
+            values (${orgId}, ${eid}, ${i + 1}, ${l.accountId}, ${row.subsidiary_id}, ${l.amount}, ${row.recognition_currency ?? row.base_currency}, ${l.txnAmount}, ${row.recognition_fx_rate},
                     ${row.department_id}, ${row.project_id}, ${row.location_id}, ${row.class_id},
                     ${row.equipment_unit_id}, ${JSON.stringify(row.extra_dims ?? {})}::jsonb,
                     ${`Revenue recognition ${row.period_name}`})`);
         }
 
-        await tx.execute(sql`
-          update journal_entries set status = 'posted', posted_at = now(), posted_by = ${actorId} where id = ${eid} and org_id = ${orgId}`);
-
-        await tx.execute(sql`
+        const committed=await tx.execute(sql`
+          update journal_entries set status = 'posted', posted_at = now(), posted_by = ${actorId} where id = ${eid} and org_id = ${orgId} and status='draft' returning id`);
+        if(committed.rows.length!==1)throw new RevenueRecognitionError('recognition journal could not be posted');
+        const linked=await tx.execute(sql`
           update recognition_schedule_lines
              set recognized_amount = ${posting}, journal_entry_id = ${eid}, updated_at = now(), updated_by = ${actorId}
-           where id = ${row.line_id} and org_id = ${orgId}`);
-
+           where id = ${row.line_id} and org_id = ${orgId} and journal_entry_id is null and superseded_by_change_id is null returning id`);
+        if(linked.rows.length!==1)throw new RevenueRecognitionError('recognition journal could not be linked to its plan');
         return { status: "posted" as const, entryId: eid, planned: posting, row };
       }));
       if (posted.status === "already_posted" || posted.status === "zero") {
@@ -1741,8 +1763,8 @@ export async function runRevenueRecognition(
       join revenue_contracts c on c.id = o.contract_id and c.org_id = o.org_id
       join recognition_rules r on r.id = o.recognition_rule_id and r.org_id = o.org_id
      where o.org_id = ${orgId} and o.status = 'open'
-       and not r.is_forecast and ${obligationScope}
-       and r.method in ('milestone', 'usage')
+       and (not r.is_forecast or o.last_change_id is not null) and ${obligationScope}
+       and ${effectiveMethod} in ('milestone', 'usage')
        ${obligationId ? sql`and o.id = ${obligationId}` : sql``}
        and (
          not exists (select 1 from recognition_schedules s where s.obligation_id = o.id and s.org_id = o.org_id)
@@ -1751,7 +1773,7 @@ export async function runRevenueRecognition(
            and not exists (
              select 1 from recognition_schedule_lines l
                join recognition_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
-              where s.obligation_id = o.id and s.org_id = o.org_id)
+              where s.obligation_id = o.id and s.org_id = o.org_id and l.superseded_by_change_id is null)
          )
        )`));
   for (const row of emptyPlans.rows) {
@@ -1774,16 +1796,16 @@ export async function runRevenueRecognition(
      where r.id = o.recognition_rule_id
        and r.org_id = o.org_id
        and o.org_id = ${orgId} and o.status = 'open'
-       and not r.is_forecast and ${obligationScope}
+       and (not r.is_forecast or o.last_change_id is not null) and ${obligationScope}
        ${obligationId ? sql`and o.id = ${obligationId}` : sql``}
-       and (r.method <> 'percent_complete' or coalesce(o.percent_complete, '0')::numeric >= 100)
-       and (r.method not in ('milestone', 'usage') or not exists (
+       and (${effectiveMethod} <> 'percent_complete' or coalesce(o.percent_complete, '0')::numeric >= 100)
+       and (${effectiveMethod} not in ('milestone', 'usage') or not exists (
          select 1 from recognition_schedules event_schedule
           where event_schedule.org_id = o.org_id and event_schedule.obligation_id = o.id
             and coalesce((select sum(event_line.recognized_amount)
               from recognition_schedule_lines event_line
               where event_line.org_id = o.org_id and event_line.schedule_id = event_schedule.id
-                and event_line.journal_entry_id is not null), 0) <> o.allocated_price
+                and event_line.journal_entry_id is not null), 0) <> event_schedule.total_amount
        ))
        and exists (
          select 1 from recognition_schedule_lines l
@@ -1792,19 +1814,19 @@ export async function runRevenueRecognition(
        and not exists (
          select 1 from recognition_schedules s
            join recognition_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
-          where s.obligation_id = o.id and s.org_id = o.org_id and l.journal_entry_id is null and l.planned_amount <> '0')`);
+          where s.obligation_id = o.id and s.org_id = o.org_id and l.journal_entry_id is null and l.superseded_by_change_id is null and l.planned_amount <> '0')`);
 
   // Advance schedule status for reporting.
   await db.execute(sql`
     update recognition_schedules s set status = case
-        when not exists (select 1 from recognition_schedule_lines l where l.schedule_id = s.id and l.org_id = s.org_id and l.journal_entry_id is null and l.planned_amount <> '0') then 'complete'
+        when not exists (select 1 from recognition_schedule_lines l where l.schedule_id = s.id and l.org_id = s.org_id and l.journal_entry_id is null and l.superseded_by_change_id is null and l.planned_amount <> '0') then 'complete'
         when exists (select 1 from recognition_schedule_lines l where l.schedule_id = s.id and l.org_id = s.org_id and l.journal_entry_id is not null) then 'in_progress'
         else 'planned' end,
       updated_at = now()
     from performance_obligations o
       join recognition_rules r on r.id = o.recognition_rule_id and r.org_id = o.org_id
     where s.org_id = ${orgId} and s.obligation_id = o.id and s.org_id = o.org_id
-      and o.status <> 'cancelled' and not r.is_forecast and ${obligationScope}
+      and o.status <> 'cancelled' and (not r.is_forecast or o.last_change_id is not null) and ${obligationScope}
       ${obligationId ? sql`and s.obligation_id = ${obligationId}` : sql``}`);
 
   return result;
@@ -1906,15 +1928,14 @@ export async function cancelRevenueRecognitionForInvoice(input: {
         );
       }
 
+      const affectedContracts=(await tx.execute<{contract_id:string}>(sql`select distinct o.contract_id from performance_obligations o join document_lines dl on dl.id=o.document_line_id and dl.org_id=o.org_id where o.org_id=${input.orgId} and dl.document_id=${input.documentId} order by o.contract_id`)).rows;
+      for(const c of affectedContracts)await lockRevenueContract(tx,input.orgId,c.contract_id);
       const obligations = (await tx.execute<{ id: string; contract_id: string; status: string }>(sql`
         select obligation.id, obligation.contract_id, obligation.status
           from performance_obligations obligation
-          join document_lines line
-            on line.id = obligation.document_line_id
-           and line.org_id = obligation.org_id
          where obligation.org_id = ${input.orgId}
-           and line.document_id = ${input.documentId}
-         order by obligation.created_at, obligation.id
+           and obligation.contract_id in(select jsonb_array_elements_text(${JSON.stringify(affectedContracts.map(c=>c.contract_id))}::jsonb)::uuid)
+         order by obligation.id
          for update of obligation
       `));
       if (obligations.rows.length === 0) {

@@ -1,4 +1,4 @@
-/**
+import { measureLossOfControl } from "../../consolidation/loss-of-control-measurement.ts";/**
  * Consolidation — IFRS 10 / ASC 810 (control), IAS 28 / ASC 323 (associates),
  * IFRS 11 (joint operations), IAS 21.39 / ASC 830-30 (foreign translation).
  *
@@ -181,14 +181,32 @@ export const CONSOLIDATION_CASES: readonly ConformanceCase[] = [
       const ledger = ctx.ledger!;
       const childId = await addSubsidiary(ctx, "Sub Co", "CAD", "CA", false);
       await addSubsidiary(ctx, "Eliminations", "CAD", "CA", true);
-      await postFixtureEntry(ctx, childId, "CONF-C1-CAP", "2026-07-01", "Opening equity", [
-        { accountId: ctx.roles.bank, amount: "800", currency: "CAD" },
-        { accountId: ctx.roles.subsidiaryEquity, amount: "-800", currency: "CAD" },
-      ]);
-      await postFixtureEntry(ctx, childId, "CONF-C1-PROFIT", ledger.date, "Period profit", [
-        { accountId: ctx.roles.bank, amount: "100", currency: "CAD" },
-        { accountId: ctx.roles.revenue, amount: "-100", currency: "CAD" },
-      ]);
+      await postFixtureEntry(
+        ctx,
+        childId,
+        "CONF-C1-CAP",
+        "2026-07-01",
+        "Opening equity",
+        [
+          { accountId: ctx.roles.bank, amount: "800", currency: "CAD" },
+          {
+            accountId: ctx.roles.subsidiaryEquity,
+            amount: "-800",
+            currency: "CAD",
+          },
+        ],
+      );
+      await postFixtureEntry(
+        ctx,
+        childId,
+        "CONF-C1-PROFIT",
+        ledger.date,
+        "Period profit",
+        [
+          { accountId: ctx.roles.bank, amount: "100", currency: "CAD" },
+          { accountId: ctx.roles.revenue, amount: "-100", currency: "CAD" },
+        ],
+      );
       await addOwnershipPolicy(ctx, {
         subsidiaryId: childId,
         ownershipPercent: "80",
@@ -207,7 +225,8 @@ export const CONSOLIDATION_CASES: readonly ConformanceCase[] = [
 
   {
     id: "consol-intercompany-elimination",
-    title: "Intercompany balances eliminate to zero while standalone views stay untouched",
+    title:
+      "Intercompany balances eliminate to zero while standalone views stay untouched",
     citations: [
       {
         standard: "IFRS 10",
@@ -252,14 +271,28 @@ export const CONSOLIDATION_CASES: readonly ConformanceCase[] = [
       await db.execute(sql`
         update accounts set eliminate = true
          where id in (${ctx.roles.ar}, ${ctx.roles.ap}) and org_id = ${ledger.orgId}`);
-      await postFixtureEntry(ctx, ledger.subsidiaryId, "CONF-C2-SALE", ledger.date, "Intercompany sale", [
-        { accountId: ctx.roles.ar, amount: "1000", currency: "CAD" },
-        { accountId: ctx.roles.revenue, amount: "-1000", currency: "CAD" },
-      ]);
-      await postFixtureEntry(ctx, childId, "CONF-C2-BUY", ledger.date, "Intercompany purchase", [
-        { accountId: ctx.roles.cogs, amount: "1000", currency: "CAD" },
-        { accountId: ctx.roles.ap, amount: "-1000", currency: "CAD" },
-      ]);
+      await postFixtureEntry(
+        ctx,
+        ledger.subsidiaryId,
+        "CONF-C2-SALE",
+        ledger.date,
+        "Intercompany sale",
+        [
+          { accountId: ctx.roles.ar, amount: "1000", currency: "CAD" },
+          { accountId: ctx.roles.revenue, amount: "-1000", currency: "CAD" },
+        ],
+      );
+      await postFixtureEntry(
+        ctx,
+        childId,
+        "CONF-C2-BUY",
+        ledger.date,
+        "Intercompany purchase",
+        [
+          { accountId: ctx.roles.cogs, amount: "1000", currency: "CAD" },
+          { accountId: ctx.roles.ap, amount: "-1000", currency: "CAD" },
+        ],
+      );
       const entry = await capture(ctx, "intercompany elimination", async () => {
         await runAutoElimination(ledger.orgId, ledger.periodId, ledger.actorId);
       });
@@ -269,7 +302,8 @@ export const CONSOLIDATION_CASES: readonly ConformanceCase[] = [
 
   {
     id: "consol-equity-method",
-    title: "An associate's profit increases the investment and its dividend reduces it",
+    title:
+      "An associate's profit increases the investment and its dividend reduces it",
     citations: [
       {
         standard: "IAS 28",
@@ -310,12 +344,25 @@ export const CONSOLIDATION_CASES: readonly ConformanceCase[] = [
     },
     run: async (ctx) => {
       const ledger = ctx.ledger!;
-      const associateId = await addSubsidiary(ctx, "Associate Co", "CAD", "CA", false);
+      const associateId = await addSubsidiary(
+        ctx,
+        "Associate Co",
+        "CAD",
+        "CA",
+        false,
+      );
       await addSubsidiary(ctx, "Eliminations", "CAD", "CA", true);
-      await postFixtureEntry(ctx, associateId, "CONF-C3-PROFIT", ledger.date, "Associate profit", [
-        { accountId: ctx.roles.bank, amount: "200", currency: "CAD" },
-        { accountId: ctx.roles.revenue, amount: "-200", currency: "CAD" },
-      ]);
+      await postFixtureEntry(
+        ctx,
+        associateId,
+        "CONF-C3-PROFIT",
+        ledger.date,
+        "Associate profit",
+        [
+          { accountId: ctx.roles.bank, amount: "200", currency: "CAD" },
+          { accountId: ctx.roles.revenue, amount: "-200", currency: "CAD" },
+        ],
+      );
       // Dividends declared live on their own equity account: the policy's
       // distribution account must capture only the dividend, never capital.
       const dividendsDeclaredId = randomUUID();
@@ -324,14 +371,32 @@ export const CONSOLIDATION_CASES: readonly ConformanceCase[] = [
                               required_dimensions, custom, subsidiary_include_children)
         values (${dividendsDeclaredId}, ${ledger.orgId}, '3050', 'Dividends Declared', 'equity', false, true, false, false,
                 '[]'::jsonb, '{}'::jsonb, true)`);
-      await postFixtureEntry(ctx, associateId, "CONF-C3-DIV", ledger.date, "Associate dividend", [
-        { accountId: dividendsDeclaredId, amount: "50", currency: "CAD" },
-        { accountId: ctx.roles.bank, amount: "-50", currency: "CAD" },
-      ]);
-      await postFixtureEntry(ctx, ledger.subsidiaryId, "CONF-C3-RECEIPT", ledger.date, "Dividend receipt", [
-        { accountId: ctx.roles.bank, amount: "50", currency: "CAD" },
-        { accountId: ctx.roles.distributionIncome, amount: "-50", currency: "CAD" },
-      ]);
+      await postFixtureEntry(
+        ctx,
+        associateId,
+        "CONF-C3-DIV",
+        ledger.date,
+        "Associate dividend",
+        [
+          { accountId: dividendsDeclaredId, amount: "50", currency: "CAD" },
+          { accountId: ctx.roles.bank, amount: "-50", currency: "CAD" },
+        ],
+      );
+      await postFixtureEntry(
+        ctx,
+        ledger.subsidiaryId,
+        "CONF-C3-RECEIPT",
+        ledger.date,
+        "Dividend receipt",
+        [
+          { accountId: ctx.roles.bank, amount: "50", currency: "CAD" },
+          {
+            accountId: ctx.roles.distributionIncome,
+            amount: "-50",
+            currency: "CAD",
+          },
+        ],
+      );
       await addOwnershipPolicy(ctx, {
         subsidiaryId: associateId,
         ownershipPercent: "30",
@@ -350,7 +415,8 @@ export const CONSOLIDATION_CASES: readonly ConformanceCase[] = [
 
   {
     id: "consol-proportionate-owned-share",
-    title: "Proportionate consolidation combines only the owned share, with no NCI",
+    title:
+      "Proportionate consolidation combines only the owned share, with no NCI",
     citations: [
       {
         standard: "IFRS 11",
@@ -384,16 +450,40 @@ export const CONSOLIDATION_CASES: readonly ConformanceCase[] = [
     },
     run: async (ctx) => {
       const ledger = ctx.ledger!;
-      const childId = await addSubsidiary(ctx, "Joint Op Co", "CAD", "CA", false);
+      const childId = await addSubsidiary(
+        ctx,
+        "Joint Op Co",
+        "CAD",
+        "CA",
+        false,
+      );
       await addSubsidiary(ctx, "Eliminations", "CAD", "CA", true);
-      await postFixtureEntry(ctx, childId, "CONF-C4-CAP", "2026-07-01", "Opening equity", [
-        { accountId: ctx.roles.bank, amount: "1000", currency: "CAD" },
-        { accountId: ctx.roles.subsidiaryEquity, amount: "-1000", currency: "CAD" },
-      ]);
-      await postFixtureEntry(ctx, childId, "CONF-C4-PROFIT", ledger.date, "Period profit", [
-        { accountId: ctx.roles.bank, amount: "100", currency: "CAD" },
-        { accountId: ctx.roles.revenue, amount: "-100", currency: "CAD" },
-      ]);
+      await postFixtureEntry(
+        ctx,
+        childId,
+        "CONF-C4-CAP",
+        "2026-07-01",
+        "Opening equity",
+        [
+          { accountId: ctx.roles.bank, amount: "1000", currency: "CAD" },
+          {
+            accountId: ctx.roles.subsidiaryEquity,
+            amount: "-1000",
+            currency: "CAD",
+          },
+        ],
+      );
+      await postFixtureEntry(
+        ctx,
+        childId,
+        "CONF-C4-PROFIT",
+        ledger.date,
+        "Period profit",
+        [
+          { accountId: ctx.roles.bank, amount: "100", currency: "CAD" },
+          { accountId: ctx.roles.revenue, amount: "-100", currency: "CAD" },
+        ],
+      );
       await addOwnershipPolicy(ctx, {
         subsidiaryId: childId,
         ownershipPercent: "50",
@@ -410,7 +500,8 @@ export const CONSOLIDATION_CASES: readonly ConformanceCase[] = [
 
   {
     id: "consol-foreign-sub-translation",
-    title: "A foreign subsidiary translates profit at the average rate and equity at history",
+    title:
+      "A foreign subsidiary translates profit at the average rate and equity at history",
     citations: [
       {
         standard: "IAS 21",
@@ -456,17 +547,39 @@ export const CONSOLIDATION_CASES: readonly ConformanceCase[] = [
       const ledger = ctx.ledger!;
       const childId = await addSubsidiary(ctx, "US Sub Co", "USD", "US", false);
       await addSubsidiary(ctx, "Eliminations", "CAD", "CA", true);
-      await postFixtureEntry(ctx, childId, "CONF-C5-CAP", "2026-07-01", "Opening equity", [
-        { accountId: ctx.roles.bank, amount: "1000", currency: "USD" },
-        { accountId: ctx.roles.subsidiaryEquity, amount: "-1000", currency: "USD" },
-      ]);
-      await postFixtureEntry(ctx, childId, "CONF-C5-PROFIT", ledger.date, "Period profit", [
-        { accountId: ctx.roles.bank, amount: "100", currency: "USD" },
-        { accountId: ctx.roles.revenue, amount: "-100", currency: "USD" },
-      ]);
+      await postFixtureEntry(
+        ctx,
+        childId,
+        "CONF-C5-CAP",
+        "2026-07-01",
+        "Opening equity",
+        [
+          { accountId: ctx.roles.bank, amount: "1000", currency: "USD" },
+          {
+            accountId: ctx.roles.subsidiaryEquity,
+            amount: "-1000",
+            currency: "USD",
+          },
+        ],
+      );
+      await postFixtureEntry(
+        ctx,
+        childId,
+        "CONF-C5-PROFIT",
+        ledger.date,
+        "Period profit",
+        [
+          { accountId: ctx.roles.bank, amount: "100", currency: "USD" },
+          { accountId: ctx.roles.revenue, amount: "-100", currency: "USD" },
+        ],
+      );
       await setSpotRate(ledger, "USD", "CAD", "2026-07-05", "1.35");
       await setSpotRate(ledger, "USD", "CAD", "2026-07-25", "1.40");
-      await deriveConsolidatedRates(ledger.orgId, ledger.periodId, ledger.actorId);
+      await deriveConsolidatedRates(
+        ledger.orgId,
+        ledger.periodId,
+        ledger.actorId,
+      );
       await addOwnershipPolicy(ctx, {
         subsidiaryId: childId,
         ownershipPercent: "80",
@@ -485,7 +598,8 @@ export const CONSOLIDATION_CASES: readonly ConformanceCase[] = [
 
   {
     id: "consol-loss-of-control",
-    title: "Loss of control derecognises the subsidiary and remeasures any retained interest",
+    title:
+      "Loss of control derecognises the subsidiary and remeasures any retained interest",
     citations: [
       {
         standard: "IFRS 10",
@@ -495,7 +609,7 @@ export const CONSOLIDATION_CASES: readonly ConformanceCase[] = [
           "When control is lost, the former parent derecognises the subsidiary's assets, liabilities and non-controlling interests, recognises any retained investment at fair value, and reclassifies related translation differences to profit or loss.",
       },
     ],
-    support: "not-implemented",
+    support: "supported",
     tier: "computation",
     assertion:
       "Selling down from 80% to 20% removes the subsidiary's net assets and NCI from the consolidated balance sheet, books the retained 20% at its fair value, and recognises the resulting gain or loss with the accumulated translation difference reclassified out of equity.",
@@ -505,10 +619,37 @@ export const CONSOLIDATION_CASES: readonly ConformanceCase[] = [
       "The retained 20% has a fair value of CAD 400.00; proceeds for the 60% sold are CAD 1,200.00.",
       "The disposal gain is 1,200.00 + 400.00 − (1,180.00 − 280.00) = CAD 700.00.",
     ],
-    gap:
-      "The engine has no loss-of-control accounting: closing or narrowing an ownership policy simply stops future consolidation generations, leaving the parent's investment at cost with no derecognition of the subsidiary's net assets, no release of NCI, no fair-value remeasurement of any retained interest, and no reclassification of translation differences.",
     expected: {
       values: { disposalGain: "700.0000" },
+    },
+    run: (ctx) => {
+      const m = measureLossOfControl({
+        netAssetBalances: [
+          {
+            accountId: ctx.roles.fixedAsset,
+            amount: "1180",
+            description: "Consolidated net assets including goodwill",
+          },
+        ],
+        nciBalance: {
+          accountId: ctx.roles.nciEquity,
+          amount: "-280",
+          description: "NCI",
+        },
+        eliminatedInvestmentBalance: {
+          accountId: ctx.roles.investmentInSub,
+          amount: "-900",
+          description: "Parent investment",
+        },
+        parentProceeds: "1200",
+        parentInvestmentCarrying: "900",
+        parentRetainedCarrying: "225",
+        retainedFairValue: "400",
+        retainedAccountId: ctx.roles.investmentInSub,
+        gainLossAccountId: ctx.roles.disposalGainLoss,
+        oci: [],
+      });
+      return { values: { disposalGain: m.totalGroupGain } };
     },
   },
 ];

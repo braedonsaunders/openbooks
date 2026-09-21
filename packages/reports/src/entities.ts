@@ -589,6 +589,8 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     description: 'The fixed-asset register — status, acquisition, cost, custodian and dimensions.',
     from: `fixed_assets fa
       LEFT JOIN asset_categories ac ON ac.id = fa.category_id AND ac.org_id = fa.org_id
+      LEFT JOIN accounting_books fab ON fab.org_id=fa.org_id AND fab.is_primary
+      LEFT JOIN asset_book_carrying_values fac ON fac.org_id=fa.org_id AND fac.asset_id=fa.id AND fac.book_id=fab.id
       LEFT JOIN parties cust ON cust.id = fa.custodian_party_id AND cust.org_id = fa.org_id
       LEFT JOIN projects prj ON prj.id = fa.project_id AND prj.org_id = fa.org_id
       LEFT JOIN departments dep ON dep.id = fa.department_id AND dep.org_id = fa.org_id`,
@@ -601,7 +603,10 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'category', label: 'Category', kind: 'text', expr: 'ac.name' },
       { key: 'acquired_on', label: 'Acquired on', kind: 'date', expr: 'fa.acquired_on' },
       { key: 'in_service_on', label: 'In service on', kind: 'date', expr: 'fa.in_service_on' },
-      { key: 'acquisition_cost', label: 'Acquisition cost', kind: 'money', expr: 'fa.acquisition_cost' },
+      { key: 'acquisition_cost', label: 'Original acquisition cost', kind: 'money', expr: 'fa.acquisition_cost' },
+      { key: 'remaining_cost', label: 'Remaining cost (primary book)', kind: 'money', expr: "case when fa.status in ('disposed','written_off') then 0 else fac.cost end" },
+      { key: 'carrying_value', label: 'Carrying value (primary book)', kind: 'money', expr: "case when fa.status in ('disposed','written_off') then 0 else fac.carrying_value end" },
+      { key: 'accumulated_depreciation', label: 'Accumulated depreciation (primary book)', kind: 'money', expr: "case when fa.status in ('disposed','written_off') then 0 else fac.accumulated end" },
       { key: 'salvage_value', label: 'Salvage value', kind: 'money', expr: 'fa.salvage_value' },
       { key: 'serial_number', label: 'Serial #', kind: 'text', expr: 'fa.serial_number' },
       { key: 'custodian_name', label: 'Custodian', kind: 'text', expr: 'cust.display_name' },
