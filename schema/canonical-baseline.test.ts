@@ -106,6 +106,9 @@ const hrmRecruitingMigrationPath = "schema/migrations/generated/0195_hrm_recruit
 const hrmCompensationMigrationPath = "schema/migrations/generated/0221_hrm_compensation_architecture.sql";
 const hrmTransparencyMigrationPath = "schema/migrations/generated/0222_hrm_headcount_plans_transparency.sql";
 // HR-12 end
+// HR-17 begin
+const hrmContinuousMigrationPath = "schema/migrations/generated/0228_hrm_continuous_performance.sql";
+// HR-17 end
 
 test("payroll opening-balance migration rebuilds its widened governed view safely", () => {
   const migration = readFileSync(payrollOpeningBalanceSecondOrderMigrationPath, "utf8");
@@ -416,6 +419,10 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0226_hrm_automations.sql",
     "0227_hrm_action_reasons_event_verbs.sql",
     // HR-16 end
+    // HR-17 begin: continuous performance — 1:1s, feedback, competencies,
+    // calibration, talent review and succession (0228).
+    "0228_hrm_continuous_performance.sql",
+    // HR-17 end
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -2194,3 +2201,52 @@ test("hrm headcount plans and transparency freeze their evidence", () => {
   assert.doesNotMatch(migration, /\n\n$/);
 });
 // HR-12 end
+
+// HR-17 begin
+test("hrm continuous performance carries 1:1s, feedback, calibration and succession with org isolation", () => {
+  // 0228 opens what happens between review cycles: 1:1s with carried
+  // (copied, never moved) agenda items, append-only feedback with
+  // retraction rows, reusable competency frameworks with links, the
+  // calibration grid with its append-only event audit trail, and
+  // HR-only talent reviews with ranked succession candidates. Ratings
+  // are numeric (they write back onto hrm_reviews calibrated_rating);
+  // talent and succession reads are HR-only in the service, while RLS
+  // below stays tenant isolation exactly like 0196.
+  const migration = readFileSync(hrmContinuousMigrationPath, "utf8");
+  for (const table of [
+    "hrm_one_on_ones",
+    "hrm_one_on_one_items",
+    "hrm_feedback",
+    "hrm_competency_frameworks",
+    "hrm_competencies",
+    "hrm_competency_levels",
+    "hrm_competency_links",
+    "hrm_calibration_sessions",
+    "hrm_calibration_entries",
+    "hrm_calibration_events",
+    "hrm_talent_reviews",
+    "hrm_succession_plans",
+    "hrm_succession_candidates",
+  ]) {
+    assert.match(migration, new RegExp(`CREATE TABLE IF NOT EXISTS public\\.${table} \\(`));
+  }
+  assert.match(migration, /hrm_one_on_ones_unique_slot/);
+  assert.match(migration, /carried_from_item_id/);
+  assert.match(migration, /hrm_feedback_immutable_guard/);
+  assert.match(migration, /retract it with a new retraction row instead of updating it/);
+  assert.match(migration, /hrm_calibration_event_immutable_guard/);
+  assert.match(migration, /hrm_calibration_entries_unique_review/);
+  assert.match(migration, /hrm_talent_reviews_unique/);
+  assert.match(migration, /hrm_succession_candidates_unique/);
+  assert.match(migration, /calibrated_share_note/);
+  assert.match(migration, /competency_id uuid/);
+  assert.match(migration, /FORCE ROW LEVEL SECURITY/);
+  assert.match(migration, /openbooks:org_isolation:v1/);
+  assert.match(migration, /openbooks\.amend/);
+  assert.doesNotMatch(migration, /on conflict do nothing/i);
+  assert.doesNotMatch(migration, /SELECT public\.openbooks_refresh_query_catalog\(\)/);
+  assert.doesNotMatch(migration, /0001_baseline/);
+  assert.match(migration, /[^\n]\n$/);
+  assert.doesNotMatch(migration, /\n\n$/);
+});
+// HR-17 end

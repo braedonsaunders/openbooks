@@ -16,6 +16,7 @@ import { hrmChangeRequestAdapter } from "./adapters/hrm-change-request.ts";
 import { hrmLeaveRequestAdapter } from "./adapters/hrm-leave-request.ts";
 import { hrmProcessStepAdapter } from "./adapters/hrm-process-step.ts";
 import { hrmQualificationAlertAdapter } from "./adapters/hrm-qualification-alert.ts";
+import { hrmFeedbackRequestAdapter } from "./adapters/hrm-feedback-request.ts";
 import { hrmReviewAdapter } from "./adapters/hrm-review.ts";
 import { notificationAdapter } from "./adapters/notification.ts";
 import { timesheetWeekAdapter } from "./adapters/timesheet-week.ts";
@@ -26,6 +27,9 @@ registerInboxAdapter(hrmProcessStepAdapter);
 registerInboxAdapter(hrmLeaveRequestAdapter);
 registerInboxAdapter(hrmChangeRequestAdapter);
 registerInboxAdapter(hrmReviewAdapter);
+// HR-17 begin: feedback requests waiting on the actor.
+registerInboxAdapter(hrmFeedbackRequestAdapter);
+// HR-17 end
 registerInboxAdapter(notificationAdapter);
 registerInboxAdapter(hrmBenefitEnrollmentWindowAdapter);
 registerInboxAdapter(hrmQualificationAlertAdapter);

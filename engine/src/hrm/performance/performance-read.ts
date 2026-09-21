@@ -361,8 +361,17 @@ export async function getReviewDetail(args: {
         );
       }
     }
-    const review = await readReviewRow(db, orgId, reviewId);
+    const stored = await readReviewRow(db, orgId, reviewId);
     const answers = await loadAnswers(db, orgId, reviewId);
+    // HR-17 calibrated share: the employee-visible share shows the
+    // calibrated rating with the note that calibration occurred — never
+    // the delta, never the justification. Subject-only readers (not HR,
+    // not the reviewer) get calibrationReason stripped here, never in
+    // the UI alone.
+    const person = await loadApprovalPerson(db, orgId, actorId);
+    const subjectOnly =
+      !granted && person.partyId !== stored.reviewerPartyId;
+    const review = subjectOnly ? { ...stored, calibrationReason: null } : stored;
     return { review, answers };
   });
 }
