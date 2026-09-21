@@ -189,6 +189,22 @@ test(
         before,
         "rollback-only preview must retain no provisional journal",
       );
+      const proposal = (
+        await db.execute<{ before_state: Record<string, unknown> }>(sql`
+          select before_state from financial_changes
+           where org_id=${f.org.orgId} and id=${id}`)
+      ).rows[0]!;
+      assert.ok(
+        proposal.before_state.preview,
+        "the approval workpaper must retain its measured balances",
+      );
+      for (const key of ["generatedEntryIds", "sourceEntryIds"]) {
+        assert.equal(
+          Object.hasOwn(proposal.before_state, key),
+          false,
+          `${key} must not expose journals created inside the rolled-back preview`,
+        );
+      }
       await assert.rejects(
         applyLossOfControl(f.org.orgId, id, f.actors.submitterId),
         /independent approval/,
@@ -226,6 +242,28 @@ test(
       assert.ok(
         count >= 3,
         "real ownership phase and separate/group disposal entries must be retained",
+      );
+      const returnedIds = result.entryIds as string[];
+      assert.equal(
+        new Set(returnedIds).size,
+        returnedIds.length,
+        "committed journal links must be unique",
+      );
+      const committedEntries = (
+        await db.execute<{ id: string; status: string }>(sql`
+          select id,status from journal_entries where org_id=${f.org.orgId}
+           and id in(select jsonb_array_elements_text(${JSON.stringify(returnedIds)}::jsonb)::uuid)`)
+      ).rows;
+      assert.deepEqual(
+        committedEntries.map((entry) => entry.id).sort(),
+        [...returnedIds].sort(),
+        "every returned journal link must resolve in the same organization after application",
+      );
+      assert.ok(
+        committedEntries.every(
+          (entry) => entry.status === "posted" || entry.status === "reversed",
+        ),
+        "application must not return a draft or provisional journal",
       );
       const next = await runOwnershipConsolidation(
         f.org.orgId,
