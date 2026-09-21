@@ -10,6 +10,7 @@ import {
   TAX_BASIS_FIELDS,
   TAX_BASIS_REGIME_LABELS,
   MACRS_VINTAGE_SOURCE_LABELS,
+  MACRS_CHECKPOINT_KIND_LABELS,
 } from "@openbooks/engine/src/tax-returns/asset-basis-policy.ts";
 const taxFields = new Map(TAX_BASIS_FIELDS.map((field) => [field.name, field]));
 const taxChoiceFields: Record<string, string> = {
@@ -30,10 +31,32 @@ const taxComputedLabels: Record<string, string> = {
   transferOn: "Transfer effective date",
   unadjustedBasis: "Open unadjusted tax basis",
   adjustedCarryover: "Adjusted carryover checkpoint",
+  checkpointKind: "Carryover checkpoint evidence",
+  takenBonus: "Bonus depreciation taken (this slice)",
   buyerPlacedInServiceOn: "Receiving asset placed-in-service date",
   buyerRecoveryPeriodYears: "Receiving asset recovery period (years)",
   buyerMethod: "Receiving asset MACRS method",
   buyerConvention: "Receiving asset MACRS convention",
+  deferredOpening: "Opening deferred intercompany amount",
+  actualCorrespondingItems: "Buyer's corresponding items",
+  recomputedCorrespondingItems: "Recomputed corresponding items for the group",
+  actualCorrespondingAmount: "Buyer's corresponding amount",
+  recomputedCorrespondingAmount: "Recomputed corresponding amount for the group",
+  sellerMatchingItems: "Seller's recognized matching items",
+  sellerMatchingAmount: "Seller's recognized matching amount",
+  deferredClosing: "Closing deferred intercompany amount",
+  attribute: "Redetermined tax attribute",
+};
+const taxAttributeLabels: Record<string, string> = {
+  ordinary: "Ordinary income or deduction",
+  section1245_ordinary: "Section 1245 ordinary gain",
+  section1231: "Section 1231 gain or loss",
+};
+const emptyTaxEvidence: Record<string, string> = {
+  taxYearWindows: "No registered tax-year windows were read by this calculation.",
+  actualCorrespondingItems: "No corresponding items were taken into account in this calculation.",
+  recomputedCorrespondingItems: "No recomputed corresponding items arose in this calculation.",
+  sellerMatchingItems: "No seller matching items arose in this calculation.",
 };
 const labels: Record<string, string> = {
   existingId: "Existing performance obligation",
@@ -96,12 +119,18 @@ export function ChangeEvidence({
   if (value === null || value === undefined)
     return <span className="text-muted-foreground">Not supplied</span>;
   if (typeof value === "boolean") return <span>{value ? "Yes" : "No"}</span>;
-  if (taxBasis && field === "taxYearWindows" && Array.isArray(value) && value.length === 0)
-    return <span>No registered tax-year windows were read by this calculation.</span>;
+  if (taxBasis && field && Array.isArray(value) && value.length === 0 && Object.hasOwn(emptyTaxEvidence, field))
+    return <span>{emptyTaxEvidence[field]}</span>;
   if (typeof value === "string" || typeof value === "number")
     return (
       <span className="break-words">
         {names[String(value)] ??
+          (taxBasis && field === "checkpointKind" && Object.hasOwn(MACRS_CHECKPOINT_KIND_LABELS, String(value))
+            ? MACRS_CHECKPOINT_KIND_LABELS[String(value) as keyof typeof MACRS_CHECKPOINT_KIND_LABELS]
+            : undefined) ??
+          (taxBasis && field === "attribute" && Object.hasOwn(taxAttributeLabels, String(value))
+            ? taxAttributeLabels[String(value)]
+            : undefined) ??
           (taxBasis &&
           field === "source" &&
           Object.hasOwn(MACRS_VINTAGE_SOURCE_LABELS, String(value))
@@ -147,7 +176,9 @@ export function ChangeEvidence({
             .map(([key, v]) => (
               <TableRow key={key}>
                 <TableCell className="align-top">
-                  {label(key, taxBasis)}
+                  {taxBasis && key === "section179" && "checkpointKind" in value && value.checkpointKind === "taken_components"
+                    ? "Section 179 depreciation taken (this slice)"
+                    : label(key, taxBasis)}
                 </TableCell>
                 <TableCell>
                   <ChangeEvidence

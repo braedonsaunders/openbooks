@@ -42,6 +42,9 @@ const vintages: OpenMacrsVintage[] = [
     convention: "half_year",
     bonusPercent: "0",
     businessUsePercent: "100",
+    checkpointKind: "declared_elections",
+    takenBonus: null,
+    shortYearMethod: "allocation",
   },
   {
     key: "excess:2025-08-01:2025-08-01",
@@ -58,6 +61,9 @@ const vintages: OpenMacrsVintage[] = [
     convention: "mid_month",
     bonusPercent: "0",
     businessUsePercent: "100",
+    checkpointKind: "declared_elections",
+    takenBonus: null,
+    shortYearMethod: "simplified",
   },
 ];
 const allocations = () =>
@@ -224,6 +230,7 @@ test("a native onward-transfer POST contains declarations and the server derives
       method: row.method,
       convention: row.convention,
       recovery: row.recoveryPeriodYears,
+      shortYearMethod: row.shortYearMethod,
     })),
     vintages.map((row) => ({
       parent: row.key,
@@ -231,6 +238,7 @@ test("a native onward-transfer POST contains declarations and the server derives
       method: row.method,
       convention: row.convention,
       recovery: row.recoveryPeriodYears,
+      shortYearMethod: row.shortYearMethod,
     })),
   );
   assert.equal(
@@ -238,6 +246,45 @@ test("a native onward-transfer POST contains declarations and the server derives
     false,
     "distinct schedules stay distinct",
   );
+});
+
+test("a dated checkpoint travels in server context while POST cannot elect or overwrite its taken amounts", () => {
+  const dated: OpenMacrsVintage = {
+    key: "original:2018-01-05", source: "original", parentKey: null,
+    placedInServiceOn: "2018-01-05", transferOn: null,
+    unadjustedBasis: "9000.0000", section179: "0.0000", bonusPercent: "100",
+    priorDepreciation: "0.0000", adjustedCarryover: "3750.0000",
+    checkpointKind: "taken_components", takenBonus: "5250.0000",
+    recoveryPeriodYears: "5", method: "200_db", convention: "half_year",
+    businessUsePercent: "100", shortYearMethod: "simplified",
+  };
+  const context: TaxBasisSourceContext = {
+    sourceOperation: "intercompany_transfer", applicable: "both", effectiveOn: "2018-08-20",
+    usSellerMacrs: { status: "ready", vintages: [dated] },
+  };
+  const allocation = prepareMacrsVintageAllocations([dated], {
+    [dated.key]: { disposedUnadjustedBasis: "9000", remainingUnadjustedBasis: "0" },
+  });
+  const post = prepareTaxBasisRegime({
+    ...seller, recognition: "nontaxable", section168i7Kind: "nonrecognition",
+    relatedPerson: true, excessBasis: "0",
+    // Neither stale editor state nor an invented client-derived object can
+    // become a competing source of approved checkpoint amounts.
+    checkpointKind: "declared_elections", takenBonus: "9999.0000",
+    buyerVintages: [{ ...dated, takenBonus: "9999.0000" }],
+  }, context, allocation);
+  for (const derived of ["checkpointKind", "takenBonus", "buyerVintages", "section179", "priorDepreciation"])
+    assert.equal(Object.hasOwn(post, derived), false, derived);
+  const server = validateTaxRegimeBasis(JSON.parse(JSON.stringify(post)), context);
+  assert.equal(server.regime, "us_macrs");
+  if (server.regime !== "us_macrs") return;
+  assert.deepEqual(server.buyerVintages?.map((row) => ({
+    kind: row.checkpointKind, section179: row.section179, bonus: row.takenBonus,
+    regular: row.priorDepreciation, remaining: row.adjustedCarryover, method: row.shortYearMethod,
+  })), [{
+    kind: "taken_components", section179: "0.0000", bonus: "5250.0000",
+    regular: "0.0000", remaining: "3750.0000", method: "simplified",
+  }]);
 });
 
 test("a server history refusal reaches the proposal action unchanged", () => {
