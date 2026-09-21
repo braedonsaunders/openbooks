@@ -172,6 +172,8 @@ export interface OpenMacrsVintage {
   convention: MacrsConvention;
   bonusPercent: string;
   businessUsePercent: string;
+  shortYearMethod?: UsShortYearMethod;
+  section168i7Kind?: UsSection168i7Kind | null;
 }
 
 /** Frozen receiving vintage for one disposed allocation. Carryover keeps
@@ -1652,6 +1654,20 @@ function requireCarryoverElection(draft: TaxBasisDraft, name: string): string {
 
 /** Declared carryover is the buyer opening. Original + allocated elections +
  *  prior depreciation must reconstruct it; a re-walked schedule must not. */
+function macrsCheckpointReconstructed(args: {
+  originalBasis: string;
+  elected179: string;
+  bonus: string;
+  prior: string;
+  remaining: string;
+}): string {
+  const postElection = formatMoney(add(args.originalBasis, neg(sum([args.elected179, args.bonus]))), 4);
+  if (cmp(args.remaining, postElection) > 0) {
+    return formatMoney(sum([args.prior, args.remaining]), 4);
+  }
+  return formatMoney(sum([args.elected179, args.bonus, args.prior, args.remaining]), 4);
+}
+
 function assertUsCarryoverCheckpoint(draft: TaxBasisDraft): void {
   const original = requireCarryoverElection(draft, "originalUnadjustedBasis");
   const section179 = requireCarryoverElection(draft, "section179");
@@ -1666,10 +1682,16 @@ function assertUsCarryoverCheckpoint(draft: TaxBasisDraft): void {
   const elected179 = cmp(section179, originalBasis) < 0 ? section179 : originalBasis;
   const after179 = add(originalBasis, neg(elected179));
   const bonus = mulPercent(after179, bonusPercent);
-  const reconstructed = formatMoney(sum([elected179, bonus, priorDepreciation, carryover]), 4);
+  const reconstructed = macrsCheckpointReconstructed({
+    originalBasis,
+    elected179,
+    bonus,
+    prior: priorDepreciation,
+    remaining: carryover,
+  });
   if (cmp(reconstructed, formatMoney(originalBasis, 4)) !== 0) {
     throw new TaxBasisPolicyError(
-      `nontaxable MACRS carryover ${carryover} plus allocated section179 ${elected179}, bonus ${bonus} and priorDepreciation ${priorDepreciation} must equal original unadjusted basis ${originalBasis} after business use; declare the slice elections and the adjusted checkpoint — do not copy the whole source-asset election or treat missing JSON as zero`,
+      `nontaxable MACRS carryover ${carryover} plus allocated elections and priorDepreciation ${priorDepreciation} must equal original unadjusted basis ${originalBasis} after business use; declare the dated slice elections and remaining — do not subtract a full original bonus from a checkpoint that still holds the buyer share`,
     );
   }
 }
@@ -1695,13 +1717,17 @@ function derivedDisposedCheckpoint(
     const elected179 = cmp(section179, originalBasis) < 0 ? section179 : originalBasis;
     const after179 = add(originalBasis, neg(elected179));
     const bonus = mulPercent(after179, vintage.bonusPercent);
-    const carryover = formatMoney(add(originalBasis, neg(sum([elected179, bonus, priorFromHistory]))), 4);
-    if (cmp(carryover, "0") < 0) {
+    const carryClassic = formatMoney(add(originalBasis, neg(sum([elected179, bonus, priorFromHistory]))), 4);
+    if (cmp(carryClassic, "0") >= 0) {
+      return { section179, priorDepreciation: priorFromHistory, adjustedCarryover: carryClassic };
+    }
+    const carryAllocated = formatMoney(add(originalBasis, neg(priorFromHistory)), 4);
+    if (cmp(carryAllocated, "0") < 0) {
       throw new TaxBasisPolicyError(
         `frozen vintage ${vintage.key} cannot derive a carryover checkpoint from disposed ${disposed}, section179 ${elected179}, bonus ${bonus} and priorDepreciation ${priorFromHistory}; reverse and re-propose the earlier workpaper — do not invent the buyer's opening`,
       );
     }
-    return { section179, priorDepreciation: priorFromHistory, adjustedCarryover: carryover };
+    return { section179, priorDepreciation: priorFromHistory, adjustedCarryover: carryAllocated };
   }
   if (vintage.source === "excess" || vintage.source === "taxable_cost") {
     const originalBasis = mulPercent(disposed, vintage.businessUsePercent);
@@ -1732,10 +1758,16 @@ function assertFrozenBuyerVintageCheckpoint(row: FrozenMacrsBuyerVintage): void 
   const after179 = add(originalBasis, neg(elected179));
   const bonus = mulPercent(after179, row.bonusPercent);
   const prior = row.priorDepreciation ?? "0";
-  const reconstructed = formatMoney(sum([elected179, bonus, prior, row.adjustedCarryover]), 4);
+  const reconstructed = macrsCheckpointReconstructed({
+    originalBasis,
+    elected179,
+    bonus,
+    prior,
+    remaining: row.adjustedCarryover,
+  });
   if (cmp(reconstructed, formatMoney(originalBasis, 4)) !== 0) {
     throw new TaxBasisPolicyError(
-      `buyer vintage ${row.key} carryover ${row.adjustedCarryover} plus allocated section179 ${elected179}, bonus ${bonus} and priorDepreciation ${prior} must equal original unadjusted basis ${originalBasis} after business use; derive the slice from applied history — do not invent a composite checkpoint`,
+      `buyer vintage ${row.key} carryover ${row.adjustedCarryover} plus allocated elections and priorDepreciation ${prior} must equal original unadjusted basis ${originalBasis} after business use; derive the dated slice — do not subtract a full original bonus from a checkpoint that still holds the buyer share`,
     );
   }
 }

@@ -694,6 +694,85 @@ export function macrsOwnershipWindowLoads(args: {
   }];
 }
 
+/** Recovery walk from original placement through asOf. Transferor years
+ *  advance elapsed recovery; receiver windows allocate deductions after
+ *  transfer. The transfer year is one recovery year, not two. */
+export function macrsLineageRecoveryWindows(args: {
+  windows: readonly MacrsYearWindow[];
+  placedInServiceOn: string;
+  transferOn: string | null;
+  asOf: string;
+  ownerSubsidiaryId?: string;
+}): MacrsYearWindow[] {
+  const ordered = [...args.windows].sort((left, right) =>
+    left.yearStart.localeCompare(right.yearStart) || left.yearEnd.localeCompare(right.yearEnd),
+  );
+  const ownerId = args.ownerSubsidiaryId;
+  const ownerWindows = ownerId
+    ? ordered.filter((row) => !row.subsidiaryId || row.subsidiaryId === ownerId)
+    : ordered;
+  const historyWindows = ownerId
+    ? ordered.filter((row) => !!row.subsidiaryId && row.subsidiaryId !== ownerId)
+    : [];
+  if (!args.transferOn || historyWindows.length === 0) {
+    const calendar = ownerWindows.length > 0 ? ownerWindows : ordered;
+    return assertMacrsWindowsCover(calendar, args.placedInServiceOn, args.asOf);
+  }
+  const historySpan = assertMacrsWindowsCover(
+    historyWindows,
+    args.placedInServiceOn,
+    args.transferOn,
+  ).filter((row) => row.yearStart <= args.transferOn!);
+  const ownerCalendar = ownerWindows.length > 0 ? ownerWindows : ordered;
+  const ownerIntersect = ownerCalendar.filter((row) =>
+    row.yearEnd >= args.transferOn! && row.yearStart <= args.asOf,
+  );
+  const ownerCoversTransfer = ownerIntersect.some((row) =>
+    args.transferOn! >= row.yearStart && args.transferOn! <= row.yearEnd,
+  );
+  const ownerFrom = ownerCoversTransfer ? args.transferOn! : ownerIntersect[0]?.yearStart;
+  if (args.asOf > args.transferOn && (!ownerFrom || ownerIntersect.length === 0)) {
+    throw new Error(
+      `no tax year window covers ${args.asOf} for the receiving subsidiary; declare the receiver tax year through that date — do not restart recovery from the transfer date`,
+    );
+  }
+  const ownerSpan = ownerFrom && ownerFrom <= args.asOf
+    ? assertMacrsWindowsCover(ownerCalendar, ownerFrom, args.asOf)
+    : [];
+  return mergeLineageRecoveryWindows(historySpan, ownerSpan, args.asOf);
+}
+
+function mergeLineageRecoveryWindows(
+  history: readonly MacrsYearWindow[],
+  owner: readonly MacrsYearWindow[],
+  asOf: string,
+): MacrsYearWindow[] {
+  const out = [...history];
+  for (const window of owner) {
+    const last = out[out.length - 1];
+    if (!last) {
+      out.push(window);
+      continue;
+    }
+    if (window.yearStart <= last.yearEnd) {
+      if (asOf >= window.yearStart && asOf <= window.yearEnd) out[out.length - 1] = window;
+      continue;
+    }
+    if (nextCalendarDay(last.yearEnd) !== window.yearStart) {
+      throw new Error(
+        `tax year windows gap between ${last.yearEnd} and ${window.yearStart}; declare the missing tax year — do not drop intervening transferor years from the recovery walk`,
+      );
+    }
+    out.push(window);
+  }
+  if (out.length === 0) {
+    throw new Error(
+      `tax year windows covering the original placement through ${asOf} are required to date MACRS checkpoints; declare them on Fixed Assets tax-year setup — do not restart recovery at the transfer`,
+    );
+  }
+  return out;
+}
+
 function macrsWindowSealKey(window: MacrsYearWindow): string {
   return window.id
     ?? `${window.subsidiaryId ?? ""}:${window.yearStart}:${window.yearEnd}`;
@@ -1189,6 +1268,7 @@ export function computeMacrsThroughYear(
     };
     const result = computeMacrsYear(yearContext);
     const laterYearSellerShare = checkpoint && transferThisWindow && !sameYear168i7 && !preTransfer
+      && input.section168i7Kind !== "consolidated_group"
       ? computeMacrsYear({
           ...yearContext,
           disposedOn: transferOn!,
@@ -1429,6 +1509,8 @@ export function refreshOpenMacrsVintageThrough(
     adjustedCarryover: string | null;
     priorDepreciation: string | null;
     transferOn: string | null;
+    shortYearMethod?: "simplified" | "allocation";
+    section168i7Kind?: "nonrecognition" | "partnership_721_prior_interest" | "consolidated_group" | null;
   },
   windows: readonly MacrsYearWindow[],
   asOf: string,
@@ -1436,16 +1518,19 @@ export function refreshOpenMacrsVintageThrough(
 ): { priorDepreciation: string; adjustedCarryover: string } {
   const origin = vintage.placedInServiceOn;
   const received = vintage.adjustedCarryover != null && vintage.transferOn != null;
-  const walkFrom = received ? vintage.transferOn! : origin;
-  const ownerWindows = opts?.ownerSubsidiaryId
-    ? windows.filter((row) => !row.subsidiaryId || row.subsidiaryId === opts.ownerSubsidiaryId)
-    : windows;
-  const walkWindows = assertMacrsWindowsCover(
-    ownerWindows.length > 0 ? ownerWindows : windows,
-    walkFrom,
+  const walkWindows = macrsLineageRecoveryWindows({
+    windows,
+    placedInServiceOn: origin,
+    transferOn: received ? vintage.transferOn : null,
     asOf,
-  );
-  const covering = walkWindows.find((row) => asOf >= row.yearStart && asOf <= row.yearEnd)!;
+    ownerSubsidiaryId: opts?.ownerSubsidiaryId,
+  });
+  const covering = walkWindows.find((row) => asOf >= row.yearStart && asOf <= row.yearEnd);
+  if (!covering) {
+    throw new Error(
+      `no tax year window covers ${asOf}; declare the tax year through that date on Fixed Assets tax-year setup — do not restart recovery from ${received ? vintage.transferOn : origin}`,
+    );
+  }
   const originWindow = windows.find((row) =>
     vintage.placedInServiceOn >= row.yearStart && vintage.placedInServiceOn <= row.yearEnd,
   );
@@ -1464,24 +1549,36 @@ export function refreshOpenMacrsVintageThrough(
     section179: vintage.section179,
     bonusPercent: vintage.bonusPercent,
     businessUsePercent: vintage.businessUsePercent,
-    disposedOn: asOf,
-    dispositionRecognition: "nontaxable",
-    section168i7Kind: "nonrecognition",
+    shortYearMethod: vintage.shortYearMethod,
+    disposedOn: vintage.section168i7Kind === "consolidated_group" ? undefined : asOf,
+    dispositionRecognition: vintage.section168i7Kind === "consolidated_group" ? undefined : "nontaxable",
+    section168i7Kind: vintage.section168i7Kind ?? "nonrecognition",
     adjustedCarryover: received ? vintage.adjustedCarryover ?? undefined : undefined,
     carryoverOn: received ? vintage.transferOn ?? undefined : undefined,
   }, walkWindows);
   const remaining = persistMacrsBasis(
-    remainingAfter(walked.prior.remainingBasis, walked.current.allowance),
+    vintage.section168i7Kind === "consolidated_group" && asOf < covering.yearEnd
+      ? walked.prior.remainingBasis
+      : remainingAfter(walked.prior.remainingBasis, walked.current.allowance),
   );
   const original = mulPercent(persistMacrsBasis(vintage.unadjustedBasis), vintage.businessUsePercent);
   const elected179Raw = persistMacrsSection179(vintage.section179);
   const elected179 = cmp(elected179Raw, original) < 0 ? elected179Raw : original;
   const after179 = add(original, neg(elected179));
   const bonus = mulPercent(after179, vintage.bonusPercent);
-  const prior = formatMoney(add(original, neg(sum([elected179, bonus, remaining]))), 4);
+  const postElection = formatMoney(add(original, neg(sum([elected179, bonus]))), 4);
+  const taken = formatMoney(add(original, neg(remaining)), 4);
+  if (cmp(taken, "0") < 0) {
+    throw new Error(
+      `dated MACRS checkpoint on ${asOf} produced remaining ${remaining} above original ${original}; reverse and re-propose the earlier workpaper — do not reuse a stale ${origin} remaining`,
+    );
+  }
+  const prior = cmp(remaining, postElection) > 0
+    ? taken
+    : formatMoney(add(postElection, neg(remaining)), 4);
   if (cmp(prior, "0") < 0) {
     throw new Error(
-      `dated MACRS checkpoint on ${asOf} produced priorDepreciation ${prior} from remaining ${remaining}; reverse and re-propose the earlier workpaper — do not reuse a stale ${origin} remaining`,
+      `dated MACRS checkpoint on ${asOf} produced priorDepreciation ${prior} from remaining ${remaining}; reverse and re-propose the earlier workpaper — do not subtract a full original bonus from a checkpoint that still holds the buyer share`,
     );
   }
   return { priorDepreciation: prior, adjustedCarryover: formatMoney(remaining, 4) };

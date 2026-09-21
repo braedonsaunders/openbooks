@@ -479,6 +479,8 @@ export function listOpenMacrsVintages(vintages: readonly MacrsVintage[]): OpenMa
       convention: vintage.convention,
       bonusPercent: vintage.bonusPercent,
       businessUsePercent: vintage.businessUsePercent,
+      shortYearMethod: vintage.shortYearMethod,
+      section168i7Kind: vintage.section168i7Kind,
     }));
 }
 

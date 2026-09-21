@@ -7,6 +7,7 @@ import {
   computeMacrsThroughYear,
   computePoolYear,
   macrsConventionAfterMidQuarter,
+  macrsLineageRecoveryWindows,
   macrsMidQuarterByWindow,
   macrsWindowsPreservingAppliedContext,
   nextCalendarDay,
@@ -1085,15 +1086,13 @@ async function runMacrs(
         if (vintage.placedInServiceOn > run.yearEnd) continue;
         const lineage = await windowsForVintage(asset.id, vintage);
         const received = !!(vintage.adjustedCarryover && vintage.transferOn);
-        const walkWindows = received
-          ? lineage.filter((window) =>
-            (!window.subsidiaryId || window.subsidiaryId === run.subsidiaryId)
-            || (
-              vintage.placedInServiceOn >= window.yearStart
-              && vintage.placedInServiceOn <= window.yearEnd
-            ),
-          )
-          : lineage;
+        const walkWindows = macrsLineageRecoveryWindows({
+          windows: lineage,
+          placedInServiceOn: vintage.placedInServiceOn,
+          transferOn: received ? vintage.transferOn : null,
+          asOf: run.yearEnd,
+          ownerSubsidiaryId: run.subsidiaryId,
+        });
         const walked = computeMacrsThroughYear({
           basis: vintage.basis,
           placedInServiceOn: vintage.placedInServiceOn,
