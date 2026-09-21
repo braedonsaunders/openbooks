@@ -11,8 +11,11 @@ const state = {
   citations: [periodId],
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("tax-matching-replay-route")] = state;
-const authUrl = new URL("./replay-auth.fixture.mjs", import.meta.url).href;
-const commandUrl = new URL("./replay-command.fixture.mjs", import.meta.url).href;
+// These two are synthetic module identities, not files on disk: the load hook
+// below returns their source inline, so nothing ever reads them from the
+// filesystem.
+const authUrl = new URL("./replay-auth.fixture.mjs", import.meta.url).href; // source-path: synthetic
+const commandUrl = new URL("./replay-command.fixture.mjs", import.meta.url).href; // source-path: synthetic
 const hooks = registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
