@@ -8,10 +8,15 @@ import { verifyPrecreatedRoles, verifyPrecreatedObjectAccess, verifyReadRoleAssu
 
 const exec = promisify(execFile);
 const adminUrl = process.env.OPENBOOKS_TEST_ADMIN_DB_URL;
+// A canonical DB partition must refuse a missing administrator endpoint rather
+// than silently skip this provisioning proof. Standalone runs can supply only
+// the administrator URL because every database used here is created afresh.
+const DB = Boolean(process.env.OPENBOOKS_DB_URL || adminUrl);
 const root = new URL("..", import.meta.url).pathname;
 const password = "precreated-role-integration-password";
 
-test("host-managed PostgreSQL installs, upgrades, and refuses broken permissions without role administration", { skip: !adminUrl, timeout: 240_000 }, async (t) => {
+test("host-managed PostgreSQL installs, upgrades, and refuses broken permissions without role administration", { skip: !DB, timeout: 240_000 }, async (t) => {
+  assert.ok(adminUrl, "host-managed provisioning tests require OPENBOOKS_TEST_ADMIN_DB_URL; use the test cluster administrator endpoint");
   const admin = new pg.Client({ connectionString: adminUrl });
   await admin.connect();
   const suffix = randomBytes(6).toString("hex");
