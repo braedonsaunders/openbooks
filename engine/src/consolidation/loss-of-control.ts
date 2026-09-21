@@ -243,7 +243,7 @@ async function scope(
   });
   const policies = (
     await tx.execute<Interest>(
-      sql`select *,effective_from::text,effective_to::text,acquisition_date::text from subsidiary_ownership_interests where org_id=${orgId} and subsidiary_id=any(${uuidArray(family)}::uuid[]) and is_active and effective_from<=${input.effectiveOn} order by subsidiary_id,effective_from,id for share`,
+      sql`select interest.*,interest.effective_from::text,interest.effective_to::text,interest.acquisition_date::text from subsidiary_ownership_interests interest where interest.org_id=${orgId} and interest.subsidiary_id=any(${uuidArray(family)}::uuid[]) and interest.is_active and interest.effective_from<=${input.effectiveOn} order by interest.subsidiary_id,interest.effective_from,interest.id for share`,
     )
   ).rows;
   // A descendant accounted for by the equity method contributes its investment

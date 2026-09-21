@@ -1123,7 +1123,31 @@ async function runAutoEliminationIn(
      where e.org_id = ${orgId} and e.period_id = ${periodId} and e.book_id = ${book.id}
        and e.status in ('posted', 'reversed')
        and a.eliminate and l.subsidiary_id <> ${elim.id}
-       and not exists(select 1 from consolidation_control_losses loss where loss.org_id=e.org_id and loss.reversed_by_change_id is null and e.posting_date>loss.effective_on and (loss.excluded_subsidiary_ids ? l.subsidiary_id::text or exists(select 1 from journal_lines counterpart where counterpart.org_id=e.org_id and counterpart.entry_id=e.id and loss.excluded_subsidiary_ids ? counterpart.subsidiary_id::text) or exists(select 1 from intercompany_pairs pair where pair.org_id=l.org_id and pair.is_active and ((pair.from_subsidiary_id=l.subsidiary_id and pair.due_from_account_id=l.account_id and loss.excluded_subsidiary_ids ? pair.to_subsidiary_id::text) or (pair.to_subsidiary_id=l.subsidiary_id and pair.due_to_account_id=l.account_id and loss.excluded_subsidiary_ids ? pair.from_subsidiary_id::text))))
+       and not exists (
+         select 1 from consolidation_control_losses loss
+          where loss.org_id = e.org_id and loss.reversed_by_change_id is null
+            and e.posting_date > loss.effective_on
+            and (
+              loss.excluded_subsidiary_ids ? l.subsidiary_id::text
+              or exists (
+                select 1 from journal_lines counterpart
+                 where counterpart.org_id = e.org_id and counterpart.entry_id = e.id
+                   and loss.excluded_subsidiary_ids ? counterpart.subsidiary_id::text
+              )
+              or exists (
+                select 1 from intercompany_pairs pair
+                 where pair.org_id = l.org_id and pair.is_active
+                   and (
+                     (pair.from_subsidiary_id = l.subsidiary_id
+                      and pair.due_from_account_id = l.account_id
+                      and loss.excluded_subsidiary_ids ? pair.to_subsidiary_id::text)
+                     or (pair.to_subsidiary_id = l.subsidiary_id
+                         and pair.due_to_account_id = l.account_id
+                         and loss.excluded_subsidiary_ids ? pair.from_subsidiary_id::text)
+                   )
+              )
+            )
+       )
      group by l.account_id, l.subsidiary_id
     having sum(l.amount) <> 0`);
 
