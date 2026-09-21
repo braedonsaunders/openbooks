@@ -7,6 +7,7 @@
  * adapters whose source has not landed (qualification alerts,
  * document signatures) — they list nothing until their source exists.
  */
+import { aiCapabilityReviewAdapter, payrollAnomalyBlockAdapter } from "./adapters/ai-rails.ts";
 import { documentSignatureAdapter } from "./adapters/document-signature.ts";
 import { expenseReportAdapter } from "./adapters/expense-report.ts";
 import { fieldTicketSignatureAdapter } from "./adapters/field-ticket-signature.ts";
@@ -43,6 +44,9 @@ registerInboxAdapter(crewTimeBatchAdapter);
 // HR-20 end
 registerInboxAdapter(expenseReportAdapter);
 registerInboxAdapter(documentSignatureAdapter);
+// HR-21: blocking payroll checks and overdue capability reviews.
+registerInboxAdapter(payrollAnomalyBlockAdapter);
+registerInboxAdapter(aiCapabilityReviewAdapter);
 
 export { actOnInboxItem, countInbox, InboxError, listInbox } from "./registry.ts";
 export { writeNotification, type NotificationWrite } from "./adapters/notification.ts";

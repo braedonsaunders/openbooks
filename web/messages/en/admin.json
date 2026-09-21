@@ -2955,7 +2955,12 @@
       "question": "Question",
       "ratingScale": "Rating scale",
       "regionScope": "Region scope",
-      "retainMonths": "Retain months"
+      "retainMonths": "Retain months",
+      "zThreshold": "Z-score threshold",
+      "retroThreshold": "Retro-pay threshold",
+      "cohortKey": "Cohort",
+      "biasTerms": "Bias terms",
+      "reviewMonths": "Review cadence (months)"
     },
     "fieldHelp": {
       "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",
@@ -3050,7 +3055,12 @@
       "hrmRetentionLeadDays": "Days before expiry to request an extension; empty sends no email.",
       "hrmRetentionScope": "Region as JSON: applies_to all or countries with country codes.",
       "hrmTemplateBody": "Letter body with placeholders for the offer data.",
-      "hrmTemplateClauses": "Clauses as a JSON list of key, label, body, and default_on."
+      "hrmTemplateClauses": "Clauses as a JSON list of key, label, body, and default_on.",
+      "aiRailsZThreshold": "Flag earnings more than this many standard deviations from the cohort mean (default 3).",
+      "aiRailsRetroThreshold": "Flag retro-pay adjustments at or above this amount (default 500).",
+      "aiRailsCohort": "Group employees for baselines by subsidiary, department, pay schedule or job level.",
+      "aiRailsBiasTerms": "Org-declared words and phrases the draft check flags whole-word, one per line in the editor.",
+      "aiRailsReviewMonths": "Ledger review cadence in months (1–36); overdue capabilities nudge the setup admins' inbox."
     },
     "options": {
       "payFrequency": {
@@ -3524,6 +3534,12 @@
       "hrmRetentionBasis": {
         "consent": "Consent",
         "inactivity": "Inactivity"
+      },
+      "aiRailsCohort": {
+        "subsidiary": "Subsidiary",
+        "department": "Department",
+        "paySchedule": "Pay schedule",
+        "jobLevel": "Job level"
       }
     },
     "payroll": {
@@ -4957,6 +4973,34 @@
     "hrmTalentPool": {
       "title": "Talent pool",
       "description": "Pools of past candidates matched to open requisitions."
+    },
+    "hrmAiAssist": {
+      "title": "AI assistance",
+      "description": "Master switch for deterministic HRM AI capabilities. Nothing here files, submits, approves or pays on its own."
+    },
+    "hrmExplainPay": {
+      "title": "Payslip explanations",
+      "description": "Deterministic payslip traces with the previous-stub diff, rendered in the Me Pay drawer."
+    },
+    "hrmPayrollAnomalies": {
+      "title": "Payroll anomalies",
+      "description": "Pre-run anomaly flags with lifecycle transitions; block severity refuses the pay-run finalize."
+    },
+    "hrmTimeAnomalies": {
+      "title": "Time anomalies",
+      "description": "Timesheet anomaly flags surfaced as approval chips and inbox items."
+    },
+    "hrmDrafting": {
+      "title": "Evidence drafting",
+      "description": "Drafts grounded in cited records with bias flags; drafts never auto-submit."
+    },
+    "hrmNlReports": {
+      "title": "Natural-language reports",
+      "description": "Validated report-engine definitions from questions, with preview and save-as-view."
+    },
+    "aiGovernanceLedger": {
+      "title": "AI governance ledger",
+      "description": "Capability registry mirror, append-only decision log, notices and review cadence."
     }
   },
   "backupsManager": {
@@ -5362,6 +5406,36 @@
       "approvalYes": "Yes",
       "approvalNo": "No",
       "approvalSave": "Save settings"
+    }
+  },
+  "aiLedger": {
+    "title": "AI governance",
+    "description": "Capabilities, their autonomy ceilings, and the append-only record of every AI-assisted answer.",
+    "capabilitiesTitle": "Capabilities",
+    "decisionsTitle": "Decisions",
+    "overdueTitle": "Reviews overdue",
+    "overdueDescription": "These capabilities passed their review cadence",
+    "export": "Export CSV",
+    "sync": "Sync registry",
+    "syncDone": "Registry synced.",
+    "review": "Record review",
+    "save": "Save",
+    "failed": "The change could not be saved.",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "all": "All",
+    "noticeRequired": "Notice required",
+    "neverReviewed": "Never reviewed",
+    "columns": {
+      "autonomy": "Autonomy",
+      "capability": "Capability",
+      "enabled": "Enabled",
+      "notice": "Notice",
+      "outcome": "Outcome",
+      "reviewed": "Reviewed",
+      "reviewer": "Reviewer",
+      "summary": "Summary",
+      "when": "When"
     }
   }
 }

@@ -423,6 +423,13 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // calibration, talent review and succession (0228).
     "0228_hrm_continuous_performance.sql",
     // HR-17 end
+    // HR-18 begin: recruiting depth — kits, scorecards, slots, templates,
+    // postings, retention, pools (0229). This entry sat at the END of the
+    // list until now, which cannot match: the assertion compares against
+    // a SORTED directory read, so an out-of-order pin fails the moment
+    // anything lands after it.
+    "0229_hrm_recruiting_depth.sql",
+    // HR-18 end
     // HR-19 begin: documents/e-sign/retention/DSAR/surveys (0230).
     "0230_hrm_documents_surveys.sql",
     // HR-19 end
@@ -430,10 +437,14 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // crew batches, equipment on entries, approval stages (0231).
     "0231_field_time_capture.sql",
     // HR-20 end
-    // HR-18 begin: recruiting depth — kits, scorecards, slots, templates,
-    // postings, retention, pools (0229).
-    "0229_hrm_recruiting_depth.sql",
-    // HR-18 end
+    // HR-21 begin: AI on the rails — capabilities ledger, decisions log,
+    // payroll anomaly flags and baselines, NL report drafts (0232).
+    "0232_hrm_ai_rails.sql",
+    // HR-21 end
+    // HR-18 follow-up: the offer signing link had no stored hash and so
+    // could never be revoked (0240, allocated by the integrator — 0233
+    // through 0239 belong to the tax, accounting and payroll lanes).
+    "0240_hrm_offer_token_revocation.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -1939,6 +1950,16 @@ test("API keys state their scopes explicitly: legacy empty sets freeze to the ca
     "time.clock",
     "time.crew.enter",
     "time.kiosk.manage",
+    // HR-19 documents and surveys (migration 0230): added after the
+    // snapshot, so a LEGACY API key with an empty scope set does NOT gain
+    // them. documents.read sees personnel documents and their signers,
+    // documents.manage authors them, runs retention and answers subject
+    // access requests, and surveys.manage runs engagement surveys. A
+    // legacy key silently gaining the right to export a person's whole
+    // record is precisely what this list exists to prevent.
+    "hrm.documents.read",
+    "hrm.documents.manage",
+    "hrm.surveys.manage",
     // HR-20 end
   ];
   assert.deepEqual(

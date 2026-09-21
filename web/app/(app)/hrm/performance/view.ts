@@ -26,6 +26,7 @@ import {
 } from '@openbooks/engine/src/hrm/performance/performance-read.ts'
 import { listReviewTemplates } from '@openbooks/engine/src/hrm/performance/review-cycles.ts'
 import { listExitRecords } from '@openbooks/engine/src/hrm/performance/exits.ts'
+import { loadAiDraftButton, loadAiDraftDrawer, type AiDraftDrawerData } from '../../../../lib/hrm/ai-rails'
 import { hrmGroupTabs } from '../../../../components/module-home/group-tabs'
 import { can, getAuthz } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
@@ -174,6 +175,7 @@ export interface PerformancePageData {
     failed: string
     cycleId: string
     closeHref: string
+    draft: { href: string; label: string } | null
   } | null
   missingReview: string | null
   retention: {
@@ -225,6 +227,8 @@ export interface PerformancePageData {
   // continuous blocks render their own tab's tables.
   cyclesTab: boolean
   continuous: ContinuousData
+  draftDrawer: AiDraftDrawerData | null
+  draftDrawerOpen: boolean
 }
 
 const f = ref<PerformancePageData>()
@@ -290,6 +294,11 @@ export function performanceSpec(data: PerformancePageData): PageSpec {
       {
         ...widgetBlock('hrm-review-drawer', { review: data.review, missingReview: data.missingReview }),
         when: f('reviewOpen'),
+      },
+      // HR-21: the shared evidence-draft drawer (?draft=<kind>:<id>).
+      {
+        ...widgetBlock('hrm-ai-draft-drawer', { draft: data.draftDrawer }),
+        when: f('draftDrawerOpen'),
       },
       {
         ...widgetBlock('hrm-cycle-dialog', { create: data.create }),
@@ -423,6 +432,7 @@ export async function loadPerformancePage(
 
   let review: PerformancePageData['review'] = null
   let missingReview: string | null = null
+  let draftDrawer: AiDraftDrawerData | null = null
   if (reviewId) {
     try {
       const full = await getReviewDetail({ orgId: authz.user.orgId, actorId: authz.user.id, reviewId })
@@ -473,7 +483,27 @@ export async function loadPerformancePage(
         failed: t('performance.actionFailed'),
         cycleId: full.review.cycleId,
         closeHref: hrefFor(rawStatus, cycleId, null),
+        draft: null,
       }
+      // HR-21: "Draft from evidence" on the answer form. Manager and self
+      // reviews draft from cycle goals and prior calibrated ratings; peer
+      // reviews have no draft kind. Insert targets the first text field.
+      const draftKind = full.review.status === 'pending'
+        ? full.review.kind === 'manager' ? 'review_manager'
+        : full.review.kind === 'self' ? 'review_self'
+        : null
+        : null
+      const firstText = full.answers.find((a) => a.answerKind === 'text' || a.answerKind === 'rating_and_text')
+      const draftLabel = draftKind && firstText ? await loadAiDraftButton(authz.user.orgId) : null
+      const reviewHref = hrefFor(rawStatus, full.review.cycleId, full.review.id)
+      if (review && draftKind && firstText && draftLabel) {
+        review.draft = { href: `${reviewHref}&draft=${draftKind}:${full.review.id}`, label: draftLabel }
+      }
+      draftDrawer = await loadAiDraftDrawer({
+        draftParam: typeof sp.draft === 'string' ? sp.draft : null,
+        closeHref: reviewHref,
+        fieldId: firstText ? `text-${firstText.id}` : '',
+      })
     } catch {
       missingReview = t('performance.reviewNotFound')
     }
@@ -607,6 +637,8 @@ export async function loadPerformancePage(
     exitOpen: exit !== null || missingExit !== null,
     cyclesTab,
     continuous,
+    draftDrawer,
+    draftDrawerOpen: draftDrawer !== null,
   }
 }
 

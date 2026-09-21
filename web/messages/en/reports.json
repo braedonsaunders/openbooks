@@ -471,6 +471,26 @@
       "deliveryEvidence": "{sent}/{total} sent · {failed} failed · {suppressed} suppressed",
       "pdf": "PDF evidence",
       "csv": "CSV"
+    },
+    "nl": {
+      "title": "Ask about reports",
+      "description": "Ask in plain language — the assistant drafts a validated definition, you preview it in the builder and save it as a view.",
+      "placeholder": "e.g. headcount by department for Q3",
+      "ask": "Ask",
+      "draftsTitle": "Your report drafts",
+      "empty": "No drafts yet — ask a question above and save the assistant's draft.",
+      "question": "Question",
+      "entity": "Entity",
+      "status": "Status",
+      "created": "Created",
+      "saveAsView": "Save as view",
+      "discard": "Discard",
+      "failed": "The drafts could not be loaded.",
+      "statuses": {
+        "drafted": "Drafted",
+        "saved": "Saved",
+        "discarded": "Discarded"
+      }
     }
   },
   "schedule": {
@@ -808,6 +828,18 @@
       "hrm_scorecards": {
         "description": "One row per interview with the panel verdict aggregates: submitted and panel counts plus the overall distribution. Per-interviewer detail never leaves through reports — the blind rule holds structurally.",
         "label": "Scorecards"
+      },
+      "payroll_anomaly_flags": {
+        "label": "Payroll anomaly flags",
+        "description": "One row per deterministic pre-run payroll or timesheet check flag: kind, severity, status, period, employment and the explanation."
+      },
+      "ai_decisions": {
+        "label": "AI decisions",
+        "description": "One row per AI-assisted answer: capability, subject, cited sources, the PII-free summary and outcome. Digests and prompts never project."
+      },
+      "ai_capabilities": {
+        "label": "AI capabilities",
+        "description": "One row per AI capability: autonomy ceiling, reviewer, subject notice, enabled state and last review."
       }
     },
     "columns": {
@@ -1808,6 +1840,42 @@
         "strong_yes": "Strong yes",
         "submitted": "Submitted",
         "yes": "Yes"
+      },
+      "payroll_anomaly_flags": {
+        "kind": "Kind",
+        "severity": "Severity",
+        "status": "Status",
+        "pay_period_from": "Period from",
+        "pay_period_to": "Period to",
+        "employee": "Employee",
+        "explanation": "Explanation",
+        "reason": "Transition reason",
+        "resolved_at": "Resolved at",
+        "flag_id": "Flag (id)",
+        "employment_id": "Employment (id)"
+      },
+      "ai_decisions": {
+        "recorded_at": "Recorded at",
+        "capability": "Capability",
+        "subject_kind": "Subject kind",
+        "subject_id": "Subject (id)",
+        "summary": "Summary",
+        "outcome": "Outcome",
+        "reviewer_id": "Reviewer (id)",
+        "reviewed_at": "Reviewed at",
+        "model": "Model",
+        "decision_id": "Decision (id)"
+      },
+      "ai_capabilities": {
+        "capability": "Capability",
+        "name": "Name",
+        "purpose": "Purpose",
+        "autonomy": "Autonomy",
+        "reviewer": "Reviewer",
+        "notice_required": "Notice required",
+        "enabled": "Enabled",
+        "last_reviewed_at": "Last reviewed",
+        "reviewed_by": "Reviewed by"
       }
     },
     "enumValues": {

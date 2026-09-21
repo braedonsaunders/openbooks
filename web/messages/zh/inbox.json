@@ -32,7 +32,9 @@
     "field_ticket_signature": "签名",
     "timesheet_week": "工时表",
     "expense_report": "费用",
-    "document_signature": "签名"
+    "document_signature": "签名",
+    "payroll_anomaly_block": "薪资检查",
+    "ai_capability_review": "AI 评审"
   },
   "emptyTitle": "全部完成",
   "emptyDescription": "当前没有等待您处理的事项。",

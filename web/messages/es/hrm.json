@@ -583,7 +583,8 @@
       "offer": "Oferta",
       "timeToFill": "Tiempo de cobertura",
       "days": "días",
-      "missing": "Este registro ya no está visible."
+      "missing": "Este registro ya no está visible.",
+      "description": "Descripción"
     },
     "create": {
       "titleField": "Título",
@@ -1310,6 +1311,25 @@
       "reopen": "Reabrir",
       "carriedForward": "Trasladado",
       "actionFailed": "La acción 1:1 falló."
+    },
+    "pay": {
+      "title": "Nómina",
+      "empty": "Aún no hay nóminas calculadas.",
+      "columns": {
+        "payDate": "Fecha de pago",
+        "gross": "Bruto",
+        "netPay": "Neto"
+      },
+      "explain": "Explicar",
+      "drawerTitle": "Explicación de la nómina",
+      "linesTitle": "Líneas",
+      "diffTitle": "Cambios desde la nómina anterior",
+      "diffEmpty": "Sin cambios desde la nómina anterior.",
+      "inputsTitle": "Datos detrás de las líneas",
+      "sourcesTitle": "Registros",
+      "missing": "Esa nómina no existe o está fuera de su organización.",
+      "close": "Cerrar",
+      "failed": "No se pudo cargar la explicación."
     }
   },
   "options": {
@@ -1903,5 +1923,16 @@
       "kicker": "Oferta",
       "version": "versión {version}"
     }
+  },
+  "aiDraft": {
+    "button": "Redactar desde evidencias",
+    "title": "Redactar desde evidencias",
+    "insert": "Insertar en el campo",
+    "discard": "Descartar",
+    "failed": "No se pudo generar el borrador.",
+    "sources": "Fuentes",
+    "biasFlags": "Lenguaje a revisar",
+    "loading": "Redactando desde los registros citados…",
+    "copied": "Sin campo editable aquí — el borrador se copió al portapapeles."
   }
 }

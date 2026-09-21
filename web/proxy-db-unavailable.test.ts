@@ -57,7 +57,7 @@ test("an unverifiable session fails closed per request, never as a bare proxy th
   assert.deepEqual(await api.json(), { error: "unavailable", requestId: apiId });
 
   const page = await proxy(
-    new NextRequest("http://localhost:4780/approvals", { headers: { cookie: `ob_session=${cookie}` } }),
+    new NextRequest("http://localhost:4780/inbox", { headers: { cookie: `ob_session=${cookie}` } }),
   );
   assert.equal(page.status, 503);
   const pageId = page.headers.get("x-request-id");

@@ -31,7 +31,9 @@ export type InboxKind =
   // HR-20 end
   | "expense_report"
   | "notification"
-  | "document_signature";
+  | "document_signature"
+  | "payroll_anomaly_block"
+  | "ai_capability_review";
 
 export type InboxActionStyle = "primary" | "secondary" | "danger";
 

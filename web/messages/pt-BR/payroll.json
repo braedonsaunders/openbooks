@@ -1487,5 +1487,77 @@
   },
   "retro": {
     "title": "Pagamento retroativo"
+  },
+  "anomalies": {
+    "title": "Verificações da folha",
+    "description": "Verificações determinísticas pré-folha com seus números. O nível de bloqueio recusa a confirmação enquanto estiver aberto.",
+    "listTitle": "Sinalizações",
+    "emptyTitle": "Sem sinalizações neste período",
+    "emptyDescription": "Execute a varredura deste período ou amplie os filtros.",
+    "scan": "Varrer período",
+    "scanBusy": "Varrendo…",
+    "scanFailed": "Não foi possível executar a varredura.",
+    "open": "Aberta",
+    "all": "Todas",
+    "runs": "Folhas",
+    "kindLabel": "Tipo",
+    "severityLabel": "Nível",
+    "statusLabel": "Estado",
+    "unassigned": "Sem responsável",
+    "wizardNotice": "{count, plural, one {# sinalização de bloqueio recusa esta confirmação} other {# sinalizações de bloqueio recusam esta confirmação}} — resolva-as ou marque como falso positivo na fila.",
+    "wizardLink": "Abrir verificações da folha",
+    "columns": {
+      "employment": "Funcionário",
+      "explanation": "Explicação",
+      "kind": "Tipo",
+      "period": "Período",
+      "severity": "Nível",
+      "status": "Estado"
+    },
+    "tiles": {
+      "blocking": "Bloqueio",
+      "warnings": "Alertas",
+      "acknowledged": "Reconhecidos",
+      "falsePositiveRate": "Taxa de falsos positivos"
+    },
+    "transitions": {
+      "acknowledge": "Reconhecer",
+      "resolve": "Resolver",
+      "falsePositive": "Falso positivo",
+      "reason": "Motivo",
+      "reasonPlaceholder": "O que você verificou ou corrigiu?",
+      "submit": "Aplicar",
+      "failed": "Não foi possível salvar a alteração."
+    },
+    "severity": {
+      "block": "Bloqueio",
+      "warn": "Alerta",
+      "info": "Info"
+    },
+    "status": {
+      "open": "Aberta",
+      "acknowledged": "Reconhecida",
+      "resolved": "Resolvida",
+      "false_positive": "Falso positivo"
+    },
+    "kinds": {
+      "terminated_with_pay": "Desligado com folha",
+      "duplicate_bank": "Conta duplicada",
+      "retro_spike": "Pico retroativo",
+      "net_pay_spike": "Pico de líquido",
+      "zero_hours_with_pay": "Zero horas com folha",
+      "hours_spike": "Pico de horas",
+      "missing_rate": "Valor ausente",
+      "expired_rate": "Valor vencido",
+      "prevailing_wage_missing": "Piso salarial ausente",
+      "apprentice_ratio_breach": "Cota de aprendizes violada",
+      "benefit_input_orphan": "Benefício sem vínculo",
+      "leave_input_orphan": "Afastamento sem vínculo",
+      "negative_balance": "Saldo de férias negativo",
+      "duplicate_entry": "Lançamento duplicado",
+      "geofence_outside": "Fora da área",
+      "unrounded": "Ponto sem arredondar",
+      "custom": "Personalizado"
+    }
   }
 }
