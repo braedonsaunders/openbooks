@@ -145,6 +145,10 @@ const DEFAULT_POLICIES: MaskingPolicy[] = [
   // 0196: review answers and exit records assess named people in free
   // text, so a masked sandbox redacts the prose (ratings, scales and
   // status codes carry no PII and copy verbatim on purpose).
+  // HR-14 begin: license/credential numbers are candidate PII — nulled
+  // in sandboxes like tax_ids, never faked into a plausible lie.
+  { tableName: "hrm_worker_qualifications", columnName: "identifier", transform: "null_out" },
+  // HR-14 end
   { tableName: "hrm_review_answers", columnName: "text", transform: "redact" },
   { tableName: "hrm_exit_records", columnName: "destination", transform: "redact" },
   { tableName: "hrm_exit_records", columnName: "notes", transform: "redact" },
