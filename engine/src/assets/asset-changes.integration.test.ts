@@ -1053,7 +1053,7 @@ test(
             actorId: f.actors.submitterId,
           },
         ),
-        /requires an applied tax basis workpaper for its approved disposal or intercompany transfer/,
+        /requires native statutory basis treatment.*no tax result has been produced/,
       );
       assert.deepEqual(
         (
