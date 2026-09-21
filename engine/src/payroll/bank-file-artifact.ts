@@ -6,6 +6,7 @@ import { add, cmp, sum } from "../money/money.ts";
 import { assertPayRunApprovalReleased, payRunApprovalState } from "./approval.ts";
 import {
   PAYROLL_BANK_FILE_FORMATS,
+  PAYROLL_BANK_FILE_RECORD_LENGTHS,
   payrollOriginatorConfig,
   preparePayRunBankFile,
   renderPayRunBankFile,
@@ -512,6 +513,82 @@ export interface GeneratePayRunBankFileInput {
 }
 
 /**
+ * Per-format bank-facing numbers and labels, derived once from the artifact's
+ * own sequence allocation. Each helper is an exhaustive switch with a
+ * never-binding — not a ternary with a fall-through default — so declaring a
+ * format that needs (or must not carry) a number fails tsc until its arm is
+ * written. The default's throw names the format for the JavaScript caller
+ * and the already-persisted row the type system cannot police.
+ */
+function payrollFileCreationNumberFor(
+  format: PayRunBankFileFormat,
+  sequenceValue: number,
+): number | null {
+  switch (format) {
+    case "cpa005":
+      return ((sequenceValue - 1) % 9999) + 1;
+    case "nacha":
+    case "sepa":
+    case "cemtex":
+      return null;
+    default: {
+      const _exhaustive: never = format;
+      throw new PayrollError(`unknown payroll bank-file format "${String(_exhaustive)}"`);
+    }
+  }
+}
+
+function payrollFileIdModifierFor(
+  format: PayRunBankFileFormat,
+  sequenceValue: number,
+): string | null {
+  switch (format) {
+    case "nacha":
+      return FILE_ID_MODIFIERS[(sequenceValue - 1) % FILE_ID_MODIFIERS.length]!;
+    case "cpa005":
+    case "sepa":
+    case "cemtex":
+      return null;
+    default: {
+      const _exhaustive: never = format;
+      throw new PayrollError(`unknown payroll bank-file format "${String(_exhaustive)}"`);
+    }
+  }
+}
+
+function payrollMessageIdFor(format: PayRunBankFileFormat, fileNumber: string): string | undefined {
+  switch (format) {
+    case "sepa":
+      return fileNumber;
+    case "cpa005":
+    case "nacha":
+    case "cemtex":
+      return undefined;
+    default: {
+      const _exhaustive: never = format;
+      throw new PayrollError(`unknown payroll bank-file format "${String(_exhaustive)}"`);
+    }
+  }
+}
+
+function payrollFilenameLabelFor(format: PayRunBankFileFormat): string {
+  switch (format) {
+    case "cpa005":
+      return "CPA005";
+    case "nacha":
+      return "NACHA";
+    case "sepa":
+      return "SEPA";
+    case "cemtex":
+      return "CEMTEX";
+    default: {
+      const _exhaustive: never = format;
+      throw new PayrollError(`unknown payroll bank-file format "${String(_exhaustive)}"`);
+    }
+  }
+}
+
+/**
  * Produce a new, immutable bank-file artifact for a committed pay run.
  *
  * Reads used to prepare the file happen before the transaction; the transaction
@@ -653,12 +730,8 @@ export async function generatePayRunBankFile(
     // value that never repeats. Cemtex carries no per-file bank number: its
     // reel sequence is the literal "01" (multi-file batches, which would
     // advance it, are refused — a run past 500 details never becomes bytes).
-    const fileCreationNumber =
-      format === "cpa005" ? ((sequenceValue - 1) % 9999) + 1 : null;
-    const fileIdModifier =
-      format === "nacha"
-        ? FILE_ID_MODIFIERS[(sequenceValue - 1) % FILE_ID_MODIFIERS.length]!
-        : null;
+    const fileCreationNumber = payrollFileCreationNumberFor(format, sequenceValue);
+    const fileIdModifier = payrollFileIdModifierFor(format, sequenceValue);
 
     // --- render (pure) -----------------------------------------------------
     const rendered = renderPayRunBankFile(inputs, {
@@ -668,7 +741,7 @@ export async function generatePayRunBankFile(
       originator: config,
       fileCreationNumber: fileCreationNumber ?? undefined,
       fileIdModifier: fileIdModifier ?? undefined,
-      messageId: format === "sepa" ? fileNumber : undefined,
+      messageId: payrollMessageIdFor(format, fileNumber),
       fundsDate: entitlement.payDate,
       createdAt: now,
     });
@@ -689,13 +762,16 @@ export async function generatePayRunBankFile(
     // length-delimited by markup, not by offsets — so non-ASCII names are
     // legal there and this check does not apply.
     const bytes = Buffer.from(rendered.content, "utf8");
-    if (format !== "sepa" && bytes.length !== rendered.content.length) {
+    // "Fixed-width" is the record-length Record, not a second format list:
+    // a null length means length-delimited, where this check does not apply.
+    // Identical to `format !== "sepa"` for every format declared today.
+    if (PAYROLL_BANK_FILE_RECORD_LENGTHS[format] != null && bytes.length !== rendered.content.length) {
       throw new PayrollError(
         "payroll bank file contains non-ASCII characters, which would shift every fixed-width field after them",
       );
     }
     const contentHash = createHash("sha256").update(bytes).digest("hex");
-    const filename = `${fileNumber}-${format === "cpa005" ? "CPA005" : format === "sepa" ? "SEPA" : format === "cemtex" ? "CEMTEX" : "NACHA"}-${
+    const filename = `${fileNumber}-${payrollFilenameLabelFor(format)}-${
       entitlement.documentNumber
     }.${rendered.extension}`.replace(/[^A-Za-z0-9._-]/g, "-");
 

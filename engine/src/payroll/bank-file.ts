@@ -325,10 +325,26 @@ type ProfileRow = {
 
 /** CPA-005 is CRLF-terminated per the bank implementation guides; NACHA is per-ODFI; SEPA pain.001 is LF-terminated XML; Cemtex files are CR/LF-delimited per the annotated sample. */
 function lineEndingFor(row: ProfileRow, format: PayRunBankFileFormat): "lf" | "crlf" {
-  if (format === "cpa005") return "crlf";
-  if (format === "sepa") return "lf";
-  if (format === "cemtex") return "crlf";
-  return String(row.settings?.lineEnding ?? "").toLowerCase() === "crlf" ? "crlf" : "lf";
+  // A switch, not a Record of constants: the NACHA arm reads per-profile
+  // settings, so there is no single value to tabulate. The never-binding in
+  // default (not just a throw) is what fails tsc when the union grows
+  // without a new case; the throw itself names the format for the
+  // JavaScript caller and the already-persisted row the type system cannot
+  // police.
+  switch (format) {
+    case "cpa005":
+      return "crlf";
+    case "sepa":
+      return "lf";
+    case "cemtex":
+      return "crlf";
+    case "nacha":
+      return String(row.settings?.lineEnding ?? "").toLowerCase() === "crlf" ? "crlf" : "lf";
+    default: {
+      const _exhaustive: never = format;
+      throw new PayrollError(`unknown payroll bank-file format "${String(_exhaustive)}"`);
+    }
+  }
 }
 
 /** Active payroll-capable originator profiles, for the operator's picker. */
@@ -589,11 +605,30 @@ function resolveCemtex(row: ProfileRow): PayrollOriginatorResult {
   };
 }
 
+/**
+ * Originator validation per format — a lookup, not a chain. The Record type
+ * refuses a union member with no resolver at build time, instead of
+ * validating it as another rail's profile at generation time.
+ */
+const PAYROLL_BANK_FILE_ORIGINATOR_RESOLVERS: Record<
+  PayRunBankFileFormat,
+  (row: ProfileRow) => PayrollOriginatorResult
+> = {
+  cpa005: resolveCpa005,
+  nacha: resolveNacha,
+  sepa: resolveSepa,
+  cemtex: resolveCemtex,
+};
+
 function resolveOriginator(row: ProfileRow, format: PayRunBankFileFormat): PayrollOriginatorResult {
   // Branch on the profile's rail-mapped format, never on a country: packs
   // declare which rail they settle on and this resolver only reads it.
-  const resolved =
-    format === "cpa005" ? resolveCpa005(row) : format === "sepa" ? resolveSepa(row) : format === "cemtex" ? resolveCemtex(row) : resolveNacha(row);
+  const resolve = PAYROLL_BANK_FILE_ORIGINATOR_RESOLVERS[format];
+  // Unreachable from TypeScript (the Record is total; noUncheckedIndexedAccess
+  // forces the check anyway) — the refusal is for the JavaScript caller and
+  // the already-persisted row the type system cannot police.
+  if (!resolve) throw new PayrollError(`unknown payroll bank-file format "${format}"`);
+  const resolved = resolve(row);
   if (!resolved.ok) return resolved;
   return { ok: true, config: { ...resolved.config, lineEnding: lineEndingFor(row, format) } };
 }
@@ -768,57 +803,75 @@ export async function loadCredits(
       continue;
     }
     const accountNumber = decryptAccountNumber(row.account_number_encrypted);
-    if (format === "cpa005") {
-      if (!/^\d{3}$/.test(routing.institution ?? "") || !/^\d{5}$/.test(routing.transit ?? "")) {
-        problems.push(
-          `${entry.employeeName}: CPA-005 needs a 3-digit institution and 5-digit transit number`,
-        );
+    // Exhaustive over the union: each format states how its credits are
+    // addressed, and a format with no case fails tsc at the never-binding
+    // below instead of being validated as another rail's account. A switch,
+    // not a Record: the SEPA/Cemtex arms resolve-and-push inside this loop's
+    // shared tail, which has no single value to tabulate. The default's
+    // throw names the format for the JavaScript caller and the
+    // already-persisted row the type system cannot police.
+    switch (format) {
+      case "cpa005": {
+        if (!/^\d{3}$/.test(routing.institution ?? "") || !/^\d{5}$/.test(routing.transit ?? "")) {
+          problems.push(
+            `${entry.employeeName}: CPA-005 needs a 3-digit institution and 5-digit transit number`,
+          );
+          continue;
+        }
+        break;
+      }
+      case "sepa": {
+        // A SEPA credit is addressed by IBAN, not by account number: the IBAN
+        // lives on the employee's bank row (`routing.iban`, falling back to the
+        // stored account number the way the AP rail does), and a value that
+        // fails the ISO 13616 mod-97 check is a named refusal — never silently
+        // dropped, never coerced into a differently-numbered account.
+        const resolved = resolveSepaCreditor(entry.employeeName, routing, accountNumber);
+        if (!resolved.ok) {
+          problems.push(resolved.reason);
+          continue;
+        }
+        credits.push({
+          ...entry,
+          employeeNumber: row.employee_number?.trim() || entry.employeePartyId.slice(0, 8),
+          routing,
+          accountNumber,
+          iban: resolved.iban,
+          bic: resolved.bic,
+        });
         continue;
       }
-    } else if (format === "sepa") {
-      // A SEPA credit is addressed by IBAN, not by account number: the IBAN
-      // lives on the employee's bank row (`routing.iban`, falling back to the
-      // stored account number the way the AP rail does), and a value that
-      // fails the ISO 13616 mod-97 check is a named refusal — never silently
-      // dropped, never coerced into a differently-numbered account.
-      const resolved = resolveSepaCreditor(entry.employeeName, routing, accountNumber);
-      if (!resolved.ok) {
-        problems.push(resolved.reason);
+      case "cemtex": {
+        // A Cemtex credit is addressed by BSB + account number: the BSB lives
+        // on the employee's bank row (`routing.bsb`) and the account number is
+        // the stored approved number. Either one unshaped is a named refusal —
+        // never silently dropped, never coerced into a differently-numbered
+        // account.
+        const resolved = resolveCemtexCreditor(entry.employeeName, routing, accountNumber);
+        if (!resolved.ok) {
+          problems.push(resolved.reason);
+          continue;
+        }
+        credits.push({
+          ...entry,
+          employeeNumber: row.employee_number?.trim() || entry.employeePartyId.slice(0, 8),
+          routing,
+          accountNumber: resolved.accountNumber,
+          bsb: resolved.bsb,
+        });
         continue;
       }
-      credits.push({
-        ...entry,
-        employeeNumber: row.employee_number?.trim() || entry.employeePartyId.slice(0, 8),
-        routing,
-        accountNumber,
-        iban: resolved.iban,
-        bic: resolved.bic,
-      });
-      continue;
-    } else if (format === "cemtex") {
-      // A Cemtex credit is addressed by BSB + account number: the BSB lives
-      // on the employee's bank row (`routing.bsb`) and the account number is
-      // the stored approved number. Either one unshaped is a named refusal —
-      // never silently dropped, never coerced into a differently-numbered
-      // account.
-      const resolved = resolveCemtexCreditor(entry.employeeName, routing, accountNumber);
-      if (!resolved.ok) {
-        problems.push(resolved.reason);
-        continue;
+      case "nacha": {
+        const aba = routing.aba ?? routing.routingNumber ?? routing.routing ?? "";
+        if (!/^\d{9}$/.test(aba)) {
+          problems.push(`${entry.employeeName}: US ACH needs a 9-digit routing number`);
+          continue;
+        }
+        break;
       }
-      credits.push({
-        ...entry,
-        employeeNumber: row.employee_number?.trim() || entry.employeePartyId.slice(0, 8),
-        routing,
-        accountNumber: resolved.accountNumber,
-        bsb: resolved.bsb,
-      });
-      continue;
-    } else {
-      const aba = routing.aba ?? routing.routingNumber ?? routing.routing ?? "";
-      if (!/^\d{9}$/.test(aba)) {
-        problems.push(`${entry.employeeName}: US ACH needs a 9-digit routing number`);
-        continue;
+      default: {
+        const _exhaustive: never = format;
+        throw new PayrollError(`unknown payroll bank-file format "${String(_exhaustive)}"`);
       }
     }
     if (toUnits(entry.amount) % 100n !== 0n) {
@@ -853,6 +906,100 @@ export interface TrailerTotals {
   count: number;
 }
 
+/** The produced characters, in both shapes the trailer readers need. */
+interface BankFileTrailerSource {
+  /** Non-empty records, split on either terminator. */
+  records: string[];
+  /** The raw produced characters (for the markup-delimited rails). */
+  content: string;
+}
+
+/**
+ * CPA-005 Z record: positions 47–60 total value of credit transactions (14
+ * digits, cents), positions 61–68 total number of credit transactions (8).
+ */
+function readCpa005Trailer({ records }: BankFileTrailerSource): TrailerTotals {
+  const trailer = records[records.length - 1];
+  if (!trailer || trailer[0] !== "Z" || trailer.length !== 1464) {
+    throw new PayrollError("generated CPA-005 file has no readable Z trailer record");
+  }
+  return {
+    totalCents: BigInt(trailer.slice(46, 60)),
+    count: Number(trailer.slice(60, 68)),
+  };
+}
+
+/**
+ * NACHA File Control "9" record: positions 14–21 entry/addenda count (8),
+ * positions 44–55 total credit entry dollar amount (12, cents).
+ */
+function readNachaTrailer({ records }: BankFileTrailerSource): TrailerTotals {
+  const trailer = records.find((line) => line[0] === "9" && !/^9{94}$/.test(line));
+  if (!trailer || trailer.length !== 94) {
+    throw new PayrollError("generated NACHA file has no readable file-control record");
+  }
+  return {
+    totalCents: BigInt(trailer.slice(43, 55)),
+    count: Number(trailer.slice(13, 21)),
+  };
+}
+
+/**
+ * SEPA pain.001: the GrpHdr `<NbOfTxs>` and `<CtrlSum>` the builder wrote —
+ * parsed back out of the produced XML, never assumed from the inputs.
+ */
+function readSepaTrailer({ content }: BankFileTrailerSource): TrailerTotals {
+  // GrpHdr carries the file's own totals; the FIRST NbOfTxs/CtrlSum in the
+  // document is the header's (each CdtTrfTxInf carries amounts but no
+  // counts). CtrlSum is exact 2dp euros, so whole cents by construction —
+  // and the render refuses sub-cent credits before writing, so the parse
+  // below cannot hide a fraction the ledger still carries.
+  const count = content.match(/<NbOfTxs>(\d+)<\/NbOfTxs>/);
+  const sum = content.match(/<CtrlSum>(\d+\.\d{2})<\/CtrlSum>/);
+  if (!count || !sum) {
+    throw new PayrollError("generated SEPA file has no readable GrpHdr totals");
+  }
+  return {
+    totalCents: toUnits(sum[1]!) / 100n,
+    count: Number(count[1]),
+  };
+}
+
+/**
+ * Cemtex file-total "7" record: positions 31–40 credit total (10, cents),
+ * positions 75–80 detail-record count (6).
+ */
+function readCemtexTrailer({ records }: BankFileTrailerSource): TrailerTotals {
+  // The file-total "7" record is the LAST record; the credit total sits at
+  // positions 31–40 (slice 30–40) and the detail count at 75–80 (slice
+  // 74–80). The net at 21–30 must equal the credit total on a payroll file
+  // (no debits), so the credit field alone ties to the ledger.
+  const last = records[records.length - 1];
+  if (!last || last[0] !== "7" || last.length !== 120) {
+    throw new PayrollError("generated Cemtex file has no readable file-total record");
+  }
+  return {
+    totalCents: BigInt(last.slice(30, 40)),
+    count: Number(last.slice(74, 80)),
+  };
+}
+
+/**
+ * The trailer reader per format — a lookup, not a chain. The Record type
+ * refuses a union member with no reader at build time, instead of parsing
+ * its bytes as another rail's trailer at generation time. A pending rail is
+ * wired by adding its reader plus one line here.
+ */
+const PAYROLL_BANK_FILE_TRAILER_READERS: Record<
+  PayRunBankFileFormat,
+  (source: BankFileTrailerSource) => TrailerTotals
+> = {
+  cpa005: readCpa005Trailer,
+  nacha: readNachaTrailer,
+  sepa: readSepaTrailer,
+  cemtex: readCemtexTrailer,
+};
+
 /**
  * Read the control totals back out of the generated characters.
  *
@@ -861,68 +1008,18 @@ export interface TrailerTotals {
  * with the ledger is the single worst outcome here, because the bank settles
  * the trailer and the books carry the ledger. So the totals are PARSED from
  * the produced bytes at fixed offsets and compared against the run.
- *
- * CPA-005 Z record: positions 47–60 total value of credit transactions (14
- * digits, cents), positions 61–68 total number of credit transactions (8).
- * NACHA File Control "9" record: positions 14–21 entry/addenda count (8),
- * positions 44–55 total credit entry dollar amount (12, cents).
- * SEPA pain.001: the GrpHdr `<NbOfTxs>` and `<CtrlSum>` the builder wrote —
- * parsed back out of the produced XML, never assumed from the inputs.
- * Cemtex file-total "7" record: positions 31–40 credit total (10, cents),
- * positions 75–80 detail-record count (6).
  */
 export function readTrailerTotals(format: PayRunBankFileFormat, content: string): TrailerTotals {
   // Split on either terminator: the terminator is per-institution and never
   // part of the record, so the parse must not depend on which one was written.
   const records = content.split(/\r?\n/).filter((line) => line.length > 0);
-  if (format === "cpa005") {
-    const trailer = records[records.length - 1];
-    if (!trailer || trailer[0] !== "Z" || trailer.length !== 1464) {
-      throw new PayrollError("generated CPA-005 file has no readable Z trailer record");
-    }
-    return {
-      totalCents: BigInt(trailer.slice(46, 60)),
-      count: Number(trailer.slice(60, 68)),
-    };
-  }
-  if (format === "sepa") {
-    // GrpHdr carries the file's own totals; the FIRST NbOfTxs/CtrlSum in the
-    // document is the header's (each CdtTrfTxInf carries amounts but no
-    // counts). CtrlSum is exact 2dp euros, so whole cents by construction —
-    // and the render refuses sub-cent credits before writing, so the parse
-    // below cannot hide a fraction the ledger still carries.
-    const count = content.match(/<NbOfTxs>(\d+)<\/NbOfTxs>/);
-    const sum = content.match(/<CtrlSum>(\d+\.\d{2})<\/CtrlSum>/);
-    if (!count || !sum) {
-      throw new PayrollError("generated SEPA file has no readable GrpHdr totals");
-    }
-    return {
-      totalCents: toUnits(sum[1]!) / 100n,
-      count: Number(count[1]),
-    };
-  }
-  const trailer = records.find((line) => line[0] === "9" && !/^9{94}$/.test(line));
-  if (format === "cemtex") {
-    // The file-total "7" record is the LAST record; the credit total sits at
-    // positions 31–40 (slice 30–40) and the detail count at 75–80 (slice
-    // 74–80). The net at 21–30 must equal the credit total on a payroll file
-    // (no debits), so the credit field alone ties to the ledger.
-    const last = records[records.length - 1];
-    if (!last || last[0] !== "7" || last.length !== 120) {
-      throw new PayrollError("generated Cemtex file has no readable file-total record");
-    }
-    return {
-      totalCents: BigInt(last.slice(30, 40)),
-      count: Number(last.slice(74, 80)),
-    };
-  }
-  if (!trailer || trailer.length !== 94) {
-    throw new PayrollError("generated NACHA file has no readable file-control record");
-  }
-  return {
-    totalCents: BigInt(trailer.slice(43, 55)),
-    count: Number(trailer.slice(13, 21)),
-  };
+  const read = PAYROLL_BANK_FILE_TRAILER_READERS[format];
+  // Unreachable from TypeScript (the Record is total; noUncheckedIndexedAccess
+  // forces the check anyway) — the refusal names the format for the
+  // JavaScript caller and the already-persisted row the type system cannot
+  // police, even when the bytes fed in are another rail's well-formed file.
+  if (!read) throw new PayrollError(`unknown payroll bank-file format "${format}"`);
+  return read({ records, content });
 }
 
 /**
@@ -1024,6 +1121,37 @@ function localDate(iso: string): Date {
 }
 
 /**
+ * The per-format renderer — a lookup, not a chain. The Record type refuses a
+ * union member with no builder at build time, instead of handing its credits
+ * to another rail's writer at generation time. A pending rail (bacs, zengin,
+ * cnab240, giro, elixir0) is wired by adding one line here once its builder
+ * exists in this tree — never by extending a ternary default.
+ */
+const PAYROLL_BANK_FILE_BUILDERS: Record<
+  PayRunBankFileFormat,
+  (input: PayRunBankFileBuildInput, credits: PayRunBankFileCredit[]) => string
+> = {
+  cpa005: buildCpa005Payroll,
+  nacha: buildNachaPayroll,
+  sepa: buildSepaPayroll,
+  cemtex: buildCemtexPayroll,
+};
+
+/**
+ * Fixed record width each rail's characters must hold, or null when the rail
+ * is length-delimited rather than offset-delimited. SEPA pain.001 is XML, so
+ * null is the DECLARED answer for that reason — not a chain's leftover
+ * default. A future delimited rail (Elixir-0 is comma-separated, not
+ * fixed-width) declares null here for the same stated reason.
+ */
+export const PAYROLL_BANK_FILE_RECORD_LENGTHS: Record<PayRunBankFileFormat, number | null> = {
+  cpa005: 1464,
+  nacha: 94,
+  sepa: null,
+  cemtex: 120,
+};
+
+/**
  * Render the file and verify it. Pure: no database, no clock, no randomness —
  * the same inputs always produce the same characters, which is what makes the
  * stored artifact reproducible evidence and the golden tests meaningful.
@@ -1083,16 +1211,21 @@ export function renderPayRunBankFile(
     );
   }
 
+  // Lookups, not chains: a format the Records do not wire fails tsc at the
+  // Record literal instead of rendering another rail's file.
+  const build = PAYROLL_BANK_FILE_BUILDERS[format];
+  // Unreachable from TypeScript (the Record is total; noUncheckedIndexedAccess
+  // forces the check anyway) — the refusal names the format for the
+  // JavaScript caller and the already-persisted row the type system cannot
+  // police.
+  if (!build) throw new PayrollError(`unknown payroll bank-file format "${format}"`);
   const content = applyLineEnding(
-    format === "cpa005"
-      ? buildCpa005Payroll(input, credits)
-      : format === "sepa"
-        ? buildSepaPayroll(input, credits)
-        : format === "cemtex"
-          ? buildCemtexPayroll(input, credits)
-          : buildNachaPayroll(input, credits),
+    build(input, credits),
     input.originator.lineEnding,
-    format === "cpa005" ? 1464 : format === "nacha" ? 94 : format === "cemtex" ? 120 : null,
+    // The builder guard above already refused the unknown format; the
+    // `?? null` only satisfies noUncheckedIndexedAccess, which types every
+    // indexed access `T | undefined` even over a total Record.
+    PAYROLL_BANK_FILE_RECORD_LENGTHS[format] ?? null,
   );
 
   // Everything below is read back out of the produced characters.
