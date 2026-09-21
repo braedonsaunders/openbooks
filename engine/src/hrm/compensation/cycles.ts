@@ -20,7 +20,6 @@ import {
   type MatrixGuideline,
 } from "./compensation-math.ts";
 import { resolveBandForScope, type BandBasis } from "./bands.ts";
-import { compensationSettings } from "./architecture.ts";
 import { requireActorId, requireId, requireOrgId, requireReason } from "../recruiting/input.ts";
 
 /**

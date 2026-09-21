@@ -9,7 +9,7 @@ import {
 } from "../authorization.ts";
 import { CompensationError } from "./errors.ts";
 import { mul } from "../../money/money.ts";
-import { bandPlacement, compaRatio } from "./compensation-math.ts";
+import { bandPlacement } from "./compensation-math.ts";
 import { requireActorId, requireId, requireOrgId, requireReason } from "../recruiting/input.ts";
 
 /**

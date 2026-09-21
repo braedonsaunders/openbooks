@@ -17,7 +17,7 @@ export const runtime = "nodejs";
  * rate service, never bands). Both ride comp.manage — equity figures
  * are HR-only. The client checks res.ok before parsing.
  */
-export async function GET(req: Request) {
+export async function GET() {
   const gate = await guardPermission("hrm.compensation.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmPayTransparency"))) {

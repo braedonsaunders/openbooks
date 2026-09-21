@@ -1,14 +1,10 @@
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import {
-  fulfilPayInformationRequest,
-  refusePayInformationRequest,
   requestPayInformation,
 } from "@openbooks/engine/src/hrm/compensation/pay-transparency.ts";
 import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
-import { isUuid } from "../../../../lib/list-params";
 import { compensationErrorResponse } from "../compensation/_lib";
 import { requestPayInfoBody } from "../compensation/bodies";
 

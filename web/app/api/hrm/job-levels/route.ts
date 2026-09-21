@@ -3,13 +3,12 @@ import { NextResponse } from "next/server";
 import {
   createJobLevel,
   listJobLevels,
-  updateJobLevel,
 } from "@openbooks/engine/src/hrm/compensation/architecture.ts";
 import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
 import { compensationErrorResponse } from "../compensation/_lib";
-import { createLevelBody, updateLevelBody } from "../compensation/bodies";
+import { createLevelBody } from "../compensation/bodies";
 
 export const runtime = "nodejs";
 

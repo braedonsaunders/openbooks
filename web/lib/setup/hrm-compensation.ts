@@ -30,12 +30,10 @@ export function normalizeHrmCompensationInput(
   }))
   const hasSlots = slots.some(({ weight }) => weight !== undefined)
   if (!hasSlots) return body
-  const { skillsWeight, effortWeight, responsibilityWeight, workingConditionsWeight, ...rest } = body as Record<string, unknown> & {
-    skillsWeight?: unknown
-    effortWeight?: unknown
-    responsibilityWeight?: unknown
-    workingConditionsWeight?: unknown
-  }
+  // The four per-criterion inputs collapse into one equalValueCriteria
+  // array, so they must not also survive as loose keys on the row.
+  const rest = { ...body }
+  for (const criterion of EQUAL_VALUE_CRITERIA) delete rest[`${criterion}Weight`]
   const criteria = slots
     .filter(({ weight }) => weight !== undefined && weight !== null && String(weight).trim() !== '')
     .map(({ criterion, weight }) => ({ criterion, weight: String(weight).trim() }))

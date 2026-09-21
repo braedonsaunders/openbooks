@@ -10,7 +10,7 @@ import {
 import { CompensationError } from "./errors.ts";
 import { compensationSettings, type FteRounding } from "./architecture.ts";
 import { resolveBandForScope } from "./bands.ts";
-import { requireActorId, requireId, requireOrgId, requireReason } from "../recruiting/input.ts";
+import { requireActorId, requireId, requireOrgId } from "../recruiting/input.ts";
 
 /**
  * Headcount plans (HR-12, 0222): workforce scenarios costed before they

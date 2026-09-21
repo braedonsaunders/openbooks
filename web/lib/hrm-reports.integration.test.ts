@@ -89,18 +89,6 @@ async function enableEveryHrmReportFeature(orgId: string): Promise<void> {
   }
 }
 // HR-12 end
-// HR-14 begin: the register rides hrmCertifications, the alert queue
-// rides hrmCertificationAlerts.
-async function enableCertifications(orgId: string): Promise<void> {
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrmCertifications}', 'true'::jsonb, true)
-     where id = ${orgId}`)
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrmCertificationAlerts}', 'true'::jsonb, true)
-     where id = ${orgId}`)
-}
 // HR-14 end
 // HR-18 begin: the depth entities ride their own sub-switches.
 async function enableRecruitingDepth(orgId: string): Promise<void> {

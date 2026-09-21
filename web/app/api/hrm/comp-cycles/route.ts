@@ -17,7 +17,7 @@ export const runtime = "nodejs";
  * requires payroll — the push writes wages and the open reads pay
  * truth). The client checks res.ok before parsing.
  */
-export async function GET(req: Request) {
+export async function GET() {
   const gate = await guardPermission("hrm.compensation.read");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmMeritCycles"))) {

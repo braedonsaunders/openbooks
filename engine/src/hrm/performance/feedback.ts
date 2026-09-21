@@ -6,7 +6,6 @@ import { businessToday } from "../../platform/business-date.ts";
 import {
   loadApprovalPerson,
   loadManagedEmploymentIds,
-  loadOwnEmploymentIds,
   requireAggregatePerformanceManage,
   requireAggregatePerformanceRead,
 } from "../authorization.ts";
