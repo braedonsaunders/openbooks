@@ -26,6 +26,9 @@ import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { resolveStatutoryRates } from "../statutory-rates.ts";
 import { calculateBrInss2026 } from "./inss-2026.ts";
 import { calculateBrIrrf2026 } from "./irrf-2026.ts";
+import { calculateBrInssFromTables } from "./inss-year.ts";
+import { calculateBrIrrfFromTables } from "./irrf-year.ts";
+import { brTablesForPayDate } from "./year-tables.ts";
 import { BR_PACK_RATES } from "./rates.ts";
 import { BR_2026_FGTS, BR_2026_PATRONAL } from "./tax-year-2026.ts";
 
@@ -99,16 +102,29 @@ export async function computeBrStatutoryWithRates(
   rates: BrEmployerRates,
 ): Promise<Record<string, string>> {
   const {
-    taxYear, region, income, nonPeriodic, pensionable, insurable,
+    taxYear, region, run, income, nonPeriodic, pensionable, insurable,
     periodsPerYear, pushStatutory, assertRegionSupported, emp,
   } = ctx;
-  if (taxYear !== 2026) {
+  if (taxYear !== 2026 && taxYear !== 2025 && taxYear !== 2024) {
     fail(
-      `tax year ${taxYear} has not been transcribed — the BR payroll pack's only `
-      + "transcribed year is calendar 2026 (see engine/src/payroll/br/tax-year-2026.ts). "
+      `tax year ${taxYear} has not been transcribed — the BR payroll pack's transcribed years are `
+      + "calendar 2024, 2025 and 2026 (see engine/src/payroll/br/tax-year-2024.ts, "
+      + "tax-year-2025.ts and tax-year-2026.ts). "
       + "Transcribe the year's Portaria + monthly tables before calculating",
     );
   }
+  // Prior years price through their own transcribed tables, selected by pay
+  // month (each changed the IRRF table mid-year); 2026 keeps its own path
+  // below, byte-for-byte the behaviour the 2026 suite proves.
+  const payDate = run.pay_date;
+  if (taxYear !== 2026 && (typeof payDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(payDate))) {
+    fail(
+      `run pay_date "${payDate ?? "(missing)"}" does not name an ISO day in tax year ${taxYear} — `
+      + "prior-year tables are selected by pay month, so the run must carry its pay_date",
+    );
+  }
+  const priorTables =
+    taxYear === 2024 || taxYear === 2025 ? brTablesForPayDate(taxYear, payDate as string) : null;
   assertRegionSupported(region);
   if (region !== "BR") {
     fail(`region "${region}" is not covered — the BR pack withholds nationally, never by state`);
@@ -126,7 +142,7 @@ export async function computeBrStatutoryWithRates(
   if (regime !== undefined && regime !== null && regime !== "" && regime !== "clt") {
     fail(
       `employee br_regime "${regime}" is not standard monthly CLT — aprendiz (2% FGTS), doméstico, `
-      + "temporário and other regimes price differently: see BR_REFUSED_2026",
+      + `temporário and other regimes price differently: see BR_REFUSED_${taxYear}`,
     );
   }
   const depRaw = empFact("BR", emp, "br_dependentes");
@@ -157,15 +173,26 @@ export async function computeBrStatutoryWithRates(
   const fmtCents = (c: bigint): string => `${c / 100n}.${String(c % 100n).padStart(2, "0")}`;
 
   // 1. INSS first: it is deductible from the IRRF base, so the order matters.
-  const inss = calculateBrInss2026({ salarioContribuicao: fmtCents(salarioContribuicao) });
+  const inss = priorTables === null
+    ? calculateBrInss2026({ salarioContribuicao: fmtCents(salarioContribuicao) })
+    : calculateBrInssFromTables(priorTables.inss, { salarioContribuicao: fmtCents(salarioContribuicao) });
 
   // 2. IRRF on the month's aggregate, with the INSS deduction inside.
-  const irrf = calculateBrIrrf2026({
-    rendimentos: fmtCents(rendimentos),
-    inss: inss.contribuicao,
-    dependentes,
-    pensaoMensal: pensao,
-  });
+  // Pre-2026 editions carry no art. 3º-A reduction (Lei 15.270/2025 takes
+  // effect 1 January 2026), so the generic calculator prices table tax only.
+  const irrf = priorTables === null
+    ? calculateBrIrrf2026({
+      rendimentos: fmtCents(rendimentos),
+      inss: inss.contribuicao,
+      dependentes,
+      pensaoMensal: pensao,
+    })
+    : calculateBrIrrfFromTables(priorTables.irrf, {
+      rendimentos: fmtCents(rendimentos),
+      inss: inss.contribuicao,
+      dependentes,
+      pensaoMensal: pensao,
+    });
 
   // 3. Employer cost: patronal 20% (published) + RAT×FAP + terceiros
   // (tenant-declared, refused by name when the lookup finds nothing) +
@@ -197,8 +224,11 @@ export async function computeBrStatutoryWithRates(
     fail(`br_fap fator "${rates.fap}" is outside 0.5–2.0`);
   }
   const terceiros = percentParts(rates.terceirosPct, "br_terceiros aliquota");
-  const patronalRate = percentParts(BR_2026_PATRONAL, "patronal");
-  const fgtsRate = percentParts(BR_2026_FGTS, "FGTS");
+  // Patronal 20% and FGTS 8% every transcribed year (Lei 8.212/1991 art. 22,
+  // I; Lei 8.036/1990 art. 15) — read off the year's own module, never
+  // borrowed across years.
+  const patronalRate = percentParts(priorTables?.patronal ?? BR_2026_PATRONAL, "patronal");
+  const fgtsRate = percentParts(priorTables?.fgts ?? BR_2026_FGTS, "FGTS");
 
   const patronal = truncCents(remuneracao * patronalRate.num, patronalRate.den);
   const ratEr = truncCents(remuneracao * rat.num * fap.num, rat.den * fap.den);
@@ -245,11 +275,11 @@ export const BR_FACTOR_LABELS: Readonly<Record<string, string>> = {
   BR_FGTS: "FGTS (fundo de garantia do tempo de serviço)",
 };
 
-/** Phase 9 — BR pack statutory pass for 2026. Refuses every other year. */
+/** Phase 9 — BR pack statutory pass for 2024–2026. Refuses every other year. */
 export async function computeBrStatutory(
   ctx: PayrollStatutoryComputeContext,
 ): Promise<Record<string, string>> {
-  if (ctx.taxYear !== 2026) {
+  if (ctx.taxYear !== 2026 && ctx.taxYear !== 2025 && ctx.taxYear !== 2024) {
     return computeBrStatutoryWithRates(ctx, { ratPct: null, fap: null, terceirosPct: null });
   }
   const resolution = await resolveStatutoryRates(ctx.orgId, BR_PACK_RATES, ctx.taxYear, ctx.run.pay_date);
