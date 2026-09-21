@@ -138,7 +138,9 @@ test("FP/FS zero below the minimum wage and above the age bar", () => {
   assert.equal(low.fs, "0.0000");
   assert.equal(low.fgsp, "4.0000");
 
-  // Born 1960 (66 in 2026): certainly past 60 — FP/FS age-barred to zero.
+  // Born 1960 (66 in 2026): certainly past 60 — FP/FS age-barred to zero,
+  // and FGŚP too (claims-protection art. 9b ust. 2, Dz.U. 2026 poz. 186 —
+  // was 8,00 under the landed unconditional pricing, now 0).
   const senior = calculatePlZus2026({
     brut: "8000.00",
     payDate: "2026-06-15",
@@ -149,7 +151,7 @@ test("FP/FS zero below the minimum wage and above the age bar", () => {
   assert.equal(senior.fpZwolnioneWiek, true);
   assert.equal(senior.fp, "0.0000");
   assert.equal(senior.fs, "0.0000");
-  assert.equal(senior.fgsp, "8.0000");
+  assert.equal(senior.fgsp, "0.0000");
 });
 
 test("named refusals: ulga age, FP band, periodicity, year", () => {
