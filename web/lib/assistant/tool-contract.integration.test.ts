@@ -169,6 +169,9 @@ const EMPTY_STORE: Record<string, string> = {
   get_equipment: "not found",
   get_subcontract: "not found",
   get_wip_prebill: "not found",
+  // HR-19: the survey read refuses an unknown survey by name, and the
+  // refusal reaches the caller through hrmRefusal unchanged.
+  hrm_survey_results: "survey is not visible in this organization",
 };
 
 const FEATURE_OFF = new Set([
@@ -328,6 +331,10 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
         get_crm_account: { partyId: randomUUID() },
         get_crm_activity: { activityId: randomUUID() },
         get_subscription: { subscriptionId: randomUUID() },
+        // HR-19: surveyId is a required uuid on the tool's own schema, so
+        // an absent fixture fails validation before the read service is
+        // ever called -- the harness must exercise the service, not zod.
+        hrm_survey_results: { surveyId: randomUUID() },
         get_lease: { leaseId: randomUUID() },
         get_timesheet_week: { employeePartyId: randomUUID(), week: "2026-09-16" },
         project_time: { projectId: randomUUID(), dimension: "employee" },
