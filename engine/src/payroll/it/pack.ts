@@ -25,6 +25,7 @@
  */
 import type { PayrollCountryPack } from "../packs.ts";
 import { IT_CERTIFICATES } from "./certificates.ts";
+import { itAnnualSettlement } from "./conguaglio.ts";
 import { computeItStatutory, IT_FACTOR_LABELS } from "./compute-statutory.ts";
 import { itPackFilings } from "./filings.ts";
 import { IT_JURISDICTIONS } from "./jurisdictions.ts";
@@ -164,6 +165,9 @@ export const IT_PAYROLL_PACK: ItPayrollPackDeclaration = {
     },
   ],
   computeStatutory: computeItStatutory,
+  // Year-end conguaglio (art. 23 c. 3 DPR 600/1973): one edition per
+  // transcribed year, adjustment lines on the final run — see conguaglio.ts.
+  annualSettlement: itAnnualSettlement,
   factorLabels: { ...IT_FACTOR_LABELS },
   // No `emp` facts: the engine reads detrazioni answers off the
   // certificate rows, never off bare profile keys.
