@@ -273,8 +273,10 @@ export async function listDecisions(
            recorded_at::text as "recordedAt"
       from ai_decisions
      where org_id = ${input.orgId}::uuid
-       and (${input.capabilityKey ?? null} is null or capability_key = ${input.capabilityKey ?? null})
-       and (${input.outcome ?? null} is null or outcome = ${input.outcome ?? null})
+       -- Cast: an untyped null parameter makes PostgreSQL refuse the
+       -- statement outright, so an unfiltered ledger read threw.
+       and (${input.capabilityKey ?? null}::text is null or capability_key = ${input.capabilityKey ?? null}::text)
+       and (${input.outcome ?? null}::text is null or outcome = ${input.outcome ?? null}::text)
      order by recorded_at desc, id desc
      limit ${limit}`)).rows;
   return rows;
