@@ -1702,6 +1702,9 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
       'One row per AI-assisted answer: capability, subject, cited sources, the PII-free summary and outcome. Digests and prompts never project. Requires the ledger admin permission.',
     from: `ai_decisions d`,
     orgColumn: 'd.org_id',
+    // Org-wide ledger by design: the no-clamp policy is declared, never
+    // omitted — an omitted policy throws for subsidiary-scoped readers.
+    subsidiaryScope: null,
     requiredPermission: 'admin.setup.manage',
     featureKey: 'aiGovernanceLedger',
     defaultPeriodField: 'recorded_at',
@@ -1730,6 +1733,9 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
       'One row per AI capability: autonomy ceiling, reviewer, subject notice, enabled state and last review. Requires the ledger admin permission.',
     from: `ai_capabilities c`,
     orgColumn: 'c.org_id',
+    // Org-wide registry mirror by design: the no-clamp policy is declared,
+    // never omitted — an omitted policy throws for subsidiary-scoped readers.
+    subsidiaryScope: null,
     requiredPermission: 'admin.setup.manage',
     featureKey: 'aiGovernanceLedger',
     defaultPeriodField: null,

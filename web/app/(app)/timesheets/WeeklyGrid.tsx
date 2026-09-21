@@ -513,6 +513,8 @@ export function WeeklyGrid({
                   {flag.hasPhoto ? ` ${t('field.flagPhoto')}` : null}
                 </span>
               ))}
+          </div>
+        ) : null}
         {/* HR-21: open anomaly flags overlapping this week. Informational
             for the approver — flags never block timesheet approval itself;
             block severity refuses the pay-run finalize, which is where the
