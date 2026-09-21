@@ -138,21 +138,6 @@ BEGIN
       ADD CONSTRAINT time_clock_events_employee_party_id_fkey
       FOREIGN KEY (employee_party_id) REFERENCES public.parties(id) DEFERRABLE;
   END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'worker_clock_pins_employee_party_id_fkey') THEN
-    ALTER TABLE public.worker_clock_pins
-      ADD CONSTRAINT worker_clock_pins_employee_party_id_fkey
-      FOREIGN KEY (employee_party_id) REFERENCES public.parties(id) DEFERRABLE;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'crew_time_batches_foreman_party_id_fkey') THEN
-    ALTER TABLE public.crew_time_batches
-      ADD CONSTRAINT crew_time_batches_foreman_party_id_fkey
-      FOREIGN KEY (foreman_party_id) REFERENCES public.parties(id) DEFERRABLE;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'crew_time_batch_lines_employee_party_id_fkey') THEN
-    ALTER TABLE public.crew_time_batch_lines
-      ADD CONSTRAINT crew_time_batch_lines_employee_party_id_fkey
-      FOREIGN KEY (employee_party_id) REFERENCES public.parties(id) DEFERRABLE;
-  END IF;
 END $$;
 
 -- Offline idempotency key: the same device event replays onto one row.
@@ -356,6 +341,32 @@ END $$;
 
 CREATE INDEX IF NOT EXISTS crew_time_batch_events_batch
   ON public.crew_time_batch_events (batch_id, recorded_at);
+
+
+-- Party links for the tables created above. These live AFTER their tables on
+-- purpose: grouped with the time_clock_events link they referenced
+-- worker_clock_pins, crew_time_batches and crew_time_batch_lines roughly a
+-- hundred lines before those tables exist, so bootstrap failed on a fresh
+-- database with "relation public.worker_clock_pins does not exist". The
+-- shard could not run a migration, so the first real execution found it.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'worker_clock_pins_employee_party_id_fkey') THEN
+    ALTER TABLE public.worker_clock_pins
+      ADD CONSTRAINT worker_clock_pins_employee_party_id_fkey
+      FOREIGN KEY (employee_party_id) REFERENCES public.parties(id) DEFERRABLE;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'crew_time_batches_foreman_party_id_fkey') THEN
+    ALTER TABLE public.crew_time_batches
+      ADD CONSTRAINT crew_time_batches_foreman_party_id_fkey
+      FOREIGN KEY (foreman_party_id) REFERENCES public.parties(id) DEFERRABLE;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'crew_time_batch_lines_employee_party_id_fkey') THEN
+    ALTER TABLE public.crew_time_batch_lines
+      ADD CONSTRAINT crew_time_batch_lines_employee_party_id_fkey
+      FOREIGN KEY (employee_party_id) REFERENCES public.parties(id) DEFERRABLE;
+  END IF;
+END $$;
 
 -- (6) Multi-stage approval chains per subject.
 CREATE TABLE IF NOT EXISTS public.time_approval_stages (
