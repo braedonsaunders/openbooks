@@ -20,6 +20,7 @@ import {
   assertMacrsVintageAllocationsMatchOpen,
   deriveMacrsDisposedBuyerVintages,
   parseFrozenMacrsBuyerVintages,
+  macrsOpeningTakenComponents,
   splitMacrsVintageCheckpoint,
   caDeemedAcquisitionPayment,
   caOrdinaryCapitalGainsInclusion,
@@ -1547,5 +1548,106 @@ test("declared elections refuse original 10000 section179 1000 bonus 0 prior 0 r
       }),
     /must equal original unadjusted basis|cannot derive a carryover checkpoint/,
     "derive does not reinterpret prior to accept an overstated remaining",
+  );
+});
+
+test("checkpoint conservation refuses supplied section179 above original instead of capping it", () => {
+  const overBasis = /section179 2000(?:\.0+)? exceeds original unadjusted basis 1000/;
+  throwsPolicy(
+    () =>
+      macrsOpeningTakenComponents({
+        subject: "dated MACRS checkpoint",
+        originalBasis: "1000.0000",
+        section179: "2000.0000",
+        bonusPercent: "0",
+        prior: "0.0000",
+        remaining: "0.0000",
+        checkpointKind: "taken_components",
+        takenBonus: "0.0000",
+      }),
+    overBasis,
+    "taken_components does not min section179 to original so 2000+0+0+0 can pass as 1000",
+  );
+  throwsPolicy(
+    () =>
+      validateTaxRegimeBasis(
+        {
+          regime: "us_macrs",
+          relationship: "non_arms_length",
+          recognition: "nontaxable",
+          relatedPerson: true,
+          placedInServiceOn: "2023-03-15",
+          recoveryPeriodYears: "5",
+          method: "200_db",
+          convention: "half_year",
+          originalUnadjustedBasis: "1000.00",
+          carryoverBasis: "0.00",
+          excessBasis: "0.00",
+          section179: "2000.00",
+          bonusPercent: "0",
+          businessUsePercent: "100",
+          priorDepreciation: "0",
+          section168i7Kind: "nonrecognition",
+        },
+        { sourceOperation: "intercompany_transfer", applicable: "buyer" },
+      ),
+    overBasis,
+    "declared_elections does not cap an impossible section179 above its slice",
+  );
+  throwsPolicy(
+    () =>
+      parseFrozenMacrsBuyerVintages([{
+        key: "carryover:2023-03-15:2025-08-01:original:2023-03-15",
+        source: "carryover",
+        parentKey: "original:2023-03-15",
+        placedInServiceOn: "2023-03-15",
+        transferOn: "2025-08-01",
+        recoveryPeriodYears: "5",
+        method: "200_db",
+        convention: "half_year",
+        unadjustedBasis: "1000.0000",
+        adjustedCarryover: "0.0000",
+        section179: "2000.0000",
+        priorDepreciation: "0.0000",
+        bonusPercent: "0",
+        businessUsePercent: "100",
+        shortYearMethod: "simplified",
+        checkpointKind: "taken_components",
+        takenBonus: "0.0000",
+      }]),
+    overBasis,
+    "frozen taken_components names the supplied 2000, not a capped 1000",
+  );
+  throwsPolicy(
+    () =>
+      deriveMacrsDisposedBuyerVintages({
+        open: [{
+          key: "excess:2025-08-01:2025-08-01",
+          source: "excess",
+          parentKey: null,
+          placedInServiceOn: "2025-08-01",
+          transferOn: "2025-08-01",
+          unadjustedBasis: "1000.0000",
+          adjustedCarryover: null,
+          section179: "2000.0000",
+          priorDepreciation: null,
+          recoveryPeriodYears: "5",
+          method: "200_db",
+          convention: "half_year",
+          bonusPercent: "0",
+          businessUsePercent: "100",
+          shortYearMethod: "simplified",
+        }],
+        allocations: [{
+          source: "excess",
+          placedInServiceOn: "2025-08-01",
+          transferOn: "2025-08-01",
+          disposedUnadjustedBasis: "1000.0000",
+          remainingUnadjustedBasis: "0.0000",
+        }],
+        transferOn: "2025-08-01",
+      }),
+    overBasis,
+    "newly placed declared 179 above its slice is refused, not reduced to original",
   );
 });
