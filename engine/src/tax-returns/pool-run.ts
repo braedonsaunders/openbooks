@@ -860,7 +860,7 @@ async function runMacrs(
   ].reduce((earliest, date) => (date < earliest ? date : earliest));
   const windows = await macrsWindows(tx, run, fromOn);
 
-  const unknownClasses = [...new Set(assets.rows)
+  const unknownClasses = [...new Set(assets.rows
     .map((asset) => asset.class_code)
     .filter((classCode) => !classes.has(classCode)))].sort();
   if (unknownClasses.length > 0) {
