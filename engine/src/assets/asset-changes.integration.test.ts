@@ -1,5 +1,4 @@
 import { runTaxPool } from "../tax-returns/pool-run.ts";
-import { ensureTaxYearWindow } from "../tax-returns/macrs-calendar.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
@@ -837,14 +836,6 @@ test(
       await db.execute(
         sql`update asset_categories set tax_attributes=jsonb_build_object('ca_cca_class','8') where org_id=${f.org.orgId} and id=${f.categoryId}`,
       );
-      await ensureTaxYearWindow(db, f.org.orgId, f.actors.submitterId, {
-        subsidiaryId: f.org.subsidiaryId,
-        regime: "ca_cca",
-        yearStart: "2026-01-01",
-        yearEnd: "2026-12-31",
-        filingYear: 2026,
-        reason: "calendar-year tax window",
-      });
       const restoredTax = await runTaxPool(
         f.org.orgId,
         f.org.bookId,
@@ -1032,22 +1023,6 @@ test(
       );
       await approve(f, id);
       await applyAssetChange(f.org.orgId, id, f.actors.submitterId);
-      await ensureTaxYearWindow(db, f.org.orgId, f.actors.submitterId, {
-        subsidiaryId: f.org.subsidiaryId,
-        regime: "ca_cca",
-        yearStart: "2025-01-01",
-        yearEnd: "2025-12-31",
-        filingYear: 2025,
-        reason: "calendar-year tax window",
-      });
-      await ensureTaxYearWindow(db, f.org.orgId, f.actors.submitterId, {
-        subsidiaryId: f.org.subsidiaryId,
-        regime: "ca_cca",
-        yearStart: "2026-01-01",
-        yearEnd: "2026-12-31",
-        filingYear: 2026,
-        reason: "calendar-year tax window",
-      });
       await runTaxPool(
         f.org.orgId,
         f.org.bookId,

@@ -48,15 +48,7 @@
       "closing": "Saldo final",
       "recapture": "Recuperação",
       "terminalLoss": "Perda terminal"
-    },
-    "legalEntity": "Entidade jurídica",
-    "window": "Exercício fiscal registrado",
-    "chooseWindow": "Selecione um período fiscal",
-    "noWindows": "Nenhum período fiscal foi registrado para esta entidade jurídica e regime.",
-    "configureYears": "Configurar exercícios fiscais",
-    "windowLabel": "{filingYear}: {start} – {end}",
-    "loadingWindows": "Carregando exercícios fiscais…",
-    "loadWindowsFailed": "Não foi possível carregar os exercícios fiscais."
+    }
   },
   "list": {
     "title": "Ativos imobilizados",

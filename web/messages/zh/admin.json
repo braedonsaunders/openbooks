@@ -1491,9 +1491,7 @@
         "classes": "税类",
         "firstYear": "首年规则",
         "methods": "方法",
-        "books": "账簿政策",
-        "cessation": "合格活动",
-        "years": "纳税年度"
+        "books": "账簿政策"
       },
       "packsTitle": "国家折旧包",
       "packsDescription": "安装折旧包会创建可编辑的租户配置。现有覆盖项永远不会被替换。",
@@ -1531,14 +1529,6 @@
         "assignments": {
           "title": "资产类别分配",
           "description": "在税务属性中，将每个资产类别分配到税制税类。"
-        },
-        "cessation": {
-          "title": "CAA 55(4) 终止",
-          "description": "记录英国合格活动终止的日期，balancing allowance 仅在该日之后才存在。处置最后一项资产并不构成终止。"
-        },
-        "years": {
-          "title": "纳税年度",
-          "description": "按法律实体和税制登记纳税年度日期及原因。"
         }
       }
     },
@@ -2586,16 +2576,6 @@
         "description": "保留规则：到期匿名化或删除。",
         "singularTitle": "保留规则",
         "title": "保留规则"
-      },
-      "tax-qualifying-activity-cessations": {
-        "title": "合格活动终止",
-        "singularTitle": "合格活动终止",
-        "description": "按 CAA 55(4) 记录每个法律实体的英国合格活动生效终止日。balancing allowance 仅在该日之后才存在；清空池本身不够。"
-      },
-      "tax-year-windows": {
-        "title": "纳税年度",
-        "singularTitle": "纳税年度",
-        "description": "按法律实体和税制登记纳税年度的起止日期，包括短纳税年度。每个期间须说明原因；已用于计算的日期将予以保留。"
       }
     },
     "fields": {
@@ -2980,13 +2960,7 @@
       "retroThreshold": "追溯阈值",
       "cohortKey": "分组",
       "biasTerms": "敏感措辞",
-      "reviewMonths": "评审周期（月）",
-      "yearStart": "年度开始日期",
-      "yearEnd": "年度结束日期",
-      "filingYear": "申报年度标签",
-      "ceasedOn": "终止日期",
-      "resumedOn": "恢复日期",
-      "evidence": "证据"
+      "reviewMonths": "评审周期（月）"
     },
     "fieldHelp": {
       "gapless": "无间隔表示序列中的每个编号都必须有记录，不能跳号。仅在法律或审计要求必须连续编号时启用。",

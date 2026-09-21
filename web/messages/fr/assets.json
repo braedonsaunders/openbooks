@@ -45,15 +45,7 @@
       "closing": "Solde de clôture",
       "recapture": "Récupération",
       "terminalLoss": "Perte finale"
-    },
-    "legalEntity": "Entité juridique",
-    "window": "Exercice fiscal enregistré",
-    "chooseWindow": "Sélectionner une période fiscale",
-    "noWindows": "Aucune période fiscale n’est enregistrée pour cette entité juridique et ce régime.",
-    "configureYears": "Configurer les exercices fiscaux",
-    "windowLabel": "{filingYear} : {start} – {end}",
-    "loadingWindows": "Chargement des exercices fiscaux…",
-    "loadWindowsFailed": "Impossible de charger les exercices fiscaux."
+    }
   },
   "list": {
     "title": "Immobilisations",

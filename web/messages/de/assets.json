@@ -45,15 +45,7 @@
       "closing": "Endsaldo",
       "recapture": "Nachversteuerung",
       "terminalLoss": "Endgültiger Verlust"
-    },
-    "legalEntity": "Rechtsträger",
-    "window": "Erfasstes Steuerjahr",
-    "chooseWindow": "Steuerjahreszeitraum auswählen",
-    "noWindows": "Für diesen Rechtsträger und dieses Steuerregime sind keine Steuerjahreszeiträume erfasst.",
-    "configureYears": "Steuerjahre konfigurieren",
-    "windowLabel": "{filingYear}: {start} – {end}",
-    "loadingWindows": "Steuerjahre werden geladen…",
-    "loadWindowsFailed": "Steuerjahre konnten nicht geladen werden."
+    }
   },
   "list": {
     "title": "Anlagevermögen",

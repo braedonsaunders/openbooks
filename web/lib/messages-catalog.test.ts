@@ -29,9 +29,6 @@ const TAX_DEPRECIATION_PREFIX = 'admin.setup.taxDepreciationSetup.'
 // this guard fails until every locale is reviewed instead of silently treating
 // an old English translation as complete.
 const TAX_DEPRECIATION_SOURCE_HASHES = {
-  [`${TAX_DEPRECIATION_PREFIX}tabs.years`]: 'd9996f84e8fff316ad5afd3da21370b0884e13065afbe33560d64be63b5fd36e',
-  [`${TAX_DEPRECIATION_PREFIX}links.years.title`]: 'd9996f84e8fff316ad5afd3da21370b0884e13065afbe33560d64be63b5fd36e',
-  [`${TAX_DEPRECIATION_PREFIX}links.years.description`]: '425bbe65e7e9bd20a068a927b207890c1c3bd828c31c5ca34caadd09c606644a',
   [`${TAX_DEPRECIATION_PREFIX}navTitle`]: 'f1920719940087cf0fdae8c5d4778b0abc3d267a387775229dc737bff5bc1365',
   [`${TAX_DEPRECIATION_PREFIX}title`]: 'f1920719940087cf0fdae8c5d4778b0abc3d267a387775229dc737bff5bc1365',
   [`${TAX_DEPRECIATION_PREFIX}description`]: '998dd3bd88bc4ffd1cad2f84b66017a70236de00f05502a1da7706219f273f75',
@@ -41,7 +38,6 @@ const TAX_DEPRECIATION_SOURCE_HASHES = {
   [`${TAX_DEPRECIATION_PREFIX}tabs.regimes`]: '730858e5fd280e8842cdddb6ac0bcca5320b61150ee678d75d2026069d59cf90',
   [`${TAX_DEPRECIATION_PREFIX}tabs.classes`]: '702fbae523babcab808ad7be5f632cfab1da0818cacc4d72cd13ca85a947295a',
   [`${TAX_DEPRECIATION_PREFIX}tabs.firstYear`]: '8423728abea04b373c144693afbd277b539fdb1da1b156efa408ddfa0509553a',
-  [`${TAX_DEPRECIATION_PREFIX}tabs.cessation`]: '3e7967550d8b48ff604c6216f05354261fbcc4c59c2c644f408792921c63e76e',
   [`${TAX_DEPRECIATION_PREFIX}tabs.methods`]: '8696622f344183c4f73993a175acb8daa6418a5cc29099e5d2d762cba2d6f7f2',
   [`${TAX_DEPRECIATION_PREFIX}tabs.books`]: 'af74d3127b3ead60b876f475b99c2ae3d8f9d813607a8088d5762f40e8ab7f65',
   [`${TAX_DEPRECIATION_PREFIX}packsTitle`]: '7d30ca17c0cd199d4698fa17a8d129fd7d70f13129327716b90f515a3c2a0335',
@@ -68,8 +64,6 @@ const TAX_DEPRECIATION_SOURCE_HASHES = {
   [`${TAX_DEPRECIATION_PREFIX}links.classes.description`]: '5378bbce05cf58ee794dc973575fe34c0570bdaffc7e0e31acf2cc8a345db650',
   [`${TAX_DEPRECIATION_PREFIX}links.firstYear.title`]: '8423728abea04b373c144693afbd277b539fdb1da1b156efa408ddfa0509553a',
   [`${TAX_DEPRECIATION_PREFIX}links.firstYear.description`]: 'b1b3e75d46ab893e60493ed32b0c59b28b50d894bff044b70fba2c63153839b4',
-  [`${TAX_DEPRECIATION_PREFIX}links.cessation.title`]: '1a2f8a6b5963d9595cfc8b1086eeb8051d771eb6f29a8485f9125790a2e9e314',
-  [`${TAX_DEPRECIATION_PREFIX}links.cessation.description`]: 'ee63569660e37fedf60466c750dec18eaf1854aba78b9be03f92b99f5c745993',
   [`${TAX_DEPRECIATION_PREFIX}links.assignments.title`]: '1eef22e22236c7c8f78fcd80652f7d0c5b36330ceeb03fbeb0a00ef2fc68d1e7',
   [`${TAX_DEPRECIATION_PREFIX}links.assignments.description`]: '42ebcc26ce4f44ebf5a0f651b97841222828b51aa39186d074b32cf663acad57',
 } as const
@@ -1491,7 +1485,6 @@ test('setup sidebar and header copy are present in every locale and translated',
     'admin.setup.entities.tax-regimes.title',
     'admin.setup.entities.tax-pool-classes.title',
     'admin.setup.entities.tax-first-year-rules.title',
-    'admin.setup.entities.tax-qualifying-activity-cessations.title',
     'admin.setup.entities.classes.title',
     'admin.setup.entities.segment-definitions.title',
     'admin.setup.entities.segment-values.title',
@@ -2240,8 +2233,6 @@ test('admin setup and permissions copy ships translated in fr and es', () => {
     'admin.setup.entities.subsidiary-ownership-interests.singularTitle',
     'admin.setup.entities.tax-first-year-rules.description',
     'admin.setup.entities.tax-first-year-rules.singularTitle',
-    'admin.setup.entities.tax-qualifying-activity-cessations.description',
-    'admin.setup.entities.tax-qualifying-activity-cessations.singularTitle',
     'admin.setup.entities.tax-jurisdictions.description',
     'admin.setup.entities.tax-jurisdictions.singularTitle',
     'admin.setup.entities.tax-pool-classes.description',

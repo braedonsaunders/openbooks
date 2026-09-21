@@ -3,6 +3,7 @@ import 'server-only'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { listTaxRegimes } from '@openbooks/engine/src/tax-returns/pool-run.ts'
 import {
   page,
@@ -16,7 +17,7 @@ import { can, requirePermission } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { isUuid, pickString } from '../../../lib/list-params'
 import { loadAsset, type AssetPayload } from '../../api/assets/_lib'
-import { isMultiSubsidiary, subsidiaryOptions, subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
+import { isMultiSubsidiary, subsidiaryOptions } from '../../../lib/subsidiaries'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { loadFieldDefs } from '../../../lib/custom-fields'
 import type { AssetDrawer } from './AssetDrawer'
@@ -71,7 +72,7 @@ export interface AssetsData {
   canRun: boolean
   canConfigure: boolean
   regimes: { code: string; name: string }[]
-  taxSubsidiaries: { id: string; name: string }[]
+  defaultTaxYear: number
   showNewRedirect: boolean
   drawer: (Record<string, unknown> & { remountKey: string }) | null
 }
@@ -113,25 +114,19 @@ export async function loadAssets(
     canRun: false,
     canConfigure: canSetupTaxDepreciation,
     regimes: [] as AssetsData['regimes'],
-    taxSubsidiaries: [] as AssetsData['taxSubsidiaries'],
+    defaultTaxYear: 0,
     showNewRedirect: false,
     drawer: null as AssetsData['drawer'],
   }
 
   if (tab === 'tax-depreciation') {
-    const [regimes, subsidiaries] = await Promise.all([
-      listTaxRegimes(orgId),
-      db.execute<{ id: string; name: string }>(sql`
-        select id, name from subsidiaries
-         where org_id=${orgId} and is_active and not is_elimination
-           ${subsidiaryVisibleFilter(sql`id`, authz.allowedSubsidiaryIds)}
-         order by name, id`),
-    ])
+    const [regimes, today] = await Promise.all([listTaxRegimes(orgId), businessToday(orgId)])
     return {
       ...base,
       canRun: canManage,
       regimes: regimes.map((regime) => ({ code: regime.code, name: regime.name })),
-      taxSubsidiaries: subsidiaries.rows,
+      // Last completed calendar year on the org business day — never browser UTC.
+      defaultTaxYear: Number(today.slice(0, 4)) - 1,
     }
   }
 
@@ -278,7 +273,7 @@ export function assetsSpec(data: AssetsData): PageSpec {
           canRun: data.canRun,
           canConfigure: data.canConfigure,
           regimes: data.regimes,
-          subsidiaries: data.taxSubsidiaries,
+          defaultTaxYear: data.defaultTaxYear,
         }),
         when: f('onTax'),
       },

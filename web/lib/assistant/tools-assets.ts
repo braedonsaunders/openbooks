@@ -134,7 +134,7 @@ const getAsset: AssistantToolDef = {
 const assetTaxPools: AssistantToolDef = {
   name: "asset_tax_pools",
   description:
-    "Tax-depreciation pool results for a filing-year label, including each registered window id, dates, legal entity and book. Multiple short years can share a label. Opening, additions, dispositions, allowance, closing, recapture and terminal loss by class. Read-only.",
+    "Tax-depreciation pool results for a tax year: opening, additions, dispositions, allowance, closing, recapture, terminal loss by class. Read-only.",
   category: "read",
   gate: assetGate(),
   feature: "fixedAssets",
@@ -147,20 +147,16 @@ const assetTaxPools: AssistantToolDef = {
     }
     const a = raw as { taxYear: number };
     const rows = (await db.execute<Record<string, string>>(sql`
-      select tw.filing_year as "taxYear", pp.tax_year_window_id as "taxYearWindowId",
-             pp.year_start::text as "yearStart", pp.year_end::text as "yearEnd",
-             tp.subsidiary_id as "subsidiaryId", tp.book_id as "bookId",
-             tp.class_code as "classCode", tp.regime,
+      select pp.tax_year as "taxYear", tp.class_code as "classCode", tp.regime,
              pp.opening_balance::text as "openingBalance", pp.additions::text as additions,
              pp.dispositions::text as dispositions, pp.allowance::text as allowance,
              pp.closing_balance::text as "closingBalance", pp.recapture::text as recapture,
              pp.terminal_loss::text as "terminalLoss"
         from tax_pool_periods pp
         join tax_depreciation_pools tp on tp.id = pp.pool_id and tp.org_id = pp.org_id
-        join tax_year_windows tw on tw.id = pp.tax_year_window_id and tw.org_id = pp.org_id
-       where pp.org_id = ${authz.user.orgId} and tw.filing_year = ${a.taxYear}
+       where pp.org_id = ${authz.user.orgId} and pp.tax_year = ${a.taxYear}
          ${subsidiaryVisibleFilter(sql`tp.subsidiary_id`, authz.allowedSubsidiaryIds)}
-       order by pp.year_start, tp.subsidiary_id, tp.book_id, tp.class_code
+       order by tp.class_code
     `)).rows;
     return {
       ok: true,
