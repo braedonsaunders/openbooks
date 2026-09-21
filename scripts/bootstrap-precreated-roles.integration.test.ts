@@ -20,6 +20,8 @@ test("host-managed PostgreSQL installs, upgrades, and refuses broken permissions
   const other = `ob_pc_other_${suffix}`;
   const database = `ob_pc_${suffix}`;
   const otherDatabase = `ob_pc_other_${suffix}`;
+  const managedDatabase = `ob_pc_managed_${suffix}`;
+  const managedRole = `ob_pc_managed_${suffix}`;
   const url = (role: string, db = database) => {
     const parsed = new URL(adminUrl!);
     parsed.username = role; parsed.password = password; parsed.pathname = `/${db}`;
@@ -57,7 +59,12 @@ test("host-managed PostgreSQL installs, upgrades, and refuses broken permissions
     const extensionAdmin = new pg.Client({ connectionString: provisionerUrl.toString() });
     await extensionAdmin.connect();
     try {
-      await extensionAdmin.query("create extension btree_gist with schema public; create extension pgcrypto with schema public");
+      await extensionAdmin.query("create extension btree_gist with schema public");
+      await t.test("missing required extension refuses before schema creation", async () => {
+        await assert.rejects(verifyPrecreatedRoles(ownerPool, config), /required extensions must be installed in public: pgcrypto/);
+        assert.equal((await ownerPool.query("select to_regclass('public.orgs') as relation")).rows[0].relation, null);
+      });
+      await extensionAdmin.query("create extension pgcrypto with schema public");
     } finally { await extensionAdmin.end(); }
 
     await t.test("fresh installation runs migrations, seeds, and governed queries with separate constrained logins", async () => {
@@ -87,6 +94,14 @@ test("host-managed PostgreSQL installs, upgrades, and refuses broken permissions
         try { await assert.rejects(client.connect(), { code: "42501" }); } finally { await client.end(); }
       }
     });
+    await t.test("PUBLIC database access and runtime schema CREATE are refused", async () => {
+      await admin.query(`grant connect on database ${database} to public`);
+      try { await assert.rejects(verifyPrecreatedRoles(ownerPool, config), /revoke database CONNECT\/CREATE from PUBLIC/); }
+      finally { await admin.query(`revoke connect on database ${database} from public`); }
+      await ownerPool.query(`grant create on schema public to ${runtime}`);
+      try { await assert.rejects(verifyPrecreatedRoles(ownerPool, config), /must not own application objects.*CREATE privileges/); }
+      finally { await ownerPool.query(`revoke create on schema public from ${runtime}`); }
+    });
     await t.test("missing and SET FALSE read memberships refuse bootstrap, and failed probes leave a reusable connection", async () => {
       await admin.query(`grant openbooks_read to ${runtime} with inherit true, set false`);
       await assert.rejects(verifyReadRoleAssumption(runtimePool, runtime), /cannot SET ROLE openbooks_read.*membership must permit SET ROLE/);
@@ -108,12 +123,21 @@ test("host-managed PostgreSQL installs, upgrades, and refuses broken permissions
     await t.test("same-login configuration fails before migration work", async () => {
       await assert.rejects(bootstrap({ OPENBOOKS_RUNTIME_DB_URL: url(owner) }), (error: unknown) => /separate migration-owner and runtime logins/.test((error as { stderr: string }).stderr));
     });
+    await t.test("automatic provisioning still installs a fresh database with the flag disabled", async () => {
+      await admin.query(`create database ${managedDatabase}`);
+      const migration = new URL(adminUrl!); migration.pathname = `/${managedDatabase}`;
+      const result = await bootstrap({ OPENBOOKS_PRECREATED_ROLES: "0", OPENBOOKS_MIGRATION_DB_URL: migration.toString(), OPENBOOKS_RUNTIME_DB_URL: url(managedRole, managedDatabase) });
+      assert.match(result.stdout, /\[bootstrap\] done/);
+      const login = await admin.query("select rolcanlogin, rolsuper, rolcreaterole, rolbypassrls from pg_roles where rolname=$1", [managedRole]);
+      assert.deepEqual(login.rows, [{ rolcanlogin: true, rolsuper: false, rolcreaterole: false, rolbypassrls: false }]);
+    });
   } finally {
     await ownerPool.end(); await runtimePool.end();
     // Only uniquely named resources created above are removed, even on refusal.
     await admin.query(`drop database if exists ${database} with (force)`);
     await admin.query(`drop database if exists ${otherDatabase} with (force)`);
-    for (const role of [owner, runtime, other]) await admin.query(`drop role if exists ${role}`);
+    await admin.query(`drop database if exists ${managedDatabase} with (force)`);
+    for (const role of [owner, runtime, other, managedRole]) await admin.query(`drop role if exists ${role}`);
     await admin.end();
   }
 });

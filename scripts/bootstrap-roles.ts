@@ -100,6 +100,10 @@ export async function verifyPrecreatedRoles(migration: pg.Pool, config: RuntimeD
       from pg_roles r where rolname = 'openbooks_read'
   `);
   if (!read.rows[0]?.safe) throw refusal("openbooks_read must exist as a restricted NOLOGIN role with no memberships in other roles");
+  const sharedAccess = await migration.query<{ allowed: boolean }>(
+    "select has_database_privilege('openbooks_read', current_database(), 'CONNECT,CREATE') as allowed",
+  );
+  if (sharedAccess.rows[0]?.allowed) throw refusal("revoke database CONNECT/CREATE from PUBLIC and openbooks_read; the shared read role must not provide cross-installation database access");
   const privileges = await migration.query<{ owner_ok: boolean; inherits_runtime: boolean }>(`
     select has_database_privilege(current_user, current_database(), 'CREATE')
       and has_schema_privilege(current_user, 'public', 'CREATE') as owner_ok,
@@ -116,7 +120,13 @@ export async function verifyPrecreatedRoles(migration: pg.Pool, config: RuntimeD
      where n.nspname in ('public', 'openbooks_query') and c.relkind in ('r', 'p', 'v', 'm', 'S')
        and not pg_has_role(current_user, c.relowner, 'USAGE')
        and not exists (select 1 from pg_depend d where d.classid = 'pg_class'::regclass
-                       and d.objid = c.oid and d.deptype = 'e') limit 5
+                       and d.objid = c.oid and d.deptype = 'e')
+    union all
+    select p.oid::regprocedure::text from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname in ('public', 'openbooks_query') and not pg_has_role(current_user, p.proowner, 'USAGE')
+       and not exists (select 1 from pg_depend d where d.classid = 'pg_proc'::regclass
+                       and d.objid = p.oid and d.deptype = 'e')
+    limit 5
   `);
   if (unowned.rows.length) throw refusal(`migration role ${owner} does not own application objects: ${unowned.rows.map((r) => r.object).join(", ")}`);
   const extensions = await migration.query<{ name: string }>(`
@@ -154,7 +164,9 @@ export async function verifyPrecreatedObjectAccess(migration: pg.Pool, config: R
       and (has_schema_privilege('openbooks_read', oid, 'CREATE') or pg_get_userbyid(nspowner) = 'openbooks_read')
     union all
     select n.nspname || '.' || c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
-     where n.nspname in ('public', 'openbooks_query') and pg_get_userbyid(c.relowner) = 'openbooks_read'
+     where n.nspname in ('public', 'openbooks_query') and
+       (pg_get_userbyid(c.relowner) = 'openbooks_read'
+         or (c.relkind = 'S' and has_sequence_privilege('openbooks_read', c.oid, 'USAGE,SELECT,UPDATE')))
     union all
     select p.oid::regprocedure::text from pg_proc p join pg_namespace n on n.oid = p.pronamespace
      where n.nspname in ('public', 'openbooks_query') and pg_get_userbyid(p.proowner) = 'openbooks_read'
