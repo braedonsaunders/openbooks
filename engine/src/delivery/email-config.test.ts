@@ -150,6 +150,27 @@ test("markEmailSent refuses when the sent-state audit update writes zero rows", 
   assert.match(lastWriteEffectSql(), /returning/u);
 });
 
+// A guarded transition updates zero rows for two different reasons and only
+// one is a lost write. These two pin the distinction: the row being PRESENT
+// and status-protected is the `status in (...)` fence doing its job, and
+// raising there would report a working guard as a failure -- in the worker,
+// where markEmailFailed is called uncaught and the remittance and
+// report-delivery marks run after it, that turns a concurrent reconciliation
+// into a job that records none of them.
+test("markEmailFailed leaves a present-but-protected row alone without refusing", async () => {
+  writeEffectHarness.reset();
+  writeEffectHarness.responses.push({ rows: [{ status: "uncertain", written: 0 }] });
+  await markEmailFailedUnderTest("org-1", "log-uncertain", "retry also failed");
+  assert.equal(writeEffectHarness.queries.length, 1, "the existence fact comes from the same statement, not a follow-up read");
+});
+
+test("markEmailUncertain leaves a present-but-protected row alone without refusing", async () => {
+  writeEffectHarness.reset();
+  writeEffectHarness.responses.push({ rows: [{ status: "sent", written: 0 }] });
+  await markEmailUncertainUnderTest("org-1", "log-sent", "acceptance could not be confirmed");
+  assert.equal(writeEffectHarness.queries.length, 1, "the existence fact comes from the same statement, not a follow-up read");
+});
+
 test("markEmailFailed refuses when the failed-state audit update writes zero rows and no row is visible", async () => {
   writeEffectHarness.reset();
   writeEffectHarness.responses.push({ rows: [] }, { rows: [] });
@@ -252,7 +273,7 @@ test("markPaymentRemittanceAttempt refuses when the pending stamp writes zero ro
 
 test("markPaymentRemittanceFailed refuses when the pending update writes zero rows and the remittance is still pending", async () => {
   writeEffectHarness.reset();
-  writeEffectHarness.responses.push({ rows: [] }, { rows: [{ status: "pending" }] });
+  writeEffectHarness.responses.push({ rows: [{ status: null, written: 0 }] });
   await assert.rejects(
     () => markPaymentRemittanceFailedUnderTest("org-1", "remit-pending", "smtp down", 1, true),
     /payment remittance remit-pending was not marked failed[\s\S]*matched no row/u,
@@ -262,7 +283,7 @@ test("markPaymentRemittanceFailed refuses when the pending update writes zero ro
 
 test("markPaymentRemittanceFailed refuses when the pending update writes zero rows even if a follow-up read would see sent", async () => {
   writeEffectHarness.reset();
-  writeEffectHarness.responses.push({ rows: [] }, { rows: [{ status: "sent" }] });
+  writeEffectHarness.responses.push({ rows: [{ status: null, written: 0 }] });
   await assert.rejects(
     () => markPaymentRemittanceFailedUnderTest("org-1", "remit-sent", "smtp down", 1, true),
     /payment remittance remit-sent was not marked failed[\s\S]*matched no row/u,

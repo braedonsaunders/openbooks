@@ -64,6 +64,18 @@ const harness = {
         // response after the uncertainty transition was applied.
         if (state.uncertaintyWriteAmbiguous) throw new Error('uncertainty write commit status unknown')
       }
+      if (text.includes('with updated as')) {
+        // The guarded transitions report the row's CURRENT status and the
+        // write in ONE statement, so a protected row (status outside the
+        // allowed set) is distinguishable from a lost write without a
+        // follow-up read. existingEmailLogStatus is what a reader still sees.
+        return {
+          rows: [{
+            status: state.auditUpdateMatches ? 'queued' : state.existingEmailLogStatus,
+            written: state.auditUpdateMatches ? 1 : 0,
+          }],
+        }
+      }
       if (!state.auditUpdateMatches) return { rows: [] }
       return { rows: [{ id: `updated-${state.updates.length}` }] }
     }
@@ -537,13 +549,18 @@ test('markEmailUncertain refuses when the uncertainty fence writes zero rows and
   assert.match(state.updates.at(-1)!.text, /returning/u)
 })
 
-test('markEmailFailed refuses when the failed-state update writes zero rows even if a follow-up read would see uncertain', async () => {
+// A row still visible as `uncertain` is the `status in ('queued','failed')`
+// fence REFUSING to let a later failure overwrite an unresolved acceptance —
+// the guard working, not a lost write. Raising here would report that as a
+// failure and, on the worker's failure path where markEmailFailed is called
+// uncaught, would skip the remittance and report-delivery marks that follow.
+// The lost-write refusals it must NOT weaken are covered above: a row that is
+// absent entirely, and a row still sitting in an eligible status.
+test('markEmailFailed leaves an uncertain row alone instead of refusing', async () => {
   reset()
   state.auditUpdateMatches = false
   state.existingEmailLogStatus = 'uncertain'
-  await assert.rejects(
-    () => markEmailFailed('org-1', 'log-uncertain', 'retry also failed'),
-    /email_log log-uncertain was not marked failed[\s\S]*matched no row/u,
-  )
+  await markEmailFailed('org-1', 'log-uncertain', 'retry also failed')
   assert.match(state.updates.at(-1)!.text, /returning/u)
+  assert.equal(state.updates.length, 1, 'the status fact rides the same statement, not a follow-up read')
 })

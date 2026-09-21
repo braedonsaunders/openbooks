@@ -278,6 +278,40 @@ function refuseUnwrittenEmailLog(updatedRows: number, id: string, intended: stri
   refuseZeroRowWrite(`email_log ${id} was not marked ${intended}`);
 }
 
+/**
+ * A guarded transition updates zero rows for three distinguishable reasons and
+ * only two of them are lost writes.
+ *
+ * ABSENT: no such row in this organization. The caller believes it recorded an
+ * outcome and nothing was written. Refuse.
+ *
+ * PRESENT AND STILL ELIGIBLE: the row's status is inside the transition's
+ * allowed set, so the update SHOULD have matched it and did not -- an RLS miss
+ * or a scope mismatch. That is the lost write the refusal exists for. Refuse.
+ *
+ * PRESENT AND PROTECTED: the status is outside the allowed set, so the
+ * `status in (...)` fence did exactly the job it exists to do. A retried
+ * attempt that fails after its predecessor was accepted has no authority to
+ * rewrite the outcome, and declining to rewrite it is the SUCCESS case.
+ * Raising there reports a working guard as a failure and, in the worker, turns
+ * a concurrent reconciliation into a job that records neither the remittance
+ * nor the report-delivery failure that follow it.
+ */
+/** The statuses a failed/uncertain transition is allowed to move. */
+const GUARDED_EMAIL_LOG_STATES = ["queued", "failed"] as const;
+
+function refuseUnwrittenGuardedEmailLog(
+  row: { status: string | null; written: number } | undefined,
+  eligible: readonly string[],
+  id: string,
+  intended: string,
+): void {
+  if ((row?.written ?? 0) > 0) return;
+  const status = row?.status ?? null;
+  if (status !== null && !eligible.includes(status)) return;
+  refuseZeroRowWrite(`email_log ${id} was not marked ${intended}`);
+}
+
 function refuseUnwrittenRemittance(updatedRows: number, id: string, intended: string): void {
   if (updatedRows > 0) return;
   refuseZeroRowWrite(`payment remittance ${id} was not marked ${intended}`);
@@ -296,14 +330,21 @@ export async function markEmailFailed(orgId: string, id: string, error: string):
   // Guarded transition: confirmed acceptance (`sent`) and unresolved
   // uncertainty must never be overwritten by a later failure mark — a retried
   // attempt that fails after its predecessor was accepted has no authority to
-  // rewrite the outcome (audit finding #52). Empty RETURNING is still a
-  // failed write, including when the row is already terminal.
-  const updated = await db.execute<{ id: string }>(sql`
-    update email_log set status = 'failed', error_message = ${error.slice(0, 500)}, updated_at = now()
-     where id = ${id} and org_id = ${orgId} and status in ('queued', 'failed')
-    returning id
+  // rewrite the outcome (audit finding #52). One statement reports both facts
+  // so there is no follow-up read to race against: `present` is the row's
+  // existence in this org, `written` is the guarded update.
+  const outcome = await db.execute<{ status: string | null; written: number }>(sql`
+    with updated as (
+      update email_log set status = 'failed', error_message = ${error.slice(0, 500)}, updated_at = now()
+       where id = ${id} and org_id = ${orgId} and status in ('queued', 'failed')
+      returning id
+    ), target as (
+      select status from email_log where id = ${id} and org_id = ${orgId}
+    )
+    select (select status from target) as status,
+           (select count(*) from updated)::int as written
   `);
-  refuseUnwrittenEmailLog(updated.rows?.length ?? 0, id, "failed");
+  refuseUnwrittenGuardedEmailLog(outcome.rows?.[0], GUARDED_EMAIL_LOG_STATES, id, "failed");
 }
 
 /**
@@ -311,12 +352,18 @@ export async function markEmailFailed(orgId: string, id: string, error: string):
  * is the reconciliation trigger: nothing re-sends while it stands open.
  */
 export async function markEmailUncertain(orgId: string, id: string, reason: string): Promise<void> {
-  const updated = await db.execute<{ id: string }>(sql`
-    update email_log set status = 'uncertain', error_message = ${reason.slice(0, 500)}, updated_at = now()
-     where id = ${id} and org_id = ${orgId} and status in ('queued', 'failed')
-    returning id
+  const outcome = await db.execute<{ status: string | null; written: number }>(sql`
+    with updated as (
+      update email_log set status = 'uncertain', error_message = ${reason.slice(0, 500)}, updated_at = now()
+       where id = ${id} and org_id = ${orgId} and status in ('queued', 'failed')
+      returning id
+    ), target as (
+      select status from email_log where id = ${id} and org_id = ${orgId}
+    )
+    select (select status from target) as status,
+           (select count(*) from updated)::int as written
   `);
-  refuseUnwrittenEmailLog(updated.rows?.length ?? 0, id, "uncertain");
+  refuseUnwrittenGuardedEmailLog(outcome.rows?.[0], GUARDED_EMAIL_LOG_STATES, id, "uncertain");
 }
 
 /** Acknowledge provider acceptance; legal from any non-suppressed state, so a late reconciliation can still complete a delivery idempotently. */
@@ -374,15 +421,33 @@ export async function markPaymentRemittanceFailed(
   attempt: number,
   terminal: boolean,
 ): Promise<void> {
-  const updated = await db.execute<{ id: string }>(sql`
-    update payment_remittances
-       set status = case when ${terminal} then 'failed' else status end,
-           attempt_count = greatest(attempt_count, ${attempt}),
-           last_attempt_at = now(), error = ${error.slice(0, 500)}, updated_at = now()
-     where id = ${id} and org_id = ${orgId} and status = 'pending'
-    returning id
+  // Same guarded-transition shape as markEmailFailed and the same three
+  // outcomes: `status = 'pending'` protects a remittance that already reached
+  // a terminal state, and refusing to rewrite it is the success case. A row
+  // still pending that matched nothing is the lost write. This runs directly
+  // after markEmailFailed on the worker's failure path, so raising on a
+  // protected row would poison the same job.
+  const outcome = await db.execute<{ status: string | null; written: number }>(sql`
+    with updated as (
+      update payment_remittances
+         set status = case when ${terminal} then 'failed' else status end,
+             attempt_count = greatest(attempt_count, ${attempt}),
+             last_attempt_at = now(), error = ${error.slice(0, 500)}, updated_at = now()
+       where id = ${id} and org_id = ${orgId} and status = 'pending'
+      returning id
+    ), target as (
+      select status from payment_remittances where id = ${id} and org_id = ${orgId}
+    )
+    select (select status from target) as status,
+           (select count(*) from updated)::int as written
   `);
-  refuseUnwrittenRemittance(updated.rows?.length ?? 0, id, "failed");
+  const remittance = outcome.rows?.[0];
+  if ((remittance?.written ?? 0) === 0 && (remittance?.status ?? null) === "pending") {
+    refuseUnwrittenRemittance(0, id, "failed");
+  }
+  if ((remittance?.written ?? 0) === 0 && (remittance?.status ?? null) === null) {
+    refuseUnwrittenRemittance(0, id, "failed");
+  }
 }
 
 /**
