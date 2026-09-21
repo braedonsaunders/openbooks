@@ -32,6 +32,8 @@
     "assets": "Immobilisations",
     "equipment": "Équipement",
     "tax-depreciation": "Amortissement fiscal",
+    "leases": "Contrats de location-preneur",
+    "accounting-changes": "Modifications comptables",
     "budgets": "Budgets",
     "banking": "Comptes bancaires",
     "banking-cash": "Position de trésorerie",

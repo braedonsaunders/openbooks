@@ -650,10 +650,14 @@ async function preview(
   } catch (e) {
     if (e instanceof PreviewRollback) {
       const {
-        generatedEntryIds: _discarded,
-        sourceEntryIds: _sourceIds,
+        generatedEntryIds,
+        sourceEntryIds,
         ...stable
       } = e.value;
+      // Preview must not return rolled-back journal ids. The bindings exist
+      // only to drop those keys; they are not read.
+      void generatedEntryIds;
+      void sourceEntryIds;
       return stable;
     }
     throw e;

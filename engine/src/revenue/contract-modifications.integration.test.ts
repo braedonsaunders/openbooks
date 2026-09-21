@@ -185,7 +185,11 @@ test(
         )
       ).rows;
       assert.deepEqual(
-        retained.map(({ superseded_by_change_id, ...r }) => r),
+        retained.map(({ id, journal_entry_id, planned_amount }) => ({
+          id,
+          journal_entry_id,
+          planned_amount,
+        })),
         old,
       );
       assert.equal(

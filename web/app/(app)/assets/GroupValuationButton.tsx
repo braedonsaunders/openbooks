@@ -107,7 +107,7 @@ export function GroupValuationButton({ assetId }: { assetId: string }) {
         <div className="space-y-4 p-4">
           <p>
             Assess group recoverability independently from the receiving
-            company's valuation. Approval preserves prior depreciation and
+            company&apos;s valuation. Approval preserves prior depreciation and
             revises only future group service. Consolidation posts the resulting
             adjustment.
           </p>

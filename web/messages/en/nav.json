@@ -36,6 +36,8 @@
     "assets": "Fixed Assets",
     "equipment": "Equipment",
     "tax-depreciation": "Tax Depreciation",
+    "leases": "Lessee Leases",
+    "accounting-changes": "Accounting Changes",
     "budgets": "Budgets",
     "banking": "Bank Accounts",
     "banking-cash": "Cash Position",
