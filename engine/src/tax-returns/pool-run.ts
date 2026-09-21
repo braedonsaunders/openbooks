@@ -8,13 +8,18 @@ import {
   computePoolYear,
   macrsConventionAfterMidQuarter,
   macrsMidQuarterByTaxYear,
+  nextCalendarDay,
   type MacrsYearWindow,
   type PoolClassDef,
   type PoolYearResult,
   TAX_DEPRECIATION_REGIMES,
 } from "./depreciation-pool.ts";
 import { MacrsShortYearError, assertShortYearFactorAgrees } from "./macrs-short-year.ts";
-import { loadOrgMacrsWindows, MacrsCalendarError } from "./macrs-calendar.ts";
+import {
+  loadTaxYearWindows,
+  MacrsCalendarError,
+  resolveTaxYearWindow,
+} from "./macrs-calendar.ts";
 import { MacrsVintageError, resolveMacrsVintages, type MacrsWorkpaperEvent } from "./macrs-vintages.ts";
 import { continuingNzAssociatedRates, nzPooledDepreciationRate, TaxBasisPolicyError } from "./asset-basis-policy.ts";
 import { effectiveClasses, regimeClassAttribute } from "./tax-classification.ts";
@@ -65,8 +70,28 @@ export interface TaxPoolLine {
 export interface TaxPoolRunResult {
   regime: string;
   taxYear: number;
+  taxYearWindowId: string;
+  yearStart: string;
+  yearEnd: string;
   lines: TaxPoolLine[];
   totals: { allowance: string; recapture: string; terminalLoss: string };
+}
+
+/** Pool-period read projection. Window id and dates distinguish equal filingYear labels. */
+export interface TaxPoolPeriodResult {
+  taxYearWindowId: string;
+  filingYear: number;
+  yearStart: string;
+  yearEnd: string;
+  classCode: string;
+  regime: string;
+  openingBalance: string;
+  additions: string;
+  dispositions: string;
+  allowance: string;
+  closingBalance: string;
+  recapture: string;
+  terminalLoss: string;
 }
 
 export class TaxPoolError extends Error {
@@ -288,36 +313,16 @@ async function macrsWindows(
   run: TaxPoolRun,
   fromOn: string,
 ): Promise<MacrsYearWindow[]> {
-  let calendar: MacrsYearWindow[];
   try {
-    calendar = await loadOrgMacrsWindows(tx, run.orgId, fromOn, run.yearEnd);
+    return await loadTaxYearWindows(tx, run.orgId, {
+      subsidiaryId: run.subsidiaryId,
+      regime: run.regime,
+      fromOn,
+      throughOn: run.yearEnd,
+    });
   } catch (error) {
     throw error instanceof MacrsCalendarError ? new TaxPoolError(error.message) : error;
   }
-  const priorRuns = (
-    await tx.execute<{ tax_year: number; year_start: string; year_end: string }>(sql`
-      select distinct pp.tax_year, pp.year_start::text, pp.year_end::text
-        from tax_pool_periods pp
-        join tax_depreciation_pools tp on tp.id=pp.pool_id and tp.org_id=pp.org_id
-       where tp.org_id=${run.orgId} and tp.book_id=${run.bookId}
-         and tp.subsidiary_id=${run.subsidiaryId} and tp.regime=${run.regime}
-         and pp.tax_year<${run.taxYear}
-       order by pp.tax_year`)
-  ).rows;
-  const byYear = new Map(calendar.map((row) => [row.taxYear, row]));
-  for (const row of priorRuns) {
-    byYear.set(row.tax_year, {
-      taxYear: row.tax_year,
-      yearStart: row.year_start,
-      yearEnd: row.year_end,
-    });
-  }
-  byYear.set(run.taxYear, {
-    taxYear: run.taxYear,
-    yearStart: run.yearStart,
-    yearEnd: run.yearEnd,
-  });
-  return [...byYear.values()].sort((left, right) => left.taxYear - right.taxYear);
 }
 
 async function receiverAssetIds(tx: SqlExecutor, run: TaxPoolRun): Promise<Set<string>> {
@@ -337,6 +342,7 @@ interface TaxPoolRun {
   subsidiaryId: string;
   regime: string;
   taxYear: number;
+  taxYearWindowId: string;
   yearStart: string;
   yearEnd: string;
   shortYearFactor: string;
@@ -407,7 +413,13 @@ export async function runTaxPool(
   subsidiaryId: string,
   regime: string,
   taxYear: number,
-  opts: { yearStart: string; yearEnd: string; shortYearFactor?: string | number; actorId: string | null },
+  opts: {
+    yearStart: string;
+    yearEnd: string;
+    taxYearWindowId?: string;
+    shortYearFactor?: string | number;
+    actorId: string | null;
+  },
 ): Promise<TaxPoolRunResult> {
   // Pure input validation before any database work: a rejected run must not
   // open (or wait on) the scope fence.
@@ -428,9 +440,26 @@ export async function runTaxPool(
     const attr = await regimeClassAttribute(tx, orgId, regime);
     const model = await regimeModel(tx, orgId, regime);
 
+    let window;
+    try {
+      window = await resolveTaxYearWindow(tx, orgId, {
+        subsidiaryId,
+        regime,
+        windowId: opts.taxYearWindowId,
+        yearStart: opts.yearStart,
+        yearEnd: opts.yearEnd,
+      });
+    } catch (error) {
+      throw error instanceof MacrsCalendarError ? new TaxPoolError(error.message) : error;
+    }
+    if (taxYear !== window.filingYear) {
+      throw new TaxPoolError(
+        `taxYear ${taxYear} does not match declared filing year ${window.filingYear} for ${window.yearStart}–${window.yearEnd}; identify the window by id and dates — do not collapse equal filing-year labels`,
+      );
+    }
     if (model === "macrs") {
       try {
-        macrsShortYearFactor = assertShortYearFactorAgrees(opts.yearStart, opts.yearEnd, opts.shortYearFactor);
+        macrsShortYearFactor = assertShortYearFactorAgrees(window.yearStart, window.yearEnd, opts.shortYearFactor);
       } catch (error) {
         throw error instanceof MacrsShortYearError
           ? new TaxPoolError(error.message)
@@ -438,14 +467,17 @@ export async function runTaxPool(
       }
     }
     const run: TaxPoolRun = {
-      orgId, bookId, subsidiaryId, regime, taxYear,
-      yearStart: opts.yearStart, yearEnd: opts.yearEnd,
+      orgId, bookId, subsidiaryId, regime,
+      taxYear: window.filingYear,
+      taxYearWindowId: window.id,
+      yearStart: window.yearStart,
+      yearEnd: window.yearEnd,
       shortYearFactor: model === "macrs" ? macrsShortYearFactor : shortYearFactor,
       actorId: opts.actorId,
     };
     await refuseMissingTaxWorkpaper(tx, run, attr);
 
-    await fenceRunOrdering(tx, orgId, bookId, subsidiaryId, regime, taxYear);
+    await fenceRunOrdering(tx, run);
 
     return model === "macrs"
       ? runMacrs(tx, run, attr, classes)
@@ -465,43 +497,50 @@ export async function runTaxPool(
  */
 async function fenceRunOrdering(
   tx: SqlExecutor,
-  orgId: string,
-  bookId: string,
-  subsidiaryId: string,
-  regime: string,
-  taxYear: number,
+  run: TaxPoolRun,
 ): Promise<void> {
-  const latest = await latestComputedTaxYear(tx, orgId, bookId, subsidiaryId, regime);
-  if (latest === null || taxYear === latest || taxYear === latest + 1) return;
-  if (taxYear < latest) {
+  const latest = await latestComputedWindow(tx, run);
+  if (!latest || latest.id === run.taxYearWindowId) return;
+  if (nextCalendarDay(latest.yearEnd) === run.yearStart) return;
+  if (run.yearEnd < latest.yearStart) {
     throw new TaxPoolError(
-      `tax year ${taxYear} cannot be run because tax year ${latest} is already computed for this regime; ` +
-      `years are computed forward in order, so a closed year can only be restated by removing the later years that build on it and re-running them`,
+      `tax year ${run.taxYear} (${run.yearStart}–${run.yearEnd}) cannot be run because tax year ${latest.filingYear} (${latest.yearStart}–${latest.yearEnd}) is already computed for this regime; ` +
+      `re-run ${latest.yearStart}–${latest.yearEnd} from Fixed Assets tax pools, or run the next declared year after ${latest.yearEnd} — an earlier year cannot be restated after a later result exists`,
     );
   }
   throw new TaxPoolError(
-    `tax year ${taxYear} cannot be computed before tax year ${latest + 1}; ` +
-    `each pool year opens from the previous year's closing balance, so years must be run consecutively`,
+    `tax year ${run.taxYear} (${run.yearStart}–${run.yearEnd}) cannot be computed before the next declared year after ${latest.yearEnd}; ` +
+    `years must be run consecutively — run that year first so each pool opens from the previous close`,
   );
 }
 
-/** The latest tax year already computed anywhere in a run scope (null before
- *  the first run). Periods exist only for pools this module created, so this
- *  spans every pool of the (org, book, subsidiary, regime) scope. */
-async function latestComputedTaxYear(
+/** The latest computed window in a run scope (null before the first run). */
+async function latestComputedWindow(
   tx: SqlExecutor,
-  orgId: string,
-  bookId: string,
-  subsidiaryId: string,
-  regime: string,
-): Promise<number | null> {
-  const r = (await tx.execute<{ latest: number | null }>(sql`
-    select max(pp.tax_year)::int as latest
+  run: Pick<TaxPoolRun, "orgId" | "bookId" | "subsidiaryId" | "regime">,
+): Promise<{ id: string; yearStart: string; yearEnd: string; filingYear: number } | null> {
+  const r = (await tx.execute<{
+    id: string;
+    year_start: string;
+    year_end: string;
+    filing_year: number;
+  }>(sql`
+    select tw.id, tw.year_start::text, tw.year_end::text, tw.filing_year
       from tax_pool_periods pp
       join tax_depreciation_pools tp on tp.id = pp.pool_id and tp.org_id = pp.org_id
-     where tp.org_id = ${orgId} and tp.book_id = ${bookId}
-       and tp.subsidiary_id = ${subsidiaryId} and tp.regime = ${regime}`));
-  return r.rows[0]?.latest ?? null;
+      join tax_year_windows tw on tw.id = pp.tax_year_window_id and tw.org_id = pp.org_id
+     where tp.org_id = ${run.orgId} and tp.book_id = ${run.bookId}
+       and tp.subsidiary_id = ${run.subsidiaryId} and tp.regime = ${run.regime}
+     order by tw.year_start desc, tw.year_end desc
+     limit 1`));
+  const row = r.rows[0];
+  if (!row) return null;
+  return {
+    id: row.id,
+    yearStart: row.year_start,
+    yearEnd: row.year_end,
+    filingYear: row.filing_year,
+  };
 }
 
 async function runPools(
@@ -695,7 +734,7 @@ async function runPools(
     const dispositions = row.dispositions;
 
     const pool = await ensurePool(tx, run, classDef);
-    const openingBalance = await openingForTaxYear(tx, orgId, pool.id, taxYear, pool.openingBalance);
+    const openingBalance = await openingForTaxYear(tx, orgId, pool.id, run, pool.openingBalance);
     const rule = await firstYearRule(tx, orgId, run.regime, classCode, run.yearEnd, classDef.firstYearFraction);
 
     const result = computePoolYear({
@@ -720,14 +759,14 @@ async function runPools(
   for (const p of prepared) {
     await tx.execute(sql`
       insert into tax_pool_periods
-        (org_id, pool_id, tax_year, opening_balance, additions, dispositions, net_additions,
+        (org_id, pool_id, tax_year, tax_year_window_id, opening_balance, additions, dispositions, net_additions,
          immediate_expense, base, allowance, closing_balance, recapture, terminal_loss,
          short_year_factor, year_start, year_end, enhanced_multiplier, created_by, updated_by)
-      values (${orgId}, ${p.poolId}, ${taxYear}, ${p.result.openingBalance}, ${p.result.additions},
+      values (${orgId}, ${p.poolId}, ${taxYear}, ${run.taxYearWindowId}, ${p.result.openingBalance}, ${p.result.additions},
               ${p.result.dispositions}, ${p.result.netAdditions}, ${p.result.immediateExpense}, ${p.result.base},
               ${p.result.allowance}, ${p.result.closingBalance}, ${p.result.recapture}, ${p.result.terminalLoss},
               ${run.shortYearFactor}, ${run.yearStart}, ${run.yearEnd}, ${p.enhancedMultiplier}, ${run.actorId}, ${run.actorId})
-      on conflict (org_id, pool_id, tax_year) do update set
+      on conflict (org_id, pool_id, tax_year_window_id) do update set
         opening_balance = excluded.opening_balance, additions = excluded.additions,
         dispositions = excluded.dispositions, net_additions = excluded.net_additions,
         immediate_expense = excluded.immediate_expense, base = excluded.base,
@@ -752,7 +791,15 @@ async function runPools(
     totTerm = addStr(totTerm, p.result.terminalLoss);
   }
 
-  return { regime: run.regime, taxYear, lines, totals: { allowance: totAllow, recapture: totRecap, terminalLoss: totTerm } };
+  return {
+    regime: run.regime,
+    taxYear,
+    taxYearWindowId: run.taxYearWindowId,
+    yearStart: run.yearStart,
+    yearEnd: run.yearEnd,
+    lines,
+    totals: { allowance: totAllow, recapture: totRecap, terminalLoss: totTerm },
+  };
 }
 
 function nzYearRate(
@@ -950,6 +997,8 @@ async function runMacrs(
           basis: vintage.basis,
           placedInServiceOn: vintage.placedInServiceOn,
           taxYear,
+          yearStart: run.yearStart,
+          yearEnd: run.yearEnd,
           recoveryPeriodYears: vintage.recoveryPeriodYears,
           method: vintage.method,
           convention: macrsConventionAfterMidQuarter(
@@ -1037,13 +1086,13 @@ async function runMacrs(
   for (const p of prepared) {
     await tx.execute(sql`
       insert into tax_pool_periods
-        (org_id, pool_id, tax_year, opening_balance, additions, dispositions, net_additions,
+        (org_id, pool_id, tax_year, tax_year_window_id, opening_balance, additions, dispositions, net_additions,
          immediate_expense, base, allowance, closing_balance, recapture, terminal_loss,
          short_year_factor, year_start, year_end, created_by, updated_by)
-      values (${orgId}, ${p.poolId}, ${taxYear}, ${p.values.openingBalance}, ${p.values.additions},
+      values (${orgId}, ${p.poolId}, ${taxYear}, ${run.taxYearWindowId}, ${p.values.openingBalance}, ${p.values.additions},
               ${p.values.dispositions}, ${p.values.netAdditions}, ${p.values.immediateExpense}, ${p.values.base},
               ${p.values.allowance}, ${p.values.closingBalance}, 0, 0, ${run.shortYearFactor}, ${run.yearStart}, ${run.yearEnd}, ${run.actorId}, ${run.actorId})
-      on conflict (org_id, pool_id, tax_year) do update set
+      on conflict (org_id, pool_id, tax_year_window_id) do update set
         opening_balance=excluded.opening_balance, additions=excluded.additions, dispositions=excluded.dispositions,
         net_additions=excluded.net_additions, immediate_expense=excluded.immediate_expense, base=excluded.base,
         allowance=excluded.allowance, closing_balance=excluded.closing_balance, recapture=0, terminal_loss=0,
@@ -1054,7 +1103,15 @@ async function runMacrs(
     lines.push({ classCode: p.classCode, className: p.def.name, openingBalance: p.values.openingBalance, additions: p.values.additions, dispositions: p.values.dispositions, allowance: p.values.allowance, closingBalance: p.values.closingBalance, recapture: "0.00", terminalLoss: "0.00" });
     totalAllowance = addStr(totalAllowance, p.values.allowance);
   }
-  return { regime: run.regime, taxYear, lines, totals: { allowance: totalAllowance, recapture: "0.00", terminalLoss: "0.00" } };
+  return {
+    regime: run.regime,
+    taxYear,
+    taxYearWindowId: run.taxYearWindowId,
+    yearStart: run.yearStart,
+    yearEnd: run.yearEnd,
+    lines,
+    totals: { allowance: totalAllowance, recapture: "0.00", terminalLoss: "0.00" },
+  };
 }
 
 function macrsValues(opening: bigint, additions: bigint, dispositions: bigint, allowance: bigint, closing: bigint) {
@@ -1088,22 +1145,87 @@ const addStr = (a: string, b: string) => formatMoney(add(a, b), 2);
 /**
  * Re-running a year must use that year's original opening, not the mutable
  * pool carry-forward balance, so a re-run reproduces the same numbers; a new
- * year opens from the latest prior close. The run-ordering fence guarantees
- * any prior period is at most `taxYear - 1`.
+ * year opens from the latest prior close by window date, not filing-year
+ * arithmetic.
  */
-async function openingForTaxYear(tx: SqlExecutor, orgId: string, poolId: string, taxYear: number, fallback: string): Promise<string> {
+async function openingForTaxYear(
+  tx: SqlExecutor,
+  orgId: string,
+  poolId: string,
+  run: Pick<TaxPoolRun, "taxYearWindowId" | "yearStart">,
+  fallback: string,
+): Promise<string> {
   const rerun = (await tx.execute<{ opening: string }>(sql`
     select opening_balance::text as opening
       from tax_pool_periods
-     where org_id=${orgId} and pool_id=${poolId} and tax_year = ${taxYear}
+     where org_id=${orgId} and pool_id=${poolId} and tax_year_window_id=${run.taxYearWindowId}
      limit 1`));
   if (rerun.rows[0]) return rerun.rows[0].opening;
   const prior = (await tx.execute<{ closing: string }>(sql`
-    select closing_balance::text as closing
-      from tax_pool_periods
-     where org_id=${orgId} and pool_id=${poolId} and tax_year < ${taxYear}
-     order by tax_year desc limit 1`));
+    select pp.closing_balance::text as closing
+      from tax_pool_periods pp
+      join tax_year_windows tw on tw.id=pp.tax_year_window_id and tw.org_id=pp.org_id
+     where pp.org_id=${orgId} and pp.pool_id=${poolId} and tw.year_end<${run.yearStart}
+     order by tw.year_start desc, tw.year_end desc
+     limit 1`));
   return prior.rows[0]?.closing ?? fallback;
+}
+
+export async function listTaxPoolPeriodResults(
+  tx: SqlExecutor,
+  orgId: string,
+  args: {
+    taxYearWindowId?: string;
+    filingYear?: number;
+  },
+): Promise<TaxPoolPeriodResult[]> {
+  const windowFilter = args.taxYearWindowId
+    ? sql`and pp.tax_year_window_id=${args.taxYearWindowId}`
+    : args.filingYear != null
+      ? sql`and tw.filing_year=${args.filingYear}`
+      : sql``;
+  const rows = (
+    await tx.execute<{
+      tax_year_window_id: string;
+      filing_year: number;
+      year_start: string;
+      year_end: string;
+      class_code: string;
+      regime: string;
+      opening_balance: string;
+      additions: string;
+      dispositions: string;
+      allowance: string;
+      closing_balance: string;
+      recapture: string;
+      terminal_loss: string;
+    }>(sql`
+      select pp.tax_year_window_id, tw.filing_year, tw.year_start::text, tw.year_end::text,
+             tp.class_code, tp.regime,
+             pp.opening_balance::text, pp.additions::text, pp.dispositions::text,
+             pp.allowance::text, pp.closing_balance::text, pp.recapture::text, pp.terminal_loss::text
+        from tax_pool_periods pp
+        join tax_depreciation_pools tp on tp.id=pp.pool_id and tp.org_id=pp.org_id
+        join tax_year_windows tw on tw.id=pp.tax_year_window_id and tw.org_id=pp.org_id
+       where pp.org_id=${orgId}
+         ${windowFilter}
+       order by tw.year_start, tw.year_end, tp.class_code`)
+  ).rows;
+  return rows.map((row) => ({
+    taxYearWindowId: row.tax_year_window_id,
+    filingYear: row.filing_year,
+    yearStart: row.year_start,
+    yearEnd: row.year_end,
+    classCode: row.class_code,
+    regime: row.regime,
+    openingBalance: row.opening_balance,
+    additions: row.additions,
+    dispositions: row.dispositions,
+    allowance: row.allowance,
+    closingBalance: row.closing_balance,
+    recapture: row.recapture,
+    terminalLoss: row.terminal_loss,
+  }));
 }
 
 async function ensurePool(

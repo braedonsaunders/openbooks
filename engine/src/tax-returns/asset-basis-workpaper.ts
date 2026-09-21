@@ -66,7 +66,7 @@ import {
   type MacrsWorkpaperEvent,
 } from "./macrs-vintages.ts";
 import { refreshOpenMacrsVintageThrough } from "./depreciation-pool.ts";
-import { loadOrgMacrsWindows } from "./macrs-calendar.ts";
+import { loadTaxYearWindows } from "./macrs-calendar.ts";
 
 export class TaxAssetBasisError extends Error {
   readonly name = "TaxAssetBasisError";
@@ -695,7 +695,12 @@ async function loadUsSellerMacrsVintageContext(
         vintage.placedInServiceOn < earliest ? vintage.placedInServiceOn : earliest,
       args.occurredOn,
     );
-    const windows = await loadOrgMacrsWindows(tx, orgId, fromOn, args.occurredOn);
+    const windows = await loadTaxYearWindows(tx, orgId, {
+      subsidiaryId: seller.subsidiary_id,
+      regime: "us_macrs",
+      fromOn,
+      throughOn: args.occurredOn,
+    });
     return {
       status: "ready",
       vintages: history.vintages.map((vintage) => {

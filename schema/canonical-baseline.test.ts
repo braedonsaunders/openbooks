@@ -387,6 +387,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0204_asset_lifecycle_changes.sql",
     "0205_consolidation_loss_of_control.sql",
     "0233_tax_asset_basis_workpapers.sql",
+    "0234_tax_year_windows.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -878,6 +879,20 @@ test("effective-date overlap guards are exclusion constraints, not racy triggers
   assert.ok(firstRepair >= 0 && firstRepair < firstConstraint);
   assert.match(migration, /consolidation-used policies % and % overlap/);
   assert.match(migration, /RAISE NOTICE 'fair_value_prices repair/);
+});
+
+test("tax year windows exclude overlapping dates per legal entity and regime", () => {
+  const migration = readFileSync("schema/migrations/generated/0234_tax_year_windows.sql", "utf8");
+  assert.match(migration, /CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA public/);
+  assert.match(migration, /ADD CONSTRAINT tax_year_windows_no_overlap\s+EXCLUDE USING gist/);
+  assert.match(migration, /org_id WITH =/);
+  assert.match(migration, /subsidiary_id WITH =/);
+  assert.match(migration, /regime WITH =/);
+  assert.match(migration, /daterange\(year_start, year_end, '\[\]'\) WITH &&/);
+  assert.match(migration, /UNIQUE \(org_id, subsidiary_id, regime, year_start\)/);
+  assert.match(migration, /DROP INDEX IF EXISTS tax_pool_periods_identity/);
+  assert.match(migration, /ON tax_pool_periods \(org_id, pool_id, tax_year_window_id\)/);
+  assert.doesNotMatch(migration, /fiscal_calendars|accounting_periods|tax_provision_runs/);
 });
 
 test("one effective tax-rate window per tax code is enforced by storage, not by the racy trigger read", () => {
