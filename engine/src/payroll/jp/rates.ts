@@ -42,7 +42,8 @@ export const JP_REFUSED_2026: readonly string[] = [
   "年末調整 year-end adjustment (no channel; never half-implemented)",
   "定時決定/随時改定 grade mechanics (the 標準報酬月額 arrives as an operator-entered fact from the JPS notice, never derived from current pay)",
   "健康保険組合-specific ceilings above the pension grades (the 協会けんぽ 50-grade ceiling is documented, not priced)",
-  "所得税徴収高計算書 remittance builder and 法定調書 (源泉徴収票/給与支払報告書) population",
+  "所得税徴収高計算書 remittance builder (no builder exists); 法定調書 (源泉徴収票/給与支払報告書/合計表) "
+  + "are declared in ./filings.ts and refuse population by name until 年末調整 is performed",
   "non-resident 20.42% withholding (所得税法第212条: a separate mechanism, not the 月額表)",
 ];
 
