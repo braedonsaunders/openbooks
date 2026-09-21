@@ -110,6 +110,18 @@ export async function meTabs(authz: Authz, activeHref: string): Promise<ModuleHo
     tabs.push({ href: '/me/compensation', label: t('me.tabs.compensation'), active: activeHref === '/me/compensation' })
   }
   // HR-12 end
+  // HR-19 begin: Documents and Open surveys tabs — feature-gated, and
+  // shown only when the person has something to see (own documents /
+  // open invitations). The pages re-check and 404 otherwise. Read
+  // failures resolve to false (the tab hides) rather than denying the
+  // whole Me strip.
+  if (activeHref === '/me/documents' || (await meHasDocuments(authz))) {
+    tabs.push({ href: '/me/documents', label: t('me.tabs.documents'), active: activeHref === '/me/documents' })
+  }
+  if (activeHref === '/me/surveys' || (await meHasSurveys(authz))) {
+    tabs.push({ href: '/me/surveys', label: t('me.tabs.openSurveys'), active: activeHref === '/me/surveys' })
+  }
+  // HR-19 end
   return tabs
 }
 
@@ -142,6 +154,19 @@ async function meHasOneOnOnes(authz: Authz): Promise<boolean> {
   try {
     const { isFeatureEnabled } = await import('../features')
     return await isFeatureEnabled(authz.user.orgId, 'hrmOneOnOnes')
+// HR-19 begin: Me Documents / Open surveys tab visibility — the person
+// holds own documents (or an export) / open invitations behind the
+// feature switch. Read failures resolve to false (the tab hides)
+// rather than denying the whole Me strip.
+async function meHasDocuments(authz: Authz): Promise<boolean> {
+    if (!(await isFeatureEnabled(authz.user.orgId, 'hrmDocuments'))) return false
+    const { listOwnDocuments } = await import('@openbooks/engine/src/hrm/documents/documents.ts')
+    const { listOwnExports } = await import('@openbooks/engine/src/hrm/documents/dsar.ts')
+    const [docs, exports] = await Promise.all([
+      listOwnDocuments({ orgId: authz.user.orgId, actorId: authz.user.id }).catch(() => null),
+      listOwnExports({ orgId: authz.user.orgId, actorId: authz.user.id }).catch(() => null),
+    ])
+    return (docs?.documents.length ?? 0) > 0 || (exports?.exports.length ?? 0) > 0
   } catch {
     return false
   }
@@ -164,6 +189,16 @@ async function meContinuousOn(orgId: string): Promise<{ oneOnOnes: boolean; feed
   }
 }
 // HR-17 end
+
+async function meHasSurveys(authz: Authz): Promise<boolean> {
+    if (!(await isFeatureEnabled(authz.user.orgId, 'hrmSurveys'))) return false
+    const { listOwnInvitations } = await import('@openbooks/engine/src/hrm/surveys/responses.ts')
+    const invitations = await listOwnInvitations({ orgId: authz.user.orgId, actorId: authz.user.id }).catch(
+      () => [],
+    )
+    return invitations.length > 0
+    return false
+// HR-19 end
 
 function toRefusal(t: Catalog, error: unknown): MeRefusal | null {
   if (error instanceof SelfServiceError || error instanceof HrmAuthorizationError) {

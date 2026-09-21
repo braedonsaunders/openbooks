@@ -786,10 +786,23 @@ async function currentFileBytes(
   return { bytes, hash: shaHex(bytes) };
 }
 
-/** Read a document's current file through the token (no session). */
+/**
+ * Read a document's current file through the token (no session). The
+ * return names the viewer's own signer row (viewerSignerId) and whether
+ * the document acknowledges rather than signs — signer party ids and
+ * evidence never leave this return unmapped: public surfaces project
+ * the timeline to ord/role/status/signedAt only.
+ */
 export async function readTokenDocument(
   token: string,
-): Promise<{ document: DocumentDTO; signers: SignerDTO[]; bytes: Buffer; contentType: string }> {
+): Promise<{
+  document: DocumentDTO;
+  signers: SignerDTO[];
+  viewerSignerId: string;
+  acknowledgmentOnly: boolean;
+  bytes: Buffer;
+  contentType: string;
+}> {
   const claims = verifyDocumentSignerToken(token);
   if (!claims) {
     throw new HrmDocumentsError("FORBIDDEN", "this signing link is invalid or expired — ask HR to re-send the document");
@@ -819,13 +832,98 @@ export async function readTokenDocument(
       throw new HrmDocumentsError("NOT_FOUND", "this document has no rendered file yet — ask HR to generate it");
     }
     const { bytes } = await currentFileBytes(db, claims.orgId, doc.file_id);
+    const acknowledgmentOnly = doc.template_id
+      ? ((await db.execute<{ acknowledgment_only: boolean }>(sql`
+          select acknowledgment_only from hrm_document_templates
+           where org_id = ${claims.orgId} and id = ${doc.template_id}
+        `)).rows[0]?.acknowledgment_only ?? false)
+      : false;
     return {
       document: toDTO(doc),
       signers: signers.map((s) => (s.id === signer.id ? { ...toSignerDTO(s), status: signer.status } : toSignerDTO(s))),
+      viewerSignerId: signer.id,
+      acknowledgmentOnly,
       bytes,
       contentType: "application/pdf",
     };
   });
+}
+
+/**
+ * The shared signing core: order check, evidence stamp, partial/final
+ * completion with the certificate page and the stored retention clock.
+ * Both the token path and the own-session path run it inside their own
+ * transaction and advisory lock — the stamp's conditional UPDATE is
+ * what makes a raced second signature a refusal, never a double event.
+ */
+async function applySignature(
+  exec: SqlExecutor,
+  orgId: string,
+  doc: DocumentRow,
+  signer: SignerRow,
+  signers: SignerRow[],
+  name: string,
+  ip: string | null,
+  userAgent: string | null,
+): Promise<DocumentDTO> {
+    const earlierPending = signers.filter((s) => s.ord < signer.ord && s.status !== "signed");
+    if (earlierPending.length > 0) {
+      throw new HrmDocumentsError(
+        "REFUSED",
+        `signatures run in order — the ${earlierPending[0]!.role} signs before you; it activates when they have signed`,
+      );
+    }
+    if (!doc.file_id) {
+      throw new HrmDocumentsError("NOT_FOUND", "this document has no rendered file yet — ask HR to generate it");
+    }
+    const { bytes, hash } = await currentFileBytes(exec, orgId, doc.file_id);
+    const evidence = {
+      name,
+      timestamp: new Date().toISOString(),
+      ipHash: ip ? shaHex(ip) : null,
+      userAgentHash: userAgent ? shaHex(userAgent) : null,
+      documentHash: hash,
+    };
+    const stamped = (await exec.execute<{ n: string }>(sql`
+      update hrm_document_signers
+         set status = 'signed', signed_at = now(), evidence = ${JSON.stringify(evidence)}::jsonb,
+             updated_at = now()
+       where org_id = ${orgId} and id = ${signer.id} and status in ('pending', 'viewed')
+      returning 1
+    `)).rows.length;
+    // Zero matched rows is a replay: someone consumed this link first.
+    if (stamped === 0) {
+      throw new HrmDocumentsError("REFUSED", "this link was just used — a signature is recorded once and never replayed");
+    }
+    await recordEvent(exec, orgId, doc.id, "signed", null);
+    const remaining = signers.filter((s) => s.id !== signer.id && s.status !== "signed");
+    if (remaining.length > 0) {
+      await exec.execute(sql`
+        update hrm_documents set status = 'partially_signed', updated_at = now()
+         where org_id = ${orgId} and id = ${doc.id} and status in ('sent', 'viewed')
+      `);
+      return toDTO({ ...doc, status: "partially_signed" });
+    }
+    // Final signature: append the certificate page, complete, retain.
+    const signedPdf = await appendSignaturePage(bytes, {
+      title: doc.title,
+      signatures: [...signers.filter((s) => s.id !== signer.id), { ...signer, status: "signed" }].map((s) => ({
+        role: s.role,
+        evidence: s.id === signer.id ? evidence : ((s.evidence ?? {}) as Record<string, unknown>),
+      })),
+    });
+    await appendCabinetVersion(exec, orgId, doc.file_id, "application/pdf", signedPdf, null);
+    const completed = (await exec.execute<DocumentRow>(sql`
+      update hrm_documents
+         set status = 'signed', completed_at = now(), updated_at = now()
+       where org_id = ${orgId} and id = ${doc.id}
+      returning id, employment_id, party_id, template_id, category_key, title, file_id,
+                status, sent_at::text as sent_at, completed_at::text as completed_at,
+                expires_at::text as expires_at, retain_until::text as retain_until, legal_hold
+    `)).rows[0]!;
+    const { applyCompletionRetention } = await import("./retention.ts");
+    await applyCompletionRetention(exec, orgId, completed.id, null);
+    return toDTO((await loadDocument(exec, orgId, completed.id)));
 }
 
 /**
@@ -857,64 +955,47 @@ export async function signTokenDocument(input: {
     if (signer.status === "declined") {
       throw new HrmDocumentsError("REFUSED", "this link recorded a decline — ask HR to re-issue the document to sign");
     }
-    const earlierPending = signers.filter((s) => s.ord < signer.ord && s.status !== "signed");
-    if (earlierPending.length > 0) {
+    return applySignature(db, orgId, doc, signer, signers, name, input.ip ?? null, input.userAgent ?? null);
+  });
+}
+
+/**
+ * Sign in-session: the actor's own open signer row on their own
+ * document. Resolves the actor to their party, refuses when they hold
+ * no open signer row here (HR staff sign through the token link like
+ * everyone else — this path never signs for another person), then
+ * runs the shared core. Powers /me/documents inline signing: the
+ * signing view is the public page rendered in-session.
+ */
+export async function signOwnDocument(input: {
+  orgId: string;
+  actorId: string;
+  documentId: string;
+  name: string;
+}): Promise<DocumentDTO> {
+  const name = input.name.trim().slice(0, 120);
+  if (!name) throw new HrmDocumentsError("VALIDATION", "your name is required to sign");
+  return withOrgTransaction(input.orgId, async () => {
+    await db.execute(sql`
+      select pg_advisory_xact_lock(hashtextextended(${"hrm-doc-sign:" + input.orgId + ":" + input.documentId}, 0))
+    `);
+    const doc = await loadDocument(db, input.orgId, input.documentId);
+    const ownParty = await loadActorPartyId(db, input.orgId, input.actorId);
+    if (!ownParty) {
       throw new HrmDocumentsError(
         "REFUSED",
-        `signatures run in order — the ${earlierPending[0]!.role} signs before you; this link activates when they have signed`,
+        "your login is not linked to a person record — ask HR to link it before signing",
       );
     }
-    if (!doc.file_id) {
-      throw new HrmDocumentsError("NOT_FOUND", "this document has no rendered file yet — ask HR to generate it");
+    const signers = await loadSigners(db, input.orgId, doc.id);
+    const signer = signers.find((s) => s.signer_party_id === ownParty && ["pending", "viewed"].includes(s.status));
+    if (!signer) {
+      throw new HrmDocumentsError(
+        "REFUSED",
+        "you hold no open signature on this document — it may already be answered, or addressed to someone else",
+      );
     }
-    const { bytes, hash } = await currentFileBytes(db, orgId, doc.file_id);
-    const evidence = {
-      name,
-      timestamp: new Date().toISOString(),
-      ipHash: input.ip ? shaHex(input.ip) : null,
-      userAgentHash: input.userAgent ? shaHex(input.userAgent) : null,
-      documentHash: hash,
-    };
-    const stamped = (await db.execute<{ n: string }>(sql`
-      update hrm_document_signers
-         set status = 'signed', signed_at = now(), evidence = ${JSON.stringify(evidence)}::jsonb,
-             updated_at = now()
-       where org_id = ${orgId} and id = ${signer.id} and status in ('pending', 'viewed')
-      returning 1
-    `)).rows.length;
-    // Zero matched rows is a replay: someone consumed this link first.
-    if (stamped === 0) {
-      throw new HrmDocumentsError("REFUSED", "this link was just used — a signature is recorded once and never replayed");
-    }
-    await recordEvent(db, orgId, doc.id, "signed", null);
-    const remaining = signers.filter((s) => s.id !== signer.id && s.status !== "signed");
-    if (remaining.length > 0) {
-      await db.execute(sql`
-        update hrm_documents set status = 'partially_signed', updated_at = now()
-         where org_id = ${orgId} and id = ${doc.id} and status in ('sent', 'viewed')
-      `);
-      return toDTO({ ...doc, status: "partially_signed" });
-    }
-    // Final signature: append the certificate page, complete, retain.
-    const signedPdf = await appendSignaturePage(bytes, {
-      title: doc.title,
-      signatures: [...signers.filter((s) => s.id !== signer.id), { ...signer, status: "signed" }].map((s) => ({
-        role: s.role,
-        evidence: s.id === signer.id ? evidence : ((s.evidence ?? {}) as Record<string, unknown>),
-      })),
-    });
-    await appendCabinetVersion(db, orgId, doc.file_id, "application/pdf", signedPdf, null);
-    const completed = (await db.execute<DocumentRow>(sql`
-      update hrm_documents
-         set status = 'signed', completed_at = now(), updated_at = now()
-       where org_id = ${orgId} and id = ${doc.id}
-      returning id, employment_id, party_id, template_id, category_key, title, file_id,
-                status, sent_at::text as sent_at, completed_at::text as completed_at,
-                expires_at::text as expires_at, retain_until::text as retain_until, legal_hold
-    `)).rows[0]!;
-    const { applyCompletionRetention } = await import("./retention.ts");
-    await applyCompletionRetention(db, orgId, completed.id, null);
-    return toDTO((await loadDocument(db, orgId, completed.id)));
+    return applySignature(db, input.orgId, doc, signer, signers, name, null, null);
   });
 }
 

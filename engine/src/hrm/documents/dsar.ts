@@ -143,6 +143,37 @@ export async function listExports(query: {
   return rows.map(toDTO);
 }
 
+/**
+ * Own exports for the Me surface (hrm.self.read, fenced to own party).
+ * HR readers use the manage list; self-service without the grant meets
+ * the read gate rather than everyone else's rows.
+ */
+export async function listOwnExports(query: {
+  orgId: string;
+  actorId: string;
+}): Promise<{ exports: DsarExportDTO[]; partyId: string }> {
+  if (!(await actorHasPermission(db, query.orgId, query.actorId, "hrm.self.read"))) {
+    await requireHrmDocumentsRead(db, query.orgId, query.actorId);
+    return { exports: await listExports(query), partyId: "" };
+  }
+  const partyId = (await db.execute<{ partyId: string | null }>(sql`
+    select party_id as "partyId" from users where org_id = ${query.orgId} and id = ${query.actorId}
+  `)).rows[0]?.partyId;
+  if (!partyId) {
+    throw new HrmDocumentsError(
+      "REFUSED",
+      "your login is not linked to a person record — ask HR to link it before opening your exports",
+    );
+  }
+  const rows = (await db.execute<ExportRow>(sql`
+    ${EXPORT_COLS}
+     where org_id = ${query.orgId} and party_id = ${partyId}
+     order by requested_at desc
+     limit 100
+  `)).rows;
+  return { exports: rows.map(toDTO), partyId };
+}
+
 /** Next queued export for the worker (one claim per call, oldest first). */
 export async function claimQueuedExport(
   exec: SqlExecutor,

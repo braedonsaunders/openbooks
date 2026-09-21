@@ -13,7 +13,10 @@
       "benefits": "福利厚生",
       "compliance": "コンプライアンス",
       "compensation": "報酬",
-      "qualifications": "資格"
+      "qualifications": "資格",
+      "documents": "文書",
+      "surveys": "調査",
+      "orgChart": "組織図"
     },
     "recruiting": {
       "title": "採用",
@@ -928,7 +931,9 @@
       "benefits": "福利厚生",
       "team": "チーム",
       "compensation": "報酬",
-      "oneOnOnes": "1:1"
+      "oneOnOnes": "1:1",
+      "documents": "文書",
+      "openSurveys": "未回答の調査"
     },
     "refusedTitle": "セルフサービスは利用できません",
     "overview": {
@@ -1591,5 +1596,207 @@
       "identifier": "免許番号",
       "notes": "備考"
     }
+  },
+  "documents": {
+    "title": "HR文書",
+    "description": "入社から退職までの文書を発行・署名・保持します。",
+    "segmentsLabel": "ステータス",
+    "statusAll": "すべて",
+    "status": {
+      "draft": "下書き",
+      "sent": "送信済み",
+      "viewed": "既読",
+      "partially_signed": "一部署名済み",
+      "signed": "署名済み",
+      "acknowledged": "確認済み",
+      "declined": "辞退",
+      "voided": "無効",
+      "expired": "期限切れ"
+    },
+    "columns": {
+      "title": "件名",
+      "person": "対象者",
+      "category": "カテゴリ",
+      "sent": "送信",
+      "expires": "期限",
+      "status": "ステータス"
+    },
+    "empty": "この条件に一致する文書はありません。",
+    "tiles": {
+      "awaiting": "署名待ち",
+      "expiring": "期限間近",
+      "retentionDue": "保持期限到来",
+      "exportsPending": "エクスポート待ち"
+    },
+    "drawer": {
+      "title": "文書",
+      "signers": "署名者",
+      "events": "履歴",
+      "versions": "版",
+      "send": "送信",
+      "remind": "リマインド",
+      "void": "無効化",
+      "hold": "リーガルホールド",
+      "releaseHold": "ホールド解除",
+      "download": "ダウンロード",
+      "voidReason": "無効化の理由",
+      "voidConfirm": "文書を無効化",
+      "cancel": "キャンセル",
+      "actionFailed": "この操作に失敗しました。",
+      "noSigners": "署名者はまだいません。",
+      "noEvents": "履歴はまだありません。",
+      "declined": "辞退",
+      "signed": "署名済み",
+      "pending": "保留中",
+      "viewed": "既読",
+      "missing": "この文書は利用できません。"
+    },
+    "generate": {
+      "open": "新規文書",
+      "title": "文書を生成",
+      "template": "テンプレート",
+      "person": "対象者",
+      "docTitle": "文書タイトル",
+      "preview": "差し込みプレビュー",
+      "submit": "生成",
+      "failed": "生成に失敗しました。",
+      "noTemplates": "有効なテンプレートがありません — 先に設定で宣言してください。"
+    }
+  },
+  "surveys": {
+    "title": "調査",
+    "description": "エンゲージメント調査を作成し、集計結果を閲覧します。",
+    "segmentsLabel": "ステータス",
+    "statusAll": "すべて",
+    "status": {
+      "draft": "下書き",
+      "open": "実施中",
+      "closed": "終了"
+    },
+    "kind": {
+      "engagement": "エンゲージメント",
+      "pulse": "パルス",
+      "onboarding": "オンボーディング",
+      "exit": "退職",
+      "custom": "カスタム"
+    },
+    "anonymity": {
+      "anonymous": "匿名",
+      "confidential": "機密",
+      "named": "記名"
+    },
+    "questionKind": {
+      "scale": "5段階",
+      "enps": "eNPS 0–10",
+      "text": "自由記述",
+      "single": "単一選択",
+      "multi": "複数選択"
+    },
+    "columns": {
+      "name": "名称",
+      "kind": "種類",
+      "anonymity": "匿名度",
+      "participation": "回答率",
+      "closes": "締切",
+      "status": "ステータス"
+    },
+    "empty": "この条件に一致する調査はありません。",
+    "drawer": {
+      "title": "調査",
+      "results": "結果",
+      "participation": "回答率",
+      "enps": "eNPS",
+      "drivers": "ドライバー",
+      "heatmap": "ヒートマップ",
+      "suppressed": "非表示 — 回答数が不足",
+      "comments": "コメント",
+      "trend": "推移",
+      "questions": "設問",
+      "open": "調査を開始",
+      "close": "調査を終了",
+      "actionFailed": "この操作に失敗しました。",
+      "invite": "招待者",
+      "cancel": "キャンセル",
+      "missing": "この調査は利用できません。"
+    },
+    "author": {
+      "open": "新規調査",
+      "title": "調査を作成",
+      "name": "名称",
+      "kind": "種類",
+      "anonymity": "匿名度",
+      "minGroup": "最小グループサイズ",
+      "questions": "設問",
+      "addQuestion": "設問を追加",
+      "prompt": "設問文",
+      "driver": "ドライバーキー",
+      "options": "選択肢",
+      "remove": "削除",
+      "submit": "調査を保存",
+      "failed": "保存に失敗しました。"
+    }
+  },
+  "orgChart": {
+    "title": "組織図",
+    "description": "欠員を含む報告ツリーを任意の日付で表示します。",
+    "tree": "ツリー",
+    "directory": "名簿",
+    "columns": {
+      "name": "氏名",
+      "title": "役職",
+      "department": "部門",
+      "manager": "上司"
+    },
+    "directoryEmpty": "該当者がいません。",
+    "search": "検索",
+    "asOf": "基準日",
+    "labels": {
+      "vacancies": "欠員",
+      "headcount": "人員数",
+      "layers": "階層",
+      "span": "スパン",
+      "vacant": "欠員",
+      "department": "部門",
+      "manager": "上司",
+      "reports": "直属部下",
+      "close": "閉じる",
+      "expand": "展開",
+      "collapse": "折りたたみ",
+      "noMatch": "該当者がいません。"
+    }
+  },
+  "meDocuments": {
+    "title": "自分の文書",
+    "description": "文書に署名し、データ開示を請求します。",
+    "columns": {
+      "title": "件名",
+      "status": "ステータス",
+      "sent": "送信"
+    },
+    "empty": "文書はありません。",
+    "signName": "氏名",
+    "sign": "署名",
+    "acknowledge": "確認",
+    "actionFailed": "この操作に失敗しました。",
+    "exportsTitle": "自分のデータ開示",
+    "exportsEmpty": "開示請求はまだありません。",
+    "exportsColumns": {
+      "requested": "請求日",
+      "status": "ステータス"
+    },
+    "requestExport": "自分のデータを開示請求",
+    "requestExportDone": "開示請求を受け付けました — 準備ができたら下に表示されます。",
+    "download": "ダウンロード"
+  },
+  "meSurveys": {
+    "title": "未回答の調査",
+    "description": "回答待ちの調査です。",
+    "columns": {
+      "name": "名称",
+      "closes": "締切"
+    },
+    "empty": "未回答の調査はありません。",
+    "respond": "回答する",
+    "actionFailed": "この操作に失敗しました。"
   }
 }

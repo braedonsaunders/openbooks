@@ -49,6 +49,8 @@ import { LeaveBalances } from '../../app/(app)/hrm/my-leave/LeaveBalances'
 import { DocumentsDrawer, DocumentsGenerateDialog } from '../../app/(app)/hrm/documents/sections'
 import { SurveysAuthorDialog, SurveysDrawer } from '../../app/(app)/hrm/surveys/sections'
 import { OrgChartPerson, OrgChartTree } from '../../app/(app)/hrm/org-chart/sections'
+import { MeDocumentActions, MeExportDialog, MeExportDownload } from '../../app/(app)/me/documents/sections'
+import { MeSurveyRespond } from '../../app/(app)/me/surveys/sections'
 // HR-19 end
 import { num, str, type WidgetRenderer } from './widget-props'
 
@@ -517,5 +519,43 @@ export const HRM_WIDGETS = {
       />
     )
   },
+  /** Me document row actions: inline sign (typed name) and acknowledge.
+   *  Renders nothing when the row carries neither action. */
+  'hrm-me-document-actions': (props) => (
+    <MeDocumentActions
+      documentId={str(props, 'documentId') ?? ''}
+      signable={props.signable === true}
+      acknowledgeable={props.acknowledgeable === true}
+      signLabel={str(props, 'signLabel') ?? ''}
+      signNameLabel={str(props, 'signNameLabel') ?? ''}
+      acknowledgeLabel={str(props, 'acknowledgeLabel') ?? ''}
+      actionFailed={str(props, 'actionFailed') ?? ''}
+    />
+  ),
+  /** Me export download cell: the link only while downloadable. */
+  'hrm-me-export-download': (props) => (
+    <MeExportDownload
+      downloadable={props.downloadable === true}
+      href={str(props, 'href') ?? ''}
+      label={str(props, 'label') ?? ''}
+    />
+  ),
+  /** Me export-my-data dialog, opened through `?export=1`. */
+  'hrm-me-export-dialog': (props) => (
+    <MeExportDialog
+      partyId={str(props, 'partyId') ?? ''}
+      requestExportLabel={str(props, 'requestExportLabel') ?? ''}
+      requestExportDone={str(props, 'requestExportDone') ?? ''}
+      actionFailed={str(props, 'actionFailed') ?? ''}
+    />
+  ),
+  /** Me open-surveys respond cell: reissues the token and navigates. */
+  'hrm-me-survey-respond': (props) => (
+    <MeSurveyRespond
+      invitationId={str(props, 'invitationId') ?? ''}
+      respondLabel={str(props, 'respondLabel') ?? ''}
+      actionFailed={str(props, 'actionFailed') ?? ''}
+    />
+  ),
   // HR-19 end
 } satisfies Record<string, WidgetRenderer>

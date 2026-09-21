@@ -1,9 +1,11 @@
 import { createCipheriv, createDecipheriv, createHmac, randomBytes } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
-import { requireHrmSurveysManage } from "../authorization.ts";
+import { loadActorPartyId, requireHrmSurveysManage } from "../authorization.ts";
+import { actorHasPermission } from "../../organization/actor-permissions.ts";
 import { HrmSurveysError } from "../documents/errors.ts";
-import { hashHrmToken, verifySurveyInvitationToken } from "../documents/tokens.ts";
+import { hashHrmToken, mintSurveyInvitationToken, verifySurveyInvitationToken } from "../documents/tokens.ts";
+import { INVITATION_TTL_MS } from "./surveys.ts";
 import {
   aggregateQuestion,
   computeEnps,
@@ -309,6 +311,107 @@ export async function submitResponse(input: {
       );
     }
     return { responseId };
+  });
+}
+
+export interface OwnInvitation {
+  invitationId: string;
+  surveyId: string;
+  surveyName: string;
+  surveyKind: string;
+  anonymity: string;
+  closesAt: string | null;
+}
+
+async function requireSelfRead(orgId: string, actorId: string): Promise<string> {
+  if (!(await actorHasPermission(db, orgId, actorId, "hrm.self.read"))) {
+    throw new HrmSurveysError(
+      "REFUSED",
+      "survey invitations need the employee self-service grant — ask an administrator for access in /admin/roles",
+    );
+  }
+  const partyId = await loadActorPartyId(db, orgId, actorId);
+  if (!partyId) {
+    throw new HrmSurveysError(
+      "REFUSED",
+      "your login is not linked to a person record — ask HR to link it before opening your surveys",
+    );
+  }
+  return partyId;
+}
+
+/** Open invitations for the actor's own party (the /me Open surveys rail). */
+export async function listOwnInvitations(query: {
+  orgId: string;
+  actorId: string;
+}): Promise<OwnInvitation[]> {
+  const partyId = await requireSelfRead(query.orgId, query.actorId);
+  const rows = (await db.execute<{
+    invitationId: string;
+    surveyId: string;
+    surveyName: string;
+    surveyKind: string;
+    anonymity: string;
+    closesAt: string | null;
+  }>(sql`
+    select i.id as "invitationId", s.id as "surveyId", s.name as "surveyName",
+           s.kind as "surveyKind", s.anonymity as "anonymity",
+           s.closes_at::text as "closesAt"
+      from hrm_survey_invitations i
+      join hrm_surveys s on s.org_id = i.org_id and s.id = i.survey_id
+     where i.org_id = ${query.orgId} and i.party_id = ${partyId}
+       and i.responded_at is null and s.status = 'open'
+       and (s.closes_at is null or s.closes_at > now())
+     order by s.closes_at nulls last, s.name
+  `)).rows;
+  return rows;
+}
+
+/**
+ * Re-mint one open invitation's token for the invited party in-session:
+ * the old link dies (a stale open meets the no-longer-available
+ * refusal) and the fresh token returns for the /survey/[token] page.
+ * Refuses answered invitations, closed surveys, and invitations
+ * addressed to anyone else — this path never answers for another
+ * person. Powers /me Open surveys: the respond link without email.
+ */
+export async function reissueInvitationToken(input: {
+  orgId: string;
+  actorId: string;
+  invitationId: string;
+}): Promise<{ token: string; surveyId: string }> {
+  const partyId = await requireSelfRead(input.orgId, input.actorId);
+  return withOrgTransaction(input.orgId, async () => {
+    const invitation = (await db.execute<{ id: string; survey_id: string; responded_at: string | null }>(sql`
+      select id, survey_id, responded_at::text as responded_at
+        from hrm_survey_invitations
+       where org_id = ${input.orgId} and id = ${input.invitationId} and party_id = ${partyId}
+    `)).rows[0];
+    // Zero rows is a failure: unknown id or another person's invitation.
+    if (!invitation) {
+      throw new HrmSurveysError("NOT_FOUND", "invitation is not visible to you — it may belong to someone else");
+    }
+    if (invitation.responded_at) {
+      throw new HrmSurveysError("REFUSED", "you already answered this survey — one response per invitation");
+    }
+    const survey = (await db.execute<{ status: string }>(sql`
+      select status from hrm_surveys where org_id = ${input.orgId} and id = ${invitation.survey_id}
+    `)).rows[0];
+    if (!survey || survey.status !== "open") {
+      throw new HrmSurveysError("REFUSED", "this survey is not open for responses");
+    }
+    const token = mintSurveyInvitationToken(input.orgId, invitation.id, new Date(Date.now() + INVITATION_TTL_MS));
+    const updated = (await db.execute<{ id: string }>(sql`
+      update hrm_survey_invitations
+         set token_hash = ${hashHrmToken(token)}
+       where org_id = ${input.orgId} and id = ${invitation.id} and responded_at is null
+      returning id
+    `)).rows[0];
+    // Zero matched rows is a race the respondent won elsewhere.
+    if (!updated) {
+      throw new HrmSurveysError("REFUSED", "this invitation was just answered — one response per invitation");
+    }
+    return { token, surveyId: invitation.survey_id };
   });
 }
 

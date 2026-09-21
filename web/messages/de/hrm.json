@@ -13,7 +13,10 @@
       "benefits": "Leistungen",
       "compliance": "Compliance",
       "compensation": "Vergütung",
-      "qualifications": "Qualifikationen"
+      "qualifications": "Qualifikationen",
+      "documents": "Dokumente",
+      "surveys": "Befragungen",
+      "orgChart": "Organigramm"
     },
     "recruiting": {
       "title": "Einstellung",
@@ -928,7 +931,9 @@
       "benefits": "Leistungen",
       "team": "Team",
       "compensation": "Vergütung",
-      "oneOnOnes": "1:1s"
+      "oneOnOnes": "1:1s",
+      "documents": "Dokumente",
+      "openSurveys": "Offene Befragungen"
     },
     "refusedTitle": "Self-Service ist nicht verfügbar",
     "overview": {
@@ -1591,5 +1596,207 @@
       "identifier": "Lizenznummer",
       "notes": "Notizen"
     }
+  },
+  "documents": {
+    "title": "HR-Dokumente",
+    "description": "Dokumente von der Einstellung bis zum Austritt ausstellen, unterschreiben und aufbewahren.",
+    "segmentsLabel": "Status",
+    "statusAll": "Alle",
+    "status": {
+      "draft": "Entwurf",
+      "sent": "Versendet",
+      "viewed": "Gelesen",
+      "partially_signed": "Teilweise unterschrieben",
+      "signed": "Unterschrieben",
+      "acknowledged": "Bestätigt",
+      "declined": "Abgelehnt",
+      "voided": "Annulliert",
+      "expired": "Abgelaufen"
+    },
+    "columns": {
+      "title": "Titel",
+      "person": "Person",
+      "category": "Kategorie",
+      "sent": "Versendet",
+      "expires": "Läuft ab",
+      "status": "Status"
+    },
+    "empty": "Keine Dokumente für diesen Filter.",
+    "tiles": {
+      "awaiting": "Ausstehende Unterschriften",
+      "expiring": "Laufen bald ab",
+      "retentionDue": "Aufbewahrung fällig",
+      "exportsPending": "Ausstehende Exporte"
+    },
+    "drawer": {
+      "title": "Dokument",
+      "signers": "Unterzeichner",
+      "events": "Ereignisse",
+      "versions": "Versionen",
+      "send": "Senden",
+      "remind": "Erinnern",
+      "void": "Annullieren",
+      "hold": "Legal Hold",
+      "releaseHold": "Hold aufheben",
+      "download": "Herunterladen",
+      "voidReason": "Grund für die Annullierung",
+      "voidConfirm": "Dokument annullieren",
+      "cancel": "Abbrechen",
+      "actionFailed": "Diese Aktion ist fehlgeschlagen.",
+      "noSigners": "Noch keine Unterzeichner.",
+      "noEvents": "Noch keine Ereignisse.",
+      "declined": "Abgelehnt",
+      "signed": "Unterschrieben",
+      "pending": "Ausstehend",
+      "viewed": "Gelesen",
+      "missing": "Dieses Dokument ist nicht mehr verfügbar."
+    },
+    "generate": {
+      "open": "Neues Dokument",
+      "title": "Dokument erstellen",
+      "template": "Vorlage",
+      "person": "Person",
+      "docTitle": "Dokumenttitel",
+      "preview": "Serienfelder-Vorschau",
+      "submit": "Erstellen",
+      "failed": "Erstellung fehlgeschlagen.",
+      "noTemplates": "Keine aktiven Vorlagen — legen Sie zuerst Vorlagen unter Setup an."
+    }
+  },
+  "surveys": {
+    "title": "Befragungen",
+    "description": "Mitarbeiterbefragungen erstellen und Gesamtergebnisse lesen.",
+    "segmentsLabel": "Status",
+    "statusAll": "Alle",
+    "status": {
+      "draft": "Entwurf",
+      "open": "Offen",
+      "closed": "Geschlossen"
+    },
+    "kind": {
+      "engagement": "Mitarbeiterbindung",
+      "pulse": "Puls",
+      "onboarding": "Onboarding",
+      "exit": "Austritt",
+      "custom": "Benutzerdefiniert"
+    },
+    "anonymity": {
+      "anonymous": "Anonym",
+      "confidential": "Vertraulich",
+      "named": "Namentlich"
+    },
+    "questionKind": {
+      "scale": "Skala 1–5",
+      "enps": "eNPS 0–10",
+      "text": "Freitext",
+      "single": "Einfachauswahl",
+      "multi": "Mehrfachauswahl"
+    },
+    "columns": {
+      "name": "Name",
+      "kind": "Art",
+      "anonymity": "Anonymität",
+      "participation": "Beteiligung",
+      "closes": "Schließt",
+      "status": "Status"
+    },
+    "empty": "Keine Befragungen für diesen Filter.",
+    "drawer": {
+      "title": "Befragung",
+      "results": "Ergebnisse",
+      "participation": "Beteiligung",
+      "enps": "eNPS",
+      "drivers": "Treiber",
+      "heatmap": "Heatmap",
+      "suppressed": "Unterdrückt — zu wenige Antworten",
+      "comments": "Kommentare",
+      "trend": "Trend",
+      "questions": "Fragen",
+      "open": "Befragung öffnen",
+      "close": "Befragung schließen",
+      "actionFailed": "Diese Aktion ist fehlgeschlagen.",
+      "invite": "Eingeladene",
+      "cancel": "Abbrechen",
+      "missing": "Diese Befragung ist nicht mehr verfügbar."
+    },
+    "author": {
+      "open": "Neue Befragung",
+      "title": "Befragung erstellen",
+      "name": "Name",
+      "kind": "Art",
+      "anonymity": "Anonymität",
+      "minGroup": "Mindestgruppengröße",
+      "questions": "Fragen",
+      "addQuestion": "Frage hinzufügen",
+      "prompt": "Fragetext",
+      "driver": "Treiberschlüssel",
+      "options": "Optionen",
+      "remove": "Entfernen",
+      "submit": "Befragung speichern",
+      "failed": "Speichern fehlgeschlagen."
+    }
+  },
+  "orgChart": {
+    "title": "Organigramm",
+    "description": "Der Berichtsbaum mit Vakanzen, zu jedem Stichtag.",
+    "tree": "Baum",
+    "directory": "Verzeichnis",
+    "columns": {
+      "name": "Name",
+      "title": "Titel",
+      "department": "Abteilung",
+      "manager": "Führungskraft"
+    },
+    "directoryEmpty": "Niemand für diese Suche.",
+    "search": "Suchen",
+    "asOf": "Stichtag",
+    "labels": {
+      "vacancies": "Vakanzen",
+      "headcount": "Kopfzahl",
+      "layers": "Ebenen",
+      "span": "Führungsspanne",
+      "vacant": "Vakant",
+      "department": "Abteilung",
+      "manager": "Führungskraft",
+      "reports": "Direkte Mitarbeiter",
+      "close": "Schließen",
+      "expand": "Erweitern",
+      "collapse": "Reduzieren",
+      "noMatch": "Niemand für diese Suche."
+    }
+  },
+  "meDocuments": {
+    "title": "Meine Dokumente",
+    "description": "Dokumente unterschreiben und Datenauskunft anfordern.",
+    "columns": {
+      "title": "Titel",
+      "status": "Status",
+      "sent": "Versendet"
+    },
+    "empty": "Sie haben keine Dokumente.",
+    "signName": "Ihr Name",
+    "sign": "Unterschreiben",
+    "acknowledge": "Bestätigen",
+    "actionFailed": "Diese Aktion ist fehlgeschlagen.",
+    "exportsTitle": "Meine Datenexporte",
+    "exportsEmpty": "Noch keine Exporte angefordert.",
+    "exportsColumns": {
+      "requested": "Angefordert",
+      "status": "Status"
+    },
+    "requestExport": "Meine Daten exportieren",
+    "requestExportDone": "Ihr Export ist angereiht — er erscheint unten, sobald er fertig ist.",
+    "download": "Herunterladen"
+  },
+  "meSurveys": {
+    "title": "Offene Befragungen",
+    "description": "Befragungen, die auf Ihre Antwort warten.",
+    "columns": {
+      "name": "Name",
+      "closes": "Schließt"
+    },
+    "empty": "Derzeit keine offenen Befragungen.",
+    "respond": "Antworten",
+    "actionFailed": "Diese Aktion ist fehlgeschlagen."
   }
 }
