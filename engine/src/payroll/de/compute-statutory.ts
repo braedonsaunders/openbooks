@@ -73,7 +73,8 @@ export const DE_FACTOR_LABELS: Readonly<Record<string, string>> = {
   PV_ER: "Pflegeversicherung (Arbeitgeber)",
 };
 
-const STKL_BY_ROMAN: Record<string, 1 | 2 | 3 | 4 | 5 | 6> = {
+/** ELStAM Steuerklasse I–VI to PAP STKL 1–6 (shared with the settlement). */
+export const STKL_BY_ROMAN: Record<string, 1 | 2 | 3 | 4 | 5 | 6> = {
   I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6,
 };
 
