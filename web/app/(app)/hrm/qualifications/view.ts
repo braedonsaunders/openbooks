@@ -68,6 +68,22 @@ export function qualificationsSpec(data: NonNullable<Awaited<ReturnType<typeof l
         allLabel: f('sectionOptions.0.label'),
         options: data.sectionOptions,
       }),
+      panel({
+        title: f('taxonomyTitle'),
+        bodyClassName: 'p-4',
+        blocks: [
+          widgetBlock('setup-section', {
+            entityKey: 'qualification-types',
+            basePath: '/hrm/qualifications',
+            sp: data.currentParams,
+          }),
+          widgetBlock('setup-section', {
+            entityKey: 'qualification-settings',
+            basePath: '/hrm/qualifications',
+            sp: data.currentParams,
+          }),
+        ],
+      }),
       ...(section === 'ledger'
         ? [
             widgetBlock('filter-chips', {

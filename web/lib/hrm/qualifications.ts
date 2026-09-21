@@ -113,6 +113,7 @@ export interface QualificationsPageData {
   dialogOpen: boolean
   recordOpen: boolean
   dialogVisible: boolean
+  taxonomyTitle: string
   requirementsTitle: string
   requirementsEmpty: string
   requirements: RequirementRow[]
@@ -397,6 +398,7 @@ export async function loadQualificationsPage(
     dialogOpen: !!sp.qualification && sp.qualification !== 'new',
     recordOpen: sp.qualification === 'new' || sp.record === 'new',
     dialogVisible: !!sp.qualification || sp.record === 'new',
+    taxonomyTitle: t('qualifications.taxonomyTitle'),
     requirementsTitle: t('qualifications.requirementsTitle'),
     requirementsEmpty: t('qualifications.requirementsEmpty'),
     requirements: requirements.map((r) => ({

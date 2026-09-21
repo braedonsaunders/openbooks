@@ -32,6 +32,10 @@ import {
   CONSTRUCTION_RATIO_RULES_ENTITY,
 } from './hrm-construction'
 // HR-13 end
+// HR-14 begin: qualification taxonomy and vocabulary (rehomed onto the
+// Qualifications page, never the setup rail).
+import { QUALIFICATION_SETTINGS_ENTITY, QUALIFICATION_TYPES_ENTITY } from './hrm-qualifications'
+// HR-14 end
 
 export type SetupFieldKind =
   | 'text'
@@ -1803,6 +1807,12 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   CONSTRUCTION_PER_DIEM_POLICIES_ENTITY,
   CONSTRUCTION_RATIO_RULES_ENTITY,
   // HR-13 end
+  // HR-14 begin: qualification taxonomy and extended vocabulary.
+  // Declared in ./hrm-qualifications.ts; rehomed onto the HRM
+  // Qualifications page.
+  QUALIFICATION_TYPES_ENTITY,
+  QUALIFICATION_SETTINGS_ENTITY,
+  // HR-14 end
   {
     key: 'pay-schedules',
     table: 'pay_schedules',

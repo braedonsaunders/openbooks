@@ -88,6 +88,14 @@ type BenefitDependent = {
   relationship: string
 }
 
+type EmploymentQualification = {
+  id: string
+  typeCode: string
+  typeName: string
+  status: string
+  expiresOn: string | null
+}
+
 type RecordState = {
   status: 'loading' | 'ready' | 'refused' | 'error'
   episodes: Episode[]
@@ -98,6 +106,8 @@ type RecordState = {
   benefits: 'hidden' | 'loading' | 'ready'
   benefitElections: BenefitElection[]
   benefitDependents: BenefitDependent[]
+  qualifications: 'hidden' | 'loading' | 'ready'
+  employmentQualifications: EmploymentQualification[]
 }
 
 function todayCivil(): string {
@@ -127,7 +137,7 @@ export function EmploymentTab({
   const [exit, setExit] = useState<ExitState>({ status: 'hidden', record: null, message: null })
   const [state, setState] = useState<RecordState>({
     status: 'loading', episodes: [], asOf: null, asOfRefusal: null, changeRequests: [], refusalMessage: null,
-    benefits: 'loading', benefitElections: [], benefitDependents: [],
+    benefits: 'loading', benefitElections: [], benefitDependents: [], qualifications: 'loading', employmentQualifications: [],
   })
   const requestId = useRef(0)
   const reload = (): void => {
@@ -158,7 +168,41 @@ export function EmploymentTab({
           benefits: 'loading',
           benefitElections: [],
           benefitDependents: [],
+          qualifications: 'loading',
+          employmentQualifications: [],
         })
+        // Qualifications ride the qualifications API beside the record:
+        // a 403/404 (no grant, or the feature off) hides the section
+        // instead of failing the tab — the employment record is readable
+        // without qualification access.
+        try {
+          const qualificationsRes = await fetch(`/api/hrm/qualifications?employmentId=${employmentId}`)
+          if (cancelled || requestId.current !== current) return
+          if (qualificationsRes.status === 403 || qualificationsRes.status === 404) {
+            setState((s) => ({ ...s, qualifications: 'hidden', employmentQualifications: [] }))
+          } else {
+            if (!qualificationsRes.ok) throw new Error(await readApiErrorMessage(qualificationsRes, 'failed to load qualifications'))
+            const quals = (await qualificationsRes.json()) as {
+              qualifications?: { id: string; type?: { code?: string; name?: string }; status?: string; expiresOn?: string | null }[]
+            }
+            if (cancelled || requestId.current !== current) return
+            const list = Array.isArray(quals.qualifications) ? quals.qualifications : []
+            setState((s) => ({
+              ...s,
+              qualifications: 'ready',
+              employmentQualifications: list.map((q) => ({
+                id: q.id,
+                typeCode: q.type?.code ?? '',
+                typeName: q.type?.name ?? '',
+                status: q.status ?? '',
+                expiresOn: q.expiresOn ?? null,
+              })),
+            }))
+          }
+        } catch {
+          if (cancelled || requestId.current !== current) return
+          setState((s) => ({ ...s, qualifications: 'hidden', employmentQualifications: [] }))
+        }
         // Benefits ride the benefits APIs beside the record: a 403 (no
         // benefits grant) hides the section instead of failing the tab —
         // the employment record is readable without benefits access.
@@ -446,6 +490,38 @@ export function EmploymentTab({
           </ul>
         )}
       </section>
+      {state.qualifications !== 'hidden' ? (
+      <section aria-label={t('employment.qualifications.title')}>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            {t('employment.qualifications.title')}
+          </h3>
+          <Link href="/hrm/qualifications" className="text-sm font-medium text-teal-700 hover:underline dark:text-teal-300">
+            {t('employment.qualifications.viewAll')}
+          </Link>
+        </div>
+        {state.qualifications === 'ready' && state.employmentQualifications.length === 0 ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400">{t('employment.qualifications.empty')}</p>
+        ) : null}
+        {state.qualifications === 'ready' && state.employmentQualifications.length > 0 ? (
+          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+            {state.employmentQualifications.map((q) => (
+              <li key={q.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2">
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                  {q.typeCode}{q.typeName ? ` · ${q.typeName}` : ''}
+                </span>
+                <span className="text-sm tabular-nums text-slate-500 dark:text-slate-400">
+                  {q.expiresOn ?? '–'}
+                </span>
+                <span className="ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                  {t.has(`qualifications.statusNames.${q.status}`) ? t(`qualifications.statusNames.${q.status}`) : q.status}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </section>
+      ) : null}
       {state.benefits !== 'hidden' ? (
       <section aria-label={t('employment.benefits.title')}>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
