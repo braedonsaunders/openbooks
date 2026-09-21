@@ -13,10 +13,10 @@
  * - the FP/FS age-bar citation (promotion-act art. 104b ust. 2 for 2024,
  *   art. 104b ust. 2 / labour-market art. 261 for 2025, art. 261 for 2026);
  * - `fgspAgeBar`: the claims-protection act (art. 9b ust. 2) exempts women
- *   55+ / men 60+ from FGŚP, which 2024 and 2025 model by zeroing FGŚP
- *   above 60-by-year. 2026 keeps its landed behaviour of pricing FGŚP
- *   unconditionally — that contradiction is reported, not changed here,
- *   and the flag keeps 2026 byte-identical.
+ *   55+ / men 60+ from FGŚP — the same 55/60 split as FP/FS art. 261, read
+ *   in the 2026 consolidated text itself (Dz.U. 2026 poz. 186), so every
+ *   transcribed year models it by zeroing FGŚP above 60-by-year and
+ *   refusing the 55–60 band by name, exactly like FP/FS.
  *
  * Method (agency-stated, quoted from the statutes transcribed in
  * ./tables-2026.ts):
@@ -152,13 +152,13 @@ export interface PlYearTables {
   readonly minWageSwitch?: string | undefined;
   /**
    * Whether the FGŚP 55/60 age bar (claims-protection art. 9b ust. 2) is
-   * modelled. True for 2024/2025; false for 2026, which keeps its landed
-   * unconditional pricing (reported, not changed — see the module header).
+   * modelled. True for every transcribed year: the 2026 consolidated text
+   * (Dz.U. 2026 poz. 186) carries the same 55/60 split as FP/FS art. 261.
    */
   readonly fgspAgeBar: boolean;
 }
 
-/** 2026 tables, built from the landed 2026 constants — behaviour unchanged. */
+/** 2026 tables, built from ./tables-2026.ts. */
 export const PL_2026_TABLES: PlYearTables = {
   year: 2026,
   module: "engine/src/payroll/pl/tables-2026.ts",
@@ -183,7 +183,7 @@ export const PL_2026_TABLES: PlYearTables = {
   fs: PL_FUNDUSZE_2026.fs.rate,
   fgsp: PL_FUNDUSZE_2026.fgsp.rate,
   minWage: PL_MIN_WAGE_2026.monthly,
-  fgspAgeBar: false,
+  fgspAgeBar: true,
 };
 
 /** 2025 tables, built from ./tables-2025.ts. */

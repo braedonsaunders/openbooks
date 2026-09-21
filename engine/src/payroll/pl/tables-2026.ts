@@ -32,6 +32,12 @@
  *   i służbach zatrudnienia, Dz.U. 2025 poz. 620 — art. 259 ust. 1 (base,
  *   no 30× cap, ≥ minimum wage), art. 260–263 (rate via budget act;
  *   55/60 age bar; PUP-hire and return-from-leave exemptions).
+ * - FGŚP age bar: ustawa z dnia 13 lipca 2006 r. o ochronie roszczeń
+ *   pracowniczych w razie niewypłacalności pracodawcy, tekst jednolity
+ *   Dz.U. 2026 poz. 186 (obwieszczenie Marszałka Sejmu z 13 lutego
+ *   2026 r.) — art. 9b ust. 2 exempts women 55+ / men 60+ from FGŚP,
+ *   the same 55/60 split as FP/FS art. 261, verified verbatim from the
+ *   gazette PDF 2026-09-21. The pack's `fgspAgeBar` flag models it.
  * - Minimum wage 2026: rozporządzenie RM z dnia 11 września 2025 r.,
  *   Dz.U. 2025 poz. 1242 (4 806 zł from 1 January 2026).
  * - ZUS corroboration (baza-wiedzy/skladki-wskazniki-odsetki, read 2026-09-19,
@@ -411,6 +417,19 @@ export const PL_FP_WIEK_QUOTE_2026 =
   + "w przypadku mężczyzn";
 
 /**
+ * Claims-protection act (Dz.U. 2026 poz. 186) art. 9b ust. 2:
+ * "Pracodawca, o którym mowa w art. 9, nie opłaca składek na Fundusz za
+ * pracowników, którzy osiągnęli wiek wynoszący co najmniej 55 lat dla
+ * kobiet i co najmniej 60 lat dla mężczyzn." Verified verbatim from the
+ * gazette PDF (obwieszczenie z 13 lutego 2026 r.). FGŚP follows the same
+ * 55/60 bar as FP/FS art. 261 in 2026 — the pack's `fgspAgeBar` flag
+ * (see ./compute-statutory.ts).
+ */
+export const PL_FGSP_WIEK_QUOTE_2026 =
+  "Pracodawca, o którym mowa w art. 9, nie opłaca składek na Fundusz za pracowników, którzy "
+  + "osiągnęli wiek wynoszący co najmniej 55 lat dla kobiet i co najmniej 60 lat dla mężczyzn";
+
+/**
  * Rozporządzenie RM z dnia 11 września 2025 r. (Dz.U. 2025 poz. 1242),
  * § 1: "Od dnia 1 stycznia 2026 r. ustala się minimalne wynagrodzenie
  * za pracę w wysokości 4806 zł."
@@ -448,6 +467,7 @@ export const PL_TENANT_DECLARED_QUOTE_2026 =
 export const PL_REFUSALS_2026: readonly string[] = [
   "Wypadkowe (employer, 0,40–8,12 % band transcribed above): the rate depends on the payer's PKD risk category or ZUS notification — tenant-declared via the pl_wypadkowe slot, never table-supplied",
   "FP/FS age band 55–60: art. 261 splits the exemption by sex (55 women / 60 men) and no pack channel carries the employee's sex or birth month — the engine applies FP/FS below 55-by-year and zeroes them above 60-by-year, and refuses the band in between",
+  "FGŚP age band 55–60: claims-protection art. 9b ust. 2 (Dz.U. 2026 poz. 186) splits the exemption the same way — the engine zeroes FGŚP above 60-by-year with FP/FS, and refuses the band in between",
   "FP/FS PUP-hire and return-from-leave exemptions (art. 262–263): need a hiring/leave channel no pack carries — the engine prices the standard FP-liable employee",
   "PIT 120 000 zł crossing on uneven pay: art. 32 ust. 2 tests year-to-date income from this payer and no pack channel carries YTD — the engine annualises the month's dochód at monthly periodicity (exact for level pay) and refuses uneven paths",
   "Emerytalne/rentowe 282 600 zł crossing on uneven pay: same — the engine annualises the month's base (exact for level pay) and refuses uneven paths",
