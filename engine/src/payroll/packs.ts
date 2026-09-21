@@ -811,6 +811,20 @@ export interface PayrollCountryPack {
     ctx: PayrollStatutoryComputeContext,
   ) => Promise<Record<string, string>>;
   /**
+   * The pack's annual settlement for one tax year: the year-end
+   * recomputation and its settlement in the final pay
+   * (engine/src/payroll/annual-settlement.ts). OPTIONAL: absent when the
+   * pack settles nothing, in which case the generic layer never calls and
+   * the monthly path is untouched by construction.
+   *
+   * LAZY per-edition closure (like `employerAggregateLevies`): the
+   * algorithm may differ by year, and a year the pack has not transcribed
+   * resolves to null — which runs nothing, never a guessed program.
+   */
+  annualSettlement?: (
+    taxYear: number,
+  ) => import("./annual-settlement.ts").PayrollAnnualSettlement | null;
+  /**
    * The statutory engine's published name, for the stub calculation trace
    * heading (F-t08-012): "T4127" for the CRA pack, "Pub 15-T" for the IRS
    * pack. REQUIRED: the trace heading names the filing regime the numbers
