@@ -1,7 +1,18 @@
 import assert from "node:assert/strict";
+import { inspect } from "node:util";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
+
+/**
+ * A database refusal raised by a trigger arrives wrapped: Drizzle's
+ * `Failed query: ...` is the message, and the trigger's own text -- the thing
+ * worth asserting -- sits on the cause. assert.rejects(fn, /re/) only ever
+ * reads the top message, so it fails precisely when the guard WORKED. Match
+ * against the whole error object instead.
+ */
+const rejectsWith = (pattern: RegExp) => (error: unknown): boolean =>
+  pattern.test(inspect(error, { depth: 6, breakLength: Infinity }));
 import { db, withBypassContext, withOrg, withOrgContext } from "../platform/db.ts";
 import { completeFinancialChange, proposeFinancialChange } from "../platform/financial-changes.ts";
 import { submitFinancialChange } from "../flows/financial-changes-adapter.ts";
@@ -120,13 +131,13 @@ test("approved workpaper citations are exact, durable, and freeze dates without 
   }) ?? "", /applied tax workpaper.*dates are frozen/);
   assert.match(await taxYearWindowDeleteProblem(db, f.org.orgId, first.id) ?? "", /cannot be deleted/);
   await assert.rejects(async () => { await db.execute(sql`
-    update tax_year_windows set filing_year=2025 where org_id=${f.org.orgId} and id=${first.id}`); }, /filing label.*frozen/);
+    update tax_year_windows set filing_year=2025 where org_id=${f.org.orgId} and id=${first.id}`); }, rejectsWith(/filing label.*frozen/));
   await assert.rejects(async () => { await db.execute(sql`
-    delete from tax_year_windows where org_id=${f.org.orgId} and id=${first.id}`); }, /cannot be deleted/);
+    delete from tax_year_windows where org_id=${f.org.orgId} and id=${first.id}`); }, rejectsWith(/cannot be deleted/));
   await assert.rejects(async () => { await db.execute(sql`
-    update tax_basis_window_citations set filing_year=2025 where org_id=${f.org.orgId} and workpaper_id=${paperId}`); }, /cannot be rewritten/);
+    update tax_basis_window_citations set filing_year=2025 where org_id=${f.org.orgId} and workpaper_id=${paperId}`); }, rejectsWith(/cannot be rewritten/));
   await assert.rejects(async () => { await db.execute(sql`
-    delete from tax_basis_window_citations where org_id=${f.org.orgId} and workpaper_id=${paperId}`); }, /cannot be deleted/);
+    delete from tax_basis_window_citations where org_id=${f.org.orgId} and workpaper_id=${paperId}`); }, rejectsWith(/cannot be deleted/));
   await withOrgContext(randomUUID(), async () => {
     assert.equal((await db.execute(sql`select id from tax_basis_window_citations where workpaper_id=${paperId}`)).rows.length, 0);
   });
@@ -138,7 +149,7 @@ test("omitted or partial citation sets abort the entire applying transaction at 
       const id = await insertPaper(f);
       if (partial) await rawCitation(f, id, f.evidence[0]!);
       await completeFinancialChange(db, f.org.orgId, f.changeId, f.actorId, { workpaperId: id });
-    }), /missing its approved tax-year citations/);
+    }), rejectsWith(/missing its approved tax-year citations/));
     assert.equal((await db.execute(sql`
       select id from tax_asset_basis_workpapers where org_id=${f.org.orgId} and change_id=${f.changeId}`)).rows.length, 0);
     assert.equal((await db.execute<{ status: string }>(sql`
@@ -150,17 +161,17 @@ test("a citation cannot substitute live dates or a different approved read set",
   await assert.rejects(withOrg(f.org.orgId, async () => {
     const id = await insertPaper(f);
     await rawCitation(f, id, { ...f.evidence[0]!, yearEnd: "2026-06-29" });
-  }), /does not match the registered identity and dates/);
+  }), rejectsWith(/does not match the registered identity and dates/));
   await assert.rejects(withOrg(f.org.orgId, async () => {
     const id = await insertPaper(f);
     await citeTaxYearWindows(db, f.org.orgId, id, [f.evidence[0]!]);
-  }), /do not match the independently approved workpaper/);
+  }), rejectsWith(/do not match the independently approved workpaper/));
   await assert.rejects(withOrg(f.org.orgId, async () => {
     const id = await insertPaper(f);
     await db.execute(sql`update tax_year_windows set year_end='2026-06-29'
       where org_id=${f.org.orgId} and id=${f.evidence[0]!.id}`);
     await citeTaxYearWindows(db, f.org.orgId, id, f.evidence);
-  }), /changed after workpaper approval/);
+  }), rejectsWith(/changed after workpaper approval/));
 }));
 
 test("setup publication takes the same legal-entity fence as workpaper application", { skip: !DB }, () => fixture(async (f) => {
