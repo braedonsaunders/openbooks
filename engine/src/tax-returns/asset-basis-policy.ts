@@ -1271,6 +1271,21 @@ export function validateDeclaredDecimal(name: string, value: unknown): string {
 
 const DRAFT_CONTEXT_KEYS = new Set(["sourceOperation", "applicable", "usSellerMacrsStatus"]);
 
+/** Server-derived US facts. Never declared on a workpaper request; validate
+ *  always drops an incoming copy and reconstructs from history. */
+export const US_MACRS_DERIVED_FACT_KEYS = ["buyerVintages"] as const;
+
+export function declaredTaxRegimeFacts<T extends TaxRegimeBasis>(row: T): T {
+  if (row.regime !== "us_macrs") return row;
+  const { buyerVintages: _buyerVintages, ...declared } = row as UsMacrsRegimeBasis;
+  return declared as T;
+}
+
+function stripDerivedUsMacrsFacts(draft: TaxBasisDraft): TaxBasisDraft {
+  const { buyerVintages: _buyerVintages, ...declared } = draft;
+  return declared;
+}
+
 /** Calendar date without importing platform (that module pulls the database). */
 export function isTaxBasisCalendarDate(value: unknown): value is string {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -1482,7 +1497,7 @@ export function validateTaxRegimeBasis(
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new TaxBasisPolicyError("each regime workpaper must be an object");
   }
-  const raw = input as TaxBasisDraft;
+  const raw = stripDerivedUsMacrsFacts(input as TaxBasisDraft);
   if (!TAX_BASIS_REGIMES.includes(raw.regime as TaxBasisRegime)) {
     throw new TaxBasisPolicyError(`unknown tax depreciation regime "${String(raw.regime ?? "")}"`);
   }

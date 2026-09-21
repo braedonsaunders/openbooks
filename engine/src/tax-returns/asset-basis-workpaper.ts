@@ -26,6 +26,7 @@ import {
   caBuyerAddition,
   caDispositionAmount,
   caStatutoryProceeds,
+  declaredTaxRegimeFacts,
   freezeCaRegimeBasis,
   nzAssociatedPersonEquivalentRate,
   nzBuyerDepreciationCost,
@@ -144,7 +145,7 @@ function workpaperPayload(
     requiredSubsidiaryIds: derived.requiredSubsidiaryIds,
     applicable: derived.applicable,
     assessment: validated.assessment,
-    regimes: frozen.map((row) => row.facts),
+    regimes: frozen.map((row) => declaredTaxRegimeFacts(row.facts)),
     computed: Object.fromEntries(frozen.map((row) => [row.facts.regime, row.computed])),
   };
 }
@@ -737,8 +738,9 @@ async function snapshot(
   if (usSellerMacrs?.status === "history_refused") {
     throw new TaxAssetBasisError(usSellerMacrs.refusal);
   }
+  let validated: TaxAssetBasisInput;
   try {
-    validateTaxAssetBasisInput(input, {
+    validated = validateTaxAssetBasisInput(input, {
       sourceOperation: source.sourceOperation,
       applicableByRegime: applicable,
       usSellerMacrs,
@@ -750,7 +752,7 @@ async function snapshot(
   const frozen = await freezeRegimes(
     tx,
     orgId,
-    input.regimes,
+    validated.regimes,
     source.sourceOperation,
     source.effectiveOn,
     applicable,
@@ -766,6 +768,7 @@ async function snapshot(
     sourceOperation: source.sourceOperation,
     effectiveOn: source.effectiveOn,
     applicable,
+    validatedRegimes: validated.regimes,
     existingWorkpaperChangeId: existing?.change_id ?? null,
     preview: {
       effectiveOn: source.effectiveOn,
@@ -1183,7 +1186,7 @@ export async function applyTaxAssetBasis(
       const frozen = await freezeRegimes(
         db,
         orgId,
-        payload.regimes,
+        state.validatedRegimes,
         state.sourceOperation,
         state.effectiveOn,
         state.applicable,
