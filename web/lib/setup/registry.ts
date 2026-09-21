@@ -278,7 +278,7 @@ export function setupEntityForFeatureState(
     return { ...control, options: control.options.filter((option) => option.value !== 'equipment_charge') }
   }
   const visible = (control: SetupField | SetupColumn) =>
-    (features.multiSubsidiary || !isSubsidiaryControl(control))
+    (features.multiSubsidiary || entity.key === 'tax-year-windows' || !isSubsidiaryControl(control))
     && (equipmentOn || !isEquipmentControl(control))
     && (fieldTicketsOn || !isFieldTicketControl(control))
   return {
@@ -2225,6 +2225,37 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     ],
   },
   {
+    // Legal tax-year declarations use the shared Setup list/drawer. A filing
+    // year is a label, so multiple short windows may carry the same label.
+    key: 'tax-year-windows',
+    rehomed: true,
+    table: 'tax_year_windows',
+    singularTitleKey: 'entities.tax-year-windows.singularTitle',
+    actorCols: true,
+    groupKey: 'assets',
+    featureKey: 'fixedAssets',
+    iconKey: 'landmark',
+    orgScoped: true,
+    orderBy: 'regime, year_start desc',
+    hasActive: false,
+    docSlug: 'setup-assets-group',
+    columns: [
+      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries' },
+      { key: 'regime', kind: 'text' },
+      { key: 'yearStart', kind: 'date' },
+      { key: 'yearEnd', kind: 'date' },
+      { key: 'filingYear', kind: 'number' },
+    ],
+    fields: [
+      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries', required: true, lockedOnEdit: true },
+      { key: 'regime', kind: 'text', required: true, lockedOnEdit: true },
+      { key: 'yearStart', kind: 'date', required: true, lockedOnEdit: true },
+      { key: 'yearEnd', kind: 'date', required: true },
+      { key: 'filingYear', kind: 'integer', required: true, min: 1900, max: 9999 },
+      { key: 'reason', kind: 'textarea', required: true },
+    ],
+  },
+  {
     key: 'tax-qualifying-activity-cessations',
     rehomed: true,
     table: 'tax_qualifying_activity_cessations',
@@ -2561,5 +2592,3 @@ export function setupEntitiesByGroup(): Map<string, SetupEntity[]> {
 export function toSnake(key: string): string {
   return key.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)
 }
-
-

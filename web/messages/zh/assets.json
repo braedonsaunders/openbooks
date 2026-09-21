@@ -45,7 +45,15 @@
       "closing": "期末余额",
       "recapture": "回收",
       "terminalLoss": "终止损失"
-    }
+    },
+    "legalEntity": "法律实体",
+    "window": "已登记的纳税年度",
+    "chooseWindow": "选择纳税年度期间",
+    "noWindows": "此法律实体和税制尚未登记纳税年度期间。",
+    "configureYears": "设置纳税年度",
+    "windowLabel": "{filingYear}：{start} – {end}",
+    "loadingWindows": "正在加载纳税年度…",
+    "loadWindowsFailed": "无法加载纳税年度。"
   },
   "list": {
     "title": "固定资产",

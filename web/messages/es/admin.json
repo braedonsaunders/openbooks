@@ -1417,7 +1417,8 @@
         "firstYear": "Reglas del primer año",
         "cessation": "Actividad calificadora",
         "methods": "Métodos",
-        "books": "Políticas por libro"
+        "books": "Políticas por libro",
+        "years": "Ejercicios fiscales"
       },
       "packsTitle": "Paquetes de depreciación por país",
       "packsDescription": "Instalar un paquete crea una configuración editable del inquilino. Las anulaciones existentes nunca se reemplazan.",
@@ -1459,6 +1460,10 @@
         "assignments": {
           "title": "Asignaciones por categoría de activos",
           "description": "Asigne cada categoría de activos a una clase de régimen en los atributos fiscales."
+        },
+        "years": {
+          "title": "Ejercicios fiscales",
+          "description": "Declare las fechas y el motivo de cada ejercicio por entidad jurídica y régimen."
         }
       }
     },
@@ -2367,6 +2372,11 @@
       "extension-settings": {
         "title": "Configuración de aplicaciones",
         "description": "Configure los ajustes declarados por las aplicaciones instaladas. Los cambios conservan los valores anteriores y sus fechas de vigencia."
+      },
+      "tax-year-windows": {
+        "title": "Ejercicios fiscales",
+        "singularTitle": "Ejercicio fiscal",
+        "description": "Declare las fechas de cada ejercicio por entidad jurídica y régimen, incluidos los ejercicios cortos. Indique el motivo; las fechas utilizadas en un cálculo se conservan."
       }
     },
     "fields": {
@@ -2633,7 +2643,10 @@
       "dateBasis": "Base de fecha",
       "unitsTotal": "Unidades totales",
       "network": "Red",
-      "lastFour": "Últimos cuatro"
+      "lastFour": "Últimos cuatro",
+      "yearStart": "Inicio del ejercicio",
+      "yearEnd": "Fin del ejercicio",
+      "filingYear": "Etiqueta del año de declaración"
     },
     "fieldHelp": {
       "gapless": "Sin huecos significa que cada número de la secuencia debe quedar contabilizado, sin números omitidos. Actívelo solo cuando los requisitos legales o de auditoría exijan una numeración ininterrumpida.",

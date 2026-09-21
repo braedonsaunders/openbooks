@@ -1462,7 +1462,8 @@
         "firstYear": "Regras do primeiro ano",
         "cessation": "Atividade qualificante",
         "methods": "Métodos",
-        "books": "Políticas por livro"
+        "books": "Políticas por livro",
+        "years": "Exercícios fiscais"
       },
       "packsTitle": "Pacotes de depreciação por país",
       "packsDescription": "A instalação de um pacote cria uma configuração editável do tenant. As substituições existentes nunca são substituídas.",
@@ -1504,6 +1505,10 @@
         "assignments": {
           "title": "Atribuições por categoria de ativo",
           "description": "Atribua cada categoria de ativo a uma classe de regime nos atributos fiscais."
+        },
+        "years": {
+          "title": "Exercícios fiscais",
+          "description": "Declare as datas e o motivo de cada exercício por entidade jurídica e regime."
         }
       }
     },
@@ -2412,6 +2417,11 @@
       "extension-settings": {
         "title": "Configurações de aplicativos",
         "description": "Configure definições declaradas pelos apps instalados. Alterações preservam valores anteriores e suas vigências."
+      },
+      "tax-year-windows": {
+        "title": "Exercícios fiscais",
+        "singularTitle": "Exercício fiscal",
+        "description": "Declare as datas de cada exercício por entidade jurídica e regime, incluindo períodos reduzidos. Informe o motivo; as datas já usadas em um cálculo são preservadas."
       }
     },
     "fields": {
@@ -2678,7 +2688,10 @@
       "dateBasis": "Base de data",
       "unitsTotal": "Unidades totais",
       "network": "Bandeira",
-      "lastFour": "Últimos quatro"
+      "lastFour": "Últimos quatro",
+      "yearStart": "Início do exercício",
+      "yearEnd": "Fim do exercício",
+      "filingYear": "Rótulo do ano da declaração"
     },
     "fieldHelp": {
       "gapless": "Sem lacunas significa que todos os números da sequência devem ser contabilizados, sem números pulados. Ative somente quando exigências legais ou de auditoria determinarem uma numeração ininterrupta.",
