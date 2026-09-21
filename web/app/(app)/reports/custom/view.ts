@@ -24,7 +24,9 @@ import {
 import { type ReportCustomQuery } from '@openbooks/reports'
 import { requirePermission } from '../../../../lib/authz'
 import { hiddenReportEntityKeys, hiddenReportStatementKinds } from '../../../../lib/report-authz'
+import { isFeatureEnabled } from '../../../../lib/features'
 import { parseListParams, pickString } from '../../../../lib/list-params'
+import type { NlAskLabels } from './NlAskPanel'
 
 /**
  * The report catalog, split into a loader and a spec. No new vocabulary.
@@ -82,6 +84,8 @@ export interface CustomReportsData {
   sort: string
   dir: string
   canCreate: boolean
+  /** HR-21 Ask box labels: null while hrmNlReports is off hides the panel. */
+  nlAsk: NlAskLabels | null
 }
 
 export async function loadCustomReports(
@@ -222,6 +226,28 @@ export async function loadCustomReports(
     sort: params.sort,
     dir: params.dir,
     canCreate,
+    nlAsk: (await isFeatureEnabled(authz.user.orgId, 'hrmNlReports'))
+      ? {
+          title: t('nl.title'),
+          description: t('nl.description'),
+          placeholder: t('nl.placeholder'),
+          ask: t('nl.ask'),
+          draftsTitle: t('nl.draftsTitle'),
+          empty: t('nl.empty'),
+          question: t('nl.question'),
+          entity: t('nl.entity'),
+          status: t('nl.status'),
+          created: t('nl.created'),
+          saveAsView: t('nl.saveAsView'),
+          discard: t('nl.discard'),
+          failed: t('nl.failed'),
+          statuses: {
+            drafted: t('nl.statuses.drafted'),
+            saved: t('nl.statuses.saved'),
+            discarded: t('nl.statuses.discarded'),
+          },
+        }
+      : null,
   }
 }
 
@@ -251,6 +277,9 @@ export function customReportsSpec(data: CustomReportsData): PageSpec {
       ]),
     ],
     body: [
+      // HR-21 Ask box: the island renders nothing while hrmNlReports is
+      // off (nlAsk null), so no `when` gate is needed.
+      widgetBlock('reports-nl-ask', { ask: data.nlAsk, canCreate: data.canCreate }),
       {
         ...widgetBlock('empty-state', {
           title: data.emptyTitle,

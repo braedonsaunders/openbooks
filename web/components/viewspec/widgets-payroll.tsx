@@ -14,6 +14,9 @@ import { Sparkles } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 import { PayrollChecklistBanner, PayrollPreviousRun, PayrollManageLinks, PayrollScheduleList, type PayrollPreviousRunProps, type PayrollScheduleListProps } from '../../app/(app)/payroll/sections'
 import { NewRunButton } from '../../app/(app)/payroll/_ui/NewRunButton'
+// HR-21 begin: anomaly checks islands (verbatim adapters only).
+import { AnomalyDrawer, AnomalyScanButton } from '../../app/(app)/payroll/anomalies/islands'
+// HR-21 end
 import { ArrowUpRight } from 'lucide-react'
 import { BookOpen } from 'lucide-react'
 import { Button } from '@openbooks/ui'
@@ -289,4 +292,22 @@ export const PAYROLL_WIDGETS = {
       <ArrowUpRight size={15} />
     </Link>
   ),
+  /* --- payroll anomaly checks (HR-21) ------------------------------------------------ */
+  /** Scan trigger for the current filter period; the loader gates it on
+   *  payroll.manage and the spec omits it otherwise. */
+  'payroll-anomaly-scan': (props) => (
+    <AnomalyScanButton
+      currentParams={(props.currentParams as Record<string, string>) ?? {}}
+      scanLabel={str(props, 'scanLabel') ?? ''}
+      scanBusyLabel={str(props, 'scanBusyLabel') ?? ''}
+      scanFailedLabel={str(props, 'scanFailedLabel') ?? ''}
+    />
+  ),
+  /** Flag drawer: loader-resolved explanation, numbers and transition
+   *  form — the drawer renders nothing without a flag. */
+  'payroll-anomaly-drawer': (props) => {
+    const flag = props.flag as ComponentProps<typeof AnomalyDrawer>['flag'] | null;
+    if (!flag) return null;
+    return <AnomalyDrawer flag={flag} closeHref={str(props, 'closeHref') ?? '/payroll/anomalies'} />;
+  },
 } satisfies Record<string, WidgetRenderer>

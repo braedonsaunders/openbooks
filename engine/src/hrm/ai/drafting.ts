@@ -253,18 +253,33 @@ async function collectReview(
 }
 
 async function collectOnboardingPlan(
-  exec: SqlExecutor, orgId: string, actorId: string, templateId: string,
+  exec: SqlExecutor, orgId: string, actorId: string, subjectId: string,
 ): Promise<DraftSource[]> {
   await requirePerm(exec, orgId, actorId, "hrm.process.read",
     "ask an HR administrator to draft this onboarding plan");
-  const template = (await exec.execute<Record<string, unknown>>(sql`
+  // The subject is a template, or a process whose template resolves it.
+  let templateId = subjectId;
+  const direct = (await exec.execute<Record<string, unknown>>(sql`
     select id::text as id, kind, name
       from hrm_process_templates
-     where org_id = ${orgId}::uuid and id = ${templateId}::uuid and is_active`)).rows[0];
+     where org_id = ${orgId}::uuid and id = ${subjectId}::uuid and is_active`)).rows[0];
+  let template = direct ?? null;
+  if (!template) {
+    const viaProcess = (await exec.execute<{ templateId: string }>(sql`
+      select template_id::text as "templateId" from hrm_processes
+       where org_id = ${orgId}::uuid and id = ${subjectId}::uuid`)).rows[0];
+    if (viaProcess) {
+      templateId = viaProcess.templateId;
+      template = (await exec.execute<Record<string, unknown>>(sql`
+        select id::text as id, kind, name
+          from hrm_process_templates
+         where org_id = ${orgId}::uuid and id = ${templateId}::uuid and is_active`)).rows[0] ?? null;
+    }
+  }
   if (!template) {
     throw new AiRailsError(
       "ai_subject_missing",
-      `process template ${templateId} matched no active row — it is missing, inactive or outside this organization; pick the template from the onboarding form`,
+      `onboarding subject ${subjectId} matched no active template or process — it is missing, inactive or outside this organization; pick the template from the onboarding form`,
     );
   }
   const sources: DraftSource[] = [{

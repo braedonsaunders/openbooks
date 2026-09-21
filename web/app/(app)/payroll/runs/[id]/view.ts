@@ -30,6 +30,7 @@ import { factorLabelForPack, PAYROLL_COUNTRY_PACKS } from '@openbooks/engine/src
 import { buildRegisterBuckets, type RegisterBucket } from '../../../../../lib/payroll-register-buckets.ts'
 import { can, requirePermission } from '../../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
+import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
 import { groupTabs } from '../../../../../components/module-home/group-tabs'
 import type {
@@ -115,6 +116,10 @@ export interface PayRunWizardData {
   refusalAcknowledgement: PayRunRefusalAcknowledgement | null
   /** Whether the recorded acknowledgement binds to the current refusal set. */
   refusalsAcknowledged: boolean
+  /** HR-21: open block-severity anomaly flags overlapping this run's
+   *  period. Zero while hrmPayrollAnomalies is off; the commit route
+   *  refuses while this is nonzero. */
+  anomalyBlocks: number
 }
 
 export async function loadPayRunWizard(
@@ -403,6 +408,19 @@ export async function loadPayRunWizard(
     // a restricted caller cannot select an account the funding panel omitted.
     const bankAccounts = funding.accounts.map(({ id, label }) => ({ id, label }))
 
+    // HR-21: the review step shows the blocking count with a link to the
+    // checks queue, and the commit button stays off while it is nonzero.
+    // The flags table is read here (count only); the route gate re-checks
+    // on commit, so a flag raised after this render still refuses.
+    let anomalyBlocks = 0
+    if (await isFeatureEnabled(orgId, 'hrmPayrollAnomalies')) {
+      const blocks = await db.execute<{ n: string }>(sql`
+        select count(*)::text as n from payroll_anomaly_flags
+         where org_id = ${orgId} and severity = 'block' and status in ('open', 'acknowledged')
+           and pay_period_from <= ${run.period_end}::date and pay_period_to >= ${run.period_start}::date`)
+      anomalyBlocks = Number(blocks.rows[0]?.n ?? 0)
+    }
+
     const moduleTabs = await groupTabs('payroll', '/payroll/runs', { orgId })
 
     return {
@@ -437,6 +455,7 @@ export async function loadPayRunWizard(
       calculationErrors,
       refusalAcknowledgement,
       refusalsAcknowledged,
+      anomalyBlocks,
     }
   })
 }
@@ -485,6 +504,7 @@ export function payRunWizardSpec(data: PayRunWizardData): PageSpec {
         calculationErrors: data.calculationErrors,
         refusalAcknowledgement: data.refusalAcknowledgement,
         refusalsAcknowledged: data.refusalsAcknowledged,
+        anomalyBlocks: data.anomalyBlocks,
       }),
     ],
   })

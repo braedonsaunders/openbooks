@@ -292,3 +292,60 @@ export async function saveNlDraft(
 export async function draftNlReport(query: NlDraftInput): Promise<{ draftId: string; definition: NlValidatedDefinition }> {
   return withOrgTransaction(query.orgId, () => saveNlDraft(db, query));
 }
+
+export interface NlDraftRow {
+  id: string;
+  question: string;
+  definition: NlValidatedDefinition;
+  status: string;
+  createdAt: string;
+}
+
+/** The caller's own drafts, newest first — the Ask panel's save-as-view list. */
+export async function listNlDrafts(
+  exec: SqlExecutor,
+  input: { readonly orgId: string; readonly actorId: string },
+): Promise<NlDraftRow[]> {
+  await assertNlFeature(exec, input.orgId);
+  const rows = (await exec.execute<{ id: string; question: string; definition: NlValidatedDefinition; status: string; createdAt: string }>(sql`
+    select id::text as id, question, definition, status,
+           created_at::text as "createdAt"
+      from nl_report_drafts
+     where org_id = ${input.orgId}::uuid and user_id = ${input.actorId}::uuid
+     order by created_at desc, id desc
+     limit 20`)).rows;
+  return rows.map((row) => ({
+    id: row.id,
+    question: row.question,
+    definition: row.definition,
+    status: row.status,
+    createdAt: row.createdAt,
+  }));
+}
+
+/**
+ * Move an own draft to saved (after save-as-view) or discarded. The update
+ * matches the row or fails: a missing, foreign, or already-transitioned
+ * draft refuses by name instead of reporting success for zero rows.
+ */
+export async function transitionNlDraft(
+  exec: SqlExecutor,
+  input: { readonly orgId: string; readonly actorId: string; readonly draftId: string; readonly status: "saved" | "discarded" },
+): Promise<NlDraftRow> {
+  await assertNlFeature(exec, input.orgId);
+  const rows = (await exec.execute<{ id: string; question: string; definition: NlValidatedDefinition; status: string; createdAt: string }>(sql`
+    update nl_report_drafts
+       set status = ${input.status}
+     where org_id = ${input.orgId}::uuid and user_id = ${input.actorId}::uuid
+       and id = ${input.draftId}::uuid and status = 'drafted'
+    returning id::text as id, question, definition, status,
+              created_at::text as "createdAt"`)).rows;
+  const row = rows[0];
+  if (!row) {
+    throw new AiRailsError(
+      "ai_draft_missing",
+      `report draft ${input.draftId} is not an open draft of yours — it is missing, already saved or discarded, or belongs to someone else`,
+    );
+  }
+  return { id: row.id, question: row.question, definition: row.definition, status: row.status, createdAt: row.createdAt };
+}

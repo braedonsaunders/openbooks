@@ -2250,7 +2250,16 @@ const nlReport: AssistantToolDef = {
         return { ok: false, error: "forbidden" };
       }
       const { executeReport } = await import("../custom-reports");
-      const preview = await executeReport(authz.user.orgId, definition, 5);
+      const preview = await executeReport(authz.user.orgId, {
+        entity: definition.entity,
+        mode: definition.mode,
+        columns: definition.columns,
+        breakouts: definition.breakouts,
+        measures: definition.measures,
+        filters: definition.filters as { combinator: "and" | "or"; rules: never[] } | null,
+        sorts: definition.sorts,
+        limit: definition.limit,
+      }, 5);
       const rows = preview.groups.flatMap((g) => g.rows.slice(0, 5)).slice(0, 5);
       if (a.action === "preview") {
         const { logDecision } = await import("@openbooks/engine/src/hrm/ai/governance.ts");

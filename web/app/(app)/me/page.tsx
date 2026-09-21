@@ -18,6 +18,7 @@ export default async function MePage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
-  const data = await loadMePage()
-  return <ModuleView spec={meSpec(data)} data={data} searchParams={(await searchParams) as Record<string, string | string[] | undefined>} trusted />
+  const sp = await searchParams
+  const data = await loadMePage(sp)
+  return <ModuleView spec={meSpec(data)} data={data} searchParams={sp as Record<string, string | string[] | undefined>} trusted />
 }

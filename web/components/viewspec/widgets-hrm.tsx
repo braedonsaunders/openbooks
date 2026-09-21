@@ -24,6 +24,10 @@ import { EnrollmentRowActions } from '../../app/(app)/hrm/benefits/EnrollmentRow
 import { WindowDialog } from '../../app/(app)/hrm/benefits/WindowDialog'
 import { WindowDrawer } from '../../app/(app)/hrm/benefits/WindowDrawer'
 import { HrmFacts } from '../../app/(app)/me/sections'
+// HR-21 begin: the Explain drawer (verbatim adapter only).
+import { ExplainDrawer } from '../../app/(app)/me/sections'
+import { AiDraftDrawer } from '../../app/(app)/hrm/ai/AiDraftDrawer'
+// HR-21 end
 import { BenefitChangeDialog, BenefitElectDialog, GoalProgressDialog, ProfileDialog, ReviewAcknowledgeButton, StepCompleteButton } from '../../app/(app)/me/islands'
 import { ProcessDrawer } from '../../app/(app)/hrm/processes/sections'
 import { LeaveCalendar } from '../../app/(app)/hrm/leave/LeaveCalendar'
@@ -216,6 +220,20 @@ export const HRM_WIDGETS = {
       empty={str(props, 'empty')}
     />
   ),
+  /** The Explain drawer (?explain=<stubId>): the deterministic payslip
+   *  trace as a table with diff chips. Renders nothing without one. */
+  'hrm-explain-drawer': (props) => {
+    const explain = (props.explain as ComponentProps<typeof ExplainDrawer>['explain']) ?? null;
+    if (!explain) return null;
+    return <ExplainDrawer explain={explain} />;
+  },
+  /** The evidence-draft drawer (?draft=<kind>:<id>): draft text, cited
+   *  sources, bias flags, Insert/Discard. Renders nothing without one. */
+  'hrm-ai-draft-drawer': (props) => {
+    const draft = props.draft as ComponentProps<typeof AiDraftDrawer> | null;
+    if (!draft?.draftParam) return null;
+    return <AiDraftDrawer {...draft} />;
+  },
   /** One checklist step's complete action inside the shared table: posts
    *  to the existing step endpoint and refreshes on success, rendering
    *  the service refusal inline. The only row-action island the Me

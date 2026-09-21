@@ -7,6 +7,7 @@ import {
   column,
   grid,
   field as item,
+  link,
   page,
   pageHeader,
   panel,
@@ -156,7 +157,7 @@ export function meSpec(data: MeOverviewData): PageSpec {
               }),
             ],
           }),
-          // HR-14 begin: the viewer's own certifications needing action —
+// HR-14 begin: the viewer's own certifications needing action —
           // same shared table block as every other overview panel.
           panel({
             title: f('qualificationsTitle'),
@@ -183,6 +184,49 @@ export function meSpec(data: MeOverviewData): PageSpec {
             ],
           }),
           // HR-14 end
+// HR-21 begin: own payslips with the Explain drawer. The trace
+          // table and diff chips render from the deterministic service —
+          // no LLM is needed for the drawer; assistant phrasing is optional.
+          // Shown while payroll is on; the empty state covers stub-less staff.
+          {
+            ...panel({
+            title: f('payTitle'),
+            iconKey: 'wallet',
+            bodyClassName: 'min-h-0 overflow-y-auto p-0',
+            blocks: [
+              table({
+                variant: 'app',
+                rows: f('payStubs'),
+                rowKey: item('id'),
+                columns: [
+                  column(
+                    f('payColumns.payDate'),
+                    text(item('payDate'), { className: 'tabular-nums' }),
+                  ),
+                  column(f('payColumns.gross'), text(item('gross')), {
+                    align: 'right',
+                    className: 'tabular-nums',
+                  }),
+                  column(f('payColumns.netPay'), text(item('netPay')), {
+                    align: 'right',
+                    className: 'tabular-nums',
+                  }),
+                  column('', link(item('explainLabel'), item('explainHref'))),
+                ],
+                empty: { title: f('payEmpty') },
+              }),
+              widgetBlock(
+                'hrm-explain-drawer',
+                {
+                  explain: data.payExplain,
+                },
+                f('payExplain'),
+              ),
+            ],
+            }),
+            when: f('hasPay'),
+          },
+          // HR-21 end
           widgetBlock(
             'directory-section',
             {
@@ -198,12 +242,15 @@ export function meSpec(data: MeOverviewData): PageSpec {
   })
 }
 
-export async function loadMePage(): Promise<MeOverviewData> {
+export async function loadMePage(sp?: Record<string, string | undefined>): Promise<MeOverviewData> {
   // The page gate lives here — where the route-gate scanner reads — and the
   // loader enforces nothing twice: it takes the authorized session as input.
   const authz = await requirePermission('hrm.self.read')
   if (!(await isFeatureEnabled(authz.user.orgId, 'hrm'))) notFound()
-  return loadMeOverview(authz)
+  const overview = await loadMeOverview(authz)
+  // HR-21: own payslips with the Explain drawer (?explain=<stubId>).
+  const { loadMePaySection } = await import('../../../lib/hrm/ai-rails')
+  return { ...overview, ...await loadMePaySection(authz, sp?.explain) }
 }
 
 export async function meTitle(): Promise<string> {

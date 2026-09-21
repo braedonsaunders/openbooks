@@ -29,6 +29,7 @@ import { hrmGroupTabs } from '../../../../components/module-home/group-tabs'
 import { can, requirePermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { SETUP_ENTITY_BY_KEY } from '../../../../lib/setup/registry'
+import { loadAiDraftButton, loadAiDraftDrawer, type AiDraftDrawerData } from '../../../../lib/hrm/ai-rails'
 import { rootSubsidiaryId, subsidiaryUiOptions } from '../../../../lib/subsidiaries'
 import type { RecruitingCreateProps } from './RecruitingCreateForm'
 import type { CandidateDrawerData, OfferDrawerData, RequisitionDrawerData } from './sections'
@@ -121,6 +122,8 @@ export interface RecruitingPageData {
   /** Registry keys of the Setup sections rehomed under this tab (feature-gated). */
   setupSections: string[]
   drawerOpen: boolean
+  draftDrawer: AiDraftDrawerData | null
+  draftDrawerOpen: boolean
   drawer: {
     closeHref: string
     title: string
@@ -285,6 +288,11 @@ export function recruitingSpec(data: RecruitingPageData): PageSpec {
         ...widgetBlock('hrm-recruiting-drawer', { drawer: data.drawer }),
         when: f('drawerOpen'),
       },
+      // HR-21: the shared evidence-draft drawer (?draft=<kind>:<id>).
+      {
+        ...widgetBlock('hrm-ai-draft-drawer', { draft: data.draftDrawer }),
+        when: f('draftDrawerOpen'),
+      },
     ],
   })
 }
@@ -362,6 +370,9 @@ export async function loadRecruitingPage(
   let candidate: CandidateDrawerData | null = null
   let offer: OfferDrawerData | null = null
   let missingDetail: string | null = null
+  // HR-21: one shared "Draft from evidence" label for both draft hosts;
+  // null while hrmDrafting is off hides both buttons.
+  const draftLabel = await loadAiDraftButton(authz.user.orgId)
   if (requisitionId) {
     try {
       const detail = await getRequisitionDetail({ orgId: authz.user.orgId, actorId: authz.user.id, requisitionId })
@@ -378,6 +389,9 @@ export async function loadRecruitingPage(
       requisition = {
         ...detail,
         closeHref: hrefFor(status, null),
+        draft: draftLabel
+          ? { href: `${hrefFor(status, { requisition: requisitionId })}&draft=job_description:${requisitionId}`, label: draftLabel }
+          : null,
         stageLabels: Object.fromEntries(detail.stages.map((stage) => [stage.id, stage.name])),
         statusLabels: Object.fromEntries(STATUSES.map((value) => [value, statusLabel(value)])),
         labels: {
@@ -436,6 +450,7 @@ export async function loadRecruitingPage(
           offerWithdraw: t('recruiting.offerActions.withdraw'),
           offerReason: t('recruiting.offerActions.reason'),
           offerActionFailed: t('recruiting.offerActions.failed'),
+          description: t('recruiting.drawer.description'),
         },
         employeeOptions: employeeRows.map((option) => ({ value: option.id, label: option.name })),
           kindOptions: ['phone', 'video', 'onsite', 'panel', 'assessment'].map((value) => ({
@@ -486,6 +501,9 @@ export async function loadRecruitingPage(
       offer = {
         ...detail,
         closeHref: hrefFor(status, null),
+        draft: draftLabel
+          ? { href: `${hrefFor(status, { offer: offerId })}&draft=offer_letter_clauses:${offerId}`, label: draftLabel }
+          : null,
         labels: {
           send: t('recruiting.offerActions.send'),
           accept: t('recruiting.offerActions.accept'),
@@ -631,6 +649,20 @@ export async function loadRecruitingPage(
     pool !== null ||
     missingDetail !== null ||
     create !== null
+  // HR-21: the shared evidence-draft drawer. No host field is editable
+  // here, so Insert copies to the clipboard (the drawer's own fallback).
+  const drawerBase = requisitionId
+    ? hrefFor(status, { requisition: requisitionId })
+    : candidateId
+      ? hrefFor(status, { candidate: candidateId })
+      : offerId
+        ? hrefFor(status, { offer: offerId })
+        : hrefFor(status, null)
+  const draftDrawer = await loadAiDraftDrawer({
+    draftParam: typeof sp.draft === 'string' ? sp.draft : null,
+    closeHref: drawerBase,
+    fieldId: '',
+  })
   return {
     title: t('recruiting.title'),
     description: t('recruiting.description'),
@@ -665,6 +697,8 @@ export async function loadRecruitingPage(
     totalLabel: t('recruiting.total'),
     totals: { headcount: String(headcountTotal), filled: String(filledTotal) },
     drawerOpen,
+    draftDrawer,
+    draftDrawerOpen: draftDrawer !== null,
     drawer: drawerOpen
       ? {
           closeHref: hrefFor(status, null),
