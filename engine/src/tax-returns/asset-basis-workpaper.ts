@@ -589,13 +589,14 @@ async function listSellerSourceOrder(
   tx: SqlExecutor,
   orgId: string,
   sellerAssetId: string,
-): Promise<string[]> {
+): Promise<{ key: string; occurredOn: string }[]> {
   const rows = (
     await tx.execute<{
       event_id: string;
       financial_change_id: string | null;
+      occurred_on: string;
     }>(sql`
-      select e.id as event_id, e.financial_change_id
+      select e.id as event_id, e.financial_change_id, e.occurred_on::text
         from asset_events e
         left join asset_transfer_bases t on t.org_id=e.org_id and t.change_id=e.financial_change_id
           and t.reversed_by_change_id is null
@@ -607,35 +608,33 @@ async function listSellerSourceOrder(
        order by e.occurred_on, e.created_at, e.id`)
   ).rows;
   const seen = new Set<string>();
-  const keys: string[] = [];
+  const sources: { key: string; occurredOn: string }[] = [];
   for (const row of rows) {
     const key = taxBasisSourceKey(row.financial_change_id, row.event_id);
     if (seen.has(key)) continue;
     seen.add(key);
-    keys.push(key);
+    sources.push({ key, occurredOn: row.occurred_on });
   }
-  return keys;
+  return sources;
 }
 
-function papersBeforeSource(
+function storedPapersBeforeSource(
   papers: StoredUsMacrsPaper[],
   sellerAssetId: string,
   sourceKey: string,
   order: Map<string, number>,
   sourceIndex: number,
   occurredOn: string,
-): MacrsWorkpaperEvent[] {
-  return papers
-    .filter((paper) => {
-      if (paper.sourceKey === sourceKey) return false;
-      if (paper.event.asset_id !== sellerAssetId && paper.event.receiving_asset_id !== sellerAssetId) {
-        return false;
-      }
-      const index = order.get(paper.sourceKey);
-      if (index != null) return index < sourceIndex;
-      return paper.event.effective_on < occurredOn;
-    })
-    .map((paper) => paper.event);
+): StoredUsMacrsPaper[] {
+  return papers.filter((paper) => {
+    if (paper.sourceKey === sourceKey) return false;
+    if (paper.event.asset_id !== sellerAssetId && paper.event.receiving_asset_id !== sellerAssetId) {
+      return false;
+    }
+    const index = order.get(paper.sourceKey);
+    if (index != null) return index < sourceIndex;
+    return paper.event.effective_on < occurredOn;
+  });
 }
 
 async function loadUsSellerMacrsVintageContext(
@@ -661,15 +660,25 @@ async function loadUsSellerMacrsVintageContext(
     };
   }
   const sourceKey = taxBasisSourceKey(args.sourceChangeId, args.sourceEventId);
-  const orderKeys = await listSellerSourceOrder(tx, orgId, args.sellerAssetId);
-  const order = new Map(orderKeys.map((key, index) => [key, index]));
-  const sourceIndex = order.get(sourceKey) ?? orderKeys.length;
+  const orderSources = await listSellerSourceOrder(tx, orgId, args.sellerAssetId);
+  const order = new Map(orderSources.map((source, index) => [source.key, index]));
+  const sourceIndex = order.get(sourceKey) ?? orderSources.length;
   const papers = await loadUsMacrsPapersForAssets(tx, orgId, [args.sellerAssetId]);
+  const priorPapers = storedPapersBeforeSource(
+    papers,
+    args.sellerAssetId,
+    sourceKey,
+    order,
+    sourceIndex,
+    args.occurredOn,
+  );
   return sellerMacrsHistoryBeforeSource({
     assetId: args.sellerAssetId,
     subsidiaryId: seller.subsidiary_id,
-    papers: papersBeforeSource(papers, args.sellerAssetId, sourceKey, order, sourceIndex, args.occurredOn),
+    papers: priorPapers.map((paper) => paper.event),
     defaults: INERT_MACRS_DEFAULTS,
+    priorSources: orderSources.slice(0, sourceIndex),
+    paperSourceKeys: priorPapers.map((paper) => paper.sourceKey),
   });
 }
 

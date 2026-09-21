@@ -648,6 +648,53 @@ function usSellerPaper(
 }
 
 test(
+  "a later US source refuses first-declaration mode when an earlier source has no workpaper",
+  { skip: !DB },
+  () =>
+    fixture(async (f) => {
+      await classifyUs(f);
+      const first = (
+        await listTaxAssetBasisSources(f.org.orgId, f.assetId, f.actors.submitterId)
+      ).sources[0];
+      assert.equal(first?.openMacrsVintages?.status, "original_declaration_required");
+      const secondChangeId = await proposeAssetChange(
+        f.org.orgId,
+        f.assetId,
+        f.actors.submitterId,
+        {
+          operation: "partial_disposal",
+          effectiveOn: "2026-08-01",
+          reason: "Sell a second identical component",
+          assessment:
+            "Equal historical cost and service support the second quarter allocation",
+          idempotencyKey: randomUUID(),
+          portion: { percent: "25" },
+          proceeds: "600",
+          proceedsAccountId: f.org.accounts.clearing,
+        },
+      );
+      await approve(f, secondChangeId);
+      await applyAssetChange(f.org.orgId, secondChangeId, f.actors.submitterId);
+      const second = (
+        await listTaxAssetBasisSources(f.org.orgId, f.assetId, f.actors.submitterId)
+      ).sources.find((row) => row.sourceChangeId === secondChangeId);
+      assert.ok(second, "the second posted disposal must be a tax source");
+      assert.equal(second.openMacrsVintages?.status, "history_refused");
+      if (second.openMacrsVintages?.status === "history_refused") {
+        assert.match(second.openMacrsVintages.refusal, /do not treat a missing prerequisite paper as a first original declaration/);
+      }
+      await assert.rejects(
+        proposeTaxAssetBasis(f.org.orgId, f.assetId, f.actors.submitterId, {
+          ...usSellerPaper(f),
+          sourceChangeId: secondChangeId,
+          idempotencyKey: randomUUID(),
+        }),
+        /do not treat a missing prerequisite paper as a first original declaration/,
+      );
+    }),
+);
+
+test(
   "US seller source context requires an original declaration then revalidates open vintage keys",
   { skip: !DB },
   () =>

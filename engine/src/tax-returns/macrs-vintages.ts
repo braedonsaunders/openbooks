@@ -241,14 +241,34 @@ export function listOpenMacrsVintages(vintages: readonly MacrsVintage[]): OpenMa
     }));
 }
 
+export function missingUsSellerPrerequisite(
+  priorSources: readonly { key: string; occurredOn: string }[],
+  paperSourceKeys: readonly string[],
+): { key: string; occurredOn: string } | null {
+  const have = new Set(paperSourceKeys);
+  return priorSources.find((source) => !have.has(source.key)) ?? null;
+}
+
 /** Reconstruct seller history immediately before a source. No prior papers
- *  is a first declaration, not an empty ready list and not book cost. */
+ *  is a first declaration only when no earlier source event exists. A prior
+ *  source without a US paper is refused — not treated as a first declaration
+ *  and not seeded from book cost. */
 export function sellerMacrsHistoryBeforeSource(args: {
   assetId: string;
   subsidiaryId: string;
   papers: MacrsWorkpaperEvent[];
   defaults: MacrsVintageDefaults;
+  priorSources?: { key: string; occurredOn: string }[];
+  paperSourceKeys?: string[];
 }): UsSellerMacrsVintageContext {
+  const missing = missingUsSellerPrerequisite(args.priorSources ?? [], args.paperSourceKeys ?? []);
+  if (missing) {
+    return {
+      status: "history_refused",
+      refusal:
+        `the earlier ${missing.occurredOn} disposal or transfer has no applied US tax basis workpaper; record and apply that workpaper before this source — do not treat a missing prerequisite paper as a first original declaration`,
+    };
+  }
   if (args.papers.length === 0) {
     return { status: "original_declaration_required" };
   }
