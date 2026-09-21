@@ -3,7 +3,6 @@ import 'server-only'
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import {
-  badge,
   column,
   grid,
   field,

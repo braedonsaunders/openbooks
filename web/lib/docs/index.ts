@@ -34,6 +34,12 @@ import { compensationAndTransparency } from './articles/compensation-transparenc
 // HR-14 begin: certifications, licenses, and dispatch gating article.
 import { certificationsLicensesDispatch } from './articles/certifications-licenses-dispatch'
 // HR-14 end
+// HR-19 begin: documents/signatures/retention, engagement surveys, and org
+// chart articles.
+import { documentsSignaturesAndRetention } from './articles/documents-signatures-and-retention'
+import { engagementSurveys } from './articles/engagement-surveys'
+import { orgChartAndDirectory } from './articles/org-chart-and-directory'
+// HR-19 end
 import { taxConfiguration } from './articles/tax-configuration'
 import { taxJurisdictionsAndNexus, taxReturnsAndBoxes } from './articles/taxes'
 import { fieldTickets } from './articles/field-tickets'
@@ -272,6 +278,11 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   // HR-14 begin
   certificationsLicensesDispatch,
   // HR-14 end
+  // HR-19 begin
+  documentsSignaturesAndRetention,
+  engagementSurveys,
+  orgChartAndDirectory,
+  // HR-19 end
   // HR-14 begin: pre-existing red on the stacked base — the 31defe406
   // reconciliation left fieldTickets/subcontractorCompliance listed twice
   // (once on the long line above, once here). The duplicate line is removed.

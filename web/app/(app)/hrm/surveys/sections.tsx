@@ -21,7 +21,6 @@ import type { loadSurveysHome } from '../../../../lib/hrm/surveys-home'
 
 type Home = NonNullable<Awaited<ReturnType<typeof loadSurveysHome>>>
 type Drawer = NonNullable<Home['drawer']>
-type Author = NonNullable<Home['author']>
 
 function msg(labels: Record<string, string>, key: string): string {
   return labels[key] ?? key

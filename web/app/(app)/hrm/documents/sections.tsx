@@ -22,7 +22,6 @@ import type { loadDocumentsHome } from '../../../../lib/hrm/documents-home'
 
 type Home = NonNullable<Awaited<ReturnType<typeof loadDocumentsHome>>>
 type Drawer = NonNullable<Home['drawer']>
-type Generate = NonNullable<Home['generate']>
 
 function msg(labels: Record<string, string>, key: string): string {
   return labels[key] ?? key
