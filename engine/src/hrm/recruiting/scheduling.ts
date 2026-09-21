@@ -370,6 +370,22 @@ export async function bookSlot(query: BookSlotQuery): Promise<SlotDTO> {
   }
   const orgId = scope[0].orgId;
   return withOrgTransaction(orgId, async () => {
+    const slotId = requireId(query.slotId, "slotId");
+    // The requested slot names its own fate before link liveness is
+    // considered: a racer arriving after the winner must hear taken (their
+    // slot is gone), not expired (the link itself may still be live with
+    // other proposed slots, or exhausted by this very booking).
+    const wanted = (await db.execute<{ kind: string }>(sql`
+      select kind from hrm_interview_slots
+       where org_id = ${orgId} and interview_id = ${interviewId} and id = ${slotId}
+         and candidate_token_hash = ${tokenHash}
+    `)).rows[0];
+    if (wanted && wanted.kind !== "proposed") {
+      throw new RecruitingError(
+        "REFUSED",
+        "this slot was just taken — pick another proposed slot instead of retrying this one",
+      );
+    }
     const link = (await db.execute<{ expiresAt: string | null }>(sql`
       select max(expires_at) as "expiresAt" from hrm_interview_slots
        where org_id = ${orgId} and interview_id = ${interviewId}
@@ -381,7 +397,6 @@ export async function bookSlot(query: BookSlotQuery): Promise<SlotDTO> {
         "this booking link expired — ask the recruiter for a fresh link instead of reusing this one",
       );
     }
-    const slotId = requireId(query.slotId, "slotId");
     // FIRST WINS: exactly one concurrent booker flips proposed→booked; the
     // others match zero rows and are refused as taken below.
     const booked = (await db.execute<SlotRow>(sql`
