@@ -4443,6 +4443,13 @@ test('I10 documents sharing trash and activity copy ships translated in every lo
   }
 })
 const I14_IDENTICAL_BY_FACT = new Set([
+    'pt-BR:reports.catalog.columns.hrm_feedback.id|Feedback (id)',
+    'pt-BR:reports.catalog.columns.hrm_one_on_ones.status|Status',
+    'pt-BR:reports.catalog.entities.hrm_feedback.label|Feedback',
+    'de:reports.catalog.columns.hrm_one_on_ones.status|Status',
+    'de:reports.catalog.entities.hrm_feedback.label|Feedback',
+    'fr:reports.catalog.columns.hrm_talent_reviews.performance_key|Performance',
+    'fr:reports.catalog.columns.hrm_calibration_entries.session|Session',
   // HR-16 report columns: these headings are the same word in the target
   // language, reviewed one by one — Version/Status/Name/Error/Action/Code
   // are borrowed or identical forms, not untranslated English.
@@ -5189,7 +5196,7 @@ const I14_IDENTICAL_BY_FACT = new Set([
 const I14_FILE_COUNTS: Record<string, number> = {
   "items": 161,
   "inventory": 159,
-  "reports": 1512,
+  "reports": 1552,
   "sync": 172,
   "login": 33,
   "accounts": 82,
