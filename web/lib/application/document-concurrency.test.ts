@@ -208,11 +208,31 @@ async function buildIdempotencyHarness() {
 
   async function seedSlowBeforeVoidScript(sleepSeconds: number): Promise<void> {
     await withBypassContext(async () => {
-      await db.execute(sql`
+      // The probe script calls ob.query (pg_sleep). That host fn demands
+      // the same gates as /api/query — queryConsole + sql.execute — not
+      // scripts alone. Leaving queryConsole off is a fixture gap, not a
+      // pool or idempotency failure.
+      const enabled = await db.execute<{ id: string }>(sql`
         update orgs
-           set settings = jsonb_set(settings, '{features,scripts}', 'true'::jsonb, true)
+           set settings = jsonb_set(
+             jsonb_set(coalesce(settings, '{}'::jsonb), '{features,scripts}', 'true'::jsonb, true),
+             '{features,queryConsole}', 'true'::jsonb, true)
          where id = ${org.orgId}
+         returning id
       `);
+      if (!enabled.rows[0]) {
+        throw new Error(`scripts/queryConsole feature write matched 0 rows for org ${org.orgId}`);
+      }
+      const granted = await db.execute<{ id: string }>(sql`
+        update app_roles
+           set permissions = coalesce(permissions, '[]'::jsonb) || '["sql.execute"]'::jsonb
+         where org_id = ${org.orgId}
+           and id in (select role_id from role_assignments where org_id = ${org.orgId} and user_id = ${actorId})
+         returning id
+      `);
+      if (!granted.rows[0]) {
+        throw new Error(`sql.execute grant matched 0 roles for actor ${actorId}`);
+      }
       await db.execute(sql`
         insert into user_scripts
           (id, org_id, name, trigger_point, document_kind, source,
