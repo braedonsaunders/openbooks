@@ -13,6 +13,9 @@ import { RecruitingDrawer } from '../../app/(app)/hrm/recruiting/sections'
 import { ChangeRequestRowActions, HrmVerbChip } from '../../app/(app)/hrm/change-requests/ChangeRequestRowActions'
 import { ProposeChangeDialog } from '../../app/(app)/hrm/change-requests/ProposeChangeDialog'
 import { LeaveDialog } from '../../app/(app)/hrm/leave/LeaveDialog'
+// HR-14 begin: qualification islands (verbatim adapters only).
+import { QualificationDialog } from '../../app/(app)/hrm/qualifications/QualificationDialog'
+// HR-14 end
 // HR-13 begin: construction-compliance islands (verbatim adapters only).
 import { ComplianceActions } from '../../app/(app)/hrm/compliance/ComplianceActions'
 import { GenerateDialog } from '../../app/(app)/hrm/compliance/GenerateDialog'
@@ -193,6 +196,17 @@ export const HRM_WIDGETS = {
       closeHref={str(props, 'closeHref') ?? '/hrm/leave'}
     />
   ),
+  // HR-14 begin: qualification record/detail entry point over a
+  // qualification id (detail) or the record flag (blank form), closing
+  // by navigating the search params away.
+  'hrm-qualification-dialog': (props) => (
+    <QualificationDialog
+      qualificationId={str(props, 'qualificationId') ?? null}
+      recordOpen={props.recordOpen === true}
+      closeHref={str(props, 'closeHref') ?? '/hrm/qualifications'}
+    />
+  ),
+  // HR-14 end
   /** Label/value facts behind the Me profile and overview panels — the
    *  loader-resolved rows, never ids. Empty sets render the loader's empty
    *  line (a missing address is legitimate) rather than a blank panel. */
