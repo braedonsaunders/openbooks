@@ -5,8 +5,8 @@ import type {
 } from "../certificates.ts";
 import type { PayrollPackWithholding } from "../withholding-jurisdictions.ts";
 import type { PayrollPackRates } from "../statutory-rates.ts";
-import type { PayrollPackFilings } from "../filing-registry.ts";
 import { computeFrStatutory, FR_FACTOR_LABELS } from "./compute-statutory.ts";
+import { frPackFilings } from "./filings.ts";
 import { FR_TAX_YEARS } from "./rates.ts";
 
 /**
@@ -267,19 +267,14 @@ const FR_RATES: PayrollPackRates = {
 };
 
 // ---------------------------------------------------------------------------
-// Filings: the SIRET filing account. DSN itself is monthly — the cadence
+// Filings: the annual récapitulatif of DSN-declared versements (see
+// ./filings.ts for the premise: France issues no employer annual tax
+// certificate, so the declaration is a per-employee per-month reconciliation
+// tying each month to its DSN). The DSN itself is monthly — the cadence
 // channel offers annual | quarterly | separation only, so no monthly filing
 // is declared here (ledger note; a channel question for Orchestrate, not a
-// second engine).
+// second engine). The SIRET program type lives on the declaration.
 // ---------------------------------------------------------------------------
-
-const FR_FILINGS: PayrollPackFilings = {
-  country: "FR",
-  programTypes: [
-    { key: "fr_siret", label: "SIRET — établissement employeur (DSN)" },
-  ],
-  yearEnd: [],
-};
 
 // ---------------------------------------------------------------------------
 // Employment calendars: the 11 jours fériés légaux (C. trav. L3133-1), plus
@@ -392,7 +387,7 @@ export const FR_PAYROLL_PACK = {
   // No pre-tax treatment transcribed: the PAS engine prices off gross, so
   // the pack declares an empty vocabulary rather than an unhonored one.
   deductionTreatments: [],
-  filings: () => FR_FILINGS,
+  filings: frPackFilings,
   statutoryRates: FR_RATES,
   taxYears: FR_TAX_YEARS,
   certificates: () => FR_CERTIFICATES,
