@@ -85,10 +85,8 @@ const TOOL_PERMS: Record<string, string> = {
 
 const UUID = "11111111-1111-4111-8111-111111111111";
 
-test("the module exports exactly the fourteen slice tools plus the core inbox tool", () => {
+test("the module exports exactly the slice tools plus the core inbox tool", () => {
   assert.deepEqual(HRM_TOOLS.map((tool) => tool.name), [...TOOL_NAMES, "inbox_items"]);
-test("the module exports exactly the thirteen HRM read tools", () => {
-  assert.deepEqual(HRM_TOOLS.map((tool) => tool.name), TOOL_NAMES);
 });
 
 test("inbox_items is the core own-scope tool: self grant, no feature, read-only", () => {
@@ -123,11 +121,17 @@ for (const name of TOOL_NAMES) {
   test(`${name} carries the slice gate: its read grant, feature, module tier`, () => {
     const tool = HRM_TOOLS.find((candidate) => candidate.name === name)!;
     assert.deepEqual(tool.gate, { mode: "anyOf", perms: [TOOL_PERMS[name]] });
-    // HR-13: construction tools carry their own switch (TOOL_FEATURES above).
-    assert.equal(tool.feature, TOOL_FEATURES[name] ?? "hrm");
-    // HR-12 begin: compensation tools gate on their own switches.
-    assert.equal(tool.feature, name === "hrm_compensation" ? "hrmCompensation" : name === "hrm_pay_equity" ? "hrmPayTransparency" : "hrm");
-    // HR-12 end
+    // HR-12/HR-13 merged: construction and automations tools carry
+    // their own switch (TOOL_FEATURES above); compensation tools gate
+    // on their sub-switches; everything else rides hrm alone.
+    const expectedFeature =
+      TOOL_FEATURES[name] ??
+      (name === "hrm_compensation"
+        ? "hrmCompensation"
+        : name === "hrm_pay_equity"
+          ? "hrmPayTransparency"
+          : "hrm");
+    assert.equal(tool.feature, expectedFeature);
     assert.equal(tool.tier, "module");
     assert.ok(
       tool.category === "read" || tool.category === "search",
@@ -301,10 +305,6 @@ function fakeAuthz(permissions: string[]): Authz {
 
 test("the registry gate admits only each tool's grant holders while its feature is on", () => {
   const byName = new Map(HRM_TOOLS.map((tool) => [tool.name, tool] as const));
-  // HR-16 begin: per-tool feature state (automations_status rides automations).
-  const featureState = (name: string, on: boolean): Record<string, boolean> =>
-    name === "automations_status" ? { automations: on } : { hrm: on };
-  // HR-16 end
   // HR-13 begin: construction tools need their full switch path resolved
   // (parent hrm plus the payroll/projects/time-tracking requirements).
   const TOOL_FEATURE_STATE: Record<string, Record<string, boolean>> = {
@@ -316,27 +316,31 @@ test("the registry gate admits only each tool's grant holders while its feature 
     const perm = TOOL_PERMS[name];
     assert.ok(perm, `${name} has a declared permission`);
     const tool = byName.get(name)!;
-    // HR-12 begin: each tool runs under its own switch (compensation
-    // tools need their sub-switch on top of hrm).
-    const state: Record<string, boolean> =
-      tool.feature === "hrm" ? { hrm: true } : { hrm: true, hrmCompensation: true, [tool.feature as string]: true };
-    // HR-12 end
+    // HR-12/HR-13/HR-16 merged: each tool runs under its own full switch
+    // path — the explicit per-tool state where declared (construction
+    // tools need the payroll/projects/time-tracking requirements),
+    // automations_status rides automations, compensation tools add their
+    // parent, everything else rides hrm alone.
+    const state: Record<string, boolean> = TOOL_FEATURE_STATE[name] ??
+      (name === "automations_status"
+        ? { automations: true }
+        : tool.feature === "hrm"
+          ? { hrm: true }
+          : { hrm: true, hrmCompensation: true, [tool.feature as string]: true });
     const reader = fakeAuthz(["assistant.use", perm]);
-    assert.equal(canRunTool(reader, byName.get(name)!, featureState(name, true)), true, `${name} must run for a gated reader`);
-    assert.equal(canRunTool(reader, byName.get(name)!, featureState(name, false)), false, `${name} must hide while its feature is off`);
-    const state = TOOL_FEATURE_STATE[name] ?? { hrm: true };
-    assert.equal(canRunTool(reader, byName.get(name)!, state), true, `${name} must run for a gated reader`);
-    assert.equal(canRunTool(reader, byName.get(name)!, { hrm: false }), false, `${name} must hide while hrm is off`);
-    assert.equal(
-      canRunTool(fakeAuthz(["assistant.use"]), byName.get(name)!, featureState(name, true)),
     assert.equal(canRunTool(reader, tool, state), true, `${name} must run for a gated reader`);
     assert.equal(canRunTool(reader, tool, { hrm: false }), false, `${name} must hide while hrm is off`);
+    assert.equal(
+      canRunTool(reader, tool, { ...state, [tool.feature as string]: false }),
+      false,
+      `${name} must hide while its own feature is off`,
+    );
+    assert.equal(
       canRunTool(fakeAuthz(["assistant.use"]), tool, state),
       false,
       `${name} must refuse without ${perm}`,
     );
     assert.equal(
-      canRunTool(fakeAuthz([perm]), byName.get(name)!, featureState(name, true)),
       canRunTool(fakeAuthz([perm]), tool, state),
       false,
       `${name} still requires assistant.use`,
