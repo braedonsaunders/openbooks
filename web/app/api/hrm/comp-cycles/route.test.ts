@@ -87,8 +87,8 @@ const mockSources = new Map<string, string>([
         if (state.serviceThrow) throw state.serviceThrow
         return []
       }
-      export async function cyclePacing(orgId, cycleId) {
-        state.calls.push({ fn: 'cyclePacing', args: { orgId, cycleId } })
+      export async function cyclePacing(orgId, actorId, cycleId) {
+        state.calls.push({ fn: 'cyclePacing', args: { orgId, actorId, cycleId } })
         if (state.serviceThrow) throw state.serviceThrow
         return { totalPct: null, overBudget: false }
       }

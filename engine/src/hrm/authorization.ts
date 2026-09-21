@@ -78,6 +78,22 @@ export async function requireAggregateCompensationRead(
   await requireHrmCompensationRead(exec, orgId, actorId);
   return actorAllowedSubsidiaryIds(exec, orgId, actorId);
 }
+
+/**
+ * Subsidiary lens without a permission gate, for write paths whose own
+ * contract carries no compensation grant: structural managers propose on
+ * direct reports through hrm.self.read, never hrm.compensation.read, so
+ * the propose path reads the lens (to withhold hidden totals from refusal
+ * text) without demanding the read grant. Scope half only — never a
+ * visibility decision on its own.
+ */
+export async function loadCompensationLens(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<Set<string> | null> {
+  return actorAllowedSubsidiaryIds(exec, orgId, actorId);
+}
 // HR-12 end
 
 /**

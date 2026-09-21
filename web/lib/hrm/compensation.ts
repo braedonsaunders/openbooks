@@ -197,7 +197,7 @@ export async function loadCompensationHome(authz: Authz): Promise<CompHomeData |
   let pacingNote = ''
   let belowMinRound = '—'
   if (openCycles[0]) {
-    const pacing = await cyclePacing(orgId, openCycles[0].id).catch(() => null)
+    const pacing = await cyclePacing(orgId, authz.user.id, openCycles[0].id).catch(() => null)
     if (pacing?.totalPct !== null && pacing?.totalPct !== undefined) {
       pacingNote = `${Math.round(pacing.totalPct)}%`
     }
@@ -442,7 +442,7 @@ export async function loadCompCycleDetail(
         department: deptOf.get(l.employmentId) ?? '',
       }
     })
-  const pacing = await cyclePacing(orgId, cycleId).catch(() => ({ totalPct: null as number | null, overBudget: false }))
+  const pacing = await cyclePacing(orgId, authz.user.id, cycleId).catch(() => ({ totalPct: null as number | null, overBudget: false }))
   const openLineId = sp.line ?? null
   const openLine = rows.find((r) => r.id === openLineId) ?? null
   const history = openLineId
