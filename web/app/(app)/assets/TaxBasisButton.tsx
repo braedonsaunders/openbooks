@@ -9,6 +9,7 @@ import { Button, Drawer, Label, SearchSelect, Textarea } from "@openbooks/ui";
 import {
   TAX_BASIS_APPLICABLE_SIDE_LABELS,
   attachTaxBasisSource,
+  taxBasisSideApplies,
   type TaxAssetBasisSourceChoice,
   type TaxAssetBasisSourcesResponse,
   type TaxBasisDraft,
@@ -17,6 +18,11 @@ import {
 import { useAppAction } from "@/lib/use-app-action";
 import { TaxBasisFields } from "./TaxBasisFields";
 import { prepareTaxBasisRegime } from "./tax-basis-draft";
+import { MacrsVintageAllocations } from "./MacrsVintageAllocations";
+import {
+  prepareMacrsVintageAllocations,
+  type MacrsAllocationEdits,
+} from "./macrs-vintage-allocation-draft";
 
 /** Same stacked workpaper Drawer as GroupValuationButton; approved facts go
  * through Accounting changes, never the asset's mutable classification JSON. */
@@ -29,10 +35,24 @@ export function TaxBasisButton({ assetId }: { assetId: string }) {
   const [loaded, setLoaded] = useState(false);
   const [sourceKey, setSourceKey] = useState("");
   const [drafts, setDrafts] = useState<Record<string, TaxBasisDraft>>({});
+  const [allocationEdits, setAllocationEdits] = useState<MacrsAllocationEdits>(
+    {},
+  );
   const [reason, setReason] = useState("");
   const [assessment, setAssessment] = useState("");
   const [requestKey, setRequestKey] = useState(() => crypto.randomUUID());
   const source = sources.find((item) => item.key === sourceKey);
+  const sellerMacrs = source?.regimes.some(
+    ({ code, applicable }) =>
+      code === "us_macrs" && taxBasisSideApplies(applicable, "seller"),
+  );
+  const macrsHistoryRefusal = sellerMacrs
+    ? !source?.openMacrsVintages
+      ? "The selected source has no tax depreciation history response. Reload the source history before proposing its workpaper."
+      : source.openMacrsVintages.status === "history_refused"
+        ? source.openMacrsVintages.refusal
+        : null
+    : null;
   function changed() {
     setRequestKey(crypto.randomUUID());
   }
@@ -52,6 +72,7 @@ export function TaxBasisButton({ assetId }: { assetId: string }) {
           // invalidated the source and its facts while this drawer was closed.
           setSourceKey("");
           setDrafts({});
+          setAllocationEdits({});
           setLoaded(true);
           changed();
         },
@@ -70,11 +91,14 @@ export function TaxBasisButton({ assetId }: { assetId: string }) {
             {
               sourceOperation: selected!.sourceOperation,
               applicable,
+              usSellerMacrs:
+                code === "us_macrs" ? selected!.openMacrsVintages : null,
             },
           ),
         ]),
       ),
     );
+    setAllocationEdits({});
     setReason("");
     setAssessment("");
     clearRefusal();
@@ -84,17 +108,35 @@ export function TaxBasisButton({ assetId }: { assetId: string }) {
     event.preventDefault();
     if (!source || !loaded || !source.regimes.length || busy) return;
     const fallbackMessage = "Could not propose the tax basis workpaper";
+    if (macrsHistoryRefusal) {
+      refuse(macrsHistoryRefusal, fallbackMessage);
+      return;
+    }
     let regimes: TaxRegimeBasis[];
     try {
       regimes = source.regimes.map(({ code, applicable }) => {
         const draft = attachTaxBasisSource(drafts[code] ?? { regime: code }, {
           sourceOperation: source.sourceOperation,
           applicable,
+          usSellerMacrs: code === "us_macrs" ? source.openMacrsVintages : null,
         });
-        return prepareTaxBasisRegime(draft, {
-          sourceOperation: source.sourceOperation,
-          applicable,
-        });
+        return prepareTaxBasisRegime(
+          draft,
+          {
+            sourceOperation: source.sourceOperation,
+            applicable,
+            usSellerMacrs:
+              code === "us_macrs" ? source.openMacrsVintages : null,
+          },
+          code === "us_macrs" &&
+            taxBasisSideApplies(applicable, "seller") &&
+            source.openMacrsVintages?.status === "ready"
+            ? prepareMacrsVintageAllocations(
+                source.openMacrsVintages.vintages,
+                allocationEdits,
+              )
+            : undefined,
+        );
       });
     } catch (error) {
       refuse(error instanceof Error ? error.message : null, fallbackMessage);
@@ -143,7 +185,12 @@ export function TaxBasisButton({ assetId }: { assetId: string }) {
           <Button
             type="submit"
             form={formId}
-            disabled={busy || !loaded || !source?.regimes.length}
+            disabled={
+              busy ||
+              !loaded ||
+              !source?.regimes.length ||
+              !!macrsHistoryRefusal
+            }
           >
             Create approval proposal
           </Button>
@@ -193,6 +240,19 @@ export function TaxBasisButton({ assetId }: { assetId: string }) {
                 Effective {source.occurredOn}. The date and legal entities
                 follow the posted source.
               </p>
+              {macrsHistoryRefusal ? (
+                <div className="space-y-2">
+                  <p role="alert">{macrsHistoryRefusal}</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={show}
+                    disabled={busy}
+                  >
+                    Reload source history
+                  </Button>
+                </div>
+              ) : null}
               {source.appliedWorkpaper ? (
                 <p>
                   <Link
@@ -222,23 +282,65 @@ export function TaxBasisButton({ assetId }: { assetId: string }) {
                         ? `Applies to ${source.receivingAssetLabel ?? "the receiving asset"}.`
                         : `Applies to ${source.assetLabel} and ${source.receivingAssetLabel ?? "the receiving asset"}.`}
                   </p>
-                  <TaxBasisFields
-                    draft={
-                      drafts[code] ??
-                      attachTaxBasisSource(
-                        { regime: code },
-                        { sourceOperation: source.sourceOperation, applicable },
-                      )
-                    }
-                    disabled={busy}
-                    onChange={(field, value) => {
-                      setDrafts((current) => ({
-                        ...current,
-                        [code]: { ...current[code], [field]: value },
-                      }));
-                      changed();
-                    }}
-                  />
+                  {code === "us_macrs" &&
+                  taxBasisSideApplies(applicable, "seller") &&
+                  macrsHistoryRefusal ? null : (
+                    <TaxBasisFields
+                      draft={
+                        drafts[code] ??
+                        attachTaxBasisSource(
+                          { regime: code },
+                          {
+                            sourceOperation: source.sourceOperation,
+                            applicable,
+                            usSellerMacrs:
+                              code === "us_macrs"
+                                ? source.openMacrsVintages
+                                : null,
+                          },
+                        )
+                      }
+                      disabled={busy}
+                      omitFields={
+                        code === "us_macrs" &&
+                        taxBasisSideApplies(applicable, "seller") &&
+                        source.openMacrsVintages?.status === "ready"
+                          ? [
+                              "disposedUnadjustedBasis",
+                              "remainingUnadjustedBasis",
+                            ]
+                          : []
+                      }
+                      onChange={(field, value) => {
+                        setDrafts((current) => ({
+                          ...current,
+                          [code]: { ...current[code], [field]: value },
+                        }));
+                        changed();
+                      }}
+                    />
+                  )}
+                  {code === "us_macrs" &&
+                  taxBasisSideApplies(applicable, "seller") &&
+                  source.openMacrsVintages?.status === "ready" ? (
+                    <MacrsVintageAllocations
+                      vintages={source.openMacrsVintages.vintages}
+                      edits={allocationEdits}
+                      disabled={busy}
+                      onChange={(key, field, value) => {
+                        setAllocationEdits((current) => ({
+                          ...current,
+                          [key]: {
+                            disposedUnadjustedBasis: "",
+                            remainingUnadjustedBasis: "",
+                            ...current[key],
+                            [field]: value,
+                          },
+                        }));
+                        changed();
+                      }}
+                    />
+                  ) : null}
                 </fieldset>
               ))}
               <div className="space-y-1.5">

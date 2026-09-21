@@ -116,3 +116,41 @@ test("changing a CA allocation choice removes the old fact while preserving zero
   assert.equal(row.allocationFraction, "0.25");
   assert.equal(Object.hasOwn(row, "allocatedCapitalCost"), false);
 });
+
+test("ready history supplies total basis and discards stale composite seller fields", () => {
+  const row = prepareTaxBasisRegime(
+    seller,
+    {
+      sourceOperation: "partial_disposal",
+      applicable: "seller",
+      usSellerMacrs: { status: "ready", vintages },
+    },
+    allocations(),
+  );
+  assert.equal(row.regime, "us_macrs");
+  if (row.regime !== "us_macrs") return;
+  assert.equal(row.originalUnadjustedBasis, "10400.0000");
+  assert.equal(row.vintageAllocations?.length, 2);
+  for (const hidden of [
+    "placedInServiceOn",
+    "recoveryPeriodYears",
+    "method",
+    "convention",
+    "usSellerMacrsStatus",
+  ])
+    assert.equal(Object.hasOwn(row, hidden), false, hidden);
+});
+
+test("a server history refusal reaches the proposal action unchanged", () => {
+  const refusal =
+    "The earlier transfer has no approved US workpaper. Apply its statutory basis workpaper before allocating this disposal.";
+  assert.throws(
+    () =>
+      prepareTaxBasisRegime(seller, {
+        sourceOperation: "partial_disposal",
+        applicable: "seller",
+        usSellerMacrs: { status: "history_refused", refusal },
+      }),
+    (error: unknown) => error instanceof Error && error.message === refusal,
+  );
+});
