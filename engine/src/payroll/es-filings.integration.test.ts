@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { add } from "../money/money.ts";
+import { add, cmp } from "../money/money.ts";
 import { es111Quarters, es111Slip, es190Slips, es190Slip } from "./es/yearend.ts";
 import { esPackFilings } from "./es/filings.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
@@ -137,10 +137,10 @@ test(
       const bruno = slips.find((s) => s.employeePartyId === fx.brunoId)!;
       // Ana: two months across the edition split; Bruno: one month. The Q2
       // draft (9999.99) appears in neither — a draft on a filing is a wrong filing.
-      assert.equal(ana.percepcionIntegra, "4000.00");
-      assert.equal(ana.retencionesPracticadas, "540.40");
-      assert.equal(bruno.percepcionIntegra, "3000.00");
-      assert.equal(bruno.retencionesPracticadas, "500.00");
+      assert.equal(cmp(String(ana.percepcionIntegra), "4000.00"), 0);
+      assert.equal(cmp(String(ana.retencionesPracticadas), "540.40"), 0);
+      assert.equal(cmp(String(bruno.percepcionIntegra), "3000.00"), 0);
+      assert.equal(cmp(String(bruno.retencionesPracticadas), "500.00"), 0);
       // Tie-out by a second method: independent SQL over the same stubs.
       const totals = (await db.execute<{ percepcion: string; retencion: string }>(sql`
         select sum(case when pc.system_key is distinct from 'irpf' and l.kind = 'earning'
@@ -156,8 +156,8 @@ test(
       const taxTotal = slips.reduce((acc, s) => add(acc, s.retencionesPracticadas), "0");
       assert.equal(slipTotal, totals.percepcion);
       assert.equal(taxTotal, totals.retencion);
-      assert.equal(slipTotal, "7000.00");
-      assert.equal(taxTotal, "1040.40");
+      assert.equal(cmp(String(slipTotal), "7000.00"), 0);
+      assert.equal(cmp(String(taxTotal), "1040.40"), 0);
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
@@ -174,12 +174,12 @@ test(
       assert.deepEqual(quarters.map((q) => q.quarter), [1, 3]);
       const q1 = quarters[0]!;
       assert.equal(q1.perceptores, 2);
-      assert.equal(q1.percepciones, "5000.00");
-      assert.equal(q1.retenciones, "770.20");
+      assert.equal(cmp(String(q1.percepciones), "5000.00"), 0);
+      assert.equal(cmp(String(q1.retenciones), "770.20"), 0);
       const q3 = quarters[1]!;
       assert.equal(q3.perceptores, 1);
-      assert.equal(q3.percepciones, "2000.00");
-      assert.equal(q3.retenciones, "270.20");
+      assert.equal(cmp(String(q3.percepciones), "2000.00"), 0);
+      assert.equal(cmp(String(q3.retenciones), "270.20"), 0);
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
@@ -226,8 +226,8 @@ test(
       const slip = await es190Slip(fx.orgId, 2026, `${fx.anaId}:MD`);
       assert.equal(slip.formCode, "ES_CERT_RET");
       const byCode = new Map(slip.boxes.map((b) => [b.code, b]));
-      assert.equal(byCode.get("dinerarias-integro")?.value, "4000.00");
-      assert.equal(byCode.get("dinerarias-retenciones")?.value, "540.40");
+      assert.equal(cmp(String(byCode.get("dinerarias-integro")?.value), "4000.00"), 0);
+      assert.equal(cmp(String(byCode.get("dinerarias-retenciones")?.value), "540.40"), 0);
       assert.ok(
         slip.headerFields.some((h) => h.value.includes("sin subclave")),
         "the slip must state the clave-A-no-subclave classification it files under",
@@ -235,8 +235,8 @@ test(
       const q1 = await es111Slip(fx.orgId, 2026, "Q1");
       const boxes111 = new Map(q1.boxes.map((b) => [b.code, b]));
       assert.equal(boxes111.get("01")?.value, "2");
-      assert.equal(boxes111.get("02")?.value, "5000.00");
-      assert.equal(boxes111.get("03")?.value, "770.20");
+      assert.equal(cmp(String(boxes111.get("02")?.value), "5000.00"), 0);
+      assert.equal(cmp(String(boxes111.get("03")?.value), "770.20"), 0);
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
