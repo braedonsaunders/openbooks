@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import { test } from "node:test";
-const state = { allowed: true, calls: [] as unknown[][], refusal: "" };
+const state = {
+  allowed: true,
+  featureEnabled: true,
+  gateArgs: [] as string[],
+  calls: [] as unknown[][],
+  refusal: "",
+};
 (globalThis as typeof globalThis & Record<symbol, unknown>)[
   Symbol.for("revenue-modification-route")
 ] = state;
@@ -12,7 +18,7 @@ const hooks = registerHooks({
       return next(specifier, { ...context, parentURL: import.meta.url });
     if (specifier === "server-only")
       return { shortCircuit: true, url: "data:text/javascript,export {}" };
-    if (specifier === "@/lib/authz")
+    if (specifier === "@/lib/feature-gates")
       return { shortCircuit: true, url: "mock:revenue-change-auth" };
     if (specifier === "@openbooks/engine/src/revenue/contract-modifications.ts")
       return { shortCircuit: true, url: "mock:revenue-change-command" };
@@ -33,7 +39,7 @@ const hooks = registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        source: `import {NextResponse} from 'next/server';export async function guardPermission(){return globalThis[Symbol.for('revenue-modification-route')].allowed?{user:{id:'actor',orgId:'org'}}:NextResponse.json({error:'missing permission'},{status:403})}`,
+        source: `import {NextResponse} from 'next/server';export async function guardFeaturePermission(...args){const s=globalThis[Symbol.for('revenue-modification-route')];s.gateArgs=args;if(!s.allowed)return NextResponse.json({error:'missing permission'},{status:403});if(!s.featureEnabled)return NextResponse.json({error:'not found'},{status:404});return {user:{id:'actor',orgId:'org'}}}`,
       };
     if (url === "mock:revenue-change-command")
       return {
@@ -94,6 +100,27 @@ test("the actual JSON and decimal schemas preserve a signed amendment and pass a
   assert.equal(state.calls[0]![0], "org");
   assert.equal(state.calls[0]![2], "actor");
   assert.deepEqual(state.calls[0]![3], valid);
+  assert.deepEqual(state.gateArgs, ["ar.post", "revenueRecognition"]);
+});
+
+test("disabled revenue recognition refuses before body parsing or proposing an amendment", async () => {
+  state.allowed = true;
+  state.featureEnabled = false;
+  state.calls = [];
+  try {
+    const response = await route.POST(
+      new Request(
+        "http://openbooks.test/api/revenue/contracts/x/modifications",
+        { method: "POST", body: "malformed JSON" },
+      ),
+      context,
+    );
+    assert.equal(response.status, 404);
+    assert.deepEqual(state.gateArgs, ["ar.post", "revenueRecognition"]);
+    assert.equal(state.calls.length, 0);
+  } finally {
+    state.featureEnabled = true;
+  }
 });
 test("malformed scope, dates, decimals and evidence never reach the domain command", async () => {
   for (const patch of [

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { proposeRevenueModification } from "@openbooks/engine/src/revenue/contract-modifications.ts";
 import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
-import { guardPermission } from "@/lib/authz";
+import { guardFeaturePermission } from "@/lib/feature-gates";
 import { exactMoney, parseJsonBody } from "@/lib/api/json";
 import { isUuid } from "@/lib/list-params";
 export const runtime = "nodejs";
@@ -60,7 +60,7 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const gate = await guardPermission("ar.post");
+  const gate = await guardFeaturePermission("ar.post", "revenueRecognition");
   if (gate instanceof NextResponse) return gate;
   const { id } = await params;
   if (!isUuid(id))
