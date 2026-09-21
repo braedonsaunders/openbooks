@@ -111,6 +111,8 @@ const hrmTransparencyMigrationPath = "schema/migrations/generated/0222_hrm_headc
 // HR-17 begin
 const hrmContinuousMigrationPath = "schema/migrations/generated/0228_hrm_continuous_performance.sql";
 // HR-17 end
+const jlCheckAccountEvidenceStampMigrationPath =
+  "schema/migrations/generated/0236_jl_check_account_evidence_stamp.sql";
 
 test("payroll opening-balance migration rebuilds its widened governed view safely", () => {
   const migration = readFileSync(payrollOpeningBalanceSecondOrderMigrationPath, "utf8");
@@ -470,6 +472,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // merge would have orphaned them (0241, allocated by the integrator;
     // 0238 is a HOLE reserved for the payroll giro renumber, not free).
     "0241_hrm_party_reference_integrity.sql",
+    "0236_jl_check_account_evidence_stamp.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -2246,6 +2249,36 @@ test("hrm compensation carries versioned bands with org isolation", () => {
   assert.match(migration, /openbooks:org_isolation:v1/);
   assert.match(migration, /openbooks\.amend/);
   assert.match(migration, /a pushed line already moved payroll/);
+test("jl_check_account admits evidence-only stamps without weakening posting rules", () => {
+  // 0236: the connector's cleared-date mirror stamps source_cleared_date /
+  // source_cleared_connector on posted lines. The stamp changes no
+  // posting-relevant field, so jl_check_account returns early exactly when
+  // every non-evidence column is byte-identical — under the SAME column set
+  // jl_guard carves out. Any other UPDATE still faces the full posting
+  // checks, and append-only legality of the stamp itself stays jl_guard's.
+  const migration = readFileSync(jlCheckAccountEvidenceStampMigrationPath, "utf8");
+  const evidenceKeys =
+    "to_jsonb(new) - 'reconciled_at' - 'reconciliation_id' - 'source_cleared_date' - 'source_cleared_connector'";
+  assert.ok(
+    migration.includes(evidenceKeys),
+    "0236 carves out exactly the jl_guard evidence columns",
+  );
+  const guard = readFileSync(
+    "schema/migrations/generated/0165_jl_guard_original_parent_immutability.sql",
+    "utf8",
+  );
+  assert.ok(
+    guard.includes(evidenceKeys),
+    "0236 drifts from jl_guard: the two guards must agree on what an evidence-only stamp is",
+  );
+  assert.match(migration, /if tg_op = 'UPDATE'/);
+  // Posting rules keep their teeth for every non-evidence write.
+  assert.match(migration, /is a summary account and cannot be posted to/);
+  assert.match(migration, /is inactive/);
+  assert.match(migration, /only accepts % postings/);
+  assert.match(migration, /does not exist in organization/);
+  assert.match(migration, /for share/);
+  assert.match(migration, /openbooks\.migration/);
   assert.doesNotMatch(migration, /on conflict do nothing/i);
   assert.doesNotMatch(migration, /SELECT public\.openbooks_refresh_query_catalog\(\)/);
   assert.doesNotMatch(migration, /0001_baseline/);
