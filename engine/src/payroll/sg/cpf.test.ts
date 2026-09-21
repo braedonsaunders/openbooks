@@ -18,11 +18,13 @@ import {
   sgRatesForTaxYear,
 } from "./cpf.ts";
 
-const CITIZEN_LE55 = { cpfStatus: "citizen", ageBand: "le55" } as const;
+const CITIZEN_LE55 = { taxYear: 2026, cpfStatus: "citizen", ageBand: "le55" } as const;
 
-test("2026 is the one transcribed year; every other year is refused by name", () => {
+test("2024–2026 are transcribed; every other year is refused by name", () => {
+  assert.equal(sgRatesForTaxYear(2024), 2024);
+  assert.equal(sgRatesForTaxYear(2025), 2025);
   assert.equal(sgRatesForTaxYear(2026), 2026);
-  for (const year of [2025, 2027]) {
+  for (const year of [2023, 2027]) {
     assert.throws(() => sgRatesForTaxYear(year), PayrollError, `${year} refused`);
   }
 });
@@ -84,7 +86,7 @@ test("a 3rd-year SPR prices the same Table 1 row as a citizen", () => {
   // Table 1 header: "for Singapore Citizens or Singapore Permanent
   // Residents (3rd year onwards)" — one row, two statuses.
   const citizen = calculateSgStatutory({ ...CITIZEN_LE55, ordinaryWages: "4500.00" });
-  const spr = calculateSgStatutory({ cpfStatus: "spr_3rd_year", ageBand: "le55", ordinaryWages: "4500.00" });
+  const spr = calculateSgStatutory({ taxYear: 2026, cpfStatus: "spr_3rd_year", ageBand: "le55", ordinaryWages: "4500.00" });
   assert.deepEqual(spr, citizen);
 });
 
@@ -146,7 +148,7 @@ test("foreigners, graduated SPR years and other age bands are refused by name", 
   }
   assert.throws(() => assertSgCovered("citizen" as never, "xx" as never), /age band/);
   assert.throws(
-    () => calculateSgStatutory({ cpfStatus: "foreigner", ageBand: "le55", ordinaryWages: "4500.00" }),
+    () => calculateSgStatutory({ taxYear: 2026, cpfStatus: "foreigner", ageBand: "le55", ordinaryWages: "4500.00" }),
     /no CPF for a foreign employee/,
   );
 });

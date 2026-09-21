@@ -107,14 +107,16 @@ test("the SG withholding declaration passes generic registration with SG impleme
   }
 });
 
-test("2026 is the one published edition; every other year is refused by name", () => {
+test("2024, 2025 and 2026 are the published editions; every other year is refused by name", () => {
   assert.equal(SG_TAX_YEARS.country, "SG");
   assert.equal(SG_TAX_YEARS.ratesModule, "engine/src/payroll/sg/rates.ts");
-  const published2026 = SG_TAX_YEARS.editions.filter(
-    (edition) => edition.year === 2026 && edition.status === "published",
-  );
-  assert.equal(published2026.length, 1, "2026 is transcribed");
-  for (const year of [2025, 2027]) {
+  for (const year of [2024, 2025, 2026]) {
+    const published = SG_TAX_YEARS.editions.filter(
+      (edition) => edition.year === year && edition.status === "published",
+    );
+    assert.equal(published.length, 1, `${year} is transcribed`);
+  }
+  for (const year of [2023, 2027]) {
     const published = SG_TAX_YEARS.editions.filter(
       (edition) => edition.year === year && edition.status === "published",
     );
