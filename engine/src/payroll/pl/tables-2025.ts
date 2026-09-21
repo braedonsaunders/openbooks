@@ -52,9 +52,9 @@
  *   switchover: one 2025 edition, no mid-year engine change.
  * - FGŚP age bar: claims-protection act, tekst jednolity Dz.U. 2025
  *   poz. 433 — art. 9b ust. 2 exempts women 55+ / men 60+ from FGŚP
- *   (single-version print, verified). The 2026 engine prices FGŚP
- *   unconditionally, so 2025 sets the pack's `fgspAgeBar` flag while 2026
- *   keeps its landed behaviour (reported, not changed here).
+ *   (single-version print, verified). 2025 sets the pack's `fgspAgeBar`
+ *   flag, as does 2026 under its own consolidated text (Dz.U. 2026
+ *   poz. 186 — see ./tables-2026.ts).
  * - Minimum wage 2025: rozporządzenie RM z dnia 12 września 2024 r.,
  *   Dz.U. 2024 poz. 1362, § 1: single step, 4 666 zł from 1 January 2025.
  * - Wypadkowe posture: sus art. 22 ust. 2 (Dz.U. 2025 poz. 350) — per-payer
