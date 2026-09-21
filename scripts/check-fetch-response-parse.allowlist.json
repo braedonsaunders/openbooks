@@ -151,11 +151,6 @@
   },
   {
     "path": "web/app/(app)/assets/AssetDrawer.tsx",
-    "fn": "runForAsset",
-    "reason": "server always returns JSON; guard adoption pending. POST /api/assets/run-depreciation (web/app/api/assets/run-depreciation/route.ts): runDepreciation sits inside try/catch-all answering NextResponse.json({ error }, { status: 500 }); no rethrow; outside-try work is a token gate, an isUuid check, and a businessToday read. Verified by reading the handler."
-  },
-  {
-    "path": "web/app/(app)/assets/AssetDrawer.tsx",
     "fn": "remove",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
@@ -168,11 +163,6 @@
     "path": "web/app/(app)/assets/NewAssetRedirect.tsx",
     "fn": "NewAssetRedirect",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/assets/RunDepreciationButton.tsx",
-    "fn": "run",
-    "reason": "server always returns JSON; guard adoption pending. Same endpoint as AssetDrawer runForAsset above: POST /api/assets/run-depreciation answers JSON on every path including the 500 catch-all."
   },
   {
     "path": "web/app/(app)/assets/equipment/NewEquipmentButton.tsx",
