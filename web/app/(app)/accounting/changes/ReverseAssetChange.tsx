@@ -8,12 +8,10 @@ export function ReverseAssetChange({
   id,
   domain = "asset",
   effectiveOn,
-  taxBasis = false,
 }: {
   id: string;
   domain?: "asset" | "consolidation";
   effectiveOn?: string;
-  taxBasis?: boolean;
 }) {
   const router = useRouter(),
     today = useBusinessToday();
@@ -33,7 +31,7 @@ export function ReverseAssetChange({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            ...(domain === "asset" && !taxBasis ? { effectiveOn: date } : {}),
+            ...(domain === "asset" ? { effectiveOn: date } : {}),
             reason,
             idempotencyKey: key,
           }),
@@ -65,16 +63,10 @@ export function ReverseAssetChange({
         onClose={() => setOpen(false)}
         title={
           domain === "asset"
-            ? taxBasis
-              ? "Reverse tax basis workpaper"
-              : "Reverse asset change"
+            ? "Reverse asset change"
             : "Correct loss of control"
         }
-        description={
-          taxBasis
-            ? "The original workpaper remains in the audit history. Reversal requires a new independent approval."
-            : "The original journals remain intact. Reversal requires a new independent approval."
-        }
+        description="The original journals remain intact. Reversal requires a new independent approval."
         footer={
           <Button disabled={busy} onClick={propose}>
             Prepare reversal
@@ -82,7 +74,7 @@ export function ReverseAssetChange({
         }
       >
         <div className="space-y-4">
-          {domain === "asset" && !taxBasis ? (
+          {domain === "asset" ? (
             <div>
               <Label>Reversal date</Label>
               <Input
@@ -94,15 +86,6 @@ export function ReverseAssetChange({
                 }}
               />
             </div>
-          ) : taxBasis ? (
-            <p>
-              The correction uses the original workpaper date ({effectiveOn}).
-              Apply a replacement tax basis workpaper after this reversal.
-              If earlier consolidated matching periods were posted, open the
-              replacement in Accounting changes to review and approve its tax
-              matching replay. Re-run the latest computed year from Fixed Assets
-              tax pools; earlier computed years cannot be overwritten.
-            </p>
           ) : (
             <p>
               The correction uses the original disposal date. Its accounting

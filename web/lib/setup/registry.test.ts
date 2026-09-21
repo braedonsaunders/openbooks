@@ -51,8 +51,6 @@ test('re-homed entities stay in the CRUD registry but leave the setup rail', () 
     'tax-regimes',
     'tax-pool-classes',
     'tax-first-year-rules',
-    'tax-year-windows',
-    'tax-qualifying-activity-cessations',
     'depreciation-methods',
     'depreciation-book-policies',
     'pay-schedules',
@@ -107,22 +105,6 @@ test('generic setup subsidiary controls follow the feature flag everywhere', () 
     assert.ok(!disabled.fields.some((field) => field.ref === 'subsidiaries' || field.key === 'subsidiaryIncludeChildren'))
     assert.ok(!disabled.columns.some((column) => column.ref === 'subsidiaries'))
   }
-})
-
-test('tax-year identity remains editable at creation in a single-company setup', () => {
-  const entity = SETUP_ENTITY_BY_KEY.get('tax-year-windows')
-  assert.ok(entity)
-  const rendered = setupEntityForFeatureState(entity, { multiSubsidiary: false, equipment: false })
-  assert.equal(rendered.featureKey, 'fixedAssets')
-  for (const key of ['subsidiaryId', 'regime', 'yearStart']) {
-    const field = rendered.fields.find((candidate) => candidate.key === key)
-    assert.ok(field, `${key} must remain available: it identifies the statutory year`)
-    assert.equal(field.required, true)
-    assert.equal(field.lockedOnEdit, true)
-  }
-  assert.ok(rendered.columns.some((column) => column.ref === 'subsidiaries'))
-  assert.ok(rendered.fields.some((field) => field.key === 'filingYear' && field.kind === 'integer'))
-  assert.ok(rendered.fields.some((field) => field.key === 'reason' && field.required))
 })
 
 test('compliance setup entities are gated and reachable from the rail', () => {

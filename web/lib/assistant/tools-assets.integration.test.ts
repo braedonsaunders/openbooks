@@ -69,17 +69,10 @@ test('asset reads: register totals, drawer detail, and subsidiary isolation', { 
         values (${poolId},${org.orgId},${org.bookId},${org.subsidiaryId},'test-regime','10.1','30','declining','1000'),
                (${hiddenPoolId},${org.orgId},${org.bookId},${hidden},'test-regime','10.1','30','declining','9000')
       `);
-      const visibleWindow = randomUUID();
-      const hiddenWindow = randomUUID();
       await db.execute(sql`
-        insert into tax_year_windows(id,org_id,subsidiary_id,regime,year_start,year_end,filing_year,reason)
-        values (${visibleWindow},${org.orgId},${org.subsidiaryId},'test-regime','2025-01-01','2025-12-31',2025,'calendar-year tax window'),
-               (${hiddenWindow},${org.orgId},${hidden},'test-regime','2025-01-01','2025-12-31',2025,'calendar-year tax window')
-      `);
-      await db.execute(sql`
-        insert into tax_pool_periods(id,org_id,pool_id,tax_year,tax_year_window_id,opening_balance,additions,dispositions,net_additions,immediate_expense,base,allowance,closing_balance,recapture,terminal_loss,short_year_factor,year_start,year_end)
-        values (${randomUUID()},${org.orgId},${poolId},2025,${visibleWindow},'1000','0','0','0','0','1000','100','900','0','0','1','2025-01-01','2025-12-31'),
-               (${randomUUID()},${org.orgId},${hiddenPoolId},2025,${hiddenWindow},'9000','0','0','0','0','9000','900','8100','0','0','1','2025-01-01','2025-12-31')
+        insert into tax_pool_periods(id,org_id,pool_id,tax_year,opening_balance,additions,dispositions,net_additions,immediate_expense,base,allowance,closing_balance,recapture,terminal_loss,short_year_factor)
+        values (${randomUUID()},${org.orgId},${poolId},2025,'1000','0','0','0','0','1000','100','900','0','0','1'),
+               (${randomUUID()},${org.orgId},${hiddenPoolId},2025,'9000','0','0','0','0','9000','900','8100','0','0','1')
       `);
     });
 

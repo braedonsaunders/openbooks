@@ -1491,9 +1491,7 @@
         "classes": "Classes fiscais",
         "firstYear": "Regras do primeiro ano",
         "methods": "Métodos",
-        "books": "Políticas por livro",
-        "cessation": "Atividade qualificante",
-        "years": "Exercícios fiscais"
+        "books": "Políticas por livro"
       },
       "packsTitle": "Pacotes de depreciação por país",
       "packsDescription": "A instalação de um pacote cria uma configuração editável do tenant. As substituições existentes nunca são substituídas.",
@@ -1531,14 +1529,6 @@
         "assignments": {
           "title": "Atribuições por categoria de ativo",
           "description": "Atribua cada categoria de ativo a uma classe de regime nos atributos fiscais."
-        },
-        "cessation": {
-          "title": "Cessação CAA 55(4)",
-          "description": "Registre quando uma atividade qualificadora do Reino Unido cessa para que exista uma balancing allowance. Alienar o último ativo não é uma cessação."
-        },
-        "years": {
-          "title": "Exercícios fiscais",
-          "description": "Declare as datas e o motivo de cada exercício por entidade jurídica e regime."
         }
       }
     },
@@ -2586,16 +2576,6 @@
         "description": "Regras de retenção: anonimizar ou excluir conforme o calendário.",
         "singularTitle": "Regra de retenção",
         "title": "Regras de retenção"
-      },
-      "tax-qualifying-activity-cessations": {
-        "title": "Cessações de atividade qualificadora",
-        "singularTitle": "Cessação de atividade qualificadora",
-        "description": "Cessação com data de vigência de uma atividade qualificadora do Reino Unido por entidade jurídica, segundo o CAA 55(4). A balancing allowance só existe após esta data; esvaziar o grupo não basta."
-      },
-      "tax-year-windows": {
-        "title": "Exercícios fiscais",
-        "singularTitle": "Exercício fiscal",
-        "description": "Declare as datas de cada exercício por entidade jurídica e regime, incluindo períodos reduzidos. Informe o motivo; as datas já usadas em um cálculo são preservadas."
       }
     },
     "fields": {
@@ -2980,13 +2960,7 @@
       "retroThreshold": "Limiar retroativo",
       "cohortKey": "Coorte",
       "biasTerms": "Termos sensíveis",
-      "reviewMonths": "Cadência (meses)",
-      "yearStart": "Início do exercício",
-      "yearEnd": "Fim do exercício",
-      "filingYear": "Rótulo do ano da declaração",
-      "ceasedOn": "Cessado em",
-      "resumedOn": "Retomado em",
-      "evidence": "Evidência"
+      "reviewMonths": "Cadência (meses)"
     },
     "fieldHelp": {
       "gapless": "Sem lacunas significa que todos os números da sequência devem ser contabilizados, sem números pulados. Ative somente quando exigências legais ou de auditoria determinarem uma numeração ininterrupta.",

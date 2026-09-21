@@ -1763,9 +1763,7 @@
         "classes": "Steuerklassen",
         "firstYear": "Erstjahresregeln",
         "methods": "Methoden",
-        "books": "Buchrichtlinien",
-        "cessation": "Qualifizierende Tätigkeit",
-        "years": "Steuerjahre"
+        "books": "Buchrichtlinien"
       },
       "packsTitle": "Länderspezifische Abschreibungspakete",
       "packsDescription": "Durch die Installation eines Pakets wird eine bearbeitbare Mandantenkonfiguration erstellt. Vorhandene Überschreibungen werden nie ersetzt.",
@@ -1803,14 +1801,6 @@
         "assignments": {
           "title": "Zuordnungen für Anlagekategorien",
           "description": "Ordnen Sie jede Anlagekategorie in den Steuerattributen einer Regimeklasse zu."
-        },
-        "cessation": {
-          "title": "Einstellung nach CAA 55(4)",
-          "description": "Erfassen Sie, wann eine britische qualifizierende Tätigkeit endet, damit ein Balancing Allowance möglich ist. Die Veräußerung des letzten Wirtschaftsguts ist keine Einstellung."
-        },
-        "years": {
-          "title": "Steuerjahre",
-          "description": "Erfassen Sie die Steuerjahresdaten und ihre Begründung je Rechtsträger und Steuerregime."
         }
       }
     },
@@ -2654,16 +2644,6 @@
         "description": "Aufbewahrungsregeln: anonymisieren oder löschen nach Frist.",
         "singularTitle": "Aufbewahrungsregel",
         "title": "Aufbewahrungsregeln"
-      },
-      "tax-qualifying-activity-cessations": {
-        "title": "Einstellungen qualifizierender Tätigkeiten",
-        "singularTitle": "Einstellung qualifizierender Tätigkeit",
-        "description": "Stichtagsbezogene Einstellung einer britischen qualifizierenden Tätigkeit je Rechtsträger nach CAA 55(4). Ein Balancing Allowance gibt es erst nach diesem Datum; ein leerer Pool reicht nicht."
-      },
-      "tax-year-windows": {
-        "title": "Steuerjahre",
-        "singularTitle": "Steuerjahr",
-        "description": "Erfassen Sie die Steuerjahreszeiträume je Rechtsträger und Steuerregime, einschließlich Rumpfjahren. Begründen Sie jeden Zeitraum; bereits verwendete Daten bleiben erhalten."
       }
     },
     "fields": {
@@ -3048,13 +3028,7 @@
       "retroThreshold": "Rückrechnungsschwelle",
       "cohortKey": "Kohorte",
       "biasTerms": "Sprachliste",
-      "reviewMonths": "Prüfrhythmus (Monate)",
-      "yearStart": "Jahresbeginn",
-      "yearEnd": "Jahresende",
-      "filingYear": "Bezeichnung des Erklärungsjahres",
-      "ceasedOn": "Eingestellt am",
-      "resumedOn": "Wieder aufgenommen am",
-      "evidence": "Nachweis"
+      "reviewMonths": "Prüfrhythmus (Monate)"
     },
     "fieldHelp": {
       "gapless": "Lückenlos bedeutet, dass jede Nummer in der Folge belegt sein muss und keine Nummer übersprungen wird. Aktivieren Sie dies nur, wenn gesetzliche oder prüfungsbezogene Vorgaben eine ununterbrochene Nummerierung verlangen.",

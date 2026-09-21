@@ -45,15 +45,7 @@
       "closing": "期末残高",
       "recapture": "戻入",
       "terminalLoss": "終了損"
-    },
-    "legalEntity": "法人",
-    "window": "登録済みの税務年度",
-    "chooseWindow": "税務年度の期間を選択",
-    "noWindows": "この法人と税制には税務年度の期間が登録されていません。",
-    "configureYears": "税務年度を設定",
-    "windowLabel": "{filingYear}：{start} ～ {end}",
-    "loadingWindows": "税務年度を読み込み中…",
-    "loadWindowsFailed": "税務年度を読み込めませんでした。"
+    }
   },
   "list": {
     "title": "固定資産",
