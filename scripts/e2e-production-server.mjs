@@ -44,9 +44,24 @@ const cert = spawnSync('openssl', [
   '-keyout', join(directory, 'key.pem'), '-out', join(directory, 'cert.pem'),
 ], { stdio: 'pipe' })
 if (cert.status !== 0) throw new Error(`Ephemeral TLS certificate creation failed: ${cert.error ?? cert.stderr}`)
+// The TLS proxy is the public origin. CSRF (f5ce3563c) will not treat
+// X-Forwarded-Host as the deployment unless the operator named the URL
+// or opted into TRUST_PROXY. Unnamed, the Next process sees
+// http://127.0.0.1:4781 and refuses Origin https://localhost:4780 as
+// 403 {"error":"forbidden"} — which is the login POST, not a dropped
+// cookie. NODE_ENV stays production: this suite exists to exercise
+// production Secure cookies and CSRF, not to fail-open as "test".
+const publicOrigin = process.env.OPENBOOKS_APP_URL ?? 'https://localhost:4780'
 app = spawn(process.execPath, [join(standalone, 'server.js')], {
   cwd: standalone,
-  env: { ...process.env, NODE_ENV: 'production', HOSTNAME: '127.0.0.1', PORT: '4781' },
+  env: {
+    ...process.env,
+    NODE_ENV: 'production',
+    HOSTNAME: '127.0.0.1',
+    PORT: '4781',
+    OPENBOOKS_APP_URL: publicOrigin,
+    OPENBOOKS_TRUST_PROXY: process.env.OPENBOOKS_TRUST_PROXY ?? '1',
+  },
   stdio: ['ignore', 'pipe', 'pipe'],
 })
 for (const stream of [app.stdout, app.stderr]) stream.on('data', (data) => { log.write(data); process.stdout.write(data) })
