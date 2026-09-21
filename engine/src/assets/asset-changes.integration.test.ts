@@ -233,8 +233,12 @@ test(
             f.actors.submitterId,
             input(f, { effectiveOn: "2026-09-01" }),
           ),
-        /post depreciation.*2026-08-31/,
+        /run depreciation for Primary through 2026-08-31 before proposing this change/,
       );
+      const remaining = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from financial_changes where org_id=${f.org.orgId}
+      `)).rows[0]!;
+      assert.equal(remaining.n, 0, "refused depreciation readiness must not leave a change proposal");
     }),
 );
 test("a stale independently approved change cannot post", { skip: !DB }, () =>

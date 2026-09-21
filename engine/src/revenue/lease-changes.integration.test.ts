@@ -256,8 +256,13 @@ test(
           await db.execute(
             sql`update financial_changes set reason='Rewrite approved terms' where id=${changeId}`,
           ),
-        (error: unknown) => errorChainMatches(error, /financial changes are immutable evidence; propose a correcting change/),
+        (error: unknown) => errorChainMatches(error, /financial change proposal is immutable; create a new proposal/),
       );
+      const preserved = (await db.execute<{ reason: string }>(sql`
+        select reason from financial_changes where org_id=${org.orgId} and id=${changeId}
+      `)).rows[0]!;
+      assert.equal(preserved.reason, input(accounts).reason,
+        "the refused rewrite must preserve the approved reason");
     });
   },
 );
@@ -437,8 +442,12 @@ test(
           userId: actors.submitterId,
           decision: "approved",
         }),
-        /own submission|not assigned|not allowed|not found/,
+        /you are not an approver for this gate/,
       );
+      const pending = (await db.execute<{ status: string }>(sql`
+        select status from flow_gates where org_id=${org.orgId} and id=${gate.id}
+      `)).rows[0]!;
+      assert.equal(pending.status, "pending", "the submitter's refused decision cannot approve the gate");
       const rows = await withOrg(org.orgId, () =>
         worklistGates(org.orgId, actors.approver1Id),
       );
