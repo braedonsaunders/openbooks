@@ -4478,6 +4478,17 @@ const I14_IDENTICAL_BY_FACT = new Set([
   // HR-16 report columns: these headings are the same word in the target
   // language, reviewed one by one — Version/Status/Name/Error/Action/Code
   // are borrowed or identical forms, not untranslated English.
+  // The natural-language report prompt's label: "Question" is the French word,
+  // spelled identically to the English. de/es/ja/pt-BR/zh all differ, which is
+  // what distinguishes a genuine cognate here from an untranslated string.
+  'fr:reports.custom.nl.question|Question',
+  // Likewise "Status" in German, which the automations columns below already
+  // record as a reviewed identical term.
+  'de:reports.custom.nl.status|Status',
+  // HR-21's payroll-anomaly and AI-capability report columns: Status and Name
+  // are the same words in German, exactly as the automations columns below.
+  'de:reports.catalog.columns.payroll_anomaly_flags.status|Status',
+  'de:reports.catalog.columns.ai_capabilities.name|Name',
   'de:reports.catalog.columns.automations.name|Name',
   'de:reports.catalog.columns.automations.status|Status',
   'pt-BR:reports.catalog.columns.automations.status|Status',
@@ -5280,7 +5291,7 @@ const I14_IDENTICAL_BY_FACT = new Set([
 const I14_FILE_COUNTS: Record<string, number> = {
   "items": 161,
   "inventory": 159,
-  "reports": 1741,
+  "reports": 1744,
   "sync": 172,
   "login": 33,
   "accounts": 82,
@@ -5293,7 +5304,7 @@ const I14_FILE_COUNTS: Record<string, number> = {
   "data": 85,
   "journal": 58,
   "labor-pricing": 128,
-  "nav": 108,
+  "nav": 110,
   "parties": 221,
   "payments": 255,
   "pdfTemplates": 50,

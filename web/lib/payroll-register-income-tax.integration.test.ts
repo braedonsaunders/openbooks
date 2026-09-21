@@ -32,7 +32,7 @@ const catalogFor = (orgId: string) => {
  * structural complement — with both columns and both labels untouched.
  */
 test('payroll register social buckets: eleven packs counted, QPIP folded into EI', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg()
+  const org = await withBypass(() => createScratchOrg())
   try {
     const orgId = org.orgId
     assert.deepEqual(eiColumnSystemKeys(), ['ei', 'qpip'])
@@ -272,7 +272,7 @@ const COVERAGE_CURRENCY: Record<string, string> = {
  * every other earnings-assessed deduction in `cpp_fica`.
  */
 test('payroll register: every statutory employee deduction appears in some column, per pack', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg()
+  const org = await withBypass(() => createScratchOrg())
   try {
     const orgId = org.orgId
     const catalog = await withOrgContext(orgId, () => catalogFor(orgId))
