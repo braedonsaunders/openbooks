@@ -173,7 +173,10 @@ export async function listPostings(query: {
     const rows = (await db.execute<PostingRow>(sql`
       select ${POSTING_COLUMNS} from hrm_job_postings
        where org_id = ${orgId}
-         and (${query.requisitionId ?? null} is null or requisition_id = ${query.requisitionId ?? null})
+         -- Cast: an untyped null parameter makes PostgreSQL refuse the
+         -- statement, so listing every posting threw while listing one
+         -- requisition's postings worked.
+         and (${query.requisitionId ?? null}::uuid is null or requisition_id = ${query.requisitionId ?? null}::uuid)
        order by board_key
     `)).rows;
     return Promise.all(
