@@ -120,6 +120,13 @@ test("hrm permissions are catalogued, grouped, and split between admin-only and 
     "hrm.certifications.read",
     "hrm.certifications.manage",
     // HR-14 end
+    // HR-19 begin: documents read/manage and surveys manage stay
+    // admin-only like the employment keys — appended after the
+    // construction keys so the pinned group order below holds.
+    "hrm.documents.read",
+    "hrm.documents.manage",
+    "hrm.surveys.manage",
+    // HR-19 end
   ];
   // HR-9 self keys: every login is a person, so every built-in role
   // carries them (admin via the catalogue spread, the rest explicitly).

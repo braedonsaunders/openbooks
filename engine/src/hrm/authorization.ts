@@ -521,6 +521,104 @@ export async function requireAggregatePositionRead(
   return actorAllowedSubsidiaryIds(exec, orgId, actorId);
 }
 
+/**
+ * HR-19 document, survey, and org-chart duties (0230). read = see HR
+ * documents, templates, retention state and exports; manage = author
+ * templates, issue/send/void documents, run retention and DSAR exports.
+ * Own documents ride hrm.self.read (fenced per-party in documents.ts);
+ * signing and acknowledging are token or own-session actions. Surveys
+ * carry only a manage key: authoring and aggregate results stay HR, and
+ * responding rides invitation tokens, never a grant. Admin-only like the
+ * employment keys above (granted via the catalogue spread).
+ */
+// HR-19 begin
+export const HRM_DOCUMENT_PERMISSIONS = ["hrm.documents.read", "hrm.documents.manage"] as const;
+
+export type HrmDocumentPermission = (typeof HRM_DOCUMENT_PERMISSIONS)[number];
+
+export const HRM_SURVEY_PERMISSIONS = ["hrm.surveys.manage"] as const;
+
+export type HrmSurveyPermission = (typeof HRM_SURVEY_PERMISSIONS)[number];
+
+async function requireHrmDocumentAccess(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  permission: HrmDocumentPermission,
+): Promise<void> {
+  if (!(await actorHasPermission(exec, orgId, actorId, permission))) {
+    throw new HrmAuthorizationError(
+      `Document access requires the ${permission} permission — ask an administrator to grant it in /admin/roles.`,
+    );
+  }
+}
+
+/** See HR documents, templates, retention state and exports. */
+export async function requireHrmDocumentsRead(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<void> {
+  return requireHrmDocumentAccess(exec, orgId, actorId, "hrm.documents.read");
+}
+
+/** Author templates, issue/send/void documents, run retention and exports. */
+export async function requireHrmDocumentsManage(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<void> {
+  return requireHrmDocumentAccess(exec, orgId, actorId, "hrm.documents.manage");
+}
+
+/** Author surveys and read aggregate results (never respondent links). */
+export async function requireHrmSurveysManage(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<void> {
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.surveys.manage"))) {
+    throw new HrmAuthorizationError(
+      "Survey access requires the hrm.surveys.manage permission — ask an administrator to grant it in /admin/roles.",
+    );
+  }
+}
+
+/**
+ * The party behind a login for own-document reads. Returns null (not a
+ * throw) when the login has no resolved person: callers treat null as
+ * "owns nothing" and refuse named-party reads, never as global access.
+ */
+export async function loadActorPartyId(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<string | null> {
+  const row = (await exec.execute<{ partyId: string | null }>(sql`
+    select party_id as "partyId" from users where org_id = ${orgId} and id = ${actorId}
+  `)).rows[0];
+  return row?.partyId ?? null;
+}
+
+/**
+ * Org-chart read: anyone with hrm.employment.read OR hrm.self.read.
+ * Self-service users see names, titles and managers through this gate —
+ * the org-chart service never returns pay or private fields to anyone,
+ * so one gate covers both audiences.
+ */
+export async function requireOrgChartRead(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<void> {
+  if (await actorHasPermission(exec, orgId, actorId, "hrm.employment.read")) return;
+  if (await actorHasPermission(exec, orgId, actorId, "hrm.self.read")) return;
+  throw new HrmAuthorizationError(
+    "Org chart access requires the hrm.employment.read or hrm.self.read permission — ask an administrator to grant it in /admin/roles.",
+  );
+}
+// HR-19 end
+
 /** Actor identity as the SoD legs see it: super-admin flag travels with the login. */
 export async function loadActorPerson(
   exec: SqlExecutor,
