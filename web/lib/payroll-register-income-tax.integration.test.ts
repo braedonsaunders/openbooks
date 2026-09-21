@@ -220,7 +220,11 @@ test('payroll register social buckets: eleven packs counted, QPIP folded into EI
 
     // Still untouched on every stub: gross, income tax parity cases above,
     // net, employer cost.
-    for (const rows of [legacy, bound]) assert.equal(rows.length, 6)
+    // Stated twice, not looped: the static checker cannot follow the alias
+    // through `[legacy, bound]`, and an exemption would also cover the next
+    // real vacuum in this file.
+    assert.equal(legacy.length, 6)
+    assert.equal(bound.length, 6)
     for (const r of legacy) {
       const b = row(bound, r.employee!)
       for (const column of ['gross', 'net_pay', 'employer_cost']) {
@@ -372,8 +376,15 @@ test('payroll register: every statutory employee deduction appears in some colum
       const compiled = compileCustomQuery(entity, { ...query }, orgId, { maxRows: 100 })
       return (await pool.query(compiled.text, compiled.values as unknown[])).rows as Record<string, string>[]
     }
+    // Absolute floor, established once and not from the thing under test:
+    // an empty or shrunken registry would make every row-count assertion
+    // below pass vacuously, so the guard against it must not be expressed
+    // in terms of it.
+    const packCount = Object.keys(PAYROLL_COUNTRY_PACKS).length
+    assert.ok(packCount >= 14, `the pack registry holds ${packCount} packs — an empty or shrunken registry makes every `
+      + 'row-count assertion below pass vacuously')
     const bound = await withOrgContext(orgId, () => run(boundEntity))
-    assert.equal(bound.length, Object.keys(PAYROLL_COUNTRY_PACKS).length)
+    assert.equal(bound.length, packCount)
     for (const [name, expected] of Object.entries(expectedByEmployee)) {
       const found = bound.find((r) => r.employee === name)!
       assert.equal(Number(found.income_tax), expected.income, `${name}: income_tax`)
@@ -412,6 +423,8 @@ test('payroll register: every statutory employee deduction appears in some colum
     const legacyQuery = { ...query, columns: ['employee', 'income_tax', 'cpp_fica', 'ei'] }
     const legacyCompiled = compileCustomQuery(REPORT_ENTITY_MAP.pay_stubs!, { ...legacyQuery }, orgId, { maxRows: 100 })
     const legacy = (await withOrgContext(orgId, () => pool.query(legacyCompiled.text, legacyCompiled.values as unknown[]))).rows as Record<string, string>[]
+    assert.equal(legacy.length, packCount,
+      'the legacy query must return a row per pack: an empty result set would make the blindness assertions below pass by absence')
     for (const r of legacy) {
       assert.equal(Number(r.income_tax), 0, `${r.employee}: legacy income_tax blind`)
       assert.equal(Number(r.cpp_fica), 0, `${r.employee}: legacy cpp_fica blind`)
