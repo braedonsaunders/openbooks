@@ -575,7 +575,7 @@ async function pretaxBookIncomeBySubsidiary(
 
 /**
  * Book-vs-tax fixed-asset differences from per-book depreciation: cumulative
- * posted depreciation on the primary book vs the tax book (code 'tax'), per
+ * recognized depreciation on the primary book vs the tax book (code 'tax'), per
  * subsidiary. Positive difference (tax depreciation ahead of book) is a
  * taxable temporary difference → DTL.
  */
@@ -601,7 +601,10 @@ export async function computeFixedAssetDifferences(
       from (
         -- Collapse each asset's schedules and lines before summing acquisition
         -- cost. This keeps cost cardinality at one row per asset while still
-        -- retaining every posted depreciation line in each book.
+        -- retaining every recognized depreciation line in each book. The
+        -- schedule evidence guard pairs nonzero amounts with GL, imported or
+        -- explicit non-GL recognition evidence. Requiring a journal here
+        -- would silently discard a reporting-only tax book's recognized use.
         select fa.id, fa.subsidiary_id, sub.name as subsidiary_name,
                fa.acquisition_cost,
                coalesce(sum(l.posted_amount) filter (where s.book_id = (select primary_id from books)), 0) as book_dep,
@@ -609,7 +612,7 @@ export async function computeFixedAssetDifferences(
           from fixed_assets fa
           join subsidiaries sub on sub.id = fa.subsidiary_id and sub.org_id = fa.org_id
           join depreciation_schedules s on s.asset_id = fa.id and s.org_id = fa.org_id
-          join depreciation_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id and l.journal_entry_id is not null
+          join depreciation_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id and l.posted_amount is not null
           join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
          where fa.org_id = ${orgId} and p.ends_on <= ${fyEnd}
            and (select tax_id from books) is not null
