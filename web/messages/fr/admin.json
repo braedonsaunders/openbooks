@@ -2483,6 +2483,21 @@
         "title": "Compétences",
         "singularTitle": "Compétence",
         "description": "Une compétence d'un référentiel, liable aux évaluations, niveaux et postes."
+      },
+      "hrm-document-categories": {
+        "title": "Catégories de documents",
+        "singularTitle": "Catégorie de document",
+        "description": "Vocabulaire déclaré par l’organisation pour les catégories de documents RH — contrats, politiques, accusés. Les modèles et règles de conservation utilisent ces clés."
+      },
+      "hrm-document-templates": {
+        "title": "Modèles de documents",
+        "singularTitle": "Modèle de document",
+        "description": "Modèles de documents RH réutilisables avec champs de fusion et signataires ordonnés. Les modèles d’accusé seul ne requièrent aucune signature."
+      },
+      "hrm-retention-schedules": {
+        "title": "Règles de conservation",
+        "singularTitle": "Règle de conservation",
+        "description": "Durée de conservation de chaque catégorie, événement de départ, et suppression ou anonymisation à l’échéance. La suspension légale bloque l’exécution nommément."
       }
     },
     "fields": {
@@ -2831,7 +2846,17 @@
       "renewalLeadDays": "Préavis de renouvellement (jours)",
       "requiresEvidence": "Justificatif requis",
       "extraCategories": "Catégories supplémentaires",
-      "frameworkId": "Référentiel"
+      "frameworkId": "Référentiel",
+      "categoryKey": "Catégorie",
+      "retainYears": "Conservation (années)",
+      "fromEvent": "Début du délai",
+      "bodyTemplate": "Modèle de corps",
+      "mergeFields": "Champs de fusion",
+      "requiresSignature": "Signature requise",
+      "signEmployee": "Signature du salarié",
+      "signManager": "Signature du manager",
+      "signHr": "Signature RH",
+      "acknowledgmentOnly": "Accusé seul"
     },
     "fieldHelp": {
       "gapless": "Sans rupture signifie que chaque numéro de la séquence doit être justifié, sans aucun numéro sauté. Activez cette option uniquement si vos obligations légales ou d’audit imposent une numérotation ininterrompue.",
@@ -3364,6 +3389,15 @@
         "medical": "Médicale",
         "clearance": "Habilitation",
         "other": "Autre"
+      },
+      "hrmDocFromEvent": {
+        "completion": "Achèvement",
+        "termination": "Départ",
+        "creation": "Création"
+      },
+      "hrmDocAction": {
+        "delete": "Supprimer",
+        "anonymize": "Anonymiser"
       }
     },
     "laborCosting": {
@@ -4762,6 +4796,30 @@
     "hrmSuccession": {
       "title": "Talents & succession",
       "description": "Revues de talent et plans de succession par poste."
+    },
+    "hrmDocuments": {
+      "title": "Documents RH",
+      "description": "Documents RH de l’embauche au départ avec signature électronique, modèles et accusés. Désactiver ne supprime jamais de données."
+    },
+    "hrmDocumentRetention": {
+      "title": "Conservation des documents",
+      "description": "Règles de conservation avec suppression auditée après un délai de grâce. Désactiver ne supprime jamais de données."
+    },
+    "hrmDataSubjectExport": {
+      "title": "Exports d’accès",
+      "description": "Exports d’accès en un clic pour les personnes concernées. Désactiver ne supprime jamais de données."
+    },
+    "hrmSurveys": {
+      "title": "Enquêtes d’engagement",
+      "description": "Enquêtes d’engagement et pulsées avec résultats gradués en anonymat. Désactiver ne supprime jamais de données."
+    },
+    "hrmPulseSurveys": {
+      "title": "Enquêtes pulsées",
+      "description": "Cadence pulsée récurrente avec tendances. Requiert les enquêtes."
+    },
+    "hrmOrgChart": {
+      "title": "Organigramme",
+      "description": "L’arbre de l’organisation avec postes vacants, départements et portées de contrôle."
     }
   },
   "backupsManager": {

@@ -2596,6 +2596,21 @@
         "title": "Kompetenzen",
         "singularTitle": "Kompetenz",
         "description": "Eine Fähigkeit in einem Rahmen, verknüpfbar mit Beurteilungen, Job-Leveln und Positionen."
+      },
+      "hrm-document-categories": {
+        "title": "Dokumentkategorien",
+        "singularTitle": "Dokumentkategorie",
+        "description": "Unternehmensweites Vokabular für HR-Dokumentkategorien — Verträge, Richtlinien, Bestätigungen. Vorlagen und Aufbewahrungsregeln verwenden diese Schlüssel."
+      },
+      "hrm-document-templates": {
+        "title": "Dokumentvorlagen",
+        "singularTitle": "Dokumentvorlage",
+        "description": "Wiederverwendbare HR-Dokumentvorlagen mit Serienfeldern und geordneten Unterzeichnern. Reine Bestätigungsvorlagen erfordern keine Unterschrift."
+      },
+      "hrm-retention-schedules": {
+        "title": "Aufbewahrungsregeln",
+        "singularTitle": "Aufbewahrungsregel",
+        "description": "Wie lange jede Dokumentkategorie aufbewahrt wird, ab welchem Ereignis und ob der Ablauf löscht oder anonymisiert. Ein Legal Hold blockiert die Ausführung namentlich."
       }
     },
     "fields": {
@@ -2944,7 +2959,17 @@
       "renewalLeadDays": "Vorlauf Erneuerung (Tage)",
       "requiresEvidence": "Nachweis erforderlich",
       "extraCategories": "Zusätzliche Kategorien",
-      "frameworkId": "Rahmen"
+      "frameworkId": "Rahmen",
+      "categoryKey": "Kategorie",
+      "retainYears": "Aufbewahrung (Jahre)",
+      "fromEvent": "Fristbeginn",
+      "bodyTemplate": "Textvorlage",
+      "mergeFields": "Serienfelder",
+      "requiresSignature": "Unterschrift erforderlich",
+      "signEmployee": "Mitarbeiter unterschreibt",
+      "signManager": "Führungskraft unterschreibt",
+      "signHr": "HR unterschreibt",
+      "acknowledgmentOnly": "Nur Bestätigung"
     },
     "fieldHelp": {
       "gapless": "Lückenlos bedeutet, dass jede Nummer in der Folge belegt sein muss und keine Nummer übersprungen wird. Aktivieren Sie dies nur, wenn gesetzliche oder prüfungsbezogene Vorgaben eine ununterbrochene Nummerierung verlangen.",
@@ -3477,6 +3502,15 @@
         "medical": "Medizinisch",
         "clearance": "Freigabe",
         "other": "Sonstiges"
+      },
+      "hrmDocFromEvent": {
+        "completion": "Abschluss",
+        "termination": "Austritt",
+        "creation": "Erstellung"
+      },
+      "hrmDocAction": {
+        "delete": "Löschen",
+        "anonymize": "Anonymisieren"
       }
     },
     "bankFeeds": {
@@ -4762,6 +4796,30 @@
     "hrmSuccession": {
       "title": "Talent & Nachfolge",
       "description": "Talentbeurteilungen und Nachfolgepläne pro Position."
+    },
+    "hrmDocuments": {
+      "title": "HR-Dokumente",
+      "description": "HR-Dokumente von der Einstellung bis zum Austritt mit E-Signatur, Vorlagen und Bestätigungen. Das Umschalten löscht niemals Daten."
+    },
+    "hrmDocumentRetention": {
+      "title": "Dokumentaufbewahrung",
+      "description": "Aufbewahrungsregeln mit geprüfter Löschung nach einer Karenzzeit. Das Umschalten löscht niemals Daten."
+    },
+    "hrmDataSubjectExport": {
+      "title": "Auskunftsexporte",
+      "description": "Auskunftsexporte für Betroffene auf Knopfdruck. Das Umschalten löscht niemals Daten."
+    },
+    "hrmSurveys": {
+      "title": "Mitarbeiterbefragungen",
+      "description": "Mitarbeiter- und Pulsbefragungen mit anonymitätsgestuften Ergebnissen. Das Umschalten löscht niemals Daten."
+    },
+    "hrmPulseSurveys": {
+      "title": "Pulsbefragungen",
+      "description": "Wiederkehrende Pulstaktung mit Trends. Erfordert Befragungen."
+    },
+    "hrmOrgChart": {
+      "title": "Organigramm",
+      "description": "Der Organisationsbaum mit Vakanzen, Abteilungen und Führungsspannen."
     }
   },
   "extensions": {

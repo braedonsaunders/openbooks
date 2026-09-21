@@ -2528,6 +2528,21 @@
         "title": "Competencies",
         "singularTitle": "Competency",
         "description": "One skill in a framework, linkable to reviews, job levels, and positions."
+      },
+      "hrm-document-categories": {
+        "title": "Document categories",
+        "singularTitle": "Document category",
+        "description": "Org-declared vocabulary for HR document categories — contracts, policies, acknowledgments. Templates and retention rules name these keys."
+      },
+      "hrm-document-templates": {
+        "title": "Document templates",
+        "singularTitle": "Document template",
+        "description": "Reusable HR document shells with merge fields and ordered signers. Acknowledgment-only templates take no signatures."
+      },
+      "hrm-retention-schedules": {
+        "title": "Retention schedules",
+        "singularTitle": "Retention schedule",
+        "description": "How long each document category is kept, from which event, and whether expiry deletes or anonymizes. Legal hold blocks execution by name."
       }
     },
     "fields": {
@@ -2876,7 +2891,17 @@
       "renewalLeadDays": "Renewal lead (days)",
       "requiresEvidence": "Requires evidence",
       "extraCategories": "Extra categories",
-      "frameworkId": "Framework"
+      "frameworkId": "Framework",
+      "categoryKey": "Category",
+      "retainYears": "Retain (years)",
+      "fromEvent": "Clock starts",
+      "bodyTemplate": "Body template",
+      "mergeFields": "Merge fields",
+      "requiresSignature": "Requires signature",
+      "signEmployee": "Employee signs",
+      "signManager": "Manager signs",
+      "signHr": "HR signs",
+      "acknowledgmentOnly": "Acknowledgment only"
     },
     "fieldHelp": {
       "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",
@@ -3409,6 +3434,15 @@
         "medical": "Medical",
         "clearance": "Clearance",
         "other": "Other"
+      },
+      "hrmDocFromEvent": {
+        "completion": "Completion",
+        "termination": "Termination",
+        "creation": "Creation"
+      },
+      "hrmDocAction": {
+        "delete": "Delete",
+        "anonymize": "Anonymize"
       }
     },
     "payroll": {
@@ -4762,6 +4796,30 @@
     "hrmSuccession": {
       "title": "Talent & succession",
       "description": "Talent reviews and ranked succession plans per position."
+    },
+    "hrmDocuments": {
+      "title": "HR documents",
+      "description": "Hire-to-retire HR documents with e-signature, templates, and acknowledgments. Toggling never deletes data."
+    },
+    "hrmDocumentRetention": {
+      "title": "Document retention",
+      "description": "Retention schedules with audited deletion after a grace period. Toggling never deletes data."
+    },
+    "hrmDataSubjectExport": {
+      "title": "Subject-access exports",
+      "description": "One-click subject-access exports for data subjects. Toggling never deletes data."
+    },
+    "hrmSurveys": {
+      "title": "Engagement surveys",
+      "description": "Engagement and pulse surveys with anonymity-grade results. Toggling never deletes data."
+    },
+    "hrmPulseSurveys": {
+      "title": "Pulse surveys",
+      "description": "Recurring pulse cadence with trends. Needs surveys."
+    },
+    "hrmOrgChart": {
+      "title": "Org chart",
+      "description": "The organization tree with vacancies, departments, and span of control."
     }
   },
   "backupsManager": {

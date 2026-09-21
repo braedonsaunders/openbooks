@@ -2596,6 +2596,21 @@
         "title": "コンピテンシー",
         "singularTitle": "コンピテンシー",
         "description": "評価・職位レベル・職位に紐づくフレームワーク内のスキル。"
+      },
+      "hrm-document-categories": {
+        "title": "文書カテゴリ",
+        "singularTitle": "文書カテゴリ",
+        "description": "HR文書カテゴリの組織定義ボキャブラリ — 契約、ポリシー、確認書。テンプレートと保持ルールはこのキーを使用します。"
+      },
+      "hrm-document-templates": {
+        "title": "文書テンプレート",
+        "singularTitle": "文書テンプレート",
+        "description": "差し込みフィールドと順序付き署名者を持つ再利用可能なHR文書ひな形。確認のみテンプレートは署名不要です。"
+      },
+      "hrm-retention-schedules": {
+        "title": "保持スケジュール",
+        "singularTitle": "保持スケジュール",
+        "description": "各文書カテゴリの保持期間、起算イベント、期限到来時に削除か匿名化かを定義します。リーガルホールドは実行を停止します。"
       }
     },
     "fields": {
@@ -2944,7 +2959,17 @@
       "renewalLeadDays": "更新リードタイム（日）",
       "requiresEvidence": "証跡が必要",
       "extraCategories": "追加カテゴリ",
-      "frameworkId": "フレームワーク"
+      "frameworkId": "フレームワーク",
+      "categoryKey": "カテゴリ",
+      "retainYears": "保持期間（年）",
+      "fromEvent": "起算日",
+      "bodyTemplate": "本文テンプレート",
+      "mergeFields": "差し込みフィールド",
+      "requiresSignature": "署名が必要",
+      "signEmployee": "従業員が署名",
+      "signManager": "マネージャーが署名",
+      "signHr": "人事が署名",
+      "acknowledgmentOnly": "確認のみ"
     },
     "fieldHelp": {
       "gapless": "欠番なしとは、連番のすべての番号が記録され、番号が飛ばないことを意味します。法令または監査要件で途切れない採番が必要な場合にのみ有効にしてください。",
@@ -3477,6 +3502,15 @@
         "medical": "医療",
         "clearance": "許可",
         "other": "その他"
+      },
+      "hrmDocFromEvent": {
+        "completion": "完了",
+        "termination": "退職",
+        "creation": "作成"
+      },
+      "hrmDocAction": {
+        "delete": "削除",
+        "anonymize": "匿名化"
       }
     },
     "invoicing": {
@@ -4762,6 +4796,30 @@
     "hrmSuccession": {
       "title": "タレントと後継",
       "description": "職位ごとのタレントレビューと後継計画。"
+    },
+    "hrmDocuments": {
+      "title": "HR文書",
+      "description": "電子署名、テンプレート、確認書を備えた入社から退職までのHR文書。無効化してもデータは削除されません。"
+    },
+    "hrmDocumentRetention": {
+      "title": "文書の保持",
+      "description": "猶予期間後の監査付き削除を備えた保持スケジュール。無効化してもデータは削除されません。"
+    },
+    "hrmDataSubjectExport": {
+      "title": "開示請求エクスポート",
+      "description": "データ主体向けワンクリック開示エクスポート。無効化してもデータは削除されません。"
+    },
+    "hrmSurveys": {
+      "title": "エンゲージメント調査",
+      "description": "匿名度別の結果を備えたエンゲージメント・パルス調査。無効化してもデータは削除されません。"
+    },
+    "hrmPulseSurveys": {
+      "title": "パルス調査",
+      "description": "トレンド付きの定期パルス実施。調査機能が必要です。"
+    },
+    "hrmOrgChart": {
+      "title": "組織図",
+      "description": "欠員、部門、スパン・オブ・コントロールを示す組織ツリー。"
     }
   },
   "extensions": {

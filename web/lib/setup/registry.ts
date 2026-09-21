@@ -20,6 +20,11 @@ import { PAY_DERIVED_RULE_ENTITIES } from './payroll-derived-rules'
 import { PAYROLL_HOLIDAYS_ENTITY } from './payroll-holidays'
 import { LEAVE_POLICIES_ENTITY, LEAVE_TYPES_ENTITY } from './hrm-leave'
 import { ACTION_REASONS_ENTITY } from './hrm-action-reasons'
+import {
+  DOCUMENT_CATEGORIES_ENTITY,
+  DOCUMENT_TEMPLATES_ENTITY,
+  RETENTION_SCHEDULES_ENTITY,
+} from './hrm-documents'
 import { BENEFIT_PLANS_ENTITY, BENEFIT_PLAN_LEVELS_ENTITY } from './hrm-benefits'
 import { JOB_FAMILIES_ENTITY, JOB_LEVELS_ENTITY, PAY_BANDS_ENTITY } from './hrm-compensation'
 // HR-13 begin: construction-compliance Setup entities (rehomed onto the
@@ -1786,6 +1791,16 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   // HR-16 begin
   ACTION_REASONS_ENTITY,
   // HR-16 end
+  // HR documents (0230, HR-19): categories, templates, and retention
+  // schedules. Rehomed as sections onto /hrm/documents (never standalone
+  // setup pages); the Setup generic write path shares the engine
+  // validation through normalizeHrmDocumentTemplateInput +
+  // validateEntityIntegrity.
+  // HR-19 begin
+  DOCUMENT_CATEGORIES_ENTITY,
+  DOCUMENT_TEMPLATES_ENTITY,
+  RETENTION_SCHEDULES_ENTITY,
+  // HR-19 end
   // HRM benefit plans and ordered pricing tiers. Declared in
   // ./hrm-benefits.ts; ordinary registry entities behind the hrm switch.
   BENEFIT_PLANS_ENTITY,
