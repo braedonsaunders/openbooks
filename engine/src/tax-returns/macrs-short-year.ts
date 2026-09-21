@@ -209,18 +209,6 @@ function taxYearWindow(yearStart: string, yearEnd: string) {
   return { start, end };
 }
 
-/** Convention dates are firsts or midpoints. Keep half months as integer
- * periods before they multiply money; BigInt(3.5) would otherwise throw. */
-function halfMonths(months: number): bigint {
-  const periods = months * 2;
-  if (!Number.isSafeInteger(periods) || periods < 0) {
-    throw new MacrsShortYearError(
-      "MACRS recovery months must be non-negative whole or half months",
-    );
-  }
-  return BigInt(periods);
-}
-
 function rateRatio(numerator: bigint, denominator: bigint): string {
   const scale = 10_000_000_000n;
   const units = roundDiv(numerator * scale, denominator);
@@ -242,7 +230,8 @@ export function addCalendarDays(start: CalendarDay, days: number): CalendarDay {
   return fromUtc(date);
 }
 
-/** Pub 946 month count when the year starts on the 1st or ends on the last day. */
+/** §4.01 HY convention midpoint month count, NOT a deduction numerator.
+ * Day-based windows use halfYearDeemedServiceDate; recovery uses Exact. */
 export function shortTaxYearMonths(
   yearStart: string,
   yearEnd: string,
@@ -269,13 +258,9 @@ export function shortTaxYearMonths(
     );
   }
   if (!startsOnFirst(start) && !endsOnLast(end)) {
-    const days = inclusiveDayCount(start, end);
-    if (days < 1) {
-      throw new MacrsShortYearError(
-        `short-year window ${yearStart}–${yearEnd} has no days`,
-      );
-    }
-    return Math.max(1, Math.round(days / 30.4166));
+    throw new MacrsShortYearError(
+      `MACRS window ${yearStart}–${yearEnd} needs its actual-day convention midpoint and exact recovery months; a whole-month estimate cannot represent these boundaries`,
+    );
   }
   const beginMonth = start.month;
   const beginYear = start.year;
@@ -288,13 +273,102 @@ export function shortTaxYearMonths(
   return months - (context?.excludedTerminalMonth ? 1 : 0);
 }
 
+/** Calendar months from the beginning of start's month through the actual
+ * inclusive end, less the elapsed part of the first month. The denominator
+ * belongs to each calendar month; leap February is never a 30-day month. */
+function calendarMonthSpan(
+  start: CalendarDay,
+  end: CalendarDay,
+  firstElapsed: MacrsMonths,
+): MacrsMonths {
+  if (utc(end) < utc(start)) return macrsMonths(0);
+  const whole = (end.year - start.year) * 12 + end.month - start.month;
+  return maxMacrsMonths(
+    0,
+    subtractMacrsMonths(
+      addMacrsMonths(
+        whole,
+        macrsMonthRatio(
+          BigInt(end.day),
+          BigInt(lastDayOfMonth(end.year, end.month)),
+        ),
+      ),
+      firstElapsed,
+    ),
+  );
+}
+
+/** Actual dated period for the §4.03 recovery numerator. This deliberately
+ * differs from the touched-month count used by §4.01 to locate a half-year
+ * convention midpoint. Start/end days are legal boundaries, not deemed
+ * midpoint dates. Partial calendar months retain their own day denominator. */
+export function shortTaxYearMonthsExact(
+  yearStart: string,
+  yearEnd: string,
+  context?: MacrsShortYearContext,
+): MacrsMonths {
+  const { start, end } = taxYearWindow(yearStart, yearEnd);
+  if (context?.excludedTerminalMonth) {
+    // Preserve the existing applicability check: this exclusion comes from
+    // consecutive month-based HY windows, not an arbitrary operator flag.
+    shortTaxYearMonths(yearStart, yearEnd, context);
+  }
+  const months = calendarMonthSpan(
+    start,
+    end,
+    macrsMonthRatio(
+      BigInt(start.day - 1),
+      BigInt(lastDayOfMonth(start.year, start.month)),
+    ),
+  );
+  if (compareMacrsMonths(months, 12) > 0) {
+    throw new MacrsShortYearError(
+      `short-year MACRS window ${yearStart}–${yearEnd} exceeds twelve months`,
+    );
+  }
+  return months;
+}
+
+/** §4.02 service numerator after applying the convention. A deemed 15th
+ * means exactly half a month; an actual partial year-end still contributes
+ * only its fraction. In particular a February 20 year-end is not all of
+ * February merely because the deemed service date is a first or midpoint. */
+export function monthsTreatedInServiceExact(
+  deemed: CalendarDay,
+  yearEnd: string,
+  context?: MacrsShortYearContext,
+): MacrsMonths {
+  const end = parseCalendarDay(yearEnd);
+  if (!end || !parseCalendarDay(formatCalendarDay(deemed))) {
+    throw new MacrsShortYearError(
+      "MACRS service requires a valid deemed date and calendar year-end",
+    );
+  }
+  if (context?.excludedTerminalMonth && endsOnLast(end)) {
+    throw new MacrsShortYearError(
+      "a terminal month ending on its last day cannot be shared with the next statutory window",
+    );
+  }
+  const elapsed =
+    deemed.day === 15
+      ? macrsMonthRatio(1n, 2n)
+      : macrsMonthRatio(
+          BigInt(deemed.day - 1),
+          BigInt(lastDayOfMonth(deemed.year, deemed.month)),
+        );
+  // §4.01's shared-month rule selected the convention date. It does not
+  // move the legal year-end for §4.02's deduction numerator. Otherwise the
+  // excluded month would lose its days before the next tax year begins.
+  return calendarMonthSpan(deemed, end, elapsed);
+}
+
 export function impliedShortYearFactor(
   yearStart: string,
   yearEnd: string,
   context?: MacrsShortYearContext,
 ): string {
-  const months = shortTaxYearMonths(yearStart, yearEnd, context);
-  return rateRatio(halfMonths(months), 24n);
+  const months = shortTaxYearMonthsExact(yearStart, yearEnd, context);
+  return rateRatio(months.numerator, months.denominator * 12n);
 }
 
 export function isFullCalendarYear(
@@ -341,13 +415,13 @@ export function assertShortYearFactorAgrees(
   declared?: string | number | null,
   context?: MacrsShortYearContext,
 ): string {
-  const months = shortTaxYearMonths(yearStart, yearEnd, context);
+  const months = shortTaxYearMonthsExact(yearStart, yearEnd, context);
   const implied = impliedShortYearFactor(yearStart, yearEnd, context);
   if (declared == null || String(declared).trim() === "") return implied;
   const exact = normalizeDecimal(declared, 10);
   if (!factorsAgree(exact, implied)) {
     throw new MacrsShortYearError(
-      `short-year factor ${exact} does not match ${yearStart}–${yearEnd} (${months}/12); pass the dates and matching factor, do not scale a calendar schedule`,
+      `short-year factor ${exact} does not match ${yearStart}–${yearEnd} (${months.numerator}/${months.denominator} months divided by 12); pass the dates and matching factor, do not scale a calendar schedule`,
     );
   }
   return implied;
