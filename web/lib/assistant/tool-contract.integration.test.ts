@@ -127,6 +127,11 @@ const READER_PERMS = [
   // service; the harness reader holds the grant so both tools run.
   "hrm.construction.read",
   // HR-13 end
+  // HR-14 begin: the register and readiness tools run through the
+  // certifications read grant; the scratch org leaves the switches off
+  // so both refuse with the documented hrm_feature_disabled.
+  "hrm.certifications.read",
+  // HR-14 end
 ];
 
 /** Empty-store refusals: stable error codes on an org with no transactions. */
