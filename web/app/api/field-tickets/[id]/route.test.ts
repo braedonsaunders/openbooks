@@ -93,6 +93,7 @@ const mockSources = new Map<string, string>([
       export async function withBypassContext(_opts, work) { return work() }
       export function inDbTransaction(_work) { throw new Error('unexpected inDbTransaction') }
       export function registerRequestOrgResolver() {}
+      export function currentRequestOrgResolver() { return null }
       export function ambientTenantOrgId() { return null }
       export const pool = {}
       export const env = {}
