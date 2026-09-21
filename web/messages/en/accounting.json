@@ -53,5 +53,25 @@
       "draftJournals": "{count} journals still in draft",
       "weakRatio": "{ratio} is grading below benchmark"
     }
+  },
+  "lifecycle": {
+    "lease_agreement": "Lessee lease",
+    "financial_change": "Accounting change",
+    "number": "Lease number",
+    "description": "Description",
+    "date": "Effective date",
+    "payment": "Payment",
+    "status": "Status",
+    "operation": "Change type",
+    "domain": "Accounting domain",
+    "reason": "Reason",
+    "draft": "Draft",
+    "active": "Active",
+    "terminated": "Terminated",
+    "complete": "Complete",
+    "pending": "Awaiting approval",
+    "approved": "Approved",
+    "rejected": "Rejected",
+    "applied": "Applied"
   }
 }

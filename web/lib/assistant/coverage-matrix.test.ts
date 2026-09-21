@@ -110,6 +110,8 @@ const MATRIX: Entry[] = [
   { prefix: "estimates", tools: ["search_orders", "get_order"], note: "estimate convert flow mirrors orders; convert writes have no application service" },
   { prefix: "purchasing", tools: ["search_orders", "get_order"] },
   { prefix: "assets", tools: ["search_assets", "get_asset", "asset_tax_pools"] },
+  { prefix: "assets/leases", tools: ["search_lease_agreements", "get_lease_agreement"], note: "creation, change, commencement and post remain native approval-controlled actions; no assistant write tool" },
+  { prefix: "leases", tools: ["search_lease_agreements", "get_lease_agreement"], note: "creation, change, commencement and post remain native approval-controlled actions; no assistant write tool" },
   { prefix: "equipment", tools: ["search_equipment", "get_equipment"] },
   { prefix: "projects", tools: ["rank_projects", "project_profitability"], note: "duplicates/merge/task maintenance writes have no application service" },
   { prefix: "billing-requests", tools: ["rank_projects", "project_profitability"], note: "billing-request lifecycle writes have no application service" },

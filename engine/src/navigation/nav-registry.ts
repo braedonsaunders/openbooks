@@ -480,6 +480,14 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'assets.read',
   },
   {
+    key: 'leases', href: '/assets/leases', label: 'Lessee Leases', iconKey: 'building',
+    group: 'accounting', subgroup: 'assets', requiredPermission: 'assets.read',
+  },
+  {
+    key: 'accounting-changes', href: '/accounting/changes', label: 'Accounting Changes', iconKey: 'journal',
+    group: 'accounting', subgroup: 'ledger', requiredPermission: 'gl.read',
+  },
+  {
     key: 'tax-depreciation',
     href: '/assets?tab=tax-depreciation',
     label: 'Tax Depreciation',
@@ -923,6 +931,8 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'revenue',
     'assets',
     'tax-depreciation',
+    'leases',
+    'accounting-changes',
     'budgets',
     'tax-filings',
     'tax-provisions',

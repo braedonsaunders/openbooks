@@ -1,5 +1,6 @@
 'use client'
 
+import { LossOfControlButton } from '@/app/(app)/accounting/changes/LossOfControlButton'
 import { Fragment, useMemo, useState, type ReactNode } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
@@ -324,6 +325,7 @@ export function SetupDrawer({
       }
     >
       {nestedTabActive ? nestedTab?.content : <>
+      {entity.key === "subsidiary-ownership-interests" && row && row.method === "full" ? <div className="mb-4"><LossOfControlButton interestId={String(row.id)} /></div> : null}
       {fieldError ? (
         <p role="alert" className="mb-4 rounded-md border border-red-200 bg-red-50 p-2.5 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
           {fieldError}

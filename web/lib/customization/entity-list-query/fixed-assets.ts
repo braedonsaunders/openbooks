@@ -11,19 +11,12 @@ import { dateOrFalse, uuidOrFalse } from "../list-query";
 
 export const FIXED_ASSET_BASE_JOINS = sql`
   left join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
-  left join lateral (
-    -- Continue-from-accumulated (migration 0156): the register's accumulated
-    -- figure carries the pre-cutover opening balance alongside posted lines,
-    -- so NBV ties to the drawer and the disposal/impairment readers.
-    select coalesce(sum(l.posted_amount), 0) + coalesce(a.opening_accumulated_depreciation, 0) as accumulated
-     from depreciation_schedules s
-      join depreciation_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
-     where s.asset_id = a.id and s.org_id = a.org_id
-       and s.book_id = ${statementBookExpr(sql`a.org_id`)}
-       and l.posted_amount is not null
-  ) depr on true`
+  left join asset_book_carrying_values depr
+    on depr.org_id=a.org_id and depr.asset_id=a.id
+   and depr.book_id=${statementBookExpr(sql`a.org_id`)}`
 
-const FIXED_ASSET_NBV_EXPR = sql`a.acquisition_cost - depr.accumulated`
+
+const FIXED_ASSET_NBV_EXPR = sql`depr.carrying_value`
 
 export const FIXED_ASSET_BUILT_IN_EXPR: Record<string, SQL> = {
   asset_number: sql`a.asset_number`,

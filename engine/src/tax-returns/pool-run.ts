@@ -1,3 +1,4 @@
+import { lockAssetTaxLifecycle } from "../organization/asset-tax-fence.ts";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
@@ -61,7 +62,8 @@ interface TaxPoolRun {
 }
 
 /** Transaction-scoped fence key: one annual run per (org, book, subsidiary,
- *  regime) scope at a time. Different scopes never contend. */
+ *  regime) scope at a time. The separate asset-lifecycle fence also serializes
+ *  books/regimes within a legal entity while a related asset change publishes. */
 export function taxPoolRunLockKey(orgId: string, bookId: string, subsidiaryId: string, regime: string): string {
   return `tax-pool-run:${orgId}:${bookId}:${subsidiaryId}:${regime}`;
 }
@@ -168,10 +170,37 @@ export async function runTaxPool(
     await tx.execute(sql`
       select pg_advisory_xact_lock(hashtextextended(${taxPoolRunLockKey(orgId, bookId, subsidiaryId, regime)}, 0))`);
 
+    await lockAssetTaxLifecycle(tx, orgId, [subsidiaryId]);
+
     const classes = await effectiveClasses(tx, orgId, regime);
     if (classes.size === 0) throw new TaxPoolError(`unknown tax depreciation regime "${regime}"`);
     const attr = await regimeClassAttribute(tx, orgId, regime);
     const model = await regimeModel(tx, orgId, regime);
+
+    // Release containment for the new book lifecycle. A book cost allocation
+    // is not a statutory tax-basis allocation and related-party consideration
+    // is not necessarily the transferee's depreciable tax basis. Until native
+    // tax treatment is joined here, do not emit an apparently complete return.
+    // This is an explicit delivery dependency, not completed tax support.
+    const unpricedLifecycle = (await tx.execute<{ asset_number: string }>(sql`
+      select a.asset_number from fixed_assets a
+      join asset_categories c on c.org_id=a.org_id and c.id=a.category_id
+      where a.org_id=${orgId} and a.subsidiary_id=${subsidiaryId}
+        and coalesce(a.custom->'taxDepreciation'->${regime}->>'classCode',c.tax_attributes->>${attr},'')<>''
+        and (
+          exists(select 1 from asset_events e where e.org_id=a.org_id and e.asset_id=a.id
+            and e.financial_change_id is not null
+            and e.kind in('disposed','written_off','partially_disposed','transferred')
+            and e.occurred_on<=${opts.yearEnd}
+            and not exists(select 1 from asset_events r where r.org_id=e.org_id and r.reverses_event_id=e.id and r.occurred_on<=${opts.yearEnd}))
+          or exists(select 1 from asset_transfer_bases t where t.org_id=a.org_id and t.receiving_asset_id=a.id
+            and t.effective_on<=${opts.yearEnd} and (t.reversed_on is null or t.reversed_on>${opts.yearEnd}))
+        ) order by a.asset_number limit 1`)).rows[0];
+    if (unpricedLifecycle) throw new TaxPoolError(
+      `Tax depreciation for asset ${unpricedLifecycle.asset_number} requires native statutory basis treatment of its approved disposal or intercompany transfer. ` +
+      `That lifecycle is not yet integrated with the ${regime} calculation, so no tax result has been produced. ` +
+      `This is an implementation blocker; do not change the transaction amount, date or classification to bypass it.`,
+    );
 
     await fenceRunOrdering(tx, orgId, bookId, subsidiaryId, regime, taxYear);
 
@@ -277,6 +306,7 @@ async function runPools(
       from fixed_assets a
       join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
      where a.org_id = ${orgId} and a.subsidiary_id = ${run.subsidiaryId}
+       and not exists(select 1 from asset_transfer_bases t where t.org_id=a.org_id and t.receiving_asset_id=a.id and t.reversed_on<=${run.yearEnd})
        and coalesce(c.tax_attributes->>${attr}, '') <> ''
      order by class_code, a.id`));
 
@@ -446,7 +476,7 @@ async function runMacrs(
   // period row. Refuse before any read or write instead of overstating.
   if (run.shortYearFactor !== normalizeDecimal(1, 10)) {
     throw new TaxPoolError(
-      `short tax year factor ${run.shortYearFactor} is not supported for the MACRS model — run the full tax year`,
+      `short tax year factor ${run.shortYearFactor} is not supported for the MACRS model; no result was produced. Native short-year MACRS computation must be implemented for this reporting period; do not replace a genuine short tax year with a full year`,
     );
   }
   const assets = (await tx.execute<MacrsAssetRow>(sql`
@@ -463,6 +493,7 @@ async function runMacrs(
          order by e.occurred_on limit 1
       ) d on true
      where a.org_id = ${orgId} and a.subsidiary_id = ${run.subsidiaryId}
+       and not exists(select 1 from asset_transfer_bases t where t.org_id=a.org_id and t.receiving_asset_id=a.id and t.reversed_on<=${run.yearEnd})
        and coalesce(a.in_service_on, a.acquired_on) is not null
        and coalesce(a.custom->'taxDepreciation'->${run.regime}->>'classCode', c.tax_attributes->>${attr}, '') <> ''`));
 

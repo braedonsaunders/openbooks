@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { Eye } from 'lucide-react'
 import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
+import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { Badge, EmptyState, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { getRecordType, listColumnMeta, recordTypeForFeatureState } from '@openbooks/customization'
@@ -74,8 +74,12 @@ export async function EntityListView({
   formatValue,
   crmAccountsVisible = true,
   hrmEmploymentVisible = true,
+  scopePredicate,
 }: {
   recordType: string
+  /** Additional trusted server-side authorization, shared by rows AND counts.
+   * It only narrows the source's mandatory tenant/entity predicate. */
+  scopePredicate?: SQL
   orgId: string
   userId: string
   canManage: boolean
@@ -220,7 +224,8 @@ export async function EntityListView({
     crmEnabled: recordType === 'customer' ? crmOn : undefined,
     hrmEnabled: recordType === 'employee' ? hrmOn : undefined,
   }
-  const where = source.where(view, adhoc, orgId, allowedSubs)
+  const narrow = (predicate: SQL) => scopePredicate ? sql`(${predicate}) and (${scopePredicate})` : predicate
+  const where = narrow(source.where(view, adhoc, orgId, allowedSubs))
   // Counts ignore the ad-hoc status selection so every status remains visible
   // in the picker, while retaining saved-view scope and entity de-duplication.
   const countFilterKey = source.countFilterKey ?? 'status'
@@ -230,12 +235,12 @@ export async function EntityListView({
   // reads `crmEnabled` to decide both the status expression and the
   // role-or-profile membership clause, and a count that assumes CRM is on
   // emits a predicate over joins the CRM-off FROM never made.
-  const countWhere = source.where(
+  const countWhere = narrow(source.where(
     countView,
     { showInactive, filters: {}, crmEnabled: adhoc.crmEnabled, hrmEnabled: adhoc.hrmEnabled },
     orgId,
     allowedSubs,
-  )
+  ))
   const orderExpr = sorts[params.sort] ?? source.defaultSort
   const aliasSql = sql.raw(source.alias)
   const idExpr = source.idExpr ?? sql`${aliasSql}.id`

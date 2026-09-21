@@ -50,6 +50,7 @@ export type Standard =
   | "IFRS 15"
   | "IFRS 16"
   | "CRA T4127"
+  | "RQ TP-1015"
   | "IRS Pub 15"
   | "IRS Pub 15-T"
   | "IRC 3101/3111"

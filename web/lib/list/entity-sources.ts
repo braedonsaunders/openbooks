@@ -1,3 +1,4 @@
+import { lifecycleWhere } from "../customization/entity-list-query/accounting-lifecycles";
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -691,6 +692,20 @@ const SOURCES: Record<string, EntityListSource> = {
     statusVariant: (row, _value, columnKey) => columnKey === 'kind'
       ? 'outline'
       : row.status === 'approved' ? 'success' : row.status === 'pending_approval' ? 'warning' : row.status === 'archived' ? 'outline' : 'secondary',
+  },
+  lease_agreement: {
+    recordType:'lease_agreement',table:'lease_agreements',alias:'la',baseJoins:sql``,
+    builtInExpr:{lease_number:sql`la.lease_number`,description:sql`la.description`,commencement_on:sql`la.commencement_on`,payment_amount:sql`la.payment_amount`,status:sql`la.status`},
+    sorts:{number:sql`la.lease_number`,description:sql`la.description`,date:sql`la.commencement_on`,payment:sql`la.payment_amount`,status:sql`la.status`},
+    defaultSort:sql`la.lease_number`,quickFilters:[{paramKey:'status',filterKey:'status'}],
+    where:(view,adhoc,orgId,allowed)=>lifecycleWhere('la',view,adhoc,orgId,allowed),drawerParam:'lease',basePath:'/assets/leases',
+  },
+  financial_change: {
+    recordType:'financial_change',table:'financial_changes',alias:'fc',baseJoins:sql``,
+    builtInExpr:{operation:sql`fc.operation`,domain:sql`fc.domain`,reason:sql`fc.reason`,effective_on:sql`fc.effective_on`,status:sql`fc.status`},
+    sorts:{operation:sql`fc.operation`,domain:sql`fc.domain`,reason:sql`fc.reason`,date:sql`fc.effective_on`,status:sql`fc.status`},
+    defaultSort:sql`fc.created_at`,quickFilters:[{paramKey:'status',filterKey:'status'}],
+    where:(view,adhoc,orgId,allowed)=>lifecycleWhere('fc',view,adhoc,orgId,allowed),drawerParam:'change',basePath:'/accounting/changes',
   },
   revenue_contract: {
     recordType: 'revenue_contract',

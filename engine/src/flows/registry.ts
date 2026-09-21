@@ -1,3 +1,4 @@
+import { FINANCIAL_CHANGE_SUBJECT_KIND, financialChangeSubjectProfile, financialChangesFlowAdapter } from "./financial-changes-adapter.ts";
 import type { FlowSubjectAdapter } from "./types.ts";
 import { createDocumentsFlowAdapter } from "./documents-adapter.ts";
 import { DOCUMENT_FLOW_KINDS, documentSubjectProfile } from "./subject-profiles.ts";
@@ -61,6 +62,7 @@ import { db } from "../platform/db.ts";
 const adapterCache = new Map<string, FlowSubjectAdapter>();
 
 export function getFlowAdapter(subjectKind: string): FlowSubjectAdapter | null {
+  if (subjectKind === FINANCIAL_CHANGE_SUBJECT_KIND) return financialChangesFlowAdapter;
   if (subjectKind === BANK_ACCOUNT_SUBJECT_KIND) return bankAccountsFlowAdapter;
   if (subjectKind === BUDGET_SCENARIO_SUBJECT_KIND) return budgetScenariosFlowAdapter;
   if (subjectKind === CLOSE_RUN_SUBJECT_KIND) return closeRunsFlowAdapter;
@@ -85,6 +87,7 @@ export function getFlowAdapter(subjectKind: string): FlowSubjectAdapter | null {
 export function listFlowSubjectProfiles(): FlowSubjectProfile[] {
   return [
     ...DOCUMENT_FLOW_KINDS.map((kind) => documentSubjectProfile(kind)),
+    financialChangeSubjectProfile,
     bankAccountSubjectProfile,
     budgetScenarioSubjectProfile,
     closeRunSubjectProfile,

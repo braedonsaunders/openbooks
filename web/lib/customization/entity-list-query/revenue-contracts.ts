@@ -11,8 +11,8 @@ import { dateOrFalse, uuidOrFalse } from "../list-query";
 export const REVENUE_CONTRACT_BASE_JOINS = sql`
   left join parties revenue_customer on revenue_customer.id=rc.customer_id and revenue_customer.org_id=rc.org_id
   left join lateral (
-    select coalesce(sum(l.planned_amount), 0) as planned,
-           coalesce(sum(l.recognized_amount) filter (where l.journal_entry_id is not null), 0) as recognized
+    select coalesce(sum(case when l.superseded_by_change_id is not null or l.reversal_journal_entry_id is not null then 0 when l.journal_entry_id is not null then coalesce(l.recognized_amount,0) else l.planned_amount end), 0) as planned,
+           coalesce(sum(l.recognized_amount) filter (where l.journal_entry_id is not null and l.reversal_journal_entry_id is null), 0) as recognized
       from performance_obligations o
       join recognition_schedules s on s.obligation_id=o.id and s.org_id=o.org_id
       join accounting_books bk on bk.id=s.book_id and bk.org_id=s.org_id and bk.is_primary
@@ -72,8 +72,13 @@ function revenueContractFilterPredicate(clause: FilterClause): SQL | null {
   return null
 }
 
-export function revenueContractWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: string): SQL {
+export function revenueContractWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: string, allowedSubsidiaryIds?: Set<string> | null): SQL {
   const parts: SQL[] = [sql`rc.org_id = ${orgId}`]
+  if (allowedSubsidiaryIds !== null) parts.push(sql`and coalesce(rc.subsidiary_id,
+    (select p.subsidiary_id from projects p where p.org_id=rc.org_id and p.id=rc.project_id),
+    (select coalesce(dl.subsidiary_id,d.subsidiary_id) from performance_obligations o join document_lines dl on dl.id=o.document_line_id and dl.org_id=o.org_id join documents d on d.id=dl.document_id and d.org_id=dl.org_id where o.org_id=rc.org_id and o.contract_id=rc.id order by o.id limit 1))
+      in (select jsonb_array_elements_text(${JSON.stringify([...(allowedSubsidiaryIds ?? [])])}::jsonb)::uuid)`)
+
   for (const filter of view.filters) {
     const predicate = revenueContractFilterPredicate(filter)
     if (predicate) parts.push(sql`and ${predicate}`)

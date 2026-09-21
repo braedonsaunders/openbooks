@@ -30,6 +30,8 @@
     "assets": "Ativo Imobilizado",
     "equipment": "Equipamentos",
     "tax-depreciation": "Depreciação Fiscal",
+    "leases": "Arrendamentos do arrendatário",
+    "accounting-changes": "Alterações contábeis",
     "budgets": "Orçamentos",
     "banking": "Contas Bancárias",
     "banking-cash": "Posição de Caixa",

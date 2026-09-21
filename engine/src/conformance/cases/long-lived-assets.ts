@@ -1,4 +1,5 @@
-/**
+import { measurePartialDisposal } from "../../assets/asset-basis.ts";
+import { measureAssetTransferElimination } from "../../consolidation/asset-transfers.ts";/**
  * Impairment and derecognition of long-lived assets — ASC 360 and IAS 16.
  *
  * These cases exercise the product's own measurement functions (the same ones
@@ -11,13 +12,15 @@ import { sql } from "drizzle-orm";
 import { computeDisposal, computeRemeasurement, remeasurementPolicy } from "../../assets/asset-lifecycle.ts";
 import { db } from "../../platform/db.ts";
 import { buildSchedule, runDepreciation } from "../../assets/depreciation.ts";
-import { add } from "../../money/money.ts";
+import { generateAccountingPeriods } from "../../close/calendar.ts";
+import { add, sum } from "../../money/money.ts";
 import type { ConformanceCase } from "../types.ts";
 
 export const LONG_LIVED_ASSET_CASES: readonly ConformanceCase[] = [
   {
     id: "ppe-impairment-to-fair-value",
-    title: "An impaired asset is written down to fair value and the loss is recognised immediately",
+    title:
+      "An impaired asset is written down to fair value and the loss is recognised immediately",
     citations: [
       {
         standard: "ASC 360",
@@ -71,7 +74,8 @@ export const LONG_LIVED_ASSET_CASES: readonly ConformanceCase[] = [
 
   {
     id: "ppe-impairment-establishes-new-basis",
-    title: "The written-down amount becomes the new cost basis for future depreciation",
+    title:
+      "The written-down amount becomes the new cost basis for future depreciation",
     citations: [
       {
         standard: "ASC 360",
@@ -115,7 +119,8 @@ export const LONG_LIVED_ASSET_CASES: readonly ConformanceCase[] = [
 
   {
     id: "ppe-disposal-gain-loss",
-    title: "Derecognition removes cost and accumulated depreciation and recognises the gain or loss",
+    title:
+      "Derecognition removes cost and accumulated depreciation and recognises the gain or loss",
     citations: [
       {
         standard: "ASC 360",
@@ -184,7 +189,8 @@ export const LONG_LIVED_ASSET_CASES: readonly ConformanceCase[] = [
 
   {
     id: "ppe-writeoff-recognises-full-carrying-amount",
-    title: "Scrapping an asset with no proceeds recognises the whole carrying amount as a loss",
+    title:
+      "Scrapping an asset with no proceeds recognises the whole carrying amount as a loss",
     citations: [
       {
         standard: "IAS 16",
@@ -332,7 +338,7 @@ export const LONG_LIVED_ASSET_CASES: readonly ConformanceCase[] = [
           "A gain or loss on disposal of long-lived assets is recognised for the difference between the proceeds and the carrying amount of the assets disposed of.",
       },
     ],
-    support: "not-implemented",
+    support: "supported",
     tier: "computation",
     assertion:
       "Selling forty percent of a machine removes forty percent of its cost and forty percent of its accumulated depreciation, and the gain is measured against the forty-percent carrying amount — the remaining sixty percent keeps depreciating untouched.",
@@ -341,7 +347,6 @@ export const LONG_LIVED_ASSET_CASES: readonly ConformanceCase[] = [
       "Forty percent is sold for 30,000.00: derecognised cost 40,000.00, derecognised accumulated depreciation 16,000.00, carrying amount disposed 24,000.00.",
       "The gain on the partial disposal is 6,000.00 and the retained sixty percent continues at a carrying amount of 36,000.00.",
     ],
-    gap: "Disposal is whole-asset only: disposeAsset takes the full cost and the full posted accumulated depreciation, with no portion or percentage — a partial sale can only be recorded as a manual journal with no schedule split behind it.",
     expected: {
       values: {
         derecognisedCost: "40000.0000",
@@ -351,11 +356,33 @@ export const LONG_LIVED_ASSET_CASES: readonly ConformanceCase[] = [
         retainedCarryingAmount: "36000.0000",
       },
     },
+    run: () => {
+      const m = measurePartialDisposal({
+        cost: "100000",
+        accumulated: "40000",
+        salvage: "0",
+        proceeds: "30000",
+        portion: { percent: "40" },
+      });
+      return {
+        values: {
+          derecognisedCost: m.removedCost,
+          derecognisedAccumulated: m.removedAccumulated,
+          disposedCarryingAmount: m.removedCarrying,
+          partialGain: m.gainLoss,
+          retainedCarryingAmount: add(
+            m.remainingCost,
+            "-" + m.remainingAccumulated,
+          ),
+        },
+      };
+    },
   },
 
   {
     id: "ppe-intercompany-transfer",
-    title: "Moving an asset between subsidiaries carries its basis and eliminates the internal gain",
+    title:
+      "Moving an asset between subsidiaries carries its basis and eliminates the internal gain",
     citations: [
       {
         standard: "IAS 16",
@@ -372,7 +399,7 @@ export const LONG_LIVED_ASSET_CASES: readonly ConformanceCase[] = [
           "A gain or loss on disposal of long-lived assets is recognised for the difference between the proceeds and the carrying amount of the assets disposed of.",
       },
     ],
-    support: "not-implemented",
+    support: "supported",
     tier: "computation",
     assertion:
       "An asset moving between legal entities keeps its carrying amount as the group's basis: the transferor's internal gain is eliminated on consolidation, the transferee depreciates the transferred basis, and no depreciation is lost or double-counted in the move.",
@@ -381,7 +408,6 @@ export const LONG_LIVED_ASSET_CASES: readonly ConformanceCase[] = [
       "It transfers the machine to a fellow subsidiary for 70,000.00: the transferor recognises an internal gain of 10,000.00 and the transferee records the asset at 70,000.00.",
       "On consolidation the 10,000.00 internal gain is eliminated and the group carries the machine at 60,000.00 with its remaining life unchanged.",
     ],
-    gap: "No transfer path exists: moving an asset between subsidiaries means a manual disposal in one entity and a manual capitalisation in the other, with no linkage, no basis carryover, and no elimination entry for the internal gain.",
     expected: {
       values: {
         transferorGain: "10000.0000",
@@ -389,11 +415,61 @@ export const LONG_LIVED_ASSET_CASES: readonly ConformanceCase[] = [
         consolidatedCarryingAmount: "60000.0000",
       },
     },
+    run: (ctx) => {
+      const m = measurePartialDisposal({
+        cost: "100000",
+        accumulated: "40000",
+        salvage: "0",
+        proceeds: "70000",
+        portion: { percent: "100" },
+      });
+      const target = measureAssetTransferElimination(
+        {
+          groupCost: "100000",
+          groupAccumulated: "40000",
+          groupSalvage: "0",
+          groupPlan: [
+            { startsOn: "2026-08-01", date: "2026-08-31", amount: "60000" },
+          ],
+          buyerCost: "70000",
+          buyerToGroupRate: "1",
+          ctaAccountId: ctx.roles.subsidiaryEquity,
+          groupAssetAccountId: ctx.roles.fixedAsset,
+          groupAccumulatedAccountId: ctx.roles.accumulatedDepreciation,
+          groupDepreciationAccountId: ctx.roles.impairmentLoss,
+          groupGainLossAccountId: ctx.roles.disposalGainLoss,
+          taxRatePercent: "0",
+          deferredTaxAccountId: ctx.roles.deferredTaxAsset,
+          taxExpenseAccountId: ctx.roles.incomeTaxExpense,
+        },
+        {
+          asOf: "2026-07-31",
+          buyerCost: "70000",
+          buyerAccumulated: "0",
+          remainingFraction: { numerator: 1n, denominator: 1n },
+          disposed: false,
+        },
+      );
+      return {
+        values: {
+          transferorGain: m.gainLoss,
+          transfereeCost: "70000.0000",
+          consolidatedCarryingAmount: add(
+            "70000",
+            add(
+              target[ctx.roles.fixedAsset] ?? "0",
+              target[ctx.roles.accumulatedDepreciation] ?? "0",
+            ),
+          ),
+        },
+      };
+    },
   },
 
   {
     id: "ppe-depreciation-445-calendar",
-    title: "Depreciation follows the entity's fiscal calendar including retail 4-4-5 patterns",
+    title:
+      "Depreciation follows the entity's fiscal calendar including retail 4-4-5 patterns",
     citations: [
       {
         standard: "IAS 16",
@@ -410,27 +486,103 @@ export const LONG_LIVED_ASSET_CASES: readonly ConformanceCase[] = [
           "The cost of a long-lived asset, less any salvage value, is depreciated in a systematic and rational manner over the asset's useful life.",
       },
     ],
-    support: "not-implemented",
-    tier: "computation",
+    support: "partial",
+    tier: "ledger",
     assertion:
-      "An entity reporting on a 4-4-5 retail calendar depreciates week-based periods — four weeks, four weeks, five weeks — with each period carrying its share of the annual charge, so the full useful life is covered with nothing skipped and nothing doubled.",
+      "Native monthly depreciation maps into a 4-4-5 fiscal calendar without dropping or duplicating a charge: months sharing a fiscal period are summed into one schedule line.",
     facts: [
-      "A retail entity reports on a 4-4-5 calendar anchored 2026-02-01: the 2026 year runs 2026-02-01 to 2027-01-30 in twelve week-based periods.",
-      "A 5-week period such as 2026-06-28 to 2026-08-01 spans two calendar month-starts, so two native monthly charges map onto one accounting period.",
-      "The book engine plans one charge per calendar month and refuses when two months land in one period — the schedule cannot be built on this calendar at all.",
+      "The retail calendar is anchored 2026-02-02, with twelve 4-4-5 fiscal periods.",
+      "A 1,200.00 asset placed in service 2026-07-01 has six straight-line monthly charges of 200.00 and no salvage value.",
+      "July/August and October/November each share a fiscal period. The four resulting schedule lines are 400.00, 200.00, 400.00 and 200.00, totaling 1,200.00.",
     ],
-    gap: "Book depreciation is monthly-native: computeSchedule plans per calendar month and buildSchedule throws 'multiple native depreciation months map to one accounting period' on any 4-4-5, 4-5-4, 5-4-4, or thirteen-period calendar whose week-based periods span month-starts. Entities on retail calendars cannot schedule depreciation.",
+    limitation:
+      "The book policy remains monthly-native. Mapping monthly charges into fiscal periods is implemented; this case does not claim depreciation weighted by the number of weeks in each period.",
     expected: {
       values: {
         periodsIn445Year: "12",
-        scheduleBuildable: "false",
+        scheduleLines: "4",
+        uniquePeriods: "4",
+        plannedTotal: "1200.0000",
+        plannedAmounts: "400.0000,200.0000,400.0000,200.0000",
       },
+    },
+    run: async (ctx) => {
+      const ledger = ctx.ledger!;
+      const calendarId = randomUUID(),
+        categoryId = randomUUID(),
+        assetId = randomUUID();
+      const previousDefaults = (
+        await db.execute<{ id: string }>(sql`
+        select id from fiscal_calendars where org_id=${ledger.orgId} and is_default`)
+      ).rows;
+      try {
+        await db.execute(sql`insert into fiscal_calendars
+          (id, org_id, name, cadence, year_start_month, week_starts_on, anchor_date, time_zone, is_default, is_active, config)
+          values (${calendarId}, ${ledger.orgId}, 'Conformance retail 4-4-5', 'four_four_five', 2, 1,
+                  '2026-02-02', 'UTC', false, true, '{"anchorFiscalYear":2026}'::jsonb)`);
+        await db.execute(
+          sql`update fiscal_calendars set is_default=false where org_id=${ledger.orgId} and is_default`,
+        );
+        await db.execute(
+          sql`update fiscal_calendars set is_default=true where org_id=${ledger.orgId} and id=${calendarId}`,
+        );
+        const periods = await generateAccountingPeriods(
+          ledger.orgId,
+          calendarId,
+          2026,
+          ledger.actorId,
+        );
+        await db.execute(sql`insert into asset_categories
+          (id, org_id, name, asset_account_id, accumulated_depreciation_account_id, depreciation_expense_account_id,
+           default_method, default_life_months, default_convention)
+          values (${categoryId}, ${ledger.orgId}, 'Conformance retail asset', ${ctx.roles.fixedAsset},
+                  ${ctx.roles.accumulatedDepreciation}, ${ctx.roles.impairmentLoss}, 'straight_line', 6, 'full_month')`);
+        await db.execute(sql`insert into fixed_assets
+          (id, org_id, subsidiary_id, category_id, asset_number, name, status, acquired_on, in_service_on,
+           acquisition_cost, salvage_value, depreciation_method, useful_life_months, depreciation_convention)
+          values (${assetId}, ${ledger.orgId}, ${ledger.subsidiaryId}, ${categoryId}, ${`CONF-445-${assetId}`},
+                  'Retail-calendar asset', 'in_service', '2026-07-01', '2026-07-01', 1200, 0, 'straight_line', 6, 'full_month')`);
+        await buildSchedule(
+          assetId,
+          ledger.orgId,
+          ledger.actorId,
+          ledger.bookId,
+        );
+        const lines = (
+          await db.execute<{ period_id: string; planned: string }>(sql`
+          select l.period_id, l.planned_amount::text as planned from depreciation_schedule_lines l
+          join depreciation_schedules s on s.id=l.schedule_id and s.org_id=l.org_id
+          where s.org_id=${ledger.orgId} and s.asset_id=${assetId} and s.book_id=${ledger.bookId}
+          order by l.sequence`)
+        ).rows;
+        return {
+          values: {
+            periodsIn445Year: String(periods.periods.length),
+            scheduleLines: String(lines.length),
+            uniquePeriods: String(
+              new Set(lines.map((line) => line.period_id)).size,
+            ),
+            plannedTotal: sum(lines.map((line) => line.planned)),
+            plannedAmounts: lines.map((line) => line.planned).join(","),
+          },
+        };
+      } finally {
+        await db.execute(
+          sql`update fiscal_calendars set is_default=false where org_id=${ledger.orgId} and id=${calendarId}`,
+        );
+        for (const previous of previousDefaults) {
+          await db.execute(
+            sql`update fiscal_calendars set is_default=true where org_id=${ledger.orgId} and id=${previous.id}`,
+          );
+        }
+      }
     },
   },
 
   {
     id: "ppe-onboarding-continues-from-accumulated",
-    title: "A mid-life asset onboards at original cost plus opening accumulated depreciation and continues from that figure",
+    title:
+      "A mid-life asset onboards at original cost plus opening accumulated depreciation and continues from that figure",
     citations: [
       {
         standard: "ASC 360",
@@ -491,23 +643,34 @@ export const LONG_LIVED_ASSET_CASES: readonly ConformanceCase[] = [
                 '12000.0000', '0.0000', 'straight_line', 12,
                 '11000.0000', '2025-12-31', '{}'::jsonb)`);
       await buildSchedule(assetId, ledger.orgId, ledger.actorId, ledger.bookId);
-      const lines = (await db.execute<{ month: string; planned: string }>(sql`
+      const lines = (
+        await db.execute<{ month: string; planned: string }>(sql`
         select p.starts_on::text as month, l.planned_amount::text as planned
           from depreciation_schedule_lines l
           join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
           join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
          where s.org_id = ${ledger.orgId} and s.asset_id = ${assetId}
-         order by p.starts_on`)).rows;
-      const run = await runDepreciation(ledger.orgId, "2026-01-31", ledger.actorId, assetId);
-      const posted = (await db.execute<{ posted: string }>(sql`
+         order by p.starts_on`)
+      ).rows;
+      const run = await runDepreciation(
+        ledger.orgId,
+        "2026-01-31",
+        ledger.actorId,
+        assetId,
+      );
+      const posted = (
+        await db.execute<{ posted: string }>(sql`
         select l.posted_amount::text as posted
           from depreciation_schedule_lines l
           join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
           join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
          where s.org_id = ${ledger.orgId} and s.asset_id = ${assetId}
-           and p.starts_on = '2026-01-01'`)).rows[0]!.posted;
-      const status = (await db.execute<{ status: string }>(sql`
-        select status from fixed_assets where id = ${assetId} and org_id = ${ledger.orgId}`)).rows[0]!.status;
+           and p.starts_on = '2026-01-01'`)
+      ).rows[0]!.posted;
+      const status = (
+        await db.execute<{ status: string }>(sql`
+        select status from fixed_assets where id = ${assetId} and org_id = ${ledger.orgId}`)
+      ).rows[0]!.status;
       return {
         values: {
           scheduledMonths: String(lines.length),

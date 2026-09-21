@@ -16,6 +16,7 @@
 
 import "../../payroll/packs.ts";
 import { calculateT4127 } from "../../payroll/canada/t4127.ts";
+import { calculateTp1015 } from "../../payroll/canada/quebec/tp1015.ts";
 import { calculatePub15T } from "../../payroll/us/pub15t.ts";
 import { AL_CERTIFICATE, AL_WITHHOLDING } from "../../payroll/us/states/al.ts";
 import { resolvedCertificate } from "../../payroll/us/states/conformance-support.ts";
@@ -488,26 +489,33 @@ export const PAYROLL_STATUTORY_CASES: readonly ConformanceCase[] = [
     title: "Québec provincial income tax (TP-1015)",
     citations: [
       {
-        standard: "CRA T4127",
-        reference: "T4127 — Quebec provincial tax administered via TP-1015",
-        kind: "requirement",
+        standard: "RQ TP-1015",
+        reference: "TP-1015.F-V (2026-01), Appendix 1, phase 1",
+        kind: "illustrative-example",
         requirement:
           "Québec employees have provincial income tax withheld under Revenu Québec's TP-1015 source-deduction tables in addition to the federal tax T4127 computes.",
       },
     ],
-    support: "not-implemented",
+    support: "supported",
     tier: "computation",
     assertion:
-      "A Québec pay deducts provincial income tax per the TP-1015 tables alongside federal tax, QPP, QPIP and EI — the stub's total withholding is complete for a Québec employee.",
+      "The Québec provincial engine reproduces the published Appendix 1 phase-1 deduction of 444.51; this case establishes provincial calculation, not complete payroll filing or transmission coverage.",
     facts: [
-      "Québec employment: T4127 covers the federal side (including the abatement) plus QPP, QPIP and EI.",
-      "Provincial income tax under TP-1015 is a further required deduction on the same pay.",
-      "The required outcome is the TP-1015 provincial withholding for the period.",
+      "Biweekly income 4,000.00; pension deduction 200.00; QPP 243.52; personal credits 21,830.00; FTQ and Fondaction shares of 100.00 and 150.00 per period.",
+      "The guide gives the workers deduction 55.77, additional-QPP deduction 38.65, annual taxable income 96,345.08 and annual tax 11,557.37.",
+      "Annual tax divided by 26 yields provincial withholding of 444.51. These are the publication's figures, not an expected value recomputed using the implementation.",
     ],
-    gap:
-      "Québec provincial income tax is not implemented: the engine computes the federal side for Québec employment (abatement, K2Q, QPP/QPIP) and provincials for every other jurisdiction, but TP-1015 tables are absent, so a Québec stub understates total withholding by the provincial share.",
     expected: {
-      values: { provincialTax: "0.0000" },
+      values: { provincialTax: "444.5100", taxableIncome: "96345.0800" },
+    },
+    run: () => {
+      const result = calculateTp1015({
+        payDate: "2026-01-15", periodsPerYear: 26,
+        income: "4000.00", pensionDeductions: "200.00",
+        qpp: "243.52", pensionable: "4000.00", personalCredits: "21830.00",
+        ftqSharesPerPeriod: "100.00", fondactionSharesPerPeriod: "150.00",
+      });
+      return { values: { provincialTax: result.periodicTax, taxableIncome: result.factors.QC_I! } };
     },
   },
 ];

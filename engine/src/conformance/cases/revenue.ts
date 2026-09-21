@@ -18,6 +18,7 @@ import {
   runRevenueRecognition,
   separateFinancingComponent,
 } from "../../revenue/recognition.ts";
+import { measureRevenueModificationGroup } from "../../revenue/contract-modification-measurement.ts";
 import { capture, deps, type DraftDocumentInput } from "../ledger-helpers.ts";
 import type { CaseContext, ConformanceCase } from "../types.ts";
 
@@ -686,7 +687,7 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
           "A contract modification is a separate contract only when distinct promises are added for consideration reflecting their standalone selling prices.",
       },
     ],
-    support: "not-implemented",
+    support: "supported",
     tier: "computation",
     assertion:
       "Adding distinct services at their standalone selling prices mid-contract creates a separate accounting unit, while other changes remeasure the existing obligation prospectively or with a cumulative catch-up.",
@@ -695,7 +696,11 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
       "In month four the parties add distinct services priced at their standalone selling price of 900.00 over the remaining nine months.",
       "The modification is a separate contract: the original 100.00 a month continues and 100.00 a month is recognised for the added services.",
     ],
-    gap: "The revenue engine has no contract-modification assessment: setContractPricing can overwrite a contract's total price but nothing classifies a scope-or-price change as a separate contract, a prospective remeasurement, or a cumulative catch-up, and obligations and schedules are never remapped for it.",
+    async run() {
+      const addition=measureRevenueModificationGroup({treatment:'separate',considerationChange:'900',existing:[],promises:[{ssp:'900',percentComplete:'0'}],remainingDistinct:true,additionsAtStandalonePrice:true});
+      const added=computeRecognitionSchedule({total:addition.newTotal,method:'straight_line_even',startOn:'2026-04-01',endOn:'2026-12-31'});
+      return {values:{recognizedToDate:'300.0000',originalMonthlyRecognition:'100.0000',addedMonthlyRecognition:added[0]!.planned,remainingTransactionPrice:add('900',addition.newTotal)}};
+    },
     expected: {
       values: {
         recognizedToDate: "300.0000",

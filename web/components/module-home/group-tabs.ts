@@ -44,6 +44,7 @@ const GROUP_TABS: Record<TabGroup, { href: string; ns: string; key: string }[]> 
   ],
   accounting: [
     { href: '/accounting', ns: 'accounting', key: 'home.title' },
+    { href: '/accounting/changes', ns: 'accounting', key: 'lifecycle.financial_change' },
     { href: '/close', ns: 'nav', key: 'modules.close' },
     { href: '/analytics/financial-health', ns: 'accounting', key: 'home.tabs.health' },
   ],
