@@ -1,4 +1,4 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
@@ -54,6 +54,23 @@ const lineSchema = z.object({
   memo: z.string().max(2000).nullable().optional(),
 })
 
+const LINES_NEEDS = 'Lines need the worker and hours on every row'
+const REJECT_NEEDS = 'Rejecting needs a reason — tell the foreman what to fix'
+
+/**
+ * The six batch actions as one body. The action names the branch and
+ * the branch names what it needs, so an unknown action and a missing
+ * reason are both refused here with the words the foreman reads.
+ */
+const batchActionBody = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('lines'), lines: z.array(lineSchema, { error: LINES_NEEDS }).max(500) }),
+  z.object({ action: z.literal('submit'), signerName: z.string().nullish() }),
+  z.object({ action: z.literal('withdraw'), reason: z.string().nullish() }),
+  z.object({ action: z.literal('approve'), comment: z.string().nullish() }),
+  z.object({ action: z.literal('reject'), reason: z.string({ error: REJECT_NEEDS }).trim().min(1, REJECT_NEEDS) }),
+  z.object({ action: z.literal('post') }),
+], { error: 'Unknown batch action — use lines, submit, withdraw, approve, reject or post' })
+
 /**
  * POST {action} — lines (draft only), submit (signed), withdraw,
  * approve (current stage), reject (reason required), post (entries +
@@ -61,62 +78,56 @@ const lineSchema = z.object({
  */
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, batchActionBody, { status: 422 });
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as Record<string, unknown>
-  const action = body.action
+  const body = parsedBody.data
   try {
-    if (action === 'lines') {
+    if (body.action === 'lines') {
       const gate = await batchGate('time.crew.enter')
       if (gate instanceof NextResponse) return gate
-      const parsed = z.object({ lines: z.array(lineSchema).max(500) }).safeParse(body)
-      if (!parsed.success) return bad('Lines need the worker and hours on every row')
-      await setBatchLines({ orgId: gate.user.orgId, actorUserId: gate.user.id, batchId: id, lines: parsed.data.lines })
+      await setBatchLines({ orgId: gate.user.orgId, actorUserId: gate.user.id, batchId: id, lines: body.lines })
       return NextResponse.json(await getBatchDetail(gate.user.orgId, id))
     }
-    if (action === 'submit') {
+    if (body.action === 'submit') {
       const gate = await batchGate('time.crew.enter')
       if (gate instanceof NextResponse) return gate
       await submitBatch({
         orgId: gate.user.orgId,
         actorUserId: gate.user.id,
         batchId: id,
-        signerName: typeof body.signerName === 'string' ? body.signerName : null,
+        signerName: body.signerName ?? null,
       })
       return NextResponse.json(await getBatchDetail(gate.user.orgId, id))
     }
-    if (action === 'withdraw') {
+    if (body.action === 'withdraw') {
       const gate = await batchGate('time.crew.enter')
       if (gate instanceof NextResponse) return gate
       await withdrawBatch({
         orgId: gate.user.orgId,
         actorUserId: gate.user.id,
         batchId: id,
-        reason: typeof body.reason === 'string' ? body.reason : null,
+        reason: body.reason ?? null,
       })
       return NextResponse.json(await getBatchDetail(gate.user.orgId, id))
     }
-    if (action === 'approve') {
+    if (body.action === 'approve') {
       const gate = await batchGate('time.approve')
       if (gate instanceof NextResponse) return gate
       const status = await approveBatchStage({
         orgId: gate.user.orgId,
         actorUserId: gate.user.id,
         batchId: id,
-        comment: typeof body.comment === 'string' ? body.comment : null,
+        comment: body.comment ?? null,
       })
       return NextResponse.json({ status, batch: await getBatchDetail(gate.user.orgId, id) })
     }
-    if (action === 'reject') {
+    if (body.action === 'reject') {
       const gate = await batchGate('time.approve')
       if (gate instanceof NextResponse) return gate
-      if (typeof body.reason !== 'string' || body.reason.trim() === '') {
-        return bad('Rejecting needs a reason — tell the foreman what to fix')
-      }
       await rejectBatch({ orgId: gate.user.orgId, actorUserId: gate.user.id, batchId: id, reason: body.reason })
       return NextResponse.json(await getBatchDetail(gate.user.orgId, id))
     }
-    if (action === 'post') {
+    if (body.action === 'post') {
       const gate = await batchGate('time.manage')
       if (gate instanceof NextResponse) return gate
       const result = await postBatch({ orgId: gate.user.orgId, actorUserId: gate.user.id, batchId: id })
@@ -136,6 +147,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       }
       return NextResponse.json({ ...result, ledgerEntryIds: entryIds })
     }
+    // The union above admits exactly six actions, so this is
+    // unreachable; it keeps the handler total for the type checker.
     return bad('Unknown batch action — use lines, submit, withdraw, approve, reject or post')
   } catch (error) {
     return fieldTime(error)

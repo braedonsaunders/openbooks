@@ -1,5 +1,6 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
@@ -11,6 +12,23 @@ export const runtime = 'nodejs'
 function bad(error: string, status = 422) {
   return NextResponse.json({ error }, { status })
 }
+
+/**
+ * The transport shape of the rules. Every key is optional here on
+ * purpose: a MISSING rule is an unconfigured org, and that refusal
+ * belongs to validateFieldTimeSettings, which names the rule and where
+ * to set it. This schema only refuses a key of the wrong type, which is
+ * a broken client rather than an unconfigured org.
+ */
+const fieldTimeSettingsBody = z.object({
+  roundingIncrement: z.number().optional(),
+  roundingMode: z.string().optional(),
+  unpaidBreakMinutes: z.number().optional(),
+  autoCloseHours: z.number().optional(),
+  signatureRequired: z.boolean().optional(),
+  equipmentToleranceHours: z.string().optional(),
+  photoRequired: z.boolean().optional(),
+})
 
 /**
  * Field-time rules (Timesheets setup): rounding, break, auto-close,
@@ -32,13 +50,13 @@ export async function PUT(req: Request) {
   if (gate instanceof NextResponse) return gate
   const { user } = gate
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, fieldTimeSettingsBody);
   if (!parsedBody.ok) return parsedBody.response;
   try {
     // validateFieldTimeSettings refuses missing or undeclared rules by
     // name before anything is stored — the settings write and the
     // service reads agree on exactly this shape.
-    const settings = validateFieldTimeSettings((parsedBody.data) as Record<string, unknown>)
+    const settings = validateFieldTimeSettings(parsedBody.data)
     const moved = (await db.execute(sql`
       update orgs
          set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{fieldTime}', ${JSON.stringify({

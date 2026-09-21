@@ -27,7 +27,12 @@ import { FEATURES } from '@openbooks/engine/src/organization/feature-registry.ts
 const WEB = new URL('../', import.meta.url)
 const APP_SEGMENT = 'app/(app)'
 
-const GATE = /requireFeatureEnabled\(|guardFeaturePermission\(|isFeatureEnabled\(|requireFlowsSession\(|requireProjectsFeature\(|guardProjectsFeature\(|requireProjectSchedulingFeature\(|guardProjectSchedulingFeature\(|guardWipBillingFeature\(|guardPropertyManagementFeature\(|guardSubcontractsFeature\(|guardComplianceFeature\(|guardLienWaiverFeature\(/
+// The HR-19 document, survey and data-subject-export routes reach their
+// feature gate through a shared helper in the segment's own route.ts, the
+// same shape as requireFlowsSession and requireProjectsFeature above. Each
+// verified to call isFeatureEnabled for its module AND its sub-switch before
+// being listed here; a helper that does not gate must never be added.
+const GATE = /requireFeatureEnabled\(|guardFeaturePermission\(|isFeatureEnabled\(|requireFlowsSession\(|requireProjectsFeature\(|guardProjectsFeature\(|requireProjectSchedulingFeature\(|guardProjectSchedulingFeature\(|guardWipBillingFeature\(|guardPropertyManagementFeature\(|guardSubcontractsFeature\(|guardComplianceFeature\(|guardLienWaiverFeature\(|gateDocuments\(|gateSurveys\(|gateExports\(/
 
 const read = readingPagePairs((path: string) => readFileSync(new URL(path, WEB), 'utf8'))
 const exists = (path: string) => existsSync(new URL(path, WEB))
