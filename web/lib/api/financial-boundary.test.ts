@@ -27,6 +27,16 @@ const { jsonObject, nullableUuidId, parseJsonBody } = await import("./json");
  * this is the only escape hatch from the shared zod request boundary.
  */
 const EXEMPT_ROUTES: Readonly<Record<string, string>> = {
+  // HR-17/18/19: lifecycle actions whose whole input is the path id. Each
+  // was checked for a body read before being listed; a route that reads
+  // req.json() must go through parseJsonBody instead of coming here.
+  "web/app/api/hrm/documents/[id]/send/route.ts": "bodyless lifecycle action; document id is a path parameter",
+  "web/app/api/hrm/documents/[id]/remind/route.ts": "bodyless reminder action; document id is a path parameter",
+  "web/app/api/hrm/documents/[id]/acknowledge/route.ts": "bodyless acknowledgement by the signed-in subject",
+  "web/app/api/hrm/feedback/[id]/retract/route.ts": "bodyless retraction; the author and feedback id decide it",
+  "web/app/api/hrm/recruiting/retention-rules/[id]/runs/route.ts": "bodyless rule evaluation; rule id is a path parameter",
+  "web/app/api/hrm/surveys/invitations/[id]/reissue/route.ts": "bodyless invitation reissue; invitation id is a path parameter",
+  "web/app/api/hrm/comp-cycles/[id]/route.ts": "bodyless cycle lifecycle transitions; cycle id is a path parameter",
   "web/app/api/apps/import/route.ts": "size-capped binary ZIP upload; parseZipBundle limits archive expansion and draftExtension validates the decoded package with zod",
   "web/app/api/admin/ai/test/route.ts": "bodyless connectivity test using saved configuration",
   "web/app/api/admin/backups/run/route.ts": "bodyless queue action",
@@ -98,12 +108,17 @@ const PARSED_SCHEMA_ARG_RE = /\bparseJsonBody\(\s*(?:req|request)\s*,\s*([A-Za-z
  * the gap the old gate could not see because parsing was mistaken for
  * validation.
  *
- * Measured at remediation HEAD: 6 shared-factory order routes + 235 routes
- * calling parseJsonBody(req, jsonObject) directly = 241. The number may only
+ * Measured at remediation HEAD: 6 shared-factory order routes + 232 routes
+ * calling parseJsonBody(req, jsonObject) directly = 238. The number may only
  * decrease: migrate a body to a typed schema and lower this ceiling in the
  * same commit.
+ *
+ * Last lowered 241 -> 238 with the nine field-time and compensation-cycle
+ * bodies, which already carried real zod schemas and validated separately
+ * from the parse; wiring each schema through parseJsonBody deleted the
+ * second validation rather than adding one.
  */
-const OBJECT_ONLY_ROUTE_CEILING = 241;
+const OBJECT_ONLY_ROUTE_CEILING = 238;
 
 interface MutationRoute {
   file: string;

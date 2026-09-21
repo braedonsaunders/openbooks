@@ -1,4 +1,4 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { isUuid } from '../../../../../lib/list-params'
@@ -26,18 +26,22 @@ async function kiosk(deviceToken: string) {
   }
 }
 
+const IDENTIFY_NEEDS = 'Identify needs the worker and a PIN'
+const EVENT_NEEDS = 'The kiosk event needs the worker, PIN, kind, occurredAt and clientEventId'
+const UNKNOWN_WORKER = 'Unknown worker — search by name and retry'
+
 const identifySchema = z.object({
   action: z.literal('identify'),
-  employeePartyId: z.string().min(1),
-  pin: z.string().min(1),
+  employeePartyId: z.string({ error: IDENTIFY_NEEDS }).refine((v) => isUuid(v), IDENTIFY_NEEDS),
+  pin: z.string({ error: IDENTIFY_NEEDS }).min(1, IDENTIFY_NEEDS),
 })
 
 const eventSchema = z.object({
   action: z.literal('event'),
-  employeePartyId: z.string().min(1),
-  pin: z.string().min(1),
+  employeePartyId: z.string({ error: EVENT_NEEDS }).refine((v) => isUuid(v), UNKNOWN_WORKER),
+  pin: z.string({ error: EVENT_NEEDS }).min(1, EVENT_NEEDS),
   kind: z.enum(['clock_in', 'clock_out', 'break_start', 'break_end', 'switch']),
-  occurredAt: z.string().min(1),
+  occurredAt: z.string({ error: EVENT_NEEDS }).min(1, EVENT_NEEDS),
   projectId: z.string().nullable().optional(),
   projectTaskId: z.string().nullable().optional(),
   costCodeRef: z.string().max(80).nullable().optional(),
@@ -47,7 +51,12 @@ const eventSchema = z.object({
     accuracyM: z.number().min(0).nullable().optional(),
   }).nullable().optional(),
   photoFileId: z.string().nullable().optional(),
-  clientEventId: z.string().min(1),
+  clientEventId: z.string({ error: EVENT_NEEDS }).min(1, EVENT_NEEDS),
+})
+
+/** The two device actions, each declaring what it needs. */
+const kioskDeviceBody = z.discriminatedUnion('action', [identifySchema, eventSchema], {
+  error: 'Unknown kiosk action — use identify or event',
 })
 
 /** GET → public kiosk descriptor (name, project pinning, switches). */
@@ -106,21 +115,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ deviceToken: s
   const found = await kiosk(deviceToken)
   if (found instanceof NextResponse) return found
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, kioskDeviceBody, { status: 422 });
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as Record<string, unknown>
+  const body = parsedBody.data
   try {
     if (body.action === 'identify') {
-      const parsed = identifySchema.safeParse(body)
-      if (!parsed.success || !isUuid(parsed.data.employeePartyId)) return bad('Identify needs the worker and a PIN')
-      await identifyByPin({ kiosk: found, employeePartyId: parsed.data.employeePartyId, pin: parsed.data.pin })
+      await identifyByPin({ kiosk: found, employeePartyId: body.employeePartyId, pin: body.pin })
       return NextResponse.json({ ok: true })
     }
-    if (body.action === 'event') {
-      const parsed = eventSchema.safeParse(body)
-      if (!parsed.success) return bad('The kiosk event needs the worker, PIN, kind, occurredAt and clientEventId')
-      const event = parsed.data
-      if (!isUuid(event.employeePartyId)) return bad('Unknown worker — search by name and retry')
+    {
+      const event = body
       // The PIN is verified on every event: a kiosk left unattended never
       // stays signed in as the last worker.
       await identifyByPin({ kiosk: found, employeePartyId: event.employeePartyId, pin: event.pin })
@@ -147,7 +151,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ deviceToken: s
       })
       return NextResponse.json(result)
     }
-    return bad('Unknown kiosk action — use identify or event')
   } catch (error) {
     if (error instanceof FieldTimeError) return bad(error.message)
     throw error

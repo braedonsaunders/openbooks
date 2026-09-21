@@ -1,4 +1,4 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { sql } from 'drizzle-orm'
@@ -29,14 +29,33 @@ async function refuseDuplicate(orgId: string, projectId: string, kind: string, e
 
 const pointSchema = z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) })
 
+const SHAPE_NEEDS = 'A geofence needs the project and circle or polygon shape'
+const UNKNOWN_PROJECT = 'Unknown project — pick it from the list'
+const DELETE_NEEDS = 'Delete needs the geofence id'
+
 const geofenceSchema = z.object({
-  projectId: z.string().min(1),
-  kind: z.enum(['circle', 'polygon']),
+  action: z.literal('save').optional(),
+  id: z.string().refine((v) => isUuid(v), 'Unknown geofence — reload and retry').optional(),
+  projectId: z.string({ error: SHAPE_NEEDS }).refine((v) => isUuid(v), UNKNOWN_PROJECT),
+  kind: z.enum(['circle', 'polygon'], { error: SHAPE_NEEDS }),
   center: pointSchema.nullable().optional(),
   radiusM: z.number().int().min(10).max(100000).nullable().optional(),
   polygon: z.array(pointSchema).min(3).max(64).nullable().optional(),
   isActive: z.boolean().optional(),
 })
+
+/**
+ * Save or retire. Delete names itself; a save carries the shape. The
+ * circle/polygon completeness checks stay in the handler so each one
+ * names the missing part rather than failing the whole union.
+ */
+const geofenceBody = z.union([
+  z.object({
+    action: z.literal('delete'),
+    id: z.string({ error: DELETE_NEEDS }).refine((v) => isUuid(v), DELETE_NEEDS),
+  }),
+  geofenceSchema,
+])
 
 /** GET → active geofences (?projectId=). */
 export async function GET(req: Request) {
@@ -61,30 +80,26 @@ export async function POST(req: Request) {
   if (gate instanceof NextResponse) return gate
   const { user } = gate
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, geofenceBody, { status: 422 });
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as Record<string, unknown>
+  const body = parsedBody.data
   try {
     if (body.action === 'delete') {
-      if (typeof body.id !== 'string' || !isUuid(body.id)) return bad('Delete needs the geofence id')
       const moved = (await db.execute(sql`
         delete from project_geofences where org_id = ${user.orgId} and id = ${body.id}`)).rowCount ?? 0
       if (moved !== 1) return bad('The geofence is unknown in this organization — reload and retry')
       return NextResponse.json({ ok: true })
     }
-    const parsed = geofenceSchema.safeParse(body)
-    if (!parsed.success) return bad('A geofence needs the project and circle or polygon shape')
-    const fence = parsed.data
-    if (!isUuid(fence.projectId)) return bad('Unknown project — pick it from the list')
+    const fence = body
     const project = (await db.execute(sql`select id from projects where org_id = ${user.orgId} and id = ${fence.projectId}`)).rows[0]
-    if (!project) return bad('Unknown project — pick it from the list')
+    if (!project) return bad(UNKNOWN_PROJECT)
     if (fence.kind === 'circle' && (!fence.center || !fence.radiusM)) {
       return bad('A circle geofence needs a center and a radius in metres')
     }
     if (fence.kind === 'polygon' && !fence.polygon) {
       return bad('A polygon geofence needs at least three corners')
     }
-    const id = typeof body.id === 'string' && isUuid(body.id) ? (body.id as string) : null
+    const id = fence.id ?? null
     await refuseDuplicate(user.orgId, fence.projectId, fence.kind, id ?? undefined)
     if (id) {
       const moved = (await db.execute(sql`
