@@ -1,4 +1,4 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "../../../../lib/api/json";
 import { NextResponse } from "next/server";
 import { recruitingErrorResponse } from "../../hrm/recruiting/_lib";
 import { applyBody } from "./bodies";

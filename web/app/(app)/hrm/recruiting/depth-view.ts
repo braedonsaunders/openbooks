@@ -99,6 +99,9 @@ export function hrefForDepth(tab: DepthTab, selection: { interview?: string; off
   return `/hrm/recruiting?${params.toString()}`
 }
 
+/** Badge variant for depth-table chip columns (scorecards, signature, status). */
+export type DepthBadgeVariant = 'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
+
 export interface InterviewTabRow {
   id: string
   candidate: string
@@ -107,7 +110,7 @@ export interface InterviewTabRow {
   when: string
   slots: string
   scorecards: string
-  scorecardsVariant: 'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
+  scorecardsVariant: DepthBadgeVariant
   href: string
 }
 
@@ -141,7 +144,7 @@ export interface OfferTabRow {
   job: string
   status: string
   signature: string
-  signatureVariant: 'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
+  signatureVariant: DepthBadgeVariant
   versions: string
   href: string
 }
@@ -180,7 +183,7 @@ export interface PostingTabRow {
   requisitionId: string
   board: string
   status: string
-  statusVariant: 'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
+  statusVariant: DepthBadgeVariant
   applies: string
   href: string
 }

@@ -34,7 +34,6 @@ import type { RecruitingCreateProps } from './RecruitingCreateForm'
 import type { CandidateDrawerData, OfferDrawerData, RequisitionDrawerData } from './sections'
 import {
   depthTabOptions,
-  hrefForDepth,
   loadInterviewDrawer,
   loadInterviewsTab,
   loadConsentStatus,
@@ -46,6 +45,10 @@ import {
   loadPoolsTab,
   resolveDepthTab,
   type DepthTab,
+  type InterviewTabRow,
+  type OfferTabRow,
+  type PostingTabRow,
+  type PoolTabRow,
   type InterviewDrawer,
   type OfferDrawerExtra,
   type PostingDrawerExtra,
@@ -112,7 +115,7 @@ export interface RecruitingPageData {
   // HR-18: sub-tab strip + depth table payload (null on Openings).
   tab: DepthTab
   depthTabs: { value: string; label: string; href: string }[]
-  depthRows: { id: string; href: string; [key: string]: string }[] | null
+  depthRows: InterviewTabRow[] | OfferTabRow[] | PostingTabRow[] | PoolTabRow[] | null
   depthColumns: Record<string, string> | null
   depthEmpty: string
   /** Registry keys of the Setup sections rehomed under this tab (feature-gated). */
@@ -263,7 +266,7 @@ export function recruitingSpec(data: RecruitingPageData): PageSpec {
           ],
         }),
             ]
-          : [depthTable(data)],
+          : [depthTable(data)]),
         // HR-18: the Setup lists rehomed under this tab (kits + pools on
         // Interviews, templates on Offers, retention rules on Pools) ride
         // the shared setup-section widget — same component as Compliance,
@@ -573,7 +576,7 @@ export async function loadRecruitingPage(
           : tab === 'pools'
             ? await loadPoolsTab(authz, t, tab)
             : null
-  const depthColumns =
+  const depthColumns: Record<string, string> | null =
     tab === 'interviews'
       ? {
           candidate: t('recruiting.depth.columns.candidate'),

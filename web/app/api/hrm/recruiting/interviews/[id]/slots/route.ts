@@ -1,4 +1,4 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "../../../../../../../lib/api/json";
 import { NextResponse } from "next/server";
 import { listInterviewSlots, proposeSlots } from "@openbooks/engine/src/hrm/recruiting/scheduling.ts";
 import { guardPermission } from "../../../../../../../lib/authz";
