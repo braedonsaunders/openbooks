@@ -1904,5 +1904,16 @@
       "kicker": "Offer",
       "version": "version {version}"
     }
+  },
+  "aiDraft": {
+    "button": "Draft from evidence",
+    "title": "Draft from evidence",
+    "insert": "Insert into field",
+    "discard": "Discard",
+    "failed": "The draft could not be generated.",
+    "sources": "Sources",
+    "biasFlags": "Language to review",
+    "loading": "Drafting from the cited records…",
+    "copied": "No editable field here — the draft was copied to the clipboard."
   }
 }

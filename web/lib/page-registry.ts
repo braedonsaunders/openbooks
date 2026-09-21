@@ -1852,6 +1852,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/payroll/anomalies': {
+    route: '/payroll/anomalies',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/payroll/anomalies/view')
+      return {
+        load: (input) => m.loadAnomalyChecksPage(input.searchParams ?? {}),
+        spec: (data) => m.anomalyChecksSpec(data as never),
+      }
+    },
+  },
   '/payroll/opening-balances': {
     route: '/payroll/opening-balances',
     segments: [],

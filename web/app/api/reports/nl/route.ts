@@ -2,7 +2,7 @@ import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { REPORT_ENTITY_MAP } from "@openbooks/reports";
-import { draftNlReport, validateNlDefinition } from "@openbooks/engine/src/hrm/ai/nl-reports.ts";
+import { draftNlReport, listNlDrafts, transitionNlDraft, validateNlDefinition } from "@openbooks/engine/src/hrm/ai/nl-reports.ts";
 import { logDecision } from "@openbooks/engine/src/hrm/ai/governance.ts";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { executeReport } from "../../../../lib/custom-reports";
@@ -86,6 +86,56 @@ export async function POST(req: Request) {
       callerPermissions,
     });
     return NextResponse.json({ draftId: saved.draftId, definition: saved.definition, previewRows });
+  } catch (e) {
+    return aiRailsErrorResponse(e);
+  }
+}
+
+/**
+ * The caller's own NL drafts for the Ask panel's save-as-view list.
+ * Feature-gated like POST: absent capability answers 404, never an
+ * empty list pretending there is nothing to ask.
+ */
+export async function GET() {
+  const authz = await requireAnyPerm(["reports.read"]);
+  if (authz instanceof NextResponse) return authz;
+  if (!(await isFeatureEnabled(authz.user.orgId, "hrmNlReports"))) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
+  try {
+    const drafts = await listNlDrafts(db, { orgId: authz.user.orgId, actorId: authz.user.id });
+    return NextResponse.json({ drafts });
+  } catch (e) {
+    return aiRailsErrorResponse(e);
+  }
+}
+
+const nlTransitionBody = z.object({
+  draftId: z.string().uuid(),
+  status: z.enum(["saved", "discarded"]),
+});
+
+/**
+ * Move an own draft to saved (after save-as-view created the definition)
+ * or discarded. The service matches the open row or refuses by name —
+ * a foreign or already-transitioned id never reports success.
+ */
+export async function PATCH(req: Request) {
+  const authz = await requireAnyPerm(["reports.read"]);
+  if (authz instanceof NextResponse) return authz;
+  if (!(await isFeatureEnabled(authz.user.orgId, "hrmNlReports"))) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
+  const parsedBody = await parseJsonBody(req, nlTransitionBody);
+  if (!parsedBody.ok) return parsedBody.response;
+  try {
+    const draft = await transitionNlDraft(db, {
+      orgId: authz.user.orgId,
+      actorId: authz.user.id,
+      draftId: parsedBody.data.draftId,
+      status: parsedBody.data.status,
+    });
+    return NextResponse.json({ draft });
   } catch (e) {
     return aiRailsErrorResponse(e);
   }

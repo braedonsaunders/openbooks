@@ -31,6 +31,7 @@ import { ResultView } from '../../app/(app)/reports/custom/ResultView'
 import { PaperView } from '../../app/(app)/reports/PaperView'
 import { NewReportButton } from '../../app/(app)/reports/custom/NewReportButton'
 import { CustomReportActions } from '../../app/(app)/reports/custom/CustomReportActions'
+import { NlAskPanel } from '../../app/(app)/reports/custom/NlAskPanel'
 import { str, num, stringRecord, type WidgetRenderer } from './widget-props'
 
 /** Reporting adapters. Compose native components without changing their props or boundaries. */
@@ -264,6 +265,13 @@ export const REPORTING_WIDGETS = {
     />
   ),
   'new-report': () => <NewReportButton />,
+  /** HR-21 Ask box: the island null-guards while hrmNlReports is off. */
+  'reports-nl-ask': (props) => (
+    <NlAskPanel
+      ask={(props.ask as ComponentProps<typeof NlAskPanel>['ask']) ?? null}
+      canCreate={props.canCreate === true}
+    />
+  ),
   'report-name-cell': (props) => (
     <ReportNameCell
       name={str(props, 'name') ?? ''}
