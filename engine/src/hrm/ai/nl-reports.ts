@@ -34,12 +34,25 @@ export interface NlCatalogEntity {
   readonly requiredPermission?: string | null;
 }
 
+/**
+ * Literal vocabularies mirror @openbooks/reports (ReportTemporalBin,
+ * ReportAggFn) so a validated definition casts cleanly to
+ * ReportCustomQuery. The engine/hrm module does not import the reports
+ * package for types — the validator below is the authority, and the
+ * package re-validates on execution.
+ */
+export type NlTemporalBin =
+  | "day" | "week" | "month" | "quarter" | "year"
+  | "fiscal_period" | "fiscal_quarter" | "fiscal_year";
+
+export type NlAggFn = "count" | "count_distinct" | "sum" | "avg" | "min" | "max" | "latest";
+
 export interface NlValidatedDefinition {
   readonly entity: string;
   readonly mode: "rows" | "summarize";
   readonly columns: string[];
-  readonly breakouts: { column: string; bin?: string }[];
-  readonly measures: { fn: string; column?: string; label?: string }[];
+  readonly breakouts: { column: string; bin?: NlTemporalBin }[];
+  readonly measures: { fn: NlAggFn; column?: string; label?: string }[];
   readonly filters: unknown;
   readonly sorts: { column: string; direction: "asc" | "desc" }[];
   readonly limit: number | null;
@@ -145,7 +158,7 @@ export function validateNlDefinition(
   if (mode === "rows" && outColumns.length === 0) {
     throw nlDefinitionRefused("rows mode needs at least one column");
   }
-  const breakouts: { column: string; bin?: string }[] = [];
+  const breakouts: NlValidatedDefinition["breakouts"] = [];
   if (raw.breakouts !== undefined && raw.breakouts !== null) {
     if (!Array.isArray(raw.breakouts)) throw nlDefinitionRefused("breakouts must be an array");
     if (raw.breakouts.length > 6) throw nlDefinitionRefused("breakouts carry more than 6 dimensions");
@@ -159,10 +172,10 @@ export function validateNlDefinition(
       if (bin !== undefined && (typeof bin !== "string" || !(TEMPORAL_BINS as readonly string[]).includes(bin))) {
         throw nlDefinitionRefused(`breakout bin ${JSON.stringify(b.bin)} on "${b.column}" is unknown`);
       }
-      breakouts.push(bin === undefined ? { column: b.column } : { column: b.column, bin });
+      breakouts.push(bin === undefined ? { column: b.column } : { column: b.column, bin: bin as NlTemporalBin });
     }
   }
-  const measures: { fn: string; column?: string; label?: string }[] = [];
+  const measures: NlValidatedDefinition["measures"] = [];
   if (raw.measures !== undefined && raw.measures !== null) {
     if (!Array.isArray(raw.measures)) throw nlDefinitionRefused("measures must be an array");
     if (raw.measures.length > 8) throw nlDefinitionRefused("measures carry more than 8 aggregates");
@@ -180,7 +193,7 @@ export function validateNlDefinition(
         }
       }
       measures.push({
-        fn: m.fn,
+        fn: m.fn as NlAggFn,
         ...(m.fn === "count" ? {} : { column: m.column as string }),
         ...(typeof m.label === "string" && m.label.trim() ? { label: m.label.trim().slice(0, 80) } : {}),
       });

@@ -185,6 +185,7 @@ test("drafting writes nowhere except ai_decisions", async () => {
   });
   assert.equal(draft.sources.length, 1);
   assert.ok(draft.text.includes("Support Engineer"));
+  assert.equal(draft.decisionId, "decision-1");
   assert.equal(writes.length, 1, "exactly one write: the ai_decisions row");
 });
 
