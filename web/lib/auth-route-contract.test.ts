@@ -149,8 +149,18 @@ test("public reachability stays an explicit allowlist decision in the proxy poli
     "/api/pay",
     "/api/payments/webhooks",
     "/api/qbd",
+    // The recruiting surface is listed route by route rather than as an
+    // /api/recruiting root: a root would enroll every future sibling
+    // silently. Security co-signed these four plus the three pages.
+    "/api/recruiting/apply",
+    "/api/recruiting/book",
+    "/api/recruiting/feed",
+    "/api/recruiting/offer",
     "/api/sign",
     "/api/v1/records",
+    "/book",
+    "/careers",
+    "/offer",
     "/pay",
     "/sign",
   ]);

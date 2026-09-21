@@ -21,7 +21,7 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
-import { loadCompliancePage, type ComplianceData } from '../../../../lib/hrm/compliance'
+import type { ComplianceData } from '../../../../lib/hrm/compliance'
 
 /**
  * The Compliance tab (HR-13), split into a loader and a spec — the

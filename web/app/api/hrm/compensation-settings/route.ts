@@ -25,7 +25,7 @@ const settingsBody = z.object({
   burdenRate: z.string().regex(/^\d+(\.\d+)?$/).nullable().optional(),
 });
 
-export async function GET(req: Request) {
+export async function GET() {
   const gate = await guardPermission("hrm.compensation.read");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmCompensation"))) {

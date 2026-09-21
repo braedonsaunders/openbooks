@@ -484,6 +484,10 @@ export const offers = pgTable(
     signatureStatus: text("signature_status"),
     signedAt: timestamp("signed_at", { withTimezone: true }),
     signedEvidence: jsonb("signed_evidence"),
+    // SHA-256 of the outstanding signing link (0240). The raw token is
+    // emailed once and never stored. NULL means no link is outstanding;
+    // overwriting it on resend is what revokes the previous link.
+    signingTokenHash: text("signing_token_hash"),
     // HR-18 end
     ...auditColumns,
   },
@@ -521,6 +525,7 @@ export const offers = pgTable(
     uniqueIndex("hrm_offers_org_id_id_unique").on(t.orgId, t.id),
     index("hrm_offers_application").on(t.orgId, t.applicationId, t.status),
     index("hrm_offers_expiry").on(t.orgId, t.status, t.expiresOn),
+    index("hrm_offers_signing_token").on(t.orgId, t.signingTokenHash),
     check("hrm_offers_title_not_blank", sql`char_length(btrim(${t.jobTitle})) > 0`),
     check("hrm_offers_compensation_amount", sql`${t.compensationAmount} > 0`),
   ],

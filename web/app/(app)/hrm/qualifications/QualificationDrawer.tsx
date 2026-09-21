@@ -57,32 +57,35 @@ export function QualificationDrawer({
   const t = useTranslations('hrm')
   const tCommon = useTranslations('common')
   const router = useRouter()
-  const [detail, setDetail] = useState<Detail | null>(null)
+  // Whose detail the loaded row belongs to is part of the state, so
+  // switching records shows nothing rather than the previous person's
+  // credential for one frame. Clearing by deriving instead of by
+  // setState-in-effect also keeps the open to one render pass.
+  const [loaded, setLoaded] = useState<{ id: string; detail: Detail } | null>(null)
+  const detail = loaded && loaded.id === qualificationId ? loaded.detail : null
   const [types, setTypes] = useState<QualificationType[]>([])
-  const [loading, setLoading] = useState(qualificationId !== null)
   const [status, setStatus] = useState<string | undefined>(undefined)
+  // Loading is a fact about the state, not a second copy of it: the
+  // drawer is loading while an id is open, its row has not arrived, and
+  // nothing has failed.
+  const loading = qualificationId !== null && loaded?.id !== qualificationId && status === undefined
   const [form, setForm] = useState({ employmentId: '', typeId: '', issuedOn: '', expiresOn: '', identifier: '', notes: '' })
 
   useEffect(() => {
     let cancelled = false
-    if (!qualificationId) {
-      setDetail(null)
-      setLoading(false)
-    } else {
-      setLoading(true)
+    const openedId = qualificationId
+    if (openedId) {
       ;(async () => {
         try {
-          const res = await fetch(`/api/hrm/qualifications/${qualificationId}`)
+          const res = await fetch(`/api/hrm/qualifications/${openedId}`)
           if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed to load the qualification'))
           const j = (await res.json()) as Detail
           if (!cancelled) {
-            setDetail(j)
+            setLoaded({ id: openedId, detail: j })
             setStatus(undefined)
           }
         } catch (e) {
           if (!cancelled) setStatus((e as Error).message)
-        } finally {
-          if (!cancelled) setLoading(false)
         }
       })()
     }
@@ -115,7 +118,7 @@ export function QualificationDrawer({
       if (qualificationId) {
         const reread = await fetch(`/api/hrm/qualifications/${qualificationId}`)
         if (!reread.ok) throw new Error(await readApiErrorMessage(reread, 'failed to reload the qualification'))
-        setDetail((await reread.json()) as Detail)
+        if (qualificationId) setLoaded({ id: qualificationId, detail: (await reread.json()) as Detail })
       } else {
         onClose()
       }
@@ -155,7 +158,7 @@ export function QualificationDrawer({
       router.refresh()
       if (nextId) {
         const reread = await fetch(`/api/hrm/qualifications/${nextId}`)
-        if (reread.ok) setDetail((await reread.json()) as Detail)
+        if (reread.ok && qualificationId) setLoaded({ id: qualificationId, detail: (await reread.json()) as Detail })
       }
     } catch (e) {
       setStatus((e as Error).message)

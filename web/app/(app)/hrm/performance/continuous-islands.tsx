@@ -519,10 +519,14 @@ export function FeedbackDialog({
   openLabel: string
 }) {
   const router = useRouter()
+  // Asking for feedback needs someone to ask. The drawer binds that
+  // person when it opens from their record; opened from anywhere else
+  // there is nobody to name and no field to name them in, so the kind is
+  // not offered rather than offered and refused on submit.
+  const offeredKinds = requestedFromPartyId ? kinds : kinds.filter((k) => k.value !== 'request')
   const [open, setOpen] = useState(requestId !== null)
-  const [kind, setKind] = useState(kinds[0]?.value ?? 'praise')
+  const [kind, setKind] = useState(offeredKinds[0]?.value ?? 'praise')
   const [visibility, setVisibility] = useState(visibilities[0]?.value ?? 'manager_and_subject')
-  const [requestedFrom, setRequestedFrom] = useState('')
   const [body, setBody] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -540,7 +544,7 @@ export function FeedbackDialog({
             visibility,
             body: body.trim(),
             ...(kind === 'request'
-              ? { requestedFromPartyId: requestedFromPartyId ?? requestedFrom }
+              ? { requestedFromPartyId }
               : {}),
           }
       const res = await fetch(url, {
@@ -576,7 +580,7 @@ export function FeedbackDialog({
         <div>
           <Label htmlFor="fb-kind">{kindLabel}</Label>
           <Select id="fb-kind" value={kind} onChange={(e) => setKind(e.target.value)}>
-            {kinds.map((k) => (
+            {offeredKinds.map((k) => (
               <option key={k.value} value={k.value}>
                 {k.label}
               </option>

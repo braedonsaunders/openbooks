@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
-import { requireHrmDocumentsManage, requireHrmDocumentsRead } from "../authorization.ts";
+import { requireHrmDocumentsRead } from "../authorization.ts";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
 import { HrmDocumentsError } from "./errors.ts";
 import { storeCabinetFile } from "./cabinet.ts";

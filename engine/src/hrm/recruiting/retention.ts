@@ -5,7 +5,6 @@ import { RecruitingError } from "./errors.ts";
 import { requireActorId, requireId, requireOrgId } from "./input.ts";
 import {
   enqueueRecruitingEmailJob,
-  escapeHtml,
   requireDepthFeature,
   type RecruitingEmailEnqueuer,
 } from "./depth.ts";
