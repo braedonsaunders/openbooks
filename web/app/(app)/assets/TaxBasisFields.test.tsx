@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { NextIntlClientProvider } from "next-intl";
 import { readFileSync } from "node:fs";
 import { TaxBasisFields } from "./TaxBasisFields";
+import { attachTaxBasisSource } from "@openbooks/engine/src/tax-returns/asset-basis-policy.ts";
 
 // The test runner uses classic JSX; the production compiler supplies it.
 Object.assign(globalThis, { React });
@@ -21,7 +22,10 @@ const ui = JSON.parse(
   ),
 );
 
-function render(draft: Parameters<typeof TaxBasisFields>[0]["draft"]) {
+function render(
+  draft: Parameters<typeof TaxBasisFields>[0]["draft"],
+  omitFields?: readonly string[],
+) {
   return renderToStaticMarkup(
     <NextIntlClientProvider
       locale="en"
@@ -35,10 +39,75 @@ function render(draft: Parameters<typeof TaxBasisFields>[0]["draft"]) {
           ...draft,
         }}
         onChange={() => {}}
+        omitFields={omitFields}
       />
     </NextIntlClientProvider>,
   );
 }
+
+test("frozen seller history uses the allocation editor without asking for a composite schedule", () => {
+  const markup = render(
+    attachTaxBasisSource(
+      { regime: "us_macrs", recognition: "taxable" },
+      {
+        sourceOperation: "partial_disposal",
+        applicable: "seller",
+        usSellerMacrs: {
+          status: "ready",
+          vintages: [
+            {
+              key: "original:2024-03-15",
+              source: "original",
+              placedInServiceOn: "2024-03-15",
+              transferOn: null,
+              unadjustedBasis: "1000.0000",
+              adjustedCarryover: null,
+              section179: "0.0000",
+              priorDepreciation: null,
+            },
+          ],
+        },
+      },
+    ),
+    ["disposedUnadjustedBasis", "remainingUnadjustedBasis"],
+  );
+  for (const field of [
+    "originalUnadjustedBasis",
+    "placedInServiceOn",
+    "recoveryPeriodYears",
+    "method",
+    "convention",
+    "disposedUnadjustedBasis",
+    "remainingUnadjustedBasis",
+  ]) {
+    assert.ok(!markup.includes(`-${field}\"`), field);
+  }
+  assert.match(markup, /MACRS partial-disposition trigger/);
+});
+
+test("the first statutory declaration still presents its original basis and recovery fields", () => {
+  const markup = render(
+    attachTaxBasisSource(
+      { regime: "us_macrs" },
+      {
+        sourceOperation: "partial_disposal",
+        applicable: "seller",
+        usSellerMacrs: { status: "original_declaration_required" },
+      },
+    ),
+  );
+  for (const field of [
+    "originalUnadjustedBasis",
+    "placedInServiceOn",
+    "recoveryPeriodYears",
+    "method",
+    "convention",
+    "disposedUnadjustedBasis",
+    "remainingUnadjustedBasis",
+  ]) {
+    assert.ok(markup.includes(`-${field}\"`), field);
+  }
+});
 
 test("tax relationship is an explicit choice with native option children", () => {
   const markup = render({ regime: "ca_cca" });
