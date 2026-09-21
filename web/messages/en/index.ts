@@ -60,6 +60,8 @@ import laborPricing from './labor-pricing.json'
 import applications from './applications.json'
 import compliance from './compliance.json'
 import hrm from './hrm.json'
+import inbox from './inbox.json'
+import home from './home.json'
 
 export default {
   common,
@@ -121,4 +123,6 @@ export default {
   applications,
   compliance,
   hrm,
+  inbox,
+  home,
 } as const
