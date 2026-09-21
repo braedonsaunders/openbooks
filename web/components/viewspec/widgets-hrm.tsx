@@ -47,6 +47,7 @@ import {
 import { LeaveBalances } from '../../app/(app)/hrm/my-leave/LeaveBalances'
 // HR-19 begin: documents drawer + generate dialog (verbatim adapters only).
 import { DocumentsDrawer, DocumentsGenerateDialog } from '../../app/(app)/hrm/documents/sections'
+import { SurveysAuthorDialog, SurveysDrawer } from '../../app/(app)/hrm/surveys/sections'
 // HR-19 end
 import { num, str, type WidgetRenderer } from './widget-props'
 
@@ -472,6 +473,21 @@ export const HRM_WIDGETS = {
     const generate = props.generate as ComponentProps<typeof DocumentsGenerateDialog>['generate']
     if (!generate) return null
     return <DocumentsGenerateDialog generate={generate} />
+  },
+  /** The survey flyout: the aggregate results panel (eNPS, drivers, the
+   *  suppression-marked heatmap, comments, trend) with open/close
+   *  actions, closing by navigation. */
+  'hrm-surveys-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof SurveysDrawer>['drawer']
+    if (!drawer) return null
+    return <SurveysDrawer drawer={drawer} />
+  },
+  /** The survey author dialog, opened from the page header through the
+   *  `author` search param; closing navigates the param away. */
+  'hrm-surveys-author-dialog': (props) => {
+    const author = props.author as ComponentProps<typeof SurveysAuthorDialog>['author']
+    if (!author) return null
+    return <SurveysAuthorDialog author={author} />
   },
   // HR-19 end
 } satisfies Record<string, WidgetRenderer>

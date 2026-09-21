@@ -226,6 +226,8 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'hrm-session-dialog': { props: ['create'] },
   'hrm-step-complete': { props: ['failedLabel', 'label', 'stepId'] },
   'hrm-talent-dialog': { props: ['dialog'] },
+  'hrm-surveys-author-dialog': { props: ['author'] },
+  'hrm-surveys-drawer': { props: ['drawer'] },
   'hrm-upcoming-changes': { props: ['ends', 'endsEmpty', 'endsTitle', 'notAvailable', 'starts', 'startsEmpty', 'startsTitle', 'truncated', 'truncatedNote'] },
   'hrm-verb-chip': { props: ['label'] },
   'hrm-window-dialog': { props: ['closeHref', 'departmentOptions', 'subsidiaryOptions'] },
