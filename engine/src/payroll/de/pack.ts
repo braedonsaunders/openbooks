@@ -1,4 +1,4 @@
-import type { PayrollFilingData } from "../filing-registry.ts";
+import { lohnsteuerbescheinigungFiling } from "./filings.ts";
 import type {
   PayrollCertificate,
   PayrollPackCertificates,
@@ -12,7 +12,6 @@ import type {
   PayrollPackWithholding,
   PayrollRegionWithholding,
 } from "../withholding-jurisdictions.ts";
-import { PayrollPackError } from "../payroll-error.ts";
 import { computeDeStatutory, DE_FACTOR_LABELS } from "./compute-statutory.ts";
 import { DE_PACK_RATES, DE_TAX_YEARS } from "./rates.ts";
 
@@ -268,38 +267,13 @@ function dePackFilings() {
         label: "Betriebsstättenfinanzamt (ELSTER)",
       },
     ],
-    yearEnd: [
-      {
-        key: "lohnsteuerbescheinigung",
-        label: "Elektronische Lohnsteuerbescheinigung (§41b EStG)",
-        cadence: "annual" as const,
-        description:
-          "The employer's annual electronic wage-tax certificate per employee, "
-          + "transmitted via ELSTER (EStG §41b).",
-        // A DECLARED refusal, so it must carry a refusal class: the generic
-        // enumeration turns a PayrollError into this filing's own
-        // populationRefusal and rethrows anything else. As a bare Error this
-        // escaped that conversion and took down the whole year-end page.
-        population: (): Promise<PayrollFilingData> =>
-          Promise.reject(
-            new PayrollPackError(
-              "ELSTER transmission of the Lohnsteuerbescheinigung is not "
-              + "implemented by the DE payroll pack — the 2026 monthly engine "
-              + "computes, but year-end population is a separate filing feature.",
-            ),
-          ),
-        parseRowId: (): null => null,
-        downloadRefusal:
-          "ELSTER transmission of the Lohnsteuerbescheinigung is not "
-          + "implemented by the DE payroll pack.",
-        amendment: {
-          supported: false as const,
-          refusal:
-            "Corrected Lohnsteuerbescheinigungen (berichtigte Bescheinigungen "
-            + "via ELSTER) are not implemented by the DE payroll pack.",
-        },
-      },
-    ],
+    // The Ausdruck declaration lives in filings.ts beside its builders (the
+    // CA/US shape): population + slip + amendment real, with the ELSTER
+    // transmission named as the refused half. A refusal thrown from
+    // population must extend PayrollError (PayrollPackError does) so the
+    // generic enumeration converts it to this filing's own populationRefusal
+    // instead of taking down the whole year-end page.
+    yearEnd: [lohnsteuerbescheinigungFiling()],
   };
 }
 
