@@ -7,7 +7,7 @@ import {
   computeMacrsThroughYear,
   computePoolYear,
   macrsConventionAfterMidQuarter,
-  macrsMidQuarterByTaxYear,
+  macrsMidQuarterByWindow,
   nextCalendarDay,
   type MacrsYearWindow,
   type PoolClassDef,
@@ -978,7 +978,7 @@ async function runMacrs(
       }
     }
   }
-  const midQuarterByTaxYear = macrsMidQuarterByTaxYear(
+  const midQuarterByWindow = macrsMidQuarterByWindow(
     windows,
     resolved.flatMap((row) => row.vintages),
   );
@@ -1005,7 +1005,7 @@ async function runMacrs(
             vintage,
             group.def.convention!,
             windows,
-            midQuarterByTaxYear,
+            midQuarterByWindow,
           ),
           disposedOn: vintage.disposedOn,
           dispositionRecognition: vintage.recognition,
