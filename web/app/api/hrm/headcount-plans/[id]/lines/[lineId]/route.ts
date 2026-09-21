@@ -15,13 +15,13 @@ export const runtime = "nodejs";
  * against it marks the line filled). The client checks res.ok before
  * parsing.
  */
-export async function POST(req: Request, { params }: { params: Promise<{ planId: string; lineId: string }> }) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string; lineId: string }> }) {
   const gate = await guardPermission("hrm.compensation.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmHeadcountPlans"))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
-  const { planId, lineId } = await params;
+  const { id: planId, lineId } = await params;
   if (!isUuid(planId) || !isUuid(lineId)) return NextResponse.json({ error: "invalid plan line" }, { status: 400 });
   const parsedBody = await parseJsonBody(
     req,
