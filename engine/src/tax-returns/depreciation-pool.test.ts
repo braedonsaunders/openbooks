@@ -942,11 +942,13 @@ test("§168(i)(7) 9000 bonus split 5250/3750 dates without a negative prior", ()
     transferOn: null,
     section168i7Kind: "nonrecognition",
   }, windows, "2018-08-20");
-  assert.equal(dated.priorDepreciation, "5250.0000");
+  assert.equal(dated.checkpointKind, "taken_components");
+  assert.equal(dated.section179, "0.0000");
+  assert.equal(dated.takenBonus, "5250.0000");
+  assert.equal(dated.priorDepreciation, "0.0000");
   assert.equal(dated.adjustedCarryover, "3750.0000");
-  assert.equal(cmp(dated.priorDepreciation, "0") >= 0, true);
   assert.equal(
-    formatMoney(add(dated.priorDepreciation, dated.adjustedCarryover), 4),
+    formatMoney(add(dated.takenBonus, dated.adjustedCarryover), 4),
     "9000.0000",
   );
 });
@@ -1042,6 +1044,9 @@ test("a later-year transfer with an intervening short year continues the origina
   assert.notEqual(collapsed.current.allowance, originalContinued.current.allowance);
   const received = {
     ...asset,
+    checkpointKind: dated.checkpointKind,
+    section179: dated.section179,
+    takenBonus: dated.takenBonus,
     adjustedCarryover: dated.adjustedCarryover,
     priorDepreciation: dated.priorDepreciation,
     transferOn: "2025-08-20",

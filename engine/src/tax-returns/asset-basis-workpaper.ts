@@ -750,6 +750,9 @@ async function loadUsSellerMacrsVintageContext(
       });
       datedVintages.push({
         ...vintage,
+        checkpointKind: dated.checkpointKind,
+        section179: dated.section179,
+        takenBonus: dated.takenBonus,
         priorDepreciation: dated.priorDepreciation,
         adjustedCarryover: dated.adjustedCarryover,
       });

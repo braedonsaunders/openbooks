@@ -10,12 +10,15 @@ import {
   TAX_BASIS_SOURCE_KINDS,
   MACRS_VINTAGE_SOURCES,
   MACRS_VINTAGE_SOURCE_LABELS,
+  MACRS_CHECKPOINT_KINDS,
+  MACRS_CHECKPOINT_KIND_LABELS,
   TaxBasisPolicyError,
   macrsVintageKey,
   parseMacrsVintageAllocations,
   attachTaxBasisSource,
   assertMacrsVintageAllocationsMatchOpen,
   deriveMacrsDisposedBuyerVintages,
+  parseFrozenMacrsBuyerVintages,
   caDeemedAcquisitionPayment,
   caOrdinaryCapitalGainsInclusion,
   caStatutoryProceeds,
@@ -745,6 +748,10 @@ test("MACRS vintage sources have human labels and a stable key", () => {
     assert.notEqual(MACRS_VINTAGE_SOURCE_LABELS[source], source);
     assert.match(MACRS_VINTAGE_SOURCE_LABELS[source], /[A-Za-z]/);
   }
+  for (const kind of MACRS_CHECKPOINT_KINDS) {
+    assert.notEqual(MACRS_CHECKPOINT_KIND_LABELS[kind], kind);
+    assert.match(MACRS_CHECKPOINT_KIND_LABELS[kind], /[A-Za-z]/);
+  }
   assert.equal(
     macrsVintageKey({ source: "original", placedInServiceOn: "2023-03-15" }),
     "original:2023-03-15",
@@ -878,6 +885,7 @@ const readyVintages = [
     convention: "half_year" as const,
     bonusPercent: "0",
     businessUsePercent: "100",
+    shortYearMethod: "simplified" as const,
   },
   {
     key: "excess:2025-08-01:2025-08-01",
@@ -894,6 +902,7 @@ const readyVintages = [
     convention: "mid_month" as const,
     bonusPercent: "0",
     businessUsePercent: "100",
+    shortYearMethod: "allocation" as const,
   },
 ];
 
@@ -1185,6 +1194,9 @@ test("ready both-sided nontaxable freezes per-disposed-vintage receiver schedule
     priorDepreciation: "400.0000",
     bonusPercent: "0",
     businessUsePercent: "100",
+    shortYearMethod: "simplified",
+    checkpointKind: "declared_elections",
+    takenBonus: null,
   });
   const twoDisposed = validateTaxRegimeBasis(
     {
@@ -1208,6 +1220,8 @@ test("ready both-sided nontaxable freezes per-disposed-vintage receiver schedule
   assert.equal(twoDisposed.buyerVintages?.[1]!.method, "straight_line");
   assert.equal(twoDisposed.buyerVintages?.[1]!.convention, "mid_month");
   assert.equal(twoDisposed.buyerVintages?.[1]!.parentKey, "excess:2025-08-01:2025-08-01");
+  assert.equal(twoDisposed.buyerVintages?.[0]!.shortYearMethod, "simplified");
+  assert.equal(twoDisposed.buyerVintages?.[1]!.shortYearMethod, "allocation");
   throwsPolicy(
     () =>
       validateTaxRegimeBasis(
@@ -1325,7 +1339,7 @@ test("a 9000 bonus split 5250/3750 dated checkpoint conserves original without n
       unadjustedBasis: "9000.0000",
       adjustedCarryover: "3750.0000",
       section179: "0.0000",
-      priorDepreciation: "5250.0000",
+      priorDepreciation: "0.0000",
       recoveryPeriodYears: "5",
       method: "200_db",
       convention: "half_year",
@@ -1333,6 +1347,8 @@ test("a 9000 bonus split 5250/3750 dated checkpoint conserves original without n
       businessUsePercent: "100",
       shortYearMethod: "simplified",
       section168i7Kind: "nonrecognition",
+      checkpointKind: "taken_components",
+      takenBonus: "5250.0000",
     }],
     allocations: [{
       source: "original",
@@ -1343,8 +1359,117 @@ test("a 9000 bonus split 5250/3750 dated checkpoint conserves original without n
     transferOn: "2018-08-20",
   });
   assert.equal(derived.length, 1);
-  assert.equal(derived[0]!.priorDepreciation, "5250.0000");
+  assert.equal(derived[0]!.checkpointKind, "taken_components");
+  assert.equal(derived[0]!.takenBonus, "5250.0000");
+  assert.equal(derived[0]!.priorDepreciation, "0.0000");
   assert.equal(derived[0]!.adjustedCarryover, "3750.0000");
   assert.equal(derived[0]!.section179, "0.0000");
   assert.equal(derived[0]!.bonusPercent, "100");
+  assert.equal(derived[0]!.shortYearMethod, "simplified");
+});
+
+test("frozen buyer vintages refuse a missing shortYearMethod instead of defaulting the paper header", () => {
+  throwsPolicy(
+    () =>
+      parseFrozenMacrsBuyerVintages([{
+        key: "carryover:2023-03-15:2025-08-01:original:2023-03-15",
+        source: "carryover",
+        parentKey: "original:2023-03-15",
+        placedInServiceOn: "2023-03-15",
+        transferOn: "2025-08-01",
+        recoveryPeriodYears: "5",
+        method: "200_db",
+        convention: "half_year",
+        unadjustedBasis: "10000.0000",
+        adjustedCarryover: "8000.0000",
+        section179: "0.0000",
+        priorDepreciation: "2000.0000",
+        bonusPercent: "0",
+        businessUsePercent: "100",
+      }]),
+    /shortYearMethod must be simplified or allocation/,
+    "omitted frozen shortYearMethod is not a paper-header default",
+  );
+});
+
+test("declared elections refuse original 10000 section179 1000 bonus 0 prior 0 remaining 10000", () => {
+  throwsPolicy(
+    () =>
+      validateTaxRegimeBasis(
+        {
+          regime: "us_macrs",
+          relationship: "non_arms_length",
+          recognition: "nontaxable",
+          relatedPerson: true,
+          placedInServiceOn: "2023-03-15",
+          recoveryPeriodYears: "5",
+          method: "200_db",
+          convention: "half_year",
+          originalUnadjustedBasis: "10000.00",
+          carryoverBasis: "10000.00",
+          excessBasis: "0.00",
+          section179: "1000.00",
+          bonusPercent: "0",
+          businessUsePercent: "100",
+          priorDepreciation: "0",
+          section168i7Kind: "nonrecognition",
+        },
+        { sourceOperation: "intercompany_transfer", applicable: "buyer" },
+      ),
+    /must equal original unadjusted basis/,
+    "remaining above post-election basis is not a second conservation identity",
+  );
+  throwsPolicy(
+    () =>
+      parseFrozenMacrsBuyerVintages([{
+        key: "carryover:2023-03-15:2025-08-01:original:2023-03-15",
+        source: "carryover",
+        parentKey: "original:2023-03-15",
+        placedInServiceOn: "2023-03-15",
+        transferOn: "2025-08-01",
+        recoveryPeriodYears: "5",
+        method: "200_db",
+        convention: "half_year",
+        unadjustedBasis: "10000.0000",
+        adjustedCarryover: "10000.0000",
+        section179: "1000.0000",
+        priorDepreciation: "0.0000",
+        bonusPercent: "0",
+        businessUsePercent: "100",
+        shortYearMethod: "simplified",
+      }]),
+    /must equal original unadjusted basis/,
+    "frozen declared_elections cannot hide a 1000 section179 behind remaining 10000",
+  );
+  throwsPolicy(
+    () =>
+      deriveMacrsDisposedBuyerVintages({
+        open: [{
+          key: "original:2023-03-15",
+          source: "original",
+          parentKey: null,
+          placedInServiceOn: "2023-03-15",
+          transferOn: null,
+          unadjustedBasis: "10000.0000",
+          adjustedCarryover: "10000.0000",
+          section179: "1000.0000",
+          priorDepreciation: "0.0000",
+          recoveryPeriodYears: "5",
+          method: "200_db",
+          convention: "half_year",
+          bonusPercent: "0",
+          businessUsePercent: "100",
+          shortYearMethod: "simplified",
+        }],
+        allocations: [{
+          source: "original",
+          placedInServiceOn: "2023-03-15",
+          disposedUnadjustedBasis: "10000.0000",
+          remainingUnadjustedBasis: "0.0000",
+        }],
+        transferOn: "2025-08-01",
+      }),
+    /must equal original unadjusted basis|cannot derive a carryover checkpoint/,
+    "derive does not reinterpret prior to accept an overstated remaining",
+  );
 });

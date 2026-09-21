@@ -18,6 +18,7 @@ import {
   parseFrozenMacrsBuyerVintages,
   parseMacrsVintageAllocations,
   type FrozenMacrsBuyerVintage,
+  type MacrsCheckpointKind,
   type MacrsVintageAllocationInput,
   type MacrsVintageSource,
   type OpenMacrsVintage,
@@ -61,6 +62,8 @@ export type MacrsVintage = {
   source: MacrsVintageSource;
   /** Open vintage this carryover was split from. Null on original / new placement. */
   parentKey: string | null;
+  checkpointKind?: MacrsCheckpointKind;
+  takenBonus: string | null;
 };
 
 export type MacrsWorkpaperEvent = {
@@ -370,6 +373,7 @@ function splitOneVintage(
   const section179 = splitAmount(vintage.section179, disposedBasis, vintage.basis);
   const priorDepreciation = splitAmount(vintage.priorDepreciation, disposedBasis, vintage.basis);
   const adjustedCarryover = splitAmount(vintage.adjustedCarryover, disposedBasis, vintage.basis);
+  const takenBonus = splitAmount(vintage.takenBonus, disposedBasis, vintage.basis);
   const out: MacrsVintage[] = [];
   if (positive(disposedBasis)) {
     out.push({
@@ -380,6 +384,7 @@ function splitOneVintage(
       section179: section179.take ?? vintage.section179,
       priorDepreciation: priorDepreciation.take,
       adjustedCarryover: adjustedCarryover.take,
+      takenBonus: takenBonus.take,
     });
   }
   if (positive(remainingBasis)) {
@@ -390,6 +395,7 @@ function splitOneVintage(
       section179: section179.keep ?? vintage.section179,
       priorDepreciation: priorDepreciation.keep,
       adjustedCarryover: adjustedCarryover.keep,
+      takenBonus: takenBonus.keep,
     });
   }
   return out;
@@ -481,6 +487,8 @@ export function listOpenMacrsVintages(vintages: readonly MacrsVintage[]): OpenMa
       businessUsePercent: vintage.businessUsePercent,
       shortYearMethod: vintage.shortYearMethod,
       section168i7Kind: vintage.section168i7Kind,
+      checkpointKind: vintage.checkpointKind,
+      takenBonus: vintage.takenBonus,
     }));
 }
 
@@ -599,6 +607,7 @@ function seedSellerPaper(paper: MacrsWorkpaperEvent, defaults: MacrsVintageDefau
     priorDepreciation: paper.prior_depreciation,
     source: "original",
     parentKey: null,
+    takenBonus: null,
   }];
 }
 
@@ -621,6 +630,7 @@ function seedAcquisition(
     priorDepreciation: null,
     source: "original",
     parentKey: null,
+    takenBonus: null,
   }];
 }
 
@@ -653,10 +663,14 @@ function receiverFromFrozenBuyerVintage(
   defaults: MacrsVintageDefaults,
   vintage: FrozenMacrsBuyerVintage,
 ): MacrsVintage {
-  const shortYearMethod = paper.short_year_method === "allocation" ? "allocation" : defaults.shortYearMethod;
+  if (vintage.shortYearMethod !== "simplified" && vintage.shortYearMethod !== "allocation") {
+    throw new MacrsVintageError(
+      `frozen buyer vintage ${vintage.key} is missing shortYearMethod; reverse and re-propose the workpaper — do not default the receiving paper header or class`,
+    );
+  }
   return {
     ...defaults,
-    shortYearMethod,
+    shortYearMethod: vintage.shortYearMethod,
     role: "buyer",
     source: vintage.source,
     parentKey: vintage.parentKey,
@@ -674,6 +688,8 @@ function receiverFromFrozenBuyerVintage(
     recognition: asRecognition(paper.recognition),
     section168i7Kind: as168i7Kind(paper.section_168i7_kind),
     disposedOn: null,
+    checkpointKind: vintage.checkpointKind,
+    takenBonus: vintage.takenBonus,
   };
 }
 
@@ -702,6 +718,7 @@ function receiverVintages(
     adjustedCarryover: null as string | null,
     priorDepreciation: null as string | null,
     parentKey: null as string | null,
+    takenBonus: null as string | null,
   };
   const vintages: MacrsVintage[] = [];
   if (paper.buyer_vintages && paper.buyer_vintages.length > 0) {

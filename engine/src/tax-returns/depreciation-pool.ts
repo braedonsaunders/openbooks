@@ -1169,6 +1169,9 @@ export function computeMacrsThroughYear(
   firstYearMonthsInService: PersistedMacrsMonths | null;
   allocationFollowYear: boolean;
   currentRecoveryYearIndex: number | null;
+  takenSection179: string;
+  takenBonus: string;
+  takenMacrs: string;
 } {
   const ordered = [...windows].sort((left, right) =>
     left.yearStart.localeCompare(right.yearStart) || left.yearEnd.localeCompare(right.yearEnd),
@@ -1202,6 +1205,9 @@ export function computeMacrsThroughYear(
   let prior = zeroMacrs(checkpoint ?? adjusted);
   let current = zeroMacrs(checkpoint ?? adjusted);
   let currentRecoveryYearIndex: number | null = null;
+  let takenSection179 = "0";
+  let takenBonus = "0";
+  let takenMacrs = "0";
   for (let index = 0; index < ordered.length; index += 1) {
     const window = ordered[index]!;
     if (currentWindow ? window.yearStart > currentWindow.yearStart : window.taxYear > input.taxYear) break;
@@ -1365,6 +1371,9 @@ export function computeMacrsThroughYear(
       applied = composeMacrsComponents("0.00", "0.00", take, remaining);
       postTransferTaken = formatMoney(add(postTransferTaken, take), 2);
     }
+    takenSection179 = formatMoney(add(takenSection179, applied.section179), 4);
+    takenBonus = formatMoney(add(takenBonus, applied.bonus), 4);
+    takenMacrs = formatMoney(add(takenMacrs, applied.macrs), 4);
     adjusted = persistMacrsBasis(applied.remainingBasis);
     if (index === currentIndex - 1) prior = applied;
     if (index === currentIndex) {
@@ -1383,6 +1392,9 @@ export function computeMacrsThroughYear(
       : null,
     allocationFollowYear,
     currentRecoveryYearIndex,
+    takenSection179,
+    takenBonus,
+    takenMacrs,
   };
 }
 
@@ -1511,11 +1523,19 @@ export function refreshOpenMacrsVintageThrough(
     transferOn: string | null;
     shortYearMethod?: "simplified" | "allocation";
     section168i7Kind?: "nonrecognition" | "partnership_721_prior_interest" | "consolidated_group" | null;
+    checkpointKind?: "taken_components" | "declared_elections";
+    takenBonus?: string | null;
   },
   windows: readonly MacrsYearWindow[],
   asOf: string,
   opts?: { ownerSubsidiaryId?: string },
-): { priorDepreciation: string; adjustedCarryover: string } {
+): {
+  checkpointKind: "taken_components";
+  section179: string;
+  takenBonus: string;
+  priorDepreciation: string;
+  adjustedCarryover: string;
+} {
   const origin = vintage.placedInServiceOn;
   const received = vintage.adjustedCarryover != null && vintage.transferOn != null;
   const walkWindows = macrsLineageRecoveryWindows({
@@ -1562,26 +1582,35 @@ export function refreshOpenMacrsVintageThrough(
       : remainingAfter(walked.prior.remainingBasis, walked.current.allowance),
   );
   const original = mulPercent(persistMacrsBasis(vintage.unadjustedBasis), vintage.businessUsePercent);
-  const elected179Raw = persistMacrsSection179(vintage.section179);
-  const elected179 = cmp(elected179Raw, original) < 0 ? elected179Raw : original;
-  const after179 = add(original, neg(elected179));
-  const bonus = mulPercent(after179, vintage.bonusPercent);
-  const postElection = formatMoney(add(original, neg(sum([elected179, bonus]))), 4);
-  const taken = formatMoney(add(original, neg(remaining)), 4);
-  if (cmp(taken, "0") < 0) {
+  if (received) {
+    if (vintage.checkpointKind !== "taken_components" || vintage.takenBonus == null || vintage.takenBonus === "") {
+      throw new Error(
+        `dated MACRS checkpoint on ${asOf} cannot continue a received vintage without taken_components (section179, takenBonus, priorDepreciation, remaining); reverse and re-propose the earlier workpaper — do not infer whether prior includes allocated bonus`,
+      );
+    }
+  }
+  const section179 = received
+    ? formatMoney(add(persistMacrsSection179(vintage.section179), walked.takenSection179), 4)
+    : walked.takenSection179;
+  const takenBonus = received
+    ? formatMoney(add(persistMacrsBasis(vintage.takenBonus!), walked.takenBonus), 4)
+    : walked.takenBonus;
+  const prior = received
+    ? formatMoney(add(persistMacrsBasis(vintage.priorDepreciation ?? "0"), walked.takenMacrs), 4)
+    : walked.takenMacrs;
+  const reconstructed = formatMoney(sum([section179, takenBonus, prior, remaining]), 4);
+  if (cmp(reconstructed, formatMoney(original, 4)) !== 0) {
     throw new Error(
-      `dated MACRS checkpoint on ${asOf} produced remaining ${remaining} above original ${original}; reverse and re-propose the earlier workpaper — do not reuse a stale ${origin} remaining`,
+      `dated MACRS checkpoint on ${asOf} produced section179 ${section179}, takenBonus ${takenBonus}, priorDepreciation ${prior} and remaining ${remaining} against original ${original}; reverse and re-propose the earlier workpaper — do not infer taken elections from a negative classic carry`,
     );
   }
-  const prior = cmp(remaining, postElection) > 0
-    ? taken
-    : formatMoney(add(postElection, neg(remaining)), 4);
-  if (cmp(prior, "0") < 0) {
-    throw new Error(
-      `dated MACRS checkpoint on ${asOf} produced priorDepreciation ${prior} from remaining ${remaining}; reverse and re-propose the earlier workpaper — do not subtract a full original bonus from a checkpoint that still holds the buyer share`,
-    );
-  }
-  return { priorDepreciation: prior, adjustedCarryover: formatMoney(remaining, 4) };
+  return {
+    checkpointKind: "taken_components",
+    section179,
+    takenBonus,
+    priorDepreciation: prior,
+    adjustedCarryover: formatMoney(remaining, 4),
+  };
 }
 
 function monthInTaxYear(date: string, yearStart?: string): number {
