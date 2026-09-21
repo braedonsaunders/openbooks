@@ -66,7 +66,9 @@ for (const postJuly of [false,true]) {
       const values = async (org:ScratchOrg,assetId:string) => (await rows(org,assetId)).map(r=>r.planned);
       const fullImpaired = await values(full,fullAsset.assetId);
       assert.deepEqual(await values(partial,partialAsset.assetId),fullImpaired.slice(0,2),'common months must agree before reversal');
-      assert.deepEqual(fullImpaired,postJuly ? ['100.0000',...Array<string>(8).fill('88.8888'),'88.8896'] : Array<string>(10).fill('80.0000'));
+      assert.deepEqual(fullImpaired,postJuly ? ['100.0000',...Array<string>(8).fill('88.8889'),'88.8888'] : Array<string>(10).fill('80.0000'));
+      assert.equal(fullImpaired.reduce((total, amount) => total + toUnits(amount), 0n),
+        toUnits(postJuly ? '900' : '800'), 'rounding cannot change the total impaired depreciable basis');
       for (const [org,{actorId,assetId}] of fixtures) {
         const july = (await rows(org,assetId))[0]!;
         const impairment = (await db.execute<{journal_entry_id:string}>(sql`select journal_entry_id from asset_events where org_id=${org.orgId} and asset_id=${assetId} and kind='impaired'`)).rows[0]!;

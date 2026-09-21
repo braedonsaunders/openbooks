@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "../platform/db.ts";
+import { errorChainMatches } from "../testing/error-chain.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -542,7 +543,7 @@ test(
                       '2026-09-01',-600,-400,0,null,${f.actors.submitterId})
             `);
           }),
-        /group component basis must match its independently approved/,
+        (error: unknown) => errorChainMatches(error, /group component basis must match its independently approved/),
         "publishing the approved legal disposal without its group measurement must fail",
       );
       await applyAssetChange(f.org.orgId, component, f.actors.submitterId);
