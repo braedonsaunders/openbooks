@@ -154,16 +154,32 @@ test("PL withholding declares one national region, implemented", () => {
   assert.ok(region.citation.length > 0);
 });
 
-test("PL 2026 is transcribed, with citations", () => {
+test("PL 2024, 2025 and 2026 are transcribed, with citations", () => {
   const published = PL_TAX_YEARS.editions.filter((edition) => edition.status === "published");
-  assert.equal(published.length, 1);
+  assert.equal(published.length, 3);
   assert.deepEqual(
     published.map((edition) => [edition.year, edition.effectiveFrom]),
-    [[2026, "2026-01-01"]],
+    [
+      [2024, "2024-01-01"],
+      [2025, "2025-01-01"],
+      [2026, "2026-01-01"],
+    ],
   );
   for (const edition of published) {
     assert.match(edition.citation, /Dz\.U\./);
   }
+  // Inverted twice (was: 2025 missing, then 2024 missing): the 2025 edition
+  // transcribes the 260 190 zł cap (M.P. 2024 poz. 1051) and the 2024 edition
+  // the 234 720 zł cap (M.P. 2023 poz. 1356). Never delete this — invert it
+  // again when 2027 lands.
+  assert.match(
+    published.find((edition) => edition.year === 2025)?.citation ?? "",
+    /M\.P\. 2024 poz\. 1051/,
+  );
+  assert.match(
+    published.find((edition) => edition.year === 2024)?.citation ?? "",
+    /M\.P\. 2023 poz\. 1356/,
+  );
   // PL_TAX_YEARS ships on the registered PL pack, so the declaration is
   // already visible via the registry; register only when it is not.
   let registered = false;
@@ -178,8 +194,10 @@ test("PL 2026 is transcribed, with citations", () => {
     );
   }
   try {
-    assert.equal(payrollTaxYearProblem("PL", 2026), null);
-    for (const year of [2025, 2027]) {
+    for (const year of [2024, 2025, 2026]) {
+      assert.equal(payrollTaxYearProblem("PL", year), null, `${year} loads`);
+    }
+    for (const year of [2023, 2027]) {
       const problem = payrollTaxYearProblem("PL", year);
       assert.equal(problem?.kind, "missing", `${year} refuses`);
       assert.match(problem?.message ?? "", new RegExp(String(year)));
