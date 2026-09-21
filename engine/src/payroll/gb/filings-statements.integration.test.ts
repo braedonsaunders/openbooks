@@ -168,7 +168,7 @@ test(
          where id = ${org.orgId}`);
       await db.execute(sql`
         update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{controlAccounts}',
-          '{"payrollDeductions": "${deductionsId}"}'::jsonb) where id = ${org.orgId}`);
+          jsonb_build_object('payrollDeductions', ${deductionsId}::text)) where id = ${org.orgId}`);
       await seedPayrollComponents(org.orgId, actorId, "GB");
       // Statutory slots declare no liabilityAccountRole, so seeding alone leaves
       // every deduction unmapped and run-commit refuses the run. Map them all to
@@ -253,6 +253,8 @@ test(
                  join pay_stubs s2 on s2.id = l.stub_id and s2.org_id = l.org_id
                  join pay_runs r2 on r2.document_id = s2.pay_run_document_id and r2.org_id = s2.org_id
                     and r2.run_status = 'committed'
+                 join employee_roles er2 on er2.party_id = s2.employee_party_id and er2.org_id = s2.org_id
+                    and (er2.terminated_on is null or er2.terminated_on::date > ${gbTaxYearBounds(YEAR).end})
                 where l.org_id = ${org.orgId} and s2.tax_year = ${YEAR} and s2.country = 'GB'
                   and l.kind = 'deduction' and pc.system_key = 'paye') as tax,
                (select coalesce(sum(l.amount), 0)::text from pay_stub_lines l
@@ -260,6 +262,8 @@ test(
                  join pay_stubs s2 on s2.id = l.stub_id and s2.org_id = l.org_id
                  join pay_runs r2 on r2.document_id = s2.pay_run_document_id and r2.org_id = s2.org_id
                     and r2.run_status = 'committed'
+                 join employee_roles er2 on er2.party_id = s2.employee_party_id and er2.org_id = s2.org_id
+                    and (er2.terminated_on is null or er2.terminated_on::date > ${gbTaxYearBounds(YEAR).end})
                 where l.org_id = ${org.orgId} and s2.tax_year = ${YEAR} and s2.country = 'GB'
                   and l.kind = 'deduction' and pc.system_key = 'nic') as "nicEe",
                (select coalesce(sum(l.amount), 0)::text from pay_stub_lines l
@@ -267,6 +271,8 @@ test(
                  join pay_stubs s2 on s2.id = l.stub_id and s2.org_id = l.org_id
                  join pay_runs r2 on r2.document_id = s2.pay_run_document_id and r2.org_id = s2.org_id
                     and r2.run_status = 'committed'
+                 join employee_roles er2 on er2.party_id = s2.employee_party_id and er2.org_id = s2.org_id
+                    and (er2.terminated_on is null or er2.terminated_on::date > ${gbTaxYearBounds(YEAR).end})
                 where l.org_id = ${org.orgId} and s2.tax_year = ${YEAR} and s2.country = 'GB'
                   and l.kind = 'employer_contribution' and pc.system_key = 'nic') as "nicEr"
           from pay_stubs s
@@ -353,8 +359,12 @@ test(
     try {
       await assert.rejects(gbP60Slips(org.orgId, YEAR), /no committed GB pay runs for 2026\/27/);
       await assert.rejects(gbP45Leavers(org.orgId, YEAR), /no committed GB pay runs for 2026\/27/);
-      await assert.rejects(gbP60Slips(org.orgId, 2025), /2025 statutory tables are not loaded for GB/);
-      await assert.rejects(gbP45Leavers(org.orgId, 2025), /2025 statutory tables are not loaded for GB/);
+      // 2025 is TRANSCRIBED now -- the GB prior-year shard landed 2024/25 and
+      // 2025/26 tables, so that year no longer refuses for a missing edition
+      // and falls through to the committed-runs refusal instead. Use a year
+      // the pack genuinely does not cover.
+      await assert.rejects(gbP60Slips(org.orgId, 2023), /2023 statutory tables are not loaded for GB/);
+      await assert.rejects(gbP45Leavers(org.orgId, 2023), /2023 statutory tables are not loaded for GB/);
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
