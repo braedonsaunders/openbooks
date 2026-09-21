@@ -807,6 +807,12 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     description:
       'One row per automation recipe — trigger kind, status, version, and last run. Requires the automations permission.',
     from: `automations a`,
+    // Org-level configuration with no legal-entity column: the policy is
+    // declared as no-clamp rather than omitted. An omitted policy makes
+    // compileSubsidiaryScope throw for any caller that carries a
+    // subsidiary allowlist, which would refuse the report to exactly the
+    // scoped readers it is meant to serve.
+    subsidiaryScope: null,
     orgColumn: 'a.org_id',
     requiredPermission: AUTOMATIONS_READ_PERMISSION,
     featureKey: AUTOMATIONS_FEATURE_KEY,
@@ -833,6 +839,12 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     description:
       'One row per automation firing — executed version, subject, status, steps, and error. Requires the automations permission.',
     from: `automation_runs r JOIN automations a ON a.id = r.automation_id AND a.org_id = r.org_id`,
+    // Org-level configuration with no legal-entity column: the policy is
+    // declared as no-clamp rather than omitted. An omitted policy makes
+    // compileSubsidiaryScope throw for any caller that carries a
+    // subsidiary allowlist, which would refuse the report to exactly the
+    // scoped readers it is meant to serve.
+    subsidiaryScope: null,
     orgColumn: 'r.org_id',
     requiredPermission: AUTOMATIONS_READ_PERMISSION,
     featureKey: AUTOMATIONS_FEATURE_KEY,
@@ -860,6 +872,12 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     description:
       'One row per reason code per HR action — the vocabulary change requests file under. Requires the HRM employment permission.',
     from: `hrm_action_reasons r`,
+    // Org-level configuration with no legal-entity column: the policy is
+    // declared as no-clamp rather than omitted. An omitted policy makes
+    // compileSubsidiaryScope throw for any caller that carries a
+    // subsidiary allowlist, which would refuse the report to exactly the
+    // scoped readers it is meant to serve.
+    subsidiaryScope: null,
     orgColumn: 'r.org_id',
     requiredPermission: HRM_EMPLOYMENT_READ_PERMISSION,
     featureKey: HRM_ACTION_REASONS_FEATURE_KEY,
