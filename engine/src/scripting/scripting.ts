@@ -36,16 +36,18 @@ import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts
  *   ob.abort("reason")       veto the operation (before_* triggers only)
  *   ob.query(sql)            run a SELECT through the read-only role -> rows[]
  *                            (ob.record.load / ob.search are sugar over it).
- *                            Unavailable in deterministic custom_gl_lines;
- *                            read from the supplied posting context instead.
  *                            Raw SQL over the governed catalog cannot apply a
  *                            subsidiary allowlist, so an ATTRIBUTED caller must
  *                            satisfy exactly what /api/query demands: the
  *                            queryConsole feature, sql.execute, and an
  *                            unrestricted subsidiary scope — a restlet is never
  *                            a way to read past the query console's gates.
- *                            Actor-less runs (engine triggers, cron) keep the
- *                            documented system path.
+ *                            Actor-less runs (scheduled/bulk cron ticks) keep
+ *                            the documented system path. Human-driven
+ *                            submit/post/void callers MUST thread ctx.user so
+ *                            these gates apply — an omitted user is the system
+ *                            path, never a silent downgrade of a signed-in
+ *                            principal.
  *   ob.runtime               { org, trigger, user } -- read-only context info
  *   ob.record.load(t, id)    load one row by id (convenience over ob.query)
  *   ob.search(t, filters)    search rows by key=value filters
@@ -59,15 +61,28 @@ import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts
  *                            permission every HTTP journal boundary demands
  *                            (fnd_mt97va1e_kiv9jd: an endpoint script may not
  *                            launder a journal write past role permissions).
- *                            Runs without a signed-in user (scheduled/bulk/
- *                            engine triggers) keep the documented system-
- *                            provenance path.
+ *                            Runs without a signed-in user (scheduled/bulk
+ *                            cron ticks) keep the documented system-
+ *                            provenance path. Human-driven submit/post/void
+ *                            must pass ctx.user so gl.post is re-resolved.
  *
  * Return contract (before_post only):
  *   return { set: { field: value } }  to mutate whitelisted header fields
  *
- * Limits: interrupt-based timeout, 64 MB memory, 1 MB stack.
- * ob.query: 5 000 rows, 5 s statement timeout, read-only transaction.
+ * Limits: interrupt-based timeout PLUS a host-I/O deadline (Asyncify
+ * suspends the interrupt handler during await — same hole apps/runtime
+ * closed with withHostDeadline). Every host await — authorization
+ * (scriptQueryRefusal, gl.post, subsidiary allowlist), SQL, and the
+ * ledger write — is raced against that deadline. 64 MB VM memory, 1 MB stack.
+ * ob.log: 200 entries / 64 KiB host-side (QuickJS limit does not cover
+ * the Node-side logs array persisted to script_runs).
+ * ob.query: 5 000 rows, remaining-budget statement timeout (max 5 s),
+ * 4 MiB host-side JSON result cap encoded incrementally (an oversize
+ * payload is refused by name without a second unbounded JSON copy),
+ * read-only transaction.
+ * Host I/O is fail-closed by trigger: payment_format and any unknown
+ * trigger get neither query nor journal.create. deterministic runs
+ * omit query and lock Date/Math.random BEFORE tenant source runs.
  */
 
 export interface ScriptContext {
@@ -249,6 +264,218 @@ const DETERMINISTIC_SCRIPT_GLOBALS = `
   })()
 `;
 
+/**
+ * Fail-closed host I/O allowlist. payment_format and any unknown trigger
+ * get neither catalog reads nor governed journal writes — a custom payment
+ * formatter is configuration, not a restlet. deterministic runs also omit
+ * query so custom_gl_lines cannot SELECT now()/random() or live catalog rows.
+ */
+const SCRIPT_QUERY_TRIGGERS = new Set([
+  "before_submit",
+  "before_post",
+  "after_post",
+  "before_void",
+  "scheduled",
+  "bulk",
+  "endpoint",
+]);
+const SCRIPT_JOURNAL_TRIGGERS = new Set([
+  "before_submit",
+  "before_post",
+  "after_post",
+  "before_void",
+  "scheduled",
+  "bulk",
+  "endpoint",
+]);
+
+export function scriptHostAllowsQuery(
+  trigger: string,
+  opts: RunScriptOptions = {},
+): boolean {
+  if (opts.deterministic) return false;
+  return SCRIPT_QUERY_TRIGGERS.has(trigger);
+}
+
+export function scriptHostAllowsJournal(
+  trigger: string,
+  opts: RunScriptOptions = {},
+): boolean {
+  if (opts.forbidJournalCreate) return false;
+  return SCRIPT_JOURNAL_TRIGGERS.has(trigger);
+}
+
+export const MAX_SCRIPT_LOG_ENTRIES = 200;
+export const MAX_SCRIPT_LOG_BYTES = 64 * 1024;
+export const MAX_SCRIPT_QUERY_RESULT_BYTES = 4 * 1024 * 1024;
+export const SCRIPT_HOST_TIMEOUT = Symbol("script-host-timeout");
+
+/**
+ * Asyncify suspends the VM while a host promise is pending, so the interrupt
+ * handler cannot observe the run deadline during that wait. Race every host
+ * operation against the same wall-clock deadline instead. The host promise
+ * remains handled after the race settles; if it resolves later, it cannot
+ * resume QuickJS or start another host operation.
+ */
+export async function withScriptHostDeadline<T>(
+  deadline: number,
+  operation: () => Promise<T>,
+): Promise<T | typeof SCRIPT_HOST_TIMEOUT> {
+  const remainingMs = deadline - Date.now();
+  if (remainingMs <= 0) return SCRIPT_HOST_TIMEOUT;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(operation),
+      new Promise<typeof SCRIPT_HOST_TIMEOUT>((resolve) => {
+        timer = setTimeout(() => resolve(SCRIPT_HOST_TIMEOUT), remainingMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+export type ScriptQueryJson =
+  | { ok: true; json: string }
+  | { ok: false; refusal: string };
+
+export function scriptQueryResultCapRefusal(
+  maxBytes: number = MAX_SCRIPT_QUERY_RESULT_BYTES,
+): string {
+  return `result exceeds the ${maxBytes} byte host result cap; narrow the SELECT or add a LIMIT`;
+}
+
+/**
+ * Encode query rows as JSON under a hard host-side byte budget. The QuickJS
+ * heap cap does not cover this Node copy, so the encoder must refuse as soon
+ * as the next write would exceed `maxBytes` — never JSON.stringify the
+ * complete payload and measure afterwards.
+ */
+export function serializeScriptQueryResult(
+  value: unknown,
+  maxBytes: number = MAX_SCRIPT_QUERY_RESULT_BYTES,
+): ScriptQueryJson {
+  const writer = createByteCappedJsonWriter(maxBytes);
+  if (!writer.encode(value)) {
+    return { ok: false, refusal: scriptQueryResultCapRefusal(maxBytes) };
+  }
+  return { ok: true, json: writer.toString() };
+}
+
+function createByteCappedJsonWriter(maxBytes: number) {
+  let buf = Buffer.allocUnsafe(Math.min(256, Math.max(0, maxBytes)));
+  let offset = 0;
+
+  function grow(needed: number): boolean {
+    if (needed > maxBytes) return false;
+    let next = buf.length < 256 ? 256 : buf.length * 2;
+    while (next < needed) next *= 2;
+    if (next > maxBytes) next = maxBytes;
+    const grown = Buffer.allocUnsafe(next);
+    buf.copy(grown, 0, 0, offset);
+    buf = grown;
+    return true;
+  }
+
+  function write(chunk: string): boolean {
+    const n = Buffer.byteLength(chunk, "utf8");
+    if (offset + n > maxBytes) return false;
+    if (offset + n > buf.length && !grow(offset + n)) return false;
+    buf.write(chunk, offset, n, "utf8");
+    offset += n;
+    return true;
+  }
+
+  function writeJsonString(s: string): boolean {
+    // Unescaped UTF-8 plus quotes is a lower bound: refuse before escaping
+    // so a multi-megabyte cell never becomes a JSON string.
+    if (offset + Buffer.byteLength(s, "utf8") + 2 > maxBytes) return false;
+    if (!write("\"")) return false;
+    let start = 0;
+    for (let i = 0; i < s.length; i++) {
+      const c = s.charCodeAt(i);
+      let esc: string | undefined;
+      if (c === 0x22) esc = "\\\"";
+      else if (c === 0x5c) esc = "\\\\";
+      else if (c === 0x08) esc = "\\b";
+      else if (c === 0x09) esc = "\\t";
+      else if (c === 0x0a) esc = "\\n";
+      else if (c === 0x0c) esc = "\\f";
+      else if (c === 0x0d) esc = "\\r";
+      else if (c < 0x20) esc = `\\u${c.toString(16).padStart(4, "0")}`;
+      if (esc) {
+        if (i > start && !write(s.slice(start, i))) return false;
+        if (!write(esc)) return false;
+        start = i + 1;
+      }
+    }
+    if (start < s.length && !write(s.slice(start))) return false;
+    return write("\"");
+  }
+
+  function encode(value: unknown): boolean {
+    if (value === null) return write("null");
+    switch (typeof value) {
+      case "boolean":
+        return write(value ? "true" : "false");
+      case "number":
+        return write(Number.isFinite(value) ? String(value) : "null");
+      case "string":
+        return writeJsonString(value);
+      case "bigint":
+        throw new TypeError("Do not know how to serialize a BigInt");
+      case "undefined":
+      case "function":
+      case "symbol":
+        return write("null");
+      case "object": {
+        if (Buffer.isBuffer(value)) {
+          // JSON.stringify(Buffer) expands to {type,data:[every byte]}.
+          // Refuse on a conservative lower bound so we never call toJSON
+          // on an oversize bytea cell.
+          if (offset + 27 + value.length * 2 > maxBytes) return false;
+          return encode(value.toJSON());
+        }
+        if (typeof (value as { toJSON?: unknown }).toJSON === "function") {
+          return encode((value as { toJSON: () => unknown }).toJSON());
+        }
+        if (Array.isArray(value)) {
+          if (!write("[")) return false;
+          for (let i = 0; i < value.length; i++) {
+            if (i > 0 && !write(",")) return false;
+            const el = value[i];
+            if (el === undefined || typeof el === "function" || typeof el === "symbol") {
+              if (!write("null")) return false;
+            } else if (!encode(el)) {
+              return false;
+            }
+          }
+          return write("]");
+        }
+        if (!write("{")) return false;
+        let first = true;
+        for (const [key, el] of Object.entries(value as Record<string, unknown>)) {
+          if (el === undefined || typeof el === "function" || typeof el === "symbol") continue;
+          if (!first && !write(",")) return false;
+          first = false;
+          if (!writeJsonString(key) || !write(":") || !encode(el)) return false;
+        }
+        return write("}");
+      }
+      default:
+        return write("null");
+    }
+  }
+
+  return {
+    encode,
+    toString() {
+      return buf.toString("utf8", 0, offset);
+    },
+  };
+}
+
 export async function runScript(
   source: string,
   ctx: ScriptContext,
@@ -263,12 +490,30 @@ export async function runScript(
   runtime.setInterruptHandler(() => Date.now() > deadline);
 
   const logs: string[] = [];
+  let logBytes = 0;
+  let logTruncated = false;
   const started = Date.now();
+  const queryAllowed = scriptHostAllowsQuery(ctx.trigger, opts);
+  const journalAllowed = scriptHostAllowsJournal(ctx.trigger, opts);
   try {
     const obHandle = vm.newObject();
 
     const logFn = vm.newFunction("log", (...args) => {
-      logs.push(args.map((a) => JSON.stringify(vm.dump(a))).join(" "));
+      if (logTruncated) return;
+      if (logs.length >= MAX_SCRIPT_LOG_ENTRIES || logBytes >= MAX_SCRIPT_LOG_BYTES) {
+        logs.push(`ob.log truncated after ${MAX_SCRIPT_LOG_ENTRIES} entries / ${MAX_SCRIPT_LOG_BYTES} bytes`);
+        logTruncated = true;
+        return;
+      }
+      const line = args.map((a) => JSON.stringify(vm.dump(a))).join(" ");
+      const nextBytes = logBytes + Buffer.byteLength(line, "utf8");
+      if (logs.length + 1 > MAX_SCRIPT_LOG_ENTRIES || nextBytes > MAX_SCRIPT_LOG_BYTES) {
+        logs.push(`ob.log truncated after ${MAX_SCRIPT_LOG_ENTRIES} entries / ${MAX_SCRIPT_LOG_BYTES} bytes`);
+        logTruncated = true;
+        return;
+      }
+      logs.push(line);
+      logBytes = nextBytes;
     });
 
     const abortFn = vm.newFunction("abort", (reasonH) => {
@@ -276,31 +521,48 @@ export async function runScript(
       return { error: vm.newError(`__OB_ABORT__${String(reason)}`) };
     });
 
+    const hostTimeoutError = (op: string) =>
+      ({ error: vm.newError(`__OB_HOST_TIMEOUT__${op}: script run deadline exceeded`) });
+
     // The caller's query authorization is fixed for the run; resolve it once
     // on first use so ob.search loops do not re-read roles per statement.
     let queryRefusal: Promise<string | null> | undefined;
     const queryFn = vm.newAsyncifiedFunction("__query", async (sqlH) => {
-      // A SELECT-only role still exposes now()/random() and mutable data.
-      // The host boundary covers ob.query, its load/search helpers, and the
-      // raw __query bridge, including calls made before main starts.
-      if (opts.deterministic) {
+      if (!queryAllowed) {
+        // A SELECT-only role still exposes now()/random() and mutable data.
+        // The host boundary covers ob.query, its load/search helpers, and the
+        // raw __query bridge, including calls made before main starts.
         return {
           error: vm.newError(
-            "query is not available in custom_gl_lines; use document, lines, and kernelLines supplied in ctx",
+            opts.deterministic
+              ? "query is not available in custom_gl_lines; use document, lines, and kernelLines supplied in ctx"
+              : `query is not available in ${ctx.trigger}`,
           ),
         };
       }
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) return hostTimeoutError("query");
       const sqlText = String(vm.dump(sqlH));
-      queryRefusal ??= scriptQueryRefusal(ctx);
-      const refusal = await queryRefusal;
-      if (refusal) return { error: vm.newError(`query: ${refusal}`) };
       try {
-        const result = await runUserSql(sqlText, {
-          orgId: ctx.org.id,
-          maxRows: 5_000,
-          timeoutMs: 5_000,
+        // Authorization (queryConsole / sql.execute / unrestricted scope)
+        // is host I/O too — Asyncify cannot observe the deadline while
+        // those reads are pending, so they share this race with the SELECT.
+        const outcome = await withScriptHostDeadline(deadline, async () => {
+          queryRefusal ??= scriptQueryRefusal(ctx);
+          const refusal = await queryRefusal;
+          if (refusal) return { kind: "refused" as const, refusal };
+          const result = await runUserSql(sqlText, {
+            orgId: ctx.org.id,
+            maxRows: 5_000,
+            timeoutMs: Math.min(5_000, Math.max(1, deadline - Date.now())),
+          });
+          return { kind: "rows" as const, result };
         });
-        return vm.newString(JSON.stringify(result.rows));
+        if (outcome === SCRIPT_HOST_TIMEOUT) return hostTimeoutError("query");
+        if (outcome.kind === "refused") return { error: vm.newError(`query: ${outcome.refusal}`) };
+        const encoded = serializeScriptQueryResult(outcome.result.rows);
+        if (!encoded.ok) return { error: vm.newError(`query: ${encoded.refusal}`) };
+        return vm.newString(encoded.json);
       } catch (e) {
         return { error: vm.newError(`query failed: ${(e as Error).message}`) };
       }
@@ -318,13 +580,17 @@ export async function runScript(
         // custom_gl_lines contributes lines through its return value; a
         // direct ledger write from inside the trigger would bypass host
         // validation (balance, account checks) and the single-entry stamp.
-        if (opts.forbidJournalCreate) {
+        if (!journalAllowed) {
           return {
             error: vm.newError(
-              `journal.create is not available in ${ctx.trigger} (return { lines: [...] } instead)`,
+              opts.forbidJournalCreate
+                ? `journal.create is not available in ${ctx.trigger} (return { lines: [...] } instead)`
+                : `journal.create is not available in ${ctx.trigger}`,
             ),
           };
         }
+        const remainingMs = deadline - Date.now();
+        if (remainingMs <= 0) return hostTimeoutError("journal.create");
         const post = vm.dump(postH) === true;
         if (post && ctx.trigger.startsWith("before_")) {
           return {
@@ -333,26 +599,29 @@ export async function runScript(
             ),
           };
         }
-        if (ctx.user?.id && !(await actorHasPermission(db, ctx.org.id, ctx.user.id, "gl.post"))) {
-          return {
-            error: vm.newError("journal.create: missing permission: gl.post"),
-          };
-        }
         try {
-          const input = JSON.parse(String(vm.dump(inputH)));
-          // The caller's live subsidiary scope travels with the write: a
-          // restricted principal can only journal into an entity it may see,
-          // exactly as at the HTTP draft route. System runs are unrestricted.
-          const allowedSubsidiaryIds = ctx.user?.id
-            ? await actorAllowedSubsidiaryIds(db, ctx.org.id, ctx.user.id)
-            : null;
-          const result = await createScriptJournal(
-            ctx.org.id,
-            ctx.user?.id ?? null,
-            input,
-            { post, allowedSubsidiaryIds },
-          );
-          return vm.newString(JSON.stringify(result));
+          // gl.post and the live subsidiary allowlist are host I/O: they
+          // must share the run deadline with the ledger write. A late
+          // authorization read cannot outlive the script timeout.
+          const outcome = await withScriptHostDeadline(deadline, async () => {
+            if (ctx.user?.id && !(await actorHasPermission(db, ctx.org.id, ctx.user.id, "gl.post"))) {
+              return { kind: "refused" as const, refusal: "journal.create: missing permission: gl.post" };
+            }
+            const input = JSON.parse(String(vm.dump(inputH)));
+            const allowedSubsidiaryIds = ctx.user?.id
+              ? await actorAllowedSubsidiaryIds(db, ctx.org.id, ctx.user.id)
+              : null;
+            const created = await createScriptJournal(
+              ctx.org.id,
+              ctx.user?.id ?? null,
+              input,
+              { post, allowedSubsidiaryIds },
+            );
+            return { kind: "created" as const, created };
+          });
+          if (outcome === SCRIPT_HOST_TIMEOUT) return hostTimeoutError("journal.create");
+          if (outcome.kind === "refused") return { error: vm.newError(outcome.refusal) };
+          return vm.newString(JSON.stringify(outcome.created));
         } catch (e) {
           return {
             error: vm.newError(
@@ -381,6 +650,7 @@ export async function runScript(
         const ctx = ${JSON.stringify(ctx)};
         const deepFreeze = (o) => { if (o && typeof o === "object") { Object.values(o).forEach(deepFreeze); Object.freeze(o); } return o; };
         deepFreeze(ctx);
+
         ob.runtime = Object.freeze({
           org: ctx.org,
           trigger: ctx.trigger,
@@ -455,7 +725,7 @@ export async function runScript(
           durationMs: Date.now() - started,
         };
       }
-      if (Date.now() > deadline) {
+      if (msg.startsWith("__OB_HOST_TIMEOUT__") || Date.now() > deadline) {
         return { status: "timeout", logs, durationMs: Date.now() - started };
       }
       return {
@@ -1081,6 +1351,13 @@ export async function runCustomGlLineScripts(
     .where(eq(schema.orgs.id, req.orgId));
   if (!org) throw new CustomGlLinesError("custom_gl_lines: organization not found");
 
+  // The same live allowlist __journal_create passes into createScriptJournal.
+  // Actor-less (system) runs stay unrestricted; an attributed poster cannot
+  // contribute lines onto a sibling they are not allowed to see.
+  const allowedSubsidiaryIds = user
+    ? await actorAllowedSubsidiaryIds(db, req.orgId, user.id)
+    : null;
+
   const out: ContributedLine[] = [];
   for (const s of scripts) {
     const ctx: ScriptContext = {
@@ -1116,7 +1393,7 @@ export async function runCustomGlLineScripts(
         `custom_gl_lines script "${s.name}" ${outcomeStatus}${res.abortReason ? `: ${res.abortReason}` : ""}`,
       );
     }
-    out.push(...(await resolveCustomGlLines(req.orgId, s.id, s.name, res.returned)));
+    out.push(...(await resolveCustomGlLines(req.orgId, s.id, s.name, res.returned, allowedSubsidiaryIds)));
   }
   return out;
 }
@@ -1164,6 +1441,7 @@ export async function resolveCustomGlLines(
   scriptId: string,
   scriptName: string,
   returned: unknown,
+  allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<ContributedLine[]> {
   if (returned === null || returned === undefined) return [];
   if (!isRecord(returned)) {
@@ -1299,6 +1577,16 @@ export async function resolveCustomGlLines(
       throw new CustomGlLinesError(
         `custom_gl_lines script "${scriptName}" line ${parsed.indexOf(foreign) + 1}: ${label} not found in this organization`,
       );
+    }
+    if (key === "subsidiaryId" && allowedSubsidiaryIds !== null) {
+      const outOfScope = parsed.find(
+        (l) => l.subsidiaryId && !allowedSubsidiaryIds.has(l.subsidiaryId),
+      );
+      if (outOfScope) {
+        throw new CustomGlLinesError(
+          `custom_gl_lines script "${scriptName}" line ${parsed.indexOf(outOfScope) + 1}: subsidiary not found in this organization`,
+        );
+      }
     }
   }
 

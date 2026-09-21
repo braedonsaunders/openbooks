@@ -305,3 +305,52 @@ test("Dynamics OData pagination never forwards bearer tokens across a redirect h
     await close(attacker);
   }
 });
+
+test("expired delegated Dynamics tokens refresh; they never mint client-credentials", async () => {
+  const grants: string[] = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = ((input, init) => {
+    const url = String(input);
+    const body = String(init?.body ?? "");
+    const grant = new URLSearchParams(body).get("grant_type") ?? "";
+    if (url.includes("/token")) grants.push(grant);
+    const payload = url.includes("/token")
+      ? { access_token: "delegated-at", refresh_token: "delegated-rt", expires_in: 1800 }
+      : { value: [{ displayName: "CRONUS" }] };
+    return Promise.resolve(new Response(JSON.stringify(payload), { status: 200 }));
+  }) as typeof fetch;
+  try {
+    const expired = {
+      accessToken: "stale",
+      refreshToken: "delegated-rt",
+      expiresAt: "1970-01-01T00:00:00.000Z",
+    };
+    const rows = await new DynamicsClient(app, "PROD", "company-id", expired).list("companyInformation");
+    assert.deepEqual(rows, [{ displayName: "CRONUS" }]);
+    assert.deepEqual(grants, ["refresh_token"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("missing delegated Dynamics refresh token refuses by name", async () => {
+  const originalFetch = globalThis.fetch;
+  let tokenPosts = 0;
+  globalThis.fetch = ((input) => {
+    if (String(input).includes("/token")) tokenPosts += 1;
+    return Promise.resolve(new Response("{}", { status: 200 }));
+  }) as typeof fetch;
+  try {
+    await assert.rejects(
+      new DynamicsClient(app, "PROD", "company-id", {
+        accessToken: "",
+        refreshToken: "",
+        expiresAt: "1970-01-01T00:00:00.000Z",
+      }).list("items"),
+      /delegated refresh token/,
+    );
+    assert.equal(tokenPosts, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

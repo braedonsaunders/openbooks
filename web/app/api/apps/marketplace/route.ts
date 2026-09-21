@@ -29,6 +29,20 @@ export async function POST(request: Request) {
   const body = parsed.data
   try {
     if (body.action === 'unpublish' && typeof body.key === 'string') {
+      // unpublishApp holds FOR UPDATE and throws when the listing is
+      // already inactive, so a concurrent second withdraw cannot report
+      // {ok:true} after this read. The route still names the key here
+      // so a sequential second unpublish refuses before calling the helper.
+      const listing = (
+        await db.execute<{ is_active: boolean }>(
+          sql`select is_active from app_listings where key=${body.key} and publisher_org_id=${gate.user.orgId}`,
+        )
+      ).rows[0]
+      if (listing && !listing.is_active)
+        throw new AppError(
+          `Nothing was withdrawn: "${body.key}" is already inactive. Publish it again if you need to withdraw a live listing.`,
+          409,
+        )
       await unpublishApp(gate.user.orgId, gate.user.id, body.key)
       return NextResponse.json({ ok: true })
     }

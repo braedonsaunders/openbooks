@@ -7,50 +7,71 @@ import { QboClient, exchangeCode, type QboApp } from '@openbooks/engine/src/conn
 import { getConnection } from '@openbooks/engine/src/sync/connection.ts'
 import { connectionAuditChanges } from '@openbooks/schema/src/connections.ts'
 import { guardPermission } from '../../../../../../../lib/authz'
+import { storageIdentityError } from '../../../_storage-identity'
+import {
+  acceptConnectionOauthState,
+  connectionOauthBounce,
+  connectionOauthCookieValue,
+  connectionOauthRedirectUri,
+  realmIdFromAccessToken,
+} from '../../_flow'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
 /**
- * QuickBooks OAuth callback: decrypt `state` for {orgId, connectionId}, use
- * THAT connection's own app credentials to exchange the code, merge the tokens
- * + realmId back onto the same row. Nothing secret ever appears in a URL.
+ * QuickBooks OAuth callback: consume the one-time cookie nonce, decrypt
+ * `state` for {orgId, connectionId}, use THAT connection's own app
+ * credentials to exchange the code, merge the tokens + realmId back onto
+ * the same row. Nothing secret ever appears in a URL.
  */
 export async function GET(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
   const url = new URL(req.url)
-  const back = (status: string) => NextResponse.redirect(new URL(`/sync?oauth=${status}`, req.url))
 
-  if (url.searchParams.get('error')) return back('denied')
+  if (url.searchParams.get('error')) return connectionOauthBounce('denied')
   const code = url.searchParams.get('code')
   const state = url.searchParams.get('state')
   const realmId = url.searchParams.get('realmId')
-  if (!code || !state || !realmId) return back('invalid')
+  if (!code || !state || !realmId) return connectionOauthBounce('invalid')
 
-  const st = unsealJson<{ orgId: string; connectionId: string }>(state)
-  if (!st?.orgId || !st?.connectionId) return back('badstate')
-  if (st.orgId !== gate.user.orgId) return back('badstate')
-  const conn = await getConnection(st.orgId, st.connectionId)
-  if (!conn || conn.source !== 'qbo') return back('notfound')
+  const st = acceptConnectionOauthState(state, connectionOauthCookieValue(req))
+  if (!st) return connectionOauthBounce('badstate')
+  if (st.orgId !== gate.user.orgId) return connectionOauthBounce('badstate')
+  const conn = await getConnection(st.orgId, st.connectionId).catch((e) => {
+    if (storageIdentityError(e)) return null
+    throw e
+  })
+  if (!conn || conn.source !== 'qbo') return connectionOauthBounce('notfound')
   const secret = unsealJson<{ clientId?: string; clientSecret?: string }>(conn.secrets)
-  if (!secret?.clientId || !secret?.clientSecret) return back('nocreds')
+  if (!secret?.clientId || !secret?.clientSecret) return connectionOauthBounce('nocreds')
 
   const environment = (conn.config as { environment?: string }).environment === 'production' ? 'production' : 'sandbox'
   const app: QboApp = {
     clientId: secret.clientId,
     clientSecret: secret.clientSecret,
-    redirectUri: `${url.origin}/api/platform/connections/oauth/qbo/callback`,
+    redirectUri: connectionOauthRedirectUri('qbo'),
     environment,
   }
   try {
     const tokens = await exchangeCode(app, code)
-    let displayName = conn.displayName
+    const tokenRealm = realmIdFromAccessToken(tokens.accessToken)
+    const client = new QboClient(app, realmId, tokens)
+    let info: { CompanyName?: string }[]
     try {
-      const client = new QboClient(app, realmId, tokens)
-      const info = await client.queryAll<{ CompanyName?: string }>('CompanyInfo')
-      if (info[0]?.CompanyName) displayName = `${info[0].CompanyName} (${realmId})`
-    } catch { /* best-effort label */ }
+      info = await client.queryAll<{ CompanyName?: string }>('CompanyInfo')
+    } catch {
+      info = []
+    }
+    if (tokenRealm) {
+      if (tokenRealm !== realmId) return connectionOauthBounce('realm')
+    } else if (!info[0]) {
+      return connectionOauthBounce('realm')
+    }
+    const displayName = info[0]?.CompanyName
+      ? `${info[0].CompanyName} (${realmId})`
+      : conn.displayName
 
     const mergedSecrets = sealJson({ clientId: secret.clientId, clientSecret: secret.clientSecret, ...tokens })
     const connected = await db.transaction(async (tx) => {
@@ -98,9 +119,9 @@ export async function GET(req: Request) {
       })
       return true
     })
-    if (!connected) return back('error')
-    return back('connected')
+    if (!connected) return connectionOauthBounce('error')
+    return connectionOauthBounce('connected')
   } catch {
-    return back('error')
+    return connectionOauthBounce('error')
   }
 }

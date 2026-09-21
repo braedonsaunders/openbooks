@@ -2,7 +2,7 @@ import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
-import { dateOrFalse } from "../list-query";
+import { dateOrFalse, pushCustomFieldFilter } from "../list-query";
 
 /* ------------------------------------------------------------------ */
 /* Journal entries                                                     */
@@ -82,10 +82,10 @@ export const JOURNAL_ENTRY_TABLE = `(
     join documents jd on jd.posted_entry_id = je.id and jd.kind in ('journal', 'pay_run') and jd.org_id = je.org_id
 )`
 
-/** The one join the journal-entry WHERE clause references (manual-vs-document
- * visibility). Count queries use exactly this — the per-entry line totals
- * below would otherwise be computed for EVERY entry in the tenant just to
- * produce a count. */
+/** The source-document join the journal-entry WHERE clause references for
+ * saved `cf_*` filters (`source_doc.custom`). Count queries use exactly this
+ * — the per-entry line totals below would otherwise be computed for EVERY
+ * entry in the tenant just to produce a count. */
 /**
  * The one journal scope every "posted entries" surface counts (F-t11-010):
  * the setup-guide tile, the /journal header, and the list total all read
@@ -182,6 +182,7 @@ export function journalEntryWhere(
   // the list total and the header/guide counts cannot drift apart (F-t11-010).
   const parts: SQL[] = [journalScopeWhere(orgId, allowedSubsidiaryIds)]
   for (const filter of view.filters) {
+    if (pushCustomFieldFilter(parts, filter, "source_doc")) continue
     const predicate = journalEntryFilterPredicate(filter)
     if (predicate) parts.push(sql`and ${predicate}`)
   }

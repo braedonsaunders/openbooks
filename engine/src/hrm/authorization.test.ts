@@ -8,9 +8,10 @@ import type { SqlExecutor } from "../platform/db.ts";
 // The launch command MUST set OPENBOOKS_DB_URL= (and the migration URL)
 // explicitly; these assignments only re-assert that for anything resolved
 // lazily afterwards. These tests never touch a real database — a
-// missing-user case needs a real isolated integration test, not a unit
+// missing-user or cross-org super-admin case cannot be proven on this
 // fake (actorIdentity falls back to the global db when its local row is
-// absent, so every actor used here has a local row).
+// absent). Those cases live in authorization.integration.test.ts so the
+// integration partition selects them.
 process.env.OPENBOOKS_DB_URL = "";
 process.env.OPENBOOKS_MIGRATION_DB_URL = "";
 

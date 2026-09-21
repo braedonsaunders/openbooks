@@ -192,6 +192,9 @@ const mockSources = new Map<string, string>([
       export async function loadRecord() { return copy(state.record) }
       export function inTypeAudience() { return true }
       export function recordSubsidiaryScopeAllows() { return true }
+      export function recordVisibleInSubsidiaryFence() { return true }
+      export function retainStoredSubsidiaryId(_sections, _stored, next) { return next }
+      export function hasSubsidiaryField() { return false }
       export async function buildSearchText(_sections, data, number) { return number.toLowerCase() + ' ' + JSON.stringify(data).toLowerCase() }
     `,
   ],

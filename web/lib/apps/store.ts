@@ -20,6 +20,7 @@ import {
 import { createScriptJournal, type ScriptJournalInput } from '@openbooks/engine/src/ledger/journal-writes.ts'
 import { requestHash } from '@/lib/application/idempotency-core'
 import { parseManifest, validateBundle, validateAppToolsForInstall, contentTypeFor, type AppManifest } from './manifest'
+import { appliedDraftStillCurrent, PACKAGE_PATH_REFUSAL, validPackagePath } from './package-files'
 import { APP_CAPABILITIES } from './manifest'
 import { projectExtensionPage } from '@openbooks/engine/src/extensions/pages.ts'
 import { projectSupplementalContributions, withdrawSupplementalContributions } from '@openbooks/engine/src/extensions/projections.ts'
@@ -36,9 +37,8 @@ import { normalizeCustomFieldConfig } from '../custom-field-config'
 import { isCustomFieldTargetEnabled } from '../customization/gates'
 import { featureGateLockKey, isFeatureEnabled } from '../features'
 import { documentRevisionSql } from '@openbooks/engine/src/records/revision.ts'
-import { inTypeAudience, hasSubsidiaryField, loadRecordTypeByKey, type RecordTypeRow } from '@/lib/records'
+import { inTypeAudience, hasSubsidiaryField, loadRecordTypeByKey, recordVisibleInSubsidiaryFenceSql, type RecordTypeRow } from '@/lib/records'
 import { lintRecordFields } from '../record-schema'
-import { pgTextArrayLiteral } from '@/lib/pg-array'
 
 /**
  * Apps server store — every function is org-scoped: the caller passes the
@@ -121,6 +121,12 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
 
   const paths = bundle.files.map((f) => f.path)
   if (new Set(paths).size !== paths.length) throw new AppError('bundle has duplicate file paths')
+  // Zip parse already gates entries; installApp is also reachable with a
+  // hand-built bundle. Extra files must pass the same relative-path rule.
+  // validPackagePath rejects manifest.json, so skip that reserved name here.
+  if (bundle.files.some((file) => !validPackagePath(file.path) && file.path !== 'manifest.json')) {
+    throw new AppError(PACKAGE_PATH_REFUSAL)
+  }
   const vb = validateBundle(manifest, paths)
   if (!vb.ok) throw new AppError(`invalid bundle: ${vb.errors.join('; ')}`)
 
@@ -174,15 +180,42 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'extension-package:' + orgId + ':' + manifest.key}, 0))`)
     let draftReason: string | null = null
     if (draft) {
-      const proposal = (await tx.execute<{ bundle: unknown; content_hash: string; base_version_id: string | null; status: string; reason: string }>(sql`
-        select bundle, content_hash, base_version_id, status, reason from extension_drafts
+      const proposal = (await tx.execute<{ bundle: unknown; content_hash: string; base_version_id: string | null; status: string; reason: string; applied_at: Date | null }>(sql`
+        select bundle, content_hash, base_version_id, status, reason, applied_at from extension_drafts
         where org_id=${orgId} and id=${draft.id} and created_by=${userId} for update
       `)).rows[0]
       if (!proposal || proposal.content_hash !== draft.hash || requestHash(bundle) !== proposal.content_hash) throw new AppError('The reviewed extension draft does not match', 409)
       draftReason = proposal.reason
-      if (proposal.status === 'applied') return
+      const current = (await tx.execute<{ active_version_id: string | null; status: string }>(sql`select active_version_id, status from apps where org_id=${orgId} and key=${manifest.key} for update`)).rows[0]
+      if (proposal.status === 'applied') {
+        // A concurrent activate may observe the winner's apply. Return only
+        // when the live version row is the exact row this draft applied;
+        // a later uninstall/reinstall of the same version label is a new row.
+        if (!current) throw new AppError('The installed extension is no longer present; create and review a new draft', 409)
+        if (current.status !== 'installed') throw new AppError('The installed extension is disabled; enable it from Apps or create and review a new draft', 409)
+        const active = current.active_version_id
+          ? (await tx.execute<{ id: string; version: string; created_at: Date }>(sql`select id, version, created_at from app_versions where org_id=${orgId} and id=${current.active_version_id}`)).rows[0]
+          : undefined
+        const evidence = (await tx.execute<{ versionId: string | null }>(sql`
+          select changes->>'versionId' as "versionId"
+            from audit_log
+           where org_id=${orgId} and table_name='extension_drafts' and row_id=${draft.id}
+             and changes->>'event'='extension_draft_applied'
+           order by at desc, id desc
+           limit 1`)).rows[0]
+        if (!appliedDraftStillCurrent({
+          activeVersionId: current.active_version_id,
+          appliedVersionId: evidence?.versionId ?? null,
+          activeVersionLabel: active?.version ?? null,
+          activeVersionCreatedAt: active?.created_at ?? null,
+          draftManifestVersion: manifest.version,
+          draftAppliedAt: proposal.applied_at,
+        })) {
+          throw new AppError('The installed extension changed after this draft was created; create and review a new draft', 409)
+        }
+        return
+      }
       if (proposal.status !== 'draft') throw new AppError('This extension draft is no longer available', 409)
-      const current = (await tx.execute<{ active_version_id: string | null }>(sql`select active_version_id from apps where org_id=${orgId} and key=${manifest.key} for update`)).rows[0]
       if ((current?.active_version_id ?? null) !== proposal.base_version_id) throw new AppError('The installed extension changed after this draft was created; create and review a new draft', 409)
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${featureGateLockKey(orgId)}, 0))`)
       if (!(await isFeatureEnabled(orgId, 'apps', tx))) throw new AppError('Extensions are disabled', 404)
@@ -291,7 +324,7 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
     if (draft) {
       await tx.execute(sql`update extension_drafts set status='applied', applied_at=now() where org_id=${orgId} and id=${draft.id}`)
       await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
-        values(${orgId},'extension_drafts',${draft.id},'update',${JSON.stringify({ event: 'extension_draft_applied', reason: draftReason, contentHash: draft.hash, appKey: manifest.key, before: { status: 'draft' }, after: { status: 'applied' } })}::jsonb,${userId})`)
+        values(${orgId},'extension_drafts',${draft.id},'update',${JSON.stringify({ event: 'extension_draft_applied', reason: draftReason, contentHash: draft.hash, appKey: manifest.key, versionId, appId, before: { status: 'draft' }, after: { status: 'applied' } })}::jsonb,${userId})`)
     }
 
   })
@@ -467,8 +500,8 @@ export async function setAppStatus(
   userId: string,
   key: string,
   status: 'installed' | 'disabled',
-): Promise<void> {
-  await db.transaction(async (tx) => {
+): Promise<{ affectedRows: number }> {
+  return await db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`extension-projections:${orgId}`}, 0))`)
     const existing = await tx.execute<{
       id: string
@@ -481,7 +514,19 @@ export async function setAppStatus(
        where org_id = ${orgId} and key = ${key}
        for update`)
     const app = existing.rows[0]
-    if (!app || app.status === status) return
+    if (!app) {
+      throw new AppError(
+        `App "${key}" was not found in this organization. Install it or GET /api/apps/${key} to confirm the key before changing status.`,
+        404,
+      )
+    }
+    if (app.status === status) {
+      const other = status === 'installed' ? 'disabled' : 'installed'
+      throw new AppError(
+        `App "${key}" is already ${status}. PATCH status to "${other}" if you need a status change.`,
+        409,
+      )
+    }
 
     const version = (await tx.execute<{ id: string; manifest: AppManifest }>(sql`select v.id,v.manifest from app_versions v join apps a on a.org_id=v.org_id and a.id=v.app_id where a.org_id=${orgId} and a.id=${app.id} and v.id=a.active_version_id`)).rows[0]
     if (status === 'disabled') {
@@ -492,10 +537,17 @@ export async function setAppStatus(
       for (const contribution of version.manifest.contributions ?? []) if (contribution.kind === 'page') await projectExtensionPage(tx, { orgId,actorId:userId,extensionId:app.id,extensionKey:key,version:version.manifest.version,versionId:version.id,contribution,reason:'Enable extension' })
       await projectSupplementalContributions(tx,{orgId,actorId:userId,extensionId:app.id,extensionKey:key,versionId:version.id,previousVersionId:version.id,contributions:(version.manifest.contributions ?? []).filter(item=>item.kind!=='page'),reason:'Enable extension'})
     }
-    await tx.execute(sql`
+    const updated = await tx.execute<{ id: string }>(sql`
       update apps
          set status = ${status}, updated_at = now(), updated_by = ${userId}
-       where org_id = ${orgId} and id = ${app.id}`)
+       where org_id = ${orgId} and id = ${app.id} and status is distinct from ${status}
+      returning id`)
+    if (!updated.rows.length) {
+      throw new AppError(
+        `App "${key}" status was not changed to ${status}. Confirm the app is still visible in this organization and retry.`,
+        409,
+      )
+    }
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'apps', ${app.id}, 'update',
@@ -505,12 +557,12 @@ export async function setAppStatus(
           after: { key: app.key, name: app.name, status },
         })}::jsonb,
         ${userId})`)
-
+    return { affectedRows: updated.rows.length }
   })
 }
 
-export async function deleteApp(orgId: string, userId: string, key: string): Promise<void> {
-  await db.transaction(async (tx) => {
+export async function deleteApp(orgId: string, userId: string, key: string): Promise<{ affectedRows: number }> {
+  return await db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`extension-projections:${orgId}`}, 0))`)
     const existing = await tx.execute<{
       id: string
@@ -543,7 +595,12 @@ export async function deleteApp(orgId: string, userId: string, key: string): Pro
        where a.org_id = ${orgId} and a.key = ${key}
        for update of a`)
     const app = existing.rows[0]
-    if (!app) return
+    if (!app) {
+      throw new AppError(
+        `App "${key}" was not found in this organization. Confirm the key is installed here before uninstalling.`,
+        404,
+      )
+    }
 
     // App-owned rows cascade with the app. Capture the complete execution and
     // code evidence first so the audit row remains useful after uninstall.
@@ -599,10 +656,23 @@ export async function deleteApp(orgId: string, userId: string, key: string): Pro
     await withdrawExtensionPages(tx,orgId,userId,app.id,'Uninstall extension')
     await withdrawSupplementalContributions(tx,{orgId,actorId:userId,extensionId:app.id,extensionKey:key,reason:'Uninstall extension'})
     if (preserveHistory) {
-      await tx.execute(sql`update apps set status='disabled',updated_at=now(),updated_by=${userId} where org_id=${orgId} and id=${app.id}`)
-      return
+      const updated = await tx.execute<{ id: string }>(sql`update apps set status='disabled',updated_at=now(),updated_by=${userId} where org_id=${orgId} and id=${app.id} returning id`)
+      if (!updated.rows.length) {
+        throw new AppError(
+          `App "${key}" was not uninstalled. Confirm the app is still visible in this organization and retry.`,
+          409,
+        )
+      }
+      return { affectedRows: updated.rows.length }
     }
-    await tx.execute(sql`delete from apps where org_id = ${orgId} and id = ${app.id}`)
+    const deleted = await tx.execute<{ id: string }>(sql`delete from apps where org_id = ${orgId} and id = ${app.id} returning id`)
+    if (!deleted.rows.length) {
+      throw new AppError(
+        `App "${key}" was not uninstalled. Confirm the app is still visible in this organization and retry.`,
+        409,
+      )
+    }
+    return { affectedRows: deleted.rows.length }
   })
 }
 
@@ -676,19 +746,17 @@ function recordsAdapter(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): AppRecordsAdapter {
   /**
-   * The bridge caller's subsidiary fence for one custom-record type. Types
-   * declaring the conventional subsidiary_id field are filtered to the
-   * caller's visible entities (fail-closed on an empty fence); types without
-   * the field stay org-visible — the same predicate platform.ts enforces.
+   * The bridge caller's subsidiary fence for one custom-record type. Same
+   * rule as recordVisibleInSubsidiaryFence: honor stored JSON subsidiary_id
+   * even when the live type no longer declares the field.
    */
   function scopeFor(type: RecordTypeRow): SQL {
-    if (allowedSubsidiaryIds === null) return sql``
     const lint = lintRecordFields(type.fields, type.name)
-    if (!lint.success || !hasSubsidiaryField(lint.sections)) return sql``
-    const ids = [...allowedSubsidiaryIds]
-    return ids.length > 0
-      ? sql`and data ->> ${'subsidiary_id'} = any(${pgTextArrayLiteral(ids)}::text[])`
-      : sql`and false`
+    const cond = recordVisibleInSubsidiaryFenceSql(
+      allowedSubsidiaryIds,
+      lint.success && hasSubsidiaryField(lint.sections),
+    )
+    return cond ? sql`and ${cond}` : sql``
   }
   return {
     async list(typeKey, filters) {
@@ -739,6 +807,15 @@ function isBridgePayloadObject(value: unknown): value is Record<string, unknown>
 
 /** Absent sub-object: the same `{}` every options/body/filters default used. */
 const EMPTY_PAYLOAD_OBJECT: Record<string, unknown> = {}
+
+function platformReadNeedsFreshInvocation(method: string): boolean {
+  return (
+    method === 'platform.query' ||
+    method === 'platform.schema' ||
+    method === 'platform.list' ||
+    method === 'platform.get'
+  )
+}
 
 export async function runBridgeMethod(opts: {
   orgId: string
@@ -838,6 +915,9 @@ export async function runBridgeMethod(opts: {
       }
     }
     try {
+      // Reads mint a nonce so a later identical fetch is a new claim, not a
+      // stale replay of the first committed page/schema/record. Writes keep
+      // the derived key so a byte-identical retry collapses.
       const outcome = await executeAppInvocation({
         orgId: opts.orgId,
         actorId: opts.user.id,
@@ -850,7 +930,9 @@ export async function runBridgeMethod(opts: {
           typeKey,
           id,
           payload: payload.body ?? payload.options ?? payload.plan ?? null,
-          ...(opts.method === 'platform.query' ? { readInvocation: crypto.randomUUID() } : {}),
+          ...(platformReadNeedsFreshInvocation(opts.method)
+            ? { readInvocation: crypto.randomUUID() }
+            : {}),
         }),
         requestHash: requestHash({ method: opts.method, typeKey, id, payload: opts.payload }),
         run: attemptDispatch,
@@ -1194,8 +1276,12 @@ export async function unpublishApp(orgId: string, userId: string, key: string): 
   await db.transaction(async tx => {
     const listing = (await tx.execute<{ id: string; is_active: boolean; version: string }>(sql`select id,is_active,version from app_listings where key=${key} and publisher_org_id=${orgId} for update`)).rows[0]
     if (!listing) throw new AppError('No app listing owned by this organization', 404)
-    if (!listing.is_active) return
-    await tx.execute(sql`update app_listings set is_active=false,updated_by=${userId},updated_at=now() where id=${listing.id} and publisher_org_id=${orgId}`)
+    // A silent return here is a no-op: no UPDATE, no audit. Callers then
+    // report {ok:true} for work no later read can observe. FOR UPDATE
+    // serializes concurrent withdraws so the loser hits this refusal.
+    if (!listing.is_active) throw new AppError(`Nothing was withdrawn: "${key}" is already unpublished. Publish it again from the app library if you need to withdraw a live listing.`, 409)
+    const withdrawn = (await tx.execute<{ id: string }>(sql`update app_listings set is_active=false,updated_by=${userId},updated_at=now() where id=${listing.id} and publisher_org_id=${orgId} and is_active=true returning id`)).rows[0]
+    if (!withdrawn) throw new AppError(`Nothing was withdrawn: "${key}" is already unpublished. Publish it again from the app library if you need to withdraw a live listing.`, 409)
     await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values(${orgId},'app_listings',${listing.id},'update',${JSON.stringify({ event:'app_listing_withdrawn',before:{isActive:true,version:listing.version},after:{isActive:false,version:listing.version} })}::jsonb,${userId})`)
   })
 }

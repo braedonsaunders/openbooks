@@ -1,8 +1,9 @@
 import 'server-only'
-import { sql } from 'drizzle-orm'
+import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { documentRevisionCounterSql } from '@openbooks/engine/src/records/revision.ts'
+import { documentRevisionCounterSql, documentRevisionSql } from '@openbooks/engine/src/records/revision.ts'
 import type { FieldValueMap, FormField, FormSection } from '@openbooks/forms-core'
+import { pgTextArrayLiteral } from './pg-array'
 import { formatFieldValue, lintRecordFields, type RecordStatus, type RecordTypeStatus } from './record-schema'
 
 /**
@@ -28,6 +29,12 @@ export type RecordTypeRow = {
   show_in_nav: boolean
   allowed_roles: string[] | null
   sort_order: number
+  /**
+   * Opaque optimistic-concurrency token: the type's canonical updated_at when
+   * read (six-digit UTC wire form). Builder saves must send it back as
+   * expectedUpdatedAt; a stale or missing token fails closed with a 409.
+   */
+  updated_at: string
 }
 
 export type RecordRow = {
@@ -49,7 +56,8 @@ export type RecordRow = {
 }
 
 const TYPE_COLUMNS = sql`id, key, name, plural_name, icon_key, description, fields,
-       status, show_in_nav, allowed_roles, sort_order`
+       status, show_in_nav, allowed_roles, sort_order,
+       ${documentRevisionSql(sql`updated_at`)} as updated_at`
 
 export async function loadRecordTypeByKey(
   orgId: string,
@@ -118,6 +126,66 @@ export function recordSubsidiaryScopeAllows(
   if (!hasSubsidiaryField(sections) || allowedSubsidiaryIds === null) return true
   const subsidiaryId = data.subsidiary_id
   return typeof subsidiaryId === 'string' && allowedSubsidiaryIds.has(subsidiaryId)
+}
+
+/**
+ * Visibility when the live type no longer declares subsidiary_id: honor the
+ * JSON value if one is still stored, and keep field-less rows without a
+ * subsidiary_id org-visible. Field-present types stay on the existing
+ * fail-closed helper. Dropping the field must not unscope stored JSON rows.
+ */
+export function recordVisibleInSubsidiaryFence(
+  sections: FormSection[],
+  data: FieldValueMap,
+  allowedSubsidiaryIds: ReadonlySet<string> | null | undefined,
+): boolean {
+  const fence = allowedSubsidiaryIds ?? null
+  if (fence === null) return true
+  if (hasSubsidiaryField(sections)) {
+    return recordSubsidiaryScopeAllows(sections, data, fence)
+  }
+  const subsidiaryId = data.subsidiary_id
+  if (typeof subsidiaryId !== 'string' || subsidiaryId.length === 0) return true
+  return fence.has(subsidiaryId)
+}
+
+/**
+ * stripUnknownData drops undeclared keys. After the live type no longer
+ * declares subsidiary_id, that would erase the stored JSON token and the
+ * fence above would treat the row as dimensionless. Copy the existing value
+ * onto the stripped bag before persist so the row stays scoped.
+ */
+export function retainStoredSubsidiaryId(
+  sections: FormSection[],
+  stored: FieldValueMap,
+  next: FieldValueMap,
+): FieldValueMap {
+  if (hasSubsidiaryField(sections)) return next
+  const storedId = stored.subsidiary_id
+  if (typeof storedId !== 'string' || storedId.length === 0) return next
+  if (next.subsidiary_id === storedId) return next
+  return { ...next, subsidiary_id: storedId }
+}
+
+/**
+ * Query form of recordVisibleInSubsidiaryFence for custom_records.data.
+ * Returns null when the caller is unrestricted (no extra predicate).
+ */
+export function recordVisibleInSubsidiaryFenceSql(
+  allowedSubsidiaryIds: ReadonlySet<string> | null | undefined,
+  declaresSubsidiaryField: boolean,
+): SQL | null {
+  const fence = allowedSubsidiaryIds ?? null
+  if (fence === null) return null
+  const inFence = sql`data ->> ${'subsidiary_id'} = any(${pgTextArrayLiteral([...fence])}::text[])`
+  if (declaresSubsidiaryField) {
+    return fence.size === 0 ? sql`false` : inFence
+  }
+  return sql`(
+    ${inFence}
+    or data ->> ${'subsidiary_id'} is null
+    or data ->> ${'subsidiary_id'} = ${''}
+  )`
 }
 
 /**

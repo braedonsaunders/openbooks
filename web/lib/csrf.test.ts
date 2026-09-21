@@ -58,12 +58,13 @@ test("same-origin mutations pass the origin check", async () => {
     true,
   );
   // The trusted edge supplies the public origin when its internal hop is HTTP.
+  // Forwarded Host is security input only after OPENBOOKS_TRUST_PROXY.
   assert.equal(
     hasTrustedOrigin(post("http://web:4780/api/accounts", {
       origin: "https://books.example",
       "x-forwarded-host": "books.example",
       "x-forwarded-proto": "https",
-    }), {}),
+    }), { OPENBOOKS_TRUST_PROXY: "1" }),
     true,
   );
 });
@@ -109,7 +110,55 @@ test("the outermost x-forwarded-host anchors the check behind proxies", async ()
     "x-forwarded-host": "books.example, web:4780",
     "x-forwarded-proto": "https, http",
   });
-  assert.equal(hasTrustedOrigin(req, {}), true);
+  assert.equal(hasTrustedOrigin(req, { OPENBOOKS_TRUST_PROXY: "1" }), true);
+});
+
+test("a client-supplied forwarded host is not the deployment origin when the canonical URL is unset", async () => {
+  const { hasTrustedOrigin } = await import("./csrf.ts");
+  const spoofed = post("http://web:4780/api/accounts", {
+    origin: "https://evil.example",
+    "x-forwarded-host": "evil.example",
+    "x-forwarded-proto": "https",
+  });
+  // Unset APP_URL is unknown. Matching Origin + X-Forwarded-Host from the
+  // client must not mint a trusted origin; the request URL is the only
+  // origin the process can know.
+  assert.equal(hasTrustedOrigin(spoofed, {}), false);
+  assert.equal(hasTrustedOrigin(spoofed, { OPENBOOKS_TRUST_PROXY: "0" }), false);
+  assert.equal(hasTrustedOrigin(spoofed, { OPENBOOKS_TRUST_PROXY: "false" }), false);
+  assert.equal(
+    hasTrustedOrigin(spoofed, { OPENBOOKS_APP_URL: "https://books.example" }),
+    false,
+  );
+  assert.equal(
+    hasTrustedOrigin(spoofed, {
+      OPENBOOKS_APP_URL: "https://books.example",
+      OPENBOOKS_TRUST_PROXY: "1",
+    }),
+    false,
+  );
+  // A same-origin browser request still passes when the request URL is the
+  // known origin, even if a client also sent a foreign forwarded host.
+  assert.equal(
+    hasTrustedOrigin(post("https://books.example/api/accounts", {
+      origin: "https://books.example",
+      "x-forwarded-host": "evil.example",
+      "x-forwarded-proto": "https",
+    }), {}),
+    true,
+  );
+});
+
+test("forwarded hosts are trusted only when the operator opts in", async () => {
+  const { trustsForwardedHeaders } = await import("./proxy-policy.ts");
+  assert.equal(trustsForwardedHeaders({}), false);
+  assert.equal(trustsForwardedHeaders({ OPENBOOKS_TRUST_PROXY: "0" }), false);
+  assert.equal(trustsForwardedHeaders({ OPENBOOKS_TRUST_PROXY: "false" }), false);
+  assert.equal(trustsForwardedHeaders({ OPENBOOKS_TRUST_PROXY: "no" }), false);
+  assert.equal(trustsForwardedHeaders({ OPENBOOKS_TRUST_PROXY: "1" }), true);
+  assert.equal(trustsForwardedHeaders({ OPENBOOKS_TRUST_PROXY: "true" }), true);
+  assert.equal(trustsForwardedHeaders({ OPENBOOKS_TRUST_PROXY: "yes" }), true);
+  assert.equal(trustsForwardedHeaders({ OPENBOOKS_TRUST_PROXY: "TRUE" }), true);
 });
 
 test("forged origins are rejected, including scheme, port, and suffix spoofs", async () => {

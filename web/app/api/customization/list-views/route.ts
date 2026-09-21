@@ -5,6 +5,11 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 import { getAuthz, can } from "../../../../lib/authz";
 import { parseListView, RECORD_TYPE_BY_KEY, stripSeededDefaultMark, type ListViewConfig } from "@openbooks/customization";
 import { refuseDisabledRecordType } from "../../../../lib/customization/gates";
+import {
+  AmbiguousListViewDefaultError,
+  assertSingleListViewDefault,
+  claimListViewDefaultSlot,
+} from "../../../../lib/customization/list-view-default";
 
 export const runtime = "nodejs";
 
@@ -48,7 +53,12 @@ export async function POST(req: Request) {
   const refused = await refuseDisabledRecordType(user.orgId, body.recordType);
   if (refused) return refused;
   if (!body.name?.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
-  const scope = body.scope === "org" ? "org" : "user";
+  // PATCH refuses a non-boolean isDefault. POST used to coerce with !! so a
+  // truthy string (including "false") cleared sibling defaults and stored true.
+  if (body.isDefault !== undefined && typeof body.isDefault !== "boolean") {
+    return NextResponse.json({ error: "isDefault must be a boolean" }, { status: 400 });
+  }
+  const scope: "org" | "user" = body.scope === "org" ? "org" : "user";
   // org-scope views require the admin permission; personal views are self-service.
   if (scope === "org" && !can(authz, "admin.customization.manage"))
     return NextResponse.json({ error: "missing permission: admin.customization.manage" }, { status: 403 });
@@ -67,23 +77,15 @@ export async function POST(req: Request) {
     // db.execute goes through the pool (each statement may land on a different
     // connection), so BEGIN/COMMIT must use db.transaction to actually be atomic.
     const row = await db.transaction(async (tx) => {
-      if (body.isDefault) {
-        if (scope === "org")
-          await tx.execute(sql`
-            update list_views set is_default = false, updated_at = now()
-             where org_id = ${user.orgId} and record_type = ${body.recordType} and scope='org' and is_default`);
-        else
-          await tx.execute(sql`
-            update list_views set is_default = false, updated_at = now()
-             where org_id = ${user.orgId} and record_type = ${body.recordType} and scope='user'
-               and owner_id = ${user.id} and is_default`);
-      }
+      const defaultScope = { orgId: user.orgId, recordType: body.recordType!, scope, ownerId };
+      if (body.isDefault === true) await claimListViewDefaultSlot(tx, defaultScope);
       const inserted = (await tx.execute<{ id: string; name: string }>(sql`
         insert into list_views (org_id, record_type, name, scope, owner_id, is_default, is_active,
                                 config, created_by, updated_by)
         values (${user.orgId}, ${body.recordType}, ${body.name!.trim()}, ${scope}, ${ownerId},
-                ${!!body.isDefault}, true, ${config}, ${user.id}, ${user.id})
+                ${body.isDefault === true}, true, ${config}, ${user.id}, ${user.id})
         returning id, name`)).rows[0]!;
+      if (body.isDefault === true) await assertSingleListViewDefault(tx, defaultScope);
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${user.orgId}, 'list_views', ${inserted.id}, 'insert', ${JSON.stringify({ name: body.name, scope })}, ${user.id})`);
@@ -92,6 +94,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ id: row.id, name: row.name });
   } catch (e) {
     const msg = (e as Error).message ?? "insert failed";
+    if (e instanceof AmbiguousListViewDefaultError)
+      return NextResponse.json({ error: e.message }, { status: 409 });
     if (msg.includes("unique"))
       return NextResponse.json({ error: "A view with that name already exists" }, { status: 409 });
     return NextResponse.json({ error: msg }, { status: 500 });

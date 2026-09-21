@@ -32,7 +32,7 @@ import {
   inTypeAudience,
   loadRecord,
   loadRecordTypeByKey,
-  recordSubsidiaryScopeAllows,
+  recordVisibleInSubsidiaryFence,
   resolveEntityLabels,
 } from '../../../../lib/records'
 import {
@@ -191,11 +191,14 @@ export async function loadRecordWorkspace(
     .map((f) => ({ field: f, value: pickString(sp[`f_${f.id}`]) }))
     .filter((x): x is { field: FormField; value: string } => Boolean(x.value))
 
-  const subsidiaryScope = !hasSubsidiaryField(sections) || authz.allowedSubsidiaryIds === null
-    ? sql``
-    : authz.allowedSubsidiaryIds.size === 0
-      ? sql` and false`
-      : sql` and r.data ->> ${'subsidiary_id'} = any(${pgTextArrayLiteral([...authz.allowedSubsidiaryIds])}::text[])`
+  const fence = authz.allowedSubsidiaryIds
+  const subsidiaryScope =
+    fence === null
+      ? sql``
+      : sql` and (
+          r.data ->> ${'subsidiary_id'} = any(${pgTextArrayLiteral([...fence])}::text[])
+          ${hasSubsidiaryField(sections) ? sql`` : sql` or r.data ->> ${'subsidiary_id'} is null`}
+        )`
   const scope = sql`r.org_id = ${authz.user.orgId} and r.type_key = ${typeKey}${subsidiaryScope}`
   let where = sql`${scope}
     ${showInactive || status === 'inactive' ? sql`` : sql` and r.status <> 'inactive'`}
@@ -259,7 +262,7 @@ export async function loadRecordWorkspace(
   )
 
   const loadedOpenRecord = recId ? await loadRecord(authz.user.orgId, typeKey, recId) : null
-  const openRecord = loadedOpenRecord && recordSubsidiaryScopeAllows(
+  const openRecord = loadedOpenRecord && recordVisibleInSubsidiaryFence(
     sections,
     loadedOpenRecord.data,
     authz.allowedSubsidiaryIds,

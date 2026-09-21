@@ -12,6 +12,8 @@ interface EmailActionState {
     title: string;
     status: string;
     subject_kind: string;
+    subject_id: string;
+    subsidiary_id: string | null;
     decided_by_name: string | null;
     document_number: string | null;
     doc_kind: string | null;
@@ -20,12 +22,16 @@ interface EmailActionState {
     document_date: string | null;
     party_name: string | null;
   };
+  allowedSubsidiaryIds: Set<string> | null;
+  scopeLoads: Array<{ userId: string; orgId: string }>;
   decideResult: { ok: true; resumed: string; runStatus: string };
   decideThrow: string | null;
   decideCalls: Array<Record<string, unknown>>;
 }
 
 const stateKey = Symbol.for("openbooks.email-action-route-test");
+const SUBJECT_SUBSIDIARY = "sub-1";
+const OTHER_SUBSIDIARY = "sub-other";
 const routeState: EmailActionState = {
   token: "test-token",
   claims: null,
@@ -35,6 +41,8 @@ const routeState: EmailActionState = {
     title: "Approval",
     status: "pending",
     subject_kind: "vendor_bill",
+    subject_id: "doc-1",
+    subsidiary_id: SUBJECT_SUBSIDIARY,
     decided_by_name: null,
     document_number: "BILL-0042",
     doc_kind: "vendor_bill",
@@ -43,6 +51,8 @@ const routeState: EmailActionState = {
     document_date: "2026-07-15",
     party_name: "Acme",
   },
+  allowedSubsidiaryIds: null,
+  scopeLoads: [],
   decideResult: { ok: true, resumed: "approve", runStatus: "completed" },
   decideThrow: null,
   decideCalls: [],
@@ -83,22 +93,68 @@ const mockSources = new Map<string, string>([
       export async function isFeatureEnabled() { return true }
     `,
   ],
+  [
+    "mock:subsidiaries",
+    `
+      const state = globalThis[Symbol.for('openbooks.email-action-route-test')]
+      export async function allowedSubsidiaryIds(userId, orgId) {
+        state.scopeLoads.push({ userId, orgId })
+        return state.allowedSubsidiaryIds
+      }
+    `,
+  ],
+  [
+    "mock:lib",
+    `
+      const state = globalThis[Symbol.for('openbooks.email-action-route-test')]
+      export async function loadFlowSubjectSubsidiary() {
+        return state.summary.subsidiary_id
+      }
+    `,
+  ],
+  [
+    "mock:auth-session",
+    `
+      export async function currentUser() { return null }
+    `,
+  ],
+  [
+    "mock:authz-subsidiaries",
+    `
+      export async function allowedSubsidiaryIds() { return null }
+    `,
+  ],
+  [
+    "mock:next-navigation",
+    `
+      export function redirect() { throw new Error('redirect is not used by subsidiaryScopeAllows') }
+    `,
+  ],
 ]);
 
 const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/platform/db.ts", "mock:db"],
   ["@openbooks/engine/src/flows/index.ts", "mock:flows"],
   ["../../../../lib/features", "mock:features"],
+  ["../../../../lib/subsidiaries", "mock:subsidiaries"],
+  ["../_lib", "mock:lib"],
+  ["next/navigation", "mock:next-navigation"],
 ]);
 
 const hooks = registerHooks({
-  resolve(specifier, _context, nextResolve) {
+  resolve(specifier, context, nextResolve) {
     if (specifier === "server-only") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
     }
+    // Session machinery is unused; the production subsidiaryScopeAllows
+    // helper must load from web/lib/authz.ts so a permissive rewrite fails.
+    if (context.parentURL?.includes("/lib/authz")) {
+      if (specifier === "./auth") return { url: "mock:auth-session", shortCircuit: true };
+      if (specifier === "./subsidiaries") return { url: "mock:authz-subsidiaries", shortCircuit: true };
+    }
     const mocked = mockUrls.get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, _context);
+    return nextResolve(specifier, context);
   },
   load(url, _context, nextLoad) {
     const source = mockSources.get(url);
@@ -111,9 +167,10 @@ const hooks = registerHooks({
 // honoured; kept in a variable so the type checker resolves "./route.ts".
 const routeUrl = "./route.ts?email-action-refusal";
 const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");
+const { subsidiaryScopeAllows } = (await import("../../../../lib/authz.ts")) as typeof import("../../../../lib/authz");
 hooks.deregister();
 
-function reset(): void {
+function reset(allowedSubsidiaryIds: Set<string> | null = null): void {
   routeState.claims = {
     gateId: "gate-1",
     decision: "approved",
@@ -121,6 +178,9 @@ function reset(): void {
     expiresAt: Date.now() + 3_600_000,
   };
   routeState.summary.status = "pending";
+  routeState.summary.subsidiary_id = SUBJECT_SUBSIDIARY;
+  routeState.allowedSubsidiaryIds = allowedSubsidiaryIds;
+  routeState.scopeLoads.length = 0;
   routeState.decideResult = { ok: true, resumed: "approve", runStatus: "completed" };
   routeState.decideThrow = null;
   routeState.decideCalls.length = 0;
@@ -131,6 +191,10 @@ function postForm(token: string, reason?: string): Request {
   form.append("token", token);
   if (reason !== undefined) form.append("reason", reason);
   return new Request("http://localhost/api/flows/email-action", { method: "POST", body: form });
+}
+
+function getLink(token: string): Request {
+  return new Request(`http://localhost/api/flows/email-action?token=${token}`);
 }
 
 // The invalid-link page must state the approval link's real lifetime, derived
@@ -177,7 +241,81 @@ test("a completed one-click decision still renders its confirmation", async () =
   assert.equal(res.status, 200);
   const html = await res.text();
   assert.ok(html.includes("Approved"), "success copy still renders for ok:true");
+  assert.deepEqual(routeState.scopeLoads, [{ userId: "user-1", orgId: "org-1" }]);
   assert.deepEqual(routeState.decideCalls, [
-    { gateId: "gate-1", decision: "approved", userId: "user-1", comment: null },
+    {
+      gateId: "gate-1",
+      decision: "approved",
+      userId: "user-1",
+      allowedSubsidiaryIds: null,
+      comment: null,
+    },
   ]);
+});
+
+test("the production subsidiary guard refuses an id outside the allowed set", () => {
+  assert.equal(subsidiaryScopeAllows(new Set([OTHER_SUBSIDIARY]), SUBJECT_SUBSIDIARY), false);
+  assert.equal(subsidiaryScopeAllows(new Set([SUBJECT_SUBSIDIARY]), SUBJECT_SUBSIDIARY), true);
+  assert.equal(subsidiaryScopeAllows(null, SUBJECT_SUBSIDIARY), true);
+});
+
+test("a restricted assignee cannot decide an out-of-scope gate from the email link", async () => {
+  reset(new Set([OTHER_SUBSIDIARY]));
+
+  const res = await POST(postForm(routeState.token));
+
+  assert.equal(res.status, 404);
+  const html = await res.text();
+  assert.ok(!html.includes("BILL-0042"), "out-of-scope refusal must not leak the document");
+  assert.ok(
+    !html.includes("Your decision was recorded. You can close this page."),
+    "success copy must not render for an out-of-scope gate",
+  );
+  assert.deepEqual(routeState.scopeLoads, [{ userId: "user-1", orgId: "org-1" }]);
+  assert.deepEqual(routeState.decideCalls, []);
+});
+
+test("a restricted assignee cannot preview an out-of-scope gate from the email link", async () => {
+  reset(new Set([OTHER_SUBSIDIARY]));
+
+  const res = await GET(getLink(routeState.token));
+
+  assert.equal(res.status, 404);
+  const html = await res.text();
+  assert.ok(!html.includes("BILL-0042"), "out-of-scope confirmation must not leak the document");
+  assert.ok(!html.includes("Confirm Approve"), "confirm control must not render");
+  assert.deepEqual(routeState.decideCalls, []);
+});
+
+test("an in-scope restricted assignee carries subsidiary scope into decideGate", async () => {
+  const scope = new Set([SUBJECT_SUBSIDIARY]);
+  reset(scope);
+
+  const res = await POST(postForm(routeState.token));
+
+  assert.equal(res.status, 200);
+  assert.deepEqual(routeState.decideCalls, [
+    {
+      gateId: "gate-1",
+      decision: "approved",
+      userId: "user-1",
+      allowedSubsidiaryIds: scope,
+      comment: null,
+    },
+  ]);
+});
+
+test("an engine not-found refusal is a 404, not a recorded decision", async () => {
+  reset();
+  routeState.decideThrow = "approval not found";
+
+  const res = await POST(postForm(routeState.token));
+
+  assert.equal(res.status, 404);
+  const html = await res.text();
+  assert.ok(!html.includes("BILL-0042"), "engine not-found must not leak the document");
+  assert.ok(
+    !html.includes("Your decision was recorded. You can close this page."),
+    "success copy must not render for an engine not-found",
+  );
 });

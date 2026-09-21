@@ -13,6 +13,11 @@ import {
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { connectionAuditChanges } from "@openbooks/schema/src/connections.ts";
 import { guardPermission } from "../../../../lib/authz";
+import {
+  callerOwnedConfigRefusal,
+  connectionConfigUrlRefusal,
+  declaredSourceConfig,
+} from "./_connector-guard";
 
 export const runtime = "nodejs";
 
@@ -137,7 +142,25 @@ export async function POST(req: Request) {
 
   const displayName =
     String(body.displayName ?? "").trim() || manifest.displayName;
-  const config = body.config ?? {};
+  const suppliedConfig =
+    body.config && typeof body.config === "object" && !Array.isArray(body.config)
+      ? body.config
+      : {};
+  const ownedError = callerOwnedConfigRefusal(suppliedConfig);
+  if (ownedError) {
+    return NextResponse.json(
+      { error: ownedError, errorCode: "OAUTH_IDENTITY_REFUSED" },
+      { status: 400 },
+    );
+  }
+  const urlError = await connectionConfigUrlRefusal(suppliedConfig);
+  if (urlError) {
+    return NextResponse.json(
+      { error: urlError, errorCode: "CONNECTOR_URL_REFUSED" },
+      { status: 400 },
+    );
+  }
+  const config = declaredSourceConfig(manifest, suppliedConfig);
 
   const configError = validateSourceConfig(manifest, config, { today: await businessToday(orgId) });
   if (configError)

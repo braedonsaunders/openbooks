@@ -266,22 +266,44 @@ export async function insertEmailLog(row: {
   return r.rows[0]!.id;
 }
 
+function refuseZeroRowWrite(label: string): never {
+  throw new Error(
+    `${label} — the update matched no row, so nothing was written. ` +
+      "Confirm the row exists and is visible in this organization before treating the write as recorded.",
+  );
+}
+
+function refuseUnwrittenEmailLog(updatedRows: number, id: string, intended: string): void {
+  if (updatedRows > 0) return;
+  refuseZeroRowWrite(`email_log ${id} was not marked ${intended}`);
+}
+
+function refuseUnwrittenRemittance(updatedRows: number, id: string, intended: string): void {
+  if (updatedRows > 0) return;
+  refuseZeroRowWrite(`payment remittance ${id} was not marked ${intended}`);
+}
+
 export async function markEmailSent(orgId: string, id: string, providerMessageId: string): Promise<void> {
-  await db.execute(sql`
+  const updated = await db.execute<{ id: string }>(sql`
     update email_log set status = 'sent', provider_message_id = ${providerMessageId}, sent_at = now(), updated_at = now()
      where id = ${id} and org_id = ${orgId}
+    returning id
   `);
+  refuseUnwrittenEmailLog(updated.rows?.length ?? 0, id, "sent");
 }
 
 export async function markEmailFailed(orgId: string, id: string, error: string): Promise<void> {
   // Guarded transition: confirmed acceptance (`sent`) and unresolved
   // uncertainty must never be overwritten by a later failure mark — a retried
   // attempt that fails after its predecessor was accepted has no authority to
-  // rewrite the outcome (audit finding #52).
-  await db.execute(sql`
+  // rewrite the outcome (audit finding #52). Empty RETURNING is still a
+  // failed write, including when the row is already terminal.
+  const updated = await db.execute<{ id: string }>(sql`
     update email_log set status = 'failed', error_message = ${error.slice(0, 500)}, updated_at = now()
      where id = ${id} and org_id = ${orgId} and status in ('queued', 'failed')
+    returning id
   `);
+  refuseUnwrittenEmailLog(updated.rows?.length ?? 0, id, "failed");
 }
 
 /**
@@ -289,10 +311,12 @@ export async function markEmailFailed(orgId: string, id: string, error: string):
  * is the reconciliation trigger: nothing re-sends while it stands open.
  */
 export async function markEmailUncertain(orgId: string, id: string, reason: string): Promise<void> {
-  await db.execute(sql`
+  const updated = await db.execute<{ id: string }>(sql`
     update email_log set status = 'uncertain', error_message = ${reason.slice(0, 500)}, updated_at = now()
      where id = ${id} and org_id = ${orgId} and status in ('queued', 'failed')
+    returning id
   `);
+  refuseUnwrittenEmailLog(updated.rows?.length ?? 0, id, "uncertain");
 }
 
 /** Acknowledge provider acceptance; legal from any non-suppressed state, so a late reconciliation can still complete a delivery idempotently. */
@@ -314,10 +338,12 @@ export async function confirmEmailSentGuarded(orgId: string, id: string, provide
 
 /** Record the terminal suppression reason on an open row without touching final states. */
 export async function markEmailSuppressed(orgId: string, id: string, reason: string): Promise<void> {
-  await db.execute(sql`
+  const updated = await db.execute<{ id: string }>(sql`
     update email_log set status = 'suppressed', error_message = ${reason.slice(0, 500)}, updated_at = now()
      where id = ${id} and org_id = ${orgId} and status in ('queued', 'failed', 'uncertain')
+    returning id
   `);
+  refuseUnwrittenEmailLog(updated.rows?.length ?? 0, id, "suppressed");
 }
 
 /** Record one queued payment-remittance attempt without claiming delivery. */
@@ -326,12 +352,14 @@ export async function markPaymentRemittanceAttempt(
   id: string,
   attempt: number,
 ): Promise<void> {
-  await db.execute(sql`
+  const updated = await db.execute<{ id: string }>(sql`
     update payment_remittances
        set attempt_count = greatest(attempt_count, ${attempt}),
            last_attempt_at = now(), error = null, updated_at = now()
      where id = ${id} and org_id = ${orgId} and status = 'pending'
+    returning id
   `);
+  refuseUnwrittenRemittance(updated.rows?.length ?? 0, id, "attempted");
 }
 
 /**
@@ -346,13 +374,15 @@ export async function markPaymentRemittanceFailed(
   attempt: number,
   terminal: boolean,
 ): Promise<void> {
-  await db.execute(sql`
+  const updated = await db.execute<{ id: string }>(sql`
     update payment_remittances
        set status = case when ${terminal} then 'failed' else status end,
            attempt_count = greatest(attempt_count, ${attempt}),
            last_attempt_at = now(), error = ${error.slice(0, 500)}, updated_at = now()
      where id = ${id} and org_id = ${orgId} and status = 'pending'
+    returning id
   `);
+  refuseUnwrittenRemittance(updated.rows?.length ?? 0, id, "failed");
 }
 
 /**
@@ -410,12 +440,16 @@ export async function appendEmailAttemptEvent(orgId: string, id: string, event: 
   detail?: string | null;
 }): Promise<AttemptRecord[]> {
   const payload = { at: new Date().toISOString(), ...event };
-  await db.execute(sql`
+  const updated = await db.execute<{ id: string }>(sql`
     update email_log
        set meta = jsonb_set(meta, '{attempts}', coalesce(meta -> 'attempts', '[]'::jsonb) || ${JSON.stringify(payload)}::jsonb),
            updated_at = now()
      where id = ${id} and org_id = ${orgId}
+    returning id
   `);
+  if ((updated.rows?.length ?? 0) === 0) {
+    refuseZeroRowWrite(`email_log ${id} attempt lineage was not appended`);
+  }
   return readAttemptLineage(orgId, id);
 }
 

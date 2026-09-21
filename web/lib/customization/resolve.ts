@@ -17,13 +17,15 @@ import {
   customFieldDefKey,
 } from "@openbooks/customization";
 import type { CustomFieldDef } from "../custom-fields";
+import { AmbiguousListViewDefaultError } from "./list-view-default.ts";
+export { AmbiguousListViewDefaultError };
 
 /**
  * Effective-resolution layer for transaction form layouts + saved list views.
  *
  * Precedence (source platform "Preferred Form" + saved-search model):
  *   form layout: user's preferred form → org default → system default
- *   list view:    ?view=<id> → user's default → org default → system default
+ *   list view:    ?view=<id> → user preference (null viewId skips personal) → unique personal isDefault → org default → system default
  *
  * Custom fields (custom_field_defs) are merged in at resolve time so a field
  * created after a layout was saved still appears: every active def for the
@@ -132,9 +134,26 @@ function mergeCustomFieldsIntoLayout(
   return layout;
 }
 
-function rowIsAccessible(row: { allowedRoles: string[] | null }, userRoles: string[]): boolean {
-  if (!row.allowedRoles || row.allowedRoles.length === 0) return true;
-  return row.allowedRoles.some((r) => userRoles.includes(r));
+/**
+ * A stored allowedRoles that is not an array of UUIDs is unusable: the
+ * previous `.some` call threw and resolveFormLayout took every form for
+ * that record type down. Treat the row as inaccessible instead.
+ */
+function storedAllowedRoles(allowedRoles: unknown): string[] | null | "malformed" {
+  if (allowedRoles == null) return null;
+  if (!Array.isArray(allowedRoles)) return "malformed";
+  if (allowedRoles.some((role) => !isUuid(role))) return "malformed";
+  return allowedRoles;
+}
+
+function rowIsAccessible(row: { allowedRoles: unknown }, heldRoleIds: ReadonlySet<string>): boolean {
+  const roles = storedAllowedRoles(row.allowedRoles);
+  if (roles === "malformed") return false;
+  if (!roles || roles.length === 0) return true;
+  // Persist writes UUID app_roles.id values; callers pass role keys
+  // (authz.user.roles[].key). Compare against the user's assigned role
+  // ids — never the key list, which cannot match a UUID gate.
+  return roles.some((r) => heldRoleIds.has(r.toLowerCase()));
 }
 
 /**
@@ -162,7 +181,20 @@ export const resolveFormLayout = cache(
        order by is_default desc, name
     `));
 
-    const accessible = rows.rows.filter((r) => rowIsAccessible(r, userRoles) || userRoles.includes("admin"));
+    const held = (await db.execute<{ id: string }>(sql`
+      select r.id
+        from role_assignments a
+        join app_roles r on r.id = a.role_id and r.org_id = a.org_id
+       where a.org_id = ${orgId} and a.user_id = ${userId}
+    `));
+    const heldRoleIds = new Set(held.rows.map((r) => r.id.toLowerCase()));
+
+    const accessible = rows.rows.filter((r) => {
+      // Admin still sees every well-formed form; a malformed gate is
+      // inaccessible to everyone — that is the value that used to throw.
+      if (storedAllowedRoles(r.allowedRoles) === "malformed") return false;
+      return rowIsAccessible(r, heldRoleIds) || userRoles.includes("admin");
+    });
     const available: FormLayoutRow[] = accessible.map((r) => ({
       id: r.id,
       name: r.name,
@@ -296,21 +328,36 @@ export const resolveListView = cache(
 
     const byId = (id: string) => rows.rows.find((r) => r.id === id);
 
+    // Leftover duplicate personal defaults are overlapping configuration.
+    // Writes already 409 a second default; falling through to org/system
+    // would leave those stored flags unobserved.
+    const personalDefaults = rows.rows.filter((r) => r.scope === "user" && r.isDefault);
+    if (personalDefaults.length > 1) throw new AmbiguousListViewDefaultError();
+
     // 1. explicit ?view=<id>
     let chosen: (ListViewRow & { config: unknown }) | undefined;
     if (viewId && isUuid(viewId)) chosen = byId(viewId);
-    // 2. user default
+    // 2. user preference (views-menu). A present row with view_id NULL is
+    // "use system default": skip the personal isDefault and fall through to
+    // org/system. A missing row is not a refusal — then a unique personal
+    // default still applies.
     if (!chosen) {
       const pref = (await db.execute<{ viewId: string | null }>(sql`
         select view_id as "viewId" from user_list_preferences
          where org_id = ${orgId} and user_id = ${userId} and record_type = ${recordType}
       `));
-      const pid = pref.rows[0]?.viewId;
-      if (pid && isUuid(pid)) chosen = byId(pid);
+      const prefRow = pref.rows[0];
+      if (prefRow) {
+        const pid = prefRow.viewId;
+        if (pid && isUuid(pid)) chosen = byId(pid);
+      } else {
+        // 3. unique personal default — designer "default for its scope".
+        if (personalDefaults.length === 1) chosen = personalDefaults[0];
+      }
     }
-    // 3. org default
+    // 4. org default
     if (!chosen) chosen = rows.rows.find((r) => r.scope === "org" && r.isDefault);
-    // 4. no saved default wins over the system default: a first-available
+    // 5. no saved default wins over the system default: a first-available
     // non-default view must never outrank the registry (it is how a stale
     // Z→A snapshot kept winning after the registry declared A→Z).
 

@@ -4,6 +4,8 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { filingArtifact } from '@openbooks/engine/src/payroll/yearend-amendments.ts'
 import { orgYearEndFilings } from '@openbooks/engine/src/payroll/yearend.ts'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
+import { isUuid } from '../../../../../../lib/list-params'
+import { suppliedValue } from '../../../../../../lib/payroll-decimal-refusal'
 import { guardPayrollFilingData, guardPayrollFilingRowIds } from '../../../subsidiary-scope'
 
 export const dynamic = 'force-dynamic'
@@ -21,8 +23,15 @@ export async function GET(req: Request) {
   const gate = await guardFeaturePermission('payroll.read', 'payroll')
   if (gate instanceof NextResponse) return gate
   const id = new URL(req.url).searchParams.get('id') ?? ''
-  if (!/^[0-9a-f-]{36}$/i.test(id)) {
-    return NextResponse.json({ error: 'a submission id is required' }, { status: 422 })
+  // `id` is a uuid column. A 36-character hex/dash string is not enough —
+  // PostgreSQL still raises `invalid input syntax for type uuid` for values
+  // the old `/^[0-9a-f-]{36}$/i` accepted (36 hex digits, 36 dashes). Shape
+  // refusals stay 422 and never bind the parameter.
+  if (!isUuid(id)) {
+    const error = id.trim() === ''
+      ? 'a submission id is required'
+      : `submission id must be a UUID — "${suppliedValue(id)}" is not a UUID`
+    return NextResponse.json({ error }, { status: 422 })
   }
   const submission = (await db.execute<{
     country: string; filing: string; taxYear: number;

@@ -1,8 +1,25 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { registerHooks } from 'node:module'
 import { readingPagePairs } from './page-source'
 import test from 'node:test'
 import { REPORT_ENTITY_MAP } from '@openbooks/reports'
+import type { Authz } from './authz'
+
+// `report-authz` is a server module. The suite loads it after the marker is
+// stubbed so the missing-entity refusal is the real function, not a source
+// grep — a grep would still pass if the guard called canRunReportEntity and
+// then returned allow anyway.
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === 'server-only') {
+      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
+    }
+    return nextResolve(specifier, context)
+  },
+})
+
+const { canRunReportEntity, guardReportEntity } = await import('./report-authz.ts')
 
 /**
  * `reports.read` is permission to use the reporting tools, not permission to
@@ -82,6 +99,16 @@ const EXECUTION_PATHS: Array<{ file: string; symbol: string; why: string }> = [
     why: 'listing hands out the ids and stored plans every other path keys on',
   },
   {
+    file: '../app/api/reports/definitions/route.ts',
+    symbol: 'guardReportEntity',
+    why: 'creating a definition must not persist an unknown or forbidden entity',
+  },
+  {
+    file: '../app/api/reports/definitions/[id]/route.ts',
+    symbol: 'guardReportEntity',
+    why: 'saving a definition query must not persist an unknown or forbidden entity',
+  },
+  {
     file: '../app/api/reports/runs/[id]/csv/route.ts',
     symbol: 'canAccessReportArtifact',
     why: 'downloading a recorded run CSV returns the same rows',
@@ -136,4 +163,78 @@ test('the gate lives in exactly one place', () => {
       `${file} re-implements the entity gate instead of using lib/report-authz`,
     )
   }
+})
+
+function reportReader(): Authz {
+  return {
+    user: {
+      id: 'user-1',
+      email: 'reader@example.com',
+      name: 'Reader',
+      roles: [],
+      orgId: 'org-1',
+      envKind: 'production',
+      productionOrgId: 'org-1',
+      isSuperAdmin: false,
+      homeUserId: 'user-1',
+      homeOrgId: 'org-1',
+    },
+    permissions: new Set(['reports.read']),
+    allowedSubsidiaryIds: null,
+  }
+}
+
+async function assertEntityRefused(query: unknown, label: string): Promise<void> {
+  const authz = reportReader()
+  assert.equal(await canRunReportEntity(authz, query), false, `${label}: canRunReportEntity must refuse`)
+  const denied = await guardReportEntity(authz, query)
+  assert.ok(denied, `${label}: guardReportEntity must refuse, not return allow (null)`)
+  assert.equal(denied.status, 403, `${label}: missing/unknown entity is a 403, not a silent allow`)
+}
+
+test('guardReportEntity refuses a missing entity the same way canRunReportEntity does', async () => {
+  // A query object that never names a catalog entity is the fail-open:
+  // requiredPermission is null, and treating that as allow lets
+  // run/export/definition writes execute a plan the catalog never named.
+  // A null query is different — that is a statement definition, tested below.
+  await assertEntityRefused({}, 'empty query')
+  await assertEntityRefused({ entity: undefined }, 'undefined entity')
+})
+
+test('guardReportEntity refuses an unknown entity the same way canRunReportEntity does', async () => {
+  assert.equal(REPORT_ENTITY_MAP['not_a_catalog_entity'], undefined)
+  await assertEntityRefused({ entity: 'not_a_catalog_entity' }, 'unknown entity')
+})
+
+test('guardReportEntity does not refuse a statement definition with no entity plan', async () => {
+  // Standard statements are seeded with query=null. The export route passes
+  // that value into this gate unconditionally before the shared
+  // CSV/XLSX/PDF pipeline. Refusing it 403s every P&L, balance sheet, and
+  // trial-balance download. canRunReportEntity(null) stays false — it
+  // answers "may I run this entity plan?" — but this HTTP gate must not
+  // apply when there is no entity plan.
+  const source = read('../app/api/reports/definitions/[id]/export/route.ts')
+  assert.match(
+    source,
+    /guardReportEntity\(\s*gate,\s*def\.query\s*\)/,
+    'export must keep passing the stored query, including statement null',
+  )
+  const authz = reportReader()
+  assert.equal(await canRunReportEntity(authz, null), false)
+  assert.equal(
+    await guardReportEntity(authz, null),
+    null,
+    'null query is a statement plan, not a missing entity — the guard must return allow',
+  )
+  assert.equal(await guardReportEntity(authz, undefined), null)
+})
+
+test('guardReportEntity still allows a catalog entity that declares no extra permission', async () => {
+  const open = Object.values(REPORT_ENTITY_MAP).find(
+    (entity) => !entity.requiredPermission && !entity.featureKey,
+  )
+  assert.ok(open, 'the catalog must keep at least one always-on entity so this is not a vacuous allow')
+  const authz = reportReader()
+  assert.equal(await canRunReportEntity(authz, { entity: open.key }), true)
+  assert.equal(await guardReportEntity(authz, { entity: open.key }), null)
 })

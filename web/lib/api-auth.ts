@@ -98,6 +98,7 @@ interface ApiKeySqlRow {
   email: string;
   name: string;
   user_active: boolean;
+  env_kind: string;
 }
 
 interface ApiKeyRoleSqlRow {
@@ -126,9 +127,11 @@ function expandToCatalogue(perms: Set<string>): Set<string> {
 
 /**
  * Resolve an API key from a request. Returns null when the token is absent,
- * invalid, revoked, or expired. On success, the scoped permission set is the
- * intersection of the key's scopes with the OWNER's effective permissions — a
- * key never grants more than its owner.
+ * invalid, revoked, expired, bound to a user outside the key's org, bound to
+ * a non-production org, or when the required last-used write matches zero
+ * rows. On success, the scoped permission set is the intersection of the
+ * key's scopes with the OWNER's effective permissions — a key never grants
+ * more than its owner.
  */
 export async function resolveApiKeyAuth(
   req: Request,
@@ -140,22 +143,31 @@ export async function resolveApiKeyAuth(
 
   const keyHash = sha256(token);
   // The key's org isn't known until the row is read — look it up under bypass.
+  // The owner user and the org row are part of the credential: a key whose
+  // user lives in another org, or whose org is not production, is not a key.
   const keyRow = await withBypassContext(
     async () =>
       (
         (await db.execute(sql`
       select k.id, k.org_id, k.user_id, k.scopes, k.is_active, k.expires_at,
              k.rate_limit_per_min,
-             u.email, u.name, u.is_active as user_active
+             u.email, u.name, u.is_active as user_active,
+             o.env_kind
         from api_keys k
-        join users u on u.id = k.user_id
+        join users u on u.id = k.user_id and u.org_id = k.org_id
+        join orgs o on o.id = k.org_id and o.id = u.org_id
        where k.key_hash = ${keyHash}
+         and o.env_kind = 'production'
        limit 1`)) as unknown as { rows: ApiKeySqlRow[] }
       ).rows[0],
   );
   if (!keyRow) return null;
   if (!keyRow.is_active || !keyRow.user_active) return null;
   if (keyRow.expires_at && new Date(keyRow.expires_at).getTime() < Date.now()) return null;
+  // Sandbox/preview orgs may hold cloned key rows; they do not authenticate.
+  // envKind is the org's column, not a hardcoded production label.
+  if (keyRow.env_kind !== "production") return null;
+  const envKind = keyRow.env_kind;
 
   // Scope the rest of this request to the key's org (RLS enforced).
   setRequestOrg(keyRow.org_id);
@@ -204,8 +216,7 @@ export async function resolveApiKeyAuth(
     name: keyRow.name,
     roles: assignments.rows.map((row) => ({ key: row.key, name: row.name })),
     orgId: keyRow.org_id,
-    // API keys are always bound to their production org — no sandbox entry.
-    envKind: "production",
+    envKind,
     productionOrgId: keyRow.org_id,
     isSuperAdmin: false,
     homeUserId: keyRow.user_id,
@@ -213,10 +224,15 @@ export async function resolveApiKeyAuth(
   };
 
   // Durable usage trace: a credential that authenticates successfully always
-  // leaves its last-used stamp behind — the request is refused when this (or
-  // any) required database write fails, never waved through unrecorded.
-  await db
-    .execute(sql`update api_keys set last_used_at = now() where id = ${keyRow.id} and org_id = ${keyRow.org_id}`);
+  // leaves its last-used stamp behind. A write that matches zero rows is a
+  // failure (RLS, concurrent revoke), not a silent success — refuse rather
+  // than return a session whose use cannot be observed.
+  const stamped = await db.execute(sql`
+    update api_keys
+       set last_used_at = now()
+     where id = ${keyRow.id} and org_id = ${keyRow.org_id}
+     returning id`);
+  if (!stamped.rows[0]) return null;
 
   return {
     user,
@@ -240,6 +256,8 @@ export async function resolveApiKeyAuth(
  * lock serializes concurrent requests for the same key), so no extra table or
  * external store is needed. Returns a 429 response to return directly when the
  * key is over its ceiling, or null to proceed. A null ceiling means unlimited.
+ * A window UPDATE that matches zero rows is not a free pass: the request is
+ * refused as unauthenticated (401), never counted as 1.
  */
 export async function enforceRateLimit(auth: ApiKeyAuth): Promise<NextResponse | null> {
   if (auth.rateLimitPerMin == null) return null;
@@ -251,7 +269,16 @@ export async function enforceRateLimit(auth: ApiKeyAuth): Promise<NextResponse |
            rate_window_start = date_trunc('minute', now())
      where id = ${auth.keyId} and org_id = ${auth.user.orgId}
      returning rate_window_count as count`));
-  const count = Number(r.rows[0]?.count ?? 1);
+  const updated = r.rows[0] as { count?: unknown } | undefined;
+  // A 0-row UPDATE is not "count 1 / under the ceiling". The key did not
+  // authenticate: the window was not recorded, so the request is refused.
+  if (!updated) {
+    return NextResponse.json({ error: "invalid or missing API key" }, { status: 401 });
+  }
+  const count = Number(updated.count);
+  if (!Number.isFinite(count)) {
+    return NextResponse.json({ error: "invalid or missing API key" }, { status: 401 });
+  }
   if (count <= auth.rateLimitPerMin) return null;
 
   const retryAfter = Math.max(1, 60 - new Date().getSeconds());

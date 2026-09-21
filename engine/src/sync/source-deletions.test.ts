@@ -116,7 +116,7 @@ test(
           ${documentId}, ${org.orgId}, 'customer_invoice', 'draft',
           'INV-SOURCE-DELETE-ROLLBACK', ${org.subsidiaryId}, ${org.customerId},
           ${org.date}, 'CAD', '1', '100', '0', '100',
-          ${JSON.stringify({ nsId: sourceRef })}::jsonb
+          ${JSON.stringify({ nsId: sourceRef, connectionId })}::jsonb
         )`);
       await db.execute(sql`
         insert into document_lines
@@ -334,4 +334,40 @@ test("resolution upserts pin the known tenant on the connection_id/source_ref co
     controlled,
     /on conflict \(connection_id, source_ref\) do update set[\s\S]*?where source_deletion_resolutions\.org_id = \$\{input\.orgId\}/,
   );
+});
+
+test("source-deletion lookups bind the document to the importing connection", () => {
+  const automatic = source.slice(
+    source.indexOf("export async function mirrorSourceDeletion"),
+    source.indexOf("export async function resolveSourceDeletion"),
+  );
+  const controlled = source.slice(
+    source.indexOf("export async function resolveSourceDeletion"),
+  );
+  assert.match(source, /async function lockImportedSourceDocument/);
+  assert.match(
+    source,
+    /custom->>'connectionId' = \$\{input\.connectionId\}/,
+  );
+  assert.match(automatic, /connectionId: string;/);
+  assert.match(automatic, /lockImportedSourceDocument\(/);
+  assert.match(controlled, /lockImportedSourceDocument\(/);
+  assert.doesNotMatch(
+    automatic,
+    /where org_id = \$\{input\.orgId\} and custom->>\$\{refKey\} = \$\{input\.sourceRef\}\s+limit 1/,
+  );
+  assert.doesNotMatch(
+    controlled,
+    /where org_id = \$\{input\.orgId\} and custom->>\$\{refKey\} = \$\{input\.sourceRef\}\s+limit 1/,
+  );
+});
+
+test("source-deletion HTTP resolution uses the path connection and the already-decoded ref", () => {
+  const route = readFileSync(
+    "web/app/api/platform/connections/[id]/source-deletions/[ref]/route.ts",
+    "utf8",
+  );
+  assert.match(route, /connectionId:\s*id/);
+  assert.match(route, /sourceRef:\s*ref/);
+  assert.doesNotMatch(route, /decodeURIComponent\(\s*ref\s*\)/);
 });

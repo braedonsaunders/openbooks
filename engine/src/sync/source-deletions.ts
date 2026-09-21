@@ -1,5 +1,5 @@
 import { and, eq, sql } from "drizzle-orm";
-import { db, schema, withOrg } from "../platform/db.ts";
+import { db, schema, withOrg, type SqlExecutor } from "../platform/db.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
 import {
@@ -32,6 +32,38 @@ function boundedVoidReason(value: string): string {
   return value.trim().slice(0, 500);
 }
 
+type ImportedSourceDocument = {
+  id: string;
+  kind: string;
+  status: string;
+  posted_entry_id: string | null;
+};
+
+async function lockImportedSourceDocument(
+  tx: SqlExecutor,
+  input: {
+    orgId: string;
+    connectionId: string;
+    refKey: string;
+    sourceRef: string;
+  },
+): Promise<ImportedSourceDocument | null> {
+  const documentResult = await tx.execute<ImportedSourceDocument>(sql`
+    select id, kind, status, posted_entry_id
+      from documents
+     where org_id = ${input.orgId}
+       and custom->>${input.refKey} = ${input.sourceRef}
+       and custom->>'connectionId' = ${input.connectionId}
+     limit 2
+     for update`);
+  if (documentResult.rows.length > 1) {
+    throw new SourceDeletionResolutionError(
+      "multiple documents imported by this connection share the source reference",
+    );
+  }
+  return documentResult.rows[0] ?? null;
+}
+
 /**
  * Mirror a source deletion automatically. The source is the system of
  * record, but OpenBooks retains institutional-grade evidence: touching
@@ -45,6 +77,7 @@ export async function mirrorSourceDeletion(input: {
   orgId: string;
   source: string;
   sourceRef: string;
+  connectionId: string;
 }): Promise<{ documentId: string | null; deleted: boolean }> {
   return withOrg(input.orgId, async () => {
     const refKey = SOURCE_REF_KEYS[input.source];
@@ -53,17 +86,12 @@ export async function mirrorSourceDeletion(input: {
         `source deletion mirroring is unsupported for ${input.source}`,
       );
     return db.transaction(async (tx) => {
-      const documentResult = (await tx.execute<{
-          id: string;
-          kind: string;
-          status: string;
-          posted_entry_id: string | null;
-        }>(sql`
-        select id, kind, status, posted_entry_id
-          from documents
-         where org_id = ${input.orgId} and custom->>${refKey} = ${input.sourceRef}
-         limit 1 for update`));
-      const document = documentResult.rows[0] ?? null;
+      const document = await lockImportedSourceDocument(tx, {
+        orgId: input.orgId,
+        connectionId: input.connectionId,
+        refKey,
+        sourceRef: input.sourceRef,
+      });
       if (!document) return { documentId: null, deleted: false };
       if (document.status === "voided") {
         return { documentId: document.id, deleted: false };
@@ -245,17 +273,12 @@ export async function resolveSourceDeletion(input: {
         `source deletion resolution is unsupported for ${source}`,
       );
 
-    const documentResult = (await tx.execute<{
-        id: string;
-        kind: string;
-        status: string;
-        posted_entry_id: string | null;
-      }>(sql`
-      select id, kind, status, posted_entry_id
-        from documents
-       where org_id = ${input.orgId} and custom->>${refKey} = ${input.sourceRef}
-       limit 1 for update`));
-    const document = documentResult.rows[0] ?? null;
+    const document = await lockImportedSourceDocument(tx, {
+      orgId: input.orgId,
+      connectionId: input.connectionId,
+      refKey,
+      sourceRef: input.sourceRef,
+    });
     let reversalEntryId: string | null = null;
 
     if (input.action === "void") {

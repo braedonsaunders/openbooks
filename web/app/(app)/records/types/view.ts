@@ -122,9 +122,9 @@ export async function loadRecordTypes(
     ${params.q ? sql` and (t.name ilike ${'%' + params.q + '%'} or t.plural_name ilike ${'%' + params.q + '%'} or t.key ilike ${'%' + params.q + '%'})` : sql``}`
 
   // A subsidiary-restricted type manager sees only the records their fence
-  // admits: the aggregate counts visible rows for scoped types and stays
-  // org-wide for field-less ones. Inside the subquery so the `records` sort
-  // orders by the same visible numbers the page prints.
+  // admits: types that declare subsidiary_id count in-fence rows; field-less
+  // types stay org-visible unless a row still carries a JSON subsidiary_id
+  // outside the fence (dropping the field must not unscope those rows).
   const fence = authz.allowedSubsidiaryIds
   const scopedTypeIds =
     fence === null
@@ -138,7 +138,13 @@ export async function loadRecordTypes(
   const countScope =
     fence === null || scopedTypeIds === null
       ? sql``
-      : sql`and (not (t.id = any(${`{${scopedTypeIds.join(',')}}`}::uuid[])) or cr.data ->> ${'subsidiary_id'} = any(${pgTextArrayLiteral([...fence])}::text[]))`
+      : sql`and (
+          cr.data ->> ${'subsidiary_id'} = any(${pgTextArrayLiteral([...fence])}::text[])
+          or (
+            not (t.id = any(${`{${scopedTypeIds.join(',')}}`}::uuid[]))
+            and cr.data ->> ${'subsidiary_id'} is null
+          )
+        )`
 
   const [types, counts, openType, roles] = await Promise.all([
     db.execute(sql`
@@ -244,6 +250,7 @@ function serializeType(t: RecordTypeRow) {
     showInNav: t.show_in_nav,
     allowedRoles: t.allowed_roles,
     sortOrder: t.sort_order,
+    updated_at: t.updated_at,
   }
 }
 

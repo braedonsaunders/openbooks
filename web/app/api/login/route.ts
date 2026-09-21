@@ -11,14 +11,12 @@ import {
 import {
   authRequestContext,
   publicLoginFailure,
-  useSecureCookies,
+  secureCookiesEnabled,
 } from "../../../lib/auth-policy";
 
 export const runtime = "nodejs";
 
-/** Wall-clock read for the failure-timing floor below (module scope: POST calls
- *  the `use`-prefixed env helper useSecureCookies, which the React compiler
- *  mistakes for a hook, so Date.now must not appear directly in its body). */
+/** Wall-clock read for the failure-timing floor below. */
 function nowMs(): number {
   return Date.now();
 }
@@ -69,7 +67,7 @@ export async function POST(req: Request) {
     response.cookies.set(LOGIN_CHALLENGE_COOKIE, result.challengeToken, {
       httpOnly: true,
       sameSite: "strict",
-      secure: useSecureCookies(),
+      secure: secureCookiesEnabled(),
       maxAge: 5 * 60,
       path: "/",
     });
@@ -81,11 +79,11 @@ export async function POST(req: Request) {
   res.cookies.set(SESSION_COOKIE, result.token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: useSecureCookies(),
+    secure: secureCookiesEnabled(),
     maxAge: SESSION_TTL_S,
     path: "/",
   });
-  res.cookies.set(LOGIN_CHALLENGE_COOKIE, "", { httpOnly: true, secure: useSecureCookies(), maxAge: 0, path: "/" });
+  res.cookies.set(LOGIN_CHALLENGE_COOKIE, "", { httpOnly: true, secure: secureCookiesEnabled(), maxAge: 0, path: "/" });
   res.headers.set("Cache-Control", "no-store");
   return res;
 }
@@ -99,7 +97,7 @@ export async function DELETE(req: Request) {
   await revokeSessionToken(rawToken ? decodeURIComponent(rawToken) : undefined);
   const res = NextResponse.json({ ok: true });
   for (const name of [SESSION_COOKIE, LOGIN_CHALLENGE_COOKIE, "ob_active_env"]) {
-    res.cookies.set(name, "", { httpOnly: true, secure: useSecureCookies(), maxAge: 0, path: "/" });
+    res.cookies.set(name, "", { httpOnly: true, secure: secureCookiesEnabled(), maxAge: 0, path: "/" });
   }
   res.headers.set("Cache-Control", "no-store");
   return res;

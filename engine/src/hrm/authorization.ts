@@ -151,9 +151,17 @@ async function requireHrmEmploymentAccess(
   employmentId: string,
   permission: HrmEmploymentPermission,
 ): Promise<TrustedEmploymentSubject> {
-  // actorHasPermission fails closed for unknown/inactive actors and enforces
-  // the live grant set — no parallel role system, no trusted booleans.
+  // actorHasPermission resolves platform super-admins through actorIdentity's
+  // home-org bypass. Do not require a local users row first: that treats an
+  // established cross-org super-admin as missing. Unknown and inactive
+  // principals still fail closed here.
   if (!(await actorHasPermission(exec, orgId, actorId, permission))) {
+    const identity = await actorIdentity(exec, orgId, actorId);
+    if (!identity?.isActive) {
+      throw new HrmAuthorizationError(
+        "Employment access refused: the identity behind this action is not established in this organization.",
+      );
+    }
     throw new HrmAuthorizationError(
       `Employment access requires the ${permission} permission — ask an administrator to grant it in /admin/roles.`,
     );

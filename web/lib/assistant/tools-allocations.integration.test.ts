@@ -35,8 +35,9 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 
 // Assistant allocation tools against the real engine: every tool calls the
 // same service the Setup screens and API routes call, under the same gates
-// (allocations feature + allocations.read, actor subsidiary scope), and the
-// preview explains without posting anything to the ledger.
+// (allocations feature + allocations.read for reads, allocations.run for
+// preview persist, actor subsidiary scope), and the preview explains without
+// posting anything to the ledger.
 
 function reader(orgId: string, userId: string, permissions: string[], allowedSubsidiaryIds: Set<string> | null): Authz {
   const user: SessionUser = {
@@ -54,7 +55,7 @@ function reader(orgId: string, userId: string, permissions: string[], allowedSub
   return { user, permissions: new Set(permissions), allowedSubsidiaryIds };
 }
 
-const FULL = ['assistant.use', 'allocations.read', 'allocations.manage'];
+const FULL = ['assistant.use', 'assistant.write', 'allocations.read', 'allocations.manage', 'allocations.run'];
 
 async function enableAllocations(orgId: string): Promise<void> {
   await db.execute(sql`

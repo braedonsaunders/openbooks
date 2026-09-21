@@ -5,7 +5,7 @@ import { Eye } from 'lucide-react'
 import { getTranslations } from 'next-intl/server'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { Badge, EmptyState, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
+import { Badge, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { getRecordType, listColumnMeta, recordTypeForFeatureState } from '@openbooks/customization'
 import { isFeatureEnabled } from '../lib/features'
 import { SearchInput } from './search-input'
@@ -17,7 +17,7 @@ import { ViewsMenu } from './views-menu'
 import { buildListDrawerHref, parseListParams, pickString } from '../lib/list-params'
 import { allowedSubsidiaryIds } from '../lib/subsidiaries'
 import { loadFieldDefs } from '../lib/custom-fields'
-import { resolveListView } from '../lib/customization/resolve'
+import { AmbiguousListViewDefaultError, resolveListView } from '../lib/customization/resolve'
 import { displayListViewName } from '../lib/customization/display'
 import { columnDescriptors, type ListColDesc } from '../lib/customization/list-query'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
@@ -147,13 +147,28 @@ export async function EntityListView({
     : []
   const showInListDefs = headerDefs.filter((d) => d.config.showInList)
 
-  const resolvedView = await resolveListView({
-    orgId,
-    userId,
-    recordType,
-    viewId: pickString(sp.view),
-    showInListDefs,
-  })
+  let resolvedView
+  try {
+    resolvedView = await resolveListView({
+      orgId,
+      userId,
+      recordType,
+      viewId: pickString(sp.view),
+      showInListDefs,
+    })
+  } catch (error) {
+    // Next.js error.tsx sanitizes thrown messages to a digest. Catch here so
+    // the operator sees the named remedy, the way HRM leave renders refusals.
+    if (error instanceof AmbiguousListViewDefaultError) {
+      return (
+        <>
+          <PageHeader title={tCustom('views.defaultName')} description={error.message} />
+          <EmptyState description={error.message} />
+        </>
+      )
+    }
+    throw error
+  }
   const view = resolvedView.view
   const viewName = displayListViewName(resolvedView.row?.name, tCustom('views.defaultName'))
 

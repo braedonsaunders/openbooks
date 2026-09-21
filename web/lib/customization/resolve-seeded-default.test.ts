@@ -26,21 +26,27 @@ type Row = Record<string, unknown>
   calls: 0,
   viewRows: [] as Row[],
   prefViewId: null as string | null,
+  // A present row with view_id NULL is "use system default" (schema:
+  // null viewId ⇒ skip personal, then org/system). That is not the same as no preference row.
+  prefCleared: false,
   async execute() {
     const state = (globalThis as Record<string, unknown>).__resolveSeedDb as {
       calls: number
       viewRows: Row[]
       prefViewId: string | null
+      prefCleared: boolean
     }
     state.calls += 1
     // First query lists the views; the second (when no explicit view) reads
     // the user's default preference.
     if (state.calls === 1) return { rows: state.viewRows }
+    if (state.prefCleared) return { rows: [{ viewId: null }] }
     return { rows: state.prefViewId ? [{ viewId: state.prefViewId }] : [] }
   },
 }
 
 const { resolveListView } = await import('./resolve.ts')
+const { AmbiguousListViewDefaultError } = await import('./list-view-default.ts')
 const { defaultListView, stripSeededDefaultMark } = await import('@openbooks/customization')
 
 const AT = new Date('2025-01-01T00:00:00Z')
@@ -64,15 +70,20 @@ function seedRow(overrides: Row = {}): Row {
   }
 }
 
-async function resolve(overrides: { viewRows: Row[]; prefViewId?: string | null; viewId?: string | null }, org: string) {
+async function resolve(
+  overrides: { viewRows: Row[]; prefViewId?: string | null; prefCleared?: boolean; viewId?: string | null },
+  org: string,
+) {
   const state = (globalThis as Record<string, unknown>).__resolveSeedDb as {
     calls: number
     viewRows: Row[]
     prefViewId: string | null
+    prefCleared: boolean
   }
   state.calls = 0
   state.viewRows = overrides.viewRows
   state.prefViewId = overrides.prefViewId ?? null
+  state.prefCleared = overrides.prefCleared === true
   return resolveListView({
     orgId: org,
     userId: 'user-1',
@@ -180,6 +191,217 @@ test('explicit pick of an untouched seed resolves live as explicit', async () =>
   assert.equal(resolved.source, 'explicit')
   assert.deepEqual(resolved.view.sort, { column: 'display_name', dir: 'asc' })
   assert.equal(resolved.row?.id, seed.id)
+})
+
+// A designer "default for its scope" on a personal view writes isDefault on
+// the user-scope row. That flag is the personal default: when no explicit
+// preference is set it must win over the org default, or the save stored a
+// flag no resolve can observe.
+test('a personal isDefault is the user default when no preference is set', async () => {
+  const personal = {
+    id: '22222222-2222-4222-8222-222222222222',
+    name: 'Mine',
+    recordType: 'employee',
+    scope: 'user',
+    ownerId: 'user-1',
+    isDefault: true,
+    isActive: true,
+    config: { ...seedShape, perPage: 50, sort: { column: 'short_code', dir: 'desc' } },
+    createdAt: AT,
+    updatedAt: AT,
+  }
+  const resolved = await resolve({ viewRows: [seedRow(), personal] }, 'org-case-9')
+  assert.equal(resolved.source, 'user')
+  assert.equal(resolved.row?.id, personal.id)
+  assert.equal(resolved.view.perPage, 50)
+  assert.deepEqual(resolved.view.sort, { column: 'short_code', dir: 'desc' })
+})
+
+test('a unique personal isDefault applies when the org view is not default', async () => {
+  const personal = {
+    id: '22222222-2222-4222-8222-222222222222',
+    name: 'Mine',
+    recordType: 'employee',
+    scope: 'user',
+    ownerId: 'user-1',
+    isDefault: true,
+    isActive: true,
+    config: { ...seedShape, perPage: 50 },
+    createdAt: AT,
+    updatedAt: AT,
+  }
+  const resolved = await resolve({ viewRows: [seedRow({ isDefault: false }), personal] }, 'org-case-13b')
+  assert.equal(resolved.source, 'user')
+  assert.equal(resolved.row?.id, personal.id)
+  assert.equal(resolved.view.perPage, 50)
+})
+
+// The views-menu preference is the more specific "I chose this view" write
+// and still outranks a personal isDefault (it can point at an org view).
+test('an explicit list preference outranks a personal isDefault', async () => {
+  const personal = {
+    id: '22222222-2222-4222-8222-222222222222',
+    name: 'Mine',
+    recordType: 'employee',
+    scope: 'user',
+    ownerId: 'user-1',
+    isDefault: true,
+    isActive: true,
+    config: { ...seedShape, perPage: 50 },
+    createdAt: AT,
+    updatedAt: AT,
+  }
+  const orgDefault = seedRow()
+  const resolved = await resolve(
+    { viewRows: [orgDefault, personal], prefViewId: orgDefault.id as string },
+    'org-case-10',
+  )
+  assert.equal(resolved.source, 'org')
+  assert.equal(resolved.row?.id, orgDefault.id)
+})
+
+// A personal default with no org default must still apply — otherwise the
+// only observable read is the system registry, and the stored flag is dead.
+test('a personal isDefault is applied when no org default exists', async () => {
+  const personal = {
+    id: '44444444-4444-4444-8444-444444444444',
+    name: 'Mine only',
+    recordType: 'employee',
+    scope: 'user',
+    ownerId: 'user-1',
+    isDefault: true,
+    isActive: true,
+    config: { ...seedShape, perPage: 75 },
+    createdAt: AT,
+    updatedAt: AT,
+  }
+  const resolved = await resolve({ viewRows: [personal] }, 'org-case-11')
+  assert.equal(resolved.source, 'user')
+  assert.equal(resolved.row?.id, personal.id)
+  assert.equal(resolved.view.perPage, 75)
+})
+
+// A personal view that is not the scope default must not steal the org
+// default — otherwise any saved personal view would silently become the list.
+test('a non-default personal view does not outrank the org default', async () => {
+  const personal = {
+    id: '55555555-5555-4555-8555-555555555555',
+    name: 'Just mine',
+    recordType: 'employee',
+    scope: 'user',
+    ownerId: 'user-1',
+    isDefault: false,
+    isActive: true,
+    config: { ...seedShape, perPage: 50 },
+    createdAt: AT,
+    updatedAt: AT,
+  }
+  const orgDefault = seedRow()
+  const resolved = await resolve({ viewRows: [orgDefault, personal] }, 'org-case-12')
+  assert.equal(resolved.source, 'org')
+  assert.equal(resolved.row?.id, orgDefault.id)
+})
+
+// An explicit ?view= still wins over a personal isDefault.
+test('an explicit view outranks a personal isDefault', async () => {
+  const personal = {
+    id: '22222222-2222-4222-8222-222222222222',
+    name: 'Mine',
+    recordType: 'employee',
+    scope: 'user',
+    ownerId: 'user-1',
+    isDefault: true,
+    isActive: true,
+    config: { ...seedShape, perPage: 50 },
+    createdAt: AT,
+    updatedAt: AT,
+  }
+  const orgDefault = seedRow()
+  const resolved = await resolve(
+    { viewRows: [orgDefault, personal], viewId: orgDefault.id as string },
+    'org-case-13',
+  )
+  assert.equal(resolved.source, 'explicit')
+  assert.equal(resolved.row?.id, orgDefault.id)
+})
+
+// Views-menu "use system default" writes a preference row with view_id NULL.
+// That is an explicit refusal of every user default, including a personal
+// isDefault — otherwise the clear cannot be observed.
+test('a cleared preference skips the personal isDefault and uses the org default', async () => {
+  const personal = {
+    id: '22222222-2222-4222-8222-222222222222',
+    name: 'Mine',
+    recordType: 'employee',
+    scope: 'user',
+    ownerId: 'user-1',
+    isDefault: true,
+    isActive: true,
+    config: { ...seedShape, perPage: 50 },
+    createdAt: AT,
+    updatedAt: AT,
+  }
+  const orgDefault = seedRow()
+  const resolved = await resolve(
+    { viewRows: [orgDefault, personal], prefCleared: true },
+    'org-case-14',
+  )
+  assert.equal(resolved.source, 'org')
+  assert.equal(resolved.row?.id, orgDefault.id)
+})
+
+test('a cleared preference with no org default uses the system default, not a personal isDefault', async () => {
+  const personal = {
+    id: '66666666-6666-4666-8666-666666666666',
+    name: 'Mine only',
+    recordType: 'employee',
+    scope: 'user',
+    ownerId: 'user-1',
+    isDefault: true,
+    isActive: true,
+    config: { ...seedShape, perPage: 75 },
+    createdAt: AT,
+    updatedAt: AT,
+  }
+  const resolved = await resolve({ viewRows: [personal], prefCleared: true }, 'org-case-15')
+  assert.equal(resolved.source, 'system')
+  assert.equal(resolved.row, null)
+})
+
+// Two personal isDefaults are overlapping configuration. Falling through to
+// the org default (or picking either personal view) would paper over flags
+// the write already refuses with 409. Resolve must raise, not guess.
+test('two personal isDefaults are refused rather than resolved to a view', async () => {
+  const first = {
+    id: '77777777-7777-4777-8777-777777777777',
+    name: 'Alpha',
+    recordType: 'employee',
+    scope: 'user',
+    ownerId: 'user-1',
+    isDefault: true,
+    isActive: true,
+    config: { ...seedShape, perPage: 10 },
+    createdAt: AT,
+    updatedAt: AT,
+  }
+  const second = {
+    ...first,
+    id: '88888888-8888-4888-8888-888888888888',
+    name: 'Beta',
+    config: { ...seedShape, perPage: 20 },
+  }
+  const orgDefault = seedRow()
+  await assert.rejects(
+    () => resolve({ viewRows: [orgDefault, first, second] }, 'org-case-16'),
+    (error: unknown) => {
+      assert.ok(error instanceof AmbiguousListViewDefaultError)
+      assert.equal(
+        error.message,
+        'More than one default view is stored for this scope. Clear the extra default and save again.',
+      )
+      return true
+    },
+  )
 })
 
 // The full PATCH round trip: a seeded default edited only in sort direction

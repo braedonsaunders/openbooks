@@ -23,7 +23,9 @@ export async function GET(
   return NextResponse.json({ app })
 }
 
-/** PATCH — enable/disable an App. */
+/** PATCH — enable/disable an App.
+ *  {ok:true} only after setAppStatus returns this request's UPDATE row
+ *  count and that count is greater than zero. */
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ key: string }> },
@@ -41,7 +43,13 @@ export async function PATCH(
     )
   }
   try {
-    await setAppStatus(gate.user.orgId, gate.user.id, key, body.status)
+    const written = await setAppStatus(gate.user.orgId, gate.user.id, key, body.status)
+    if (!written || written.affectedRows < 1) {
+      throw new AppError(
+        `App "${key}" status was not changed to ${body.status}. Confirm the app is still visible in this organization and retry.`,
+        409,
+      )
+    }
   } catch (error) {
     if (error instanceof AppError)
       return NextResponse.json(
@@ -53,7 +61,10 @@ export async function PATCH(
   return NextResponse.json({ ok: true })
 }
 
-/** DELETE — uninstall an App (with an append-only evidence snapshot). */
+/** DELETE — uninstall an App (with an append-only evidence snapshot).
+ *  {ok:true} only after deleteApp returns this request's UPDATE/DELETE
+ *  row count and that count is greater than zero. A history-preserving
+ *  uninstall that disables the row is that successful write. */
 export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ key: string }> },
@@ -62,7 +73,13 @@ export async function DELETE(
   if (gate instanceof NextResponse) return gate
   const { key } = await params
   try {
-    await deleteApp(gate.user.orgId, gate.user.id, key)
+    const written = await deleteApp(gate.user.orgId, gate.user.id, key)
+    if (!written || written.affectedRows < 1) {
+      throw new AppError(
+        `App "${key}" was not uninstalled. Confirm the app is still visible in this organization and retry.`,
+        409,
+      )
+    }
   } catch (error) {
     if (error instanceof AppError)
       return NextResponse.json(

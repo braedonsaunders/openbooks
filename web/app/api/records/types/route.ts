@@ -12,9 +12,9 @@ export async function GET() {
   const gate = await guardPermission('records.manage_types')
   if (gate instanceof NextResponse) return gate
   // A subsidiary-restricted type manager sees only the records their fence
-  // admits: scoped types count visible rows, field-less types stay
-  // org-visible. The predicate lives inside the aggregate so the (unsorted
-  // here) counts and any consumer stay consistent.
+  // admits: types that declare subsidiary_id count in-fence rows; field-less
+  // types stay org-visible unless a row still carries a JSON subsidiary_id
+  // outside the fence (dropping the field must not unscope those rows).
   const fence = gate.allowedSubsidiaryIds
   const scopedTypeIds =
     fence === null
@@ -28,7 +28,13 @@ export async function GET() {
   const countScope =
     fence === null || scopedTypeIds === null
       ? sql``
-      : sql`and (not (t.id = any(${`{${scopedTypeIds.join(',')}}`}::uuid[])) or cr.data ->> ${'subsidiary_id'} = any(${pgTextArrayLiteral([...fence])}::text[]))`
+      : sql`and (
+          cr.data ->> ${'subsidiary_id'} = any(${pgTextArrayLiteral([...fence])}::text[])
+          or (
+            not (t.id = any(${`{${scopedTypeIds.join(',')}}`}::uuid[]))
+            and cr.data ->> ${'subsidiary_id'} is null
+          )
+        )`
   const r = ((await db.execute(sql`
     select t.id, t.key, t.name, t.plural_name, t.icon_key, t.description, t.fields,
            t.status, t.show_in_nav, t.allowed_roles, t.sort_order, t.updated_at,

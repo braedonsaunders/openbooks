@@ -53,6 +53,30 @@ const USER_REFERENCE_COLUMNS: Readonly<Record<string, string>> = {
   saved_reports: "created_by_user_id",
 };
 
+/**
+ * resolveFormLayout and resolveListView both select only is_active rows
+ * before picking is_default. Promoting an inactive default is a write no
+ * resolve can observe — refuse it at apply (and at capture), and name the
+ * remedies the designer already exposes: activate, or unset default first.
+ */
+export function refuseInactivePromotedDefault(
+  table: string,
+  payload: Record<string, unknown>,
+  existing: Record<string, unknown> | null = null,
+): void {
+  const kind = table === "form_layouts" ? "form" : table === "list_views" ? "view" : null;
+  if (!kind) return;
+  const flag = (row: Record<string, unknown> | null, field: string, fallback: boolean): boolean =>
+    row && Object.hasOwn(row, field) ? row[field] === true : fallback;
+  const isDefault = flag(payload, "is_default", existing?.is_default === true);
+  const isActive = flag(payload, "is_active", existing == null ? true : existing.is_active === true);
+  if (isDefault && !isActive) {
+    throw new Error(
+      `An inactive ${kind} cannot be the default — activate it, or unset default before deactivating; recapture the change set`,
+    );
+  }
+}
+
 function mappedUserReference(value: unknown, ids: ReadonlyMap<string, string>, label: string): string | null {
   if (value === null) return null;
   const mapped = typeof value === "string" ? ids.get(value.toLowerCase()) : undefined;
@@ -117,9 +141,11 @@ async function assertActiveActor(actorId: string, orgId: string): Promise<void> 
   if (!actor.rows[0]) throw new Error(`actor ${actorId} is not an active user of the production organization`);
 }
 
-/** Freeze the applying actor's authority before any item can change a role.
- * User administration takes the user write lock; role edits take the role write
- * lock. Holding both here orders revocations with the whole promotion. */
+/** Freeze the lifecycle actor's sandbox-management authority. Review and
+ * approval consult this before any status write; apply also uses the returned
+ * set to gate per-table writes and role grants. User administration takes the
+ * user write lock; role edits take the role write lock. Holding both here
+ * orders revocations with the whole promotion. */
 async function promotionAuthority(actorId: string, orgId: string): Promise<Set<string>> {
   const actor = (await db.execute<{ is_super_admin: boolean; is_active: boolean }>(sql`
     select is_super_admin,is_active from users where id=${actorId} and org_id=${orgId} for share`)).rows[0];
@@ -270,6 +296,7 @@ export async function buildChangeSet(
         if (!repairsProductionReference && contentSig(t, d.sbx_row) === contentSig(t, d.prod_row)) continue; // unchanged
         const targetId = d.prod_id ?? randomUUID();
         const payload = { ...d.sbx_row, id: targetId, org_id: prod, created_by: null, updated_by: null };
+        refuseInactivePromotedDefault(t, payload, null);
         await db.insert(schema.changeSetItems).values({
           orgId: prod,
           changeSetId: cs.id,
@@ -311,7 +338,7 @@ export async function buildChangeSet(
   });
 }
 
-/** Mark a complete capture as reviewed by an independent production actor. */
+/** Mark a complete capture as reviewed by an independent production actor who holds admin.sandboxes.manage. */
 export async function reviewChangeSet(changeSetId: string, reviewerId?: string | null): Promise<void> {
   const id = assertUuid(changeSetId);
   const actor = requireActor(reviewerId, "change-set review");
@@ -323,6 +350,7 @@ export async function reviewChangeSet(changeSetId: string, reviewerId?: string |
     if (!c) throw new Error(`change set not found: ${id}`);
     const prod = assertUuid(c.org_id);
     await assertActiveActor(actor, prod);
+    await promotionAuthority(actor, prod);
     if (c.status !== "draft") throw new Error(`change set is ${c.status}, not draft`);
     if (!c.capture_complete) throw new Error("change set capture is incomplete");
     await assertDistinctActors(actor, [["creator", c.created_by]]);
@@ -339,7 +367,7 @@ export async function reviewChangeSet(changeSetId: string, reviewerId?: string |
   });
 }
 
-/** Approve a reviewed capture by a second independent production actor. */
+/** Approve a reviewed capture by a second independent production actor who holds admin.sandboxes.manage. */
 export async function approveChangeSet(changeSetId: string, approverId?: string | null): Promise<void> {
   const id = assertUuid(changeSetId);
   const actor = requireActor(approverId, "change-set approval");
@@ -351,6 +379,7 @@ export async function approveChangeSet(changeSetId: string, approverId?: string 
     if (!c) throw new Error(`change set not found: ${id}`);
     const prod = assertUuid(c.org_id);
     await assertActiveActor(actor, prod);
+    await promotionAuthority(actor, prod);
     if (c.status !== "reviewed") throw new Error(`change set is ${c.status}, not reviewed`);
     if (!c.capture_complete) throw new Error("change set capture is incomplete");
     await assertDistinctActors(actor, [["creator", c.created_by], ["reviewer", c.reviewed_by]]);
@@ -522,6 +551,7 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
         if (Object.keys(payload).some((key) => !known.includes(key))) {
           throw new Error(`promotion payload contains obsolete or unknown columns for ${t}; recapture the change set`);
         }
+        refuseInactivePromotedDefault(t, payload, before);
         const fields = columns.filter((column) => !STRUCTURAL.has(column) && Object.hasOwn(payload, column));
         const incoming = sql`jsonb_populate_record(null::${table}, ${JSON.stringify(payload)}::jsonb) incoming`;
         if (it.op === "update") {

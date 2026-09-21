@@ -5,6 +5,7 @@ import { join, relative } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { NextResponse } from "next/server";
+import { resolveEffectivePermissions } from "./permissions";
 
 const apiRoot = fileURLToPath(new URL("../app/api/", import.meta.url));
 
@@ -69,6 +70,10 @@ const mockSources = new Map<string, string>([
           });
         },
       };
+      export function ambientTenantOrgId() { return null }
+      export function registerRequestOrgResolver() {}
+      export async function withBypass(work) { return work() }
+      export async function withBypassContext(work) { return work() }
     `,
   ],
 ]);
@@ -102,6 +107,74 @@ const { GET, POST } = (await import(routeUrl)) as typeof import(
   "../app/api/dunning/route.ts"
 );
 hooks.deregister();
+
+// The route-contract cases above stub guardPermission. Those stay green if
+// can(), subsidiaryScopeAllows, or guardSubsidiaryScope starts with
+// `return true` (or the HTTP twin, `return null`). Load the real module
+// after the route mock is gone so the cases below call the functions.
+const behavioralStateKey = Symbol.for("openbooks.authz-behavioral-test");
+interface BehavioralState {
+  user: import("./auth").SessionUser | null;
+}
+const behavioralState: BehavioralState = { user: null };
+;(globalThis as typeof globalThis & Record<symbol, unknown>)[behavioralStateKey] = behavioralState;
+
+const behavioralHooks = registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === "server-only") {
+      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
+    }
+    if (specifier === "./auth" && context.parentURL?.includes("lib/authz.ts")) {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url: "data:text/javascript," + encodeURIComponent(`
+          const state = globalThis[Symbol.for("openbooks.authz-behavioral-test")];
+          export async function currentUser() { return state.user; }
+        `),
+      };
+    }
+    return nextResolve(specifier, context);
+  },
+});
+
+const behavioralUrl = './authz.ts?behavioral'
+const {
+  can,
+  subsidiaryScopeAllows,
+  guardSubsidiaryScope,
+  subsidiariesInScope,
+  getAuthz,
+  guardPermission,
+  assertCan,
+  ForbiddenError,
+} = (await import(behavioralUrl)) as typeof import('./authz.ts');
+behavioralHooks.deregister();
+
+type Authz = import("./authz.ts").Authz;
+type SessionUser = import("./auth").SessionUser;
+
+function sessionUser(): SessionUser {
+  return {
+    id: "user-1",
+    email: "authz-probe@example.test",
+    name: "Authz Probe",
+    roles: [],
+    orgId: "org-1",
+    envKind: "production",
+    productionOrgId: "org-1",
+    isSuperAdmin: false,
+    homeUserId: "user-1",
+    homeOrgId: "org-1",
+  };
+}
+
+function authzWith(
+  permissions: Iterable<string>,
+  allowedSubsidiaryIds: Set<string> | null = null,
+): Authz {
+  return { user: sessionUser(), permissions: new Set(permissions), allowedSubsidiaryIds };
+}
 
 function reset(mode: GateMode): void {
   routeState.gate = mode === "unauthorized"
@@ -176,4 +249,105 @@ test("an allowed GET continues through the handler", async () => {
   assert.deepEqual(await response.json(), { policies: [] });
   assert.deepEqual(routeState.gateCalls, ["documents.manage"]);
   assert.equal(routeState.dbCalls, 2);
+});
+
+async function assertNotFound(response: Response): Promise<void> {
+  assert.equal(response.status, 404);
+  assert.match(response.headers.get("content-type") ?? "", /^application\/json\b/);
+  assert.deepEqual(await response.json(), { error: "not found" });
+}
+
+// ---------------------------------------------------------------------------
+// Real guards. A function that starts with `return true` (or the HTTP allow
+// `return null`) fails every deny case below. Source greps of the
+// implementation would still pass after that early return.
+// ---------------------------------------------------------------------------
+
+test("can() is false for a missing grant", () => {
+  assert.equal(can(authzWith([]), "ap.post"), false);
+  assert.equal(can(authzWith(["ap.read"]), "ap.post"), false);
+  assert.equal(can(authzWith(["ar.*"]), "ap.post"), false);
+});
+
+test("can() is false when a deny override wins", () => {
+  const denied = authzWith(resolveEffectivePermissions({
+    rolePermissionSets: [["ap.post", "ap.read"]],
+    overrides: [{ permission: "ap.post", effect: "deny" }],
+  }));
+  assert.equal(can(denied, "ap.post"), false);
+  assert.equal(can(denied, "ap.read"), true);
+
+  const runtimeDeny = authzWith(["*", "!ap.post"]);
+  assert.equal(can(runtimeDeny, "ap.post"), false);
+  assert.equal(can(runtimeDeny, "ap.read"), true);
+});
+
+test("can() honors exact and wildcard grants", () => {
+  assert.equal(can(authzWith(["ap.post"]), "ap.post"), true);
+  assert.equal(can(authzWith(["ap.*"]), "ap.post"), true);
+  assert.equal(can(authzWith(["ap.*"]), "ar.post"), false);
+  assert.equal(can(authzWith(["*"]), "admin.users.manage"), true);
+});
+
+test("assertCan throws ForbiddenError only when can() is false", () => {
+  assert.doesNotThrow(() => assertCan(authzWith(["ap.post"]), "ap.post"));
+  assert.throws(() => assertCan(authzWith(["ap.read"]), "ap.post"), (err: unknown) => {
+    assert.ok(err instanceof ForbiddenError);
+    assert.equal(err.permission, "ap.post");
+    assert.equal(err.status, 403);
+    return true;
+  });
+});
+
+test("subsidiaryScopeAllows fails closed on a restricted unknown or null subsidiary", () => {
+  const scope = new Set(["sub-a"]);
+  assert.equal(subsidiaryScopeAllows(scope, "sub-b"), false);
+  assert.equal(subsidiaryScopeAllows(scope, null), false);
+  assert.equal(subsidiaryScopeAllows(scope, undefined), false);
+  assert.equal(subsidiaryScopeAllows(scope, ""), false);
+  assert.equal(subsidiaryScopeAllows(new Set(), "sub-a"), false);
+});
+
+test("subsidiaryScopeAllows admits unrestricted callers and explicit allowlist members", () => {
+  assert.equal(subsidiaryScopeAllows(null, "sub-b"), true);
+  assert.equal(subsidiaryScopeAllows(null, null), true);
+  assert.equal(subsidiaryScopeAllows(new Set(["sub-a"]), "sub-a"), true);
+  assert.equal(subsidiaryScopeAllows(new Set(["sub-a"]), null, { orgWideNull: true }), true);
+  assert.equal(subsidiaryScopeAllows(new Set(["sub-a"]), "sub-b", { orgWideNull: true }), false);
+});
+
+test("guardSubsidiaryScope returns 404 for an out-of-scope record", async () => {
+  const restricted = authzWith(["documents.manage"], new Set(["sub-a"]));
+  const denied = guardSubsidiaryScope(restricted, "sub-b");
+  assert.ok(denied, "out-of-scope must not return the allow (null)");
+  await assertNotFound(denied);
+  await assertNotFound(guardSubsidiaryScope(restricted, null)!);
+  await assertNotFound(guardSubsidiaryScope(restricted, undefined)!);
+  await assertNotFound(guardSubsidiaryScope(restricted, "")!);
+});
+
+test("guardSubsidiaryScope returns null only when the record is in scope", () => {
+  const restricted = authzWith(["documents.manage"], new Set(["sub-a"]));
+  assert.equal(guardSubsidiaryScope(restricted, "sub-a"), null);
+  assert.equal(guardSubsidiaryScope(restricted, null, { orgWideNull: true }), null);
+  assert.equal(guardSubsidiaryScope(authzWith(["documents.manage"], null), "sub-b"), null);
+});
+
+test("subsidiariesInScope refuses assigning a record the caller cannot see", () => {
+  const restricted = authzWith(["documents.manage"], new Set(["sub-a"]));
+  assert.equal(subsidiariesInScope(restricted, ["sub-a"]), true);
+  assert.equal(subsidiariesInScope(restricted, ["sub-a", "sub-b"]), false);
+  assert.equal(subsidiariesInScope(restricted, [null]), false);
+  assert.equal(subsidiariesInScope(restricted, [undefined]), false);
+  assert.equal(subsidiariesInScope(restricted, [""]), false);
+  assert.equal(subsidiariesInScope(authzWith(["documents.manage"], null), ["sub-b"]), true);
+});
+
+test("getAuthz and guardPermission fail closed when there is no signed-in user", async () => {
+  behavioralState.user = null;
+  assert.equal(await getAuthz(), null);
+
+  const denied = await guardPermission("ap.post");
+  assert.ok(denied instanceof NextResponse, "missing user must be a JSON response, not an Authz allow");
+  await assertJsonError(denied, 401, "unauthorized");
 });

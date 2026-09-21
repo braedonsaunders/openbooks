@@ -2,7 +2,7 @@ import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
-import { dateOrFalse, uuidOrFalse } from "../list-query";
+import { dateOrFalse, pushCustomFieldFilter, uuidOrFalse } from "../list-query";
 
 /* ------------------------------------------------------------------ */
 /* Inventory                                                           */
@@ -38,6 +38,7 @@ function inventoryRefFilter(clause: FilterClause, itemColumn: SQL, locationColum
 export function inventoryOnhandWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: string): SQL {
   const parts: SQL[] = [sql`oh.org_id = ${orgId}`]
   for (const filter of view.filters) {
+    if (pushCustomFieldFilter(parts, filter, "it")) continue
     const predicate = inventoryRefFilter(filter, sql`oh.item_id`, sql`oh.stock_location_id`)
     if (predicate) parts.push(sql`and ${predicate}`)
   }
@@ -78,6 +79,7 @@ export const INVENTORY_MOVEMENT_SORTS: Record<string, SQL> = {
 export function inventoryMovementWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: string): SQL {
   const parts: SQL[] = [sql`m.org_id = ${orgId}`]
   for (const filter of view.filters) {
+    if (pushCustomFieldFilter(parts, filter, "it")) continue
     const ref = inventoryRefFilter(filter, sql`m.item_id`, sql`m.stock_location_id`)
     if (ref) {
       parts.push(sql`and ${ref}`)

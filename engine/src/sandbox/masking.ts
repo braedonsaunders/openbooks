@@ -65,6 +65,15 @@ export function maskExpr(
       // Deterministic ±50% jitter, preserves sign and numeric type.
       return `(case when ${q} is null then null else round(${q} * (0.5 + (abs(hashtext(${idExpr}::text)) % 1000) / 1000.0), 4) end)`;
     case "null_out":
+      // information_return_filings_finalized requires payer_snapshot <> '{}'
+      // on finalized/filed rows. Emptying the object would refuse the clone
+      // INSERT and leave production tax ids in the sandbox if the operator
+      // retried unmasked. A tombstone removes the identifiers and still
+      // satisfies the check. A new named transform would also need the
+      // masking_policies enum in schema/src/sandboxes.ts.
+      if (col === "payer_snapshot" && (column?.udtName === "jsonb" || column?.udtName === "json")) {
+        return `'{"redacted":true}'::${column.udtName}`;
+      }
       return removed;
     case "reseal_secret":
       // Can't re-encrypt in SQL; null = "unconfigured", the safe sandbox state.
@@ -102,9 +111,12 @@ export async function loadMaskingPolicies(
  * exist in the schema are skipped by the clone generator, so a bad guess is
  * harmless. Beyond contact PII this covers the identifiers a masked sandbox
  * must never carry: bank routing + last-four, taxpayer identification (TIN
- * ciphertext, last four, type) on vendor and information-return rows, and the
- * party / legal-entity tax registrations. The org row's own tax ids are not
- * cloned at all; createSandbox/refreshSandbox blank them for masked sandboxes.
+ * ciphertext, last four, type) on vendor and information-return rows, employee
+ * SIN ciphertext and last-three, the frozen information-return recipient
+ * snapshot (name/TIN/address at compute time), the frozen payer snapshot
+ * (org/subsidiary tax registrations at finalize time), and the party /
+ * legal-entity tax registrations. The org row's own tax ids are not cloned
+ * at all; createSandbox/refreshSandbox blank them for masked sandboxes.
  *
  * User rows remain present so the production login can act as its deterministic
  * sandbox counterpart, but their contact identity and password credential are
@@ -134,8 +146,12 @@ const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "vendor_roles", columnName: "tin_encrypted", transform: "reseal_secret" },
   { tableName: "vendor_roles", columnName: "tin_last4", transform: "null_out" },
   { tableName: "vendor_roles", columnName: "tin_type", transform: "null_out" },
+  { tableName: "employee_payroll_profiles", columnName: "sin_encrypted", transform: "reseal_secret" },
+  { tableName: "employee_payroll_profiles", columnName: "sin_last3", transform: "null_out" },
   { tableName: "information_return_recipients", columnName: "tin_last4", transform: "null_out" },
   { tableName: "information_return_recipients", columnName: "tin_type", transform: "null_out" },
+  { tableName: "information_return_recipients", columnName: "recipient_snapshot", transform: "null_out" },
+  { tableName: "information_return_filings", columnName: "payer_snapshot", transform: "null_out" },
   { tableName: "subsidiaries", columnName: "tax_ids", transform: "null_out" },
   { tableName: "addresses", columnName: "line1", transform: "redact" },
   { tableName: "addresses", columnName: "line2", transform: "redact" },

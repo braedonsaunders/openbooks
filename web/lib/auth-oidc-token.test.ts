@@ -18,7 +18,7 @@ registerHooks({
   },
 });
 
-const { beginOidcAuthorization, completeOidcAuthorization } = await import("./auth-oidc");
+const { beginOidcAuthorization, completeOidcAuthorization, oidcEnabled } = await import("./auth-oidc");
 
 // auth-oidc reads its config live from process.env (never the engine db.ts
 // module-evaluation snapshot); the fixed test command supplies no OIDC
@@ -50,6 +50,39 @@ function token(claimOverrides: Record<string, unknown> = {}) {
     keys: [{ ...publicKey.export({ format: "jwk" }), kid: "test-key", alg: "RS256" }],
   };
 }
+
+test("OIDC refuses an HTTP app URL when NODE_ENV is unset or misspelled", () => {
+  const configured = {
+    OPENBOOKS_OIDC_ISSUER: "https://id.example.test",
+    OPENBOOKS_OIDC_CLIENT_ID: "openbooks-test",
+    OPENBOOKS_APP_URL: "http://books.example.test",
+  };
+  assert.throws(() => oidcEnabled(configured), /HTTPS/);
+  assert.throws(() => oidcEnabled({ ...configured, NODE_ENV: "" }), /HTTPS/);
+  assert.throws(() => oidcEnabled({ ...configured, NODE_ENV: "prodction" }), /HTTPS/);
+  assert.throws(() => oidcEnabled({ ...configured, NODE_ENV: "production" }), /HTTPS/);
+  assert.equal(oidcEnabled({
+    ...configured,
+    NODE_ENV: "development",
+    OPENBOOKS_APP_URL: "http://localhost:4780",
+  }), true);
+  assert.equal(oidcEnabled({
+    ...configured,
+    NODE_ENV: "test",
+    OPENBOOKS_APP_URL: "http://127.0.0.1:4780",
+  }), true);
+});
+
+test("OIDC refuses HTTP loopback issuers unless a non-production environment is named", () => {
+  const configured = {
+    OPENBOOKS_OIDC_ISSUER: "http://127.0.0.1:8080",
+    OPENBOOKS_OIDC_CLIENT_ID: "openbooks-test",
+    OPENBOOKS_APP_URL: "https://books.example.test",
+  };
+  assert.throws(() => oidcEnabled(configured), /HTTPS/);
+  assert.throws(() => oidcEnabled({ ...configured, NODE_ENV: "prodction" }), /HTTPS/);
+  assert.equal(oidcEnabled({ ...configured, NODE_ENV: "development" }), true);
+});
 
 test("OIDC ID-token validation verifies signature and security claims", () => {
   const fixture = token();

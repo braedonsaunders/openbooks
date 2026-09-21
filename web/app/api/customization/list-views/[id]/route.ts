@@ -6,6 +6,15 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 import { getAuthz, can } from "../../../../../lib/authz";
 import { parseListView, stripSeededDefaultMark } from "@openbooks/customization";
 import { refuseDisabledRecordType } from "../../../../../lib/customization/gates";
+import { isUuid } from "../../../../../lib/list-params";
+import { inactiveDefaultMessage, nextDefaultFlags, refuseInactiveDefault } from "../../../../../lib/customization/active-default";
+import {
+  AmbiguousListViewDefaultError,
+  InactiveListViewDefaultError,
+  assertSingleListViewDefault,
+  clearSiblingListViewDefaults,
+  lockListViewDefaultScope,
+} from "../../../../../lib/customization/list-view-default";
 
 export const runtime = "nodejs";
 
@@ -14,6 +23,7 @@ const nameBodySchema = z.looseObject({
 });
 
 async function loadOwn(orgId: string, userId: string, id: string) {
+  if (!isUuid(id)) return null;
   const r = (await db.execute<{ id: string; recordType: string; name: string; scope: string; ownerId: string | null; isDefault: boolean; isActive: boolean; config: unknown }>(sql`
     select id, record_type as "recordType", name, scope, owner_id as "ownerId",
            is_default as "isDefault", is_active as "isActive", config
@@ -31,6 +41,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const authz = await getAuthz();
   if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { id } = await params;
+  if (!isUuid(id)) return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
   const row = await loadOwn(authz.user.orgId, authz.user.id, id);
   if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
   const refused = await refuseDisabledRecordType(authz.user.orgId, row.recordType);
@@ -44,6 +55,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { user } = authz;
   const { id } = await params;
+  if (!isUuid(id)) return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
   const existing = await loadOwn(user.orgId, user.id, id);
   if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
   const refused = await refuseDisabledRecordType(user.orgId, existing.recordType);
@@ -67,7 +79,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.name !== undefined && typeof body.name !== "string") {
     return NextResponse.json({ error: "name must be a string" }, { status: 400 });
   }
-  if (body.name !== undefined && body.name.trim()) {
+  // A supplied name is an explicit write. Collection POST already refuses
+  // !body.name?.trim(); dropping whitespace here would report
+  // {ok:true, changed:false} (or apply sibling fields) as if the operator
+  // asked for a no-op. Refuse by name instead.
+  if (body.name !== undefined && !body.name.trim()) {
+    return NextResponse.json({ error: "name cannot be empty" }, { status: 400 });
+  }
+  if (body.name !== undefined) {
     const name = body.name.trim();
     sets.push(sql`name = ${name}`);
     changes.name = name;
@@ -88,8 +107,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.isDefault !== undefined) {
     // A truthy non-boolean would otherwise reach the boolean column and
     // either coerce silently ('yes'::boolean) or abort the update with an
-    // unhandled storage error surfaced as a 500; collection POST coerces
-    // with !!, but an explicit PATCH value outside the domain is refused.
+    // unhandled storage error surfaced as a 500. Collection POST and PATCH
+    // both refuse a value outside the boolean domain.
     if (typeof body.isDefault !== 'boolean') {
       return NextResponse.json({ error: 'isDefault must be a boolean' }, { status: 400 });
     }
@@ -103,34 +122,81 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     sets.push(sql`is_active = ${body.isActive}`);
     changes.isActive = body.isActive;
   }
+  // Request-complete contradiction needs no row snapshot. resolveListView
+  // filters is_active before picking isDefault, so default+inactive is a
+  // save no subsequent read can observe. Concurrent default+deactivate is
+  // decided from the locked row inside the write.
+  const requestFlags = nextDefaultFlags(existing, { isDefault: body.isDefault, isActive: body.isActive });
+  const requestRefusal = refuseInactiveDefault({ kind: "view", ...requestFlags });
+  if (!requestRefusal.ok) return NextResponse.json({ error: requestRefusal.error }, { status: 400 });
   if (sets.length === 0) return NextResponse.json({ ok: true, changed: false });
+
+  const nextDefaultSql = body.isDefault !== undefined ? sql`${body.isDefault}` : sql`is_default`;
+  const nextActiveSql = body.isActive !== undefined ? sql`${body.isActive}` : sql`is_active`;
 
   try {
     // db.execute goes through the pool (each statement may land on a different
     // connection), so BEGIN/COMMIT must use db.transaction to actually be atomic.
-    await db.transaction(async (tx) => {
-      if (body.isDefault) {
-        if (existing.scope === "org")
-          await tx.execute(sql`
-            update list_views set is_default = false, updated_at = now()
-             where org_id = ${user.orgId} and record_type = ${existing.recordType} and scope='org'
-               and is_default and id <> ${id}`);
-        else
-          await tx.execute(sql`
-            update list_views set is_default = false, updated_at = now()
-             where org_id = ${user.orgId} and record_type = ${existing.recordType} and scope='user'
-               and owner_id = ${user.id} and is_default and id <> ${id}`);
-      }
-      await tx.execute(sql`
+    const updated = await db.transaction(async (tx) => {
+      const locked = (await tx.execute<{
+        id: string;
+        recordType: string;
+        scope: string;
+        ownerId: string | null;
+        isDefault: boolean;
+        isActive: boolean;
+      }>(sql`
+        select id, record_type as "recordType", scope, owner_id as "ownerId",
+               is_default as "isDefault", is_active as "isActive"
+          from list_views
+         where id = ${id} and org_id = ${user.orgId}
+         for update`)).rows[0];
+      if (!locked) return { kind: "not_found" as const };
+      const nextFlags = nextDefaultFlags(locked, { isDefault: body.isDefault, isActive: body.isActive });
+      const inactiveDefault = refuseInactiveDefault({ kind: "view", ...nextFlags });
+      if (!inactiveDefault.ok) return { kind: "inactive_default" as const, error: inactiveDefault.error };
+      const defaultScope = {
+        orgId: user.orgId,
+        recordType: locked.recordType,
+        scope: locked.scope === "org" ? "org" as const : "user" as const,
+        ownerId: locked.scope === "user" ? user.id : null,
+        exceptId: id,
+      };
+      // Lock only — sibling clears wait until THIS update returns a row.
+      // Otherwise a concurrent delete can demote the live default, write
+      // audit, and still report {ok:true} for a view that is gone.
+      if (body.isDefault === true) await lockListViewDefaultScope(tx, defaultScope);
+      // Next-state default+inactive must match zero rows even if the JS
+      // refusal is skipped — refuse by name, never {ok:true}.
+      const written = (await tx.execute<{ id: string }>(sql`
         update list_views set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${user.id}
-         where id = ${id} and org_id = ${user.orgId}`);
+         where id = ${id} and org_id = ${user.orgId}
+           and not (${nextDefaultSql} and not ${nextActiveSql})
+         returning id`)).rows[0];
+      if (!written) {
+        if (nextFlags.isDefault && !nextFlags.isActive) {
+          return { kind: "inactive_default" as const, error: inactiveDefaultMessage("view") };
+        }
+        return { kind: "not_found" as const };
+      }
+      if (body.isDefault === true) {
+        await clearSiblingListViewDefaults(tx, defaultScope);
+        await assertSingleListViewDefault(tx, defaultScope);
+      }
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${user.orgId}, 'list_views', ${id}, 'update', ${JSON.stringify(changes)}, ${user.id})`);
+      return { kind: "ok" as const };
     });
+    if (updated.kind === "not_found") return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (updated.kind === "inactive_default") return NextResponse.json({ error: updated.error }, { status: 400 });
     return NextResponse.json({ ok: true });
   } catch (e) {
     const msg = (e as Error).message ?? "update failed";
+    if (e instanceof AmbiguousListViewDefaultError)
+      return NextResponse.json({ error: e.message }, { status: 409 });
+    if (e instanceof InactiveListViewDefaultError)
+      return NextResponse.json({ error: e.message }, { status: 400 });
     if (msg.includes("unique"))
       return NextResponse.json({ error: "A view with that name already exists" }, { status: 409 });
     return NextResponse.json({ error: msg }, { status: 500 });
@@ -143,6 +209,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { user } = authz;
   const { id } = await params;
+  if (!isUuid(id)) return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
   const existing = await loadOwn(user.orgId, user.id, id);
   if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
   const refused = await refuseDisabledRecordType(user.orgId, existing.recordType);

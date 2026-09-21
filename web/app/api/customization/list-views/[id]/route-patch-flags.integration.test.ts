@@ -4,12 +4,12 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 
 // Live-Postgres regression for PATCH /api/customization/list-views/:id.
-// Collection POST coerces isDefault with !! (always a real boolean), but the
-// [id] PATCH wrote body.isDefault / body.isActive straight into boolean
-// columns. A non-boolean JSON value reaches PostgreSQL, which either throws
-// 22P02 (raw 500 with a driver message through the route's catch-all) or
-// silently coerces ('yes'::boolean = true) — the same unhandled-storage-error
-// class the api-keys route guards with a strict-boolean check.
+// Collection POST refuses a non-boolean isDefault. The [id] PATCH wrote
+// body.isDefault / body.isActive straight into boolean columns. A non-boolean
+// JSON value reaches PostgreSQL, which either throws 22P02 (raw 500 with a
+// driver message through the route's catch-all) or silently coerces
+// ('yes'::boolean = true) — the same unhandled-storage-error class the
+// api-keys route guards with a strict-boolean check.
 
 const stateKey = Symbol.for("openbooks.list-view-patch-bool-test");
 interface RouteState {
@@ -131,10 +131,27 @@ test(
   { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const f = await seed();
-    const res = await PATCH(patchRequest({ isDefault: true, isActive: false }), {
+    const res = await PATCH(patchRequest({ isDefault: true, isActive: true }), {
       params: Promise.resolve({ id: VIEW_ID }),
     });
     assert.equal(res.status, 200);
-    assert.deepEqual(await storedFlags(f.orgId), { isDefault: true, isActive: false });
+    assert.deepEqual(await storedFlags(f.orgId), { isDefault: true, isActive: true });
+  },
+);
+
+test(
+  "PATCH refuses an inactive personal isDefault instead of storing a flag resolve cannot see",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const f = await seed();
+    const res = await PATCH(patchRequest({ isDefault: true, isActive: false }), {
+      params: Promise.resolve({ id: VIEW_ID }),
+    });
+    assert.notEqual(res.status, 200, "an inactive personal default must not report success");
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.match(String(body.error), /inactive view cannot be the default/i);
+    assert.match(String(body.error), /activate it/i);
+    assert.deepEqual(await storedFlags(f.orgId), { isDefault: false, isActive: true });
   },
 );

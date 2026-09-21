@@ -175,11 +175,14 @@ export class DynamicsClient {
   }
 
   private async accessToken(): Promise<string> {
-    // App-only (client-credentials) auth: BC's recommended service-to-service
-    // flow. No refresh token — mint a fresh app token whenever the cached one
-    // expires. Avoids the delegated-consent/refresh fragility entirely.
+    // Delegated consent is the authority. Missing or expired user tokens
+    // refuse by name — never fall through to client-credentials, which would
+    // run as the app's service principal instead of the consented user.
+    if (!this.tokens.refreshToken) {
+      throw new Error("Dynamics connection has no delegated refresh token — reconnect to grant access");
+    }
     if (!this.tokens.accessToken || new Date(this.tokens.expiresAt).getTime() <= Date.now()) {
-      this.tokens = await clientCredentialsToken(this.app);
+      this.tokens = await refreshTokens(this.app, this.tokens.refreshToken);
       await this.onRefresh?.(this.tokens);
     }
     return this.tokens.accessToken;

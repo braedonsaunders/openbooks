@@ -34,12 +34,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ typeKey:
   const page = clamp(Number(url.searchParams.get('page') ?? '1'), 1, 10_000)
   const perPage = clamp(Number(url.searchParams.get('perPage') ?? '25'), 5, 100)
 
+  const fence = gate.allowedSubsidiaryIds
   const where = sql`r.org_id = ${user.orgId} and r.type_key = ${typeKey}
-    ${!hasSubsidiaryField || gate.allowedSubsidiaryIds === null
+    ${fence === null
       ? sql``
-      : gate.allowedSubsidiaryIds.size === 0
-        ? sql` and false`
-        : sql` and r.data ->> ${'subsidiary_id'} = any(${pgTextArrayLiteral([...gate.allowedSubsidiaryIds])}::text[])`}
+      : sql` and (
+          r.data ->> ${'subsidiary_id'} = any(${pgTextArrayLiteral([...fence])}::text[])
+          ${hasSubsidiaryField ? sql`` : sql` or r.data ->> ${'subsidiary_id'} is null`}
+        )`}
     ${status ? sql` and r.status = ${status}` : sql``}
     ${q ? sql` and (r.search_text ilike ${'%' + q.toLowerCase() + '%'} or r.record_number ilike ${'%' + q + '%'})` : sql``}`
 

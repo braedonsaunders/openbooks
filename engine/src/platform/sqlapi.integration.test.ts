@@ -77,6 +77,13 @@ test('governed SQL catalog enforces tenant RLS and denies credential surfaces', 
     assert.deepEqual(capped.rows, [{ value: 1 }, { value: 2 }])
     assert.equal(capped.truncated, true)
     await assert.rejects(
+      runUserSql("select repeat('x', 5000) as payload", {
+        orgId: first.orgId,
+        maxBytes: 200,
+      }),
+      /query result exceeds 200 bytes/,
+    )
+    await assert.rejects(
       runUserSql('select lo_create(0)', { orgId: first.orgId }),
       /read-only transaction/i,
     )
@@ -136,19 +143,24 @@ test('governed SQL catalog enforces tenant RLS and denies credential surfaces', 
       runUserSql('select * from public.accounts', { orgId: first.orgId }),
       /permission denied/,
     )
-    try {
-      const attemptedContextSwitch = await runUserSql(
+    await assert.rejects(
+      runUserSql(
         `with changed as materialized (
            select pg_catalog."set_config"('app.current_org', '${second.orgId}', true)
          )
          select distinct account.org_id::text as org_id
            from accounts account cross join changed`,
         { orgId: first.orgId },
-      )
-      assert.deepEqual(attemptedContextSwitch.rows, [{ org_id: first.orgId }])
-    } catch (error) {
-      assert.match(String(error), /permission denied for function set_config/)
-    }
+      ),
+      /set_config\(\) is not allowed|permission denied for function set_config/,
+    )
+    await assert.rejects(
+      runUserSql(
+        `select U&"\\0073et_config"('app.current_org', '${second.orgId}', true)`,
+        { orgId: first.orgId },
+      ),
+      /set_config\(\) is not allowed/,
+    )
     const executableDefiners = await runUserSql(
       `select procedure.proname as name
          from pg_catalog.pg_proc procedure

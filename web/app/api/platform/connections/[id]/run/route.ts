@@ -3,11 +3,14 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { enqueueMigration, getMigrationQueue } from "@openbooks/jobs";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { getConnection } from "@openbooks/engine/src/sync/connection.ts";
+import type { ConnectionRow } from "@openbooks/engine/src/sync/connection.ts";
 import { guardPermission } from "../../../../../../lib/authz";
 import { storageIdentityError } from "../../_storage-identity";
+import { connectionConfigUrlRefusal } from "../../_connector-guard";
 
 export const runtime = "nodejs";
+
+type ProbeRow = ConnectionRow & { updatedAt: Date | string | null };
 
 const ACTIVE_MIGRATION_JOB_STATES = new Set([
   "active",
@@ -32,10 +35,24 @@ export async function POST(
   if (gate instanceof NextResponse) return gate;
   const orgId = gate.user.orgId;
   const { id } = await params;
-  const conn = await getConnection(orgId, id).catch((e) => {
-    if (storageIdentityError(e)) return null;
-    throw e;
-  });
+  const conn = await db
+    .execute<ProbeRow>(sql`
+      select id, org_id as "orgId", source, display_name as "displayName",
+             auth_kind as "authKind", status, config, secrets,
+             mirror_enabled as "mirrorEnabled", mirror_schedule as "mirrorSchedule",
+             posted_change_policy as "postedChangePolicy",
+             posted_change_authorized_by as "postedChangeAuthorizedBy",
+             posted_change_authorized_at as "postedChangeAuthorizedAt",
+             cursor, last_run_at as "lastRunAt", last_error as "lastError",
+             updated_at as "updatedAt"
+        from connections
+       where id = ${id} and org_id = ${orgId}
+    `)
+    .then((loaded) => loaded.rows[0] ?? null)
+    .catch((e) => {
+      if (storageIdentityError(e)) return null;
+      throw e;
+    });
   if (!conn)
     return NextResponse.json(
       { errorCode: "CONNECTION_NOT_FOUND" },
@@ -45,6 +62,13 @@ export async function POST(
     return NextResponse.json(
       { errorCode: "CONNECTION_UNCONFIGURED" },
       { status: 400 },
+    );
+  }
+  const urlError = await connectionConfigUrlRefusal(conn.config);
+  if (urlError) {
+    return NextResponse.json(
+      { error: urlError, errorCode: "CONNECTOR_URL_REFUSED" },
+      { status: 404 },
     );
   }
 
@@ -90,7 +114,7 @@ export async function POST(
       : mode === "preflight"
         ? "full_preflight"
         : mode;
-  const job = await db.transaction(async (tx) => {
+  const outcome = await db.transaction(async (tx) => {
     // The worker creates the sync_runs row after it starts consuming the job.
     // Serialize the database check and queue claim so concurrent requests cannot
     // both pass the pre-worker window. The stable job id closes that same window
@@ -101,19 +125,28 @@ export async function POST(
         hashtext(${`connection-run:${id}:${mode}`})
       )`);
 
+    const live = await tx.execute(sql`
+      select id from connections
+       where id = ${id} and org_id = ${orgId}
+         and updated_at is not distinct from ${conn.updatedAt}
+         and config is not distinct from ${JSON.stringify(conn.config ?? {})}::jsonb
+         and secrets is not distinct from ${conn.secrets}
+       limit 1`);
+    if (live.rows.length === 0) return { kind: "changed" as const };
+
     const running = await tx.execute(sql`
       select 1 from sync_runs
        where org_id = ${orgId} and connection_id = ${id}
          and kind = ${runKind} and status = 'running'
        limit 1`);
-    if (running.rows.length > 0) return null;
+    if (running.rows.length > 0) return { kind: "active" as const };
 
     const queue = getMigrationQueue();
     const jobId = `migration|${id}|${mode}`;
     const existing = await queue.getJob(jobId);
     if (existing) {
       const state = await existing.getState();
-      if (ACTIVE_MIGRATION_JOB_STATES.has(state)) return null;
+      if (ACTIVE_MIGRATION_JOB_STATES.has(state)) return { kind: "active" as const };
       // Completed/failed jobs are retained by the queue for operational
       // history. Remove the terminal record before reusing its stable id for a
       // deliberate later run; active and waiting records returned above remain
@@ -121,16 +154,27 @@ export async function POST(
       await existing.remove();
     }
 
-    return enqueueMigration(
+    const job = await enqueueMigration(
       { orgId, connectionId: id, mode, triggeredBy: gate.user.id },
       { jobId },
     );
+    return { kind: "queued" as const, job };
   });
-  if (!job) {
+  if (outcome.kind === "changed") {
+    return NextResponse.json(
+      {
+        error:
+          "connection changed during the run; retry against the current configuration",
+        errorCode: "CONNECTION_CHANGED",
+      },
+      { status: 409 },
+    );
+  }
+  if (outcome.kind !== "queued") {
     return NextResponse.json(
       { errorCode: "RUN_ALREADY_ACTIVE" },
       { status: 409 },
     );
   }
-  return NextResponse.json({ jobId: job.id, mode });
+  return NextResponse.json({ jobId: outcome.job.id, mode });
 }

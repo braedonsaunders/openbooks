@@ -23,14 +23,32 @@ class GovernedPoolHarness {
   async connectGovernedReadClient() {
     this.governedConnects += 1;
     return {
-      query: async (text: string, params?: unknown[]) => {
-        this.queries.push({ text, params });
+      query: async (textOrConfig: string | { text: string; values?: unknown[] }, params?: unknown[]) => {
+        const text = typeof textOrConfig === "string" ? textOrConfig : textOrConfig.text;
+        const values = typeof textOrConfig === "string" ? params : textOrConfig.values;
+        this.queries.push({ text, params: values });
         const normalized = text.replace(/\s+/g, " ").trim().toLowerCase();
-        if (normalized === "select * from (select 42 as answer) __q limit 2") {
+        if (normalized.includes("from (select 42 as answer) __q") && normalized.includes("__ob_row_bytes")) {
           return {
-            rows: [{ answer: 42 }, { answer: 43 }],
-            fields: [{ name: "answer" }],
+            rows: [
+              { __ob_row_bytes: 13, __ob_row: { answer: 42 } },
+              { __ob_row_bytes: 13, __ob_row: { answer: 43 } },
+            ],
+            fields: [{ name: "__ob_row_bytes" }, { name: "__ob_row" }],
             rowCount: 2,
+          };
+        }
+        if (normalized.includes("from (select 'wide' as payload) __q") && normalized.includes("__ob_row_bytes")) {
+          const maxBytes = Number(values?.[1] ?? 0);
+          const payload = { payload: "x".repeat(200) };
+          const size = Buffer.byteLength(JSON.stringify(payload), "utf8");
+          return {
+            rows: [{
+              __ob_row_bytes: size,
+              __ob_row: size > maxBytes ? null : payload,
+            }],
+            fields: [{ name: "__ob_row_bytes" }, { name: "__ob_row" }],
+            rowCount: 1,
           };
         }
         if (normalized.includes("from information_schema.columns")) {
@@ -100,6 +118,7 @@ const {
   ensureReadRole,
   listSchema,
   runUserSql,
+  USER_SQL_MAX_RESULT_BYTES,
   validateUserSql,
 } = await import(sqlapiUrl) as typeof import("./sqlapi.ts");
 hooks.deregister();
@@ -116,6 +135,70 @@ test("query validation removes only a trailing statement terminator", () => {
 test("query validation still rejects multiple statements and write prefixes", () => {
   assert.throws(() => validateUserSql("select 1; select 2"), /one statement/);
   assert.throws(() => validateUserSql("update documents set memo = 'nope'"), /read-only/);
+});
+
+test("query validation refuses SET, CALL, and DO even after a leading comment", () => {
+  assert.throws(() => validateUserSql("set search_path to public"), /read-only/);
+  assert.throws(() => validateUserSql("call foo()"), /read-only/);
+  assert.throws(() => validateUserSql("do $$ begin null; end $$"), /read-only/);
+  assert.throws(() => validateUserSql("/* select 1 */ set search_path to public"), /read-only/);
+  assert.throws(() => validateUserSql("-- select 1\ncall foo()"), /read-only/);
+});
+
+test("query validation refuses unquoted set_config and keeps dollar-quoted literals", () => {
+  assert.throws(
+    () => validateUserSql("select set_config('app.current_org', 'x', true)"),
+    /set_config/,
+  );
+  assert.throws(
+    () => validateUserSql("select pg_catalog.set_config('app.current_org', 'x', true)"),
+    /set_config/,
+  );
+  const dollarQuoted = "select $foo$set_config('app.current_org', 'x', true)$foo$ as payload";
+  assert.equal(validateUserSql(dollarQuoted), dollarQuoted);
+});
+
+test("query validation refuses set_config when the name is a quoted identifier", () => {
+  assert.throws(
+    () => validateUserSql(`select pg_catalog."set_config"('app.current_org', 'x', true)`),
+    /set_config/,
+  );
+  assert.throws(
+    () => validateUserSql(`select pg_catalog."SET_CONFIG"('app.bypass_rls', 'on', true)`),
+    /set_config/,
+  );
+});
+
+test("query validation refuses set_config hidden in a Unicode-escaped identifier", () => {
+  assert.throws(
+    () => validateUserSql(`select U&"set_config"('app.current_org', 'x', true)`),
+    /set_config/,
+  );
+  assert.throws(
+    () => validateUserSql(`select pg_catalog.U&"\\0073et_config"('app.current_org', 'x', true)`),
+    /set_config/,
+  );
+  assert.throws(
+    () => validateUserSql(`select U&"!0073et_config" UESCAPE '!'('app.bypass_rls', 'on', true)`),
+    /set_config/,
+  );
+  const unicodeString = `select U&'set_config(' as payload`;
+  assert.equal(validateUserSql(unicodeString), unicodeString);
+});
+
+test("query validation still sees statements after a dollar-quote closer hidden in a comment", () => {
+  assert.throws(
+    () => validateUserSql("select $x$ /* $x$ ) __q; set search_path to public; select 1 */"),
+    /one statement|read-only/,
+  );
+  assert.throws(
+    () => validateUserSql("select $x$ /* $x$ ) __q; call foo(); select 1 */"),
+    /one statement|read-only/,
+  );
+  assert.throws(
+    () => validateUserSql("select $x$ /* $x$ ) __q; do $$ begin null; end $$; select 1 */"),
+    /one statement|read-only/,
+  );
 });
 
 test("SQL API operations use only the isolated governed pool", async () => {
@@ -149,7 +232,13 @@ test("SQL API operations use only the isolated governed pool", async () => {
     2,
   );
   assert.ok(statements.includes("set local statement_timeout = 1234"));
-  assert.ok(statements.includes("select * from (select 42 as answer) __q limit 2"));
+  const userQuery = harness.queries.find(({ text }) => text.includes("__ob_row_bytes"));
+  assert.ok(userQuery, "governed user SQL must go through the measured wrapper");
+  assert.match(userQuery!.text, /row_to_json/);
+  assert.match(userQuery!.text, /limit \$1::pg_catalog\.int4/);
+  assert.match(userQuery!.text, /\$2::pg_catalog\.int8/);
+  assert.match(userQuery!.text, /then null/);
+  assert.deepEqual(userQuery!.params, [2, USER_SQL_MAX_RESULT_BYTES]);
   assert.equal(statements.filter((text) => text === "rollback").length, 2);
   assert.equal(
     statements.filter((text) => text === "truncate table pg_temp.openbooks_query_context").length,
@@ -161,4 +250,21 @@ test("SQL API operations use only the isolated governed pool", async () => {
       && params?.[0] === "00000000-0000-4000-8000-000000000001").length,
     2,
   );
+});
+
+test("runUserSql refuses a result that exceeds the caller byte budget", async () => {
+  harness.reset();
+  await assert.rejects(
+    runUserSql("select 'wide' as payload", {
+      orgId: "00000000-0000-4000-8000-000000000001",
+      maxBytes: 40,
+    }),
+    /query result exceeds 40 bytes/,
+  );
+  const allowed = await runUserSql("select 'wide' as payload", {
+    orgId: "00000000-0000-4000-8000-000000000001",
+    maxBytes: 4_096,
+  });
+  assert.equal(allowed.rowCount, 1);
+  assert.equal(typeof allowed.rows[0]?.payload, "string");
 });
