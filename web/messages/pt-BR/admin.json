@@ -2528,6 +2528,21 @@
         "title": "Competências",
         "singularTitle": "Competência",
         "description": "Uma habilidade de uma matriz, vinculável a avaliações, níveis e cargos."
+      },
+      "hrm-document-categories": {
+        "title": "Categorias de documentos",
+        "singularTitle": "Categoria de documento",
+        "description": "Vocabulário declarado pela organização para categorias de documentos de RH — contratos, políticas, ciências. Modelos e regras de retenção usam estas chaves."
+      },
+      "hrm-document-templates": {
+        "title": "Modelos de documentos",
+        "singularTitle": "Modelo de documento",
+        "description": "Modelos reutilizáveis de documentos de RH com campos de mesclagem e assinantes ordenados. Modelos de somente ciência não exigem assinaturas."
+      },
+      "hrm-retention-schedules": {
+        "title": "Regras de retenção",
+        "singularTitle": "Regra de retenção",
+        "description": "Por quanto tempo cada categoria é mantida, a partir de qual evento e se o vencimento exclui ou anonimiza. A suspensão legal bloqueia a execução nominalmente."
       }
     },
     "fields": {
@@ -2876,7 +2891,17 @@
       "renewalLeadDays": "Antecedência de renovação (dias)",
       "requiresEvidence": "Exige evidência",
       "extraCategories": "Categorias extras",
-      "frameworkId": "Matriz"
+      "frameworkId": "Matriz",
+      "categoryKey": "Categoria",
+      "retainYears": "Retenção (anos)",
+      "fromEvent": "Início da contagem",
+      "bodyTemplate": "Modelo do corpo",
+      "mergeFields": "Campos de mesclagem",
+      "requiresSignature": "Exige assinatura",
+      "signEmployee": "A pessoa empregada assina",
+      "signManager": "A gerência assina",
+      "signHr": "O RH assina",
+      "acknowledgmentOnly": "Somente ciência"
     },
     "fieldHelp": {
       "gapless": "Sem lacunas significa que todos os números da sequência devem ser contabilizados, sem números pulados. Ative somente quando exigências legais ou de auditoria determinarem uma numeração ininterrupta.",
@@ -3409,6 +3434,15 @@
         "medical": "Médica",
         "clearance": "Autorização",
         "other": "Outra"
+      },
+      "hrmDocFromEvent": {
+        "completion": "Conclusão",
+        "termination": "Desligamento",
+        "creation": "Criação"
+      },
+      "hrmDocAction": {
+        "delete": "Excluir",
+        "anonymize": "Anonimizar"
       }
     },
     "payroll": {
@@ -4762,6 +4796,30 @@
     "hrmSuccession": {
       "title": "Talento e sucessão",
       "description": "Avaliações de talento e planos de sucessão por cargo."
+    },
+    "hrmDocuments": {
+      "title": "Documentos de RH",
+      "description": "Documentos de RH da admissão ao desligamento com assinatura eletrônica, modelos e ciências. Desativar nunca exclui dados."
+    },
+    "hrmDocumentRetention": {
+      "title": "Retenção de documentos",
+      "description": "Regras de retenção com exclusão auditada após período de carência. Desativar nunca exclui dados."
+    },
+    "hrmDataSubjectExport": {
+      "title": "Exportações de acesso",
+      "description": "Exportações de acesso com um clique para titulares. Desativar nunca exclui dados."
+    },
+    "hrmSurveys": {
+      "title": "Pesquisas de engajamento",
+      "description": "Pesquisas de engajamento e de pulso com resultados por grau de anonimato. Desativar nunca exclui dados."
+    },
+    "hrmPulseSurveys": {
+      "title": "Pesquisas de pulso",
+      "description": "Cadência de pulso recorrente com tendências. Requer pesquisas."
+    },
+    "hrmOrgChart": {
+      "title": "Organograma",
+      "description": "A árvore da organização com vagas, departamentos e amplitude de controle."
     }
   },
   "backupsManager": {

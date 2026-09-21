@@ -27,8 +27,11 @@ import { normalizeHrmProcessTemplateInput } from './hrm-process-template'
 import { normalizeHrmPipelineStageInput } from './hrm-pipeline'
 import { normalizeHrmReviewTemplateInput } from './hrm-review-template'
 import { normalizeHrmCompensationInput } from './hrm-compensation'
+import { validateCategoryKey } from '@openbooks/engine/src/hrm/documents/categories.ts'
+import { validateTemplateInput } from '@openbooks/engine/src/hrm/documents/templates.ts'
 import { benefitPlanShapeProblem } from './hrm-benefits'
 import { leavePolicyRuleProblem, normalizeHrmLeavePolicyInput } from './hrm-leave-policy'
+import { mergeTemplateSlots, normalizeHrmDocumentTemplateInput } from './hrm-document-template'
 import { applyRuleSlotColumns } from './hrm-rule-slots'
 import { normalizeTaxReturnFormInput } from './tax-return-form'
 import { saveSetupBook } from './books'
@@ -1046,6 +1049,70 @@ export async function validateEntityIntegrity(
     // CHECK would refuse with a worse message.
     body.ratingScale = scale
   }
+  // HR-19 begin: document templates (0230) — the folded signer/merge
+  // slots are proved with the engine's own words (validateTemplateInput
+  // shares the API's validation; never a second classifier) and the
+  // category must be declared in hrm_document_categories. Edits merge
+  // the stored row first so a partial slot edit keeps the untouched
+  // signer set (review-template precedent).
+  if (entity.key === 'hrm-document-templates') {
+    let current: { signer_roles?: unknown; merge_fields?: unknown } | null = null
+    if (rowId) {
+      const rows = (await executor.execute(sql`
+        select signer_roles, merge_fields, category_key as "categoryKey", name as "name",
+               body_template as "bodyTemplate", requires_signature as "requiresSignature",
+               acknowledgment_only as "acknowledgmentOnly"
+          from hrm_document_templates where id = ${rowId} and org_id = ${orgId}`)).rows as Record<string, unknown>[]
+      if (!rows[0]) return 'Document template not found'
+      current = rows[0]
+    }
+    const merged = mergeTemplateSlots(current, body)
+    const probe = {
+      name: body.name ?? (current as Record<string, unknown> | null)?.name ?? '',
+      categoryKey: body.categoryKey ?? (current as Record<string, unknown> | null)?.categoryKey ?? '',
+      bodyTemplate: body.bodyTemplate ?? (current as Record<string, unknown> | null)?.bodyTemplate ?? '',
+      mergeFields: merged.mergeFields,
+      requiresSignature: body.requiresSignature ?? (current as Record<string, unknown> | null)?.requiresSignature ?? false,
+      signerRoles: merged.signerRoles,
+      acknowledgmentOnly: body.acknowledgmentOnly ?? (current as Record<string, unknown> | null)?.acknowledgmentOnly ?? false,
+    }
+    try {
+      validateTemplateInput(probe)
+    } catch (e) {
+      return e instanceof Error ? e.message : 'Invalid document template'
+    }
+    const declared = await executor.execute(sql`
+      select 1 from hrm_document_categories
+       where org_id = ${orgId} and key = ${String(probe.categoryKey)} and is_active`)
+    if (!declared.rows.length) {
+      return `Category ${JSON.stringify(String(probe.categoryKey))} is not declared — declare it under Setup → Workforce → Document Categories first`
+    }
+    body.signerRoles = merged.signerRoles
+    body.mergeFields = merged.mergeFields
+  }
+  // HR-19 end
+  // HR-19 begin: retention schedules (0230) — a schedule for an
+  // undeclared category would never match a document, so the save is
+  // refused against the Setup vocabulary instead of stored as a dead
+  // rule. Categories themselves prove key shape with the engine's own
+  // words (validateCategoryKey).
+  if (entity.key === 'hrm-retention-schedules') {
+    const categoryKey = String(body.categoryKey ?? '').trim()
+    const declared = await executor.execute(sql`
+      select 1 from hrm_document_categories
+       where org_id = ${orgId} and key = ${categoryKey} and is_active`)
+    if (!declared.rows.length) {
+      return `Category ${JSON.stringify(categoryKey)} is not declared — declare it under Setup → Workforce → Document Categories first`
+    }
+  }
+  if (entity.key === 'hrm-document-categories') {
+    try {
+      validateCategoryKey(body.key)
+    } catch (e) {
+      return e instanceof Error ? e.message : 'Invalid category key'
+    }
+  }
+  // HR-19 end
   if (entity.key === 'hrm-review-template-sections') {
     let values = body
     if (rowId) {
@@ -1214,7 +1281,7 @@ export async function createSetupRecord(
     }
   }
 
-  const body = normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, normalizeHrmReviewTemplateInput(entity.key, normalizeHrmCompensationInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody))))))
+  const body = normalizeHrmDocumentTemplateInput(entity.key, normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, normalizeHrmReviewTemplateInput(entity.key, normalizeHrmCompensationInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody)))))))
   const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
   const writableEntity = writableSetupEntity(entity, {
     multiSubsidiary: await subsidiaryFeatureEnabled(orgId),
@@ -1423,7 +1490,7 @@ export async function updateSetupRecord(
   if (!(await setupEntityEnabled(entity, orgId))) return { status: 404, body: { error: 'unknown setup entity' } }
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
 
-  const body = normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, normalizeHrmReviewTemplateInput(entity.key, normalizeHrmCompensationInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody))))))
+  const body = normalizeHrmDocumentTemplateInput(entity.key, normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, normalizeHrmReviewTemplateInput(entity.key, normalizeHrmCompensationInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody)))))))
   const id = String(body.id ?? '')
   if (!id) return { status: 400, body: { error: 'id required' } }
   if (entity.dataSource !== 'extension-settings' && idColumn(entity) === 'id' && !UUID_RE.test(id)) {

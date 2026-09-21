@@ -2483,6 +2483,21 @@
         "title": "Competencias",
         "singularTitle": "Competencia",
         "description": "Una habilidad de un marco, vinculable a evaluaciones, niveles y puestos."
+      },
+      "hrm-document-categories": {
+        "title": "Categorías de documentos",
+        "singularTitle": "Categoría de documento",
+        "description": "Vocabulario declarado por la organización para las categorías de documentos de RR. HH. — contratos, políticas, acuses. Las plantillas y reglas de conservación usan estas claves."
+      },
+      "hrm-document-templates": {
+        "title": "Plantillas de documentos",
+        "singularTitle": "Plantilla de documento",
+        "description": "Plantillas reutilizables de documentos de RR. HH. con campos combinados y firmantes ordenados. Las plantillas de solo acuse no requieren firmas."
+      },
+      "hrm-retention-schedules": {
+        "title": "Reglas de conservación",
+        "singularTitle": "Regla de conservación",
+        "description": "Cuánto se conserva cada categoría, desde qué evento y si el vencimiento elimina o anonimiza. La retención legal bloquea la ejecución por nombre."
       }
     },
     "fields": {
@@ -2831,7 +2846,17 @@
       "renewalLeadDays": "Antelación de renovación (días)",
       "requiresEvidence": "Requiere evidencia",
       "extraCategories": "Categorías adicionales",
-      "frameworkId": "Marco"
+      "frameworkId": "Marco",
+      "categoryKey": "Categoría",
+      "retainYears": "Conservación (años)",
+      "fromEvent": "Inicio del cómputo",
+      "bodyTemplate": "Plantilla del cuerpo",
+      "mergeFields": "Campos combinados",
+      "requiresSignature": "Requiere firma",
+      "signEmployee": "Firma la persona empleada",
+      "signManager": "Firma su responsable",
+      "signHr": "Firma RR. HH.",
+      "acknowledgmentOnly": "Solo acuse"
     },
     "fieldHelp": {
       "gapless": "Sin huecos significa que cada número de la secuencia debe quedar contabilizado, sin números omitidos. Actívelo solo cuando los requisitos legales o de auditoría exijan una numeración ininterrumpida.",
@@ -3364,6 +3389,15 @@
         "medical": "Médica",
         "clearance": "Habilitación",
         "other": "Otra"
+      },
+      "hrmDocFromEvent": {
+        "completion": "Finalización",
+        "termination": "Baja",
+        "creation": "Creación"
+      },
+      "hrmDocAction": {
+        "delete": "Eliminar",
+        "anonymize": "Anonimizar"
       }
     },
     "laborCosting": {
@@ -4762,6 +4796,30 @@
     "hrmSuccession": {
       "title": "Talento y sucesión",
       "description": "Revisiones de talento y planes de sucesión por puesto."
+    },
+    "hrmDocuments": {
+      "title": "Documentos de RR. HH.",
+      "description": "Documentos de RR. HH. de la contratación a la baja con firma electrónica, plantillas y acuses. Desactivar nunca elimina datos."
+    },
+    "hrmDocumentRetention": {
+      "title": "Conservación de documentos",
+      "description": "Reglas de conservación con eliminación auditada tras un período de gracia. Desactivar nunca elimina datos."
+    },
+    "hrmDataSubjectExport": {
+      "title": "Exportaciones de acceso",
+      "description": "Exportaciones de acceso para los interesados con un clic. Desactivar nunca elimina datos."
+    },
+    "hrmSurveys": {
+      "title": "Encuestas de compromiso",
+      "description": "Encuestas de compromiso y de pulso con resultados por grado de anonimato. Desactivar nunca elimina datos."
+    },
+    "hrmPulseSurveys": {
+      "title": "Encuestas de pulso",
+      "description": "Cadencia de pulso recurrente con tendencias. Requiere encuestas."
+    },
+    "hrmOrgChart": {
+      "title": "Organigrama",
+      "description": "El árbol de la organización con vacantes, departamentos y ámbito de control."
     }
   },
   "backupsManager": {

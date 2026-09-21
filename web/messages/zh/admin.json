@@ -2528,6 +2528,21 @@
         "title": "能力项",
         "singularTitle": "能力项",
         "description": "框架中的一项技能,可关联评估、职级与职位。"
+      },
+      "hrm-document-categories": {
+        "title": "文档类别",
+        "singularTitle": "文档类别",
+        "description": "组织自定义的人力资源文档类别词汇——合同、政策、确认书。模板和保留规则使用这些键。"
+      },
+      "hrm-document-templates": {
+        "title": "文档模板",
+        "singularTitle": "文档模板",
+        "description": "可复用的人力资源文档模板，含合并字段和有序签署人。仅确认模板无需签名。"
+      },
+      "hrm-retention-schedules": {
+        "title": "保留规则",
+        "singularTitle": "保留规则",
+        "description": "每个文档类别的保留期限、起算事件，以及到期时删除还是匿名化。法定保留会按名称阻止执行。"
       }
     },
     "fields": {
@@ -2876,7 +2891,17 @@
       "renewalLeadDays": "续期提前期（天）",
       "requiresEvidence": "需要证明",
       "extraCategories": "附加类别",
-      "frameworkId": "框架"
+      "frameworkId": "框架",
+      "categoryKey": "类别",
+      "retainYears": "保留期限（年）",
+      "fromEvent": "起算时间",
+      "bodyTemplate": "正文模板",
+      "mergeFields": "合并字段",
+      "requiresSignature": "需要签名",
+      "signEmployee": "员工签署",
+      "signManager": "经理签署",
+      "signHr": "人力资源签署",
+      "acknowledgmentOnly": "仅确认"
     },
     "fieldHelp": {
       "gapless": "无间隔表示序列中的每个编号都必须有记录，不能跳号。仅在法律或审计要求必须连续编号时启用。",
@@ -3409,6 +3434,15 @@
         "medical": "医疗",
         "clearance": "许可",
         "other": "其他"
+      },
+      "hrmDocFromEvent": {
+        "completion": "完成",
+        "termination": "离职",
+        "creation": "创建"
+      },
+      "hrmDocAction": {
+        "delete": "删除",
+        "anonymize": "匿名化"
       }
     },
     "payroll": {
@@ -4762,6 +4796,30 @@
     "hrmSuccession": {
       "title": "人才与继任",
       "description": "各职位的人才评估与继任计划。"
+    },
+    "hrmDocuments": {
+      "title": "人力资源文档",
+      "description": "从入职到离职的人力资源文档，支持电子签名、模板和确认书。关闭功能不会删除数据。"
+    },
+    "hrmDocumentRetention": {
+      "title": "文档保留",
+      "description": "宽限期后经审计删除的保留规则。关闭功能不会删除数据。"
+    },
+    "hrmDataSubjectExport": {
+      "title": "主体访问导出",
+      "description": "面向数据主体的一键访问导出。关闭功能不会删除数据。"
+    },
+    "hrmSurveys": {
+      "title": "敬业度调查",
+      "description": "具有匿名等级结果的敬业度和脉动调查。关闭功能不会删除数据。"
+    },
+    "hrmPulseSurveys": {
+      "title": "脉动调查",
+      "description": "带趋势的定期脉动调查。需要调查功能。"
+    },
+    "hrmOrgChart": {
+      "title": "组织架构图",
+      "description": "显示空缺、部门和管理幅度的组织树。"
     }
   },
   "backupsManager": {
