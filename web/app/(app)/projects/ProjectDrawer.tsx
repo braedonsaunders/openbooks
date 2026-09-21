@@ -18,6 +18,9 @@ import type { CustomFieldDefClient } from '../../../components/custom-field-inpu
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import { InvoicingPreferenceFields, type InvoicingPref } from '../../../components/invoicing-preference-fields'
 import { RateBookAssignmentSection } from '../parties/RateBookAssignmentSection'
+// HR-20 begin: project geofences, rehomed onto the project page.
+import { GeofenceSection } from '../../../components/field-time/GeofenceSection'
+// HR-20 end
 import { shouldAutoActivateProject } from './project-activation'
 import { FinancialsTab, type FinancialsData } from './tabs/FinancialsTab'
 import { RecognitionCard, type RecognitionStatus } from './tabs/RecognitionCard'
@@ -93,6 +96,8 @@ export interface ProjectCockpitData {
   financials: FinancialsData
   projectType: { key: string; name: string }
   time: CostTimeData
+  // HR-20: crew-today rows for the cockpit (empty when fieldTime is off).
+  crewToday: { employeePartyId: string; employeeName: string | null; since: string; costCodeRef: string | null; geoCheck: string }[]
   unbilled: UnbilledClient
   billingRequests: BillingRequestClient[]
   billableFieldTickets: BillableFieldTicketClient[]
@@ -707,6 +712,11 @@ export function ProjectDrawer({
             <RateBookAssignmentSection scope="project" scopeId={String(pr.id)} editable={editable} />
           ) : null}
 
+          {/* HR-20: the clock enforcement place, rehomed onto the project page. */}
+          {!isPlaceholderName ? (
+            <GeofenceSection projectId={String(pr.id)} initial={[]} canManage={editable} />
+          ) : null}
+
         </div>
       ) : null}
 
@@ -714,7 +724,8 @@ export function ProjectDrawer({
         <FinancialsTab data={cockpit.financials} />
       ) : null}
 
-      {tab === 'cost_time' ? <CostTimeTab data={cockpit.time} projectId={String(pr.id)} /> : null}
+      {/* HR-20: crew-today rides the cost/time tab. */}
+      {tab === 'cost_time' ? <CostTimeTab data={cockpit.time} projectId={String(pr.id)} crewToday={cockpit.crewToday} /> : null}
 
       {tab === 'billing' ? (
         <BillingSection
