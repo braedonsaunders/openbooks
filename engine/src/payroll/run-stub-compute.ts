@@ -15,6 +15,7 @@ import { packRates, PayrollPackError, assertPayrollRegionSupported, type Employe
 import { assertConfiguredStatutoryRates, type StatutoryRateResolution } from "./statutory-rates.ts";
 import { createPushStatutory } from "./push-statutory.ts";
 import { assessStubAggregateLevies } from "./employer-aggregate-priors.ts";
+import { assertSettlementFactorsMergeable, settleAnnualSettlement } from "./annual-settlement-run.ts";
 import { EMPTY_EMPLOYER_LEVY_FACTORS } from "./statutory-context.ts";
 import { type StatutoryHolidayEligibilityFacts } from "./holidays.ts";
 import { payRateIsUsable } from "./rate.ts";
@@ -435,6 +436,32 @@ export async function calculateStub(
   recordProtectionShortfalls(factors, {
     lastProtection, protectedLines, protectionRequested,
   });
+
+  // ---- Annual settlement: the pack's year-end recomputation ----------------
+  //
+  // On the final period of the pack's tax year the declared settlement prices
+  // the committed year-to-date and pushes its adjustment lines here — after
+  // the monthly pass and its protection fixpoint have settled, before net is
+  // totalled — so the refund or collection flows into net pay, the stub, the
+  // remittance, and the bank file through the existing rails. Any other
+  // period, any non-regular run, or a pack declaring nothing settles nothing
+  // and this block costs the stub nothing: ordinary months are byte-identical
+  // with or without it.
+  const settlementFactors = await settleAnnualSettlement({
+    tx, orgId, documentId, pack, run, emp, country, region: province, taxYear,
+    periodsPerYear: P, runType, employeePartyId,
+    employeeName: emp.display_name ?? employeePartyId,
+    income, nonPeriodic, lines, need: ctx.need, components: ctx.components,
+    filingAccountId: jurisdiction.filingAccountId,
+    storedCertificates, certificateFor, bool, employerLevies,
+  });
+  if (settlementFactors !== null) {
+    // The settlement owns its factor namespace and the monthly pass owns
+    // its; a key in both would settle one levy's money under another's name.
+    // Refused by name rather than merged and misattributed.
+    assertSettlementFactorsMergeable(emp.display_name ?? employeePartyId, country, factors, settlementFactors);
+    Object.assign(factors, settlementFactors);
+  }
 
   const deductions = sum(lines.filter((l) => l.kind === "deduction").map((l) => l.amount));
   // Refundable employment credits (a `credit` line) are money the employer
