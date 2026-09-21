@@ -187,14 +187,19 @@ test("ES 2026 is transcribed with two editions split at 10 September", () => {
   }
 });
 
-test("ES filings declare the TGSS account and build no year-end return yet", () => {
+test("ES filings declare the TGSS account plus the 190 (annual) and 111 (quarterly)", () => {
+  // Was "build no year-end return yet" while the 111/190 had no builders; the
+  // populations now read committed stubs, so the declaration carries both.
   const filings = esPackFilings();
   assert.equal(filings.country, "ES");
   assert.deepEqual(
     filings.programTypes.map((program) => program.key),
     ["es_tgss_ccc"],
   );
-  assert.deepEqual([...filings.yearEnd], []);
+  assert.deepEqual(
+    filings.yearEnd.map((filing) => [filing.key, filing.cadence]),
+    [["190", "annual"], ["111", "quarterly"]],
+  );
   assert.deepEqual(ES_PAYROLL_PACK.filings(), filings);
 });
 
