@@ -2,29 +2,32 @@
  * The IT pack's filing declaration: the two sostituto d'imposta filings.
  *
  * - CU (Certificazione Unica): the employer-as-sostituto certifies each
- *   employee's dependent-employment income and the IRPEF, addizionali and
- *   INPS withheld, delivers it to the percipiente and transmits it to the
- *   Agenzia delle Entrate (CU 2026, tax year 2025: AdE Provvedimento n. 15707
- *   del 15 gennaio 2026).
+ *   employee's dependent-employment income and the IRPEF, addizionale
+ *   regionale and INPS withheld, delivers it to the percipiente and
+ *   transmits it to the Agenzia delle Entrate (CU 2026, tax year 2025: AdE
+ *   Provvedimento n. 15707 del 15 gennaio 2026). Populated off the year's
+ *   committed stubs — see ./cu.ts for the box-by-box citation.
  * - Modello 770: the sostituto's annual declaration of the withholdings
  *   operated and paid (770/2026, tax year 2025: AdE Provvedimento n. 72221
- *   del 2026).
- *
- * Both are DECLARED (keys, cadence, correction posture, download refusals)
- * but not populated: no engine computes the numbers yet, so population
- * refuses by name instead of printing zeros an employer might file. Row
- * grammars and slips arrive with the builders, never ahead of them.
+ *   del 2026). Declared but not populated: the employer's own annual return
+ *   is a different transcription (its quadri reconcile sostituto-level F24
+ *   payments, not per-employee slips), so population refuses by name instead
+ *   of printing zeros an employer might file.
  */
-import { PayrollError } from "../error.ts";
 import type {
-  PayrollFilingData,
-  PayrollFilingRowScope,
   PayrollPackFilings,
 } from "../filing-registry.ts";
+import {
+  CU_SUPPORTED_TAX_YEAR,
+  ItFilingRefusal,
+  cuPopulation,
+  cuSlip,
+  parseCuRowId,
+} from "./cu.ts";
 
-export class ItFilingRefusal extends PayrollError {}
+export { ItFilingRefusal };
 
-function refusePopulation(filing: string, year: number): Promise<PayrollFilingData> {
+function refusePopulation(filing: string, year: number): Promise<never> {
   return Promise.reject(
     new ItFilingRefusal(
       `the IT payroll pack declares the ${filing} filing but cannot populate it for tax year ${year}: `
@@ -35,7 +38,7 @@ function refusePopulation(filing: string, year: number): Promise<PayrollFilingDa
 }
 
 /** No rows exist while population refuses, so no row id parses. */
-function refuseRowId(): PayrollFilingRowScope | null {
+function refuseRowId(): null {
   return null;
 }
 
@@ -56,16 +59,26 @@ export const IT_PACK_FILINGS: PayrollPackFilings = {
         "Certificazione Unica dei redditi di lavoro dipendente e delle ritenute operate, "
         + "rilasciata dal sostituto d'imposta al percipiente e trasmessa all'Agenzia delle Entrate.",
       emptyText: "No committed IT pay stubs for this year.",
-      population: (_orgId, taxYear) => refusePopulation("Certificazione Unica", taxYear),
-      parseRowId: () => refuseRowId(),
+      population: (orgId, taxYear) => cuPopulation(orgId, taxYear),
+      parseRowId: (rowId) => parseCuRowId(rowId),
+      slip: { build: (orgId, taxYear, rowId) => cuSlip(orgId, taxYear, rowId) },
       downloadRefusal:
-        "the IT pack produces no Entratel CU telematic file — the slip data is not computed; "
-        + "transmit the Certificazione Unica through the Agenzia delle Entrate's own channels",
+        "the IT pack produces no Entratel CU telematic file (Specifiche tecniche CU 2026) — "
+        + "the slip data above is complete; transmit the Certificazione Unica through the Agenzia "
+        + "delle Entrate's own channels",
+      // A wrong CU is corrected with a new CU comunicazione barring
+      // Sostituzione (or Annullamento to withdraw it), never by editing the
+      // original — CU 2026 istruzioni §3.1 "Tipo di comunicazione". This pack
+      // produces the original slip only, so the correction names its real
+      // out-of-product vehicle.
       amendment: {
         supported: false,
         refusal:
-          "the CU correction vehicle (tipi di comunicazione sostitutiva/annullamento) is not "
-          + "transcribed by the IT pack — a corrected CU cannot be produced here",
+          "a wrong CU is corrected only by re-transmitting a CU comunicazione barring Sostituzione "
+          + "(or Annullamento to withdraw it) via Entratel — CU 2026 istruzioni §3.1 Tipo di comunicazione, "
+          + "in a new comunicazione carrying only the replaced or withdrawn certifications. "
+          + "This pack produces the original slip and no sostitutiva/annullamento file: prepare the "
+          + "correction in the Agenzia delle Entrate's own channel before the presentation deadline.",
       },
     },
     {
@@ -95,3 +108,5 @@ export const IT_PACK_FILINGS: PayrollPackFilings = {
 export function itPackFilings(): PayrollPackFilings {
   return IT_PACK_FILINGS;
 }
+
+export { CU_SUPPORTED_TAX_YEAR };
