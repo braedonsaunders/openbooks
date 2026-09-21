@@ -752,6 +752,26 @@
       "hrm_talent_reviews": {
         "label": "人才盘点",
         "description": "每次人才盘点一行 — 员工、绩效与潜力、流失影响与风险以及晋升准备度。需要人力资源绩效权限。"
+      },
+      "hrm_documents": {
+        "label": "人力资源文档",
+        "description": "每个 HR 文档一行——标题、声明类别、生命周期状态、发送/完成/到期和法定保留。"
+      },
+      "hrm_document_signers": {
+        "label": "文档签署人",
+        "description": "每个有序签署人一行——文档、顺序、角色和状态。"
+      },
+      "hrm_retention_actions": {
+        "label": "保留操作",
+        "description": "每个保留操作一行——文档、类别、到期日、最终操作、执行和法定保留阻止。"
+      },
+      "hrm_survey_results": {
+        "label": "调查结果",
+        "description": "每个调查一行——类型、匿名等级、状态、邀请数与回答数、截止日期。"
+      },
+      "hrm_org_chart": {
+        "label": "组织架构图",
+        "description": "报告日期每个在职雇佣一行——姓名、职位、部门和直线经理。"
       }
     },
     "columns": {
@@ -1612,6 +1632,51 @@
         "impact_of_loss": "流失影响",
         "risk_of_loss": "流失风险",
         "id": "评估 (ID)"
+      },
+      "hrm_documents": {
+        "title": "标题",
+        "person": "人员",
+        "category": "类别",
+        "status": "状态",
+        "sent_at": "发送时间",
+        "completed_at": "完成时间",
+        "expires_at": "到期时间",
+        "legal_hold": "法定保留",
+        "document_id": "文档（ID）"
+      },
+      "hrm_document_signers": {
+        "document": "文档",
+        "ord": "顺序",
+        "role": "角色",
+        "status": "状态",
+        "signed_at": "签署时间",
+        "document_id": "文档（ID）"
+      },
+      "hrm_retention_actions": {
+        "document": "文档",
+        "category": "类别",
+        "due_on": "到期日",
+        "action": "操作",
+        "executed_at": "执行时间",
+        "blocked_reason": "阻止原因",
+        "document_id": "文档（ID）"
+      },
+      "hrm_survey_results": {
+        "name": "名称",
+        "kind": "类型",
+        "anonymity": "匿名度",
+        "status": "状态",
+        "invitations": "邀请数",
+        "responded": "回答数",
+        "closes_at": "截止时间",
+        "survey_id": "调查（ID）"
+      },
+      "hrm_org_chart": {
+        "employee": "员工",
+        "title": "职位",
+        "department": "部门",
+        "manager": "经理",
+        "employment_id": "雇佣（ID）"
       }
     },
     "enumValues": {

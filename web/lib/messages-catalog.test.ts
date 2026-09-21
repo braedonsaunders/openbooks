@@ -3014,6 +3014,7 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   // (6 features, 2 setup entities, 1 setup field); zh/pt-BR completeness
   // is asserted per-key below.
   assert.equal(wanted.length, 3844, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  assert.equal(wanted.length, 3861, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3377,6 +3378,8 @@ test('admin copy ships translated in de and ja (i2)', () => {
   // 19 continuous-performance keys; de/ja completeness asserted per-key below.
   const ADMIN_I2_SOURCE_COUNT = 3844
   const ADMIN_I2_SOURCE_HASH = '2ebe1e5de3a8a2c782a3fa593e8bc22849b615c60ece383e30fbd025ed2a17c8'
+  const ADMIN_I2_SOURCE_COUNT = 3861
+  const ADMIN_I2_SOURCE_HASH = '984d6457c1cd7caa80f913b3c943fac7b190049d153da692d4c7e135c3977527'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))
@@ -4471,6 +4474,26 @@ const I14_IDENTICAL_BY_FACT = new Set([
   'fr:reports.catalog.columns.hrm_action_reasons.action|Action',
   'de:reports.catalog.columns.hrm_action_reasons.reason_code|Code',
   'fr:reports.catalog.columns.hrm_action_reasons.reason_code|Code',
+  // HR-19 report columns: these headings are the same word in the target
+  // language, reviewed one by one — Person/Status/Name/Document/Action/
+  // Invitations/Manager are borrowed or identical forms, not untranslated
+  // English.
+  'de:reports.catalog.columns.hrm_documents.person|Person',
+  'de:reports.catalog.columns.hrm_documents.status|Status',
+  'de:reports.catalog.columns.hrm_document_signers.status|Status',
+  'de:reports.catalog.columns.hrm_survey_results.name|Name',
+  'de:reports.catalog.columns.hrm_survey_results.status|Status',
+  'fr:reports.catalog.columns.hrm_documents.document_id|Document (id)',
+  'fr:reports.catalog.columns.hrm_document_signers.document|Document',
+  'fr:reports.catalog.columns.hrm_document_signers.document_id|Document (id)',
+  'fr:reports.catalog.columns.hrm_retention_actions.document|Document',
+  'fr:reports.catalog.columns.hrm_retention_actions.action|Action',
+  'fr:reports.catalog.columns.hrm_retention_actions.document_id|Document (id)',
+  'fr:reports.catalog.columns.hrm_survey_results.invitations|Invitations',
+  'fr:reports.catalog.columns.hrm_org_chart.manager|Manager',
+  'pt-BR:reports.catalog.columns.hrm_documents.status|Status',
+  'pt-BR:reports.catalog.columns.hrm_document_signers.status|Status',
+  'pt-BR:reports.catalog.columns.hrm_survey_results.status|Status',
     'de:reports.catalog.columns.hrm_benefit_enrollments.person|Person',
     'de:reports.catalog.columns.hrm_benefit_enrollments.plan|Plan',
     'de:reports.catalog.columns.hrm_benefit_enrollments.status|Status',
@@ -5201,6 +5224,7 @@ const I14_FILE_COUNTS: Record<string, number> = {
   "items": 161,
   "inventory": 159,
   "reports": 1549,
+  "reports": 1557,
   "sync": 172,
   "login": 33,
   "accounts": 82,

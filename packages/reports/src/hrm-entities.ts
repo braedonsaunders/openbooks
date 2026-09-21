@@ -87,6 +87,24 @@ export const HRM_CERTIFICATION_ALERTS_FEATURE_KEY = 'hrmCertificationAlerts'
 const HRM_QUALIFICATION_STATUSES = ['valid', 'revoked', 'pending_verification'] as const
 const HRM_ALERT_CHANNELS = ['inbox', 'email'] as const
 // HR-14 end
+// HR-19 begin: documents, signers, retention actions, survey results, org
+// chart report entities (0230).
+export const HRM_DOCUMENTS_READ_PERMISSION = 'hrm.documents.read'
+export const HRM_DOCUMENTS_FEATURE_KEY = 'hrmDocuments'
+export const HRM_DOCUMENT_RETENTION_FEATURE_KEY = 'hrmDocumentRetention'
+export const HRM_SURVEYS_MANAGE_PERMISSION = 'hrm.surveys.manage'
+export const HRM_SURVEYS_FEATURE_KEY = 'hrmSurveys'
+export const HRM_ORG_CHART_FEATURE_KEY = 'hrmOrgChart'
+
+const HRM_DOCUMENT_STATUSES = [
+  'draft', 'sent', 'viewed', 'partially_signed', 'signed', 'acknowledged', 'declined', 'voided', 'expired',
+] as const
+const HRM_SIGNER_STATUSES = ['pending', 'viewed', 'signed', 'declined'] as const
+const HRM_RETENTION_ACTIONS = ['delete', 'anonymize'] as const
+const HRM_SURVEY_KINDS = ['engagement', 'pulse', 'onboarding', 'exit', 'custom'] as const
+const HRM_SURVEY_ANONYMITY = ['anonymous', 'confidential', 'named'] as const
+const HRM_SURVEY_STATUSES = ['draft', 'open', 'closed'] as const
+// HR-19 end
 const HRM_REVIEW_KINDS = ['self', 'manager', 'peer'] as const
 const HRM_REVIEW_STATUSES = ['pending', 'submitted', 'calibrated', 'shared', 'acknowledged'] as const
 const HRM_GOAL_STATUSES = ['active', 'achieved', 'missed', 'cancelled'] as const
@@ -1225,4 +1243,151 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     defaultSort: { column: 'reviewed_at', direction: 'desc' },
   },
   // HR-17 end
+  // HR-19 begin: the document register (one row per non-deleted
+  // document) and the signer timeline (one row per ordered signer).
+  // Both read the 0230 cabinet through the same predicates the engine
+  // read paths use: deleted documents never list; signer party ids and
+  // evidence never leave (role and status only); file bytes, tokens,
+  // and hashes have no column at all.
+    key: 'hrm_documents',
+    label: 'HR documents',
+      'One row per HR document — title, declared category, lifecycle status, send/completion/expiry, and legal hold. Requires the HRM documents permission.',
+    from: `hrm_documents d
+      LEFT JOIN parties p ON p.id = d.party_id AND p.org_id = d.org_id`,
+    orgColumn: 'd.org_id',
+    requiredPermission: HRM_DOCUMENTS_READ_PERMISSION,
+    featureKey: HRM_DOCUMENTS_FEATURE_KEY,
+    // The creation day is the fact: the period picker narrows on it, so
+    // a register filtered to a window lists what HR issued inside it.
+    defaultPeriodField: 'created_at',
+      { key: 'title', label: 'Title', kind: 'text', expr: 'd.title' },
+      { key: 'person', label: 'Person', kind: 'text', expr: 'p.display_name' },
+      { key: 'category', label: 'Category', kind: 'text', expr: 'd.category_key' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'd.status', options: HRM_DOCUMENT_STATUSES },
+      { key: 'sent_at', label: 'Sent at', kind: 'timestamp', expr: 'd.sent_at' },
+      { key: 'completed_at', label: 'Completed at', kind: 'timestamp', expr: 'd.completed_at' },
+      { key: 'expires_at', label: 'Expires at', kind: 'timestamp', expr: 'd.expires_at' },
+      { key: 'legal_hold', label: 'Legal hold', kind: 'boolean', expr: 'd.legal_hold' },
+      { key: 'document_id', label: 'Document (id)', kind: 'uuid', expr: 'd.id' },
+    defaultSort: { column: 'created_at', direction: 'desc' },
+    key: 'hrm_document_signers',
+    label: 'Document signers',
+      'One row per ordered signer — document, signing order, role, and per-signer status. Requires the HRM documents permission.',
+    from: `hrm_document_signers s
+      JOIN hrm_documents d ON d.id = s.document_id AND d.org_id = s.org_id`,
+    orgColumn: 's.org_id',
+    requiredPermission: HRM_DOCUMENTS_READ_PERMISSION,
+    featureKey: HRM_DOCUMENTS_FEATURE_KEY,
+    defaultPeriodField: 'signed_at',
+      { key: 'document', label: 'Document', kind: 'text', expr: 'd.title' },
+      { key: 'ord', label: 'Order', kind: 'number', expr: 's.ord' },
+      { key: 'role', label: 'Role', kind: 'text', expr: 's.role' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 's.status', options: HRM_SIGNER_STATUSES },
+      { key: 'signed_at', label: 'Signed at', kind: 'timestamp', expr: 's.signed_at' },
+      { key: 'document_id', label: 'Document (id)', kind: 'uuid', expr: 's.document_id' },
+    defaultSort: { column: 'signed_at', direction: 'desc' },
+  // HR-19 end
+  // HR-19 begin: the retention execution ledger (one row per flagged or
+  // executed (document, schedule) pair). executed_at null = flagged,
+  // waiting out the grace days; blocked_reason names the legal hold.
+  // Execution itself stays human-approved (HR) or scheduler-run — the
+  // report never executes anything.
+    key: 'hrm_retention_actions',
+    label: 'Retention actions',
+      'One row per retention action — document, category, due date, terminal action, execution, and any legal-hold block. Requires the HRM documents permission.',
+    from: `hrm_retention_actions a
+      JOIN hrm_documents d ON d.id = a.document_id AND d.org_id = a.org_id
+      JOIN hrm_retention_schedules s ON s.id = a.schedule_id AND s.org_id = a.org_id`,
+    orgColumn: 'a.org_id',
+    requiredPermission: HRM_DOCUMENTS_READ_PERMISSION,
+    featureKey: HRM_DOCUMENT_RETENTION_FEATURE_KEY,
+    // The due day is the fact: the period picker narrows on it, so the
+    // ledger filtered to a window lists what came due inside it.
+    defaultPeriodField: 'due_on',
+      { key: 'document', label: 'Document', kind: 'text', expr: 'd.title' },
+      { key: 'category', label: 'Category', kind: 'text', expr: 's.category_key' },
+      { key: 'due_on', label: 'Due on', kind: 'date', expr: 'a.due_on' },
+      { key: 'action', label: 'Action', kind: 'enum', expr: 'a.action', options: HRM_RETENTION_ACTIONS },
+      { key: 'executed_at', label: 'Executed at', kind: 'timestamp', expr: 'a.executed_at' },
+      { key: 'blocked_reason', label: 'Blocked reason', kind: 'text', expr: 'a.blocked_reason' },
+      { key: 'document_id', label: 'Document (id)', kind: 'uuid', expr: 'a.document_id' },
+    defaultSort: { column: 'due_on', direction: 'asc' },
+  // HR-19 end
+  // HR-19 begin: survey aggregates (one row per survey). Invitations
+  // and responses count through the invitation ledger; eNPS and
+  // participation stay viewer derivations over these counts, so the
+  // report never persists a projection. Respondent links have no
+  // column at all — anonymous surveys assert no link anywhere.
+    key: 'hrm_survey_results',
+    label: 'Survey results',
+      'One row per survey — kind, anonymity grade, status, invitation and response counts, and close date. Requires the HRM surveys permission.',
+    from: `hrm_surveys s
+      LEFT JOIN LATERAL (
+        SELECT count(*)::integer AS invitations,
+               count(*) FILTER (WHERE i.responded_at IS NOT NULL)::integer AS responded
+          FROM hrm_survey_invitations i
+         WHERE i.org_id = s.org_id AND i.survey_id = s.id
+      ) inv ON TRUE`,
+    orgColumn: 's.org_id',
+    requiredPermission: HRM_SURVEYS_MANAGE_PERMISSION,
+    featureKey: HRM_SURVEYS_FEATURE_KEY,
+    defaultPeriodField: 'closes_at',
+      { key: 'name', label: 'Name', kind: 'text', expr: 's.name' },
+      { key: 'kind', label: 'Kind', kind: 'enum', expr: 's.kind', options: HRM_SURVEY_KINDS },
+      { key: 'anonymity', label: 'Anonymity', kind: 'enum', expr: 's.anonymity', options: HRM_SURVEY_ANONYMITY },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 's.status', options: HRM_SURVEY_STATUSES },
+      { key: 'invitations', label: 'Invitations', kind: 'number', expr: 'inv.invitations' },
+      { key: 'responded', label: 'Responded', kind: 'number', expr: 'inv.responded' },
+      { key: 'closes_at', label: 'Closes at', kind: 'timestamp', expr: 's.closes_at' },
+      { key: 'survey_id', label: 'Survey (id)', kind: 'uuid', expr: 's.id' },
+    defaultSort: { column: 'closes_at', direction: 'desc' },
+  // HR-19 end
+  // HR-19 begin: the org-chart snapshot (one row per in-service
+  // employment at the report as-of date). The as-of join is bounded
+  // one-sided — versions effective on or before the as-of day,
+  // currently-known revisions only — with the in-service status
+  // predicate excluding the departed instead of an upper clamp, the
+  // same contract the tree read resolves through. Names, titles,
+  // departments, and managers only — never pay or private fields.
+    key: 'hrm_org_chart',
+    label: 'Org chart',
+      'One row per in-service employment at the report as-of date — name, title, department, and line manager. Requires the HRM employment permission.',
+    from: `worker_employments e
+      JOIN LATERAL (
+        SELECT ev.status
+          FROM worker_employment_versions ev
+         WHERE ev.employment_id = e.id AND ev.org_id = e.org_id
+           AND ev.recorded_until IS NULL
+           AND ev.effective_from <= ${REPORT_AS_OF}
+           AND ev.status IN ('active', 'on_leave', 'suspended')
+         ORDER BY ev.version_no DESC LIMIT 1
+      ) ev ON TRUE
+      JOIN parties w ON w.id = e.worker_party_id AND w.org_id = e.org_id
+      LEFT JOIN LATERAL (
+        SELECT a.job_title, a.department_id
+          FROM employment_assignment_versions a
+         WHERE a.org_id = e.org_id AND a.employment_id = e.id AND a.is_primary
+           AND a.recorded_until IS NULL
+           AND a.effective_from <= ${REPORT_AS_OF}
+         ORDER BY a.version_no DESC LIMIT 1
+      ) a ON TRUE
+      LEFT JOIN departments dep ON dep.id = a.department_id AND dep.org_id = e.org_id
+      LEFT JOIN LATERAL (
+        SELECT r.manager_employment_id
+          FROM reporting_relationships r
+         WHERE r.org_id = e.org_id AND r.employment_id = e.id AND r.kind = 'line'
+           AND r.recorded_until IS NULL
+           AND r.effective_from <= ${REPORT_AS_OF}
+         ORDER BY r.effective_from DESC LIMIT 1
+      ) r ON TRUE
+      LEFT JOIN worker_employments me ON me.id = r.manager_employment_id AND me.org_id = e.org_id
+      LEFT JOIN parties mw ON mw.id = me.worker_party_id AND mw.org_id = e.org_id`,
+    requiredPermission: HRM_EMPLOYMENT_READ_PERMISSION,
+    featureKey: HRM_ORG_CHART_FEATURE_KEY,
+      { key: 'title', label: 'Title', kind: 'text', expr: 'a.job_title' },
+      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
+      { key: 'manager', label: 'Manager', kind: 'text', expr: 'mw.display_name' },
+      { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'e.id' },
+    defaultSort: { column: 'employee', direction: 'asc' },
+  // HR-19 end
 ]

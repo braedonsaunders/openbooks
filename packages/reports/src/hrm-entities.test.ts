@@ -50,6 +50,13 @@ const HRM_KEYS = [
   'hrm_calibration_entries',
   'hrm_talent_reviews',
   // HR-17 end
+  // HR-19 begin
+  'hrm_documents',
+  'hrm_document_signers',
+  'hrm_retention_actions',
+  'hrm_survey_results',
+  'hrm_org_chart',
+  // HR-19 end
 ] as const
 
 const HRM_PERMISSIONS: Record<(typeof HRM_KEYS)[number], string> = {
@@ -96,6 +103,15 @@ const HRM_PERMISSIONS: Record<(typeof HRM_KEYS)[number], string> = {
   hrm_calibration_entries: 'hrm.performance.read',
   hrm_talent_reviews: 'hrm.performance.read',
   // HR-17 end
+  // HR-19 begin: the register, signers, and retention ledger carry the
+  // documents read grant; results carry the surveys manage grant; the
+  // chart carries the employment read grant.
+  hrm_documents: 'hrm.documents.read',
+  hrm_document_signers: 'hrm.documents.read',
+  hrm_retention_actions: 'hrm.documents.read',
+  hrm_survey_results: 'hrm.surveys.manage',
+  hrm_org_chart: 'hrm.employment.read',
+  // HR-19 end
 }
 
 test('workforce entities are registered on the shared catalog exactly once', () => {
@@ -128,6 +144,15 @@ test('workforce entities refuse without their gate and their own read permission
     hrm_qualifications: 'hrmCertifications',
     hrm_qualification_alerts: 'hrmCertificationAlerts',
     // HR-14 end
+    // HR-19 begin: documents and signers ride hrmDocuments, the ledger
+    // rides hrmDocumentRetention, results ride hrmSurveys, the chart
+    // rides hrmOrgChart.
+    hrm_documents: 'hrmDocuments',
+    hrm_document_signers: 'hrmDocuments',
+    hrm_retention_actions: 'hrmDocumentRetention',
+    hrm_survey_results: 'hrmSurveys',
+    hrm_org_chart: 'hrmOrgChart',
+    // HR-19 end
     // HR-14 begin: pre-existing red on the stacked base — the HR-12
     // compensation entities were never added to this switch map, so the
     // exact pin above compared against undefined. They ride
@@ -206,6 +231,13 @@ test('workforce entities scope to one org and one legal-entity boundary', () => 
     hrm_calibration_entries: 'e.org_id',
     hrm_talent_reviews: 't.org_id',
     // HR-17 end
+    // HR-19 begin
+    hrm_documents: 'd.org_id',
+    hrm_document_signers: 's.org_id',
+    hrm_retention_actions: 'a.org_id',
+    hrm_survey_results: 's.org_id',
+    hrm_org_chart: 'e.org_id',
+    // HR-19 end
   }
   const scopeColumns: Record<(typeof HRM_KEYS)[number], string | null> = {
     hrm_headcount: 'hc.employer_subsidiary_id',
@@ -251,6 +283,16 @@ test('workforce entities scope to one org and one legal-entity boundary', () => 
     hrm_calibration_entries: 'emp.employer_subsidiary_id',
     hrm_talent_reviews: 'e.employer_subsidiary_id',
     // HR-17 end
+    // HR-19 begin: documents, signers, retention, surveys, and the org
+    // chart carry no subsidiary clamp (HR-16 null spelling): documents
+    // and surveys are org-wide HR artifacts, and the tree read itself
+    // resolves without a subsidiary scope.
+    hrm_documents: null,
+    hrm_document_signers: null,
+    hrm_retention_actions: null,
+    hrm_survey_results: null,
+    hrm_org_chart: null,
+    // HR-19 end
   }
   for (const key of HRM_KEYS) {
     const entity = REPORT_ENTITY_MAP[key]!

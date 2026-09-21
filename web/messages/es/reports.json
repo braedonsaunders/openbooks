@@ -752,6 +752,26 @@
       "hrm_talent_reviews": {
         "label": "Evaluaciones de talento",
         "description": "Una fila por evaluación de talento: empleado, desempeño y potencial, impacto y riesgo de pérdida, y preparación para ascender. Requiere el permiso de desempeño de RR. HH."
+      },
+      "hrm_documents": {
+        "label": "Documentos de RR. HH.",
+        "description": "Una fila por documento de RR. HH. — título, categoría declarada, estado del ciclo de vida, envío/finalización/vencimiento y retención legal."
+      },
+      "hrm_document_signers": {
+        "label": "Firmantes de documentos",
+        "description": "Una fila por firmante ordenado — documento, orden, rol y estado."
+      },
+      "hrm_retention_actions": {
+        "label": "Acciones de conservación",
+        "description": "Una fila por acción de conservación — documento, categoría, vencimiento, acción terminal, ejecución y bloqueo legal."
+      },
+      "hrm_survey_results": {
+        "label": "Resultados de encuestas",
+        "description": "Una fila por encuesta — tipo, grado de anonimato, estado, recuentos de invitaciones y respuestas, fecha de cierre."
+      },
+      "hrm_org_chart": {
+        "label": "Organigrama",
+        "description": "Una fila por empleo en servicio a la fecha del informe — nombre, cargo, departamento y responsable."
       }
     },
     "columns": {
@@ -1612,6 +1632,51 @@
         "impact_of_loss": "Impacto de pérdida",
         "risk_of_loss": "Riesgo de pérdida",
         "id": "Evaluación (id)"
+      },
+      "hrm_documents": {
+        "title": "Título",
+        "person": "Persona",
+        "category": "Categoría",
+        "status": "Estado",
+        "sent_at": "Enviado el",
+        "completed_at": "Finalizado el",
+        "expires_at": "Vence el",
+        "legal_hold": "Retención legal",
+        "document_id": "Documento (id)"
+      },
+      "hrm_document_signers": {
+        "document": "Documento",
+        "ord": "Orden",
+        "role": "Rol",
+        "status": "Estado",
+        "signed_at": "Firmado el",
+        "document_id": "Documento (id)"
+      },
+      "hrm_retention_actions": {
+        "document": "Documento",
+        "category": "Categoría",
+        "due_on": "Vence el",
+        "action": "Acción",
+        "executed_at": "Ejecutado el",
+        "blocked_reason": "Motivo del bloqueo",
+        "document_id": "Documento (id)"
+      },
+      "hrm_survey_results": {
+        "name": "Nombre",
+        "kind": "Tipo",
+        "anonymity": "Anonimato",
+        "status": "Estado",
+        "invitations": "Invitaciones",
+        "responded": "Respondidas",
+        "closes_at": "Cierra el",
+        "survey_id": "Encuesta (id)"
+      },
+      "hrm_org_chart": {
+        "employee": "Persona empleada",
+        "title": "Cargo",
+        "department": "Departamento",
+        "manager": "Responsable",
+        "employment_id": "Empleo (id)"
       }
     },
     "enumValues": {

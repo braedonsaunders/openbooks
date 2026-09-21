@@ -752,6 +752,26 @@
       "hrm_talent_reviews": {
         "label": "Avaliações de talento",
         "description": "Uma linha por avaliação de talento: colaborador, desempenho e potencial, impacto e risco de perda, e prontidão para promoção. Requer a permissão de desempenho de RH."
+      },
+      "hrm_documents": {
+        "label": "Documentos de RH",
+        "description": "Uma linha por documento de RH — título, categoria declarada, status do ciclo de vida, envio/conclusão/vencimento e suspensão legal."
+      },
+      "hrm_document_signers": {
+        "label": "Assinantes de documentos",
+        "description": "Uma linha por assinante ordenado — documento, ordem, função e status."
+      },
+      "hrm_retention_actions": {
+        "label": "Ações de retenção",
+        "description": "Uma linha por ação de retenção — documento, categoria, vencimento, ação terminal, execução e bloqueio legal."
+      },
+      "hrm_survey_results": {
+        "label": "Resultados de pesquisas",
+        "description": "Uma linha por pesquisa — tipo, grau de anonimato, status, contagens de convites e respostas, data de encerramento."
+      },
+      "hrm_org_chart": {
+        "label": "Organograma",
+        "description": "Uma linha por vínculo ativo na data do relatório — nome, cargo, departamento e gerência."
       }
     },
     "columns": {
@@ -1612,6 +1632,51 @@
         "impact_of_loss": "Impacto da perda",
         "risk_of_loss": "Risco de perda",
         "id": "Avaliação (id)"
+      },
+      "hrm_documents": {
+        "title": "Título",
+        "person": "Pessoa",
+        "category": "Categoria",
+        "status": "Status",
+        "sent_at": "Enviado em",
+        "completed_at": "Concluído em",
+        "expires_at": "Vence em",
+        "legal_hold": "Suspensão legal",
+        "document_id": "Documento (id)"
+      },
+      "hrm_document_signers": {
+        "document": "Documento",
+        "ord": "Ordem",
+        "role": "Função",
+        "status": "Status",
+        "signed_at": "Assinado em",
+        "document_id": "Documento (id)"
+      },
+      "hrm_retention_actions": {
+        "document": "Documento",
+        "category": "Categoria",
+        "due_on": "Vence em",
+        "action": "Ação",
+        "executed_at": "Executado em",
+        "blocked_reason": "Motivo do bloqueio",
+        "document_id": "Documento (id)"
+      },
+      "hrm_survey_results": {
+        "name": "Nome",
+        "kind": "Tipo",
+        "anonymity": "Anonimato",
+        "status": "Status",
+        "invitations": "Convites",
+        "responded": "Respostas",
+        "closes_at": "Encerra em",
+        "survey_id": "Pesquisa (id)"
+      },
+      "hrm_org_chart": {
+        "employee": "Pessoa empregada",
+        "title": "Cargo",
+        "department": "Departamento",
+        "manager": "Gerência",
+        "employment_id": "Vínculo (id)"
       }
     },
     "enumValues": {

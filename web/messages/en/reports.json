@@ -752,6 +752,26 @@
       "hrm_talent_reviews": {
         "label": "Talent reviews",
         "description": "One row per talent review — employee, performance and potential keys, loss impact and risk, and promotion readiness. Requires the HRM performance permission."
+      },
+      "hrm_documents": {
+        "label": "HR documents",
+        "description": "One row per HR document — title, declared category, lifecycle status, send/completion/expiry, and legal hold."
+      },
+      "hrm_document_signers": {
+        "label": "Document signers",
+        "description": "One row per ordered signer — document, signing order, role, and per-signer status."
+      },
+      "hrm_retention_actions": {
+        "label": "Retention actions",
+        "description": "One row per retention action — document, category, due date, terminal action, execution, and any legal-hold block."
+      },
+      "hrm_survey_results": {
+        "label": "Survey results",
+        "description": "One row per survey — kind, anonymity grade, status, invitation and response counts, and close date."
+      },
+      "hrm_org_chart": {
+        "label": "Org chart",
+        "description": "One row per in-service employment at the report as-of date — name, title, department, and line manager."
       }
     },
     "columns": {
@@ -1612,6 +1632,51 @@
         "impact_of_loss": "Impact of loss",
         "risk_of_loss": "Risk of loss",
         "id": "Review (id)"
+      },
+      "hrm_documents": {
+        "title": "Title",
+        "person": "Person",
+        "category": "Category",
+        "status": "Status",
+        "sent_at": "Sent at",
+        "completed_at": "Completed at",
+        "expires_at": "Expires at",
+        "legal_hold": "Legal hold",
+        "document_id": "Document (id)"
+      },
+      "hrm_document_signers": {
+        "document": "Document",
+        "ord": "Order",
+        "role": "Role",
+        "status": "Status",
+        "signed_at": "Signed at",
+        "document_id": "Document (id)"
+      },
+      "hrm_retention_actions": {
+        "document": "Document",
+        "category": "Category",
+        "due_on": "Due on",
+        "action": "Action",
+        "executed_at": "Executed at",
+        "blocked_reason": "Blocked reason",
+        "document_id": "Document (id)"
+      },
+      "hrm_survey_results": {
+        "name": "Name",
+        "kind": "Kind",
+        "anonymity": "Anonymity",
+        "status": "Status",
+        "invitations": "Invitations",
+        "responded": "Responded",
+        "closes_at": "Closes at",
+        "survey_id": "Survey (id)"
+      },
+      "hrm_org_chart": {
+        "employee": "Employee",
+        "title": "Title",
+        "department": "Department",
+        "manager": "Manager",
+        "employment_id": "Employment (id)"
       }
     },
     "enumValues": {

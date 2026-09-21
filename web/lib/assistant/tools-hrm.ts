@@ -13,6 +13,11 @@ import {
 } from "@openbooks/engine/src/hrm/leave-read.ts";
 import { LeaveError } from "@openbooks/engine/src/hrm/leave-errors.ts";
 import { HrmQualificationError } from "@openbooks/engine/src/hrm/qualifications/errors.ts";
+// HR-19 begin: documents/surveys refusals (feature off, undeclared
+// category, token replay, suppression) reach the caller intact — both
+// error classes live in the documents errors module.
+import { HrmDocumentsError, HrmSurveysError } from "@openbooks/engine/src/hrm/documents/errors.ts";
+// HR-19 end
 import { SelfServiceError } from "@openbooks/engine/src/hrm/self-service/actor.ts";
 import { getMyProfile } from "@openbooks/engine/src/hrm/self-service/self-read.ts";
 import {
@@ -113,6 +118,11 @@ export function hrmRefusal(error: unknown): ToolResult {
     // required, unknown type) reach the caller with their message intact.
     error instanceof HrmQualificationError ||
     // HR-14 end
+    // HR-19 begin: documents/surveys refusals reach the caller with
+    // their message intact, like every other read-service refusal.
+    error instanceof HrmDocumentsError ||
+    error instanceof HrmSurveysError ||
+    // HR-19 end
 
     error instanceof HrmAuthorizationError ||
     error instanceof TemporalError ||
@@ -1607,6 +1617,47 @@ const hrmOneOnOnes: AssistantToolDef = {
             openItems: one.items.filter((item) => item.status === "open").length,
             href: "/me/one-on-ones",
           })),
+// HR-19 begin: documents, survey results, and org chart reads (0230).
+// hrm_documents answers own (self-service) or manage scope: titles,
+// statuses, and signer progress — never file bytes, tokens, or
+// evidence. hrm_survey_results answers aggregate results only (the
+// reader grant pattern: suppression already applied by the service),
+// never respondent links. hrm_org_chart answers names, titles, and
+// managers — never pay or private fields. All three are read-only.
+const hrmDocuments: AssistantToolDef = {
+  name: "hrm_documents",
+    "HR documents: title, category, status, and signer progress. Own documents for self-service, everything with the read grant. File bytes, tokens, and evidence never leave. Read-only.",
+  gate: { mode: "anyOf", perms: ["hrm.self.read"] },
+  feature: "hrmDocuments",
+    status: z
+      .enum(["draft", "sent", "viewed", "partially_signed", "signed", "acknowledged", "declined", "voided", "expired"])
+      .optional()
+      .describe("Keep only this document status"),
+    categoryKey: z.string().optional().describe("Keep only this declared category key"),
+    if (!(await isFeatureEnabled(authz.user.orgId, "hrmDocuments"))) return { ok: false, error: HRM_FEATURE_OFF };
+    const a = raw as { status?: string; categoryKey?: string };
+      const { listDocuments, listOwnDocuments } = await import(
+        "@openbooks/engine/src/hrm/documents/documents.ts"
+      const manages = await import("@openbooks/engine/src/organization/actor-permissions.ts").then((m) =>
+        m.actorHasPermission(db, authz.user.orgId, authz.user.id, "hrm.documents.read"),
+      const documents = manages
+        ? await listDocuments({
+            ...(a.categoryKey ? { categoryKey: a.categoryKey } : {}),
+          })
+        : (
+            await listOwnDocuments({ orgId: authz.user.orgId, actorId: authz.user.id })
+          ).documents.filter(
+            (d) => (!a.status || d.status === a.status) && (!a.categoryKey || d.categoryKey === a.categoryKey),
+          documents: documents.map((d) => ({
+            id: d.id,
+            title: d.title,
+            categoryKey: d.categoryKey,
+            status: d.status,
+            sentAt: d.sentAt,
+            completedAt: d.completedAt,
+            expiresAt: d.expiresAt,
+            legalHold: d.legalHold,
+          href: "/hrm/documents",
         },
       };
     } catch (error) {
@@ -1641,6 +1692,18 @@ const hrmFeedback: AssistantToolDef = {
         orgId: authz.user.orgId,
         actorId: authz.user.id,
         ...(a.subjectEmploymentId ? { subjectEmploymentId: a.subjectEmploymentId } : {}),
+const hrmSurveyResults: AssistantToolDef = {
+  name: "hrm_survey_results",
+    "Survey aggregate results: participation, eNPS, driver scores, the suppression-marked heatmap, and the pulse trend. Aggregate only — respondent links never leave the service. Read-only.",
+  gate: { mode: "anyOf", perms: ["hrm.surveys.manage"] },
+  feature: "hrmSurveys",
+    surveyId: uuidInput.describe("Survey to read aggregate results for"),
+    if (!(await isFeatureEnabled(authz.user.orgId, "hrmSurveys"))) return { ok: false, error: HRM_FEATURE_OFF };
+    const a = raw as { surveyId?: string };
+    if (!a.surveyId) return { ok: false, error: "survey_required" };
+      const { getSurveyResults } = await import("@openbooks/engine/src/hrm/surveys/responses.ts");
+      const results = await getSurveyResults({
+        surveyId: a.surveyId,
       });
       return {
         ok: true,
@@ -1657,6 +1720,17 @@ const hrmFeedback: AssistantToolDef = {
               recordedAt: row.recordedAt,
               href: "/me/one-on-ones",
             })),
+          surveyId: results.surveyId,
+          status: results.status,
+          invitations: results.invitations,
+          responded: results.responded,
+          participationPct: results.participationPct,
+          enps: results.enps,
+          drivers: results.drivers,
+          heat: results.heat,
+          trend: results.trend,
+          comments: results.comments,
+          href: "/hrm/surveys",
         },
       };
     } catch (error) {
@@ -1722,6 +1796,31 @@ const hrmCalibration: AssistantToolDef = {
             status: session.status,
             href: "/hrm/performance?tab=calibration",
           })),
+const hrmOrgChart: AssistantToolDef = {
+  name: "hrm_org_chart",
+    "Org chart: the reporting tree with titles, departments, vacancies, and span of control as of a date, plus the directory. Names and titles only — never pay or private fields. Read-only.",
+  gate: { mode: "anyOf", perms: ["hrm.self.read"] },
+  feature: "hrmOrgChart",
+    asOf: dateInput.optional().describe("Read the tree as of this date; defaults to today"),
+    search: z.string().optional().describe("Keep directory entries matching this name, title, or department"),
+    if (!(await isFeatureEnabled(authz.user.orgId, "hrmOrgChart"))) return { ok: false, error: HRM_FEATURE_OFF };
+    const a = raw as { asOf?: string; search?: string };
+      const { loadDirectory, loadOrgChart } = await import("@openbooks/engine/src/hrm/org-chart.ts");
+      const { businessToday } = await import("@openbooks/engine/src/platform/business-date.ts");
+      const asOf = a.asOf ?? (await businessToday(authz.user.orgId));
+      const [chart, directory] = await Promise.all([
+        loadOrgChart({ orgId: authz.user.orgId, actorId: authz.user.id, asOf }),
+        loadDirectory({
+          ...(a.search ? { search: a.search } : {}),
+          limit: 200,
+      ]);
+          asOf: chart.asOf,
+          headcount: chart.headcount,
+          vacancies: chart.vacancies,
+          layers: chart.layers,
+          roots: chart.roots,
+          directory,
+          href: "/hrm/org-chart",
         },
       };
     } catch (error) {
@@ -1735,4 +1834,7 @@ const hrmCalibration: AssistantToolDef = {
 export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting, hrmPerformanceCycles, hrmTurnover, hrmBenefits, hrmMe, automationsStatus, hrmComplianceFindings, hrmCertifiedPayroll, hrmCompensation, hrmPayEquity, hrmQualifications, hrmDispatchCheck, hrmOneOnOnes, hrmFeedback, hrmCalibration, inboxItems];
 
 
+// HR-19 end
+
+export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting, hrmPerformanceCycles, hrmTurnover, hrmBenefits, hrmMe, automationsStatus, hrmComplianceFindings, hrmCertifiedPayroll, hrmCompensation, hrmPayEquity, hrmQualifications, hrmDispatchCheck, hrmDocuments, hrmSurveyResults, hrmOrgChart, inboxItems];
 // HR-12 end

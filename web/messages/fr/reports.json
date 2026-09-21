@@ -752,6 +752,26 @@
       "hrm_talent_reviews": {
         "label": "Revues de talents",
         "description": "Une ligne par revue de talents : collaborateur, performance et potentiel, impact et risque de départ, et aptitude à la promotion. Nécessite l’autorisation de performance RH."
+      },
+      "hrm_documents": {
+        "label": "Documents RH",
+        "description": "Une ligne par document RH — titre, catégorie déclarée, statut du cycle de vie, envoi/achèvement/expiration et suspension légale."
+      },
+      "hrm_document_signers": {
+        "label": "Signataires de documents",
+        "description": "Une ligne par signataire ordonné — document, ordre, rôle et statut."
+      },
+      "hrm_retention_actions": {
+        "label": "Actions de conservation",
+        "description": "Une ligne par action de conservation — document, catégorie, échéance, action terminale, exécution et blocage légal."
+      },
+      "hrm_survey_results": {
+        "label": "Résultats d’enquêtes",
+        "description": "Une ligne par enquête — type, degré d’anonymat, statut, nombres d’invitations et de réponses, date de clôture."
+      },
+      "hrm_org_chart": {
+        "label": "Organigramme",
+        "description": "Une ligne par emploi en service à la date du rapport — nom, titre, département et manager."
       }
     },
     "columns": {
@@ -1612,6 +1632,51 @@
         "impact_of_loss": "Impact du départ",
         "risk_of_loss": "Risque de départ",
         "id": "Revue (id)"
+      },
+      "hrm_documents": {
+        "title": "Titre",
+        "person": "Personne",
+        "category": "Catégorie",
+        "status": "Statut",
+        "sent_at": "Envoyé le",
+        "completed_at": "Achevé le",
+        "expires_at": "Expire le",
+        "legal_hold": "Suspension légale",
+        "document_id": "Document (id)"
+      },
+      "hrm_document_signers": {
+        "document": "Document",
+        "ord": "Ordre",
+        "role": "Rôle",
+        "status": "Statut",
+        "signed_at": "Signé le",
+        "document_id": "Document (id)"
+      },
+      "hrm_retention_actions": {
+        "document": "Document",
+        "category": "Catégorie",
+        "due_on": "Échéance le",
+        "action": "Action",
+        "executed_at": "Exécuté le",
+        "blocked_reason": "Motif du blocage",
+        "document_id": "Document (id)"
+      },
+      "hrm_survey_results": {
+        "name": "Nom",
+        "kind": "Type",
+        "anonymity": "Anonymat",
+        "status": "Statut",
+        "invitations": "Invitations",
+        "responded": "Réponses",
+        "closes_at": "Clôture le",
+        "survey_id": "Enquête (id)"
+      },
+      "hrm_org_chart": {
+        "employee": "Salarié",
+        "title": "Titre",
+        "department": "Département",
+        "manager": "Manager",
+        "employment_id": "Emploi (id)"
       }
     },
     "enumValues": {
