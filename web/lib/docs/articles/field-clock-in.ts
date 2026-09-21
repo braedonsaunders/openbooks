@@ -20,7 +20,7 @@ export const fieldClockIn: DocArticle = {
     "PIN",
     "field time",
   ],
-  related: ["labor-costing", "fieldTickets", "payroll"],
+  related: ["labor-costing", "field-tickets", "payroll"],
   body: `# Clocking in from the field
 
 Deskless crews do not fill a weekly grid. Field time capture is a

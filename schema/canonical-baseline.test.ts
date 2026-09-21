@@ -426,6 +426,10 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // HR-19 begin: documents/e-sign/retention/DSAR/surveys (0230).
     "0230_hrm_documents_surveys.sql",
     // HR-19 end
+    // HR-20 begin: field time capture — clock events, geofences, kiosks,
+    // crew batches, equipment on entries, approval stages (0231).
+    "0231_field_time_capture.sql",
+    // HR-20 end
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
