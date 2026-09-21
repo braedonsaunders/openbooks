@@ -45,6 +45,9 @@ import {
   PlacementSummary,
 } from '../../app/(app)/hrm/compensation/sections'
 import { LeaveBalances } from '../../app/(app)/hrm/my-leave/LeaveBalances'
+// HR-19 begin: documents drawer + generate dialog (verbatim adapters only).
+import { DocumentsDrawer, DocumentsGenerateDialog } from '../../app/(app)/hrm/documents/sections'
+// HR-19 end
 import { num, str, type WidgetRenderer } from './widget-props'
 
 /** HR workspace adapters; lifecycle permissions remain owned by the rendered components. */
@@ -456,4 +459,19 @@ export const HRM_WIDGETS = {
       cancel={str(props, 'cancel') ?? ''}
     />
   ),
+  // HR-19 begin: the document flyout (signers timeline, events, versions,
+  // send/remind/void/hold) and the generate dialog (template + person +
+  // merge preview), both closing by navigation. Null payloads render
+  // nothing — the spec's `when` gates already omit them.
+  'hrm-documents-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof DocumentsDrawer>['drawer']
+    if (!drawer) return null
+    return <DocumentsDrawer drawer={drawer} />
+  },
+  'hrm-documents-generate-dialog': (props) => {
+    const generate = props.generate as ComponentProps<typeof DocumentsGenerateDialog>['generate']
+    if (!generate) return null
+    return <DocumentsGenerateDialog generate={generate} />
+  },
+  // HR-19 end
 } satisfies Record<string, WidgetRenderer>

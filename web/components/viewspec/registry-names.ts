@@ -188,6 +188,10 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   // HR-14 begin
   'hrm-qualification-dialog',
   // HR-14 end
+  // HR-19 begin
+  'hrm-documents-drawer',
+  'hrm-documents-generate-dialog',
+  // HR-19 end
   'hrm-comp-cycle-dialog',
   'hrm-comp-equity-dialog',
   'hrm-comp-line-drawer',
