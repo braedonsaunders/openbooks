@@ -137,10 +137,28 @@ CREATE INDEX IF NOT EXISTS ai_decisions_org_actor
 
 -- Append-only: decisions are evidence. UPDATE and DELETE are refused; a
 -- correction is a new row, exactly like the employment_changes ledger.
+--
+-- "Exactly like" has to include the escape hatch, or the claim is only
+-- half true. Every other HRM evidence ledger -- feedback, calibration
+-- events, qualification events, talent reviews, allowance inputs --
+-- stands down when openbooks.amend is on, which is how a disposable org
+-- is torn down and how an authorized amendment is applied. This guard
+-- originally had no such check, so it was the ONE trigger in the block
+-- that could not be told to stand down: dropScratchOrg sets
+-- openbooks.amend, sandbox_wipe and bypass_rls and still could not clear
+-- the table, which failed the whole teardown and took the standards
+-- conformance evidence set down with it.
+--
+-- Note this is NOT a weakening. Ordinary callers never set the GUC, so
+-- an update or delete on a real decision is refused exactly as before;
+-- amend is set only by the teardown path and by authorized amendment.
 CREATE OR REPLACE FUNCTION public.ai_decisions_refuse_update() RETURNS trigger
   LANGUAGE plpgsql
   AS $$
 BEGIN
+  IF coalesce(current_setting('openbooks.amend', true), 'off') = 'on' THEN
+    RETURN COALESCE(OLD, NEW);
+  END IF;
   RAISE EXCEPTION 'ai_decisions is append-only: decisions cannot be updated or deleted; record a new row (capability %, subject %)',
     COALESCE(OLD.capability_key, NEW.capability_key),
     COALESCE(OLD.subject_kind, NEW.subject_kind);
