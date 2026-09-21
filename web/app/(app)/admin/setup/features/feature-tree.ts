@@ -56,6 +56,10 @@ export interface FeatureTreeNode {
   missingRequirements: string[]
   /** False only for children hidden while their parent is off. */
   visible: boolean
+  /** Nesting distance from the group's top-level parent: 1 for a direct
+   *  child, 2 for a child of that child, and so on. The switchboard indents
+   *  by this so a sub-sub-feature reads as subordinate rather than sibling. */
+  depth: number
 }
 
 export interface FeatureTreeGroup {
@@ -135,21 +139,42 @@ export function buildFeatureTree(
 
   const toNode = (row: FeatureTreeRow, visible: boolean): FeatureTreeNode => ({
     row,
+    depth: 0,
     on: visible && resolveFeatureOn(allRows, state, row.key),
     missingRequirements: missingRequirements(byKey, state, row),
     visible,
   })
 
+  // Walk to the TOP-LEVEL ancestor, not just the immediate parent. The
+  // switchboard has two visual levels, but the registry nests deeper than
+  // that — projects > timeTracking > fieldTime > fieldTimeGeofence, and every
+  // HRM sub-feature under its module. Attaching only direct children of a
+  // top-level row silently dropped 36 features off the page entirely, so an
+  // org could never switch them on. Depth is carried so the row can indent.
+  const ancestry = (row: FeatureTreeRow): { root: FeatureTreeRow; depth: number } => {
+    let current = row
+    let depth = 0
+    const seen = new Set<string>([row.key])
+    while (current.parentKey) {
+      const parent = byKey.get(current.parentKey)
+      // Unknown parent: fail visible as a top-level row rather than vanish.
+      if (!parent || seen.has(parent.key)) break
+      seen.add(parent.key)
+      current = parent
+      depth += 1
+    }
+    return { root: current, depth }
+  }
+
   const groupsByParent = new Map<string, FeatureTreeNode[]>()
   const topLevel: FeatureTreeRow[] = []
   for (const row of allRows) {
-    const parent = row.parentKey ? byKey.get(row.parentKey) : undefined
-    if (row.parentKey && parent) {
-      const siblings = groupsByParent.get(parent.key) ?? []
-      siblings.push(toNode(row, false))
-      groupsByParent.set(parent.key, siblings)
+    const { root, depth } = ancestry(row)
+    if (depth > 0) {
+      const siblings = groupsByParent.get(root.key) ?? []
+      siblings.push({ ...toNode(row, false), depth })
+      groupsByParent.set(root.key, siblings)
     } else {
-      // No parentKey, or an unknown parentKey: fail visible as a top-level row.
       topLevel.push(row)
     }
   }

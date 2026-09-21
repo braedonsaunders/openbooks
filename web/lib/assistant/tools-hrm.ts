@@ -1662,7 +1662,7 @@ const hrmDocuments: AssistantToolDef = {
       .enum(["draft", "sent", "viewed", "partially_signed", "signed", "acknowledged", "declined", "voided", "expired"])
       .optional()
       .describe("Keep only this document status"),
-    categoryKey: z.string().optional().describe("Keep only this declared category key"),
+    categoryKey: z.string().max(64).optional().describe("Keep only this declared category key"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "hrmDocuments"))) return { ok: false, error: HRM_FEATURE_OFF };
@@ -1762,7 +1762,7 @@ const hrmOrgChart: AssistantToolDef = {
   tier: "module",
   inputSchema: z.object({
     asOf: dateInput.optional().describe("Read the tree as of this date; defaults to today"),
-    search: z.string().optional().describe("Keep directory entries matching this name, title, or department"),
+    search: z.string().max(200).optional().describe("Keep directory entries matching this name, title, or department"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "hrmOrgChart"))) return { ok: false, error: HRM_FEATURE_OFF };

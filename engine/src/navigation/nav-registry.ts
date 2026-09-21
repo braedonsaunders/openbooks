@@ -939,6 +939,8 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'equipment',
     'employees',
     'hrm',
+    // HR-13: the Compliance tab sits with its HRM parent in the rail order.
+    'hrm-compliance',
     'me',
   ],
   banking: [

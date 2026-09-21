@@ -6,7 +6,7 @@ import { isFeatureEnabled } from "../../../../lib/features";
 import { hrmDocumentsErrorResponse } from "../documents/_lib";
 import { requestExportBody } from "../retention-schedules/bodies";
 
-async function gateExports(orgId: string): Promise<NextResponse | null> {
+export async function gateExports(orgId: string): Promise<NextResponse | null> {
   if (!(await isFeatureEnabled(orgId, "hrm"))) return NextResponse.json({ error: "not found" }, { status: 404 });
   if (!(await isFeatureEnabled(orgId, "hrmDocuments"))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });

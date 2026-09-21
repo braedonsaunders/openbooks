@@ -60,6 +60,8 @@ test('default workspaces follow the approved journey-oriented information archit
     'equipment',
     'employees',
     'hrm',
+    // HR-13: the construction Compliance surface sits with its HRM parent.
+    'hrm-compliance',
     'me',
   ])
   assert.deepEqual(
