@@ -460,6 +460,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // HR-21 begin: AI on the rails — capabilities ledger, decisions log,
     // payroll anomaly flags and baselines, NL report drafts (0232).
     "0232_hrm_ai_rails.sql",
+    "0236_jl_check_account_evidence_stamp.sql",
     "0237_non_gl_depreciation_recognition.sql",
     // HR-21 end
     // HR-18 follow-up: the offer signing link had no stored hash and so
