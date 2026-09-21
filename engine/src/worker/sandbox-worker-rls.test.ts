@@ -333,6 +333,12 @@ test("refresh ready write refuses a clone this request did not just prove", () =
   assert.doesNotMatch(refresh, /advisoryLockKey:/);
   assert.match(refresh, /last_error = \$\{proofToken\}/);
   assert.match(refresh, /refuseUnprovenRefreshReady\(/);
+  const markAt = refresh.indexOf("status = 'refreshing'");
+  const cloneAt = refresh.indexOf("inRefreshTransaction(");
+  assert.ok(
+    markAt >= 0 && cloneAt >= 0 && markAt < cloneAt,
+    "refreshing + proof token must commit before the clone unit; a mark inside the unit rolls back on clone failure and the catch then matches zero rows",
+  );
 });
 
 test("requireFoundSandbox refuses a missing sandbox instead of succeeding", () => {

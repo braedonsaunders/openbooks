@@ -437,24 +437,25 @@ export async function refreshSandbox(
 
   await withSandboxRefreshLock(sandboxId, async () => {
     try {
-      await inRefreshTransaction(async () => {
-        // A delete that already marked 'deleting' owns this sandbox: steamrolling
-        // its mark would resurrect a sandbox whose org is being dropped. The
-        // conditional mark makes the race atomic — the loser refuses loudly.
-        const marked = (await db.execute<{ id: string }>(sql`
-          update sandboxes
-             set status = 'refreshing', last_error = ${proofToken}, updated_at = now()
-           where id = ${sandboxId} and org_id = ${s.org_id} and status <> 'deleting'
-           returning id`));
-        if (!marked.rows[0]) {
-          requireFoundSandbox(
-            sandboxId,
-            (await db.execute<{ status: string }>(sql`
-            select status from sandboxes where id = ${sandboxId} and org_id = ${s.org_id}`)).rows[0],
-          );
-          throw new Error(`cannot refresh sandbox ${sandboxId} while it is being deleted`);
-        }
+      // Commit refreshing + this request's proof token BEFORE the clone
+      // unit. A mark inside that transaction rolls back with a failed
+      // INSERT, the catch's `last_error = proofToken` then matches zero
+      // rows, and the sandbox stays ready after a failed refresh.
+      const marked = (await db.execute<{ id: string }>(sql`
+        update sandboxes
+           set status = 'refreshing', last_error = ${proofToken}, updated_at = now()
+         where id = ${sandboxId} and org_id = ${s.org_id} and status <> 'deleting'
+         returning id`));
+      if (!marked.rows[0]) {
+        requireFoundSandbox(
+          sandboxId,
+          (await db.execute<{ status: string }>(sql`
+          select status from sandboxes where id = ${sandboxId} and org_id = ${s.org_id}`)).rows[0],
+        );
+        throw new Error(`cannot refresh sandbox ${sandboxId} while it is being deleted`);
+      }
 
+      await inRefreshTransaction(async () => {
         const { rebaseSet } = await loadCatalog();
         const asOfPeriod = await asOfPeriodOf(s.as_of_period_id, s.production_org_id);
         if (s.tier === "as_of" && !asOfPeriod) throw new Error("as-of sandbox requires a cutoff period");
@@ -521,12 +522,18 @@ export async function refreshSandbox(
       }
     } catch (err) {
       // Never clobber a deleter's mark or a newer refresh's proof token.
-      await db.execute(sql`
+      // Zero rows is expected and benign only in that race — our own mark
+      // is committed before the clone unit, so a clone failure matches.
+      const failed = await db.execute<{ id: string }>(sql`
         update sandboxes
            set status = 'failed', last_error = ${String(err instanceof Error ? err.message : err)},
                updated_at = now()
          where id = ${sandboxId} and org_id = ${s.org_id}
-           and status <> 'deleting' and last_error = ${proofToken}`);
+           and status <> 'deleting' and last_error = ${proofToken}
+         returning id`);
+      if (!failed.rows[0] && err instanceof Error) {
+        err.message = `${err.message}; failed-status write matched 0 rows for sandbox ${sandboxId}`;
+      }
       throw err;
     }
   });
