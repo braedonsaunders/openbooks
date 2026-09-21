@@ -125,9 +125,19 @@ const hooks = registerHooks({
     if (specifier === "../../../../../lib/authz" && context.parentURL?.includes("setup/labor-costing")) {
       return { url: "mock:authz", shortCircuit: true };
     }
-    // Only the route's OWN db import is wrapped; engine modules reached
-    // through it keep the un-instrumented real module.
-    if (specifier === "@openbooks/engine/src/platform/db.ts" && context.parentURL?.includes("setup/labor-costing/route.ts")) {
+    // The route's own db import is wrapped, and so is the canonical
+    // wage writer's (HR-12 extracted save-rate into
+    // engine/src/projects/labor-cost-rates.ts): the fault seam follows
+    // the writer, so mid-transaction failures still surface inside the
+    // same unit. Every other engine module keeps the real module.
+    if (
+      (specifier === "@openbooks/engine/src/platform/db.ts" ||
+        // The writer imports the platform db relatively (engine
+        // convention); both spellings resolve to the same module.
+        specifier === "../platform/db.ts") &&
+      (context.parentURL?.includes("setup/labor-costing/route.ts") ||
+        context.parentURL?.includes("projects/labor-cost-rates.ts"))
+    ) {
       return { url: "mock:dbwrap", shortCircuit: true };
     }
     return nextResolve(specifier, context);

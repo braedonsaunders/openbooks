@@ -438,6 +438,18 @@ export async function tick(): Promise<void> {
         console.error("[scheduler] scheduled flows scan failed:", e);
       }
 
+      // Worker-composed duties (HR-16): scans registered at process boot
+      // through the engine/src/worker duty registry — scripts/worker-entry.ts
+      // in production, web/instrumentation.node.ts on single-process opt-in.
+      // This tick only runs what the process registered; it never imports a
+      // duty module itself, so adding a duty adds no module edge.
+      try {
+        const { runWorkerDuties } = await import("../worker/duties.ts");
+        await runWorkerDuties();
+      } catch (e) {
+        console.error("[scheduler] worker duties failed:", e);
+      }
+
       // Period close: expire temporary reopen windows and execute deadline rules.
       try {
         const { recloseExpiredReopens } = await import("../close/reopening.ts"), { runDueCloseAutomations } = await import("../close/run-automation.ts");

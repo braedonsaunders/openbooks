@@ -10,14 +10,21 @@ import {
 } from '../../app/(app)/hrm/sections'
 import { PositionDrawer } from '../../app/(app)/hrm/positions/sections'
 import { RecruitingDrawer } from '../../app/(app)/hrm/recruiting/sections'
-import { ChangeRequestRowActions } from '../../app/(app)/hrm/change-requests/ChangeRequestRowActions'
+import { ChangeRequestRowActions, HrmVerbChip } from '../../app/(app)/hrm/change-requests/ChangeRequestRowActions'
 import { ProposeChangeDialog } from '../../app/(app)/hrm/change-requests/ProposeChangeDialog'
 import { LeaveDialog } from '../../app/(app)/hrm/leave/LeaveDialog'
+// HR-14 begin: qualification islands (verbatim adapters only).
+import { QualificationDialog } from '../../app/(app)/hrm/qualifications/QualificationDialog'
+// HR-14 end
+// HR-13 begin: construction-compliance islands (verbatim adapters only).
+import { ComplianceActions } from '../../app/(app)/hrm/compliance/ComplianceActions'
+import { GenerateDialog } from '../../app/(app)/hrm/compliance/GenerateDialog'
+// HR-13 end
 import { EnrollmentRowActions } from '../../app/(app)/hrm/benefits/EnrollmentRowActions'
 import { WindowDialog } from '../../app/(app)/hrm/benefits/WindowDialog'
 import { WindowDrawer } from '../../app/(app)/hrm/benefits/WindowDrawer'
 import { HrmFacts } from '../../app/(app)/me/sections'
-import { ProfileDialog, StepCompleteButton } from '../../app/(app)/me/islands'
+import { BenefitChangeDialog, BenefitElectDialog, GoalProgressDialog, ProfileDialog, ReviewAcknowledgeButton, StepCompleteButton } from '../../app/(app)/me/islands'
 import { ProcessDrawer } from '../../app/(app)/hrm/processes/sections'
 import { LeaveCalendar } from '../../app/(app)/hrm/leave/LeaveCalendar'
 import {
@@ -27,6 +34,16 @@ import {
   RetentionPanel,
   ReviewDrawer,
 } from '../../app/(app)/hrm/performance/sections'
+import {
+  CompCycleDialog,
+  CompEquityDialog,
+  CompLineDrawer,
+  CompPlanDialog,
+  PacingBar,
+  PayInfoRequest,
+  PlacementBar,
+  PlacementSummary,
+} from '../../app/(app)/hrm/compensation/sections'
 import { LeaveBalances } from '../../app/(app)/hrm/my-leave/LeaveBalances'
 import { num, str, type WidgetRenderer } from './widget-props'
 
@@ -40,9 +57,14 @@ export const HRM_WIDGETS = {
       requestId={str(props, 'requestId') ?? ''}
       requestStatus={str(props, 'requestStatus') ?? ''}
       employmentId={str(props, 'employmentId') ?? ''}
+      appliedChangeId={str(props, 'appliedChangeId') ?? null}
       departmentOptions={(props.departmentOptions as ComponentProps<typeof ChangeRequestRowActions>['departmentOptions']) ?? []}
     />
   ),
+  /** HR-16 begin: the applied event's verb chip (0227) — renders only when
+   *  the loader resolved a non-apply verb; null rows render nothing. */
+  'hrm-verb-chip': (props) => <HrmVerbChip label={str(props, 'label')} />,
+  // HR-16 end
   /** The propose-change dialog, opened from the page header through the
    *  `propose` search param; closing navigates the param away. */
   'hrm-propose-change-dialog': (props) => (
@@ -174,6 +196,17 @@ export const HRM_WIDGETS = {
       closeHref={str(props, 'closeHref') ?? '/hrm/leave'}
     />
   ),
+  // HR-14 begin: qualification record/detail entry point over a
+  // qualification id (detail) or the record flag (blank form), closing
+  // by navigating the search params away.
+  'hrm-qualification-dialog': (props) => (
+    <QualificationDialog
+      qualificationId={str(props, 'qualificationId') ?? null}
+      recordOpen={props.recordOpen === true}
+      closeHref={str(props, 'closeHref') ?? '/hrm/qualifications'}
+    />
+  ),
+  // HR-14 end
   /** Label/value facts behind the Me profile and overview panels — the
    *  loader-resolved rows, never ids. Empty sets render the loader's empty
    *  line (a missing address is legitimate) rather than a blank panel. */
@@ -200,6 +233,41 @@ export const HRM_WIDGETS = {
     <ProfileDialog
       dialog={(props.dialog as ComponentProps<typeof ProfileDialog>['dialog']) ?? null}
       closeHref={str(props, 'closeHref') ?? '/me/profile'}
+    />
+  ),
+  /** One shared review's acknowledge action inside the Me reviews table:
+   *  posts to the Me acknowledge route, rendering the service refusal
+   *  inline. Rows that cannot acknowledge render nothing. */
+  'hrm-review-acknowledge': (props) => (
+    <ReviewAcknowledgeButton
+      reviewId={str(props, 'reviewId') ?? ''}
+      label={str(props, 'label') ?? ''}
+      canAcknowledge={props.canAcknowledge === true}
+      failedLabel={str(props, 'failedLabel') ?? ''}
+    />
+  ),
+  /** Goal progress dialog, opened from the goals table through the
+   *  `goal` search param; submit posts progress with a note. */
+  'hrm-goal-dialog': (props) => (
+    <GoalProgressDialog
+      dialog={(props.dialog as ComponentProps<typeof GoalProgressDialog>['dialog']) ?? null}
+      closeHref={str(props, 'closeHref') ?? '/me/reviews'}
+    />
+  ),
+  /** Elect-coverage dialog, opened from the benefits header through the
+   *  `elect` search param; submit elects inside an open window. */
+  'hrm-benefit-dialog': (props) => (
+    <BenefitElectDialog
+      dialog={(props.dialog as ComponentProps<typeof BenefitElectDialog>['dialog']) ?? null}
+      closeHref={str(props, 'closeHref') ?? '/me/benefits'}
+    />
+  ),
+  /** Change-coverage dialog, opened from an active election row through
+   *  the `change` search param; submit changes inside an open window. */
+  'hrm-benefit-change-dialog': (props) => (
+    <BenefitChangeDialog
+      dialog={(props.dialog as ComponentProps<typeof BenefitChangeDialog>['dialog']) ?? null}
+      closeHref={str(props, 'closeHref') ?? '/me/benefits'}
     />
   ),
   /** Department leave calendar: loader-resolved absence days grouped by
@@ -270,6 +338,38 @@ export const HRM_WIDGETS = {
       canManage={props.canManage === true}
     />
   ),
+  // HR-13 begin: construction-compliance islands. One row-action island
+  // per table (findings, per-diem entries, certified runs) driven by the
+  // row's own status, and the certified-generate dialog driven by the
+  // `generate` search param — @openbooks/ui primitives only.
+  'hrm-compliance-actions': (props) => (
+    <ComplianceActions
+      actionKind={(str(props, 'actionKind') as 'finding' | 'entry' | 'run') ?? 'finding'}
+      rowId={str(props, 'rowId') ?? ''}
+      rowStatus={str(props, 'rowStatus') ?? ''}
+      entryKind={str(props, 'entryKind') ?? 'per_diem'}
+      canManage={props.canManage === true}
+      acknowledgeLabel={str(props, 'acknowledgeLabel') ?? ''}
+      resolveLabel={str(props, 'resolveLabel') ?? ''}
+      approveLabel={str(props, 'approveLabel') ?? ''}
+      voidLabel={str(props, 'voidLabel') ?? ''}
+      submitLabel={str(props, 'submitLabel') ?? ''}
+    />
+  ),
+  'hrm-compliance-generate': (props) => (
+    <GenerateDialog
+      projects={(props.projects as ComponentProps<typeof GenerateDialog>['projects']) ?? []}
+      formats={(props.formats as ComponentProps<typeof GenerateDialog>['formats']) ?? []}
+      title={str(props, 'title') ?? ''}
+      projectLabel={str(props, 'projectLabel') ?? ''}
+      weekLabel={str(props, 'weekLabel') ?? ''}
+      formatLabel={str(props, 'formatLabel') ?? ''}
+      generateLabel={str(props, 'generateLabel') ?? ''}
+      cancelLabel={str(props, 'cancelLabel') ?? ''}
+      closeHref={str(props, 'closeHref') ?? '/hrm/compliance'}
+    />
+  ),
+  // HR-13 end
 
   /** Recruiting funnel figures beside the queue link: open requisitions,
    *  offers awaiting response, interviews this week — loader-resolved.
@@ -295,6 +395,65 @@ export const HRM_WIDGETS = {
       missingLabel={str(props, 'missingLabel') ?? ''}
       queueHref={str(props, 'queueHref') ?? '/hrm/benefits'}
       viewAllLabel={str(props, 'viewAllLabel') ?? ''}
+    />
+  ),
+  /* --- HR-12 compensation --- */
+  /** Band placement bar: min/target/max with the payroll-side rate
+   *  marker, loader-resolved edges — 'no band' renders the label. */
+  'hrm-placement-bar': (props) => (
+    <PlacementBar
+      min={str(props, 'min') ?? null}
+      target={str(props, 'target') ?? null}
+      max={str(props, 'max') ?? null}
+      rate={str(props, 'rate') ?? null}
+      label={str(props, 'label') ?? ''}
+    />
+  ),
+  /** Cycle budget pacing bar: computed percent with the over-budget
+   *  tone, loader-resolved. */
+  'hrm-pacing-bar': (props) => (
+    <PacingBar pct={num(props, 'pct') ?? null} note={str(props, 'note') ?? ''} />
+  ),
+  /** The cycle line drawer: propose form, decide buttons, and the
+   *  append-only event history, opened from the line's `line` param. */
+  'hrm-comp-line-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof CompLineDrawer>['drawer']
+    if (!drawer) return null
+    return <CompLineDrawer drawer={drawer} />
+  },
+  /** The new-cycle dialog, opened from the page header through the
+   *  `cycle` search param; closing navigates the param away. */
+  'hrm-comp-cycle-dialog': (props) => {
+    const dialog = props.dialog as ComponentProps<typeof CompCycleDialog>['dialog']
+    if (!dialog) return null
+    return <CompCycleDialog dialog={dialog} />
+  },
+  /** The new-plan dialog, opened from the page header through the
+   *  `plan` search param. */
+  'hrm-comp-plan-dialog': (props) => {
+    const dialog = props.dialog as ComponentProps<typeof CompPlanDialog>['dialog']
+    if (!dialog) return null
+    return <CompPlanDialog dialog={dialog} />
+  },
+  /** The snapshot-generate dialog on the equity surface. */
+  'hrm-comp-equity-dialog': (props) => {
+    const dialog = props.dialog as ComponentProps<typeof CompEquityDialog>['dialog']
+    if (!dialog) return null
+    return <CompEquityDialog dialog={dialog} />
+  },
+  /** Placement summary on the Me surface: loader-resolved strings. */
+  'hrm-placement-summary': (props) => (
+    <PlacementSummary placement={str(props, 'placement') ?? ''} compaRatio={str(props, 'compaRatio') ?? null} bandRange={str(props, 'bandRange') ?? null} />
+  ),
+  /** Pay-information request action with the open request's status. */
+  'hrm-pay-info-request': (props) => (
+    <PayInfoRequest
+      employmentId={str(props, 'employmentId') ?? ''}
+      requestLabel={str(props, 'requestLabel') ?? ''}
+      requestStatus={str(props, 'requestStatus') ?? null}
+      failed={str(props, 'failed') ?? ''}
+      submit={str(props, 'submit') ?? ''}
+      cancel={str(props, 'cancel') ?? ''}
     />
   ),
 } satisfies Record<string, WidgetRenderer>

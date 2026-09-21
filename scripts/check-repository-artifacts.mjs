@@ -1,9 +1,18 @@
 import { execFileSync } from "node:child_process";
 
+// KNOWN DEBT, not a cure: both ceilings here scale with the REPOSITORY, not
+// with the change under test, because the guard enumerates and reads every
+// candidate blob in the tree. Raising them buys room; it does not remove the
+// failure mode, and the next person to hit it will be under release pressure
+// with less context. The real fix is to scope the guard to the CHANGED blobs
+// or to stream instead of buffering, so the cost is proportional to the diff.
+// Worth doing because the failure is silent in the dangerous direction: the
+// process dies with ENOBUFS, which reads as a tooling error rather than as a
+// finding, so a guard that cannot run looks like a guard with nothing to say.
 function git(...args) {
   return execFileSync("git", args, {
     encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
+    maxBuffer: 512 * 1024 * 1024,
     stdio: ["ignore", "pipe", "pipe"],
   });
 }
@@ -62,10 +71,12 @@ function readTrackedBlobs(objectIds) {
   const uniqueObjectIds = [...new Set(objectIds)];
   if (uniqueObjectIds.length === 0) return new Map();
 
+  // Same ceiling, same debt as the helper above: this batch carries every
+  // candidate blob's CONTENT, so it is the one that threw ENOBUFS first.
   const output = execFileSync("git", ["cat-file", "--batch"], {
     input: `${uniqueObjectIds.join("\n")}\n`,
     encoding: null,
-    maxBuffer: 64 * 1024 * 1024,
+    maxBuffer: 512 * 1024 * 1024,
     stdio: ["pipe", "pipe", "pipe"],
   });
   const blobs = new Map();

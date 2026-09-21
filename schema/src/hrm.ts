@@ -384,6 +384,19 @@ export const employmentChanges = pgTable(
      */
     closedVersions: jsonb("closed_versions").$type<unknown[]>().notNull().default([]),
     recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Generic HR action carried from the request (0227). */
+    action: text("action"),
+    /** Reason code carried from the request (0227). */
+    reasonCode: text("reason_code"),
+    /** Event verb: apply, cancel, rescind, correct (0227). Rescind and
+     *  correct are appended EVENTS over prior changes, never edits. */
+    verb: text("verb", { enum: ["apply", "cancel", "rescind", "correct"] })
+      .notNull()
+      .default("apply"),
+    /** Rescind names the completed change it reverses (0227). */
+    reversesChangeId: uuid("reverses_change_id"),
+    /** Correct names the completed change it supersedes (0227). */
+    correctedChangeId: uuid("corrected_change_id"),
     ...auditColumns,
   },
   (t) => [

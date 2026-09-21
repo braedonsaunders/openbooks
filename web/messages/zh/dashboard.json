@@ -40,7 +40,23 @@
     "topCustomers": "主要客户",
     "topVendors": "主要供应商",
     "openCount": "{count, plural, one {# 笔未结} other {# 笔未结}}",
-    "runway": "现金可维持"
+    "runway": "现金可维持",
+    "inboxList": "我的任务",
+    "payTile": "薪酬",
+    "balanceTile": "休假余额",
+    "whosOut": "缺勤",
+    "homeUpcoming": "近期安排",
+    "celebrations": "庆祝",
+    "announcements": "公告",
+    "homeAsk": "提问",
+    "teamApprovals": "团队审批",
+    "teamSteps": "逾期的团队步骤",
+    "teamNudges": "1:1与提醒",
+    "teamHeadcount": "团队人数",
+    "teamQuals": "即将到期的资质",
+    "adminAttention": "需要处理",
+    "workflowErrors": "工作流错误",
+    "adminCalendar": "合规日历"
   },
   "metricContext": {
     "today": "今日已过账",
@@ -100,7 +116,23 @@
     "expectedPayments": "未来30天预计供应商付款（本位币）。",
     "topCustomers": "排名前五的客户未结余额。",
     "topVendors": "排名前五的供应商未结余额。",
-    "runway": "未来几周的预计现金与可维持期（本位币）。"
+    "runway": "未来几周的预计现金与可维持期（本位币）。",
+    "inboxList": "您的主要任务，附收件箱链接。",
+    "payTile": "下次发薪日与上期工资单。",
+    "balanceTile": "休假余额与申请链接。",
+    "whosOut": "本周缺勤人员。",
+    "homeUpcoming": "节假日与到期评估。",
+    "celebrations": "生日、周年与新成员。",
+    "announcements": "管理员公告。",
+    "homeAsk": "询问助手。",
+    "teamApprovals": "等待审批。",
+    "teamSteps": "逾期的团队步骤。",
+    "teamNudges": "1:1提醒与关注。",
+    "teamHeadcount": "您的团队人数。",
+    "teamQuals": "即将到期的资质。",
+    "adminAttention": "汇总的待处理事项。",
+    "workflowErrors": "出错的工作流。",
+    "adminCalendar": "报告与汇缴日期。"
   },
   "grid": {
     "customizing": "正在自定义您的仪表板",
@@ -181,5 +213,21 @@
     "personalBadge": "您的看板",
     "roleBadge": "角色默认",
     "systemBadge": "公司默认"
+  },
+  "persona": {
+    "nothingWaiting": "暂无等待事项。",
+    "noBalances": "暂无可计算的余额。",
+    "nobodyOut": "本周无人缺勤。",
+    "nothingUpcoming": "暂无安排。",
+    "noCelebrations": "暂无庆祝。",
+    "noAnnouncements": "暂无公告。",
+    "askHint": "询问薪酬、休假或制度。",
+    "noOverdueSteps": "暂无逾期步骤。",
+    "noNudges": "暂无提醒。",
+    "noExpiringQuals": "暂无即将到期的资质。",
+    "allClear": "一切正常。",
+    "needsAttention": "需要处理。",
+    "requestTimeOff": "申请休假",
+    "lastSlip": "上期 {date}"
   }
 }

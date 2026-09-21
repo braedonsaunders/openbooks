@@ -148,6 +148,30 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/admin/automations': {
+    route: '/admin/automations',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/admin/automations/view')
+      return {
+        load: (input) => m.loadAutomations(input.searchParams ?? {}),
+        spec: (data) => m.automationsSpec(data as never),
+      }
+    },
+  },
+  '/admin/automations/[id]': {
+    route: '/admin/automations/[id]',
+    segments: ['id'],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/admin/automations/[id]/view')
+      return {
+        load: (input) => m.loadAutomationBuilder(segment(input, 'id')),
+        spec: (data) => m.automationBuilderSpec(data as never),
+      }
+    },
+  },
   '/admin/backups': {
     route: '/admin/backups',
     segments: [],
@@ -784,18 +808,6 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
-  '/approvals': {
-    route: '/approvals',
-    segments: [],
-    searchParams: true,
-    module: async () => {
-      const m = await import('../app/(app)/approvals/view')
-      return {
-        load: (input) => m.loadApprovals(input.searchParams ?? {}),
-        spec: (data) => m.approvalsSpec(data as never),
-      }
-    },
-  },
   '/apps': {
     route: '/apps',
     segments: [],
@@ -1384,6 +1396,66 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/hrm/compensation': {
+    route: '/hrm/compensation',
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/hrm/compensation/view')
+      return {
+        load: () => m.loadCompensationPage(),
+        spec: (data) => m.compensationSpec(data as never),
+      }
+    },
+  },
+  '/hrm/compensation/cycles/[id]': {
+    route: '/hrm/compensation/cycles/[id]',
+    segments: ['id'],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/hrm/compensation/cycles/[id]/view')
+      return {
+        load: (input) => m.loadCompCyclePage(segment(input, 'id'), input.searchParams ?? {}),
+        spec: (data) => m.compCycleSpec(data as never),
+      }
+    },
+  },
+  '/hrm/compensation/equity': {
+    route: '/hrm/compensation/equity',
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/hrm/compensation/equity/view')
+      return {
+        load: () => m.loadEquityPage(),
+        spec: (data) => m.equitySpec(data as never),
+      }
+    },
+  },
+  '/hrm/compensation/plans/[id]': {
+    route: '/hrm/compensation/plans/[id]',
+    segments: ['id'],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/hrm/compensation/plans/[id]/view')
+      return {
+        load: (input) => m.loadCompPlanPage(segment(input, 'id')),
+        spec: (data) => m.compPlanSpec(data as never),
+      }
+    },
+  },
+  '/hrm/compliance': {
+    route: '/hrm/compliance',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/hrm/compliance/view')
+      return {
+        load: (input) => m.loadCompliancePageData(input.searchParams ?? {}),
+        spec: (data) => m.complianceSpec(data as never),
+      }
+    },
+  },
   '/hrm/leave': {
     route: '/hrm/leave',
     segments: [],
@@ -1453,6 +1525,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: (input) => m.loadRecruitingPage(input.searchParams ?? {}),
         spec: (data) => m.recruitingSpec(data as never),
+      }
+    },
+  },
+  '/inbox': {
+    route: '/inbox',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/inbox/view')
+      return {
+        load: (input) => m.loadApprovals(input.searchParams ?? {}),
+        spec: (data) => m.approvalsSpec(data as never),
       }
     },
   },
@@ -1564,6 +1648,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/me/benefits': {
+    route: '/me/benefits',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/me/benefits/view')
+      return {
+        load: (input) => m.loadMeBenefitsPage(input.searchParams ?? {}),
+        spec: (data) => m.meBenefitsSpec(data as never),
+      }
+    },
+  },
   '/me/checklists': {
     route: '/me/checklists',
     segments: [],
@@ -1576,6 +1672,30 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/me/compensation': {
+    route: '/me/compensation',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/me/compensation/view')
+      return {
+        load: (input) => m.loadMyCompPage(input.searchParams ?? {}),
+        spec: (data) => m.myCompSpec(data as never),
+      }
+    },
+  },
+  '/me/one-on-ones': {
+    route: '/me/one-on-ones',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/me/one-on-ones/view')
+      return {
+        load: (input) => m.loadMeOneOnOnesPage(input.searchParams ?? {}),
+        spec: (data) => m.meOneOnOnesSpec(data as never),
+      }
+    },
+  },
   '/me/profile': {
     route: '/me/profile',
     segments: [],
@@ -1585,6 +1705,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: (input) => m.loadMeProfilePage(input.searchParams ?? {}),
         spec: (data) => m.meProfileSpec(data as never),
+      }
+    },
+  },
+  '/me/reviews': {
+    route: '/me/reviews',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/me/reviews/view')
+      return {
+        load: (input) => m.loadMeReviewsPage(input.searchParams ?? {}),
+        spec: (data) => m.meReviewsSpec(data as never),
       }
     },
   },

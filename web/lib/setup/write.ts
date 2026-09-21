@@ -1,6 +1,7 @@
 import 'server-only'
 import { uuidId } from '../api/json'
 import { saveExtensionSettingRow } from './extension-settings'
+import { createHomeAnnouncementRow, deleteHomeAnnouncementRow, saveHomeAnnouncementRow } from './home-announcements'
 import { sql } from 'drizzle-orm'
 import { CurrencyError, updateFxRate } from '@openbooks/engine/src/fx/currencies.ts'
 import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
@@ -25,6 +26,7 @@ import {
 import { normalizeHrmProcessTemplateInput } from './hrm-process-template'
 import { normalizeHrmPipelineStageInput } from './hrm-pipeline'
 import { normalizeHrmReviewTemplateInput } from './hrm-review-template'
+import { normalizeHrmCompensationInput } from './hrm-compensation'
 import { benefitPlanShapeProblem } from './hrm-benefits'
 import { leavePolicyRuleProblem, normalizeHrmLeavePolicyInput } from './hrm-leave-policy'
 import { applyRuleSlotColumns } from './hrm-rule-slots'
@@ -1082,6 +1084,64 @@ export async function validateEntityIntegrity(
     `)
     if (!refs.rows[0]?.section_ok) return 'The parent section is not visible in this organization'
   }
+  // HRM compensation architecture (0221, HR-12): levels carry at least
+  // one directive criterion with a positive weight (merged on edit so a
+  // partial slot edit keeps the untouched weights); the family, when
+  // named, must be visible in this org. Bands order min <= target <=
+  // max and scope to the level's own family — a band that prices a rung
+  // against another family's ladder is refused by field name.
+  if (entity.key === 'hrm-job-levels') {
+    let values = body
+    if (rowId) {
+      const current = await executor.execute(sql`
+        select family_id as "familyId", equal_value_criteria as "equalValueCriteria"
+          from hrm_job_levels where id = ${rowId} and org_id = ${orgId}
+      `)
+      if (!current.rows[0]) return 'Job level not found'
+      values = { ...(current.rows[0] as Record<string, unknown>), ...body }
+    }
+    const criteria = values.equalValueCriteria
+    const allowed = new Set(['skills', 'effort', 'responsibility', 'working_conditions'])
+    if (!Array.isArray(criteria) || criteria.length === 0) {
+      return 'Declare at least one equal-value criterion (skills, effort, responsibility, working_conditions) with a weight'
+    }
+    for (const entry of criteria) {
+      const row = entry as Record<string, unknown>
+      if (!row || !allowed.has(String(row.criterion))) return 'Each criterion names skills, effort, responsibility, or working_conditions'
+      if (typeof row.weight !== 'string' || !/^\d+(\.\d+)?$/.test(row.weight) || !(Number(row.weight) > 0)) {
+        return 'Each criterion needs a positive weight'
+      }
+    }
+    if (values.familyId) {
+      const family = await executor.execute(sql`
+        select 1 from hrm_job_families where id = ${String(values.familyId)} and org_id = ${orgId}
+      `)
+      if (!family.rows[0]) return 'The family is not visible in this organization'
+    }
+    if (values.rank !== undefined && (!Number.isInteger(Number(values.rank)) || Number(values.rank) < 1)) {
+      return 'Rank is a positive integer ordering the ladder'
+    }
+  }
+  if (entity.key === 'hrm-pay-bands') {
+    const min = body.min !== undefined ? Number(body.min) : null
+    const target = body.target !== undefined ? Number(body.target) : null
+    const max = body.max !== undefined ? Number(body.max) : null
+    if ((min !== null && !(min > 0)) || (target !== null && !(target > 0)) || (max !== null && !(max > 0))) {
+      return 'Band min, target and max are positive amounts'
+    }
+    if (min !== null && target !== null && max !== null && !(min <= target && target <= max)) {
+      return 'Order the band min <= target <= max'
+    }
+    if (body.levelId) {
+      const level = (await executor.execute(sql`
+        select family_id as "familyId" from hrm_job_levels where id = ${String(body.levelId)} and org_id = ${orgId}
+      `)).rows[0] as Record<string, unknown> | undefined
+      if (!level) return 'The level is not visible in this organization'
+      if (body.familyId && String(body.familyId) !== String(level.familyId ?? '')) {
+        return 'Scope the band to the level\'s own family, or to no family for the org-wide ladder'
+      }
+    }
+  }
   return null
 }
 
@@ -1146,7 +1206,15 @@ export async function createSetupRecord(
   if (entity.allowCreate === false) return { status: 405, body: { error: 'This configuration is declared by its module' } }
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
 
-  const body = normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, normalizeHrmReviewTemplateInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody)))))
+  // HR-15: home announcements create into org settings JSON.
+  if (entity.dataSource === 'home-announcements') {
+    try { return { status: 200, body: await createHomeAnnouncementRow(orgId, rawBody) } }
+    catch (error) {
+      return { status: 400, body: { error: error instanceof Error ? error.message : 'Invalid announcement' } }
+    }
+  }
+
+  const body = normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, normalizeHrmReviewTemplateInput(entity.key, normalizeHrmCompensationInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody))))))
   const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
   const writableEntity = writableSetupEntity(entity, {
     multiSubsidiary: await subsidiaryFeatureEnabled(orgId),
@@ -1355,7 +1423,7 @@ export async function updateSetupRecord(
   if (!(await setupEntityEnabled(entity, orgId))) return { status: 404, body: { error: 'unknown setup entity' } }
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
 
-  const body = normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, normalizeHrmReviewTemplateInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody)))))
+  const body = normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, normalizeHrmReviewTemplateInput(entity.key, normalizeHrmCompensationInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody))))))
   const id = String(body.id ?? '')
   if (!id) return { status: 400, body: { error: 'id required' } }
   if (entity.dataSource !== 'extension-settings' && idColumn(entity) === 'id' && !UUID_RE.test(id)) {
@@ -1367,6 +1435,15 @@ export async function updateSetupRecord(
     catch (error) {
       const status = error instanceof Error && 'status' in error && error.status === 409 ? 409 : 400
       return { status: status, body: { error: error instanceof Error ? error.message : 'Invalid module setting' } }
+    }
+  }
+
+  // HR-15: home announcements live in org settings JSON, not a table.
+  if (entity.dataSource === 'home-announcements') {
+    try { return { status: 200, body: await saveHomeAnnouncementRow(orgId, id, body) } }
+    catch (error) {
+      const status = error instanceof Error && 'status' in error && error.status === 404 ? 404 : 400
+      return { status: status, body: { error: error instanceof Error ? error.message : 'Invalid announcement' } }
     }
   }
 
@@ -1672,6 +1749,17 @@ export async function deleteSetupRecord(
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
   if (entity.key === 'accounting-books') {
     return { status: 405, body: { error: 'archive-only' } }
+  }
+
+  // HR-15: home announcements delete from org settings JSON.
+  if (entity.dataSource === 'home-announcements') {
+    try {
+      await deleteHomeAnnouncementRow(orgId, id)
+      return { status: 200, body: { ok: true } }
+    } catch (error) {
+      const status = error instanceof Error && 'status' in error && error.status === 404 ? 404 : 400
+      return { status: status, body: { error: error instanceof Error ? error.message : 'Invalid announcement' } }
+    }
   }
 
   if (!id) return { status: 400, body: { error: 'id required' } }

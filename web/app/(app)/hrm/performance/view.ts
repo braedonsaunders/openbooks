@@ -29,6 +29,7 @@ import { listExitRecords } from '@openbooks/engine/src/hrm/performance/exits.ts'
 import { hrmGroupTabs } from '../../../../components/module-home/group-tabs'
 import { can, getAuthz } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
+import { continuousBlocks, continuousTabChips, loadContinuousTab, type ContinuousData } from './continuous-view'
 
 /**
  * Performance tab: review cycles as loader-resolved rows, the cycle drawer
@@ -219,6 +220,11 @@ export interface PerformancePageData {
   drawerOpen: boolean
   reviewOpen: boolean
   exitOpen: boolean
+  // HR-17: route sub-tabs Cycles (existing) / Calibration / Talent. The
+  // cycles table and retention panel render only on the Cycles tab; the
+  // continuous blocks render their own tab's tables.
+  cyclesTab: boolean
+  continuous: ContinuousData
 }
 
 const f = ref<PerformancePageData>()
@@ -243,28 +249,36 @@ export function performanceSpec(data: PerformancePageData): PageSpec {
       }),
     ],
     body: [
-      widgetBlock('filter-chips', {
-        basePath: '/hrm/performance',
-        currentParams: data.currentParams,
-        paramKey: 'status',
-        label: data.segmentsLabel,
-        allLabel: data.allLabel,
-        options: data.segmentOptions,
-      }),
-      table({
-        variant: 'app',
-        rows: f('rows'),
-        rowKey: item('id'),
-        empty: { title: f('empty') },
-        columns: [
-          column(data.columns.name, link(item('name'), item('href'))),
-          column(data.columns.period, text(item('period'))),
-          column(data.columns.template, text(item('template'))),
-          column(data.columns.self, text(item('selfProgress')), { align: 'right', className: 'tabular-nums' }),
-          column(data.columns.manager, text(item('managerProgress')), { align: 'right', className: 'tabular-nums' }),
-          column(data.columns.status, badge(item('statusLabel'), { variant: item('statusVariant') })),
-        ],
-      }),
+      continuousTabChips(data.continuous),
+      {
+        ...widgetBlock('filter-chips', {
+          basePath: '/hrm/performance',
+          currentParams: data.currentParams,
+          paramKey: 'status',
+          label: data.segmentsLabel,
+          allLabel: data.allLabel,
+          options: data.segmentOptions,
+        }),
+        when: f('cyclesTab'),
+      },
+      {
+        ...table({
+          variant: 'app',
+          rows: f('rows'),
+          rowKey: item('id'),
+          empty: { title: f('empty') },
+          columns: [
+            column(data.columns.name, link(item('name'), item('href'))),
+            column(data.columns.period, text(item('period'))),
+            column(data.columns.template, text(item('template'))),
+            column(data.columns.self, text(item('selfProgress')), { align: 'right', className: 'tabular-nums' }),
+            column(data.columns.manager, text(item('managerProgress')), { align: 'right', className: 'tabular-nums' }),
+            column(data.columns.status, badge(item('statusLabel'), { variant: item('statusVariant') })),
+          ],
+        }),
+        when: f('cyclesTab'),
+      },
+      ...continuousBlocks(data.continuous),
       {
         ...widgetBlock('hrm-retention-panel', { retention: data.retention }),
         when: f('canRetain'),
@@ -298,11 +312,14 @@ export async function loadPerformancePage(
   sp: Record<string, string | undefined>,
 ): Promise<PerformancePageData> {
   // Structural scope: any authenticated viewer gets the tab (the read
-  // service narrows every row to their privacy scope); only the hrm switch
-  // gates the page itself. HRM management and retention stay grants.
+  // service narrows every row to their privacy scope); the hrm and
+  // hrmPerformance switches gate the page itself (HR-7's gating moved
+  // under hrmPerformance additively). HRM management and retention stay
+  // grants.
   const authz = await getAuthz()
   if (!authz) notFound()
   if (!(await isFeatureEnabled(authz.user.orgId, 'hrm'))) notFound()
+  if (!(await isFeatureEnabled(authz.user.orgId, 'hrmPerformance'))) notFound()
   const t = await getTranslations('hrm')
   const tabs = await hrmGroupTabs(authz, '/hrm/performance')
 
@@ -521,8 +538,13 @@ export async function loadPerformancePage(
     }
   }
 
+  // HR-17: the continuous tabs resolve first — retention stays a Cycles-tab
+  // panel, so calibration and talent grids get the full page.
+  const continuous = await loadContinuousTab(authz, sp, canManage)
+  const cyclesTab = continuous.tab === 'cycles'
+
   let retention: PerformancePageData['retention'] = null
-  if (canRetain) {
+  if (canRetain && cyclesTab) {
     const overview = await getRetentionOverview({ orgId: authz.user.orgId, actorId: authz.user.id })
     const trailing = overview.trailingTwelveMonths
     retention = {
@@ -558,7 +580,10 @@ export async function loadPerformancePage(
     segmentsLabel: t('performance.segmentsLabel'),
     allLabel: t('performance.allCycles'),
     segmentOptions,
-    currentParams: { ...(rawStatus ? { status: rawStatus } : {}) },
+    currentParams: {
+      ...(rawStatus ? { status: rawStatus } : {}),
+      ...(cyclesTab ? {} : { tab: continuous.tab }),
+    },
     columns: {
       name: t('performance.colName'),
       period: t('performance.colPeriod'),
@@ -580,6 +605,8 @@ export async function loadPerformancePage(
     drawerOpen: detail !== null || missingDetail !== null || creating,
     reviewOpen: review !== null || missingReview !== null,
     exitOpen: exit !== null || missingExit !== null,
+    cyclesTab,
+    continuous,
   }
 }
 

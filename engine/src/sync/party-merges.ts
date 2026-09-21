@@ -144,6 +144,31 @@ const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] =
   // so re-pointing cannot duplicate (the party-merges coverage test names
   // every parties(id) foreign key; this one was missing from the seam).
   ["hrm_benefit_plans", "provider_party_id"],
+  // HR-12 begin: the cycle budget holder and the line decider follow the
+  // merge wholesale. SIMPLE, not GUARDED: no uniqueness on either table
+  // involves those party columns, so re-pointing cannot duplicate.
+  // proposed_by/actor/generated_by name users, never parties: no entry.
+  ["hrm_comp_cycle_budgets", "manager_party_id"],
+  ["hrm_comp_cycle_lines", "approver_party_id"],
+  // HR-12 end
+  // HR-13 begin: the allowance seam keys the run's read on
+  // employee_party_id like the benefits seam above — same guarded shape,
+  // same reason (entry-keyed uniqueness, no party merge collision).
+  ["hrm_allowance_payroll_inputs", "employee_party_id"],
+  // HR-13 end
+  // HR-17 begin: 1:1 item authors/assignees, feedback authors and
+  // requested parties, and calibration facilitators follow the merge
+  // wholesale. SIMPLE, not GUARDED: no uniqueness on these tables
+  // involves a party column (1:1 slots key employments, feedback has no
+  // party uniqueness, calibration entries key session+review), so
+  // re-pointing cannot duplicate. decided_by/created_by name users,
+  // never parties: no entry.
+  ["hrm_one_on_one_items", "author_party_id"],
+  ["hrm_one_on_one_items", "assignee_party_id"],
+  ["hrm_feedback", "author_party_id"],
+  ["hrm_feedback", "requested_from_party_id"],
+  ["hrm_calibration_sessions", "facilitator_party_id"],
+  // HR-17 end
 ];
 
 /**

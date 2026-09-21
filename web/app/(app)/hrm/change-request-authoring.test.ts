@@ -148,7 +148,7 @@ test("the Employment tab gates authoring on the manage grant — readers see the
   assert.match(tab, /canManageHrm/, "the tab takes the manage grant as a prop");
   assert.match(tab, /proposeButton/, "the propose action labels from the catalog");
   assert.match(tab, /ChangeRequestActions/, "rows render the native lifecycle actions");
-  assert.match(tab, /href="\/approvals"/, "bound runs still link to the native approvals surface");
+  assert.match(tab, /href="\/inbox"/, "bound runs still link to the native inbox surface");
   assert.ok(!/decide/.test(tab), "no approval decision rides the Employment tab");
   assert.match(partiesDrawer, /canManageHrm/, "the drawer passes the manage grant to the Employment tab");
   assert.match(entityView, /hrm\.employment\.manage/, "the loader reads the employment manage grant");

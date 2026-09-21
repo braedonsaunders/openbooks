@@ -16,6 +16,7 @@ import {
   text,
   widget,
   widgetBlock,
+  widgetCell,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
@@ -84,6 +85,30 @@ export function meTeamSpec(data: MeTeamData): PageSpec {
                   column(
                     f('rosterColumns.serviceStart'),
                     text(item('serviceStart'), { className: 'tabular-nums' }),
+                  ),
+                  // HR-17: the 1:1 column and the per-report praise action.
+                  // Rows without the switches resolve null hrefs/props, so
+                  // the cells stay empty instead of promising a 404.
+                  column(f('rosterColumns.oneOnOne'), link(item('oneOnOneLabel'), item('oneOnOneHref'))),
+                  column(
+                    f('rosterColumns.feedback'),
+                    widgetCell('hrm-feedback-dialog', {
+                      subjectEmploymentId: item('feedback.subjectEmploymentId'),
+                      requestedFromPartyId: item('feedback.requestedFromPartyId'),
+                      subjectLabel: item('feedback.subjectLabel'),
+                      requestId: null,
+                      kinds: item('feedback.kinds'),
+                      kindLabel: item('feedback.kindLabel'),
+                      visibilities: item('feedback.visibilities'),
+                      visibilityLabel: item('feedback.visibilityLabel'),
+                      bodyLabel: item('feedback.bodyLabel'),
+                      bodyPlaceholder: item('feedback.bodyPlaceholder'),
+                      submitLabel: item('feedback.submitLabel'),
+                      cancelLabel: item('feedback.cancelLabel'),
+                      closeHref: item('feedback.closeHref'),
+                      failed: item('feedback.failed'),
+                      openLabel: item('feedback.openLabel'),
+                    }),
                   ),
                 ],
                 empty: { title: f('rosterEmpty') },
@@ -156,6 +181,32 @@ export function meTeamSpec(data: MeTeamData): PageSpec {
                   column('', link(item('decideLabel'), item('decideHref'))),
                 ],
                 empty: { title: f('changesEmpty') },
+              }),
+            ],
+          }),
+          panel({
+            title: f('owedTitle'),
+            iconKey: 'star',
+            bodyClassName: 'min-h-0 overflow-y-auto p-0',
+            blocks: [
+              table({
+                variant: 'app',
+                rows: f('owedReviews'),
+                rowKey: item('reviewId'),
+                columns: [
+                  column(f('owedColumns.employee'), text(item('workerName'))),
+                  column(f('owedColumns.cycle'), text(item('cycleName'))),
+                  column(
+                    f('owedColumns.status'),
+                    badge(item('statusLabel'), { variant: item('statusVariant') }),
+                  ),
+                  column(
+                    f('owedColumns.due'),
+                    text(item('dueOn'), { className: 'tabular-nums' }),
+                  ),
+                  column('', link(item('openLabel'), item('openHref'))),
+                ],
+                empty: { title: f('owedEmpty') },
               }),
             ],
           }),

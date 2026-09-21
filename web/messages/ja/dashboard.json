@@ -40,7 +40,23 @@
     "topCustomers": "主要顧客",
     "topVendors": "主要仕入先",
     "openCount": "{count, plural, one {# 件の未処理} other {# 件の未処理}}",
-    "runway": "資金繰り期間"
+    "runway": "資金繰り期間",
+    "inboxList": "自分のタスク",
+    "payTile": "給与",
+    "balanceTile": "休暇残高",
+    "whosOut": "不在者",
+    "homeUpcoming": "予定",
+    "celebrations": "お祝い",
+    "announcements": "お知らせ",
+    "homeAsk": "質問",
+    "teamApprovals": "チームの承認",
+    "teamSteps": "期限切れ手順",
+    "teamNudges": "1:1と気づき",
+    "teamHeadcount": "チーム人数",
+    "teamQuals": "期限切れ間近の資格",
+    "adminAttention": "要対応",
+    "workflowErrors": "ワークフローエラー",
+    "adminCalendar": "コンプライアンス予定"
   },
   "metricContext": {
     "today": "本日記帳済み",
@@ -100,7 +116,23 @@
     "expectedPayments": "今後30日間の支払見込み（基軸通貨）。",
     "topCustomers": "未収残高の大きい顧客上位5件。",
     "topVendors": "未払残高の大きい仕入先上位5件。",
-    "runway": "今後数週間の予測残高と資金繰り期間（基軸通貨）。"
+    "runway": "今後数週間の予測残高と資金繰り期間（基軸通貨）。",
+    "inboxList": "受信箱へのリンク付きの主要タスク。",
+    "payTile": "次回給与日と最新明細。",
+    "balanceTile": "申請リンク付き休暇残高。",
+    "whosOut": "今週の不在者。",
+    "homeUpcoming": "休日と期日の評価。",
+    "celebrations": "誕生日・記念日・新入者。",
+    "announcements": "管理者のお知らせ。",
+    "homeAsk": "アシスタントに質問。",
+    "teamApprovals": "承認待ち。",
+    "teamSteps": "期限切れ手順。",
+    "teamNudges": "1:1の促しと気づき。",
+    "teamHeadcount": "チーム人数。",
+    "teamQuals": "期限切れ間近の資格。",
+    "adminAttention": "要対応の集約。",
+    "workflowErrors": "エラーの実行。",
+    "adminCalendar": "報告・納付日。"
   },
   "grid": {
     "customizing": "ダッシュボードをカスタマイズ中",
@@ -181,5 +213,21 @@
     "personalBadge": "自分のボード",
     "roleBadge": "ロールの既定",
     "systemBadge": "会社の既定"
+  },
+  "persona": {
+    "nothingWaiting": "待つものはありません。",
+    "noBalances": "計算可能な残高がありません。",
+    "nobodyOut": "不在者はいません。",
+    "nothingUpcoming": "予定はありません。",
+    "noCelebrations": "お祝いはありません。",
+    "noAnnouncements": "お知らせはありません。",
+    "askHint": "給与・休暇・制度について質問。",
+    "noOverdueSteps": "期限切れ手順はありません。",
+    "noNudges": "促しはありません。",
+    "noExpiringQuals": "期限切れ間近の資格はありません。",
+    "allClear": "すべて完了です。",
+    "needsAttention": "要対応。",
+    "requestTimeOff": "休暇を申請",
+    "lastSlip": "最新明細 {date}"
   }
 }

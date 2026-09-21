@@ -10,7 +10,10 @@
       "myLeave": "My leave",
       "recruiting": "Recruiting",
       "performance": "Performance",
-      "benefits": "Benefits"
+      "benefits": "Benefits",
+      "compliance": "Compliance",
+      "compensation": "Compensation",
+      "qualifications": "Qualifications"
     },
     "recruiting": {
       "title": "Recruiting",
@@ -78,7 +81,9 @@
       "pending": "{count, plural, one {# change request awaiting decision} other {# change requests awaiting decision}}",
       "overdueSteps": "{count, plural, one {# checklist step overdue} other {# checklist steps overdue}}",
       "leavePending": "{count, plural, one {# leave request awaiting approval} other {# leave requests awaiting approval}}",
-      "unfunded": "{fte} filled FTE with no funding behind it"
+      "unfunded": "{fte} filled FTE with no funding behind it",
+      "expiringQualifications": "{count, plural, one {# certification expiring soon} other {# certifications expiring soon}}",
+      "expiredQualifications": "{count, plural, one {# certification expired — dispatch refused until renewed} other {# certifications expired — dispatch refused until renewed}}"
     }
   },
   "overview": {
@@ -160,7 +165,9 @@
       "kind": "Change",
       "effective": "Effective",
       "requester": "Requester",
-      "submitted": "Submitted"
+      "submitted": "Submitted",
+      "action": "Action",
+      "verb": "Verb"
     },
     "emptyTitle": "No change requests here",
     "emptyDescription": "This view is empty — nothing has been proposed in this segment yet.",
@@ -172,7 +179,14 @@
     "proposeFailed": "The employment list could not be loaded.",
     "draftBadge": "Actions",
     "openEmployee": "Open the employee record",
-    "notAvailable": "Not available"
+    "notAvailable": "Not available",
+    "reasonsButton": "Reason codes",
+    "verbs": {
+      "apply": "Apply",
+      "cancel": "Cancel",
+      "rescind": "Rescind",
+      "correct": "Correct"
+    }
   },
   "employment": {
     "episodes": {
@@ -220,7 +234,7 @@
       "binding": "Binding",
       "bindingValue": "Request revision {request} against employment revision {expected}",
       "submitted": "Submitted",
-      "viewInApprovals": "View in approvals",
+      "viewInApprovals": "View in inbox",
       "noRun": "Draft — no approval run yet.",
       "empty": "No change requests yet.",
       "proposeButton": "Propose change",
@@ -290,7 +304,18 @@
       "positionHint": "The funded establishment this assignment holds. The assignment keeps its own title, department, and location.",
       "positionRequired": "Pick a position or mark the assignment as unassigned.",
       "unassignLabel": "Unassign from the position",
-      "unassignHint": "Posts an explicit null link: the slot keeps its content but holds no establishment."
+      "unassignHint": "Posts an explicit null link: the slot keeps its content but holds no establishment.",
+      "actionLabel": "Action",
+      "actionPlaceholder": "Select an action",
+      "actionRequired": "Pick the HR action this change files under.",
+      "reasonCodeLabel": "Reason",
+      "reasonCodePlaceholder": "Select a reason",
+      "rescindAction": "Rescind",
+      "correctAction": "Correct",
+      "rescindTitle": "Rescind change",
+      "correctTitle": "Correct change",
+      "rescindToast": "Change rescinded.",
+      "correctToast": "Correction recorded."
     },
     "exit": {
       "title": "Exit record",
@@ -301,6 +326,14 @@
       "empty": "No benefit elections or dependents yet.",
       "viewAll": "Benefits",
       "dependents": "{count, plural, one {# dependent: {names}} other {# dependents: {names}}}"
+    },
+    "qualifications": {
+      "title": "Qualifications",
+      "viewAll": "View all",
+      "empty": "No qualifications recorded."
+    },
+    "continuous": {
+      "title": "Feedback & competencies"
     }
   },
   "directory": {
@@ -715,7 +748,95 @@
     "exitDestination": "Destination",
     "exitNotes": "Notes",
     "saveExit": "Save exit record",
-    "recordExit": "Record exit"
+    "recordExit": "Record exit",
+    "continuous": {
+      "tabs": {
+        "cycles": "Cycles",
+        "calibration": "Calibration",
+        "talent": "Talent & succession"
+      },
+      "calibration": {
+        "title": "Calibration",
+        "description": "The rating grid over a review cycle: proposed beside calibrated, with the audit trail.",
+        "newSession": "New session",
+        "sessionsEmpty": "No calibration sessions yet.",
+        "colSession": "Session",
+        "colStatus": "Status",
+        "colOpened": "Opened",
+        "gridTitle": "Calibration grid",
+        "gridEmpty": "No submitted manager reviews in this session yet.",
+        "colReview": "Review",
+        "colProposed": "Proposed",
+        "colDecide": "Decide",
+        "distributionTitle": "Rating distribution",
+        "unrated": "Unrated",
+        "missingTitle": "Missing from this session",
+        "openSession": "Open session",
+        "closeSession": "Close session",
+        "sessionName": "Session name",
+        "sessionCycle": "Review cycle",
+        "createSession": "Create session",
+        "ratingLabel": "Calibrated rating",
+        "potentialLabel": "Potential",
+        "justificationLabel": "Justification",
+        "saveLabel": "Save rating",
+        "revertLabel": "Revert",
+        "revertReasonLabel": "Reason for revert"
+      },
+      "talent": {
+        "title": "Talent & succession",
+        "description": "The 9-box over the org-declared scales, the talent table, and succession plans.",
+        "newRecord": "New record",
+        "cycleLabel": "Review cycle",
+        "gridTitle": "Talent grid",
+        "gridEmpty": "No scales declared for this cycle yet.",
+        "unplacedNote": "{count} placements fall outside the declared scales",
+        "colEmployee": "Employee",
+        "colPerformance": "Performance",
+        "colPotential": "Potential",
+        "colLoss": "Impact / risk of loss",
+        "colReady": "Promotion ready",
+        "readyYes": "Yes",
+        "readyNo": "Not yet",
+        "reviewsEmpty": "No talent reviews for this cycle yet.",
+        "plansTitle": "Succession plans",
+        "plansEmpty": "No succession plans yet.",
+        "colPosition": "Position",
+        "colIncumbent": "Incumbent",
+        "colCandidates": "Candidates",
+        "colStatus": "Status",
+        "impactLabel": "Impact of loss",
+        "riskLabel": "Risk of loss",
+        "promotionLabel": "Promotion ready",
+        "notesLabel": "Notes",
+        "submitLabel": "Save record",
+        "modeLabel": "Record",
+        "modeTalentLabel": "Talent review",
+        "modeSuccessionLabel": "Succession plan",
+        "employeeLabel": "Employee",
+        "positionLabel": "Position"
+      },
+      "feedback": {
+        "settingsTitle": "Feedback settings",
+        "anyoneLabel": "Anyone in the org",
+        "managersLabel": "Managers and HR only",
+        "saveLabel": "Save settings",
+        "praise": "Praise",
+        "feedbackKind": "Feedback",
+        "request": "Request",
+        "kindLabel": "Kind",
+        "visibilityLabel": "Visibility",
+        "publicVis": "Public",
+        "managerAndSubject": "Manager and subject",
+        "managerOnly": "Manager only",
+        "subjectOnly": "Subject only",
+        "bodyLabel": "Message",
+        "bodyPlaceholder": "Say what happened, specifically",
+        "submitLabel": "Send",
+        "praiseAction": "Give praise",
+        "respondLabel": "Respond"
+      }
+    }
   },
   "retention": {
     "title": "Retention",
@@ -804,7 +925,11 @@
       "profile": "Profile",
       "leave": "Leave",
       "checklists": "Checklists",
-      "team": "Team"
+      "reviews": "Reviews",
+      "benefits": "Benefits",
+      "team": "Team",
+      "compensation": "Compensation",
+      "oneOnOnes": "1:1s"
     },
     "refusedTitle": "Self-service is unavailable",
     "overview": {
@@ -830,7 +955,10 @@
       "balancesTitle": "Balances",
       "balancesEmpty": "No active leave types.",
       "viewLeave": "Open leave",
-      "extensionsTitle": "More"
+      "extensionsTitle": "More",
+      "qualificationsTitle": "Certifications needing action",
+      "qualificationsEmpty": "Nothing expiring",
+      "qualificationsEmptyDescription": "Your certifications are current — renewals will appear here before they lapse."
     },
     "profile": {
       "title": "My profile",
@@ -935,16 +1063,534 @@
         "title": "Title",
         "department": "Department",
         "status": "Status",
-        "serviceStart": "Service start"
+        "serviceStart": "Service start",
+        "cycle": "Cycle",
+        "oneOnOne": "1:1",
+        "feedback": "Feedback"
       },
       "rosterEmpty": "No direct reports",
       "stepsTitle": "Steps assigned to me",
       "stepsEmpty": "No steps assigned to you on this team.",
       "leaveTitle": "Pending leave",
       "leaveEmpty": "No leave requests awaiting decision.",
-      "decideInApprovals": "Decide in Approvals",
+      "decideInApprovals": "Decide in Inbox",
       "changesTitle": "Pending change requests",
-      "changesEmpty": "No change requests awaiting decision."
+      "changesEmpty": "No change requests awaiting decision.",
+      "owedTitle": "Reviews I owe",
+      "owedEmpty": "No reviews owed in the open cycle.",
+      "openReview": "Open review",
+      "oneOnOneLink": "Open 1:1s"
+    },
+    "reviewStatus": {
+      "pending": "Draft",
+      "submitted": "Submitted",
+      "calibrated": "Calibrated",
+      "shared": "Shared",
+      "acknowledged": "Acknowledged"
+    },
+    "goalStatus": {
+      "active": "Active",
+      "achieved": "Achieved",
+      "missed": "Missed",
+      "cancelled": "Cancelled"
+    },
+    "enrollmentStatus": {
+      "elected": "Elected",
+      "waived": "Waived",
+      "pending_approval": "Pending approval",
+      "active": "Active",
+      "ended": "Ended",
+      "cancelled": "Cancelled"
+    },
+    "windowKinds": {
+      "open_enrollment": "Open enrollment",
+      "new_hire": "New hire",
+      "life_event": "Life event"
+    },
+    "reviews": {
+      "title": "My reviews",
+      "description": "Self-assessments you owe, reviews shared with you, and your goals.",
+      "selfTitle": "Self-assessments",
+      "columns": {
+        "cycle": "Cycle",
+        "period": "Period",
+        "status": "Status",
+        "rating": "Rating",
+        "shared": "Shared",
+        "goal": "Goal",
+        "progress": "Progress"
+      },
+      "selfEmpty": "No self-assessments",
+      "selfEmptyDescription": "Reviews you owe list here once a cycle opens.",
+      "answerInDrawer": "Answer in HR",
+      "sharedTitle": "Shared with me",
+      "sharedEmpty": "Nothing shared yet",
+      "sharedEmptyDescription": "Manager reviews shared with you list here.",
+      "acknowledge": "Acknowledge",
+      "acknowledgeFailed": "The review could not be acknowledged.",
+      "goalsTitle": "My goals",
+      "goalsEmpty": "No goals yet",
+      "goalsEmptyDescription": "Goals for your employment list here with progress.",
+      "goalDialogTitle": "Update goal progress",
+      "goalDialogDescription": "Record progress with a note — it becomes part of the goal's evidence.",
+      "goalNoteLabel": "Note",
+      "goalNotePlaceholder": "What moved since the last update",
+      "goalSubmit": "Save progress",
+      "goalUpdate": "Update",
+      "goalFailed": "Progress could not be saved."
+    },
+    "benefits": {
+      "title": "My benefits",
+      "description": "Your elections, open enrollment windows, and dependents.",
+      "electionsTitle": "My elections",
+      "columns": {
+        "plan": "Plan",
+        "coverage": "Coverage",
+        "status": "Status",
+        "effective": "Effective",
+        "monthly": "Deduction / period",
+        "window": "Window",
+        "kind": "Kind",
+        "range": "Dates",
+        "dependent": "Dependent",
+        "relationship": "Relationship"
+      },
+      "electionsEmpty": "No elections",
+      "electionsEmptyDescription": "Coverage you elect lists here.",
+      "monthlyHint": "The stored amount payroll deducts each period — never recomputed here.",
+      "windowsTitle": "Open enrollment windows",
+      "windowsEmpty": "No open window",
+      "windowsEmptyDescription": "Windows covering your employer list here while open.",
+      "dependentsTitle": "Dependents",
+      "dependentsEmpty": "No dependents on file.",
+      "elect": "Elect coverage",
+      "electTitle": "Elect coverage",
+      "electDescription": "Elect inside an open window covering your employer — or record a life event.",
+      "fromLabel": "Effective from",
+      "lifeEventLabel": "Life event reason (instead of a window)",
+      "lifeEventPlaceholder": "What changed, for the HR approver",
+      "electSubmit": "Elect",
+      "electFailed": "The election could not be recorded.",
+      "change": "Change",
+      "changeTitle": "Change coverage",
+      "changeDescription": "Change from a date inside an open window — the old row ends the day before.",
+      "changeReasonPlaceholder": "Why the coverage changes",
+      "changeSubmit": "Save change",
+      "changeFailed": "The change could not be recorded."
+    },
+    "qualifications": {
+      "columns": {
+        "type": "Certification",
+        "expires": "Expires",
+        "status": "Status"
+      }
+    },
+    "oneOnOnes": {
+      "title": "1:1s",
+      "description": "Your upcoming and past 1:1 conversations with their agendas.",
+      "upcoming": "Upcoming",
+      "past": "Past",
+      "requests": "Feedback requests",
+      "colWhen": "When",
+      "colWith": "With",
+      "colStatus": "Status",
+      "upcomingEmpty": "No 1:1s scheduled.",
+      "pastEmpty": "No past 1:1s.",
+      "requestsEmpty": "No open feedback requests.",
+      "scheduled": "Scheduled",
+      "held": "Held",
+      "skipped": "Skipped",
+      "cancelled": "Cancelled",
+      "talkingPoint": "Talking point",
+      "actionItem": "Action item",
+      "note": "Note",
+      "shared": "Shared",
+      "private": "Private",
+      "privateNote": "Private — only you can read this",
+      "kindLabel": "Kind",
+      "bodyLabel": "Agenda item",
+      "bodyPlaceholder": "Say what the point is",
+      "addItem": "Add item",
+      "hold": "Hold 1:1",
+      "skip": "Skip",
+      "skipReason": "Reason for skipping",
+      "cancelMeeting": "Cancel",
+      "carryNote": "Holding carries open items forward as copies — the originals stay here as history.",
+      "done": "Done",
+      "reopen": "Reopen",
+      "carriedForward": "Carried forward",
+      "actionFailed": "The 1:1 action failed."
+    }
+  },
+  "options": {
+    "hrmAction": {
+      "hire": "Hire",
+      "rehire": "Rehire",
+      "transfer": "Transfer",
+      "promotion": "Promotion",
+      "demotion": "Demotion",
+      "pay_change": "Pay change",
+      "manager_change": "Manager change",
+      "location_change": "Location change",
+      "schedule_change": "Schedule change",
+      "leave_of_absence": "Leave of absence",
+      "return": "Return",
+      "termination": "Termination",
+      "profile_change": "Profile change",
+      "other": "Other"
+    }
+  },
+  "compliance": {
+    "title": "Compliance",
+    "description": "Prevailing wage, certified payroll, workers' comp classes, apprentice ratios, and per-diem — construction compliance from the same time, project, and payroll records.",
+    "refused": "Compliance is unavailable",
+    "needRead": "You need the construction read permission to open this workspace.",
+    "generate": "Generate report",
+    "findingsTitle": "Findings",
+    "ratesTitle": "Rate schedules",
+    "certifiedTitle": "Certified payroll",
+    "classesTitle": "Comp classes",
+    "perdiemTitle": "Per-diem entries",
+    "empty": "Nothing here yet.",
+    "emptyAction": "Configure it in Setup below.",
+    "active": "Active",
+    "retired": "Retired",
+    "sections": {
+      "findings": "Findings",
+      "rates": "Rates",
+      "certified": "Certified payroll",
+      "classes": "Classes",
+      "perdiem": "Per diem"
+    },
+    "kinds": {
+      "ratio_breach": "Ratio breach",
+      "missing_rate": "Missing rate",
+      "class_unresolved": "Unresolved class",
+      "registration_missing": "Missing registration",
+      "fringe_mismatch": "Fringe mismatch"
+    },
+    "findingStatus": {
+      "open": "Open",
+      "acknowledged": "Acknowledged",
+      "resolved": "Resolved"
+    },
+    "runStatus": {
+      "draft": "Draft",
+      "generated": "Generated",
+      "submitted": "Submitted",
+      "amended": "Amended"
+    },
+    "entryStatus": {
+      "computed": "Computed",
+      "approved": "Approved",
+      "voided": "Voided",
+      "consumed": "Consumed"
+    },
+    "scheduleKind": {
+      "prevailing_wage": "Prevailing wage",
+      "union_agreement": "Union agreement",
+      "org_declared": "Org declared"
+    },
+    "reciprocity": {
+      "home_local": "Home local",
+      "jobsite_local": "Jobsite local",
+      "higher_of": "Higher of"
+    },
+    "scope": {
+      "project": "projects",
+      "location": "locations",
+      "subsidiary": "Subsidiary",
+      "org": "Whole org"
+    },
+    "columns": {
+      "kind": "Kind",
+      "project": "Project",
+      "day": "Day",
+      "status": "Status",
+      "recorded": "Recorded",
+      "schedule": "Schedule",
+      "scope": "Scope",
+      "reciprocity": "Reciprocity",
+      "window": "Window",
+      "run": "Run",
+      "week": "Week",
+      "format": "Format",
+      "code": "Code",
+      "name": "Name",
+      "rate": "Rate / 100",
+      "rules": "Rules",
+      "amount": "Amount",
+      "actions": "Actions"
+    },
+    "stats": {
+      "openFindings": "Open findings",
+      "openFindingsSub": "Needs attention before the next run",
+      "dueReports": "Reports due",
+      "dueReportsSub": "Scoped projects with no report for week ending {week}",
+      "unresolvedClasses": "Unresolved classes",
+      "unresolvedClassesSub": "Hours no rule matched",
+      "perdiemWaiting": "Per-diem waiting",
+      "perdiemWaitingSub": "Computed entries to approve"
+    },
+    "actions": {
+      "acknowledge": "Acknowledge",
+      "resolve": "Resolve",
+      "approve": "Approve",
+      "void": "Void",
+      "submit": "Submit"
+    },
+    "generateDialog": {
+      "title": "Generate certified report",
+      "project": "Project",
+      "week": "Week ending",
+      "format": "Format",
+      "generate": "Generate",
+      "cancel": "Cancel"
+    }
+  },
+  "compensation": {
+    "title": "Compensation",
+    "description": "What roles should pay, whether people sit in range, and how raises are decided.",
+    "tiles": {
+      "belowMin": "Below band min",
+      "openCyclePacing": "Open cycle pacing",
+      "awaitingPlans": "Plans awaiting approval",
+      "jointFlags": "Joint assessment flags"
+    },
+    "bandsTitle": "Pay bands by level",
+    "bandsEmpty": "No bands yet — declare a band for a level to price it.",
+    "cyclesTitle": "Merit cycles",
+    "cyclesEmpty": "No cycles yet — open a round to price raises.",
+    "plansTitle": "Headcount plans",
+    "plansEmpty": "No plans yet — draft a workforce scenario.",
+    "architectureTitle": "Job architecture",
+    "newCycle": "New cycle",
+    "newPlan": "New plan",
+    "equity": "Pay equity",
+    "back": "Back",
+    "pacing": "Budget pacing",
+    "pacingNone": "No budget envelope set",
+    "pacingNote": "{pct}% of envelope proposed",
+    "linesTitle": "Team grid",
+    "linesEmpty": "No lines — open the cycle to snapshot the team.",
+    "totalCost": "Costed total",
+    "planLinesTitle": "Plan lines",
+    "planLinesEmpty": "No lines yet.",
+    "approveLine": "Approve",
+    "columns": {
+      "level": "Level",
+      "range": "Range",
+      "headcount": "Headcount",
+      "placement": "Placement",
+      "name": "Name",
+      "status": "Status",
+      "effective": "Effective",
+      "cost": "Cost",
+      "employee": "Employee",
+      "current": "Current",
+      "rating": "Rating",
+      "guideline": "Guideline",
+      "proposed": "Proposed",
+      "title": "Title",
+      "kind": "Kind",
+      "fte": "FTE",
+      "start": "Start"
+    },
+    "placement": {
+      "below_min": "Below min",
+      "in_range": "In range",
+      "above_max": "Above max",
+      "no_band": "No band"
+    },
+    "cycleKind": {
+      "merit": "Merit",
+      "promotion": "Promotion",
+      "adjustment": "Adjustment",
+      "cola": "COLA"
+    },
+    "cycleStatus": {
+      "draft": "Draft",
+      "open": "Open",
+      "in_review": "In review",
+      "approved": "Approved",
+      "pushed": "Pushed",
+      "closed": "Closed",
+      "cancelled": "Cancelled"
+    },
+    "lineStatus": {
+      "pending": "Pending",
+      "proposed": "Proposed",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "pushed": "Pushed"
+    },
+    "planStatus": {
+      "draft": "Draft",
+      "submitted": "Submitted",
+      "approved": "Approved",
+      "closed": "Closed"
+    },
+    "planLineStatus": {
+      "proposed": "Proposed",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "opened": "Opened",
+      "filled": "Filled",
+      "cancelled": "Cancelled"
+    },
+    "lineKind": {
+      "create": "Create",
+      "backfill": "Backfill",
+      "change": "Change",
+      "terminate": "Terminate"
+    },
+    "eventKind": {
+      "opened": "Opened",
+      "proposed": "Proposed",
+      "reopened": "Reopened",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "budget_changed": "Budget changed",
+      "pushed": "Pushed",
+      "closed": "Closed",
+      "cancelled": "Cancelled"
+    },
+    "drawer": {
+      "proposeTitle": "Propose",
+      "decideTitle": "Decide",
+      "historyTitle": "History",
+      "pctLabel": "Raise %",
+      "rateLabel": "New rate",
+      "reasonLabel": "Reason",
+      "failed": "The change was refused",
+      "submit": "Save",
+      "cancel": "Cancel",
+      "approve": "Approve",
+      "reject": "Reject",
+      "reopen": "Reopen"
+    },
+    "historyColumns": {
+      "event": "Event",
+      "reason": "Reason",
+      "at": "At"
+    },
+    "emptyHistory": "No events yet."
+  },
+  "equity": {
+    "title": "Pay equity",
+    "description": "Frozen gap metrics computed from payroll truth, by equal-value category.",
+    "meanGap": "Mean gap",
+    "medianGap": "Median gap",
+    "variableGap": "Variable pay gap",
+    "jointFlags": "Joint assessment due",
+    "categoriesTitle": "Gaps by category",
+    "categoriesEmpty": "No categories measured.",
+    "columns": {
+      "category": "Category",
+      "counts": "Headcount A / B",
+      "mean": "Mean gap",
+      "median": "Median gap",
+      "unexplained": "Unexplained",
+      "flag": "Flag"
+    },
+    "jointDue": "Assess jointly",
+    "generate": "Generate snapshot",
+    "emptyTitle": "No snapshot yet",
+    "emptyDescription": "Compute a snapshot to measure gaps."
+  },
+  "myComp": {
+    "title": "My compensation",
+    "description": "Your band placement, statements, and pay information.",
+    "placement": "Band placement",
+    "statementsTitle": "Statements",
+    "columns": {
+      "period": "Period",
+      "generated": "Generated"
+    },
+    "statementsEmpty": "No statements yet.",
+    "requestPayInfo": "Request pay information",
+    "requestFailed": "The request was refused",
+    "requestSubmit": "Save",
+    "requestCancel": "Cancel",
+    "requestStatus": {
+      "open": "Open"
+    }
+  },
+  "qualifications": {
+    "title": "Qualifications",
+    "description": "Licenses, certifications, and credentials by worker — who can be dispatched today, and what expires next.",
+    "record": "Record qualification",
+    "recordTitle": "Record qualification",
+    "drawerTitle": "Qualification",
+    "settings": "Qualification settings",
+    "sectionLabel": "Section",
+    "sections": {
+      "ledger": "Ledger",
+      "requirements": "Requirements",
+      "alerts": "Alerts"
+    },
+    "segmentsLabel": "Status",
+    "allLabel": "All",
+    "typesLabel": "Type",
+    "typesAll": "All types",
+    "listTitle": "Qualifications by worker",
+    "open": "Open",
+    "columns": {
+      "worker": "Worker",
+      "type": "Type",
+      "status": "Status",
+      "expiry": "Expires",
+      "subject": "Subject",
+      "severity": "Severity",
+      "window": "Window",
+      "due": "Due",
+      "sent": "Sent"
+    },
+    "statusNames": {
+      "valid": "Valid",
+      "expiring": "Expiring",
+      "expired": "Expired",
+      "revoked": "Revoked",
+      "pending_verification": "Pending verification"
+    },
+    "emptyTitle": "No qualifications recorded",
+    "emptyDescription": "Record the crew's licenses and certifications to gate dispatch.",
+    "requirementsTitle": "Dispatch requirements",
+    "requirementsEmpty": "No requirements declared yet.",
+    "coverageTitle": "Project coverage",
+    "coverageProjectLabel": "Project",
+    "coverageProjectAll": "Choose project",
+    "coverageEmpty": "No crew assigned to this project yet.",
+    "coverage": {
+      "qualified": "Qualified",
+      "missing": "Missing",
+      "expired": "Expired",
+      "pending": "Pending"
+    },
+    "alertsTitle": "Expiry alerts",
+    "alertsEmpty": "No alerts fired.",
+    "alertDue": "Due",
+    "taxonomyTitle": "Qualification taxonomy",
+    "windowOpen": "{from} – ongoing",
+    "verify": "Verify",
+    "renew": "Renew",
+    "revoke": "Revoke",
+    "revokePrompt": "Revoke this qualification? State the reason:",
+    "renewPrompt": "Issue date of the renewed qualification (YYYY-MM-DD):",
+    "drawer": {
+      "issued": "Issued",
+      "identifier": "License no.",
+      "notes": "Notes",
+      "evidence": "View evidence",
+      "events": "History"
+    },
+    "recordForm": {
+      "employment": "Employment",
+      "type": "Qualification type",
+      "issuedOn": "Issued on",
+      "expiresOn": "Expires on",
+      "identifier": "License number",
+      "notes": "Notes"
     }
   }
 }

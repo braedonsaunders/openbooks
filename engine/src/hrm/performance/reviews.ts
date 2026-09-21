@@ -57,6 +57,11 @@ export interface ReviewDTO {
   readonly overallRating: string | null;
   readonly calibratedRating: string | null;
   readonly calibrationReason: string | null;
+  // HR-17: the employee-visible share shows the calibrated rating with a
+  // note that calibration occurred — never the delta, never the
+  // justification (performance-read.ts strips calibrationReason for
+  // subject-only readers).
+  readonly calibratedShareNote: string | null;
   readonly submittedAt: string | null;
   readonly sharedAt: string | null;
   readonly acknowledgedAt: string | null;
@@ -88,6 +93,7 @@ type StoredReview = {
   overallRating: string | null;
   calibratedRating: string | null;
   calibrationReason: string | null;
+  calibratedShareNote: string | null;
   submittedAt: string | null;
   sharedAt: string | null;
   acknowledgedAt: string | null;
@@ -112,6 +118,7 @@ function toReviewDTO(row: StoredReview): ReviewDTO {
     overallRating: row.overallRating,
     calibratedRating: row.calibratedRating,
     calibrationReason: row.calibrationReason,
+    calibratedShareNote: row.calibratedShareNote,
     submittedAt: row.submittedAt,
     sharedAt: row.sharedAt,
     acknowledgedAt: row.acknowledgedAt,
@@ -130,6 +137,7 @@ async function loadReview(exec: SqlExecutor, orgId: string, reviewId: string): P
            r.overall_rating::text as "overallRating",
            r.calibrated_rating::text as "calibratedRating",
            r.calibration_reason as "calibrationReason",
+           r.calibrated_share_note as "calibratedShareNote",
            r.submitted_at as "submittedAt",
            r.shared_at as "sharedAt",
            r.acknowledged_at as "acknowledgedAt"

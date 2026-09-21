@@ -45,7 +45,7 @@ type Entry = {
 const MATRIX: Entry[] = [
   // --- landing / navigation -------------------------------------------------
   { prefix: "", tools: ["analytics_financial_health", "cash_position"] },
-  { prefix: "dashboard", tools: ["analytics_financial_health", "cash_position", "ar_position", "ap_position"] },
+  { prefix: "dashboard", tools: ["analytics_financial_health", "cash_position", "ar_position", "ap_position", "inbox_items"], note: "persona tiles read the caller's own inbox items through the inbox adapters" },
   { prefix: "accounting", tools: ["trial_balance", "find_journal_entries"] },
   { prefix: "accounts", tools: ["find_accounts", "account_register"] },
   { prefix: "account-groups", tools: ["find_accounts"] },
@@ -61,7 +61,8 @@ const MATRIX: Entry[] = [
   { prefix: "me", tools: ["whoami", "describe_page_layout"] },
   { prefix: "page-specs", tools: ["list_page_layouts", "describe_page_layout"] },
   { prefix: "settings/security", tools: ["list_users", "list_roles"] },
-  { prefix: "approvals", tools: ["list_approvals"] },
+  // HR-15: the approvals place is the inbox; the route moved with it.
+  { prefix: "inbox", tools: ["inbox_items", "list_approvals", "decide_approval"], note: "the unified inbox reads through the inbox adapters (same readers as the page) while decisions run through native Flows gates; step completion, submits, and acknowledgement are human-attested actions with no assistant write surface by design" },
   { prefix: "assistant", uncovered: "assistant surface: the chat/commit/conversation surface itself" },
   { prefix: "login", uncovered: "transport-only: session establishment, no data view" },
   { prefix: "access-denied", tools: ["whoami", "list_roles"], note: "permission-refusal explanation; no writes" },
@@ -130,7 +131,8 @@ const MATRIX: Entry[] = [
   { prefix: "sign", uncovered: "no application service: signature capture persists inline" },
   { prefix: "expenses", tools: ["list_expense_reports", "get_expense_report", "expense_overview", "expense_approvals"] },
   { prefix: "payroll", tools: ["list_pay_runs", "get_pay_run", "payroll_year_end", "payroll_setup_status", "list_payroll_employees", "payroll_entitlements", "payroll_remittances"], note: "profiles/settings/opening-balance/retro/parallel-run writes have no application service" },
-  { prefix: "hrm", tools: ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave", "hrm_recruiting", "hrm_performance_cycles", "hrm_turnover", "hrm_benefits", "hrm_me"], note: "as-of headcount, the effective version with assignments, the change-request list, positions with vacancy, the process checklists, leave requests with balances, requisitions with the funnel, review cycles with progress, turnover, benefit elections, and the caller's own employment summary reuse their canonical HRM read services; authoring stays human-attested with no tool" },
+  { prefix: "hrm", tools: ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave", "hrm_recruiting", "hrm_performance_cycles", "hrm_turnover", "hrm_benefits", "hrm_me", "inbox_items", "hrm_compliance_findings", "hrm_certified_payroll", "hrm_compensation", "hrm_pay_equity", "hrm_qualifications", "hrm_dispatch_check", "hrm_one_on_ones", "hrm_feedback", "hrm_calibration"], note: "as-of headcount, the effective version with assignments, the change-request list, positions with vacancy, the process checklists, leave requests with balances, requisitions with the funnel, review cycles with progress, turnover, benefit elections, the caller's own employment summary, the held-qualification register, the dispatch readiness verdict, 1:1s read the caller's own and their reports' meetings with private items author-only, feedback reads through the visibility matrix, calibration reads the HR grid with the missing list, and the caller's own inbox items reuse their canonical HRM read services; authoring stays human-attested with no tool" },
+  // HR-13: findings and frozen runs read through the construction services (kept on one line: the scope test matches per-line).
   { prefix: "hrm", tools: ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_leave"], note: "as-of headcount, the effective version with assignments, the change-request list, and the leave-request list with TIME balances reuse the employment and leave read services; authoring stays human-attested with no tool" },
   { prefix: "labor-rate-cards", uncovered: "no application service: rate card writes are route-inline" },
   { prefix: "rate-book-assignments", tools: ["list_setup_records"], note: "item-rate-book-assignments is a setup entity" },
@@ -158,6 +160,10 @@ const MATRIX: Entry[] = [
   { prefix: "admin/pdf-templates", tools: ["list_pdf_templates", "get_pdf_template"] },
   { prefix: "customization", tools: ["list_page_layouts", "describe_page_layout"] },
   { prefix: "admin/flows", tools: ["list_approvals"], note: "flow authoring writes have no application service" },
+  // HR-16 begin: the automation recipe list/builder reads through the automations read service; recipe authoring, enable/disable, run-now and simulate are human-attested with no assistant write surface by design.
+  { prefix: "admin/automations", tools: ["automations_status"], note: "the recipe list, builder, simulate and runs read through the automations read service; authoring, enable/disable, run-now and simulate are human-attested with no assistant write surface by design" },
+  { prefix: "automations", tools: ["automations_status"], note: "recipe and run reads reuse the automations read service; writes are human-attested with no assistant write surface by design" },
+  // HR-16 end
   { prefix: "flows", tools: ["list_approvals", "decide_approval"], note: "flow authoring and manual/record-state triggers have no application service" },
   { prefix: "hrm/change-requests", tools: ["hrm_change_requests", "list_approvals", "decide_approval"], note: "the queue lists through the employment read service while decisions run through native Flows gates; authoring, submit and withdraw are human-attested HR actions with no assistant write surface by design" },
   { prefix: "hrm/leave", tools: ["hrm_leave", "list_approvals", "decide_approval"], note: "the queue, department calendar, and drawer read through the leave read service while decisions run through native Flows gates; filing, submit, withdraw, cancel and absence recording are human-attested HR actions with no assistant write surface by design" },
@@ -166,12 +172,28 @@ const MATRIX: Entry[] = [
   { prefix: "hrm/leave-absences", tools: ["hrm_leave"], note: "after-the-fact absence recording is a human-attested HR action with no assistant write surface by design" },
   { prefix: "hrm/recruiting", tools: ["hrm_recruiting"], note: "the requisitions list and the requisition, candidate, and offer drawers read through the recruiting read service (names only, contact PII never leaves); requisition authoring, funnel moves, interviews, offers, and hire are human-attested HR actions with no assistant write surface by design" },
   { prefix: "hrm/performance", tools: ["hrm_performance_cycles"], note: "the cycles list and drawer read through the privacy-scoped performance read service; submit, calibrate, share, acknowledge and goal writes are human-attested HR actions with no assistant write surface by design" },
+  // HR-17 begin: continuous performance reads ride the structural scope
+  // (1:1s, feedback) and the manage grant (calibration); scheduling,
+  // rating decisions, talent records and succession writes are
+  // human-attested HR actions with no assistant write surface by design.
+  { prefix: "hrm/one-on-ones", tools: ["hrm_one_on_ones"], note: "1:1s read the caller's own and their reports' meetings with private items author-only; scheduling, agenda writes and carry-forward are human-attested with no assistant write surface by design" },
+  { prefix: "hrm/feedback", tools: ["hrm_feedback"], note: "feedback reads through the visibility matrix; giving, fulfilling and retracting are human-attested with no assistant write surface by design" },
+  { prefix: "hrm/calibration-sessions", tools: ["hrm_calibration"], note: "calibration reads the HR grid with the missing list; opening, deciding, reverting and closing are human-attested with no assistant write surface by design" },
+  { prefix: "hrm/calibration-entries", tools: ["hrm_calibration"], note: "entry reads go through the session grid; deciding an entry is a human-attested HR action with no assistant write surface by design" },
+  // HR-17 end
   { prefix: "hrm/benefits", tools: ["hrm_benefits"], note: "windows, elections, and monthly inputs read through the benefits read service; electing, approving, and input generation are human-attested HR actions with no assistant write surface by design" },
+  // HR-13 begin: the Compliance tab reads flags and frozen runs through
+  // the construction services; generating, approving, and finding
+  // transitions are human-attested HR actions with no write surface.
+  { prefix: "hrm/compliance", tools: ["hrm_compliance_findings", "hrm_certified_payroll"], note: "findings and frozen certified runs read through the construction services; generation, approval, voids, submit, amend, acknowledge and resolve are human-attested HR actions with no assistant write surface by design" },
+  // HR-14: the register and the readiness check read through the qualification services; recording, verifying, renewing, revoking, and requirement authoring are human-attested HR actions with no assistant write surface by design.
+  { prefix: "hrm/qualifications", tools: ["hrm_qualifications", "hrm_dispatch_check"], note: "the held-qualification register and the per-assignment readiness verdict read through the qualification services; recording, verifying, renewing, revoking, and requirement authoring are human-attested with no assistant write surface by design" },
+  // HR-13 end
   { prefix: "hrm/enrollment-windows", tools: ["hrm_benefits"], note: "window open and close are human-attested HR actions with no assistant write surface by design" },
   { prefix: "hrm/enrollments", tools: ["hrm_benefits"], note: "electing, approving, changing, ending, and dependent linking are human-attested HR actions with no assistant write surface by design" },
   { prefix: "hrm/dependents", tools: ["hrm_benefits"], note: "dependent authoring is a human-attested HR action with no assistant write surface by design" },
   { prefix: "hrm/retention", tools: ["hrm_turnover"], note: "the retention overview and turnover table read through the retention read service; exit recording is a human-attested HR action with no assistant write surface by design" },
-  { prefix: "me", tools: ["hrm_me"], note: "the Me workspace reads only the caller's own employment summary through the self-service read service; profile filing and step completion are human-attested actions with no assistant write surface by design" },
+  { prefix: "me", tools: ["hrm_me"], note: "the Me workspace reads only the caller's own employment summary, review cycles, and benefits through the self-service read services; profile filing, step completion, review answers, and elections are human-attested actions with no assistant write surface by design" },
   { prefix: "admin/fx-provider", tools: ["list_currencies", "list_fx_rates"] },
   { prefix: "admin/navigation", uncovered: "no application service: nav config persists inline" },
   { prefix: "admin/payment-operations", uncovered: "no application service: bank-profile/format/schedule config persists inline" },

@@ -18,6 +18,11 @@ export async function registerNodeInstrumentation() {
   const decision = resolveWebSchedulerMode(process.env)
   if (decision.enabled) {
     ensureScheduler()
+    // HR-16 automation scan on the same 60-second topology (own advisory
+    // claim key, same mode decision) — web-composed because no engine
+    // module may depend on the automations module.
+    const { ensureAutomationTick } = await import('@openbooks/engine/src/automations/tick.ts')
+    ensureAutomationTick()
   }
   console.log(decision.logLine)
   const { ensureSftpServer } = await import('@openbooks/engine/src/sftp/manager.ts')

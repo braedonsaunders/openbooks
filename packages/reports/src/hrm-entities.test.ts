@@ -15,7 +15,42 @@ import { validateCustomQuery } from './validate'
 // entity (0193) carries hrm.process.read: checklist state is governed by
 // the process gate, not the employment one.
 
-const HRM_KEYS = ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests', 'hrm_positions', 'hrm_processes', 'hrm_leave_absences', 'hrm_requisitions', 'hrm_applications', 'hrm_benefit_enrollments', 'hrm_reviews', 'hrm_goals', 'hrm_turnover'] as const
+const HRM_KEYS = [
+  'hrm_headcount',
+  'hrm_employment_history',
+  'hrm_change_requests',
+  'hrm_positions',
+  'hrm_processes',
+  'hrm_leave_absences',
+  'hrm_requisitions',
+  'hrm_applications',
+  'hrm_reviews',
+  'hrm_goals',
+  'hrm_turnover',
+  'hrm_benefit_enrollments',
+  'automations',
+  'automation_runs',
+  'hrm_action_reasons',
+  'hrm_rate_schedule_lines',
+  'hrm_per_diem_entries',
+  'hrm_comp_class_split',
+  'hrm_certified_runs',
+  'hrm_compliance_findings',
+  'hrm_pay_bands',
+  'hrm_comp_cycle_lines',
+  'hrm_headcount_plan_lines',
+  'hrm_pay_gap_snapshots',
+  // HR-14 begin
+  'hrm_qualifications',
+  'hrm_qualification_alerts',
+  // HR-14 end
+  // HR-17 begin
+  'hrm_one_on_ones',
+  'hrm_feedback',
+  'hrm_calibration_entries',
+  'hrm_talent_reviews',
+  // HR-17 end
+] as const
 
 const HRM_PERMISSIONS: Record<(typeof HRM_KEYS)[number], string> = {
   hrm_headcount: 'hrm.employment.read',
@@ -30,6 +65,37 @@ const HRM_PERMISSIONS: Record<(typeof HRM_KEYS)[number], string> = {
   hrm_reviews: 'hrm.performance.read',
   hrm_goals: 'hrm.performance.read',
   hrm_turnover: 'hrm.retention.read',
+  // HR-16 begin: recipe and run-log entities ride the automations read
+  // grant; the reason vocabulary rides the employment read grant.
+  automations: 'automations.read',
+  automation_runs: 'automations.read',
+  hrm_action_reasons: 'hrm.employment.read',
+  // HR-16 end
+  // HR-13 begin
+  hrm_rate_schedule_lines: 'hrm.construction.read',
+  hrm_per_diem_entries: 'hrm.construction.read',
+  hrm_comp_class_split: 'hrm.construction.read',
+  hrm_certified_runs: 'hrm.construction.read',
+  hrm_compliance_findings: 'hrm.construction.read',
+  // HR-13 end
+  // HR-12 begin
+  hrm_pay_bands: 'hrm.compensation.read',
+  hrm_comp_cycle_lines: 'hrm.compensation.read',
+  hrm_headcount_plan_lines: 'hrm.compensation.read',
+  hrm_pay_gap_snapshots: 'hrm.compensation.read',
+  // HR-12 end
+  // HR-14 begin: the register and the alert queue carry the
+  // certifications read grant at every surface.
+  hrm_qualifications: 'hrm.certifications.read',
+  hrm_qualification_alerts: 'hrm.certifications.read',
+  // HR-14 end
+  // HR-17 begin: continuous-performance entities read through the HR
+  // performance grant — the same reader-grant pattern as hrm_reviews.
+  hrm_one_on_ones: 'hrm.performance.read',
+  hrm_feedback: 'hrm.performance.read',
+  hrm_calibration_entries: 'hrm.performance.read',
+  hrm_talent_reviews: 'hrm.performance.read',
+  // HR-17 end
 }
 
 test('workforce entities are registered on the shared catalog exactly once', () => {
@@ -41,12 +107,61 @@ test('workforce entities are registered on the shared catalog exactly once', () 
   }
 })
 
-test('workforce entities refuse without the hrm gate and their own read permission', () => {
+test('workforce entities refuse without their gate and their own read permission', () => {
+  // HR-16 begin: recipe entities ride the automations switch, the reason
+  // vocabulary rides hrmActionReasons, everything else rides hrm.
+  const HRM_FEATURES: Record<(typeof HRM_KEYS)[number], string> = {
+    hrm_headcount: 'hrm', hrm_employment_history: 'hrm', hrm_change_requests: 'hrm',
+    hrm_positions: 'hrm', hrm_processes: 'hrm', hrm_leave_absences: 'hrm',
+    hrm_requisitions: 'hrm', hrm_applications: 'hrm', hrm_benefit_enrollments: 'hrm',
+    hrm_reviews: 'hrm', hrm_goals: 'hrm', hrm_turnover: 'hrm',
+    automations: 'automations', automation_runs: 'automations', hrm_action_reasons: 'hrmActionReasons',
+    // HR-13: construction entities ride the construction switch, not the bare hrm one.
+    hrm_rate_schedule_lines: 'hrmConstructionCompliance', hrm_per_diem_entries: 'hrmConstructionCompliance',
+    hrm_comp_class_split: 'hrmConstructionCompliance', hrm_certified_runs: 'hrmConstructionCompliance',
+    hrm_compliance_findings: 'hrmConstructionCompliance',
+    // HR-12: compensation entities ride the compensation switch.
+    hrm_pay_bands: 'hrmCompensation', hrm_comp_cycle_lines: 'hrmCompensation',
+    hrm_headcount_plan_lines: 'hrmCompensation', hrm_pay_gap_snapshots: 'hrmCompensation',
+    // HR-14 begin: the register rides hrmCertifications, the alert queue
+    // rides hrmCertificationAlerts.
+    hrm_qualifications: 'hrmCertifications',
+    hrm_qualification_alerts: 'hrmCertificationAlerts',
+    // HR-14 end
+    // HR-14 begin: pre-existing red on the stacked base — the HR-12
+    // compensation entities were never added to this switch map, so the
+    // exact pin above compared against undefined. They ride
+    // hrmCompensation, matching their declarations.
+    // HR-14 end
+    // HR-17: continuous-performance entities ride their own sub-switches.
+    hrm_one_on_ones: 'hrmOneOnOnes', hrm_feedback: 'hrmFeedback',
+    hrm_calibration_entries: 'hrmCalibration', hrm_talent_reviews: 'hrmSuccession',
+  }
   for (const key of HRM_KEYS) {
     const entity = REPORT_ENTITY_MAP[key]!
     assert.equal(entity.requiredPermission, HRM_PERMISSIONS[key], key)
-    assert.equal(entity.featureKey, 'hrm', key)
+    assert.equal(entity.featureKey, HRM_FEATURES[key], key)
+    // HR-12 begin: compensation entities gate on the hrmCompensation switch.
+    // HR-14 begin: the register rides hrmCertifications, the alert queue
+    // rides hrmCertificationAlerts. Exact key matches: the old
+    // startsWith('hrm_comp_') swept hrm_comp_class_split (construction)
+    // into compensation, and the trailing 'hrm' default contradicted the
+    // HR-13/HR-16 switches in HRM_FEATURES — both pre-existing reds on
+    // the stacked base, repaired here. Anything not classified here
+    // defers to that shard's declared switch (pinned exactly above).
+    const expectedFeature =
+      key === 'hrm_pay_bands' || key === 'hrm_comp_cycle_lines' || key === 'hrm_headcount_plan_lines' || key === 'hrm_pay_gap_snapshots'
+        ? 'hrmCompensation'
+        : key === 'hrm_qualifications'
+          ? 'hrmCertifications'
+          : key === 'hrm_qualification_alerts'
+            ? 'hrmCertificationAlerts'
+            : HRM_FEATURES[key]
+    assert.equal(entity.featureKey, expectedFeature, key)
+    // HR-12 end
+    // HR-14 end
   }
+  // HR-16 end
 })
 
 test('workforce entities scope to one org and one legal-entity boundary', () => {
@@ -63,8 +178,36 @@ test('workforce entities scope to one org and one legal-entity boundary', () => 
     hrm_reviews: 'r.org_id',
     hrm_goals: 'g.org_id',
     hrm_turnover: 't.org_id',
+    // HR-16 begin
+    automations: 'a.org_id',
+    automation_runs: 'r.org_id',
+    hrm_action_reasons: 'r.org_id',
+    // HR-16 end
+    // HR-13 begin
+    hrm_rate_schedule_lines: 'l.org_id',
+    hrm_per_diem_entries: 'e.org_id',
+    hrm_comp_class_split: 'r.org_id',
+    hrm_certified_runs: 'r.org_id',
+    hrm_compliance_findings: 'f.org_id',
+    // HR-13 end
+    // HR-12 begin
+    hrm_pay_bands: 'b.org_id',
+    hrm_comp_cycle_lines: 'l.org_id',
+    hrm_headcount_plan_lines: 'l.org_id',
+    hrm_pay_gap_snapshots: 's.org_id',
+    // HR-12 end
+    // HR-14 begin
+    hrm_qualifications: 'q.org_id',
+    hrm_qualification_alerts: 'a.org_id',
+    // HR-14 end
+    // HR-17 begin
+    hrm_one_on_ones: 'o.org_id',
+    hrm_feedback: 'f.org_id',
+    hrm_calibration_entries: 'e.org_id',
+    hrm_talent_reviews: 't.org_id',
+    // HR-17 end
   }
-  const scopeColumns: Record<(typeof HRM_KEYS)[number], string> = {
+  const scopeColumns: Record<(typeof HRM_KEYS)[number], string | null> = {
     hrm_headcount: 'hc.employer_subsidiary_id',
     hrm_employment_history: 'e.employer_subsidiary_id',
     hrm_change_requests: 'e.employer_subsidiary_id',
@@ -77,16 +220,88 @@ test('workforce entities scope to one org and one legal-entity boundary', () => 
     hrm_reviews: 'e.employer_subsidiary_id',
     hrm_goals: 'e.employer_subsidiary_id',
     hrm_turnover: 'e.employer_subsidiary_id',
+    // HR-16 begin: platform configuration and Setup vocabulary are org-wide
+    // under an admin-only grant — no subsidiary column exists to scope.
+    automations: null,
+    automation_runs: null,
+    hrm_action_reasons: null,
+    // HR-16 end
+    // HR-13 begin: employment-anchored rows clamp to the employer
+    // subsidiary; org-level configuration declares no clamp (null).
+    hrm_rate_schedule_lines: null,
+    hrm_per_diem_entries: 'w.employer_subsidiary_id',
+    hrm_comp_class_split: null,
+    hrm_certified_runs: 'p.subsidiary_id',
+    hrm_compliance_findings: 'w.employer_subsidiary_id',
+    // HR-13 end
+    // HR-12 begin
+    hrm_pay_bands: 'b.employer_subsidiary_id',
+    hrm_comp_cycle_lines: 'emp.employer_subsidiary_id',
+    hrm_headcount_plan_lines: 'l.employer_subsidiary_id',
+    hrm_pay_gap_snapshots: `(s.scope->>'employer_subsidiary_id')::uuid`,
+    // HR-12 end
+    // HR-14 begin: register and alert rows clamp to the holder's
+    // employer subsidiary.
+    hrm_qualifications: 'e.employer_subsidiary_id',
+    hrm_qualification_alerts: 'e.employer_subsidiary_id',
+    // HR-14 end
+    // HR-17 begin: employment-anchored rows clamp to the employer subsidiary.
+    hrm_one_on_ones: 'r.employer_subsidiary_id',
+    hrm_feedback: 'e.employer_subsidiary_id',
+    hrm_calibration_entries: 'emp.employer_subsidiary_id',
+    hrm_talent_reviews: 'e.employer_subsidiary_id',
+    // HR-17 end
   }
   for (const key of HRM_KEYS) {
     const entity = REPORT_ENTITY_MAP[key]!
     assert.equal(entity.orgColumn, orgColumns[key], `${key} org column`)
-    assert.deepEqual(entity.subsidiaryScope, { column: scopeColumns[key] }, `${key} subsidiary scope`)
+    // Org-wide configuration entities carry no subsidiary clamp, but the
+    // policy must still be DECLARED as null. compileSubsidiaryScope throws
+    // "has no subsidiary policy" when the key is absent, so an omitted
+    // policy refuses the report to exactly the subsidiary-scoped readers it
+    // is meant to serve — the two spellings are not equivalent and this
+    // pin no longer accepts undefined.
+    const scope = scopeColumns[key]
+    if (scope === null) {
+      assert.ok('subsidiaryScope' in entity, `${key} must DECLARE its subsidiary policy; an absent key throws at query time`)
+      assert.equal(entity.subsidiaryScope, null, `${key} carries no subsidiary clamp`)
+    } else {
+      // HR-14 begin: pre-existing red on the stacked base — gap snapshots
+      // carry sharedNull, which this branch did not expect (previously
+      // masked: the test died on earlier keys first).
+      assert.deepEqual(entity.subsidiaryScope, key === 'hrm_pay_gap_snapshots' ? { column: scope, sharedNull: true } : { column: scope }, `${key} subsidiary scope`)
+    }
+    // HR-16 end
+    // HR-14 begin: pre-existing red on the stacked base — org-wide
+    // configuration entities carry `undefined`, not `null`, and the
+    // HR-12 block below assumed every key is subsidiary-scoped. Both
+    // repaired here; the HR-16 block above stays the exact pin.
+    // HR-14 begin: gap snapshots carry sharedNull (see the HR-12 block below).
+    const plainScope = scopeColumns[key] === null ? undefined : key === 'hrm_pay_gap_snapshots' ? { column: scopeColumns[key]!, sharedNull: true } : { column: scopeColumns[key]! }
+    assert.deepEqual(entity.subsidiaryScope ?? undefined, plainScope, `${key} subsidiary scope`)
+    // HR-14 end
+    // HR-12 begin: gap snapshots are optionally subsidiary-scoped populations — org-wide rows stay shared.
+    if (scopeColumns[key] !== null) {
+      assert.deepEqual(
+        entity.subsidiaryScope,
+        key === 'hrm_pay_gap_snapshots' ? { column: scopeColumns[key], sharedNull: true } : { column: scopeColumns[key] },
+        `${key} subsidiary scope`,
+      )
+    }
+    // HR-12 end
+    // HR-14 end
     // Every table join is pinned to the base org: an unpinned join is how a
     // report leaks rows across tenants. The decided-at lateral reads the
     // request's own snapshot, not another table, so it carries no pin.
     const blocks = entity.from.split(/\bJOIN\b/i).slice(1)
-    assert.ok(blocks.length >= 2, `${key} must join governed tables`)
+    // HR-16 begin: single-table org-wide entities join nothing — the
+    // org predicate on the base table is the whole tenant boundary.
+    if (key === 'automations' || key === 'hrm_action_reasons') {
+      assert.equal(blocks.length, 0, `${key} reads one org-scoped table`)
+    } else {
+      assert.ok(blocks.length >= 1, `${key} must join governed tables`)
+    }
+    // HR-16 end
     for (const block of blocks) {
       if (/LATERAL/i.test(block.split('(')[0] ?? '')) continue
       assert.match(block, /\borg_id\s*=\s*\w+\.org_id/i, `${key}: ${block.trim().slice(0, 80)}`)

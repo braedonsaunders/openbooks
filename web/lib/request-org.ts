@@ -1,6 +1,6 @@
 import "server-only";
 import { workAsyncStorage } from "next/dist/server/app-render/work-async-storage.external";
-import { registerRequestOrgResolver } from "@openbooks/engine/src/platform/db.ts";
+import { currentRequestOrgResolver, registerRequestOrgResolver } from "@openbooks/engine/src/platform/db.ts";
 import { requestOrgByWorkStore } from "./request-org-state";
 
 /**
@@ -22,12 +22,18 @@ export function setRequestOrg(orgId: string): void {
   if (store) requestOrgByWorkStore.set(store, { orgId, bypass: false });
 }
 
+// The previously registered resolver (the integration-test bypass, when
+// present) stays as the fallback outside a Next request: chaining keeps a
+// web-layer import from silently discarding the test boundary. In
+// production nothing precedes this registration, so the empty window still
+// denies rather than falling back to a trusted bypass that isn't there.
+const previousResolver = currentRequestOrgResolver();
 registerRequestOrgResolver(() => {
   const store = workAsyncStorage.getStore();
   // During Next app rendering there is always a request store, even before
   // `currentUser()` resolves and seeds `setRequestOrg`.
   // Returning a denied tenant scope for that empty window is safer than silently
   // falling back to trusted bypass.
-  if (!store) return undefined;
+  if (!store) return previousResolver?.();
   return requestOrgByWorkStore.get(store) ?? { orgId: "", bypass: false };
 });

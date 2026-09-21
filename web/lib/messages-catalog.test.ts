@@ -2995,10 +2995,25 @@ test('admin namespace ships translated in zh and pt-BR', () => {
     'pt-BR:admin.setup.taxBoxes.manual|Manual',
     'pt-BR:admin.setup.taxLibrary.status|Status',
     'pt-BR:admin.users.statusFilter|Status',
+    'pt-BR:admin.automations.list.statusLabel|Status',
+    'pt-BR:admin.automations.list.columnStatus|Status',
+    'pt-BR:admin.automations.triggerKinds.manual|Manual',
+    'pt-BR:admin.automations.builder.cronLabel|Cron',
+    'pt-BR:admin.automations.builder.opLabel|Op',
+    'pt-BR:admin.automations.builder.simulateSubjectPlaceholder|leave_request:<id>',
+    'pt-BR:admin.automations.builder.stepStatus|Status',
+    'pt-BR:admin.automations.builder.runStatus|Status',
+    // HR-17: Feedback is the pt-BR product term, kept as in English.
+    'pt-BR:admin.features.hrmFeedback.title|Feedback',
+    'zh:admin.automations.builder.cronLabel|Cron',
+    'zh:admin.automations.builder.simulateSubjectPlaceholder|leave_request:<id>',
   ])
   const source = flattenCatalog('en')
   const wanted = [...source.keys()].filter((key) => key.startsWith('admin.'))
-  assert.equal(wanted.length, 3549, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  // HR-17: 3844 = 3825 on b4b4fe256 plus 19 continuous-performance keys
+  // (6 features, 2 setup entities, 1 setup field); zh/pt-BR completeness
+  // is asserted per-key below.
+  assert.equal(wanted.length, 3844, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3158,7 +3173,26 @@ test('admin copy ships translated in de and ja (i2)', () => {
   // shared identifiers. Anything pasted back in English outside this
   // list fails.
   const ADMIN_I2_COGNATES = new Set([
+    // HR-17: Feedback is the German product term (Duden loanword), kept as in English.
+    'de:admin.features.hrmFeedback.title',
     'de:admin.users.linkPersonLabel',
+    'de:admin.automations.builder.cronLabel',
+    'de:admin.automations.builder.nameTitle',
+    'de:admin.automations.builder.opLabel',
+    'de:admin.automations.builder.rule_positionId',
+    'de:admin.automations.builder.runStatus',
+    'de:admin.automations.builder.runVersion',
+    'de:admin.automations.builder.stepDetail',
+    'de:admin.automations.builder.stepStatus',
+    'de:admin.automations.builder.triggerTitle',
+    'de:admin.automations.list.columnStatus',
+    'de:admin.automations.list.columnTrigger',
+    'de:admin.automations.list.nameLabel',
+    'de:admin.automations.list.statusLabel',
+    'de:admin.automations.list.triggerLabel',
+    'de:admin.features.automationSimulator.title',
+    'ja:admin.automations.builder.cronLabel',
+    'ja:admin.automations.builder.simulateSubjectPlaceholder',
     'de:admin.ai.agents.parameterLabel',
     'de:admin.ai.agents.units.percent',
     'de:admin.apiKeys.table.name',
@@ -3339,8 +3373,10 @@ test('admin copy ships translated in de and ja (i2)', () => {
     'ja:admin.setup.paymentProviders.webhookUrl',
     'ja:admin.setup.wizard.company.namePlaceholder',
   ])
-  const ADMIN_I2_SOURCE_COUNT = 3549
-  const ADMIN_I2_SOURCE_HASH = '52d65309e464e0ea225a0d22ffc0aebce0f60aa437bd1b89ab23eb6da5692e0e'
+  // HR-17: count and hash recomputed over the sorted key inventory for the
+  // 19 continuous-performance keys; de/ja completeness asserted per-key below.
+  const ADMIN_I2_SOURCE_COUNT = 3844
+  const ADMIN_I2_SOURCE_HASH = '2ebe1e5de3a8a2c782a3fa593e8bc22849b615c60ece383e30fbd025ed2a17c8'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))
@@ -4407,10 +4443,28 @@ test('I10 documents sharing trash and activity copy ships translated in every lo
   }
 })
 const I14_IDENTICAL_BY_FACT = new Set([
+  // HR-16 report columns: these headings are the same word in the target
+  // language, reviewed one by one — Version/Status/Name/Error/Action/Code
+  // are borrowed or identical forms, not untranslated English.
+  'de:reports.catalog.columns.automations.name|Name',
+  'de:reports.catalog.columns.automations.status|Status',
+  'pt-BR:reports.catalog.columns.automations.status|Status',
+  'de:reports.catalog.columns.automations.version|Version',
+  'fr:reports.catalog.columns.automations.version|Version',
+  'es:reports.catalog.columns.automations.error_message|Error',
+  'de:reports.catalog.columns.automation_runs.status|Status',
+  'pt-BR:reports.catalog.columns.automation_runs.status|Status',
+  'de:reports.catalog.columns.automation_runs.version|Version',
+  'fr:reports.catalog.columns.automation_runs.version|Version',
+  'es:reports.catalog.columns.automation_runs.error|Error',
+  'fr:reports.catalog.columns.hrm_action_reasons.action|Action',
+  'de:reports.catalog.columns.hrm_action_reasons.reason_code|Code',
+  'fr:reports.catalog.columns.hrm_action_reasons.reason_code|Code',
     'de:reports.catalog.columns.hrm_benefit_enrollments.person|Person',
     'de:reports.catalog.columns.hrm_benefit_enrollments.plan|Plan',
     'de:reports.catalog.columns.hrm_benefit_enrollments.status|Status',
     'es:reports.catalog.columns.hrm_benefit_enrollments.plan|Plan',
+    'fr:reports.catalog.columns.hrm_change_requests.action|Action',
   // Spanish 'General' is the reviewed cognate for the payroll General sub-tab.
   'es:parties.drawer.payrollTabs.general|General',
     'de:reports.catalog.columns.hrm_employment_history.person|Person',
@@ -4422,9 +4476,29 @@ const I14_IDENTICAL_BY_FACT = new Set([
     'pt-BR:reports.catalog.columns.hrm_employment_history.status|Status',
     'pt-BR:reports.catalog.columns.hrm_change_requests.status|Status',
     'de:reports.catalog.columns.hrm_positions.code|Code',
+    // HR-13: reviewed cognates in the construction report columns.
+    'de:reports.catalog.columns.hrm_per_diem_entries.status|Status',
+    'de:reports.catalog.columns.hrm_certified_runs.status|Status',
+    'de:reports.catalog.columns.hrm_certified_runs.format_key|Format',
+    'de:reports.catalog.columns.hrm_compliance_findings.status|Status',
+    'fr:reports.catalog.columns.hrm_rate_schedule_lines.classification|Classification',
+    'fr:reports.catalog.columns.hrm_certified_runs.format_key|Format',
+    'pt-BR:reports.catalog.columns.hrm_per_diem_entries.status|Status',
+    'pt-BR:reports.catalog.columns.hrm_certified_runs.status|Status',
+    'pt-BR:reports.catalog.columns.hrm_compliance_findings.status|Status',
     'de:reports.catalog.columns.hrm_positions.status|Status',
     'fr:reports.catalog.columns.hrm_positions.code|Code',
     'pt-BR:reports.catalog.columns.hrm_positions.status|Status',
+    // HR-14: reviewed cognates in the qualification report columns —
+    // Status/Type/Qualification spell identically in de/pt-BR/fr, and
+    // fr keeps the "(id)" qualifier convention untranslated.
+    'de:reports.catalog.columns.hrm_qualifications.status|Status',
+    'pt-BR:reports.catalog.columns.hrm_qualifications.status|Status',
+    'fr:reports.catalog.entities.hrm_qualifications.label|Qualifications',
+    'fr:reports.catalog.columns.hrm_qualifications.type_name|Type',
+    'fr:reports.catalog.columns.hrm_qualifications.qualification_id|Qualification (id)',
+    'fr:reports.catalog.columns.hrm_qualification_alerts.type_name|Type',
+    'fr:reports.catalog.columns.hrm_qualification_alerts.qualification_id|Qualification (id)',
   "de:accounts.types.assetBank|Bank",
   "de:common.actions.pdf|PDF",
   "de:common.auditTrail.systemActor|System",
@@ -5115,7 +5189,7 @@ const I14_IDENTICAL_BY_FACT = new Set([
 const I14_FILE_COUNTS: Record<string, number> = {
   "items": 161,
   "inventory": 159,
-  "reports": 1363,
+  "reports": 1512,
   "sync": 172,
   "login": 33,
   "accounts": 82,
@@ -5124,7 +5198,7 @@ const I14_FILE_COUNTS: Record<string, number> = {
   "common": 264,
   "crm": 304,
   "customization": 185,
-  "dashboard": 157,
+  "dashboard": 203,
   "data": 85,
   "journal": 58,
   "labor-pricing": 128,

@@ -680,6 +680,78 @@
       "hrm_benefit_enrollments": {
         "label": "福利参保",
         "description": "每次参保一行 — 参保人、雇主、参保时部门、计划与保障档次、状态及按期存储金额。需要福利权限。"
+      },
+      "automations": {
+        "label": "自动化",
+        "description": "每个自动化配方一行 — 触发器类型、状态、版本和上次运行。需要自动化权限。"
+      },
+      "automation_runs": {
+        "label": "自动化运行",
+        "description": "每次触发一行 — 执行版本、主体、状态、步骤和错误。需要自动化权限。"
+      },
+      "hrm_action_reasons": {
+        "label": "操作原因",
+        "description": "每个HR操作的原因代码一行 — 变更申请的词汇表。需要HR雇佣权限。"
+      },
+      "hrm_rate_schedule_lines": {
+        "label": "工资表",
+        "description": "每个工资表、分类和生效日期一行：可确定的基本工资、现金津贴、可抵免部分和加班倍率。"
+      },
+      "hrm_per_diem_entries": {
+        "label": "每日津贴",
+        "description": "每个雇佣关系、项目和日期一行：已计算的津贴和差旅费及其状态。"
+      },
+      "hrm_comp_class_split": {
+        "label": "类别拆分",
+        "description": "优先级规则及其保险类别：哪个类别为每小时定价及其每100费率。"
+      },
+      "hrm_certified_runs": {
+        "label": "认证运行",
+        "description": "按项目和周的认证工资运行：冻结数据含格式文件和修订链接。"
+      },
+      "hrm_compliance_findings": {
+        "label": "发现项",
+        "description": "按种类的追加式运行前标记：比例违规、缺少工资标准、未解决类别。"
+      },
+      "hrm_pay_bands": {
+        "label": "薪酬带宽",
+        "description": "每个有效带宽一行：级别、范围、币种、基准与最小/目标/最大值。"
+      },
+      "hrm_comp_cycle_lines": {
+        "label": "调薪明细",
+        "description": "每个决定一行：人员、雇主、冻结标准、提议与状态。"
+      },
+      "hrm_headcount_plan_lines": {
+        "label": "规划明细",
+        "description": "每个计划变动一行：规划、类型、标题、FTE、测算成本与状态。"
+      },
+      "hrm_pay_gap_snapshots": {
+        "label": "差距快照",
+        "description": "每个快照×类别一行：级别、人数、差距与标记。"
+      },
+      "hrm_qualifications": {
+        "label": "资格",
+        "description": "每项持有的认证或许可证一行 — 持有人、雇主、类型与类别、签发与到期，以及带验证的存储状态。"
+      },
+      "hrm_qualification_alerts": {
+        "label": "资格提醒",
+        "description": "每个认证续期提醒一行 — 持有人、类型、到期、触发的提前天数计划以及是否已发送。"
+      },
+      "hrm_one_on_ones": {
+        "label": "一对一会议",
+        "description": "每次一对一会议一行 — 经理、下属、计划与实际日期以及状态。需要人力资源绩效权限。"
+      },
+      "hrm_feedback": {
+        "label": "反馈",
+        "description": "每条表扬、反馈或请求一行 — 对象、类型、可见范围和记录日期。需要人力资源绩效权限。"
+      },
+      "hrm_calibration_entries": {
+        "label": "校准记录",
+        "description": "每条已校准评估一行 — 会议、员工、建议评级与校准评级、潜力以及决定人。需要人力资源绩效权限。"
+      },
+      "hrm_talent_reviews": {
+        "label": "人才盘点",
+        "description": "每次人才盘点一行 — 员工、绩效与潜力、流失影响与风险以及晋升准备度。需要人力资源绩效权限。"
       }
     },
     "columns": {
@@ -1248,7 +1320,9 @@
         "reason": "原因",
         "created_at": "创建时间",
         "id": "申请（ID）",
-        "employment_id": "雇用（ID）"
+        "employment_id": "雇用（ID）",
+        "action": "操作",
+        "reason_code": "原因代码"
       },
       "hrm_positions": {
         "code": "编码",
@@ -1362,6 +1436,185 @@
         "effective_to": "生效至",
         "employment_id": "雇佣（id）",
         "id": "参保（id）"
+      },
+      "hrm_rate_schedule_lines": {
+        "schedule": "工资表",
+        "classification": "分类",
+        "base_rate": "基本工资",
+        "fringe_rate": "现金津贴",
+        "currency": "货币",
+        "effective_from": "生效日期"
+      },
+      "hrm_per_diem_entries": {
+        "worked_on": "日期",
+        "amount": "金额",
+        "currency": "货币",
+        "status": "状态",
+        "employment_id": "雇佣关系 (ID)"
+      },
+      "hrm_comp_class_split": {
+        "class": "类别",
+        "priority": "优先级",
+        "rate": "费率 / 100"
+      },
+      "hrm_certified_runs": {
+        "week_ending": "截至周",
+        "format_key": "格式",
+        "status": "状态",
+        "project_id": "项目 (ID)"
+      },
+      "hrm_compliance_findings": {
+        "kind": "类型",
+        "worked_on": "日期",
+        "status": "状态",
+        "project_id": "项目 (ID)"
+      },
+      "hrm_pay_bands": {
+        "level": "级别",
+        "family": "岗位族",
+        "employer": "雇主",
+        "currency": "币种",
+        "basis": "基准",
+        "min": "下限",
+        "target": "目标",
+        "max": "上限",
+        "effective_from": "生效日",
+        "effective_to": "终止日",
+        "id": "带宽 (id)"
+      },
+      "hrm_comp_cycle_lines": {
+        "cycle": "周期",
+        "person": "人员",
+        "employer": "雇主",
+        "current_rate": "现行标准",
+        "currency": "币种",
+        "compa_ratio": "比较比率",
+        "proposed_pct": "提议 %",
+        "proposed_rate": "提议标准",
+        "status": "状态",
+        "effective_on": "生效日",
+        "employment_id": "雇佣 (id)",
+        "id": "明细 (id)"
+      },
+      "hrm_headcount_plan_lines": {
+        "plan": "规划",
+        "kind": "类型",
+        "title": "标题",
+        "employer": "雇主",
+        "planned_fte": "计划FTE",
+        "start_on": "开始",
+        "est_annual_cost": "预计年成本",
+        "currency": "币种",
+        "status": "状态",
+        "id": "明细 (id)"
+      },
+      "hrm_pay_gap_snapshots": {
+        "as_of": "日期",
+        "employer": "雇主",
+        "level": "级别",
+        "count_a": "人数 A",
+        "count_b": "人数 B",
+        "mean_gap_pct": "平均差距 %",
+        "median_gap_pct": "中位差距 %",
+        "unexplained_gap_pct": "未解释差距 %",
+        "method": "方法",
+        "joint_assessment_due": "联合评估",
+        "id": "快照 (id)"
+      },
+      "hrm_qualifications": {
+        "employee": "员工",
+        "employer": "雇主",
+        "type_code": "类型代码",
+        "type_name": "类型",
+        "category": "类别",
+        "identifier": "许可证号",
+        "issued_on": "签发日期",
+        "expires_on": "到期日",
+        "status": "状态",
+        "verified_at": "验证时间",
+        "qualification_id": "资格（ID）",
+        "employment_id": "雇用（ID）"
+      },
+      "hrm_qualification_alerts": {
+        "employee": "员工",
+        "type_code": "类型代码",
+        "type_name": "类型",
+        "expires_on": "到期日",
+        "due_on": "到期日",
+        "lead_days": "提前天数",
+        "sent_at": "发送时间",
+        "channel": "渠道",
+        "alert_id": "提醒（ID）",
+        "qualification_id": "资格（ID）"
+      },
+      "automations": {
+        "name": "名称",
+        "status": "状态",
+        "trigger_kind": "触发器",
+        "version": "版本",
+        "priority": "优先级",
+        "last_run_at": "上次运行时间",
+        "error_message": "错误",
+        "created_at": "创建时间",
+        "id": "自动化 (ID)"
+      },
+      "automation_runs": {
+        "automation": "自动化",
+        "status": "状态",
+        "version": "版本",
+        "subject_kind": "对象类型",
+        "subject_id": "对象 (ID)",
+        "started_at": "开始时间",
+        "finished_at": "完成时间",
+        "error": "错误",
+        "created_at": "创建时间",
+        "id": "运行 (ID)"
+      },
+      "hrm_action_reasons": {
+        "action": "操作",
+        "reason_code": "代码",
+        "label": "标签",
+        "requires_comment": "需要备注",
+        "is_active": "启用",
+        "created_at": "创建时间",
+        "id": "原因 (ID)"
+      },
+      "hrm_one_on_ones": {
+        "scheduled_at": "计划时间",
+        "held_at": "实际时间",
+        "manager": "经理",
+        "report": "下属",
+        "employer": "雇主",
+        "status": "状态",
+        "id": "会议 (ID)"
+      },
+      "hrm_feedback": {
+        "recorded_at": "记录时间",
+        "employee": "员工",
+        "employer": "雇主",
+        "kind": "类型",
+        "visibility": "可见范围",
+        "id": "反馈 (ID)"
+      },
+      "hrm_calibration_entries": {
+        "session": "会议",
+        "employee": "员工",
+        "employer": "雇主",
+        "proposed_rating": "建议评级",
+        "calibrated_rating": "校准评级",
+        "potential_key": "潜力",
+        "decided_at": "决定时间",
+        "id": "记录 (ID)"
+      },
+      "hrm_talent_reviews": {
+        "reviewed_at": "评估时间",
+        "employee": "员工",
+        "employer": "雇主",
+        "performance_key": "绩效",
+        "potential_key": "潜力",
+        "impact_of_loss": "流失影响",
+        "risk_of_loss": "流失风险",
+        "id": "评估 (ID)"
       }
     },
     "enumValues": {
@@ -1444,7 +1697,12 @@
       "filled": "已填补",
       "open": "开放中",
       "planned": "已规划",
-      "position_assignment": "职位任命"
+      "position_assignment": "职位任命",
+      "valid": "有效",
+      "revoked": "已撤销",
+      "pending_verification": "待验证",
+      "inbox": "收件箱",
+      "email": "电子邮件"
     }
   },
   "operators": {

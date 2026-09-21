@@ -47,6 +47,16 @@
         "platform"
       ]
     },
+    "automations": {
+      "description": "HRM automation recipes: triggers, rules, conditions, actions, exception-only approval, simulator, run log, action reasons and change event verbs.",
+      "dependsOn": [
+        "flows",
+        "hrm",
+        "organization",
+        "platform",
+        "scheduling"
+      ]
+    },
     "backup": {
       "description": "Organization backup and restore, local and stored, with CLIs.",
       "dependsOn": [
@@ -198,6 +208,15 @@
         "sim"
       ]
     },
+    "inbox": {
+      "description": "HR-15 inbox read model: one My Tasks list over approvals, checklist steps, requests, reviews, windows, signatures, weeks, and expenses.",
+      "dependsOn": [
+        "flows",
+        "hrm",
+        "organization",
+        "platform"
+      ]
+    },
     "hrm": {
       "description": "Human resources: employments, change requests, temporal records.",
       "dependsOn": [
@@ -205,7 +224,8 @@
         "money",
         "organization",
         "payroll",
-        "platform"
+        "platform",
+        "projects"
       ]
     },
     "inventory": {

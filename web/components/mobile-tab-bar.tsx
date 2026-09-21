@@ -13,6 +13,7 @@ import { Menu } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 import { useMobileNav } from './mobile-nav'
 import { NavIcon, type SidebarNavGroup } from './sidebar-nav'
+import { NavCountBadge } from './nav-count-badge'
 import { findActiveNavHref } from './sidebar-nav-active'
 import { useNavGroups } from './use-platform-nav'
 import { selectMobileTabs } from '../lib/mobile-nav'
@@ -49,7 +50,14 @@ export function MobileTabBar({ groups }: { groups: SidebarNavGroup[] }) {
         const active = activeHref === t.href
         return (
           <Link key={t.href} href={t.href as never} className={tabClass(active)}>
-            <NavIcon iconKey={t.iconKey} size={20} />
+            <span className="relative inline-flex">
+              <NavIcon iconKey={t.iconKey} size={20} />
+              {t.badgeCountHref ? (
+                <span className="absolute -top-1.5 -right-2.5">
+                  <NavCountBadge source={t.badgeCountHref} />
+                </span>
+              ) : null}
+            </span>
             <span className="w-full truncate text-center">{t.shortLabel ?? t.label}</span>
           </Link>
         )

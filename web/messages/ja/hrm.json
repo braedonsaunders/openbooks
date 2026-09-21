@@ -10,7 +10,10 @@
       "myLeave": "自分の休暇",
       "recruiting": "採用",
       "performance": "パフォーマンス",
-      "benefits": "福利厚生"
+      "benefits": "福利厚生",
+      "compliance": "コンプライアンス",
+      "compensation": "報酬",
+      "qualifications": "資格"
     },
     "recruiting": {
       "title": "採用",
@@ -78,7 +81,9 @@
       "pending": "{count, plural, other {決定待ちの変更申請 # 件}}",
       "overdueSteps": "{count, plural, other {期限超過のチェックリスト項目 # 件}}",
       "leavePending": "{count, plural, other {承認待ちの休暇申請 # 件}}",
-      "unfunded": "予算裏付けのない充足FTE {fte}"
+      "unfunded": "予算裏付けのない充足FTE {fte}",
+      "expiringQualifications": "{count, plural, other {まもなく期限切れの認定 # 件}}",
+      "expiredQualifications": "{count, plural, other {期限切れの認定 # 件 — 更新まで配車拒否}}"
     }
   },
   "overview": {
@@ -160,7 +165,9 @@
       "kind": "変更",
       "effective": "発効",
       "requester": "申請者",
-      "submitted": "提出"
+      "submitted": "提出",
+      "action": "アクション",
+      "verb": "動詞"
     },
     "emptyTitle": "ここに変更申請はありません",
     "emptyDescription": "このビューは空です — このセグメントではまだ何も提案されていません。",
@@ -172,7 +179,14 @@
     "proposeFailed": "雇用リストを読み込めませんでした。",
     "draftBadge": "操作",
     "openEmployee": "従業員レコードを開く",
-    "notAvailable": "利用不可"
+    "notAvailable": "利用不可",
+    "reasonsButton": "理由コード",
+    "verbs": {
+      "apply": "適用",
+      "cancel": "取消",
+      "rescind": "破棄",
+      "correct": "訂正"
+    }
   },
   "employment": {
     "episodes": {
@@ -220,7 +234,7 @@
       "binding": "バインディング",
       "bindingValue": "申請リビジョン {request}（雇用リビジョン {expected} に対して）",
       "submitted": "提出済み",
-      "viewInApprovals": "承認で表示",
+      "viewInApprovals": "受信トレイで表示",
       "noRun": "下書き — 承認ランはまだありません。",
       "empty": "変更申請はまだありません。",
       "statusNames": {
@@ -290,7 +304,18 @@
       "positionHint": "この配属が保持する財源付き編制。配属自体のタイトル、部門、勤務地は保持されます。",
       "positionRequired": "ポジションを選択するか、配属を未割当としてマークしてください。",
       "unassignLabel": "ポジションから外す",
-      "unassignHint": "明示的なnullリンクを記録します：枠は内容を保持しますが、編制を保持しません。"
+      "unassignHint": "明示的なnullリンクを記録します：枠は内容を保持しますが、編制を保持しません。",
+      "actionLabel": "アクション",
+      "actionPlaceholder": "アクションを選択",
+      "actionRequired": "この変更のHRアクションを選択してください。",
+      "reasonCodeLabel": "理由",
+      "reasonCodePlaceholder": "理由を選択",
+      "rescindAction": "破棄",
+      "correctAction": "訂正",
+      "rescindTitle": "変更を破棄",
+      "correctTitle": "変更を訂正",
+      "rescindToast": "変更を破棄しました。",
+      "correctToast": "訂正を記録しました。"
     },
     "exit": {
       "title": "退職記録",
@@ -301,6 +326,14 @@
       "empty": "福利厚生の加入や扶養家族はまだありません。",
       "viewAll": "福利厚生",
       "dependents": "扶養家族（{count}人）: {names}"
+    },
+    "qualifications": {
+      "title": "資格",
+      "viewAll": "すべて見る",
+      "empty": "資格が登録されていません。"
+    },
+    "continuous": {
+      "title": "フィードバックとコンピテンシー"
     }
   },
   "directory": {
@@ -714,7 +747,95 @@
     "exitDestination": "転職先",
     "exitNotes": "備考",
     "saveExit": "退職記録を保存",
-    "recordExit": "退職を記録"
+    "recordExit": "退職を記録",
+    "continuous": {
+      "tabs": {
+        "cycles": "サイクル",
+        "calibration": "キャリブレーション",
+        "talent": "タレントと後継"
+      },
+      "calibration": {
+        "title": "キャリブレーション",
+        "description": "評価サイクルに対する格付けグリッド:提案値と調整値を監査証跡付きで。",
+        "newSession": "新規セッション",
+        "sessionsEmpty": "キャリブレーションセッションはまだありません。",
+        "colSession": "セッション",
+        "colStatus": "ステータス",
+        "colOpened": "開始",
+        "gridTitle": "キャリブレーショングリッド",
+        "gridEmpty": "このセッションには提出済みのマネージャー評価がまだありません。",
+        "colReview": "評価",
+        "colProposed": "提案値",
+        "colDecide": "決定",
+        "distributionTitle": "評価の分布",
+        "unrated": "未評価",
+        "missingTitle": "このセッションの未登録",
+        "openSession": "セッションを開始",
+        "closeSession": "セッションを確定",
+        "sessionName": "セッション名",
+        "sessionCycle": "評価サイクル",
+        "createSession": "セッションを作成",
+        "ratingLabel": "調整後の評価",
+        "potentialLabel": "ポテンシャル",
+        "justificationLabel": "根拠",
+        "saveLabel": "評価を保存",
+        "revertLabel": "差し戻し",
+        "revertReasonLabel": "差し戻しの理由"
+      },
+      "talent": {
+        "title": "タレントと後継",
+        "description": "宣言スケール上の9ボックス、タレント表、後継計画。",
+        "newRecord": "新規記録",
+        "cycleLabel": "評価サイクル",
+        "gridTitle": "タレントグリッド",
+        "gridEmpty": "このサイクルのスケールはまだ宣言されていません。",
+        "unplacedNote": "宣言スケール外の配置が{count}件あります",
+        "colEmployee": "従業員",
+        "colPerformance": "業績",
+        "colPotential": "ポテンシャル",
+        "colLoss": "喪失の影響 / リスク",
+        "colReady": "昇進可能",
+        "readyYes": "はい",
+        "readyNo": "まだ",
+        "reviewsEmpty": "このサイクルのタレントレビューはまだありません。",
+        "plansTitle": "後継計画",
+        "plansEmpty": "後継計画はまだありません。",
+        "colPosition": "職位",
+        "colIncumbent": "現任者",
+        "colCandidates": "候補者",
+        "colStatus": "ステータス",
+        "impactLabel": "喪失の影響",
+        "riskLabel": "喪失のリスク",
+        "promotionLabel": "昇進可能",
+        "notesLabel": "メモ",
+        "submitLabel": "記録を保存",
+        "modeLabel": "記録",
+        "modeTalentLabel": "タレントレビュー",
+        "modeSuccessionLabel": "後継計画",
+        "employeeLabel": "従業員",
+        "positionLabel": "職位"
+      },
+      "feedback": {
+        "settingsTitle": "フィードバック設定",
+        "anyoneLabel": "組織内の全員",
+        "managersLabel": "マネージャーと人事のみ",
+        "saveLabel": "設定を保存",
+        "praise": "称賛",
+        "feedbackKind": "フィードバック",
+        "request": "リクエスト",
+        "kindLabel": "種類",
+        "visibilityLabel": "公開範囲",
+        "publicVis": "公開",
+        "managerAndSubject": "マネージャーと本人",
+        "managerOnly": "マネージャーのみ",
+        "subjectOnly": "本人のみ",
+        "bodyLabel": "メッセージ",
+        "bodyPlaceholder": "何が起きたか具体的に書いてください",
+        "submitLabel": "送信",
+        "praiseAction": "称賛する",
+        "respondLabel": "回答する"
+      }
+    }
   },
   "retention": {
     "title": "定着",
@@ -803,7 +924,11 @@
       "profile": "プロフィール",
       "leave": "休暇",
       "checklists": "チェックリスト",
-      "team": "チーム"
+      "reviews": "評価",
+      "benefits": "福利厚生",
+      "team": "チーム",
+      "compensation": "報酬",
+      "oneOnOnes": "1:1"
     },
     "refusedTitle": "セルフサービスは利用できません",
     "overview": {
@@ -829,7 +954,10 @@
       "balancesTitle": "残高",
       "balancesEmpty": "有効な休暇種別がありません。",
       "viewLeave": "休暇を開く",
-      "extensionsTitle": "その他"
+      "extensionsTitle": "その他",
+      "qualificationsTitle": "対応が必要な認定",
+      "qualificationsEmpty": "期限切れなし",
+      "qualificationsEmptyDescription": "認定は有効です — 失効前に更新がここに表示されます。"
     },
     "profile": {
       "title": "マイプロフィール",
@@ -934,16 +1062,534 @@
         "title": "職名",
         "department": "部門",
         "status": "ステータス",
-        "serviceStart": "勤務開始日"
+        "serviceStart": "勤務開始日",
+        "cycle": "サイクル",
+        "oneOnOne": "1:1",
+        "feedback": "フィードバック"
       },
       "rosterEmpty": "直属の部下はいません",
       "stepsTitle": "自分に割り当てられたステップ",
       "stepsEmpty": "このチームであなたに割り当てられたステップはありません。",
       "leaveTitle": "未決定の休暇申請",
       "leaveEmpty": "決定待ちの休暇申請はありません。",
-      "decideInApprovals": "承認画面で決定する",
+      "decideInApprovals": "受信トレイで決定する",
       "changesTitle": "未決定の変更申請",
-      "changesEmpty": "決定待ちの変更申請はありません。"
+      "changesEmpty": "決定待ちの変更申請はありません。",
+      "owedTitle": "担当の評価",
+      "owedEmpty": "オープン中のサイクルに担当の評価はありません。",
+      "openReview": "評価を開く",
+      "oneOnOneLink": "1:1を開く"
+    },
+    "reviewStatus": {
+      "pending": "下書き",
+      "submitted": "提出済み",
+      "calibrated": "調整済み",
+      "shared": "共有済み",
+      "acknowledged": "確認済み"
+    },
+    "goalStatus": {
+      "active": "進行中",
+      "achieved": "達成",
+      "missed": "未達",
+      "cancelled": "中止"
+    },
+    "enrollmentStatus": {
+      "elected": "選択済み",
+      "waived": "辞退",
+      "pending_approval": "承認待ち",
+      "active": "有効",
+      "ended": "終了",
+      "cancelled": "取消"
+    },
+    "windowKinds": {
+      "open_enrollment": "定期登録",
+      "new_hire": "新規採用",
+      "life_event": "ライフイベント"
+    },
+    "reviews": {
+      "title": "自分の評価",
+      "description": "提出すべき自己評価、共有された評価、自分の目標。",
+      "selfTitle": "自己評価",
+      "columns": {
+        "cycle": "サイクル",
+        "period": "期間",
+        "status": "状態",
+        "rating": "評価",
+        "shared": "共有日",
+        "goal": "目標",
+        "progress": "進捗"
+      },
+      "selfEmpty": "自己評価はありません",
+      "selfEmptyDescription": "サイクルが開始すると提出すべき評価がここに表示されます。",
+      "answerInDrawer": "人事画面で回答",
+      "sharedTitle": "共有された評価",
+      "sharedEmpty": "共有はまだありません",
+      "sharedEmptyDescription": "共有されたマネージャー評価がここに表示されます。",
+      "acknowledge": "確認する",
+      "acknowledgeFailed": "評価を確認できませんでした。",
+      "goalsTitle": "自分の目標",
+      "goalsEmpty": "目標はまだありません",
+      "goalsEmptyDescription": "雇用の目標が進捗とともにここに表示されます。",
+      "goalDialogTitle": "目標の進捗を更新",
+      "goalDialogDescription": "メモとともに進捗を記録します — 目標の証跡になります。",
+      "goalNoteLabel": "メモ",
+      "goalNotePlaceholder": "前回更新からの進展",
+      "goalSubmit": "進捗を保存",
+      "goalUpdate": "更新",
+      "goalFailed": "進捗を保存できませんでした。"
+    },
+    "benefits": {
+      "title": "自分の福利厚生",
+      "description": "加入内容、登録期間中のウィンドウ、扶養家族。",
+      "electionsTitle": "加入内容",
+      "columns": {
+        "plan": "プラン",
+        "coverage": "保障内容",
+        "status": "状態",
+        "effective": "適用期間",
+        "monthly": "控除 / 期間",
+        "window": "ウィンドウ",
+        "kind": "種類",
+        "range": "期間",
+        "dependent": "扶養家族",
+        "relationship": "続柄"
+      },
+      "electionsEmpty": "加入はありません",
+      "electionsEmptyDescription": "選択した保障がここに表示されます。",
+      "monthlyHint": "給与から控除される保存済み金額 — 再計算されません。",
+      "windowsTitle": "登録受付中のウィンドウ",
+      "windowsEmpty": "受付中のウィンドウはありません",
+      "windowsEmptyDescription": "雇用主のウィンドウは受付中にここに表示されます。",
+      "dependentsTitle": "扶養家族",
+      "dependentsEmpty": "扶養家族は登録されていません。",
+      "elect": "保障を選択",
+      "electTitle": "保障を選択",
+      "electDescription": "雇用主の受付中ウィンドウ内で選択 — またはライフイベントを記録。",
+      "fromLabel": "適用開始日",
+      "lifeEventLabel": "ライフイベントの理由（ウィンドウの代わり）",
+      "lifeEventPlaceholder": "人事承認者向けに変更内容を記入",
+      "electSubmit": "選択する",
+      "electFailed": "加入を記録できませんでした。",
+      "change": "変更",
+      "changeTitle": "保障を変更",
+      "changeDescription": "受付中ウィンドウ内の日付から変更 — 旧行は前日に終了します。",
+      "changeReasonPlaceholder": "保障を変更する理由",
+      "changeSubmit": "変更を保存",
+      "changeFailed": "変更を記録できませんでした。"
+    },
+    "qualifications": {
+      "columns": {
+        "type": "認定",
+        "expires": "有効期限",
+        "status": "ステータス"
+      }
+    },
+    "oneOnOnes": {
+      "title": "1:1",
+      "description": "予定と過去の1:1とそのアジェンダ。",
+      "upcoming": "予定",
+      "past": "過去",
+      "requests": "フィードバック依頼",
+      "colWhen": "日時",
+      "colWith": "相手",
+      "colStatus": "ステータス",
+      "upcomingEmpty": "予定された1:1はありません。",
+      "pastEmpty": "過去の1:1はありません。",
+      "requestsEmpty": "未回答の依頼はありません。",
+      "scheduled": "予定",
+      "held": "実施済み",
+      "skipped": "スキップ",
+      "cancelled": "キャンセル",
+      "talkingPoint": "話題",
+      "actionItem": "アクション",
+      "note": "メモ",
+      "shared": "共有",
+      "private": "非公開",
+      "privateNote": "非公開 — あなただけが読めます",
+      "kindLabel": "種類",
+      "bodyLabel": "アジェンダ項目",
+      "bodyPlaceholder": "要点を書いてください",
+      "addItem": "項目を追加",
+      "hold": "1:1を実施",
+      "skip": "スキップ",
+      "skipReason": "スキップの理由",
+      "cancelMeeting": "キャンセル",
+      "carryNote": "実施すると未完了項目がコピーとして引き継がれます — 原本は履歴として残ります。",
+      "done": "完了",
+      "reopen": "再開",
+      "carriedForward": "引継ぎ済み",
+      "actionFailed": "1:1の操作に失敗しました。"
+    }
+  },
+  "options": {
+    "hrmAction": {
+      "hire": "採用",
+      "rehire": "再雇用",
+      "transfer": "異動",
+      "promotion": "昇進",
+      "demotion": "降格",
+      "pay_change": "給与変更",
+      "manager_change": "上長変更",
+      "location_change": "勤務地変更",
+      "schedule_change": "勤務時間変更",
+      "leave_of_absence": "休職",
+      "return": "復職",
+      "termination": "退職",
+      "profile_change": "プロフィール変更",
+      "other": "その他"
+    }
+  },
+  "compliance": {
+    "title": "コンプライアンス",
+    "description": "標準賃金、認証給与、労災クラス、見習い比率、日当 — 同じ勤怠・プロジェクト・給与記録から建設コンプライアンスを処理します。",
+    "refused": "コンプライアンスは利用できません",
+    "needRead": "このワークスペースを開くには建設関連の読み取り権限が必要です。",
+    "generate": "レポートを生成",
+    "findingsTitle": "指摘事項",
+    "ratesTitle": "賃金表",
+    "certifiedTitle": "認証給与",
+    "classesTitle": "クラス",
+    "perdiemTitle": "日当",
+    "empty": "まだ何もありません。",
+    "emptyAction": "下の設定で構成してください。",
+    "active": "有効",
+    "retired": "廃止",
+    "sections": {
+      "findings": "指摘事項",
+      "rates": "賃金表",
+      "certified": "認証給与",
+      "classes": "クラス",
+      "perdiem": "日当"
+    },
+    "kinds": {
+      "ratio_breach": "比率違反",
+      "missing_rate": "賃金未設定",
+      "class_unresolved": "クラス未解決",
+      "registration_missing": "登録不足",
+      "fringe_mismatch": "フリンジ不一致"
+    },
+    "findingStatus": {
+      "open": "未対応",
+      "acknowledged": "確認済み",
+      "resolved": "解決済み"
+    },
+    "runStatus": {
+      "draft": "下書き",
+      "generated": "生成済み",
+      "submitted": "提出済み",
+      "amended": "修正済み"
+    },
+    "entryStatus": {
+      "computed": "計算済み",
+      "approved": "承認済み",
+      "voided": "無効",
+      "consumed": "消費済み"
+    },
+    "scheduleKind": {
+      "prevailing_wage": "標準賃金",
+      "union_agreement": "組合協定",
+      "org_declared": "自社宣言"
+    },
+    "reciprocity": {
+      "home_local": "所属支部",
+      "jobsite_local": "現場支部",
+      "higher_of": "高い方"
+    },
+    "scope": {
+      "project": "プロジェクト",
+      "location": "拠点",
+      "subsidiary": "子会社",
+      "org": "全社"
+    },
+    "columns": {
+      "kind": "種類",
+      "project": "プロジェクト",
+      "day": "日",
+      "status": "状態",
+      "recorded": "記録日",
+      "schedule": "賃金表",
+      "scope": "範囲",
+      "reciprocity": "相互適用",
+      "window": "期間",
+      "run": "実行",
+      "week": "週",
+      "format": "形式",
+      "code": "コード",
+      "name": "名称",
+      "rate": "率 / 100",
+      "rules": "ルール",
+      "amount": "金額",
+      "actions": "操作"
+    },
+    "stats": {
+      "openFindings": "未対応の指摘",
+      "openFindingsSub": "次回実行前に対応",
+      "dueReports": "未提出レポート",
+      "dueReportsSub": "{week} 週のレポートがない案件",
+      "unresolvedClasses": "未解決クラス",
+      "unresolvedClassesSub": "一致するルールがない時間",
+      "perdiemWaiting": "承認待ち日当",
+      "perdiemWaitingSub": "計算済みエントリの承認"
+    },
+    "actions": {
+      "acknowledge": "確認",
+      "resolve": "解決",
+      "approve": "承認",
+      "void": "無効化",
+      "submit": "提出"
+    },
+    "generateDialog": {
+      "title": "認証レポートを生成",
+      "project": "プロジェクト",
+      "week": "週末日",
+      "format": "形式",
+      "generate": "生成",
+      "cancel": "キャンセル"
+    }
+  },
+  "compensation": {
+    "title": "報酬",
+    "description": "役割の適正給与、バンド内の位置、昇給の決定方法。",
+    "tiles": {
+      "belowMin": "バンド下限未満",
+      "openCyclePacing": " cycle進捗",
+      "awaitingPlans": "承認待ちプラン",
+      "jointFlags": "共同評価対象"
+    },
+    "bandsTitle": "レベル別バンド",
+    "bandsEmpty": "バンドがありません — レベルにバンドを設定してください。",
+    "cyclesTitle": "昇給サイクル",
+    "cyclesEmpty": "サイクルがありません — ラウンドを開いてください。",
+    "plansTitle": "人員計画",
+    "plansEmpty": "プランがありません — シナリオを作成してください。",
+    "architectureTitle": "職務体系",
+    "newCycle": "新規サイクル",
+    "newPlan": "新規プラン",
+    "equity": "給与の公平性",
+    "back": "戻る",
+    "pacing": "予算進捗",
+    "pacingNone": "予算枠が未設定",
+    "pacingNote": "枠の{pct}%を提案済み",
+    "linesTitle": "チーム表",
+    "linesEmpty": "明細がありません — サイクルを開いてください。",
+    "totalCost": "積算合計",
+    "planLinesTitle": "プラン明細",
+    "planLinesEmpty": "明細がありません。",
+    "approveLine": "承認",
+    "columns": {
+      "level": "レベル",
+      "range": "バンド",
+      "headcount": "人数",
+      "placement": "位置",
+      "name": "名前",
+      "status": "状態",
+      "effective": "適用日",
+      "cost": "コスト",
+      "employee": "従業員",
+      "current": "現行",
+      "rating": "評価",
+      "guideline": "ガイドライン",
+      "proposed": "提案",
+      "title": "件名",
+      "kind": "種別",
+      "fte": "常勤換算",
+      "start": "開始"
+    },
+    "placement": {
+      "below_min": "下限未満",
+      "in_range": "範囲内",
+      "above_max": "上限超過",
+      "no_band": "バンドなし"
+    },
+    "cycleKind": {
+      "merit": "昇給",
+      "promotion": "昇進",
+      "adjustment": "調整",
+      "cola": "物価調整"
+    },
+    "cycleStatus": {
+      "draft": "下書き",
+      "open": "公開中",
+      "in_review": "審査中",
+      "approved": "承認済み",
+      "pushed": "反映済み",
+      "closed": "終了",
+      "cancelled": "取消"
+    },
+    "lineStatus": {
+      "pending": "未処理",
+      "proposed": "提案済み",
+      "approved": "承認済み",
+      "rejected": "却下",
+      "pushed": "反映済み"
+    },
+    "planStatus": {
+      "draft": "下書き",
+      "submitted": "提出済み",
+      "approved": "承認済み",
+      "closed": "終了"
+    },
+    "planLineStatus": {
+      "proposed": "提案済み",
+      "approved": "承認済み",
+      "rejected": "却下",
+      "opened": "募集中",
+      "filled": "充足済み",
+      "cancelled": "取消"
+    },
+    "lineKind": {
+      "create": "新設",
+      "backfill": "補充",
+      "change": "変更",
+      "terminate": "廃止"
+    },
+    "eventKind": {
+      "opened": "公開",
+      "proposed": "提案",
+      "reopened": "再開",
+      "approved": "承認",
+      "rejected": "却下",
+      "budget_changed": "予算変更",
+      "pushed": "反映",
+      "closed": "終了",
+      "cancelled": "取消"
+    },
+    "drawer": {
+      "proposeTitle": "提案",
+      "decideTitle": "決定",
+      "historyTitle": "履歴",
+      "pctLabel": "昇給 %",
+      "rateLabel": "新レート",
+      "reasonLabel": "理由",
+      "failed": "変更は拒否されました",
+      "submit": "保存",
+      "cancel": "キャンセル",
+      "approve": "承認",
+      "reject": "却下",
+      "reopen": "再開"
+    },
+    "historyColumns": {
+      "event": "イベント",
+      "reason": "理由",
+      "at": "日時"
+    },
+    "emptyHistory": "イベントがありません。"
+  },
+  "equity": {
+    "title": "給与の公平性",
+    "description": "給与実績から算出した確定済み格差指標（等価カテゴリー別）。",
+    "meanGap": "平均格差",
+    "medianGap": "中央値格差",
+    "variableGap": "変動給格差",
+    "jointFlags": "共同評価対象",
+    "categoriesTitle": "カテゴリー別格差",
+    "categoriesEmpty": "測定済みカテゴリーがありません。",
+    "columns": {
+      "category": "カテゴリー",
+      "counts": "人数 A / B",
+      "mean": "平均格差",
+      "median": "中央値格差",
+      "unexplained": "未説明格差",
+      "flag": "フラグ"
+    },
+    "jointDue": "共同で評価",
+    "generate": "スナップショット生成",
+    "emptyTitle": "スナップショットなし",
+    "emptyDescription": "スナップショットを生成して格差を測定してください。"
+  },
+  "myComp": {
+    "title": "自分の報酬",
+    "description": "バンド内の位置、明細、給与情報。",
+    "placement": "バンド内の位置",
+    "statementsTitle": "明細",
+    "columns": {
+      "period": "期間",
+      "generated": "生成日"
+    },
+    "statementsEmpty": "明細がありません。",
+    "requestPayInfo": "給与情報を請求",
+    "requestFailed": "請求は拒否されました",
+    "requestSubmit": "保存",
+    "requestCancel": "キャンセル",
+    "requestStatus": {
+      "open": "受付中"
+    }
+  },
+  "qualifications": {
+    "title": "資格",
+    "description": "作業員ごとの免許・資格・証明 — 本日配置可能な要員と期限切れが近いもの。",
+    "record": "資格を登録",
+    "recordTitle": "資格を登録",
+    "drawerTitle": "資格",
+    "settings": "資格設定",
+    "sectionLabel": "セクション",
+    "sections": {
+      "ledger": "台帳",
+      "requirements": "要件",
+      "alerts": "アラート"
+    },
+    "segmentsLabel": "ステータス",
+    "allLabel": "すべて",
+    "typesLabel": "種類",
+    "typesAll": "すべての種類",
+    "listTitle": "作業員ごとの資格",
+    "open": "開く",
+    "columns": {
+      "worker": "作業員",
+      "type": "種類",
+      "status": "ステータス",
+      "expiry": "期限",
+      "subject": "対象",
+      "severity": "重大度",
+      "window": "期間",
+      "due": "期限日",
+      "sent": "送信済み"
+    },
+    "statusNames": {
+      "valid": "有効",
+      "expiring": "期限間近",
+      "expired": "期限切れ",
+      "revoked": "取消済み",
+      "pending_verification": "確認待ち"
+    },
+    "emptyTitle": "資格が登録されていません",
+    "emptyDescription": "作業員の免許・資格を登録して配置を管理します。",
+    "requirementsTitle": "配置要件",
+    "requirementsEmpty": "要件はまだ定義されていません。",
+    "coverageTitle": "プロジェクトの充足状況",
+    "coverageProjectLabel": "プロジェクト",
+    "coverageProjectAll": "プロジェクトを選択",
+    "coverageEmpty": "このプロジェクトに要員はまだ配置されていません。",
+    "coverage": {
+      "qualified": "充足",
+      "missing": "不足",
+      "expired": "期限切れ",
+      "pending": "確認待ち"
+    },
+    "alertsTitle": "期限アラート",
+    "alertsEmpty": "アラートはありません。",
+    "alertDue": "未送信",
+    "taxonomyTitle": "資格体系",
+    "windowOpen": "{from} – 継続中",
+    "verify": "確認",
+    "renew": "更新",
+    "revoke": "取消",
+    "revokePrompt": "この資格を取り消しますか？理由を入力してください：",
+    "renewPrompt": "更新後の資格の発行日（YYYY-MM-DD）：",
+    "drawer": {
+      "issued": "発行日",
+      "identifier": "免許番号",
+      "notes": "備考",
+      "evidence": "証跡を見る",
+      "events": "履歴"
+    },
+    "recordForm": {
+      "employment": "雇用",
+      "type": "資格種類",
+      "issuedOn": "発行日",
+      "expiresOn": "有効期限",
+      "identifier": "免許番号",
+      "notes": "備考"
     }
   }
 }

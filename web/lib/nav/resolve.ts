@@ -116,6 +116,8 @@ export async function resolveNav(
           iconKey: item.iconKey ?? mod.iconKey,
           exact: mod.exact,
           mobile: item.mobile,
+          // HR-15: inbox badge plumbing — the count route self-scopes to the actor.
+          ...(mod.badgeCountHref ? { badgeCountHref: mod.badgeCountHref } : {}),
           // Nested sub-menu label (registry-driven; desktop sidebar renders it
           // collapsible, the top nav as a flyout, flat consumers ignore it).
           // subgroupHref makes the sub-menu header itself navigate.

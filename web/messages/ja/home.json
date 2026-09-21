@@ -1,0 +1,39 @@
+{
+  "title": "ホーム",
+  "greeting": "おかえりなさい、{name}さん",
+  "sections": {
+    "myTasks": "自分のタスク",
+    "openInbox": "受信箱を開く",
+    "pay": "給与",
+    "timeOff": "休暇",
+    "requestTimeOff": "休暇を申請",
+    "whosOut": "今週の不在者",
+    "upcoming": "予定",
+    "celebrations": "お祝い",
+    "announcements": "お知らせ",
+    "ask": "質問する",
+    "askPlaceholder": "給与・休暇・制度について質問…",
+    "teamApprovals": "自分を待つ承認",
+    "teamOut": "チームの不在",
+    "teamSteps": "期限切れのチーム手順",
+    "teamQualifications": "期限切れ間近の資格",
+    "oneOnOnes": "1:1の促し",
+    "headcount": "自分のチーム",
+    "attention": "要対応",
+    "workflows": "ワークフローのエラー",
+    "compliance": "コンプライアンス予定"
+  },
+  "empty": {
+    "tasks": "待つものはありません。",
+    "out": "今週の不在者はいません。",
+    "upcoming": "予定はありません。",
+    "celebrations": "今週のお祝いはありません。",
+    "announcements": "お知らせはありません。",
+    "attention": "すべて完了です。"
+  },
+  "pay": {
+    "nextPay": "次回給与日",
+    "lastSlip": "最新の給与明細",
+    "viewSlip": "明細を見る"
+  }
+}

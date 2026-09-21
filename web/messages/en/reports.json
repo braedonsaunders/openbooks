@@ -680,6 +680,78 @@
       "hrm_benefit_enrollments": {
         "label": "Benefit enrolments",
         "description": "One row per benefit election — person, employer, department at election, plan and coverage tier, status, and stored per-period amounts. Requires the HRM benefits permission."
+      },
+      "automations": {
+        "label": "Automations",
+        "description": "One row per automation recipe — trigger kind, status, version, and last run. Requires the automations permission."
+      },
+      "automation_runs": {
+        "label": "Automation runs",
+        "description": "One row per automation firing — executed version, subject, status, steps, and error. Requires the automations permission."
+      },
+      "hrm_action_reasons": {
+        "label": "Action reasons",
+        "description": "One row per reason code per HR action — the vocabulary change requests file under. Requires the HRM employment permission."
+      },
+      "hrm_rate_schedule_lines": {
+        "label": "Rate schedule lines",
+        "description": "One row per schedule, classification, and effective date: the resolvable base, cash fringe, creditable fringe, and overtime multiplier."
+      },
+      "hrm_per_diem_entries": {
+        "label": "Per-diem entries",
+        "description": "One row per employment, project, and day: computed per-diem and travel amounts with status across computed, approved, voided, and consumed."
+      },
+      "hrm_comp_class_split": {
+        "label": "Comp class split",
+        "description": "Priority match rules with their premium classes: which class prices each costed hour and its rate per 100."
+      },
+      "hrm_certified_runs": {
+        "label": "Certified runs",
+        "description": "Certified payroll runs by project and week: frozen payloads with pack format, file artefact, and amendment links."
+      },
+      "hrm_compliance_findings": {
+        "label": "Compliance findings",
+        "description": "Append-only pre-run flags by kind: ratio breaches, missing rates, unresolved classes, missing registrations, and fringe mismatches."
+      },
+      "hrm_pay_bands": {
+        "label": "Pay bands",
+        "description": "One row per live pay band version: level, scope, currency, basis, and the min/target/max SHOULD-pay figures. Requires the HRM compensation permission."
+      },
+      "hrm_comp_cycle_lines": {
+        "label": "Merit cycle lines",
+        "description": "One row per cycle decision: person, employer, frozen current rate, proposal, and status. Requires the HRM compensation permission."
+      },
+      "hrm_headcount_plan_lines": {
+        "label": "Headcount plan lines",
+        "description": "One row per planned movement: plan, kind, title, FTE, computed cost, and status. Requires the HRM compensation permission."
+      },
+      "hrm_pay_gap_snapshots": {
+        "label": "Pay gap snapshots",
+        "description": "One row per frozen snapshot per category: level, headcounts, gaps, and the joint-assessment flag. Requires the HRM compensation permission."
+      },
+      "hrm_qualifications": {
+        "label": "Qualifications",
+        "description": "One row per held certification or license — holder, employer, type and category, issuance and expiry, and stored status with its verification."
+      },
+      "hrm_qualification_alerts": {
+        "label": "Qualification alerts",
+        "description": "One row per certification renewal alert — holder, type, expiry, the lead-day schedule it fired on, and whether it has been sent."
+      },
+      "hrm_one_on_ones": {
+        "label": "One-on-ones",
+        "description": "One row per 1:1 meeting — manager, report, scheduled and held dates, and status. Requires the HRM performance permission."
+      },
+      "hrm_feedback": {
+        "label": "Feedback",
+        "description": "One row per praise, feedback, or request — subject, kind, visibility, and recorded date. Requires the HRM performance permission."
+      },
+      "hrm_calibration_entries": {
+        "label": "Calibration entries",
+        "description": "One row per calibrated review — session, employee, proposed beside calibrated rating, potential, and the decider. Requires the HRM performance permission."
+      },
+      "hrm_talent_reviews": {
+        "label": "Talent reviews",
+        "description": "One row per talent review — employee, performance and potential keys, loss impact and risk, and promotion readiness. Requires the HRM performance permission."
       }
     },
     "columns": {
@@ -1248,7 +1320,9 @@
         "reason": "Reason",
         "created_at": "Created at",
         "id": "Request (id)",
-        "employment_id": "Employment (id)"
+        "employment_id": "Employment (id)",
+        "action": "Action",
+        "reason_code": "Reason code"
       },
       "hrm_positions": {
         "code": "Code",
@@ -1362,6 +1436,185 @@
         "effective_to": "Effective to",
         "employment_id": "Employment (id)",
         "id": "Enrolment (id)"
+      },
+      "hrm_rate_schedule_lines": {
+        "schedule": "Schedule",
+        "classification": "Classification",
+        "base_rate": "Base rate",
+        "fringe_rate": "Cash fringe",
+        "currency": "Currency",
+        "effective_from": "Effective from"
+      },
+      "hrm_per_diem_entries": {
+        "worked_on": "Day",
+        "amount": "Amount",
+        "currency": "Currency",
+        "status": "Status",
+        "employment_id": "Employment (id)"
+      },
+      "hrm_comp_class_split": {
+        "class": "Class",
+        "priority": "Priority",
+        "rate": "Rate / 100"
+      },
+      "hrm_certified_runs": {
+        "week_ending": "Week ending",
+        "format_key": "Format",
+        "status": "Status",
+        "project_id": "Project (id)"
+      },
+      "hrm_compliance_findings": {
+        "kind": "Kind",
+        "worked_on": "Day",
+        "status": "Status",
+        "project_id": "Project (id)"
+      },
+      "hrm_pay_bands": {
+        "level": "Level",
+        "family": "Family",
+        "employer": "Employer",
+        "currency": "Currency",
+        "basis": "Basis",
+        "min": "Min",
+        "target": "Target",
+        "max": "Max",
+        "effective_from": "Effective from",
+        "effective_to": "Effective to",
+        "id": "Band (id)"
+      },
+      "hrm_comp_cycle_lines": {
+        "cycle": "Cycle",
+        "person": "Person",
+        "employer": "Employer",
+        "current_rate": "Current rate",
+        "currency": "Currency",
+        "compa_ratio": "Compa-ratio",
+        "proposed_pct": "Proposed %",
+        "proposed_rate": "Proposed rate",
+        "status": "Status",
+        "effective_on": "Effective on",
+        "employment_id": "Employment (id)",
+        "id": "Line (id)"
+      },
+      "hrm_headcount_plan_lines": {
+        "plan": "Plan",
+        "kind": "Kind",
+        "title": "Title",
+        "employer": "Employer",
+        "planned_fte": "Planned FTE",
+        "start_on": "Start",
+        "est_annual_cost": "Est. annual cost",
+        "currency": "Currency",
+        "status": "Status",
+        "id": "Line (id)"
+      },
+      "hrm_pay_gap_snapshots": {
+        "as_of": "As of",
+        "employer": "Employer",
+        "level": "Level",
+        "count_a": "Headcount A",
+        "count_b": "Headcount B",
+        "mean_gap_pct": "Mean gap %",
+        "median_gap_pct": "Median gap %",
+        "unexplained_gap_pct": "Unexplained gap %",
+        "method": "Method",
+        "joint_assessment_due": "Joint assessment due",
+        "id": "Snapshot (id)"
+      },
+      "hrm_qualifications": {
+        "employee": "Employee",
+        "employer": "Employer",
+        "type_code": "Type code",
+        "type_name": "Type",
+        "category": "Category",
+        "identifier": "License no.",
+        "issued_on": "Issued on",
+        "expires_on": "Expires on",
+        "status": "Status",
+        "verified_at": "Verified at",
+        "qualification_id": "Qualification (id)",
+        "employment_id": "Employment (id)"
+      },
+      "hrm_qualification_alerts": {
+        "employee": "Employee",
+        "type_code": "Type code",
+        "type_name": "Type",
+        "expires_on": "Expires on",
+        "due_on": "Due on",
+        "lead_days": "Lead days",
+        "sent_at": "Sent at",
+        "channel": "Channel",
+        "alert_id": "Alert (id)",
+        "qualification_id": "Qualification (id)"
+      },
+      "automations": {
+        "name": "Name",
+        "status": "Status",
+        "trigger_kind": "Trigger",
+        "version": "Version",
+        "priority": "Priority",
+        "last_run_at": "Last run at",
+        "error_message": "Error",
+        "created_at": "Created at",
+        "id": "Automation (id)"
+      },
+      "automation_runs": {
+        "automation": "Automation",
+        "status": "Status",
+        "version": "Version",
+        "subject_kind": "Subject kind",
+        "subject_id": "Subject (id)",
+        "started_at": "Started at",
+        "finished_at": "Finished at",
+        "error": "Error",
+        "created_at": "Created at",
+        "id": "Run (id)"
+      },
+      "hrm_action_reasons": {
+        "action": "Action",
+        "reason_code": "Code",
+        "label": "Label",
+        "requires_comment": "Requires comment",
+        "is_active": "Active",
+        "created_at": "Created at",
+        "id": "Reason (id)"
+      },
+      "hrm_one_on_ones": {
+        "scheduled_at": "Scheduled",
+        "held_at": "Held",
+        "manager": "Manager",
+        "report": "Report",
+        "employer": "Employer",
+        "status": "Status",
+        "id": "Meeting (id)"
+      },
+      "hrm_feedback": {
+        "recorded_at": "Recorded",
+        "employee": "Employee",
+        "employer": "Employer",
+        "kind": "Kind",
+        "visibility": "Visibility",
+        "id": "Feedback (id)"
+      },
+      "hrm_calibration_entries": {
+        "session": "Session",
+        "employee": "Employee",
+        "employer": "Employer",
+        "proposed_rating": "Proposed",
+        "calibrated_rating": "Calibrated",
+        "potential_key": "Potential",
+        "decided_at": "Decided",
+        "id": "Entry (id)"
+      },
+      "hrm_talent_reviews": {
+        "reviewed_at": "Reviewed",
+        "employee": "Employee",
+        "employer": "Employer",
+        "performance_key": "Performance",
+        "potential_key": "Potential",
+        "impact_of_loss": "Impact of loss",
+        "risk_of_loss": "Risk of loss",
+        "id": "Review (id)"
       }
     },
     "enumValues": {
@@ -1444,7 +1697,12 @@
       "differences": "Differences to resolve",
       "no_comparable_data": "Nothing was compared",
       "true": "Yes",
-      "false": "No"
+      "false": "No",
+      "valid": "Valid",
+      "revoked": "Revoked",
+      "pending_verification": "Pending verification",
+      "inbox": "Inbox",
+      "email": "Email"
     }
   },
   "operators": {

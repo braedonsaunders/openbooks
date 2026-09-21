@@ -288,3 +288,21 @@ test('every setup column, field and filter key has an English label under admin.
   }
   assert.deepEqual(missing, [])
 })
+
+// HR-14 begin: qualification taxonomy and vocabulary ride the registry
+// rehomed onto the Qualifications page — one surface, never two.
+test('qualification setup entities are gated and rehomed', () => {
+  for (const key of ['qualification-types', 'qualification-settings']) {
+    const entity = SETUP_ENTITY_BY_KEY.get(key)
+    assert.ok(entity, `${key} must be registered`)
+    assert.equal(entity.featureKey, 'hrmCertifications', `${key} hides while the feature is off`)
+    assert.equal(entity.rehomed, true, `${key} must be marked rehomed`)
+  }
+  const types = SETUP_ENTITY_BY_KEY.get('qualification-types')!
+  assert.equal(types.naturalKey, 'code', 'type codes are the org-unique handle')
+  assert.equal(types.hasActive, true, 'retired types hide but keep history resolving')
+  const settings = SETUP_ENTITY_BY_KEY.get('qualification-settings')!
+  assert.equal(settings.allowCreate, false, 'the settings singleton is never created here')
+  assert.equal(settings.allowDelete, false, 'the settings singleton is never deleted here')
+})
+// HR-14 end

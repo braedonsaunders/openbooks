@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, Drawer, Label, Textarea } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../lib/api-error'
+import { promptDialog } from '../../../lib/prompt'
 import { ChangeRequestDrawer, type DepartmentOption, type EditableChangeRequest } from './ChangeRequestDrawer'
 
 /**
@@ -29,11 +30,14 @@ export type ChangeRequestRow = {
 export function ChangeRequestActions({
   request,
   employmentId,
+  appliedChangeId,
   departmentOptions,
   onChanged,
 }: {
   request: ChangeRequestRow
   employmentId: string
+  /** Applied employment_changes id (0227): Rescind/Correct act on it. */
+  appliedChangeId?: string | null
   departmentOptions: DepartmentOption[]
   onChanged: () => void
 }) {
@@ -42,8 +46,36 @@ export function ChangeRequestActions({
   const [editing, setEditing] = useState<EditableChangeRequest | null>(null)
   const [loadingEdit, setLoadingEdit] = useState(false)
   const [lifecycle, setLifecycle] = useState<'submit' | 'withdraw' | null>(null)
+  // HR-16: verb-action busyness lives with the other hooks (never conditional).
+  const [verbBusy, setVerbBusy] = useState(false)
 
-  if ((TERMINAL as readonly string[]).includes(request.status)) return null
+  if ((TERMINAL as readonly string[]).includes(request.status) && !(request.status === 'applied' && appliedChangeId)) return null
+
+  async function verbAction(verb: 'rescind' | 'correct') {
+    const reason = await promptDialog({
+      title: t(`employment.changeRequests.${verb}Title`),
+      label: t('employment.changeRequests.reasonLabel'),
+    })
+    if (!reason) return
+    setVerbBusy(true)
+    try {
+      const res = await fetch(`/api/hrm/change-requests/${appliedChangeId}/${verb}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      })
+      if (!res.ok) {
+        toast.error(await readApiErrorMessage(res, t('employment.changeRequests.requestFailed')))
+        return
+      }
+      toast.success(t(`employment.changeRequests.${verb}Toast`))
+      onChanged()
+    } catch {
+      toast.error(t('employment.changeRequests.requestFailed'))
+    } finally {
+      setVerbBusy(false)
+    }
+  }
 
   async function openEdit() {
     setLoadingEdit(true)
@@ -81,6 +113,18 @@ export function ChangeRequestActions({
           {t('employment.changeRequests.withdrawAction')}
         </Button>
       ) : null}
+      {/* HR-16 begin: Rescind (danger) and Correct (secondary) on a completed change. */}
+      {request.status === 'applied' && appliedChangeId ? (
+        <>
+          <Button size="sm" variant="destructive" disabled={verbBusy} onClick={() => verbAction('rescind')}>
+            {t('employment.changeRequests.rescindAction')}
+          </Button>
+          <Button size="sm" variant="secondary" disabled={verbBusy} onClick={() => verbAction('correct')}>
+            {t('employment.changeRequests.correctAction')}
+          </Button>
+        </>
+      ) : null}
+      {/* HR-16 end */}
       {editing ? (
         <ChangeRequestDrawer
           employmentId={employmentId}

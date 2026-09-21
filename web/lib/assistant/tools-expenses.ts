@@ -228,13 +228,13 @@ const expenseApprovals: AssistantToolDef = {
     // The approvals hub doorway: without any approve permission the worklist
     // is empty rather than forbidden.
     if (!can(authz, "flows.approve") && !can(authz, "ap.approve") && !can(authz, "ar.approve")) {
-      return { ok: true, data: { returned: 0, total: 0, approvals: [], href: "/approvals" } };
+      return { ok: true, data: { returned: 0, total: 0, approvals: [], href: "/inbox" } };
     }
     let items: Awaited<ReturnType<typeof approvalWorklistForAuthz>> = [];
     try {
       items = await approvalWorklistForAuthz(authz);
     } catch {
-      return { ok: true, data: { returned: 0, total: 0, approvals: [], href: "/approvals" } };
+      return { ok: true, data: { returned: 0, total: 0, approvals: [], href: "/inbox" } };
     }
     const approvals: Record<string, unknown>[] = [];
     for (const item of items) {
@@ -273,7 +273,7 @@ const expenseApprovals: AssistantToolDef = {
         total: approvals.length,
         truncated: capped.truncated,
         approvals: capped.items,
-        href: "/approvals",
+        href: "/inbox",
       },
     };
   },

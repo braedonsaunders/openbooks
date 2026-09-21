@@ -40,7 +40,23 @@
     "topCustomers": "Top-Kunden",
     "topVendors": "Top-Lieferanten",
     "openCount": "{count, plural, one {# offen} other {# offene}}",
-    "runway": "Liquiditätsreichweite"
+    "runway": "Liquiditätsreichweite",
+    "inboxList": "Meine Aufgaben",
+    "payTile": "Gehalt",
+    "balanceTile": "Urlaubskonten",
+    "whosOut": "Wer ist abwesend",
+    "homeUpcoming": "Anstehend",
+    "celebrations": "Feiern",
+    "announcements": "Ankündigungen",
+    "homeAsk": "Fragen",
+    "teamApprovals": "Team-Genehmigungen",
+    "teamSteps": "Überfällige Team-Schritte",
+    "teamNudges": "1:1 und Hinweise",
+    "teamHeadcount": "Teamgröße",
+    "teamQuals": "Ablaufende Qualifikationen",
+    "adminAttention": "Handlungsbedarf",
+    "workflowErrors": "Workflow-Fehler",
+    "adminCalendar": "Compliance-Kalender"
   },
   "metricContext": {
     "today": "Heute gebucht",
@@ -100,7 +116,23 @@
     "expectedPayments": "Prognostizierte Lieferantenzahlungen der nächsten 30 Tage, in Basiswährung.",
     "topCustomers": "Die fünf größten offenen Kundensalden.",
     "topVendors": "Die fünf größten offenen Lieferantensalden.",
-    "runway": "Prognostizierter Bestand und Reichweite der kommenden Wochen, in Basiswährung."
+    "runway": "Prognostizierter Bestand und Reichweite der kommenden Wochen, in Basiswährung.",
+    "inboxList": "Ihre wichtigsten Aufgaben mit Link zum Posteingang.",
+    "payTile": "Nächster Zahltag und letzte Abrechnung.",
+    "balanceTile": "Urlaubskonten mit Antragslink.",
+    "whosOut": "Wer diese Woche abwesend ist.",
+    "homeUpcoming": "Feiertage und fällige Beurteilungen.",
+    "celebrations": "Geburtstage, Jubiläen und Neue.",
+    "announcements": "Ankündigungen der Admins.",
+    "homeAsk": "Den Assistenten fragen.",
+    "teamApprovals": "Genehmigungen, die auf Sie warten.",
+    "teamSteps": "Überfällige Team-Checklisten.",
+    "teamNudges": "1:1-Hinweise und Auffälligkeiten.",
+    "teamHeadcount": "Kopfzahl Ihres Teams.",
+    "teamQuals": "Ablaufende Team-Qualifikationen.",
+    "adminAttention": "Zusammengefasster Handlungsbedarf.",
+    "workflowErrors": "Fehlerhafte Flows-Läufe.",
+    "adminCalendar": "Berichts- und Abführungstermine."
   },
   "grid": {
     "customizing": "Dashboard wird angepasst",
@@ -181,5 +213,21 @@
     "personalBadge": "Ihre Seite",
     "roleBadge": "Rollenstandard",
     "systemBadge": "Unternehmensstandard"
+  },
+  "persona": {
+    "nothingWaiting": "Nichts wartet auf Sie.",
+    "noBalances": "Keine berechenbaren Konten.",
+    "nobodyOut": "Niemand abwesend.",
+    "nothingUpcoming": "Nichts anstehend.",
+    "noCelebrations": "Keine Feiern.",
+    "noAnnouncements": "Keine Ankündigungen.",
+    "askHint": "Fragen zu Gehalt, Urlaub oder Richtlinien.",
+    "noOverdueSteps": "Keine überfälligen Schritte.",
+    "noNudges": "Keine Hinweise.",
+    "noExpiringQuals": "Keine ablaufenden Qualifikationen.",
+    "allClear": "Alles in Ordnung.",
+    "needsAttention": "Handlungsbedarf.",
+    "requestTimeOff": "Urlaub beantragen",
+    "lastSlip": "Letzte Abrechnung {date}"
   }
 }

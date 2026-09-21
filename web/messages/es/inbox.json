@@ -1,0 +1,44 @@
+{
+  "title": "Bandeja de entrada",
+  "description": "Aprobaciones, pasos de listas, solicitudes y firmas que le esperan — complételos aquí.",
+  "filters": {
+    "all": "Todo",
+    "approvals": "Aprobaciones",
+    "myTasks": "Mis tareas",
+    "signatures": "Firmas",
+    "notices": "Avisos",
+    "overdue": "Vencido"
+  },
+  "columns": {
+    "task": "Tarea",
+    "detail": "Detalle",
+    "due": "Vence",
+    "priority": "Prioridad",
+    "actions": "Acciones"
+  },
+  "priorities": {
+    "overdue": "Vencido",
+    "dueSoon": "Pronto",
+    "normal": "Normal"
+  },
+  "kinds": {
+    "flows_approval": "Aprobación",
+    "hrm_process_step": "Paso de lista",
+    "hrm_leave_request": "Vacaciones",
+    "hrm_change_request": "Solicitud de cambio",
+    "hrm_review": "Evaluación",
+    "hrm_benefit_enrollment_window": "Beneficios",
+    "hrm_qualification_alert": "Cualificación",
+    "field_ticket_signature": "Firma",
+    "timesheet_week": "Parte de horas",
+    "expense_report": "Gasto",
+    "document_signature": "Firma"
+  },
+  "emptyTitle": "Todo al día",
+  "emptyDescription": "Nada le espera ahora mismo.",
+  "open": "Abrir",
+  "acted": "Hecho",
+  "refused": "No se pudo completar: {message}",
+  "delegatePlaceholder": "Delegar a…",
+  "count": "{count, plural, one {# elemento} other {# elementos}}"
+}

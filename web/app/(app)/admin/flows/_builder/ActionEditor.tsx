@@ -148,7 +148,7 @@ export function ActionEditor({
             <Input
               value={action.href ?? ''}
               onChange={(e) => onChange({ ...action, href: e.target.value || undefined })}
-              placeholder="/approvals"
+              placeholder="/inbox"
             />
           </div>
           <FieldTokensHint profile={profile} />

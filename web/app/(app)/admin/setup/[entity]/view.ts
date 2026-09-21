@@ -1,5 +1,6 @@
 import 'server-only'
 import { loadExtensionSettingRows } from '../../../../../lib/setup/extension-settings'
+import { loadHomeAnnouncementRows } from '../../../../../lib/setup/home-announcements'
 
 import { notFound, redirect } from 'next/navigation'
 import { sql } from 'drizzle-orm'
@@ -228,9 +229,15 @@ export async function loadSetupEntity(
     : sql``
   const moduleRows = entity?.dataSource === 'extension-settings'
     ? (await loadExtensionSettingRows(orgId)).filter((row) => !list.q || Object.values(row).some((value) => String(value).toLowerCase().includes(list.q!.toLowerCase()))) : null
+  // HR-15: home announcements list from org settings JSON.
+  const announcementRows = entity?.dataSource === 'home-announcements'
+    ? (await loadHomeAnnouncementRows(orgId)).filter((row) => !list.q || [row.title, row.body ?? ''].some((value) => String(value).toLowerCase().includes(list.q!.toLowerCase())))
+    : null
   const [rowsRes, countRes, refOptions, installedPackRows] = moduleRows
     ? [{ rows: moduleRows.slice((list.page - 1) * list.perPage, list.page * list.perPage) }, { rows: [{ n: moduleRows.length }] }, {}, { rows: [] }]
-    : entity
+    : announcementRows
+      ? [{ rows: announcementRows.slice((list.page - 1) * list.perPage, list.page * list.perPage) }, { rows: [{ n: announcementRows.length }] }, {}, { rows: [] }]
+      : entity
     ? await Promise.all([
         (db.execute(sql`
       select * from ${sql.raw(entity.table)} ${rowFilter}

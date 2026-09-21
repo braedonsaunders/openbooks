@@ -60,8 +60,8 @@ function requireId(field: string, value: unknown): string {
   return value;
 }
 
-async function assertPerformanceFeature(exec: SqlExecutor, orgId: string): Promise<void> {
-  if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_FEATURE_KEY))) {
+async function assertPerformanceFeature(db: SqlExecutor, orgId: string): Promise<void> {
+  if (!(await lockAndCheckOrgFeature(db, orgId, HRM_FEATURE_KEY))) {
     throw new HrmPerformanceError(
       "FEATURE_OFF",
       "hrm feature is disabled: enable it on Company Settings → Features before reading performance",
@@ -70,9 +70,9 @@ async function assertPerformanceFeature(exec: SqlExecutor, orgId: string): Promi
 }
 
 /** Live performance grant without throwing: true widens to the HR scope. */
-async function hasPerformanceGrant(exec: SqlExecutor, orgId: string, actorId: string): Promise<boolean> {
+async function hasPerformanceGrant(db: SqlExecutor, orgId: string, actorId: string): Promise<boolean> {
   try {
-    await requireAggregatePerformanceRead(exec, orgId, actorId);
+    await requireAggregatePerformanceRead(db, orgId, actorId);
     return true;
   } catch {
     return false;
@@ -86,7 +86,7 @@ async function hasPerformanceGrant(exec: SqlExecutor, orgId: string, actorId: st
  * report's review only by authoring it.
  */
 async function readableReviewIds(
-  exec: SqlExecutor,
+  db: SqlExecutor,
   orgId: string,
   actorId: string,
   granted: boolean,
@@ -97,7 +97,7 @@ async function readableReviewIds(
     // One parameter per id: bare JS arrays must never be interpolated into
     // ANY() (they bind as row constructors, not PostgreSQL arrays).
     const ids = [...allowed!].map((id) => sql`${id}::uuid`);
-    const rows = (await exec.execute<{ id: string }>(sql`
+    const rows = (await db.execute<{ id: string }>(sql`
       select r.id from hrm_reviews r
       join worker_employments e
         on e.org_id = r.org_id and e.id = r.employment_id
@@ -105,9 +105,9 @@ async function readableReviewIds(
     `)).rows;
     return new Set(rows.map((row) => row.id));
   }
-  const person = await loadApprovalPerson(exec, orgId, actorId);
+  const person = await loadApprovalPerson(db, orgId, actorId);
   if (!person.partyId) return new Set();
-  const rows = (await exec.execute<{ id: string }>(sql`
+  const rows = (await db.execute<{ id: string }>(sql`
     select id from hrm_reviews
      where org_id = ${orgId}
        and (reviewer_party_id = ${person.partyId}
@@ -126,12 +126,12 @@ export interface CycleProgressDTO extends ReadCycleDTO {
 }
 
 async function cycleProgress(
-  exec: SqlExecutor,
+  db: SqlExecutor,
   orgId: string,
   cycleId: string,
   visible: Set<string> | null,
 ): Promise<{ totalSelf: number; submittedSelf: number; totalManager: number; submittedManager: number }> {
-  const rows = (await exec.execute<{
+  const rows = (await db.execute<{
     id: string;
     kind: string;
     status: string;
@@ -155,8 +155,8 @@ export interface ReadCycleDTO extends CycleDTO {
   readonly templateName: string;
 }
 
-async function loadCycleRow(exec: SqlExecutor, orgId: string, cycleId: string): Promise<ReadCycleDTO> {
-  const row = (await exec.execute<{
+async function loadCycleRow(db: SqlExecutor, orgId: string, cycleId: string): Promise<ReadCycleDTO> {
+  const row = (await db.execute<{
     id: string;
     templateId: string;
     templateName: string;
@@ -289,8 +289,8 @@ export async function getCycleDetail(args: {
   });
 }
 
-async function readReviewRow(exec: SqlExecutor, orgId: string, reviewId: string): Promise<ReviewDTO> {
-  const stored = await loadReview(exec, orgId, reviewId);
+async function readReviewRow(db: SqlExecutor, orgId: string, reviewId: string): Promise<ReviewDTO> {
+  const stored = await loadReview(db, orgId, reviewId);
   if (!["self", "manager", "peer"].includes(stored.kind)) {
     throw new HrmPerformanceError("BAD_STATE", `review ${reviewId} carries an unknown kind`);
   }
@@ -309,6 +309,7 @@ async function readReviewRow(exec: SqlExecutor, orgId: string, reviewId: string)
     overallRating: stored.overallRating,
     calibratedRating: stored.calibratedRating,
     calibrationReason: stored.calibrationReason,
+    calibratedShareNote: stored.calibratedShareNote,
     submittedAt: stored.submittedAt,
     sharedAt: stored.sharedAt,
     acknowledgedAt: stored.acknowledgedAt,
@@ -361,8 +362,17 @@ export async function getReviewDetail(args: {
         );
       }
     }
-    const review = await readReviewRow(db, orgId, reviewId);
+    const stored = await readReviewRow(db, orgId, reviewId);
     const answers = await loadAnswers(db, orgId, reviewId);
+    // HR-17 calibrated share: the employee-visible share shows the
+    // calibrated rating with the note that calibration occurred — never
+    // the delta, never the justification. Subject-only readers (not HR,
+    // not the reviewer) get calibrationReason stripped here, never in
+    // the UI alone.
+    const person = await loadApprovalPerson(db, orgId, actorId);
+    const subjectOnly =
+      !granted && person.partyId !== stored.reviewerPartyId;
+    const review = subjectOnly ? { ...stored, calibrationReason: null } : stored;
     return { review, answers };
   });
 }
@@ -623,7 +633,7 @@ type LeaverRow = {
 };
 
 async function loadLeavers(
-  exec: SqlExecutor,
+  db: SqlExecutor,
   orgId: string,
   start: string,
   end: string,
@@ -634,7 +644,7 @@ async function loadLeavers(
   // first service date spans ALL versions: the opening version is
   // superseded by definition, and reading only live rows would tenure
   // every leaver at zero days.
-  const rows = (await exec.execute<{
+  const rows = (await db.execute<{
     employmentId: string;
     terminatedFrom: string;
     firstFrom: string;
@@ -656,7 +666,7 @@ async function loadLeavers(
     const tenureDays = Math.round(
       (Date.parse(`${row.terminatedFrom}T00:00:00Z`) - Date.parse(`${row.firstFrom}T00:00:00Z`)) / 86400000,
     );
-    const dept = (await exec.execute<{ departmentId: string | null }>(sql`
+    const dept = (await db.execute<{ departmentId: string | null }>(sql`
       select av.department_id as "departmentId"
         from employment_assignment_versions av
        where av.org_id = ${orgId}
@@ -670,7 +680,7 @@ async function loadLeavers(
     `)).rows[0];
     const departmentId_ = dept?.departmentId ?? null;
     if (departmentId !== null && departmentId_ !== departmentId) continue;
-    const exit = (await exec.execute<{ isVoluntary: boolean; isRegrettable: boolean | null }>(sql`
+    const exit = (await db.execute<{ isVoluntary: boolean; isRegrettable: boolean | null }>(sql`
       select is_voluntary as "isVoluntary", is_regrettable as "isRegrettable"
         from hrm_exit_records
        where org_id = ${orgId} and employment_id = ${row.employmentId}
@@ -688,13 +698,13 @@ async function loadLeavers(
 }
 
 async function departmentNames(
-  exec: SqlExecutor,
+  db: SqlExecutor,
   orgId: string,
   ids: string[],
 ): Promise<Map<string, string>> {
   if (ids.length === 0) return new Map();
   const params = ids.map((id) => sql`${id}::uuid`);
-  const rows = (await exec.execute<{ id: string; name: string }>(sql`
+  const rows = (await db.execute<{ id: string; name: string }>(sql`
     select id::text as id, name from departments
      where org_id = ${orgId} and id in (${sql.join(params, sql`, `)})
   `)).rows;

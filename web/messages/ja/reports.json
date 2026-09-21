@@ -680,6 +680,78 @@
       "hrm_benefit_enrollments": {
         "label": "福利厚生加入",
         "description": "加入ごと1行 — 加入者、雇用者、加入時の部門、プランと保障区分、状態、期間ごとの保存金額。福利厚生権限が必要。"
+      },
+      "automations": {
+        "label": "自動化",
+        "description": "自動化レシピごとに1行 — トリガー種別、ステータス、バージョン、最終実行。自動化権限が必要です。"
+      },
+      "automation_runs": {
+        "label": "自動化実行",
+        "description": "自動化の実行ごとに1行 — 実行バージョン、サブジェクト、ステータス、ステップ、エラー。自動化権限が必要です。"
+      },
+      "hrm_action_reasons": {
+        "label": "アクション理由",
+        "description": "HRアクションごとの理由コードに1行 — 変更申請の語彙。HR雇用権限が必要です。"
+      },
+      "hrm_rate_schedule_lines": {
+        "label": "賃金表",
+        "description": "賃金表・分類・適用日ごとの1行：解決可能な基本給、現金フリンジ、控除可能分、残業倍率。"
+      },
+      "hrm_per_diem_entries": {
+        "label": "日当エントリ",
+        "description": "雇用・プロジェクト・日ごとの1行：計算済み日当・旅費とステータス。"
+      },
+      "hrm_comp_class_split": {
+        "label": "クラス分割",
+        "description": "優先度ルールとプレミアムクラス：各時間をどのクラスが単価付けするかと100あたり料率。"
+      },
+      "hrm_certified_runs": {
+        "label": "認証実行",
+        "description": "プロジェクト・週ごとの認証給与実行：確定データとパック形式・ファイル。"
+      },
+      "hrm_compliance_findings": {
+        "label": "指摘事項",
+        "description": "種類別の追加専用事前フラグ：比率違反、賃金未設定、未解決クラス。"
+      },
+      "hrm_pay_bands": {
+        "label": "バンド",
+        "description": "有効バンドごとに1行：レベル、範囲、通貨、基準、最小/目標/最大。"
+      },
+      "hrm_comp_cycle_lines": {
+        "label": "昇給明細",
+        "description": "決定ごとに1行：本人、雇用主、確定レート、提案、状態。"
+      },
+      "hrm_headcount_plan_lines": {
+        "label": "プラン明細",
+        "description": "移動ごとに1行：プラン、種別、件名、FTE、積算コスト、状態。"
+      },
+      "hrm_pay_gap_snapshots": {
+        "label": "格差スナップショット",
+        "description": "スナップショット×カテゴリーごとに1行：レベル、人数、格差、フラグ。"
+      },
+      "hrm_qualifications": {
+        "label": "資格",
+        "description": "保有する認定・免許ごとに1行 — 保有者、雇用主、種類とカテゴリ、発行と有効期限、検証付きの保存済みステータス。"
+      },
+      "hrm_qualification_alerts": {
+        "label": "資格アラート",
+        "description": "認定更新アラートごとに1行 — 保有者、種類、有効期限、発火したリード日数スケジュール、送信済みかどうか。"
+      },
+      "hrm_one_on_ones": {
+        "label": "1on1ミーティング",
+        "description": "1on1ミーティングごとに1行 — マネージャー、メンバー、予定日と実施日、ステータス。HRの評価権限が必要です。"
+      },
+      "hrm_feedback": {
+        "label": "フィードバック",
+        "description": "称賛・フィードバック・依頼ごとに1行 — 対象者、種別、公開範囲、記録日。HRの評価権限が必要です。"
+      },
+      "hrm_calibration_entries": {
+        "label": "キャリブレーション記録",
+        "description": "キャリブレーション済み評価ごとに1行 — セッション、従業員、提案評価と確定評価、ポテンシャル、決定者。HRの評価権限が必要です。"
+      },
+      "hrm_talent_reviews": {
+        "label": "タレントレビュー",
+        "description": "タレントレビューごとに1行 — 従業員、パフォーマンスとポテンシャル、離職時の影響とリスク、昇進準備度。HRの評価権限が必要です。"
       }
     },
     "columns": {
@@ -1248,7 +1320,9 @@
         "reason": "理由",
         "created_at": "作成日時",
         "id": "申請（ID）",
-        "employment_id": "雇用（ID）"
+        "employment_id": "雇用（ID）",
+        "action": "アクション",
+        "reason_code": "理由コード"
       },
       "hrm_positions": {
         "code": "コード",
@@ -1362,6 +1436,185 @@
         "effective_to": "終了日",
         "employment_id": "雇用（id）",
         "id": "加入（id）"
+      },
+      "hrm_rate_schedule_lines": {
+        "schedule": "賃金表",
+        "classification": "分類",
+        "base_rate": "基本給",
+        "fringe_rate": "現金フリンジ",
+        "currency": "通貨",
+        "effective_from": "適用日"
+      },
+      "hrm_per_diem_entries": {
+        "worked_on": "日",
+        "amount": "金額",
+        "currency": "通貨",
+        "status": "状態",
+        "employment_id": "雇用 (ID)"
+      },
+      "hrm_comp_class_split": {
+        "class": "クラス",
+        "priority": "優先度",
+        "rate": "率 / 100"
+      },
+      "hrm_certified_runs": {
+        "week_ending": "週末日",
+        "format_key": "形式",
+        "status": "状態",
+        "project_id": "プロジェクト (ID)"
+      },
+      "hrm_compliance_findings": {
+        "kind": "種類",
+        "worked_on": "日",
+        "status": "状態",
+        "project_id": "プロジェクト (ID)"
+      },
+      "hrm_pay_bands": {
+        "level": "レベル",
+        "family": "ファミリー",
+        "employer": "雇用主",
+        "currency": "通貨",
+        "basis": "基準",
+        "min": "最小",
+        "target": "目標",
+        "max": "最大",
+        "effective_from": "適用開始",
+        "effective_to": "適用終了",
+        "id": "バンド (id)"
+      },
+      "hrm_comp_cycle_lines": {
+        "cycle": "サイクル",
+        "person": "本人",
+        "employer": "雇用主",
+        "current_rate": "現行レート",
+        "currency": "通貨",
+        "compa_ratio": "コンパレシオ",
+        "proposed_pct": "提案 %",
+        "proposed_rate": "提案レート",
+        "status": "状態",
+        "effective_on": "適用日",
+        "employment_id": "雇用 (id)",
+        "id": "明細 (id)"
+      },
+      "hrm_headcount_plan_lines": {
+        "plan": "プラン",
+        "kind": "種別",
+        "title": "件名",
+        "employer": "雇用主",
+        "planned_fte": "計画FTE",
+        "start_on": "開始",
+        "est_annual_cost": "推定年額",
+        "currency": "通貨",
+        "status": "状態",
+        "id": "明細 (id)"
+      },
+      "hrm_pay_gap_snapshots": {
+        "as_of": "基準日",
+        "employer": "雇用主",
+        "level": "レベル",
+        "count_a": "人数 A",
+        "count_b": "人数 B",
+        "mean_gap_pct": "平均格差 %",
+        "median_gap_pct": "中央値格差 %",
+        "unexplained_gap_pct": "未説明格差 %",
+        "method": "手法",
+        "joint_assessment_due": "共同評価",
+        "id": "スナップショット (id)"
+      },
+      "hrm_qualifications": {
+        "employee": "従業員",
+        "employer": "雇用主",
+        "type_code": "種類コード",
+        "type_name": "種類",
+        "category": "カテゴリ",
+        "identifier": "免許番号",
+        "issued_on": "発行日",
+        "expires_on": "有効期限",
+        "status": "ステータス",
+        "verified_at": "確認日時",
+        "qualification_id": "資格（ID）",
+        "employment_id": "雇用（ID）"
+      },
+      "hrm_qualification_alerts": {
+        "employee": "従業員",
+        "type_code": "種類コード",
+        "type_name": "種類",
+        "expires_on": "有効期限",
+        "due_on": "期限",
+        "lead_days": "リード日数",
+        "sent_at": "送信日時",
+        "channel": "チャネル",
+        "alert_id": "アラート（ID）",
+        "qualification_id": "資格（ID）"
+      },
+      "automations": {
+        "name": "名前",
+        "status": "ステータス",
+        "trigger_kind": "トリガー",
+        "version": "バージョン",
+        "priority": "優先度",
+        "last_run_at": "最終実行日時",
+        "error_message": "エラー",
+        "created_at": "作成日時",
+        "id": "自動化 (ID)"
+      },
+      "automation_runs": {
+        "automation": "自動化",
+        "status": "ステータス",
+        "version": "バージョン",
+        "subject_kind": "対象の種類",
+        "subject_id": "対象 (ID)",
+        "started_at": "開始日時",
+        "finished_at": "終了日時",
+        "error": "エラー",
+        "created_at": "作成日時",
+        "id": "実行 (ID)"
+      },
+      "hrm_action_reasons": {
+        "action": "アクション",
+        "reason_code": "コード",
+        "label": "ラベル",
+        "requires_comment": "コメント必須",
+        "is_active": "有効",
+        "created_at": "作成日時",
+        "id": "理由 (ID)"
+      },
+      "hrm_one_on_ones": {
+        "scheduled_at": "予定日",
+        "held_at": "実施日",
+        "manager": "マネージャー",
+        "report": "メンバー",
+        "employer": "雇用主",
+        "status": "ステータス",
+        "id": "ミーティング (ID)"
+      },
+      "hrm_feedback": {
+        "recorded_at": "記録日",
+        "employee": "従業員",
+        "employer": "雇用主",
+        "kind": "種別",
+        "visibility": "公開範囲",
+        "id": "フィードバック (ID)"
+      },
+      "hrm_calibration_entries": {
+        "session": "セッション",
+        "employee": "従業員",
+        "employer": "雇用主",
+        "proposed_rating": "提案評価",
+        "calibrated_rating": "確定評価",
+        "potential_key": "ポテンシャル",
+        "decided_at": "決定日",
+        "id": "記録 (ID)"
+      },
+      "hrm_talent_reviews": {
+        "reviewed_at": "評価日",
+        "employee": "従業員",
+        "employer": "雇用主",
+        "performance_key": "パフォーマンス",
+        "potential_key": "ポテンシャル",
+        "impact_of_loss": "離職時の影響",
+        "risk_of_loss": "離職リスク",
+        "id": "レビュー (ID)"
       }
     },
     "enumValues": {
@@ -1444,7 +1697,12 @@
       "filled": "充足済み",
       "open": "募集中",
       "planned": "計画中",
-      "position_assignment": "ポジション割当"
+      "position_assignment": "ポジション割当",
+      "valid": "有効",
+      "revoked": "取消済み",
+      "pending_verification": "確認待ち",
+      "inbox": "受信トレイ",
+      "email": "メール"
     }
   },
   "operators": {

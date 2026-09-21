@@ -1,0 +1,39 @@
+{
+  "title": "Início",
+  "greeting": "Bom ver você, {name}",
+  "sections": {
+    "myTasks": "Minhas tarefas",
+    "openInbox": "Abrir a caixa",
+    "pay": "Folha",
+    "timeOff": "Férias",
+    "requestTimeOff": "Solicitar férias",
+    "whosOut": "Quem falta esta semana",
+    "upcoming": "Próximo",
+    "celebrations": "Celebrações",
+    "announcements": "Avisos",
+    "ask": "Perguntar",
+    "askPlaceholder": "Pergunte sobre folha, férias ou políticas…",
+    "teamApprovals": "Aprovações que me aguardam",
+    "teamOut": "Equipe ausente",
+    "teamSteps": "Etapas da equipe atrasadas",
+    "teamQualifications": "Qualificações vencendo",
+    "oneOnOnes": "Lembretes de 1:1",
+    "headcount": "Minha equipe",
+    "attention": "Precisa de atenção",
+    "workflows": "Erros de fluxo",
+    "compliance": "Calendário de conformidade"
+  },
+  "empty": {
+    "tasks": "Nada aguarda você.",
+    "out": "Ninguém falta esta semana.",
+    "upcoming": "Nada próximo.",
+    "celebrations": "Sem celebrações esta semana.",
+    "announcements": "Sem avisos.",
+    "attention": "Tudo em dia."
+  },
+  "pay": {
+    "nextPay": "Próximo pagamento",
+    "lastSlip": "Último holerite",
+    "viewSlip": "Ver holerite"
+  }
+}

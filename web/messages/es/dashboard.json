@@ -40,7 +40,23 @@
     "topCustomers": "Principales clientes",
     "topVendors": "Principales proveedores",
     "openCount": "{count, plural, one {# abierto} other {# abiertos}}",
-    "runway": "Autonomía de caja"
+    "runway": "Autonomía de caja",
+    "inboxList": "Mis tareas",
+    "payTile": "Nómina",
+    "balanceTile": "Saldos de vacaciones",
+    "whosOut": "Ausentes",
+    "homeUpcoming": "Próximo",
+    "celebrations": "Celebraciones",
+    "announcements": "Anuncios",
+    "homeAsk": "Preguntar",
+    "teamApprovals": "Aprobaciones del equipo",
+    "teamSteps": "Pasos vencidos del equipo",
+    "teamNudges": "1:1 y avisos",
+    "teamHeadcount": "Tamaño del equipo",
+    "teamQuals": "Cualificaciones por vencer",
+    "adminAttention": "Requiere atención",
+    "workflowErrors": "Errores de flujo",
+    "adminCalendar": "Calendario de cumplimiento"
   },
   "metricContext": {
     "today": "Contabilizados hoy",
@@ -100,7 +116,23 @@
     "expectedPayments": "Pagos a proveedores previstos para los próximos 30 días, en moneda base.",
     "topCustomers": "Los cinco mayores saldos de clientes pendientes.",
     "topVendors": "Los cinco mayores saldos de proveedores pendientes.",
-    "runway": "Saldo proyectado y autonomía de las próximas semanas, en moneda base."
+    "runway": "Saldo proyectado y autonomía de las próximas semanas, en moneda base.",
+    "inboxList": "Sus tareas principales con enlace a la bandeja.",
+    "payTile": "Próxima nómina y último recibo.",
+    "balanceTile": "Saldos con enlace de solicitud.",
+    "whosOut": "Quién falta esta semana.",
+    "homeUpcoming": "Festivos y evaluaciones.",
+    "celebrations": "Cumpleaños, aniversarios e incorporaciones.",
+    "announcements": "Anuncios de la administración.",
+    "homeAsk": "Preguntar al asistente.",
+    "teamApprovals": "Aprobaciones que le esperan.",
+    "teamSteps": "Pasos vencidos del equipo.",
+    "teamNudges": "Avisos de 1:1 y atención.",
+    "teamHeadcount": "Tamaño de su equipo.",
+    "teamQuals": "Cualificaciones por vencer.",
+    "adminAttention": "Atención acumulada.",
+    "workflowErrors": "Ejecuciones con error.",
+    "adminCalendar": "Fechas de informes y remesas."
   },
   "grid": {
     "customizing": "Personalizando tu panel",
@@ -181,5 +213,21 @@
     "personalBadge": "Tu panel",
     "roleBadge": "Predeterminado del rol",
     "systemBadge": "Predeterminado de la empresa"
+  },
+  "persona": {
+    "nothingWaiting": "Nada le espera.",
+    "noBalances": "Sin saldos computables.",
+    "nobodyOut": "Nadie ausente.",
+    "nothingUpcoming": "Nada próximo.",
+    "noCelebrations": "Sin celebraciones.",
+    "noAnnouncements": "Sin anuncios.",
+    "askHint": "Pregunte sobre nómina, vacaciones o políticas.",
+    "noOverdueSteps": "Sin pasos vencidos.",
+    "noNudges": "Sin avisos.",
+    "noExpiringQuals": "Sin cualificaciones por vencer.",
+    "allClear": "Todo al día.",
+    "needsAttention": "Requiere atención.",
+    "requestTimeOff": "Solicitar vacaciones",
+    "lastSlip": "Último recibo {date}"
   }
 }

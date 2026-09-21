@@ -37,11 +37,12 @@ const { EmploymentReadError } = await import("@openbooks/engine/src/hrm/employme
 const { HrmAuthorizationError } = await import("@openbooks/engine/src/hrm/authorization.ts");
 const { AmbiguousRevisionError, NoRevisionError } = await import("@openbooks/engine/src/hrm/temporal.ts");
 const { HrmPerformanceError } = await import("@openbooks/engine/src/hrm/performance/errors.ts");
+const { HrmQualificationError } = await import("@openbooks/engine/src/hrm/qualifications/errors.ts");
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const tools = read("./tools-hrm.ts");
 
-const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave", "hrm_recruiting", "hrm_performance_cycles", "hrm_turnover", "hrm_benefits", "hrm_me"];
+const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave", "hrm_recruiting", "hrm_performance_cycles", "hrm_turnover", "hrm_benefits", "hrm_me", "automations_status", "hrm_compliance_findings", "hrm_certified_payroll", "hrm_compensation", "hrm_pay_equity", "hrm_qualifications", "hrm_dispatch_check", "hrm_one_on_ones", "hrm_feedback", "hrm_calibration"];
 
 const TOOL_PERMS: Record<string, string> = {
   // Elections and windows read through the benefits read service under
@@ -66,19 +67,104 @@ const TOOL_PERMS: Record<string, string> = {
   // The self-service summary scopes by the party behind the login, so it
   // carries the self grant every built-in role holds — never employment.read.
   hrm_me: "hrm.self.read",
+  // HR-16 begin: the automation status tool carries the automations read
+  // grant behind the automations switch — never an HR key.
+  automations_status: "automations.read",
+  // HR-16 end
+  // HR-13 begin: compliance reads carry the construction grant at every
+  // surface, never the employment one.
+  hrm_compliance_findings: "hrm.construction.read",
+  hrm_certified_payroll: "hrm.construction.read",
+  // HR-13 end
+  // HR-12 begin: bands, cycles, plans and equity snapshots carry the
+  // compensation read grant at every surface; per-person pay never
+  // leaves through the equity tool.
+  hrm_compensation: "hrm.compensation.read",
+  hrm_pay_equity: "hrm.compensation.read",
+  // HR-12 end
+  // HR-14 begin: the register and the readiness check carry the
+  // certifications read grant at every surface; license numbers and
+  // notes never leave through the register tool.
+  hrm_qualifications: "hrm.certifications.read",
+  hrm_dispatch_check: "hrm.certifications.read",
+  // HR-14 end
+  // HR-17 begin: 1:1s and feedback read through the structural scope
+  // (HR grant or self grant); calibration reads through the manage
+  // grant. Private 1:1 items and talent rows never leave through tools.
+  hrm_one_on_ones: "hrm.performance.read",
+  hrm_feedback: "hrm.performance.read",
+  hrm_calibration: "hrm.performance.manage",
+  // HR-17 end
 };
 
 const UUID = "11111111-1111-4111-8111-111111111111";
 
-test("the module exports exactly the eleven HRM read tools", () => {
-  assert.deepEqual(HRM_TOOLS.map((tool) => tool.name), TOOL_NAMES);
+test("the module exports exactly the slice tools plus the core inbox tool", () => {
+  assert.deepEqual(HRM_TOOLS.map((tool) => tool.name), [...TOOL_NAMES, "inbox_items"]);
 });
 
+test("inbox_items is the core own-scope tool: self grant, no feature, read-only", () => {
+  const tool = HRM_TOOLS.find((candidate) => candidate.name === "inbox_items")!;
+  assert.deepEqual(tool.gate, { mode: "anyOf", perms: ["hrm.self.read"] });
+  assert.equal(tool.feature, undefined);
+  assert.equal(tool.tier, "module");
+  assert.equal(tool.category, "read");
+  assert.ok(
+    tool.description.length > 0 && tool.description.length <= 220,
+    `inbox_items description is ${tool.description.length} chars (slice ceiling is 220)`,
+  );
+  assert.match(tool.description, /Read-only\.$/);
+  assert.doesNotMatch(tool.description, /Approvals/, "the place is the inbox, not approvals");
+  tool.inputSchema.parse({});
+  tool.inputSchema.parse({ filter: "notices", limit: 10 });
+  assert.throws(() => tool.inputSchema.parse({ filter: "someday" }));
+  assert.throws(() => tool.inputSchema.parse({ limit: 0 }));
+});
+
+// HR-13 begin: construction tools sit behind the construction switch, not
+// the bare hrm switch — a general-business org never sees them.
+const TOOL_FEATURES: Record<string, string> = {
+  hrm_compliance_findings: "hrmConstructionCompliance",
+  hrm_certified_payroll: "hrmConstructionCompliance",
+  // HR-16: the automations recipe tool rides the automations switch.
+  automations_status: "automations",
+  // HR-14 begin: the register rides hrmCertifications, the readiness
+  // check rides hrmDispatchGating.
+  hrm_qualifications: "hrmCertifications",
+  hrm_dispatch_check: "hrmDispatchGating",
+  // HR-14 end
+  // HR-17 begin: continuous tools sit behind their own sub-switches —
+  // off means the tool is absent, never an empty answer.
+  hrm_one_on_ones: "hrmOneOnOnes",
+  hrm_feedback: "hrmFeedback",
+  hrm_calibration: "hrmCalibration",
+  // HR-17 end
+};
+// HR-13 end
+
 for (const name of TOOL_NAMES) {
-  test(`${name} carries the slice gate: its read grant, hrm feature, module tier`, () => {
+  test(`${name} carries the slice gate: its read grant, feature, module tier`, () => {
     const tool = HRM_TOOLS.find((candidate) => candidate.name === name)!;
-    assert.deepEqual(tool.gate, { mode: "anyOf", perms: [TOOL_PERMS[name]] });
-    assert.equal(tool.feature, "hrm");
+    // HR-17 begin: 1:1 and feedback tools admit the HR grant OR the self
+    // grant (structural own-and-reports scope); every other tool admits
+    // exactly its slice grant.
+    const expectedPerms =
+      name === "hrm_one_on_ones" || name === "hrm_feedback"
+        ? ["hrm.performance.read", "hrm.self.read"]
+        : [TOOL_PERMS[name]];
+    assert.deepEqual(tool.gate, { mode: "anyOf", perms: expectedPerms });
+    // HR-17 end
+    // HR-12/HR-13 merged: construction and automations tools carry
+    // their own switch (TOOL_FEATURES above); compensation tools gate
+    // on their sub-switches; everything else rides hrm alone.
+    const expectedFeature =
+      TOOL_FEATURES[name] ??
+      (name === "hrm_compensation"
+        ? "hrmCompensation"
+        : name === "hrm_pay_equity"
+          ? "hrmPayTransparency"
+          : "hrm");
+    assert.equal(tool.feature, expectedFeature);
     assert.equal(tool.tier, "module");
     assert.ok(
       tool.category === "read" || tool.category === "search",
@@ -145,6 +231,35 @@ test("minimal valid inputs parse; addressing is runtime-enforced with stable cod
   assert.throws(() => byName.get("hrm_recruiting")!.inputSchema.parse({ segment: "archived" }));
   assert.throws(() => byName.get("hrm_recruiting")!.inputSchema.parse({ requisitionId: "nope" }));
   assert.throws(() => byName.get("hrm_recruiting")!.inputSchema.parse({ limit: 0 }));
+  // HR-14 begin: half-addressed calls parse (addressing is
+  // runtime-enforced with stable codes); genuinely invalid values throw.
+  byName.get("hrm_qualifications")!.inputSchema.parse({});
+  byName.get("hrm_qualifications")!.inputSchema.parse({ employmentId: UUID, status: "expiring" });
+  assert.throws(() => byName.get("hrm_qualifications")!.inputSchema.parse({ employmentId: "nope" }));
+  assert.throws(() => byName.get("hrm_qualifications")!.inputSchema.parse({ status: "lapsed" }));
+  byName.get("hrm_dispatch_check")!.inputSchema.parse({});
+  byName.get("hrm_dispatch_check")!.inputSchema.parse({ employmentId: UUID, subjectKind: "equipment", subjectId: UUID, on: "2026-09-01" });
+  assert.throws(() => byName.get("hrm_dispatch_check")!.inputSchema.parse({ subjectKind: "crew" }));
+  assert.throws(() => byName.get("hrm_dispatch_check")!.inputSchema.parse({ subjectId: "nope" }));
+  assert.throws(() => byName.get("hrm_dispatch_check")!.inputSchema.parse({ on: "tomorrow" }));
+  // HR-14 end
+  // HR-17 begin: continuous tools parse minimal inputs; genuinely invalid values throw.
+  byName.get("hrm_one_on_ones")!.inputSchema.parse({});
+  byName.get("hrm_one_on_ones")!.inputSchema.parse({ employmentId: UUID });
+  byName.get("hrm_one_on_ones")!.inputSchema.parse({ status: "held", limit: 10 });
+  assert.throws(() => byName.get("hrm_one_on_ones")!.inputSchema.parse({ status: "archived" }));
+  assert.throws(() => byName.get("hrm_one_on_ones")!.inputSchema.parse({ employmentId: "nope" }));
+  assert.throws(() => byName.get("hrm_one_on_ones")!.inputSchema.parse({ limit: 0 }));
+  byName.get("hrm_feedback")!.inputSchema.parse({});
+  byName.get("hrm_feedback")!.inputSchema.parse({ subjectEmploymentId: UUID });
+  byName.get("hrm_feedback")!.inputSchema.parse({ kind: "praise", limit: 10 });
+  assert.throws(() => byName.get("hrm_feedback")!.inputSchema.parse({ kind: "rumor" }));
+  assert.throws(() => byName.get("hrm_feedback")!.inputSchema.parse({ limit: 0 }));
+  byName.get("hrm_calibration")!.inputSchema.parse({});
+  byName.get("hrm_calibration")!.inputSchema.parse({ sessionId: UUID });
+  byName.get("hrm_calibration")!.inputSchema.parse({ cycleId: UUID });
+  assert.throws(() => byName.get("hrm_calibration")!.inputSchema.parse({ sessionId: "nope" }));
+  // HR-17 end
 });
 
 // Every tool reuses the canonical read loaders the HRM tabs read
@@ -169,6 +284,23 @@ test("HRM reads reuse the canonical HRM read services", () => {
     "resolveToolRange(",
     "AmbiguousRevisionError(",
     "hrmRefusal(",
+    // HR-12 begin
+    "listPayBands(",
+    "listCycles(",
+    "listPlans(",
+    "compaRatioFor(",
+    "latestGapSnapshot(",
+    // HR-12 end
+    // HR-14 begin
+    "listQualifications(",
+    "checkAssignment(",
+    // HR-14 end
+    // HR-17 begin: continuous tools reuse the governed 0228 services.
+    "listOneOnOnes(",
+    "listFeedback(",
+    "getCalibrationSession(",
+    "listCalibrationSessions(",
+    // HR-17 end
   ]) {
     assert.ok(tools.includes(service), `tools-hrm.ts must reuse ${service}`);
   }
@@ -215,6 +347,17 @@ test("hrmRefusal carries read-service refusals and rethrows the rest", () => {
     ok: false,
     error: "review cycle has no required question",
   });
+  // HR-14 begin: a computed qualification refusal names the remedy and
+  // reaches the caller intact — never a parse error, never silence.
+  // (Message quoted verbatim from recordQualification.)
+  assert.deepEqual(
+    hrmRefusal(new HrmQualificationError('Qualification type "CPSA-1" requires evidence — attach the certificate or license file before recording.')),
+    {
+      ok: false,
+      error: 'Qualification type "CPSA-1" requires evidence — attach the certificate or license file before recording.',
+    },
+  );
+  // HR-14 end
   const missing = new NoRevisionError("2026-06-15", "2026-07-01T00:00:00.000000Z");
   const mapped = hrmRefusal(missing);
   assert.equal(mapped.ok, false);
@@ -243,21 +386,57 @@ function fakeAuthz(permissions: string[]): Authz {
   return { user, permissions: new Set(permissions), allowedSubsidiaryIds: null };
 }
 
-test("the registry gate admits only each tool's grant holders while hrm is on", () => {
+test("the registry gate admits only each tool's grant holders while its feature is on", () => {
   const byName = new Map(HRM_TOOLS.map((tool) => [tool.name, tool] as const));
+  // HR-13 begin: construction tools need their full switch path resolved
+  // (parent hrm plus the payroll/projects/time-tracking requirements).
+  const TOOL_FEATURE_STATE: Record<string, Record<string, boolean>> = {
+    hrm_compliance_findings: { hrm: true, payroll: true, projects: true, timeTracking: true, hrmConstructionCompliance: true },
+    hrm_certified_payroll: { hrm: true, payroll: true, projects: true, timeTracking: true, hrmConstructionCompliance: true },
+    // HR-14 begin: the register needs the hrm → hrmCertifications path;
+    // the readiness check needs the full dispatch path (certifications
+    // plus the projects/projectScheduling requirements).
+    hrm_qualifications: { hrm: true, hrmCertifications: true },
+    hrm_dispatch_check: { hrm: true, hrmCertifications: true, projects: true, projectScheduling: true, hrmDispatchGating: true },
+    // HR-14 end
+    // HR-17 begin: continuous tools need the hrmPerformance parent on
+    // top of hrm plus their own sub-switch.
+    hrm_one_on_ones: { hrm: true, hrmPerformance: true, hrmOneOnOnes: true },
+    hrm_feedback: { hrm: true, hrmPerformance: true, hrmFeedback: true },
+    hrm_calibration: { hrm: true, hrmPerformance: true, hrmCalibration: true },
+    // HR-17 end
+  };
+  // HR-13 end
   for (const name of TOOL_NAMES) {
     const perm = TOOL_PERMS[name];
     assert.ok(perm, `${name} has a declared permission`);
+    const tool = byName.get(name)!;
+    // HR-12/HR-13/HR-16 merged: each tool runs under its own full switch
+    // path — the explicit per-tool state where declared (construction
+    // tools need the payroll/projects/time-tracking requirements),
+    // automations_status rides automations, compensation tools add their
+    // parent, everything else rides hrm alone.
+    const state: Record<string, boolean> = TOOL_FEATURE_STATE[name] ??
+      (name === "automations_status"
+        ? { automations: true }
+        : tool.feature === "hrm"
+          ? { hrm: true }
+          : { hrm: true, hrmCompensation: true, [tool.feature as string]: true });
     const reader = fakeAuthz(["assistant.use", perm]);
-    assert.equal(canRunTool(reader, byName.get(name)!, { hrm: true }), true, `${name} must run for a gated reader`);
-    assert.equal(canRunTool(reader, byName.get(name)!, { hrm: false }), false, `${name} must hide while hrm is off`);
+    assert.equal(canRunTool(reader, tool, state), true, `${name} must run for a gated reader`);
+    assert.equal(canRunTool(reader, tool, { hrm: false }), false, `${name} must hide while hrm is off`);
     assert.equal(
-      canRunTool(fakeAuthz(["assistant.use"]), byName.get(name)!, { hrm: true }),
+      canRunTool(reader, tool, { ...state, [tool.feature as string]: false }),
+      false,
+      `${name} must hide while its own feature is off`,
+    );
+    assert.equal(
+      canRunTool(fakeAuthz(["assistant.use"]), tool, state),
       false,
       `${name} must refuse without ${perm}`,
     );
     assert.equal(
-      canRunTool(fakeAuthz([perm]), byName.get(name)!, { hrm: true }),
+      canRunTool(fakeAuthz([perm]), tool, state),
       false,
       `${name} still requires assistant.use`,
     );
@@ -286,6 +465,13 @@ test("registrations: registry spread, scrape lists, matrix entry, playbook, cont
   const entry = matrix.split("\n").find((line) => line.includes('prefix: "hrm"'));
   assert.ok(entry, "coverage matrix needs an hrm entry");
   for (const name of TOOL_NAMES) {
+    // HR-16 begin: automations_status covers the automations prefixes, not hrm.
+    if (name === "automations_status") {
+      assert.ok(matrix.includes('prefix: "admin/automations"'), "coverage matrix needs an automations entry");
+      assert.ok(matrix.includes('"automations_status"'), "matrix automations entry must cover automations_status");
+      continue;
+    }
+    // HR-16 end
     assert.ok(entry.includes(`"${name}"`), `matrix hrm entry must cover ${name}`);
   }
   assert.ok(!entry.includes("uncovered"), "the hrm entry must map tools, never an uncovered gap");

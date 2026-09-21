@@ -28,6 +28,7 @@ import {
   HardHat,
   HeartPulse,
   History,
+  Inbox,
   KeyRound,
   Layers,
   LayoutGrid,
@@ -63,6 +64,7 @@ import {
 } from 'lucide-react'
 import { Popover, cn } from '@openbooks/ui'
 import { findActiveNavHref } from './sidebar-nav-active'
+import { NavCountBadge } from './nav-count-badge'
 
 // Map string keys → icon components. RSCs can't serialise function references,
 // so the parent server component passes us a key and we resolve client-side.
@@ -88,6 +90,8 @@ const ICONS: Record<string, LucideIcon> = {
   file: FileText,
   folder: Folder,
   gauge: Gauge,
+  // HR-15: inbox badge entry icon.
+  inbox: Inbox,
   grad: GraduationCap,
   grid: LayoutGrid,
   'hard-hat': HardHat,
@@ -140,6 +144,9 @@ export type SidebarNavItem = {
   subgroupIconKey?: string
   /** Tenant-selected shortcut in the four-item mobile tab bar. */
   mobile?: boolean
+  /** HR-15: when set, the shell renders a live count badge on this entry,
+   *  polled from this route (which must self-scope to the actor). */
+  badgeCountHref?: string
   /**
    * Short label for the mobile tab bar, where the full module label collides
    * when truncated (es "Cuentas por cobrar/pagar" both became "Cuentas
@@ -500,6 +507,7 @@ function NavLink({ item, active, nested = false }: { item: SidebarNavItem; activ
         )}
       />
       <span>{item.label}</span>
+      {item.badgeCountHref ? <NavCountBadge source={item.badgeCountHref} /> : null}
     </>
   )
   return item.href.startsWith('https://') ? (
