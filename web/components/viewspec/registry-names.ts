@@ -185,6 +185,9 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'hrm-compliance-actions',
   'hrm-compliance-generate',
   // HR-13 end
+  // HR-14 begin
+  'hrm-qualification-dialog',
+  // HR-14 end
   'hrm-comp-cycle-dialog',
   'hrm-comp-equity-dialog',
   'hrm-comp-line-drawer',

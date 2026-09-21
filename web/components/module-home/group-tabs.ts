@@ -93,6 +93,11 @@ const GROUP_TABS: Record<TabGroup, { href: string; ns: string; key: string }[]> 
     // the hrmConstructionCompliance switch (TAB_FEATURE).
     { href: '/hrm/compliance', ns: 'hrm', key: 'home.tabs.compliance' },
     // HR-13 end
+    // HR-14 begin: the worker qualification ledger — behind
+    // hrm.certifications.read (HRM_TAB_PERMISSION) and the
+    // hrmCertifications switch (TAB_FEATURE).
+    { href: '/hrm/qualifications', ns: 'hrm', key: 'home.tabs.qualifications' },
+    // HR-14 end
     // NOT tabs, by review: the change-request queue is a working surface
     // reached from the cockpit's pending panel and the employee drawer, not
     // a top-level destination; self-service leave is a quick action on the
@@ -130,6 +135,9 @@ const TAB_FEATURE: Record<string, string> = {
   // HR-13 begin
   '/hrm/compliance': 'hrmConstructionCompliance',
   // HR-13 end
+  // HR-14 begin
+  '/hrm/qualifications': 'hrmCertifications',
+  // HR-14 end
   '/hrm/positions': 'hrm',
   '/hrm/processes': 'hrm',
   '/close': 'continuousClose',
@@ -217,6 +225,9 @@ const HRM_TAB_PERMISSION: Record<string, string> = {
   // HR-13 begin
   '/hrm/compliance': 'hrm.construction.read',
   // HR-13 end
+  // HR-14 begin
+  '/hrm/qualifications': 'hrm.certifications.read',
+  // HR-14 end
 }
 
 /**
