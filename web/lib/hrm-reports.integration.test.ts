@@ -732,43 +732,24 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
       for (const key of ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests'] as const) {
         assert.equal(await canRunReportEntity(darkReader, { entity: key }), false, `${key} refuses with the feature off`)
       }
+      // Derived, not pinned. On the dark org NOTHING is enabled and the
+      // reader holds one grant, so every HRM entity hides -- by feature if
+      // not by permission. That is universal, so a literal list here can
+      // only go stale, which it did: nine entities behind.
+      const darkEntities = declared.filter((entity) => entity.key.startsWith('hrm_'))
+      assert.ok(darkEntities.length > 20, `the HRM catalogue reads as ${darkEntities.length} entities`)
+      // The precondition that makes the claim universal, asserted rather
+      // than assumed: an HRM entity naming no feature would stay visible
+      // here for anyone holding its grant, and the derivation below would
+      // be quietly wrong instead of loudly.
+      for (const entity of darkEntities) {
+        assert.ok(entity.featureKey, `${entity.key} names no feature, so nothing hides it on a dark org`)
+      }
+      const darkCatalogue = darkEntities.map((entity) => entity.key).sort()
       assert.deepEqual(
         (await hiddenReportEntityKeys(darkReader)).filter((key) => key.startsWith('hrm_')).sort(),
-        [
-        'hrm_action_reasons',
-        'hrm_applications',
-        'hrm_benefit_enrollments',
-        'hrm_certified_runs',
-        'hrm_change_requests',
-        'hrm_comp_class_split',
-        'hrm_comp_cycle_lines',
-        'hrm_compliance_findings',
-        'hrm_employment_history',
-        'hrm_goals',
-        'hrm_headcount',
-        'hrm_headcount_plan_lines',
-        'hrm_interview_slots',
-        'hrm_leave_absences',
-        'hrm_offers',
-        'hrm_pay_bands',
-        'hrm_pay_gap_snapshots',
-        'hrm_per_diem_entries',
-        'hrm_pool_members',
-        'hrm_positions',
-        'hrm_postings',
-        'hrm_processes',
-        // HR-14 begin: the register and the alert queue hide without the
-        // certifications read grant (and on the dark org, with switches off).
-        'hrm_qualification_alerts',
-        'hrm_qualifications',
-        // HR-14 end
-        'hrm_rate_schedule_lines',
-        'hrm_requisitions',
-        'hrm_retention_runs',
-        'hrm_reviews',
-        'hrm_scorecards',
-        'hrm_turnover',
-      ],
+        darkCatalogue,
+        'every HRM entity hides on an org with no HRM switches on',
       )
     })
   } finally {
