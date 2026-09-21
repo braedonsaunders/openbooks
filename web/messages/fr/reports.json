@@ -577,6 +577,18 @@
         "label": "Semaines de feuille de temps",
         "description": "Feuilles de temps hebdomadaires, dates de soumission et d’approbation, et total des heures."
       },
+      "field_clock_events": {
+        "label": "Pointages terrain",
+        "description": "Actions d’horloge mobiles et sur kiosque — qui, quand, indicateur de zone, et tarification de la paire. Indicateurs uniquement ; les coordonnées brutes exigent la permission d’emploi RH."
+      },
+      "field_clock_coordinates": {
+        "label": "Coordonnées de pointage",
+        "description": "Coordonnées brutes par pointage — localisation du travailleur, visibles uniquement avec la permission d’emploi RH. Les indicateurs pour les autres sont dans Pointages terrain."
+      },
+      "crew_time_batches": {
+        "label": "Lots d’équipe",
+        "description": "Lots d’équipe du contremaître par projet et par jour — statut dans les étapes d’approbation, heures et effectif."
+      },
       "fixed_assets": {
         "label": "Immobilisations",
         "description": "Le registre des immobilisations — statut, acquisition, coût, dépositaire et dimensions."
@@ -988,6 +1000,9 @@
         "department": "Département",
         "memo": "Mémo",
         "created_at": "Créé le",
+        "equipment_unit": "Unité d’équipement",
+        "equipment_hours": "Heures d’équipement",
+        "cost_code_ref": "Code de coût",
         "id": "Saisie de temps (id)"
       },
       "timesheet_weeks": {
@@ -1003,6 +1018,39 @@
         "approved_at": "Approuvé le",
         "rejection_reason": "Motif du rejet",
         "id": "Semaine (id)"
+      },
+      "field_clock_events": {
+        "employee_name": "Employé",
+        "kind": "Action",
+        "occurred_at": "Heure de l’appareil",
+        "project": "Projet",
+        "cost_code_ref": "Code de coût",
+        "geo_check": "Géorepérage",
+        "accuracy_m": "Précision du repère (m)",
+        "source": "Source",
+        "status": "Statut",
+        "auto_closed": "Fermé auto",
+        "has_photo": "Photo jointe",
+        "id": "Pointage (id)"
+      },
+      "field_clock_coordinates": {
+        "employee_name": "Employé",
+        "occurred_at": "Heure de l’appareil",
+        "latitude": "Latitude",
+        "longitude": "Longitude",
+        "accuracy_m": "Précision du repère (m)",
+        "id": "Pointage (id)"
+      },
+      "crew_time_batches": {
+        "foreman_name": "Contremaître",
+        "project": "Projet",
+        "worked_on": "Travaillé le",
+        "status": "Statut",
+        "total_hours": "Heures totales",
+        "worker_count": "Ouvriers",
+        "line_count": "Lignes",
+        "submitted_at": "Soumis le",
+        "id": "Lot d’équipe (id)"
       },
       "fixed_assets": {
         "asset_number": "N° d’immobilisation",

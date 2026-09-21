@@ -577,6 +577,18 @@
         "label": "Semanas de hoja de horas",
         "description": "Hojas de horas semanales, fechas de envío y aprobación y total de horas."
       },
+      "field_clock_events": {
+        "label": "Fichajes de campo",
+        "description": "Acciones de reloj móviles y de quiosco — quién, cuándo, con indicador de zona, y cómo se tarifa el par. Solo indicadores; las coordenadas brutas exigen el permiso de empleo de RR. HH."
+      },
+      "field_clock_coordinates": {
+        "label": "Coordenadas de fichaje",
+        "description": "Coordenadas brutas por fichaje — ubicación del trabajador, visibles solo con el permiso de empleo de RR. HH. Los indicadores están en Fichajes de campo."
+      },
+      "crew_time_batches": {
+        "label": "Lotes de cuadrilla",
+        "description": "Lotes de cuadrilla del capataz por proyecto y día — estado en las etapas de aprobación, horas y personal."
+      },
       "fixed_assets": {
         "label": "Activos fijos",
         "description": "El registro de activos fijos: estado, adquisición, costo, custodio y dimensiones."
@@ -988,6 +1000,9 @@
         "department": "Departamento",
         "memo": "Nota",
         "created_at": "Creado el",
+        "equipment_unit": "Unidad de equipo",
+        "equipment_hours": "Horas de equipo",
+        "cost_code_ref": "Código de coste",
         "id": "Registro de tiempo (id)"
       },
       "timesheet_weeks": {
@@ -1003,6 +1018,39 @@
         "approved_at": "Aprobado el",
         "rejection_reason": "Motivo del rechazo",
         "id": "Semana (id)"
+      },
+      "field_clock_events": {
+        "employee_name": "Empleado",
+        "kind": "Acción",
+        "occurred_at": "Hora del dispositivo",
+        "project": "Proyecto",
+        "cost_code_ref": "Código de coste",
+        "geo_check": "Geocerca",
+        "accuracy_m": "Precisión de la posición (m)",
+        "source": "Origen",
+        "status": "Estado",
+        "auto_closed": "Cierre auto",
+        "has_photo": "Foto adjunta",
+        "id": "Fichaje (id)"
+      },
+      "field_clock_coordinates": {
+        "employee_name": "Empleado",
+        "occurred_at": "Hora del dispositivo",
+        "latitude": "Latitude",
+        "longitude": "Longitude",
+        "accuracy_m": "Precisión de la posición (m)",
+        "id": "Fichaje (id)"
+      },
+      "crew_time_batches": {
+        "foreman_name": "Capataz",
+        "project": "Proyecto",
+        "worked_on": "Trabajado el",
+        "status": "Estado",
+        "total_hours": "Horas totales",
+        "worker_count": "Trabajadores",
+        "line_count": "Líneas",
+        "submitted_at": "Enviado el",
+        "id": "Lote de cuadrilla (id)"
       },
       "fixed_assets": {
         "asset_number": "N.º de activo",

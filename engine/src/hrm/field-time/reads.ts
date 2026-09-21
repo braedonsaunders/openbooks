@@ -9,14 +9,14 @@
  */
 
 import { sql } from "drizzle-orm";
-import { db } from "../../platform/db.ts";
+import { db, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { FieldTimeError, refuse } from "./errors.ts";
 import { FIELD_TIME_CREW_ENTRY_FEATURE, FIELD_TIME_FEATURE } from "./settings.ts";
 import { clockStatus } from "./clock.ts";
 
-export async function resolveOwnParty(orgId: string, userId: string): Promise<string> {
-  const row = (await db.execute<{ party_id: string | null }>(sql`
+export async function resolveOwnParty(orgId: string, userId: string, exec: SqlExecutor = db): Promise<string> {
+  const row = (await exec.execute<{ party_id: string | null }>(sql`
     select party_id::text as party_id from users where org_id = ${orgId} and id = ${userId}`)).rows[0];
   if (!row?.party_id) {
     refuse(
@@ -40,19 +40,19 @@ export type TodayPair = {
   hasPhoto: boolean;
 }
 
-export async function myClockDay(orgId: string, userId: string): Promise<{
+export async function myClockDay(orgId: string, userId: string, exec: SqlExecutor = db): Promise<{
   status: Awaited<ReturnType<typeof clockStatus>>;
   pairs: TodayPair[];
 }> {
-  if (!(await lockAndCheckOrgFeature(db, orgId, FIELD_TIME_FEATURE))) {
+  if (!(await lockAndCheckOrgFeature(exec, orgId, FIELD_TIME_FEATURE))) {
     refuse(
       "field_time_off",
       "Field time is turned off — turn on fieldTime in Company Settings → Features to clock in from the field",
     );
   }
-  const partyId = await resolveOwnParty(orgId, userId);
+  const partyId = await resolveOwnParty(orgId, userId, exec);
   const status = await clockStatus(orgId, partyId);
-  const pairs = (await db.execute<TodayPair>(sql`
+  const pairs = (await exec.execute<TodayPair>(sql`
     select i.id::text as "pairId", i.occurred_at::text as "clockInAt",
            o.occurred_at::text as "clockOutAt",
            i.project_id::text as "projectId", p.name as "projectName",
@@ -77,7 +77,7 @@ export async function myClockDay(orgId: string, userId: string): Promise<{
  * (line reports as of today), never role grant. Empty team reads as an
  * empty list, never an error.
  */
-export async function teamClockedIn(orgId: string, userId: string, today: string): Promise<Array<{
+export async function teamClockedIn(orgId: string, userId: string, today: string, exec: SqlExecutor = db): Promise<Array<{
   employeePartyId: string;
   employeeName: string | null;
   since: string;
@@ -85,17 +85,20 @@ export async function teamClockedIn(orgId: string, userId: string, today: string
   costCodeRef: string | null;
   geoCheck: string;
 }>> {
-  const person = (await db.execute<{ party_id: string | null }>(sql`
+  // Gate first: with the feature off even the employment/team lookups below
+  // must not run — an existing path calling this must observe nothing.
+  if (!(await lockAndCheckOrgFeature(exec, orgId, FIELD_TIME_FEATURE))) return [];
+  const person = (await exec.execute<{ party_id: string | null }>(sql`
     select party_id::text as party_id from users where org_id = ${orgId} and id = ${userId}`)).rows[0];
   if (!person?.party_id) return [];
-  const own = (await db.execute<{ id: string }>(sql`
+  const own = (await exec.execute<{ id: string }>(sql`
     select id::text as id from worker_employments
      where org_id = ${orgId} and worker_party_id = ${person.party_id}`)).rows.map((row) => row.id);
   if (own.length === 0) return [];
   // One parameter per id: bare JS arrays must never be interpolated into
   // ANY() (they bind as row constructors, not PostgreSQL arrays).
   const ids = own.map((id) => sql`${id}::uuid`);
-  return (await db.execute<{
+  return (await exec.execute<{
     employeePartyId: string;
     employeeName: string | null;
     since: string;
@@ -126,15 +129,15 @@ export async function teamClockedIn(orgId: string, userId: string, today: string
 }
 
 /** Who is clocked in on a project right now — the cockpit "Crew today". */
-export async function crewToday(orgId: string, projectId: string): Promise<Array<{
+export async function crewToday(orgId: string, projectId: string, exec: SqlExecutor = db): Promise<Array<{
   employeePartyId: string;
   employeeName: string | null;
   since: string;
   costCodeRef: string | null;
   geoCheck: string;
 }>> {
-  if (!(await lockAndCheckOrgFeature(db, orgId, FIELD_TIME_FEATURE))) return [];
-  return (await db.execute<{
+  if (!(await lockAndCheckOrgFeature(exec, orgId, FIELD_TIME_FEATURE))) return [];
+  return (await exec.execute<{
     employeePartyId: string;
     employeeName: string | null;
     since: string;
@@ -165,14 +168,15 @@ export type CrewBatchSummary = {
 export async function listCrewBatches(
   orgId: string,
   filter: { status?: string | null; projectId?: string | null },
+  exec: SqlExecutor = db,
 ): Promise<CrewBatchSummary[]> {
-  if (!(await lockAndCheckOrgFeature(db, orgId, FIELD_TIME_CREW_ENTRY_FEATURE))) {
+  if (!(await lockAndCheckOrgFeature(exec, orgId, FIELD_TIME_CREW_ENTRY_FEATURE))) {
     refuse(
       "field_time_crew_off",
       "Crew time entry is turned off — turn on fieldTimeCrewEntry in Company Settings → Features to see crew batches",
     );
   }
-  return (await db.execute<CrewBatchSummary>(sql`
+  return (await exec.execute<CrewBatchSummary>(sql`
     select b.id::text as id, frm.display_name as "foremanName",
            prj.name as "projectName", b.worked_on::text as "workedOn", b.status,
            coalesce(sum(l.hours), 0)::text as "totalHours",
@@ -214,8 +218,14 @@ export type BatchDetail = {
   events: Array<{ kind: string; actorName: string | null; reason: string | null; recordedAt: string }>;
 }
 
-export async function getBatchDetail(orgId: string, batchId: string): Promise<BatchDetail> {
-  const batch = (await db.execute<{
+export async function getBatchDetail(orgId: string, batchId: string, exec: SqlExecutor = db): Promise<BatchDetail> {
+  if (!(await lockAndCheckOrgFeature(exec, orgId, FIELD_TIME_CREW_ENTRY_FEATURE))) {
+    refuse(
+      "field_time_crew_off",
+      "Crew time entry is turned off — turn on fieldTimeCrewEntry in Company Settings → Features to see crew batches",
+    );
+  }
+  const batch = (await exec.execute<{
     id: string; status: string; foreman_party_id: string; foreman_name: string | null;
     project_id: string; project_name: string | null; worked_on: string;
     notes: string | null; signature_evidence: unknown;
@@ -231,7 +241,7 @@ export async function getBatchDetail(orgId: string, batchId: string): Promise<Ba
   if (!batch) {
     throw new FieldTimeError("batch_unknown", "The crew batch is unknown in this organization — reload the crew list");
   }
-  const lines = (await db.execute<BatchDetail["lines"][number]>(sql`
+  const lines = (await exec.execute<BatchDetail["lines"][number]>(sql`
     select l.id::text as id, l.employee_party_id::text as "employeePartyId",
            emp.display_name as "employeeName", l.hours::text as hours,
            l.time_type_id::text as "timeTypeId", l.project_task_id::text as "projectTaskId",
@@ -243,7 +253,7 @@ export async function getBatchDetail(orgId: string, batchId: string): Promise<Ba
       left join equipment_units eq on eq.id = l.equipment_id and eq.org_id = ${orgId}
      where l.batch_id = ${batchId}
      order by emp.display_name, l.id`)).rows;
-  const events = (await db.execute<BatchDetail["events"][number]>(sql`
+  const events = (await exec.execute<BatchDetail["events"][number]>(sql`
     select e.kind, u.name as "actorName", e.reason,
            e.recorded_at::text as "recordedAt"
       from crew_time_batch_events e
@@ -273,6 +283,7 @@ export async function getBatchDetail(orgId: string, batchId: string): Promise<Ba
 export async function approvalFlags(
   orgId: string,
   filter: { weekStart?: string; employeePartyId?: string; batchId?: string },
+  exec: SqlExecutor = db,
 ): Promise<Array<{
   entryId: string;
   workedOn: string;
@@ -282,10 +293,13 @@ export async function approvalFlags(
   hasPhoto: boolean;
   photoFileId: string | null;
 }>> {
+  // Gate first: the timesheet drawer calls this for every week it opens —
+  // with the feature off it must observe nothing, not even a flag query.
+  if (!(await lockAndCheckOrgFeature(exec, orgId, FIELD_TIME_FEATURE))) return [];
   const pairFilter = filter.batchId
     ? sql`and te.crew_batch_line_id in (select id from crew_time_batch_lines where batch_id = ${filter.batchId})`
     : sql`and te.employee_party_id = ${filter.employeePartyId} and te.worked_on >= ${filter.weekStart}::date and te.worked_on <= ${filter.weekStart}::date + 6`;
-  return (await db.execute<{
+  return (await exec.execute<{
     entryId: string;
     workedOn: string;
     hours: string;

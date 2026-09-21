@@ -577,6 +577,18 @@
         "label": "Stundenzettel-Wochen",
         "description": "Wöchentliche Stundenzettel, Einreichungs- und Genehmigungsdaten sowie Gesamtstunden."
       },
+      "field_clock_events": {
+        "label": "Außendienst-Stempelungen",
+        "description": "Mobile und Kiosk-Stempelungen — wer, wann, mit Geozonen-Kennzeichen und wie das Paar bepreist wird. Nur Kennzeichen; Rohkoordinaten brauchen die HR-Beschäftigungsberechtigung."
+      },
+      "field_clock_coordinates": {
+        "label": "Stempelkoordinaten",
+        "description": "Rohkoordinaten je Stempelung — Aufenthaltsort des Mitarbeiters, nur mit HR-Beschäftigungsberechtigung sichtbar. Kennzeichen für alle anderen stehen in Außendienst-Stempelungen."
+      },
+      "crew_time_batches": {
+        "label": "Crew-Lose",
+        "description": "Crew-Lose des Vorarbeiters je Projekt und Tag — Stand in den Genehmigungsstufen, Stunden und Kopfzahl."
+      },
       "fixed_assets": {
         "label": "Anlagevermögen",
         "description": "Das Anlagenverzeichnis – Status, Anschaffung, Kosten, Verantwortlicher und Dimensionen."
@@ -988,6 +1000,9 @@
         "department": "Abteilung",
         "memo": "Notiz",
         "created_at": "Erstellt am",
+        "equipment_unit": "Geräteeinheit",
+        "equipment_hours": "Gerätestunden",
+        "cost_code_ref": "Kostenstelle",
         "id": "Zeiterfassung (ID)"
       },
       "timesheet_weeks": {
@@ -1003,6 +1018,39 @@
         "approved_at": "Genehmigt am",
         "rejection_reason": "Ablehnungsgrund",
         "id": "Woche (id)"
+      },
+      "field_clock_events": {
+        "employee_name": "Mitarbeiter",
+        "kind": "Aktion",
+        "occurred_at": "Gerätezeit",
+        "project": "Projekt",
+        "cost_code_ref": "Kostenstelle",
+        "geo_check": "Geozone",
+        "accuracy_m": "Standortgenauigkeit (m)",
+        "source": "Quelle",
+        "status": "Status",
+        "auto_closed": "Auto geschlossen",
+        "has_photo": "Foto angehängt",
+        "id": "Stempelung (ID)"
+      },
+      "field_clock_coordinates": {
+        "employee_name": "Mitarbeiter",
+        "occurred_at": "Gerätezeit",
+        "latitude": "Latitude",
+        "longitude": "Longitude",
+        "accuracy_m": "Standortgenauigkeit (m)",
+        "id": "Stempelung (ID)"
+      },
+      "crew_time_batches": {
+        "foreman_name": "Vorarbeiter",
+        "project": "Projekt",
+        "worked_on": "Gearbeitet am",
+        "status": "Status",
+        "total_hours": "Gesamtstunden",
+        "worker_count": "Arbeitskräfte",
+        "line_count": "Zeilen",
+        "submitted_at": "Eingereicht am",
+        "id": "Crew-Los (ID)"
       },
       "fixed_assets": {
         "asset_number": "Anlagennummer",

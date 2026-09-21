@@ -186,6 +186,7 @@ export async function loadProjectCockpit(
     time,
     // HR-20: crew-today rows ride alongside the time summary.
     crewToday: crewTodayRows,
+    showFieldTime: fieldTimeEnabled,
     unbilled,
     billingRequests: billingRequests as ProjectCockpitData['billingRequests'],
     billableFieldTickets: billableFieldTickets as ProjectCockpitData['billableFieldTickets'],
