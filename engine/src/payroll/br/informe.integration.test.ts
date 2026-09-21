@@ -9,6 +9,7 @@ import { calculatePayRun } from "../run-calculation.ts";
 import { commitPayRun } from "../run-commit.ts";
 import { createPayRun } from "../run-lifecycle.ts";
 import { seedPayrollComponents } from "../run-setup.ts";
+import { PAYROLL_COUNTRY_PACKS, setPackSlotAccount } from "../packs.ts";
 import { upsertStatutoryRate } from "../statutory-rates.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../../testing/fixtures.ts";
 import { BR_PACK_RATES } from "./rates.ts";
@@ -50,6 +51,7 @@ async function brPayrollOrg(): Promise<Fixture> {
   const wageExpense = await account("6000", "Wages expense", "expense");
   const burdenExpense = await account("6010", "Payroll burden", "expense");
   const netPayable = await account("2300", "Wages payable", "liability_current");
+  const deductionsId = await account("2310", "Payroll deductions payable", "liability_current");
   await db.execute(sql`
     update orgs set settings = settings || ${JSON.stringify({
       payroll: {
@@ -61,6 +63,11 @@ async function brPayrollOrg(): Promise<Fixture> {
       },
     })}::jsonb where id = ${org.orgId}`);
   await seedPayrollComponents(org.orgId, actorId, "BR");
+  // Statutory slots declare no liabilityAccountRole, so seeding alone leaves
+  // every deduction unmapped and run-commit refuses the run.
+  for (const slot of PAYROLL_COUNTRY_PACKS.BR!.statutorySlots) {
+    await setPackSlotAccount(org.orgId, actorId, "BR", slot.key, deductionsId);
+  }
 
   const subsidiaryId = randomUUID();
   await db.execute(sql`

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
+import { PAYROLL_COUNTRY_PACKS, setPackSlotAccount } from "../packs.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
 import { add, cmp } from "../../money/money.ts";
@@ -63,6 +64,12 @@ async function seedOrg(): Promise<{ orgId: string; actorId: string; scheduleId: 
     update subsidiaries set base_currency = 'EUR', country = 'IT', name = 'Roma HQ'
      where org_id = ${org.orgId} and id = ${org.subsidiaryId}`);
   await seedPayrollComponents(org.orgId, actorId, "IT");
+  // Statutory slots declare no liabilityAccountRole, so seeding alone leaves
+  // every deduction unmapped and run-commit refuses the run. Map them all to
+  // the payroll-deductions control account, as the IT settlement fixture does.
+  for (const slot of PAYROLL_COUNTRY_PACKS.IT!.statutorySlots) {
+    await setPackSlotAccount(org.orgId, actorId, "IT", slot.key, deductionsId);
+  }
   // Tenant-deliberated surtax rates: synthetic, not any comune's real figure.
   await upsertStatutoryRate({
     orgId: org.orgId, actorId, rates: IT_PACK_RATES,

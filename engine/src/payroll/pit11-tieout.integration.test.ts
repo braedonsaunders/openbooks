@@ -8,6 +8,7 @@ import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
+import { PAYROLL_COUNTRY_PACKS, setPackSlotAccount } from "./packs.ts";
 import { parsePit11RowId, pit11Population, pit11Slips, pit11Slip } from "./pl/pit11.ts";
 import {
   createScratchOrg,
@@ -108,6 +109,12 @@ test(
            )
          where id = ${org.orgId}`);
       await seedPayrollComponents(org.orgId, actorId, "PL");
+      // Statutory slots carry no liabilityAccountRole, so seeding alone leaves
+      // every PL deduction unmapped and run-commit refuses the run. Map them
+      // the way the IT settlement fixture does.
+      for (const slot of PAYROLL_COUNTRY_PACKS.PL!.statutorySlots) {
+        await setPackSlotAccount(org.orgId, actorId, "PL", slot.key, deductionsId);
+      }
 
       const scheduleId = randomUUID();
       await db.execute(sql`

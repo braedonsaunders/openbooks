@@ -10,6 +10,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
+import { PAYROLL_COUNTRY_PACKS, setPackSlotAccount } from "../packs.ts";
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { db } from "../../platform/db.ts";
@@ -136,6 +137,12 @@ test(
          where org_id = ${org.orgId} and id = ${org.subsidiaryId}`);
 
       await seedPayrollComponents(org.orgId, actorId, "DE");
+      // Statutory slots declare no liabilityAccountRole, so seeding alone leaves
+      // every deduction unmapped and run-commit refuses the run. Map them all to
+      // the payroll-deductions control account, as the IT settlement fixture does.
+      for (const slot of PAYROLL_COUNTRY_PACKS.DE!.statutorySlots) {
+        await setPackSlotAccount(org.orgId, actorId, "DE", slot.key, deductionsId);
+      }
       // The fund's own Zusatzbeitragssatz (tenant-declared: no national
       // average is transcribed, and the engine refuses without it).
       await db.execute(sql`
