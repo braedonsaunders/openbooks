@@ -466,6 +466,10 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // could never be revoked (0240, allocated by the integrator — 0233
     // through 0239 belong to the tax, accounting and payroll lanes).
     "0240_hrm_offer_token_revocation.sql",
+    // Eleven HRM party columns had no foreign key at all, so a party
+    // merge would have orphaned them (0241, allocated by the integrator;
+    // 0238 is a HOLE reserved for the payroll giro renumber, not free).
+    "0241_hrm_party_reference_integrity.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),

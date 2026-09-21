@@ -411,14 +411,25 @@ export async function recordClockEvent(input: RecordClockInput): Promise<ClockRe
 
   return withOrgTransaction(input.orgId, async () => {
     const open = await openPair(input.orgId, input.employeePartyId);
-    const onBreak = open ? await breakOpen(input.orgId, input.employeePartyId, open.id) : false;
-    validateClockSequence(input.kind, { clockedIn: !!open, onBreak });
 
-    // An open pair past the auto-close window closes with a flag first.
+    // The stale pair closes BEFORE the sequence is judged, because the
+    // sequence has to be judged against the state the worker is actually
+    // in. Validating first meant a pair left open past the auto-close
+    // window refused the next clock-in as "Already clocked in" and the
+    // auto-close below never ran -- so a worker whose device died mid
+    // shift, or who simply forgot to clock out, could not clock in again
+    // at all. That is precisely the case auto-close exists for.
     let autoClosedPairId: string | null = null;
     if (input.kind === "clock_in" && open) {
       autoClosedPairId = await autoCloseStale(input.orgId, input.employeePartyId, input.actorUserId, occurredMs);
     }
+
+    // Re-read only when something closed: a pair inside the window is
+    // still open and must still refuse, which is the sequence rule doing
+    // its job rather than being skipped.
+    const current = autoClosedPairId ? await openPair(input.orgId, input.employeePartyId) : open;
+    const onBreak = current ? await breakOpen(input.orgId, input.employeePartyId, current.id) : false;
+    validateClockSequence(input.kind, { clockedIn: !!current, onBreak });
 
     await checkPhotoRequirement(input);
     const geoCheck = await checkGeofence(input.orgId, input.projectId ?? null, input.geo ?? null);
@@ -440,18 +451,18 @@ export async function recordClockEvent(input: RecordClockInput): Promise<ClockRe
 
     let entryIds: string[] = [];
     let pairId: string | null = null;
-    if ((input.kind === "clock_out" || input.kind === "switch") && open) {
-      pairId = open.id;
+    if ((input.kind === "clock_out" || input.kind === "switch") && current) {
+      pairId = current.id;
       entryIds = await pairAndPostEntries({
         orgId: input.orgId,
         actorUserId: input.actorUserId,
         employeePartyId: input.employeePartyId,
-        open,
+        open: current,
         closeOccurredAt: input.occurredAt,
         closeRefs: {
-          projectId: input.projectId ?? open.project_id,
-          projectTaskId: input.projectTaskId ?? open.project_task_id,
-          costCodeRef: input.costCodeRef ?? open.cost_code_ref,
+          projectId: input.projectId ?? current.project_id,
+          projectTaskId: input.projectTaskId ?? current.project_task_id,
+          costCodeRef: input.costCodeRef ?? current.cost_code_ref,
         },
         autoClosed: false,
       });
@@ -465,8 +476,8 @@ export async function recordClockEvent(input: RecordClockInput): Promise<ClockRe
           values
             (${input.orgId}, ${input.employeePartyId}, 'clock_in', ${input.occurredAt}::timestamptz,
              ${input.deviceId ?? null}, ${input.source},
-             ${input.projectId ?? open.project_id}, ${input.projectTaskId ?? open.project_task_id},
-             ${input.costCodeRef ?? open.cost_code_ref},
+             ${input.projectId ?? current.project_id}, ${input.projectTaskId ?? current.project_task_id},
+             ${input.costCodeRef ?? current.cost_code_ref},
              ${input.geo ? JSON.stringify(input.geo) : null}::jsonb, ${geoCheck},
              ${input.photoFileId ?? null}, gen_random_uuid(), 'recorded',
              ${input.actorUserId}, ${input.actorUserId})
@@ -507,16 +518,16 @@ export async function clockStatus(
   queuedNote: false;
 }> {
   await requireFieldTime(orgId);
-  const open = await openPair(orgId, employeePartyId);
-  if (!open) {
+  const current = await openPair(orgId, employeePartyId);
+  if (!current) {
     return { clockedIn: false, since: null, projectId: null, costCodeRef: null, onBreak: false, queuedNote: false };
   }
   return {
     clockedIn: true,
-    since: open.occurred_at,
-    projectId: open.project_id,
-    costCodeRef: open.cost_code_ref,
-    onBreak: await breakOpen(orgId, employeePartyId, open.id),
+    since: current.occurred_at,
+    projectId: current.project_id,
+    costCodeRef: current.cost_code_ref,
+    onBreak: await breakOpen(orgId, employeePartyId, current.id),
     queuedNote: false,
   };
 }
