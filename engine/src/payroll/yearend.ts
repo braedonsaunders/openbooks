@@ -18,7 +18,12 @@ import {
   type PayrollFilingIssue,
 } from "./filing-registry.ts";
 import { RATES_2026_JAN } from "./canada/rates.ts";
-import { payrollFilingYearOptions, payrollTaxYearProblem } from "./packs.ts";
+import {
+  assertPayrollTaxYearSupported,
+  payrollFilingYearOptions,
+  payrollPack,
+  payrollTaxYearProblem,
+} from "./packs.ts";
 import { PayrollError } from "./error.ts";
 
 /**
@@ -1295,6 +1300,224 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
     };
   });
   return carryOpeningYearEndYtd(seeded, openings, (slip, opening) => openingYtdIntoW2Slip(slip, opening, ficaRates));
+}
+
+// ---------------------------------------------------------------------------
+// Great Britain: P60 End of Year Certificates and P45 leaver statements
+// ---------------------------------------------------------------------------
+
+/**
+ * The GB tax year's calendar bounds, from the pack's own tax-year definition
+ * (fiscal, opening 6 April, named by the opening year) — never calendar
+ * arithmetic. The opening date falls in the named year; the closing 5 April
+ * falls in the next.
+ */
+export function gbTaxYearBounds(taxYear: number): { start: string; end: string } {
+  const definition = payrollPack("GB").taxYear;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return {
+    start: `${taxYear}-${pad(definition.startMonth)}-${pad(definition.startDay)}`,
+    end: `${taxYear + 1}-${pad(definition.startMonth)}-${pad(definition.startDay - 1)}`,
+  };
+}
+
+/** One employee's year on a GB statutory statement, straight off the stubs. */
+export interface GbYearStatement {
+  employeePartyId: string;
+  employeeName: string;
+  /**
+   * Nation of employment from the stub snapshot (ENG/SCT/WLS/NIR): the
+   * LATEST stub's, because a P60/P45 covers one employment and the T4's old
+   * `max(province)` named the lexically largest nation for a mid-year mover.
+   */
+  nation: string;
+  /** PAYE account the year is filed under; null = unassigned. */
+  filingAccountId: string | null;
+  /**
+   * Pay "in this employment": total pay for Income Tax purposes — the
+   * GB_TAXABLE factor sums plus GB_ADDPAY (K-code added pay is priced
+   * separately from period taxable pay in calculate.ts, but it is taxable
+   * pay all the same).
+   */
+  payInEmployment: string;
+  /** PAYE income tax deducted — the GB_TAX factor sums. */
+  taxDeducted: string;
+  /** Employee (primary) Class 1 NIC — the `nic` deduction lines. */
+  nicEmployee: string;
+  /** Employer (secondary) Class 1 NIC — the `nic` employer lines. */
+  nicEmployer: string;
+  /**
+   * The final tax code from the P6/P9 coding notice on file, with the
+   * week-1/month-1 marker appended when the notice carries it (RD1: the final
+   * tax code box includes the indicator "if applicable"). Null when no notice
+   * is on file — the slip refuses by name rather than printing a blank code.
+   */
+  finalTaxCode: string | null;
+  /** Whether the final code is an S-prefix Scottish-taxpayer code. */
+  scottishCode: boolean;
+  /** The employee's payroll number, when the role carries one. */
+  payrollNumber: string | null;
+  /** Latest committed stub pay date in the year (the P45's fallback leaving date). */
+  lastPayDate: string;
+  stubCount: number;
+}
+
+/**
+ * One GB employee-year of committed stubs, before the P60/P45 eligibility
+ * split. GB has no opening-YTD columns (no migration shard has carried one —
+ * see compute-statutory.ts), so there is no carry-in to fold: the statement
+ * is the committed subledger, whole.
+ */
+async function gbYearStatements(
+  orgId: string,
+  taxYear: number,
+): Promise<(GbYearStatement & { terminatedOn: string | null })[]> {
+  assertPayrollTaxYearSupported("GB", taxYear);
+  await assertPayrollCountryKnown(db, orgId, taxYear);
+  await assertPayrollFilingAccountKnown(db, orgId, { taxYear });
+  const rows = (await db.execute<Record<string, unknown>>(sql`
+    with committed as (
+      select s.*
+        from pay_stubs s
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
+     where s.org_id = ${orgId} and s.tax_year = ${taxYear}
+       and s.country = 'GB'
+    )
+    select c.employee_party_id, p.display_name, c.filing_account_id,
+           (array_agg(c.province order by c.pay_date desc, c.id desc))[1] as nation,
+           max(c.pay_date)::text as last_pay_date,
+           count(*)::int as stub_count,
+           sum((c.factors->>'GB_TAXABLE')::numeric) as taxable,
+           sum(coalesce((c.factors->>'GB_ADDPAY')::numeric, 0)) as added,
+           sum((c.factors->>'GB_TAX')::numeric) as tax,
+           sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+                where l.org_id = ${orgId} and l.stub_id = c.id and l.kind = 'deduction'
+                  and pc.system_key = 'nic')) as nic_employee,
+           sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+                where l.org_id = ${orgId} and l.stub_id = c.id and l.kind = 'employer_contribution'
+                  and pc.system_key = 'nic')) as nic_employer,
+           (select cert.answers->>'tax_code'
+              from employee_tax_certificates cert
+             where cert.org_id = ${orgId} and cert.employee_party_id = c.employee_party_id
+               and cert.country = 'GB' and cert.certificate_key = 'gb_tax_code_notice'
+               and cert.superseded_on is null
+             order by cert.effective_from desc nulls last limit 1) as tax_code,
+           (select cert.answers->>'non_cumulative'
+              from employee_tax_certificates cert
+             where cert.org_id = ${orgId} and cert.employee_party_id = c.employee_party_id
+               and cert.country = 'GB' and cert.certificate_key = 'gb_tax_code_notice'
+               and cert.superseded_on is null
+             order by cert.effective_from desc nulls last limit 1) as non_cumulative,
+           er.employee_number as payroll_number,
+           er.terminated_on::text as terminated_on
+      from committed c
+      join parties p on p.id = c.employee_party_id and p.org_id = ${orgId}
+      left join employee_roles er on er.party_id = c.employee_party_id and er.org_id = ${orgId}
+     group by c.employee_party_id, p.display_name, c.filing_account_id,
+              er.employee_number, er.terminated_on
+     order by p.display_name, min(c.pay_date)
+  `));
+  return rows.rows.map((row) => {
+    const rawCode = row.tax_code == null ? null : String(row.tax_code).trim() || null;
+    const nonCumulative = String(row.non_cumulative ?? "").toLowerCase() === "true";
+    return {
+      employeePartyId: String(row.employee_party_id),
+      employeeName: String(row.display_name),
+      nation: String(row.nation ?? ""),
+      filingAccountId: (row.filing_account_id as string | null) ?? null,
+      payInEmployment: add(num(row.taxable), num(row.added)),
+      taxDeducted: num(row.tax),
+      nicEmployee: num(row.nic_employee),
+      nicEmployer: num(row.nic_employer),
+      finalTaxCode: rawCode == null ? null : (nonCumulative ? `${rawCode} (week 1/month 1)` : rawCode),
+      scottishCode: rawCode != null && /^s/i.test(rawCode),
+      payrollNumber: row.payroll_number == null ? null : String(row.payroll_number),
+      lastPayDate: String(row.last_pay_date),
+      stubCount: Number(row.stub_count ?? 0),
+      terminatedOn: row.terminated_on == null ? null : String(row.terminated_on),
+    };
+  });
+}
+
+/**
+ * Throw the named refusal when the year holds no committed GB payroll at
+ * all. An empty statutory statement is a wrong statutory statement, so a
+ * year with nothing paid refuses instead of printing one.
+ */
+async function assertGbCommittedRuns(orgId: string, taxYear: number, form: string): Promise<void> {
+  const existing = (await db.execute<{ id: string }>(sql`
+    select s.id from pay_stubs s
+    join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
+   where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'GB'
+   limit 1
+  `));
+  if (existing.rows.length === 0) {
+    throw new PayrollError(
+      `no committed GB pay runs for ${taxYear}/${String(taxYear + 1).slice(2)} — a ${form} reports `
+      + "what was actually paid and withheld, so a year with no committed payroll cannot produce one. "
+      + "Commit a GB pay run for the year first.",
+    );
+  }
+}
+
+/** One employee's P60 figures: still employed at the year's 5 April. */
+export type GbP60Slip = GbYearStatement;
+
+/**
+ * The year's P60 population: every employee with committed GB stubs who is
+ * still in the employment on the last day of the Income Tax year (5 April)
+ * — HMRC RD1: "Employers must give a P60 to every employee who's in their
+ * employment on the last day of the Income Tax year (5 April)". A leaver's
+ * statement is the P45, not a P60.
+ */
+export async function gbP60Slips(orgId: string, taxYear: number): Promise<GbP60Slip[]> {
+  const statements = await gbYearStatements(orgId, taxYear);
+  const { end } = gbTaxYearBounds(taxYear);
+  const eligible = statements.filter(
+    (statement) => statement.terminatedOn == null || statement.terminatedOn > end,
+  );
+  if (eligible.length === 0) await assertGbCommittedRuns(orgId, taxYear, "P60");
+  return eligible.map(({ terminatedOn: _terminatedOn, ...slip }) => slip);
+}
+
+/** One leaver's P45 figures, including the leaving date the form carries. */
+export interface GbP45Leaver extends GbYearStatement {
+  /** The leaving date: the termination date, else the final committed pay date. */
+  leavingDate: string;
+}
+
+/**
+ * The year's P45 population: leavers — anyone whose termination date falls in
+ * the GB tax year, plus anyone paid by a termination run (the ROE-candidate
+ * shape, GB-scoped: termination runs settle leavers whatever the profile
+ * carries).
+ */
+export async function gbP45Leavers(orgId: string, taxYear: number): Promise<GbP45Leaver[]> {
+  const statements = await gbYearStatements(orgId, taxYear);
+  const { start, end } = gbTaxYearBounds(taxYear);
+  const terminatedIds = new Set(
+    (await db.execute<{ id: string }>(sql`
+      select distinct s.employee_party_id as id
+        from pay_stubs s
+        join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
+       where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'GB'
+         and (r.run_type = 'termination'
+              or exists (select 1 from employee_roles er
+                         where er.org_id = ${orgId} and er.party_id = s.employee_party_id
+                           and er.terminated_on::date between ${start} and ${end}))
+    `)).rows.map((row) => row.id),
+  );
+  const leavers = statements.filter((statement) => terminatedIds.has(statement.employeePartyId));
+  if (leavers.length === 0) await assertGbCommittedRuns(orgId, taxYear, "P45");
+  return leavers.map(({ terminatedOn, ...slip }) => ({
+    ...slip,
+    // The termination date when the role carries one, else the final
+    // committed pay date — a P45 without a leaving date is not a P45, and
+    // the year-end 5 April it would otherwise fall back to is a guess.
+    leavingDate: terminatedOn ?? slip.lastPayDate,
+  }));
 }
 
 // ---------------------------------------------------------------------------
