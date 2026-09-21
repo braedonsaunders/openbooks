@@ -190,8 +190,7 @@ async function runReminderDuty(): Promise<void> {
               title: `Reminder: sign ${signer.title}`,
               body: `${org?.name ?? "Your organization"} is still waiting for your signature on ${signer.title}, sent ${signer.sentAt}.`,
               href: "/me/documents",
-              createdBy: null,
-              updatedBy: null,
+              actorId: null,
             });
             delivered = true;
           }
