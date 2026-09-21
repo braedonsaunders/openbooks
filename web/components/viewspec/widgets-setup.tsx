@@ -4,6 +4,7 @@ import { NavEditor } from '../../app/(app)/admin/navigation/NavEditor'
 import { FeaturesWorkspace } from '../../app/(app)/admin/setup/features/FeaturesWorkspace'
 import { EmailSettingsForm } from '../../app/(app)/admin/email/EmailSettingsForm'
 import { AiSettingsForm } from '../../app/(app)/admin/ai/AiSettingsForm'
+import { AiGovernanceSection } from '../../app/(app)/admin/ai/AiGovernanceSection'
 import { InvoicingSettingsWorkspace } from '../../app/(app)/admin/setup/invoicing/InvoicingSettingsWorkspace'
 import { TemplatesList } from '../../app/(app)/admin/pdf-templates/TemplatesList'
 import PdfTemplateEditor from '../../app/(app)/admin/pdf-templates/[id]/PdfTemplateEditor'
@@ -187,6 +188,10 @@ export const SETUP_WIDGETS = {
       specs={props.specs as ComponentProps<typeof AiSettingsForm>['specs']}
       initial={props.initial as ComponentProps<typeof AiSettingsForm>['initial']}
     />
+  ),
+  /** HR-21 governance ledger: the section null-guards without the setup grant. */
+  'ai-governance-ledger': (props) => (
+    <AiGovernanceSection ledger={(props.ledger as ComponentProps<typeof AiGovernanceSection>['ledger']) ?? null} />
   ),
   /** SEVEN FLAT props, no wrapper bag. The page is seven conditional PAIRS
    *  (a badge plus an optional count line; a footer CTA that swaps both href

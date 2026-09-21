@@ -583,7 +583,8 @@
       "offer": "オファー",
       "timeToFill": "充足日数",
       "days": "日",
-      "missing": "このレコードは表示できません。"
+      "missing": "このレコードは表示できません。",
+      "description": "説明"
     },
     "create": {
       "titleField": "タイトル",
@@ -1310,6 +1311,25 @@
       "reopen": "再開",
       "carriedForward": "引継ぎ済み",
       "actionFailed": "1:1の操作に失敗しました。"
+    },
+    "pay": {
+      "title": "給与",
+      "empty": "計算済みの給与明細はまだありません。",
+      "columns": {
+        "payDate": "支給日",
+        "gross": "総支給",
+        "netPay": "手取り"
+      },
+      "explain": "説明",
+      "drawerTitle": "明細の説明",
+      "linesTitle": "内訳",
+      "diffTitle": "前回からの変更",
+      "diffEmpty": "前回からの変更はありません。",
+      "inputsTitle": "内訳の根拠",
+      "sourcesTitle": "記録",
+      "missing": "その明細は存在しないか、組織外です。",
+      "close": "閉じる",
+      "failed": "説明を読み込めませんでした。"
     }
   },
   "options": {
@@ -1903,5 +1923,16 @@
       "kicker": "オファー",
       "version": "第{version}版"
     }
+  },
+  "aiDraft": {
+    "button": "根拠から起草",
+    "title": "根拠から起草",
+    "insert": "欄に挿入",
+    "discard": "破棄",
+    "failed": "下書きを生成できませんでした。",
+    "sources": "根拠",
+    "biasFlags": "見直すべき表現",
+    "loading": "引用記録から起草中…",
+    "copied": "編集可能な欄がありません — 下書きをクリップボードにコピーしました。"
   }
 }

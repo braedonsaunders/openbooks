@@ -583,7 +583,8 @@
       "offer": "录用通知",
       "timeToFill": "填补用时",
       "days": "天",
-      "missing": "此记录已不可见。"
+      "missing": "此记录已不可见。",
+      "description": "说明"
     },
     "create": {
       "titleField": "标题",
@@ -1310,6 +1311,25 @@
       "reopen": "重新打开",
       "carriedForward": "已结转",
       "actionFailed": "1:1操作失败。"
+    },
+    "pay": {
+      "title": "工资",
+      "empty": "暂无已计算的工资单。",
+      "columns": {
+        "payDate": "发薪日",
+        "gross": "应发",
+        "netPay": "实发"
+      },
+      "explain": "解释",
+      "drawerTitle": "工资单解释",
+      "linesTitle": "明细",
+      "diffTitle": "与上期相比的变化",
+      "diffEmpty": "与上期相比无变化。",
+      "inputsTitle": "明细依据",
+      "sourcesTitle": "记录",
+      "missing": "该工资单不存在或不在您的组织内。",
+      "close": "关闭",
+      "failed": "无法加载解释。"
     }
   },
   "options": {
@@ -1903,5 +1923,16 @@
       "kicker": "录用函",
       "version": "第{version}版"
     }
+  },
+  "aiDraft": {
+    "button": "根据依据起草",
+    "title": "根据依据起草",
+    "insert": "插入到字段",
+    "discard": "舍弃",
+    "failed": "无法生成草稿。",
+    "sources": "依据",
+    "biasFlags": "待审查措辞",
+    "loading": "正在根据引用记录起草…",
+    "copied": "此处无可编辑字段 — 草稿已复制到剪贴板。"
   }
 }

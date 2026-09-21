@@ -21,6 +21,7 @@ export function ReviewAnswerForm({
   textLabel,
   requiredLabel,
   failed,
+  draft,
 }: {
   reviewId: string
   cycleId: string
@@ -30,6 +31,9 @@ export function ReviewAnswerForm({
   textLabel: string
   requiredLabel: string
   failed: string
+  /** HR-21 "Draft from evidence" link: absent while hrmDrafting is off, the
+   *  review is not pending, or the review is a peer review (no draft kind). */
+  draft: { href: string; label: string } | null
 }) {
   const router = useRouter()
   const [ratings, setRatings] = useState<Record<string, string>>(() =>
@@ -115,9 +119,16 @@ export function ReviewAnswerForm({
           {error}
         </p>
       ) : null}
-      <Button type="submit" disabled={busy}>
-        {submitLabel}
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" disabled={busy}>
+          {submitLabel}
+        </Button>
+        {draft ? (
+          <Button type="button" variant="outline" disabled={busy} onClick={() => router.push(draft.href)}>
+            {draft.label}
+          </Button>
+        ) : null}
+      </div>
     </form>
   )
 }

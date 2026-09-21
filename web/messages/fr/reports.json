@@ -471,6 +471,26 @@
       "deliveryEvidence": "{sent}/{total} envoyés · {failed} en échec · {suppressed} bloqués",
       "pdf": "Justificatif PDF",
       "csv": "CSV"
+    },
+    "nl": {
+      "title": "Interroger les rapports",
+      "description": "Posez votre question en langage courant — l'assistant rédige une définition validée, vous la prévisualisez puis l'enregistrez en vue.",
+      "placeholder": "p. ex. effectifs par service au T3",
+      "ask": "Poser",
+      "draftsTitle": "Vos brouillons",
+      "empty": "Aucun brouillon — posez une question ci-dessus puis enregistrez le brouillon.",
+      "question": "Question",
+      "entity": "Entité",
+      "status": "Statut",
+      "created": "Créé",
+      "saveAsView": "Enregistrer en vue",
+      "discard": "Abandonner",
+      "failed": "Les brouillons n'ont pas pu être chargés.",
+      "statuses": {
+        "drafted": "Brouillon",
+        "saved": "Enregistré",
+        "discarded": "Abandonné"
+      }
     }
   },
   "schedule": {
@@ -808,6 +828,18 @@
       "hrm_scorecards": {
         "description": "Une ligne par entretien avec les agrégats du jury : avis rendus et taille plus la distribution globale. Le détail par évaluateur ne sort jamais.",
         "label": "Avis"
+      },
+      "payroll_anomaly_flags": {
+        "label": "Alertes d'anomalies de paie",
+        "description": "Une ligne par alerte déterministe préalable : type, niveau, statut, période, emploi et explication."
+      },
+      "ai_decisions": {
+        "label": "Décisions IA",
+        "description": "Une ligne par réponse assistée : capacité, objet, sources citées, résumé sans PII et résultat. Digests et prompts jamais projetés."
+      },
+      "ai_capabilities": {
+        "label": "Capacités IA",
+        "description": "Une ligne par capacité : plafond d'autonomie, relecteur, mention, état et dernière revue."
       }
     },
     "columns": {
@@ -1811,6 +1843,42 @@
         "strong_yes": "Oui franc",
         "submitted": "Envoyés",
         "yes": "Oui"
+      },
+      "payroll_anomaly_flags": {
+        "kind": "Type",
+        "severity": "Niveau",
+        "status": "Statut",
+        "pay_period_from": "Période du",
+        "pay_period_to": "Période au",
+        "employee": "Salarié",
+        "explanation": "Explication",
+        "reason": "Motif du changement",
+        "resolved_at": "Résolu le",
+        "flag_id": "Alerte (id)",
+        "employment_id": "Emploi (id)"
+      },
+      "ai_decisions": {
+        "recorded_at": "Consigné le",
+        "capability": "Capacité",
+        "subject_kind": "Type d'objet",
+        "subject_id": "Objet (id)",
+        "summary": "Résumé",
+        "outcome": "Résultat",
+        "reviewer_id": "Relecteur (id)",
+        "reviewed_at": "Revu le",
+        "model": "Modèle",
+        "decision_id": "Décision (id)"
+      },
+      "ai_capabilities": {
+        "capability": "Capacité",
+        "name": "Nom",
+        "purpose": "Objet",
+        "autonomy": "Autonomie",
+        "reviewer": "Relecteur",
+        "notice_required": "Mention requise",
+        "enabled": "Activée",
+        "last_reviewed_at": "Dernière revue",
+        "reviewed_by": "Revu par"
       }
     },
     "enumValues": {

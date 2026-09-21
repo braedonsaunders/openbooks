@@ -65,6 +65,13 @@ const HRM_KEYS = [
   'hrm_retention_runs',
   'hrm_pool_members',
   // HR-18 end
+  // HR-21 begin: anomaly flags ride the payroll manager grant with the
+  // anomalies switch; the ledger and the capability mirror ride the
+  // setup grant with the ledger switch.
+  'payroll_anomaly_flags',
+  'ai_decisions',
+  'ai_capabilities',
+  // HR-21 end
 ] as const
 
 const HRM_PERMISSIONS: Record<(typeof HRM_KEYS)[number], string> = {
@@ -128,6 +135,11 @@ const HRM_PERMISSIONS: Record<(typeof HRM_KEYS)[number], string> = {
   hrm_survey_results: 'hrm.surveys.manage',
   hrm_org_chart: 'hrm.employment.read',
   // HR-19 end
+  // HR-21 begin
+  payroll_anomaly_flags: 'payroll.manage',
+  ai_decisions: 'admin.setup.manage',
+  ai_capabilities: 'admin.setup.manage',
+  // HR-21 end
 }
 
 test('workforce entities are registered on the shared catalog exactly once', () => {
@@ -174,6 +186,12 @@ test('workforce entities refuse without their gate and their own read permission
     hrm_offers: 'hrmOfferSigning', hrm_postings: 'hrmJobBoards',
     hrm_retention_runs: 'hrmCandidateRetention', hrm_pool_members: 'hrmTalentPool',
     // HR-18 end
+    // HR-21 begin: flags ride the anomalies switch, the ledger and its
+    // mirror ride the ledger switch.
+    payroll_anomaly_flags: 'hrmPayrollAnomalies',
+    ai_decisions: 'aiGovernanceLedger',
+    ai_capabilities: 'aiGovernanceLedger',
+    // HR-21 end
     // HR-14 begin: pre-existing red on the stacked base — the HR-12
     // compensation entities were never added to this switch map, so the
     // exact pin above compared against undefined. They ride
@@ -267,6 +285,11 @@ test('workforce entities scope to one org and one legal-entity boundary', () => 
     hrm_survey_results: 's.org_id',
     hrm_org_chart: 'e.org_id',
     // HR-19 end
+    // HR-21 begin
+    payroll_anomaly_flags: 'f.org_id',
+    ai_decisions: 'd.org_id',
+    ai_capabilities: 'c.org_id',
+    // HR-21 end
   }
   const scopeColumns: Record<(typeof HRM_KEYS)[number], string | null> = {
     hrm_headcount: 'hc.employer_subsidiary_id',
@@ -301,6 +324,14 @@ test('workforce entities scope to one org and one legal-entity boundary', () => 
     hrm_headcount_plan_lines: 'l.employer_subsidiary_id',
     hrm_pay_gap_snapshots: `(s.scope->>'employer_subsidiary_id')::uuid`,
     // HR-12 end
+    // HR-21 begin: flags clamp to the flagged employment's subsidiary
+    // (employment-less flags fail closed for restricted readers); the
+    // ledger and its mirror are org-wide under the setup grant, like the
+    // HR-16 platform configuration.
+    payroll_anomaly_flags: 'e.employer_subsidiary_id',
+    ai_decisions: null,
+    ai_capabilities: null,
+    // HR-21 end
     // HR-14 begin: register and alert rows clamp to the holder's
     // employer subsidiary.
     hrm_qualifications: 'e.employer_subsidiary_id',
@@ -380,7 +411,9 @@ test('workforce entities scope to one org and one legal-entity boundary', () => 
     const blocks = entity.from.split(/\bJOIN\b/i).slice(1)
     // HR-16 begin: single-table org-wide entities join nothing — the
     // org predicate on the base table is the whole tenant boundary.
-    if (key === 'automations' || key === 'hrm_action_reasons') {
+    // HR-21: the ledger and its mirror are single-table org-wide under
+    // the setup grant — same exemption.
+    if (key === 'automations' || key === 'hrm_action_reasons' || key === 'ai_decisions' || key === 'ai_capabilities') {
       assert.equal(blocks.length, 0, `${key} reads one org-scoped table`)
     } else {
       assert.ok(blocks.length >= 1, `${key} must join governed tables`)

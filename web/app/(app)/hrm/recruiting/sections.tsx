@@ -85,6 +85,7 @@ export interface DrawerLabels {
   offerWithdraw: string
   offerReason: string
   offerActionFailed: string
+  description: string
 }
 
 export interface RequisitionDrawerData {
@@ -121,6 +122,8 @@ export interface RequisitionDrawerData {
   closeHref: string
   stageLabels: Record<string, string>
   statusLabels: Record<string, string>
+  /** HR-21 "Draft from evidence" link for the description (job_description kind). */
+  draft: { href: string; label: string } | null
   labels: DrawerLabels
   candidateOptions: Option[]
   employeeOptions: Option[]
@@ -167,6 +170,8 @@ export interface OfferDrawerData {
   respondedAt: string | null
   declineReason: string | null
   closeHref: string
+  /** HR-21 "Draft from evidence" link for the letter clauses (offer_letter_clauses kind). */
+  draft: { href: string; label: string } | null
   labels: { send: string; accept: string; decline: string; withdraw: string; reason: string; failed: string }
 }
 
@@ -197,6 +202,19 @@ export function RequisitionDrawerBody({ detail }: { detail: RequisitionDrawerDat
           </p>
         ) : null}
       </div>
+      {detail.description || detail.draft ? (
+        <div>
+          <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{labels.description}</h4>
+          {detail.description ? (
+            <p className="mt-1 whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-300">{detail.description}</p>
+          ) : null}
+          {detail.draft ? (
+            <a href={detail.draft.href} className="mt-1 inline-block text-sm font-medium text-teal-700 dark:text-teal-300">
+              {detail.draft.label}
+            </a>
+          ) : null}
+        </div>
+      ) : null}
       <div>
         <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{labels.pipeline}</h4>
         <div className="mt-2 flex flex-wrap gap-1.5">
@@ -382,6 +400,11 @@ export function OfferDrawerBody({ detail }: { detail: OfferDrawerData }) {
         </div>
         {detail.declineReason ? (
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{detail.declineReason}</p>
+        ) : null}
+        {detail.draft ? (
+          <a href={detail.draft.href} className="mt-2 inline-block text-sm font-medium text-teal-700 dark:text-teal-300">
+            {detail.draft.label}
+          </a>
         ) : null}
       </div>
       {detail.status === 'draft' || detail.status === 'sent' ? (

@@ -23,6 +23,7 @@ import type { ModuleHomeTab } from '../../components/module-home/ui'
 import { loadMyLeave, type MyLeaveBalance } from './leave'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { listQualifications } from '@openbooks/engine/src/hrm/qualifications/qualifications.ts'
+import type { ExplainPayTrace } from '@openbooks/engine/src/hrm/ai/explain-pay.ts'
 
 /**
  * Me workspace loaders — the person's own view of their employment and the
@@ -295,6 +296,30 @@ export interface MeOverviewData {
   hasExtensions: boolean
   profileHref: string
   editProfile: string
+  // HR-21 begin: own payslips with the Explain drawer. Optional so older
+  // loaders keep compiling; the Me page fills it from the AI rails loader.
+  hasPay?: boolean
+  payTitle?: string
+  payStubs?: { id: string; payDate: string; gross: string; netPay: string; explainLabel: string; explainHref: string }[]
+  payColumns?: { payDate: string; gross: string; netPay: string }
+  payEmpty?: string
+  payExplain?: {
+    stubId: string
+    closeHref: string
+    title: string
+    missing: string | null
+    grossLabel: string
+    netLabel: string
+    employerCostLabel: string
+    earningsTitle: string
+    deductionsTitle: string
+    contributionsTitle: string
+    inputsTitle: string
+    diffTitle: string
+    sourcesTitle: string
+    trace: ExplainPayTrace | null
+  } | null
+  // HR-21 end
 }
 
 function stepRows(t: Catalog, steps: MyStep[]): MeStepRow[] {

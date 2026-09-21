@@ -471,6 +471,26 @@
       "deliveryEvidence": "{sent}/{total} gesendet · {failed} fehlgeschlagen · {suppressed} unterdrückt",
       "pdf": "PDF-Nachweis",
       "csv": "CSV"
+    },
+    "nl": {
+      "title": "Nach Berichten fragen",
+      "description": "Fragen Sie in Alltagssprache — die Assistenz entwirft eine geprüfte Definition, Sie sehen die Vorschau im Builder und speichern sie als Ansicht.",
+      "placeholder": "z. B. Köpfe nach Abteilung für Q3",
+      "ask": "Fragen",
+      "draftsTitle": "Ihre Berichtsentwürfe",
+      "empty": "Noch keine Entwürfe — fragen Sie oben und speichern Sie den Entwurf der Assistenz.",
+      "question": "Frage",
+      "entity": "Entität",
+      "status": "Status",
+      "created": "Erstellt",
+      "saveAsView": "Als Ansicht speichern",
+      "discard": "Verwerfen",
+      "failed": "Die Entwürfe konnten nicht geladen werden.",
+      "statuses": {
+        "drafted": "Entwurf",
+        "saved": "Gespeichert",
+        "discarded": "Verworfen"
+      }
     }
   },
   "schedule": {
@@ -808,6 +828,18 @@
       "hrm_scorecards": {
         "description": "Eine Zeile je Gespräch mit den Urteilssummen des Gremiums: abgegebene und Gremiumsanzahl plus Gesamtverteilung. Einzelurteile verlassen die Berichte nie — die Blindregel gilt baulich.",
         "label": "Urteile"
+      },
+      "payroll_anomaly_flags": {
+        "label": "Lohnanomalie-Hinweise",
+        "description": "Ein Datensatz je deterministischem Vorlauf-Hinweis: Art, Stufe, Status, Periode, Beschäftigung und Erklärung."
+      },
+      "ai_decisions": {
+        "label": "KI-Entscheidungen",
+        "description": "Ein Datensatz je KI-gestützter Antwort: Fähigkeit, Gegenstand, genannte Belege, PII-freie Zusammenfassung und Ergebnis. Digests und Prompts werden nie projiziert."
+      },
+      "ai_capabilities": {
+        "label": "KI-Fähigkeiten",
+        "description": "Ein Datensatz je KI-Fähigkeit: Autonomiestufe, Prüfer, Gegenstandshinweis, Aktivierung und letzte Prüfung."
       }
     },
     "columns": {
@@ -1811,6 +1843,42 @@
         "strong_yes": "Klares Ja",
         "submitted": "Abgegeben",
         "yes": "Ja"
+      },
+      "payroll_anomaly_flags": {
+        "kind": "Art",
+        "severity": "Stufe",
+        "status": "Status",
+        "pay_period_from": "Periode von",
+        "pay_period_to": "Periode bis",
+        "employee": "Mitarbeiter",
+        "explanation": "Erklärung",
+        "reason": "Übergabegrund",
+        "resolved_at": "Erledigt am",
+        "flag_id": "Hinweis (ID)",
+        "employment_id": "Beschäftigung (ID)"
+      },
+      "ai_decisions": {
+        "recorded_at": "Erfasst am",
+        "capability": "Fähigkeit",
+        "subject_kind": "Gegenstandsart",
+        "subject_id": "Gegenstand (ID)",
+        "summary": "Zusammenfassung",
+        "outcome": "Ergebnis",
+        "reviewer_id": "Prüfer (ID)",
+        "reviewed_at": "Geprüft am",
+        "model": "Modell",
+        "decision_id": "Entscheidung (ID)"
+      },
+      "ai_capabilities": {
+        "capability": "Fähigkeit",
+        "name": "Name",
+        "purpose": "Zweck",
+        "autonomy": "Autonomie",
+        "reviewer": "Prüfer",
+        "notice_required": "Hinweis erforderlich",
+        "enabled": "Aktiviert",
+        "last_reviewed_at": "Zuletzt geprüft",
+        "reviewed_by": "Geprüft von"
       }
     },
     "enumValues": {

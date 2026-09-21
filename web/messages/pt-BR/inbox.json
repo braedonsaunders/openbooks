@@ -32,7 +32,9 @@
     "field_ticket_signature": "Assinatura",
     "timesheet_week": "Folha de ponto",
     "expense_report": "Despesa",
-    "document_signature": "Assinatura"
+    "document_signature": "Assinatura",
+    "payroll_anomaly_block": "Verificação da folha",
+    "ai_capability_review": "Revisão de IA"
   },
   "emptyTitle": "Tudo em dia",
   "emptyDescription": "Nada aguarda você no momento.",

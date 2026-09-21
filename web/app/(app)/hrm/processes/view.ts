@@ -105,6 +105,11 @@ export function processesSpec(data: ProcessesPageData): PageSpec {
         ...widgetBlock('hrm-process-drawer', { drawer: data.drawer }),
         when: f('drawerOpen'),
       },
+      // HR-21: the shared evidence-draft drawer (?draft=<kind>:<id>).
+      {
+        ...widgetBlock('hrm-ai-draft-drawer', { draft: data.draftDrawer }),
+        when: f('draftDrawerOpen'),
+      },
     ],
   })
 }

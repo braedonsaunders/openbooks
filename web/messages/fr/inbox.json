@@ -32,7 +32,9 @@
     "field_ticket_signature": "Signature",
     "timesheet_week": "Feuille de temps",
     "expense_report": "Note de frais",
-    "document_signature": "Signature"
+    "document_signature": "Signature",
+    "payroll_anomaly_block": "Contrôle de paie",
+    "ai_capability_review": "Revue IA"
   },
   "emptyTitle": "Tout est à jour",
   "emptyDescription": "Rien ne vous attend pour le moment.",

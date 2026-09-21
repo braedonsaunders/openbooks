@@ -584,7 +584,8 @@
       "offer": "Offer",
       "timeToFill": "Time to fill",
       "days": "days",
-      "missing": "This record is no longer visible."
+      "missing": "This record is no longer visible.",
+      "description": "Description"
     },
     "create": {
       "titleField": "Title",
@@ -1311,6 +1312,25 @@
       "reopen": "Reopen",
       "carriedForward": "Carried forward",
       "actionFailed": "The 1:1 action failed."
+    },
+    "pay": {
+      "title": "Pay",
+      "empty": "No calculated payslips yet.",
+      "columns": {
+        "payDate": "Pay date",
+        "gross": "Gross",
+        "netPay": "Net pay"
+      },
+      "explain": "Explain",
+      "drawerTitle": "Payslip explanation",
+      "linesTitle": "Lines",
+      "diffTitle": "Changed since the previous stub",
+      "diffEmpty": "No changes since the previous stub.",
+      "inputsTitle": "Inputs behind the lines",
+      "sourcesTitle": "Records",
+      "missing": "That payslip is missing or outside your organization.",
+      "close": "Close",
+      "failed": "The explanation could not be loaded."
     }
   },
   "options": {
@@ -1904,5 +1924,16 @@
       "kicker": "Offer",
       "version": "version {version}"
     }
+  },
+  "aiDraft": {
+    "button": "Draft from evidence",
+    "title": "Draft from evidence",
+    "insert": "Insert into field",
+    "discard": "Discard",
+    "failed": "The draft could not be generated.",
+    "sources": "Sources",
+    "biasFlags": "Language to review",
+    "loading": "Drafting from the cited records…",
+    "copied": "No editable field here — the draft was copied to the clipboard."
   }
 }

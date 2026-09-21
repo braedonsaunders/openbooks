@@ -1487,5 +1487,77 @@
   },
   "retro": {
     "title": "Retroactive pay"
+  },
+  "anomalies": {
+    "title": "Payroll checks",
+    "description": "Deterministic pre-run checks with their numbers. Block severity refuses the pay-run finalize while open.",
+    "listTitle": "Flags",
+    "emptyTitle": "No flags for this period",
+    "emptyDescription": "Run the scan to check this period, or widen the filters.",
+    "scan": "Scan period",
+    "scanBusy": "Scanning…",
+    "scanFailed": "The scan could not run.",
+    "open": "Open",
+    "all": "All",
+    "runs": "Runs",
+    "kindLabel": "Kind",
+    "severityLabel": "Severity",
+    "statusLabel": "Status",
+    "unassigned": "Unassigned",
+    "wizardNotice": "{count, plural, one {# blocking check refuses this finalize} other {# blocking checks refuse this finalize}} — resolve them or mark false positive in the checks queue.",
+    "wizardLink": "Open payroll checks",
+    "columns": {
+      "employment": "Employee",
+      "explanation": "Explanation",
+      "kind": "Kind",
+      "period": "Period",
+      "severity": "Severity",
+      "status": "Status"
+    },
+    "tiles": {
+      "blocking": "Blocking",
+      "warnings": "Warnings",
+      "acknowledged": "Acknowledged",
+      "falsePositiveRate": "False-positive rate"
+    },
+    "transitions": {
+      "acknowledge": "Acknowledge",
+      "resolve": "Resolve",
+      "falsePositive": "False positive",
+      "reason": "Reason",
+      "reasonPlaceholder": "What did you check, or what did you fix?",
+      "submit": "Apply",
+      "failed": "The transition could not be saved."
+    },
+    "severity": {
+      "block": "Block",
+      "warn": "Warning",
+      "info": "Info"
+    },
+    "status": {
+      "open": "Open",
+      "acknowledged": "Acknowledged",
+      "resolved": "Resolved",
+      "false_positive": "False positive"
+    },
+    "kinds": {
+      "terminated_with_pay": "Terminated with pay",
+      "duplicate_bank": "Duplicate bank details",
+      "retro_spike": "Retro spike",
+      "net_pay_spike": "Net pay spike",
+      "zero_hours_with_pay": "Zero hours with pay",
+      "hours_spike": "Hours spike",
+      "missing_rate": "Missing rate",
+      "expired_rate": "Expired rate",
+      "prevailing_wage_missing": "Prevailing wage missing",
+      "apprentice_ratio_breach": "Apprentice ratio breach",
+      "benefit_input_orphan": "Benefit input orphan",
+      "leave_input_orphan": "Leave input orphan",
+      "negative_balance": "Negative leave balance",
+      "duplicate_entry": "Duplicate time entry",
+      "geofence_outside": "Outside geofence",
+      "unrounded": "Unrounded clock event",
+      "custom": "Custom"
+    }
   }
 }

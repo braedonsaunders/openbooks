@@ -3023,7 +3023,12 @@
       "question": "質問",
       "ratingScale": "評価尺度",
       "regionScope": "地域範囲",
-      "retainMonths": "保持月数"
+      "retainMonths": "保持月数",
+      "zThreshold": "Z値しきい値",
+      "retroThreshold": "遡及しきい値",
+      "cohortKey": "コホート",
+      "biasTerms": "配慮語句",
+      "reviewMonths": "レビュー周期（月）"
     },
     "fieldHelp": {
       "gapless": "欠番なしとは、連番のすべての番号が記録され、番号が飛ばないことを意味します。法令または監査要件で途切れない採番が必要な場合にのみ有効にしてください。",
@@ -3118,7 +3123,12 @@
       "hrmRetentionLeadDays": "期限前に延長を求める日数。空欄は通知なし。",
       "hrmRetentionScope": "地域をJSONで指定：applies_to allまたはcountries。",
       "hrmTemplateBody": "オファーデータの差し込み欄付き本文。",
-      "hrmTemplateClauses": "key、label、body、default_onのJSONリスト。"
+      "hrmTemplateClauses": "key、label、body、default_onのJSONリスト。",
+      "aiRailsZThreshold": "平均からこの標準偏差を超える支給を検出（既定3）。",
+      "aiRailsRetroThreshold": "この金額以上の遡及を検出（既定500）。",
+      "aiRailsCohort": "子会社・部門・給与サイクル・職位で従業員をグルーピング。",
+      "aiRailsBiasTerms": "組織が定める語句を完全一致で検出。1行1語句。",
+      "aiRailsReviewMonths": "レビュー周期（月、1〜36）。期限切れはsetupの受信箱に通知。"
     },
     "options": {
       "timeClassification": {
@@ -3592,6 +3602,12 @@
       "hrmRetentionBasis": {
         "consent": "同意",
         "inactivity": "無応募"
+      },
+      "aiRailsCohort": {
+        "subsidiary": "子会社",
+        "department": "部門",
+        "paySchedule": "給与サイクル",
+        "jobLevel": "職位"
       }
     },
     "invoicing": {
@@ -4957,6 +4973,34 @@
     "hrmTalentPool": {
       "title": "タレントプール",
       "description": "過去の候補者を募集中の求人に照合するプール。"
+    },
+    "hrmAiAssist": {
+      "title": "AI支援",
+      "description": "確定的HRMのAI能力のマスタースイッチ。自動で提出・承認・支払いすることはありません。"
+    },
+    "hrmExplainPay": {
+      "title": "明細の説明",
+      "description": "前期差分つき確定的明細トレースを「給与」ドロワーに表示。"
+    },
+    "hrmPayrollAnomalies": {
+      "title": "給与異常",
+      "description": "ライフサイクルつき実行前フラグ。ブロックは確定を拒否。"
+    },
+    "hrmTimeAnomalies": {
+      "title": "勤怠異常",
+      "description": "承認チップと受信箱に勤怠フラグを表示。"
+    },
+    "hrmDrafting": {
+      "title": "根拠に基づく起草",
+      "description": "引用記録からの下書きと言語フラグ。自動提出しません。"
+    },
+    "hrmNlReports": {
+      "title": "自然言語レポート",
+      "description": "質問から検証済み定義を作成し、プレビューしてビュー保存。"
+    },
+    "aiGovernanceLedger": {
+      "title": "AIガバナンス台帳",
+      "description": "能力ミラー、追記専用ログ、通知とレビュー周期。"
     }
   },
   "extensions": {
@@ -5362,6 +5406,36 @@
       "approvalYes": "はい",
       "approvalNo": "いいえ",
       "approvalSave": "設定を保存"
+    }
+  },
+  "aiLedger": {
+    "title": "AIガバナンス",
+    "description": "能力、その自律性の上限、AI支援の回答ごとの不変の記録。",
+    "capabilitiesTitle": "能力",
+    "decisionsTitle": "判断",
+    "overdueTitle": "期限切れのレビュー",
+    "overdueDescription": "レビュー周期を過ぎた能力",
+    "export": "CSV出力",
+    "sync": "台帳を同期",
+    "syncDone": "台帳を同期しました。",
+    "review": "レビューを記録",
+    "save": "保存",
+    "failed": "変更を保存できませんでした。",
+    "enabled": "有効",
+    "disabled": "無効",
+    "all": "すべて",
+    "noticeRequired": "通知が必要",
+    "neverReviewed": "未レビュー",
+    "columns": {
+      "autonomy": "自律性",
+      "capability": "能力",
+      "enabled": "有効",
+      "notice": "通知",
+      "outcome": "結果",
+      "reviewed": "レビュー",
+      "reviewer": "レビュー担当",
+      "summary": "概要",
+      "when": "日時"
     }
   }
 }

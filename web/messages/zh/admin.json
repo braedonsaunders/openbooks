@@ -2955,7 +2955,12 @@
       "question": "问题",
       "ratingScale": "评分量表",
       "regionScope": "地区范围",
-      "retainMonths": "保留月数"
+      "retainMonths": "保留月数",
+      "zThreshold": "Z 值阈值",
+      "retroThreshold": "追溯阈值",
+      "cohortKey": "分组",
+      "biasTerms": "敏感措辞",
+      "reviewMonths": "评审周期（月）"
     },
     "fieldHelp": {
       "gapless": "无间隔表示序列中的每个编号都必须有记录，不能跳号。仅在法律或审计要求必须连续编号时启用。",
@@ -3050,7 +3055,12 @@
       "hrmRetentionLeadDays": "到期前请求延长的天数，留空则不发邮件。",
       "hrmRetentionScope": "JSON地区：applies_to all或countries及代码。",
       "hrmTemplateBody": "正文，含录用数据的占位符。",
-      "hrmTemplateClauses": "JSON条款列表，含key、label、body和default_on。"
+      "hrmTemplateClauses": "JSON条款列表，含key、label、body和default_on。",
+      "aiRailsZThreshold": "标记超过均值此标准差倍数的收入（默认 3）。",
+      "aiRailsRetroThreshold": "标记达到此金额的追溯（默认 500）。",
+      "aiRailsCohort": "按子公司、部门、发薪周期或职级分组员工。",
+      "aiRailsBiasTerms": "组织设定的词语和短语，逐词精确标记，每行一条。",
+      "aiRailsReviewMonths": "评审周期（月，1–36）；逾期能力会通知 setup 收件箱。"
     },
     "options": {
       "payFrequency": {
@@ -3524,6 +3534,12 @@
       "hrmRetentionBasis": {
         "consent": "同意",
         "inactivity": "无动态"
+      },
+      "aiRailsCohort": {
+        "subsidiary": "子公司",
+        "department": "部门",
+        "paySchedule": "发薪周期",
+        "jobLevel": "职级"
       }
     },
     "payroll": {
@@ -4957,6 +4973,34 @@
     "hrmTalentPool": {
       "title": "人才库",
       "description": "将往期候选人与在招职位匹配的人才池。"
+    },
+    "hrmAiAssist": {
+      "title": "AI 助手",
+      "description": "确定性 HRM AI 能力的总开关。此处不会自动提交、审批或付款。"
+    },
+    "hrmExplainPay": {
+      "title": "工资单解释",
+      "description": "在“工资”抽屉中显示确定性追溯及上期差异。"
+    },
+    "hrmPayrollAnomalies": {
+      "title": "薪资异常",
+      "description": "带生命周期的运行前标记；阻止级别拒绝确认。"
+    },
+    "hrmTimeAnomalies": {
+      "title": "考勤异常",
+      "description": "考勤标记显示为审批徽章和收件箱事项。"
+    },
+    "hrmDrafting": {
+      "title": "依据起草",
+      "description": "基于引用记录的草稿及措辞标记；从不自动提交。"
+    },
+    "hrmNlReports": {
+      "title": "自然语言报表",
+      "description": "根据问题生成经验证的定义，可预览并另存为视图。"
+    },
+    "aiGovernanceLedger": {
+      "title": "AI 治理台账",
+      "description": "能力镜像、只增日志、提示与评审周期。"
     }
   },
   "backupsManager": {
@@ -5362,6 +5406,36 @@
       "approvalYes": "是",
       "approvalNo": "否",
       "approvalSave": "保存设置"
+    }
+  },
+  "aiLedger": {
+    "title": "AI 治理",
+    "description": "各项能力、其自主性上限，以及每个 AI 辅助答复的不可变记录。",
+    "capabilitiesTitle": "能力",
+    "decisionsTitle": "决策",
+    "overdueTitle": "逾期的评审",
+    "overdueDescription": "这些能力已超过评审周期",
+    "export": "导出 CSV",
+    "sync": "同步台账",
+    "syncDone": "台账已同步。",
+    "review": "记录评审",
+    "save": "保存",
+    "failed": "无法保存更改。",
+    "enabled": "已启用",
+    "disabled": "已禁用",
+    "all": "全部",
+    "noticeRequired": "需要提示",
+    "neverReviewed": "从未评审",
+    "columns": {
+      "autonomy": "自主性",
+      "capability": "能力",
+      "enabled": "已启用",
+      "notice": "提示",
+      "outcome": "结果",
+      "reviewed": "已评审",
+      "reviewer": "评审人",
+      "summary": "摘要",
+      "when": "时间"
     }
   }
 }

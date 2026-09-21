@@ -1487,5 +1487,77 @@
   },
   "retro": {
     "title": "遡及支給"
+  },
+  "anomalies": {
+    "title": "給与チェック",
+    "description": "実行前の確定的チェックとその数値。ブロックは未解決の間、給与実行の確定を拒否します。",
+    "listTitle": "フラグ",
+    "emptyTitle": "この期間のフラグはありません",
+    "emptyDescription": "この期間をスキャンするか、フィルターを広げてください。",
+    "scan": "期間をスキャン",
+    "scanBusy": "スキャン中…",
+    "scanFailed": "スキャンを実行できませんでした。",
+    "open": "未対応",
+    "all": "すべて",
+    "runs": "実行",
+    "kindLabel": "種類",
+    "severityLabel": "重要度",
+    "statusLabel": "状態",
+    "unassigned": "未割当",
+    "wizardNotice": "{count, plural, one {# 件のブロックがこの確定を拒否しています} other {# 件のブロックがこの確定を拒否しています}} — チェックキューで解決するか誤検出にしてください。",
+    "wizardLink": "給与チェックを開く",
+    "columns": {
+      "employment": "従業員",
+      "explanation": "説明",
+      "kind": "種類",
+      "period": "期間",
+      "severity": "重要度",
+      "status": "状態"
+    },
+    "tiles": {
+      "blocking": "ブロック",
+      "warnings": "警告",
+      "acknowledged": "確認済み",
+      "falsePositiveRate": "誤検出率"
+    },
+    "transitions": {
+      "acknowledge": "確認する",
+      "resolve": "解決する",
+      "falsePositive": "誤検出",
+      "reason": "理由",
+      "reasonPlaceholder": "何を確認・修正しましたか？",
+      "submit": "適用",
+      "failed": "変更を保存できませんでした。"
+    },
+    "severity": {
+      "block": "ブロック",
+      "warn": "警告",
+      "info": "情報"
+    },
+    "status": {
+      "open": "未対応",
+      "acknowledged": "確認済み",
+      "resolved": "解決済み",
+      "false_positive": "誤検出"
+    },
+    "kinds": {
+      "terminated_with_pay": "退職後の支給",
+      "duplicate_bank": "銀行口座の重複",
+      "retro_spike": "遡及の急増",
+      "net_pay_spike": "手取りの急増",
+      "zero_hours_with_pay": "労働時間ゼロの支給",
+      "hours_spike": "時間の急増",
+      "missing_rate": "単価なし",
+      "expired_rate": "単価の期限切れ",
+      "prevailing_wage_missing": "基準賃金なし",
+      "apprentice_ratio_breach": "見習い比率違反",
+      "benefit_input_orphan": "未割当の福利",
+      "leave_input_orphan": "未割当の休暇",
+      "negative_balance": "休暇残高マイナス",
+      "duplicate_entry": "重複入力",
+      "geofence_outside": "範囲外",
+      "unrounded": "丸めなし打刻",
+      "custom": "カスタム"
+    }
   }
 }
