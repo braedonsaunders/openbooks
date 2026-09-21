@@ -10,6 +10,13 @@ import {
   type MacrsWorkpaperEvent,
   type MacrsVintageDefaults,
 } from "./macrs-vintages.ts";
+import { refreshOpenMacrsVintageThrough } from "./depreciation-pool.ts";
+import {
+  declaredTaxRegimeFacts,
+  validateTaxRegimeBasis,
+  type UsMacrsRegimeBasis,
+} from "./asset-basis-policy.ts";
+import { formatMoney, sum } from "../money/money.ts";
 
 const defaults: MacrsVintageDefaults = {
   recoveryPeriodYears: "7",
@@ -381,9 +388,9 @@ test("an explicit vintage allocation splits carryover and excess without FIFO", 
     recognition: "nontaxable",
     section_168i7_kind: "nonrecognition",
     buyer_cost: null,
-    carryover_basis: "6400.00",
+    carryover_basis: "6200.00",
     excess_basis: "400.00",
-    related_person: "false",
+    related_person: "true",
     original_unadjusted_basis: "10000.00",
     disposed_unadjusted_basis: "10000.00",
     section_179: "200.00",
@@ -910,4 +917,98 @@ test("a present but invalid vintage allocation array raises the parser refusal",
     }),
     /vintageAllocations\[0\]/,
   );
+});
+
+test("a buyer-only declared-elections paper dates later without requiring taken_components on the applied row", () => {
+  const validated = validateTaxRegimeBasis(
+    {
+      regime: "us_macrs",
+      relationship: "non_arms_length",
+      recognition: "nontaxable",
+      relatedPerson: true,
+      placedInServiceOn: "2023-03-15",
+      recoveryPeriodYears: "5",
+      method: "200_db",
+      convention: "half_year",
+      originalUnadjustedBasis: "10000.00",
+      carryoverBasis: "6400.00",
+      excessBasis: "0.00",
+      section179: "0",
+      bonusPercent: "0",
+      businessUsePercent: "100",
+      priorDepreciation: "3600.00",
+      section168i7Kind: "nonrecognition",
+    },
+    { sourceOperation: "intercompany_transfer", applicable: "buyer" },
+  ) as UsMacrsRegimeBasis;
+  const persisted = declaredTaxRegimeFacts(validated);
+  assert.equal(Object.hasOwn(persisted, "checkpointKind"), false);
+  assert.equal(Object.hasOwn(persisted, "takenBonus"), false);
+  assert.equal(Object.hasOwn(persisted, "buyerVintages"), false);
+  const paper: MacrsWorkpaperEvent = {
+    ...bothSidedTaxable,
+    recognition: "nontaxable",
+    section_168i7_kind: "nonrecognition",
+    buyer_cost: null,
+    carryover_basis: persisted.carryoverBasis ?? null,
+    excess_basis: persisted.excessBasis ?? "0",
+    original_unadjusted_basis: persisted.originalUnadjustedBasis ?? null,
+    disposed_unadjusted_basis: persisted.originalUnadjustedBasis ?? null,
+    remaining_basis: "0",
+    placed_in_service_on: persisted.placedInServiceOn ?? null,
+    recovery_period_years: persisted.recoveryPeriodYears ?? null,
+    macrs_method: persisted.method ?? null,
+    macrs_convention: persisted.convention ?? null,
+    section_179: persisted.section179 ?? null,
+    bonus_percent: persisted.bonusPercent ?? null,
+    business_use_percent: persisted.businessUsePercent ?? null,
+    prior_depreciation: persisted.priorDepreciation ?? null,
+    buyer_vintages: null,
+    vintage_allocations: null,
+  };
+  const received = resolveMacrsVintages({
+    assetId: "buyer",
+    subsidiaryId: "sub-b",
+    placedOn: "2025-08-01",
+    acquisitionCost: "1.00",
+    disposedOn: null,
+    papers: [paper],
+    defaults,
+  });
+  const open = listOpenMacrsVintages(received);
+  assert.equal(open.length, 1);
+  assert.equal(open[0]!.adjustedCarryover, "6400.00");
+  assert.equal(open[0]!.checkpointKind, undefined);
+  assert.equal(open[0]!.takenBonus, null);
+  const windows = [
+    { taxYear: 2023, yearStart: "2023-01-01", yearEnd: "2023-12-31" },
+    { taxYear: 2024, yearStart: "2024-01-01", yearEnd: "2024-12-31" },
+    { taxYear: 2025, yearStart: "2025-01-01", yearEnd: "2025-12-31" },
+    { taxYear: 2026, yearStart: "2026-01-01", yearEnd: "2026-12-31" },
+  ];
+  const dated = refreshOpenMacrsVintageThrough(open[0]!, windows, "2026-09-01");
+  assert.equal(dated.checkpointKind, "taken_components");
+  assert.equal(
+    formatMoney(sum([
+      dated.section179,
+      dated.takenBonus,
+      dated.priorDepreciation,
+      dated.adjustedCarryover,
+    ]), 4),
+    "10000.0000",
+  );
+  const replayed = refreshOpenMacrsVintageThrough(
+    listOpenMacrsVintages(resolveMacrsVintages({
+      assetId: "buyer",
+      subsidiaryId: "sub-b",
+      placedOn: "2025-08-01",
+      acquisitionCost: "1.00",
+      disposedOn: null,
+      papers: [paper],
+      defaults,
+    }))[0]!,
+    windows,
+    "2026-09-01",
+  );
+  assert.deepEqual(replayed, dated);
 });

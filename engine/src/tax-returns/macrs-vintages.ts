@@ -11,9 +11,11 @@
  * receiving class. A missing buyer_vintages array keeps the legacy one-header
  * carryover path for already-applied papers.
  */
-import { add, cmp, formatMoney, mulRatio, neg, toUnits } from "../money/money.ts";
+import { add, cmp, formatMoney, neg } from "../money/money.ts";
+import { splitMoneyProportionally } from "../money/allocate-proportional.ts";
 import {
   TaxBasisPolicyError,
+  splitMacrsVintageCheckpoint,
   macrsVintageKey,
   parseFrozenMacrsBuyerVintages,
   parseMacrsVintageAllocations,
@@ -351,11 +353,65 @@ function as168i7Kind(value: string | null): MacrsVintage["section168i7Kind"] {
     : null;
 }
 
-function splitAmount(amount: string | null, take: string, total: string): { take: string | null; keep: string | null } {
-  if (amount == null) return { take: null, keep: null };
-  if (cmp(total, "0") <= 0) return { take: formatMoney(amount, 4), keep: formatMoney("0", 4) };
-  const taken = formatMoney(mulRatio(amount, toUnits(take), toUnits(total)), 4);
-  return { take: taken, keep: formatMoney(add(amount, neg(taken)), 4) };
+function splitUndatedVintageAmounts(
+  vintage: MacrsVintage,
+  disposedBasis: string,
+): {
+  take: {
+    checkpointKind?: MacrsVintage["checkpointKind"];
+    section179: string;
+    takenBonus: string | null;
+    priorDepreciation: string | null;
+    adjustedCarryover: string | null;
+  };
+  keep: {
+    checkpointKind?: MacrsVintage["checkpointKind"];
+    section179: string;
+    takenBonus: string | null;
+    priorDepreciation: string | null;
+    adjustedCarryover: string | null;
+  };
+} {
+  const parts = [
+    { key: "section179", amount: formatMoney(vintage.section179, 4) },
+    ...(vintage.takenBonus != null ? [{ key: "takenBonus", amount: formatMoney(vintage.takenBonus, 4) }] : []),
+    ...(vintage.priorDepreciation != null
+      ? [{ key: "regular", amount: formatMoney(vintage.priorDepreciation, 4) }]
+      : []),
+  ];
+  const named = parts.reduce((total, part) => add(total, part.amount), "0");
+  const rest = formatMoney(add(vintage.basis, neg(named)), 4);
+  if (cmp(rest, "0") < 0) {
+    throw new MacrsVintageError(
+      `vintage ${macrsVintageKey(vintage)} elections ${named} exceed unadjusted basis ${vintage.basis}; reverse and re-propose the earlier workpaper — do not independently round each component`,
+    );
+  }
+  if (cmp(rest, "0") > 0) parts.push({ key: "basisRest", amount: rest });
+  let rows;
+  try {
+    rows = splitMoneyProportionally(parts, formatMoney(disposedBasis, 4));
+  } catch (error) {
+    throw error instanceof Error
+      ? new MacrsVintageError(
+        `vintage ${macrsVintageKey(vintage)} cannot split disposed ${disposedBasis} from elections ${named}; ${error.message} — reverse and re-propose the earlier workpaper`,
+      )
+      : error;
+  }
+  const byKey = new Map(rows.map((row) => [row.key, row]));
+  return {
+    take: {
+      section179: byKey.get("section179")!.take,
+      takenBonus: vintage.takenBonus == null ? null : byKey.get("takenBonus")!.take,
+      priorDepreciation: vintage.priorDepreciation == null ? null : byKey.get("regular")!.take,
+      adjustedCarryover: null,
+    },
+    keep: {
+      section179: byKey.get("section179")!.keep,
+      takenBonus: vintage.takenBonus == null ? null : byKey.get("takenBonus")!.keep,
+      priorDepreciation: vintage.priorDepreciation == null ? null : byKey.get("regular")!.keep,
+      adjustedCarryover: null,
+    },
+  };
 }
 
 function splitOneVintage(
@@ -370,10 +426,24 @@ function splitOneVintage(
       `vintage ${macrsVintageKey(vintage)} disposed ${disposedBasis} plus remaining ${remainingBasis} must equal that vintage's unadjusted basis ${vintage.basis}; do not overwrite a retained vintage to hide a conflicting split`,
     );
   }
-  const section179 = splitAmount(vintage.section179, disposedBasis, vintage.basis);
-  const priorDepreciation = splitAmount(vintage.priorDepreciation, disposedBasis, vintage.basis);
-  const adjustedCarryover = splitAmount(vintage.adjustedCarryover, disposedBasis, vintage.basis);
-  const takenBonus = splitAmount(vintage.takenBonus, disposedBasis, vintage.basis);
+  let split;
+  try {
+    split = vintage.adjustedCarryover != null
+      ? splitMacrsVintageCheckpoint({
+        key: macrsVintageKey(vintage),
+        unadjustedBasis: vintage.basis,
+        businessUsePercent: vintage.businessUsePercent,
+        section179: vintage.section179,
+        bonusPercent: vintage.bonusPercent,
+        priorDepreciation: vintage.priorDepreciation,
+        adjustedCarryover: vintage.adjustedCarryover,
+        checkpointKind: vintage.checkpointKind,
+        takenBonus: vintage.takenBonus,
+      }, disposedBasis)
+      : splitUndatedVintageAmounts(vintage, disposedBasis);
+  } catch (error) {
+    throw error instanceof TaxBasisPolicyError ? new MacrsVintageError(error.message) : error;
+  }
   const out: MacrsVintage[] = [];
   if (positive(disposedBasis)) {
     out.push({
@@ -381,10 +451,11 @@ function splitOneVintage(
       basis: formatMoney(disposedBasis, 4),
       disposedOn,
       recognition: recognition ?? vintage.recognition,
-      section179: section179.take ?? vintage.section179,
-      priorDepreciation: priorDepreciation.take,
-      adjustedCarryover: adjustedCarryover.take,
-      takenBonus: takenBonus.take,
+      section179: split.take.section179,
+      takenBonus: split.take.takenBonus,
+      priorDepreciation: split.take.priorDepreciation,
+      adjustedCarryover: split.take.adjustedCarryover,
+      checkpointKind: split.take.checkpointKind,
     });
   }
   if (positive(remainingBasis)) {
@@ -392,10 +463,11 @@ function splitOneVintage(
       ...vintage,
       basis: formatMoney(remainingBasis, 4),
       disposedOn: null,
-      section179: section179.keep ?? vintage.section179,
-      priorDepreciation: priorDepreciation.keep,
-      adjustedCarryover: adjustedCarryover.keep,
-      takenBonus: takenBonus.keep,
+      section179: split.keep.section179,
+      takenBonus: split.keep.takenBonus,
+      priorDepreciation: split.keep.priorDepreciation,
+      adjustedCarryover: split.keep.adjustedCarryover,
+      checkpointKind: split.keep.checkpointKind,
     });
   }
   return out;

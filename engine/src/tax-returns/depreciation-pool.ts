@@ -25,6 +25,7 @@
  */
 
 import { add, cmp, formatMoney, fromUnits, mulDecimal, mulDecimalFactors, mulPercent, mulRatio, neg, normalizeMoney, roundDiv, roundMoney, sum, toUnits } from "../money/money.ts";
+import { macrsOpeningTakenComponents } from "./asset-basis-policy.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { taxConventionHalfMonths } from "../assets/depreciation-conventions.ts";
 import {
@@ -755,7 +756,6 @@ function mergeLineageRecoveryWindows(
       continue;
     }
     if (window.yearStart <= last.yearEnd) {
-      if (asOf >= window.yearStart && asOf <= window.yearEnd) out[out.length - 1] = window;
       continue;
     }
     if (nextCalendarDay(last.yearEnd) !== window.yearStart) {
@@ -1576,28 +1576,34 @@ export function refreshOpenMacrsVintageThrough(
     adjustedCarryover: received ? vintage.adjustedCarryover ?? undefined : undefined,
     carryoverOn: received ? vintage.transferOn ?? undefined : undefined,
   }, walkWindows);
+  const openingOfWindow = vintage.section168i7Kind === "consolidated_group" && asOf < covering.yearEnd;
   const remaining = persistMacrsBasis(
-    vintage.section168i7Kind === "consolidated_group" && asOf < covering.yearEnd
+    openingOfWindow
       ? walked.prior.remainingBasis
       : remainingAfter(walked.prior.remainingBasis, walked.current.allowance),
   );
   const original = mulPercent(persistMacrsBasis(vintage.unadjustedBasis), vintage.businessUsePercent);
+  const walkSection179 = takenThroughCutoff(walked.takenSection179, walked.current.section179, openingOfWindow);
+  const walkBonus = takenThroughCutoff(walked.takenBonus, walked.current.bonus, openingOfWindow);
+  const walkMacrs = takenThroughCutoff(walked.takenMacrs, walked.current.macrs, openingOfWindow);
+  let section179 = walkSection179;
+  let takenBonus = walkBonus;
+  let prior = walkMacrs;
   if (received) {
-    if (vintage.checkpointKind !== "taken_components" || vintage.takenBonus == null || vintage.takenBonus === "") {
-      throw new Error(
-        `dated MACRS checkpoint on ${asOf} cannot continue a received vintage without taken_components (section179, takenBonus, priorDepreciation, remaining); reverse and re-propose the earlier workpaper — do not infer whether prior includes allocated bonus`,
-      );
-    }
+    const opening = macrsOpeningTakenComponents({
+      subject: `dated MACRS checkpoint on ${asOf}`,
+      originalBasis: original,
+      section179: persistMacrsSection179(vintage.section179),
+      bonusPercent: vintage.bonusPercent,
+      prior: vintage.priorDepreciation ?? "0",
+      remaining: vintage.adjustedCarryover!,
+      checkpointKind: vintage.checkpointKind,
+      takenBonus: vintage.takenBonus,
+    });
+    section179 = formatMoney(add(opening.section179, walkSection179), 4);
+    takenBonus = formatMoney(add(opening.takenBonus, walkBonus), 4);
+    prior = formatMoney(add(opening.priorDepreciation, walkMacrs), 4);
   }
-  const section179 = received
-    ? formatMoney(add(persistMacrsSection179(vintage.section179), walked.takenSection179), 4)
-    : walked.takenSection179;
-  const takenBonus = received
-    ? formatMoney(add(persistMacrsBasis(vintage.takenBonus!), walked.takenBonus), 4)
-    : walked.takenBonus;
-  const prior = received
-    ? formatMoney(add(persistMacrsBasis(vintage.priorDepreciation ?? "0"), walked.takenMacrs), 4)
-    : walked.takenMacrs;
   const reconstructed = formatMoney(sum([section179, takenBonus, prior, remaining]), 4);
   if (cmp(reconstructed, formatMoney(original, 4)) !== 0) {
     throw new Error(
@@ -1611,6 +1617,17 @@ export function refreshOpenMacrsVintageThrough(
     priorDepreciation: prior,
     adjustedCarryover: formatMoney(remaining, 4),
   };
+}
+
+function takenThroughCutoff(accumulated: string, current: string, excludeCurrent: boolean): string {
+  if (!excludeCurrent) return formatMoney(accumulated, 4);
+  const taken = formatMoney(add(accumulated, neg(current)), 4);
+  if (cmp(taken, "0") < 0) {
+    throw new Error(
+      `dated MACRS checkpoint excluded the current-year take ${current} from accumulated ${accumulated}; reverse and re-propose the earlier workpaper — do not keep remaining and taken components on different sides of the same year`,
+    );
+  }
+  return taken;
 }
 
 function monthInTaxYear(date: string, yearStart?: string): number {
