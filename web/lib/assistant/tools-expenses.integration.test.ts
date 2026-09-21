@@ -151,7 +151,7 @@ test('expense assistant reads: list, detail, overview, approvals', { skip: !proc
       assert.equal(approvals.ok, true, JSON.stringify(approvals));
       assert.ok(approvals.ok);
       // No approval doorway: the queue reads empty rather than forbidden.
-      assert.deepEqual(approvals.data, { returned: 0, total: 0, approvals: [], href: '/approvals' });
+      assert.deepEqual(approvals.data, { returned: 0, total: 0, approvals: [], href: '/inbox' });
     });
   } finally {
     await dropScratchOrg(org.orgId);
