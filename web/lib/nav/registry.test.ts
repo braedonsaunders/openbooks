@@ -69,6 +69,10 @@ test('default workspaces follow the approved journey-oriented information archit
     ['revenue', 'assets', 'tax-depreciation'],
   )
   assert.deepEqual(
+    DEFAULT_NAV_ORDER.accounting.slice(5, 7),
+    ['leases', 'accounting-changes'],
+  )
+  assert.deepEqual(
     NAV_MODULES.find((module) => module.key === 'tax-depreciation'),
     {
       key: 'tax-depreciation',
@@ -78,6 +82,30 @@ test('default workspaces follow the approved journey-oriented information archit
       group: 'accounting',
       subgroup: 'assets',
       requiredPermission: 'assets.read',
+    },
+  )
+  assert.deepEqual(
+    NAV_MODULES.find((module) => module.key === 'leases'),
+    {
+      key: 'leases',
+      href: '/assets/leases',
+      label: 'Lessee Leases',
+      iconKey: 'building',
+      group: 'accounting',
+      subgroup: 'assets',
+      requiredPermission: 'assets.read',
+    },
+  )
+  assert.deepEqual(
+    NAV_MODULES.find((module) => module.key === 'accounting-changes'),
+    {
+      key: 'accounting-changes',
+      href: '/accounting/changes',
+      label: 'Accounting Changes',
+      iconKey: 'journal',
+      group: 'accounting',
+      subgroup: 'ledger',
+      requiredPermission: 'gl.read',
     },
   )
 })

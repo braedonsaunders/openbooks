@@ -32,6 +32,8 @@
     "assets": "固定資産",
     "equipment": "設備",
     "tax-depreciation": "税務減価償却",
+    "leases": "借手リース",
+    "accounting-changes": "会計上の変更",
     "budgets": "予算",
     "banking": "銀行口座",
     "banking-cash": "資金ポジション",

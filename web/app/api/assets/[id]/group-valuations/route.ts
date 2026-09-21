@@ -49,9 +49,15 @@ export async function GET(
         gate.allowedSubsidiaryIds.has(row.elimination_subsidiary_id)),
   );
   return NextResponse.json({
-    events: rows.map(
-      ({ subsidiary_id: _s, elimination_subsidiary_id: _e, ...row }) => row,
-    ),
+    events: rows.map((row) => ({
+      id: row.id,
+      date: row.date,
+      kind: row.kind,
+      amount: row.amount,
+      book_name: row.book_name,
+      group_currency: row.group_currency,
+      recorded: row.recorded,
+    })),
   });
 }
 export async function POST(

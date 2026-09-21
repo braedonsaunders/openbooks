@@ -1,7 +1,7 @@
 import { apportion } from "./recognition.ts";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, type SqlExecutor } from "../platform/db.ts";
+import type { SqlExecutor } from "../platform/db.ts";
 import {
   existingFinancialChange,
   proposeFinancialChange,
