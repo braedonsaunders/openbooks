@@ -547,11 +547,6 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
       // grant, so every entity's switch must be on or the assertion fails on
       // the switch rather than on the gate it is testing.
       await enableEveryHrmReportFeature(scratch.orgId)
-      await enableHrm(scratch.orgId)
-      await enableCompensation(scratch.orgId)
-      // HR-14 begin
-      await enableCertifications(scratch.orgId)
-      // HR-14 end
       // HR-18 begin
       await enableRecruitingDepth(scratch.orgId)
       // HR-18 end

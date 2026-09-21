@@ -41,16 +41,9 @@ import {
 // Qualifications page, never the setup rail).
 import { QUALIFICATION_SETTINGS_ENTITY, QUALIFICATION_TYPES_ENTITY } from './hrm-qualifications'
 // HR-14 end
-// HR-20 begin: field-time Setup entities (all rehomed — the project page
-// and the Timesheets setup surface — never the setup rail).
-import {
-  PROJECT_GEOFENCES_ENTITY,
-  TIME_APPROVAL_STAGES_ENTITY,
-  TIME_KIOSKS_ENTITY,
-} from './field-time'
-// HR-20 end
 // HR-18 begin: recruiting-depth Setup entities (rehomed onto /hrm/recruiting,
 // never the setup rail).
+import {
   RECRUITING_INTERVIEWER_POOLS_ENTITY,
   RECRUITING_KIT_ATTRIBUTES_ENTITY,
   RECRUITING_KIT_QUESTIONS_ENTITY,
@@ -59,6 +52,14 @@ import {
   RECRUITING_RETENTION_RULES_ENTITY,
 } from './hrm-recruiting'
 // HR-18 end
+// HR-20 begin: field-time Setup entities (all rehomed — the project page
+// and the Timesheets setup surface — never the setup rail).
+import {
+  PROJECT_GEOFENCES_ENTITY,
+  TIME_APPROVAL_STAGES_ENTITY,
+  TIME_KIOSKS_ENTITY,
+} from './field-time'
+// HR-20 end
 
 export type SetupFieldKind =
   | 'text'

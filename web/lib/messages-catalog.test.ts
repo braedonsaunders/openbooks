@@ -3013,10 +3013,9 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   // HR-17: 3844 = 3825 on b4b4fe256 plus 19 continuous-performance keys
   // (6 features, 2 setup entities, 1 setup field); zh/pt-BR completeness
   // is asserted per-key below.
-  assert.equal(wanted.length, 3908, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   // HR-17 + HR-18: 3906 = 3844 on 12359058e (3825 plus 19 continuous-performance
   // keys) plus 62 recruiting-depth keys; zh/pt-BR completeness is asserted per-key below.
-  assert.equal(wanted.length, 3906, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  assert.equal(wanted.length, 3969, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3386,13 +3385,11 @@ test('admin copy ships translated in de and ja (i2)', () => {
   ])
   // HR-17: count and hash recomputed over the sorted key inventory for the
   // 19 continuous-performance keys; de/ja completeness asserted per-key below.
-  const ADMIN_I2_SOURCE_COUNT = 3908
-  const ADMIN_I2_SOURCE_HASH = '49f73cec807d1b5b34210cf2e70f80c79f7b4fff99cb288cfee315ec0c0dbd0b'
   // HR-17 + HR-18: count and hash recomputed over the sorted key inventory
   // for the continuous-performance and recruiting-depth keys; de/ja completeness
   // asserted per-key below.
-  const ADMIN_I2_SOURCE_COUNT = 3906
-  const ADMIN_I2_SOURCE_HASH = '0d05d2048b0352862085b7237f85b97b112d1424410fd138aaf2c391dea020b6'
+  const ADMIN_I2_SOURCE_COUNT = 3969
+  const ADMIN_I2_SOURCE_HASH = '5f86af22561e7464c4e87423929a2c691fa5d772ff33cd87e7451d7929a19eb6'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))
@@ -5275,8 +5272,7 @@ const I14_IDENTICAL_BY_FACT = new Set([
 const I14_FILE_COUNTS: Record<string, number> = {
   "items": 161,
   "inventory": 159,
-  "reports": 1630,
-  "reports": 1608,
+  "reports": 1689,
   "sync": 172,
   "login": 33,
   "accounts": 82,
