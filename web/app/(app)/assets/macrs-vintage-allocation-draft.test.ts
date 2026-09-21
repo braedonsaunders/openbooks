@@ -15,10 +15,16 @@ function source(transferOn: string, unadjustedBasis: string): OpenMacrsVintage {
   return {
     ...identity,
     key: macrsVintageKey(identity),
+    parentKey: null,
     unadjustedBasis,
     adjustedCarryover: "500.0000",
     section179: "0.0000",
     priorDepreciation: "100.0000",
+    recoveryPeriodYears: "5",
+    method: "200_db",
+    convention: "half_year",
+    bonusPercent: "0",
+    businessUsePercent: "100",
   };
 }
 const first = source("2025-08-20", "1000.0001");
@@ -146,6 +152,39 @@ test("negative, rounded and stale allocations cannot be submitted", () => {
     () => prepareMacrsVintageAllocations([], {}),
     /No open tax depreciation vintages/,
   );
+});
+
+test("allocations forward parentKey lineage so two same-day carryovers stay distinct", () => {
+  const firstLineage = source("2025-08-20", "1000.0001");
+  const secondLineage = {
+    ...source("2025-08-20", "2000.0002"),
+    parentKey: "original:2023-03-15",
+    key: macrsVintageKey({
+      source: "carryover",
+      placedInServiceOn: "2024-03-15",
+      transferOn: "2025-08-20",
+      parentKey: "original:2023-03-15",
+    }),
+  };
+  const result = prepareMacrsVintageAllocations(
+    [firstLineage, secondLineage],
+    {
+      [firstLineage.key]: {
+        disposedUnadjustedBasis: "250.0001",
+        remainingUnadjustedBasis: "750.0000",
+      },
+      [secondLineage.key]: {
+        disposedUnadjustedBasis: "0.0000",
+        remainingUnadjustedBasis: "2000.0002",
+      },
+    },
+  );
+  assert.equal(result.vintageAllocations[0]!.parentKey, null);
+  assert.equal(result.vintageAllocations[1]!.parentKey, "original:2023-03-15");
+  assert.deepEqual(result.vintageAllocations.map(macrsVintageKey), [
+    firstLineage.key,
+    secondLineage.key,
+  ]);
 });
 
 test("summing allocation amounts never crosses the binary floating point boundary", () => {

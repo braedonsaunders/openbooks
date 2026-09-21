@@ -828,22 +828,34 @@ const readyVintages = [
   {
     key: "carryover:2023-03-15:2025-08-01",
     source: "carryover" as const,
+    parentKey: null,
     placedInServiceOn: "2023-03-15",
     transferOn: "2025-08-01",
     unadjustedBasis: "10000.0000",
     adjustedCarryover: "8000.0000",
     section179: "0.0000",
     priorDepreciation: "2000.0000",
+    recoveryPeriodYears: "5",
+    method: "200_db" as const,
+    convention: "half_year" as const,
+    bonusPercent: "0",
+    businessUsePercent: "100",
   },
   {
     key: "excess:2025-08-01:2025-08-01",
     source: "excess" as const,
+    parentKey: null,
     placedInServiceOn: "2025-08-01",
     transferOn: "2025-08-01",
     unadjustedBasis: "400.0000",
     adjustedCarryover: null,
     section179: "0.0000",
     priorDepreciation: null,
+    recoveryPeriodYears: "7",
+    method: "straight_line" as const,
+    convention: "mid_month" as const,
+    bonusPercent: "0",
+    businessUsePercent: "100",
   },
 ];
 
@@ -896,11 +908,12 @@ test("ready MACRS history hides the composite seller vintage and requires identi
     },
   );
   assert.equal(taxBasisFieldRequired(field("originalUnadjustedBasis"), bothNontaxable), false);
-  assert.equal(taxBasisFieldRequired(field("placedInServiceOn"), bothNontaxable), true);
-  assert.equal(taxBasisFieldRequired(field("method"), bothNontaxable), true);
-  assert.equal(taxBasisFieldRequired(field("convention"), bothNontaxable), true);
-  assert.equal(taxBasisFieldRequired(field("recoveryPeriodYears"), bothNontaxable), true);
-  assert.equal(taxBasisFieldRequired(field("carryoverBasis"), bothNontaxable), true);
+  assert.equal(taxBasisFieldVisible(field("placedInServiceOn"), bothNontaxable), false);
+  assert.equal(taxBasisFieldVisible(field("method"), bothNontaxable), false);
+  assert.equal(taxBasisFieldVisible(field("convention"), bothNontaxable), false);
+  assert.equal(taxBasisFieldVisible(field("recoveryPeriodYears"), bothNontaxable), false);
+  assert.equal(taxBasisFieldVisible(field("carryoverBasis"), bothNontaxable), false);
+  assert.equal(taxBasisFieldRequired(field("excessBasis"), bothNontaxable), true);
 });
 
 test("validateUs derives the header original from ready vintages and rechecks allocation keys", () => {
@@ -1039,7 +1052,7 @@ test("validateUs derives the header original from ready vintages and rechecks al
   );
 });
 
-test("ready both-sided nontaxable keeps buyer transferor schedule and refuses a composite placed date", () => {
+test("ready both-sided nontaxable freezes per-disposed-vintage receiver schedules from history", () => {
   const allocations = [
     {
       source: "carryover" as const,
@@ -1059,6 +1072,7 @@ test("ready both-sided nontaxable keeps buyer transferor schedule and refuses a 
   const context = {
     sourceOperation: "intercompany_transfer" as const,
     applicable: "both" as const,
+    effectiveOn: "2026-09-01",
     usSellerMacrs: { status: "ready" as const, vintages: readyVintages },
   };
   const base = {
@@ -1070,12 +1084,7 @@ test("ready both-sided nontaxable keeps buyer transferor schedule and refuses a 
     recognition: "nontaxable",
     section168i7Kind: "nonrecognition",
     relatedPerson: true,
-    carryoverBasis: "1280.00",
     excessBasis: "0.00",
-    section179: "0",
-    bonusPercent: "0",
-    businessUsePercent: "100",
-    priorDepreciation: "720.00",
     vintageAllocations: allocations,
   };
   throwsPolicy(
@@ -1083,16 +1092,84 @@ test("ready both-sided nontaxable keeps buyer transferor schedule and refuses a 
       validateTaxRegimeBasis(
         {
           ...base,
-          placedInServiceOn: "2025-08-01",
+          placedInServiceOn: "2023-03-15",
+          recoveryPeriodYears: "10",
+          method: "straight_line",
+          convention: "mid_month",
+        },
+        context,
+      ),
+    /does not match the frozen disposed vintage recoveryPeriodYears 5/,
+    "invented recovery is not accepted because the date matches",
+  );
+  throwsPolicy(
+    () =>
+      validateTaxRegimeBasis(
+        {
+          ...base,
+          placedInServiceOn: "2023-03-15",
           recoveryPeriodYears: "5",
-          method: "200_db",
+          method: "straight_line",
           convention: "half_year",
         },
         context,
       ),
-    /must equal the allocated vintage's placed-in-service date 2023-03-15/,
-    "buyer schedule must follow the disposed vintage",
+    /does not match the frozen disposed vintage method 200_db/,
+    "invented method is not accepted because the date matches",
   );
+  throwsPolicy(
+    () => validateTaxRegimeBasis(base, { ...context, effectiveOn: undefined }),
+    /source effective date is required to freeze buyer vintage transfer dates/,
+    "buyer vintages need the source date",
+  );
+  const row = validateTaxRegimeBasis(base, context) as UsMacrsRegimeBasis;
+  assert.equal(row.originalUnadjustedBasis, "10400.0000");
+  assert.equal(row.placedInServiceOn, "2023-03-15");
+  assert.equal(row.recoveryPeriodYears, "5");
+  assert.equal(row.method, "200_db");
+  assert.equal(row.convention, "half_year");
+  assert.equal(row.carryoverBasis, "1600.0000");
+  assert.equal(row.section179, "0.0000");
+  assert.equal(row.priorDepreciation, "400.0000");
+  assert.equal(row.buyerVintages?.length, 1);
+  assert.deepEqual(row.buyerVintages?.[0], {
+    key: "carryover:2023-03-15:2026-09-01:carryover:2023-03-15:2025-08-01",
+    source: "carryover",
+    parentKey: "carryover:2023-03-15:2025-08-01",
+    placedInServiceOn: "2023-03-15",
+    transferOn: "2026-09-01",
+    recoveryPeriodYears: "5",
+    method: "200_db",
+    convention: "half_year",
+    unadjustedBasis: "2000.0000",
+    adjustedCarryover: "1600.0000",
+    section179: "0.0000",
+    priorDepreciation: "400.0000",
+    bonusPercent: "0",
+    businessUsePercent: "100",
+  });
+  const twoDisposed = validateTaxRegimeBasis(
+    {
+      ...base,
+      disposedUnadjustedBasis: "2400.00",
+      remainingUnadjustedBasis: "8000.00",
+      vintageAllocations: [
+        { ...allocations[0]!, disposedUnadjustedBasis: "2000.00", remainingUnadjustedBasis: "8000.00" },
+        { ...allocations[1]!, disposedUnadjustedBasis: "400.00", remainingUnadjustedBasis: "0.00" },
+      ],
+    },
+    context,
+  ) as UsMacrsRegimeBasis;
+  assert.equal(twoDisposed.buyerVintages?.length, 2);
+  assert.equal(twoDisposed.placedInServiceOn, undefined);
+  assert.equal(twoDisposed.method, undefined);
+  assert.equal(twoDisposed.carryoverBasis, "2000.0000");
+  assert.equal(twoDisposed.buyerVintages?.[0]!.recoveryPeriodYears, "5");
+  assert.equal(twoDisposed.buyerVintages?.[0]!.method, "200_db");
+  assert.equal(twoDisposed.buyerVintages?.[1]!.recoveryPeriodYears, "7");
+  assert.equal(twoDisposed.buyerVintages?.[1]!.method, "straight_line");
+  assert.equal(twoDisposed.buyerVintages?.[1]!.convention, "mid_month");
+  assert.equal(twoDisposed.buyerVintages?.[1]!.parentKey, "excess:2025-08-01:2025-08-01");
   throwsPolicy(
     () =>
       validateTaxRegimeBasis(
@@ -1111,20 +1188,16 @@ test("ready both-sided nontaxable keeps buyer transferor schedule and refuses a 
         },
         context,
       ),
-    /different placed dates/,
-    "two disposed vintages are not one transferor date",
+    /cannot be one header 5 when the disposed vintages have recoveryPeriodYears 5, 7/,
+    "two disposed schedules are not one header recovery",
   );
-  const row = validateTaxRegimeBasis(
-    {
-      ...base,
-      placedInServiceOn: "2023-03-15",
-      recoveryPeriodYears: "5",
-      method: "200_db",
-      convention: "half_year",
-    },
-    context,
-  ) as UsMacrsRegimeBasis;
-  assert.equal(row.originalUnadjustedBasis, "10400.0000");
-  assert.equal(row.placedInServiceOn, "2023-03-15");
-  assert.equal(row.carryoverBasis, "1280.00");
+  const computed = usRegimeWorkpaperOutcome(twoDisposed, "intercompany_transfer", "both", {
+    placedInServiceOn: "2026-09-01",
+    recoveryPeriodYears: "7",
+    method: "200_db",
+    convention: "half_year",
+  });
+  assert.ok(Array.isArray(computed.buyerVintages));
+  assert.equal(computed.buyerVintages.length, 2);
+  assert.equal(computed.carryoverBasis, "2000.0000");
 });

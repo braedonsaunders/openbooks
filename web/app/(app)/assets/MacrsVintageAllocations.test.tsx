@@ -18,10 +18,16 @@ const identity = {
 const vintage: OpenMacrsVintage = {
   ...identity,
   key: macrsVintageKey(identity),
+  parentKey: null,
   unadjustedBasis: "1000.0001",
   adjustedCarryover: "850.0000",
   section179: "0.0000",
   priorDepreciation: "150.0001",
+  recoveryPeriodYears: "5",
+  method: "200_db",
+  convention: "half_year",
+  bonusPercent: "0",
+  businessUsePercent: "100",
 };
 function render(edits: MacrsAllocationEdits = {}, disabled = false) {
   return renderToStaticMarkup(
@@ -39,6 +45,7 @@ test("native allocation controls keep identities fixed and start with unanswered
   assert.match(markup, /§168\(i\)\(7\) carryover — transferor history/);
   assert.match(markup, /2024-03-15/);
   assert.match(markup, /2025-08-20/);
+  assert.match(markup, /5-year 200_db \/ half_year/);
   assert.match(markup, /1000.0001/);
   assert.match(markup, /850.0000/);
   const inputs = markup.match(/<input\b[^>]*>/g) ?? [];

@@ -542,6 +542,11 @@ function asMacrsEventFromStored(row: {
       : Array.isArray(facts.vintageAllocations)
         ? facts.vintageAllocations
         : null,
+    buyer_vintages: Array.isArray(computed.buyerVintages)
+      ? computed.buyerVintages
+      : Array.isArray(facts.buyerVintages)
+        ? facts.buyerVintages
+        : null,
   };
 }
 
@@ -737,6 +742,7 @@ async function snapshot(
       sourceOperation: source.sourceOperation,
       applicableByRegime: applicable,
       usSellerMacrs,
+      effectiveOn: source.effectiveOn,
     });
   } catch (error) {
     throw error instanceof Error ? new TaxAssetBasisError(error.message) : error;
@@ -998,6 +1004,7 @@ export async function proposeTaxAssetBasis(
           sourceOperation: sourceOperation as TaxBasisSourceOperation,
           applicableByRegime: applicable,
           usSellerMacrs,
+          effectiveOn: String(replay.payload.effectiveOn ?? ""),
         });
         const frozen = await freezeRegimes(
           db,
@@ -1070,6 +1077,7 @@ export async function proposeTaxAssetBasis(
         sourceOperation: source.sourceOperation,
         applicableByRegime: applicable,
         usSellerMacrs,
+        effectiveOn: source.effectiveOn,
       });
       const state = await snapshot(db, orgId, actorId, assetId, validated);
       if (state.existingWorkpaperChangeId) {

@@ -60,6 +60,7 @@ export function MacrsVintageAllocations({
             <p className="text-sm">
               Placed in service {vintage.placedInServiceOn}
               {vintage.transferOn ? ` · Transferred ${vintage.transferOn}` : ""}
+              {` · ${vintage.recoveryPeriodYears}-year ${vintage.method} / ${vintage.convention}`}
             </p>
             <p className="text-sm">
               Open unadjusted tax basis: {vintage.unadjustedBasis}

@@ -41,6 +41,7 @@ const bothSidedTaxable: MacrsWorkpaperEvent = {
   business_use_percent: null,
   prior_depreciation: null,
   vintage_allocations: null,
+  buyer_vintages: null,
 };
 
 test("a same-regime both-sided taxable transfer starts the buyer on the receiving placed date and class, not seller age", () => {
@@ -545,4 +546,82 @@ test("seller history before a source distinguishes first declaration from ready 
     assert.match(missingPaper.refusal, /2026-07-01/);
     assert.match(missingPaper.refusal, /do not treat a missing prerequisite paper as a first original declaration/);
   }
+});
+
+test("frozen buyer vintages reconstruct two transferor schedules instead of one header composite", () => {
+  const paper: MacrsWorkpaperEvent = {
+    ...bothSidedTaxable,
+    recognition: "nontaxable",
+    section_168i7_kind: "nonrecognition",
+    buyer_cost: null,
+    carryover_basis: "2000.0000",
+    excess_basis: "0",
+    related_person: "true",
+    original_unadjusted_basis: "10400.00",
+    disposed_unadjusted_basis: "2400.00",
+    remaining_basis: "8000.00",
+    placed_in_service_on: null,
+    recovery_period_years: null,
+    macrs_method: null,
+    macrs_convention: null,
+    section_179: "0.0000",
+    bonus_percent: "0",
+    business_use_percent: "100",
+    prior_depreciation: "400.0000",
+    buyer_vintages: [
+      {
+        key: "carryover:2023-03-15:2026-09-01:carryover:2023-03-15:2025-08-01",
+        source: "carryover",
+        parentKey: "carryover:2023-03-15:2025-08-01",
+        placedInServiceOn: "2023-03-15",
+        transferOn: "2026-09-01",
+        recoveryPeriodYears: "5",
+        method: "200_db",
+        convention: "half_year",
+        unadjustedBasis: "2000.0000",
+        adjustedCarryover: "1600.0000",
+        section179: "0.0000",
+        priorDepreciation: "400.0000",
+        bonusPercent: "0",
+        businessUsePercent: "100",
+      },
+      {
+        key: "carryover:2025-08-01:2026-09-01:excess:2025-08-01:2025-08-01",
+        source: "carryover",
+        parentKey: "excess:2025-08-01:2025-08-01",
+        placedInServiceOn: "2025-08-01",
+        transferOn: "2026-09-01",
+        recoveryPeriodYears: "7",
+        method: "straight_line",
+        convention: "mid_month",
+        unadjustedBasis: "400.0000",
+        adjustedCarryover: "400.0000",
+        section179: "0.0000",
+        priorDepreciation: "0.0000",
+        bonusPercent: "0",
+        businessUsePercent: "100",
+      },
+    ],
+  };
+  const buyer = resolveMacrsVintages({
+    assetId: "buyer",
+    subsidiaryId: "sub-b",
+    placedOn: "2026-09-01",
+    acquisitionCost: "1.00",
+    disposedOn: null,
+    papers: [paper],
+    defaults: { ...defaults, recoveryPeriodYears: "39", method: "straight_line", convention: "mid_month" },
+  });
+  const open = listOpenMacrsVintages(buyer);
+  assert.equal(open.length, 2);
+  assert.equal(open[0]!.recoveryPeriodYears, "5");
+  assert.equal(open[0]!.method, "200_db");
+  assert.equal(open[0]!.convention, "half_year");
+  assert.equal(open[0]!.parentKey, "carryover:2023-03-15:2025-08-01");
+  assert.equal(open[0]!.key, "carryover:2023-03-15:2026-09-01:carryover:2023-03-15:2025-08-01");
+  assert.equal(open[1]!.recoveryPeriodYears, "7");
+  assert.equal(open[1]!.method, "straight_line");
+  assert.equal(open[1]!.convention, "mid_month");
+  assert.equal(open[0]!.adjustedCarryover, "1600.0000");
+  assert.equal(open[1]!.adjustedCarryover, "400.0000");
 });

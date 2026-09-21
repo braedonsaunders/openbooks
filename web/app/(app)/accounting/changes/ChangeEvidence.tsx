@@ -19,7 +19,9 @@ const taxChoiceFields: Record<string, string> = {
 };
 const taxComputedLabels: Record<string, string> = {
   vintageAllocations: "Allocation by tax depreciation vintage",
+  buyerVintages: "Frozen receiving tax depreciation vintages",
   source: "Tax depreciation source",
+  parentKey: "Source vintage identity",
   transferOn: "Transfer effective date",
   unadjustedBasis: "Open unadjusted tax basis",
   adjustedCarryover: "Adjusted carryover checkpoint",

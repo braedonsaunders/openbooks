@@ -109,6 +109,7 @@ type LiveWorkpaper = {
   business_use_percent: string | null;
   prior_depreciation: string | null;
   vintage_allocations: unknown;
+  buyer_vintages: unknown;
 };
 
 function classifiedClassSql(
@@ -237,7 +238,8 @@ async function liveWorkpapers(
              w.computed->>'bonusPercent' as bonus_percent,
              w.computed->>'businessUsePercent' as business_use_percent,
              w.computed->>'priorDepreciation' as prior_depreciation,
-             w.computed->'vintageAllocations' as vintage_allocations
+             w.computed->'vintageAllocations' as vintage_allocations,
+             w.computed->'buyerVintages' as buyer_vintages
         from tax_asset_basis_workpapers w
         join fixed_assets seller on seller.org_id=w.org_id and seller.id=w.asset_id
         join asset_categories seller_c on seller_c.org_id=seller.org_id and seller_c.id=seller.category_id
@@ -778,6 +780,7 @@ function asMacrsEvents(papers: LiveWorkpaper[]): MacrsWorkpaperEvent[] {
     vintage_allocations: Array.isArray(paper.vintage_allocations)
       ? paper.vintage_allocations
       : null,
+    buyer_vintages: Array.isArray(paper.buyer_vintages) ? paper.buyer_vintages : null,
   }));
 }
 

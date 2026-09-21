@@ -125,12 +125,20 @@ export const MACRS_VINTAGE_SOURCE_LABELS: Record<MacrsVintageSource, string> = {
   taxable_cost: "Taxable buyer cost — newly placed on the receiving schedule",
 };
 
+export const MACRS_METHODS = ["200_db", "150_db", "straight_line"] as const;
+export type MacrsMethod = (typeof MACRS_METHODS)[number];
+
+export const MACRS_CONVENTIONS = ["half_year", "mid_quarter", "mid_month"] as const;
+export type MacrsConvention = (typeof MACRS_CONVENTIONS)[number];
+
 /** Operator-declared split of one identified vintage. Header
- *  disposedUnadjustedBasis / remainingUnadjustedBasis are the sums. */
+ *  disposedUnadjustedBasis / remainingUnadjustedBasis are the sums.
+ *  `parentKey` is required when the open vintage key includes lineage. */
 export interface MacrsVintageAllocationInput {
   source: MacrsVintageSource;
   placedInServiceOn: string;
   transferOn?: string | null;
+  parentKey?: string | null;
   disposedUnadjustedBasis: string;
   remainingUnadjustedBasis: string;
 }
@@ -139,23 +147,50 @@ export function macrsVintageKey(args: {
   source: MacrsVintageSource;
   placedInServiceOn: string;
   transferOn?: string | null;
+  parentKey?: string | null;
 }): string {
   if (args.source === "original") return `original:${args.placedInServiceOn}`;
-  return `${args.source}:${args.placedInServiceOn}:${args.transferOn ?? ""}`;
+  const base = `${args.source}:${args.placedInServiceOn}:${args.transferOn ?? ""}`;
+  return args.parentKey ? `${base}:${args.parentKey}` : base;
 }
 
 /** One open seller vintage reconstructed immediately before the selected
- *  source. Identities are server-derived; the editor allocates disposed and
- *  retained amounts against these rows. */
+ *  source. Identities and recovery are server-derived; the editor allocates
+ *  disposed and retained amounts against these rows. */
 export interface OpenMacrsVintage {
   key: string;
   source: MacrsVintageSource;
+  parentKey: string | null;
   placedInServiceOn: string;
   transferOn: string | null;
   unadjustedBasis: string;
   adjustedCarryover: string | null;
   section179: string;
   priorDepreciation: string | null;
+  recoveryPeriodYears: string;
+  method: MacrsMethod;
+  convention: MacrsConvention;
+  bonusPercent: string;
+  businessUsePercent: string;
+}
+
+/** Frozen receiving vintage for one disposed allocation. Carryover keeps
+ *  transferor recovery; `parentKey` is the open vintage that was split. */
+export interface FrozenMacrsBuyerVintage {
+  key: string;
+  source: "carryover" | "excess" | "taxable_cost";
+  parentKey: string | null;
+  placedInServiceOn: string;
+  transferOn: string;
+  recoveryPeriodYears: string;
+  method: MacrsMethod;
+  convention: MacrsConvention;
+  unadjustedBasis: string;
+  adjustedCarryover: string | null;
+  section179: string;
+  priorDepreciation: string | null;
+  bonusPercent: string;
+  businessUsePercent: string;
 }
 
 export const US_SELLER_MACRS_VINTAGE_STATUSES = [
@@ -181,12 +216,6 @@ export type UsAmountRealizedRule = (typeof US_AMOUNT_REALIZED_RULES)[number];
 
 export const NZ_ASSOCIATE_COST_BASES = ["original_cost", "first_business_use_fmv"] as const;
 export type NzAssociateCostBasis = (typeof NZ_ASSOCIATE_COST_BASES)[number];
-
-export const MACRS_METHODS = ["200_db", "150_db", "straight_line"] as const;
-export type MacrsMethod = (typeof MACRS_METHODS)[number];
-
-export const MACRS_CONVENTIONS = ["half_year", "mid_quarter", "mid_month"] as const;
-export type MacrsConvention = (typeof MACRS_CONVENTIONS)[number];
 
 /** Client POST body. effectiveOn, requiredSubsidiaryIds and receivingAssetId
  *  are derived from the source financial change or legacy event and must not
@@ -265,12 +294,16 @@ export interface TaxBasisSourceContext {
   sourceOperation: TaxBasisSourceOperation;
   applicable: TaxBasisApplicableSide;
   usSellerMacrs?: UsSellerMacrsVintageContext | null;
+  /** Source occurredOn. Required to freeze buyer vintage transferOn. */
+  effectiveOn?: string;
 }
 
 export interface TaxBasisValidationContext extends Partial<TaxBasisSourceContext> {
   sourceOperation: TaxBasisSourceOperation;
   applicableByRegime?: Readonly<Partial<Record<TaxBasisRegime, TaxBasisApplicableSide>>>;
   usSellerMacrs?: UsSellerMacrsVintageContext | null;
+  /** Source effective date. Required to freeze buyer vintage transferOn. */
+  effectiveOn?: string;
 }
 
 /** One classified regime on a GET source row. `applicable` is server-derived. */
@@ -446,6 +479,9 @@ export interface UsMacrsRegimeBasis extends TaxRegimeBasisBase {
   /** Required when more than one vintage is open. Each row is one vintage;
    *  header disposed/remaining are the sums. Do not match a vintage by amount. */
   vintageAllocations?: MacrsVintageAllocationInput[];
+  /** Frozen per-disposed-vintage receiver schedules. Derived from ready
+   *  history; not an operator-typed composite header. */
+  buyerVintages?: FrozenMacrsBuyerVintage[];
 }
 
 export type TaxBasisFieldKind = "decimal" | "boolean" | "enum" | "text" | "date";
@@ -501,21 +537,32 @@ const US_ORIGINAL_STATUTORY: TaxBasisFieldPredicate = {
     },
   ],
 };
-/** Seller first declaration, or buyer nontaxable carryover schedule. Ready
- *  seller history does not hide these from a both-sided carryover — the buyer
- *  still continues a transferor date/method. */
+/** Seller first declaration, or buyer nontaxable carryover before seller
+ *  history is ready. Ready history freezes date/method/convention/recovery
+ *  per disposed vintage — do not retype a composite header. */
 const US_TRANSFEROR_HISTORY: TaxBasisFieldPredicate = {
   any: [
     US_SELLER_ORIGINAL_DECLARATION,
-    { all: [BUYER, { fieldEquals: { name: "recognition", values: ["nontaxable"] } }] },
+    {
+      all: [
+        BUYER,
+        { fieldEquals: { name: "recognition", values: ["nontaxable"] } },
+        { not: { usSellerMacrsStatus: "ready" } },
+      ],
+    },
   ],
 };
 const US_SELLER_SPLIT_AMOUNTS: TaxBasisFieldPredicate = {
   all: [SELLER, { not: { usSellerMacrsStatus: "history_refused" } }],
 };
-/** Historical elections allocated to the carried-over slice. Missing JSON is not zero. */
+/** Historical elections allocated to the carried-over slice. Missing JSON is
+ *  not zero. Ready seller history derives these per disposed vintage. */
 const US_CARRYOVER_ELECTIONS: TaxBasisFieldPredicate = {
-  all: [BUYER, { fieldEquals: { name: "recognition", values: ["nontaxable"] } }],
+  all: [
+    BUYER,
+    { fieldEquals: { name: "recognition", values: ["nontaxable"] } },
+    { not: { usSellerMacrsStatus: "ready" } },
+  ],
 };
 
 function labeledChoices<T extends string>(
@@ -890,7 +937,7 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     kind: "decimal",
     visibleWhen: { all: [{ regime: "us_macrs" }, US_SELLER_SPLIT_AMOUNTS] },
     requiredWhen: { all: [{ regime: "us_macrs" }, US_SELLER_SPLIT_AMOUNTS] },
-    help: "Continues the original placed-in-service date, method and convention. When frozen history is ready, this is the sum of vintageAllocations.remainingUnadjustedBasis — identify each vintage by source, placedInServiceOn and transferOn; do not match a vintage by amount.",
+    help: "Continues the original placed-in-service date, method and convention. When frozen history is ready, this is the sum of vintageAllocations.remainingUnadjustedBasis — identify each vintage by source, placedInServiceOn, transferOn and parentKey; do not match a vintage by amount.",
   },
   {
     name: "disposedUnadjustedBasis",
@@ -906,7 +953,7 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     kind: "date",
     visibleWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
     requiredWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
-    help: "Required on the first seller declaration and on a nontaxable buyer carryover. After frozen seller history is ready, a both-sided carryover must continue the allocated vintage's placed date — do not invent one composite date across vintages with different recovery histories.",
+    help: "Required on the first seller declaration and on a nontaxable buyer carryover before seller history is ready. Ready history freezes each disposed vintage's date, method, convention and recovery — do not retype a composite header.",
   },
   {
     name: "recoveryPeriodYears",
@@ -914,7 +961,7 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     kind: "decimal",
     visibleWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
     requiredWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
-    help: "Required on the first seller declaration and on a nontaxable buyer carryover. After frozen seller history is ready, continue the allocated vintage's recovery period — do not invent a composite schedule.",
+    help: "Required on the first seller declaration and on a nontaxable buyer carryover before seller history is ready. Ready history freezes each disposed vintage's recovery — do not invent a composite schedule.",
   },
   {
     name: "method",
@@ -927,7 +974,7 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     }),
     visibleWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
     requiredWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
-    help: "Required on the first seller declaration and on a nontaxable buyer carryover. After frozen seller history is ready, continue the allocated vintage's method — do not invent a composite schedule.",
+    help: "Required on the first seller declaration and on a nontaxable buyer carryover before seller history is ready. Ready history freezes each disposed vintage's method — do not invent a composite schedule.",
   },
   {
     name: "convention",
@@ -940,7 +987,7 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     }),
     visibleWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
     requiredWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
-    help: "Required on the first seller declaration and on a nontaxable buyer carryover. After frozen seller history is ready, continue the allocated vintage's convention — do not invent a composite schedule.",
+    help: "Required on the first seller declaration and on a nontaxable buyer carryover before seller history is ready. Ready history freezes each disposed vintage's convention — do not invent a composite schedule.",
   },
   {
     name: "recognition",
@@ -1006,8 +1053,9 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     name: "carryoverBasis",
     label: "Carryover basis",
     kind: "decimal",
-    visibleWhen: { all: [{ regime: "us_macrs" }, BUYER, { fieldEquals: { name: "recognition", values: ["nontaxable"] } }] },
-    requiredWhen: { all: [{ regime: "us_macrs" }, BUYER, { fieldEquals: { name: "recognition", values: ["nontaxable"] } }] },
+    visibleWhen: { all: [{ regime: "us_macrs" }, US_CARRYOVER_ELECTIONS] },
+    requiredWhen: { all: [{ regime: "us_macrs" }, US_CARRYOVER_ELECTIONS] },
+    help: "Required on a nontaxable buyer carryover before seller history is ready. Ready history derives this checkpoint from each disposed vintage — do not retype a composite carryover.",
   },
   {
     name: "excessBasis",
@@ -1234,6 +1282,7 @@ const VINTAGE_ALLOCATION_KEYS = [
   "source",
   "placedInServiceOn",
   "transferOn",
+  "parentKey",
   "disposedUnadjustedBasis",
   "remainingUnadjustedBasis",
 ] as const;
@@ -1287,6 +1336,16 @@ export function parseMacrsVintageAllocations(value: unknown): MacrsVintageAlloca
         `vintageAllocations[${index}].transferOn must be a calendar date (YYYY-MM-DD)`,
       );
     }
+    if (raw.parentKey != null && raw.parentKey !== "" && typeof raw.parentKey !== "string") {
+      throw new TaxBasisPolicyError(
+        `vintageAllocations[${index}].parentKey must identify the open vintage lineage`,
+      );
+    }
+    if (source === "original" && raw.parentKey != null && raw.parentKey !== "") {
+      throw new TaxBasisPolicyError(
+        `vintageAllocations[${index}].parentKey is not used for an original vintage; identify it by placedInServiceOn`,
+      );
+    }
     const disposed = validateDeclaredDecimal(
       `vintageAllocations[${index}].disposedUnadjustedBasis`,
       raw.disposedUnadjustedBasis,
@@ -1298,7 +1357,8 @@ export function parseMacrsVintageAllocations(value: unknown): MacrsVintageAlloca
     const transferOn = source === "original"
       ? (isTaxBasisCalendarDate(raw.transferOn) ? raw.transferOn : null)
       : String(raw.transferOn);
-    const key = macrsVintageKey({ source, placedInServiceOn: raw.placedInServiceOn, transferOn });
+    const parentKey = typeof raw.parentKey === "string" && raw.parentKey !== "" ? raw.parentKey : null;
+    const key = macrsVintageKey({ source, placedInServiceOn: raw.placedInServiceOn, transferOn, parentKey });
     if (seen.has(key)) {
       throw new TaxBasisPolicyError(
         `vintageAllocations declares ${key} more than once; each open vintage is allocated exactly once`,
@@ -1309,6 +1369,7 @@ export function parseMacrsVintageAllocations(value: unknown): MacrsVintageAlloca
       source,
       placedInServiceOn: raw.placedInServiceOn,
       transferOn,
+      parentKey,
       disposedUnadjustedBasis: disposed,
       remainingUnadjustedBasis: remaining,
     };
@@ -1577,32 +1638,304 @@ function assertUsCarryoverCheckpoint(draft: TaxBasisDraft): void {
   }
 }
 
-function assertReadyBuyerTransferorSchedule(
-  draft: TaxBasisDraft,
-  open: readonly OpenMacrsVintage[],
-  allocations: readonly MacrsVintageAllocationInput[],
-): void {
-  const disposedKeys = allocations
-    .filter((row) => cmp(row.disposedUnadjustedBasis, "0") > 0)
-    .map((row) => macrsVintageKey(row));
-  if (disposedKeys.length === 0) {
+function splitAllocatedAmount(amount: string | null, take: string, total: string): string | null {
+  if (amount == null) return null;
+  if (cmp(total, "0") <= 0) return formatMoney(amount, 4);
+  return formatMoney(mulRatio(amount, toUnits(take), toUnits(total)), 4);
+}
+
+function derivedDisposedCheckpoint(
+  vintage: OpenMacrsVintage,
+  disposed: string,
+): Pick<FrozenMacrsBuyerVintage, "section179" | "priorDepreciation" | "adjustedCarryover"> {
+  const section179 = splitAllocatedAmount(vintage.section179, disposed, vintage.unadjustedBasis) ?? "0.0000";
+  const priorFromHistory = splitAllocatedAmount(vintage.priorDepreciation, disposed, vintage.unadjustedBasis);
+  const carryFromHistory = splitAllocatedAmount(vintage.adjustedCarryover, disposed, vintage.unadjustedBasis);
+  if (carryFromHistory != null) {
+    return { section179, priorDepreciation: priorFromHistory, adjustedCarryover: carryFromHistory };
+  }
+  if (priorFromHistory != null) {
+    const originalBasis = mulPercent(disposed, vintage.businessUsePercent);
+    const elected179 = cmp(section179, originalBasis) < 0 ? section179 : originalBasis;
+    const after179 = add(originalBasis, neg(elected179));
+    const bonus = mulPercent(after179, vintage.bonusPercent);
+    const carryover = formatMoney(add(originalBasis, neg(sum([elected179, bonus, priorFromHistory]))), 4);
+    if (cmp(carryover, "0") < 0) {
+      throw new TaxBasisPolicyError(
+        `frozen vintage ${vintage.key} cannot derive a carryover checkpoint from disposed ${disposed}, section179 ${elected179}, bonus ${bonus} and priorDepreciation ${priorFromHistory}; reverse and re-propose the earlier workpaper — do not invent the buyer's opening`,
+      );
+    }
+    return { section179, priorDepreciation: priorFromHistory, adjustedCarryover: carryover };
+  }
+  if (vintage.source === "excess" || vintage.source === "taxable_cost") {
+    const originalBasis = mulPercent(disposed, vintage.businessUsePercent);
+    const elected179 = cmp(section179, originalBasis) < 0 ? section179 : originalBasis;
+    const after179 = add(originalBasis, neg(elected179));
+    const bonus = mulPercent(after179, vintage.bonusPercent);
+    const carryover = formatMoney(add(originalBasis, neg(sum([elected179, bonus]))), 4);
+    if (cmp(carryover, "0") < 0) {
+      throw new TaxBasisPolicyError(
+        `frozen vintage ${vintage.key} cannot derive a newly placed opening from disposed ${disposed}, section179 ${elected179} and bonus ${bonus}; reverse and re-propose the earlier workpaper — do not invent the buyer's opening`,
+      );
+    }
+    return { section179, priorDepreciation: "0.0000", adjustedCarryover: carryover };
+  }
+  throw new TaxBasisPolicyError(
+    `frozen vintage ${vintage.key} has no adjusted carryover checkpoint or prior depreciation; reverse and re-propose the earlier workpaper — do not invent the buyer's opening`,
+  );
+}
+
+function assertFrozenBuyerVintageCheckpoint(row: FrozenMacrsBuyerVintage): void {
+  if (row.adjustedCarryover == null) {
+    throw new TaxBasisPolicyError(
+      `buyer vintage ${row.key} is missing its adjusted carryover checkpoint; derive it from applied history — do not leave the opening unstated`,
+    );
+  }
+  const originalBasis = mulPercent(row.unadjustedBasis, row.businessUsePercent);
+  const elected179 = cmp(row.section179, originalBasis) < 0 ? row.section179 : originalBasis;
+  const after179 = add(originalBasis, neg(elected179));
+  const bonus = mulPercent(after179, row.bonusPercent);
+  const prior = row.priorDepreciation ?? "0";
+  const reconstructed = formatMoney(sum([elected179, bonus, prior, row.adjustedCarryover]), 4);
+  if (cmp(reconstructed, formatMoney(originalBasis, 4)) !== 0) {
+    throw new TaxBasisPolicyError(
+      `buyer vintage ${row.key} carryover ${row.adjustedCarryover} plus allocated section179 ${elected179}, bonus ${bonus} and priorDepreciation ${prior} must equal original unadjusted basis ${originalBasis} after business use; derive the slice from applied history — do not invent a composite checkpoint`,
+    );
+  }
+}
+
+function uniqueBuyerVintageValue<T>(
+  vintages: readonly FrozenMacrsBuyerVintage[],
+  get: (row: FrozenMacrsBuyerVintage) => T,
+): T | null {
+  const values = [...new Set(vintages.map((row) => String(get(row))))];
+  return values.length === 1 ? get(vintages[0]!) : null;
+}
+
+/** Per-disposed-vintage receiver schedules. Carryover keeps transferor
+ *  recovery; lineage is the open vintage key. Excess and taxable cost stay
+ *  newly placed on the receiving class. */
+export function deriveMacrsDisposedBuyerVintages(args: {
+  open: readonly OpenMacrsVintage[];
+  allocations: readonly MacrsVintageAllocationInput[];
+  transferOn: string;
+}): FrozenMacrsBuyerVintage[] {
+  if (!isTaxBasisCalendarDate(args.transferOn)) {
+    throw new TaxBasisPolicyError(
+      "the selected source effective date is required to freeze buyer vintage transfer dates; pass the source occurredOn — do not invent a transferOn",
+    );
+  }
+  const derived: FrozenMacrsBuyerVintage[] = [];
+  for (const row of args.allocations) {
+    if (cmp(row.disposedUnadjustedBasis, "0") <= 0) continue;
+    const key = macrsVintageKey(row);
+    const vintage = args.open.find((item) => item.key === key);
+    if (!vintage) {
+      throw new TaxBasisPolicyError(
+        `vintageAllocations name ${key}, which is not an open MACRS vintage (${args.open.map((item) => item.key).join(", ")}); reconstruct from the frozen history — do not invent a vintage`,
+      );
+    }
+    const checkpoint = derivedDisposedCheckpoint(vintage, row.disposedUnadjustedBasis);
+    const buyer: FrozenMacrsBuyerVintage = {
+      key: macrsVintageKey({
+        source: "carryover",
+        placedInServiceOn: vintage.placedInServiceOn,
+        transferOn: args.transferOn,
+        parentKey: vintage.key,
+      }),
+      source: "carryover",
+      parentKey: vintage.key,
+      placedInServiceOn: vintage.placedInServiceOn,
+      transferOn: args.transferOn,
+      recoveryPeriodYears: vintage.recoveryPeriodYears,
+      method: vintage.method,
+      convention: vintage.convention,
+      unadjustedBasis: moneyExact(row.disposedUnadjustedBasis, "disposedUnadjustedBasis"),
+      section179: checkpoint.section179,
+      priorDepreciation: checkpoint.priorDepreciation,
+      adjustedCarryover: checkpoint.adjustedCarryover,
+      bonusPercent: vintage.bonusPercent,
+      businessUsePercent: vintage.businessUsePercent,
+    };
+    assertFrozenBuyerVintageCheckpoint(buyer);
+    derived.push(buyer);
+  }
+  if (derived.length === 0) {
     throw new TaxBasisPolicyError(
       "a nontaxable MACRS carryover requires a disposed vintage slice; allocate disposedUnadjustedBasis on the vintage whose transferor history the buyer continues — do not invent a header schedule for a zero disposal",
     );
   }
-  const placed = [...new Set(
-    open.filter((vintage) => disposedKeys.includes(vintage.key)).map((vintage) => vintage.placedInServiceOn),
-  )];
-  if (placed.length !== 1) {
+  return derived;
+}
+
+function assertSuppliedHeaderMatchesFrozenBuyerVintages(
+  draft: TaxBasisDraft,
+  derived: readonly FrozenMacrsBuyerVintage[],
+): void {
+  const checks = [
+    ["placedInServiceOn", (row: FrozenMacrsBuyerVintage) => row.placedInServiceOn],
+    ["recoveryPeriodYears", (row: FrozenMacrsBuyerVintage) => row.recoveryPeriodYears],
+    ["method", (row: FrozenMacrsBuyerVintage) => row.method],
+    ["convention", (row: FrozenMacrsBuyerVintage) => row.convention],
+  ] as const;
+  for (const [name, get] of checks) {
+    const supplied = draft[name];
+    if (supplied == null || supplied === "") continue;
+    const values = [...new Set(derived.map((row) => String(get(row))))];
+    if (values.length !== 1) {
+      throw new TaxBasisPolicyError(
+        `${name} cannot be one header ${String(supplied)} when the disposed vintages have ${name} ${values.join(", ")}; buyer recovery is frozen per vintage — do not invent a composite schedule`,
+      );
+    }
+    if (name === "recoveryPeriodYears") {
+      if (cmp(moneyExact(supplied, name), moneyExact(values[0], name)) !== 0) {
+        throw new TaxBasisPolicyError(
+          `${name} ${String(supplied)} does not match the frozen disposed vintage ${name} ${values[0]}; buyer recovery is derived from applied history — do not invent a schedule`,
+        );
+      }
+      continue;
+    }
+    if (String(supplied) !== values[0]) {
+      throw new TaxBasisPolicyError(
+        `${name} ${String(supplied)} does not match the frozen disposed vintage ${name} ${values[0]}; buyer recovery is derived from applied history — do not invent a schedule`,
+      );
+    }
+  }
+}
+
+function applyDerivedBuyerVintages(draft: TaxBasisDraft, derived: FrozenMacrsBuyerVintage[]): void {
+  draft.buyerVintages = derived;
+  const carryover = derived.reduce((total, row) => add(total, row.adjustedCarryover ?? "0"), "0");
+  const section179 = derived.reduce((total, row) => add(total, row.section179), "0");
+  const prior = derived.reduce((total, row) => add(total, row.priorDepreciation ?? "0"), "0");
+  if (draft.carryoverBasis != null && draft.carryoverBasis !== "") {
+    if (cmp(moneyExact(draft.carryoverBasis, "carryoverBasis"), formatMoney(carryover, 4)) !== 0) {
+      throw new TaxBasisPolicyError(
+        `carryoverBasis ${draft.carryoverBasis} must equal the sum of frozen disposed vintage checkpoints ${formatMoney(carryover, 4)}; buyer recovery is derived from applied history — do not invent a composite carryover`,
+      );
+    }
+  }
+  draft.carryoverBasis = formatMoney(carryover, 4);
+  draft.section179 = formatMoney(section179, 4);
+  draft.priorDepreciation = formatMoney(prior, 4);
+  const bonus = uniqueBuyerVintageValue(derived, (row) => row.bonusPercent);
+  const businessUse = uniqueBuyerVintageValue(derived, (row) => row.businessUsePercent);
+  if (bonus != null) draft.bonusPercent = bonus;
+  else delete draft.bonusPercent;
+  if (businessUse != null) draft.businessUsePercent = businessUse;
+  else delete draft.businessUsePercent;
+  const placed = uniqueBuyerVintageValue(derived, (row) => row.placedInServiceOn);
+  const recovery = uniqueBuyerVintageValue(derived, (row) => row.recoveryPeriodYears);
+  const method = uniqueBuyerVintageValue(derived, (row) => row.method);
+  const convention = uniqueBuyerVintageValue(derived, (row) => row.convention);
+  if (placed != null && recovery != null && method != null && convention != null) {
+    draft.placedInServiceOn = placed;
+    draft.recoveryPeriodYears = recovery;
+    draft.method = method;
+    draft.convention = convention;
+  } else {
+    delete draft.placedInServiceOn;
+    delete draft.recoveryPeriodYears;
+    delete draft.method;
+    delete draft.convention;
+  }
+}
+
+const FROZEN_BUYER_VINTAGE_KEYS = [
+  "key",
+  "source",
+  "parentKey",
+  "placedInServiceOn",
+  "transferOn",
+  "recoveryPeriodYears",
+  "method",
+  "convention",
+  "unadjustedBasis",
+  "adjustedCarryover",
+  "section179",
+  "priorDepreciation",
+  "bonusPercent",
+  "businessUsePercent",
+] as const;
+
+/** Rehydrate frozen receiver vintages from applied computed JSON. */
+export function parseFrozenMacrsBuyerVintages(value: unknown): FrozenMacrsBuyerVintage[] {
+  if (!Array.isArray(value) || value.length === 0) {
     throw new TaxBasisPolicyError(
-      `placedInServiceOn cannot be one transferor date when the disposed allocation covers vintages with different placed dates (${placed.join(", ") || "none"}); allocate one vintage's history — do not invent a composite carryover vintage`,
+      "buyerVintages must freeze each disposed MACRS vintage; do not invent one composite receiver schedule",
     );
   }
-  if (String(draft.placedInServiceOn ?? "") !== placed[0]) {
-    throw new TaxBasisPolicyError(
-      `placedInServiceOn ${String(draft.placedInServiceOn ?? "")} must equal the allocated vintage's placed-in-service date ${placed[0]}; do not invent a composite seller vintage`,
+  return value.map((row, index) => {
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      throw new TaxBasisPolicyError(`buyerVintages[${index}] must be an object`);
+    }
+    const raw = row as Record<string, unknown>;
+    const unknown = Object.keys(raw).filter(
+      (key) => !(FROZEN_BUYER_VINTAGE_KEYS as readonly string[]).includes(key),
     );
-  }
+    if (unknown.length > 0) {
+      throw new TaxBasisPolicyError(
+        `unknown buyerVintages[${index}] field(s): ${unknown.sort().join(", ")}`,
+      );
+    }
+    if (raw.source !== "carryover" && raw.source !== "excess" && raw.source !== "taxable_cost") {
+      throw new TaxBasisPolicyError(
+        `buyerVintages[${index}].source must be carryover, excess, or taxable_cost`,
+      );
+    }
+    if (typeof raw.key !== "string" || raw.key === "") {
+      throw new TaxBasisPolicyError(`buyerVintages[${index}].key is required to identify the receiving vintage`);
+    }
+    if (raw.parentKey != null && typeof raw.parentKey !== "string") {
+      throw new TaxBasisPolicyError(`buyerVintages[${index}].parentKey must identify the disposed vintage`);
+    }
+    if (!isTaxBasisCalendarDate(raw.placedInServiceOn)) {
+      throw new TaxBasisPolicyError(
+        `buyerVintages[${index}].placedInServiceOn must be a calendar date (YYYY-MM-DD)`,
+      );
+    }
+    if (!isTaxBasisCalendarDate(raw.transferOn)) {
+      throw new TaxBasisPolicyError(
+        `buyerVintages[${index}].transferOn must be a calendar date (YYYY-MM-DD)`,
+      );
+    }
+    if (!(MACRS_METHODS as readonly string[]).includes(String(raw.method ?? ""))) {
+      throw new TaxBasisPolicyError(`buyerVintages[${index}].method must be 200_db, 150_db, or straight_line`);
+    }
+    if (!(MACRS_CONVENTIONS as readonly string[]).includes(String(raw.convention ?? ""))) {
+      throw new TaxBasisPolicyError(`buyerVintages[${index}].convention must be half_year, mid_quarter, or mid_month`);
+    }
+    const vintage: FrozenMacrsBuyerVintage = {
+      key: raw.key,
+      source: raw.source,
+      parentKey: typeof raw.parentKey === "string" && raw.parentKey !== "" ? raw.parentKey : null,
+      placedInServiceOn: raw.placedInServiceOn,
+      transferOn: raw.transferOn,
+      recoveryPeriodYears: (() => {
+        const recovery = normalizeDecimal(String(raw.recoveryPeriodYears ?? ""), 10);
+        if (cmp(recovery, "0") <= 0) {
+          throw new TaxBasisPolicyError(
+            `buyerVintages[${index}].recoveryPeriodYears must be greater than 0`,
+          );
+        }
+        return String(raw.recoveryPeriodYears);
+      })(),
+      method: raw.method as MacrsMethod,
+      convention: raw.convention as MacrsConvention,
+      unadjustedBasis: moneyExact(raw.unadjustedBasis, `buyerVintages[${index}].unadjustedBasis`),
+      adjustedCarryover: raw.adjustedCarryover == null || raw.adjustedCarryover === ""
+        ? null
+        : moneyExact(raw.adjustedCarryover, `buyerVintages[${index}].adjustedCarryover`),
+      section179: moneyExact(raw.section179, `buyerVintages[${index}].section179`),
+      priorDepreciation: raw.priorDepreciation == null || raw.priorDepreciation === ""
+        ? null
+        : moneyExact(raw.priorDepreciation, `buyerVintages[${index}].priorDepreciation`),
+      bonusPercent: normalizeDecimal(String(raw.bonusPercent ?? ""), 10),
+      businessUsePercent: normalizeDecimal(String(raw.businessUsePercent ?? ""), 10),
+    };
+    if (vintage.source === "carryover") assertFrozenBuyerVintageCheckpoint(vintage);
+    return vintage;
+  });
 }
 
 function validateUs(draft: TaxBasisDraft, context?: TaxBasisValidationContext): UsMacrsRegimeBasis {
@@ -1656,7 +1989,19 @@ function validateUs(draft: TaxBasisDraft, context?: TaxBasisValidationContext): 
         const buyerTransferorHistory =
           taxBasisSideApplies(draft.applicable, "buyer") && draft.recognition === "nontaxable";
         if (buyerTransferorHistory) {
-          assertReadyBuyerTransferorSchedule(draft, history.vintages, allocations);
+          const transferOn = context?.effectiveOn;
+          if (!transferOn || !isTaxBasisCalendarDate(transferOn)) {
+            throw new TaxBasisPolicyError(
+              "the selected source effective date is required to freeze buyer vintage transfer dates; pass the source occurredOn — do not invent a transferOn",
+            );
+          }
+          const derived = deriveMacrsDisposedBuyerVintages({
+            open: history.vintages,
+            allocations,
+            transferOn,
+          });
+          assertSuppliedHeaderMatchesFrozenBuyerVintages(draft, derived);
+          applyDerivedBuyerVintages(draft, derived);
         } else {
           for (const name of ["placedInServiceOn", "recoveryPeriodYears", "method", "convention"] as const) {
             if (draft[name] != null && draft[name] !== "") {
@@ -1676,7 +2021,8 @@ function validateUs(draft: TaxBasisDraft, context?: TaxBasisValidationContext): 
   }
   if (
     taxBasisSideApplies(draft.applicable, "buyer") &&
-    draft.recognition === "nontaxable"
+    draft.recognition === "nontaxable" &&
+    !(Array.isArray(draft.buyerVintages) && draft.buyerVintages.length > 0)
   ) {
     assertUsCarryoverCheckpoint(draft);
   }
@@ -2104,8 +2450,27 @@ export function usRegimeWorkpaperOutcome(
   const buyer = sourceOperation === "intercompany_transfer" && taxBasisSideApplies(applicable, "buyer");
   const taxable = row.recognition === "taxable";
   const transferorHistory = seller || (buyer && !taxable);
+  const buyerVintages = buyer && !taxable && row.buyerVintages && row.buyerVintages.length > 0
+    ? parseFrozenMacrsBuyerVintages(row.buyerVintages)
+    : null;
   const carryoverElections = buyer && !taxable
-    ? freezeUsCarryoverElections(row)
+    ? buyerVintages
+      ? {
+          originalUnadjustedBasis: seller
+            ? row.originalUnadjustedBasis ?? null
+            : buyerVintages.reduce((total, vintage) => add(total, vintage.unadjustedBasis), "0"),
+          section179: formatMoney(
+            buyerVintages.reduce((total, vintage) => add(total, vintage.section179), "0"),
+            4,
+          ),
+          bonusPercent: uniqueBuyerVintageValue(buyerVintages, (vintage) => vintage.bonusPercent),
+          businessUsePercent: uniqueBuyerVintageValue(buyerVintages, (vintage) => vintage.businessUsePercent),
+          priorDepreciation: formatMoney(
+            buyerVintages.reduce((total, vintage) => add(total, vintage.priorDepreciation ?? "0"), "0"),
+            4,
+          ),
+        }
+      : freezeUsCarryoverElections(row)
     : {
         originalUnadjustedBasis: seller ? row.originalUnadjustedBasis ?? null : null,
         section179: null,
@@ -2120,13 +2485,21 @@ export function usRegimeWorkpaperOutcome(
     vintageAllocations: seller && row.vintageAllocations
       ? parseMacrsVintageAllocations(row.vintageAllocations)
       : null,
+    buyerVintages,
     placedInServiceOn: transferorHistory ? row.placedInServiceOn ?? null : null,
     recoveryPeriodYears: transferorHistory ? row.recoveryPeriodYears ?? null : null,
     method: transferorHistory ? row.method ?? null : null,
     convention: transferorHistory ? row.convention ?? null : null,
     recognition: row.recognition,
     section168i7Kind: !taxable ? row.section168i7Kind ?? null : null,
-    carryoverBasis: buyer && !taxable ? row.carryoverBasis ?? null : null,
+    carryoverBasis: buyer && !taxable
+      ? buyerVintages
+        ? formatMoney(
+            buyerVintages.reduce((total, vintage) => add(total, vintage.adjustedCarryover ?? "0"), "0"),
+            4,
+          )
+        : row.carryoverBasis ?? null
+      : null,
     excessBasis: buyer && !taxable ? row.excessBasis ?? null : null,
     buyerCost: buyer && taxable ? row.buyerCost ?? null : null,
     shortYearMethod: row.shortYearMethod ?? null,
