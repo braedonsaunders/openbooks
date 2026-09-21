@@ -3008,7 +3008,7 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   ])
   const source = flattenCatalog('en')
   const wanted = [...source.keys()].filter((key) => key.startsWith('admin.'))
-  assert.equal(wanted.length, 3571, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  assert.equal(wanted.length, 3825, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3366,8 +3366,8 @@ test('admin copy ships translated in de and ja (i2)', () => {
     'ja:admin.setup.paymentProviders.webhookUrl',
     'ja:admin.setup.wizard.company.namePlaceholder',
   ])
-  const ADMIN_I2_SOURCE_COUNT = 3571
-  const ADMIN_I2_SOURCE_HASH = '0c6ad8b9e5ab45bcdb035d2e049963202bb3e709f72093f1b7b7f68f40023579'
+  const ADMIN_I2_SOURCE_COUNT = 3825
+  const ADMIN_I2_SOURCE_HASH = '664edc64653c392007ca1daca237f436bd1bbdaaaa723ed351229fe11a0a2c42'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))
@@ -4463,6 +4463,16 @@ const I14_IDENTICAL_BY_FACT = new Set([
     'de:reports.catalog.columns.hrm_positions.status|Status',
     'fr:reports.catalog.columns.hrm_positions.code|Code',
     'pt-BR:reports.catalog.columns.hrm_positions.status|Status',
+    // HR-14: reviewed cognates in the qualification report columns —
+    // Status/Type/Qualification spell identically in de/pt-BR/fr, and
+    // fr keeps the "(id)" qualifier convention untranslated.
+    'de:reports.catalog.columns.hrm_qualifications.status|Status',
+    'pt-BR:reports.catalog.columns.hrm_qualifications.status|Status',
+    'fr:reports.catalog.entities.hrm_qualifications.label|Qualifications',
+    'fr:reports.catalog.columns.hrm_qualifications.type_name|Type',
+    'fr:reports.catalog.columns.hrm_qualifications.qualification_id|Qualification (id)',
+    'fr:reports.catalog.columns.hrm_qualification_alerts.type_name|Type',
+    'fr:reports.catalog.columns.hrm_qualification_alerts.qualification_id|Qualification (id)',
   "de:accounts.types.assetBank|Bank",
   "de:common.actions.pdf|PDF",
   "de:common.auditTrail.systemActor|System",
@@ -5152,8 +5162,8 @@ const I14_IDENTICAL_BY_FACT = new Set([
 
 const I14_FILE_COUNTS: Record<string, number> = {
   "items": 161,
-  "inventory": 104,
-  "reports": 1415,
+  "inventory": 159,
+  "reports": 1486,
   "sync": 172,
   "login": 33,
   "accounts": 82,

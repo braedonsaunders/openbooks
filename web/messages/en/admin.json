@@ -989,7 +989,9 @@
     "hrm_construction_manage": "Manage construction compliance",
     "hrm_compensation_read": "View bands, architecture, and cycles",
     "hrm_compensation_manage": "Run cycles, push rates, and author plans and snapshots",
-    "hrm_compensation_approve": "Decide cycle lines through the approval run"
+    "hrm_compensation_approve": "Decide cycle lines through the approval run",
+    "hrm_certifications_read": "View certifications and dispatch readiness",
+    "hrm_certifications_manage": "Manage certification types, requirements, and renewals"
   },
   "ai": {
     "metaTitle": "AI providers",

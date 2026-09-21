@@ -728,6 +728,14 @@
       "hrm_pay_gap_snapshots": {
         "label": "Medições de diferença",
         "description": "Uma linha por medição e categoria: nível, pessoas, diferenças e marca."
+      },
+      "hrm_qualifications": {
+        "label": "Qualificações",
+        "description": "Uma linha por certificação ou licença possuída — titular, empregador, tipo e categoria, emissão e vencimento, e status guardado com sua verificação."
+      },
+      "hrm_qualification_alerts": {
+        "label": "Alertas de qualificações",
+        "description": "Uma linha por alerta de renovação de certificação — titular, tipo, vencimento, o cronograma de antecedência em que disparou e se foi enviado."
       }
     },
     "columns": {
@@ -1493,6 +1501,32 @@
         "method": "Método",
         "joint_assessment_due": "Avaliação conjunta",
         "id": "Medição (id)"
+      },
+      "hrm_qualifications": {
+        "employee": "Funcionário",
+        "employer": "Empregador",
+        "type_code": "Código do tipo",
+        "type_name": "Tipo",
+        "category": "Categoria",
+        "identifier": "N.º da licença",
+        "issued_on": "Emitido em",
+        "expires_on": "Validade",
+        "status": "Status",
+        "verified_at": "Verificado em",
+        "qualification_id": "Qualificação (id)",
+        "employment_id": "Emprego (id)"
+      },
+      "hrm_qualification_alerts": {
+        "employee": "Funcionário",
+        "type_code": "Código do tipo",
+        "type_name": "Tipo",
+        "expires_on": "Validade",
+        "due_on": "Vencimento",
+        "lead_days": "Dias de antecedência",
+        "sent_at": "Enviado em",
+        "channel": "Canal",
+        "alert_id": "Alerta (id)",
+        "qualification_id": "Qualificação (id)"
       }
     },
     "enumValues": {
@@ -1575,7 +1609,12 @@
       "filled": "Preenchido",
       "open": "Aberto",
       "planned": "Planejado",
-      "position_assignment": "Atribuição de posição"
+      "position_assignment": "Atribuição de posição",
+      "valid": "Válida",
+      "revoked": "Revogada",
+      "pending_verification": "Verificação pendente",
+      "inbox": "Caixa de entrada",
+      "email": "E-mail"
     }
   },
   "operators": {

@@ -728,6 +728,14 @@
       "hrm_pay_gap_snapshots": {
         "label": "差距快照",
         "description": "每个快照×类别一行：级别、人数、差距与标记。"
+      },
+      "hrm_qualifications": {
+        "label": "资格",
+        "description": "每项持有的认证或许可证一行 — 持有人、雇主、类型与类别、签发与到期，以及带验证的存储状态。"
+      },
+      "hrm_qualification_alerts": {
+        "label": "资格提醒",
+        "description": "每个认证续期提醒一行 — 持有人、类型、到期、触发的提前天数计划以及是否已发送。"
       }
     },
     "columns": {
@@ -1493,6 +1501,32 @@
         "method": "方法",
         "joint_assessment_due": "联合评估",
         "id": "快照 (id)"
+      },
+      "hrm_qualifications": {
+        "employee": "员工",
+        "employer": "雇主",
+        "type_code": "类型代码",
+        "type_name": "类型",
+        "category": "类别",
+        "identifier": "许可证号",
+        "issued_on": "签发日期",
+        "expires_on": "到期日",
+        "status": "状态",
+        "verified_at": "验证时间",
+        "qualification_id": "资格（ID）",
+        "employment_id": "雇用（ID）"
+      },
+      "hrm_qualification_alerts": {
+        "employee": "员工",
+        "type_code": "类型代码",
+        "type_name": "类型",
+        "expires_on": "到期日",
+        "due_on": "到期日",
+        "lead_days": "提前天数",
+        "sent_at": "发送时间",
+        "channel": "渠道",
+        "alert_id": "提醒（ID）",
+        "qualification_id": "资格（ID）"
       }
     },
     "enumValues": {
@@ -1575,7 +1609,12 @@
       "filled": "已填补",
       "open": "开放中",
       "planned": "已规划",
-      "position_assignment": "职位任命"
+      "position_assignment": "职位任命",
+      "valid": "有效",
+      "revoked": "已撤销",
+      "pending_verification": "待验证",
+      "inbox": "收件箱",
+      "email": "电子邮件"
     }
   },
   "operators": {

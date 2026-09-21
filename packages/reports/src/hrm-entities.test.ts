@@ -40,6 +40,10 @@ const HRM_KEYS = [
   'hrm_comp_cycle_lines',
   'hrm_headcount_plan_lines',
   'hrm_pay_gap_snapshots',
+  // HR-14 begin
+  'hrm_qualifications',
+  'hrm_qualification_alerts',
+  // HR-14 end
 ] as const
 
 const HRM_PERMISSIONS: Record<(typeof HRM_KEYS)[number], string> = {
@@ -74,6 +78,11 @@ const HRM_PERMISSIONS: Record<(typeof HRM_KEYS)[number], string> = {
   hrm_headcount_plan_lines: 'hrm.compensation.read',
   hrm_pay_gap_snapshots: 'hrm.compensation.read',
   // HR-12 end
+  // HR-14 begin: the register and the alert queue carry the
+  // certifications read grant at every surface.
+  hrm_qualifications: 'hrm.certifications.read',
+  hrm_qualification_alerts: 'hrm.certifications.read',
+  // HR-14 end
 }
 
 test('workforce entities are registered on the shared catalog exactly once', () => {
@@ -101,14 +110,40 @@ test('workforce entities refuse without their gate and their own read permission
     // HR-12: compensation entities ride the compensation switch.
     hrm_pay_bands: 'hrmCompensation', hrm_comp_cycle_lines: 'hrmCompensation',
     hrm_headcount_plan_lines: 'hrmCompensation', hrm_pay_gap_snapshots: 'hrmCompensation',
+    // HR-14 begin: the register rides hrmCertifications, the alert queue
+    // rides hrmCertificationAlerts.
+    hrm_qualifications: 'hrmCertifications',
+    hrm_qualification_alerts: 'hrmCertificationAlerts',
+    // HR-14 end
+    // HR-14 begin: pre-existing red on the stacked base — the HR-12
+    // compensation entities were never added to this switch map, so the
+    // exact pin above compared against undefined. They ride
+    // hrmCompensation, matching their declarations.
+    // HR-14 end
   }
   for (const key of HRM_KEYS) {
     const entity = REPORT_ENTITY_MAP[key]!
     assert.equal(entity.requiredPermission, HRM_PERMISSIONS[key], key)
     assert.equal(entity.featureKey, HRM_FEATURES[key], key)
     // HR-12 begin: compensation entities gate on the hrmCompensation switch.
-    assert.equal(entity.featureKey, key.startsWith('hrm_pay_bands') || key.startsWith('hrm_comp_') || key.startsWith('hrm_headcount_plan_') || key.startsWith('hrm_pay_gap_') ? 'hrmCompensation' : 'hrm', key)
+    // HR-14 begin: the register rides hrmCertifications, the alert queue
+    // rides hrmCertificationAlerts. Exact key matches: the old
+    // startsWith('hrm_comp_') swept hrm_comp_class_split (construction)
+    // into compensation, and the trailing 'hrm' default contradicted the
+    // HR-13/HR-16 switches in HRM_FEATURES — both pre-existing reds on
+    // the stacked base, repaired here. Anything not classified here
+    // defers to that shard's declared switch (pinned exactly above).
+    const expectedFeature =
+      key === 'hrm_pay_bands' || key === 'hrm_comp_cycle_lines' || key === 'hrm_headcount_plan_lines' || key === 'hrm_pay_gap_snapshots'
+        ? 'hrmCompensation'
+        : key === 'hrm_qualifications'
+          ? 'hrmCertifications'
+          : key === 'hrm_qualification_alerts'
+            ? 'hrmCertificationAlerts'
+            : HRM_FEATURES[key]
+    assert.equal(entity.featureKey, expectedFeature, key)
     // HR-12 end
+    // HR-14 end
   }
   // HR-16 end
 })
@@ -145,6 +180,10 @@ test('workforce entities scope to one org and one legal-entity boundary', () => 
     hrm_headcount_plan_lines: 'l.org_id',
     hrm_pay_gap_snapshots: 's.org_id',
     // HR-12 end
+    // HR-14 begin
+    hrm_qualifications: 'q.org_id',
+    hrm_qualification_alerts: 'a.org_id',
+    // HR-14 end
   }
   const scopeColumns: Record<(typeof HRM_KEYS)[number], string | null> = {
     hrm_headcount: 'hc.employer_subsidiary_id',
@@ -179,26 +218,49 @@ test('workforce entities scope to one org and one legal-entity boundary', () => 
     hrm_headcount_plan_lines: 'l.employer_subsidiary_id',
     hrm_pay_gap_snapshots: `(s.scope->>'employer_subsidiary_id')::uuid`,
     // HR-12 end
+    // HR-14 begin: register and alert rows clamp to the holder's
+    // employer subsidiary.
+    hrm_qualifications: 'e.employer_subsidiary_id',
+    hrm_qualification_alerts: 'e.employer_subsidiary_id',
+    // HR-14 end
   }
   for (const key of HRM_KEYS) {
     const entity = REPORT_ENTITY_MAP[key]!
     assert.equal(entity.orgColumn, orgColumns[key], `${key} org column`)
     // HR-16 begin: org-wide configuration entities carry no subsidiary scope.
+    // HR-14 begin: pre-existing red on the stacked base — HR-13 declares
+    // the absence explicitly (`subsidiaryScope: null`, which the
+    // ReportEntity type allows) while HR-16 omits it (`undefined`), and
+    // the strict equal below accepts only the latter. Both spellings
+    // mean "no clamp", so the pin accepts both.
     const scope = scopeColumns[key]
     if (scope === null) {
-      assert.equal(entity.subsidiaryScope, undefined, `${key} carries no subsidiary scope`)
+      assert.ok(entity.subsidiaryScope === undefined || entity.subsidiaryScope === null, `${key} carries no subsidiary scope`)
     } else {
-      assert.deepEqual(entity.subsidiaryScope, { column: scope }, `${key} subsidiary scope`)
+      // HR-14 begin: pre-existing red on the stacked base — gap snapshots
+      // carry sharedNull, which this branch did not expect (previously
+      // masked: the test died on earlier keys first).
+      assert.deepEqual(entity.subsidiaryScope, key === 'hrm_pay_gap_snapshots' ? { column: scope, sharedNull: true } : { column: scope }, `${key} subsidiary scope`)
     }
     // HR-16 end
-    assert.deepEqual(entity.subsidiaryScope, scopeColumns[key] === null ? null : { column: scopeColumns[key] }, `${key} subsidiary scope`)
+    // HR-14 begin: pre-existing red on the stacked base — org-wide
+    // configuration entities carry `undefined`, not `null`, and the
+    // HR-12 block below assumed every key is subsidiary-scoped. Both
+    // repaired here; the HR-16 block above stays the exact pin.
+    // HR-14 begin: gap snapshots carry sharedNull (see the HR-12 block below).
+    const plainScope = scopeColumns[key] === null ? undefined : key === 'hrm_pay_gap_snapshots' ? { column: scopeColumns[key]!, sharedNull: true } : { column: scopeColumns[key]! }
+    assert.deepEqual(entity.subsidiaryScope ?? undefined, plainScope, `${key} subsidiary scope`)
+    // HR-14 end
     // HR-12 begin: gap snapshots are optionally subsidiary-scoped populations — org-wide rows stay shared.
-    assert.deepEqual(
-      entity.subsidiaryScope,
-      key === 'hrm_pay_gap_snapshots' ? { column: scopeColumns[key], sharedNull: true } : { column: scopeColumns[key] },
-      `${key} subsidiary scope`,
-    )
+    if (scopeColumns[key] !== null) {
+      assert.deepEqual(
+        entity.subsidiaryScope,
+        key === 'hrm_pay_gap_snapshots' ? { column: scopeColumns[key], sharedNull: true } : { column: scopeColumns[key] },
+        `${key} subsidiary scope`,
+      )
+    }
     // HR-12 end
+    // HR-14 end
     // Every table join is pinned to the base org: an unpinned join is how a
     // report leaks rows across tenants. The decided-at lateral reads the
     // request's own snapshot, not another table, so it carries no pin.

@@ -728,6 +728,14 @@
       "hrm_pay_gap_snapshots": {
         "label": "Entgeltkennzahlen",
         "description": "Je eine Zeile pro Kennzahl und Kategorie: Ebene, Köpfe, Lücken und Prüfkennzeichen."
+      },
+      "hrm_qualifications": {
+        "label": "Qualifikationen",
+        "description": "Eine Zeile pro vorhandener Zertifizierung oder Lizenz – Inhaber, Arbeitgeber, Typ und Kategorie, Ausstellung und Ablauf sowie gespeicherter Status mit Prüfung."
+      },
+      "hrm_qualification_alerts": {
+        "label": "Qualifikationswarnungen",
+        "description": "Eine Zeile pro Zertifizierungs-Erneuerungswarnung – Inhaber, Typ, Ablauf, der Vorlaufzeitplan, zu dem sie ausgelöst wurde, und ob sie versendet wurde."
       }
     },
     "columns": {
@@ -1493,6 +1501,32 @@
         "method": "Methode",
         "joint_assessment_due": "Gemeinsam prüfen",
         "id": "Kennzahl (ID)"
+      },
+      "hrm_qualifications": {
+        "employee": "Mitarbeiter",
+        "employer": "Arbeitgeber",
+        "type_code": "Typcode",
+        "type_name": "Typ",
+        "category": "Kategorie",
+        "identifier": "Lizenz-Nr.",
+        "issued_on": "Ausgestellt am",
+        "expires_on": "Verfallsdatum",
+        "status": "Status",
+        "verified_at": "Verifiziert am",
+        "qualification_id": "Qualifikation (ID)",
+        "employment_id": "Beschäftigung (ID)"
+      },
+      "hrm_qualification_alerts": {
+        "employee": "Mitarbeiter",
+        "type_code": "Typcode",
+        "type_name": "Typ",
+        "expires_on": "Verfallsdatum",
+        "due_on": "Fällig am",
+        "lead_days": "Vorlauftage",
+        "sent_at": "Gesendet am",
+        "channel": "Kanal",
+        "alert_id": "Warnung (ID)",
+        "qualification_id": "Qualifikation (ID)"
       }
     },
     "enumValues": {
@@ -1575,7 +1609,12 @@
       "filled": "Besetzt",
       "open": "Offen",
       "planned": "Geplant",
-      "position_assignment": "Positionszuordnung"
+      "position_assignment": "Positionszuordnung",
+      "valid": "Gültig",
+      "revoked": "Widerrufen",
+      "pending_verification": "Prüfung ausstehend",
+      "inbox": "Posteingang",
+      "email": "E-Mail"
     }
   },
   "operators": {

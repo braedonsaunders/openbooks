@@ -989,7 +989,9 @@
     "hrm_construction_manage": "Gerenciar conformidade de construção",
     "hrm_compensation_read": "Ver faixas, arquitetura e ciclos",
     "hrm_compensation_manage": "Executar ciclos, transferir taxas e criar planos e medições",
-    "hrm_compensation_approve": "Decidir linhas pelo fluxo de aprovação"
+    "hrm_compensation_approve": "Decidir linhas pelo fluxo de aprovação",
+    "hrm_certifications_read": "Ver certificações e prontidão de despacho",
+    "hrm_certifications_manage": "Gerenciar tipos de certificação, requisitos e renovações"
   },
   "ai": {
     "metaTitle": "Configurações de IA",

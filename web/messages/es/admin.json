@@ -989,7 +989,9 @@
     "hrm_construction_manage": "Gestionar cumplimiento de construcción",
     "hrm_compensation_read": "Ver bandas, arquitectura y ciclos",
     "hrm_compensation_manage": "Ejecutar ciclos, trasladar tarifas y crear planes y mediciones",
-    "hrm_compensation_approve": "Decidir líneas mediante el flujo de aprobación"
+    "hrm_compensation_approve": "Decidir líneas mediante el flujo de aprobación",
+    "hrm_certifications_read": "Ver certificaciones y disponibilidad de asignación",
+    "hrm_certifications_manage": "Gestionar tipos de certificación, requisitos y renovaciones"
   },
   "ai": {
     "metaTitle": "Proveedores de IA",

@@ -989,7 +989,9 @@
     "hrm_construction_manage": "Gérer la conformité construction",
     "hrm_compensation_read": "Voir fourchettes, architecture et cycles",
     "hrm_compensation_manage": "Mener les cycles, transférer les taux, créer plans et mesures",
-    "hrm_compensation_approve": "Décider les lignes via le circuit d'approbation"
+    "hrm_compensation_approve": "Décider les lignes via le circuit d'approbation",
+    "hrm_certifications_read": "Voir les certifications et l’aptitude à la répartition",
+    "hrm_certifications_manage": "Gérer les types de certification, les exigences et les renouvellements"
   },
   "ai": {
     "metaTitle": "Fournisseurs d'IA",
