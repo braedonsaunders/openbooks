@@ -1026,6 +1026,14 @@ export async function runAnomalyScan(query: {
   return withOrgTransaction(query.orgId, () => scanAnomalies(db, query));
 }
 
+export async function computeAnomalyBaselines(query: {
+  readonly orgId: string;
+  readonly actorId: string;
+  readonly windowPeriods?: number;
+}): Promise<{ computed: number; windowPayDates: string[]; cohortKey: string }> {
+  return withOrgTransaction(query.orgId, () => computeBaselines(db, query));
+}
+
 export async function resolveFlag(query: {
   readonly orgId: string;
   readonly actorId: string;

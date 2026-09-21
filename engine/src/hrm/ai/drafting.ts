@@ -48,6 +48,8 @@ export interface DraftResult {
   text: string;
   sources: DraftSource[];
   biasFlags: BiasFlag[];
+  /** Ledger row for the shown draft — PATCH /api/ai/drafts marks the outcome. */
+  decisionId: string;
 }
 
 /**
@@ -388,7 +390,7 @@ export async function draftFromEvidence(
   const biasFlags = flagBiasTerms(text, settings.biasTerms);
   // The service's ONLY write: the decision row. No draft is stored, no
   // form is filled, no record is created — the human submits.
-  await logDecision(exec, {
+  const decisionId = await logDecision(exec, {
     orgId,
     actorId,
     capabilityKey: "hrmDrafting",
@@ -401,7 +403,7 @@ export async function draftFromEvidence(
     outcome: "shown",
     model: "drafting-service",
   });
-  return { kind, subjectId, text, sources, biasFlags };
+  return { kind, subjectId, text, sources, biasFlags, decisionId };
 }
 
 /** Public boundary: draft from evidence. One transaction. */

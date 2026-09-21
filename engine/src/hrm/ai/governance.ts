@@ -194,10 +194,12 @@ export async function updateCapability(
   if (input.autonomy !== undefined) assertAutonomyAtOrBelowMax(input.key, input.autonomy);
   const reviewedAt = input.markReviewed ? sql`now()` : sql`last_reviewed_at`;
   const reviewedBy = input.markReviewed ? sql`${actorId}::uuid` : sql`reviewed_by`;
+  // Explicit null clears the reviewer; undefined leaves it alone.
+  const hasReviewer = input.reviewerRole !== undefined;
   const rows = (await exec.execute<CapabilityRow>(sql`
     update ai_capabilities
        set autonomy = coalesce(${input.autonomy ?? null}, autonomy),
-           reviewer_role = coalesce(${input.reviewerRole ?? null}, reviewer_role),
+           reviewer_role = case when ${hasReviewer} then ${input.reviewerRole ?? null} else reviewer_role end,
            enabled = coalesce(${input.enabled ?? null}, enabled),
            last_reviewed_at = ${reviewedAt},
            reviewed_by = ${reviewedBy},
@@ -233,6 +235,51 @@ export async function updateCapability(
   return row;
 }
 
+export type DecisionRow = {
+  id: string;
+  capabilityKey: string;
+  actorUserId: string;
+  subjectKind: string;
+  subjectId: string | null;
+  outputSummary: string;
+  sources: unknown;
+  outcome: string;
+  humanReviewer: string | null;
+  reviewedAt: string | null;
+  model: string;
+  recordedAt: string;
+}
+
+/**
+ * List decision rows for the ledger. Digests are never selected — they
+ * are tamper-evidence for auditors, not UI content.
+ */
+export async function listDecisions(
+  exec: SqlExecutor,
+  input: {
+    readonly orgId: string;
+    readonly capabilityKey?: string;
+    readonly outcome?: string;
+    readonly limit?: number;
+  },
+): Promise<DecisionRow[]> {
+  const limit = Math.min(input.limit ?? 50, 200);
+  const rows = (await exec.execute<DecisionRow>(sql`
+    select id::text as id, capability_key as "capabilityKey",
+           actor_user_id::text as "actorUserId", subject_kind as "subjectKind",
+           subject_id::text as "subjectId", output_summary as "outputSummary",
+           sources, outcome, human_reviewer::text as "humanReviewer",
+           reviewed_at::text as "reviewedAt", model,
+           recorded_at::text as "recordedAt"
+      from ai_decisions
+     where org_id = ${input.orgId}::uuid
+       and (${input.capabilityKey ?? null} is null or capability_key = ${input.capabilityKey ?? null})
+       and (${input.outcome ?? null} is null or outcome = ${input.outcome ?? null})
+     order by recorded_at desc, id desc
+     limit ${limit}`)).rows;
+  return rows;
+}
+
 /** Capabilities whose last review is older than the org's declared months. */
 export async function overdueReviews(
   exec: SqlExecutor,
@@ -251,6 +298,81 @@ export async function overdueReviews(
             or last_reviewed_at < now() - (${olderThanMonths}::int * interval '1 month'))
      order by key`)).rows;
   return rows;
+}
+
+/**
+ * Mark what the human did with a shown output (accepted, edited,
+ * rejected). The log is append-only — the refuse-update trigger rejects
+ * UPDATE — so an outcome is a NEW row carrying the original digests,
+ * never an edit. Zero matched originals fail.
+ */
+export async function markDecision(
+  exec: SqlExecutor,
+  input: {
+    readonly orgId: string;
+    readonly actorId: string;
+    readonly decisionId: string;
+    readonly outcome: DecisionOutcome;
+    readonly note?: string;
+  },
+): Promise<string> {
+  const { orgId, actorId } = requireIds(input.orgId, input.actorId);
+  if (!["accepted", "edited", "rejected"].includes(input.outcome)) {
+    throw new AiRailsError(
+      "ai_invalid_input",
+      "outcome must be accepted, edited or rejected — shown and expired are written by the service, not the human",
+    );
+  }
+  const original = (await exec.execute<{
+    capabilityKey: string;
+    subjectKind: string;
+    subjectId: string | null;
+    inputDigest: string;
+    outputDigest: string;
+    outputSummary: string;
+    sources: unknown;
+    model: string;
+  }>(sql`
+    select capability_key as "capabilityKey", subject_kind as "subjectKind",
+           subject_id::text as "subjectId", input_digest as "inputDigest",
+           output_digest as "outputDigest", output_summary as "outputSummary",
+           sources, model
+      from ai_decisions
+     where org_id = ${orgId}::uuid and id = ${input.decisionId}::uuid`)).rows[0];
+  if (!original) {
+    throw new AiRailsError(
+      "ai_decision_missing",
+      `decision ${input.decisionId} matched no row — it is missing or outside this organization; reload and retry`,
+    );
+  }
+  const sources = Array.isArray(original.sources)
+    ? (original.sources as { kind: string; id: string }[])
+    : [];
+  return logDecision(exec, {
+    orgId,
+    actorId,
+    capabilityKey: original.capabilityKey,
+    subjectKind: original.subjectKind,
+    subjectId: original.subjectId,
+    input: `markDecision ${input.decisionId} -> ${input.outcome}${input.note ? `: ${input.note}` : ""}`,
+    output: original.outputDigest,
+    outputSummary: `${original.outputSummary} — ${input.outcome}`,
+    sources,
+    outcome: input.outcome,
+    humanReviewer: actorId,
+    model: original.model,
+  });
+}
+
+/** Public boundary: record a human outcome. One transaction. */
+export async function markDecisionOutcome(query: {
+  readonly orgId: string;
+  readonly actorId: string;
+  readonly decisionId: string;
+  readonly outcome: DecisionOutcome;
+  readonly note?: string;
+}): Promise<string> {
+  return withOrgTransaction(query.orgId, () => markDecision(db, query));
 }
 
 /** Public boundary: sync the registry mirror. One transaction. */
