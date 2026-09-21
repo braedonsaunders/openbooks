@@ -65,6 +65,12 @@ async function frPayrollOrg(): Promise<Fixture> {
         countries: ["FR"],
       },
     })}::jsonb where id = ${org.orgId}`);
+  // The scratch org's legal entity is CA by default; employees on the FR pack
+  // cannot be paid CA statutory withholdings, and the run correctly refuses.
+  // Put the entity in France, as the DE fixture does for Germany.
+  await db.execute(sql`
+    update subsidiaries set base_currency = 'EUR', country = 'FR'
+     where org_id = ${org.orgId} and id = ${org.subsidiaryId}`);
   await seedPayrollComponents(org.orgId, actorId, "FR");
   await setPackSlotAccount(org.orgId, actorId, "FR", "pas", urssafPayable);
   await setPackSlotAccount(org.orgId, actorId, "FR", "salariales", urssafPayable);
@@ -157,13 +163,19 @@ async function independentTieout(fx: Fixture) {
   }>(sql`
     select s.employee_party_id, to_char(s.pay_date, 'YYYY-MM') as month,
            sum(s.gross)::text as gross, sum(s.net_pay)::text as net,
-           (select coalesce(sum(l.amount), 0) from pay_stub_lines l
-             join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
-            where l.org_id = ${fx.orgId} and l.stub_id = s.id and l.kind = 'deduction'
-              and pc.system_key = 'pas')::text as pas
+           sum(pas.amount)::text as pas
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
        and r.run_status = 'committed'
+      -- Per-stub PAS, summed by the outer aggregate. A correlated subquery
+      -- cannot read s.id or s.pay_date here: both are ungrouped once the
+      -- select groups by employee and month.
+      left join lateral (
+        select coalesce(sum(l.amount), 0) as amount from pay_stub_lines l
+          join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+         where l.org_id = ${fx.orgId} and l.stub_id = s.id
+           and l.kind = 'deduction' and pc.system_key = 'pas'
+      ) pas on true
      where s.org_id = ${fx.orgId} and s.tax_year = 2026 and s.country = 'FR'
      group by s.employee_party_id, to_char(s.pay_date, 'YYYY-MM')`)).rows;
 }
