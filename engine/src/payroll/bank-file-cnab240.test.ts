@@ -5,9 +5,9 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { sealJson } from "../platform/secrets.ts";
 import { createScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
-import { buildCnab240BbFile } from "../payments/rail-formatters.ts";
 import { PaymentError } from "../payments/payment-errors.ts";
 import {
+  buildCnab240BbFile,
   inscricaoTipoFor,
   isValidBancoCode,
   isValidContaDv,
@@ -15,7 +15,7 @@ import {
   normalizeContaNumero,
   normalizeCpfCnpj,
   validateCnab240BbSettings,
-} from "../payments/rail-settings.ts";
+} from "../payments/rail-cnab240-bb.ts";
 import {
   PAYROLL_BANK_FILE_FORMATS,
   payrollBankProfiles,
@@ -34,7 +34,7 @@ import { PayrollError } from "./error.ts";
  * The name is `cnab240`, the rail `cnab240_bb_credit`, the currency BRL; BR
  * bank details are agência + conta (with check digits) plus a CPF/CNPJ
  * inscription — never an IBAN. The writer is the shared AP builder
- * (`buildCnab240BbFile`, engine/src/payments/rail-formatters.ts), whose
+ * (`buildCnab240BbFile`, engine/src/payments/rail-cnab240-bb.ts), whose
  * evidence log names every source with publisher, edition and date: two
  * bank-published manuals (Bradesco Multipag 2017, Banco Inter Pagamentos
  * 2025), the BB-manual-quoting Ruby transcription, a production folha
