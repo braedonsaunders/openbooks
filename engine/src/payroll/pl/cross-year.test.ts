@@ -9,9 +9,9 @@
  * - 8 000 zł June: genuinely frozen — the scale, rates and funds are
  *   identical, so the same 498 zł advance in all three years is asserted per
  *   year, pinning the freeze against future edits.
- * - Senior FGŚP: 0,00 in 2024/2025 (art. 9b ust. 2, modelled) against 8,00
- *   in 2026 (landed behaviour, reported as a defect — pinned here only to
- *   prove the dispatch is distinct, not to endorse the figure).
+ * - Senior FGŚP: 0,00 in all three transcribed years (art. 9b ust. 2,
+ *   modelled per year — 2026 under Dz.U. 2026 poz. 186). The dispatch is
+ *   still proved distinct by the December advances above.
  * - The adapter cases price December through `computePlStatutory` per
  *   taxYear: a dispatch that fell through to 2026 would print 5 695 for a
  *   2025 run instead of 5 832.
@@ -134,16 +134,16 @@ test("June 8 000 zł is frozen: the same figures in all three years", () => {
   }
 });
 
-test("senior FGŚP: zero in 2024/2025, 8,00 in 2026 (landed, reported)", () => {
-  // Born 1960: past 60-by-year in every transcribed year. 2024/2025 model
-  // the claims-protection art. 9b ust. 2 exemption; 2026 prices FGŚP
-  // unconditionally — its landed guard pins 8,00 and the contradiction is
-  // reported, not changed here. Asserting both proves the dispatch reaches
-  // each year's own tables.
+test("senior FGŚP: zero in every transcribed year", () => {
+  // Born 1960: past 60-by-year in every transcribed year. Each year models
+  // the claims-protection art. 9b ust. 2 exemption under its own
+  // consolidated text (2026: Dz.U. 2026 poz. 186 — was 8,00 under the
+  // landed unconditional pricing, now 0). Asserting all three proves the
+  // dispatch reaches each year's own tables.
   for (const [year, expected] of [
     [2024, "0.0000"],
     [2025, "0.0000"],
-    [2026, "8.0000"],
+    [2026, "0.0000"],
   ] as const) {
     const input = {
       brut: "8000.00",
