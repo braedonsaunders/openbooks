@@ -37,11 +37,12 @@ const { EmploymentReadError } = await import("@openbooks/engine/src/hrm/employme
 const { HrmAuthorizationError } = await import("@openbooks/engine/src/hrm/authorization.ts");
 const { AmbiguousRevisionError, NoRevisionError } = await import("@openbooks/engine/src/hrm/temporal.ts");
 const { HrmPerformanceError } = await import("@openbooks/engine/src/hrm/performance/errors.ts");
+const { HrmQualificationError } = await import("@openbooks/engine/src/hrm/qualifications/errors.ts");
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const tools = read("./tools-hrm.ts");
 
-const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave", "hrm_recruiting", "hrm_performance_cycles", "hrm_turnover", "hrm_benefits", "hrm_me", "automations_status", "hrm_compliance_findings", "hrm_certified_payroll", "hrm_compensation", "hrm_pay_equity"];
+const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave", "hrm_recruiting", "hrm_performance_cycles", "hrm_turnover", "hrm_benefits", "hrm_me", "automations_status", "hrm_compliance_findings", "hrm_certified_payroll", "hrm_compensation", "hrm_pay_equity", "hrm_qualifications", "hrm_dispatch_check"];
 
 const TOOL_PERMS: Record<string, string> = {
   // Elections and windows read through the benefits read service under
@@ -81,6 +82,12 @@ const TOOL_PERMS: Record<string, string> = {
   hrm_compensation: "hrm.compensation.read",
   hrm_pay_equity: "hrm.compensation.read",
   // HR-12 end
+  // HR-14 begin: the register and the readiness check carry the
+  // certifications read grant at every surface; license numbers and
+  // notes never leave through the register tool.
+  hrm_qualifications: "hrm.certifications.read",
+  hrm_dispatch_check: "hrm.certifications.read",
+  // HR-14 end
 };
 
 const UUID = "11111111-1111-4111-8111-111111111111";
@@ -114,6 +121,11 @@ const TOOL_FEATURES: Record<string, string> = {
   hrm_certified_payroll: "hrmConstructionCompliance",
   // HR-16: the automations recipe tool rides the automations switch.
   automations_status: "automations",
+  // HR-14 begin: the register rides hrmCertifications, the readiness
+  // check rides hrmDispatchGating.
+  hrm_qualifications: "hrmCertifications",
+  hrm_dispatch_check: "hrmDispatchGating",
+  // HR-14 end
 };
 // HR-13 end
 
@@ -198,6 +210,18 @@ test("minimal valid inputs parse; addressing is runtime-enforced with stable cod
   assert.throws(() => byName.get("hrm_recruiting")!.inputSchema.parse({ segment: "archived" }));
   assert.throws(() => byName.get("hrm_recruiting")!.inputSchema.parse({ requisitionId: "nope" }));
   assert.throws(() => byName.get("hrm_recruiting")!.inputSchema.parse({ limit: 0 }));
+  // HR-14 begin: half-addressed calls parse (addressing is
+  // runtime-enforced with stable codes); genuinely invalid values throw.
+  byName.get("hrm_qualifications")!.inputSchema.parse({});
+  byName.get("hrm_qualifications")!.inputSchema.parse({ employmentId: UUID, status: "expiring" });
+  assert.throws(() => byName.get("hrm_qualifications")!.inputSchema.parse({ employmentId: "nope" }));
+  assert.throws(() => byName.get("hrm_qualifications")!.inputSchema.parse({ status: "lapsed" }));
+  byName.get("hrm_dispatch_check")!.inputSchema.parse({});
+  byName.get("hrm_dispatch_check")!.inputSchema.parse({ employmentId: UUID, subjectKind: "equipment", subjectId: UUID, on: "2026-09-01" });
+  assert.throws(() => byName.get("hrm_dispatch_check")!.inputSchema.parse({ subjectKind: "crew" }));
+  assert.throws(() => byName.get("hrm_dispatch_check")!.inputSchema.parse({ subjectId: "nope" }));
+  assert.throws(() => byName.get("hrm_dispatch_check")!.inputSchema.parse({ on: "tomorrow" }));
+  // HR-14 end
 });
 
 // Every tool reuses the canonical read loaders the HRM tabs read
@@ -229,6 +253,10 @@ test("HRM reads reuse the canonical HRM read services", () => {
     "compaRatioFor(",
     "latestGapSnapshot(",
     // HR-12 end
+    // HR-14 begin
+    "listQualifications(",
+    "checkAssignment(",
+    // HR-14 end
   ]) {
     assert.ok(tools.includes(service), `tools-hrm.ts must reuse ${service}`);
   }
@@ -275,6 +303,17 @@ test("hrmRefusal carries read-service refusals and rethrows the rest", () => {
     ok: false,
     error: "review cycle has no required question",
   });
+  // HR-14 begin: a computed qualification refusal names the remedy and
+  // reaches the caller intact — never a parse error, never silence.
+  // (Message quoted verbatim from recordQualification.)
+  assert.deepEqual(
+    hrmRefusal(new HrmQualificationError('Qualification type "CPSA-1" requires evidence — attach the certificate or license file before recording.')),
+    {
+      ok: false,
+      error: 'Qualification type "CPSA-1" requires evidence — attach the certificate or license file before recording.',
+    },
+  );
+  // HR-14 end
   const missing = new NoRevisionError("2026-06-15", "2026-07-01T00:00:00.000000Z");
   const mapped = hrmRefusal(missing);
   assert.equal(mapped.ok, false);
@@ -310,6 +349,12 @@ test("the registry gate admits only each tool's grant holders while its feature 
   const TOOL_FEATURE_STATE: Record<string, Record<string, boolean>> = {
     hrm_compliance_findings: { hrm: true, payroll: true, projects: true, timeTracking: true, hrmConstructionCompliance: true },
     hrm_certified_payroll: { hrm: true, payroll: true, projects: true, timeTracking: true, hrmConstructionCompliance: true },
+    // HR-14 begin: the register needs the hrm → hrmCertifications path;
+    // the readiness check needs the full dispatch path (certifications
+    // plus the projects/projectScheduling requirements).
+    hrm_qualifications: { hrm: true, hrmCertifications: true },
+    hrm_dispatch_check: { hrm: true, hrmCertifications: true, projects: true, projectScheduling: true, hrmDispatchGating: true },
+    // HR-14 end
   };
   // HR-13 end
   for (const name of TOOL_NAMES) {

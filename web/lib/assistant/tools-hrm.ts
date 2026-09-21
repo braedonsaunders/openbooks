@@ -12,6 +12,7 @@ import {
   timeBalanceAsOf,
 } from "@openbooks/engine/src/hrm/leave-read.ts";
 import { LeaveError } from "@openbooks/engine/src/hrm/leave-errors.ts";
+import { HrmQualificationError } from "@openbooks/engine/src/hrm/qualifications/errors.ts";
 import { SelfServiceError } from "@openbooks/engine/src/hrm/self-service/actor.ts";
 import { getMyProfile } from "@openbooks/engine/src/hrm/self-service/self-read.ts";
 import {
@@ -108,6 +109,11 @@ export function hrmRefusal(error: unknown): ToolResult {
     // HR-13 end
     error instanceof BenefitsError ||
     error instanceof CompensationError ||
+    // HR-14 begin: qualification refusals (feature off by name, evidence
+    // required, unknown type) reach the caller with their message intact.
+    error instanceof HrmQualificationError ||
+    // HR-14 end
+
     error instanceof HrmAuthorizationError ||
     error instanceof TemporalError ||
     error instanceof SelfServiceError
@@ -1439,6 +1445,114 @@ const automationsStatus: AssistantToolDef = {
 // HR-16 end
 
 
+// HR-14 begin: certification register and dispatch-readiness reads
+// (0225). Both reuse the canonical qualification services behind the
+// certifications read grant — never a parallel query. License numbers
+// and free-text notes stay on the page and the report: the register
+// tool answers what is held and when it lapses, which is what dispatch
+// needs, without pulling identifiers through the conversation.
+const hrmQualifications: AssistantToolDef = {
+  name: "hrm_qualifications",
+  description:
+    "Held certifications and licenses: type and category, issuance and expiry, stored status with the live expiring/expired projection, and verification. License numbers stay on the page. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.certifications.read"] },
+  feature: "hrmCertifications",
+  tier: "module",
+  inputSchema: z.object({
+    employmentId: uuidInput.optional().describe("Keep only this employment's qualifications"),
+    typeId: uuidInput.optional().describe("Keep only this qualification type"),
+    status: z
+      .enum(["valid", "revoked", "pending_verification", "expiring", "expired"])
+      .optional()
+      .describe("Keep only this read status (expiring/expired are projected at read)"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    if (!(await isFeatureEnabled(authz.user.orgId, "hrmCertifications"))) return { ok: false, error: HRM_FEATURE_OFF };
+    const a = raw as { employmentId?: string; typeId?: string; status?: string };
+    try {
+      const { listQualifications } = await import("@openbooks/engine/src/hrm/qualifications/qualifications.ts");
+      const held = await listQualifications(db, {
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        employmentId: a.employmentId,
+        typeId: a.typeId,
+        status: a.status as "valid" | "revoked" | "pending_verification" | "expiring" | "expired" | undefined,
+      });
+      return {
+        ok: true,
+        data: {
+          qualifications: held.map((q) => ({
+            id: q.id,
+            employmentId: q.employmentId,
+            typeCode: q.type.code,
+            typeName: q.type.name,
+            category: q.type.category,
+            issuedOn: q.issuedOn,
+            expiresOn: q.expiresOn,
+            status: q.status,
+            verifiedAt: q.verifiedAt,
+          })),
+          href: "/hrm/qualifications",
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+
+const hrmDispatchCheck: AssistantToolDef = {
+  name: "hrm_dispatch_check",
+  description:
+    "Dispatch readiness for one worker on one subject: which required qualifications are met, which block, and which warn, as of a date. Read-only.",
+  category: "search",
+  gate: { mode: "anyOf", perms: ["hrm.certifications.read"] },
+  feature: "hrmDispatchGating",
+  tier: "module",
+  inputSchema: z.object({
+    employmentId: uuidInput.optional().describe("Worker employment to check"),
+    subjectKind: z.enum(["project", "equipment", "position", "classification"]).optional().describe("What the worker would be assigned to"),
+    subjectId: uuidInput.optional().describe("Id of the project, equipment, position, or classification"),
+    on: dateInput.optional().describe("Check as of this date; defaults to today"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    if (!(await isFeatureEnabled(authz.user.orgId, "hrmDispatchGating"))) return { ok: false, error: HRM_FEATURE_OFF };
+    const a = raw as { employmentId?: string; subjectKind?: string; subjectId?: string; on?: string };
+    if (!a.employmentId) return { ok: false, error: "employment_required" };
+    if (!a.subjectKind || !a.subjectId) return { ok: false, error: "subject_required" };
+    try {
+      const { checkAssignment } = await import("@openbooks/engine/src/hrm/qualifications/gating.ts");
+      const verdict = await checkAssignment(db, {
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        employmentId: a.employmentId,
+        subjectKind: a.subjectKind as "project" | "equipment" | "position" | "classification",
+        subjectId: a.subjectId,
+        on: a.on,
+      });
+      const findings = verdict.ok ? verdict.warnings : [...verdict.blocking, ...verdict.warnings];
+      return {
+        ok: true,
+        data: {
+          allowed: verdict.ok,
+          findings: findings.map((f) => ({
+            typeCode: f.typeCode,
+            typeName: f.typeName,
+            severity: f.severity,
+            reason: f.reason,
+            detail: f.detail,
+          })),
+          href: "/hrm/qualifications",
+        },
+      };
+    } catch (error) {
+      return hrmRefusal(error);
+    }
+  },
+};
+// HR-14 end
+
 // HR-15: the core own-scope inbox tool rides after every slice tool.
-export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting, hrmPerformanceCycles, hrmTurnover, hrmBenefits, hrmMe, automationsStatus, hrmComplianceFindings, hrmCertifiedPayroll, hrmCompensation, hrmPayEquity, inboxItems];
+export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting, hrmPerformanceCycles, hrmTurnover, hrmBenefits, hrmMe, automationsStatus, hrmComplianceFindings, hrmCertifiedPayroll, hrmCompensation, hrmPayEquity, hrmQualifications, hrmDispatchCheck, inboxItems];
 // HR-12 end
