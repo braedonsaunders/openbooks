@@ -176,7 +176,7 @@ export function clockSpec(data: ClockPageData): PageSpec {
                 align: 'right',
                 className: 'tabular-nums',
               }),
-              column(f('geoLabel'), badge(item('geo'), { variant: 'neutral' })),
+              column(f('geoLabel'), badge(item('geo'), { variant: 'secondary' })),
             ],
             empty: { title: f('pairsTitle'), description: f('emptyPairs') },
           }),

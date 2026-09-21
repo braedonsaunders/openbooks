@@ -1,6 +1,6 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { guardFeaturePermission } from '../../../lib/feature-gates'
+import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { loadChain, saveChain, type ChainSubject } from '@openbooks/engine/src/hrm/field-time/stages.ts'
 import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'
 

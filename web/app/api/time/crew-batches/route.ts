@@ -1,8 +1,8 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { guardFeaturePermission } from '../../../lib/feature-gates'
-import { can } from '../../../lib/authz'
+import { guardFeaturePermission } from '../../../../lib/feature-gates'
+import { can } from '../../../../lib/authz'
 import { createBatch } from '@openbooks/engine/src/hrm/field-time/crew.ts'
 import { listCrewBatches } from '@openbooks/engine/src/hrm/field-time/reads.ts'
 import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'

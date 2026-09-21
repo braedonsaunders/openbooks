@@ -5,12 +5,10 @@ import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
-  field as item,
   page,
   pageHeader,
   panel,
   ref,
-  text,
   widget,
   widgetBlock,
   type PageSpec,
@@ -61,7 +59,7 @@ export async function loadFieldSetupPage(): Promise<FieldSetupData> {
   const orgId = authz.user.orgId
   const settings = (await db.execute<{ settings: unknown }>(sql`
     select settings->'fieldTime' as settings from orgs where id = ${orgId}`)).rows[0]?.settings as Record<string, unknown> | null
-  const kiosks = (await db.execute<FieldSetupData['kiosks']>(sql`
+  const kiosks = (await db.execute<FieldSetupData['kiosks'][number]>(sql`
     select id::text as id, name, location_id::text as "locationId",
            project_id::text as "projectId", pin_required as "pinRequired",
            photo_required as "photoRequired", is_active as "isActive",
@@ -118,7 +116,6 @@ export function fieldSetupSpec(data: FieldSetupData): PageSpec {
             chains: data.chains,
             kioskLinkBase: data.kioskLinkBase,
           }),
-          text(item('description')),
         ],
       }),
     ],

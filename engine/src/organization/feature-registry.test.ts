@@ -114,7 +114,6 @@ test("hrmActionReasons defaults on, hrmEventVerbs defaults off, both under hrm",
   assert.equal(verbs.parentKey, "hrm");
   assert.equal(featureEnabled({ hrm: false, hrmActionReasons: true }, "hrmActionReasons"), false);
 });
-
 // HR-14 begin: certifications ride hrm; dispatch gating needs projects +
 // projectScheduling, equipment qualifications need equipment, alerts ride
 // the parent alone. Off hides the surface, never the data.
@@ -198,3 +197,31 @@ test("hrm documents, surveys, and org chart gate under hrm", () => {
   assert.equal(featureEnabled({ hrm: false, hrmOrgChart: true }, "hrmOrgChart"), false);
 });
 // HR-19 end
+
+// HR-20 begin: field time capture rides timeTracking (office orgs never
+// see a clock) and needs projects; sub-features hide optional
+// complexity. Off stops rendering and writing, never data.
+test("fieldTime rides timeTracking with six sub-features", () => {
+  const def = FEATURE_BY_KEY.get("fieldTime");
+  assert.ok(def, "fieldTime must be registered");
+  assert.equal(def.defaultEnabled, false);
+  assert.equal(def.parentKey, "timeTracking");
+  assert.deepEqual(def.requiresAll, ["projects"]);
+  for (const key of [
+    "fieldTimeGeofence",
+    "fieldTimePhoto",
+    "fieldTimeKiosk",
+    "fieldTimeCrewEntry",
+    "fieldTimeEquipment",
+    "fieldTimeMultiStageApproval",
+  ]) {
+    assert.equal(sub.parentKey, "fieldTime");
+    assert.equal(sub.defaultEnabled, false);
+    // A stale stored override can never resurrect a child while the parent is off.
+    assert.equal(featureEnabled({ fieldTime: false, [key]: true }, key), false);
+  assert.deepEqual(FEATURE_BY_KEY.get("fieldTimeEquipment")!.requiresAll, ["equipment"]);
+  assert.equal(
+    featureEnabled({ projects: true, timeTracking: true, fieldTime: true, fieldTimeKiosk: true }, "fieldTimeKiosk"),
+    true,
+  );
+// HR-20 end

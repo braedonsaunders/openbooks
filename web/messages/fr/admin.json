@@ -2859,7 +2859,14 @@
       "signEmployee": "Signature du salarié",
       "signManager": "Signature du manager",
       "signHr": "Signature RH",
-      "acknowledgmentOnly": "Accusé seul"
+      "acknowledgmentOnly": "Accusé seul",
+      "radiusM": "Rayon (m)",
+      "center": "Centre",
+      "polygon": "Polygone",
+      "pinRequired": "PIN exigé",
+      "photoRequired": "Photo exigée",
+      "subjectKind": "Sujet",
+      "stages": "Étapes"
     },
     "fieldHelp": {
       "gapless": "Sans rupture signifie que chaque numéro de la séquence doit être justifié, sans aucun numéro sauté. Activez cette option uniquement si vos obligations légales ou d’audit imposent une numérotation ininterrompue.",

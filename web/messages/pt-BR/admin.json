@@ -2904,7 +2904,14 @@
       "signEmployee": "A pessoa empregada assina",
       "signManager": "A gerência assina",
       "signHr": "O RH assina",
-      "acknowledgmentOnly": "Somente ciência"
+      "acknowledgmentOnly": "Somente ciência",
+      "radiusM": "Raio (m)",
+      "center": "Centro",
+      "polygon": "Polígono",
+      "pinRequired": "PIN obrigatório",
+      "photoRequired": "Foto obrigatória",
+      "subjectKind": "Assunto",
+      "stages": "Etapas"
     },
     "fieldHelp": {
       "gapless": "Sem lacunas significa que todos os números da sequência devem ser contabilizados, sem números pulados. Ative somente quando exigências legais ou de auditoria determinarem uma numeração ininterrupta.",

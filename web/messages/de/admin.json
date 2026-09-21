@@ -2972,7 +2972,14 @@
       "signEmployee": "Mitarbeiter unterschreibt",
       "signManager": "Führungskraft unterschreibt",
       "signHr": "HR unterschreibt",
-      "acknowledgmentOnly": "Nur Bestätigung"
+      "acknowledgmentOnly": "Nur Bestätigung",
+      "radiusM": "Radius (m)",
+      "center": "Mitte",
+      "polygon": "Polygon",
+      "pinRequired": "PIN erforderlich",
+      "photoRequired": "Foto erforderlich",
+      "subjectKind": "Vorgang",
+      "stages": "Stufen"
     },
     "fieldHelp": {
       "gapless": "Lückenlos bedeutet, dass jede Nummer in der Folge belegt sein muss und keine Nummer übersprungen wird. Aktivieren Sie dies nur, wenn gesetzliche oder prüfungsbezogene Vorgaben eine ununterbrochene Nummerierung verlangen.",

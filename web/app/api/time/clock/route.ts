@@ -1,8 +1,8 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { guardFeaturePermission } from '../../../lib/feature-gates'
-import { isUuid } from '../../../lib/list-params'
+import { guardFeaturePermission } from '../../../../lib/feature-gates'
+import { isUuid } from '../../../../lib/list-params'
 import { myClockDay, resolveOwnParty } from '@openbooks/engine/src/hrm/field-time/reads.ts'
 import { recordClockEvent, replayClockEvents, type RecordClockInput } from '@openbooks/engine/src/hrm/field-time/clock.ts'
 import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'
