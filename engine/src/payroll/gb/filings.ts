@@ -23,10 +23,32 @@
  */
 
 import { add } from "../../money/money.ts";
-import { isFilingRowUuid, type PayrollFilingData, type PayrollFilingRowScope, type PayrollFilingSlipData, type PayrollPackFilings, type PayrollYearEndFiling } from "../filing-registry.ts";
+import type { PayrollFilingData, PayrollFilingRowScope, PayrollFilingSlipData, PayrollPackFilings, PayrollYearEndFiling } from "../filing-registry.ts";
 import { PayrollError } from "../error.ts";
 import { filingAccountRef, filingAccountsById } from "../filing.ts";
-import { gbP45Leavers, gbP60Slips, gbTaxYearBounds, type GbYearStatement } from "../yearend.ts";
+import type { GbYearStatement } from "../yearend.ts";
+
+/**
+ * yearend.ts reaches the pack REGISTRY (packs.ts), and the registry builds its
+ * map from GB_PACK, which is this module's own package. Importing it at module
+ * scope closes the cycle gb/pack -> gb/filings -> yearend -> packs -> gb/pack
+ * and evaluates PAYROLL_COUNTRY_PACKS while GB_PACK is still in its temporal
+ * dead zone. The codebase's rule for this (F-reg-003) is that a pack's
+ * dependencies do not import the registry; every caller below is already
+ * async, so load it on first use instead.
+ */
+const gbYearEnd = () => import("../yearend.ts");
+
+/**
+ * The row-id UUID shape, owned locally (the de/filings.ts and canada/filings.ts
+ * precedent) rather than imported from filing-registry.ts: that module imports
+ * packs.ts at evaluation time, so a pack-tree module reaching it puts its own
+ * pack object mid-flight when packs.ts evaluates PAYROLL_COUNTRY_PACKS --
+ * `Cannot access 'GB_PACK' before initialization` for any entry starting at
+ * gb/pack.ts.
+ */
+const ROW_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isFilingRowUuid = (value: string): boolean => ROW_UUID_RE.test(value);
 
 /**
  * The `employee:account` row grammar, as the inverse of the P60/P45
@@ -52,6 +74,7 @@ export function gbTaxYearLabel(taxYear: number): string {
 }
 
 async function p60Population(orgId: string, taxYear: number): Promise<PayrollFilingData> {
+  const { gbP60Slips } = await gbYearEnd();
   const slips = await gbP60Slips(orgId, taxYear);
   // The employer-side tie, on the face of the population: total pay, total
   // PAYE, and both NIC shares — the secondary (employer) share is the
@@ -96,6 +119,7 @@ async function p60Population(orgId: string, taxYear: number): Promise<PayrollFil
 }
 
 async function p45Population(orgId: string, taxYear: number): Promise<PayrollFilingData> {
+  const { gbP45Leavers } = await gbYearEnd();
   const leavers = await gbP45Leavers(orgId, taxYear);
   return {
     rowKey: "rowId",
@@ -136,6 +160,7 @@ async function gbPayeReference(orgId: string, filingAccountId: string | null): P
  * section heading, quoted.
  */
 async function p60Slip(orgId: string, taxYear: number, rowId: string): Promise<PayrollFilingSlipData> {
+  const { gbP60Slips } = await gbYearEnd();
   const slips = await gbP60Slips(orgId, taxYear);
   const slip = slips.find(
     (candidate) => `${candidate.employeePartyId}:${candidate.filingAccountId ?? ""}` === rowId,
@@ -149,6 +174,7 @@ async function p60Slip(orgId: string, taxYear: number, rowId: string): Promise<P
       + "printed without one. File the gb_tax_code_notice certificate, then re-open the P60.",
     );
   }
+  const { gbTaxYearBounds } = await gbYearEnd();
   const { end } = gbTaxYearBounds(taxYear);
   return {
     formCode: "GB_P60",
@@ -239,6 +265,7 @@ async function p60Slip(orgId: string, taxYear: number, rowId: string): Promise<P
  * continue — none can, because the pack prices none (jurisdictions.ts).
  */
 async function p45Slip(orgId: string, taxYear: number, rowId: string): Promise<PayrollFilingSlipData> {
+  const { gbP45Leavers } = await gbYearEnd();
   const leavers = await gbP45Leavers(orgId, taxYear);
   const leaver = leavers.find(
     (candidate) => `${candidate.employeePartyId}:${candidate.filingAccountId ?? ""}` === rowId,

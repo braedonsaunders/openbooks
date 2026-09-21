@@ -277,7 +277,7 @@ test(
       );
       assert.equal(totalOf("Employees"), "2");
     } finally {
-      await dropScratchOrgReporting(org.orgId).catch(() => undefined);
+      await dropScratchOrgReporting(org.orgId);
     }
   },
 );
@@ -295,7 +295,7 @@ test(
         /no committed IE pay stubs for tax year 2026/,
       );
     } finally {
-      await dropScratchOrgReporting(org.orgId).catch(() => undefined);
+      await dropScratchOrgReporting(org.orgId);
     }
   },
 );
@@ -312,7 +312,7 @@ test(
       assert.match(ie[0]!.populationRefusal ?? "", /2025 statutory tables are not loaded for IE/);
       assert.deepEqual(ie[0]!.data.rows, []);
     } finally {
-      await dropScratchOrgReporting(org.orgId).catch(() => undefined);
+      await dropScratchOrgReporting(org.orgId);
     }
   },
 );

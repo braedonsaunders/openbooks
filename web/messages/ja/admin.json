@@ -3051,7 +3051,10 @@
       "reviewMonths": "レビュー周期（月）",
       "yearStart": "年度開始日",
       "yearEnd": "年度終了日",
-      "filingYear": "申告年度の表示名"
+      "filingYear": "申告年度の表示名",
+      "ceasedOn": "終了日",
+      "resumedOn": "再開日",
+      "evidence": "証跡"
     },
     "fieldHelp": {
       "gapless": "欠番なしとは、連番のすべての番号が記録され、番号が飛ばないことを意味します。法令または監査要件で途切れない採番が必要な場合にのみ有効にしてください。",

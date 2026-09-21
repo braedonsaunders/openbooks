@@ -53,17 +53,27 @@ export function TaxPoolsView({
   const fmt = (v: string) => formatTaxPoolAmount(v, locale)
   const selectedWindow = windows.find((window) => window.id === taxYearWindowId && window.regime === regime && window.subsidiaryId === subsidiaryId)
 
-  useEffect(() => {
-    const controller = new AbortController()
+  // Changing regime or subsidiary invalidates everything below it. React's
+  // documented way to do that is to adjust state DURING RENDER off the
+  // previous selection, not to fire setState synchronously from an effect --
+  // the effect version renders the stale windows once before clearing them.
+  const selection = `${regime}|${subsidiaryId}`
+  const [renderedSelection, setRenderedSelection] = useState(selection)
+  if (selection !== renderedSelection) {
+    setRenderedSelection(selection)
     setWindows([])
     setTaxYearWindowId('')
     setResult(null)
     setWindowError(null)
     setRunError(null)
-    if (!regime || !subsidiaryId) { setLoadingWindows(false); return }
-    setLoadingWindows(true)
+  }
+
+  useEffect(() => {
+    const controller = new AbortController()
     const params = new URLSearchParams({ view: 'windows', regime, subsidiaryId })
     void (async () => {
+      if (!regime || !subsidiaryId) { setLoadingWindows(false); return }
+      setLoadingWindows(true)
       try {
         const response = await fetch(`/api/assets/tax-pools?${params}`, { signal: controller.signal })
         if (!response.ok) {

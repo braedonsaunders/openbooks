@@ -1,3 +1,4 @@
+-- OpenBooks forward migration 0234_tax_year_windows.
 -- Declared tax-year windows per legal entity and regime. Book fiscal
 -- calendars, provision runs, and pool-period results are not this registry.
 -- Dates are the identity; filing_year may repeat so two short years ending

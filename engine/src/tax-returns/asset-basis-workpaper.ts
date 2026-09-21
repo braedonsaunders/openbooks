@@ -1338,8 +1338,8 @@ export async function applyTaxAssetBasis(
         permission: "assets.manage",
         feature: "fixedAssets",
       });
-      if (change.status === "applied") return change.result as TaxAssetBasisApplyResult;
-      const payload = change.payload as TaxAssetBasisInput & {
+      if (change.status === "applied") return change.result as unknown as TaxAssetBasisApplyResult;
+      const payload = change.payload as unknown as TaxAssetBasisInput & {
         sourceOperation: TaxBasisSourceOperation;
         effectiveOn: string;
         sellerAssetId: string;
@@ -1433,7 +1433,7 @@ export async function applyTaxAssetBasis(
         regimes: frozen.map((row) => row.facts.regime),
         computed: Object.fromEntries(frozen.map((row) => [row.facts.regime, row.computed])),
       };
-      await completeFinancialChange(db, orgId, changeId, actorId, result);
+      await completeFinancialChange(db, orgId, changeId, actorId, result as unknown as Record<string, unknown>);
       return result;
     }),
   );
@@ -1565,7 +1565,7 @@ export async function applyTaxAssetBasisReversal(
         permission: "assets.manage",
         feature: "fixedAssets",
       });
-      if (change.status === "applied") return change.result as TaxAssetBasisApplyResult;
+      if (change.status === "applied") return change.result as unknown as TaxAssetBasisApplyResult;
       await lockAssetTaxLifecycle(db, orgId, required);
       const sourceChangeId = String(change.payload.sourceChangeId ?? "");
       const source = await loadFinancialChange(db, orgId, sourceChangeId);
@@ -1620,7 +1620,7 @@ export async function applyTaxAssetBasisReversal(
         regimes: papers.map((row) => row.regime),
         computed: { reversedWorkpaperChangeId: sourceChangeId },
       };
-      await completeFinancialChange(db, orgId, changeId, actorId, result);
+      await completeFinancialChange(db, orgId, changeId, actorId, result as unknown as Record<string, unknown>);
       return result;
     }),
   );

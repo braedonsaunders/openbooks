@@ -1,3 +1,4 @@
+-- OpenBooks forward migration 0233_tax_asset_basis_workpapers.
 -- Independently approved statutory tax-basis workpapers. Book buyerAmount,
 -- group_component and acquisition_cost are not a tax basis. Historical rows
 -- freeze computed outcomes so a later helper change cannot reprice a filed year.

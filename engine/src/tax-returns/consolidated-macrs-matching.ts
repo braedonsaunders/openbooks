@@ -785,11 +785,23 @@ export type MatchingReplayPeriodEvidence = {
 export function matchingReplayPeriodEvidence(
   row: MatchingPeriodReplay,
 ): MatchingReplayPeriodEvidence {
+  // A replayed year is CITED evidence: approval renders these amounts and the
+  // UI never recomputes them. The facts row allows a null year boundary or
+  // vintage, which a replay year cannot have -- rendering "null" as a period
+  // in an approval packet is worse than refusing to produce one.
+  const required = { yearStart: row.yearStart, yearEnd: row.yearEnd, vintageKey: row.vintageKey };
+  for (const [field, value] of Object.entries(required)) {
+    if (value === null || value === undefined) {
+      throw new Error(
+        `matching replay period ${row.priorMatchingPeriodId} has no ${field}; a cited replay year cannot be evidenced without it`,
+      );
+    }
+  }
   return {
-    yearStart: row.yearStart,
-    yearEnd: row.yearEnd,
+    yearStart: required.yearStart!,
+    yearEnd: required.yearEnd!,
     taxYearWindowId: row.taxYearWindowId,
-    vintageKey: row.vintageKey,
+    vintageKey: required.vintageKey!,
     priorMatchingPeriodId: row.priorMatchingPeriodId,
     deferredOpening: row.deferredOpening,
     actualDeduction: row.actualDeduction,

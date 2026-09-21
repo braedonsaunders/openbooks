@@ -64,7 +64,12 @@ export async function POST(
           gate.user.orgId,
           id,
           gate.user.id,
-          body.data,
+          // The body is schema-parsed but structurally loose: the regime
+          // union is validated inside proposeTaxAssetBasis
+          // (validateTaxRegimeBasis), which refuses an unknown or
+          // incomplete regime by name. This is the JSON boundary, not a
+          // claim that the parse already produced the union.
+          body.data as unknown as Parameters<typeof proposeTaxAssetBasis>[3],
         ),
       },
       { status: 201 },

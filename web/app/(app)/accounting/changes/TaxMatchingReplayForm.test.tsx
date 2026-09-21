@@ -2,8 +2,25 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { NextIntlClientProvider } from "next-intl";
+import { readFileSync } from "node:fs";
 import { TaxMatchingReplayForm } from "./TaxMatchingReplayForm";
 import { prepareTaxMatchingReplay } from "./tax-matching-replay-draft";
+
+// FieldLabel reads ui.fieldHelp through useTranslations, so these components
+// cannot render outside a message provider.
+const common = JSON.parse(
+  readFileSync(new URL("../../../../messages/en/common.json", import.meta.url), "utf8"),
+);
+const ui = JSON.parse(
+  readFileSync(new URL("../../../../messages/en/ui.json", import.meta.url), "utf8"),
+);
+const wrap = (node: React.ReactNode) =>
+  renderToStaticMarkup(
+    <NextIntlClientProvider locale="en" timeZone="UTC" messages={{ common, ui }}>
+      {node}
+    </NextIntlClientProvider>,
+  );
 
 Object.assign(globalThis, { React });
 const preview = {
@@ -56,7 +73,7 @@ test("replay cannot be proposed using absent, cross-asset or stale replacement e
 });
 
 test("native replay preserves both same-label short years and exact opening with only a reason input", () => {
-  const markup = renderToStaticMarkup(<TaxMatchingReplayForm formId="replay" preview={preview}
+  const markup = wrap(<TaxMatchingReplayForm formId="replay" preview={preview}
     reason="Correct the deferred gain" busy={false} onReasonChange={() => {}} onSubmit={() => {}} />);
   for (const fact of ["2026-01-01", "2026-06-30", "2026-07-01", "2026-12-31", "50.0001",
     "Cited historical matching periods", "Replacement opening deferred intercompany amount",
@@ -72,7 +89,7 @@ test("native replay preserves both same-label short years and exact opening with
 });
 
 test("a refused preview retains the native pool remedy without offering a reason or proposal form input", () => {
-  const markup = renderToStaticMarkup(<TaxMatchingReplayForm formId="replay" preview={null}
+  const markup = wrap(<TaxMatchingReplayForm formId="replay" preview={null}
     reason="" busy={false} onReasonChange={() => {}} onSubmit={() => {}} />);
   assert.match(markup, /href="\/assets\/tax-pools"/);
   assert.doesNotMatch(markup, /<(?:input|select|textarea|button)\b/);

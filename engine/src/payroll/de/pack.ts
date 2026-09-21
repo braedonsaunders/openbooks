@@ -12,7 +12,6 @@ import type {
   PayrollPackWithholding,
   PayrollRegionWithholding,
 } from "../withholding-jurisdictions.ts";
-import { PayrollPackError } from "../payroll-error.ts";
 import { deAnnualSettlement } from "./annual-settlement.ts";
 import { computeDeStatutory, DE_FACTOR_LABELS } from "./compute-statutory.ts";
 import { DE_EMPLOYEE_FACTS } from "./employee-facts.ts";

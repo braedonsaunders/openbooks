@@ -2938,7 +2938,10 @@
       "reviewMonths": "Cadence (mois)",
       "yearStart": "Début de l’exercice",
       "yearEnd": "Fin de l’exercice",
-      "filingYear": "Libellé de l’année déclarative"
+      "filingYear": "Libellé de l’année déclarative",
+      "ceasedOn": "Cessation le",
+      "resumedOn": "Reprise le",
+      "evidence": "Justificatif"
     },
     "fieldHelp": {
       "gapless": "Sans rupture signifie que chaque numéro de la séquence doit être justifié, sans aucun numéro sauté. Activez cette option uniquement si vos obligations légales ou d’audit imposent une numérotation ininterrompue.",

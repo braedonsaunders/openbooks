@@ -2569,7 +2569,7 @@ test('admin setup and permissions copy ships translated in fr and es', () => {
     'admin.setup.taxSetup.toggleStates',
     'admin.users.unassignedRole',
   ] as const
-  assert.equal(wanted.length, 409, 'admin scattered source inventory changed; translate the new keys in fr/es and re-pin')
+  assert.equal(wanted.length, 411, 'admin scattered source inventory changed; translate the new keys in fr/es and re-pin')
   const source = flattenCatalog('en')
   for (const key of wanted) {
     const english = source.get(key)
@@ -3028,7 +3028,7 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   // tree after the AI-rails admin copy landed. Never arithmetic and never
   // a number measured on another branch -- the count is whatever the
   // English catalog actually holds here.
-  assert.equal(wanted.length, 4023, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  assert.equal(wanted.length, 4041, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3401,8 +3401,8 @@ test('admin copy ships translated in de and ja (i2)', () => {
   // HR-17 + HR-18: count and hash recomputed over the sorted key inventory
   // for the continuous-performance and recruiting-depth keys; de/ja completeness
   // asserted per-key below.
-  const ADMIN_I2_SOURCE_COUNT = 4023
-  const ADMIN_I2_SOURCE_HASH = 'b8f456c5d66e175b8b98c6a5972800df9a5b7c24e3bc2dad44c3a86cadaeb263'
+  const ADMIN_I2_SOURCE_COUNT = 4041
+  const ADMIN_I2_SOURCE_HASH = '2a5244e733451be9e71a3b648ad8d925a1239d9fc046a90edffd3df5e5376777'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))

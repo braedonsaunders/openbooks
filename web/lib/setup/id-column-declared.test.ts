@@ -30,10 +30,15 @@ function tablesWithIdColumn(): Set<string> {
     .map((f) => readFileSync(`${MIGRATIONS}/${f}`, "utf8"))
     .join("\n");
   const out = new Set<string>();
-  for (const m of sql.matchAll(/CREATE TABLE (?:IF NOT EXISTS )?(?:ONLY )?public\.([a-z_]+)\s*\(([\s\S]*?)\n\);/g)) {
-    if (/^\s*id\s+uuid/m.test(m[2]!)) out.add(m[1]!);
+  // Migrations are written in both styles -- uppercase DDL with a `public.`
+  // qualifier, and lowercase DDL with a bare table name. Matching only the
+  // first made every table written in the second style INVISIBLE to this
+  // check, which reports invisibility as an offence; two tax tables that do
+  // declare `id uuid` were flagged that way.
+  for (const m of sql.matchAll(/create\s+table\s+(?:if\s+not\s+exists\s+)?(?:only\s+)?(?:public\.)?"?([a-z_]+)"?\s*\(([\s\S]*?)\n\);/gi)) {
+    if (/(?:^|,)\s*"?id"?\s+uuid/im.test(m[2]!)) out.add(m[1]!);
   }
-  for (const m of sql.matchAll(/ALTER TABLE (?:ONLY )?public\.([a-z_]+)\s+ADD COLUMN (?:IF NOT EXISTS )?id\b/g)) {
+  for (const m of sql.matchAll(/alter\s+table\s+(?:only\s+)?(?:public\.)?"?([a-z_]+)"?\s+add\s+column\s+(?:if\s+not\s+exists\s+)?"?id"?\b/gi)) {
     out.add(m[1]!);
   }
   return out;

@@ -2983,7 +2983,10 @@
       "reviewMonths": "Cadência (meses)",
       "yearStart": "Início do exercício",
       "yearEnd": "Fim do exercício",
-      "filingYear": "Rótulo do ano da declaração"
+      "filingYear": "Rótulo do ano da declaração",
+      "ceasedOn": "Cessado em",
+      "resumedOn": "Retomado em",
+      "evidence": "Evidência"
     },
     "fieldHelp": {
       "gapless": "Sem lacunas significa que todos os números da sequência devem ser contabilizados, sem números pulados. Ative somente quando exigências legais ou de auditoria determinarem uma numeração ininterrupta.",

@@ -338,7 +338,7 @@ async function qualifyingActivityCeased(tx: SqlExecutor, run: TaxPoolRun): Promi
   return !!row;
 }
 
-async function macrsWindows(
+async function _macrsWindows(
   tx: SqlExecutor,
   run: TaxPoolRun,
   fromOn: string,
@@ -986,8 +986,6 @@ function postedMatchingRow(row: {
       recomputedCorrespondingAmount: row.recomputed_corresponding_amount,
       sellerMatchingAmount: row.seller_matching_amount,
       deferredClosing: row.deferred_closing,
-      actualCorrespondingItems: [],
-      recomputedCorrespondingItems: [],
       sellerMatchingItems: [],
       membership: {
         identity: "us_macrs.consolidated_group.membership",
