@@ -186,6 +186,17 @@ export const FEATURES: FeatureDef[] = [
   { key: 'hrmApprenticeRatios', defaultEnabled: false, category: 'operations', parentKey: 'hrmConstructionCompliance', requiresAll: ['hrmPrevailingWage'] },
   { key: 'hrmPerDiem', defaultEnabled: false, category: 'operations', parentKey: 'hrmConstructionCompliance' },
   // HR-13 end
+  // HR-14 begin: certifications, licenses and dispatch gating — the worker
+  // qualification ledger. Dispatch gating refuses unqualified assignments
+  // on the projectScheduling board (needs projects + projectScheduling);
+  // equipment qualifications gate machine assignments (needs equipment);
+  // certification alerts are the daily expiry scan (needs nothing else).
+  // Toggling any of these never deletes data.
+  { key: 'hrmCertifications', defaultEnabled: false, category: 'operations', parentKey: 'hrm' },
+  { key: 'hrmDispatchGating', defaultEnabled: false, category: 'operations', parentKey: 'hrmCertifications', requiresAll: ['projects', 'projectScheduling'] },
+  { key: 'hrmEquipmentQualifications', defaultEnabled: false, category: 'operations', parentKey: 'hrmCertifications', requiresAll: ['equipment'] },
+  { key: 'hrmCertificationAlerts', defaultEnabled: false, category: 'operations', parentKey: 'hrmCertifications' },
+  // HR-14 end
 ]
 
 export const FEATURE_BY_KEY = new Map(FEATURES.map((f) => [f.key, f]))
