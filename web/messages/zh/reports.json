@@ -736,6 +736,22 @@
       "hrm_qualification_alerts": {
         "label": "资格提醒",
         "description": "每个认证续期提醒一行 — 持有人、类型、到期、触发的提前天数计划以及是否已发送。"
+      },
+      "hrm_one_on_ones": {
+        "label": "一对一会议",
+        "description": "每次一对一会议一行 — 经理、下属、计划与实际日期以及状态。需要人力资源绩效权限。"
+      },
+      "hrm_feedback": {
+        "label": "反馈",
+        "description": "每条表扬、反馈或请求一行 — 对象、类型、可见范围和记录日期。需要人力资源绩效权限。"
+      },
+      "hrm_calibration_entries": {
+        "label": "校准记录",
+        "description": "每条已校准评估一行 — 会议、员工、建议评级与校准评级、潜力以及决定人。需要人力资源绩效权限。"
+      },
+      "hrm_talent_reviews": {
+        "label": "人才盘点",
+        "description": "每次人才盘点一行 — 员工、绩效与潜力、流失影响与风险以及晋升准备度。需要人力资源绩效权限。"
       }
     },
     "columns": {
@@ -1559,6 +1575,43 @@
         "is_active": "启用",
         "created_at": "创建时间",
         "id": "原因 (ID)"
+      },
+      "hrm_one_on_ones": {
+        "scheduled_at": "计划时间",
+        "held_at": "实际时间",
+        "manager": "经理",
+        "report": "下属",
+        "employer": "雇主",
+        "status": "状态",
+        "id": "会议 (ID)"
+      },
+      "hrm_feedback": {
+        "recorded_at": "记录时间",
+        "employee": "员工",
+        "employer": "雇主",
+        "kind": "类型",
+        "visibility": "可见范围",
+        "id": "反馈 (ID)"
+      },
+      "hrm_calibration_entries": {
+        "session": "会议",
+        "employee": "员工",
+        "employer": "雇主",
+        "proposed_rating": "建议评级",
+        "calibrated_rating": "校准评级",
+        "potential_key": "潜力",
+        "decided_at": "决定时间",
+        "id": "记录 (ID)"
+      },
+      "hrm_talent_reviews": {
+        "reviewed_at": "评估时间",
+        "employee": "员工",
+        "employer": "雇主",
+        "performance_key": "绩效",
+        "potential_key": "潜力",
+        "impact_of_loss": "流失影响",
+        "risk_of_loss": "流失风险",
+        "id": "评估 (ID)"
       }
     },
     "enumValues": {

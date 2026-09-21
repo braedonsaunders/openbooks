@@ -736,6 +736,22 @@
       "hrm_qualification_alerts": {
         "label": "Alertes de qualification",
         "description": "Une ligne par alerte de renouvellement de certification — titulaire, type, expiration, le calendrier d’anticipation sur lequel elle s’est déclenchée, et si elle a été envoyée."
+      },
+      "hrm_one_on_ones": {
+        "label": "Entretiens individuels",
+        "description": "Une ligne par entretien individuel : responsable, collaborateur, dates prévue et tenue, et statut. Nécessite l’autorisation de performance RH."
+      },
+      "hrm_feedback": {
+        "label": "Retours",
+        "description": "Une ligne par félicitation, retour ou demande : personne concernée, type, visibilité et date d’enregistrement. Nécessite l’autorisation de performance RH."
+      },
+      "hrm_calibration_entries": {
+        "label": "Entrées de calibrage",
+        "description": "Une ligne par évaluation calibrée : session, collaborateur, note proposée face à la note calibrée, potentiel et décideur. Nécessite l’autorisation de performance RH."
+      },
+      "hrm_talent_reviews": {
+        "label": "Revues de talents",
+        "description": "Une ligne par revue de talents : collaborateur, performance et potentiel, impact et risque de départ, et aptitude à la promotion. Nécessite l’autorisation de performance RH."
       }
     },
     "columns": {
@@ -1559,6 +1575,43 @@
         "is_active": "Actif",
         "created_at": "Créé le",
         "id": "Motif (id)"
+      },
+      "hrm_one_on_ones": {
+        "scheduled_at": "Prévu",
+        "held_at": "Tenu",
+        "manager": "Responsable",
+        "report": "Collaborateur",
+        "employer": "Employeur",
+        "status": "Statut",
+        "id": "Entretien (id)"
+      },
+      "hrm_feedback": {
+        "recorded_at": "Enregistré",
+        "employee": "Collaborateur",
+        "employer": "Employeur",
+        "kind": "Type",
+        "visibility": "Visibilité",
+        "id": "Retour (id)"
+      },
+      "hrm_calibration_entries": {
+        "session": "Session",
+        "employee": "Collaborateur",
+        "employer": "Employeur",
+        "proposed_rating": "Proposée",
+        "calibrated_rating": "Calibrée",
+        "potential_key": "Potentiel",
+        "decided_at": "Décidée",
+        "id": "Entrée (id)"
+      },
+      "hrm_talent_reviews": {
+        "reviewed_at": "Évalué",
+        "employee": "Collaborateur",
+        "employer": "Employeur",
+        "performance_key": "Performance",
+        "potential_key": "Potentiel",
+        "impact_of_loss": "Impact du départ",
+        "risk_of_loss": "Risque de départ",
+        "id": "Revue (id)"
       }
     },
     "enumValues": {
