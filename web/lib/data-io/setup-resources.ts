@@ -2,6 +2,7 @@
 
 import 'server-only'
 import { loadExtensionSettingRows } from '../setup/extension-settings'
+import { loadHomeAnnouncementRows } from '../setup/home-announcements'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { COUNTRY_CODES } from '../countries'
@@ -49,6 +50,43 @@ function refNaturalKey(ref: string): string {
   if (ref === 'accounts') return 'number'
   const entity = SETUP_ENTITY_BY_KEY.get(ref)
   return entity?.naturalKey ?? 'id'
+}
+
+/**
+ * Rows for the setup entities whose records live in org settings JSON
+ * rather than in a table of their own. Their registry entry still names
+ * table 'orgs' so the rest of the registry works, which means the plain
+ * SELECT path would ask orgs for columns it does not have.
+ *
+ * The switch is exhaustive on purpose. home-announcements was added as a
+ * second dataSource and this dispatcher still had only the one arm, so
+ * exporting announcements asked `select title, body, audience, starts_on,
+ * ends_on from orgs` and the whole resource matrix failed. The `never`
+ * below turns the next one into a compile error instead.
+ */
+async function jsonBackedRows(
+  source: NonNullable<SetupEntity['dataSource']>,
+  orgId: string,
+): Promise<Record<string, unknown>[]> {
+  switch (source) {
+    case 'extension-settings':
+      return (await loadExtensionSettingRows(orgId)).slice(0, MAX_EXPORT_ROWS) as Record<string, unknown>[]
+    case 'home-announcements': {
+      // The exporter reads raw[toSnake(fieldKey)]; this loader hands back
+      // the camelCase record shape, so the keys are translated here and
+      // not in the domain module.
+      const rows = await loadHomeAnnouncementRows(orgId)
+      return rows.slice(0, MAX_EXPORT_ROWS).map((row) => {
+        const out: Record<string, unknown> = {}
+        for (const [key, value] of Object.entries(row)) out[toSnake(key)] = value
+        return out
+      })
+    }
+    default: {
+      const unreachable: never = source
+      throw new Error(`setup data source ${String(unreachable)} has no export arm`)
+    }
+  }
 }
 
 function setupFields(entity: SetupEntity): ResourceField[] {
@@ -107,8 +145,8 @@ export function setupResource(entity: SetupEntity, orgId: string): DataResource 
       const fields = setupFields(await gatedSetupEntity(entity, orgId))
       const resolver = new RefResolver(orgId)
       const cols = fields.map((f) => sql.raw(toSnake(f.key)))
-      const result = entity.dataSource === 'extension-settings'
-        ? { rows: (await loadExtensionSettingRows(orgId)).slice(0, MAX_EXPORT_ROWS) as Record<string, unknown>[] }
+      const result = entity.dataSource
+        ? { rows: await jsonBackedRows(entity.dataSource, orgId) }
         : (await db.execute(sql`
         select ${sql.join(cols, sql`, `)}
           from ${sql.raw(entity.table)}
