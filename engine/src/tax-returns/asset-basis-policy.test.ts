@@ -30,6 +30,7 @@ import {
   taxWorkpaperSellerDisposition,
   usDispositionProceeds,
   usRegimeWorkpaperOutcome,
+  declaredTaxRegimeFacts,
   validateTaxRegimeBasis,
   continuingNzAssociatedRates,
   nzAssociatedPersonEquivalentRate,
@@ -1200,4 +1201,78 @@ test("ready both-sided nontaxable freezes per-disposed-vintage receiver schedule
   assert.ok(Array.isArray(computed.buyerVintages));
   assert.equal(computed.buyerVintages.length, 2);
   assert.equal(computed.carryoverBasis, "2000.0000");
+});
+
+test("service revalidation drops client buyerVintages and reconstructs them from history", () => {
+  const allocations = [
+    {
+      source: "carryover" as const,
+      placedInServiceOn: "2023-03-15",
+      transferOn: "2025-08-01",
+      disposedUnadjustedBasis: "2000.00",
+      remainingUnadjustedBasis: "8000.00",
+    },
+    {
+      source: "excess" as const,
+      placedInServiceOn: "2025-08-01",
+      transferOn: "2025-08-01",
+      disposedUnadjustedBasis: "0.00",
+      remainingUnadjustedBasis: "400.00",
+    },
+  ];
+  const context = {
+    sourceOperation: "intercompany_transfer" as const,
+    applicable: "both" as const,
+    effectiveOn: "2026-09-01",
+    usSellerMacrs: { status: "ready" as const, vintages: readyVintages },
+  };
+  const declared = {
+    regime: "us_macrs",
+    relationship: "non_arms_length",
+    dispositionTrigger: "section_168i7b",
+    remainingUnadjustedBasis: "8400.00",
+    disposedUnadjustedBasis: "2000.00",
+    recognition: "nontaxable",
+    section168i7Kind: "nonrecognition",
+    relatedPerson: true,
+    excessBasis: "0.00",
+    vintageAllocations: allocations,
+  };
+  const first = validateTaxRegimeBasis(declared, context) as UsMacrsRegimeBasis;
+  assert.equal(first.buyerVintages?.length, 1);
+  assert.equal(first.buyerVintages?.[0]!.method, "200_db");
+  const persisted = declaredTaxRegimeFacts(first);
+  assert.equal(Object.hasOwn(persisted, "buyerVintages"), false);
+  const replayed = validateTaxRegimeBasis(
+    JSON.parse(JSON.stringify(first)),
+    context,
+  ) as UsMacrsRegimeBasis;
+  assert.deepEqual(replayed.buyerVintages, first.buyerVintages);
+  const invented = validateTaxRegimeBasis(
+    {
+      ...declared,
+      buyerVintages: [
+        {
+          key: "invented",
+          source: "carryover",
+          parentKey: first.buyerVintages?.[0]!.parentKey,
+          placedInServiceOn: "2023-03-15",
+          transferOn: "2026-09-01",
+          recoveryPeriodYears: "10",
+          method: "straight_line",
+          convention: "mid_month",
+          unadjustedBasis: "2000.0000",
+          adjustedCarryover: "1999.0000",
+          section179: "0.0000",
+          priorDepreciation: "1.0000",
+          bonusPercent: "0",
+          businessUsePercent: "100",
+        },
+      ],
+    },
+    context,
+  ) as UsMacrsRegimeBasis;
+  assert.equal(invented.buyerVintages?.[0]!.method, "200_db");
+  assert.equal(invented.buyerVintages?.[0]!.recoveryPeriodYears, "5");
+  assert.notEqual(invented.buyerVintages?.[0]!.adjustedCarryover, "1999.0000");
 });
