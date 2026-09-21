@@ -68,12 +68,24 @@ async function enableEveryHrmReportFeature(orgId: string): Promise<void> {
   // "the helper is out of date" — which is exactly how HR-19's and
   // HR-21's switches went missing here.
   const { HRM_REPORT_ENTITIES } = await import('@openbooks/reports')
-  const declared = new Set<string>()
-  for (const entity of HRM_REPORT_ENTITIES) {
-    if (entity.featureKey) declared.add(entity.featureKey)
+  const { FEATURE_BY_KEY, featureRequirements } = await import(
+    '../../engine/src/organization/feature-registry.ts'
+  )
+  // Close over the REQUIREMENT GRAPH, not just the declared keys. A
+  // sub-switch is off while its parent is off, and the parents no entity
+  // names (hrmAiAssist above hrmPayrollAnomalies, payroll above that)
+  // were the second and third time this helper went stale. Listing them
+  // by hand is what made it stale twice; the registry already knows.
+  const keys = new Set<string>(['hrm'])
+  const visit = (key: string): void => {
+    if (keys.has(key)) return
+    keys.add(key)
+    const def = FEATURE_BY_KEY.get(key)
+    if (def) for (const required of featureRequirements(def)) visit(required)
   }
-  // The parents those sub-switches hang from, which no entity names.
-  const keys = ['hrm', 'payroll', 'flows', 'automations', 'hrmRecruiting', 'hrmPerformance', ...declared]
+  for (const entity of HRM_REPORT_ENTITIES) {
+    if (entity.featureKey) visit(entity.featureKey)
+  }
   for (const key of keys) {
     await db.execute(sql`
       update orgs
