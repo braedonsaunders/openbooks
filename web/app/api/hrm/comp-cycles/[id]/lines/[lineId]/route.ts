@@ -1,5 +1,6 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import {
   approveLine,
   proposeLine,
@@ -14,6 +15,28 @@ import { compensationErrorResponse } from "../../../../compensation/_lib";
 export const runtime = "nodejs";
 
 /**
+ * The proposal body. The percent and the rate are the two ways a
+ * proposal may be expressed; the reason is what carries an
+ * outside-guideline proposal, a reopen or a rejection. Each refusal is
+ * the one the reviewer reads, so it is declared here rather than left
+ * to a generic "expected number".
+ */
+const PCT_MESSAGE = "proposedPct must be a non-negative percent";
+const RATE_MESSAGE = "proposedRate must be a positive amount with at most 4 decimals";
+
+const cycleLineBody = z.object({
+  proposedPct: z
+    .number({ error: PCT_MESSAGE })
+    .refine((v) => Number.isFinite(v) && v >= 0, PCT_MESSAGE)
+    .nullish(),
+  proposedRate: z
+    .string({ error: RATE_MESSAGE })
+    .regex(/^\d+(\.\d{1,4})?$/, RATE_MESSAGE)
+    .nullish(),
+  reason: z.string().nullish(),
+});
+
+/**
  * One cycle line: PATCH?action= proposes (the manager's own reports or
  * comp.manage, within guideline or with a reason), reopens a decided
  * line with a reason, or approves/rejects through the Flows gate key
@@ -25,13 +48,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id, lineId } = await params;
   if (!isUuid(id) || !isUuid(lineId)) return NextResponse.json({ error: "invalid cycle line" }, { status: 400 });
   const action = new URL(req.url).searchParams.get("action");
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, cycleLineBody);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data as {
-    proposedPct?: unknown;
-    proposedRate?: unknown;
-    reason?: unknown;
-  };
+  const body = parsedBody.data;
   if (action === "propose") {
     // Proposing is the manager's structural scope (or comp.manage in the
     // service) — the route needs only the read grant; the service fences.
@@ -42,12 +61,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     const proposedPct = body.proposedPct ?? null;
     const proposedRate = body.proposedRate ?? null;
-    if (proposedPct !== null && (typeof proposedPct !== "number" || !Number.isFinite(proposedPct) || proposedPct < 0)) {
-      return NextResponse.json({ error: "proposedPct must be a non-negative percent" }, { status: 400 });
-    }
-    if (proposedRate !== null && (typeof proposedRate !== "string" || !/^\d+(\.\d{1,4})?$/.test(proposedRate))) {
-      return NextResponse.json({ error: "proposedRate must be a positive amount with at most 4 decimals" }, { status: 400 });
-    }
     try {
       const line = await proposeLine({
         orgId: gate.user.orgId,
@@ -55,7 +68,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         lineId,
         proposedPct,
         proposedRate,
-        reason: typeof body.reason === "string" ? body.reason : null,
+        reason: body.reason ?? null,
       });
       return NextResponse.json({ line });
     } catch (e) {
@@ -67,7 +80,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmMeritCycles"))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
-  const reason = typeof body.reason === "string" && body.reason.trim() ? body.reason : null;
+  const reason = body.reason?.trim() ? body.reason : null;
   try {
     const q = { orgId: gate.user.orgId, actorId: gate.user.id, lineId };
     if (action === "approve") {

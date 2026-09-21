@@ -176,7 +176,13 @@ export const FEATURES: FeatureDef[] = [
   { key: 'allocationsAtEntry', defaultEnabled: true, category: 'accounting', parentKey: 'allocations' },
   { key: 'allocationsAtPosting', defaultEnabled: true, category: 'accounting', parentKey: 'allocations' },
   // Platform
-  { key: 'flows', defaultEnabled: true, category: 'platform', navModules: ['flows', 'approvals'] },
+  // HR-15: the inbox nav module ('approvals') is NO LONGER a flows surface.
+  // It is the one place a person completes work — leave requests, checklist
+  // steps, signatures and notices all arrive there, and only the decision
+  // rows come from flows. Claiming it here made the switchboard promise that
+  // turning flows off hides the inbox, which would strand every non-flows
+  // task; the flows ADAPTER already returns nothing when flows is off.
+  { key: 'flows', defaultEnabled: true, category: 'platform', navModules: ['flows'] },
   // HR-16 automations on Flows (0226): trigger/rule/condition/action recipes
   // over the existing Flows gates. The builder is platform-nav under Flows;
   // exception-only approval is a per-flow SETTING, not a feature.

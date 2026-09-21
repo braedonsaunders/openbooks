@@ -1,4 +1,4 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody, uuidId } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
@@ -27,18 +27,37 @@ export async function GET() {
   return NextResponse.json({ kiosks: rows })
 }
 
+const REGISTER_NEEDS = 'Register needs a kiosk name'
+const REVOKE_NEEDS = 'Revoke needs the kiosk id'
+const PIN_NEEDS = 'Set-pin needs the worker and a PIN'
+
+/** An optional reference that the picker may send back as '' or null. */
+const optionalRef = z.union([uuidId, z.literal(''), z.null()]).optional()
+
 const registerSchema = z.object({
-  name: z.string().min(1).max(120),
-  locationId: z.string().nullable().optional(),
-  projectId: z.string().nullable().optional(),
+  action: z.literal('register').optional(),
+  name: z.string({ error: REGISTER_NEEDS }).min(1, REGISTER_NEEDS).max(120),
+  locationId: optionalRef,
+  projectId: optionalRef,
   pinRequired: z.boolean().optional(),
   photoRequired: z.boolean().optional(),
 })
 
-const pinSchema = z.object({
-  employeePartyId: z.string().min(1),
-  pin: z.string().min(1),
-})
+/**
+ * One body for the three device actions. Register carries no action
+ * because the kiosk list POSTs a kiosk; revoke and set-pin name
+ * themselves. Each branch declares its own refusal so the setup screen
+ * shows the operator what is missing.
+ */
+const kioskBody = z.union([
+  z.object({ action: z.literal('revoke'), kioskId: z.string({ error: REVOKE_NEEDS }).refine((v) => isUuid(v), REVOKE_NEEDS) }),
+  z.object({
+    action: z.literal('set-pin'),
+    employeePartyId: z.string({ error: PIN_NEEDS }).refine((v) => isUuid(v), PIN_NEEDS),
+    pin: z.string({ error: PIN_NEEDS }).min(1, PIN_NEEDS),
+  }),
+  registerSchema,
+])
 
 /**
  * POST register {name,...} → the kiosk plus its raw device token, shown
@@ -50,32 +69,25 @@ export async function POST(req: Request) {
   if (gate instanceof NextResponse) return gate
   const { user } = gate
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, kioskBody, { status: 422 });
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as Record<string, unknown>
+  const body = parsedBody.data
   try {
     if (body.action === 'revoke') {
-      if (typeof body.kioskId !== 'string' || !isUuid(body.kioskId)) return bad('Revoke needs the kiosk id')
       await revokeKiosk(user.orgId, body.kioskId, user.id)
       return NextResponse.json({ ok: true })
     }
     if (body.action === 'set-pin') {
-      const parsed = pinSchema.safeParse(body)
-      if (!parsed.success || !isUuid(parsed.data.employeePartyId)) return bad('Set-pin needs the worker and a PIN')
-      await setWorkerPin({ orgId: user.orgId, actorUserId: user.id, employeePartyId: parsed.data.employeePartyId, pin: parsed.data.pin })
+      await setWorkerPin({ orgId: user.orgId, actorUserId: user.id, employeePartyId: body.employeePartyId, pin: body.pin })
       return NextResponse.json({ ok: true })
     }
-    const parsed = registerSchema.safeParse(body)
-    if (!parsed.success) return bad('Register needs a kiosk name')
-    const input = parsed.data
-    if (input.locationId != null && input.locationId !== '' && !isUuid(input.locationId)) return bad('Unknown location — pick it from the list')
-    if (input.projectId != null && input.projectId !== '' && !isUuid(input.projectId)) return bad('Unknown project — pick it from the list')
+    const input = body
     const { kiosk, token } = await registerKiosk({
       orgId: user.orgId,
       actorUserId: user.id,
       name: input.name,
-      locationId: input.locationId ?? null,
-      projectId: input.projectId ?? null,
+      locationId: input.locationId || null,
+      projectId: input.projectId || null,
       pinRequired: input.pinRequired,
       photoRequired: input.photoRequired,
     })
