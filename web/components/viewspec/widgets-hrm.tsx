@@ -48,6 +48,7 @@ import { LeaveBalances } from '../../app/(app)/hrm/my-leave/LeaveBalances'
 // HR-19 begin: documents drawer + generate dialog (verbatim adapters only).
 import { DocumentsDrawer, DocumentsGenerateDialog } from '../../app/(app)/hrm/documents/sections'
 import { SurveysAuthorDialog, SurveysDrawer } from '../../app/(app)/hrm/surveys/sections'
+import { OrgChartPerson, OrgChartTree } from '../../app/(app)/hrm/org-chart/sections'
 // HR-19 end
 import { num, str, type WidgetRenderer } from './widget-props'
 
@@ -488,6 +489,33 @@ export const HRM_WIDGETS = {
     const author = props.author as ComponentProps<typeof SurveysAuthorDialog>['author']
     if (!author) return null
     return <SurveysAuthorDialog author={author} />
+  },
+  /** The org-chart tree: collapsible nodes, vacancy dashes, as-of
+   *  search, and the narrow-screen card stack. Loader-resolved props
+   *  only — no org or user crosses into the widget. */
+  'org-chart-tree': (props) => (
+    <OrgChartTree
+      chart={props.chart as ComponentProps<typeof OrgChartTree>['chart']}
+      search={str(props, 'search') ?? ''}
+      asOf={str(props, 'asOf') ?? ''}
+      today={str(props, 'today') ?? ''}
+      personBaseHref={str(props, 'personBaseHref') ?? '/hrm/org-chart'}
+      asOfLabel={str(props, 'asOfLabel') ?? ''}
+      searchLabel={str(props, 'searchLabel') ?? ''}
+      labels={(props.labels as ComponentProps<typeof OrgChartTree>['labels']) ?? {}}
+    />
+  ),
+  /** The org-chart person drawer, closing by navigation. */
+  'hrm-org-chart-person': (props) => {
+    const selected = props.selected as ComponentProps<typeof OrgChartPerson>['selected']
+    if (!selected) return null
+    return (
+      <OrgChartPerson
+        selected={selected}
+        closeHref={str(props, 'closeHref') ?? '/hrm/org-chart'}
+        labels={(props.labels as ComponentProps<typeof OrgChartPerson>['labels']) ?? {}}
+      />
+    )
   },
   // HR-19 end
 } satisfies Record<string, WidgetRenderer>

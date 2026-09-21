@@ -74,7 +74,7 @@ export interface DocumentTile {
   accent: string
   label: string
   value: string
-  tone: 'default' | 'warning' | 'destructive' | 'success'
+  tone: 'default' | 'warning' | 'negative' | 'positive'
 }
 
 function statusVariant(status: string): DocumentRow['statusVariant'] {
@@ -161,7 +161,7 @@ export async function loadDocumentsHome(
 
   const tiles: DocumentTile[] = [
     { iconKey: 'pen-line', accent: 'amber', label: t('documents.tiles.awaiting'), value: String(awaiting), tone: awaiting > 0 ? 'warning' : 'default' },
-    { iconKey: 'alarm-clock', accent: 'red', label: t('documents.tiles.expiring'), value: expiringRows?.count ?? '0', tone: Number(expiringRows?.count ?? 0) > 0 ? 'destructive' : 'default' },
+    { iconKey: 'alarm-clock', accent: 'red', label: t('documents.tiles.expiring'), value: expiringRows?.count ?? '0', tone: Number(expiringRows?.count ?? 0) > 0 ? 'negative' : 'default' },
     { iconKey: 'archive', accent: 'slate', label: t('documents.tiles.retentionDue'), value: retentionRows?.count ?? '0', tone: 'default' },
     { iconKey: 'package-open', accent: 'blue', label: t('documents.tiles.exportsPending'), value: exportRows?.count ?? '0', tone: 'default' },
   ]
