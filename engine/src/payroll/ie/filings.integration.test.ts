@@ -16,24 +16,24 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { db } from "../platform/db.ts";
-import { add, cmp } from "../money/money.ts";
-import { calculatePayRun } from "./run-calculation.ts";
-import { commitPayRun } from "./run-commit.ts";
-import { createPayRun } from "./run-lifecycle.ts";
-import { seedPayrollComponents } from "./run-setup.ts";
+import { db } from "../../platform/db.ts";
+import { add, cmp } from "../../money/money.ts";
+import { calculatePayRun } from "../run-calculation.ts";
+import { commitPayRun } from "../run-commit.ts";
+import { createPayRun } from "../run-lifecycle.ts";
+import { seedPayrollComponents } from "../run-setup.ts";
 import {
   createScratchOrg,
   dropScratchOrgReporting,
   seedFlowActors,
-} from "../testing/fixtures.ts";
-import "../testing/database-bypass.ts";
+} from "../../testing/fixtures.ts";
+import "../../testing/database-bypass.ts";
 import {
   IE_PAYE_RECONCILIATION_FILING,
   iePayeReconciliation,
   parseIeReconciliationRowId,
 } from "./filings.ts";
-import { orgYearEndFilings } from "./yearend.ts";
+import { orgYearEndFilings } from "../yearend.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -187,7 +187,11 @@ test(
       // Independent tie-out: a flat join over the same committed stubs —
       // different shape from the population's correlated subselects — must
       // agree to the cent on every figure, for every employee.
-      const oracle = (await db.execute<Record<string, string>>(sql`
+      type OracleRow = {
+        employee: string; gross: string; paye: string;
+        pre_ee: string; post_ee: string; pre_er: string; post_er: string; usc: string;
+      };
+      const oracle = (await db.execute<OracleRow>(sql`
         select s.employee_party_id as employee,
                sum(case when l.kind = 'earning' then l.amount else 0 end)::text as gross,
                sum(case when pc.system_key = 'ie_paye' and l.kind = 'deduction'
@@ -216,7 +220,7 @@ test(
          where l.org_id = ${org.orgId} and s.tax_year = 2026 and s.country = 'IE'
          group by s.employee_party_id`)).rows;
       assert.equal(oracle.length, 2, "the draft run is excluded from the oracle too");
-      const bases = (await db.execute<Record<string, string>>(sql`
+      const bases = (await db.execute<{ employee: string; taxable: string; reckonable: string }>(sql`
         select s.employee_party_id as employee,
                sum(coalesce((s.factors->>'IE_TAXBASE')::numeric, 0))::text as taxable,
                sum(s.pensionable_earnings)::text as reckonable
@@ -255,7 +259,7 @@ test(
       // submissions must sum to — they equal the oracle's column sums.
       const data = await IE_PAYE_RECONCILIATION_FILING.population(org.orgId, 2026);
       assert.equal(data.rows.length, 2);
-      const sum = (pick: (r: Record<string, string>) => string): string =>
+      const sum = (pick: (r: OracleRow) => string): string =>
         oracle.reduce((acc, r) => add(acc, pick(r)), "0");
       const totalOf = (label: string): string =>
         data.totals?.find((t) => t.label === label)?.value ?? "missing";

@@ -258,6 +258,7 @@ export function iePayeReconciliationFiling(): PayrollYearEndFiling {
         + "through Revenue Online Service (ROS); the reconciliation above carries what was withheld",
     },
   };
+  return cached;
 }
 
 /** The declaration object, for the pack and for tests. */
