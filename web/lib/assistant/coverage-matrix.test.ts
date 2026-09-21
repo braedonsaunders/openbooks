@@ -57,7 +57,10 @@ const MATRIX: Entry[] = [
   { prefix: "views", uncovered: "no application service: saved view run/export is route-inline" },
   { prefix: "saved-reports", tools: ["list_report_definitions", "run_report"] },
   { prefix: "insights", uncovered: "no application service: dashboard/card builder persists inline" },
-  { prefix: "notifications", uncovered: "no application service: inbox reads/writes are route-inline SQL" },
+  // HR-15 gap fill: notifications stopped being route-inline SQL when the
+  // inbox read model landed — every notice is an inbox item through the
+  // shared adapters, and inbox_items reads them under the caller's scope.
+  { prefix: "notifications", tools: ["inbox_items"], note: "notices read through the inbox read model; marking read is the reader's own act" },
   { prefix: "me", tools: ["whoami", "describe_page_layout"] },
   { prefix: "page-specs", tools: ["list_page_layouts", "describe_page_layout"] },
   { prefix: "settings/security", tools: ["list_users", "list_roles"] },
@@ -170,6 +173,13 @@ const MATRIX: Entry[] = [
   { prefix: "hrm/my-leave", tools: ["hrm_leave"], note: "the self-service inbox reads only the caller's own requests and balances; filing is a human-attested HR action with no assistant write surface by design" },
   { prefix: "hrm/leave-requests", tools: ["hrm_leave", "list_approvals", "decide_approval"], note: "the queue and drawer read through the leave read service (TIME balances; VALUE stays in payroll tools) while decisions run through native Flows gates; filing, submit, withdraw, cancel and attachment are human-attested HR actions with no assistant write surface by design" },
   { prefix: "hrm/leave-absences", tools: ["hrm_leave"], note: "after-the-fact absence recording is a human-attested HR action with no assistant write surface by design" },
+  // HR-18: the public career-site surface. Like the external payer link,
+  // these are token-addressed endpoints used by someone who is not a user
+  // of this system — a candidate applying, choosing an interview slot, or
+  // signing their own offer, plus the signed feed boards read. No tenant
+  // data view exists for a tool to cover, and no assistant may act in the
+  // candidate's place.
+  { prefix: "recruiting", uncovered: "transport-only: public career-site apply, tokened self-booking and offer signature, and the signed board feed" },
   { prefix: "hrm/recruiting", tools: ["hrm_recruiting"], note: "the requisitions list and the requisition, candidate, and offer drawers read through the recruiting read service (names only, contact PII never leaves); requisition authoring, funnel moves, interviews, offers, and hire are human-attested HR actions with no assistant write surface by design" },
   { prefix: "hrm/performance", tools: ["hrm_performance_cycles"], note: "the cycles list and drawer read through the privacy-scoped performance read service; submit, calibrate, share, acknowledge and goal writes are human-attested HR actions with no assistant write surface by design" },
   // HR-17 begin: continuous performance reads ride the structural scope

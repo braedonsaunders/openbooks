@@ -712,7 +712,7 @@ const requisitionSegments = ["draft", "open", "on_hold", "filled", "cancelled"] 
 const hrmRecruiting: AssistantToolDef = {
   name: "hrm_recruiting",
   description:
-    "Requisitions with headcount versus filled, the funnel per application with stages and offer state, and one opening pipeline with time-to-fill. Depth: interview scorecard summaries (aggregates plus missing seats by name), offer signature state, and board posting status. Candidate contact PII never leaves through this tool, names only. Read-only.",
+    "Requisitions with headcount versus filled, the funnel per application, one opening with time-to-fill, scorecard summaries, offer signature state, and posting status. Names only, never candidate contact PII. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["hrm.recruiting.read"] },
   feature: "hrm",

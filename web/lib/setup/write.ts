@@ -1469,10 +1469,9 @@ export async function createSetupRecord(
     }
   }
 
-  const body = normalizeHrmDocumentTemplateInput(entity.key, normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, normalizeHrmReviewTemplateInput(entity.key, normalizeHrmCompensationInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody)))))))
   // HR-18: recruiting-depth create defaults fold before the generic coercion.
   const recruitingBody = foldRecruitingSetupCreate(entity.key, rawBody)
-  const body = normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, normalizeHrmReviewTemplateInput(entity.key, normalizeHrmCompensationInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, recruitingBody))))))
+  const body = normalizeHrmDocumentTemplateInput(entity.key, normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, normalizeHrmReviewTemplateInput(entity.key, normalizeHrmCompensationInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, recruitingBody)))))))
   const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
   const writableEntity = writableSetupEntity(entity, {
     multiSubsidiary: await subsidiaryFeatureEnabled(orgId),
