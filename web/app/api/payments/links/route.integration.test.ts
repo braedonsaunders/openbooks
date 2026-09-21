@@ -42,7 +42,7 @@ const routeUrl = "./route.ts?payment-links-boundary-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(
   "@openbooks/engine/src/testing/fixtures.ts",
 );
@@ -55,14 +55,17 @@ function request(body: unknown): Request {
 }
 
 test("payment-link API rejects a malformed bank reference before any link write", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
-  const actorId = await createScratchUser(org.orgId, "Payment links", "admin");
-  try {
+  const { org, actorId } = await withBypassContext(async () => {
+    const seeded = await createScratchOrg();
+    const seededActor = await createScratchUser(seeded.orgId, "Payment links", "admin");
     await db.execute(sql`
       update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}',
         coalesce(settings->'features', '{}'::jsonb) || '{"onlinePayments":true}'::jsonb)
-       where id = ${org.orgId}
+       where id = ${seeded.orgId}
     `);
+    return { org: seeded, actorId: seededActor };
+  });
+  try {
     const state = (globalThis as typeof globalThis & Record<symbol, unknown>)[routeState] as {
       authz: { user: { orgId: string; id: string } } | null;
     };

@@ -104,11 +104,15 @@ test('platform schema/list/get mint a fresh readInvocation nonce like query', ()
   assert.notEqual(start, -1, 'platform bridge dispatch must remain defined')
   const body = store.slice(start, store.indexOf("if (opts.method === 'records.list'"))
   // All four reads mint a nonce so a later identical fetch is not a stale replay.
-  assert.match(body, /opts\.method === 'platform\.query'/)
-  assert.match(body, /opts\.method === 'platform\.schema'/)
-  assert.match(body, /opts\.method === 'platform\.list'/)
-  assert.match(body, /opts\.method === 'platform\.get'/)
-  assert.match(body, /platformRead \? \{ readInvocation: crypto\.randomUUID\(\) \}/)
+  // The membership list lives on the extracted helper; pin that, not the
+  // pre-extract `opts.method === 'platform.query'` literals.
+  assert.match(body, /platformReadNeedsFreshInvocation\(opts\.method\)/)
+  assert.match(store, /function platformReadNeedsFreshInvocation\(method: string\): boolean/)
+  assert.match(store, /method === 'platform\.query'/)
+  assert.match(store, /method === 'platform\.schema'/)
+  assert.match(store, /method === 'platform\.list'/)
+  assert.match(store, /method === 'platform\.get'/)
+  assert.match(body, /platformReadNeedsFreshInvocation\(opts\.method\)\s*\n\s*\? \{ readInvocation: crypto\.randomUUID\(\) \}/)
   // Writes keep a derived key so byte-identical retries still collapse.
   assert.doesNotMatch(body, /opts\.method === 'platform\.query' \? \{ readInvocation/)
 })

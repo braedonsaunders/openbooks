@@ -131,7 +131,11 @@ function installDb() {
           if (/update list_views set/.test(text) && /returning/.test(text)) {
             return { rows: state.updateRows }
           }
-          return { rows: [{ id: VIEW_ID, name: 'Mine' }] }
+          // FOR UPDATE and other reads must carry the locked row's flags.
+          // A stub of {id, name} leaves isActive undefined, and
+          // refuseInactiveDefault(isDefault && !isActive) then 400s an
+          // isDefault-only PATCH of a live view.
+          return { rows: state.loadRow ? [{ ...state.loadRow }] : [] }
         },
       }
       return fn(tx)

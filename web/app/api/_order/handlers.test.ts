@@ -846,6 +846,12 @@ class IssuePoolHarness {
     if (normalized.startsWith("select settings #>> '{features,scripts}'")) {
       return this.result([{ enabled: 'true' }])
     }
+    if (normalized.includes("queryconsole") && normalized.includes('features')) {
+      return this.result([{ enabled: true }])
+    }
+    if (normalized.includes('is_super_admin') && normalized.includes('from users')) {
+      return this.result([{ isSuperAdmin: true, isActive: true }])
+    }
     if (normalized.startsWith('update user_scripts set last_run_at = now()')) return this.result([])
     throw new Error(`unexpected pool-contention query: ${normalized}`)
   }
@@ -864,6 +870,10 @@ class IssuePoolHarness {
       return [{ id: ORG_ID, name: 'Pool Test Org', baseCurrency: 'CAD' }]
     }
     if (table.__table === 'documentLines') return []
+    if (table.__table === 'users') {
+      return [{ id: USER_ID, name: 'Pool Actor' }]
+    }
+    if (table.__table === 'roleAssignments') return []
     if (table.__table === 'userScripts') {
       return [{
         id: '20000000-0000-4000-8000-000000000001',
@@ -915,7 +925,13 @@ class IssuePoolHarness {
     await this.awaitPoolSaturation()
     this.governedPoolCheckouts += 1
     return {
-      query: (text, params) => this.governedQuery(text, params),
+      query: (text, params) => {
+        if (text && typeof text === 'object' && 'text' in text) {
+          const config = text as { text: string; values?: unknown[] }
+          return this.governedQuery(config.text, config.values ?? params)
+        }
+        return this.governedQuery(text as string, params)
+      },
       release: () => {
         this.governedPoolReleases += 1
       },
@@ -980,9 +996,15 @@ class IssuePoolHarness {
       this.governedRollbacks += 1
       return { ...this.result([]), rowCount: 0 }
     }
-    if (normalized.startsWith('select * from (select 42 as answer) __q limit 5001')) {
+    if (normalized.includes('select 42 as answer')) {
       this.governedReads += 1
-      return { ...this.result([{ answer: 42 }], ['answer']), rowCount: 1 }
+      return {
+        ...this.result(
+          [{ __ob_row_bytes: 16, __ob_row: { answer: 42 } }],
+          ['__ob_row_bytes', '__ob_row'],
+        ),
+        rowCount: 1,
+      }
     }
     throw new Error(`unexpected governed read query: ${normalized}`)
   }
@@ -1083,6 +1105,9 @@ const poolMockSources = new Map<string, string>([
       documents: table('documents', { id: 'documents.id', orgId: 'documents.orgId', status: 'documents.status' }),
       documentLines: table('documentLines', { documentId: 'document_lines.document_id', orgId: 'document_lines.org_id' }),
       orgs: table('orgs', { id: 'orgs.id' }),
+      users: table('users', { id: 'users.id', name: 'users.name', orgId: 'users.org_id', isActive: 'users.is_active' }),
+      roleAssignments: table('roleAssignments', { orgId: 'role_assignments.org_id', userId: 'role_assignments.user_id', roleId: 'role_assignments.role_id' }),
+      appRoles: table('appRoles', { id: 'app_roles.id', key: 'app_roles.key', isBuiltIn: 'app_roles.is_built_in' }),
       userScripts: table('userScripts', {
         orgId: 'user_scripts.org_id', triggerPoint: 'user_scripts.trigger_point',
         isActive: 'user_scripts.is_active', documentKind: 'user_scripts.document_kind',
@@ -1099,6 +1124,7 @@ const poolMockSources = new Map<string, string>([
         let selectedTable
         const builder = {
           from(value) { selectedTable = value; return builder },
+          innerJoin() { return builder },
           where() { return builder },
           orderBy() { return builder },
           for() { return builder },
@@ -1130,6 +1156,8 @@ const poolMockSources = new Map<string, string>([
     export function withOrgTransaction(_orgId, callback) { return state.transaction(callback) }
     export function connectGovernedReadClient() { return state.connectGovernedReadClient() }
     export const pool = { connect() { return state.connectRequestReadClient() } }
+    export function withBypass(work) { return work() }
+    export function withBypassContext(work) { return work() }
   `],
   ['pool:flow-run', `
     export async function runRecordFlows() { return { runs: [], gatesCreated: 0, failed: false } }

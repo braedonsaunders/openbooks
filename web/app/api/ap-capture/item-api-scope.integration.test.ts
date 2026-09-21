@@ -33,7 +33,7 @@ const HIDDEN_PO_NUMBER = 'PO-HIDDEN-SCOPE-ZX'
  * A 36-hyphen bulk id is HTTP 404, never a uuid bind inside HTTP 200.
  */
 async function fixture() {
-  const org = await createScratchOrg()
+  const org = await withBypassContext(() => createScratchOrg())
   const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Scoped reviewer', 'reviewer'))
   await withBypassContext(async () => {
     await db.execute(sql`
