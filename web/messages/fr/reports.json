@@ -728,6 +728,14 @@
       "hrm_pay_gap_snapshots": {
         "label": "Mesures d'écart",
         "description": "Une ligne par mesure et catégorie : niveau, effectifs, écarts et marque."
+      },
+      "hrm_qualifications": {
+        "label": "Qualifications",
+        "description": "Une ligne par certification ou licence détenue — titulaire, employeur, type et catégorie, délivrance et expiration, et statut enregistré avec sa vérification."
+      },
+      "hrm_qualification_alerts": {
+        "label": "Alertes de qualification",
+        "description": "Une ligne par alerte de renouvellement de certification — titulaire, type, expiration, le calendrier d’anticipation sur lequel elle s’est déclenchée, et si elle a été envoyée."
       }
     },
     "columns": {
@@ -1493,6 +1501,32 @@
         "method": "Méthode",
         "joint_assessment_due": "Examen conjoint",
         "id": "Mesure (id)"
+      },
+      "hrm_qualifications": {
+        "employee": "Employé",
+        "employer": "Employeur",
+        "type_code": "Code de type",
+        "type_name": "Type",
+        "category": "Catégorie",
+        "identifier": "N° de licence",
+        "issued_on": "Délivré le",
+        "expires_on": "Date d’expiration",
+        "status": "Statut",
+        "verified_at": "Vérifié le",
+        "qualification_id": "Qualification (id)",
+        "employment_id": "Emploi (id)"
+      },
+      "hrm_qualification_alerts": {
+        "employee": "Employé",
+        "type_code": "Code de type",
+        "type_name": "Type",
+        "expires_on": "Date d’expiration",
+        "due_on": "Échéance",
+        "lead_days": "Jours d’anticipation",
+        "sent_at": "Envoyé le",
+        "channel": "Canal",
+        "alert_id": "Alerte (id)",
+        "qualification_id": "Qualification (id)"
       }
     },
     "enumValues": {
@@ -1575,7 +1609,12 @@
       "filled": "Pourvu",
       "open": "Ouvert",
       "planned": "Prévu",
-      "position_assignment": "Affectation à un poste"
+      "position_assignment": "Affectation à un poste",
+      "valid": "Valide",
+      "revoked": "Révoquée",
+      "pending_verification": "Vérification en attente",
+      "inbox": "Boîte de réception",
+      "email": "E-mail"
     }
   },
   "operators": {

@@ -989,7 +989,9 @@
     "hrm_construction_manage": "管理建筑合规",
     "hrm_compensation_read": "查看带宽、体系与周期",
     "hrm_compensation_manage": "运行周期、推送标准、编写规划与快照",
-    "hrm_compensation_approve": "经审批流决定明细"
+    "hrm_compensation_approve": "经审批流决定明细",
+    "hrm_certifications_read": "查看认证与派工就绪情况",
+    "hrm_certifications_manage": "管理认证类型、要求与续期"
   },
   "ai": {
     "metaTitle": "AI 设置",

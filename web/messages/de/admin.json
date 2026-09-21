@@ -989,7 +989,9 @@
     "hrm_construction_manage": "Bau-Compliance verwalten",
     "hrm_compensation_read": "Bänder, Architektur und Runden einsehen",
     "hrm_compensation_manage": "Runden durchführen, Sätze übertragen, Pläne und Kennzahlen erstellen",
-    "hrm_compensation_approve": "Zeilen über den Genehmigungslauf entscheiden"
+    "hrm_compensation_approve": "Zeilen über den Genehmigungslauf entscheiden",
+    "hrm_certifications_read": "Zertifizierungen und Einsatzbereitschaft ansehen",
+    "hrm_certifications_manage": "Zertifizierungsarten, Anforderungen und Erneuerungen verwalten"
   },
   "ai": {
     "metaTitle": "KI-Einstellungen",

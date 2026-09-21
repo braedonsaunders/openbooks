@@ -989,7 +989,9 @@
     "hrm_construction_manage": "建設コンプライアンスを管理",
     "hrm_compensation_read": "バンド・体系・サイクルを閲覧",
     "hrm_compensation_manage": "サイクル実行、レート反映、プランとスナップショット作成",
-    "hrm_compensation_approve": "承認フローを通じて明細を決定"
+    "hrm_compensation_approve": "承認フローを通じて明細を決定",
+    "hrm_certifications_read": "認定と配車可否の表示",
+    "hrm_certifications_manage": "認定種類・要件・更新の管理"
   },
   "ai": {
     "metaTitle": "AI設定",

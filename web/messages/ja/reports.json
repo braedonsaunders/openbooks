@@ -728,6 +728,14 @@
       "hrm_pay_gap_snapshots": {
         "label": "格差スナップショット",
         "description": "スナップショット×カテゴリーごとに1行：レベル、人数、格差、フラグ。"
+      },
+      "hrm_qualifications": {
+        "label": "資格",
+        "description": "保有する認定・免許ごとに1行 — 保有者、雇用主、種類とカテゴリ、発行と有効期限、検証付きの保存済みステータス。"
+      },
+      "hrm_qualification_alerts": {
+        "label": "資格アラート",
+        "description": "認定更新アラートごとに1行 — 保有者、種類、有効期限、発火したリード日数スケジュール、送信済みかどうか。"
       }
     },
     "columns": {
@@ -1493,6 +1501,32 @@
         "method": "手法",
         "joint_assessment_due": "共同評価",
         "id": "スナップショット (id)"
+      },
+      "hrm_qualifications": {
+        "employee": "従業員",
+        "employer": "雇用主",
+        "type_code": "種類コード",
+        "type_name": "種類",
+        "category": "カテゴリ",
+        "identifier": "免許番号",
+        "issued_on": "発行日",
+        "expires_on": "有効期限",
+        "status": "ステータス",
+        "verified_at": "確認日時",
+        "qualification_id": "資格（ID）",
+        "employment_id": "雇用（ID）"
+      },
+      "hrm_qualification_alerts": {
+        "employee": "従業員",
+        "type_code": "種類コード",
+        "type_name": "種類",
+        "expires_on": "有効期限",
+        "due_on": "期限",
+        "lead_days": "リード日数",
+        "sent_at": "送信日時",
+        "channel": "チャネル",
+        "alert_id": "アラート（ID）",
+        "qualification_id": "資格（ID）"
       }
     },
     "enumValues": {
@@ -1575,7 +1609,12 @@
       "filled": "充足済み",
       "open": "募集中",
       "planned": "計画中",
-      "position_assignment": "ポジション割当"
+      "position_assignment": "ポジション割当",
+      "valid": "有効",
+      "revoked": "取消済み",
+      "pending_verification": "確認待ち",
+      "inbox": "受信トレイ",
+      "email": "メール"
     }
   },
   "operators": {

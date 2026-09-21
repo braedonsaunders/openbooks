@@ -728,6 +728,14 @@
       "hrm_pay_gap_snapshots": {
         "label": "Mediciones de brecha",
         "description": "Una fila por medición y categoría: nivel, personas, brechas y marca."
+      },
+      "hrm_qualifications": {
+        "label": "Cualificaciones",
+        "description": "Una fila por certificación o licencia poseída: titular, empleador, tipo y categoría, emisión y vencimiento, y estado guardado con su verificación."
+      },
+      "hrm_qualification_alerts": {
+        "label": "Alertas de cualificaciones",
+        "description": "Una fila por alerta de renovación de certificación: titular, tipo, vencimiento, el programa de antelación con el que se activó y si fue enviada."
       }
     },
     "columns": {
@@ -1493,6 +1501,32 @@
         "method": "Método",
         "joint_assessment_due": "Evaluación conjunta",
         "id": "Medición (id)"
+      },
+      "hrm_qualifications": {
+        "employee": "Empleado",
+        "employer": "Empleador",
+        "type_code": "Código de tipo",
+        "type_name": "Tipo",
+        "category": "Categoría",
+        "identifier": "N.º de licencia",
+        "issued_on": "Fecha de emisión",
+        "expires_on": "Fecha de vencimiento",
+        "status": "Estado",
+        "verified_at": "Verificado el",
+        "qualification_id": "Cualificación (id)",
+        "employment_id": "Empleo (id)"
+      },
+      "hrm_qualification_alerts": {
+        "employee": "Empleado",
+        "type_code": "Código de tipo",
+        "type_name": "Tipo",
+        "expires_on": "Fecha de vencimiento",
+        "due_on": "Vencimiento",
+        "lead_days": "Días de antelación",
+        "sent_at": "Enviado el",
+        "channel": "Canal",
+        "alert_id": "Alerta (id)",
+        "qualification_id": "Cualificación (id)"
       }
     },
     "enumValues": {
@@ -1575,7 +1609,12 @@
       "filled": "Cubierto",
       "open": "Abierto",
       "planned": "Planificado",
-      "position_assignment": "Asignación de puesto"
+      "position_assignment": "Asignación de puesto",
+      "valid": "Válida",
+      "revoked": "Revocada",
+      "pending_verification": "Verificación pendiente",
+      "inbox": "Bandeja de entrada",
+      "email": "Correo electrónico"
     }
   },
   "operators": {

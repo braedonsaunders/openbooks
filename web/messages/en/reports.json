@@ -728,6 +728,14 @@
       "hrm_pay_gap_snapshots": {
         "label": "Pay gap snapshots",
         "description": "One row per frozen snapshot per category: level, headcounts, gaps, and the joint-assessment flag. Requires the HRM compensation permission."
+      },
+      "hrm_qualifications": {
+        "label": "Qualifications",
+        "description": "One row per held certification or license — holder, employer, type and category, issuance and expiry, and stored status with its verification."
+      },
+      "hrm_qualification_alerts": {
+        "label": "Qualification alerts",
+        "description": "One row per certification renewal alert — holder, type, expiry, the lead-day schedule it fired on, and whether it has been sent."
       }
     },
     "columns": {
@@ -1493,6 +1501,32 @@
         "method": "Method",
         "joint_assessment_due": "Joint assessment due",
         "id": "Snapshot (id)"
+      },
+      "hrm_qualifications": {
+        "employee": "Employee",
+        "employer": "Employer",
+        "type_code": "Type code",
+        "type_name": "Type",
+        "category": "Category",
+        "identifier": "License no.",
+        "issued_on": "Issued on",
+        "expires_on": "Expires on",
+        "status": "Status",
+        "verified_at": "Verified at",
+        "qualification_id": "Qualification (id)",
+        "employment_id": "Employment (id)"
+      },
+      "hrm_qualification_alerts": {
+        "employee": "Employee",
+        "type_code": "Type code",
+        "type_name": "Type",
+        "expires_on": "Expires on",
+        "due_on": "Due on",
+        "lead_days": "Lead days",
+        "sent_at": "Sent at",
+        "channel": "Channel",
+        "alert_id": "Alert (id)",
+        "qualification_id": "Qualification (id)"
       }
     },
     "enumValues": {
@@ -1575,7 +1609,12 @@
       "differences": "Differences to resolve",
       "no_comparable_data": "Nothing was compared",
       "true": "Yes",
-      "false": "No"
+      "false": "No",
+      "valid": "Valid",
+      "revoked": "Revoked",
+      "pending_verification": "Pending verification",
+      "inbox": "Inbox",
+      "email": "Email"
     }
   },
   "operators": {

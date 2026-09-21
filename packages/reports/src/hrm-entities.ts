@@ -79,6 +79,14 @@ const HRM_COMP_LINE_STATUSES = ['pending', 'proposed', 'approved', 'rejected', '
 const HRM_PLAN_LINE_KINDS = ['create', 'backfill', 'change', 'terminate'] as const
 const HRM_PLAN_LINE_STATUSES = ['proposed', 'approved', 'rejected', 'opened', 'filled', 'cancelled'] as const
 // HR-12 end
+// HR-14 begin: certification register and alert queue report entities (0225).
+export const HRM_CERTIFICATIONS_READ_PERMISSION = 'hrm.certifications.read'
+export const HRM_CERTIFICATIONS_FEATURE_KEY = 'hrmCertifications'
+export const HRM_CERTIFICATION_ALERTS_FEATURE_KEY = 'hrmCertificationAlerts'
+
+const HRM_QUALIFICATION_STATUSES = ['valid', 'revoked', 'pending_verification'] as const
+const HRM_ALERT_CHANNELS = ['inbox', 'email'] as const
+// HR-14 end
 const HRM_REVIEW_KINDS = ['self', 'manager', 'peer'] as const
 const HRM_REVIEW_STATUSES = ['pending', 'submitted', 'calibrated', 'shared', 'acknowledged'] as const
 const HRM_GOAL_STATUSES = ['active', 'achieved', 'missed', 'cancelled'] as const
@@ -999,4 +1007,79 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     defaultSort: { column: 'worked_on', direction: 'desc' },
   },
   // HR-13 end
+  // HR-14 begin: certification register (one row per held qualification)
+  // and the renewal alert queue (one row per qualification/lead-day).
+  // Both read the 0225 ledger through the same joins the engine read
+  // path uses; expiring/expired stays a viewer derivation over
+  // expires_on against the org business day — storage holds only
+  // valid/revoked/pending_verification, so the report never persists a
+  // projection either. Renewals are new rows (linked by events), so the
+  // register shows every issuance; revoked rows stay visible as history.
+  {
+    key: 'hrm_qualifications',
+    label: 'Qualifications',
+    category: 'hrm',
+    description:
+      'One row per held certification or license — holder, employer, type and category, issuance and expiry, and stored status with its verification. Requires the HRM certifications permission.',
+    from: `hrm_worker_qualifications q
+      JOIN hrm_qualification_types t ON t.id = q.type_id AND t.org_id = q.org_id
+      JOIN worker_employments e ON e.id = q.employment_id AND e.org_id = q.org_id
+      JOIN parties w ON w.id = e.worker_party_id AND w.org_id = q.org_id
+      JOIN subsidiaries sub ON sub.id = e.employer_subsidiary_id AND sub.org_id = q.org_id`,
+    orgColumn: 'q.org_id',
+    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
+    requiredPermission: HRM_CERTIFICATIONS_READ_PERMISSION,
+    featureKey: HRM_CERTIFICATIONS_FEATURE_KEY,
+    // The expiry day is the fact: the period picker narrows on it, so a
+    // register filtered to a window lists what lapses inside it.
+    defaultPeriodField: 'expires_on',
+    columns: [
+      { key: 'employee', label: 'Employee', kind: 'text', expr: 'w.display_name' },
+      { key: 'employer', label: 'Employer', kind: 'text', expr: 'sub.name' },
+      { key: 'type_code', label: 'Type code', kind: 'text', expr: 't.code' },
+      { key: 'type_name', label: 'Type', kind: 'text', expr: 't.name' },
+      { key: 'category', label: 'Category', kind: 'text', expr: 't.category' },
+      { key: 'identifier', label: 'License no.', kind: 'text', expr: 'q.identifier' },
+      { key: 'issued_on', label: 'Issued on', kind: 'date', expr: 'q.issued_on' },
+      { key: 'expires_on', label: 'Expires on', kind: 'date', expr: 'q.expires_on' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'q.status', options: HRM_QUALIFICATION_STATUSES },
+      { key: 'verified_at', label: 'Verified at', kind: 'timestamp', expr: 'q.verified_at' },
+      { key: 'qualification_id', label: 'Qualification (id)', kind: 'uuid', expr: 'q.id' },
+      { key: 'employment_id', label: 'Employment (id)', kind: 'uuid', expr: 'q.employment_id' },
+    ],
+    defaultSort: { column: 'expires_on', direction: 'asc' },
+  },
+  {
+    key: 'hrm_qualification_alerts',
+    label: 'Qualification alerts',
+    category: 'hrm',
+    description:
+      'One row per certification renewal alert — holder, type, expiry, the lead-day schedule it fired on, and whether it has been sent. Requires the HRM certifications permission.',
+    from: `hrm_qualification_alerts a
+      JOIN hrm_worker_qualifications q ON q.id = a.qualification_id AND q.org_id = a.org_id
+      JOIN hrm_qualification_types t ON t.id = q.type_id AND t.org_id = a.org_id
+      JOIN worker_employments e ON e.id = q.employment_id AND e.org_id = a.org_id
+      JOIN parties w ON w.id = e.worker_party_id AND w.org_id = a.org_id`,
+    orgColumn: 'a.org_id',
+    subsidiaryScope: { column: 'e.employer_subsidiary_id' },
+    requiredPermission: HRM_CERTIFICATIONS_READ_PERMISSION,
+    featureKey: HRM_CERTIFICATION_ALERTS_FEATURE_KEY,
+    // The due day is the fact: the period picker narrows on it, so the
+    // queue filtered to a window lists what comes due inside it.
+    defaultPeriodField: 'due_on',
+    columns: [
+      { key: 'employee', label: 'Employee', kind: 'text', expr: 'w.display_name' },
+      { key: 'type_code', label: 'Type code', kind: 'text', expr: 't.code' },
+      { key: 'type_name', label: 'Type', kind: 'text', expr: 't.name' },
+      { key: 'expires_on', label: 'Expires on', kind: 'date', expr: 'q.expires_on' },
+      { key: 'due_on', label: 'Due on', kind: 'date', expr: 'a.due_on' },
+      { key: 'lead_days', label: 'Lead days', kind: 'number', expr: 'a.lead_days' },
+      { key: 'sent_at', label: 'Sent at', kind: 'timestamp', expr: 'a.sent_at' },
+      { key: 'channel', label: 'Channel', kind: 'enum', expr: 'a.channel', options: HRM_ALERT_CHANNELS },
+      { key: 'alert_id', label: 'Alert (id)', kind: 'uuid', expr: 'a.id' },
+      { key: 'qualification_id', label: 'Qualification (id)', kind: 'uuid', expr: 'a.qualification_id' },
+    ],
+    defaultSort: { column: 'due_on', direction: 'asc' },
+  },
+  // HR-14 end
 ]
