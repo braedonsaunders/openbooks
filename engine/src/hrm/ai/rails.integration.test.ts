@@ -17,7 +17,6 @@ import {
   transitionFlag,
 } from "./anomalies.ts";
 import { explainPay } from "./explain-pay.ts";
-import { AiRailsError } from "./errors.ts";
 
 /**
  * HR-21 AI rails DB coverage (integration partition, gating box runs
@@ -351,11 +350,17 @@ test("explain-pay trace carries lines, treatments, inputs and the diff", { skip:
     assert.ok(trace.sources.some((s) => s.kind === "pay_stub" && s.id === stubCur));
     assert.ok((await decisionCount(org.orgId)) > before, "explain-pay must log its decision");
 
-    // Explaining another person's pay without a grant refuses.
+    // Explaining another person's pay without a grant refuses, NAMING the
+    // missing permission. The class is deliberately not pinned: the scope
+    // check delegates to requireHrmSelfRead, so the refusal is the shared
+    // HrmAuthorizationError every other HRM read raises, and hrmRefusal
+    // already surfaces its message to the caller intact. Asserting the
+    // message is the stronger test anyway -- an instanceof pin passes for
+    // a refusal that says nothing useful.
     const outsider = await createScratchUser(org.orgId, "Outsider", "outsider");
     await assert.rejects(
       explainPay(db, { orgId: org.orgId, actorId: outsider, employmentId }),
-      AiRailsError,
+      /hrm\.self\.read/,
     );
   } finally {
     await dropScratchOrg(org.orgId);

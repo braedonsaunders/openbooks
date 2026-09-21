@@ -664,19 +664,36 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
     const employmentOnly = fakeAuthz(scratch.orgId, ['reports.read', 'hrm.employment.read'], null)
     await withOrgContext(scratch.orgId, async () => {
       const hiddenHrm = (await hiddenReportEntityKeys(employmentOnly)).filter((key) => key.startsWith('hrm_')).sort()
-      // DERIVED, after two rounds of adding names to a pin that could only
-      // ever omit. Every HRM feature is enabled for this org above, so
-      // nothing here hides for a feature reason and the answer is exactly
-      // "every HRM entity whose declared permission is not the one grant
-      // this reader holds". I kept this as a pin once on the argument that
-      // it depended on feature state; that argument was wrong, because the
-      // test turns every switch on before it runs.
-      const shouldHide = declared
-        .filter((entity) => entity.key.startsWith('hrm_') && entity.requiredPermission !== 'hrm.employment.read')
-        .map((entity) => entity.key)
-        .sort()
-      assert.ok(shouldHide.length > 20, `the non-employment HRM catalogue reads as ${shouldHide.length} entities`)
-      assert.deepEqual(hiddenHrm, shouldHide, 'only the entities whose grants are missing hide')
+      // BOTH DIRECTIONS, DERIVED, and deliberately NOT an exact-set pin.
+      // hiddenReportEntityKeys hides for permission OR for feature, so a
+      // pinned set silently couples this test to which switches happen to
+      // be on -- which is what made it wrong twice: nine of the entries I
+      // was told were missing turned out to be feature-gated, not
+      // permission-gated, and adding them would have pinned the feature
+      // state too.
+      const byKey = new Map(declared.map((entity) => [entity.key, entity]))
+      const hrmCatalogue = declared.filter((entity) => entity.key.startsWith('hrm_'))
+      assert.ok(hrmCatalogue.length > 20, `the HRM catalogue reads as ${hrmCatalogue.length} entities`)
+      // Every entity whose grant this reader lacks MUST hide. This is the
+      // claim the test is named for and it holds whatever the switches say.
+      for (const entity of hrmCatalogue) {
+        if (entity.requiredPermission === 'hrm.employment.read') continue
+        assert.ok(
+          hiddenHrm.includes(entity.key),
+          `${entity.key} stayed visible to a reader without ${entity.requiredPermission}`,
+        )
+      }
+      // And nothing hides WITHOUT a reason: an entity this reader is
+      // entitled to may only be hidden by a feature it actually declares.
+      for (const key of hiddenHrm) {
+        const entity = byKey.get(key)
+        assert.ok(entity, `${key} is hidden but absent from the catalogue`)
+        if (entity.requiredPermission !== 'hrm.employment.read') continue
+        assert.ok(
+          entity.featureKey,
+          `${key} hid from a reader holding its grant and names no feature that could explain it`,
+        )
+      }
     })
 
     const noPerm = fakeAuthz(scratch.orgId, ['reports.read'], null)
