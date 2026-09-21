@@ -230,7 +230,11 @@
     "totalJobPrice": "案件総額",
     "totalJobCost": "案件総原価",
     "committedHint": "未消化の発注書コミットメントです。",
-    "grossProfit": "売上総利益"
+    "grossProfit": "売上総利益",
+    "crewToday": "今日の班",
+    "unknownWorker": "（不明な作業員）",
+    "sinceTime": "{since}から",
+    "geoOutside": "圏外"
   },
   "charges": {
     "costRecovered": "回収済み原価",

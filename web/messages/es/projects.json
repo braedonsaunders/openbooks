@@ -230,7 +230,11 @@
     "totalJobPrice": "Precio total del trabajo",
     "totalJobCost": "Costo total del trabajo",
     "committedHint": "Compromisos de órdenes de compra abiertas.",
-    "grossProfit": "Utilidad bruta"
+    "grossProfit": "Utilidad bruta",
+    "crewToday": "Cuadrilla hoy",
+    "unknownWorker": "(trabajador desconocido)",
+    "sinceTime": "desde {since}",
+    "geoOutside": "fuera de geocerca"
   },
   "charges": {
     "costRecovered": "Costo recuperado",

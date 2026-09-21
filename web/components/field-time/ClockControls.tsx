@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Button, Input, Label, Select } from '@openbooks/ui'
 
@@ -32,6 +32,10 @@ interface QueuedEvent {
 const QUEUE_KEY = 'openbooks.field-clock-queue'
 
 function loadQueue(): QueuedEvent[] {
+  // Lazy state initializer (theme-provider precedent): the server has no
+  // store, so it reads empty; a returning offline worker hydrates with
+  // their queue and the banner renders client-side.
+  if (typeof window === 'undefined') return []
   try {
     const raw = localStorage.getItem(QUEUE_KEY)
     const parsed = raw ? (JSON.parse(raw) as QueuedEvent[]) : []
@@ -87,14 +91,10 @@ export function ClockControls({
   const [error, setError] = useState<string | null>(null)
   const [photoId, setPhotoId] = useState<string | null>(null)
   const [photoBusy, setPhotoBusy] = useState(false)
-  const [queue, setQueue] = useState<QueuedEvent[]>([])
+  const [queue, setQueue] = useState<QueuedEvent[]>(loadQueue)
   const [replaying, setReplaying] = useState(false)
   const [search, setSearch] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    setQueue(loadQueue())
-  }, [])
 
   const refresh = useCallback(async () => {
     const res = await fetch('/api/time/clock', { credentials: 'same-origin' })

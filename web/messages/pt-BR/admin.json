@@ -991,7 +991,10 @@
     "hrm_compensation_manage": "Executar ciclos, transferir taxas e criar planos e medições",
     "hrm_compensation_approve": "Decidir linhas pelo fluxo de aprovação",
     "hrm_certifications_read": "Ver certificações e prontidão de despacho",
-    "hrm_certifications_manage": "Gerenciar tipos de certificação, requisitos e renovações"
+    "hrm_certifications_manage": "Gerenciar tipos de certificação, requisitos e renovações",
+    "time_clock": "Bater ponto em campo",
+    "time_crew_enter": "Lançar lotes de equipe",
+    "time_kiosk_manage": "Gerenciar quiosques e PINs"
   },
   "ai": {
     "metaTitle": "Configurações de IA",
@@ -3443,6 +3446,14 @@
       "hrmDocAction": {
         "delete": "Excluir",
         "anonymize": "Anonimizar"
+      },
+      "geofenceKind": {
+        "circle": "Círculo",
+        "polygon": "Polígono"
+      },
+      "approvalSubject": {
+        "timesheetWeek": "Semana do timesheet",
+        "crewTimeBatch": "Lote de equipe"
       }
     },
     "payroll": {
@@ -4820,6 +4831,34 @@
     "hrmOrgChart": {
       "title": "Organograma",
       "description": "A árvore da organização com vagas, departamentos e amplitude de controle."
+    },
+    "fieldTime": {
+      "title": "Ponto em campo",
+      "description": "Ponto móvel e em quiosque com geocerca, foto e fila offline; lotes do encarregado; horas de equipamento nos apontamentos."
+    },
+    "fieldTimeGeofence": {
+      "title": "Cercas de ponto",
+      "description": "Conferir a posição com círculos e polígonos do projeto; fora se sinaliza, nunca se recusa."
+    },
+    "fieldTimePhoto": {
+      "title": "Fotos de ponto",
+      "description": "Exigir foto nos pontos móveis."
+    },
+    "fieldTimeKiosk": {
+      "title": "Quiosques de obra",
+      "description": "Aparelhos PIN compartilhados com volta automática."
+    },
+    "fieldTimeCrewEntry": {
+      "title": "Horas da equipe",
+      "description": "Lotes do encarregado por projeto e dia com assinatura e etapas."
+    },
+    "fieldTimeEquipment": {
+      "title": "Equipamento no tempo",
+      "description": "Horas de equipamento em apontamentos e linhas, ao preço do item. Requer equipamento."
+    },
+    "fieldTimeMultiStageApproval": {
+      "title": "Aprovação de horas por etapas",
+      "description": "Cadeia de supervisor, gerente de projeto e folha para timesheets e lotes."
     }
   },
   "backupsManager": {

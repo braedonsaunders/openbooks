@@ -52,9 +52,26 @@ export function GeofenceSection({
     setFences(payload.geofences)
   }, [projectId])
 
+  // Mount load through a promise chain (approval-actions precedent):
+  // state settles in the continuation, never synchronously in the body.
   useEffect(() => {
-    reload()
-  }, [reload])
+    let cancelled = false
+    fetch(`/api/time/geofences?projectId=${projectId}`, { credentials: 'same-origin' })
+      .then((res) => {
+        if (res.status === 404 || res.status === 403) {
+          if (!cancelled) setVisible(false)
+          return null
+        }
+        return res.ok ? res.json() : null
+      })
+      .then((payload: { geofences: GeofenceRow[] } | null) => {
+        if (!cancelled && payload) setFences(payload.geofences)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [projectId])
 
   const save = useCallback(async () => {
     setBusy(true)

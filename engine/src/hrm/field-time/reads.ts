@@ -27,7 +27,7 @@ export async function resolveOwnParty(orgId: string, userId: string): Promise<st
   return row.party_id!;
 }
 
-export interface TodayPair {
+export type TodayPair = {
   pairId: string;
   clockInAt: string;
   clockOutAt: string | null;
@@ -95,14 +95,14 @@ export async function teamClockedIn(orgId: string, userId: string, today: string
   // One parameter per id: bare JS arrays must never be interpolated into
   // ANY() (they bind as row constructors, not PostgreSQL arrays).
   const ids = own.map((id) => sql`${id}::uuid`);
-  return (await db.execute<Array<{
+  return (await db.execute<{
     employeePartyId: string;
     employeeName: string | null;
     since: string;
     projectName: string | null;
     costCodeRef: string | null;
     geoCheck: string;
-  }>>(sql`
+  }>(sql`
     select e.worker_party_id::text as "employeePartyId",
            emp.display_name as "employeeName",
            i.occurred_at::text as since,
@@ -134,13 +134,13 @@ export async function crewToday(orgId: string, projectId: string): Promise<Array
   geoCheck: string;
 }>> {
   if (!(await lockAndCheckOrgFeature(db, orgId, FIELD_TIME_FEATURE))) return [];
-  return (await db.execute<Array<{
+  return (await db.execute<{
     employeePartyId: string;
     employeeName: string | null;
     since: string;
     costCodeRef: string | null;
     geoCheck: string;
-  }>>(sql`
+  }>(sql`
     select i.employee_party_id::text as "employeePartyId",
            emp.display_name as "employeeName",
            i.occurred_at::text as since,
@@ -152,7 +152,7 @@ export async function crewToday(orgId: string, projectId: string): Promise<Array
      order by i.occurred_at`)).rows;
 }
 
-export interface CrewBatchSummary {
+export type CrewBatchSummary = {
   id: string;
   foremanName: string | null;
   projectName: string | null;
@@ -188,7 +188,7 @@ export async function listCrewBatches(
      order by b.worked_on desc, b.id`)).rows;
 }
 
-export interface BatchDetail {
+export type BatchDetail = {
   id: string;
   status: string;
   foremanPartyId: string;
@@ -231,7 +231,7 @@ export async function getBatchDetail(orgId: string, batchId: string): Promise<Ba
   if (!batch) {
     throw new FieldTimeError("batch_unknown", "The crew batch is unknown in this organization — reload the crew list");
   }
-  const lines = (await db.execute<BatchDetail["lines"]>(sql`
+  const lines = (await db.execute<BatchDetail["lines"][number]>(sql`
     select l.id::text as id, l.employee_party_id::text as "employeePartyId",
            emp.display_name as "employeeName", l.hours::text as hours,
            l.time_type_id::text as "timeTypeId", l.project_task_id::text as "projectTaskId",
@@ -243,7 +243,7 @@ export async function getBatchDetail(orgId: string, batchId: string): Promise<Ba
       left join equipment_units eq on eq.id = l.equipment_id and eq.org_id = ${orgId}
      where l.batch_id = ${batchId}
      order by emp.display_name, l.id`)).rows;
-  const events = (await db.execute<BatchDetail["events"]>(sql`
+  const events = (await db.execute<BatchDetail["events"][number]>(sql`
     select e.kind, u.name as "actorName", e.reason,
            e.recorded_at::text as "recordedAt"
       from crew_time_batch_events e
@@ -285,7 +285,7 @@ export async function approvalFlags(
   const pairFilter = filter.batchId
     ? sql`and te.crew_batch_line_id in (select id from crew_time_batch_lines where batch_id = ${filter.batchId})`
     : sql`and te.employee_party_id = ${filter.employeePartyId} and te.worked_on >= ${filter.weekStart}::date and te.worked_on <= ${filter.weekStart}::date + 6`;
-  return (await db.execute<Array<{
+  return (await db.execute<{
     entryId: string;
     workedOn: string;
     hours: string;
@@ -293,7 +293,7 @@ export async function approvalFlags(
     autoClosed: boolean;
     hasPhoto: boolean;
     photoFileId: string | null;
-  }>>(sql`
+  }>(sql`
     select te.id::text as "entryId", te.worked_on::text as "workedOn",
            te.hours::text as hours,
            ev.geo_check as "geoCheck",

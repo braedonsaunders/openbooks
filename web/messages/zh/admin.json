@@ -991,7 +991,10 @@
     "hrm_compensation_manage": "运行周期、推送标准、编写规划与快照",
     "hrm_compensation_approve": "经审批流决定明细",
     "hrm_certifications_read": "查看认证与派工就绪情况",
-    "hrm_certifications_manage": "管理认证类型、要求与续期"
+    "hrm_certifications_manage": "管理认证类型、要求与续期",
+    "time_clock": "外勤打卡",
+    "time_crew_enter": "录入班组批次",
+    "time_kiosk_manage": "管理终端与PIN"
   },
   "ai": {
     "metaTitle": "AI 设置",
@@ -3443,6 +3446,14 @@
       "hrmDocAction": {
         "delete": "删除",
         "anonymize": "匿名化"
+      },
+      "geofenceKind": {
+        "circle": "圆形",
+        "polygon": "多边形"
+      },
+      "approvalSubject": {
+        "timesheetWeek": "工时周",
+        "crewTimeBatch": "班组批次"
       }
     },
     "payroll": {
@@ -4820,6 +4831,34 @@
     "hrmOrgChart": {
       "title": "组织架构图",
       "description": "显示空缺、部门和管理幅度的组织树。"
+    },
+    "fieldTime": {
+      "title": "外勤打卡",
+      "description": "带围栏、拍照、离线队列的手机／终端打卡，工长批次，工时附设备工时。"
+    },
+    "fieldTimeGeofence": {
+      "title": "打卡围栏",
+      "description": "按项目的圆和多边形核对位置；围栏外只标记，不拒绝。"
+    },
+    "fieldTimePhoto": {
+      "title": "打卡拍照",
+      "description": "手机打卡必须拍照。"
+    },
+    "fieldTimeKiosk": {
+      "title": "工地终端",
+      "description": "共用PIN设备，自动回到待机。"
+    },
+    "fieldTimeCrewEntry": {
+      "title": "班组工时",
+      "description": "工长按项目按日填报，签名并分阶段审批。"
+    },
+    "fieldTimeEquipment": {
+      "title": "工时附设备",
+      "description": "工时与批次行的设备工时，按设备计费品目计价。需要设备功能。"
+    },
+    "fieldTimeMultiStageApproval": {
+      "title": "工时多级审批",
+      "description": "工时单与班组批次的主管、项目经理、薪酬审批链。"
     }
   },
   "backupsManager": {

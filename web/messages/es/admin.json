@@ -991,7 +991,10 @@
     "hrm_compensation_manage": "Ejecutar ciclos, trasladar tarifas y crear planes y mediciones",
     "hrm_compensation_approve": "Decidir líneas mediante el flujo de aprobación",
     "hrm_certifications_read": "Ver certificaciones y disponibilidad de asignación",
-    "hrm_certifications_manage": "Gestionar tipos de certificación, requisitos y renovaciones"
+    "hrm_certifications_manage": "Gestionar tipos de certificación, requisitos y renovaciones",
+    "time_clock": "Fichar en campo",
+    "time_crew_enter": "Cargar lotes de cuadrilla",
+    "time_kiosk_manage": "Gestionar quioscos y PIN"
   },
   "ai": {
     "metaTitle": "Proveedores de IA",
@@ -3398,6 +3401,14 @@
       "hrmDocAction": {
         "delete": "Eliminar",
         "anonymize": "Anonimizar"
+      },
+      "geofenceKind": {
+        "circle": "Círculo",
+        "polygon": "Polígono"
+      },
+      "approvalSubject": {
+        "timesheetWeek": "Semana del parte",
+        "crewTimeBatch": "Lote de cuadrilla"
       }
     },
     "laborCosting": {
@@ -4820,6 +4831,34 @@
     "hrmOrgChart": {
       "title": "Organigrama",
       "description": "El árbol de la organización con vacantes, departamentos y ámbito de control."
+    },
+    "fieldTime": {
+      "title": "Fichaje en campo",
+      "description": "Fichaje móvil y en quiosco con geocerca, foto y cola offline; lotes del capataz; horas de equipo en los partes."
+    },
+    "fieldTimeGeofence": {
+      "title": "Geocercas de fichaje",
+      "description": "Comparar la ubicación con círculos y polígonos del proyecto; lo de fuera se marca, nunca se rechaza."
+    },
+    "fieldTimePhoto": {
+      "title": "Fotos de fichaje",
+      "description": "Exigir foto en los fichajes móviles."
+    },
+    "fieldTimeKiosk": {
+      "title": "Quioscos de obra",
+      "description": "Dispositivos PIN compartidos con vuelta automática al inicio."
+    },
+    "fieldTimeCrewEntry": {
+      "title": "Tiempo de cuadrilla",
+      "description": "Lotes del capataz por proyecto y día con firma y etapas."
+    },
+    "fieldTimeEquipment": {
+      "title": "Equipo en el tiempo",
+      "description": "Horas de equipo en partes y líneas, al precio del ítem del equipo. Requiere equipo."
+    },
+    "fieldTimeMultiStageApproval": {
+      "title": "Aprobación de tiempo por etapas",
+      "description": "Cadena de supervisor, jefe de proyecto y nómina para partes y lotes."
     }
   },
   "backupsManager": {

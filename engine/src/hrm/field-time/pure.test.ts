@@ -4,8 +4,8 @@ import {
   checkEquipmentTolerance,
   insideCircle,
   insidePolygon,
+  netShiftMs,
   roundHours,
-  subtractBreaks,
   validateClockSequence,
   validateStages,
 } from "./pure.ts";
@@ -48,11 +48,18 @@ describe("rounding rules", () => {
 });
 
 describe("break subtraction", () => {
-  it("a 30-minute break leaves 7.5", () => {
-    assert.equal(subtractBreaks("8.0000", 30), "7.5000");
+  it("recorded breaks replace the auto-deduction up to their length", () => {
+    // 8h shift, 45 recorded minutes, 30-minute rule → 7.25h net.
+    assert.equal(netShiftMs(8 * 3_600_000, 45 * 60_000, 30), 7.25 * 3_600_000);
   });
-  it("breaks never drive hours negative", () => {
-    assert.equal(subtractBreaks("0.2500", 60), "0.0000");
+  it("the declared rule applies when no break is recorded", () => {
+    assert.equal(netShiftMs(8 * 3_600_000, 0, 30), 7.5 * 3_600_000);
+  });
+  it("breaks never drive net time negative", () => {
+    assert.equal(netShiftMs(15 * 60_000, 60 * 60_000, 0), 0);
+  });
+  it("an undeclared rule refuses by name", () => {
+    refuses(() => netShiftMs(8 * 3_600_000, 0, -1));
   });
 });
 

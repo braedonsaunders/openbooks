@@ -991,7 +991,10 @@
     "hrm_compensation_manage": "Run cycles, push rates, and author plans and snapshots",
     "hrm_compensation_approve": "Decide cycle lines through the approval run",
     "hrm_certifications_read": "View certifications and dispatch readiness",
-    "hrm_certifications_manage": "Manage certification types, requirements, and renewals"
+    "hrm_certifications_manage": "Manage certification types, requirements, and renewals",
+    "time_clock": "Clock in from the field",
+    "time_crew_enter": "Enter crew time batches",
+    "time_kiosk_manage": "Manage kiosk devices and PINs"
   },
   "ai": {
     "metaTitle": "AI providers",
@@ -3443,6 +3446,14 @@
       "hrmDocAction": {
         "delete": "Delete",
         "anonymize": "Anonymize"
+      },
+      "geofenceKind": {
+        "circle": "Circle",
+        "polygon": "Polygon"
+      },
+      "approvalSubject": {
+        "timesheetWeek": "Timesheet week",
+        "crewTimeBatch": "Crew time batch"
       }
     },
     "payroll": {
@@ -4820,6 +4831,34 @@
     "hrmOrgChart": {
       "title": "Org chart",
       "description": "The organization tree with vacancies, departments, and span of control."
+    },
+    "fieldTime": {
+      "title": "Field time capture",
+      "description": "Mobile and kiosk clock-in with geofence, photo and offline queue; foreman crew batches; equipment hours on entries."
+    },
+    "fieldTimeGeofence": {
+      "title": "Clock geofences",
+      "description": "Check clock-in location against per-project circles and polygons; outside fixes are flagged, never refused."
+    },
+    "fieldTimePhoto": {
+      "title": "Clock photos",
+      "description": "Require a photo with mobile clock events."
+    },
+    "fieldTimeKiosk": {
+      "title": "Site kiosks",
+      "description": "Shared PIN devices for crew clock-in with auto-return to idle."
+    },
+    "fieldTimeCrewEntry": {
+      "title": "Crew time entry",
+      "description": "Foreman batches per project per day with signatures and stage approvals."
+    },
+    "fieldTimeEquipment": {
+      "title": "Equipment on time",
+      "description": "Equipment hours on time entries and crew lines, priced through the unit's charge item. Needs equipment."
+    },
+    "fieldTimeMultiStageApproval": {
+      "title": "Multi-stage time approval",
+      "description": "Supervisor, project manager and payroll stage chains for timesheets and crew batches."
     }
   },
   "backupsManager": {
