@@ -649,9 +649,15 @@ export interface MacrsYearWindow {
   /**
    * Convention adjacency sealed by an applied paper. `null` freezes absence:
    * a later-added contiguous successor must not become §4.01 context.
-   * Omitted (`undefined`) means this window is live and may read `windows[index+1]`.
+   * Omitted (`undefined`) means this window is live and may read the next
+   * same-owner year, not the next globally sorted row.
    */
-  frozenConventionSuccessor?: { yearStart: string; yearEnd: string } | null;
+  frozenConventionSuccessor?: {
+    yearStart: string;
+    yearEnd: string;
+    subsidiaryId?: string;
+    regime?: string;
+  } | null;
 }
 
 /** Ownership loads for one vintage. Transferor history stops at the checkpoint;
@@ -697,6 +703,35 @@ function isContiguousSuccessor(previous: MacrsYearWindow, next: MacrsYearWindow)
   return nextCalendarDay(previous.yearEnd) === next.yearStart;
 }
 
+function sameMacrsWindowContext(left: MacrsYearWindow, right: MacrsYearWindow): boolean {
+  return (left.subsidiaryId ?? "") === (right.subsidiaryId ?? "")
+    && (left.regime ?? "") === (right.regime ?? "");
+}
+
+function nextSameOwnerWindow(
+  windows: readonly MacrsYearWindow[],
+  index: number,
+): MacrsYearWindow | undefined {
+  const window = windows[index];
+  if (!window) return undefined;
+  return windows.slice(index + 1).find((candidate) => sameMacrsWindowContext(window, candidate));
+}
+
+function frozenSameOwnerSuccessor(
+  windows: readonly MacrsYearWindow[],
+  window: MacrsYearWindow,
+): MacrsYearWindow | undefined {
+  const frozen = window.frozenConventionSuccessor;
+  if (!frozen) return undefined;
+  return windows.find((candidate) =>
+    sameMacrsWindowContext(window, candidate)
+    && candidate.yearStart === frozen.yearStart
+    && candidate.yearEnd === frozen.yearEnd
+    && (frozen.subsidiaryId == null || candidate.subsidiaryId === frozen.subsidiaryId)
+    && (frozen.regime == null || candidate.regime === frozen.regime),
+  );
+}
+
 export type MacrsAppliedWindowSet = {
   /** Calculation asOf that consumed these windows. */
   throughOn: string;
@@ -729,11 +764,16 @@ export function macrsWindowsPreservingAppliedContext(
         continue;
       }
       if (sealed.has(key)) continue;
-      const next = ordered[index + 1];
+      const next = nextSameOwnerWindow(ordered, index);
       sealed.set(key, {
         ...window,
         frozenConventionSuccessor: next && isContiguousSuccessor(window, next)
-          ? { yearStart: next.yearStart, yearEnd: next.yearEnd }
+          ? {
+              yearStart: next.yearStart,
+              yearEnd: next.yearEnd,
+              subsidiaryId: next.subsidiaryId,
+              regime: next.regime,
+            }
           : null,
       });
     }
@@ -767,13 +807,8 @@ export function adjacentShortYearExclusion(
   const window = windows[index];
   if (!window) return false;
   const next = window.frozenConventionSuccessor === undefined
-    ? windows[index + 1]
-    : window.frozenConventionSuccessor == null
-      ? undefined
-      : windows.find((candidate) =>
-        candidate.yearStart === window.frozenConventionSuccessor!.yearStart
-        && candidate.yearEnd === window.frozenConventionSuccessor!.yearEnd,
-      );
+    ? nextSameOwnerWindow(windows, index)
+    : frozenSameOwnerSuccessor(windows, window);
   return !!(
     next
     && isShortTaxYear(window.yearStart, window.yearEnd)

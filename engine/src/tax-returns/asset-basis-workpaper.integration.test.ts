@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -61,8 +61,9 @@ async function fixture(
   work: (f: Fixture) => Promise<void>,
   operation: AssetChangeInput["operation"] = "partial_disposal",
 ) {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
+    await withOrgContext(org.orgId, async () => {
     const actors = await seedFlowActors(org.orgId);
     await db.execute(sql`
       insert into user_permission_overrides(org_id,user_id,permission,effect)
@@ -126,6 +127,7 @@ async function fixture(
         operation === "intercompany_transfer"
           ? String(applied.receivingAssetId)
           : null,
+    });
     });
   } finally {
     await dropScratchOrg(org.orgId);
@@ -978,7 +980,7 @@ test(
       const w1 = await ensureTaxYearWindow(db, f.org.orgId, f.actors.submitterId, {
         subsidiaryId: f.org.subsidiaryId,
         regime: "us_macrs",
-        yearStart: "2026-07-01",
+        yearStart: "2026-05-01",
         yearEnd: "2026-07-15",
         filingYear: 2026,
         reason: "first short year",
@@ -1057,7 +1059,7 @@ test(
         f.actors.submitterId,
         {
           operation: "partial_disposal",
-          effectiveOn: "2026-10-01",
+          effectiveOn: "2026-08-20",
           reason: "Sell a third identical component",
           assessment: "W2 is now a calculated year and may read W3 as convention context",
           idempotencyKey: randomUUID(),
