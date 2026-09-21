@@ -1372,11 +1372,16 @@ function allocateRecoveryYearsToReporting(args: {
   for (const item of desired) {
     const take = cmp(item.windowTake, left) <= 0 ? item.windowTake : left;
     left = formatMoney(add(left, neg(take)), 4);
-    const windowParts = splitAppliedComponents(item.row.applied, take);
     const throughParts = splitAppliedComponents(
       item.row.applied,
       formatMoney(add(item.beforeTake, take), 4),
     );
+    const beforeParts = splitAppliedComponents(item.row.applied, item.beforeTake);
+    const windowParts = {
+      section179: formatMoney(add(throughParts.section179, neg(beforeParts.section179)), 4),
+      bonus: formatMoney(add(throughParts.bonus, neg(beforeParts.bonus)), 4),
+      macrs: formatMoney(add(throughParts.macrs, neg(beforeParts.macrs)), 4),
+    };
     section179 = formatMoney(add(section179, windowParts.section179), 4);
     bonus = formatMoney(add(bonus, windowParts.bonus), 4);
     macrs = formatMoney(add(macrs, windowParts.macrs), 4);
