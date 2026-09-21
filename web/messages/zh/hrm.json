@@ -707,6 +707,7 @@
       "pause": "暂停",
       "poolMembers": "成员",
       "proposedSlots": "已提议{count}个",
+      "proposeFromPool": "从分组提议",
       "publish": "发布",
       "questions": "问题",
       "remove": "移除",

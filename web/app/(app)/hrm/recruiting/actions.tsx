@@ -610,18 +610,42 @@ export function ScorecardFormIsland({
 /** Propose slots from declared windows; surfaces the booking link. */
 export function SlotProposeIsland({
   interviewId,
+  pools,
   labels,
 }: {
   interviewId: string
-  labels: { submit: string; failed: string }
+  pools: { id: string; name: string; windowCount: number }[]
+  labels: { submit: string; failed: string; proposeFromPool: string }
 }) {
   const refresh = useRefresh()
   const [startsAt, setStartsAt] = useState('')
   const [endsAt, setEndsAt] = useState('')
   const [timezone, setTimezone] = useState('America/Toronto')
+  const [poolId, setPoolId] = useState('')
   const [link, setLink] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  async function proposeFromPool(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!poolId) return
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await postJson(`/api/hrm/recruiting/interviews/${interviewId}/slots`, 'POST', { poolId })
+      if (!res.ok) {
+        setError(await readApiErrorMessage(res, labels.failed))
+        setBusy(false)
+        return
+      }
+      const body = (await res.json()) as { bookingUrlPath: string }
+      setLink(body.bookingUrlPath)
+      refresh()
+    } catch {
+      setError(labels.failed)
+      setBusy(false)
+    }
+  }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -646,6 +670,22 @@ export function SlotProposeIsland({
   }
 
   return (
+    <>
+    {pools.length > 0 ? (
+      <form onSubmit={(event) => void proposeFromPool(event)} className="mb-3 flex flex-wrap items-center gap-2">
+        <Select aria-label={labels.proposeFromPool} value={poolId} onChange={(event) => setPoolId(event.target.value)}>
+          <option value="">{labels.proposeFromPool}</option>
+          {pools.map((pool) => (
+            <option key={pool.id} value={pool.id}>
+              {pool.name} ({pool.windowCount})
+            </option>
+          ))}
+        </Select>
+        <Button size="sm" type="submit" disabled={busy || !poolId}>
+          {labels.proposeFromPool}
+        </Button>
+      </form>
+    ) : null}
     <form onSubmit={(event) => void submit(event)} className="space-y-2">
       <div className="flex flex-wrap gap-2">
         <Input aria-label="starts" type="datetime-local" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} />
@@ -662,6 +702,7 @@ export function SlotProposeIsland({
         {labels.submit}
       </Button>
     </form>
+    </>
   )
 }
 

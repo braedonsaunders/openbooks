@@ -44,6 +44,9 @@ import { documentsSignaturesAndRetention } from './articles/documents-signatures
 import { engagementSurveys } from './articles/engagement-surveys'
 import { orgChartAndDirectory } from './articles/org-chart-and-directory'
 // HR-19 end
+// HR-18 begin: structured interviews, offers and job boards article.
+import { structuredInterviewsOffersJobBoards } from './articles/structured-interviews-offers-job-boards'
+// HR-18 end
 import { taxConfiguration } from './articles/tax-configuration'
 import { taxJurisdictionsAndNexus, taxReturnsAndBoxes } from './articles/taxes'
 import { fieldTickets } from './articles/field-tickets'
@@ -287,6 +290,9 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   engagementSurveys,
   orgChartAndDirectory,
   // HR-19 end
+  // HR-18 begin
+  structuredInterviewsOffersJobBoards,
+  // HR-18 end
   // HR-14 begin: pre-existing red on the stacked base — the 31defe406
   // reconciliation left fieldTickets/subcontractorCompliance listed twice
   // (once on the long line above, once here). The duplicate line is removed.

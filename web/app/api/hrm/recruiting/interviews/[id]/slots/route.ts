@@ -55,6 +55,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       actorId: gate.user.id,
       interviewId: id,
       windows: body.windows,
+      poolId: body.poolId,
       expiresAt: body.expiresAt,
     });
     return NextResponse.json(result, { status: 201 });
