@@ -1491,7 +1491,9 @@
         "classes": "Tax classes",
         "firstYear": "First-year rules",
         "methods": "Methods",
-        "books": "Book policies"
+        "books": "Book policies",
+        "cessation": "Qualifying activity",
+        "years": "Tax years"
       },
       "packsTitle": "Country depreciation packs",
       "packsDescription": "Installing a pack creates editable tenant configuration. Existing overrides are never replaced.",
@@ -1529,6 +1531,14 @@
         "assignments": {
           "title": "Asset-category assignments",
           "description": "Assign each asset category to a regime class in Tax attributes."
+        },
+        "cessation": {
+          "title": "CAA 55(4) cessation",
+          "description": "Record when a UK qualifying activity ceases so a balancing allowance is available. Disposing of the last asset is not cessation."
+        },
+        "years": {
+          "title": "Tax years",
+          "description": "Declare tax-year dates and the reason for each legal entity and regime."
         }
       }
     },
@@ -2576,6 +2586,16 @@
         "description": "Retention rules: anonymize or delete candidates on schedule.",
         "singularTitle": "Retention rule",
         "title": "Retention rules"
+      },
+      "tax-qualifying-activity-cessations": {
+        "title": "Qualifying Activity Cessations",
+        "singularTitle": "Qualifying Activity Cessation",
+        "description": "Effective-dated CAA 55(4) cessation of a UK qualifying activity per legal entity. A balancing allowance is available only after this date; emptying the pool is not enough."
+      },
+      "tax-year-windows": {
+        "title": "Tax years",
+        "singularTitle": "Tax year",
+        "description": "Declare tax-year dates for each legal entity and regime, including short years. Give the reason for each window; dates already used in a run are preserved."
       }
     },
     "fields": {
@@ -2960,7 +2980,10 @@
       "retroThreshold": "Retro-pay threshold",
       "cohortKey": "Cohort",
       "biasTerms": "Bias terms",
-      "reviewMonths": "Review cadence (months)"
+      "reviewMonths": "Review cadence (months)",
+      "yearStart": "Year start",
+      "yearEnd": "Year end",
+      "filingYear": "Filing-year label"
     },
     "fieldHelp": {
       "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",

@@ -391,6 +391,37 @@ export const assetTransferConsolidationEntries = pgTable(
   },
 );
 
+/** Independently approved statutory tax-basis workpaper. Frozen facts and
+ *  computed outcomes; book amounts and group_component are not this table. */
+export const taxAssetBasisWorkpapers = pgTable("tax_asset_basis_workpapers", {
+  id: id(),
+  orgId: orgRef(),
+  assetId: uuid("asset_id").notNull(),
+  changeId: uuid("change_id").notNull(),
+  sourceChangeId: uuid("source_change_id"),
+  sourceEventId: uuid("source_event_id"),
+  receivingAssetId: uuid("receiving_asset_id"),
+  effectiveOn: date("effective_on").notNull(),
+  sourceOperation: text("source_operation", {
+    enum: ["partial_disposal", "intercompany_transfer"],
+  }).notNull(),
+  applicable: text("applicable", { enum: ["seller", "buyer", "both"] }).notNull(),
+  regime: text("regime").notNull(),
+  assessment: text("assessment").notNull(),
+  facts: jsonb("facts").notNull(),
+  computed: jsonb("computed").notNull(),
+  /** Generated from computed; pool-run consumes these, never book cost. */
+  sellerDisposition: money("seller_disposition"),
+  buyerAddition: money("buyer_addition"),
+  remainingBasis: money("remaining_basis"),
+  reversedByChangeId: uuid("reversed_by_change_id"),
+  reversedOn: date("reversed_on"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  createdBy: uuid("created_by").notNull(),
+});
+
 /** Approved group valuation linked to the receiving legal-book event. */
 export const assetTransferMeasurements = pgTable('asset_transfer_measurements', {
   id:id(), orgId:orgRef(), ordinal:bigserial('ordinal',{mode:'bigint'}).notNull(),

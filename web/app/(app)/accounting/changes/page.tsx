@@ -15,6 +15,7 @@ import { subsidiaryVisibleFilter } from "@/lib/subsidiaries";
 import { ChangeEvidence } from "./ChangeEvidence";
 import { ReverseAssetChange } from "./ReverseAssetChange";
 import { ChangeActions } from "./ChangeActions";
+import { TaxMatchingReplayButton } from "./TaxMatchingReplayButton";
 export const dynamic = "force-dynamic";
 const fieldNames: Record<string, string> = {
   groupCarryingBefore: "Group carrying amount before valuation",
@@ -134,6 +135,7 @@ export default async function AccountingChanges({
     collect(row.payload);
     collect(row.before_state.preview);
     collect(row.before_state.previews);
+    collect(row.result);
   }
   const references = referenceIds.size
     ? (
@@ -143,12 +145,16 @@ export default async function AccountingChanges({
     union all select id,name from recognition_rules where org_id=${orgId} and id in(select jsonb_array_elements_text(${JSON.stringify([...referenceIds])}::jsonb)::uuid)
     union all select id,description from performance_obligations where org_id=${orgId} and id in(select jsonb_array_elements_text(${JSON.stringify([...referenceIds])}::jsonb)::uuid)
     union all select id,name from subsidiaries where org_id=${orgId} and id in(select jsonb_array_elements_text(${JSON.stringify([...referenceIds])}::jsonb)::uuid)
+    union all select id,asset_number||' — '||name from fixed_assets where org_id=${orgId} and id in(select jsonb_array_elements_text(${JSON.stringify([...referenceIds])}::jsonb)::uuid) ${subsidiaryVisibleFilter(sql`subsidiary_id`, auth.allowedSubsidiaryIds)}
   `)
       ).rows
     : [];
   const referenceNames = Object.fromEntries(
     references.map((r) => [r.id, r.label]),
   );
+  const taxBasis =
+    row?.operation === "tax_basis" || row?.operation === "tax_basis_reversal" ||
+    row?.operation === "tax_matching_replay";
   const permission =
     row?.domain === "revenue"
       ? "ar.post"
@@ -209,23 +215,44 @@ export default async function AccountingChanges({
                   <h3 className="font-semibold">
                     Proposed terms and assessment
                   </h3>
-                  <ChangeEvidence value={row.payload} names={referenceNames} />
+                  <ChangeEvidence
+                    value={row.payload}
+                    names={referenceNames}
+                    taxBasis={taxBasis}
+                  />
                 </section>
                 {["revenue", "asset", "consolidation"].includes(row.domain) ? (
                   <section className="space-y-2">
-                    <h3 className="font-semibold">Book-specific allocations</h3>
+                    <h3 className="font-semibold">
+                      {row.operation === "tax_matching_replay"
+                        ? "Historical matching replay assessment"
+                        : taxBasis
+                        ? "Statutory tax basis assessment"
+                        : "Book-specific allocations"}
+                    </h3>
                     <ChangeEvidence
                       value={
-                        row.before_state.preview ?? row.before_state.previews
+                        row.operation === "tax_matching_replay"
+                          ? row.before_state
+                          : row.before_state.preview ?? row.before_state.previews
                       }
                       names={referenceNames}
+                      taxBasis={taxBasis}
                     />
                   </section>
                 ) : null}
                 {row.result ? (
                   <section className="space-y-2">
                     <h3 className="font-semibold">Applied result</h3>
-                    <Facts value={row.result} />
+                    {taxBasis ? (
+                      <ChangeEvidence
+                        value={row.result}
+                        names={referenceNames}
+                        taxBasis
+                      />
+                    ) : (
+                      <Facts value={row.result} />
+                    )}
                     {Array.isArray(row.result.entryIds)
                       ? row.result.entryIds.map((entry) => (
                           <p key={String(entry)}>
@@ -264,15 +291,30 @@ export default async function AccountingChanges({
                     Open lease and schedule history
                   </Link>
                 ) : null}
+                {row.domain === "asset" && row.status === "applied" &&
+                row.operation === "tax_basis" && can(auth, "assets.manage") ? (
+                  <TaxMatchingReplayButton assetId={row.subject_id} replacementWorkpaperChangeId={row.id} />
+                ) : null}
+                {row.domain === "asset" && row.operation === "tax_matching_replay" ? (
+                  <p>
+                    Applied replay evidence cannot be reversed. For a further correction,
+                    reverse the replacement tax basis workpaper, apply its replacement,
+                    and approve a new matching replay. Re-run the latest computed year
+                    from <Link className="underline" href="/assets/tax-pools">Fixed Assets tax pools</Link> after applying the replay.
+                  </p>
+                ) : null}
                 {row.domain === "asset" &&
                 row.status === "applied" &&
-                ["partial_disposal", "intercompany_transfer"].includes(
-                  row.operation,
-                ) &&
+                [
+                  "partial_disposal",
+                  "intercompany_transfer",
+                  "tax_basis",
+                ].includes(row.operation) &&
                 can(auth, "assets.manage") ? (
                   <ReverseAssetChange
                     id={row.id}
                     effectiveOn={row.effective_on}
+                    taxBasis={row.operation === "tax_basis"}
                   />
                 ) : null}
                 {row.domain === "consolidation" &&

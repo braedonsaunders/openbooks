@@ -31,6 +31,8 @@ registerHooks({
 });
 const { withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { insertTaxYearWindow } = await import("@openbooks/engine/src/tax-returns/macrs-calendar.ts");
 const { POST } = await import("./route.ts");
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -54,19 +56,24 @@ const post = (body: unknown) =>
 test("tax-pool run refuses a non-calendar year start without running", { skip: !DB }, async () => {
   const { org } = await fixture();
   try {
-    const response = await post({ taxYear: 2026, yearStart: "2026-09-31", yearEnd: "2026-12-31" });
+    const response = await post({ regime: 'ca_cca', taxYear: 2026, yearStart: "2026-09-31", yearEnd: "2026-12-31" });
     const json = (await response.json().catch(() => null)) as { error?: string } | null;
     assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
+    assert.match(json?.error ?? '', /Year start must be a real calendar date/);
     assert.doesNotMatch(json?.error ?? "", /invalid input syntax|Failed query/i);
   } finally {
     await dropScratchOrg(org.orgId);
   }
 });
 
-test("tax-pool run still computes an ordinary year", { skip: !DB }, async () => {
+test("tax-pool run computes the explicitly registered year", { skip: !DB }, async () => {
   const { org } = await fixture();
   try {
-    const response = await post({ taxYear: 2026 });
+    const window = await withOrgContext(org.orgId, () => insertTaxYearWindow(db, org.orgId, state.actorId, {
+      subsidiaryId: org.subsidiaryId, regime: 'ca_cca', yearStart: '2026-01-01', yearEnd: '2026-12-31',
+      filingYear: 2026, reason: 'Approved company tax year',
+    }));
+    const response = await post({ regime: 'ca_cca', subsidiaryId: org.subsidiaryId, taxYearWindowId: window.id });
     assert.equal(response.status, 200, JSON.stringify(await response.json().catch(() => null)));
   } finally {
     await dropScratchOrg(org.orgId);

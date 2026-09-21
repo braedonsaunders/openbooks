@@ -6,6 +6,85 @@ import {
   TableHeader,
   TableRow,
 } from "@openbooks/ui";
+import {
+  TAX_BASIS_FIELDS,
+  TAX_BASIS_REGIME_LABELS,
+  MACRS_VINTAGE_SOURCE_LABELS,
+  MACRS_CHECKPOINT_KIND_LABELS,
+  CONSOLIDATED_MEMBERSHIP_IDENTITY,
+} from "@openbooks/engine/src/tax-returns/asset-basis-policy.ts";
+const taxFields = new Map(TAX_BASIS_FIELDS.map((field) => [field.name, field]));
+const taxChoiceFields: Record<string, string> = {
+  regimes: "regime",
+  buyerMethod: "method",
+  buyerConvention: "convention",
+};
+const taxComputedLabels: Record<string, string> = {
+  replacementWorkpaperId: "Replacement statutory workpaper reference",
+  replacementWorkpaperChangeId: "Approved replacement tax basis change",
+  replacementOpening: "Replacement opening deferred intercompany amount",
+  latestPoolYearStart: "Latest computed tax year starts",
+  citedHistoricalPeriodIds: "Cited historical matching period references",
+  historical: "Cited historical matching periods",
+  replayed: "Replacement matching periods",
+  replayedPeriods: "Replacement matching periods",
+  replayedPeriodIds: "Appended matching period references",
+  priorMatchingPeriodId: "Original matching period reference",
+  replayChangeId: "Approved matching replay change",
+  workpaperId: "Statutory workpaper reference",
+  workpaperChangeId: "Approved tax basis change",
+  taxYearWindowId: "Registered tax year reference",
+  vintageKey: "Tax depreciation vintage identity",
+  consolidatedGroupMembership: "Declared consolidated income-tax group membership",
+  consolidatedMembership: "Approved consolidated income-tax group membership",
+  consolidatedMatching: "Deferred intercompany gain or loss and matching",
+  groupKey: "Income-tax consolidated group",
+  sellerSubsidiaryId: "Seller legal entity",
+  buyerSubsidiaryId: "Buyer legal entity",
+  throughOn: "Membership through",
+  sellerAdjustedBasis: "Seller adjusted tax basis of the transferred slice",
+  identity: "Evidence type",
+  taxYearWindows: "Registered tax years used by this calculation",
+  filingYear: "Filing-year label",
+  yearStart: "Tax year starts",
+  yearEnd: "Tax year ends",
+  subsidiaryId: "Legal entity",
+  vintageAllocations: "Allocation by tax depreciation vintage",
+  buyerVintages: "Frozen receiving tax depreciation vintages",
+  source: "Tax depreciation source",
+  parentKey: "Source vintage identity",
+  transferOn: "Transfer effective date",
+  unadjustedBasis: "Open unadjusted tax basis",
+  adjustedCarryover: "Adjusted carryover checkpoint",
+  checkpointKind: "Carryover checkpoint evidence",
+  takenBonus: "Bonus depreciation taken (this slice)",
+  buyerPlacedInServiceOn: "Receiving asset placed-in-service date",
+  buyerRecoveryPeriodYears: "Receiving asset recovery period (years)",
+  buyerMethod: "Receiving asset MACRS method",
+  buyerConvention: "Receiving asset MACRS convention",
+  deferredOpening: "Opening deferred intercompany amount",
+  actualDeduction: "Buyer's depreciation deduction (nonnegative magnitude)",
+  recomputedDeduction: "Group's recomputed depreciation deduction (nonnegative magnitude)",
+  actualCorrespondingItems: "Buyer's corresponding items",
+  recomputedCorrespondingItems: "Recomputed corresponding items for the group",
+  actualCorrespondingAmount: "Buyer's corresponding amount",
+  recomputedCorrespondingAmount: "Recomputed corresponding amount for the group",
+  sellerMatchingItems: "Seller's recognized matching items",
+  sellerMatchingAmount: "Seller's recognized matching amount",
+  deferredClosing: "Closing deferred intercompany amount",
+  attribute: "Redetermined tax attribute",
+};
+const taxAttributeLabels: Record<string, string> = {
+  ordinary: "Ordinary income or deduction",
+  section1245_ordinary: "Section 1245 ordinary gain",
+  section1231: "Section 1231 gain or loss",
+};
+const emptyTaxEvidence: Record<string, string> = {
+  taxYearWindows: "No registered tax-year windows were read by this calculation.",
+  actualCorrespondingItems: "No corresponding items were taken into account in this calculation.",
+  recomputedCorrespondingItems: "No recomputed corresponding items arose in this calculation.",
+  sellerMatchingItems: "No seller matching items arose in this calculation.",
+};
 const labels: Record<string, string> = {
   existingId: "Existing performance obligation",
   existingObligationIds: "Promises affected",
@@ -37,8 +116,13 @@ const labels: Record<string, string> = {
   newRou: "Revised right-of-use asset",
   rouDelta: "Right-of-use adjustment",
 };
-function label(key: string) {
+function label(key: string, taxBasis: boolean) {
   return (
+    (taxBasis
+      ? (taxComputedLabels[key] ??
+        taxFields.get(key)?.label ??
+        TAX_BASIS_REGIME_LABELS[key as keyof typeof TAX_BASIS_REGIME_LABELS])
+      : undefined) ??
     labels[key] ??
     key
       .replace(/([a-z])([A-Z])/g, "$1 $2")
@@ -51,17 +135,45 @@ function label(key: string) {
 export function ChangeEvidence({
   value,
   names = {},
+  taxBasis = false,
+  field,
 }: {
   value: unknown;
   names?: Record<string, string>;
+  taxBasis?: boolean;
+  field?: string;
 }) {
   if (value === null || value === undefined)
     return <span className="text-muted-foreground">Not supplied</span>;
   if (typeof value === "boolean") return <span>{value ? "Yes" : "No"}</span>;
+  if (taxBasis && field && Array.isArray(value) && value.length === 0 && Object.hasOwn(emptyTaxEvidence, field))
+    return <span>{emptyTaxEvidence[field]}</span>;
   if (typeof value === "string" || typeof value === "number")
     return (
       <span className="break-words">
-        {names[String(value)] ?? String(value).replaceAll("_", " ")}
+        {names[String(value)] ??
+          (taxBasis && field === "identity" && value === CONSOLIDATED_MEMBERSHIP_IDENTITY
+            ? "US consolidated income-tax group membership"
+            : undefined) ??
+          (taxBasis && field === "checkpointKind" && Object.hasOwn(MACRS_CHECKPOINT_KIND_LABELS, String(value))
+            ? MACRS_CHECKPOINT_KIND_LABELS[String(value) as keyof typeof MACRS_CHECKPOINT_KIND_LABELS]
+            : undefined) ??
+          (taxBasis && field === "attribute" && Object.hasOwn(taxAttributeLabels, String(value))
+            ? taxAttributeLabels[String(value)]
+            : undefined) ??
+          (taxBasis &&
+          field === "source" &&
+          Object.hasOwn(MACRS_VINTAGE_SOURCE_LABELS, String(value))
+            ? MACRS_VINTAGE_SOURCE_LABELS[
+                String(value) as keyof typeof MACRS_VINTAGE_SOURCE_LABELS
+              ]
+            : undefined) ??
+          (taxBasis && field
+            ? taxFields
+                .get(taxChoiceFields[field] ?? field)
+                ?.choices?.find((choice) => choice.value === value)?.label
+            : undefined) ??
+          String(value)}
       </span>
     );
   if (Array.isArray(value))
@@ -69,33 +181,55 @@ export function ChangeEvidence({
       <div className="space-y-3">
         {value.map((v, i) => (
           <div key={i} className="rounded border p-3">
-            <ChangeEvidence value={v} names={names} />
+            <ChangeEvidence
+              value={v}
+              names={names}
+              taxBasis={taxBasis}
+              field={field}
+            />
           </div>
         ))}
       </div>
     );
   if (typeof value === "object")
     return (
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Assessment / measurement</TableHead>
-            <TableHead>Approved proposal</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {Object.entries(value)
-            .filter(([key]) => key !== "idempotencyKey")
-            .map(([key, v]) => (
-              <TableRow key={key}>
-                <TableCell className="align-top">{label(key)}</TableCell>
-                <TableCell>
-                  <ChangeEvidence value={v} names={names} />
-                </TableCell>
-              </TableRow>
-            ))}
-        </TableBody>
-      </Table>
+      <div className="space-y-2">
+        {taxBasis && ("actualCorrespondingAmount" in value || "sellerMatchingItems" in value) ? (
+          <p className="text-sm text-muted-foreground">
+            Corresponding and matching amounts are signed effects on taxable income: deductions are negative.
+            Deferred amounts retain the sign of the intercompany gain or loss.
+          </p>
+        ) : null}
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Assessment / measurement</TableHead>
+              <TableHead>Approved proposal</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {Object.entries(value)
+              .filter(([key]) => key !== "idempotencyKey")
+              .map(([key, v]) => (
+                <TableRow key={key}>
+                  <TableCell className="align-top">
+                    {taxBasis && key === "section179" && "checkpointKind" in value && value.checkpointKind === "taken_components"
+                      ? "Section 179 depreciation taken (this slice)"
+                      : label(key, taxBasis)}
+                  </TableCell>
+                  <TableCell>
+                    <ChangeEvidence
+                      value={v}
+                      names={names}
+                      taxBasis={taxBasis}
+                      field={key}
+                    />
+                  </TableCell>
+                </TableRow>
+              ))}
+          </TableBody>
+        </Table>
+      </div>
     );
   return null;
 }

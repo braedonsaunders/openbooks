@@ -42,6 +42,10 @@ test("tax pools mirror the tax-pools route scoping and money stays canonical", (
   assert.match(tools, /subsidiaryVisibleFilter\(sql`tp\.subsidiary_id`, authz\.allowedSubsidiaryIds\)/);
   assert.match(tools, /tax_pool_periods/);
   assert.match(tools, /normalizeMoney/);
+  assert.match(tools, /pp\.tax_year_window_id as "taxYearWindowId"/);
+  assert.match(tools, /pp\.year_start::text as "yearStart"/);
+  assert.match(tools, /pp\.year_end::text as "yearEnd"/);
+  assert.match(tools, /tp\.subsidiary_id as "subsidiaryId"/);
 });
 
 test("lessee reads use the native scoped lease loader and the actual lease register", () => {
