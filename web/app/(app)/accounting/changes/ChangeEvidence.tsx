@@ -18,6 +18,11 @@ const taxChoiceFields: Record<string, string> = {
   buyerConvention: "convention",
 };
 const taxComputedLabels: Record<string, string> = {
+  taxYearWindows: "Registered tax years used by this calculation",
+  filingYear: "Filing-year label",
+  yearStart: "Tax year starts",
+  yearEnd: "Tax year ends",
+  subsidiaryId: "Legal entity",
   vintageAllocations: "Allocation by tax depreciation vintage",
   buyerVintages: "Frozen receiving tax depreciation vintages",
   source: "Tax depreciation source",
@@ -91,6 +96,8 @@ export function ChangeEvidence({
   if (value === null || value === undefined)
     return <span className="text-muted-foreground">Not supplied</span>;
   if (typeof value === "boolean") return <span>{value ? "Yes" : "No"}</span>;
+  if (taxBasis && field === "taxYearWindows" && Array.isArray(value) && value.length === 0)
+    return <span>No registered tax-year windows were read by this calculation.</span>;
   if (typeof value === "string" || typeof value === "number")
     return (
       <span className="break-words">
