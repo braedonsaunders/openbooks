@@ -98,8 +98,10 @@ test("automations is an opt-in platform feature under flows with four sub-featur
     // A stale stored override can never resurrect a child while the parent is off.
     assert.equal(featureEnabled({ automations: false, [key]: true }, key), false);
     assert.equal(featureEnabled({ flows: true, automations: true, [key]: true }, key), true);
+  }
   // Exception-only approval is a per-flow setting, never a feature key.
   assert.equal(FEATURE_BY_KEY.has("automationExceptionApproval"), false);
+});
 
 test("hrmActionReasons defaults on, hrmEventVerbs defaults off, both under hrm", () => {
   const reasons = FEATURE_BY_KEY.get("hrmActionReasons");
@@ -111,3 +113,4 @@ test("hrmActionReasons defaults on, hrmEventVerbs defaults off, both under hrm",
   assert.equal(verbs.defaultEnabled, false);
   assert.equal(verbs.parentKey, "hrm");
   assert.equal(featureEnabled({ hrm: false, hrmActionReasons: true }, "hrmActionReasons"), false);
+});
