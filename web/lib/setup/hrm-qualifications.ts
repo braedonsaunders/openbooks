@@ -50,6 +50,10 @@ export const QUALIFICATION_TYPES_ENTITY: SetupEntity = {
 export const QUALIFICATION_SETTINGS_ENTITY: SetupEntity = {
   key: 'qualification-settings',
   table: 'hrm_qualification_settings',
+  // Keyed by the org itself (0225 makes org_id the PRIMARY KEY and adds
+  // no id column), so the generic reader's default of "id" names a
+  // column that does not exist.
+  idColumn: 'org_id',
   groupKey: 'workforce',
   featureKey: 'hrmCertifications',
   rehomed: true, // section on the HRM Qualifications page
