@@ -658,40 +658,42 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
     })
     // Hiding is by PERMISSION, entity by entity: without the headcount-plan
     // grant exactly the positions entity hides, and the employment ones stay.
+    // Shared by both readers below: the declarations are the independent
+    // side of every check here, so they are read once, above both.
+    const { HRM_REPORT_ENTITIES: declared } = await import('@openbooks/reports')
     const employmentOnly = fakeAuthz(scratch.orgId, ['reports.read', 'hrm.employment.read'], null)
     await withOrgContext(scratch.orgId, async () => {
       const hiddenHrm = (await hiddenReportEntityKeys(employmentOnly)).filter((key) => key.startsWith('hrm_')).sort()
-      assert.deepEqual(hiddenHrm, [
-        'hrm_applications',
-        'hrm_benefit_enrollments',
-        'hrm_certified_runs',
-        'hrm_comp_class_split',
-        'hrm_comp_cycle_lines',
-        'hrm_compliance_findings',
-        'hrm_goals',
-        'hrm_headcount_plan_lines',
-        'hrm_interview_slots',
-        'hrm_leave_absences',
-        'hrm_offers',
-        'hrm_pay_bands',
-        'hrm_pay_gap_snapshots',
-        'hrm_per_diem_entries',
-        'hrm_pool_members',
-        'hrm_positions',
-        'hrm_postings',
-        'hrm_processes',
-        // HR-14 begin: the register and the alert queue hide without the
-        // certifications read grant (and on the dark org, with switches off).
-        'hrm_qualification_alerts',
-        'hrm_qualifications',
-        // HR-14 end
-        'hrm_rate_schedule_lines',
-        'hrm_requisitions',
-        'hrm_retention_runs',
-        'hrm_reviews',
-        'hrm_scorecards',
-        'hrm_turnover',
-      ], 'only the entities whose grants are missing hide')
+      // BOTH DIRECTIONS, DERIVED, and deliberately NOT an exact-set pin.
+      // hiddenReportEntityKeys hides for permission OR for feature, so a
+      // pinned set silently couples this test to which switches happen to
+      // be on -- which is what made it wrong twice: nine of the entries I
+      // was told were missing turned out to be feature-gated, not
+      // permission-gated, and adding them would have pinned the feature
+      // state too.
+      const byKey = new Map(declared.map((entity) => [entity.key, entity]))
+      const hrmCatalogue = declared.filter((entity) => entity.key.startsWith('hrm_'))
+      assert.ok(hrmCatalogue.length > 20, `the HRM catalogue reads as ${hrmCatalogue.length} entities`)
+      // Every entity whose grant this reader lacks MUST hide. This is the
+      // claim the test is named for and it holds whatever the switches say.
+      for (const entity of hrmCatalogue) {
+        if (entity.requiredPermission === 'hrm.employment.read') continue
+        assert.ok(
+          hiddenHrm.includes(entity.key),
+          `${entity.key} stayed visible to a reader without ${entity.requiredPermission}`,
+        )
+      }
+      // And nothing hides WITHOUT a reason: an entity this reader is
+      // entitled to may only be hidden by a feature it actually declares.
+      for (const key of hiddenHrm) {
+        const entity = byKey.get(key)
+        assert.ok(entity, `${key} is hidden but absent from the catalogue`)
+        if (entity.requiredPermission !== 'hrm.employment.read') continue
+        assert.ok(
+          entity.featureKey,
+          `${key} hid from a reader holding its grant and names no feature that could explain it`,
+        )
+      }
     })
 
     const noPerm = fakeAuthz(scratch.orgId, ['reports.read'], null)
@@ -699,45 +701,28 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
       for (const key of ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests', 'hrm_positions'] as const) {
         assert.equal(await canRunReportEntity(noPerm, { entity: key }), false, `${key} refuses without the permission`)
       }
-      // Every HRM entity hides for a reader holding no HRM grant (each one
-      // names its own permission); the list grows with each HRM entity.
+      // Every HRM entity hides for a reader holding no HRM grant. That is
+      // a UNIVERSAL claim, so it is derived rather than listed: every HRM
+      // entity declares a requiredPermission (asserted just below), and
+      // this reader holds none of them, so the answer is the whole HRM
+      // catalogue. The hand-written version of this list was already
+      // eight entries stale and had never been REACHED -- the assertion
+      // above it threw first, so nothing reported it.
+      const hrmCatalogue = declared.filter((entity) => entity.key.startsWith('hrm_'))
+      // Non-vacuity anchor. Both the loop below and the deepEqual after
+      // it compare against this collection, so an empty one would make
+      // the whole block pass while asserting nothing.
+      assert.ok(hrmCatalogue.length > 20, `the HRM catalogue reads as ${hrmCatalogue.length} entities`)
+      for (const entity of hrmCatalogue) {
+        assert.ok(
+          entity.requiredPermission,
+          `${entity.key} declares no requiredPermission, so nothing makes it hide from a reader with no grant`,
+        )
+      }
       assert.deepEqual(
         (await hiddenReportEntityKeys(noPerm)).filter((key) => key.startsWith('hrm_')).sort(),
-        [
-        'hrm_action_reasons',
-        'hrm_applications',
-        'hrm_benefit_enrollments',
-        'hrm_certified_runs',
-        'hrm_change_requests',
-        'hrm_comp_class_split',
-        'hrm_comp_cycle_lines',
-        'hrm_compliance_findings',
-        'hrm_employment_history',
-        'hrm_goals',
-        'hrm_headcount',
-        'hrm_headcount_plan_lines',
-        'hrm_interview_slots',
-        'hrm_leave_absences',
-        'hrm_offers',
-        'hrm_pay_bands',
-        'hrm_pay_gap_snapshots',
-        'hrm_per_diem_entries',
-        'hrm_pool_members',
-        'hrm_positions',
-        'hrm_postings',
-        'hrm_processes',
-        // HR-14 begin: the register and the alert queue hide without the
-        // certifications read grant (and on the dark org, with switches off).
-        'hrm_qualification_alerts',
-        'hrm_qualifications',
-        // HR-14 end
-        'hrm_rate_schedule_lines',
-        'hrm_requisitions',
-        'hrm_retention_runs',
-        'hrm_reviews',
-        'hrm_scorecards',
-        'hrm_turnover',
-      ],
+        hrmCatalogue.map((entity) => entity.key).sort(),
+        'every HRM entity hides for a reader holding no HRM grant',
       )
     })
 
@@ -747,43 +732,24 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
       for (const key of ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests'] as const) {
         assert.equal(await canRunReportEntity(darkReader, { entity: key }), false, `${key} refuses with the feature off`)
       }
+      // Derived, not pinned. On the dark org NOTHING is enabled and the
+      // reader holds one grant, so every HRM entity hides -- by feature if
+      // not by permission. That is universal, so a literal list here can
+      // only go stale, which it did: nine entities behind.
+      const darkEntities = declared.filter((entity) => entity.key.startsWith('hrm_'))
+      assert.ok(darkEntities.length > 20, `the HRM catalogue reads as ${darkEntities.length} entities`)
+      // The precondition that makes the claim universal, asserted rather
+      // than assumed: an HRM entity naming no feature would stay visible
+      // here for anyone holding its grant, and the derivation below would
+      // be quietly wrong instead of loudly.
+      for (const entity of darkEntities) {
+        assert.ok(entity.featureKey, `${entity.key} names no feature, so nothing hides it on a dark org`)
+      }
+      const darkCatalogue = darkEntities.map((entity) => entity.key).sort()
       assert.deepEqual(
         (await hiddenReportEntityKeys(darkReader)).filter((key) => key.startsWith('hrm_')).sort(),
-        [
-        'hrm_action_reasons',
-        'hrm_applications',
-        'hrm_benefit_enrollments',
-        'hrm_certified_runs',
-        'hrm_change_requests',
-        'hrm_comp_class_split',
-        'hrm_comp_cycle_lines',
-        'hrm_compliance_findings',
-        'hrm_employment_history',
-        'hrm_goals',
-        'hrm_headcount',
-        'hrm_headcount_plan_lines',
-        'hrm_interview_slots',
-        'hrm_leave_absences',
-        'hrm_offers',
-        'hrm_pay_bands',
-        'hrm_pay_gap_snapshots',
-        'hrm_per_diem_entries',
-        'hrm_pool_members',
-        'hrm_positions',
-        'hrm_postings',
-        'hrm_processes',
-        // HR-14 begin: the register and the alert queue hide without the
-        // certifications read grant (and on the dark org, with switches off).
-        'hrm_qualification_alerts',
-        'hrm_qualifications',
-        // HR-14 end
-        'hrm_rate_schedule_lines',
-        'hrm_requisitions',
-        'hrm_retention_runs',
-        'hrm_reviews',
-        'hrm_scorecards',
-        'hrm_turnover',
-      ],
+        darkCatalogue,
+        'every HRM entity hides on an org with no HRM switches on',
       )
     })
   } finally {
