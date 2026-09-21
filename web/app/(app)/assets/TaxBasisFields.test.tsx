@@ -230,6 +230,30 @@ test("buyer-only US carryover asks for transferor history without inventing a se
   assert.doesNotMatch(markup, /-amountRealizedRule"/);
 });
 
+test("buyer-only taxable carryover exposes historical basis and membership gain facts as separate controls", () => {
+  const markup = render({
+    regime: "us_macrs", sourceOperation: "intercompany_transfer", applicable: "buyer",
+    recognition: "taxable", section168i7Kind: "consolidated_group",
+    consolidatedGroupMembership: {
+      groupKey: "US income-tax group A",
+      sellerSubsidiaryId: "11111111-1111-4111-8111-111111111111",
+      buyerSubsidiaryId: "22222222-2222-4222-8222-222222222222",
+      effectiveOn: "2026-01-01", throughOn: "2026-12-31",
+    },
+    originalUnadjustedBasis: "100.0000", priorDepreciation: "20.0000",
+    placedInServiceOn: "2024-01-01", recoveryPeriodYears: "10",
+    method: "straight_line", convention: "half_year",
+    carryoverBasis: "80.0000", excessBasis: "50.0000", buyerCost: "130.0000",
+    sellerAdjustedBasis: "80.0000", statutoryProceeds: "130.0000",
+  });
+  for (const field of ["originalUnadjustedBasis", "placedInServiceOn", "recoveryPeriodYears", "method",
+    "convention", "carryoverBasis", "excessBasis", "buyerCost", "sellerAdjustedBasis", "statutoryProceeds"])
+    assert.ok(markup.includes(`-${field}"`), `native buyer carryover must expose ${field}`);
+  assert.match(markup, /id="[^"]*-sellerAdjustedBasis"[^>]*required=""/);
+  assert.doesNotMatch(markup, /-disposedUnadjustedBasis"|-remainingUnadjustedBasis"/);
+  assert.doesNotMatch(markup, /-deferredOpening"|-sellerMatchingAmount"/);
+});
+
 test("both classified parties receive both statutory worksheets with no applicability election", () => {
   const markup = render({
     regime: "ca_cca",

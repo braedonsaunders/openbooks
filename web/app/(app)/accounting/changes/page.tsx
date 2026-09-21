@@ -15,6 +15,7 @@ import { subsidiaryVisibleFilter } from "@/lib/subsidiaries";
 import { ChangeEvidence } from "./ChangeEvidence";
 import { ReverseAssetChange } from "./ReverseAssetChange";
 import { ChangeActions } from "./ChangeActions";
+import { TaxMatchingReplayButton } from "./TaxMatchingReplayButton";
 export const dynamic = "force-dynamic";
 const fieldNames: Record<string, string> = {
   groupCarryingBefore: "Group carrying amount before valuation",
@@ -152,7 +153,8 @@ export default async function AccountingChanges({
     references.map((r) => [r.id, r.label]),
   );
   const taxBasis =
-    row?.operation === "tax_basis" || row?.operation === "tax_basis_reversal";
+    row?.operation === "tax_basis" || row?.operation === "tax_basis_reversal" ||
+    row?.operation === "tax_matching_replay";
   const permission =
     row?.domain === "revenue"
       ? "ar.post"
@@ -222,13 +224,17 @@ export default async function AccountingChanges({
                 {["revenue", "asset", "consolidation"].includes(row.domain) ? (
                   <section className="space-y-2">
                     <h3 className="font-semibold">
-                      {taxBasis
+                      {row.operation === "tax_matching_replay"
+                        ? "Historical matching replay assessment"
+                        : taxBasis
                         ? "Statutory tax basis assessment"
                         : "Book-specific allocations"}
                     </h3>
                     <ChangeEvidence
                       value={
-                        row.before_state.preview ?? row.before_state.previews
+                        row.operation === "tax_matching_replay"
+                          ? row.before_state
+                          : row.before_state.preview ?? row.before_state.previews
                       }
                       names={referenceNames}
                       taxBasis={taxBasis}
@@ -284,6 +290,18 @@ export default async function AccountingChanges({
                   >
                     Open lease and schedule history
                   </Link>
+                ) : null}
+                {row.domain === "asset" && row.status === "applied" &&
+                row.operation === "tax_basis" && can(auth, "assets.manage") ? (
+                  <TaxMatchingReplayButton assetId={row.subject_id} replacementWorkpaperChangeId={row.id} />
+                ) : null}
+                {row.domain === "asset" && row.operation === "tax_matching_replay" ? (
+                  <p>
+                    Applied replay evidence cannot be reversed. For a further correction,
+                    reverse the replacement tax basis workpaper, apply its replacement,
+                    and approve a new matching replay. Re-run the latest computed year
+                    from <Link className="underline" href="/assets/tax-pools">Fixed Assets tax pools</Link> after applying the replay.
+                  </p>
                 ) : null}
                 {row.domain === "asset" &&
                 row.status === "applied" &&

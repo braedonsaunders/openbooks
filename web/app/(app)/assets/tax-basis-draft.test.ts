@@ -91,6 +91,35 @@ test("membership never follows a different source or accepts invented nested fac
   }, membershipContext, undefined, membershipSource), /after throughOn/);
 });
 
+test("buyer-only taxable carryover survives the native visible-field filter with its required history", () => {
+  const context: TaxBasisSourceContext = {
+    ...membershipContext, applicable: "buyer", usSellerMacrs: null,
+  };
+  const source: TaxAssetBasisSourceChoice = {
+    ...membershipSource,
+    regimes: [{ code: "us_macrs", name: "United States — MACRS", applicable: "buyer" }],
+    openMacrsVintages: null,
+  };
+  const post = prepareTaxBasisRegime(consolidatedSale, context, undefined, source);
+  assert.equal(post.regime, "us_macrs");
+  if (post.regime !== "us_macrs") return;
+  assert.equal(post.originalUnadjustedBasis, "100.0000");
+  assert.equal(post.placedInServiceOn, "2024-01-01");
+  assert.equal(post.recoveryPeriodYears, "10");
+  assert.equal(post.method, "straight_line");
+  assert.equal(post.convention, "half_year");
+  assert.equal(post.carryoverBasis, "80.0000");
+  assert.equal(post.priorDepreciation, "20.0000");
+  assert.equal(post.statutoryProceeds, "130.0000");
+  assert.equal(Object.hasOwn(post, "disposedUnadjustedBasis"), false);
+  assert.equal(Object.hasOwn(post, "remainingUnadjustedBasis"), false);
+  const server = validateTaxRegimeBasis(JSON.parse(JSON.stringify(post)), context);
+  assert.equal(server.regime, "us_macrs");
+  if (server.regime !== "us_macrs") return;
+  assert.equal(server.carryoverBasis, "80.0000");
+  assert.deepEqual(server.consolidatedGroupMembership, membership);
+});
+
 const seller = {
   regime: "us_macrs",
   relationship: "arms_length",

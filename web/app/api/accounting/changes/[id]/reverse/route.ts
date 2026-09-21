@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { proposeAssetReversal } from "@openbooks/engine/src/assets/asset-change-reversals.ts";
 import { proposeTaxAssetBasisReversal } from "@openbooks/engine/src/tax-returns/asset-basis-workpaper.ts";
+import { proposeTaxMatchingReplayReversal } from "@openbooks/engine/src/tax-returns/consolidated-matching-replay.ts";
 import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import { parseJsonBody } from "@/lib/api/json";
 import { authorizeChange } from "../../_authorization";
@@ -24,6 +25,8 @@ export async function POST(
       .object({
         effectiveOn:
           gate.operation === "tax_basis"
+            || gate.operation === "tax_matching_replay"
+            || gate.operation === "tax_matching_generation_repair"
             ? z.never().optional()
             : z.string().refine(isIsoCalendarDate),
         reason: z.string().trim().min(8).max(1000),
@@ -34,6 +37,8 @@ export async function POST(
   );
   if (!body.ok) return body.response;
   try {
+    if (gate.operation === "tax_matching_replay" || gate.operation === "tax_matching_generation_repair")
+      return await proposeTaxMatchingReplayReversal();
     if (gate.operation === "tax_basis")
       return NextResponse.json({
         changeId: await proposeTaxAssetBasisReversal(

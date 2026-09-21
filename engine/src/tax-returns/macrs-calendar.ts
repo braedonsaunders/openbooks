@@ -484,13 +484,13 @@ export async function assertTaxYearWindowWrite(
     if (subsidiaryId !== existing.subsidiary_id || regime !== existing.regime || yearStart !== existing.year_start) {
       throw new MacrsCalendarError(
         cited > 0
-          ? `tax year window ${existing.year_start}–${existing.year_end} already has a computed pool result or applied tax workpaper; its legal entity, regime, and year start cannot be rewritten. Re-run that same year from Fixed Assets tax pools if it is the latest computed year for the regime — there is no reversal of a computed tax year`
+          ? `tax year window ${existing.year_start}–${existing.year_end} is cited by a computed pool result, applied tax workpaper or posted consolidated matching; its legal entity, regime, and year start cannot be rewritten. Re-run that same year from Fixed Assets tax pools if it is the latest computed year for the regime — there is no reversal of a computed tax year`
           : "a tax year window's legal entity, regime, and year start are its identity and cannot be rewritten; delete this unused window on Fixed Assets tax-year setup and declare the correct year",
       );
     }
     if ((yearEnd !== existing.year_end || filingYear !== existing.filing_year) && cited > 0) {
       throw new MacrsCalendarError(
-        `tax year window ${existing.year_start}–${existing.year_end} already has a computed pool result or applied tax workpaper; its dates are frozen, as is its filing label. Re-run that same year from Fixed Assets tax pools if it is the latest computed year for the regime — there is no reversal of a computed tax year`,
+        `tax year window ${existing.year_start}–${existing.year_end} is cited by a computed pool result, applied tax workpaper or posted consolidated matching; its dates are frozen, as is its filing label. Re-run that same year from Fixed Assets tax pools if it is the latest computed year for the regime — there is no reversal of a computed tax year`,
       );
     }
   }
@@ -619,7 +619,7 @@ export async function taxYearWindowDeleteProblem(
   if (!existing) return "that tax year window could not be loaded";
   const cited = await taxYearWindowCitationCount(runner, orgId, windowId);
   if (cited > 0) {
-    return `tax year window ${existing.year_start}–${existing.year_end} already has a computed pool result or applied tax workpaper and cannot be deleted. Re-run that same year from Fixed Assets tax pools if it is the latest computed year for the regime — there is no reversal of a computed tax year`;
+    return `tax year window ${existing.year_start}–${existing.year_end} is cited by a computed pool result, applied tax workpaper or posted consolidated matching and cannot be deleted. Re-run that same year from Fixed Assets tax pools if it is the latest computed year for the regime — there is no reversal of a computed tax year`;
   }
   return null;
 }
@@ -634,6 +634,7 @@ async function taxYearWindowCitationCount(
       select (
         (select count(*) from tax_pool_periods where org_id=${orgId} and tax_year_window_id=${windowId})
         + (select count(*) from tax_basis_window_citations where org_id=${orgId} and tax_year_window_id=${windowId})
+        + (select count(*) from tax_consolidated_matching_periods where org_id=${orgId} and tax_year_window_id=${windowId})
       )::int as n`)
   ).rows[0]?.n ?? 0;
 }

@@ -802,8 +802,10 @@ function receiverVintages(
     }
     vintages.push(...frozen.map((vintage) => receiverFromFrozenBuyerVintage(paper, defaults, vintage)));
     const hasExcess = frozen.some((vintage) => vintage.source === "excess");
+    const hasCarryover = frozen.some((vintage) => vintage.source === "carryover");
     const hasTaxable = frozen.some((vintage) => vintage.source === "taxable_cost");
-    if (paper.recognition === "nontaxable" && positive(paper.excess_basis) && !hasExcess) {
+    const split168i7 = as168i7Kind(paper.section_168i7_kind) != null;
+    if ((paper.recognition === "nontaxable" || split168i7) && positive(paper.excess_basis) && !hasExcess) {
       const buyer = frozenBuyerSchedule(paper);
       vintages.push({
         ...shared,
@@ -816,7 +818,12 @@ function receiverVintages(
         convention: buyer.convention,
       });
     }
-    if (paper.recognition === "taxable" && paper.buyer_cost && !hasTaxable) {
+    if (paper.recognition === "taxable" && split168i7 && !hasCarryover && !paper.carryover_basis) {
+      throw new MacrsVintageError(
+        "§168(i)(7) on an intercompany sale requires carryover basis equal to the seller's adjusted basis and excess as newly placed; reverse and re-propose the workpaper — do not collapse the sale into one taxable_cost vintage",
+      );
+    }
+    if (paper.recognition === "taxable" && paper.buyer_cost && !hasTaxable && !split168i7) {
       const buyer = frozenBuyerSchedule(paper);
       vintages.push({
         ...shared,
@@ -831,7 +838,8 @@ function receiverVintages(
     }
     return vintages;
   }
-  if (paper.recognition === "nontaxable" && paper.carryover_basis) {
+  const split168i7 = as168i7Kind(paper.section_168i7_kind) != null;
+  if ((paper.recognition === "nontaxable" || split168i7) && paper.carryover_basis) {
     vintages.push(carryoverVintage(paper, {
       ...shared,
       source: "carryover",
@@ -841,7 +849,7 @@ function receiverVintages(
       convention: transferorConvention,
     }));
   }
-  if (paper.recognition === "nontaxable" && positive(paper.excess_basis)) {
+  if ((paper.recognition === "nontaxable" || split168i7) && positive(paper.excess_basis)) {
     const buyer = frozenBuyerSchedule(paper);
     vintages.push({
       ...shared,
@@ -854,7 +862,12 @@ function receiverVintages(
       convention: buyer.convention,
     });
   }
-  if (paper.recognition === "taxable" && paper.buyer_cost) {
+  if (paper.recognition === "taxable" && split168i7 && !paper.carryover_basis) {
+    throw new MacrsVintageError(
+      "§168(i)(7) on an intercompany sale requires carryover basis equal to the seller's adjusted basis and excess as newly placed; reverse and re-propose the workpaper — do not collapse the sale into one taxable_cost vintage",
+    );
+  }
+  if (paper.recognition === "taxable" && paper.buyer_cost && !split168i7) {
     const buyer = frozenBuyerSchedule(paper);
     vintages.push({
       ...shared,

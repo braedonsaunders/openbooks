@@ -9,6 +9,7 @@ import {
   macrsConventionAfterMidQuarter,
   macrsLineageRecoveryWindows,
   macrsMidQuarterByWindow,
+  originCeasedOnFromParentKey,
   macrsWindowsPreservingAppliedContext,
   nextCalendarDay,
   type MacrsYearWindow,
@@ -24,6 +25,7 @@ import {
 } from "./macrs-calendar.ts";
 import {
   MacrsVintageError,
+  macrsVintageReceivingPaper,
   macrsVintageWindowPlan,
   macrsWindowsFromAppliedComputed,
   resolveMacrsVintages,
@@ -32,7 +34,19 @@ import {
   type MacrsVintage,
   type MacrsWorkpaperEvent,
 } from "./macrs-vintages.ts";
-import { continuingNzAssociatedRates, nzPooledDepreciationRate, TaxBasisPolicyError } from "./asset-basis-policy.ts";
+import { continuingNzAssociatedRates, macrsVintageKey, nzPooledDepreciationRate, TaxBasisPolicyError } from "./asset-basis-policy.ts";
+import {
+  allocatedDeferredOpeningsByVintage,
+  assertWriteOnceMatchingPeriod,
+  matchConsolidatedMacrsFromWorkpaper,
+  matchingPeriodPersistFacts,
+  matchingPeriodRowIdentity,
+  resolveFrozenUsConsolidatedMatching,
+  type ConsolidatedMacrsYearMatching,
+  type ConsolidatedMatchingPeriodFacts,
+  type MatchingVintageWeight,
+} from "./consolidated-macrs-matching.ts";
+import { ConsolidatedTaxMatchingError } from "./consolidated-tax-matching.ts";
 import { effectiveClasses, regimeClassAttribute } from "./tax-classification.ts";
 import { legacyPoolDisposition, taxEventRequiresTaxWorkpaper } from "./pool-run-legacy.ts";
 
@@ -86,6 +100,7 @@ export interface TaxPoolRunResult {
   yearEnd: string;
   lines: TaxPoolLine[];
   totals: { allowance: string; recapture: string; terminalLoss: string };
+  consolidatedMatching: ConsolidatedMacrsYearMatching[];
 }
 
 /** Pool-period read projection. Window id and dates distinguish equal filingYear labels. */
@@ -110,6 +125,8 @@ export class TaxPoolError extends Error {
 }
 
 type LiveWorkpaper = {
+  id: string;
+  change_id: string;
   asset_id: string;
   receiving_asset_id: string | null;
   effective_on: string;
@@ -245,7 +262,7 @@ async function liveWorkpapers(
 ): Promise<LiveWorkpaper[]> {
   return (
     await tx.execute<LiveWorkpaper>(sql`
-      select w.asset_id, w.receiving_asset_id, w.effective_on::text, w.source_operation,
+      select w.id, w.change_id, w.asset_id, w.receiving_asset_id, w.effective_on::text, w.source_operation,
              w.applicable, w.seller_disposition::text, w.buyer_addition::text, w.remaining_basis::text,
              seller.subsidiary_id as seller_subsidiary_id,
              ${classifiedClassSql("seller", run, attr)} as seller_class,
@@ -826,6 +843,7 @@ async function runPools(
     yearEnd: run.yearEnd,
     lines,
     totals: { allowance: totAllow, recapture: totRecap, terminalLoss: totTerm },
+    consolidatedMatching: [],
   };
 }
 
@@ -889,6 +907,414 @@ type MacrsAssetRow = {
   disposal_change_id: string | null;
   custom: Record<string, unknown> | null;
 };
+
+function paperForBuyerVintage(
+  papers: readonly LiveWorkpaper[],
+  assetId: string,
+  vintage: MacrsVintage,
+): LiveWorkpaper | undefined {
+  try {
+    return macrsVintageReceivingPaper(papers, assetId, vintage) ?? undefined;
+  } catch (error) {
+    throw error instanceof MacrsVintageError ? new TaxPoolError(error.message) : error;
+  }
+}
+
+function immediatePriorMatchingWindow(
+  reportingWindows: readonly MacrsYearWindow[],
+  run: TaxPoolRun,
+  transferOn: string | null,
+): MacrsYearWindow | null {
+  const prior = reportingWindows
+    .filter((window) =>
+      window.yearEnd < run.yearStart
+      && (!transferOn || window.yearEnd >= transferOn),
+    )
+    .sort((left, right) =>
+      left.yearStart.localeCompare(right.yearStart) || left.yearEnd.localeCompare(right.yearEnd),
+    );
+  return prior.at(-1) ?? null;
+}
+
+async function loadPostedMatchingClosing(
+  tx: SqlExecutor,
+  orgId: string,
+  workpaperId: string,
+  vintageKey: string,
+  taxYearWindowId: string,
+): Promise<string | null> {
+  const identity = matchingPeriodRowIdentity({ workpaperId, vintageKey, taxYearWindowId });
+  const row = (
+    await tx.execute<{ deferred_closing: string }>(sql`
+      select deferred_closing::text
+        from tax_consolidated_matching_periods
+       where org_id=${orgId}
+         and workpaper_id=${identity.workpaperId}
+         and vintage_key=${identity.vintageKey}
+         and tax_year_window_id=${identity.taxYearWindowId}`)
+  ).rows[0];
+  return row?.deferred_closing ?? null;
+}
+
+function postedMatchingRow(row: {
+  workpaper_id: string;
+  workpaper_change_id: string;
+  vintage_key: string;
+  parent_key: string | null;
+  group_key: string;
+  seller_subsidiary_id: string;
+  buyer_subsidiary_id: string;
+  membership_effective_on: string;
+  membership_through_on: string;
+  year_start: string;
+  year_end: string;
+  deferred_opening: string;
+  actual_deduction: string;
+  recomputed_deduction: string;
+  actual_corresponding_amount: string;
+  recomputed_corresponding_amount: string;
+  seller_matching_amount: string;
+  deferred_closing: string;
+}): ConsolidatedMatchingPeriodFacts {
+  return matchingPeriodPersistFacts({
+    workpaperId: row.workpaper_id,
+    matched: {
+      deferredOpening: row.deferred_opening,
+      actualDeduction: row.actual_deduction,
+      recomputedDeduction: row.recomputed_deduction,
+      actualCorrespondingAmount: row.actual_corresponding_amount,
+      recomputedCorrespondingAmount: row.recomputed_corresponding_amount,
+      sellerMatchingAmount: row.seller_matching_amount,
+      deferredClosing: row.deferred_closing,
+      actualCorrespondingItems: [],
+      recomputedCorrespondingItems: [],
+      sellerMatchingItems: [],
+      membership: {
+        identity: "us_macrs.consolidated_group.membership",
+        groupKey: row.group_key,
+        sellerSubsidiaryId: row.seller_subsidiary_id,
+        buyerSubsidiaryId: row.buyer_subsidiary_id,
+        effectiveOn: row.membership_effective_on,
+        throughOn: row.membership_through_on,
+      },
+      yearStart: row.year_start,
+      yearEnd: row.year_end,
+      taxYearWindowId: "posted",
+      vintageKey: row.vintage_key,
+    },
+    workpaperChangeId: row.workpaper_change_id,
+    parentKey: row.parent_key,
+  });
+}
+
+async function persistConsolidatedMatchingPeriod(
+  tx: SqlExecutor,
+  run: TaxPoolRun,
+  paper: LiveWorkpaper,
+  matched: ConsolidatedMacrsYearMatching,
+  parentKey: string | null,
+): Promise<void> {
+  if (!paper.id || !paper.change_id) {
+    throw new TaxPoolError(
+      "1.1502-13 matching periods cite the applied tax basis workpaper; reverse and re-propose it — do not persist matching without that change",
+    );
+  }
+  let proposed: ReturnType<typeof matchingPeriodPersistFacts>;
+  try {
+    proposed = matchingPeriodPersistFacts({
+      matched,
+      workpaperId: paper.id,
+      workpaperChangeId: paper.change_id,
+      parentKey,
+    });
+  } catch (error) {
+    throw error instanceof ConsolidatedTaxMatchingError ? new TaxPoolError(error.message) : error;
+  }
+  const existing = (
+    await tx.execute<{
+      workpaper_id: string;
+      workpaper_change_id: string;
+      vintage_key: string;
+      parent_key: string | null;
+      group_key: string;
+      seller_subsidiary_id: string;
+      buyer_subsidiary_id: string;
+      membership_effective_on: string;
+      membership_through_on: string;
+      year_start: string;
+      year_end: string;
+      deferred_opening: string;
+      actual_deduction: string;
+      recomputed_deduction: string;
+      actual_corresponding_amount: string;
+      recomputed_corresponding_amount: string;
+      seller_matching_amount: string;
+      deferred_closing: string;
+    }>(sql`
+      select workpaper_id, workpaper_change_id, vintage_key, parent_key, group_key,
+             seller_subsidiary_id, buyer_subsidiary_id,
+             membership_effective_on::text, membership_through_on::text,
+             year_start::text, year_end::text,
+             deferred_opening::text, actual_deduction::text, recomputed_deduction::text,
+             actual_corresponding_amount::text, recomputed_corresponding_amount::text,
+             seller_matching_amount::text, deferred_closing::text
+        from tax_consolidated_matching_periods
+       where org_id=${run.orgId}
+         and workpaper_id=${proposed.workpaperId}
+         and vintage_key=${proposed.vintageKey}
+         and tax_year_window_id=${run.taxYearWindowId}`)
+  ).rows[0];
+  if (existing) {
+    try {
+      assertWriteOnceMatchingPeriod(postedMatchingRow(existing), proposed);
+    } catch (error) {
+      throw error instanceof ConsolidatedTaxMatchingError ? new TaxPoolError(error.message) : error;
+    }
+  }
+  const written = await tx.execute(sql`
+    insert into tax_consolidated_matching_periods
+      (org_id, workpaper_id, workpaper_change_id, vintage_key, parent_key, tax_year_window_id,
+       year_start, year_end, group_key, seller_subsidiary_id, buyer_subsidiary_id,
+       membership_effective_on, membership_through_on, deferred_opening, actual_deduction,
+       recomputed_deduction, actual_corresponding_amount, recomputed_corresponding_amount,
+       seller_matching_amount, deferred_closing, created_by, updated_by)
+    values (${run.orgId}, ${paper.id}, ${paper.change_id}, ${proposed.vintageKey}, ${proposed.parentKey},
+            ${run.taxYearWindowId}, ${proposed.yearStart}, ${proposed.yearEnd}, ${proposed.groupKey},
+            ${proposed.sellerSubsidiaryId}, ${proposed.buyerSubsidiaryId},
+            ${proposed.membershipEffectiveOn}, ${proposed.membershipThroughOn},
+            ${proposed.deferredOpening}, ${proposed.actualDeduction}, ${proposed.recomputedDeduction},
+            ${proposed.actualCorrespondingAmount}, ${proposed.recomputedCorrespondingAmount},
+            ${proposed.sellerMatchingAmount}, ${proposed.deferredClosing}, ${run.actorId}, ${run.actorId})
+    on conflict (org_id, workpaper_id, vintage_key, tax_year_window_id) do update set
+      updated_at=now(), updated_by=${run.actorId}
+    where tax_consolidated_matching_periods.org_id=${run.orgId}
+      and tax_consolidated_matching_periods.deferred_opening is not distinct from excluded.deferred_opening
+      and tax_consolidated_matching_periods.actual_deduction is not distinct from excluded.actual_deduction
+      and tax_consolidated_matching_periods.recomputed_deduction is not distinct from excluded.recomputed_deduction
+      and tax_consolidated_matching_periods.actual_corresponding_amount is not distinct from excluded.actual_corresponding_amount
+      and tax_consolidated_matching_periods.recomputed_corresponding_amount is not distinct from excluded.recomputed_corresponding_amount
+      and tax_consolidated_matching_periods.seller_matching_amount is not distinct from excluded.seller_matching_amount
+      and tax_consolidated_matching_periods.deferred_closing is not distinct from excluded.deferred_closing
+      and tax_consolidated_matching_periods.workpaper_change_id is not distinct from excluded.workpaper_change_id
+      and tax_consolidated_matching_periods.group_key is not distinct from excluded.group_key`);
+  if ((written.rowCount ?? 0) !== 1) {
+    throw new TaxPoolError(
+      `posted 1.1502-13 matching for receiving workpaper ${proposed.workpaperId} vintage ${proposed.vintageKey} ${proposed.yearStart}–${proposed.yearEnd} was not written; a write that matches zero rows is a failure — reverse the applied tax basis workpaper and re-propose it; there is no reversal of a computed tax year and posted matching cannot be overwritten`,
+    );
+  }
+}
+
+export type ConsolidatedMatchingPaper = {
+  id?: string;
+  change_id?: string;
+  computed: Record<string, unknown> | null;
+  original_unadjusted_basis: string | null;
+  seller_subsidiary_id: string;
+  buyer_subsidiary_id: string | null;
+};
+
+export type ConsolidatedMatchingVintageJob = {
+  vintage: MacrsVintage;
+  actualAllowance: string;
+  sellerLineage: readonly MacrsYearWindow[];
+  buyerReportingWindows: readonly MacrsYearWindow[];
+  postedDeferredOpening?: string | null;
+};
+
+function buyerVintageKey(vintage: MacrsVintage): string {
+  return macrsVintageKey({
+    source: vintage.source,
+    placedInServiceOn: vintage.placedInServiceOn,
+    transferOn: vintage.transferOn,
+    parentKey: vintage.parentKey,
+  });
+}
+
+function sellerStillHeldRecomputedDeduction(args: {
+  vintage: MacrsVintage;
+  paper: ConsolidatedMatchingPaper;
+  sellerLineage: readonly MacrsYearWindow[];
+  buyerReportingWindows: readonly MacrsYearWindow[];
+  run: Pick<TaxPoolRun, "taxYear" | "yearStart" | "yearEnd" | "shortYearFactor">;
+}): string {
+  if (args.vintage.source !== "carryover") return formatMoney("0", 2);
+  let recomputedYears: MacrsYearWindow[];
+  try {
+    const recomputed = macrsLineageRecoveryWindows({
+      windows: args.sellerLineage,
+      placedInServiceOn: args.vintage.placedInServiceOn,
+      transferOn: args.vintage.transferOn,
+      asOf: args.run.yearEnd,
+      ownerSubsidiaryId: args.paper.buyer_subsidiary_id ?? undefined,
+      originCeasedOn: originCeasedOnFromParentKey(
+        args.vintage.parentKey,
+        args.vintage.transferOn,
+      ),
+    });
+    recomputedYears = recomputed.recoveryYears;
+  } catch (error) {
+    throw error instanceof TaxPoolError ? error : new TaxPoolError(
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+  try {
+    return computeMacrsThroughYear({
+      basis: args.vintage.basis,
+      placedInServiceOn: args.vintage.placedInServiceOn,
+      recoveryPeriodYears: args.vintage.recoveryPeriodYears,
+      method: args.vintage.method,
+      convention: args.vintage.convention,
+      section179: args.vintage.section179,
+      bonusPercent: args.vintage.bonusPercent,
+      businessUsePercent: args.vintage.businessUsePercent,
+      shortYearFactor: args.run.shortYearFactor,
+      shortYearMethod: args.vintage.shortYearMethod,
+      taxYear: args.run.taxYear,
+      yearStart: args.run.yearStart,
+      yearEnd: args.run.yearEnd,
+    }, recomputedYears, args.buyerReportingWindows).current.allowance;
+  } catch (error) {
+    throw error instanceof TaxPoolError ? error : new TaxPoolError(
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+}
+
+function aggregateMatchingJobsByVintage(
+  jobs: readonly ConsolidatedMatchingVintageJob[],
+): ConsolidatedMatchingVintageJob[] {
+  const grouped = new Map<string, ConsolidatedMatchingVintageJob>();
+  for (const job of jobs) {
+    const vintageKey = buyerVintageKey(job.vintage);
+    const existing = grouped.get(vintageKey);
+    if (!existing) {
+      grouped.set(vintageKey, {
+        ...job,
+        actualAllowance: formatMoney(job.actualAllowance, 2),
+        vintage: { ...job.vintage, basis: formatMoney(job.vintage.basis, 4) },
+      });
+      continue;
+    }
+    if (
+      existing.postedDeferredOpening != null
+      && existing.postedDeferredOpening !== ""
+      && job.postedDeferredOpening != null
+      && job.postedDeferredOpening !== ""
+      && existing.postedDeferredOpening !== job.postedDeferredOpening
+    ) {
+      throw new TaxPoolError(
+        `1.1502-13 matching has two posted openings for receiving vintage ${vintageKey}; approve tax_matching_replay on the replacement workpaper — do not persist two matching rows for one acquisition identity`,
+      );
+    }
+    grouped.set(vintageKey, {
+      vintage: {
+        ...existing.vintage,
+        basis: formatMoney(add(existing.vintage.basis, job.vintage.basis), 4),
+      },
+      actualAllowance: formatMoney(add(existing.actualAllowance, job.actualAllowance), 2),
+      sellerLineage: existing.sellerLineage.length > 0 ? existing.sellerLineage : job.sellerLineage,
+      buyerReportingWindows: existing.buyerReportingWindows.length > 0
+        ? existing.buyerReportingWindows
+        : job.buyerReportingWindows,
+      postedDeferredOpening: existing.postedDeferredOpening || job.postedDeferredOpening,
+    });
+  }
+  return [...grouped.values()];
+}
+
+/** Native pool matching grain: one seller-still-held recomputed schedule per
+ *  carryover parent, excess newly placed at zero recomputed, and the paper
+ *  deferred opening allocated once across first-year vintages. */
+export function matchConsolidatedGroupPaperYear(args: {
+  paper: ConsolidatedMatchingPaper;
+  jobs: readonly ConsolidatedMatchingVintageJob[];
+  run: Pick<TaxPoolRun, "taxYear" | "yearStart" | "yearEnd" | "taxYearWindowId" | "shortYearFactor">;
+}): { vintage: MacrsVintage; vintageKey: string; matched: ConsolidatedMacrsYearMatching }[] {
+  const { paper, run } = args;
+  if (!paper.computed?.consolidatedMembership && !paper.computed?.consolidatedMatching) {
+    return [];
+  }
+  if (!paper.original_unadjusted_basis) {
+    throw new TaxPoolError(
+      "1.1502-13 matching requires originalUnadjustedBasis on the applied workpaper so the seller-still-held corresponding item can be identified; reverse and re-propose that workpaper — do not recompute from remaining carryover or book cost",
+    );
+  }
+  const buyerJobs = aggregateMatchingJobsByVintage(
+    args.jobs.filter((job) => job.vintage.role === "buyer"),
+  );
+  if (buyerJobs.length === 0) return [];
+  const carryoverParents = new Map<string, string>();
+  for (const job of buyerJobs) {
+    if (job.vintage.source !== "carryover") continue;
+    const grain = job.vintage.parentKey ?? paper.id ?? "paper";
+    const vintageKey = buyerVintageKey(job.vintage);
+    const existing = carryoverParents.get(grain);
+    if (existing && existing !== vintageKey) {
+      throw new TaxPoolError(
+        `1.1502-13 matching has two carryover vintages (${existing} and ${vintageKey}) for seller parent ${grain}; reverse and re-propose the workpaper — one seller-still-held schedule belongs to each parent, not a second walk of originalUnadjustedBasis`,
+      );
+    }
+    carryoverParents.set(grain, vintageKey);
+  }
+  const firstYearKeys = buyerJobs
+    .filter((job) => job.postedDeferredOpening == null || job.postedDeferredOpening === "")
+    .map((job) => buyerVintageKey(job.vintage));
+  let allocated = new Map<string, string>();
+  if (firstYearKeys.length > 0) {
+    let paperOpening: string;
+    try {
+      paperOpening = resolveFrozenUsConsolidatedMatching(paper.computed).consolidatedMatching.deferredOpening;
+    } catch (error) {
+      throw error instanceof ConsolidatedTaxMatchingError ? new TaxPoolError(error.message) : error;
+    }
+    const weights: MatchingVintageWeight[] = firstYearKeys.map((vintageKey) => {
+      const job = buyerJobs.find((row) => buyerVintageKey(row.vintage) === vintageKey)!;
+      return { vintageKey, amount: formatMoney(job.vintage.basis, 4) };
+    });
+    try {
+      allocated = allocatedDeferredOpeningsByVintage({
+        paperOpening,
+        vintageKeys: firstYearKeys,
+        vintageWeights: weights,
+      });
+    } catch (error) {
+      throw error instanceof ConsolidatedTaxMatchingError ? new TaxPoolError(error.message) : error;
+    }
+  }
+  const results: { vintage: MacrsVintage; vintageKey: string; matched: ConsolidatedMacrsYearMatching }[] = [];
+  for (const job of buyerJobs) {
+    const vintageKey = buyerVintageKey(job.vintage);
+    const recomputedDeduction = sellerStillHeldRecomputedDeduction({
+      vintage: job.vintage,
+      paper,
+      sellerLineage: job.sellerLineage,
+      buyerReportingWindows: job.buyerReportingWindows,
+      run,
+    });
+    try {
+      const matched = matchConsolidatedMacrsFromWorkpaper({
+        role: job.vintage.role,
+        computed: paper.computed,
+        originalUnadjustedBasis: paper.original_unadjusted_basis,
+        actualDeduction: job.actualAllowance,
+        recomputedDeduction,
+        yearStart: run.yearStart,
+        yearEnd: run.yearEnd,
+        taxYearWindowId: run.taxYearWindowId,
+        vintageKey,
+        transferOn: job.vintage.transferOn,
+        sellerSubsidiaryId: paper.seller_subsidiary_id,
+        buyerSubsidiaryId: paper.buyer_subsidiary_id,
+        postedDeferredOpening: job.postedDeferredOpening,
+        allocatedDeferredOpening: allocated.get(vintageKey) ?? null,
+      });
+      if (matched) results.push({ vintage: job.vintage, vintageKey, matched });
+    } catch (error) {
+      throw error instanceof ConsolidatedTaxMatchingError ? new TaxPoolError(error.message) : error;
+    }
+  }
+  return results;
+}
 
 async function runMacrs(
   tx: SqlExecutor,
@@ -1077,11 +1503,25 @@ async function runMacrs(
   // Compute every class first, then persist all periods and roll-forwards in
   // this one transaction — identical atomicity contract to the pooled model.
   const prepared: { poolId: string; classCode: string; def: PoolClassDef; values: ReturnType<typeof macrsValues> }[] = [];
+  const consolidatedMatching: ConsolidatedMacrsYearMatching[] = [];
+  const pendingMatching: {
+    paper: LiveWorkpaper;
+    matched: ConsolidatedMacrsYearMatching;
+    parentKey: string | null;
+  }[] = [];
+  const pendingMatchingJobs: {
+    paper: LiveWorkpaper;
+    vintage: MacrsVintage;
+    actualAllowance: string;
+    sellerLineage: MacrsYearWindow[];
+    buyerReportingWindows: MacrsYearWindow[];
+    postedDeferredOpening?: string | null;
+  }[] = [];
   let totalAllowance = "0";
   for (const [classCode, group] of grouped) {
     let opening = 0n, additions = 0n, dispositions = 0n, allowance = 0n, closing = 0n;
     for (const row of resolved.filter((item) => item.classCode === classCode)) {
-      const { asset, vintages, latestReceiver, yearPapers } = row;
+      const { asset, vintages, latestReceiver, yearPapers, receiverPapers } = row;
       for (const vintage of vintages) {
         if (vintage.placedInServiceOn > run.yearEnd) continue;
         const lineage = await windowsForVintage(asset.id, vintage);
@@ -1092,7 +1532,17 @@ async function runMacrs(
           transferOn: received ? vintage.transferOn : null,
           asOf: run.yearEnd,
           ownerSubsidiaryId: run.subsidiaryId,
+          originCeasedOn: originCeasedOnFromParentKey(
+            vintage.parentKey,
+            received ? vintage.transferOn : null,
+          ),
         });
+        const convention = macrsConventionAfterMidQuarter(
+          vintage,
+          group.def.convention!,
+          lineage,
+          midQuarterByWindow,
+        );
         const walked = computeMacrsThroughYear({
           basis: vintage.basis,
           placedInServiceOn: vintage.placedInServiceOn,
@@ -1101,12 +1551,7 @@ async function runMacrs(
           yearEnd: run.yearEnd,
           recoveryPeriodYears: vintage.recoveryPeriodYears,
           method: vintage.method,
-          convention: macrsConventionAfterMidQuarter(
-            vintage,
-            group.def.convention!,
-            lineage,
-            midQuarterByWindow,
-          ),
+          convention,
           disposedOn: vintage.disposedOn,
           dispositionRecognition: vintage.recognition,
           section179: vintage.section179,
@@ -1119,6 +1564,54 @@ async function runMacrs(
           section168i7Kind: vintage.section168i7Kind ?? undefined,
         }, recoveryYears, reportingWindows);
         const current = walked.current;
+        const matchingPaper = paperForBuyerVintage(receiverPapers, asset.id, vintage) ?? latestReceiver;
+        const willMatch = vintage.role === "buyer" && !!(
+          matchingPaper?.computed?.consolidatedMembership
+          || matchingPaper?.computed?.consolidatedMatching
+        );
+        if (willMatch && matchingPaper) {
+          const vintageKey = macrsVintageKey({
+            source: vintage.source,
+            placedInServiceOn: vintage.placedInServiceOn,
+            transferOn: vintage.transferOn,
+            parentKey: vintage.parentKey,
+          });
+          let postedDeferredOpening: string | undefined;
+          const priorWindow = immediatePriorMatchingWindow(reportingWindows, run, vintage.transferOn);
+          if (priorWindow) {
+            if (!priorWindow.id) {
+              throw new TaxPoolError(
+                `1.1502-13 matching for vintage ${vintageKey} ${priorWindow.yearStart}–${priorWindow.yearEnd} requires the registered tax year; run that year from tax-year setup — do not reconstruct a posted opening from a live walk`,
+              );
+            }
+            let posted: string | null;
+            try {
+              posted = await loadPostedMatchingClosing(
+                tx,
+                orgId,
+                matchingPaper.id,
+                vintageKey,
+                priorWindow.id,
+              );
+            } catch (error) {
+              throw error instanceof ConsolidatedTaxMatchingError ? new TaxPoolError(error.message) : error;
+            }
+            if (posted === null) {
+              throw new TaxPoolError(
+                `posted 1.1502-13 matching for receiving workpaper ${matchingPaper.id} vintage ${vintageKey} ${priorWindow.yearStart}–${priorWindow.yearEnd} is required before ${run.yearStart}–${run.yearEnd}; approve tax_matching_replay on the replacement workpaper citing that historical row, or re-run this year when it is the latest computed result — do not reconstruct the opening from a live walk, borrow the reversed paper's closing, or upsert an earlier tax pool year`,
+              );
+            }
+            postedDeferredOpening = posted;
+          }
+          pendingMatchingJobs.push({
+            paper: matchingPaper,
+            vintage,
+            actualAllowance: current.allowance,
+            sellerLineage: lineage,
+            buyerReportingWindows: reportingWindows,
+            postedDeferredOpening,
+          });
+        }
         const transferredThisYear = !!(
           vintage.role === "buyer" &&
           vintage.adjustedCarryover &&
@@ -1203,6 +1696,33 @@ async function runMacrs(
     lines.push({ classCode: p.classCode, className: p.def.name, openingBalance: p.values.openingBalance, additions: p.values.additions, dispositions: p.values.dispositions, allowance: p.values.allowance, closingBalance: p.values.closingBalance, recapture: "0.00", terminalLoss: "0.00" });
     totalAllowance = addStr(totalAllowance, p.values.allowance);
   }
+  const matchingJobsByPaper = new Map<string, typeof pendingMatchingJobs>();
+  for (const job of pendingMatchingJobs) {
+    const paperId = job.paper.id;
+    if (!paperId) {
+      throw new TaxPoolError(
+        "1.1502-13 matching periods cite the applied tax basis workpaper; reverse and re-propose it — do not persist matching without that paper",
+      );
+    }
+    const group = matchingJobsByPaper.get(paperId) ?? [];
+    group.push(job);
+    matchingJobsByPaper.set(paperId, group);
+  }
+  for (const jobs of matchingJobsByPaper.values()) {
+    const paper = jobs[0]!.paper;
+    const results = matchConsolidatedGroupPaperYear({ paper, jobs, run });
+    for (const result of results) {
+      consolidatedMatching.push(result.matched);
+      pendingMatching.push({
+        paper,
+        matched: result.matched,
+        parentKey: result.vintage.parentKey ?? null,
+      });
+    }
+  }
+  for (const row of pendingMatching) {
+    await persistConsolidatedMatchingPeriod(tx, run, row.paper, row.matched, row.parentKey);
+  }
   return {
     regime: run.regime,
     taxYear,
@@ -1211,6 +1731,7 @@ async function runMacrs(
     yearEnd: run.yearEnd,
     lines,
     totals: { allowance: totalAllowance, recapture: "0.00", terminalLoss: "0.00" },
+    consolidatedMatching,
   };
 }
 
