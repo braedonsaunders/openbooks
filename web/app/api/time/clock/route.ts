@@ -1,4 +1,4 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
@@ -24,17 +24,32 @@ const geoSchema = z.object({
   accuracyM: z.number().min(0).nullable().optional(),
 })
 
+const SINGLE_NEEDS = 'The clock event needs kind, occurredAt and clientEventId'
+
 const eventSchema = z.object({
-  kind: z.enum(['clock_in', 'clock_out', 'break_start', 'break_end', 'switch']),
-  occurredAt: z.string().min(1),
+  kind: z.enum(['clock_in', 'clock_out', 'break_start', 'break_end', 'switch'], { error: SINGLE_NEEDS }),
+  occurredAt: z.string({ error: SINGLE_NEEDS }).min(1, SINGLE_NEEDS),
   deviceId: z.string().max(120).nullable().optional(),
   projectId: z.string().nullable().optional(),
   projectTaskId: z.string().nullable().optional(),
   costCodeRef: z.string().max(80).nullable().optional(),
   geo: geoSchema.nullable().optional(),
   photoFileId: z.string().nullable().optional(),
-  clientEventId: z.string().min(1),
+  clientEventId: z.string({ error: SINGLE_NEEDS }).min(1, SINGLE_NEEDS),
 })
+
+const REPLAY_NEEDS = 'Each replayed event needs kind, occurredAt and clientEventId'
+const REPLAY_CAP = 'Replay batches hold at most 200 events'
+
+/**
+ * One body, two shapes: a single event, or { events: [...] } from the
+ * offline queue. The replay cap is declared here because a queue that
+ * grew past it is a client bug the worker must see, not a truncation.
+ */
+const clockBody = z.union([
+  z.object({ events: z.array(eventSchema, { error: REPLAY_NEEDS }).max(200, REPLAY_CAP) }),
+  eventSchema,
+])
 
 /** GET → own clock status, today's pairs, and the offline replay hint. */
 export async function GET() {
@@ -59,27 +74,22 @@ export async function POST(req: Request) {
   const { user } = gate
   const orgId = user.orgId
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, clockBody, { status: 422 });
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as Record<string, unknown>
+  const body = parsedBody.data
   try {
     // The clock is self: the employee always resolves from the login,
     // never from client input — another worker's party id reads as
     // missing here, not as permission to clock for them.
     const employeePartyId = await resolveOwnParty(orgId, user.id)
 
-    if (Array.isArray(body.events)) {
-      if (body.events.length > 200) return bad('Replay batches hold at most 200 events')
-      const parsed = z.array(eventSchema).safeParse(body.events)
-      if (!parsed.success) return bad('Each replayed event needs kind, occurredAt and clientEventId')
-      const inputs: RecordClockInput[] = parsed.data.map((event) => toInput(orgId, user.id, employeePartyId, event))
+    if ('events' in body) {
+      const inputs: RecordClockInput[] = body.events.map((event) => toInput(orgId, user.id, employeePartyId, event))
       const results = await replayClockEvents(inputs)
       return NextResponse.json({ results })
     }
 
-    const parsed = eventSchema.safeParse(body)
-    if (!parsed.success) return bad('The clock event needs kind, occurredAt and clientEventId')
-    const result = await recordClockEvent(toInput(orgId, user.id, employeePartyId, parsed.data))
+    const result = await recordClockEvent(toInput(orgId, user.id, employeePartyId, body))
     return NextResponse.json(result)
   } catch (error) {
     return fieldTime(error)

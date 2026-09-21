@@ -1,4 +1,4 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
@@ -37,10 +37,13 @@ export async function GET(req: Request) {
   }
 }
 
+/** A batch is opened for one foreman on one project day. */
+const NEEDS = 'A batch needs the foreman, the project and the worked day'
+
 const createSchema = z.object({
-  foremanPartyId: z.string().min(1),
-  projectId: z.string().min(1),
-  workedOn: z.string().min(1),
+  foremanPartyId: z.string({ error: NEEDS }).min(1, NEEDS),
+  projectId: z.string({ error: NEEDS }).min(1, NEEDS),
+  workedOn: z.string({ error: NEEDS }).min(1, NEEDS),
   notes: z.string().max(2000).nullable().optional(),
 })
 
@@ -50,18 +53,16 @@ export async function POST(req: Request) {
   if (gate instanceof NextResponse) return gate
   const { user } = gate
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, createSchema, { status: 422 });
   if (!parsedBody.ok) return parsedBody.response;
-  const parsed = createSchema.safeParse((parsedBody.data) as Record<string, unknown>)
-  if (!parsed.success) return bad('A batch needs the foreman, the project and the worked day')
   try {
     const id = await createBatch({
       orgId: user.orgId,
       actorUserId: user.id,
-      foremanPartyId: parsed.data.foremanPartyId,
-      projectId: parsed.data.projectId,
-      workedOn: parsed.data.workedOn,
-      notes: parsed.data.notes ?? null,
+      foremanPartyId: parsedBody.data.foremanPartyId,
+      projectId: parsedBody.data.projectId,
+      workedOn: parsedBody.data.workedOn,
+      notes: parsedBody.data.notes ?? null,
       canManageAll: can(gate, 'time.manage'),
     })
     return NextResponse.json({ id })
