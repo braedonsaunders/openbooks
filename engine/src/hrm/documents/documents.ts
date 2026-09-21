@@ -926,8 +926,8 @@ export async function declineTokenDocument(input: {
  * one; otherwise the subject acknowledges directly.
  */
 export async function acknowledgeDocument(input: {
-  orgId: string;
-  actorId: string | null;
+  orgId?: string;
+  actorId?: string | null;
   token?: string;
   documentId?: string;
 }): Promise<DocumentDTO> {
@@ -971,33 +971,36 @@ export async function acknowledgeDocument(input: {
       return toDTO(await loadDocument(db, orgId, updated.id));
     });
   }
-  if (!input.documentId || !input.actorId) {
+  if (!input.documentId || !input.actorId || !input.orgId) {
     throw new HrmDocumentsError("VALIDATION", "acknowledgment needs the document or a signing link");
   }
-  return withOrgTransaction(input.orgId, async () => {
-    const doc = await loadDocument(db, input.orgId, input.documentId!);
-    const ownParty = await loadActorPartyId(db, input.orgId, input.actorId!);
+  const orgId: string = input.orgId;
+  const actorId: string = input.actorId;
+  const documentId: string = input.documentId;
+  return withOrgTransaction(orgId, async () => {
+    const doc = await loadDocument(db, orgId, documentId);
+    const ownParty = await loadActorPartyId(db, orgId, actorId);
     const isOwner = ownParty !== null && ownParty === doc.party_id;
     if (!isOwner) {
-      await requireHrmDocumentsManage(db, input.orgId, input.actorId!);
-    } else if (!(await actorHasPermission(db, input.orgId, input.actorId!, "hrm.self.read"))) {
-      await requireHrmDocumentsManage(db, input.orgId, input.actorId!);
+      await requireHrmDocumentsManage(db, orgId, actorId);
+    } else if (!(await actorHasPermission(db, orgId, actorId, "hrm.self.read"))) {
+      await requireHrmDocumentsManage(db, orgId, actorId);
     }
     if (doc.status === "acknowledged") {
       throw new HrmDocumentsError("REFUSED", "this document is already acknowledged");
     }
-    await recordEvent(db, input.orgId, doc.id, "acknowledged", input.actorId);
+    await recordEvent(db, orgId, doc.id, "acknowledged", actorId);
     const updated = (await db.execute<DocumentRow>(sql`
       update hrm_documents set status = 'acknowledged', completed_at = now(),
-             updated_at = now(), updated_by = ${input.actorId}
-       where org_id = ${input.orgId} and id = ${doc.id}
+             updated_at = now(), updated_by = ${actorId}
+       where org_id = ${orgId} and id = ${doc.id}
       returning id, employment_id, party_id, template_id, category_key, title, file_id,
                 status, sent_at::text as sent_at, completed_at::text as completed_at,
                 expires_at::text as expires_at, retain_until::text as retain_until, legal_hold
     `)).rows[0]!;
     const { applyCompletionRetention } = await import("./retention.ts");
-    await applyCompletionRetention(db, input.orgId, updated.id, input.actorId);
-    return toDTO(await loadDocument(db, input.orgId, updated.id));
+    await applyCompletionRetention(db, orgId, updated.id, actorId);
+    return toDTO(await loadDocument(db, orgId, updated.id));
   });
 }
 
@@ -1161,6 +1164,29 @@ export async function dueReminderSigners(
      order by d.sent_at
      limit 200
   `)).rows;
+}
+
+/**
+ * Record a reminder send on an open signer (the daily job calls this
+ * AFTER delivering, so the reminded event witnesses an actual send).
+ * The advisory lock serializes concurrent duty replicas; the conditional
+ * update makes a raced second delivery a no-op, never a double event.
+ */
+export async function recordDocumentReminded(
+  exec: SqlExecutor,
+  orgId: string,
+  signerId: string,
+): Promise<boolean> {
+  await exec.execute(sql`
+    select pg_advisory_xact_lock(hashtextextended(${"hrm-doc-remind:" + orgId + ":" + signerId}, 0))
+  `);
+  const row = (await exec.execute<{ document_id: string }>(sql`
+    select document_id from hrm_document_signers
+     where org_id = ${orgId} and id = ${signerId} and status in ('pending', 'viewed')
+  `)).rows[0];
+  if (!row) return false;
+  await recordEvent(exec, orgId, row.document_id, "reminded", null);
+  return true;
 }
 
 /** Read a document's current bytes for download (HR gate or owner). */
