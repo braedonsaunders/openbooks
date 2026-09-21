@@ -1,0 +1,144 @@
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import {
+  checkEquipmentTolerance,
+  insideCircle,
+  insidePolygon,
+  roundHours,
+  subtractBreaks,
+  validateClockSequence,
+  validateStages,
+} from "./pure.ts";
+import { FieldTimeError } from "./errors.ts";
+
+function refuses(fn: () => void): string {
+  try {
+    fn();
+  } catch (e) {
+    assert.ok(e instanceof FieldTimeError, "refusal is a FieldTimeError");
+    return (e as FieldTimeError).message;
+  }
+  assert.fail("expected a refusal");
+}
+
+describe("rounding rules", () => {
+  it("none keeps exact hours", () => {
+    assert.equal(roundHours("7.1267", { incrementMinutes: 0, mode: "nearest" }), "7.1267");
+  });
+  it("nearest quarter rounds 7.13 to 7.25", () => {
+    assert.equal(roundHours("7.13", { incrementMinutes: 15, mode: "nearest" }), "7.2500");
+  });
+  it("nearest quarter rounds 7.11 to 7.00", () => {
+    assert.equal(roundHours("7.11", { incrementMinutes: 15, mode: "nearest" }), "7.0000");
+  });
+  it("up always rounds up a partial tenth", () => {
+    assert.equal(roundHours("7.01", { incrementMinutes: 6, mode: "up" }), "7.1000");
+  });
+  it("down truncates a partial tenth", () => {
+    assert.equal(roundHours("7.19", { incrementMinutes: 6, mode: "down" }), "7.1000");
+  });
+  it("exact steps are untouched in every mode", () => {
+    assert.equal(roundHours("8.25", { incrementMinutes: 15, mode: "up" }), "8.2500");
+    assert.equal(roundHours("8.25", { incrementMinutes: 15, mode: "down" }), "8.2500");
+  });
+  it("unknown increment is refused by name", () => {
+    const msg = refuses(() => roundHours("8", { incrementMinutes: 10, mode: "nearest" }));
+    assert.match(msg, /none, 6 or 15/);
+  });
+});
+
+describe("break subtraction", () => {
+  it("a 30-minute break leaves 7.5", () => {
+    assert.equal(subtractBreaks("8.0000", 30), "7.5000");
+  });
+  it("breaks never drive hours negative", () => {
+    assert.equal(subtractBreaks("0.2500", 60), "0.0000");
+  });
+});
+
+describe("geofence containment", () => {
+  it("circle admits inside and refuses outside", () => {
+    const center = { lat: 43.6532, lng: -79.3832 };
+    assert.equal(insideCircle({ lat: 43.6533, lng: -79.3832 }, center, 100), true);
+    assert.equal(insideCircle({ lat: 43.66, lng: -79.39 }, center, 100), false);
+  });
+  it("concave polygon admits the notch interior and refuses the bay", () => {
+    // C-shaped block: the bay (right-middle) is outside though bounded on three sides.
+    const polygon = [
+      { lat: 0, lng: 0 },
+      { lat: 0, lng: 10 },
+      { lat: 4, lng: 10 },
+      { lat: 4, lng: 6 },
+      { lat: 6, lng: 6 },
+      { lat: 6, lng: 10 },
+      { lat: 10, lng: 10 },
+      { lat: 10, lng: 0 },
+    ];
+    assert.equal(insidePolygon({ lat: 2, lng: 8 }, polygon), true);
+    assert.equal(insidePolygon({ lat: 5, lng: 8 }, polygon), false);
+    assert.equal(insidePolygon({ lat: 5, lng: 4 }, polygon), true);
+  });
+  it("fence line counts as inside", () => {
+    const polygon = [
+      { lat: 0, lng: 0 },
+      { lat: 0, lng: 10 },
+      { lat: 10, lng: 10 },
+      { lat: 10, lng: 0 },
+    ];
+    assert.equal(insidePolygon({ lat: 0, lng: 5 }, polygon), true);
+  });
+});
+
+describe("clock sequencing", () => {
+  it("clock-in while clocked in is refused", () => {
+    const msg = refuses(() => validateClockSequence("clock_in", { clockedIn: true, onBreak: false }));
+    assert.match(msg, /Already clocked in/);
+  });
+  it("clock-out with no open pair is refused, never silently paired", () => {
+    const msg = refuses(() => validateClockSequence("clock_out", { clockedIn: false, onBreak: false }));
+    assert.match(msg, /No open clock-in/);
+  });
+  it("clock-out on an open break names the remedy", () => {
+    const msg = refuses(() => validateClockSequence("clock_out", { clockedIn: true, onBreak: true }));
+    assert.match(msg, /end the break/);
+  });
+  it("break_end with no break is refused", () => {
+    refuses(() => validateClockSequence("break_end", { clockedIn: true, onBreak: false }));
+  });
+  it("a clean shift passes", () => {
+    validateClockSequence("clock_in", { clockedIn: false, onBreak: false });
+    validateClockSequence("break_start", { clockedIn: true, onBreak: false });
+    validateClockSequence("break_end", { clockedIn: true, onBreak: true });
+    validateClockSequence("clock_out", { clockedIn: true, onBreak: false });
+  });
+});
+
+describe("stage validation", () => {
+  it("a two-stage chain validates in order", () => {
+    const stages = validateStages([
+      { order: 2, approverKind: "payroll" },
+      { order: 1, approverKind: "supervisor" },
+    ]);
+    assert.deepEqual(stages.map((s) => s.order), [1, 2]);
+  });
+  it("gapped orders are refused", () => {
+    const msg = refuses(() => validateStages([{ order: 1, approverKind: "supervisor" }, { order: 3, approverKind: "payroll" }]));
+    assert.match(msg, /without gaps/);
+  });
+  it("role without a key is refused", () => {
+    refuses(() => validateStages([{ order: 1, approverKind: "role" }]));
+  });
+  it("empty chain is refused", () => {
+    refuses(() => validateStages([]));
+  });
+});
+
+describe("equipment tolerance", () => {
+  it("equipment within tolerance passes", () => {
+    checkEquipmentTolerance("8.0000", "8.5000", "1.0000");
+  });
+  it("equipment over tolerance names the remedy", () => {
+    const msg = refuses(() => checkEquipmentTolerance("8.0000", "9.5000", "1.0000"));
+    assert.match(msg, /split the equipment time/);
+  });
+});
