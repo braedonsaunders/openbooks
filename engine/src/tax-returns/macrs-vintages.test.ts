@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { listOpenMacrsVintages, resolveMacrsVintages, type MacrsWorkpaperEvent, type MacrsVintageDefaults } from "./macrs-vintages.ts";
+import { listOpenMacrsVintages, resolveMacrsVintages, sellerMacrsHistoryBeforeSource, type MacrsWorkpaperEvent, type MacrsVintageDefaults } from "./macrs-vintages.ts";
 
 const defaults: MacrsVintageDefaults = {
   recoveryPeriodYears: "7",
@@ -468,4 +468,68 @@ test("a received asset later disposed does not keep depreciating as acquired", (
   assert.equal(vintages[0]!.placedInServiceOn, "2024-06-01");
   assert.equal(vintages[0]!.disposedOn, "2025-02-01");
   assert.equal(vintages[0]!.recognition, "taxable");
+});
+
+test("seller history before a source distinguishes first declaration from ready vintages and refused history", () => {
+  assert.deepEqual(
+    sellerMacrsHistoryBeforeSource({
+      assetId: "seller",
+      subsidiaryId: "sub-a",
+      papers: [],
+      defaults,
+    }),
+    { status: "original_declaration_required" },
+  );
+  assert.throws(
+    () =>
+      resolveMacrsVintages({
+        assetId: "seller",
+        subsidiaryId: "sub-a",
+        placedOn: "2023-03-15",
+        acquisitionCost: "10000.00",
+        disposedOn: null,
+        papers: [],
+        defaults,
+        allowBookAcquisition: false,
+      }),
+    /do not seed book acquisition cost/,
+  );
+  const missing = sellerMacrsHistoryBeforeSource({
+    assetId: "seller",
+    subsidiaryId: "sub-a",
+    papers: [{ ...bothSidedTaxable, original_unadjusted_basis: null, placed_in_service_on: null }],
+    defaults,
+  });
+  assert.equal(missing.status, "history_refused");
+  if (missing.status === "history_refused") {
+    assert.match(missing.refusal, /do not substitute book acquisition cost|missing originalUnadjustedBasis|missing placedInServiceOn/);
+  }
+  const ready = sellerMacrsHistoryBeforeSource({
+    assetId: "seller",
+    subsidiaryId: "sub-a",
+    papers: [{
+      ...bothSidedTaxable,
+      remaining_basis: "4000.00",
+      disposed_unadjusted_basis: "6000.00",
+      buyer_cost: null,
+      receiving_asset_id: null,
+    }],
+    defaults,
+  });
+  assert.equal(ready.status, "ready");
+  if (ready.status === "ready") {
+    assert.deepEqual(ready.vintages.map((row) => row.key), ["original:2023-03-15"]);
+    assert.equal(ready.vintages[0]!.unadjustedBasis, "4000.0000");
+    assert.notEqual(ready.vintages[0]!.unadjustedBasis, "10000.00");
+  }
+  const closed = sellerMacrsHistoryBeforeSource({
+    assetId: "seller",
+    subsidiaryId: "sub-a",
+    papers: [bothSidedTaxable],
+    defaults,
+  });
+  assert.equal(closed.status, "history_refused");
+  if (closed.status === "history_refused") {
+    assert.match(closed.refusal, /no open MACRS vintage remains/);
+  }
 });

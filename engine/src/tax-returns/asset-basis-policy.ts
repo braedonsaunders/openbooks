@@ -144,6 +144,35 @@ export function macrsVintageKey(args: {
   return `${args.source}:${args.placedInServiceOn}:${args.transferOn ?? ""}`;
 }
 
+/** One open seller vintage reconstructed immediately before the selected
+ *  source. Identities are server-derived; the editor allocates disposed and
+ *  retained amounts against these rows. */
+export interface OpenMacrsVintage {
+  key: string;
+  source: MacrsVintageSource;
+  placedInServiceOn: string;
+  transferOn: string | null;
+  unadjustedBasis: string;
+  adjustedCarryover: string | null;
+  section179: string;
+  priorDepreciation: string | null;
+}
+
+export const US_SELLER_MACRS_VINTAGE_STATUSES = [
+  "ready",
+  "original_declaration_required",
+  "history_refused",
+] as const;
+export type UsSellerMacrsVintageStatus = (typeof US_SELLER_MACRS_VINTAGE_STATUSES)[number];
+
+/** Seller-side US source context. Missing history is not an empty valid
+ *  list and is not book acquisition cost. `null` on the source choice means
+ *  US is not seller-applicable. */
+export type UsSellerMacrsVintageContext =
+  | { status: "ready"; vintages: OpenMacrsVintage[] }
+  | { status: "original_declaration_required" }
+  | { status: "history_refused"; refusal: string };
+
 export const US_SHORT_YEAR_METHODS = ["simplified", "allocation"] as const;
 export type UsShortYearMethod = (typeof US_SHORT_YEAR_METHODS)[number];
 
@@ -235,11 +264,13 @@ export function taxBasisSourceRegimes(
 export interface TaxBasisSourceContext {
   sourceOperation: TaxBasisSourceOperation;
   applicable: TaxBasisApplicableSide;
+  usSellerMacrs?: UsSellerMacrsVintageContext | null;
 }
 
 export interface TaxBasisValidationContext extends Partial<TaxBasisSourceContext> {
   sourceOperation: TaxBasisSourceOperation;
   applicableByRegime?: Readonly<Partial<Record<TaxBasisRegime, TaxBasisApplicableSide>>>;
+  usSellerMacrs?: UsSellerMacrsVintageContext | null;
 }
 
 /** One classified regime on a GET source row. `applicable` is server-derived. */
@@ -263,6 +294,9 @@ export interface TaxAssetBasisSourceChoice {
   subsidiaryLabel: string;
   receivingAssetLabel: string | null;
   regimes: TaxAssetBasisSourceRegime[];
+  /** Seller-side US vintage history immediately before this source.
+   *  `null` when US is not seller-applicable. */
+  openMacrsVintages: UsSellerMacrsVintageContext | null;
   appliedWorkpaper: {
     changeId: string;
     status: "draft" | "pending" | "approved" | "rejected" | "applied";
@@ -425,6 +459,7 @@ export type TaxBasisFieldPredicate =
   | { side: "seller" | "buyer" }
   | { fieldEquals: { name: string; values: readonly string[] } }
   | { fieldTrue: string }
+  | { usSellerMacrsStatus: UsSellerMacrsVintageStatus }
   | { all: TaxBasisFieldPredicate[] }
   | { any: TaxBasisFieldPredicate[] }
   | { not: TaxBasisFieldPredicate };
@@ -443,12 +478,24 @@ const BUYER: TaxBasisFieldPredicate = {
   all: [{ sourceOperation: "intercompany_transfer" }, { side: "buyer" }],
 };
 const SELLER: TaxBasisFieldPredicate = { side: "seller" };
-/** Seller vintage, or buyer nontaxable carryover that continues that vintage. */
+/** First seller declaration only. Frozen history supplies each vintage's own
+ *  placed date, method, convention and recovery — do not invent one composite. */
+const US_SELLER_ORIGINAL_DECLARATION: TaxBasisFieldPredicate = {
+  all: [
+    SELLER,
+    { not: { usSellerMacrsStatus: "ready" } },
+    { not: { usSellerMacrsStatus: "history_refused" } },
+  ],
+};
+/** Seller vintage on first declaration, or buyer nontaxable carryover. */
 const US_TRANSFEROR_HISTORY: TaxBasisFieldPredicate = {
   any: [
-    SELLER,
+    US_SELLER_ORIGINAL_DECLARATION,
     { all: [BUYER, { fieldEquals: { name: "recognition", values: ["nontaxable"] } }] },
   ],
+};
+const US_SELLER_SPLIT_AMOUNTS: TaxBasisFieldPredicate = {
+  all: [SELLER, { not: { usSellerMacrsStatus: "history_refused" } }],
 };
 /** Historical elections allocated to the carried-over slice. Missing JSON is not zero. */
 const US_CARRYOVER_ELECTIONS: TaxBasisFieldPredicate = {
@@ -819,22 +866,23 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     kind: "decimal",
     visibleWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
     requiredWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
+    help: "Required on the first seller declaration. After frozen history is ready, the server derives this as the sum of open vintage unadjusted bases — do not invent a composite vintage.",
   },
   {
     name: "remainingUnadjustedBasis",
     label: "Remaining unadjusted basis (same vintage)",
     kind: "decimal",
-    visibleWhen: { all: [{ regime: "us_macrs" }, SELLER] },
-    requiredWhen: { all: [{ regime: "us_macrs" }, SELLER] },
-    help: "Continues the original placed-in-service date, method and convention. When more than one vintage is open, this is the sum of vintageAllocations.remainingUnadjustedBasis — identify each vintage by source, placedInServiceOn and transferOn; do not match a vintage by amount.",
+    visibleWhen: { all: [{ regime: "us_macrs" }, US_SELLER_SPLIT_AMOUNTS] },
+    requiredWhen: { all: [{ regime: "us_macrs" }, US_SELLER_SPLIT_AMOUNTS] },
+    help: "Continues the original placed-in-service date, method and convention. When frozen history is ready, this is the sum of vintageAllocations.remainingUnadjustedBasis — identify each vintage by source, placedInServiceOn and transferOn; do not match a vintage by amount.",
   },
   {
     name: "disposedUnadjustedBasis",
     label: "Disposed unadjusted basis (same vintage)",
     kind: "decimal",
-    visibleWhen: { all: [{ regime: "us_macrs" }, SELLER] },
-    requiredWhen: { all: [{ regime: "us_macrs" }, SELLER] },
-    help: "When more than one vintage is open, this is the sum of vintageAllocations.disposedUnadjustedBasis. Record one allocation row per open vintage; do not FIFO-allocate carryover and excess.",
+    visibleWhen: { all: [{ regime: "us_macrs" }, US_SELLER_SPLIT_AMOUNTS] },
+    requiredWhen: { all: [{ regime: "us_macrs" }, US_SELLER_SPLIT_AMOUNTS] },
+    help: "When frozen history is ready, this is the sum of vintageAllocations.disposedUnadjustedBasis. Record one allocation row per open vintage; do not FIFO-allocate carryover and excess.",
   },
   {
     name: "placedInServiceOn",
@@ -842,6 +890,7 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     kind: "date",
     visibleWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
     requiredWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
+    help: "Required on the first seller declaration. After frozen history is ready, each open vintage already has its own placed-in-service date.",
   },
   {
     name: "recoveryPeriodYears",
@@ -849,6 +898,7 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     kind: "decimal",
     visibleWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
     requiredWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
+    help: "Required on the first seller declaration. After frozen history is ready, each open vintage already has its own recovery period.",
   },
   {
     name: "method",
@@ -861,6 +911,7 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     }),
     visibleWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
     requiredWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
+    help: "Required on the first seller declaration. After frozen history is ready, each open vintage already has its own method.",
   },
   {
     name: "convention",
@@ -873,6 +924,7 @@ export const TAX_BASIS_FIELDS: TaxBasisFieldMeta[] = [
     }),
     visibleWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
     requiredWhen: { all: [{ regime: "us_macrs" }, US_TRANSFEROR_HISTORY] },
+    help: "Required on the first seller declaration. After frozen history is ready, each open vintage already has its own convention.",
   },
   {
     name: "recognition",
@@ -999,6 +1051,8 @@ export type TaxBasisDraft = Record<string, unknown> & {
   sourceOperation?: TaxBasisSourceOperation;
   /** From the selected source regime row — classified seller/receiver, not an election. */
   applicable?: TaxBasisApplicableSide;
+  /** From the selected source's openMacrsVintages.status — not an election. */
+  usSellerMacrsStatus?: UsSellerMacrsVintageStatus;
 };
 
 /** Buyer capital-cost / first-element / associate-cost facts. Hidden on a
@@ -1031,7 +1085,14 @@ export function attachTaxBasisSource(
   draft: TaxBasisDraft,
   context: TaxBasisSourceContext,
 ): TaxBasisDraft {
-  return { ...draft, sourceOperation: context.sourceOperation, applicable: context.applicable };
+  return {
+    ...draft,
+    sourceOperation: context.sourceOperation,
+    applicable: context.applicable,
+    ...(context.usSellerMacrs
+      ? { usSellerMacrsStatus: context.usSellerMacrs.status }
+      : {}),
+  };
 }
 
 export function matchTaxBasisPredicate(predicate: TaxBasisFieldPredicate, draft: TaxBasisDraft): boolean {
@@ -1043,6 +1104,7 @@ export function matchTaxBasisPredicate(predicate: TaxBasisFieldPredicate, draft:
   if ("side" in predicate) return taxBasisSideApplies(draft.applicable, predicate.side);
   if ("fieldEquals" in predicate) return predicate.fieldEquals.values.includes(String(draft[predicate.fieldEquals.name] ?? ""));
   if ("fieldTrue" in predicate) return draft[predicate.fieldTrue] === true;
+  if ("usSellerMacrsStatus" in predicate) return draft.usSellerMacrsStatus === predicate.usSellerMacrsStatus;
   if ("all" in predicate) return predicate.all.every((item) => matchTaxBasisPredicate(item, draft));
   if ("any" in predicate) return predicate.any.some((item) => matchTaxBasisPredicate(item, draft));
   return !matchTaxBasisPredicate(predicate.not, draft);
@@ -1143,7 +1205,7 @@ export function validateDeclaredDecimal(name: string, value: unknown): string {
   return amount;
 }
 
-const DRAFT_CONTEXT_KEYS = new Set(["sourceOperation", "applicable"]);
+const DRAFT_CONTEXT_KEYS = new Set(["sourceOperation", "applicable", "usSellerMacrsStatus"]);
 
 /** Calendar date without importing platform (that module pulls the database). */
 export function isTaxBasisCalendarDate(value: unknown): value is string {
@@ -1251,6 +1313,44 @@ export function assertMacrsVintageAllocationTotals(
   }
 }
 
+/** Revalidate operator allocations against the reconstructed open vintages.
+ *  A client-only check is not enough; propose and apply must call this. */
+export function assertMacrsVintageAllocationsMatchOpen(
+  allocations: readonly MacrsVintageAllocationInput[],
+  open: readonly OpenMacrsVintage[],
+): void {
+  if (open.length === 0) {
+    throw new TaxBasisPolicyError(
+      "vintageAllocations cannot be checked against an empty vintage list; reconstruct the frozen history or declare the original statutory vintage — do not treat missing rows as a valid split",
+    );
+  }
+  if (allocations.length !== open.length) {
+    throw new TaxBasisPolicyError(
+      `vintageAllocations must name every open MACRS vintage (${open.map((row) => row.key).join(", ")}); do not invent a composite vintage or omit a key`,
+    );
+  }
+  const used = new Set<string>();
+  for (const row of allocations) {
+    const key = macrsVintageKey(row);
+    const vintage = open.find((item) => item.key === key);
+    if (!vintage) {
+      throw new TaxBasisPolicyError(
+        `vintageAllocations name ${key}, which is not an open MACRS vintage (${open.map((item) => item.key).join(", ")}); reconstruct from the frozen history — do not invent a vintage`,
+      );
+    }
+    if (used.has(key)) {
+      throw new TaxBasisPolicyError(`vintageAllocations name ${key} more than once`);
+    }
+    used.add(key);
+    const slice = add(row.disposedUnadjustedBasis, row.remainingUnadjustedBasis);
+    if (cmp(slice, vintage.unadjustedBasis) !== 0) {
+      throw new TaxBasisPolicyError(
+        `vintageAllocations for ${key} disposed ${row.disposedUnadjustedBasis} plus remaining ${row.remainingUnadjustedBasis} must equal that vintage's unadjusted basis ${vintage.unadjustedBasis}; do not invent a composite basis`,
+      );
+    }
+  }
+}
+
 function resolveSourceOperation(
   draft: TaxBasisDraft,
   context?: TaxBasisValidationContext,
@@ -1289,7 +1389,12 @@ function resolveApplicable(
 }
 
 function stripDraftContext(draft: TaxBasisDraft): TaxBasisDraft {
-  const { sourceOperation: _sourceOperation, applicable: _applicable, ...rest } = draft;
+  const {
+    sourceOperation: _sourceOperation,
+    applicable: _applicable,
+    usSellerMacrsStatus: _usSellerMacrsStatus,
+    ...rest
+  } = draft;
   return rest;
 }
 
@@ -1311,11 +1416,15 @@ export function validateTaxRegimeBasis(
   if (unknown.length > 0) {
     throw new TaxBasisPolicyError(`unknown ${regime} workpaper field(s): ${unknown.sort().join(", ")}`);
   }
+  if (regime === "us_macrs" && context?.usSellerMacrs?.status === "history_refused") {
+    throw new TaxBasisPolicyError(context.usSellerMacrs.refusal);
+  }
   const sourceOperation = resolveSourceOperation(raw, context);
   const draft: TaxBasisDraft = {
     ...raw,
     sourceOperation,
     applicable: resolveApplicable(raw, context, sourceOperation),
+    usSellerMacrsStatus: context?.usSellerMacrs?.status ?? raw.usSellerMacrsStatus,
   };
   for (const field of TAX_BASIS_FIELDS) {
     const supplied = draft[field.name] != null && draft[field.name] !== "";
@@ -1338,7 +1447,7 @@ export function validateTaxRegimeBasis(
   if (regime === "uk_wda") return validateUk(draft);
   if (regime === "au_pool") return validateAu(draft);
   if (regime === "nz_pool") return validateNz(draft);
-  return validateUs(draft);
+  return validateUs(draft, context);
 }
 
 function validateCa(draft: TaxBasisDraft): CaCcaRegimeBasis {
@@ -1452,7 +1561,8 @@ function assertUsCarryoverCheckpoint(draft: TaxBasisDraft): void {
   }
 }
 
-function validateUs(draft: TaxBasisDraft): UsMacrsRegimeBasis {
+function validateUs(draft: TaxBasisDraft, context?: TaxBasisValidationContext): UsMacrsRegimeBasis {
+  const history = context?.usSellerMacrs ?? null;
   if (taxBasisSideApplies(draft.applicable, "seller")) {
     const trigger = draft.dispositionTrigger as UsDispositionTrigger;
     if (trigger === "elective_other" && draft.partialDispositionElection !== true) {
@@ -1465,6 +1575,34 @@ function validateUs(draft: TaxBasisDraft): UsMacrsRegimeBasis {
         `a ${trigger} of a portion of MACRS property is a required partial disposition under Treas. Reg. 1.168(i)-8(d)(1) and Pub 544; an election is not required and cannot be used to ignore it`,
       );
     }
+    if (history?.status === "ready") {
+      if (history.vintages.length === 0) {
+        throw new TaxBasisPolicyError(
+          "open MACRS vintages were reported ready with no rows; reconstruct the frozen history — do not treat a missing list as an empty valid vintage",
+        );
+      }
+      const derivedOriginal = history.vintages.reduce((total, row) => add(total, row.unadjustedBasis), "0");
+      if (draft.originalUnadjustedBasis != null && draft.originalUnadjustedBasis !== "") {
+        if (cmp(moneyExact(draft.originalUnadjustedBasis, "originalUnadjustedBasis"), derivedOriginal) !== 0) {
+          throw new TaxBasisPolicyError(
+            `originalUnadjustedBasis ${draft.originalUnadjustedBasis} must equal the sum of open MACRS vintage bases ${derivedOriginal}; do not invent a composite vintage`,
+          );
+        }
+      }
+      draft.originalUnadjustedBasis = moneyExact(derivedOriginal, "originalUnadjustedBasis");
+      for (const name of ["placedInServiceOn", "recoveryPeriodYears", "method", "convention"] as const) {
+        if (draft[name] != null && draft[name] !== "") {
+          throw new TaxBasisPolicyError(
+            `${name} cannot be declared as one seller vintage when frozen MACRS history is authoritative; allocate each open vintage in vintageAllocations`,
+          );
+        }
+      }
+      if (draft.vintageAllocations == null || draft.vintageAllocations === "") {
+        throw new TaxBasisPolicyError(
+          `vintageAllocations must name every open MACRS vintage (${history.vintages.map((row) => row.key).join(", ")}); the header remaining/disposed amounts are the sums — do not invent a composite vintage`,
+        );
+      }
+    }
     const original = moneyExact(draft.originalUnadjustedBasis, "originalUnadjustedBasis");
     const remaining = moneyExact(draft.remainingUnadjustedBasis, "remainingUnadjustedBasis");
     const disposed = moneyExact(draft.disposedUnadjustedBasis, "disposedUnadjustedBasis");
@@ -1476,6 +1614,9 @@ function validateUs(draft: TaxBasisDraft): UsMacrsRegimeBasis {
     if (draft.vintageAllocations != null && draft.vintageAllocations !== "") {
       const allocations = parseMacrsVintageAllocations(draft.vintageAllocations);
       assertMacrsVintageAllocationTotals(allocations, disposed, remaining);
+      if (history?.status === "ready") {
+        assertMacrsVintageAllocationsMatchOpen(allocations, history.vintages);
+      }
       draft.vintageAllocations = allocations;
     }
   } else if (draft.vintageAllocations != null && draft.vintageAllocations !== "") {

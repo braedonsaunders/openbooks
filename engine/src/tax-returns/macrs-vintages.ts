@@ -15,6 +15,8 @@ import {
   parseMacrsVintageAllocations,
   type MacrsVintageAllocationInput,
   type MacrsVintageSource,
+  type OpenMacrsVintage,
+  type UsSellerMacrsVintageContext,
 } from "./asset-basis-policy.ts";
 
 export class MacrsVintageError extends Error {
@@ -224,16 +226,7 @@ function splitOpenVintages(
 }
 
 /** Open vintages the native editor must present as allocation rows. */
-export function listOpenMacrsVintages(vintages: readonly MacrsVintage[]): {
-  key: string;
-  source: MacrsVintageSource;
-  placedInServiceOn: string;
-  transferOn: string | null;
-  unadjustedBasis: string;
-  adjustedCarryover: string | null;
-  section179: string;
-  priorDepreciation: string | null;
-}[] {
+export function listOpenMacrsVintages(vintages: readonly MacrsVintage[]): OpenMacrsVintage[] {
   return vintages
     .filter((vintage) => vintage.disposedOn == null)
     .map((vintage) => ({
@@ -246,6 +239,48 @@ export function listOpenMacrsVintages(vintages: readonly MacrsVintage[]): {
       section179: vintage.section179,
       priorDepreciation: vintage.priorDepreciation,
     }));
+}
+
+/** Reconstruct seller history immediately before a source. No prior papers
+ *  is a first declaration, not an empty ready list and not book cost. */
+export function sellerMacrsHistoryBeforeSource(args: {
+  assetId: string;
+  subsidiaryId: string;
+  papers: MacrsWorkpaperEvent[];
+  defaults: MacrsVintageDefaults;
+}): UsSellerMacrsVintageContext {
+  if (args.papers.length === 0) {
+    return { status: "original_declaration_required" };
+  }
+  try {
+    const vintages = resolveMacrsVintages({
+      assetId: args.assetId,
+      subsidiaryId: args.subsidiaryId,
+      placedOn: "0001-01-01",
+      acquisitionCost: "0",
+      disposedOn: null,
+      papers: args.papers,
+      defaults: args.defaults,
+      allowBookAcquisition: false,
+    });
+    const open = listOpenMacrsVintages(vintages);
+    if (open.length === 0) {
+      return {
+        status: "history_refused",
+        refusal:
+          "no open MACRS vintage remains before this source; the earlier workpaper disposed the last unadjusted basis — do not seed book acquisition cost or invent a composite vintage",
+      };
+    }
+    return { status: "ready", vintages: open };
+  } catch (error) {
+    return {
+      status: "history_refused",
+      refusal:
+        error instanceof Error
+          ? error.message
+          : "MACRS history could not be reconstructed from the frozen workpapers",
+    };
+  }
 }
 
 function seedSellerPaper(paper: MacrsWorkpaperEvent, defaults: MacrsVintageDefaults): MacrsVintage[] {
@@ -452,6 +487,10 @@ export function resolveMacrsVintages(args: {
   disposedOn: string | null;
   papers: MacrsWorkpaperEvent[];
   defaults: MacrsVintageDefaults;
+  /** Pool-run may seed the first undeclared vintage from book acquisition.
+   *  Seller source reconstruction must not — missing papers are a first
+   *  declaration or a refused history. */
+  allowBookAcquisition?: boolean;
 }): MacrsVintage[] {
   const ordered = [...args.papers].sort((left, right) =>
     left.effective_on === right.effective_on
@@ -512,6 +551,11 @@ export function resolveMacrsVintages(args: {
     }
   }
   if (vintages.length === 0) {
+    if (args.allowBookAcquisition === false) {
+      throw new MacrsVintageError(
+        "no frozen MACRS vintage exists before this source; declare the original statutory basis on the first workpaper — do not seed book acquisition cost",
+      );
+    }
     return seedAcquisition(args.defaults, args.placedOn, args.acquisitionCost, args.disposedOn);
   }
   if (args.disposedOn) {

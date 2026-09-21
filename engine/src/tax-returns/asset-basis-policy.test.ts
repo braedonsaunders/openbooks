@@ -14,6 +14,7 @@ import {
   macrsVintageKey,
   parseMacrsVintageAllocations,
   attachTaxBasisSource,
+  assertMacrsVintageAllocationsMatchOpen,
   caDeemedAcquisitionPayment,
   caOrdinaryCapitalGainsInclusion,
   caStatutoryProceeds,
@@ -820,5 +821,205 @@ test("NZ associated-person rate cap continues after the transfer year", () => {
       "1",
     ),
     [],
+  );
+});
+
+const readyVintages = [
+  {
+    key: "carryover:2023-03-15:2025-08-01",
+    source: "carryover" as const,
+    placedInServiceOn: "2023-03-15",
+    transferOn: "2025-08-01",
+    unadjustedBasis: "10000.0000",
+    adjustedCarryover: "8000.0000",
+    section179: "0.0000",
+    priorDepreciation: "2000.0000",
+  },
+  {
+    key: "excess:2025-08-01:2025-08-01",
+    source: "excess" as const,
+    placedInServiceOn: "2025-08-01",
+    transferOn: "2025-08-01",
+    unadjustedBasis: "400.0000",
+    adjustedCarryover: null,
+    section179: "0.0000",
+    priorDepreciation: null,
+  },
+];
+
+test("ready MACRS history hides the composite seller vintage and requires identified allocations", () => {
+  const ready = attachTaxBasisSource(
+    { regime: "us_macrs", relationship: "arms_length", recognition: "taxable" },
+    {
+      sourceOperation: "partial_disposal",
+      applicable: "seller",
+      usSellerMacrs: { status: "ready", vintages: readyVintages },
+    },
+  );
+  assert.equal(taxBasisFieldRequired(field("originalUnadjustedBasis"), ready), false);
+  assert.equal(taxBasisFieldVisible(field("placedInServiceOn"), ready), false);
+  assert.equal(taxBasisFieldVisible(field("method"), ready), false);
+  assert.equal(taxBasisFieldVisible(field("convention"), ready), false);
+  assert.equal(taxBasisFieldVisible(field("recoveryPeriodYears"), ready), false);
+  assert.equal(taxBasisFieldRequired(field("remainingUnadjustedBasis"), ready), true);
+  assert.equal(taxBasisFieldRequired(field("disposedUnadjustedBasis"), ready), true);
+
+  const first = attachTaxBasisSource(
+    { regime: "us_macrs", relationship: "arms_length", recognition: "taxable" },
+    {
+      sourceOperation: "partial_disposal",
+      applicable: "seller",
+      usSellerMacrs: { status: "original_declaration_required" },
+    },
+  );
+  assert.equal(taxBasisFieldRequired(field("originalUnadjustedBasis"), first), true);
+  assert.equal(taxBasisFieldRequired(field("placedInServiceOn"), first), true);
+  assert.equal(taxBasisFieldRequired(field("method"), first), true);
+
+  const refused = attachTaxBasisSource(
+    { regime: "us_macrs", relationship: "arms_length", recognition: "taxable" },
+    {
+      sourceOperation: "partial_disposal",
+      applicable: "seller",
+      usSellerMacrs: { status: "history_refused", refusal: "frozen US workpaper is missing originalUnadjustedBasis" },
+    },
+  );
+  assert.equal(taxBasisFieldVisible(field("originalUnadjustedBasis"), refused), false);
+  assert.equal(taxBasisFieldVisible(field("remainingUnadjustedBasis"), refused), false);
+});
+
+test("validateUs derives the header original from ready vintages and rechecks allocation keys", () => {
+  const context = {
+    sourceOperation: "partial_disposal" as const,
+    applicable: "seller" as const,
+    usSellerMacrs: { status: "ready" as const, vintages: readyVintages },
+  };
+  const allocations = [
+    {
+      source: "carryover" as const,
+      placedInServiceOn: "2023-03-15",
+      transferOn: "2025-08-01",
+      disposedUnadjustedBasis: "2000.00",
+      remainingUnadjustedBasis: "8000.00",
+    },
+    {
+      source: "excess" as const,
+      placedInServiceOn: "2025-08-01",
+      transferOn: "2025-08-01",
+      disposedUnadjustedBasis: "0.00",
+      remainingUnadjustedBasis: "400.00",
+    },
+  ];
+  throwsPolicy(
+    () =>
+      validateTaxRegimeBasis(
+        {
+          regime: "us_macrs",
+          relationship: "arms_length",
+          dispositionTrigger: "sale",
+          remainingUnadjustedBasis: "8400.00",
+          disposedUnadjustedBasis: "2000.00",
+          recognition: "taxable",
+          relatedPerson: false,
+          statutoryProceeds: "2000.00",
+          amountRealizedRule: "amount_realized",
+        },
+        context,
+      ),
+    /vintageAllocations must name every open MACRS vintage/,
+    "ready history without allocations",
+  );
+  throwsPolicy(
+    () =>
+      validateTaxRegimeBasis(
+        {
+          regime: "us_macrs",
+          relationship: "arms_length",
+          dispositionTrigger: "sale",
+          placedInServiceOn: "2023-03-15",
+          remainingUnadjustedBasis: "8400.00",
+          disposedUnadjustedBasis: "2000.00",
+          recognition: "taxable",
+          relatedPerson: false,
+          statutoryProceeds: "2000.00",
+          amountRealizedRule: "amount_realized",
+          vintageAllocations: allocations,
+        },
+        context,
+      ),
+    /placedInServiceOn cannot be declared as one seller vintage/,
+    "composite placed date on ready history",
+  );
+  throwsPolicy(
+    () =>
+      validateTaxRegimeBasis(
+        {
+          regime: "us_macrs",
+          relationship: "arms_length",
+          dispositionTrigger: "sale",
+          remainingUnadjustedBasis: "8400.00",
+          disposedUnadjustedBasis: "2000.00",
+          recognition: "taxable",
+          relatedPerson: false,
+          statutoryProceeds: "2000.00",
+          amountRealizedRule: "amount_realized",
+          vintageAllocations: [
+            {
+              source: "carryover",
+              placedInServiceOn: "2023-03-15",
+              transferOn: "2025-08-01",
+              disposedUnadjustedBasis: "2000.00",
+              remainingUnadjustedBasis: "8400.00",
+            },
+          ],
+        },
+        context,
+      ),
+    /must name every open MACRS vintage/,
+    "omitted excess vintage",
+  );
+  const row = validateTaxRegimeBasis(
+    {
+      regime: "us_macrs",
+      relationship: "arms_length",
+      dispositionTrigger: "sale",
+      remainingUnadjustedBasis: "8400.00",
+      disposedUnadjustedBasis: "2000.00",
+      recognition: "taxable",
+      relatedPerson: false,
+      statutoryProceeds: "2000.00",
+      amountRealizedRule: "amount_realized",
+      vintageAllocations: allocations,
+    },
+    context,
+  ) as UsMacrsRegimeBasis;
+  assert.equal(row.originalUnadjustedBasis, "10400.0000");
+  assert.equal(row.vintageAllocations?.length, 2);
+  throwsPolicy(
+    () =>
+      validateTaxRegimeBasis(
+        {
+          regime: "us_macrs",
+          relationship: "arms_length",
+          dispositionTrigger: "sale",
+          remainingUnadjustedBasis: "8400.00",
+          disposedUnadjustedBasis: "2000.00",
+          recognition: "taxable",
+          relatedPerson: false,
+        },
+        {
+          sourceOperation: "partial_disposal",
+          applicable: "seller",
+          usSellerMacrs: { status: "history_refused", refusal: "frozen US workpaper is missing originalUnadjustedBasis for the seller vintage; reverse and re-propose it — do not substitute book acquisition cost" },
+        },
+      ),
+    /do not substitute book acquisition cost/,
+    "history-refused propose",
+  );
+  throwsPolicy(
+    () =>
+      assertMacrsVintageAllocationsMatchOpen(allocations, []),
+    /empty vintage list/,
+    "empty open list is not a valid match",
   );
 });
