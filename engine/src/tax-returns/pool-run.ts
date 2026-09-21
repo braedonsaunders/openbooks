@@ -1086,7 +1086,7 @@ async function runMacrs(
         if (vintage.placedInServiceOn > run.yearEnd) continue;
         const lineage = await windowsForVintage(asset.id, vintage);
         const received = !!(vintage.adjustedCarryover && vintage.transferOn);
-        const walkWindows = macrsLineageRecoveryWindows({
+        const { recoveryYears, reportingWindows } = macrsLineageRecoveryWindows({
           windows: lineage,
           placedInServiceOn: vintage.placedInServiceOn,
           transferOn: received ? vintage.transferOn : null,
@@ -1117,7 +1117,7 @@ async function runMacrs(
           adjustedCarryover: vintage.adjustedCarryover ?? undefined,
           carryoverOn: received ? vintage.transferOn ?? undefined : undefined,
           section168i7Kind: vintage.section168i7Kind ?? undefined,
-        }, walkWindows);
+        }, recoveryYears, reportingWindows);
         const current = walked.current;
         const transferredThisYear = !!(
           vintage.role === "buyer" &&
