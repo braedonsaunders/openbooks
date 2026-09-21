@@ -97,7 +97,7 @@ async function submitForApprovalLocked(
       .select()
       .from(schema.documentLines)
       .where(and(eq(schema.documentLines.documentId, targetId), eq(schema.documentLines.orgId, doc.orgId)));
-    const user = await resolveScriptUser(doc.orgId, actorId ?? null);
+    const user = await resolveScriptUser(doc.orgId, actorId ?? null, { required: false });
     const scriptCtx: ScriptContext = {
       trigger: "before_submit",
       document: doc as unknown as Record<string, unknown>,
