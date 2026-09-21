@@ -113,7 +113,9 @@ export async function supersedeLaborCostRate(
     scope.departmentId,
     scope.subsidiaryId,
   ].filter((v) => v !== null && v !== undefined && String(v).length > 0);
-  if (scopeMembers.length !== 1) fail("exactly one wage scope member must be set");
+  // At most one scope member (the labor_cost_rates_one_scope storage
+  // rule): none set is the org-wide fallback wage, never an error.
+  if (scopeMembers.length > 1) fail("at most one wage scope member may be set");
   if (query.basis !== "hour" && query.basis !== "year") fail("basis must be hour or year");
 
   // Deterministic same-scope serialization BEFORE any read: a concurrent

@@ -323,7 +323,8 @@ test("the registry gate admits only each tool's grant holders while its feature 
     const tool = byName.get(name)!;
     // HR-12 begin: each tool runs under its own switch (compensation
     // tools need their sub-switch on top of hrm).
-    const state: Record<string, boolean> = tool.feature === "hrm" ? { hrm: true } : { hrm: true, [tool.feature as string]: true };
+    const state: Record<string, boolean> =
+      tool.feature === "hrm" ? { hrm: true } : { hrm: true, hrmCompensation: true, [tool.feature as string]: true };
     // HR-12 end
     const reader = fakeAuthz(["assistant.use", perm]);
     assert.equal(canRunTool(reader, byName.get(name)!, featureState(name, true)), true, `${name} must run for a gated reader`);
