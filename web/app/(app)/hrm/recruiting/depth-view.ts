@@ -1,7 +1,7 @@
 import 'server-only'
 
 import type { getTranslations } from 'next-intl/server'
-import { listUpcomingInterviews } from '@openbooks/engine/src/hrm/recruiting/scheduling.ts'
+import { listInterviewerPools, listUpcomingInterviews } from '@openbooks/engine/src/hrm/recruiting/scheduling.ts'
 import {
   listOffersWithSignature,
   listOfferVersions,
@@ -246,6 +246,8 @@ export interface InterviewDrawer {
   requisition: string
   kit: { name: string; instructions: string | null; questions: { question: string; attribute: string | null }[] } | null
   slots: { id: string; startsAt: string; endsAt: string; kind: string }[]
+  /** Pools the propose picker can book from (managers only — readers get []). */
+  pools: { id: string; name: string; windowCount: number }[]
   mine: { id: string; overall: string | null; submittedAt: string | null } | null
   others: { interviewer: string | null; overall: string | null; submittedAt: string | null }[]
   blinded: boolean
@@ -315,6 +317,17 @@ export async function loadInterviewDrawer(
     } catch {
       summary = null
     }
+    // HR-18: pools for the propose picker. listInterviewerPools proves the
+    // manage grant itself, so a read-only viewer lands here with [] and
+    // the picker stays absent instead of erroring.
+    let pools: InterviewDrawer['pools'] = []
+    try {
+      pools = (
+        await listInterviewerPools({ orgId: authz.user.orgId, actorId: authz.user.id })
+      ).map((pool) => ({ id: pool.id, name: pool.name, windowCount: pool.availability.length }))
+    } catch {
+      pools = []
+    }
     return {
       id: interviewId,
       closeHref: hrefForTab(tab, null),
@@ -337,10 +350,12 @@ export async function loadInterviewDrawer(
       })),
       blinded: cards.blinded,
       summary,
+      pools,
       labels: {
         kit: t('recruiting.depth.kit'),
         questions: t('recruiting.depth.questions'),
         slots: t('recruiting.depth.slots'),
+        proposeFromPool: t('recruiting.depth.proposeFromPool'),
         myScorecard: t('recruiting.depth.myScorecard'),
         others: t('recruiting.depth.others'),
         blinded: t('recruiting.depth.blinded'),

@@ -707,6 +707,7 @@
       "pause": "一時停止",
       "poolMembers": "メンバー",
       "proposedSlots": "提案中{count}件",
+      "proposeFromPool": "グループから提案",
       "publish": "公開",
       "questions": "質問",
       "remove": "外す",

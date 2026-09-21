@@ -436,7 +436,8 @@ export function InterviewDrawerBody({ detail }: { detail: InterviewDrawer }) {
         <div className="mt-3">
           <SlotProposeIsland
             interviewId={detail.id}
-            labels={{ submit: labels.submit ?? 'Propose slots', failed: labels.failed }}
+            pools={detail.pools}
+            labels={{ submit: labels.submit ?? 'Propose slots', failed: labels.failed, proposeFromPool: detail.labels.proposeFromPool }}
           />
         </div>
       </div>

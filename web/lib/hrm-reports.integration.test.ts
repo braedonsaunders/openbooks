@@ -88,6 +88,38 @@ async function enableEveryHrmReportFeature(orgId: string): Promise<void> {
        where id = ${orgId}`)
   }
 }
+// HR-12 end
+// HR-14 begin: the register rides hrmCertifications, the alert queue
+// rides hrmCertificationAlerts.
+async function enableCertifications(orgId: string): Promise<void> {
+  await db.execute(sql`
+    update orgs
+       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrmCertifications}', 'true'::jsonb, true)
+     where id = ${orgId}`)
+  await db.execute(sql`
+    update orgs
+       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrmCertificationAlerts}', 'true'::jsonb, true)
+     where id = ${orgId}`)
+}
+// HR-14 end
+// HR-18 begin: the depth entities ride their own sub-switches.
+async function enableRecruitingDepth(orgId: string): Promise<void> {
+  for (const key of [
+    'hrmRecruiting',
+    'hrmStructuredInterviews',
+    'hrmInterviewScheduling',
+    'hrmOfferSigning',
+    'hrmJobBoards',
+    'hrmCandidateRetention',
+    'hrmTalentPool',
+  ] as const) {
+    await db.execute(sql`
+      update orgs
+         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), string_to_array(${`features,${key}`}, ','), 'true'::jsonb, true)
+       where id = ${orgId}`)
+  }
+}
+// HR-18 end
 
 async function grantPermissions(orgId: string, userId: string, permissions: string[]): Promise<void> {
   for (const permission of permissions) {
@@ -515,6 +547,14 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
       // grant, so every entity's switch must be on or the assertion fails on
       // the switch rather than on the gate it is testing.
       await enableEveryHrmReportFeature(scratch.orgId)
+      await enableHrm(scratch.orgId)
+      await enableCompensation(scratch.orgId)
+      // HR-14 begin
+      await enableCertifications(scratch.orgId)
+      // HR-14 end
+      // HR-18 begin
+      await enableRecruitingDepth(scratch.orgId)
+      // HR-18 end
       second = await mkSubsidiary(scratch.orgId, 'Second Co', scratch.subsidiaryId)
       const empA = await mkEmployment(scratch.orgId, await mkWorker(scratch.orgId, 'Worker Ada'), scratch.subsidiaryId)
       await addVersion(scratch.orgId, empA, 1, 'active', '2026-01-01', null, T0)
@@ -595,6 +635,15 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
         'hrm_qualifications',
         'hrm_qualification_alerts',
         // HR-14 end
+        // HR-18 begin: recruiting-depth entities read through their
+        // sub-switches (enabled above) and the recruiting grant.
+        'hrm_scorecards',
+        'hrm_interview_slots',
+        'hrm_offers',
+        'hrm_postings',
+        'hrm_retention_runs',
+        'hrm_pool_members',
+        // HR-18 end
       ] as const) {
         assert.equal(await canRunReportEntity(reader, { entity: key }), true, `${key} runs for a permitted reader`)
       }
@@ -614,11 +663,15 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
         'hrm_compliance_findings',
         'hrm_goals',
         'hrm_headcount_plan_lines',
+        'hrm_interview_slots',
         'hrm_leave_absences',
+        'hrm_offers',
         'hrm_pay_bands',
         'hrm_pay_gap_snapshots',
         'hrm_per_diem_entries',
+        'hrm_pool_members',
         'hrm_positions',
+        'hrm_postings',
         'hrm_processes',
         // HR-14 begin: the register and the alert queue hide without the
         // certifications read grant (and on the dark org, with switches off).
@@ -627,7 +680,9 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
         // HR-14 end
         'hrm_rate_schedule_lines',
         'hrm_requisitions',
+        'hrm_retention_runs',
         'hrm_reviews',
+        'hrm_scorecards',
         'hrm_turnover',
       ], 'only the entities whose grants are missing hide')
     })
@@ -654,11 +709,15 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
         'hrm_goals',
         'hrm_headcount',
         'hrm_headcount_plan_lines',
+        'hrm_interview_slots',
         'hrm_leave_absences',
+        'hrm_offers',
         'hrm_pay_bands',
         'hrm_pay_gap_snapshots',
         'hrm_per_diem_entries',
+        'hrm_pool_members',
         'hrm_positions',
+        'hrm_postings',
         'hrm_processes',
         // HR-14 begin: the register and the alert queue hide without the
         // certifications read grant (and on the dark org, with switches off).
@@ -667,7 +726,9 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
         // HR-14 end
         'hrm_rate_schedule_lines',
         'hrm_requisitions',
+        'hrm_retention_runs',
         'hrm_reviews',
+        'hrm_scorecards',
         'hrm_turnover',
       ],
       )
@@ -694,11 +755,15 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
         'hrm_goals',
         'hrm_headcount',
         'hrm_headcount_plan_lines',
+        'hrm_interview_slots',
         'hrm_leave_absences',
+        'hrm_offers',
         'hrm_pay_bands',
         'hrm_pay_gap_snapshots',
         'hrm_per_diem_entries',
+        'hrm_pool_members',
         'hrm_positions',
+        'hrm_postings',
         'hrm_processes',
         // HR-14 begin: the register and the alert queue hide without the
         // certifications read grant (and on the dark org, with switches off).
@@ -707,7 +772,9 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
         // HR-14 end
         'hrm_rate_schedule_lines',
         'hrm_requisitions',
+        'hrm_retention_runs',
         'hrm_reviews',
+        'hrm_scorecards',
         'hrm_turnover',
       ],
       )

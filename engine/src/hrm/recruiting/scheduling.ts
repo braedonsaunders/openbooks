@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
-import { requireHrmRecruitingManage } from "../authorization.ts";
+import { requireHrmRecruitingManage, requireHrmRecruitingManageOrg } from "../authorization.ts";
 import { RecruitingError } from "./errors.ts";
 import { requireActorId, requireId, requireOrgId } from "./input.ts";
 import {
@@ -173,17 +173,96 @@ async function panelParties(exec: SqlExecutor, orgId: string, interviewId: strin
   return rows.map((row) => row.partyId);
 }
 
+export interface InterviewerPoolDTO {
+  readonly id: string;
+  readonly name: string;
+  readonly kitId: string | null;
+  readonly availability: readonly AvailabilityWindow[];
+  readonly isActive: boolean;
+}
+
+/**
+ * Interviewer pools for the propose picker and Setup ref labels. Pools
+ * are org-wide configuration (writes ride Setup CRUD); this read proves
+ * the manage grant and the scheduling switch, and refuses unreadable
+ * stored windows by pool name — Setup can never store them (write-path
+ * validation), so a refusal here names data repair, never user input.
+ */
+export async function listInterviewerPools(query: {
+  orgId: string;
+  actorId: string;
+  includeInactive?: boolean;
+}): Promise<readonly InterviewerPoolDTO[]> {
+  const orgId = requireOrgId(query.orgId);
+  const actorId = requireActorId(query.actorId);
+  return withOrgTransaction(orgId, async () => {
+    await requireHrmRecruitingManageOrg(db, orgId, actorId);
+    await requireDepthFeature(db, orgId, "hrmInterviewScheduling");
+    const rows = (await db.execute<{
+      id: string;
+      name: string;
+      kitId: string | null;
+      availability: unknown;
+      isActive: boolean;
+    }>(sql`
+      select id, name, kit_id as "kitId", availability, is_active as "isActive"
+        from hrm_interviewer_pools
+       where org_id = ${orgId}
+         and (${query.includeInactive === true} or is_active)
+       order by name
+    `)).rows;
+    return rows.map((row) => {
+      let availability: readonly AvailabilityWindow[];
+      try {
+        availability = row.availability === null ? [] : validateAvailabilityWindows(row.availability);
+      } catch (e) {
+        if (e instanceof RecruitingError) {
+          throw new RecruitingError(
+            "REFUSED",
+            `interviewer pool ${row.name} carries availability the scheduler cannot read — fix the pool in Setup instead of proposing from it`,
+          );
+        }
+        throw e;
+      }
+      return { id: row.id, name: row.name, kitId: row.kitId, availability, isActive: row.isActive };
+    });
+  });
+}
+
 export async function proposeSlots(query: {
   orgId: string;
   actorId: string;
   interviewId: string;
-  windows: unknown;
+  windows?: unknown;
+  poolId?: unknown;
   expiresAt?: unknown;
 }): Promise<ProposeResult> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const interviewId = requireId(query.interviewId, "interviewId");
-  const windows = validateAvailabilityWindows(query.windows);
+  // Windows may ride an interviewer pool: the pool's DECLARED availability
+  // (stored on the pool, never read from a calendar). Explicit windows win
+  // when both arrive; neither is a refusal naming the remedy.
+  let windows: readonly AvailabilityWindow[];
+  if (query.windows !== undefined) {
+    windows = validateAvailabilityWindows(query.windows);
+  } else if (query.poolId !== undefined) {
+    const pools = await listInterviewerPools({ orgId, actorId });
+    const pool = pools.find((candidate) => candidate.id === String(query.poolId));
+    if (!pool) throw new RecruitingError("NOT_FOUND", "interviewer pool is not visible in this organization");
+    if (pool.availability.length === 0) {
+      throw new RecruitingError(
+        "REFUSED",
+        `interviewer pool ${pool.name} declares no availability windows — add windows to the pool in Setup or propose explicit windows instead`,
+      );
+    }
+    windows = pool.availability;
+  } else {
+    throw new RecruitingError(
+      "REFUSED",
+      "propose at least one availability window or name an interviewer pool — the scheduler never invents times",
+    );
+  }
   const expiresAt =
     typeof query.expiresAt === "string" && !Number.isNaN(Date.parse(query.expiresAt))
       ? new Date(query.expiresAt).toISOString()

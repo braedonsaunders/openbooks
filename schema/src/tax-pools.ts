@@ -1,4 +1,9 @@
+<<<<<<< Updated upstream
 import { boolean, date, index, integer, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+=======
+import { sql } from "drizzle-orm";
+import { boolean, date, index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+>>>>>>> Stashed changes
 import { TAX_DEPRECIATION_CONVENTIONS } from "./depreciation-conventions";
 import { auditColumns, id, money, orgRef } from "./helpers";
 import { fxRate } from "./helpers";
@@ -141,3 +146,75 @@ export const taxFirstYearRules = pgTable(
   },
   (t) => [index("tax_first_year_rules_lookup").on(t.orgId, t.regime, t.classCode)],
 );
+<<<<<<< Updated upstream
+=======
+
+/**
+ * CAA 55(4) qualifying-activity cessation. UK main/special balancing
+ * allowance is available only after this dated fact — not merely because
+ * the last asset left the pool.
+ */
+export const taxQualifyingActivityCessations = pgTable(
+  "tax_qualifying_activity_cessations",
+  {
+    id: id(),
+    orgId: orgRef(),
+    subsidiaryId: uuid("subsidiary_id").notNull(),
+    regime: text("regime").notNull(),
+    ceasedOn: date("ceased_on").notNull(),
+    resumedOn: date("resumed_on"),
+    evidence: text("evidence").notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("tax_qualifying_activity_cessations_open")
+      .on(t.orgId, t.subsidiaryId, t.regime)
+      .where(sql`${t.resumedOn} is null`),
+  ],
+);
+
+/**
+ * Declared tax-year windows for one legal entity and regime. Dates are the
+ * identity; filing_year is a repeatable label so two short years ending in
+ * the same calendar year both survive. Book fiscal calendars and provision
+ * runs are not this registry.
+ */
+export const taxYearWindows = pgTable(
+  "tax_year_windows",
+  {
+    id: id(),
+    orgId: orgRef(),
+    subsidiaryId: uuid("subsidiary_id").notNull(),
+    regime: text("regime").notNull(),
+    yearStart: date("year_start").notNull(),
+    yearEnd: date("year_end").notNull(),
+    filingYear: integer("filing_year").notNull(),
+    reason: text("reason").notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("tax_year_windows_org_id_id").on(t.orgId, t.id),
+    uniqueIndex("tax_year_windows_identity").on(t.orgId, t.subsidiaryId, t.regime, t.yearStart),
+  ],
+);
+
+/** Exact tax-year read set frozen by an independently approved workpaper.
+ * A checkpoint can consume several original/receiver years and convention
+ * context; a date-overlap query is not evidence of which years it used. */
+export const taxBasisWindowCitations = pgTable("tax_basis_window_citations", {
+  id: id(),
+  orgId: orgRef(),
+  workpaperId: uuid("workpaper_id").notNull(),
+  taxYearWindowId: uuid("tax_year_window_id").notNull(),
+  subsidiaryId: uuid("subsidiary_id").notNull(),
+  regime: text("regime").notNull(),
+  yearStart: date("year_start").notNull(),
+  yearEnd: date("year_end").notNull(),
+  filingYear: integer("filing_year").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  createdBy: uuid("created_by").notNull(),
+}, (table) => [
+  uniqueIndex("tax_basis_window_citations_identity").on(table.orgId, table.workpaperId, table.taxYearWindowId),
+  index("tax_basis_window_citations_window").on(table.orgId, table.taxYearWindowId),
+]);
+>>>>>>> Stashed changes
