@@ -36,8 +36,11 @@ const HRM_KEYS = [
   'hrm_comp_class_split',
   'hrm_certified_runs',
   'hrm_compliance_findings',
+  'hrm_pay_bands',
+  'hrm_comp_cycle_lines',
+  'hrm_headcount_plan_lines',
+  'hrm_pay_gap_snapshots',
 ] as const
-const HRM_KEYS = ['hrm_headcount', 'hrm_employment_history', 'hrm_change_requests', 'hrm_positions', 'hrm_processes', 'hrm_leave_absences', 'hrm_requisitions', 'hrm_applications', 'hrm_benefit_enrollments', 'hrm_reviews', 'hrm_goals', 'hrm_turnover', 'hrm_pay_bands', 'hrm_comp_cycle_lines', 'hrm_headcount_plan_lines', 'hrm_pay_gap_snapshots'] as const
 
 const HRM_PERMISSIONS: Record<(typeof HRM_KEYS)[number], string> = {
   hrm_headcount: 'hrm.employment.read',

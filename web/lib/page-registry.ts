@@ -1396,19 +1396,13 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
-  '/hrm/compliance': {
-    route: '/hrm/compliance',
-    segments: [],
-    searchParams: true,
-    module: async () => {
-      const m = await import('../app/(app)/hrm/compliance/view')
-      return {
-        load: (input) => m.loadCompliancePageData(input.searchParams ?? {}),
-        spec: (data) => m.complianceSpec(data as never),
   '/hrm/compensation': {
     route: '/hrm/compensation',
+    segments: [],
     searchParams: false,
+    module: async () => {
       const m = await import('../app/(app)/hrm/compensation/view')
+      return {
         load: () => m.loadCompensationPage(),
         spec: (data) => m.compensationSpec(data as never),
       }
@@ -1417,7 +1411,10 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/hrm/compensation/cycles/[id]': {
     route: '/hrm/compensation/cycles/[id]',
     segments: ['id'],
+    searchParams: true,
+    module: async () => {
       const m = await import('../app/(app)/hrm/compensation/cycles/[id]/view')
+      return {
         load: (input) => m.loadCompCyclePage(segment(input, 'id'), input.searchParams ?? {}),
         spec: (data) => m.compCycleSpec(data as never),
       }
@@ -1425,8 +1422,11 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   },
   '/hrm/compensation/equity': {
     route: '/hrm/compensation/equity',
+    segments: [],
     searchParams: false,
+    module: async () => {
       const m = await import('../app/(app)/hrm/compensation/equity/view')
+      return {
         load: () => m.loadEquityPage(),
         spec: (data) => m.equitySpec(data as never),
       }
@@ -1436,9 +1436,23 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
     route: '/hrm/compensation/plans/[id]',
     segments: ['id'],
     searchParams: false,
+    module: async () => {
       const m = await import('../app/(app)/hrm/compensation/plans/[id]/view')
+      return {
         load: (input) => m.loadCompPlanPage(segment(input, 'id')),
         spec: (data) => m.compPlanSpec(data as never),
+      }
+    },
+  },
+  '/hrm/compliance': {
+    route: '/hrm/compliance',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/hrm/compliance/view')
+      return {
+        load: (input) => m.loadCompliancePageData(input.searchParams ?? {}),
+        spec: (data) => m.complianceSpec(data as never),
       }
     },
   },

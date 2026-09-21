@@ -68,12 +68,6 @@ export const FEATURES: FeatureDef[] = [
   // exist before the cockpit says anything true). Stands alone: it reads
   // the HRM foundation but never drives payroll.
   { key: 'hrm', defaultEnabled: false, category: 'operations', navModules: ['hrm'] },
-  // HR-15 begin: optional persona-home complexity. The inbox and the persona
-  // homes are core; only these widgets gate. Off hides the widget, never data.
-  { key: 'hrmCelebrations', defaultEnabled: false, category: 'operations', parentKey: 'hrm' },
-  { key: 'hrmManagerNudges', defaultEnabled: false, category: 'operations', parentKey: 'hrm' },
-  { key: 'homeAnnouncements', defaultEnabled: true, category: 'platform' },
-  // HR-15 end
   // HR-12 begin: compensation — job architecture and bands ride the
   // parent; merit cycles, headcount plans and pay transparency are
   // opt-in sub-features. Merit cycles push to payroll and read pay
@@ -83,6 +77,12 @@ export const FEATURES: FeatureDef[] = [
   { key: 'hrmHeadcountPlans', defaultEnabled: false, category: 'operations', parentKey: 'hrmCompensation' },
   { key: 'hrmPayTransparency', defaultEnabled: false, category: 'operations', parentKey: 'hrmCompensation' },
   // HR-12 end
+  // HR-15 begin: optional persona-home complexity. The inbox and the persona
+  // homes are core; only these widgets gate. Off hides the widget, never data.
+  { key: 'hrmCelebrations', defaultEnabled: false, category: 'operations', parentKey: 'hrm' },
+  { key: 'hrmManagerNudges', defaultEnabled: false, category: 'operations', parentKey: 'hrm' },
+  { key: 'homeAnnouncements', defaultEnabled: true, category: 'platform' },
+  // HR-15 end
   { key: 'fieldTickets', defaultEnabled: false, category: 'operations', navModules: ['field-tickets'], parentKey: 'projects' },
   // Project scheduling: critical-path Gantt, working calendars, baselines and
   // resource levelling. Off by default — a schedule is a planning instrument,

@@ -150,11 +150,6 @@ test("migration 0031 freezes legacy empty scope sets into the explicit current c
     "hrm.self.request",
     "hrm.team.read",
     "hrm.team.manage",
-    // HR-13 begin: 0223/0224 construction compliance — post-snapshot
-    // like the rest of HRM.
-    "hrm.construction.read",
-    "hrm.construction.manage",
-    // HR-13 end
     // HR-12 begin: 0221/0222 HRM compensation — who is paid what and
     // whether pay is equitable carry their own read/manage/approve keys,
     // post-snapshot like the rest of HRM.
@@ -162,6 +157,11 @@ test("migration 0031 freezes legacy empty scope sets into the explicit current c
     "hrm.compensation.manage",
     "hrm.compensation.approve",
     // HR-12 end
+    // HR-13 begin: 0223/0224 construction compliance — post-snapshot
+    // like the rest of HRM.
+    "hrm.construction.read",
+    "hrm.construction.manage",
+    // HR-13 end
   ]);
   for (const key of addedAfter0031) {
     assert.ok((PERMISSION_CATALOGUE as readonly string[]).includes(key), `${key} must exist in the catalogue`);

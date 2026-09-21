@@ -41,12 +41,7 @@ const { HrmPerformanceError } = await import("@openbooks/engine/src/hrm/performa
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const tools = read("./tools-hrm.ts");
 
-const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave", "hrm_recruiting", "hrm_performance_cycles", "hrm_turnover", "hrm_benefits", "hrm_me", "automations_status",
-  // HR-13 begin: read-only construction-compliance tools.
-  "hrm_compliance_findings", "hrm_certified_payroll",
-  // HR-13 end
-];
-const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave", "hrm_recruiting", "hrm_performance_cycles", "hrm_turnover", "hrm_benefits", "hrm_me", "hrm_compensation", "hrm_pay_equity"];
+const TOOL_NAMES = ["hrm_headcount", "hrm_employment_as_of", "hrm_change_requests", "hrm_positions_as_of", "hrm_processes", "hrm_leave", "hrm_recruiting", "hrm_performance_cycles", "hrm_turnover", "hrm_benefits", "hrm_me", "automations_status", "hrm_compliance_findings", "hrm_certified_payroll", "hrm_compensation", "hrm_pay_equity"];
 
 const TOOL_PERMS: Record<string, string> = {
   // Elections and windows read through the benefits read service under
