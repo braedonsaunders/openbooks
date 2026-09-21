@@ -304,7 +304,14 @@ test("Rev. Proc. 89-15 consecutive short years allocate their shared October onl
   const second = halfYearDeemedServiceDate("2025-10-16", "2026-05-31");
   assert.equal(formatCalendarDay(first), "2025-08-01");
   assert.equal(formatCalendarDay(second), "2026-02-01");
-  assert.equal(monthsTreatedInService(first, "2025-10-15", context), 2);
+  assert.deepEqual(
+    monthsTreatedInServiceExact(first, "2025-10-15", context),
+    macrsMonthRatio(77n, 31n),
+  );
+  assert.throws(
+    () => monthsTreatedInService(first, "2025-10-15", context),
+    /requires exact month fractions/,
+  );
   assert.equal(monthsTreatedInService(second, "2026-05-31"), 4);
   assert.equal(
     impliedShortYearFactor("2025-06-01", "2025-10-15", context),
