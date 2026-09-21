@@ -14,6 +14,12 @@ import { canonicalDecimal, compareDecimal, isPositiveDecimal } from './exact-dec
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { isUuid } from './list-params'
 import { acquireFeatureGateLock, isFeatureEnabled } from './features'
+import { HrmQualificationError } from '@openbooks/engine/src/hrm/qualifications/errors.ts'
+import {
+  gateScheduleAssignment,
+  noteWarnedDispatch,
+  refuseBlockedDispatch,
+} from '@openbooks/engine/src/hrm/qualifications/gating.ts'
 
 /**
  * Project schedule persistence.
@@ -347,6 +353,43 @@ async function applyTaskPatch(
       const units = persistScheduleAssignmentUnits(assignment.units)
       if (units === 'invalid') {
         throw new ScheduleError('assignment units must be a number with no more than four decimal places', 422)
+      }
+      // HR-14 dispatch gating: when hrmDispatchGating is on, a block
+      // requirement refuses the assignment BY NAME and a warn requirement
+      // records a warned event beside it — in this same transaction, so
+      // the assignment and its warning commit together. The gate itself
+      // passes through untouched when the feature is off. System writes
+      // with no dispatcher identity skip the gate (nothing to authorize
+      // the qualification read against); every interactive write names
+      // its dispatcher.
+      if (userId) {
+        try {
+          const gated = await gateScheduleAssignment(exec, {
+            orgId,
+            actorId: userId,
+            resourceId: String(assignment.resourceId),
+            taskId,
+            trusted: true,
+          })
+          if (gated.gated) {
+            // Block throws by name (mapped to 422 below); warn continues
+            // to the insert with its event recorded beside it.
+            refuseBlockedDispatch(gated.verdict, gated.resourceName)
+            if (gated.verdict.warnings.length > 0) {
+              await noteWarnedDispatch(exec, {
+                orgId,
+                actorId: userId,
+                warnings: gated.verdict.warnings,
+                context: 'schedule assignment',
+              })
+            }
+          }
+        } catch (error) {
+          // The refusal message names the missing types and the remedy;
+          // it must reach the dispatcher intact as a 422, never a 500.
+          if (error instanceof HrmQualificationError) throw new ScheduleError(error.message, 422)
+          throw error
+        }
       }
       await exec.execute(sql`
         insert into schedule_task_assignments (org_id, task_id, resource_id, units, role, created_by, updated_by)

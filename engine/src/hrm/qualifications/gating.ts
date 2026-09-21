@@ -93,6 +93,31 @@ export async function checkAssignment(
   return checkAssignmentInternal(exec, orgId, employmentId, subjectKind, subjectId, on);
 }
 
+export interface CheckAssignmentTrustedInput {
+  readonly orgId: string;
+  readonly employmentId: string;
+  readonly subjectKind: RequirementSubjectKind;
+  readonly subjectId: string;
+  readonly on: string;
+}
+
+/**
+ * Trusted gate for the scheduling write path (no per-actor grant — see
+ * ScheduleGateInput.trusted). Feature assert stays; the verdict scopes
+ * to the single assigned employment.
+ */
+export async function checkAssignmentTrusted(
+  exec: SqlExecutor,
+  input: CheckAssignmentTrustedInput,
+): Promise<GateVerdict> {
+  const orgId = requireId(input.orgId, "orgId");
+  const employmentId = requireId(input.employmentId, "employmentId");
+  const subjectId = requireId(input.subjectId, "subjectId");
+  const on = requireDate(input.on, "on");
+  await assertQualificationsFeature(exec, orgId, HRM_CERTIFICATIONS_FEATURE, "Dispatch gating");
+  return checkAssignmentInternal(exec, orgId, employmentId, input.subjectKind, subjectId, on);
+}
+
 export async function checkAssignmentInternal(
   exec: SqlExecutor,
   orgId: string,
@@ -244,6 +269,15 @@ export interface ScheduleGateInput {
     exec: SqlExecutor,
     input: CheckAssignmentInput,
   ) => Promise<GateVerdict>;
+  /**
+   * Trusted scheduling-path mode: skip the per-actor read grant and gate
+   * on the employment behind the resource. The dispatcher sees only the
+   * verdict for the assignment being made (the refusal names the missing
+   * types — that disclosure IS the feature); full ledger reads still
+   * need hrm.certifications.read. Never set from user input: only the
+   * scheduling write path passes true.
+   */
+  readonly trusted?: boolean;
 }
 
 export interface ScheduleGateResult {
@@ -299,15 +333,27 @@ export async function gateScheduleAssignment(
   if (!employment) return { ...passThrough, resourceName: resource.name };
   const projectId = resource.project_id;
   if (!projectId) return { ...passThrough, employmentId: employment.id, resourceName: resource.name };
-  const gate = input.gate ?? checkAssignment;
-  const verdict = await gate(exec, {
-    orgId,
-    actorId,
-    employmentId: employment.id,
-    subjectKind: "project",
-    subjectId: projectId,
-    on,
-  });
+  if (input.gate) {
+    const verdict = await input.gate(exec, {
+      orgId,
+      actorId,
+      employmentId: employment.id,
+      subjectKind: "project",
+      subjectId: projectId,
+      on,
+    });
+    return { gated: true, verdict, employmentId: employment.id, resourceName: resource.name };
+  }
+  const verdict = input.trusted === true
+    ? await checkAssignmentTrusted(exec, { orgId, employmentId: employment.id, subjectKind: "project", subjectId: projectId, on })
+    : await checkAssignment(exec, {
+        orgId,
+        actorId,
+        employmentId: employment.id,
+        subjectKind: "project",
+        subjectId: projectId,
+        on,
+      });
   return { gated: true, verdict, employmentId: employment.id, resourceName: resource.name };
 }
 

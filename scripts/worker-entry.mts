@@ -19,6 +19,7 @@
 import { pathToFileURL } from "node:url";
 import { registerWorkerDuty } from "../engine/src/worker/duties.ts";
 import { AUTOMATION_TICK_LOCK_KEY, runAutomationTickClaimed } from "../engine/src/automations/tick.ts";
+import { runQualificationAlertScan } from "../engine/src/hrm/qualifications/alerts.ts";
 
 export function registerWorkerDuties(): void {
   // One scanner per key (the registry refuses duplicates): the automation
@@ -31,6 +32,18 @@ export function registerWorkerDuties(): void {
       await runAutomationTickClaimed(now);
     },
   });
+  // HR-14 begin: the daily qualification-expiry scan. Idempotent per
+  // (qualification, lead_days) and self-serializing per org on its own
+  // advisory key, so the 60-second tick simply re-runs it: off-schedule
+  // days change nothing and a second replica changes nothing.
+  console.log(`[worker] duty registered: qualification-alerts`);
+  registerWorkerDuty({
+    key: "qualification-alerts",
+    run: async (now: Date) => {
+      await runQualificationAlertScan(now);
+    },
+  });
+  // HR-14 end
 }
 
 registerWorkerDuties();
