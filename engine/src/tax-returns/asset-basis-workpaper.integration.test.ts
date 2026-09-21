@@ -883,3 +883,222 @@ test(
       assert.ok(proposed);
     }),
 );
+
+test(
+  "a first-declaration paper with empty taxYearWindows still dates 2023–2025 on a later source",
+  { skip: !DB },
+  () =>
+    fixture(async (f) => {
+      await classifyUs(f);
+      for (const year of [2023, 2024, 2025]) {
+        await ensureTaxYearWindow(db, f.org.orgId, f.actors.submitterId, {
+          subsidiaryId: f.org.subsidiaryId,
+          regime: "us_macrs",
+          yearStart: `${year}-01-01`,
+          yearEnd: `${year}-12-31`,
+          filingYear: year,
+          reason: "calendar-year tax window",
+        });
+      }
+      const first = await applyApproved(f, usSellerPaper(f, { placedInServiceOn: "2023-01-01" }));
+      const stored = (
+        await db.execute<{ tax_year_windows: unknown }>(sql`
+          select computed->'taxYearWindows' as tax_year_windows
+            from tax_asset_basis_workpapers
+           where org_id=${f.org.orgId} and change_id=${first.id} and regime='us_macrs'`)
+      ).rows[0];
+      assert.deepEqual(stored?.tax_year_windows, []);
+
+      const secondChangeId = await proposeAssetChange(
+        f.org.orgId,
+        f.assetId,
+        f.actors.submitterId,
+        {
+          operation: "partial_disposal",
+          effectiveOn: "2026-08-01",
+          reason: "Sell a second identical component",
+          assessment:
+            "Equal historical cost and service support the second quarter allocation",
+          idempotencyKey: randomUUID(),
+          portion: { percent: "25" },
+          proceeds: "600",
+          proceedsAccountId: f.org.accounts.clearing,
+        },
+      );
+      await approve(f, secondChangeId);
+      await applyAssetChange(f.org.orgId, secondChangeId, f.actors.submitterId);
+      const second = (
+        await listTaxAssetBasisSources(f.org.orgId, f.assetId, f.actors.submitterId)
+      ).sources.find((row) => row.sourceChangeId === secondChangeId);
+      assert.ok(second, "the later posted disposal must be a tax source");
+      assert.equal(second.openMacrsVintages?.status, "ready");
+      if (second.openMacrsVintages?.status !== "ready") return;
+      const starts = (second.openMacrsVintages.taxYearWindows ?? []).map((row) => row.yearStart);
+      assert.ok(starts.includes("2023-01-01"), "2023 history must be read after an empty first declaration");
+      assert.ok(starts.includes("2024-01-01"));
+      assert.ok(starts.includes("2025-01-01"));
+      const proposed = await proposeTaxAssetBasis(f.org.orgId, f.assetId, f.actors.submitterId, {
+        sourceChangeId: secondChangeId,
+        reason: "Allocate the remaining MACRS vintage after the first declaration",
+        assessment: "Ready history must still walk 2023 through this source",
+        idempotencyKey: randomUUID(),
+        regimes: [{
+          regime: "us_macrs",
+          relationship: "arms_length",
+          dispositionTrigger: "sale",
+          remainingUnadjustedBasis: "1500.00",
+          disposedUnadjustedBasis: "750.00",
+          recognition: "taxable",
+          relatedPerson: false,
+          amountRealizedRule: "amount_realized",
+          statutoryProceeds: "600.00",
+          vintageAllocations: [{
+            source: "original",
+            placedInServiceOn: "2023-01-01",
+            disposedUnadjustedBasis: "750.00",
+            remainingUnadjustedBasis: "1500.00",
+          }],
+        }],
+      });
+      assert.ok(proposed);
+    }),
+);
+
+test(
+  "a later source can use a context-only successor's own later convention year",
+  { skip: !DB },
+  () =>
+    fixture(async (f) => {
+      await db.execute(sql`
+        insert into tax_regimes(org_id,code,name,country_code,calculation_model,class_attribute,is_active)
+        values(${f.org.orgId},'us_macrs','United States MACRS','US','macrs','us_macrs_class',true)`);
+      await db.execute(sql`
+        update asset_categories set tax_attributes=tax_attributes||'{"us_macrs_class":"gds_5"}'::jsonb
+         where org_id=${f.org.orgId} and id=${f.categoryId}`);
+      const w1 = await ensureTaxYearWindow(db, f.org.orgId, f.actors.submitterId, {
+        subsidiaryId: f.org.subsidiaryId,
+        regime: "us_macrs",
+        yearStart: "2026-07-01",
+        yearEnd: "2026-07-15",
+        filingYear: 2026,
+        reason: "first short year",
+      });
+      const w2 = await ensureTaxYearWindow(db, f.org.orgId, f.actors.submitterId, {
+        subsidiaryId: f.org.subsidiaryId,
+        regime: "us_macrs",
+        yearStart: "2026-07-16",
+        yearEnd: "2026-09-15",
+        filingYear: 2026,
+        reason: "convention-only successor",
+      });
+      await applyApproved(f, usSellerPaper(f));
+      const secondChangeId = await proposeAssetChange(
+        f.org.orgId,
+        f.assetId,
+        f.actors.submitterId,
+        {
+          operation: "partial_disposal",
+          effectiveOn: "2026-07-10",
+          reason: "Sell a second identical component",
+          assessment: "Source still in the first short year so W2 is convention context only",
+          idempotencyKey: randomUUID(),
+          portion: { percent: "25" },
+          proceeds: "600",
+          proceedsAccountId: f.org.accounts.clearing,
+        },
+      );
+      await approve(f, secondChangeId);
+      await applyAssetChange(f.org.orgId, secondChangeId, f.actors.submitterId);
+      const readySecond = await proposeTaxAssetBasis(f.org.orgId, f.assetId, f.actors.submitterId, {
+        sourceChangeId: secondChangeId,
+        reason: "Freeze W1 calculation and W2 as convention context",
+        assessment: "W2 yearStart is after this source; do not seal W2 absence",
+        idempotencyKey: randomUUID(),
+        regimes: [{
+          regime: "us_macrs",
+          relationship: "arms_length",
+          dispositionTrigger: "sale",
+          remainingUnadjustedBasis: "1500.00",
+          disposedUnadjustedBasis: "750.00",
+          recognition: "taxable",
+          relatedPerson: false,
+          amountRealizedRule: "amount_realized",
+          statutoryProceeds: "600.00",
+          vintageAllocations: [{
+            source: "original",
+            placedInServiceOn: "2026-07-01",
+            disposedUnadjustedBasis: "750.00",
+            remainingUnadjustedBasis: "1500.00",
+          }],
+        }],
+      });
+      await approve(f, readySecond);
+      await applyTaxAssetBasis(f.org.orgId, readySecond, f.actors.submitterId);
+      const secondWindows = (
+        await db.execute<{ tax_year_windows: { id: string; yearStart: string }[] }>(sql`
+          select computed->'taxYearWindows' as tax_year_windows
+            from tax_asset_basis_workpapers
+           where org_id=${f.org.orgId} and change_id=${readySecond} and regime='us_macrs'`)
+      ).rows[0]?.tax_year_windows ?? [];
+      assert.ok(secondWindows.some((row) => row.id === w1.id));
+      assert.ok(secondWindows.some((row) => row.id === w2.id));
+
+      const w3 = await ensureTaxYearWindow(db, f.org.orgId, f.actors.submitterId, {
+        subsidiaryId: f.org.subsidiaryId,
+        regime: "us_macrs",
+        yearStart: "2026-09-16",
+        yearEnd: "2026-12-31",
+        filingYear: 2026,
+        reason: "later convention year for W2",
+      });
+      const thirdChangeId = await proposeAssetChange(
+        f.org.orgId,
+        f.assetId,
+        f.actors.submitterId,
+        {
+          operation: "partial_disposal",
+          effectiveOn: "2026-10-01",
+          reason: "Sell a third identical component",
+          assessment: "W2 is now a calculated year and may read W3 as convention context",
+          idempotencyKey: randomUUID(),
+          portion: { percent: "25" },
+          proceeds: "600",
+          proceedsAccountId: f.org.accounts.clearing,
+        },
+      );
+      await approve(f, thirdChangeId);
+      await applyAssetChange(f.org.orgId, thirdChangeId, f.actors.submitterId);
+      const third = (
+        await listTaxAssetBasisSources(f.org.orgId, f.assetId, f.actors.submitterId)
+      ).sources.find((row) => row.sourceChangeId === thirdChangeId);
+      assert.ok(third, "the later posted disposal must be a tax source");
+      assert.equal(third.openMacrsVintages?.status, "ready");
+      if (third.openMacrsVintages?.status !== "ready") return;
+      const laterIds = (third.openMacrsVintages.taxYearWindows ?? []).map((row) => row.id);
+      assert.ok(laterIds.includes(w3.id), "W3 must be readable as W2 convention context, not excluded by a sealed W2 absence");
+      const proposed = await proposeTaxAssetBasis(f.org.orgId, f.assetId, f.actors.submitterId, {
+        sourceChangeId: thirdChangeId,
+        reason: "Continue the remaining vintage after W3 was declared",
+        assessment: "Context-only W2 must not have frozen successor absence",
+        idempotencyKey: randomUUID(),
+        regimes: [{
+          regime: "us_macrs",
+          relationship: "arms_length",
+          dispositionTrigger: "sale",
+          remainingUnadjustedBasis: "750.00",
+          disposedUnadjustedBasis: "750.00",
+          recognition: "taxable",
+          relatedPerson: false,
+          amountRealizedRule: "amount_realized",
+          statutoryProceeds: "600.00",
+          vintageAllocations: [{
+            source: "original",
+            placedInServiceOn: "2026-07-01",
+            disposedUnadjustedBasis: "750.00",
+            remainingUnadjustedBasis: "750.00",
+          }],
+        }],
+      });
+      assert.ok(proposed);
+    }),
+);

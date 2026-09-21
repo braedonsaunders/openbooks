@@ -697,21 +697,37 @@ function isContiguousSuccessor(previous: MacrsYearWindow, next: MacrsYearWindow)
   return nextCalendarDay(previous.yearEnd) === next.yearStart;
 }
 
-/** Seal each applied paper's exact window set, including successor absence.
- *  A later paper or live load may add years after that paper; it must not
- *  rewrite convention adjacency already frozen on an earlier window. */
+export type MacrsAppliedWindowSet = {
+  /** Calculation asOf that consumed these windows. */
+  throughOn: string;
+  windows: readonly MacrsYearWindow[];
+};
+
+function asLiveMacrsWindow(window: MacrsYearWindow): MacrsYearWindow {
+  const { frozenConventionSuccessor: _sealed, ...live } = window;
+  return live;
+}
+
+/** Seal convention adjacency only on years the paper actually calculated.
+ *  A supporting successor cited for §4.01 context is not a calculated year
+ *  and must not freeze its own successor absence. */
 export function macrsWindowsPreservingAppliedContext(
-  appliedFrozen: readonly (readonly MacrsYearWindow[])[],
+  applied: readonly MacrsAppliedWindowSet[],
   later: readonly MacrsYearWindow[] = [],
 ): MacrsYearWindow[] {
   const sealed = new Map<string, MacrsYearWindow>();
-  for (const frozen of appliedFrozen) {
-    const ordered = [...frozen].sort((left, right) =>
+  const supporting = new Map<string, MacrsYearWindow>();
+  for (const { throughOn, windows } of applied) {
+    const ordered = [...windows].sort((left, right) =>
       left.yearStart.localeCompare(right.yearStart) || left.yearEnd.localeCompare(right.yearEnd),
     );
     for (let index = 0; index < ordered.length; index += 1) {
       const window = ordered[index]!;
       const key = macrsWindowSealKey(window);
+      if (window.yearStart > throughOn) {
+        if (!sealed.has(key) && !supporting.has(key)) supporting.set(key, asLiveMacrsWindow(window));
+        continue;
+      }
       if (sealed.has(key)) continue;
       const next = ordered[index + 1];
       sealed.set(key, {
@@ -722,16 +738,19 @@ export function macrsWindowsPreservingAppliedContext(
       });
     }
   }
-  const out = [...sealed.values()].sort((left, right) =>
-    left.yearStart.localeCompare(right.yearStart) || left.yearEnd.localeCompare(right.yearEnd),
-  );
+  const out = [...sealed.values()];
   const known = new Set(out.map(macrsWindowSealKey));
+  for (const window of supporting.values()) {
+    const key = macrsWindowSealKey(window);
+    if (known.has(key)) continue;
+    known.add(key);
+    out.push(window);
+  }
   for (const window of later) {
     const key = macrsWindowSealKey(window);
     if (known.has(key)) continue;
     known.add(key);
-    const { frozenConventionSuccessor: _sealed, ...live } = window;
-    out.push(live);
+    out.push(asLiveMacrsWindow(window));
   }
   return out.sort((left, right) =>
     left.yearStart.localeCompare(right.yearStart) || left.yearEnd.localeCompare(right.yearEnd),

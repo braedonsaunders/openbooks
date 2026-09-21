@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   listOpenMacrsVintages,
+  macrsVintageDatingPapers,
   macrsVintageReceivingPaper,
   macrsVintageWindowPlan,
   resolveMacrsVintages,
@@ -704,5 +705,124 @@ test("same-day transfers to one entity resolve the transferor by receiving asset
       papers: [fromA, fromB],
     }).transferorSubsidiaryId,
     "sub-a",
+  );
+});
+
+test("an empty first-declaration taxYearWindows array does not seal later history loads", () => {
+  const plan = macrsVintageWindowPlan({
+    assetId: "seller",
+    currentSubsidiaryId: "sub-a",
+    asOf: "2026-08-01",
+    vintage: {
+      source: "original",
+      placedInServiceOn: "2023-01-01",
+      transferOn: null,
+      parentKey: null,
+    },
+    papers: [{
+      asset_id: "seller",
+      receiving_asset_id: "buyer",
+      effective_on: "2026-07-01",
+      seller_subsidiary_id: "sub-a",
+      taxYearWindows: [],
+    }],
+  });
+  assert.deepEqual(plan.frozenSets, []);
+  assert.deepEqual(plan.liveLoads, [{
+    subsidiaryId: "sub-a",
+    fromOn: "2023-01-01",
+    throughOn: "2026-08-01",
+  }]);
+});
+
+test("a present but invalid seller allocation array raises the parser refusal", () => {
+  assert.throws(
+    () => macrsVintageWindowPlan({
+      assetId: "seller",
+      currentSubsidiaryId: "sub-a",
+      asOf: "2026-08-01",
+      vintage: {
+        source: "original",
+        placedInServiceOn: "2023-01-01",
+        transferOn: null,
+        parentKey: null,
+      },
+      papers: [{
+        asset_id: "seller",
+        receiving_asset_id: "buyer",
+        effective_on: "2026-07-01",
+        seller_subsidiary_id: "sub-a",
+        vintage_allocations: [{ source: "original" }],
+      }],
+    }),
+    /vintageAllocations\[0\]/,
+  );
+});
+
+test("a present but invalid buyer vintage array raises the parser refusal", () => {
+  assert.throws(
+    () => macrsVintageReceivingPaper([{
+      asset_id: "source-a",
+      receiving_asset_id: "recv-a",
+      effective_on: "2026-08-20",
+      seller_subsidiary_id: "sub-a",
+      buyer_vintages: [{ source: "carryover" }],
+    }], "recv-a", {
+      source: "carryover",
+      placedInServiceOn: "2023-03-15",
+      transferOn: "2026-08-20",
+      parentKey: "original:2023-03-15",
+    }),
+    /buyerVintages\[0\]/,
+  );
+});
+
+test("an explicit empty buyer vintage array is not a legacy date match", () => {
+  assert.equal(
+    macrsVintageReceivingPaper([{
+      asset_id: "source-a",
+      receiving_asset_id: "recv-a",
+      effective_on: "2026-08-20",
+      seller_subsidiary_id: "sub-a",
+      buyer_vintages: [],
+    }], "recv-a", {
+      source: "carryover",
+      placedInServiceOn: "2023-03-15",
+      transferOn: "2026-08-20",
+      parentKey: "original:2023-03-15",
+    }),
+    null,
+  );
+  assert.equal(
+    macrsVintageReceivingPaper([{
+      asset_id: "source-a",
+      receiving_asset_id: "recv-a",
+      effective_on: "2026-08-20",
+      seller_subsidiary_id: "sub-a",
+    }], "recv-a", {
+      source: "carryover",
+      placedInServiceOn: "2023-03-15",
+      transferOn: "2026-08-20",
+      parentKey: "original:2023-03-15",
+    })?.asset_id,
+    "source-a",
+  );
+});
+
+test("a present but invalid vintage allocation array raises the parser refusal", () => {
+  assert.throws(
+    () => macrsVintageDatingPapers([{
+      asset_id: "seller",
+      receiving_asset_id: "buyer",
+      effective_on: "2026-07-01",
+      seller_subsidiary_id: "sub-a",
+      vintage_allocations: [{ source: "original" }],
+    }], "seller", {
+      source: "original",
+      placedInServiceOn: "2023-01-01",
+      transferOn: null,
+      parentKey: null,
+    }),
+    /vintageAllocations\[0\]/,
   );
 });
