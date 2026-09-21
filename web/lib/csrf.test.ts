@@ -149,6 +149,28 @@ test("a client-supplied forwarded host is not the deployment origin when the can
   );
 });
 
+test("the production e2e TLS proxy is unnamed CSRF-forbidden until APP_URL or TRUST_PROXY is set", async () => {
+  // scripts/e2e-production-server.mjs terminates TLS on :4780 and forwards
+  // to Next on http://127.0.0.1:4781. The browser Origin is the public
+  // HTTPS origin. Without a named APP_URL or TRUST_PROXY, the process
+  // only knows the internal HTTP URL — scheme mismatch, 403 forbidden.
+  const { hasTrustedOrigin } = await import("./csrf.ts");
+  const login = post("http://127.0.0.1:4781/api/login", {
+    origin: "https://localhost:4780",
+    "x-forwarded-host": "localhost:4780",
+    "x-forwarded-proto": "https",
+  });
+  assert.equal(hasTrustedOrigin(login, {}), false);
+  assert.equal(
+    hasTrustedOrigin(login, { OPENBOOKS_APP_URL: "https://localhost:4780" }),
+    true,
+  );
+  assert.equal(
+    hasTrustedOrigin(login, { OPENBOOKS_TRUST_PROXY: "1" }),
+    true,
+  );
+});
+
 test("forwarded hosts are trusted only when the operator opts in", async () => {
   const { trustsForwardedHeaders } = await import("./proxy-policy.ts");
   assert.equal(trustsForwardedHeaders({}), false);
