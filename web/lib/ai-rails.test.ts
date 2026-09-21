@@ -1,7 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { registerHooks } from "node:module";
 import { AiRailsError } from "@openbooks/engine/src/hrm/ai/errors.ts";
-import { aiRailsErrorResponse, dateParam, uuidParam } from "./ai-rails.ts";
+
+// ./ai-rails.ts rides ./authz, which opens with `import "server-only"` —
+// the package throws at load outside a Server Component. Stub it the way
+// web/lib/authz.test.ts does so this unit file loads in the node runner.
+const hooks = registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === "server-only") {
+      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
+    }
+    return nextResolve(specifier, context);
+  },
+});
+const { aiRailsErrorResponse, dateParam, uuidParam } = await import("./ai-rails.ts");
+hooks.deregister();
 
 /**
  * HR-21 API plumbing unit tests — no database. The refusal-to-status
