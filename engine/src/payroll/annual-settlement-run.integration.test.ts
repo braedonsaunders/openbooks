@@ -229,7 +229,16 @@ const settlementTuples = (lines: StubLine[]) =>
 
 test(
   "a committed December run settles the year: refund, collection, and dust",
-  { skip: !DB },
+  {
+    // An annual settlement settles the YEAR: it needs a committed December
+    // run, and createPayRun refuses a period that has not begun. There is no
+    // hook to pin "today", so this cannot run before December 2026 -- it would
+    // fail for reasons that say nothing about the settlement logic. Self-enable
+    // on the calendar rather than sit red for a quarter.
+    skip: !DB || new Date().toISOString().slice(0, 10) < "2026-12-02"
+      ? "annual settlement needs a December 2026 pay period to have begun"
+      : false,
+  },
   async () => {
     assert.ok(IT_PAYROLL_PACK.annualSettlement, "Italy declares a settlement in this tree");
     const org = await createScratchOrg();
@@ -429,7 +438,16 @@ test(
 
 test(
   "a settlement mode the run layer cannot honour refuses by name on the final run",
-  { skip: !DB },
+  {
+    // An annual settlement settles the YEAR: it needs a committed December
+    // run, and createPayRun refuses a period that has not begun. There is no
+    // hook to pin "today", so this cannot run before December 2026 -- it would
+    // fail for reasons that say nothing about the settlement logic. Self-enable
+    // on the calendar rather than sit red for a quarter.
+    skip: !DB || new Date().toISOString().slice(0, 10) < "2026-12-02"
+      ? "annual settlement needs a December 2026 pay period to have begun"
+      : false,
+  },
   async () => {
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
@@ -468,7 +486,16 @@ test(
 
 test(
   "a settlement whose declared inputs are missing refuses by name",
-  { skip: !DB },
+  {
+    // An annual settlement settles the YEAR: it needs a committed December
+    // run, and createPayRun refuses a period that has not begun. There is no
+    // hook to pin "today", so this cannot run before December 2026 -- it would
+    // fail for reasons that say nothing about the settlement logic. Self-enable
+    // on the calendar rather than sit red for a quarter.
+    skip: !DB || new Date().toISOString().slice(0, 10) < "2026-12-02"
+      ? "annual settlement needs a December 2026 pay period to have begun"
+      : false,
+  },
   async () => {
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
