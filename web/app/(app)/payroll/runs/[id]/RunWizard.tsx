@@ -452,8 +452,6 @@ export function RunWizard(props: {
   // never slip past a stale tab either).
   const canCommit =
     props.canRun && commitDocOpen && run.run_status === 'calculated' && !props.staleness.stale
-    && (refusals.length === 0 || refusalsAcked)
-    props.canRun && docDraft && run.run_status === 'calculated' && !props.staleness.stale
     && (refusals.length === 0 || refusalsAcked) && props.anomalyBlocks === 0
   const canPost =
     props.canRun && committed && (run.document_status === 'draft' || run.document_status === 'approved')
