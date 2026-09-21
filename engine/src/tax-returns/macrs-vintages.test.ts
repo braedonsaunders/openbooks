@@ -593,6 +593,9 @@ test("frozen buyer vintages reconstruct two transferor schedules instead of one 
         priorDepreciation: "400.0000",
         bonusPercent: "0",
         businessUsePercent: "100",
+        shortYearMethod: "simplified",
+        checkpointKind: "declared_elections",
+        takenBonus: null,
       },
       {
         key: "carryover:2025-08-01:2026-09-01:excess:2025-08-01:2025-08-01",
@@ -609,6 +612,9 @@ test("frozen buyer vintages reconstruct two transferor schedules instead of one 
         priorDepreciation: "0.0000",
         bonusPercent: "0",
         businessUsePercent: "100",
+        shortYearMethod: "allocation",
+        checkpointKind: "declared_elections",
+        takenBonus: null,
       },
     ],
   };
@@ -633,6 +639,82 @@ test("frozen buyer vintages reconstruct two transferor schedules instead of one 
   assert.equal(open[1]!.convention, "mid_month");
   assert.equal(open[0]!.adjustedCarryover, "1600.0000");
   assert.equal(open[1]!.adjustedCarryover, "400.0000");
+  assert.equal(open[0]!.shortYearMethod, "simplified");
+  assert.equal(open[1]!.shortYearMethod, "allocation");
+});
+
+test("frozen buyer vintages keep their short-year method when the receiving paper header is omitted or simplified", () => {
+  const paper: MacrsWorkpaperEvent = {
+    ...bothSidedTaxable,
+    recognition: "nontaxable",
+    section_168i7_kind: "partnership_721_prior_interest",
+    buyer_cost: null,
+    carryover_basis: "2000.0000",
+    excess_basis: "0",
+    related_person: "true",
+    original_unadjusted_basis: "10400.00",
+    disposed_unadjusted_basis: "2000.00",
+    remaining_basis: "8400.00",
+    short_year_method: null,
+    placed_in_service_on: null,
+    recovery_period_years: null,
+    macrs_method: null,
+    macrs_convention: null,
+    section_179: "0.0000",
+    bonus_percent: "0",
+    business_use_percent: "100",
+    prior_depreciation: "400.0000",
+    buyer_vintages: [
+      {
+        key: "carryover:2023-03-15:2026-09-01:original:2023-03-15",
+        source: "carryover",
+        parentKey: "original:2023-03-15",
+        placedInServiceOn: "2023-03-15",
+        transferOn: "2026-09-01",
+        recoveryPeriodYears: "5",
+        method: "200_db",
+        convention: "half_year",
+        unadjustedBasis: "2000.0000",
+        adjustedCarryover: "1600.0000",
+        section179: "0.0000",
+        priorDepreciation: "400.0000",
+        bonusPercent: "0",
+        businessUsePercent: "100",
+        shortYearMethod: "allocation",
+        checkpointKind: "declared_elections",
+        takenBonus: null,
+      },
+    ],
+  };
+  const buyer = resolveMacrsVintages({
+    assetId: "buyer",
+    subsidiaryId: "sub-b",
+    placedOn: "2026-09-01",
+    acquisitionCost: "1.00",
+    disposedOn: null,
+    papers: [paper],
+    defaults,
+  });
+  assert.equal(buyer.length, 1);
+  assert.equal(buyer[0]!.shortYearMethod, "allocation");
+  assert.notEqual(buyer[0]!.shortYearMethod, defaults.shortYearMethod);
+  assert.equal(buyer[0]!.section168i7Kind, "partnership_721_prior_interest");
+  const omittedKind: MacrsWorkpaperEvent = {
+    ...paper,
+    section_168i7_kind: "nonrecognition",
+    short_year_method: "simplified",
+  };
+  const replayed = resolveMacrsVintages({
+    assetId: "buyer",
+    subsidiaryId: "sub-b",
+    placedOn: "2026-09-01",
+    acquisitionCost: "1.00",
+    disposedOn: null,
+    papers: [omittedKind],
+    defaults,
+  });
+  assert.equal(replayed[0]!.shortYearMethod, "allocation");
+  assert.equal(replayed[0]!.section168i7Kind, "nonrecognition");
 });
 
 test("same-day transfers to one entity resolve the transferor by receiving asset and parent vintage", () => {
@@ -651,6 +733,9 @@ test("same-day transfers to one entity resolve the transferor by receiving asset
     priorDepreciation: "3000.0000",
     bonusPercent: "0",
     businessUsePercent: "100",
+    shortYearMethod: "simplified" as const,
+    checkpointKind: "declared_elections" as const,
+    takenBonus: null,
   };
   const buyerB = {
     ...buyerA,
