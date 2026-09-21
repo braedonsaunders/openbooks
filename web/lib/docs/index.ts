@@ -30,6 +30,10 @@ import { benefitsEnrollment } from './articles/benefits-enrollment'
 // HR-13 begin: construction-compliance article.
 import { certifiedPayrollPrevailingWagePerDiem } from './articles/certified-payroll-prevailing-wage-per-diem'
 // HR-13 end
+// HR-20 begin: field-time articles.
+import { fieldClockIn } from './articles/field-clock-in'
+import { crewTimeEntry } from './articles/crew-time-entry'
+// HR-20 end
 import { compensationAndTransparency } from './articles/compensation-transparency'
 // HR-14 begin: certifications, licenses, and dispatch gating article.
 import { certificationsLicensesDispatch } from './articles/certifications-licenses-dispatch'
@@ -287,6 +291,12 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   // reconciliation left fieldTickets/subcontractorCompliance listed twice
   // (once on the long line above, once here). The duplicate line is removed.
   // HR-14 end
+  // HR-14 deduped fieldTickets/subcontractorCompliance (listed on the long
+  // line above) — HR-20 keeps that removal and adds only its own articles.
+  // HR-20 begin
+  fieldClockIn,
+  crewTimeEntry,
+  // HR-20 end
   itemRates,
   financialReports,
   analyticsAndSavedViews,
