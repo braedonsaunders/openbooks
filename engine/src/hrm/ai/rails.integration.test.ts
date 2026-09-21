@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db } from "../../platform/db.ts";
 import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
   type ScratchOrg,
-} from "../testing/fixtures.ts";
+} from "../../testing/fixtures.ts";
 import { logDecision, syncCapabilities, updateCapability } from "./governance.ts";
 import {
   checkPayrollFinalizeAllowed,
