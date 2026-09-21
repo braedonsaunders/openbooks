@@ -20,6 +20,9 @@ import { hrmFeedbackRequestAdapter } from "./adapters/hrm-feedback-request.ts";
 import { hrmReviewAdapter } from "./adapters/hrm-review.ts";
 import { notificationAdapter } from "./adapters/notification.ts";
 import { timesheetWeekAdapter } from "./adapters/timesheet-week.ts";
+// HR-20 begin
+import { crewTimeBatchAdapter } from "./adapters/crew-time-batch.ts";
+// HR-20 end
 import { registerInboxAdapter } from "./registry.ts";
 
 registerInboxAdapter(flowsApprovalAdapter);
@@ -35,6 +38,9 @@ registerInboxAdapter(hrmBenefitEnrollmentWindowAdapter);
 registerInboxAdapter(hrmQualificationAlertAdapter);
 registerInboxAdapter(fieldTicketSignatureAdapter);
 registerInboxAdapter(timesheetWeekAdapter);
+// HR-20 begin
+registerInboxAdapter(crewTimeBatchAdapter);
+// HR-20 end
 registerInboxAdapter(expenseReportAdapter);
 registerInboxAdapter(documentSignatureAdapter);
 

@@ -57,6 +57,20 @@ export const FEATURES: FeatureDef[] = [
   // Schedule-of-values billing remains a project-type procedure, not a gate.
   { key: 'projects', defaultEnabled: true, category: 'operations', navModules: ['projects', 'field-tickets', 'lien-waivers'] },
   { key: 'timeTracking', defaultEnabled: true, category: 'operations', navModules: ['timesheets'], parentKey: 'projects' },
+  // HR-20 begin: field time capture — mobile and kiosk clock-in with
+  // geofence, photo and offline queue; foreman crew batch entry;
+  // equipment hours on entries; multi-stage approval. The parent rides
+  // timeTracking (office orgs never see a clock) and needs projects;
+  // sub-features hide optional complexity. Off stops rendering and
+  // writing, never data.
+  { key: 'fieldTime', defaultEnabled: false, category: 'operations', navModules: ['timesheets'], parentKey: 'timeTracking', requiresAll: ['projects'] },
+  { key: 'fieldTimeGeofence', defaultEnabled: false, category: 'operations', parentKey: 'fieldTime' },
+  { key: 'fieldTimePhoto', defaultEnabled: false, category: 'operations', parentKey: 'fieldTime' },
+  { key: 'fieldTimeKiosk', defaultEnabled: false, category: 'operations', parentKey: 'fieldTime' },
+  { key: 'fieldTimeCrewEntry', defaultEnabled: false, category: 'operations', parentKey: 'fieldTime' },
+  { key: 'fieldTimeEquipment', defaultEnabled: false, category: 'operations', parentKey: 'fieldTime', requiresAll: ['equipment'] },
+  { key: 'fieldTimeMultiStageApproval', defaultEnabled: false, category: 'operations', parentKey: 'fieldTime' },
+  // HR-20 end
   // Payroll — country-pack statutory engines (CA T4127, US Pub 15-T), pay
   // runs, stubs, remittance liabilities. Off by default: enabling payroll is
   // a deliberate adoption decision (TD1/W-4 profiles, control accounts,

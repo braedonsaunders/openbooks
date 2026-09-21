@@ -179,6 +179,11 @@ const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] =
   ["hrm_document_signers", "signer_party_id"],
   ["hrm_data_subject_exports", "party_id"],
   // HR-19 end
+  // HR-20 begin: clock events follow the merge wholesale. SIMPLE, not
+  // GUARDED: the event uniqueness is (org, client_event_id) and carries
+  // no party column, so re-pointing the worker cannot collide.
+  ["time_clock_events", "employee_party_id"],
+  // HR-20 end
 ];
 
 /**
@@ -341,6 +346,32 @@ const GUARDED_PARTY_REFS: readonly GuardedPartyRef[] = [
       "s.org_id = d.org_id and s.cycle_id = d.cycle_id and s.employment_id = d.employment_id" +
       " and s.kind = d.kind",
   },
+  // HR-20 begin: the foreman-day uniqueness is (org, foreman, project,
+  // worked_on) and the line uniqueness spans the nullable line key —
+  // both mirrored exactly with IS NOT DISTINCT FROM. A conflicting row
+  // stays on the absorbed party, never silently absorbed.
+  {
+    table: "crew_time_batches",
+    column: "foreman_party_id",
+    conflict:
+      "s.org_id = d.org_id and s.project_id = d.project_id and s.worked_on = d.worked_on",
+  },
+  {
+    table: "crew_time_batch_lines",
+    column: "employee_party_id",
+    conflict:
+      "s.batch_id = d.batch_id" +
+      " and s.time_type_id is not distinct from d.time_type_id" +
+      " and s.project_task_id is not distinct from d.project_task_id" +
+      " and s.cost_code_ref is not distinct from d.cost_code_ref" +
+      " and s.equipment_id is not distinct from d.equipment_id",
+  },
+  {
+    table: "worker_clock_pins",
+    column: "employee_party_id",
+    conflict: "s.org_id = d.org_id",
+  },
+  // HR-20 end
 ];
 
 type PartyRow = {
