@@ -26,7 +26,8 @@ if (!isVitest) {
     },
   });
 }
-const { POST, __resetApplyRateLimitForTests } = (await import("./route.ts?hrm-recruiting-apply")) as typeof import("./route.ts");
+const applyRouteUrl = "./route.ts?hrm-recruiting-apply";
+const { POST, __resetApplyRateLimitForTests } = (await import(applyRouteUrl)) as typeof import("./route.ts");
 hooks?.deregister();
 
 function applyRequest(postingId: string, displayName: string): Request {
@@ -64,7 +65,6 @@ if (isVitest) {
     __resetApplyRateLimitForTests();
     const statuses: number[] = [];
     for (let attempt = 0; attempt < 6; attempt += 1) {
-      // eslint-disable-next-line no-await-in-loop
       const response = await POST(applyRequest(POSTING_ID, `Applicant ${attempt}`));
       statuses.push(response.status);
     }

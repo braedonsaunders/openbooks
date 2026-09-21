@@ -1339,10 +1339,10 @@ test("consent extension emails go once per grant, then lapse into the action", {
       insert into hrm_retention_rules
         (id, org_id, name, region_scope, basis, retain_months, action, consent_extension_lead_days, is_active)
       values (${ruleId}, ${orgId}, 'Consent lapses', '{}'::jsonb, 'consent', 12, 'anonymize', 14, true)`);
-    const { candidateId, applicationId } = await (async () => {
+    const { candidateId } = await (async () => {
       const seeded = await seedSentOffer(h);
       await rejectApplication({ orgId, actorId: h.recruiterId, applicationId: seeded.applicationId, reason: "not a fit" });
-      return { candidateId: seeded.candidateId, applicationId: seeded.applicationId };
+      return { candidateId: seeded.candidateId };
     })();
     await db.execute(sql`
       insert into hrm_candidate_consents (org_id, candidate_id, purpose, source, expires_at)

@@ -437,7 +437,7 @@ export function InterviewDrawerBody({ detail }: { detail: InterviewDrawer }) {
           <SlotProposeIsland
             interviewId={detail.id}
             pools={detail.pools}
-            labels={{ submit: labels.submit ?? 'Propose slots', failed: labels.failed, proposeFromPool: detail.labels.proposeFromPool }}
+            labels={{ submit: labels.submit ?? 'Propose slots', failed: labels.failed ?? 'Save failed.', proposeFromPool: detail.labels.proposeFromPool ?? 'Propose from pool' }}
           />
         </div>
       </div>
@@ -451,7 +451,7 @@ export function InterviewDrawerBody({ detail }: { detail: InterviewDrawer }) {
           <div className="mt-2">
             <ScorecardFormIsland
               interviewId={detail.id}
-              labels={{ overall: labels.overall, submit: labels.submit ?? 'Submit', failed: labels.failed }}
+              labels={{ overall: labels.overall ?? 'Overall', submit: labels.submit ?? 'Submit', failed: labels.failed ?? 'Save failed.' }}
             />
           </div>
         )}
@@ -502,7 +502,7 @@ export function OfferDepthBody({ offerId, extra }: { offerId: string; extra: Off
       <div className="mt-3">
         <OfferSigningIsland
           offerId={offerId}
-          labels={{ sendLink: extra.labels.sendLink, void: extra.labels.void, failed: extra.labels.failed }}
+          labels={{ sendLink: extra.labels.sendLink ?? 'Send signing link', void: extra.labels.void ?? 'Void', failed: extra.labels.failed ?? 'Save failed.' }}
         />
       </div>
     </div>
@@ -526,7 +526,7 @@ export function PostingDrawerBody({
       <PostingActionsIsland
         postingId={posting.id}
         status={posting.status}
-        labels={{ publish: extra.labels.publish, pause: extra.labels.pause, close: extra.labels.close, failed: extra.labels.failed }}
+        labels={{ publish: extra.labels.publish ?? 'Publish', pause: extra.labels.pause ?? 'Pause', close: extra.labels.close ?? 'Close', failed: extra.labels.failed ?? 'Save failed.' }}
       />
       <div>
         <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{extra.labels.events}</h4>
@@ -558,7 +558,7 @@ export function PoolDrawerBody({ detail }: { detail: PoolDrawer }) {
               {member.tags.map((tag) => (
                 <Badge key={tag} variant="outline">{tag}</Badge>
               ))}
-              <PoolMemberRemoveIsland poolId={detail.id} candidateId={member.candidateId} labels={{ remove: detail.labels.remove, failed: detail.labels.failed }} />
+              <PoolMemberRemoveIsland poolId={detail.id} candidateId={member.candidateId} labels={{ remove: detail.labels.remove ?? 'Remove', failed: detail.labels.failed ?? 'Save failed.' }} />
             </div>
           ))}
         </div>
@@ -566,7 +566,7 @@ export function PoolDrawerBody({ detail }: { detail: PoolDrawer }) {
       <div>
         <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{detail.labels.match}</h4>
         <div className="mt-2">
-          <PoolRediscoverIsland poolId={detail.id} labels={{ tags: detail.labels.tags, failed: detail.labels.failed }} />
+          <PoolRediscoverIsland poolId={detail.id} labels={{ tags: detail.labels.tags ?? 'Tags (comma separated)', failed: detail.labels.failed ?? 'Save failed.' }} />
         </div>
       </div>
     </div>
