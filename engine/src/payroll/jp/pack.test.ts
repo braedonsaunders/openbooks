@@ -138,12 +138,22 @@ test("2026 is published; the ledger names every refusal", () => {
   }
 });
 
-test("filings declare the establishment program, no year-end builders", () => {
+test("filings declare the establishment program; year-end filings refuse by name", () => {
   const filings = jpPackFilings();
   assert.equal(filings.country, "JP");
   assert.deepEqual(filings.programTypes.map((program) => program.key), ["jp_shaho_jigyosho"]);
-  assert.deepEqual(filings.yearEnd, []);
-  assert.deepEqual(JP_PAYROLL_PACK.filings(), jpPackFilings());
+  // The three statutory year-end filings are DECLARED (see ./filings.test.ts
+  // for the refusal proofs) but none populates: 年末調整 is not performed,
+  // so no 年調年税額 exists to report.
+  assert.deepEqual(filings.yearEnd.map((filing) => filing.key), [
+    "gensenchoshu",
+    "kyuyo_shiharai_hokokusho",
+    "hotei_chosho_gokeihyo",
+  ]);
+  // One declaration function, never a divergent copy: the pack serves the
+  // same builder the tests prove (fresh closures defeat deepEqual, so the
+  // assertion is reference identity, not structure).
+  assert.equal(JP_PAYROLL_PACK.filings, jpPackFilings);
 });
 
 test("the holiday calendar carries 14 computed holidays; equinoxes stay out", () => {
