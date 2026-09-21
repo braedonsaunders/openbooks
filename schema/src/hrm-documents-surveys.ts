@@ -17,6 +17,7 @@ import { auditColumns, id, orgRef } from "./helpers";
  * HRM documents with e-sign, retention, DSAR exports, surveys (migration
  * 0230, HR-19).
  *
+ * - hrm_document_categories: the org-declared Setup vocabulary.
  * - hrm_document_templates / hrm_documents / hrm_document_signers /
  *   hrm_document_events: the hire-to-retire paper trail. Templates carry
  *   mustache bodies with declared merge fields; documents point at the
@@ -42,6 +43,21 @@ const bytea = customType<{ data: Uint8Array; driverData: Uint8Array }>({
     return "bytea";
   },
 });
+
+export const hrmDocumentCategories = pgTable(
+  "hrm_document_categories",
+  {
+    id: id(),
+    orgId: orgRef(),
+    key: text("key").notNull(),
+    label: text("label").notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("hrm_document_categories_org_key").on(t.orgId, t.key),
+  ],
+);
 
 export const hrmDocumentTemplates = pgTable(
   "hrm_document_templates",

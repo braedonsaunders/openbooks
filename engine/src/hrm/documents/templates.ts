@@ -3,6 +3,7 @@ import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
 import { requireHrmDocumentsManage, requireHrmDocumentsRead } from "../authorization.ts";
+import { assertCategoryDeclared } from "./categories.ts";
 import { HrmDocumentsError } from "./errors.ts";
 
 /**
@@ -201,6 +202,10 @@ export async function saveTemplate(input: {
   return withOrgTransaction(input.orgId, async () => {
     await requireHrmDocumentsManage(db, input.orgId, input.actorId);
     await assertDocumentsFeature(db, input.orgId);
+    // Membership, not shape: the key must be declared under Setup →
+    // Workforce → Document Categories, which is the vocabulary's single
+    // source of truth.
+    await assertCategoryDeclared(db, input.orgId, valid.categoryKey);
     if (input.templateId) {
       const updated = (await db.execute<TemplateRow>(sql`
         update hrm_document_templates

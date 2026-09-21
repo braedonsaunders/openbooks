@@ -14,6 +14,7 @@ import {
   type ScratchOrg,
 } from "../testing/fixtures.ts";
 import { HrmDocumentsError } from "./documents/errors.ts";
+import { saveCategory } from "./documents/categories.ts";
 import { generateDocument, sendDocument, signTokenDocument } from "./documents/documents.ts";
 import { saveTemplate } from "./documents/templates.ts";
 import {
@@ -91,6 +92,10 @@ async function setupHarness(): Promise<Harness> {
   await db.execute(sql`update users set party_id = ${partyId} where id = ${employeeId} and org_id = ${org.orgId}`);
   await grantPermissions(org.orgId, hrId, ["hrm.documents.read", "hrm.documents.manage"]);
   await grantPermissions(org.orgId, employeeId, ["hrm.self.read"]);
+  // The declared category vocabulary templates and schedules must name.
+  for (const [key, label] of [["contract", "Contracts"], ["letter", "Letters"]] as const) {
+    await saveCategory({ orgId: org.orgId, actorId: hrId, key, label });
+  }
   return { org, hrId, employeeId, partyId, employmentId };
 }
 
