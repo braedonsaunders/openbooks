@@ -545,15 +545,24 @@ test("hrm_recruiting depth inputs parse and reuse the depth services", () => {
   for (const service of ["scorecardSummary(", "offerSignatureState(", "listPostings("]) {
     assert.ok(tools.includes(service), `tools-hrm.ts must reuse ${service}`);
   }
-  for (const key of ["hrmStructuredInterviews", "hrmOfferSigning", "hrmJobBoards"]) {
-    assert.ok(tools.includes(`"${key}"`), `tools-hrm.ts must gate on ${key}`);
-  }
-  for (const error of [
-    "hrm_structured_interviews_feature_disabled",
-    "hrm_offer_signing_feature_disabled",
-    "hrm_job_boards_feature_disabled",
-  ]) {
-    assert.ok(tools.includes(error), `tools-hrm.ts must refuse with ${error}`);
+  // The sub-switch gate lives in the SERVICE, not here. requireDepthFeature
+  // refuses by name for the sub-feature or its hrmRecruiting parent, and the
+  // tool propagates that refusal — so a duplicate isFeatureEnabled in the tool
+  // block was both redundant and a feature-parity violation (a tool declares
+  // one feature and cannot declare three). Assert the real gate instead of the
+  // copy: each depth service must call requireDepthFeature with its own key.
+  const depthServices: Record<string, string> = {
+    hrmStructuredInterviews: "../../../engine/src/hrm/recruiting/scorecards.ts",
+    hrmOfferSigning: "../../../engine/src/hrm/recruiting/offers-signing.ts",
+    hrmJobBoards: "../../../engine/src/hrm/recruiting/postings.ts",
+  };
+  for (const [key, path] of Object.entries(depthServices)) {
+    const source = read(path);
+    assert.match(
+      source,
+      new RegExp(`requireDepthFeature\\([^)]*"${key}"`),
+      `${path} must refuse by name when ${key} is off`,
+    );
   }
 });
 // HR-18 end

@@ -133,6 +133,30 @@ export function hrmRefusal(error: unknown): ToolResult {
   throw error;
 }
 
+// Shared feature gates, kept beside hrmFeatureRefused and ABOVE the first
+// tool block on purpose: they are module-level helpers, and sitting between
+// two tool definitions made the feature-parity scanner read their checks as
+// belonging to whichever tool happened to follow them.
+// HR-13 begin: read-only construction-compliance tools. Generating a
+// report, approving per-diem, and transitioning a finding are
+// human-attested HR actions with no assistant write surface by design —
+// these two tools read the flags and the frozen runs through the same
+// services and gates as the Compliance page.
+const HRM_CONSTRUCTION_FEATURE_OFF = "hrm_construction_feature_disabled";
+
+async function constructionFeatureRefused(orgId: string): Promise<ToolResult | null> {
+  if (!(await isFeatureEnabled(orgId, "hrmConstructionCompliance")))
+    return { ok: false, error: HRM_CONSTRUCTION_FEATURE_OFF };
+  return null;
+}
+
+async function continuousFeatureRefused(orgId: string, key: string): Promise<ToolResult | null> {
+  if (!(await isFeatureEnabled(orgId, "hrm"))) return { ok: false, error: HRM_FEATURE_OFF };
+  if (!(await isFeatureEnabled(orgId, "hrmPerformance"))) return { ok: false, error: HRM_FEATURE_OFF };
+  if (!(await isFeatureEnabled(orgId, key))) return { ok: false, error: HRM_FEATURE_OFF };
+  return null;
+}
+
 async function hrmFeatureRefused(orgId: string): Promise<ToolResult | null> {
   if (!(await isFeatureEnabled(orgId, "hrm"))) return { ok: false, error: HRM_FEATURE_OFF };
   return null;
@@ -744,9 +768,6 @@ const hrmRecruiting: AssistantToolDef = {
       // HR-18 begin: scorecard summary (aggregate only, names of missing
       // seats — private notes never ride this shape).
       if (a.interviewId) {
-        if (!(await isFeatureEnabled(authz.user.orgId, "hrmStructuredInterviews"))) {
-          return { ok: false, error: "hrm_structured_interviews_feature_disabled" };
-        }
         const { scorecardSummary } = await import(
           "@openbooks/engine/src/hrm/recruiting/scorecards.ts"
         );
@@ -760,9 +781,6 @@ const hrmRecruiting: AssistantToolDef = {
       // HR-18 end
       // HR-18 begin: offer signature state (state only, never the letter).
       if (a.offerId) {
-        if (!(await isFeatureEnabled(authz.user.orgId, "hrmOfferSigning"))) {
-          return { ok: false, error: "hrm_offer_signing_feature_disabled" };
-        }
         const { offerSignatureState } = await import(
           "@openbooks/engine/src/hrm/recruiting/offers-signing.ts"
         );
@@ -785,9 +803,6 @@ const hrmRecruiting: AssistantToolDef = {
         // while hrmJobBoards is off.
         let postings: { boardKey: string; status: string; applyCount: number }[] | undefined;
         if (a.includePostings === true) {
-          if (!(await isFeatureEnabled(authz.user.orgId, "hrmJobBoards"))) {
-            return { ok: false, error: "hrm_job_boards_feature_disabled" };
-          }
           const { listPostings } = await import("@openbooks/engine/src/hrm/recruiting/postings.ts");
           postings = (
             await listPostings({
@@ -1253,18 +1268,6 @@ const inboxItems: AssistantToolDef = {
     }
   },
 };
-// HR-13 begin: read-only construction-compliance tools. Generating a
-// report, approving per-diem, and transitioning a finding are
-// human-attested HR actions with no assistant write surface by design —
-// these two tools read the flags and the frozen runs through the same
-// services and gates as the Compliance page.
-const HRM_CONSTRUCTION_FEATURE_OFF = "hrm_construction_feature_disabled";
-
-async function constructionFeatureRefused(orgId: string): Promise<ToolResult | null> {
-  if (!(await isFeatureEnabled(orgId, "hrmConstructionCompliance")))
-    return { ok: false, error: HRM_CONSTRUCTION_FEATURE_OFF };
-  return null;
-}
 
 const hrmComplianceFindings: AssistantToolDef = {
   name: "hrm_compliance_findings",
@@ -1377,9 +1380,16 @@ const hrmCompensation: AssistantToolDef = {
       const asOf = a.asOf ?? (await todayOf(authz.user.orgId));
       const [bands, cycles, plans] = await Promise.all([
         listPayBands({ orgId: authz.user.orgId, actorId: authz.user.id, asOf }),
+        // Merit cycles are an optional section of the compensation answer, not
+        // its subject: with the switch off the bands and placement still answer
+        // and the section is simply absent. The tool itself rides
+        // hrmCompensation and is gone when that is off, so this is never the
+        // refusal path.
+        // soft-feature: optional section only, never a refusal.
         isFeatureEnabled(authz.user.orgId, "hrmMeritCycles").then((on) =>
           on ? listCycles({ orgId: authz.user.orgId, actorId: authz.user.id }) : [],
         ),
+        // soft-feature: headcount plans are the same optional section, same reason.
         isFeatureEnabled(authz.user.orgId, "hrmHeadcountPlans").then((on) =>
           on ? listPlans({ orgId: authz.user.orgId, actorId: authz.user.id }) : [],
         ),
@@ -1794,12 +1804,6 @@ const hrmOrgChart: AssistantToolDef = {
 // the widening leg; calibration reads through the manage grant. Each
 // sits behind its own sub-switch — off means the tool is absent, never
 // an empty answer.
-async function continuousFeatureRefused(orgId: string, key: string): Promise<ToolResult | null> {
-  if (!(await isFeatureEnabled(orgId, "hrm"))) return { ok: false, error: HRM_FEATURE_OFF };
-  if (!(await isFeatureEnabled(orgId, "hrmPerformance"))) return { ok: false, error: HRM_FEATURE_OFF };
-  if (!(await isFeatureEnabled(orgId, key))) return { ok: false, error: HRM_FEATURE_OFF };
-  return null;
-}
 
 const oneOnOneStatuses = ["scheduled", "held", "skipped", "cancelled"] as const;
 
