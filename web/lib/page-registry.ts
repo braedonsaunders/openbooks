@@ -1492,6 +1492,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/hrm/org-chart': {
+    route: '/hrm/org-chart',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/hrm/org-chart/view')
+      return {
+        load: (input) => m.loadOrgChartPage(input.searchParams ?? {}),
+        spec: (data) => m.orgChartSpec(data as never),
+      }
+    },
+  },
   '/hrm/performance': {
     route: '/hrm/performance',
     segments: [],
