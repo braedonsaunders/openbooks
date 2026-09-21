@@ -9,6 +9,14 @@
  */
 import type { PayrollTaxYearSupport } from "../tax-years.ts";
 import type { PayrollPackRates } from "../statutory-rates.ts";
+import {
+  BR_2024_EDITION_LABEL_FEB,
+  BR_2024_EDITION_LABEL_JAN,
+} from "./tax-year-2024.ts";
+import {
+  BR_2025_EDITION_LABEL_EARLY,
+  BR_2025_EDITION_LABEL_LATE,
+} from "./tax-year-2025.ts";
 import { BR_2026_EDITION_LABEL } from "./tax-year-2026.ts";
 
 export const BR_RATES_MODULE = "engine/src/payroll/br/tax-year-2026.ts";
@@ -16,6 +24,45 @@ export const BR_RATES_MODULE = "engine/src/payroll/br/tax-year-2026.ts";
 export const BR_TAX_YEARS: PayrollTaxYearSupport = {
   country: "BR",
   editions: [
+    {
+      year: 2024,
+      label: `2024 monthly CLT, January (INSS Portaria 2/2024 + IRRF Lei 14.663/2023 item X): ${BR_2024_EDITION_LABEL_JAN}`,
+      effectiveFrom: "2024-01-01",
+      citation:
+        "Portaria Interministerial MPS/MF nº 2, de 11/1/2024 (DOU 12/1/2024); "
+        + "Lei 14.663/2023 art. 5º item X; Lei 9.250/1995 art. 4º (R$ 189,59/dependente, 25% simplificado)",
+      status: "published",
+    },
+    {
+      year: 2024,
+      label: `2024 monthly CLT, February–December (INSS Portaria 2/2024 + IRRF Lei 14.848/2024 item XI): ${BR_2024_EDITION_LABEL_FEB}`,
+      effectiveFrom: "2024-02-01",
+      citation:
+        "Portaria Interministerial MPS/MF nº 2, de 11/1/2024 (DOU 12/1/2024); "
+        + "Lei 14.848/2024 art. 1º item XI; RFB official 2024 tabelas page; "
+        + "Lei 9.250/1995 art. 4º (R$ 189,59/dependente, 25% simplificado)",
+      status: "published",
+    },
+    {
+      year: 2025,
+      label: `2025 monthly CLT, January–April (INSS Portaria 6/2025 + IRRF Lei 14.848/2024 item XI): ${BR_2025_EDITION_LABEL_EARLY}`,
+      effectiveFrom: "2025-01-01",
+      citation:
+        "Portaria Interministerial MPS/MF nº 6, de 10/1/2025 (DOU 13/1/2025); "
+        + "Lei 14.848/2024 art. 1º item XI; RFB official 2025 tabelas page; "
+        + "Lei 9.250/1995 art. 4º (R$ 189,59/dependente, 25% simplificado)",
+      status: "published",
+    },
+    {
+      year: 2025,
+      label: `2025 monthly CLT, May–December (INSS Portaria 6/2025 + IRRF Lei 15.191/2025 item XII): ${BR_2025_EDITION_LABEL_LATE}`,
+      effectiveFrom: "2025-05-01",
+      citation:
+        "Portaria Interministerial MPS/MF nº 6, de 10/1/2025 (DOU 13/1/2025); "
+        + "Lei 15.191/2025 art. 2º item XII (ex MP 1.294/2025); RFB official 2025 tabelas page; "
+        + "Lei 9.250/1995 art. 4º (R$ 189,59/dependente, 25% simplificado)",
+      status: "published",
+    },
     {
       year: 2026,
       label: `2026 monthly CLT (INSS Portaria 13/2026 + IRRF Lei 15.270/2025 art. 3º-A): ${BR_2026_EDITION_LABEL}`,
@@ -39,11 +86,29 @@ export const BR_TAX_YEARS: PayrollTaxYearSupport = {
           "Transcribe the year's Portaria Interministerial (DOU, January) Anexo I "
           + "and the year's IRRF monthly table + art. 3º-A reduction beside the {priorYear} edition.",
       },
+      {
+        path: "engine/src/payroll/br/tax-year-2024.ts",
+        purpose:
+          "2024 tables: one INSS table plus the January vs February–December IRRF editions",
+        template:
+          "Transcribe the January Portaria Anexo II once and each in-force IRRF monthly table "
+          + "(Lei 14.663/2023 item X for January, Lei 14.848/2024 item XI from February) as its own edition.",
+      },
+      {
+        path: "engine/src/payroll/br/tax-year-2025.ts",
+        purpose:
+          "2025 tables: one INSS table plus the January–April vs May–December IRRF editions",
+        template:
+          "Transcribe the January Portaria Anexo II once and each in-force IRRF monthly table "
+          + "(Lei 14.848/2024 item XI through April, Lei 15.191/2025 item XII from May) as its own edition.",
+      },
     ],
     barrels: [],
     steps: [
-      "Fetch the January Portaria Interministerial (DOU) and transcribe its Anexo I brackets and teto.",
-      "Transcribe the IRRF Tabela Progressiva Mensal and the Lei 15.270-style monthly reduction in force for the year.",
+      "Fetch the January Portaria Interministerial (DOU) and transcribe its Anexo II brackets and teto.",
+      "Transcribe EVERY IRRF Tabela Progressiva Mensal in force during the year — Brazil reprices "
+      + "mid-year (February 2024, May 2025): each table is its own edition with its own effectiveFrom.",
+      "Transcribe the Lei 15.270-style monthly reduction only when in force for the year (2026+).",
       "Transcribe or explicitly refuse 13º, férias and rescisão for the year.",
       "Add golden stubs and flip the pack to installable.",
     ],
