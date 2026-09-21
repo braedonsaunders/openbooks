@@ -24,6 +24,7 @@ import {
   voidDocument,
   setLegalHold,
 } from "./documents/documents.ts";
+import { saveCategory } from "./documents/categories.ts";
 import { saveTemplate } from "./documents/templates.ts";
 
 /**
@@ -109,6 +110,10 @@ async function setupHarness(): Promise<Harness> {
   await grantPermissions(org.orgId, hrId, ["hrm.documents.read", "hrm.documents.manage"]);
   await grantPermissions(org.orgId, employeeId, ["hrm.self.read"]);
   await grantPermissions(org.orgId, managerId, ["hrm.self.read"]);
+  // The declared category vocabulary templates must name.
+  for (const [key, label] of [["contract", "Contracts"], ["policy", "Policies"]] as const) {
+    await saveCategory({ orgId: org.orgId, actorId: hrId, key, label });
+  }
   return {
     org,
     hrId,

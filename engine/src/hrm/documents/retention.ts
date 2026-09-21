@@ -4,6 +4,7 @@ import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
 import { requireHrmDocumentsManage, requireHrmDocumentsRead } from "../authorization.ts";
 import { HrmDocumentsError } from "./errors.ts";
+import { assertCategoryDeclared } from "./categories.ts";
 import { HRM_DOCUMENTS_FEATURE_KEY } from "./documents.ts";
 import { purgeCabinetBytes } from "./cabinet.ts";
 
@@ -124,6 +125,10 @@ export async function saveSchedule(input: {
   return withOrgTransaction(input.orgId, async () => {
     await requireHrmDocumentsManage(db, input.orgId, input.actorId);
     await assertDocumentsFeature(db, input.orgId);
+    // Membership, not shape: a schedule for an undeclared category would
+    // never match a document, so the save is refused against the Setup
+    // vocabulary instead of stored as a dead rule.
+    await assertCategoryDeclared(db, input.orgId, categoryKey);
     if (input.scheduleId) {
       const updated = (await db.execute<ScheduleRow>(sql`
         update hrm_retention_schedules

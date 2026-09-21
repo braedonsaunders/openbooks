@@ -6,9 +6,13 @@
 --
 -- WHAT NEEDS STORAGE:
 --
---   hrm_document_templates — org-authored document shells (contract,
---   policy, acknowledgment, letter, form, other — categories are an
---   org-declared Setup list, never an enum). body_template is mustache
+--   hrm_document_categories — the org-declared Setup vocabulary
+--   (contract, policy, acknowledgment, letter, form, other — never an
+--   enum). Templates, documents, and schedules name keys from this
+--   list; the services refuse unknown keys against it.
+--
+--   hrm_document_templates — org-authored document shells (categories are
+--   an org-declared Setup list, never an enum). body_template is mustache
 --   merged at generate time through the packages/pdf idiom; merge_fields
 --   declares the keys, resolved ONLY from the employment/person/org read
 --   services through an allowlist in code. signer_roles is the ordered
@@ -88,6 +92,38 @@ SET standard_conforming_strings = on;
 SET client_min_messages = warning;
 
 SELECT pg_catalog.set_config('search_path', 'public, pg_catalog', false);
+
+-- (0) Document categories: the org-declared Setup vocabulary templates,
+-- documents, and retention schedules name. category_key columns stay text
+-- (no FK: a category deleted mid-life must not strand issued documents),
+-- and the services refuse unknown keys against this table — the Setup →
+-- Workforce → Document Categories screen the refusal remedy names.
+CREATE TABLE IF NOT EXISTS public.hrm_document_categories (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v7(),
+  org_id uuid NOT NULL,
+  key text NOT NULL,
+  label text NOT NULL,
+  is_active boolean NOT NULL DEFAULT true,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  created_by uuid,
+  updated_at timestamp with time zone DEFAULT now() NOT NULL,
+  updated_by uuid
+);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'hrm_document_categories_key') THEN
+    ALTER TABLE public.hrm_document_categories
+      ADD CONSTRAINT hrm_document_categories_key CHECK (char_length(btrim(key)) > 0);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'hrm_document_categories_label') THEN
+    ALTER TABLE public.hrm_document_categories
+      ADD CONSTRAINT hrm_document_categories_label CHECK (char_length(btrim(label)) > 0);
+  END IF;
+END $$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS hrm_document_categories_org_key
+  ON public.hrm_document_categories (org_id, key);
 
 -- (1) Document templates.
 CREATE TABLE IF NOT EXISTS public.hrm_document_templates (
@@ -579,15 +615,16 @@ CREATE TRIGGER hrm_survey_responses_immutable
   FOR EACH ROW EXECUTE FUNCTION public.hrm_documents_history_guard();
 
 -- Tenant RLS (0195 pattern): ENABLE + FORCE with org_isolation USING + WITH
--- CHECK on all eleven tables.
+-- CHECK on all twelve tables.
 DO $$
 DECLARE tbl text;
 BEGIN
   FOREACH tbl IN ARRAY ARRAY[
-    'hrm_document_templates', 'hrm_documents', 'hrm_document_signers',
-    'hrm_document_events', 'hrm_retention_schedules', 'hrm_retention_actions',
-    'hrm_data_subject_exports', 'hrm_surveys', 'hrm_survey_questions',
-    'hrm_survey_invitations', 'hrm_survey_responses'] LOOP
+    'hrm_document_categories', 'hrm_document_templates', 'hrm_documents',
+    'hrm_document_signers', 'hrm_document_events', 'hrm_retention_schedules',
+    'hrm_retention_actions', 'hrm_data_subject_exports', 'hrm_surveys',
+    'hrm_survey_questions', 'hrm_survey_invitations',
+    'hrm_survey_responses'] LOOP
     EXECUTE format('ALTER TABLE ONLY public.%I ENABLE ROW LEVEL SECURITY', tbl);
     EXECUTE format('ALTER TABLE ONLY public.%I FORCE ROW LEVEL SECURITY', tbl);
     IF NOT EXISTS (SELECT 1 FROM pg_policies
@@ -607,6 +644,8 @@ BEGIN
   END LOOP;
 END $$;
 
+COMMENT ON TABLE public.hrm_document_categories IS
+  'HRM document categories (0230): the org-declared Setup vocabulary for template, document, and retention-schedule category keys.';
 COMMENT ON TABLE public.hrm_document_templates IS
   'HRM document templates (0230): org-authored shells with mustache bodies and declared merge fields; signatures ordered by signer_roles.';
 COMMENT ON TABLE public.hrm_documents IS
