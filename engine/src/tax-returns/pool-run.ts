@@ -14,6 +14,7 @@ import {
   TAX_DEPRECIATION_REGIMES,
 } from "./depreciation-pool.ts";
 import { MacrsShortYearError, assertShortYearFactorAgrees } from "./macrs-short-year.ts";
+import { loadOrgMacrsWindows, MacrsCalendarError } from "./macrs-calendar.ts";
 import { MacrsVintageError, resolveMacrsVintages, type MacrsWorkpaperEvent } from "./macrs-vintages.ts";
 import { continuingNzAssociatedRates, nzPooledDepreciationRate, TaxBasisPolicyError } from "./asset-basis-policy.ts";
 import { effectiveClasses, regimeClassAttribute } from "./tax-classification.ts";
@@ -282,8 +283,18 @@ async function qualifyingActivityCeased(tx: SqlExecutor, run: TaxPoolRun): Promi
   return !!row;
 }
 
-async function macrsWindows(tx: SqlExecutor, run: TaxPoolRun): Promise<MacrsYearWindow[]> {
-  const rows = (
+async function macrsWindows(
+  tx: SqlExecutor,
+  run: TaxPoolRun,
+  fromOn: string,
+): Promise<MacrsYearWindow[]> {
+  let calendar: MacrsYearWindow[];
+  try {
+    calendar = await loadOrgMacrsWindows(tx, run.orgId, fromOn, run.yearEnd);
+  } catch (error) {
+    throw error instanceof MacrsCalendarError ? new TaxPoolError(error.message) : error;
+  }
+  const priorRuns = (
     await tx.execute<{ tax_year: number; year_start: string; year_end: string }>(sql`
       select distinct pp.tax_year, pp.year_start::text, pp.year_end::text
         from tax_pool_periods pp
@@ -293,10 +304,20 @@ async function macrsWindows(tx: SqlExecutor, run: TaxPoolRun): Promise<MacrsYear
          and pp.tax_year<${run.taxYear}
        order by pp.tax_year`)
   ).rows;
-  return [
-    ...rows.map((row) => ({ taxYear: row.tax_year, yearStart: row.year_start, yearEnd: row.year_end })),
-    { taxYear: run.taxYear, yearStart: run.yearStart, yearEnd: run.yearEnd },
-  ];
+  const byYear = new Map(calendar.map((row) => [row.taxYear, row]));
+  for (const row of priorRuns) {
+    byYear.set(row.tax_year, {
+      taxYear: row.tax_year,
+      yearStart: row.year_start,
+      yearEnd: row.year_end,
+    });
+  }
+  byYear.set(run.taxYear, {
+    taxYear: run.taxYear,
+    yearStart: run.yearStart,
+    yearEnd: run.yearEnd,
+  });
+  return [...byYear.values()].sort((left, right) => left.taxYear - right.taxYear);
 }
 
 async function receiverAssetIds(tx: SqlExecutor, run: TaxPoolRun): Promise<Set<string>> {
@@ -803,7 +824,6 @@ async function runMacrs(
 ): Promise<TaxPoolRunResult> {
   const { orgId, taxYear } = run;
   const papers = await liveWorkpapers(tx, run, attr);
-  const windows = await macrsWindows(tx, run);
   const receivers = await receiverAssetIds(tx, run);
   const assets = (await tx.execute<MacrsAssetRow>(sql`
     select a.id,
@@ -833,7 +853,14 @@ async function runMacrs(
        and coalesce(a.in_service_on, a.acquired_on) <= ${run.yearEnd}
        and coalesce(a.custom->'taxDepreciation'->${run.regime}->>'classCode', c.tax_attributes->>${attr}, '') <> ''`));
 
-  const unknownClasses = [...new Set(assets.rows
+  const fromOn = [
+    run.yearStart,
+    ...assets.rows.map((asset) => asset.placed_on),
+    ...papers.map((paper) => paper.placed_in_service_on ?? paper.effective_on),
+  ].reduce((earliest, date) => (date < earliest ? date : earliest));
+  const windows = await macrsWindows(tx, run, fromOn);
+
+  const unknownClasses = [...new Set(assets.rows)
     .map((asset) => asset.class_code)
     .filter((classCode) => !classes.has(classCode)))].sort();
   if (unknownClasses.length > 0) {

@@ -1187,7 +1187,7 @@ const ALLOWED_KEYS: Record<TaxBasisRegime, readonly string[]> = {
     "regime", "relationship", "originalCapitalCost", "allocationMethod", "allocatedCapitalCost",
     "allocationFraction", "allocationReason", "partFairMarketValue", "retainedFairMarketValue",
     "statutoryProceeds", "fairMarketValue", "payment", "sellerOriginalCapitalCost",
-    "transferorCharacter", "capitalGainsInclusionRate", "capitalGainsInclusionRateCitation",
+    "transferorCharacter",
     "capitalGainsDeductionClaimed", "rolloverElection", "electedAmount",
   ],
   uk_wda: [
@@ -1271,18 +1271,26 @@ export function validateDeclaredDecimal(name: string, value: unknown): string {
 
 const DRAFT_CONTEXT_KEYS = new Set(["sourceOperation", "applicable", "usSellerMacrsStatus"]);
 
-/** Server-derived US facts. Never declared on a workpaper request; validate
- *  always drops an incoming copy and reconstructs from history. */
-export const US_MACRS_DERIVED_FACT_KEYS = ["buyerVintages"] as const;
+/** Server-derived facts. Never declared on a workpaper request; validate
+ *  always drops an incoming copy and reconstructs from history or
+ *  effectiveOn. */
+export const DERIVED_TAX_REGIME_FACT_KEYS = [
+  "buyerVintages",
+  "capitalGainsInclusionRate",
+  "capitalGainsInclusionRateCitation",
+] as const;
 
 export function declaredTaxRegimeFacts<T extends TaxRegimeBasis>(row: T): T {
-  if (row.regime !== "us_macrs") return row;
-  const { buyerVintages: _buyerVintages, ...declared } = row as UsMacrsRegimeBasis;
-  return declared as T;
+  return stripDerivedTaxRegimeFacts(row as TaxBasisDraft) as T;
 }
 
-function stripDerivedUsMacrsFacts(draft: TaxBasisDraft): TaxBasisDraft {
-  const { buyerVintages: _buyerVintages, ...declared } = draft;
+function stripDerivedTaxRegimeFacts(draft: TaxBasisDraft): TaxBasisDraft {
+  const {
+    buyerVintages: _buyerVintages,
+    capitalGainsInclusionRate: _capitalGainsInclusionRate,
+    capitalGainsInclusionRateCitation: _capitalGainsInclusionRateCitation,
+    ...declared
+  } = draft;
   return declared;
 }
 
@@ -1497,7 +1505,7 @@ export function validateTaxRegimeBasis(
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new TaxBasisPolicyError("each regime workpaper must be an object");
   }
-  const raw = stripDerivedUsMacrsFacts(input as TaxBasisDraft);
+  const raw = stripDerivedTaxRegimeFacts(input as TaxBasisDraft);
   if (!TAX_BASIS_REGIMES.includes(raw.regime as TaxBasisRegime)) {
     throw new TaxBasisPolicyError(`unknown tax depreciation regime "${String(raw.regime ?? "")}"`);
   }
