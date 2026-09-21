@@ -49,6 +49,7 @@ import {
   type TaxRegimeBasis,
   type UsBuyerMacrsSchedule,
   type UsMacrsRegimeBasis,
+  type UsSellerMacrsVintageContext,
 } from "./asset-basis-policy.ts";
 import {
   classifyAssetFromContext,
@@ -58,6 +59,11 @@ import {
   regimeClassAttribute,
   type ClassifiedRegime,
 } from "./tax-classification.ts";
+import {
+  sellerMacrsHistoryBeforeSource,
+  type MacrsVintageDefaults,
+  type MacrsWorkpaperEvent,
+} from "./macrs-vintages.ts";
 
 export class TaxAssetBasisError extends Error {
   readonly name = "TaxAssetBasisError";
@@ -468,6 +474,214 @@ async function resolveSource(
   };
 }
 
+const INERT_MACRS_DEFAULTS: MacrsVintageDefaults = {
+  recoveryPeriodYears: "5",
+  method: "200_db",
+  convention: "half_year",
+  section179: "0",
+  bonusPercent: "0",
+  businessUsePercent: "100",
+  shortYearMethod: "simplified",
+};
+
+function taxBasisSourceKey(
+  sourceChangeId: string | null | undefined,
+  sourceEventId: string | null | undefined,
+): string {
+  return sourceChangeId ? `change:${sourceChangeId}` : `event:${sourceEventId}`;
+}
+
+function asStoredText(value: unknown): string | null {
+  if (value == null || value === "") return null;
+  return String(value);
+}
+
+function asMacrsEventFromStored(row: {
+  asset_id: string;
+  receiving_asset_id: string | null;
+  effective_on: string;
+  seller_subsidiary_id: string;
+  buyer_subsidiary_id: string | null;
+  facts: Record<string, unknown>;
+  computed: Record<string, unknown>;
+}): MacrsWorkpaperEvent {
+  const facts = row.facts;
+  const computed = row.computed;
+  return {
+    asset_id: row.asset_id,
+    receiving_asset_id: row.receiving_asset_id,
+    effective_on: row.effective_on,
+    seller_subsidiary_id: row.seller_subsidiary_id,
+    buyer_subsidiary_id: row.buyer_subsidiary_id,
+    remaining_basis: asStoredText(computed.remainingUnadjustedBasis),
+    disposed_unadjusted_basis: asStoredText(computed.disposedUnadjustedBasis),
+    carryover_basis: asStoredText(computed.carryoverBasis),
+    excess_basis: asStoredText(computed.excessBasis),
+    buyer_cost: asStoredText(computed.buyerCost),
+    recognition: asStoredText(computed.recognition ?? facts.recognition),
+    section_168i7_kind: asStoredText(computed.section168i7Kind ?? facts.section168i7Kind),
+    related_person: facts.relatedPerson == null ? null : String(facts.relatedPerson),
+    recovery_period_years: asStoredText(computed.recoveryPeriodYears ?? facts.recoveryPeriodYears),
+    placed_in_service_on: asStoredText(computed.placedInServiceOn ?? facts.placedInServiceOn),
+    macrs_method: asStoredText(computed.method ?? facts.method),
+    macrs_convention: asStoredText(computed.convention ?? facts.convention),
+    short_year_method: asStoredText(computed.shortYearMethod ?? facts.shortYearMethod),
+    buyer_placed_in_service_on: asStoredText(computed.buyerPlacedInServiceOn),
+    buyer_recovery_period_years: asStoredText(computed.buyerRecoveryPeriodYears),
+    buyer_method: asStoredText(computed.buyerMethod),
+    buyer_convention: asStoredText(computed.buyerConvention),
+    original_unadjusted_basis: asStoredText(
+      computed.originalUnadjustedBasis ?? facts.originalUnadjustedBasis,
+    ),
+    section_179: asStoredText(computed.section179 ?? facts.section179),
+    bonus_percent: asStoredText(computed.bonusPercent ?? facts.bonusPercent),
+    business_use_percent: asStoredText(computed.businessUsePercent ?? facts.businessUsePercent),
+    prior_depreciation: asStoredText(computed.priorDepreciation ?? facts.priorDepreciation),
+    vintage_allocations: Array.isArray(computed.vintageAllocations)
+      ? computed.vintageAllocations
+      : Array.isArray(facts.vintageAllocations)
+        ? facts.vintageAllocations
+        : null,
+  };
+}
+
+type StoredUsMacrsPaper = {
+  sourceKey: string;
+  event: MacrsWorkpaperEvent;
+};
+
+async function loadUsMacrsPapersForAssets(
+  tx: SqlExecutor,
+  orgId: string,
+  assetIds: string[],
+): Promise<StoredUsMacrsPaper[]> {
+  if (assetIds.length === 0) return [];
+  const idList = sql.join(assetIds.map((id) => sql`${id}`), sql`, `);
+  const rows = (
+    await tx.execute<{
+      source_change_id: string | null;
+      source_event_id: string | null;
+      asset_id: string;
+      receiving_asset_id: string | null;
+      effective_on: string;
+      seller_subsidiary_id: string;
+      buyer_subsidiary_id: string | null;
+      facts: Record<string, unknown>;
+      computed: Record<string, unknown>;
+    }>(sql`
+      select w.source_change_id, w.source_event_id, w.asset_id, w.receiving_asset_id,
+             w.effective_on::text, seller.subsidiary_id as seller_subsidiary_id,
+             buyer.subsidiary_id as buyer_subsidiary_id, w.facts, w.computed
+        from tax_asset_basis_workpapers w
+        join fixed_assets seller on seller.org_id=w.org_id and seller.id=w.asset_id
+        left join fixed_assets buyer on buyer.org_id=w.org_id and buyer.id=w.receiving_asset_id
+       where w.org_id=${orgId} and w.regime='us_macrs' and w.reversed_by_change_id is null
+         and (w.asset_id in (${idList}) or w.receiving_asset_id in (${idList}))
+       order by w.effective_on, w.created_at, w.id`)
+  ).rows;
+  return rows.map((row) => ({
+    sourceKey: taxBasisSourceKey(row.source_change_id, row.source_event_id),
+    event: asMacrsEventFromStored(row),
+  }));
+}
+
+async function listSellerSourceOrder(
+  tx: SqlExecutor,
+  orgId: string,
+  sellerAssetId: string,
+): Promise<string[]> {
+  const rows = (
+    await tx.execute<{
+      event_id: string;
+      financial_change_id: string | null;
+    }>(sql`
+      select e.id as event_id, e.financial_change_id
+        from asset_events e
+        left join asset_transfer_bases t on t.org_id=e.org_id and t.change_id=e.financial_change_id
+          and t.reversed_by_change_id is null
+        left join fixed_assets rec on rec.org_id=t.org_id and rec.id=t.receiving_asset_id
+       where e.org_id=${orgId}
+         and e.kind in ('partially_disposed','transferred','disposed','written_off')
+         and (e.asset_id=${sellerAssetId} or rec.id=${sellerAssetId})
+         and not exists(select 1 from asset_events r where r.org_id=e.org_id and r.reverses_event_id=e.id)
+       order by e.occurred_on, e.created_at, e.id`)
+  ).rows;
+  const seen = new Set<string>();
+  const keys: string[] = [];
+  for (const row of rows) {
+    const key = taxBasisSourceKey(row.financial_change_id, row.event_id);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    keys.push(key);
+  }
+  return keys;
+}
+
+function papersBeforeSource(
+  papers: StoredUsMacrsPaper[],
+  sellerAssetId: string,
+  sourceKey: string,
+  order: Map<string, number>,
+  sourceIndex: number,
+  occurredOn: string,
+): MacrsWorkpaperEvent[] {
+  return papers
+    .filter((paper) => {
+      if (paper.sourceKey === sourceKey) return false;
+      if (paper.event.asset_id !== sellerAssetId && paper.event.receiving_asset_id !== sellerAssetId) {
+        return false;
+      }
+      const index = order.get(paper.sourceKey);
+      if (index != null) return index < sourceIndex;
+      return paper.event.effective_on < occurredOn;
+    })
+    .map((paper) => paper.event);
+}
+
+async function loadUsSellerMacrsVintageContext(
+  tx: SqlExecutor,
+  orgId: string,
+  args: {
+    sellerAssetId: string;
+    sourceChangeId: string | null;
+    sourceEventId: string | null;
+    occurredOn: string;
+  },
+): Promise<UsSellerMacrsVintageContext> {
+  const seller = (
+    await tx.execute<{ subsidiary_id: string }>(sql`
+      select subsidiary_id from fixed_assets
+       where org_id=${orgId} and id=${args.sellerAssetId}`)
+  ).rows[0];
+  if (!seller) {
+    return {
+      status: "history_refused",
+      refusal:
+        "the seller asset for this source could not be loaded; correct the posted source before recording tax basis",
+    };
+  }
+  const sourceKey = taxBasisSourceKey(args.sourceChangeId, args.sourceEventId);
+  const orderKeys = await listSellerSourceOrder(tx, orgId, args.sellerAssetId);
+  const order = new Map(orderKeys.map((key, index) => [key, index]));
+  const sourceIndex = order.get(sourceKey) ?? orderKeys.length;
+  const papers = await loadUsMacrsPapersForAssets(tx, orgId, [args.sellerAssetId]);
+  return sellerMacrsHistoryBeforeSource({
+    assetId: args.sellerAssetId,
+    subsidiaryId: seller.subsidiary_id,
+    papers: papersBeforeSource(papers, args.sellerAssetId, sourceKey, order, sourceIndex, args.occurredOn),
+    defaults: INERT_MACRS_DEFAULTS,
+  });
+}
+
+function usSellerMacrsForChoice(
+  regimes: { code: string; applicable: TaxBasisApplicableSide }[],
+  context: UsSellerMacrsVintageContext | null,
+): UsSellerMacrsVintageContext | null {
+  const us = regimes.find((row) => row.code === "us_macrs");
+  if (!us || !taxBasisSideApplies(us.applicable, "seller")) return null;
+  return context;
+}
+
 async function snapshot(
   tx: SqlExecutor,
   orgId: string,
@@ -498,6 +712,26 @@ async function snapshot(
   const transfer = source.sourceOperation === "intercompany_transfer";
   assertClassifiedRegimes(input.regimes, sellerClassified, receiverClassified, transfer);
   const applicable = classifiedApplicable(sellerClassified, receiverClassified, transfer);
+  const usSellerMacrs = taxBasisSideApplies(applicable.us_macrs, "seller")
+    ? await loadUsSellerMacrsVintageContext(tx, orgId, {
+        sellerAssetId: source.sellerAssetId,
+        sourceChangeId: source.sourceChangeId,
+        sourceEventId: source.sourceEventId,
+        occurredOn: source.effectiveOn,
+      })
+    : null;
+  if (usSellerMacrs?.status === "history_refused") {
+    throw new TaxAssetBasisError(usSellerMacrs.refusal);
+  }
+  try {
+    validateTaxAssetBasisInput(input, {
+      sourceOperation: source.sourceOperation,
+      applicableByRegime: applicable,
+      usSellerMacrs,
+    });
+  } catch (error) {
+    throw error instanceof Error ? new TaxAssetBasisError(error.message) : error;
+  }
   const frozen = await freezeRegimes(
     tx,
     orgId,
@@ -565,6 +799,7 @@ export async function listTaxAssetBasisSources(
         financial_change_id: string | null;
         kind: TaxBasisSourceKind;
         occurred_on: string;
+        seller_asset_id: string;
         book_name: string | null;
         asset_label: string;
         subsidiary_id: string;
@@ -577,6 +812,7 @@ export async function listTaxAssetBasisSources(
         receiving_tax: unknown;
       }>(sql`
         select e.id as event_id, e.financial_change_id, e.kind, e.occurred_on::text,
+               e.asset_id as seller_asset_id,
                coalesce(b.name, jb.name) as book_name,
                a.asset_number||' — '||a.name as asset_label,
                a.subsidiary_id, s.name as subsidiary_label,
@@ -634,8 +870,9 @@ export async function listTaxAssetBasisSources(
            )`)
     ).rows;
     const classification = await loadRegimeClassificationContext(db, orgId);
-    const seen = new Set<string>();
+      const seen = new Set<string>();
     const sources: TaxAssetBasisSourceChoice[] = [];
+    const sellerHistory = new Map<string, UsSellerMacrsVintageContext>();
     for (const row of rows) {
       if (await sourceReversed(db, orgId, {
         sourceChangeId: row.financial_change_id,
@@ -657,6 +894,27 @@ export async function listTaxAssetBasisSources(
             ? item.source_change_id === row.financial_change_id
             : item.source_event_id === row.event_id,
         );
+      const regimes = taxBasisSourceRegimes(
+        classifyAssetFromContext(row.seller_custom, row.seller_tax, classification),
+        classifyAssetFromContext(row.receiving_custom, row.receiving_tax, classification),
+        row.kind === "transferred",
+      );
+      const usSeller = regimes.find((item) => item.code === "us_macrs");
+      let openMacrsVintages: UsSellerMacrsVintageContext | null = null;
+      if (usSeller && taxBasisSideApplies(usSeller.applicable, "seller")) {
+        const cacheKey = `${row.seller_asset_id}:${key}`;
+        let history = sellerHistory.get(cacheKey);
+        if (!history) {
+          history = await loadUsSellerMacrsVintageContext(db, orgId, {
+            sellerAssetId: row.seller_asset_id,
+            sourceChangeId: row.financial_change_id,
+            sourceEventId: row.financial_change_id ? null : row.event_id,
+            occurredOn: row.occurred_on,
+          });
+          sellerHistory.set(cacheKey, history);
+        }
+        openMacrsVintages = usSellerMacrsForChoice(regimes, history);
+      }
       sources.push({
         key,
         sourceChangeId: row.financial_change_id,
@@ -664,11 +922,8 @@ export async function listTaxAssetBasisSources(
         occurredOn: row.occurred_on,
         sourceKind: row.kind,
         sourceOperation: taxBasisSourceOperation(row.kind),
-        regimes: taxBasisSourceRegimes(
-          classifyAssetFromContext(row.seller_custom, row.seller_tax, classification),
-          classifyAssetFromContext(row.receiving_custom, row.receiving_tax, classification),
-          row.kind === "transferred",
-        ),
+        regimes,
+        openMacrsVintages,
         bookLabel: row.book_name,
         assetLabel: row.asset_label,
         subsidiaryLabel: row.subsidiary_label,
@@ -719,9 +974,21 @@ export async function proposeTaxAssetBasis(
           throw new TaxAssetBasisError("the frozen workpaper is missing its source operation");
         }
         const applicable = (replay.payload.applicable ?? {}) as Record<string, TaxBasisApplicableSide>;
+        const usSellerMacrs = taxBasisSideApplies(applicable.us_macrs, "seller")
+          ? await loadUsSellerMacrsVintageContext(db, orgId, {
+              sellerAssetId: String(replay.payload.sellerAssetId ?? ""),
+              sourceChangeId: (replay.payload.sourceChangeId as string | null) ?? null,
+              sourceEventId: (replay.payload.sourceEventId as string | null) ?? null,
+              occurredOn: String(replay.payload.effectiveOn ?? ""),
+            })
+          : null;
+        if (usSellerMacrs?.status === "history_refused") {
+          throw new TaxAssetBasisError(usSellerMacrs.refusal);
+        }
         const validated = validateTaxAssetBasisInput(input, {
           sourceOperation: sourceOperation as TaxBasisSourceOperation,
           applicableByRegime: applicable,
+          usSellerMacrs,
         });
         const frozen = await freezeRegimes(
           db,
@@ -779,9 +1046,21 @@ export async function proposeTaxAssetBasis(
         receiverClassified,
         source.sourceOperation === "intercompany_transfer",
       );
+      const usSellerMacrs = taxBasisSideApplies(applicable.us_macrs, "seller")
+        ? await loadUsSellerMacrsVintageContext(db, orgId, {
+            sellerAssetId: source.sellerAssetId,
+            sourceChangeId: source.sourceChangeId,
+            sourceEventId: source.sourceEventId,
+            occurredOn: source.effectiveOn,
+          })
+        : null;
+      if (usSellerMacrs?.status === "history_refused") {
+        throw new TaxAssetBasisError(usSellerMacrs.refusal);
+      }
       const validated = validateTaxAssetBasisInput(input, {
         sourceOperation: source.sourceOperation,
         applicableByRegime: applicable,
+        usSellerMacrs,
       });
       const state = await snapshot(db, orgId, actorId, assetId, validated);
       if (state.existingWorkpaperChangeId) {

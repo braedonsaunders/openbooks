@@ -604,3 +604,154 @@ test(
       );
     }),
 );
+
+async function classifyUs(f: Fixture) {
+  await db.execute(sql`
+    insert into tax_regimes(org_id,code,name,country_code,calculation_model,class_attribute,is_active)
+    values(${f.org.orgId},'us_macrs','United States MACRS','US','macrs','us_macrs_class',true)`);
+  const updated = await db.execute(sql`
+    update asset_categories set tax_attributes=tax_attributes||'{"us_macrs_class":"gds_5"}'::jsonb
+     where org_id=${f.org.orgId} and id=${f.categoryId} returning id`);
+  assert.equal(updated.rows.length, 1);
+}
+
+function usSellerPaper(
+  f: Fixture,
+  extras: Partial<Extract<TaxAssetBasisInput["regimes"][number], { regime: "us_macrs" }>> = {},
+): TaxAssetBasisInput {
+  return {
+    sourceChangeId: f.sourceChangeId,
+    reason: "Record the original MACRS vintage for the disposed component",
+    assessment:
+      "First seller declaration of the statutory vintage; remaining 2250 continues the same placed date",
+    idempotencyKey: randomUUID(),
+    regimes: [
+      {
+        regime: "us_macrs",
+        relationship: "arms_length",
+        dispositionTrigger: "sale",
+        originalUnadjustedBasis: "3000.00",
+        remainingUnadjustedBasis: "2250.00",
+        disposedUnadjustedBasis: "750.00",
+        placedInServiceOn: "2026-07-01",
+        recoveryPeriodYears: "5",
+        method: "200_db",
+        convention: "half_year",
+        recognition: "taxable",
+        relatedPerson: false,
+        amountRealizedRule: "amount_realized",
+        statutoryProceeds: "600.00",
+        ...extras,
+      },
+    ],
+  };
+}
+
+test(
+  "US seller source context requires an original declaration then revalidates open vintage keys",
+  { skip: !DB },
+  () =>
+    fixture(async (f) => {
+      await classifyUs(f);
+      const firstSources = await listTaxAssetBasisSources(
+        f.org.orgId,
+        f.assetId,
+        f.actors.submitterId,
+      );
+      assert.equal(firstSources.sources[0]!.openMacrsVintages?.status, "original_declaration_required");
+      await applyApproved(f, usSellerPaper(f));
+
+      const secondChangeId = await proposeAssetChange(
+        f.org.orgId,
+        f.assetId,
+        f.actors.submitterId,
+        {
+          operation: "partial_disposal",
+          effectiveOn: "2026-08-01",
+          reason: "Sell a second identical component",
+          assessment:
+            "Equal historical cost and service support the second quarter allocation",
+          idempotencyKey: randomUUID(),
+          portion: { percent: "25" },
+          proceeds: "600",
+          proceedsAccountId: f.org.accounts.clearing,
+        },
+      );
+      await approve(f, secondChangeId);
+      await applyAssetChange(f.org.orgId, secondChangeId, f.actors.submitterId);
+
+      const listed = await listTaxAssetBasisSources(
+        f.org.orgId,
+        f.assetId,
+        f.actors.submitterId,
+      );
+      const second = listed.sources.find((row) => row.sourceChangeId === secondChangeId);
+      assert.ok(second, "the second posted disposal must be a tax source");
+      assert.equal(second.openMacrsVintages?.status, "ready");
+      if (second.openMacrsVintages?.status !== "ready") return;
+      assert.deepEqual(second.openMacrsVintages.vintages.map((row) => row.key), [
+        "original:2026-07-01",
+      ]);
+      assert.equal(second.openMacrsVintages.vintages[0]!.unadjustedBasis, "2250.0000");
+
+      const readyBase = {
+        sourceChangeId: secondChangeId,
+        reason: "Allocate the remaining MACRS vintage for the second component",
+        assessment:
+          "The remaining open vintage is the first declaration's leftover unadjusted basis",
+        idempotencyKey: randomUUID(),
+        regimes: [
+          {
+            regime: "us_macrs" as const,
+            relationship: "arms_length" as const,
+            dispositionTrigger: "sale" as const,
+            remainingUnadjustedBasis: "1500.00",
+            disposedUnadjustedBasis: "750.00",
+            recognition: "taxable" as const,
+            relatedPerson: false,
+            amountRealizedRule: "amount_realized" as const,
+            statutoryProceeds: "600.00",
+          },
+        ],
+      };
+      await assert.rejects(
+        proposeTaxAssetBasis(f.org.orgId, f.assetId, f.actors.submitterId, readyBase),
+        /vintageAllocations must name every open MACRS vintage/,
+      );
+      await assert.rejects(
+        proposeTaxAssetBasis(f.org.orgId, f.assetId, f.actors.submitterId, {
+          ...readyBase,
+          idempotencyKey: randomUUID(),
+          regimes: readyBase.regimes.map((row) => ({
+            ...row,
+            vintageAllocations: [
+              {
+                source: "carryover",
+                placedInServiceOn: "2023-03-15",
+                transferOn: "2025-08-01",
+                disposedUnadjustedBasis: "750.00",
+                remainingUnadjustedBasis: "1500.00",
+              },
+            ],
+          })),
+        }),
+        /is not an open MACRS vintage/,
+      );
+      const proposed = await proposeTaxAssetBasis(f.org.orgId, f.assetId, f.actors.submitterId, {
+        ...readyBase,
+        idempotencyKey: randomUUID(),
+        regimes: readyBase.regimes.map((row) => ({
+          ...row,
+          vintageAllocations: [
+            {
+              source: "original",
+              placedInServiceOn: "2026-07-01",
+              disposedUnadjustedBasis: "750.00",
+              remainingUnadjustedBasis: "1500.00",
+            },
+          ],
+        })),
+      });
+      assert.ok(proposed);
+    }),
+);
