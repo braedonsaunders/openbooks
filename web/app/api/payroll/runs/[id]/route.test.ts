@@ -34,6 +34,7 @@ const mockSources = new Map<string, string>([
       export const pool = { query() { return Promise.resolve({ rows: [] }) } }
       export const orgContext = { getStore() { return undefined } }
       export function registerRequestOrgResolver() {}
+      export function currentRequestOrgResolver() { return null }
       export function ambientTenantOrgId() { return null }
       export async function assertSafeRuntimeDatabaseRole() {}
       export async function withOrgTransaction(_orgId, fn) { return fn() }

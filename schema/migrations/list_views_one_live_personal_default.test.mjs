@@ -61,10 +61,13 @@ test("0219 unique partial index enforces one live personal list-view isDefault",
     `${repairName} must be the next free ordinal after 0218`,
   );
   assert.equal(repairName, "0219_list_views_one_live_personal_default.sql");
-  assert.equal(
-    publishedSql.filter((file) => file.startsWith("0211_")).length,
-    0,
-    "0211 is reserved for Payroll; generated/ must contain no 0211_* from this goal",
+  const unexpected211 = publishedSql.filter(
+    (file) => file.startsWith("0211_") && file !== "0211_pay_run_bank_file_zengin_cnab240.sql",
+  );
+  assert.deepEqual(
+    unexpected211,
+    [],
+    "0211 is reserved for Payroll (0211_pay_run_bank_file_zengin_cnab240.sql); this goal must not publish a 0211_* of its own",
   );
   assert.equal(
     publishedSql.filter((file) => file.startsWith("0220_")).length,
