@@ -8,7 +8,7 @@ import {
   computePoolYear,
   macrsConventionAfterMidQuarter,
   macrsMidQuarterByWindow,
-  macrsOwnershipWindowLoads,
+  macrsWindowsPreservingAppliedContext,
   nextCalendarDay,
   type MacrsYearWindow,
   type PoolClassDef,
@@ -21,7 +21,16 @@ import {
   MacrsCalendarError,
   resolveTaxYearWindow,
 } from "./macrs-calendar.ts";
-import { MacrsVintageError, resolveMacrsVintages, type MacrsWorkpaperEvent } from "./macrs-vintages.ts";
+import {
+  MacrsVintageError,
+  macrsVintageWindowPlan,
+  macrsWindowsFromAppliedComputed,
+  resolveMacrsVintages,
+  type MacrsFrozenLineagePaper,
+  type MacrsLineageIdentity,
+  type MacrsVintage,
+  type MacrsWorkpaperEvent,
+} from "./macrs-vintages.ts";
 import { continuingNzAssociatedRates, nzPooledDepreciationRate, TaxBasisPolicyError } from "./asset-basis-policy.ts";
 import { effectiveClasses, regimeClassAttribute } from "./tax-classification.ts";
 import { legacyPoolDisposition, taxEventRequiresTaxWorkpaper } from "./pool-run-legacy.ts";
@@ -137,6 +146,7 @@ type LiveWorkpaper = {
   prior_depreciation: string | null;
   vintage_allocations: unknown;
   buyer_vintages: unknown;
+  computed: Record<string, unknown> | null;
 };
 
 function classifiedClassSql(
@@ -266,7 +276,8 @@ async function liveWorkpapers(
              w.computed->>'businessUsePercent' as business_use_percent,
              w.computed->>'priorDepreciation' as prior_depreciation,
              w.computed->'vintageAllocations' as vintage_allocations,
-             w.computed->'buyerVintages' as buyer_vintages
+             w.computed->'buyerVintages' as buyer_vintages,
+             w.computed as computed
         from tax_asset_basis_workpapers w
         join fixed_assets seller on seller.org_id=w.org_id and seller.id=w.asset_id
         join asset_categories seller_c on seller_c.org_id=seller.org_id and seller_c.id=seller.category_id
@@ -937,27 +948,49 @@ async function runMacrs(
       throw error instanceof MacrsCalendarError ? new TaxPoolError(error.message) : error;
     }
   };
+  let lineagePapers: MacrsFrozenLineagePaper[];
+  try {
+    lineagePapers = papers.map((paper) => ({
+      asset_id: paper.asset_id,
+      receiving_asset_id: paper.receiving_asset_id,
+      effective_on: paper.effective_on,
+      seller_subsidiary_id: paper.seller_subsidiary_id,
+      buyer_vintages: paper.buyer_vintages,
+      vintage_allocations: paper.vintage_allocations,
+      taxYearWindows: macrsWindowsFromAppliedComputed(paper.computed),
+    }));
+  } catch (error) {
+    throw error instanceof MacrsVintageError ? new TaxPoolError(error.message) : error;
+  }
+  const vintageWindowCache = new Map<string, MacrsYearWindow[]>();
   const windowsForVintage = async (
-    vintage: { placedInServiceOn: string; transferOn: string | null },
+    assetId: string,
+    vintage: MacrsLineageIdentity | MacrsVintage,
   ): Promise<MacrsYearWindow[]> => {
-    const transferorId = papers.find((paper) =>
-      paper.effective_on === vintage.transferOn
-      && paper.buyer_subsidiary_id === run.subsidiaryId,
-    )?.seller_subsidiary_id ?? null;
-    const loaded: MacrsYearWindow[] = [];
-    for (const load of macrsOwnershipWindowLoads({
-      placedInServiceOn: vintage.placedInServiceOn,
-      transferOn: vintage.transferOn,
-      asOf: run.yearEnd,
-      currentSubsidiaryId: run.subsidiaryId,
-      transferorSubsidiaryId: transferorId,
-    })) {
-      loaded.push(...await loadOwnedWindows(load.subsidiaryId, load.fromOn, load.throughOn));
+    const cacheKey = `${assetId}:${vintage.source}:${vintage.placedInServiceOn}:${vintage.transferOn ?? ""}:${vintage.parentKey ?? ""}`;
+    const cached = vintageWindowCache.get(cacheKey);
+    if (cached) return cached;
+    try {
+      const plan = macrsVintageWindowPlan({
+        assetId,
+        currentSubsidiaryId: run.subsidiaryId,
+        asOf: run.yearEnd,
+        vintage,
+        papers: lineagePapers,
+      });
+      const later: MacrsYearWindow[] = [];
+      for (const load of plan.liveLoads) {
+        later.push(...await loadOwnedWindows(load.subsidiaryId, load.fromOn, load.throughOn));
+      }
+      const loaded = macrsWindowsPreservingAppliedContext(plan.frozenSets, later);
+      vintageWindowCache.set(cacheKey, loaded);
+      return loaded;
+    } catch (error) {
+      throw error instanceof MacrsVintageError ? new TaxPoolError(error.message) : error;
     }
-    return loaded;
   };
 
-  const unknownClasses = [...new Set(assets.rows)
+  const unknownClasses = [...new Set(assets.rows
     .map((asset) => asset.class_code)
     .filter((classCode) => !classes.has(classCode)))].sort();
   if (unknownClasses.length > 0) {
@@ -1031,7 +1064,7 @@ async function runMacrs(
   const vintageWindowLists: MacrsYearWindow[][] = [];
   for (const row of resolved) {
     for (const vintage of row.vintages) {
-      vintageWindowLists.push(await windowsForVintage(vintage));
+      vintageWindowLists.push(await windowsForVintage(row.asset.id, vintage));
     }
   }
   const windows = vintageWindowLists.flat();
@@ -1050,7 +1083,7 @@ async function runMacrs(
       const { asset, vintages, latestReceiver, yearPapers } = row;
       for (const vintage of vintages) {
         if (vintage.placedInServiceOn > run.yearEnd) continue;
-        const lineage = await windowsForVintage(vintage);
+        const lineage = await windowsForVintage(asset.id, vintage);
         const received = !!(vintage.adjustedCarryover && vintage.transferOn);
         const walkWindows = received
           ? lineage.filter((window) =>

@@ -23,6 +23,16 @@ import {
   type OpenMacrsVintage,
   type UsSellerMacrsVintageContext,
 } from "./asset-basis-policy.ts";
+import {
+  macrsOwnershipWindowLoads,
+  nextCalendarDay,
+  type MacrsYearWindow,
+} from "./depreciation-pool.ts";
+import {
+  freezeTaxYearWindowEvidence,
+  MacrsCalendarError,
+  taxYearWindowEvidence,
+} from "./macrs-calendar.ts";
 
 export class MacrsVintageError extends Error {
   readonly name = "MacrsVintageError";
@@ -93,6 +103,208 @@ export type MacrsVintageDefaults = {
   businessUsePercent: string;
   shortYearMethod: "simplified" | "allocation";
 };
+
+/** Asset/vintage identity used to find the paper that received or dated a vintage. */
+export type MacrsLineageIdentity = {
+  source: MacrsVintageSource;
+  placedInServiceOn: string;
+  transferOn: string | null;
+  parentKey: string | null;
+};
+
+export type MacrsLineagePaper = {
+  asset_id: string;
+  receiving_asset_id: string | null;
+  effective_on: string;
+  seller_subsidiary_id: string;
+  buyer_vintages?: unknown;
+  vintage_allocations?: unknown;
+};
+
+function lineageKey(identity: MacrsLineageIdentity): string {
+  return macrsVintageKey(identity);
+}
+
+function paperBuyerIdentities(paper: MacrsLineagePaper): MacrsLineageIdentity[] | null {
+  if (paper.buyer_vintages == null) return null;
+  if (!Array.isArray(paper.buyer_vintages) || paper.buyer_vintages.length === 0) return null;
+  try {
+    return parseFrozenMacrsBuyerVintages(paper.buyer_vintages).map((vintage) => ({
+      source: vintage.source,
+      placedInServiceOn: vintage.placedInServiceOn,
+      transferOn: vintage.transferOn,
+      parentKey: vintage.parentKey,
+    }));
+  } catch {
+    return null;
+  }
+}
+
+function paperSellerIdentities(paper: MacrsLineagePaper): MacrsLineageIdentity[] | null {
+  if (paper.vintage_allocations == null) return null;
+  try {
+    return parseMacrsVintageAllocations(paper.vintage_allocations).map((row) => ({
+      source: row.source,
+      placedInServiceOn: row.placedInServiceOn,
+      transferOn: row.transferOn ?? null,
+      parentKey: row.parentKey ?? null,
+    }));
+  } catch {
+    return null;
+  }
+}
+
+function paperReceivesVintage(paper: MacrsLineagePaper, vintage: MacrsLineageIdentity): boolean {
+  if (paper.receiving_asset_id == null) return false;
+  if (vintage.transferOn == null || paper.effective_on !== vintage.transferOn) return false;
+  const buyers = paperBuyerIdentities(paper);
+  if (buyers) return buyers.some((row) => lineageKey(row) === lineageKey(vintage));
+  return true;
+}
+
+function paperAllocatesSellerVintage(paper: MacrsLineagePaper, vintage: MacrsLineageIdentity): boolean {
+  const allocations = paperSellerIdentities(paper);
+  if (!allocations) return false;
+  return allocations.some((row) => lineageKey(row) === lineageKey(vintage));
+}
+
+/** The workpaper that received this vintage onto `receivingAssetId`.
+ *  Two same-day transfers to one entity are distinguished by receiving
+ *  asset and buyer-vintage parentKey — not by date and buyer subsidiary. */
+export function macrsVintageReceivingPaper<T extends MacrsLineagePaper>(
+  papers: readonly T[],
+  receivingAssetId: string,
+  vintage: MacrsLineageIdentity,
+): T | null {
+  if (vintage.transferOn == null) return null;
+  const ontoAsset = papers.filter((paper) => paper.receiving_asset_id === receivingAssetId);
+  const identified = ontoAsset.filter((paper) => paperReceivesVintage(paper, vintage));
+  if (identified.length === 1) return identified[0]!;
+  if (identified.length > 1) {
+    const sources = identified.map((paper) => paper.asset_id).sort().join(", ");
+    throw new MacrsVintageError(
+      `two applied workpapers on ${vintage.transferOn} receive onto this asset (${sources}); identify the vintage by source, placedInServiceOn, transferOn and parentKey — do not pick a transferor by date and buyer subsidiary`,
+    );
+  }
+  return null;
+}
+
+/** Applied papers that dated this vintage, oldest first: the receiving paper
+ *  plus later seller allocations on the same asset. */
+export function macrsVintageDatingPapers<T extends MacrsLineagePaper>(
+  papers: readonly T[],
+  assetId: string,
+  vintage: MacrsLineageIdentity,
+): T[] {
+  const dating = papers.filter((paper) => {
+    if (paper.receiving_asset_id === assetId && paperReceivesVintage(paper, vintage)) return true;
+    if (paper.asset_id !== assetId) return false;
+    if (paperAllocatesSellerVintage(paper, vintage)) return true;
+    return paper.receiving_asset_id !== assetId
+      && paper.vintage_allocations == null
+      && (vintage.transferOn == null || paper.effective_on >= vintage.transferOn);
+  });
+  return [...dating].sort((left, right) =>
+    left.effective_on === right.effective_on
+      ? left.asset_id.localeCompare(right.asset_id)
+      : left.effective_on.localeCompare(right.effective_on),
+  );
+}
+
+export type MacrsFrozenLineagePaper = MacrsLineagePaper & {
+  taxYearWindows?: MacrsYearWindow[] | null;
+};
+
+/** Live loads after every applied paper that already froze this vintage.
+ *  Transferor history is not re-fetched once a paper sealed its window set. */
+export function macrsVintageWindowPlan(args: {
+  assetId: string;
+  currentSubsidiaryId: string;
+  asOf: string;
+  vintage: MacrsLineageIdentity;
+  papers: readonly MacrsFrozenLineagePaper[];
+}): {
+  transferorSubsidiaryId: string | null;
+  frozenSets: MacrsYearWindow[][];
+  liveLoads: { subsidiaryId: string; fromOn: string; throughOn: string }[];
+} {
+  const receiving = macrsVintageReceivingPaper(args.papers, args.assetId, args.vintage);
+  const dating = macrsVintageDatingPapers(args.papers, args.assetId, args.vintage);
+  const frozenSets = dating
+    .filter((paper) => paper.taxYearWindows != null)
+    .map((paper) => paper.taxYearWindows!);
+  const lastFrozenOn = dating.filter((paper) => paper.taxYearWindows != null).at(-1)?.effective_on ?? null;
+  if (frozenSets.length > 0 && lastFrozenOn) {
+    const laterFrom = nextCalendarDay(lastFrozenOn);
+    return {
+      transferorSubsidiaryId: receiving?.seller_subsidiary_id ?? null,
+      frozenSets,
+      liveLoads: laterFrom <= args.asOf
+        ? [{
+            subsidiaryId: args.currentSubsidiaryId,
+            fromOn: laterFrom,
+            throughOn: args.asOf,
+          }]
+        : [],
+    };
+  }
+  return {
+    transferorSubsidiaryId: receiving?.seller_subsidiary_id ?? null,
+    frozenSets: [],
+    liveLoads: macrsOwnershipWindowLoads({
+      placedInServiceOn: args.vintage.placedInServiceOn,
+      transferOn: args.vintage.transferOn,
+      asOf: args.asOf,
+      currentSubsidiaryId: args.currentSubsidiaryId,
+      transferorSubsidiaryId: receiving?.seller_subsidiary_id ?? null,
+    }),
+  };
+}
+
+/** Rehydrate an applied paper's computed.taxYearWindows. `null` means the
+ *  paper predates the freeze and reconstruction must live-load. */
+export function macrsWindowsFromAppliedComputed(computed: unknown): MacrsYearWindow[] | null {
+  if (computed == null || typeof computed !== "object" || Array.isArray(computed)) return null;
+  const rows = (computed as { taxYearWindows?: unknown }).taxYearWindows;
+  if (rows == null) return null;
+  if (!Array.isArray(rows)) {
+    throw new MacrsVintageError(
+      "applied workpaper computed.taxYearWindows must be an array of the windows that paper consumed; reverse and re-propose it — do not load a live calendar over a missing set",
+    );
+  }
+  try {
+    return freezeTaxYearWindowEvidence(rows.map((row, index) => {
+      if (!row || typeof row !== "object" || Array.isArray(row)) {
+        throw new MacrsVintageError(
+          `applied workpaper computed.taxYearWindows[${index}] must be a registered window; reverse and re-propose it`,
+        );
+      }
+      const raw = row as Record<string, unknown>;
+      return taxYearWindowEvidence({
+        id: typeof raw.id === "string" ? raw.id : undefined,
+        subsidiaryId: typeof raw.subsidiaryId === "string" ? raw.subsidiaryId : undefined,
+        regime: typeof raw.regime === "string" ? raw.regime : undefined,
+        taxYear: typeof raw.filingYear === "number" ? raw.filingYear : Number(raw.taxYear),
+        yearStart: String(raw.yearStart ?? ""),
+        yearEnd: String(raw.yearEnd ?? ""),
+      });
+    })).map((row) => ({
+      id: row.id,
+      subsidiaryId: row.subsidiaryId,
+      regime: row.regime,
+      taxYear: row.filingYear,
+      yearStart: row.yearStart,
+      yearEnd: row.yearEnd,
+    }));
+  } catch (error) {
+    if (error instanceof MacrsVintageError) throw error;
+    throw new MacrsVintageError(
+      error instanceof MacrsCalendarError || error instanceof Error
+        ? error.message
+        : "applied workpaper computed.taxYearWindows could not be read; reverse and re-propose it",
+    );
+  }
+}
 
 function positive(value: string | null | undefined): value is string {
   return !!value && cmp(value, "0") > 0;

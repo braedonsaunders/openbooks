@@ -646,6 +646,12 @@ export interface MacrsYearWindow {
   taxYear: number;
   yearStart: string;
   yearEnd: string;
+  /**
+   * Convention adjacency sealed by an applied paper. `null` freezes absence:
+   * a later-added contiguous successor must not become §4.01 context.
+   * Omitted (`undefined`) means this window is live and may read `windows[index+1]`.
+   */
+  frozenConventionSuccessor?: { yearStart: string; yearEnd: string } | null;
 }
 
 /** Ownership loads for one vintage. Transferor history stops at the checkpoint;
@@ -682,18 +688,75 @@ export function macrsOwnershipWindowLoads(args: {
   }];
 }
 
+function macrsWindowSealKey(window: MacrsYearWindow): string {
+  return window.id
+    ?? `${window.subsidiaryId ?? ""}:${window.yearStart}:${window.yearEnd}`;
+}
+
+function isContiguousSuccessor(previous: MacrsYearWindow, next: MacrsYearWindow): boolean {
+  return nextCalendarDay(previous.yearEnd) === next.yearStart;
+}
+
+/** Seal each applied paper's exact window set, including successor absence.
+ *  A later paper or live load may add years after that paper; it must not
+ *  rewrite convention adjacency already frozen on an earlier window. */
+export function macrsWindowsPreservingAppliedContext(
+  appliedFrozen: readonly (readonly MacrsYearWindow[])[],
+  later: readonly MacrsYearWindow[] = [],
+): MacrsYearWindow[] {
+  const sealed = new Map<string, MacrsYearWindow>();
+  for (const frozen of appliedFrozen) {
+    const ordered = [...frozen].sort((left, right) =>
+      left.yearStart.localeCompare(right.yearStart) || left.yearEnd.localeCompare(right.yearEnd),
+    );
+    for (let index = 0; index < ordered.length; index += 1) {
+      const window = ordered[index]!;
+      const key = macrsWindowSealKey(window);
+      if (sealed.has(key)) continue;
+      const next = ordered[index + 1];
+      sealed.set(key, {
+        ...window,
+        frozenConventionSuccessor: next && isContiguousSuccessor(window, next)
+          ? { yearStart: next.yearStart, yearEnd: next.yearEnd }
+          : null,
+      });
+    }
+  }
+  const out = [...sealed.values()].sort((left, right) =>
+    left.yearStart.localeCompare(right.yearStart) || left.yearEnd.localeCompare(right.yearEnd),
+  );
+  const known = new Set(out.map(macrsWindowSealKey));
+  for (const window of later) {
+    const key = macrsWindowSealKey(window);
+    if (known.has(key)) continue;
+    known.add(key);
+    const { frozenConventionSuccessor: _sealed, ...live } = window;
+    out.push(live);
+  }
+  return out.sort((left, right) =>
+    left.yearStart.localeCompare(right.yearStart) || left.yearEnd.localeCompare(right.yearEnd),
+  );
+}
+
 /** Rev. Proc. 89-15 §4.01(1)(a)(i): successive short years that share a
  *  calendar month exclude that month from the FIRST year. Derived only from
- *  validated adjacent windows. */
+ *  validated adjacent windows, or from an applied paper's frozen successor. */
 export function adjacentShortYearExclusion(
   windows: readonly MacrsYearWindow[],
   index: number,
 ): boolean {
   const window = windows[index];
-  const next = windows[index + 1];
+  if (!window) return false;
+  const next = window.frozenConventionSuccessor === undefined
+    ? windows[index + 1]
+    : window.frozenConventionSuccessor == null
+      ? undefined
+      : windows.find((candidate) =>
+        candidate.yearStart === window.frozenConventionSuccessor!.yearStart
+        && candidate.yearEnd === window.frozenConventionSuccessor!.yearEnd,
+      );
   return !!(
-    window
-    && next
+    next
     && isShortTaxYear(window.yearStart, window.yearEnd)
     && isShortTaxYear(next.yearStart, next.yearEnd)
     && window.yearEnd.slice(0, 7) === next.yearStart.slice(0, 7)

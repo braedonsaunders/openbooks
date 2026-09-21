@@ -61,11 +61,18 @@ import {
   type ClassifiedRegime,
 } from "./tax-classification.ts";
 import {
+  macrsVintageWindowPlan,
+  macrsWindowsFromAppliedComputed,
   sellerMacrsHistoryBeforeSource,
+  type MacrsFrozenLineagePaper,
   type MacrsVintageDefaults,
   type MacrsWorkpaperEvent,
 } from "./macrs-vintages.ts";
-import { macrsOwnershipWindowLoads, refreshOpenMacrsVintageThrough } from "./depreciation-pool.ts";
+import {
+  macrsWindowsPreservingAppliedContext,
+  refreshOpenMacrsVintageThrough,
+  type MacrsYearWindow,
+} from "./depreciation-pool.ts";
 import {
   citeTaxYearWindows,
   freezeTaxYearWindowEvidence,
@@ -568,6 +575,7 @@ function asMacrsEventFromStored(row: {
 type StoredUsMacrsPaper = {
   sourceKey: string;
   event: MacrsWorkpaperEvent;
+  taxYearWindows: MacrsYearWindow[] | null;
 };
 
 async function loadUsMacrsPapersForAssets(
@@ -602,6 +610,7 @@ async function loadUsMacrsPapersForAssets(
   return rows.map((row) => ({
     sourceKey: taxBasisSourceKey(row.source_change_id, row.source_event_id),
     event: asMacrsEventFromStored(row),
+    taxYearWindows: macrsWindowsFromAppliedComputed(row.computed),
   }));
 }
 
@@ -702,44 +711,53 @@ async function loadUsSellerMacrsVintageContext(
   });
   if (history.status !== "ready") return history;
   try {
-    const windows = [];
-    const seenLoads = new Set<string>();
+    const lineagePapers: MacrsFrozenLineagePaper[] = priorPapers.map((paper) => ({
+      asset_id: paper.event.asset_id,
+      receiving_asset_id: paper.event.receiving_asset_id,
+      effective_on: paper.event.effective_on,
+      seller_subsidiary_id: paper.event.seller_subsidiary_id,
+      buyer_vintages: paper.event.buyer_vintages,
+      vintage_allocations: paper.event.vintage_allocations,
+      taxYearWindows: paper.taxYearWindows,
+    }));
+    const consumed: MacrsYearWindow[] = [];
+    const datedVintages = [];
     for (const vintage of history.vintages) {
-      const transferorId = priorPapers.find((paper) =>
-        paper.event.effective_on === vintage.transferOn
-        && paper.event.buyer_subsidiary_id === seller.subsidiary_id,
-      )?.event.seller_subsidiary_id ?? null;
-      for (const load of macrsOwnershipWindowLoads({
-        placedInServiceOn: vintage.placedInServiceOn,
-        transferOn: vintage.transferOn,
-        asOf: args.occurredOn,
+      const plan = macrsVintageWindowPlan({
+        assetId: args.sellerAssetId,
         currentSubsidiaryId: seller.subsidiary_id,
-        transferorSubsidiaryId: transferorId,
-      })) {
+        asOf: args.occurredOn,
+        vintage,
+        papers: lineagePapers,
+      });
+      const later: MacrsYearWindow[] = [];
+      const seenLoads = new Set<string>();
+      for (const load of plan.liveLoads) {
         const key = `${load.subsidiaryId}:${load.fromOn}:${load.throughOn}`;
         if (seenLoads.has(key)) continue;
         seenLoads.add(key);
-        windows.push(...await loadTaxYearWindows(tx, orgId, {
+        later.push(...await loadTaxYearWindows(tx, orgId, {
           subsidiaryId: load.subsidiaryId,
           regime: "us_macrs",
           fromOn: load.fromOn,
           throughOn: load.throughOn,
         }));
       }
+      const windows = macrsWindowsPreservingAppliedContext(plan.frozenSets, later);
+      consumed.push(...windows);
+      const dated = refreshOpenMacrsVintageThrough(vintage, windows, args.occurredOn, {
+        ownerSubsidiaryId: seller.subsidiary_id,
+      });
+      datedVintages.push({
+        ...vintage,
+        priorDepreciation: dated.priorDepreciation,
+        adjustedCarryover: dated.adjustedCarryover,
+      });
     }
     return {
       status: "ready",
-      vintages: history.vintages.map((vintage) => {
-        const dated = refreshOpenMacrsVintageThrough(vintage, windows, args.occurredOn, {
-          ownerSubsidiaryId: seller.subsidiary_id,
-        });
-        return {
-          ...vintage,
-          priorDepreciation: dated.priorDepreciation,
-          adjustedCarryover: dated.adjustedCarryover,
-        };
-      }),
-      taxYearWindows: freezeTaxYearWindowEvidence(windows.map(taxYearWindowEvidence)),
+      vintages: datedVintages,
+      taxYearWindows: freezeTaxYearWindowEvidence(consumed.map(taxYearWindowEvidence)),
     };
   } catch (error) {
     return {
