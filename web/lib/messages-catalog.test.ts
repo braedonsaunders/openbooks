@@ -3013,10 +3013,8 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   // HR-17: 3844 = 3825 on b4b4fe256 plus 19 continuous-performance keys
   // (6 features, 2 setup entities, 1 setup field); zh/pt-BR completeness
   // is asserted per-key below.
-  assert.equal(wanted.length, 3880, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  assert.equal(wanted.length, 3908, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
-  assert.equal(wanted.length, 3844, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')  for (const key of wanted) {
-  assert.equal(wanted.length, 3872, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
   }
@@ -3382,13 +3380,9 @@ test('admin copy ships translated in de and ja (i2)', () => {
   ])
   // HR-17: count and hash recomputed over the sorted key inventory for the
   // 19 continuous-performance keys; de/ja completeness asserted per-key below.
-  const ADMIN_I2_SOURCE_COUNT = 3880
-  const ADMIN_I2_SOURCE_HASH = '2564c9020790b151f9097690974e128da6859315c79640a6dbdad675577a1f60'
+  const ADMIN_I2_SOURCE_COUNT = 3908
+  const ADMIN_I2_SOURCE_HASH = '49f73cec807d1b5b34210cf2e70f80c79f7b4fff99cb288cfee315ec0c0dbd0b'
   const source = flattenCatalog('en')
-  const ADMIN_I2_SOURCE_COUNT = 3844
-  const ADMIN_I2_SOURCE_HASH = '2ebe1e5de3a8a2c782a3fa593e8bc22849b615c60ece383e30fbd025ed2a17c8'  const source = flattenCatalog('en')
-  const ADMIN_I2_SOURCE_COUNT = 3872
-  const ADMIN_I2_SOURCE_HASH = '9b72d95052d98bfb4e5976c227033421ae6515959df727efd64cc1c9a036736b'
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))
     .sort()
@@ -5261,9 +5255,7 @@ const I14_IDENTICAL_BY_FACT = new Set([
 const I14_FILE_COUNTS: Record<string, number> = {
   "items": 161,
   "inventory": 159,
-  "reports": 1594,
-  "reports": 1548,
-  "reports": 1585,
+  "reports": 1630,
   "sync": 172,
   "login": 33,
   "accounts": 82,
