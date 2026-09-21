@@ -73,7 +73,7 @@ async function enableEveryHrmReportFeature(orgId: string): Promise<void> {
     if (entity.featureKey) declared.add(entity.featureKey)
   }
   // The parents those sub-switches hang from, which no entity names.
-  const keys = ['hrm', 'flows', 'automations', 'hrmRecruiting', 'hrmPerformance', ...declared]
+  const keys = ['hrm', 'payroll', 'flows', 'automations', 'hrmRecruiting', 'hrmPerformance', ...declared]
   for (const key of keys) {
     await db.execute(sql`
       update orgs
