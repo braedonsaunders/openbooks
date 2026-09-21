@@ -157,17 +157,24 @@ export async function resolveApiKeyAuth(
         join users u on u.id = k.user_id and u.org_id = k.org_id
         join orgs o on o.id = k.org_id and o.id = u.org_id
        where k.key_hash = ${keyHash}
-         and o.env_kind = 'production'
        limit 1`)) as unknown as { rows: ApiKeySqlRow[] }
       ).rows[0],
   );
   if (!keyRow) return null;
   if (!keyRow.is_active || !keyRow.user_active) return null;
   if (keyRow.expires_at && new Date(keyRow.expires_at).getTime() < Date.now()) return null;
-  // Sandbox/preview orgs may hold cloned key rows; they do not authenticate.
-  // envKind is the org's column, not a hardcoded production label.
-  if (keyRow.env_kind !== "production") return null;
+  // A key authenticates in its OWN org whatever that org's env_kind is.
+  // Testing an integration against a sandbox is a principal reason sandboxes
+  // exist, so a key minted inside one has to work. The cloning hazard this
+  // once guarded against is handled where it arises rather than here:
+  // engine/src/sandbox/catalog.ts never copies api_keys (the hash sits in a
+  // global unique index), and neuterSandbox deactivates any row that reaches
+  // a sandbox by other means -- which the is_active check above then refuses.
+  // The column is free text; SessionUser.envKind is not. An org carrying a
+  // kind this build does not know is refused rather than coerced -- the same
+  // fail-closed reading the is_active and expiry checks above get.
   const envKind = keyRow.env_kind;
+  if (envKind !== "production" && envKind !== "sandbox" && envKind !== "preview") return null;
 
   // Scope the rest of this request to the key's org (RLS enforced).
   setRequestOrg(keyRow.org_id);
