@@ -31,6 +31,7 @@ export {
   attachEvidence,
   listQualificationEvents,
   listQualifications,
+  loadQualification,
   recordQualification,
   renewQualification,
   revokeQualification,

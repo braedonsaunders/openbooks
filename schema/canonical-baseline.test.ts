@@ -1908,6 +1908,13 @@ test("API keys state their scopes explicitly: legacy empty sets freeze to the ca
     "hrm.construction.read",
     "hrm.construction.manage",
     // HR-13 end
+    // HR-14 begin: certifications and dispatch gating (migration 0225):
+    // read sees the taxonomy, held qualifications, requirements and
+    // alerts; manage records, verifies, renews, revokes and authors
+    // requirements. Admin-only like the employment keys above.
+    "hrm.certifications.read",
+    "hrm.certifications.manage",
+    // HR-14 end
   ];
   assert.deepEqual(
     snapshot,
