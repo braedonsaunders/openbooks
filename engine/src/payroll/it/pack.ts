@@ -130,6 +130,12 @@ export const IT_PAYROLL_PACK: ItPayrollPackDeclaration = {
         // IRPEF is assessed on reddito complessivo net of oneri deducibili,
         // so a pre-tax deduction moves it — re-derived by the fixpoint.
         { code: "IRPEF", name: "IRPEF — imposta sul reddito delle persone fisiche", systemKey: "income_tax", kind: "deduction", sequence: 110, assessedOn: "taxable_income", remittance: "tax_authority" },
+        // The conguaglio's refund rail: an over-withheld year returns as a
+        // positive credit under the same systemKey, so the remittance nets it
+        // against the destination and the GL debits the same F24 liability.
+        // Earnings-assessed (computed once, post-fixpoint, never re-derived);
+        // a distinct credit row because the remittance negates by COMPONENT kind.
+        { code: "CONG-IRPEF", name: "Conguaglio IRPEF a credito", systemKey: "income_tax", kind: "credit", sequence: 110, assessedOn: "earnings", remittance: "tax_authority" },
         // The TI and c. 4 somma payouts: refundable credits the employer pays
         // the worker and recovers through the F24. Earnings-assessed (computed
         // from gross), pushed once, never re-derived by the protection
@@ -144,6 +150,9 @@ export const IT_PAYROLL_PACK: ItPayrollPackDeclaration = {
         // Same base as IRPEF (the domicile region's surcharge on the IRPEF
         // taxable income), remitted through the same F24.
         { code: "ADDREG", name: "Addizionale regionale all'IRPEF", systemKey: "regional_surtax", kind: "deduction", sequence: 115, assessedOn: "taxable_income", remittance: "tax_authority" },
+        // The conguaglio's refund rail for the regionale — same doctrine as
+        // CONG-IRPEF above: same key, credit kind, earnings-assessed, one push.
+        { code: "CONG-ADDREG", name: "Conguaglio addizionale regionale a credito", systemKey: "regional_surtax", kind: "credit", sequence: 115, assessedOn: "earnings", remittance: "tax_authority" },
       ],
     },
     {
@@ -152,6 +161,9 @@ export const IT_PAYROLL_PACK: ItPayrollPackDeclaration = {
         // The domicile comune's surcharge (acconto + saldo mechanics live in
         // the untranscribed tables, not in the slot).
         { code: "ADDCOM", name: "Addizionale comunale all'IRPEF", systemKey: "municipal_surtax", kind: "deduction", sequence: 120, assessedOn: "taxable_income", remittance: "tax_authority" },
+        // The conguaglio's refund rail for the comunale — same doctrine as
+        // CONG-IRPEF above: same key, credit kind, earnings-assessed, one push.
+        { code: "CONG-ADDCOM", name: "Conguaglio addizionale comunale a credito", systemKey: "municipal_surtax", kind: "credit", sequence: 120, assessedOn: "earnings", remittance: "tax_authority" },
       ],
     },
     {
@@ -167,6 +179,9 @@ export const IT_PAYROLL_PACK: ItPayrollPackDeclaration = {
   computeStatutory: computeItStatutory,
   // Year-end conguaglio (art. 23 c. 3 DPR 600/1973): one edition per
   // transcribed year, adjustment lines on the final run — see conguaglio.ts.
+  // Refunds ride the CONG-* credit rows in the withholding slots above (the
+  // run layer pushes through the pack's declared components, and the
+  // remittance only nets credit-KIND components).
   annualSettlement: itAnnualSettlement,
   factorLabels: { ...IT_FACTOR_LABELS },
   // No `emp` facts: the engine reads detrazioni answers off the

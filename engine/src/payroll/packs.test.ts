@@ -155,14 +155,24 @@ test("the YTD income-tax key set derives from the pack declarations", () => {
   }
   // Round trip: every returned key resolves to a deduction assessed on
   // taxable income in at least one registered pack — the set carries no
-  // stray key no pack declares.
+  // stray key no pack declares. A key may ALSO have an earnings-assessed
+  // credit owner: the annual settlement's refund rail (IT CONG-*, pushed by
+  // the pack's settlement compute through the run layer), which settles
+  // against the same key the withholdings carry so the remittance nets it.
   for (const key of incomeTaxWithholdingSystemKeys()) {
     const owners = Object.keys(PAYROLL_COUNTRY_PACKS).flatMap((country) =>
       packStatutoryComponents(country).filter((component) => component.systemKey === key));
     assert.ok(owners.length > 0, `${key} is declared by no pack`);
+    assert.ok(
+      owners.some((owner) => owner.kind === "deduction" && owner.assessedOn === "taxable_income"),
+      `${key} has no withholding owner`,
+    );
     for (const owner of owners) {
-      assert.equal(owner.kind, "deduction", key);
-      assert.equal(owner.assessedOn, "taxable_income", key);
+      assert.ok(
+        (owner.kind === "deduction" && owner.assessedOn === "taxable_income")
+        || (owner.kind === "credit" && owner.assessedOn === "earnings"),
+        `${key} owner ${owner.code} is neither the withholding nor its settlement credit`,
+      );
     }
   }
 });
