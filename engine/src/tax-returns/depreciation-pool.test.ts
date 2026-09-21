@@ -711,6 +711,42 @@ test("macrsWindowsPreservingAppliedContext seals successor absence only on the c
   );
 });
 
+test("a mixed-entity evidence set seals the same-owner successor, not the next global row", () => {
+  const transferor = {
+    subsidiaryId: "A",
+    regime: "us_macrs",
+    taxYear: 2024,
+    yearStart: "2024-01-01",
+    yearEnd: "2024-03-15",
+  };
+  const receiver = {
+    subsidiaryId: "B",
+    regime: "us_macrs",
+    taxYear: 2024,
+    yearStart: "2024-03-01",
+    yearEnd: "2024-12-31",
+  };
+  const transferorSuccessor = {
+    subsidiaryId: "A",
+    regime: "us_macrs",
+    taxYear: 2024,
+    yearStart: "2024-03-16",
+    yearEnd: "2024-06-15",
+  };
+  const preserved = macrsWindowsPreservingAppliedContext(
+    [{ throughOn: "2024-03-10", windows: [transferor, receiver, transferorSuccessor] }],
+    [],
+  );
+  assert.equal(adjacentShortYearExclusion(preserved, 0), true);
+  assert.deepEqual(preserved[0]?.frozenConventionSuccessor, {
+    yearStart: "2024-03-16",
+    yearEnd: "2024-06-15",
+    subsidiaryId: "A",
+    regime: "us_macrs",
+  });
+  assert.equal(adjacentShortYearExclusion([transferor, receiver, transferorSuccessor], 0), true);
+});
+
 test("a context-only successor does not freeze its own later convention absence", () => {
   const first = { taxYear: 2024, yearStart: "2024-01-01", yearEnd: "2024-03-15" };
   const context = { taxYear: 2024, yearStart: "2024-03-16", yearEnd: "2024-06-15" };
