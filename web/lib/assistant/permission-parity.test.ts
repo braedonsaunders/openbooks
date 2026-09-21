@@ -236,6 +236,12 @@ const UNION_ROWS: Row[] = [
     routes: [["../../app/api/journals/draft/route.ts", "guardPermission(\"gl.post\")"]],
     note: "draft creation (commit path re-checks at /api/assistant/commit)",
   },
+  {
+    tools: ["preview_allocation"], file: "./tools-allocations.ts",
+    gate: ["allocations.run"],
+    routes: [["../../app/api/allocations/runs/preview/route.ts", 'guardAllocations("allocations.run")']],
+    note: "preview persists a previewed allocation_runs row; same gate as POST /api/allocations/runs/preview",
+  },
 ];
 
 test("assistant tool doorways cover every cited surface and admit nothing uncited", () => {
@@ -296,6 +302,16 @@ const NARROWED_ROWS: { tool: string; file: string; markers: string[]; note: stri
     tool: "get_continuous_close_finding", file: "./tools.ts",
     markers: ["readableContinuousCloseAgents(authz)", "row.agent_key"],
     note: "single-finding read checks the row's agent against the shared reader",
+  },
+  {
+    tool: "explain_allocation", file: "./tools-allocations.ts",
+    markers: [
+      "entryDetail(authz.user.orgId, anchor.id, authz.allowedSubsidiaryIds)",
+      "subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)",
+      'error: "entry_not_found"',
+      'error: "document_not_found"',
+    ],
+    note: "journal/document anchors use the same visibility as get_journal_entry / get_document before queryLineage",
   },
 ];
 

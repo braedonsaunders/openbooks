@@ -3,7 +3,7 @@ import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
-import { dateOrFalse, uuidOrFalse } from "../list-query";
+import { dateOrFalse, pushCustomFieldFilter, uuidOrFalse } from "../list-query";
 
 /* ------------------------------------------------------------------ */
 /* Opportunities                                                       */
@@ -102,6 +102,7 @@ export function opportunityWhere(
   if (!adhoc.showInactive) parts.push(sql`and o.is_active`)
   parts.push(crmOpportunityScope(allowedSubsidiaryIds))
   for (const filter of view.filters) {
+    if (pushCustomFieldFilter(parts, filter, "o")) continue
     const predicate = opportunityFilterPredicate(filter)
     if (predicate) parts.push(sql`and ${predicate}`)
   }

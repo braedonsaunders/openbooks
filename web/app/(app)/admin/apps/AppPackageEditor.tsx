@@ -27,6 +27,7 @@ import { AppWorkspaceTabs } from "./sections";
 import { AppScreens } from "./AppScreens";
 import { AppDefinitions } from "./AppDefinitions";
 import { CodeEditor } from "@/components/code-editor";
+import { readApiErrorMessage } from "@/lib/api-error";
 import { promptDialog } from "@/lib/prompt";
 import { confirmDialog } from "@/lib/confirm";
 import {
@@ -253,8 +254,11 @@ export function AppPackageEditor({
           sourceDraft,
         }),
       });
+      // Status first: a proxy/HTML/empty refusal must surface the HTTP
+      // failure, never a SyntaxError from parsing the body.
+      if (!response.ok)
+        throw new Error(await readApiErrorMessage(response, t("failed")));
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? t("failed"));
       onDirtyChange?.(false);
       setDirty(false);
       router.push(result.reviewUrl);

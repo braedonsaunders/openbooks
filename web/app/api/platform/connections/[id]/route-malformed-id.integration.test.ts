@@ -26,8 +26,9 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { sql } = await import('drizzle-orm')
 const { PATCH, DELETE } = await import('./route.ts')
 const { POST: runPost } = await import('./run/route.ts')
 const { POST: testPost } = await import('./test/route.ts')
@@ -115,6 +116,106 @@ test('source-deletions returns 404 for a malformed connection id', { skip: !DB }
   try {
     const result = await call(deletionsPost, 'POST', { id: MALFORMED, ref: 'x' }, { action: 'retain' })
     assert.equal(result.status, 404, `expected 404, got ${result.status}: ${JSON.stringify(result.json)}`)
+  } finally {
+    await dropScratchOrg(org.orgId)
+  }
+})
+
+test('source-deletions binds void/retain to the path connection and the already-decoded ref', { skip: !DB }, async () => {
+  const org = await fixture()
+  try {
+    state.actorId = await createScratchUser(org.orgId, 'Source deletion route controller', 'admin')
+    const pathConnection = randomUUID()
+    const otherConnection = randomUUID()
+    const pathDocument = randomUUID()
+    const otherDocument = randomUUID()
+    const sourceRef = 'INV-100%25OFF'
+    await db.execute(sql`
+      insert into connections
+        (id, org_id, source, display_name, status)
+      values
+        (${pathConnection}, ${org.orgId}, 'qbo', 'Path connection', 'active'),
+        (${otherConnection}, ${org.orgId}, 'qbo', 'Other connection', 'active')`)
+    await db.execute(sql`
+      insert into documents
+        (id, org_id, kind, status, document_number, document_date, currency,
+         subtotal, tax_total, total, custom)
+      values
+        (
+          ${pathDocument}, ${org.orgId}, 'sales_order', 'approved',
+          'SO-PATH-REF', ${org.date}, 'CAD', '25', '0', '25',
+          ${JSON.stringify({ qboId: sourceRef, connectionId: pathConnection })}::jsonb
+        ),
+        (
+          ${otherDocument}, ${org.orgId}, 'sales_order', 'approved',
+          'SO-OTHER-REF', ${org.date}, 'CAD', '30', '0', '30',
+          ${JSON.stringify({ qboId: sourceRef, connectionId: otherConnection })}::jsonb
+        )`)
+
+    const retained = await call(
+      deletionsPost,
+      'POST',
+      { id: pathConnection, ref: sourceRef },
+      { action: 'retain' },
+    )
+    assert.equal(retained.status, 200, JSON.stringify(retained.json))
+    assert.deepEqual(retained.json, {
+      ok: true,
+      documentId: pathDocument,
+      action: 'retain',
+      reversalEntryId: null,
+    })
+
+    const voided = await call(
+      deletionsPost,
+      'POST',
+      { id: otherConnection, ref: sourceRef },
+      { action: 'void' },
+    )
+    assert.equal(voided.status, 200, JSON.stringify(voided.json))
+    assert.deepEqual(voided.json, {
+      ok: true,
+      documentId: otherDocument,
+      action: 'void',
+      reversalEntryId: null,
+    })
+
+    const statuses = (
+      await db.execute<{ id: string; status: string }>(sql`
+        select id, status
+          from documents
+         where org_id = ${org.orgId}
+           and id in (${pathDocument}, ${otherDocument})
+         order by document_number
+      `)
+    ).rows
+    assert.deepEqual(statuses, [
+      { id: otherDocument, status: 'voided' },
+      { id: pathDocument, status: 'approved' },
+    ])
+
+    const barePercentRef = '100%'
+    const percentDocument = randomUUID()
+    await db.execute(sql`
+      insert into documents
+        (id, org_id, kind, status, document_number, document_date, currency,
+         subtotal, tax_total, total, custom)
+      values (
+        ${percentDocument}, ${org.orgId}, 'sales_order', 'approved',
+        'SO-PERCENT-REF', ${org.date}, 'CAD', '10', '0', '10',
+        ${JSON.stringify({ qboId: barePercentRef, connectionId: pathConnection })}::jsonb
+      )`)
+    const percent = await call(
+      deletionsPost,
+      'POST',
+      { id: pathConnection, ref: barePercentRef },
+      { action: 'retain' },
+    )
+    assert.equal(percent.status, 200, JSON.stringify(percent.json))
+    assert.equal(
+      (percent.json as { documentId?: string }).documentId,
+      percentDocument,
+    )
   } finally {
     await dropScratchOrg(org.orgId)
   }

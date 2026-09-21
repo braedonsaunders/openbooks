@@ -2,6 +2,7 @@ import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
+import { pushCustomFieldFilter } from "../list-query";
 
 /* ------------------------------------------------------------------ */
 /* Items                                                               */
@@ -59,6 +60,7 @@ export function itemWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: strin
   const savedViewOwnsActivity = view.filters.some((filter) => filter.key === 'status')
   if (!adhoc.showInactive && !savedViewOwnsActivity) parts.push(sql`and i.is_active`)
   for (const filter of view.filters) {
+    if (pushCustomFieldFilter(parts, filter, "i")) continue
     const predicate = itemFilterPredicate(filter)
     if (predicate) parts.push(sql`and ${predicate}`)
   }

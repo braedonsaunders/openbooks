@@ -6,6 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  isHostVmUnfreeableSignal,
   runAppEndpoint,
   type AppHostAdapters,
   type AppRequest,
@@ -334,6 +335,51 @@ test("an infinite loop is stopped by the deadline", async () => {
   assert.equal(r.status, "timeout");
 });
 
+test("a guest stack overflow is an endpoint error, not a host process abort", async () => {
+  const r = await runAppEndpoint({
+    source: `function handler() { function rec() { rec(); } rec(); }`,
+    request: req(),
+    adapters: fakeAdapters(),
+  });
+  assert.equal(r.status, "error");
+  assert.equal(
+    r.error,
+    "guest stack overflow: the handler exceeded the sandbox stack limit",
+  );
+  // Dispose of that poisoned WASM runtime must not take the process down:
+  // a later endpoint on the same host still returns a result.
+  const after = await runAppEndpoint({
+    source: `function handler() { return 1 }`,
+    request: req(),
+    adapters: fakeAdapters(),
+  });
+  assert.equal(after.status, "ok");
+  assert.equal(after.response!.body, 1);
+});
+
+test("guest-controlled error text does not rewrite or skip runtime dispose", async () => {
+  for (const text of ["stack overflow", "Maximum call stack size exceeded"]) {
+    const r = await runAppEndpoint({
+      source: `function handler() { throw new Error(${JSON.stringify(text)}); }`,
+      request: req(),
+      adapters: fakeAdapters(),
+    });
+    assert.equal(r.status, "error");
+    assert.equal(r.error, text);
+  }
+});
+
+test("a renamed Error is not a WebAssembly abort", () => {
+  assert.equal(
+    isHostVmUnfreeableSignal(new WebAssembly.RuntimeError("Aborted()")),
+    true,
+  );
+  const renamed = new Error("Aborted()");
+  renamed.name = "RuntimeError";
+  assert.equal(isHostVmUnfreeableSignal(renamed), false);
+  assert.equal(renamed instanceof WebAssembly.RuntimeError, false);
+});
+
 test('platform query plans round-trip through QuickJS without exposing SQL', async () => {
   const adapters = withPlatform(fakeAdapters())
   const plan = { from: { type: 'items', as: 'item' }, select: [{ source: 'item', field: 'id' }] }
@@ -349,3 +395,80 @@ test('platform query plans round-trip through QuickJS without exposing SQL', asy
   assert.deepEqual(result.response!.body, { records: [{ 'item.id': 'i1' }], hasMore: false })
   assert.equal(result.units, 80)
 })
+
+test("the sandbox has no host db, fs, or net primitives except injected adapters", async () => {
+  const r = await runAppEndpoint({
+    source: `function handler() {
+      var names = Object.getOwnPropertyNames(globalThis).sort();
+      return {
+        process: typeof process,
+        require: typeof require,
+        fetch: typeof fetch,
+        fs: typeof fs,
+        net: typeof net,
+        http: typeof http,
+        https: typeof https,
+        child_process: typeof child_process,
+        Buffer: typeof Buffer,
+        XMLHttpRequest: typeof XMLHttpRequest,
+        WebSocket: typeof WebSocket,
+        Deno: typeof Deno,
+        os: typeof os,
+        std: typeof std,
+        names: names
+      };
+    }`,
+    request: req(),
+    adapters: fakeAdapters(),
+  });
+  assert.equal(r.status, "ok");
+  const body = r.response!.body as Record<string, unknown>;
+  for (const key of [
+    "process",
+    "require",
+    "fetch",
+    "fs",
+    "net",
+    "http",
+    "https",
+    "child_process",
+    "Buffer",
+    "XMLHttpRequest",
+    "WebSocket",
+    "Deno",
+    "os",
+    "std",
+  ]) {
+    assert.equal(body[key], "undefined", `${key} leaked into the sandbox`);
+  }
+  const names = body.names as string[];
+  assert.ok(names.includes("ob"));
+  assert.equal(names.includes("process"), false);
+  assert.equal(names.includes("require"), false);
+});
+
+test("raw records, journal, and platform host functions fail closed without adapters", async () => {
+  const records = await runAppEndpoint({
+    source: `function handler() { return JSON.parse(ob.__records_get("equipment", "r1")); }`,
+    request: req(),
+    adapters: fakeAdapters(),
+  });
+  assert.equal(records.status, "forbidden");
+  assert.match(records.error!, /records\.read not granted/);
+
+  const journal = await runAppEndpoint({
+    source: `function handler() { return JSON.parse(ob.__journal_create("{}", false)); }`,
+    request: req(),
+    adapters: fakeAdapters(),
+  });
+  assert.equal(journal.status, "forbidden");
+  assert.match(journal.error!, /gl\.post not granted/);
+
+  const platform = await runAppEndpoint({
+    source: `function handler() { return JSON.parse(ob.__platform_create("items", "{}")); }`,
+    request: req(),
+    adapters: fakeAdapters(),
+  });
+  assert.equal(platform.status, "forbidden");
+  assert.match(platform.error!, /platform API unavailable/);
+});

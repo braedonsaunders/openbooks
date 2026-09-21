@@ -15,11 +15,11 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { accounts } from "./coa";
-import { accountingBooks, accountingPeriods, departments, locations, projects } from "./core";
+import { accountingBooks, accountingPeriods, classes, departments, locations, projects } from "./core";
 import { subsidiaries } from "./subsidiaries";
 import { documents } from "./documents";
 import { timeEntries } from "./time";
-import { journalEntries } from "./ledger";
+import { journalEntries, journalLines } from "./ledger";
 import { auditColumns, id, money, orgRef } from "./helpers";
 
 /**
@@ -265,6 +265,11 @@ export const allocationRuleTargets = pgTable(
       foreignColumns: [locations.orgId, locations.id],
     }),
     foreignKey({
+      name: "allocation_rule_targets_class_id_fkey",
+      columns: [t.orgId, t.classId],
+      foreignColumns: [classes.orgId, classes.id],
+    }),
+    foreignKey({
       name: "allocation_rule_targets_project_id_fkey",
       columns: [t.orgId, t.projectId],
       foreignColumns: [projects.orgId, projects.id],
@@ -366,8 +371,8 @@ export const allocationRuns = pgTable(
     }),
     foreignKey({
       name: "allocation_runs_book_id_fkey",
-      columns: [t.bookId],
-      foreignColumns: [accountingBooks.id],
+      columns: [t.orgId, t.bookId],
+      foreignColumns: [accountingBooks.orgId, accountingBooks.id],
     }),
     foreignKey({
       name: "allocation_runs_subsidiary_id_fkey",
@@ -446,6 +451,16 @@ export const allocationLineage = pgTable(
       name: "allocation_lineage_journal_entry_id_fkey",
       columns: [t.orgId, t.journalEntryId],
       foreignColumns: [journalEntries.orgId, journalEntries.id],
+    }),
+    foreignKey({
+      name: "allocation_lineage_journal_line_id_fkey",
+      columns: [t.orgId, t.journalLineId],
+      foreignColumns: [journalLines.orgId, journalLines.id],
+    }),
+    foreignKey({
+      name: "allocation_lineage_source_journal_line_id_fkey",
+      columns: [t.orgId, t.sourceJournalLineId],
+      foreignColumns: [journalLines.orgId, journalLines.id],
     }),
     foreignKey({
       name: "allocation_lineage_driver_id_fkey",

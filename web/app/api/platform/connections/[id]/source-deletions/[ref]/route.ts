@@ -33,7 +33,7 @@ export async function POST(
     const result = await resolveSourceDeletion({
       orgId: gate.user.orgId,
       connectionId: id,
-      sourceRef: decodeURIComponent(ref),
+      sourceRef: ref,
       action: body.action,
       actorId: gate.user.id,
       note: body.note?.trim() || null,

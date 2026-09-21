@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
+import type { FilterClause } from "@openbooks/customization";
 
 // List filter values reach typed columns uncast: a crafted ?vendor=, ?from=
 // or ?to= (or a saved view holding one) dies at the database as a raw uuid /
@@ -65,11 +66,11 @@ test("malformed saved-view structured filters match nothing instead of throwing"
     const id = randomUUID();
     await db.execute(sql`insert into documents (id, org_id, kind, status, document_number, document_date, subsidiary_id, currency, subtotal, tax_total, total, custom)
       values (${id}, ${org.orgId}, 'vendor_bill', 'draft', 'BILL-F', ${org.date}, ${org.subsidiaryId}, 'CAD', '10', '0', '10', '{}'::jsonb)`);
-    const run = async (filters: { key: string; operator: string; value?: string | null }[]): Promise<number> => {
+    const run = async (filters: FilterClause[]): Promise<number> => {
       const rows = (
         await db.execute<{ n: number }>(sql`select count(*)::int as n from documents d
           left join parties p on p.id = d.party_id and p.org_id = d.org_id
-          where ${documentWhere([...KINDS], { ...view, filters: filters as never }, {}, org.orgId, null)}`)
+          where ${documentWhere([...KINDS], { ...view, filters }, {}, org.orgId, null)}`)
       ).rows;
       return rows[0]!.n;
     };
@@ -87,6 +88,49 @@ test("malformed saved-view structured filters match nothing instead of throwing"
       await run([{ key: "status", operator: "eq", value: "draft" }]),
       1,
       "well-formed saved filters keep working",
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("saved custom-field filters restrict the document list instead of dropping", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const west = randomUUID();
+    const east = randomUUID();
+    await db.execute(sql`insert into documents (id, org_id, kind, status, document_number, document_date, subsidiary_id, currency, subtotal, tax_total, total, custom)
+      values
+        (${west}, ${org.orgId}, 'vendor_bill', 'draft', 'BILL-W', ${org.date}, ${org.subsidiaryId}, 'CAD', '10', '0', '10', ${'{"region":"west"}'}::jsonb),
+        (${east}, ${org.orgId}, 'vendor_bill', 'draft', 'BILL-E', ${org.date}, ${org.subsidiaryId}, 'CAD', '10', '0', '10', ${'{"region":"east"}'}::jsonb)`);
+    const run = async (filters: FilterClause[]): Promise<number> => {
+      const rows = (
+        await db.execute<{ n: number }>(sql`select count(*)::int as n from documents d
+          left join parties p on p.id = d.party_id and p.org_id = d.org_id
+          where ${documentWhere([...KINDS], { ...view, filters }, {}, org.orgId, null)}`)
+      ).rows;
+      return rows[0]!.n;
+    };
+    assert.equal(await run([]), 2, "unfiltered list sees both bills");
+    assert.equal(
+      await run([{ key: "cf_region", operator: "eq", value: "west" }]),
+      1,
+      "eq on a custom field must AND, not drop",
+    );
+    assert.equal(
+      await run([{ key: "cf_region", operator: "eq", value: "south" }]),
+      0,
+      "a non-matching custom-field filter must empty the list, not return the tenant",
+    );
+    assert.equal(
+      await run([{ key: "cf_region", operator: "in", value: ["west", "east"] }]),
+      2,
+      "in on a custom field keeps matching rows",
+    );
+    assert.equal(
+      await run([{ key: "cf_region", operator: "between", value: "east", to: "west" }]),
+      0,
+      "an untyped range operator fails closed to empty, never drops",
     );
   } finally {
     await dropScratchOrg(org.orgId);

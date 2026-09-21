@@ -3,7 +3,7 @@ import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
 import { statementBookExpr } from "../../gl-summary";
-import { dateOrFalse, uuidOrFalse } from "../list-query";
+import { dateOrFalse, pushCustomFieldFilter, uuidOrFalse } from "../list-query";
 
 /* ------------------------------------------------------------------ */
 /* Fixed assets                                                        */
@@ -98,6 +98,7 @@ export function fixedAssetWhere(
     parts.push(ids.length ? sql`and a.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[])` : sql`and false`)
   }
   for (const filter of view.filters) {
+    if (pushCustomFieldFilter(parts, filter, "a")) continue
     const predicate = fixedAssetFilterPredicate(filter)
     if (predicate) parts.push(sql`and ${predicate}`)
   }

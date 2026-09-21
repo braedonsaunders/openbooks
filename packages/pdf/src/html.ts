@@ -7,11 +7,21 @@
 // (`sanitizeRenderedHtml`) so record data can never supply an attribute
 // scheme. Belt-and-braces here anyway: JavaScript is disabled in the print
 // page and subresource loading is restricted to inline data URLs for images,
-// fonts and stylesheets. Template-authored network URLs are never fetched by
-// the renderer.
+// fonts and stylesheets.
+//
+// The page request interceptor sees only the document created by
+// `page.setContent`. Chromium prints `headerTemplate` / `footerTemplate` as
+// their own documents, and Puppeteer interception does not observe those
+// subresources. Header and footer HTML therefore go through
+// `preparePdfChromeHtml` (the same inline-only resource policy) before they
+// are handed to `page.pdf`. Template-authored network URLs are never fetched
+// by the renderer.
 
 import puppeteer, { type Browser, type Page } from 'puppeteer-core'
+import { isAllowedPdfRequest, sanitizeTokenizedFragment } from './template'
 import type { PdfPaperSize } from './types'
+
+export { isAllowedPdfRequest }
 
 export type PdfOrientation = 'portrait' | 'landscape'
 
@@ -51,30 +61,6 @@ async function getBrowser(): Promise<Browser> {
   return browserPromise
 }
 
-const INLINE_RESOURCE_TYPES = new Set(['image', 'font', 'stylesheet'])
-
-/**
- * Return whether a request is safe for the print page to continue.
- *
- * The document created by `page.setContent` has the `about:blank` URL. All
- * template-controlled visual resources must be inline `data:` URLs; allowing
- * an HTTP(S) resource here would let an authored template make a request from
- * the OpenBooks server network (including redirects to private destinations).
- */
-export function isAllowedPdfRequest(resourceType: string, requestUrl: string): boolean {
-  let url: URL
-  try {
-    url = new URL(requestUrl)
-  } catch {
-    return false
-  }
-
-  if (resourceType === 'document') {
-    return url.href === 'about:blank'
-  }
-  return url.protocol === 'data:' && INLINE_RESOURCE_TYPES.has(resourceType)
-}
-
 /** New page hardened for printing: no JS, no template-controlled network. */
 async function newPdfPage(browser: Browser): Promise<Page> {
   const page = await browser.newPage()
@@ -101,6 +87,21 @@ export type HtmlDocumentPdfInput = {
   footerHtml?: string | null
 }
 
+function applyPageCounters(html: string): string {
+  return html
+    .replace(/\{\{\s*page\s*\}\}/g, '<span class="pageNumber"></span>')
+    .replace(/\{\{\s*pages\s*\}\}/g, '<span class="totalPages"></span>')
+}
+
+/**
+ * Prepare header/footer HTML for `page.pdf`. Chromium renders those strings
+ * as separate documents that the print-page interceptor cannot see, so this
+ * is the load-bearing inline-only rewrite — not the interceptor.
+ */
+export function preparePdfChromeHtml(html: string): string {
+  return applyPageCounters(sanitizeTokenizedFragment(html))
+}
+
 /**
  * Print merged template HTML on the chosen paper at the chosen orientation and
  * margins, with the org's own running header/footer. `{{page}}`/`{{pages}}` in
@@ -116,17 +117,11 @@ export async function renderHtmlDocumentPdf(input: HtmlDocumentPdfInput): Promis
   if (Buffer.byteLength(html, 'utf8') > HTML_BYTE_LIMIT) {
     throw new Error('Rendered document HTML exceeds the 16 MiB print limit.')
   }
-  const pageCounters = (s?: string | null): string =>
-    s
-      ? s
-          .replace(/\{\{\s*page\s*\}\}/g, '<span class="pageNumber"></span>')
-          .replace(/\{\{\s*pages\s*\}\}/g, '<span class="totalPages"></span>')
-      : ''
   const headerTemplate = input.headerHtml
-    ? `<div style="font-size:8px;width:100%;padding:0 ${m};color:#64748b;">${pageCounters(input.headerHtml)}</div>`
+    ? `<div style="font-size:8px;width:100%;padding:0 ${m};color:#64748b;">${preparePdfChromeHtml(input.headerHtml)}</div>`
     : `<div></div>`
   const footerTemplate = input.footerHtml
-    ? `<div style="font-size:8px;width:100%;padding:0 ${m};color:#94a3b8;text-align:center;">${pageCounters(input.footerHtml)}</div>`
+    ? `<div style="font-size:8px;width:100%;padding:0 ${m};color:#94a3b8;text-align:center;">${preparePdfChromeHtml(input.footerHtml)}</div>`
     : `<div></div>`
   const browser = await getBrowser()
   const page = await newPdfPage(browser)

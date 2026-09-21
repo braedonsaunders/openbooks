@@ -1,4 +1,5 @@
 import { isIP } from "node:net";
+import { isNamedNonProductionEnvironment } from "./auth-secret-policy";
 import { isSameLoopbackOrigin } from "./csrf";
 
 export const LOGIN_WINDOW_S = 15 * 60;
@@ -30,9 +31,9 @@ export type LockoutState = {
   lockedUntil: Date | null;
 };
 
-/** Production cookies can never be downgraded by configuration. */
-export function useSecureCookies(environment: Record<string, string | undefined> = process.env): boolean {
-  if (environment.NODE_ENV === "production") return true;
+/** Cookies are Secure unless the operator named a non-production environment. */
+export function secureCookiesEnabled(environment: Record<string, string | undefined> = process.env): boolean {
+  if (!isNamedNonProductionEnvironment(environment)) return true;
   return /^(1|true|yes)$/i.test(environment.OPENBOOKS_COOKIE_SECURE ?? "");
 }
 

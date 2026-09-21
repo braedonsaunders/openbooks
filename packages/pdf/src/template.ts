@@ -13,6 +13,11 @@
 //     (`escapeHtml: true`). Escaping alone cannot cover attribute context (a
 //     token placed in an attribute takes the value's scheme), so the print
 //     path sanitizes the merged BODY again (`sanitizeRenderedHtml`).
+//   • Header/footer fragments (`sanitizeTokenizedFragment`) drop any
+//     resource URL that `isAllowedPdfRequest` would abort. Chromium prints
+//     those strings as their own documents, so a leftover
+//     `<img src="https://…">` would be fetched from the OpenBooks host —
+//     the page interceptor never sees it.
 //   • The builder marks repeating elements with `data-each="collection"` and
 //     conditional elements with `data-if="path"`; `expandRepeatMarkers`
 //     expands them into `{{#each}}` / `{{#if}}` blocks at compile time, capped
@@ -933,6 +938,523 @@ export function sanitizeTemplateFragment(html: string): string {
   return sanitizeMarkup(html, false, TEMPLATE_RENDER_LIMITS.templateChars, 'Authored template HTML')
 }
 
+const INLINE_RESOURCE_TYPES = new Set(['image', 'font', 'stylesheet'])
+
+/**
+ * Return whether a request is safe for the print page to continue.
+ *
+ * The document created by `page.setContent` has the `about:blank` URL. All
+ * template-controlled visual resources must be inline `data:` URLs; allowing
+ * an HTTP(S) resource here would let an authored template make a request from
+ * the OpenBooks server network (including redirects to private destinations).
+ *
+ * Header/footer HTML is printed outside that interceptor, so the chrome
+ * rewriter below consults this same function before a URL is left in the
+ * markup Chromium will load.
+ */
+export function isAllowedPdfRequest(resourceType: string, requestUrl: string): boolean {
+  let url: URL
+  try {
+    url = new URL(requestUrl.trim())
+  } catch {
+    return false
+  }
+
+  if (resourceType === 'document') {
+    return url.href === 'about:blank'
+  }
+  return url.protocol === 'data:' && INLINE_RESOURCE_TYPES.has(resourceType)
+}
+
+/** True when the interceptor would continue this URL as a visual resource. */
+export function isInlinePdfResourceUrl(value: string): boolean {
+  return (
+    isAllowedPdfRequest('image', value) ||
+    isAllowedPdfRequest('font', value) ||
+    isAllowedPdfRequest('stylesheet', value)
+  )
+}
+
+const RESOURCE_URI_ATTRS = new Set(['src', 'srcset', 'poster', 'background', 'xlink:href'])
+
+/** SVG/CSS presentation attributes whose value is a paint or filter and may be `url(...)`. */
+const CSS_URL_PRESENTATION_ATTRS = new Set([
+  'filter',
+  'clip-path',
+  'mask',
+  'mask-image',
+  'fill',
+  'stroke',
+  'marker',
+  'marker-start',
+  'marker-mid',
+  'marker-end',
+  'cursor',
+])
+
+function attributeCarriesCssResourceUrl(attrName: string, decodedValue: string): boolean {
+  if (attrName === 'style' || CSS_URL_PRESENTATION_ATTRS.has(attrName)) return true
+  return /url\s*\(/i.test(decodeCssEscapes(decodedValue))
+}
+
+function isFetchUriAttr(tagName: string, attrName: string): boolean {
+  if (RESOURCE_URI_ATTRS.has(attrName)) return true
+  // <a>/<area> hrefs become PDF link annotations; they are not subresource
+  // fetches. Every other href (link, image, use, base, …) is a fetch.
+  if (attrName === 'href') return tagName !== 'a' && tagName !== 'area'
+  return attrName === 'data' && tagName === 'object'
+}
+
+function resourceTypeForAttr(tagName: string, attrName: string): string {
+  if (attrName === 'href' || tagName === 'link') return 'stylesheet'
+  return 'image'
+}
+
+function isAllowedResourceAttrValue(tagName: string, attrName: string, value: string): boolean {
+  const resourceType = resourceTypeForAttr(tagName, attrName)
+  if (attrName !== 'srcset') return isAllowedPdfRequest(resourceType, value)
+  const trimmed = value.trim()
+  // A lone data: URL is unambiguous. Commas also appear inside base64, so a
+  // srcset that mentions data: and cannot be proven to be a single data: URL
+  // is dropped rather than half-parsed.
+  if (isAllowedPdfRequest(resourceType, trimmed)) return true
+  if (/data:/i.test(trimmed)) return false
+  return trimmed.split(',').every((candidate) => {
+    const url = candidate.trim().split(/\s+/)[0] ?? ''
+    return isAllowedPdfRequest(resourceType, url)
+  })
+}
+
+function decodeHtmlAttrValue(value: string): string {
+  let out = ''
+  let cursor = 0
+  while (cursor < value.length) {
+    if (value.charCodeAt(cursor) === 38) {
+      const entity = decodeEntityAt(value, cursor)
+      if (entity) {
+        out += entity.value
+        cursor = entity.next
+        continue
+      }
+    }
+    out += value[cursor]!
+    cursor += 1
+  }
+  return out
+}
+
+function decodeCssEscapes(input: string): string {
+  let out = ''
+  let cursor = 0
+  while (cursor < input.length) {
+    if (input[cursor] !== '\\') {
+      out += input[cursor]
+      cursor += 1
+      continue
+    }
+    if (cursor + 1 >= input.length) break
+    const next = input[cursor + 1]!
+    if (next === '\n' || next === '\f') {
+      cursor += 2
+      continue
+    }
+    if (next === '\r') {
+      cursor += input[cursor + 2] === '\n' ? 3 : 2
+      continue
+    }
+    let hex = ''
+    let hexEnd = cursor + 1
+    while (hexEnd < input.length && hex.length < 6 && /[0-9a-fA-F]/.test(input[hexEnd]!)) {
+      hex += input[hexEnd]
+      hexEnd += 1
+    }
+    if (hex) {
+      const code = Number.parseInt(hex, 16)
+      out +=
+        code === 0 || (code >= 0xd800 && code <= 0xdfff) || code > 0x10ffff
+          ? '\uFFFD'
+          : String.fromCodePoint(code)
+      if (input[hexEnd] === '\r' && input[hexEnd + 1] === '\n') hexEnd += 2
+      else if (
+        input[hexEnd] === ' ' ||
+        input[hexEnd] === '\t' ||
+        input[hexEnd] === '\n' ||
+        input[hexEnd] === '\f' ||
+        input[hexEnd] === '\r'
+      ) {
+        hexEnd += 1
+      }
+      cursor = hexEnd
+      continue
+    }
+    out += next
+    cursor += 2
+  }
+  return out
+}
+
+function extractCssResourceUrls(fragment: string): string[] {
+  const urls: string[] = []
+  const urlFn = /url\(\s*(?:'([^']*)'|"([^"]*)"|([^)]*?))\s*\)/gi
+  let match: RegExpExecArray | null
+  while ((match = urlFn.exec(fragment)) !== null) {
+    const url = (match[1] ?? match[2] ?? match[3] ?? '').trim()
+    if (url) urls.push(url)
+  }
+  const quoted = /["']([^"']*)["']/g
+  while ((match = quoted.exec(fragment)) !== null) {
+    const url = match[1]!.trim()
+    if (url) urls.push(url)
+  }
+  const bare = /(?:https?:)?\/\/[^\s,)"']+/gi
+  while ((match = bare.exec(fragment)) !== null) {
+    urls.push(match[0])
+  }
+  return urls
+}
+
+function cssImportIsInlineOnly(statement: string): boolean {
+  const urls = extractCssResourceUrls(statement)
+  return urls.length > 0 && urls.every(isInlinePdfResourceUrl)
+}
+
+function findMatchingParen(source: string, openIndex: number): number {
+  let depth = 0
+  let quote = 0
+  for (let i = openIndex; i < source.length; i++) {
+    const code = source.charCodeAt(i)
+    if (quote) {
+      if (code === 92) {
+        i += 1
+        continue
+      }
+      if (code === quote) quote = 0
+      continue
+    }
+    if (code === 34 || code === 39) {
+      quote = code
+      continue
+    }
+    if (code === 40) depth += 1
+    else if (code === 41) {
+      depth -= 1
+      if (depth === 0) return i
+    }
+  }
+  return -1
+}
+
+const CSS_IMAGE_FUNCTIONS = ['-webkit-image-set', 'image-set', 'cross-fade', 'image'] as const
+
+function cssFunctionArgsAreInlineOnly(args: string): boolean {
+  const urls = extractCssResourceUrls(args)
+  if (urls.length === 0) return !/(?:https?:|url\s*\(|\/\/)/i.test(args)
+  return urls.every(isInlinePdfResourceUrl)
+}
+
+function rewriteCssImageFunctions(css: string): string {
+  let out = ''
+  let cursor = 0
+  const lower = css.toLowerCase()
+  while (cursor < css.length) {
+    let found = -1
+    let foundName = ''
+    for (const name of CSS_IMAGE_FUNCTIONS) {
+      const idx = lower.indexOf(`${name}(`, cursor)
+      if (idx === -1) continue
+      if (name === 'image' && lower.startsWith('image-set(', idx)) continue
+      if (found === -1 || idx < found) {
+        found = idx
+        foundName = name
+      }
+    }
+    if (found === -1) {
+      out += css.slice(cursor)
+      break
+    }
+    const open = found + foundName.length
+    const close = findMatchingParen(css, open)
+    out += css.slice(cursor, found)
+    if (close === -1) {
+      out += 'none'
+      break
+    }
+    const args = css.slice(open + 1, close)
+    out += cssFunctionArgsAreInlineOnly(args) ? css.slice(found, close + 1) : 'none'
+    cursor = close + 1
+  }
+  return out
+}
+
+function neutralizeCssFetches(css: string): string {
+  // Decode first so `\75rl(...)` and `url(\68ttps://...)` become a visible
+  // url() that isAllowedPdfRequest can refuse. image-set() can take a quoted
+  // URL with no url() wrapper — those are rewritten as a whole function.
+  const decoded = decodeCssEscapes(css)
+  let out = decoded.replace(/@import\b[^;]*;?/gi, (statement) =>
+    cssImportIsInlineOnly(statement) ? statement : '',
+  )
+  out = rewriteCssImageFunctions(out)
+  out = out.replace(/url\(\s*(?:'([^']*)'|"([^"]*)"|([^)]*?))\s*\)/gi, (full, quotedSingle, quotedDouble, bare) => {
+    const inner = String(quotedSingle ?? quotedDouble ?? bare ?? '').trim()
+    return isInlinePdfResourceUrl(inner) ? full : 'none'
+  })
+  // Quoted http(s) left outside url() — image-set("https://…") is handled
+  // above; this is the fail-closed remainder and must not touch a data: URL.
+  return out.replace(/["']https?:\/\/[^"']+["']/gi, (quoted, offset: number, source: string) => {
+    if (source.slice(Math.max(0, offset - 320), offset).includes('data:')) return quoted
+    const inner = quoted.slice(1, -1)
+    return isInlinePdfResourceUrl(inner) ? quoted : 'none'
+  })
+}
+
+function rewriteTagResourceAttrs(openTag: string, tagName: string): string {
+  let cursor = 1
+  while (cursor < openTag.length && isHtmlSpace(openTag.charCodeAt(cursor))) cursor += 1
+  cursor += tagName.length
+  let rewritten = openTag.slice(0, cursor)
+
+  while (cursor < openTag.length) {
+    const attrStart = cursor
+    while (cursor < openTag.length && isHtmlSpace(openTag.charCodeAt(cursor))) cursor += 1
+    if (cursor >= openTag.length) {
+      rewritten += openTag.slice(attrStart)
+      break
+    }
+    const next = openTag[cursor]
+    if (next === '>' || next === '/') {
+      rewritten += openTag.slice(attrStart)
+      break
+    }
+
+    const nameStart = cursor
+    while (cursor < openTag.length) {
+      const code = openTag.charCodeAt(cursor)
+      const isName =
+        (code >= 48 && code <= 57) ||
+        (code >= 65 && code <= 90) ||
+        code === 45 ||
+        code === 58 ||
+        code === 95 ||
+        (code >= 97 && code <= 122)
+      if (!isName) break
+      cursor += 1
+    }
+    if (cursor === nameStart) {
+      rewritten += openTag[cursor] ?? ''
+      cursor += 1
+      continue
+    }
+
+    const attrName = openTag.slice(nameStart, cursor)
+    const attrNameLower = attrName.toLowerCase()
+    while (cursor < openTag.length && isHtmlSpace(openTag.charCodeAt(cursor))) cursor += 1
+
+    let value: string | null = null
+    if (openTag[cursor] === '=') {
+      cursor += 1
+      while (cursor < openTag.length && isHtmlSpace(openTag.charCodeAt(cursor))) cursor += 1
+      const quote = openTag[cursor]
+      if (quote === '"' || quote === "'") {
+        cursor += 1
+        const valueStart = cursor
+        while (cursor < openTag.length && openTag[cursor] !== quote) cursor += 1
+        value = openTag.slice(valueStart, cursor)
+        if (cursor < openTag.length) cursor += 1
+      } else {
+        const valueStart = cursor
+        while (
+          cursor < openTag.length &&
+          !isHtmlSpace(openTag.charCodeAt(cursor)) &&
+          openTag[cursor] !== '>'
+        ) {
+          cursor += 1
+        }
+        value = openTag.slice(valueStart, cursor)
+      }
+    }
+
+    if (value != null && attributeCarriesCssResourceUrl(attrNameLower, decodeHtmlAttrValue(value))) {
+      const decoded = decodeHtmlAttrValue(value)
+      const nextCss = neutralizeCssFetches(decoded)
+      if (nextCss === decoded) {
+        rewritten += openTag.slice(attrStart, cursor)
+      } else {
+        rewritten += ` ${attrName}="${escapeTemplateHtml(nextCss)}"`
+      }
+    } else if (
+      value != null &&
+      isFetchUriAttr(tagName, attrNameLower) &&
+      !isAllowedResourceAttrValue(tagName, attrNameLower, decodeHtmlAttrValue(value))
+    ) {
+      // Drop the fetchable attribute; keep the rest of the tag.
+    } else {
+      rewritten += openTag.slice(attrStart, cursor)
+    }
+  }
+
+  return rewritten
+}
+
+/**
+ * Strip fetchable network URLs from already-sanitized chrome HTML so Chromium
+ * has nothing to retrieve when it prints a header/footer as its own document.
+ * Text content is left untouched — an escaped `https://` mention is not a fetch.
+ */
+export function rewriteNetworkPdfResources(html: string): string {
+  assertLength(html, TEMPLATE_RENDER_LIMITS.renderOutputChars, 'Sanitized template HTML')
+  const out = new BoundedStringBuilder(
+    TEMPLATE_RENDER_LIMITS.renderOutputChars,
+    'Sanitized template HTML',
+  )
+  let cursor = 0
+  let inStyle = false
+  while (cursor < html.length) {
+    const start = html.indexOf('<', cursor)
+    if (start === -1) {
+      const rest = html.slice(cursor)
+      out.append(inStyle ? neutralizeCssFetches(rest) : rest)
+      break
+    }
+    const text = html.slice(cursor, start)
+    out.append(inStyle ? neutralizeCssFetches(text) : text)
+    const tag = readHtmlTag(html, start)
+    if (!tag) {
+      out.append('<')
+      cursor = start + 1
+      continue
+    }
+    const rawTag = html.slice(start, tag.end)
+    if (tag.name === 'style') {
+      if (tag.closing) inStyle = false
+      else if (!tag.selfClosing) inStyle = true
+    }
+    out.append(tag.name && !tag.closing ? rewriteTagResourceAttrs(rawTag, tag.name) : rawTag)
+    cursor = tag.end
+  }
+  return out.toString()
+}
+
+export type PdfChromeSubresourceRequest = { resourceType: string; url: string }
+
+function collectCssSubresourceRequests(css: string): PdfChromeSubresourceRequest[] {
+  const decoded = decodeCssEscapes(css)
+  const requests: PdfChromeSubresourceRequest[] = []
+  const importPattern = /@import\b[^;]*;?/gi
+  let importMatch: RegExpExecArray | null
+  while ((importMatch = importPattern.exec(decoded)) !== null) {
+    for (const url of extractCssResourceUrls(importMatch[0])) {
+      requests.push({ resourceType: 'stylesheet', url })
+    }
+  }
+  for (const url of extractCssResourceUrls(decoded)) {
+    requests.push({ resourceType: 'image', url })
+  }
+  return requests
+}
+
+function collectTagSubresourceRequests(openTag: string, tagName: string): PdfChromeSubresourceRequest[] {
+  const requests: PdfChromeSubresourceRequest[] = []
+  let cursor = 1
+  while (cursor < openTag.length && isHtmlSpace(openTag.charCodeAt(cursor))) cursor += 1
+  cursor += tagName.length
+  while (cursor < openTag.length) {
+    while (cursor < openTag.length && isHtmlSpace(openTag.charCodeAt(cursor))) cursor += 1
+    if (cursor >= openTag.length) break
+    const next = openTag[cursor]
+    if (next === '>' || next === '/') break
+    const nameStart = cursor
+    while (cursor < openTag.length) {
+      const code = openTag.charCodeAt(cursor)
+      const isName =
+        (code >= 48 && code <= 57) ||
+        (code >= 65 && code <= 90) ||
+        code === 45 ||
+        code === 58 ||
+        code === 95 ||
+        (code >= 97 && code <= 122)
+      if (!isName) break
+      cursor += 1
+    }
+    if (cursor === nameStart) {
+      cursor += 1
+      continue
+    }
+    const attrNameLower = openTag.slice(nameStart, cursor).toLowerCase()
+    while (cursor < openTag.length && isHtmlSpace(openTag.charCodeAt(cursor))) cursor += 1
+    let value: string | null = null
+    if (openTag[cursor] === '=') {
+      cursor += 1
+      while (cursor < openTag.length && isHtmlSpace(openTag.charCodeAt(cursor))) cursor += 1
+      const quote = openTag[cursor]
+      if (quote === '"' || quote === "'") {
+        cursor += 1
+        const valueStart = cursor
+        while (cursor < openTag.length && openTag[cursor] !== quote) cursor += 1
+        value = openTag.slice(valueStart, cursor)
+        if (cursor < openTag.length) cursor += 1
+      } else {
+        const valueStart = cursor
+        while (
+          cursor < openTag.length &&
+          !isHtmlSpace(openTag.charCodeAt(cursor)) &&
+          openTag[cursor] !== '>'
+        ) {
+          cursor += 1
+        }
+        value = openTag.slice(valueStart, cursor)
+      }
+    }
+    if (value == null) continue
+    const decoded = decodeHtmlAttrValue(value)
+    if (attributeCarriesCssResourceUrl(attrNameLower, decoded)) {
+      requests.push(...collectCssSubresourceRequests(decoded))
+    } else if (isFetchUriAttr(tagName, attrNameLower)) {
+      if (attrNameLower === 'srcset') {
+        for (const candidate of decoded.split(',')) {
+          const url = candidate.trim().split(/\s+/)[0] ?? ''
+          if (url) requests.push({ resourceType: resourceTypeForAttr(tagName, attrNameLower), url })
+        }
+      } else {
+        requests.push({ resourceType: resourceTypeForAttr(tagName, attrNameLower), url: decoded })
+      }
+    }
+  }
+  return requests
+}
+
+/**
+ * Resource URLs Chromium would request while printing this chrome HTML.
+ * Used to prove header/footer markup that survives rewrite would also pass
+ * `isAllowedPdfRequest` — the interceptor never sees these documents.
+ */
+export function pdfChromeSubresourceRequests(html: string): PdfChromeSubresourceRequest[] {
+  const requests: PdfChromeSubresourceRequest[] = []
+  let cursor = 0
+  let inStyle = false
+  while (cursor < html.length) {
+    const start = html.indexOf('<', cursor)
+    if (start === -1) {
+      if (inStyle) requests.push(...collectCssSubresourceRequests(html.slice(cursor)))
+      break
+    }
+    if (inStyle) requests.push(...collectCssSubresourceRequests(html.slice(cursor, start)))
+    const tag = readHtmlTag(html, start)
+    if (!tag) {
+      cursor = start + 1
+      continue
+    }
+    const rawTag = html.slice(start, tag.end)
+    if (tag.name === 'style') {
+      if (tag.closing) inStyle = false
+      else if (!tag.selfClosing) inStyle = true
+    }
+    if (tag.name && !tag.closing) requests.push(...collectTagSubresourceRequests(rawTag, tag.name))
+    cursor = tag.end
+  }
+  return requests
+}
+
 function assertTemplateTokensAreTextOnly(html: string): void {
   let cursor = 0
   let inStyle = false
@@ -961,9 +1483,13 @@ function assertTemplateTokensAreTextOnly(html: string): void {
 /**
  * Sanitize a tokenized header/footer fragment and prove that every token is in
  * text content — a record value can never become a URL, CSS, or attribute.
+ * Network resource URLs are stripped here too: save-time DOMPurify still
+ * allows static `https:` images and stylesheets, and those would be fetched
+ * from the print host because header/footer documents sit outside the
+ * interceptor.
  */
 export function sanitizeTokenizedFragment(html: string): string {
-  const sanitized = sanitizeTemplateFragment(html)
+  const sanitized = rewriteNetworkPdfResources(sanitizeTemplateFragment(html))
   assertTemplateTokensAreTextOnly(sanitized)
   return sanitized
 }

@@ -21,7 +21,7 @@ import {
   widgetCell,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { parseListParams, pickString } from '../../../../lib/list-params'
+import { isUuid, parseListParams, pickString } from '../../../../lib/list-params'
 import { can, getAuthz } from '../../../../lib/authz'
 import { RECORD_TYPES, RECORD_TYPE_BY_KEY, customFieldTargetFor, defaultFormLayout, type FormLayoutConfig } from '@openbooks/customization'
 import { loadFieldDefs } from '../../../../lib/custom-fields'
@@ -194,8 +194,16 @@ export async function loadCustomization(
   // transaction kind currently exposes a configurable form.
   const supportsForms = canManageOrg && (!recordType || RECORD_TYPE_BY_KEY[recordType]?.supportsForms !== false)
   const tab = !supportsForms ? 'views' : pickString(sp.tab) === 'views' ? 'views' : 'forms'
-  const formId = canManageOrg ? pickString(sp.form) : undefined
-  const viewId = pickString(sp.view)
+  const requestedFormId = canManageOrg ? pickString(sp.form) : undefined
+  const formId =
+    requestedFormId === 'new' || (requestedFormId != null && isUuid(requestedFormId))
+      ? requestedFormId
+      : undefined
+  const requestedViewId = pickString(sp.view)
+  const viewId =
+    requestedViewId === 'new' || (requestedViewId != null && isUuid(requestedViewId))
+      ? requestedViewId
+      : undefined
   const params = parseListParams(sp, { sort: 'name', allowedSorts: ['name'] as const, perPage: 100 })
 
   const hiddenList = [...hiddenKinds]
@@ -233,11 +241,11 @@ export async function loadCustomization(
   ])
 
   const openForm =
-    formId && formId !== 'new'
+    formId && formId !== 'new' && isUuid(formId)
       ? ((await db.execute(sql`select id, name, description, is_default as "isDefault", is_active as "isActive", allowed_roles as "allowedRoles", layout, record_type as "recordType" from form_layouts where id = ${formId} and org_id = ${authz.user.orgId}`)) as unknown as { rows: FormDesignerDef[] }).rows[0] ?? null
       : null
   const openView =
-    viewId && viewId !== 'new'
+    viewId && viewId !== 'new' && isUuid(viewId)
       ? ((await db.execute(sql`select id, name, scope, is_default as "isDefault", is_active as "isActive", config, record_type as "recordType" from list_views where id = ${viewId} and org_id = ${authz.user.orgId} and ${canManageOrg ? sql`(scope = 'org' or owner_id = ${authz.user.id})` : sql`scope = 'user' and owner_id = ${authz.user.id}`}`)) as unknown as { rows: ListViewDesignerDef[] }).rows[0] ?? null
       : null
   if (openForm?.recordType && hiddenKinds.has(openForm.recordType)) notFound()
@@ -254,7 +262,7 @@ export async function loadCustomization(
   if (recordType && formId === 'new' && fromParam) {
     if (fromParam === 'standard') {
       duplicateFrom = { name: t('designer.forms.copyName', { name: t('designer.forms.standardName', { type: typeLabel }) }), layout: defaultFormLayout(recordType) }
-    } else {
+    } else if (isUuid(fromParam)) {
       const src = ((await db.execute(sql`select name, layout from form_layouts where id = ${fromParam} and org_id = ${authz.user.orgId} and record_type = ${recordType}`)) as unknown as { rows: FormCopySqlRow[] }).rows[0]
       if (src) duplicateFrom = { name: t('designer.forms.copyName', { name: src.name }), layout: src.layout as FormLayoutConfig }
     }

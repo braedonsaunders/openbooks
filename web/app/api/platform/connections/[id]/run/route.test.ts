@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 type MockJob = {
   id: string;
@@ -19,6 +21,8 @@ type RouteState = {
   blockFirstEnqueue: boolean;
   firstEnqueueStarted?: () => void;
   releaseFirstEnqueue?: () => void;
+  config: Record<string, unknown>;
+  versionMatch: boolean;
 };
 
 const stateKey = Symbol.for("openbooks.connection-run-route-test");
@@ -30,6 +34,8 @@ const routeState: RouteState = {
   lockHeld: false,
   lockWaiters: [],
   blockFirstEnqueue: false,
+  config: {},
+  versionMatch: true,
 };
 (
   globalThis as typeof globalThis & Record<symbol, unknown>
@@ -70,9 +76,7 @@ const mockSources = new Map<string, string>([
   [
     "mock:connection",
     `
-      export async function getConnection() {
-        return { status: 'connected', source: 'netsuite' }
-      }
+      export {}
     `,
   ],
   [
@@ -140,6 +144,9 @@ const mockSources = new Map<string, string>([
               state.lockHeld = true
               lockAcquired = true
             }
+            if (text.includes('from connections')) {
+              return { rows: state.versionMatch === false ? [] : [{ one: 1 }] }
+            }
             if (text.includes('from sync_runs')) {
               return { rows: state.running ? [{ one: 1 }] : [] }
             }
@@ -149,6 +156,23 @@ const mockSources = new Map<string, string>([
         }
       }
       export const db = {
+        async execute(query) {
+          const text = sqlText(query)
+          if (text.includes('from connections')) {
+            return {
+              rows: [{
+                id: 'conn-1',
+                orgId: 'org-1',
+                status: 'connected',
+                source: 'netsuite',
+                config: state.config,
+                secrets: null,
+                updatedAt: 't0',
+              }],
+            }
+          }
+          return { rows: [] }
+        },
         async transaction(callback) {
           const tx = makeTx()
           try { return await callback(tx) }
@@ -210,6 +234,8 @@ function reset(): void {
   routeState.blockFirstEnqueue = false;
   routeState.firstEnqueueStarted = undefined;
   routeState.releaseFirstEnqueue = undefined;
+  routeState.config = {};
+  routeState.versionMatch = true;
 }
 
 function request(mode: string): Request {
@@ -276,4 +302,57 @@ test("a terminal queue record can be replaced for a later deliberate run", async
     "migration|conn-1|mirror",
     "migration|conn-1|mirror",
   ]);
+});
+
+const refusedConnectorUrls = [
+  ["loopback IPv4", { url: "http://127.0.0.1/" }],
+  ["localhost", { url: "http://localhost:8069" }],
+  ["metadata", { url: "http://169.254.169.254/latest/meta-data/" }],
+  ["loopback IPv6", { url: "http://[::1]/" }],
+  ["file scheme", { url: "file:///etc/passwd" }],
+  ["NetSuite host loopback", { host: "https://127.0.0.1" }],
+  ["IPv4-mapped IPv6 hex", { url: "http://[::ffff:7f00:1]/" }],
+  ["IPv4-mapped IPv6 dotted", { url: "http://[::ffff:127.0.0.1]/" }],
+  ["RFC1918 10.0.0.1", { url: "http://10.0.0.1/" }],
+  ["IPv6 ULA fd00::1", { url: "http://[fd00::1]/" }],
+  ["unspecified 0.0.0.0", { url: "http://0.0.0.0/" }],
+] as const;
+
+for (const [name, config] of refusedConnectorUrls) {
+  test(`run does not enqueue a ${name} connector URL`, async () => {
+    reset();
+    routeState.config = { ...config };
+
+    const response = await POST(request("full_migration"), {
+      params: Promise.resolve({ id: "conn-1" }),
+    });
+
+    assert.equal(response.status, 404);
+    const body = (await response.json()) as { errorCode?: string };
+    assert.equal(body.errorCode, "CONNECTOR_URL_REFUSED");
+    assert.equal(routeState.enqueueAttempts, 0, "must not enqueue a refused connector URL");
+    assert.equal(routeState.createdJobIds.length, 0);
+  });
+}
+
+test("run route source captures probe URL and version from one row", () => {
+  const source = readFileSync(fileURLToPath(new URL("./route.ts", import.meta.url)), "utf8");
+  assert.doesNotMatch(source, /\bgetConnection\b/);
+  assert.doesNotMatch(source, /loadConnectionVersion/);
+  assert.match(source, /updated_at as "updatedAt"/);
+  assert.match(source, /updated_at is not distinct from \$\{conn\.updatedAt\}/);
+});
+
+test("run does not enqueue after a concurrent connection change", async () => {
+  reset();
+  routeState.versionMatch = false;
+
+  const response = await POST(request("full_migration"), {
+    params: Promise.resolve({ id: "conn-1" }),
+  });
+
+  assert.equal(response.status, 409);
+  const body = (await response.json()) as { errorCode?: string };
+  assert.equal(body.errorCode, "CONNECTION_CHANGED");
+  assert.equal(routeState.enqueueAttempts, 0);
 });

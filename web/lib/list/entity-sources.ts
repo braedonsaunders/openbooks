@@ -4,7 +4,7 @@ import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { resolveProjectActualCosts } from '@openbooks/engine/src/projects/financials.ts'
 import { cmp } from '@openbooks/engine/src/money/money.ts'
-import type { ListViewConfig } from '@openbooks/customization'
+import { isCustomFieldKey, type ListViewConfig } from '@openbooks/customization'
 import { displayOpportunityStatusName } from '../crm-status-display'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
 import {
@@ -40,6 +40,7 @@ import {
   JOURNAL_ENTRY_SORTS,
   JOURNAL_ENTRY_TABLE,
   journalEntryBaseJoins,
+  journalEntryCountJoins,
   journalEntryWhere,
   INVENTORY_ONHAND_BUILT_IN_EXPR,
   INVENTORY_ONHAND_SORTS,
@@ -241,6 +242,10 @@ const SOURCES: Record<string, EntityListSource> = {
       if (adhoc.q) parts.push(sql`and cs.name ilike ${`%${adhoc.q}%`}`);
       if (adhoc.filters?.status) parts.push(sql`and cs.status=${adhoc.filters.status}`);
       for (const filter of view.filters) {
+        if (isCustomFieldKey(filter.key)) {
+          parts.push(sql`and false`);
+          continue;
+        }
         if (filter.key !== 'status') continue;
         const values = (Array.isArray(filter.value) ? filter.value : [filter.value]).map(String);
         if (filter.operator === 'eq') parts.push(sql`and cs.status=${values[0]}`);
@@ -570,9 +575,10 @@ const SOURCES: Record<string, EntityListSource> = {
     customFieldKind: 'journal',
     customFieldAlias: 'source_doc',
     baseJoins: journalEntryBaseJoins,
-    // The WHERE never references the laterals (visibility lives in the table
-    // union), so the count/status queries can skip them entirely.
-    countJoins: sql``,
+    // Saved cf_* filters bind against source_doc.custom, so the count/status
+    // queries must keep that lateral. Visibility still lives in the table
+    // union; the line-totals lateral stays on the row query only.
+    countJoins: journalEntryCountJoins,
     builtInExpr: JOURNAL_ENTRY_BUILT_IN_EXPR,
     sorts: JOURNAL_ENTRY_SORTS,
     defaultSort: sql`e.posting_date`,

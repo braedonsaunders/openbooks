@@ -1,5 +1,6 @@
 import {
   boolean,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -84,7 +85,11 @@ export const flows = pgTable(
     lastScheduledRunAt: timestamp("last_scheduled_run_at", { withTimezone: true }),
     ...auditColumns,
   },
-  (t) => [index("flows_org_subject").on(t.orgId, t.subjectKind, t.enabled)],
+  (t) => [
+    // Exact organization and id key required by tenant-coherent references (0213).
+    uniqueIndex("flows_org_id_id_unique").on(t.orgId, t.id),
+    index("flows_org_subject").on(t.orgId, t.subjectKind, t.enabled),
+  ],
 );
 
 /**
@@ -119,6 +124,14 @@ export const flowRuns = pgTable(
     ...auditColumns,
   },
   (t) => [
+    // Exact organization and id key required by tenant-coherent references (0214).
+    uniqueIndex("flow_runs_org_id_id_unique").on(t.orgId, t.id),
+    // Tenant pair required by 0213: a run may only name a flow of its own org.
+    foreignKey({
+      name: "flow_runs_flow_id_fkey",
+      columns: [t.orgId, t.flowId],
+      foreignColumns: [flows.orgId, flows.id],
+    }).onDelete("cascade"),
     index("flow_runs_org_flow").on(t.orgId, t.flowId),
     index("flow_runs_subject").on(t.orgId, t.subjectKind, t.subjectId),
     index("flow_runs_status").on(t.orgId, t.status),
@@ -151,7 +164,15 @@ export const flowRunEffects = pgTable(
     completedAt: timestamp("completed_at", { withTimezone: true }).notNull().defaultNow(),
     ...auditColumns,
   },
-  (t) => [uniqueIndex("flow_run_effects_run_effect").on(t.runId, t.effectKey)],
+  (t) => [
+    uniqueIndex("flow_run_effects_run_effect").on(t.runId, t.effectKey),
+    // Tenant pair required by 0216: an effect may only name a run of its own org.
+    foreignKey({
+      name: "flow_run_effects_run_id_fkey",
+      columns: [t.orgId, t.runId],
+      foreignColumns: [flowRuns.orgId, flowRuns.id],
+    }).onDelete("cascade"),
+  ],
 );
 
 /**
@@ -210,6 +231,17 @@ export const flowGates = pgTable(
     index("flow_gates_assignee").on(t.orgId, t.status, t.assigneeUserId),
     index("flow_gates_subject").on(t.orgId, t.subjectKind, t.subjectId),
     index("flow_gates_remind").on(t.orgId, t.status, t.remindAt),
+    // Tenant pairs required by 0214: a gate may only name a flow or run of its own org.
+    foreignKey({
+      name: "flow_gates_flow_id_fkey",
+      columns: [t.orgId, t.flowId],
+      foreignColumns: [flows.orgId, flows.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "flow_gates_run_id_fkey",
+      columns: [t.orgId, t.runId],
+      foreignColumns: [flowRuns.orgId, flowRuns.id],
+    }).onDelete("cascade"),
   ],
 );
 
@@ -269,6 +301,12 @@ export const flowLocks = pgTable(
   (t) => [
     uniqueIndex("flow_locks_subject").on(t.subjectKind, t.subjectId),
     index("flow_locks_org").on(t.orgId, t.subjectKind),
+    // Tenant pair required by 0215: a lock may only name a flow of its own org.
+    foreignKey({
+      name: "flow_locks_flow_id_fkey",
+      columns: [t.orgId, t.flowId],
+      foreignColumns: [flows.orgId, flows.id],
+    }).onDelete("cascade"),
   ],
 );
 
@@ -347,19 +385,19 @@ schema/migrations/referential-integrity.sql):
   flow_scheduled_occurrences.run_id → flow_runs.id
   flows.org_id                  → orgs.id (on delete cascade)
   flow_runs.org_id              → orgs.id (on delete cascade)
-  flow_runs.flow_id             → flows.id (on delete cascade)
+  flow_runs.(org_id, flow_id)   → flows(org_id, id) (on delete cascade; 0213)
   flow_run_effects.org_id       → orgs.id (on delete cascade)
-  flow_run_effects.run_id       → flow_runs.id (on delete cascade)
+  flow_run_effects.(org_id, run_id) → flow_runs(org_id, id) (on delete cascade; 0216)
   flow_gates.org_id             → orgs.id (on delete cascade)
-  flow_gates.flow_id            → flows.id (on delete cascade)
-  flow_gates.run_id             → flow_runs.id (on delete cascade)
+  flow_gates.(org_id, flow_id)  → flows(org_id, id) (on delete cascade; 0214)
+  flow_gates.(org_id, run_id)   → flow_runs(org_id, id) (on delete cascade; 0214)
   flow_gates.assignee_user_id   → users.id
   flow_gates.decided_by         → users.id
   approval_delegations.org_id       → orgs.id (on delete cascade)
   approval_delegations.from_user_id → users.id
   approval_delegations.to_user_id   → users.id
   flow_locks.org_id             → orgs.id (on delete cascade)
-  flow_locks.flow_id            → flows.id (on delete cascade)
+  flow_locks.(org_id, flow_id)  → flows(org_id, id) (on delete cascade; 0215)
   notifications.org_id          → orgs.id (on delete cascade)
   notifications.user_id         → users.id (on delete cascade)
   flow_scheduled_occurrences.org_id  → orgs.id

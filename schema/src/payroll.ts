@@ -178,6 +178,9 @@ export const payComponents = pgTable(
     ...auditColumns,
   },
   (t) => [
+    // Tenant pair required by composite child FKs (0218). id is the PK, so
+    // 0044 never installed this key as a tenant-coherent parent.
+    uniqueIndex("pay_components_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("pay_components_org_code").on(t.orgId, t.code),
     // Component identity is (org, country, system_key, kind) — two packs may
     // each own e.g. income_tax (0189). The live DDL is a PARTIAL unique index
@@ -501,6 +504,9 @@ export const payRuns = pgTable(
     ...auditColumns,
   },
   (t) => [
+    // Tenant pair required by composite child FKs (0208/0209). document_id is
+    // the PK, not id, so 0044 never installed this key.
+    uniqueIndex("pay_runs_org_id_document_id_unique").on(t.orgId, t.documentId),
     index("pay_runs_org_period").on(t.orgId, t.periodStart, t.periodEnd),
     // One live REGULAR run per schedule period; a voided run remains immutable
     // history but releases the period so an exact replacement can be opened.
@@ -581,6 +587,11 @@ export const payStubs = pgTable(
     ...auditColumns,
   },
   (t) => [
+    foreignKey({
+      name: "pay_stubs_pay_run_document_id_fkey",
+      columns: [t.orgId, t.payRunDocumentId],
+      foreignColumns: [payRuns.orgId, payRuns.documentId],
+    }),
     foreignKey({ name: "pay_stubs_filing_account_tenant_fkey",
       columns: [t.orgId, t.filingAccountId],
       foreignColumns: [payrollFilingAccounts.orgId, payrollFilingAccounts.id],
@@ -969,6 +980,16 @@ export const payRunAdjustments = pgTable(
   },
   (t) => [
     foreignKey({
+      name: "pay_run_adjustments_run_fkey",
+      columns: [t.orgId, t.payRunDocumentId],
+      foreignColumns: [payRuns.orgId, payRuns.documentId],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "pay_run_adjustments_component_fkey",
+      columns: [t.orgId, t.componentId],
+      foreignColumns: [payComponents.orgId, payComponents.id],
+    }).onDelete("cascade"),
+    foreignKey({
       name: "pay_run_adjustments_employment_tenant_fkey",
       columns: [t.orgId, t.employmentId],
       foreignColumns: [workerEmployments.orgId, workerEmployments.id],
@@ -1006,6 +1027,11 @@ export const payRunHolidayAssertions = pgTable(
     ...auditColumns,
   },
   (t) => [
+    foreignKey({
+      name: "pay_run_holiday_assertions_run_fkey",
+      columns: [t.orgId, t.payRunDocumentId],
+      foreignColumns: [payRuns.orgId, payRuns.documentId],
+    }).onDelete("cascade"),
     foreignKey({
       name: "pay_run_holiday_assertions_employment_tenant_fkey",
       columns: [t.orgId, t.employmentId],

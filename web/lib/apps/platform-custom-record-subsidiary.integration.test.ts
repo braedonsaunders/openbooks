@@ -118,3 +118,99 @@ test(
     }
   },
 )
+
+test(
+  'restricted platform reads and writes still honor stored JSON subsidiary_id after the type drops the field',
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const typeKey = `platdrop-${randomUUID().replaceAll('-', '').slice(0, 12)}`
+    const { org, actorId, hiddenId, visibleId } = await withBypass(async () => {
+      const created = await createScratchOrg()
+      const actor = (await seedFlowActors(created.orgId)).adminId
+      const branch = randomUUID()
+      const typeId = randomUUID()
+      const visible = randomUUID()
+      const hidden = randomUUID()
+      const fields = [{
+        id: 'main',
+        title: 'Details',
+        fields: [{ id: 'title', type: 'text', label: 'Title' }],
+      }]
+      await db.execute(sql`
+        insert into subsidiaries
+          (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+        values
+          (${branch}, ${created.orgId}, ${created.subsidiaryId}, 'Platform Drop Branch', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)
+      `)
+      await db.execute(sql`
+        insert into custom_record_types
+          (id, org_id, key, name, plural_name, fields, status, created_by, updated_by)
+        values
+          (${typeId}, ${created.orgId}, ${typeKey}, 'Platform Dropped', 'Platform Dropped',
+           ${JSON.stringify(fields)}::jsonb, 'published', ${actor}, ${actor})
+      `)
+      for (const [id, subsidiaryId, title] of [
+        [visible, created.subsidiaryId, 'visible'] as const,
+        [hidden, branch, 'hidden'] as const,
+      ]) {
+        await db.execute(sql`
+          insert into custom_records
+            (id, org_id, type_id, type_key, record_number, data, search_text, status, created_by, updated_by)
+          values
+            (${id}, ${created.orgId}, ${typeId}, ${typeKey}, ${id},
+             ${JSON.stringify({ subsidiary_id: subsidiaryId, title })}::jsonb,
+             ${title}, 'active', ${actor}, ${actor})
+        `)
+      }
+      return { org: created, actorId: actor, hiddenId: hidden, visibleId: visible }
+    })
+
+    const user = {
+      id: actorId,
+      email: 'platform-drop@scratch.test',
+      name: 'Platform Drop Controller',
+      roles: [{ key: 'admin', name: 'Admin' }],
+      orgId: org.orgId,
+      envKind: 'production' as const,
+      productionOrgId: org.orgId,
+      isSuperAdmin: false,
+      homeUserId: actorId,
+      homeOrgId: org.orgId,
+    }
+    const platform = createAppPlatformAdapter({
+      orgId: org.orgId,
+      user,
+      grantedPermissions: ['records.read', 'records.create'],
+      userCan: () => true,
+      allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+    })
+
+    try {
+      await withOrgContext(org.orgId, async () => {
+        const listed = await platform.list(typeKey, {}) as {
+          records: Array<{ id: string }>
+          total: number
+        }
+        assert.equal(listed.total, 1)
+        assert.equal(listed.records[0]?.id, visibleId)
+        assert.equal(await platform.get(typeKey, hiddenId), null)
+
+        const { documentRevisionCounterSql } = await import('@openbooks/engine/src/records/revision.ts')
+        const revision = (await db.execute<{ revision: string }>(sql`
+          select ${documentRevisionCounterSql(sql`revision_seq`)} as revision
+            from custom_records where id = ${hiddenId}
+        `)).rows[0]!.revision
+        await assert.rejects(
+          platform.update(typeKey, hiddenId, { data: { title: 'smuggled' }, expectedUpdatedAt: revision }),
+          (error: unknown) => error instanceof Error && /not found|outside the caller subsidiary scope/.test(error.message),
+        )
+        const stored = (await db.execute<{ title: string }>(sql`
+          select data ->> 'title' as title from custom_records where id = ${hiddenId}
+        `)).rows[0]
+        assert.equal(stored?.title, 'hidden')
+      })
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId))
+    }
+  },
+)

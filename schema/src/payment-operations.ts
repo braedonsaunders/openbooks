@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -11,6 +12,8 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { PgTableExtraConfigValue } from "drizzle-orm/pg-core";
+import { paymentRuns } from "./banking";
 import { auditColumns, currencyCode, fxRate, id, money, orgRef } from "./helpers";
 
 /**
@@ -101,9 +104,17 @@ export const paymentSchedules = pgTable(
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns,
   },
-  (t) => [
+  (t): PgTableExtraConfigValue[] => [
+    // Exact organization and id key required by tenant-coherent references (0210).
+    uniqueIndex("payment_schedules_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("payment_schedules_org_name").on(t.orgId, t.name),
     index("payment_schedules_due").on(t.isActive, t.nextRunAt),
+    // Tenant pair required by 0212: a schedule may only name a last run of its own org.
+    foreignKey({
+      name: "payment_schedules_last_payment_run_id_fkey",
+      columns: [t.orgId, t.lastPaymentRunId],
+      foreignColumns: [paymentRuns.orgId, paymentRuns.id],
+    }),
   ],
 );
 

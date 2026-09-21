@@ -7,7 +7,8 @@ import {
   createPaymentLink,
   listPaymentLinks,
 } from "@openbooks/engine/src/payments/acceptance.ts";
-import { guardPermission } from "../../../../lib/authz";
+import { guardPermission, type Authz } from "../../../../lib/authz";
+import { guardSubsidiaryScope } from "@/lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
 import { nullableUuidId, parseJsonBody, uuidId } from "../../../../lib/api/json";
@@ -26,6 +27,24 @@ const createLinkBody = z.object({
   memo: z.string().nullable().optional(),
 });
 
+/**
+ * Payment-link list/mint is a document-record boundary: the invoice's
+ * subsidiary is loaded with the org probe, then the shared gate runs
+ * before tokens are listed or minted. Out-of-scope invoices read exactly
+ * like a missing one — the same 404 as /api/documents/[id].
+ */
+async function denyOutsideDocumentScope(
+  authz: Authz,
+  documentId: string,
+): Promise<NextResponse | null> {
+  const owned = (await db.execute<{ subsidiaryId: string | null }>(sql`
+    select subsidiary_id as "subsidiaryId" from documents
+     where id = ${documentId} and org_id = ${authz.user.orgId}
+  `));
+  if (!owned.rows[0]) return NextResponse.json({ error: "not found" }, { status: 404 });
+  return guardSubsidiaryScope(authz, owned.rows[0].subsidiaryId);
+}
+
 export async function GET(req: Request) {
   const gate = await guardPermission("ar.read");
   if (gate instanceof NextResponse) return gate;
@@ -36,6 +55,8 @@ export async function GET(req: Request) {
   if (!documentId || !isUuid(documentId)) {
     return NextResponse.json({ error: "documentId is required" }, { status: 400 });
   }
+  const denied = await denyOutsideDocumentScope(gate, documentId);
+  if (denied) return denied;
   const [links, providers] = await Promise.all([
     listPaymentLinks(gate.user.orgId, documentId),
     db.execute<{ provider: string }>(sql`
@@ -57,6 +78,8 @@ export async function POST(req: Request) {
   const parsed = await parseJsonBody(req, createLinkBody);
   if (!parsed.ok) return parsed.response;
   const body = parsed.data;
+  const denied = await denyOutsideDocumentScope(gate, body.documentId);
+  if (denied) return denied;
   try {
     const link = await createPaymentLink(gate.user.orgId, gate.user.id, {
       documentId: body.documentId,

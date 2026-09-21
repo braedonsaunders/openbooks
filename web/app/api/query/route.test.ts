@@ -7,6 +7,19 @@ import test from 'node:test'
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
 const source = (path: string) => readFileSync(join(webRoot, path), 'utf8')
 
+test('query console and schema browser require sql.execute, not scripts.execute', () => {
+  const queryRoute = source('app/api/query/route.ts')
+  const schemaRoute = source('app/api/query/schema/route.ts')
+  assert.match(queryRoute, /guardFeaturePermission\("sql\.execute", "queryConsole"\)/)
+  assert.match(schemaRoute, /guardFeaturePermission\("sql\.execute", "queryConsole"\)/)
+  assert.match(queryRoute, /hasUnrestrictedQueryScope\(gate\.allowedSubsidiaryIds\)/)
+  assert.match(schemaRoute, /hasUnrestrictedQueryScope\(gate\.allowedSubsidiaryIds\)/)
+  assert.doesNotMatch(queryRoute, /scripts\.execute/)
+  assert.doesNotMatch(schemaRoute, /scripts\.execute/)
+  assert.match(schemaRoute, /listSchema\(gate\.user\.orgId\)/)
+  assert.doesNotMatch(schemaRoute, /searchParams|orgId \?\?/)
+})
+
 test('query console echoes only schema-free validation messages', () => {
   const route = source('app/api/query/route.ts')
 

@@ -1,5 +1,10 @@
 import 'server-only'
-import { renderHtmlDocumentPdf, renderTemplate, sanitizeRenderedHtml } from '@openbooks/pdf'
+import {
+  renderHtmlDocumentPdf,
+  renderTemplate,
+  sanitizeRenderedHtml,
+  sanitizeTokenizedFragment,
+} from '@openbooks/pdf'
 import type { ResolvedPdfTemplate } from './store'
 
 /**
@@ -22,6 +27,13 @@ import type { ResolvedPdfTemplate } from './store'
  * (https/mailto), inline data: images, and all escaped text byte-identical.
  * Sized with the rendered-output policy: a valid merge repeats content past
  * the 1MB authored-template ceiling, and must not be refused for it.
+ *
+ * The merged HEADER and FOOTER use `sanitizeTokenizedFragment` instead: they
+ * become Chromium chrome documents that the print-page interceptor cannot
+ * see, so static `https:` images, stylesheets and CSS `url()` values must be
+ * stripped here (and again in `preparePdfChromeHtml`) rather than left for
+ * `page.on('request')`. Navigation `<a href>` and escaped text mentioning a
+ * URL are not fetches and stay.
  */
 const UNTRUSTED_VALUES = { escapeHtml: true, allowRawValues: false } as const
 
@@ -35,7 +47,11 @@ export async function mergeAndPrintPdf(
     paperSize: tpl.paperSize,
     orientation: tpl.orientation,
     marginMm: tpl.marginMm,
-    headerHtml: tpl.headerHtml ? renderTemplate(tpl.headerHtml, counters, UNTRUSTED_VALUES) : null,
-    footerHtml: tpl.footerHtml ? renderTemplate(tpl.footerHtml, counters, UNTRUSTED_VALUES) : null,
+    headerHtml: tpl.headerHtml
+      ? sanitizeTokenizedFragment(renderTemplate(tpl.headerHtml, counters, UNTRUSTED_VALUES))
+      : null,
+    footerHtml: tpl.footerHtml
+      ? sanitizeTokenizedFragment(renderTemplate(tpl.footerHtml, counters, UNTRUSTED_VALUES))
+      : null,
   })
 }

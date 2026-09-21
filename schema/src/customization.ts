@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { boolean, index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
 
@@ -92,6 +93,7 @@ export const listViews = pgTable(
   (t) => [
     uniqueIndex("list_views_org_scope_type_name").on(t.orgId, t.scope, t.recordType, t.name),
     index("list_views_org_type").on(t.orgId, t.recordType, t.scope),
+    uniqueIndex("list_views_one_live_personal_default").on(t.orgId, t.ownerId, t.recordType).where(sql`${t.scope} = 'user' AND ${t.isDefault} AND ${t.isActive}`),
   ],
 );
 

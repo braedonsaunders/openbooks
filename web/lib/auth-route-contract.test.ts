@@ -5,7 +5,7 @@ import { isPublicPath } from "./proxy-policy";
 
 test("login cookies use the environment-aware production-secure policy", () => {
   const route = readFileSync("web/app/api/login/route.ts", "utf8");
-  assert.match(route, /secure: useSecureCookies\(\)/);
+  assert.match(route, /secure: secureCookiesEnabled\(\)/);
   assert.doesNotMatch(route, /secure:\s*false/);
   assert.match(route, /revokeSessionToken/);
   assert.match(route, /publicLoginFailure/);

@@ -1,6 +1,6 @@
 import { and, asc, eq } from "drizzle-orm";
 import { db, schema } from "../platform/db.ts";
-import { runTriggerScripts, type ScriptContext } from "../scripting/scripting.ts";
+import { resolveScriptUser, runTriggerScripts, type ScriptContext } from "../scripting/scripting.ts";
 import { emitStatusChange, runRecordFlows } from "../flows/run.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import { applyInventoryReturnsForVendorCredit } from "../inventory/documents-vendor-credits.ts";
@@ -130,11 +130,13 @@ export async function runPostDocumentEffects(
       if (options.alreadyClaimed) throw error;
       return;
     }
+    const scriptUser = await resolveScriptUser(doc.orgId, effectActorId);
     const ctx: ScriptContext = {
       trigger: "after_post",
       document: doc as unknown as Record<string, unknown>,
       lines: lines as unknown as Record<string, unknown>[],
       org: { id: org.id, name: org.name, baseCurrency: org.baseCurrency },
+      ...(scriptUser ? { user: scriptUser } : {}),
     };
     if (!options.suppressAutomation) {
       await runTriggerScripts("after_post", ctx, doc.id);

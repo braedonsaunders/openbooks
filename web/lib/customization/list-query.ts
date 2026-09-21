@@ -7,7 +7,11 @@ import type {
   ListViewConfig,
   FilterClause,
 } from "@openbooks/customization";
-import { listColumnMeta, isCustomFieldKey, customFieldDefKey } from "@openbooks/customization";
+import {
+  listColumnMeta,
+  isCustomFieldKey,
+  customFieldDefKey,
+} from "@openbooks/customization";
 import type { CustomFieldDef } from "../custom-fields";
 
 /**
@@ -230,7 +234,73 @@ export function dateOrFalse(value: string): SQL | null {
   return isIsoCalendarDate(value) ? null : sql`false`
 }
 
+/**
+ * Predicate for a saved `cf_*` filter against `<alias>.custom`.
+ * Always returns SQL for a custom-field key (fail closed on an empty value or
+ * an operator the jsonb text extract cannot apply). Returns null for built-ins
+ * so each list's switch can keep owning those keys.
+ *
+ * `tableAlias` is code-controlled (never user input) — the same contract as
+ * columnDescriptors.
+ */
+export function customFieldFilterPredicate(clause: FilterClause, tableAlias = "d"): SQL | null {
+  if (!isCustomFieldKey(clause.key)) return null
+  if (!/^[a-z_][a-z0-9_]*$/.test(tableAlias)) return sql`false`
+  const defKey = customFieldDefKey(clause.key)
+  const extracted = sql`${sql.raw(tableAlias)}.custom->>${defKey}`
+  const { operator, value } = clause
+  const single = (v: unknown) => (Array.isArray(v) ? String(v[0] ?? "") : String(v ?? ""))
+  const needsValue = operator !== "is_set" && operator !== "is_not_set"
+  if (needsValue) {
+    const hasValue = Array.isArray(value) ? value.length > 0 : value != null && value !== ""
+    if (!hasValue) return sql`false`
+  }
+  switch (operator) {
+    case "eq":
+      return sql`${extracted} = ${single(value)}`
+    case "ne":
+      return sql`${extracted} <> ${single(value)}`
+    case "contains":
+      return sql`${extracted} ilike ${"%" + single(value) + "%"}`
+    case "is_set":
+      return sql`(${extracted} is not null and ${extracted} <> '')`
+    case "is_not_set":
+      return sql`(${extracted} is null or ${extracted} = '')`
+    case "in":
+    case "not_in": {
+      const values = (Array.isArray(value) ? value : [String(value ?? "")]).map(String)
+      if (values.length === 0) return operator === "in" ? sql`false` : sql`true`
+      const list = sql.join(values.map((item) => sql`${item}`), sql`, `)
+      return operator === "in" ? sql`${extracted} in (${list})` : sql`${extracted} not in (${list})`
+    }
+    default:
+      // gte/lte/between need a field type; without one, empty-match not drop.
+      return sql`false`
+  }
+}
+
+/**
+ * AND a saved `cf_*` clause into a WHERE parts list. `customAlias` is the
+ * code-controlled table whose `custom` jsonb backs this list (same as
+ * columnDescriptors). `null` means the list has no custom store — fail
+ * closed to empty rather than dropping the clause or referencing a missing
+ * column. Returns true when `clause` is a custom-field filter so the caller
+ * skips its built-in switch.
+ */
+export function pushCustomFieldFilter(
+  parts: SQL[],
+  clause: FilterClause,
+  customAlias: string | null,
+): boolean {
+  if (!isCustomFieldKey(clause.key)) return false
+  const predicate = customAlias ? customFieldFilterPredicate(clause, customAlias) : sql`false`
+  if (predicate) parts.push(sql`and ${predicate}`)
+  return true
+}
+
 function filterPredicate(clause: FilterClause): SQL | null {
+  const custom = customFieldFilterPredicate(clause, "d")
+  if (custom) return custom
   const { key, operator } = clause
   const value = clause.value
   const to = clause.to

@@ -1,5 +1,6 @@
 import { strFromU8, Unzip, UnzipInflate } from 'fflate'
 import { contentTypeFor } from './manifest'
+import { PACKAGE_PATH_REFUSAL, validPackagePath, validZipEntryLocation, validZipRootPrefix } from './package-files'
 
 /**
  * Zip → bundle parsing for App uploads. Pure module (no server-only, no DB) so
@@ -140,11 +141,13 @@ export function parseZipBundle(bytes: Uint8Array): ParsedBundle {
       throw new ZipBundleError('manifest.json must be at the archive root')
     }
   }
+  if (!validZipRootPrefix(prefix)) throw new ZipBundleError(PACKAGE_PATH_REFUSAL)
 
   let manifest: unknown
   const files: ParsedBundle['files'] = []
   for (const entry of entries) {
     const raw = entry.rawPath
+    if (!validZipEntryLocation(raw)) throw new ZipBundleError(PACKAGE_PATH_REFUSAL)
     const data = joinChunks(entry.chunks)
     const path = raw.slice(prefix.length)
     if (!path) continue
@@ -156,6 +159,7 @@ export function parseZipBundle(bytes: Uint8Array): ParsedBundle {
       }
       continue
     }
+    if (!validPackagePath(path)) throw new ZipBundleError(PACKAGE_PATH_REFUSAL)
     const { binary } = contentTypeFor(path)
     files.push({
       path,

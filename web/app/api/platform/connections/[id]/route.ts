@@ -14,6 +14,11 @@ import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { connectionAuditChanges } from "@openbooks/schema/src/connections.ts";
 import { guardPermission } from "../../../../../lib/authz";
 import { storageIdentityError } from "../_storage-identity";
+import {
+  callerOwnedConfigRefusal,
+  connectionConfigUrlRefusal,
+  declaredSourceConfig,
+} from "../_connector-guard";
 
 export const runtime = "nodejs";
 
@@ -42,6 +47,22 @@ export async function PATCH(
     postedChangePolicy?: "review_required" | "append_only_automatic";
     status?: "active" | "paused";
   };
+  if (body.config && typeof body.config === "object") {
+    const ownedError = callerOwnedConfigRefusal(body.config);
+    if (ownedError) {
+      return NextResponse.json(
+        { error: ownedError, errorCode: "OAUTH_IDENTITY_REFUSED" },
+        { status: 400 },
+      );
+    }
+    const urlError = await connectionConfigUrlRefusal(body.config);
+    if (urlError) {
+      return NextResponse.json(
+        { error: urlError, errorCode: "CONNECTOR_URL_REFUSED" },
+        { status: 400 },
+      );
+    }
+  }
   const today =
     body.config && typeof body.config === "object"
       ? await businessToday(orgId)
@@ -78,12 +99,17 @@ export async function PATCH(
         !Array.isArray(existing.config)
           ? existing.config
           : {};
-      const merged = { ...currentConfig, ...body.config };
-      if (manifest) {
-        const configError = validateSourceConfig(manifest, merged, { today });
-        if (configError) {
-          return NextResponse.json({ error: configError }, { status: 400 });
-        }
+      if (!manifest) {
+        return NextResponse.json(
+          { error: "unknown source type" },
+          { status: 400 },
+        );
+      }
+      const incoming = declaredSourceConfig(manifest, body.config);
+      const merged = { ...currentConfig, ...incoming };
+      const configError = validateSourceConfig(manifest, merged, { today });
+      if (configError) {
+        return NextResponse.json({ error: configError }, { status: 400 });
       }
       updates.config = merged;
     }
@@ -205,7 +231,7 @@ export async function DELETE(
   });
   if (!existing)
     return NextResponse.json({ error: "not found" }, { status: 404 });
-  await db.transaction(async (tx) => {
+  const deleted = await db.transaction(async (tx) => {
     // Preserve run history while detaching it from the connection being
     // removed.  The migration makes connection_id nullable; doing this
     // explicitly keeps the delete independent of deferred FK timing.
@@ -214,9 +240,12 @@ export async function DELETE(
          set connection_id = null
        where org_id = ${orgId} and connection_id = ${id}
     `);
-    await tx.execute(
-      sql`delete from connections where org_id = ${orgId} and id = ${id}`,
-    );
+    const removed = await tx.execute<{ id: string }>(sql`
+      delete from connections
+       where org_id = ${orgId} and id = ${id}
+       returning id
+    `);
+    if (!removed.rows[0]) return null;
     await tx.execute(sql`
       insert into audit_log
         (org_id, table_name, row_id, action, changes, actor_id)
@@ -233,6 +262,13 @@ export async function DELETE(
         ${gate.user.id}
       )
     `);
+    return removed.rows[0];
+  }).catch((e) => {
+    if (storageIdentityError(e)) return null;
+    throw e;
   });
+  if (!deleted) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
   return NextResponse.json({ ok: true });
 }

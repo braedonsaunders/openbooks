@@ -30,7 +30,8 @@ import {
   inTypeAudience,
   loadRecord,
   loadRecordTypeByKey,
-  recordSubsidiaryScopeAllows,
+  recordVisibleInSubsidiaryFence,
+  retainStoredSubsidiaryId,
 } from "../records";
 import {
   lintRecordFields,
@@ -137,7 +138,7 @@ async function applyCustomRecord(
     status: locked.status as RecordStatus,
   };
   const allowed = await mutationSubsidiaryScope(user, allowedScope);
-  if (!recordSubsidiaryScopeAllows(sections, record.data, allowed)) return err(404, "not found");
+  if (!recordVisibleInSubsidiaryFence(sections, record.data, allowed)) return err(404, "not found");
   if (body.data !== undefined && locked.revision !== body.expectedUpdatedAt) {
     return err(409, "This record changed after you opened it; reload the record and reapply your changes");
   }
@@ -178,9 +179,12 @@ async function applyCustomRecord(
     );
   }
 
-  const effectiveData = nextData ?? stripUnknownData(sections, record.data);
+  const strippedData = nextData ?? stripUnknownData(sections, record.data);
+  const persistedData = retainStoredSubsidiaryId(sections, record.data, strippedData);
+  if (nextData !== undefined) nextData = persistedData;
+  const effectiveData = strippedData;
   const effectiveStatus = nextStatus ?? record.status;
-  if (!recordSubsidiaryScopeAllows(sections, effectiveData, allowed)) return err(404, "not found");
+  if (!recordVisibleInSubsidiaryFence(sections, persistedData, allowed)) return err(404, "not found");
   const stage = effectiveStatus === "active" ? "submit" : "draft";
   const errors = validateRecordData(sections, effectiveData, stage);
   if (errors.length > 0) {
@@ -441,7 +445,7 @@ async function deleteCustomRecord(
      for update`)).rows[0];
   if (!locked) return err(404, "not found");
   const allowed = await mutationSubsidiaryScope(user, allowedScope);
-  if (!recordSubsidiaryScopeAllows(scope.sections, locked.data as FieldValueMap, allowed)) {
+  if (!recordVisibleInSubsidiaryFence(scope.sections, locked.data as FieldValueMap, allowed)) {
     return err(404, "not found");
   }
   if (locked.status !== "draft") {

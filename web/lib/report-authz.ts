@@ -76,16 +76,28 @@ export async function canRunReportStatement(authz: Authz, kind: string | null | 
 }
 
 /**
- * Refuse a plan whose entity demands more than the caller holds, or whose
- * Features switch is off. Returns null when allowed, so a route reads
+ * Refuse a plan whose entity is missing or unknown, whose permission the
+ * caller does not hold, or whose Features switch is off. Returns null when
+ * allowed, so a route reads
  * `const denied = await guardReportEntity(...); if (denied) return denied`.
  *
- * Permission misses are 403. A disabled feature is 404 so the module
- * disappears rather than advertising that it exists.
+ * This is the HTTP face of `canRunReportEntity` for entity plans: every
+ * export, run, and definition-write path must go through this gate so a
+ * missing `requiredPermission` cannot fail open on an unknown entity.
+ *
+ * A null/undefined query is not a missing entity. Statement definitions
+ * store `query=null` on purpose and are gated by `STATEMENT_KIND_FEATURE`
+ * / `canRunReportStatement`. The export route passes `def.query` into this
+ * function unconditionally; refusing that value 403s every standard
+ * CSV/XLSX/PDF download.
+ *
+ * Permission misses and unknown/missing entities on a query object are
+ * 403. A disabled feature is 404 so the module disappears rather than
+ * advertising that it exists.
  */
 export async function guardReportEntity(authz: Authz, query: unknown): Promise<NextResponse | null> {
-  const key = (query as { entity?: unknown } | null)?.entity
-  if (typeof key === 'string' && key.startsWith('custom:') && !(await canRunReportEntity(authz, query))) return NextResponse.json({ error: 'you do not have access to this data' }, { status: 403 })
+  if (query == null) return null
+  if (await canRunReportEntity(authz, query)) return null
   const required = reportEntityPermission(query)
   if (required && !can(authz, required)) {
     return NextResponse.json({ error: 'you do not have access to this data' }, { status: 403 })
@@ -94,7 +106,7 @@ export async function guardReportEntity(authz: Authz, query: unknown): Promise<N
   if (featureKey && !(await isFeatureEnabled(authz.user.orgId, featureKey))) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
-  return null
+  return NextResponse.json({ error: 'you do not have access to this data' }, { status: 403 })
 }
 
 /** Entity keys this reader must not see — missing permission or feature off. */

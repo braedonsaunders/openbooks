@@ -2,7 +2,7 @@ import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
-import { dateOrFalse, uuidOrFalse } from "../list-query";
+import { dateOrFalse, pushCustomFieldFilter, uuidOrFalse } from "../list-query";
 
 /* ------------------------------------------------------------------ */
 /* Revenue contracts                                                   */
@@ -80,6 +80,7 @@ export function revenueContractWhere(view: ListViewConfig, adhoc: EntityAdhoc, o
       in (select jsonb_array_elements_text(${JSON.stringify([...(allowedSubsidiaryIds ?? [])])}::jsonb)::uuid)`)
 
   for (const filter of view.filters) {
+    if (pushCustomFieldFilter(parts, filter, "rc")) continue
     const predicate = revenueContractFilterPredicate(filter)
     if (predicate) parts.push(sql`and ${predicate}`)
   }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { readApiErrorMessage } from '@/lib/api-error'
 import {
   makeBridgeResult,
   parseBridgeRequest,
@@ -50,9 +51,22 @@ export function AppFrame({
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ method: req.method, payload: req.payload, versionId: context.app.versionId }),
         })
-        const json = await res.json().catch(() => ({}))
-        if (!res.ok || json?.ok === false) post(false, json?.error || `bridge call failed (${res.status})`)
-        else post(true, json.result)
+        // The status is checked before the body is parsed: a non-JSON error
+        // body must surface the failure, never a SyntaxError from res.json()
+        // and never an empty object that hides the server's refusal.
+        if (!res.ok) {
+          post(false, await readApiErrorMessage(res, 'bridge call failed'))
+          return
+        }
+        const json = await res.json()
+        if (json?.ok === false) {
+          post(
+            false,
+            typeof json?.error === 'string' && json.error.trim() !== ''
+              ? json.error
+              : `bridge call failed (status ${res.status})`,
+          )
+        } else post(true, json.result)
       } catch (err) {
         post(false, (err as Error).message)
       }

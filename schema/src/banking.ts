@@ -3,6 +3,7 @@ import {
   boolean,
   check,
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -13,7 +14,9 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { PgTableExtraConfigValue } from "drizzle-orm/pg-core";
 import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
+import { paymentSchedules } from "./payment-operations";
 
 /**
  * Banking: statement import → matching → reconciliation sign-off, and
@@ -273,7 +276,15 @@ export const paymentRuns = pgTable(
     postingClaimedBy: uuid("posting_claimed_by"),
     ...auditColumns,
   },
-  (t) => [
+  (t): PgTableExtraConfigValue[] => [
+    // Exact organization and id key required by tenant-coherent references (0212).
+    uniqueIndex("payment_runs_org_id_id_unique").on(t.orgId, t.id),
+    // Tenant pair required by 0210: a run may only name a schedule of its own org.
+    foreignKey({
+      name: "payment_runs_source_schedule_id_fkey",
+      columns: [t.orgId, t.sourceScheduleId],
+      foreignColumns: [paymentSchedules.orgId, paymentSchedules.id],
+    }),
     // Recovery sweeps and operational dashboards look for exactly these rows.
     index("payment_runs_posting_claims")
       .on(t.orgId, t.postingClaimedAt)

@@ -21,7 +21,7 @@ import {
   normalizeDocumentRecordRevisions,
 } from '@openbooks/engine/src/records/document-edit-policy.ts'
 import { isUuid } from '@/lib/list-params'
-import { inTypeAudience, loadRecordTypeByKey } from '@/lib/records'
+import { inTypeAudience, loadRecordTypeByKey, recordVisibleInSubsidiaryFenceSql } from '@/lib/records'
 
 type PlatformOperation = ApiOperation | 'schema'
 
@@ -176,13 +176,12 @@ function subsidiaryScopeCondition(
   resolved: ResolvedApiType,
   schema: ApiRecordTypeSchema,
 ): SQL | null {
-  if (ctx.allowedSubsidiaryIds === null || !hasSubsidiaryField(schema)) return null
-  const ids = [...ctx.allowedSubsidiaryIds]
+  if (ctx.allowedSubsidiaryIds === null) return null
   if (resolved.dynamic) {
-    return ids.length > 0
-      ? sql`data ->> ${'subsidiary_id'} = any(${pgTextArrayLiteral(ids)}::text[])`
-      : sql`false`
+    return recordVisibleInSubsidiaryFenceSql(ctx.allowedSubsidiaryIds, hasSubsidiaryField(schema))
   }
+  if (!hasSubsidiaryField(schema)) return null
+  const ids = [...ctx.allowedSubsidiaryIds]
   return ids.length > 0
     ? sql`subsidiary_id = any(${pgTextArrayLiteral(ids)}::uuid[])`
     : sql`false`

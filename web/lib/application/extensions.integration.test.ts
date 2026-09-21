@@ -1,9 +1,39 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 import type { ApplicationContext } from './context'
+
+const extensionsSource = readFileSync(new URL('./extensions.ts', import.meta.url), 'utf8')
+const draftsRouteSource = readFileSync(new URL('../../app/api/apps/drafts/route.ts', import.meta.url), 'utf8')
+
+function functionBody(source: string, name: string): string {
+  const start = source.indexOf(`export async function ${name}`)
+  assert.notEqual(start, -1, `${name} must remain defined`)
+  const end = source.indexOf('\nexport ', start + 1)
+  return source.slice(start, end === -1 ? undefined : end)
+}
+
+function registerSourceTests(): void {
+  test('discardExtensionDraft refuses a zero-row discard instead of reporting discarded:true', () => {
+    const body = functionBody(extensionsSource, 'discardExtensionDraft')
+    assert.match(body, /already discarded/)
+    assert.match(body, /if \(!changed\.length\)/)
+    assert.doesNotMatch(body, /status !== 'discarded'\) throw/)
+    assert.match(draftsRouteSource, /discardExtensionDraft/)
+  })
+
+  test('activateExtensionDraft refuses an already-applied draft before returning activated:true', () => {
+    const body = functionBody(extensionsSource, 'activateExtensionDraft')
+    const appliedGuard = body.search(/status === ['"]applied['"]/)
+    const activated = body.indexOf('activated: true')
+    assert.match(body, /already activated/)
+    assert.ok(appliedGuard >= 0 && appliedGuard < activated, 'already-applied must be refused before a success payload')
+    assert.match(draftsRouteSource, /activateExtensionDraft/)
+  })
+}
 
 registerHooks({ resolve(specifier, context, nextResolve) {
   if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
@@ -14,6 +44,8 @@ const { db, env, withBypassContext } = await import('@openbooks/engine/src/platf
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { draftExtension, discardExtensionDraft, getExtensionDraft, activateExtensionDraft, describeExtensionVocabulary, getExtensionPackage, previewExtensionPage } = await import('./extensions')
 const { getAppByKey, installApp } = await import('../apps/store')
+
+registerSourceTests()
 
 async function fixture() {
   const org = await createScratchOrg()
@@ -79,6 +111,7 @@ test('extension draft isolation, exact review, atomic activation and immutable r
     assert.equal((await db.execute(sql`select id from page_specs where org_id=${org.orgId} and extension_version_id is not null`)).rows.length,0)
     const outcomes = await Promise.all([activateExtensionDraft(context, proposal), activateExtensionDraft(context, proposal)])
     assert.ok(outcomes.every(result => result.activated))
+    await assert.rejects(() => activateExtensionDraft(context, proposal), /already activated/)
     const app = await getAppByKey(org.orgId, bundle.manifest.key)
     assert.equal(app?.manifest?.frontend.renderer, 'native')
     assert.equal((await db.execute(sql`select id from custom_record_types where org_id=${org.orgId} and key='equipment-check' and status='published'`)).rows.length, 1)
@@ -125,9 +158,13 @@ test('draft revision replaces only its author proposal and failed object install
     await db.execute(sql`update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}','{"apps":false}'::jsonb) where id=${org.orgId}`)
     await assert.rejects(() => getExtensionDraft(context, second.draftId), /not found/)
     await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}','{"apps":true}'::jsonb) where id=${org.orgId}`)
-    await discardExtensionDraft(context, second)
-    await discardExtensionDraft(context, second)
+    const discarded = await discardExtensionDraft(context, second)
+    assert.equal(discarded.discarded, true)
+    const discardAudit = (await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='extension_drafts' and row_id=${second.draftId}`)).rows.length
+    assert.equal(discardAudit, 1)
+    await assert.rejects(() => discardExtensionDraft(context, second), /already discarded/)
     assert.equal((await getExtensionDraft(context, second.draftId)).status, 'discarded')
+    assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='extension_drafts' and row_id=${second.draftId}`)).rows.length, discardAudit)
     await assert.rejects(() => activateExtensionDraft(context, second), /no longer available/)
   } finally { await dropScratchOrg(org.orgId) }
 }))
@@ -227,7 +264,7 @@ test('library publication and withdrawal preserve package evidence and reject an
   const foreign = await fixture()
   try {
     const { createAppStarter } = await import('../apps/starter')
-    const { publishApp, unpublishApp, isAppPublished } = await import('../apps/store')
+    const { publishApp, unpublishApp, isAppPublished, AppError } = await import('../apps/store')
     const source=createAppStarter('sandbox')
     const key=`library-${randomUUID()}`
     const bundle={...source,manifest:{...source.manifest as Record<string,unknown>,key}}
@@ -240,6 +277,16 @@ test('library publication and withdrawal preserve package evidence and reject an
     await unpublishApp(org.orgId,context.authz.user.id,key)
     assert.equal(await isAppPublished(key,org.orgId),false)
     assert.equal((await getAppByKey(org.orgId,key))?.status,'installed')
+    await assert.rejects(
+      () => unpublishApp(org.orgId, context.authz.user.id, key),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError)
+        assert.equal(error.status, 409)
+        assert.match(error.message, /already unpublished/)
+        assert.match(error.message, /Publish it again/)
+        return true
+      },
+    )
     const evidence=(await db.execute<{changes:Record<string,unknown>;actor_id:string}>(sql`select changes,actor_id from audit_log where org_id=${org.orgId} and table_name='app_listings' and row_id=${listing.id} order by at,id`)).rows
     assert.equal(evidence.length,2)
     assert.ok(evidence.every(row=>row.actor_id===context.authz.user.id))
@@ -247,4 +294,38 @@ test('library publication and withdrawal preserve package evidence and reject an
     assert.equal(evidence[1]!.changes.event,'app_listing_withdrawn')
     assert.equal(((evidence[0]!.changes.after as {files:unknown[]}).files).length,bundle.files.length)
   } finally { await dropScratchOrg(foreign.org.orgId); await dropScratchOrg(org.orgId) }
+}))
+
+test('concurrent library withdrawals serialize to one withdraw and one 409', { skip: !env.OPENBOOKS_DB_URL }, async () => withBypassContext(async () => {
+  const { org, context } = await fixture()
+  try {
+    const { createAppStarter } = await import('../apps/starter')
+    const { publishApp, unpublishApp, isAppPublished, AppError } = await import('../apps/store')
+    const source = createAppStarter('sandbox')
+    const key = `library-race-${randomUUID()}`
+    const bundle = { ...source, manifest: { ...source.manifest as Record<string, unknown>, key } }
+    const draft = await draftExtension(context, { bundle, reason: 'Concurrent withdrawal serialization' })
+    await activateExtensionDraft(context, draft)
+    const listing = await publishApp(org.orgId, context.authz.user.id, key)
+    const attempts = await Promise.allSettled([
+      unpublishApp(org.orgId, context.authz.user.id, key),
+      unpublishApp(org.orgId, context.authz.user.id, key),
+    ])
+    const accepted = attempts.filter((row) => row.status === 'fulfilled')
+    const refused = attempts.filter((row): row is PromiseRejectedResult => row.status === 'rejected')
+    assert.equal(accepted.length, 1)
+    assert.equal(refused.length, 1)
+    const reason = refused[0]!.reason
+    assert.ok(reason instanceof AppError)
+    assert.equal(reason.status, 409)
+    assert.match(reason.message, /already unpublished/)
+    assert.equal(await isAppPublished(key, org.orgId), false)
+    const withdrawn = (await db.execute<{ n: string }>(sql`
+      select count(*)::text as n from audit_log
+       where org_id=${org.orgId} and table_name='app_listings' and row_id=${listing.id}
+         and changes->>'event'='app_listing_withdrawn'`)).rows[0]
+    assert.equal(withdrawn?.n, '1')
+  } finally {
+    await dropScratchOrg(org.orgId)
+  }
 }))

@@ -17,6 +17,7 @@ import {
   OPERATORS_BY_KIND,
 } from "./registry";
 import type {
+  FilterClause,
   FilterOperator,
   FormActionPlacement,
   FormLayoutConfig,
@@ -244,10 +245,40 @@ export function lintFormLayout(config: FormLayoutConfig): LintIssue[] {
 }
 
 /**
+ * Operators the list query layer can apply to `custom->>key` without a field
+ * type. Range operators stay refused: text comparison of numbers is a silent
+ * mis-order, and lint has no per-org def to know the kind.
+ */
+export const CUSTOM_FIELD_FILTER_OPERATORS: readonly FilterOperator[] = [
+  "eq",
+  "ne",
+  "in",
+  "not_in",
+  "contains",
+  "is_set",
+  "is_not_set",
+]
+
+function filterHasValue(clause: FilterClause): boolean {
+  return Array.isArray(clause.value) ? clause.value.length > 0 : clause.value != null && clause.value !== ""
+}
+
+function lintFilterValuePresence(issues: LintIssue[], path: string, clause: FilterClause): void {
+  const needsValue = !["is_set", "is_not_set"].includes(clause.operator)
+  if (needsValue && !filterHasValue(clause))
+    issues.push({ path, message: `filter "${clause.key}" needs a value` })
+  if (clause.operator === "between" && (clause.to == null || clause.to === ""))
+    issues.push({ path, message: `"between" needs an upper bound (to)` })
+}
+
+/**
  * Validate a parsed ListViewConfig against the registry: columns and filters
  * reference known built-ins or `cf_<key>`; filter operators are allowed for the
  * field kind; sort column is a known sortable; required values present per
- * operator. Custom-field columns/filters existence is checked at the API layer.
+ * operator. Custom-field column existence is per-org and resolved at render
+ * time. Custom-field filters are linted here for operator and value — a
+ * missing def fails closed at query time (no match), never by dropping the
+ * clause. The list-views API only calls parseListView; this is the authority.
  */
 export function lintListView(config: ListViewConfig): LintIssue[] {
   const issues: LintIssue[] = []
@@ -284,7 +315,17 @@ export function lintListView(config: ListViewConfig): LintIssue[] {
   // Filters: known key, allowed operator, value presence.
   config.filters.forEach((f, fi) => {
     const path = `filters[${fi}]`
-    if (isCustomFieldKey(f.key)) return
+    if (isCustomFieldKey(f.key)) {
+      if (!CUSTOM_FIELD_FILTER_OPERATORS.includes(f.operator)) {
+        issues.push({
+          path,
+          message: `operator "${f.operator}" not allowed for custom field "${f.key}"`,
+        })
+        return
+      }
+      lintFilterValuePresence(issues, path, f)
+      return
+    }
     const fm = listFilterMeta(config.recordType, f.key)
     if (!fm) {
       issues.push({ path, message: `unknown filter "${f.key}"` })
@@ -292,14 +333,7 @@ export function lintListView(config: ListViewConfig): LintIssue[] {
     }
     if (!fm.operators.includes(f.operator))
       issues.push({ path, message: `operator "${f.operator}" not allowed for "${f.key}"` })
-    const needsValue = !["is_set", "is_not_set"].includes(f.operator)
-    if (needsValue) {
-      const hasValue =
-        Array.isArray(f.value) ? f.value.length > 0 : f.value != null && f.value !== ""
-      if (!hasValue) issues.push({ path, message: `filter "${f.key}" needs a value` })
-    }
-    if (f.operator === "between" && (f.to == null || f.to === ""))
-      issues.push({ path, message: `"between" needs an upper bound (to)` })
+    lintFilterValuePresence(issues, path, f)
     // option-bound filters: value must be a known option.
     if (fm.options && fm.options.length && f.operator !== "is_set" && f.operator !== "is_not_set") {
       const allowed = new Set(fm.options.map((o) => o.value))

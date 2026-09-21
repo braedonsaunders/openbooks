@@ -4,10 +4,9 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 
 // Live-Postgres regression for POST /api/customization/form-layouts.
-// isDefault is coerced with !!, but isActive rode `${body.isActive ?? true}`
-// straight into the boolean column: a non-boolean JSON value either throws
-// 22P02 (raw 500 through the route's catch-all) or coerces silently — the
-// same unhandled-storage class as the [id] PATCH flags.
+// isDefault and isActive must be real booleans when present. A non-boolean
+// used to coerce isDefault via !! (so the string "false" stole the org
+// default) or ride isActive into the column (22P02 / silent coerce).
 
 const stateKey = Symbol.for("openbooks.form-layout-post-bool-test");
 interface RouteState {
@@ -88,6 +87,77 @@ async function layoutCount(orgId: string): Promise<number> {
   return Number(r.rows[0]?.c ?? 0);
 }
 
+async function defaultNames(orgId: string): Promise<string[]> {
+  const r = await db.execute<{ name: string }>(sql`
+    select name from form_layouts where org_id = ${orgId} and is_default order by name`);
+  return r.rows.map((row) => row.name);
+}
+
+test(
+  "POST refuses a non-boolean isDefault with a 400 and does not steal the org default",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const f = await seed();
+    const prior = await POST(
+      postRequest({
+        recordType: "vendor_bill",
+        name: "Prior default",
+        layout: defaultFormLayout("vendor_bill"),
+        isDefault: true,
+      }),
+    );
+    assert.equal(prior.status, 200);
+    const res = await POST(
+      postRequest({
+        recordType: "vendor_bill",
+        name: "Thief",
+        layout: defaultFormLayout("vendor_bill"),
+        isDefault: "false",
+      }),
+    );
+    assert.equal(res.status, 400);
+    assert.equal((await res.json()).error, "isDefault must be a boolean");
+    assert.equal(await layoutCount(f.orgId), 1, "rejected create must store no row");
+    assert.deepEqual(await defaultNames(f.orgId), ["Prior default"]);
+  },
+);
+
+test(
+  "POST still accepts an omitted or real-boolean isDefault",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const f = await seed();
+    const implicit = await POST(
+      postRequest({
+        recordType: "vendor_bill",
+        name: "Implicit default flag",
+        layout: defaultFormLayout("vendor_bill"),
+      }),
+    );
+    assert.equal(implicit.status, 200);
+    const explicitFalse = await POST(
+      postRequest({
+        recordType: "vendor_bill",
+        name: "Explicit nondefault",
+        layout: defaultFormLayout("vendor_bill"),
+        isDefault: false,
+      }),
+    );
+    assert.equal(explicitFalse.status, 200);
+    const explicitTrue = await POST(
+      postRequest({
+        recordType: "vendor_bill",
+        name: "Explicit default",
+        layout: defaultFormLayout("vendor_bill"),
+        isDefault: true,
+      }),
+    );
+    assert.equal(explicitTrue.status, 200);
+    assert.equal(await layoutCount(f.orgId), 3);
+    assert.deepEqual(await defaultNames(f.orgId), ["Explicit default"]);
+  },
+);
+
 test(
   "POST refuses a non-boolean isActive with a 400, never a storage 500",
   { skip: !process.env.OPENBOOKS_DB_URL },
@@ -104,6 +174,68 @@ test(
     assert.equal(res.status, 400);
     assert.match(String((await res.json()).error), /isActive/);
     assert.equal(await layoutCount(f.orgId), 0, "rejected create must store no row");
+  },
+);
+
+test(
+  "POST refuses a truthy non-array allowedRoles and stores no row",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const f = await seed();
+    const res = await POST(
+      postRequest({
+        recordType: "vendor_bill",
+        name: "Gated",
+        layout: defaultFormLayout("vendor_bill"),
+        allowedRoles: { admin: true },
+      }),
+    );
+    assert.equal(res.status, 400);
+    assert.match(String((await res.json()).error), /allowedRoles/);
+    assert.equal(await layoutCount(f.orgId), 0, "rejected create must store no row");
+  },
+);
+
+test(
+  "POST refuses a non-UUID allowedRoles string and stores no row",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const f = await seed();
+    const res = await POST(
+      postRequest({
+        recordType: "vendor_bill",
+        name: "Keyed",
+        layout: defaultFormLayout("vendor_bill"),
+        allowedRoles: ["admin"],
+      }),
+    );
+    assert.equal(res.status, 400);
+    assert.match(String((await res.json()).error), /allowedRoles/);
+    assert.equal(await layoutCount(f.orgId), 0, "rejected create must store no row");
+  },
+);
+
+const ROLE_ID = "00000000-0000-4000-8000-000000000099";
+
+test(
+  "POST persists a UUID allowedRoles list",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const f = await seed();
+    const res = await POST(
+      postRequest({
+        recordType: "vendor_bill",
+        name: "Role Gated",
+        layout: defaultFormLayout("vendor_bill"),
+        allowedRoles: [ROLE_ID],
+      }),
+    );
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as { id?: string };
+    const stored = await db.execute<{ allowedRoles: unknown }>(sql`
+      select allowed_roles as "allowedRoles"
+        from form_layouts where org_id = ${f.orgId} and id = ${body.id}`);
+    assert.deepEqual(stored.rows[0]?.allowedRoles, [ROLE_ID]);
   },
 );
 
@@ -130,5 +262,27 @@ test(
     );
     assert.equal(explicit.status, 200);
     assert.equal(await layoutCount(f.orgId), 2);
+  },
+);
+
+test(
+  "POST refuses an inactive default instead of storing a row resolve cannot see",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const f = await seed();
+    const res = await POST(
+      postRequest({
+        recordType: "vendor_bill",
+        name: "Hidden default",
+        layout: defaultFormLayout("vendor_bill"),
+        isDefault: true,
+        isActive: false,
+      }),
+    );
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.match(String(body.error), /inactive form cannot be the default/i);
+    assert.match(String(body.error), /activate it/i);
+    assert.equal(await layoutCount(f.orgId), 0, "rejected create must store no row");
   },
 );

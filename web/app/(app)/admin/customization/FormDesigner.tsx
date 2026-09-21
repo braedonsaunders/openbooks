@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { ChevronDown, ChevronUp, Eye, EyeOff, GripVertical, Plus, Trash2, X } from 'lucide-react'
 import { Badge, Button, Input, Label, Select, UrlDrawer, cn } from '@openbooks/ui'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 import {
   customFieldDefKey,
   customFieldCreationTargetFor,
@@ -384,25 +385,30 @@ export function FormDesigner({
     // Edits address the member route: PATCH exists only on
     // /form-layouts/[id] (the collection serves GET+POST, so a PATCH there
     // 405s). F-t10-001.
-    const res = await fetch(
-      creating ? '/api/customization/form-layouts' : `/api/customization/form-layouts/${def!.id}`,
-      {
-        method: creating ? 'POST' : 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      },
-    )
-    // A non-JSON error body (e.g. a status with no payload) must surface as
-    // the save error, never throw past the busy reset and stick on Saving.
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) {
-      toast.error(data.error ?? t('designer.forms.saveFailed'))
+    try {
+      const res = await fetch(
+        creating ? '/api/customization/form-layouts' : `/api/customization/form-layouts/${def!.id}`,
+        {
+          method: creating ? 'POST' : 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        },
+      )
+      // The status is checked before the body is parsed: a non-JSON error
+      // body must surface the named refusal (or the fallback with status),
+      // never a SyntaxError from parsing the body that hides it and sticks on Saving.
+      if (!res.ok) {
+        toast.error(await readApiErrorMessage(res, t('designer.forms.saveFailed')))
+        return
+      }
+      toast.success(t('designer.forms.saved'))
+      router.push(`/admin/customization?recordType=${recordType}&tab=forms`)
+      router.refresh()
+    } catch {
+      toast.error(t('designer.forms.saveFailed'))
+    } finally {
       setBusy(false)
-      return
     }
-    toast.success(t('designer.forms.saved'))
-    router.push(`/admin/customization?recordType=${recordType}&tab=forms`)
-    router.refresh()
   }
   async function remove() {
     if (!def?.id) return
@@ -411,13 +417,20 @@ export function FormDesigner({
     // F-t10-004.
     if (def?.isDefault && !window.confirm(t('designer.forms.deleteDefaultConfirm', { name: def.name ?? '' }))) return
     setBusy(true)
-    const res = await fetch(`/api/customization/form-layouts/${def.id}`, { method: 'DELETE' })
-    if (res.ok) {
+    try {
+      const res = await fetch(`/api/customization/form-layouts/${def.id}`, { method: 'DELETE' })
+      // Status first: an empty or non-JSON DELETE refusal must not throw past
+      // setBusy(false) and leave the button stuck on Saving.
+      if (!res.ok) {
+        toast.error(await readApiErrorMessage(res, t('designer.forms.saveFailed')))
+        return
+      }
       toast.success(t('designer.forms.deleted'))
       router.push(`/admin/customization?recordType=${recordType}&tab=forms`)
       router.refresh()
-    } else {
-      toast.error((await res.json()).error ?? t('designer.forms.saveFailed'))
+    } catch {
+      toast.error(t('designer.forms.saveFailed'))
+    } finally {
       setBusy(false)
     }
   }
@@ -801,21 +814,31 @@ function AddFieldPanel({ level, recordType, usedKeys, onCreated }: {
     if (!target) { setBusy(false); return }
     const targetTable = target.table
     const targetKind = target.kind
-    const res = await fetch('/api/admin/custom-fields', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ targetTable, targetKind, key, label: trimmed, fieldType, config, isRequired: false, sortOrder: 0 }),
-    })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) {
-      toast.error(data.error ?? t('designer.forms.addFieldFailed'))
+    try {
+      const res = await fetch('/api/admin/custom-fields', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetTable, targetKind, key, label: trimmed, fieldType, config, isRequired: false, sortOrder: 0 }),
+      })
+      // Status first: a named refusal (duplicate key, validation) must reach
+      // the operator, never hide behind a generic toast when the body is not JSON.
+      if (!res.ok) {
+        toast.error(await readApiErrorMessage(res, t('designer.forms.addFieldFailed')))
+        return
+      }
+      const data = await res.json().catch(() => ({})) as { id?: unknown }
+      if (typeof data.id !== 'string' || !data.id) {
+        toast.error(t('designer.forms.addFieldFailed'))
+        return
+      }
+      onCreated({ id: data.id, targetTable, targetKind, key, label: trimmed, fieldType, config, isRequired: false, sortOrder: 0 })
+      toast.success(t('designer.forms.addFieldDone', { label: trimmed }))
+      reset()
+    } catch {
+      toast.error(t('designer.forms.addFieldFailed'))
+    } finally {
       setBusy(false)
-      return
     }
-    onCreated({ id: data.id, targetTable, targetKind, key, label: trimmed, fieldType, config, isRequired: false, sortOrder: 0 })
-    toast.success(t('designer.forms.addFieldDone', { label: trimmed }))
-    setBusy(false)
-    reset()
   }
 
   if (!target) return null

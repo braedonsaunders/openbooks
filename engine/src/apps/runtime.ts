@@ -120,6 +120,30 @@ const FORBIDDEN = "__OB_FORBIDDEN__";
 const GOVERNANCE = "__OB_GOV__";
 const TIMEOUT = "__OB_TIMEOUT__";
 const HOST_TIMEOUT = Symbol("host-timeout");
+// The asyncify boundary surfaces a real guest stack-limit hit as
+// V8's RangeError. Guest-visible strings are not a signal: a
+// handler can throw new Error("stack overflow") on a healthy VM.
+const HOST_STACK_EXHAUSTED = "Maximum call stack size exceeded";
+const GUEST_STACK_OVERFLOW_MESSAGE =
+  "guest stack overflow: the handler exceeded the sandbox stack limit";
+
+/**
+ * True only for a host/VM stack-exhaustion signal. Dumped guest
+ * exceptions are plain objects or Error instances whose text the
+ * handler chose — matching that text would skip JS_FreeRuntime
+ * and rewrite the operator-visible refusal. `Error.name` is
+ * mutable, so a renamed ordinary Error is not a WASM abort;
+ * Emscripten abort() throws `new WebAssembly.RuntimeError(...)`.
+ */
+export function isHostStackExhaustion(error: unknown): boolean {
+  return error instanceof RangeError && error.message === HOST_STACK_EXHAUSTED;
+}
+
+export function isHostVmUnfreeableSignal(error: unknown): boolean {
+  return (
+    error instanceof WebAssembly.RuntimeError || isHostStackExhaustion(error)
+  );
+}
 
 export async function runAppEndpoint(opts: {
   source: string;
@@ -182,11 +206,28 @@ export async function runAppEndpoint(opts: {
 
   let vmDisposed = false;
   let cleanupDeferred = false;
+  // After a real guest stack-limit hit, JS_FreeRuntime asserts
+  // list_empty(&rt->gc_obj_list). The browser-asyncify Emscripten
+  // abort() throws WebAssembly.RuntimeError from dispose — and a
+  // throw from this finally replaces the already-computed
+  // AppEndpointResult, taking the Node process down with it.
+  // Only a host RangeError / WASM abort sets this; guest exception
+  // text is attacker-controlled and must not skip FreeRuntime.
+  let runtimeUnfreeable = false;
   const disposeVm = (): void => {
     if (vmDisposed) return;
     vmDisposed = true;
-    vm.dispose();
-    runtime.dispose();
+    const release = (fn: () => void): void => {
+      try {
+        fn();
+      } catch (e) {
+        if (!isHostVmUnfreeableSignal(e)) throw e;
+        runtimeUnfreeable = true;
+      }
+    };
+    release(() => vm.dispose());
+    if (runtimeUnfreeable) return;
+    release(() => runtime.dispose());
   };
 
   /** Charge units; throw a governance error handle when over budget. */
@@ -583,6 +624,9 @@ export async function runAppEndpoint(opts: {
       durationMs: Date.now() - started,
     };
   } catch (e) {
+    if (isHostVmUnfreeableSignal(e)) {
+      runtimeUnfreeable = true;
+    }
     if (Date.now() > deadline) {
       return {
         status: "timeout",
@@ -594,7 +638,9 @@ export async function runAppEndpoint(opts: {
     }
     return {
       status: "error",
-      error: (e as Error).message,
+      error: isHostStackExhaustion(e)
+        ? GUEST_STACK_OVERFLOW_MESSAGE
+        : (e as Error).message,
       logs,
       units,
       durationMs: Date.now() - started,

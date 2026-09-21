@@ -19,6 +19,7 @@ import type { ExtensionDraft } from "@/lib/application/extensions";
 import { AppPackageEditor } from "./AppPackageEditor";
 import { AppWorkspaceTabs } from "./sections";
 import { AppOverviewHero } from "./AppOverviewHero";
+import { readApiErrorMessage } from "@/lib/api-error";
 import { confirmDialog } from "@/lib/confirm";
 import { parseManifest } from "@/lib/apps/manifest";
 import {
@@ -83,8 +84,12 @@ export function ExtensionReview({ draft }: { draft: ExtensionDraft }) {
           contentHash: draft.content_hash,
         }),
       });
+      // Status first: a non-JSON 500/HTML refusal from POST /api/apps/drafts
+      // must surface the API message (or the fallback with status), never a
+      // SyntaxError from response.json() that hides the activate/discard remedy.
+      if (!response.ok)
+        throw new Error(await readApiErrorMessage(response, t("failed")));
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? t("failed"));
       router.push(data.reviewUrl ?? "/admin/apps");
       router.refresh();
     } catch (e) {
@@ -106,8 +111,13 @@ export function ExtensionReview({ draft }: { draft: ExtensionDraft }) {
           route,
         }),
       });
+      // Status first: a non-JSON 500/HTML refusal from POST /api/apps/drafts
+      // must surface the API message (or the fallback with status), never a
+      // SyntaxError from response.json() that hides the preview-page remedy.
+      if (!response.ok)
+        throw new Error(await readApiErrorMessage(response, t("failed")));
       const data = await response.json();
-      if (!response.ok || !data.staged)
+      if (!data.staged)
         throw new Error(data.error ?? data.errors?.join("; ") ?? t("failed"));
       router.push(data.previewUrl);
     } catch (e) {

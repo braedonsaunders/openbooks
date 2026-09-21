@@ -6,6 +6,7 @@ import {
   lintListView,
   lintFormLayout,
   mergeRegisteredFieldsIntoLayout,
+  parseListView,
   resolveFormTabs,
 } from './schema.ts'
 import { getRecordType, recordTypeForFeatureState } from './registry.ts'
@@ -456,6 +457,33 @@ test('between list filters require both bounds', () => {
 
   view.filters[0]!.value = '2026-01-01'
   assert.deepEqual(lintListView(view), [])
+})
+
+test('custom-field list filters are linted instead of skipped', () => {
+  // parseListView is the list-views POST/PATCH authority. An early return for
+  // cf_* used to store a filter whose WHERE builders then dropped the clause,
+  // so an org-shared view could claim to restrict rows and still return the
+  // unfiltered tenant list.
+  const view = defaultListView('vendor_bill')
+  view.filters = [{ key: 'cf_region', operator: 'eq' }]
+  assert.deepEqual(lintListView(view), [
+    { path: 'filters[0]', message: 'filter "cf_region" needs a value' },
+  ])
+  const refused = parseListView({ ...view, filters: [{ key: 'cf_region', operator: 'eq' }] })
+  assert.equal(refused.success, false)
+  assert.deepEqual(refused.issues, [
+    { path: 'filters[0]', message: 'filter "cf_region" needs a value' },
+  ])
+
+  view.filters = [{ key: 'cf_region', operator: 'between', value: '2026-01-01', to: '2026-12-31' }]
+  assert.deepEqual(lintListView(view), [
+    { path: 'filters[0]', message: 'operator "between" not allowed for custom field "cf_region"' },
+  ])
+
+  view.filters = [{ key: 'cf_region', operator: 'eq', value: 'west' }]
+  assert.deepEqual(lintListView(view), [])
+  const accepted = parseListView({ ...view, filters: [{ key: 'cf_region', operator: 'eq', value: 'west' }] })
+  assert.equal(accepted.success, true)
 })
 
 test('the default check form carries an optional vendor payee', () => {

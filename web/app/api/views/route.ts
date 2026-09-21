@@ -1,17 +1,29 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../lib/authz'
+import { canRunReportEntity } from '../../../lib/report-authz'
 import { createView, loadViews } from '../../../lib/views'
 
 export const runtime = 'nodejs'
 
-/** List the views visible to the caller (own private + shared). */
+/**
+ * List the views visible to the caller (own private + shared).
+ *
+ * Filtered by the same entity gate the runner applies. Listing a payroll plan
+ * to a reader who cannot run it leaks the catalog (names, descriptions and the
+ * stored plan itself) and hands out the id that every execution path keys on.
+ */
 export async function GET() {
   const gate = await guardPermission('reports.read')
   if (gate instanceof NextResponse) return gate
   const { user, permissions } = gate
   const rows = await loadViews(user.orgId, user.id, permissions)
-  return NextResponse.json({ views: rows })
+  const visible = []
+  for (const row of rows) {
+    if (!(await canRunReportEntity(gate, row.query))) continue
+    visible.push(row)
+  }
+  return NextResponse.json({ views: visible })
 }
 
 /** Instant-into-draft: create a private draft owned by the caller. */

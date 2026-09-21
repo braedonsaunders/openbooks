@@ -101,6 +101,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ recordT
   if (requestedTo !== '' && !isValidEmailAddress(requestedTo)) {
     return NextResponse.json({ error: 'invalid recipient email address' }, { status: 400 })
   }
+  // A present template field (including empty) that is not a UUID is the
+  // same 404 a missing template gets, settled before sendRecordPdfEmail
+  // can bind it to pdf_templates.id. Only an omitted field may fall through
+  // to the org default / starter.
+  const requestedTemplate = typeof body.template === 'string' ? body.template : null
+  if (requestedTemplate !== null && !isUuid(requestedTemplate)) {
+    return NextResponse.json({ error: 'template not found' }, { status: 404 })
+  }
   try {
     const result = await sendRecordPdfEmail({
       recordType,
@@ -108,7 +116,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ recordT
       id,
       to: requestedTo || undefined,
       message: typeof body.message === 'string' ? body.message : undefined,
-      templateId: typeof body.template === 'string' ? body.template : null,
+      templateId: requestedTemplate,
     })
     return NextResponse.json({ ok: true, ...result })
   } catch (e) {

@@ -6,11 +6,52 @@ import { getDocumentCaptureSettings } from '@openbooks/engine/src/payables/ap-ca
 import type { CaptureLine, NormalizedCapture } from '@openbooks/engine/src/payables/ap-capture.ts'
 import { resolveAndValidateCapture } from '@openbooks/engine/src/payables/ap-capture-service.ts'
 import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
-import { guardPermission } from '../../../../lib/authz'
+import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 import { isDocKindEnabled } from "../../../../lib/documents.ts";
 import { isFeatureEnabled } from '../../../../lib/features'
+import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 
 export const runtime = 'nodejs'
+
+/**
+ * Same vendor/PO visibility the inbox list and `?capture=` flyout apply
+ * (`web/app/(app)/ap/capture/view.ts`). A restricted caller who cannot see
+ * the row in the list must get the same not_found by id. Empty allowed set
+ * denies every capture (`and false`); null vendor/PO subsidiaries stay
+ * org-wide, matching the inbox `is null or in allowed` predicate.
+ */
+function apCaptureSubsidiaryScope(allowed: ReadonlySet<string> | null) {
+  if (allowed === null) return sql``
+  if (allowed.size === 0) return sql` and false`
+  return sql`${subsidiaryVisibleFilter(sql`po.subsidiary_id`, allowed, { orgWideNull: true })}
+             ${subsidiaryVisibleFilter(sql`vendor.subsidiary_id`, allowed, { orgWideNull: true })}`
+}
+
+/** Write-side twin: the associations the UPDATE will persist, not the pre-update row. */
+function resolvedAssociationsInScope(
+  orgId: string,
+  allowed: ReadonlySet<string> | null,
+  vendorId: string | null,
+  purchaseOrderId: string | null,
+) {
+  if (allowed === null) return sql`true`
+  if (allowed.size === 0) return sql`false`
+  const vendorOk = !vendorId
+    ? sql`true`
+    : sql`exists (
+        select 1 from parties vendor
+         where vendor.org_id = ${orgId} and vendor.id = ${vendorId}
+         ${subsidiaryVisibleFilter(sql`vendor.subsidiary_id`, allowed, { orgWideNull: true })}
+      )`
+  const purchaseOrderOk = !purchaseOrderId
+    ? sql`true`
+    : sql`exists (
+        select 1 from documents po
+         where po.org_id = ${orgId} and po.id = ${purchaseOrderId}
+         ${subsidiaryVisibleFilter(sql`po.subsidiary_id`, allowed, { orgWideNull: true })}
+      )`
+  return sql`${vendorOk} and ${purchaseOrderOk}`
+}
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
@@ -90,7 +131,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const result = (await db.execute<Record<string, unknown>>(sql`
     select ci.*, f.content_type, f.size_bytes
       from ap_capture_items ci join files f on f.id = ci.file_id and f.org_id = ci.org_id
+      left join parties vendor on vendor.id = ci.vendor_candidate_id and vendor.org_id = ci.org_id
+      left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
      where ci.org_id = ${gate.user.orgId} and ci.id = ${id}
+     ${apCaptureSubsidiaryScope(gate.allowedSubsidiaryIds)}
   `))
   if (!result.rows[0]) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   const [fields, events] = await Promise.all([
@@ -137,8 +181,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: error instanceof Error ? error.message : 'invalid_capture' }, { status: 422 })
   }
   const current = (await db.execute<{ normalized: NormalizedCapture; status: string; document_kind: string; vendor_candidate_id: string | null; purchase_order_id: string | null }>(sql`
-    select normalized, status, document_kind, vendor_candidate_id, purchase_order_id from ap_capture_items
-     where org_id = ${gate.user.orgId} and id = ${id}
+    select ci.normalized, ci.status, ci.document_kind, ci.vendor_candidate_id, ci.purchase_order_id
+      from ap_capture_items ci
+      left join parties vendor on vendor.id = ci.vendor_candidate_id and vendor.org_id = ci.org_id
+      left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
+     where ci.org_id = ${gate.user.orgId} and ci.id = ${id}
+     ${apCaptureSubsidiaryScope(gate.allowedSubsidiaryIds)}
   `))
   if (!current.rows[0]) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   if (['materialized', 'rejected', 'extracting', 'queued'].includes(current.rows[0].status)) {
@@ -191,9 +239,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     saved = await withOrgTransaction(gate.user.orgId, async () => {
       const tx = db
       const locked = (await tx.execute<{ normalized: NormalizedCapture; status: string; document_kind: string; vendor_candidate_id: string | null; purchase_order_id: string | null; revision: string }>(sql`
-        select normalized, status, document_kind, vendor_candidate_id, purchase_order_id,
-               ${documentRevisionCounterSql(sql`revision_seq`)} as revision
-          from ap_capture_items where org_id = ${gate.user.orgId} and id = ${id} for update
+        select ci.normalized, ci.status, ci.document_kind, ci.vendor_candidate_id, ci.purchase_order_id,
+               ${documentRevisionCounterSql(sql`ci.revision_seq`)} as revision
+          from ap_capture_items ci
+          left join parties vendor on vendor.id = ci.vendor_candidate_id and vendor.org_id = ci.org_id
+          left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
+         where ci.org_id = ${gate.user.orgId} and ci.id = ${id}
+         ${apCaptureSubsidiaryScope(gate.allowedSubsidiaryIds)}
+         for update of ci
       `))
       const live = locked.rows[0]
       if (!live) throw new Error('capture_not_found')
@@ -211,6 +264,29 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         confidenceThreshold: settings.confidenceThreshold,
         vendorId: nextVendorId, purchaseOrderId: nextPurchaseOrderId, documentKind: kind,
     })
+    // Omitted vendorId/purchaseOrderId lets resolveAndValidateCapture pick
+    // org-wide. Lock those target rows before the gate so a concurrent
+    // subsidiary reassignment cannot change the answer under the UPDATE.
+    if (resolved.vendorId) {
+      const vendor = (await tx.execute<{ subsidiaryId: string | null }>(sql`
+        select subsidiary_id as "subsidiaryId" from parties
+         where org_id = ${gate.user.orgId} and id = ${resolved.vendorId}
+         for update
+      `)).rows[0]
+      if (!vendor || guardSubsidiaryScope(gate, vendor.subsidiaryId, { orgWideNull: true })) {
+        throw new Error('capture_not_found')
+      }
+    }
+    if (resolved.purchaseOrderId) {
+      const purchaseOrder = (await tx.execute<{ subsidiaryId: string | null }>(sql`
+        select subsidiary_id as "subsidiaryId" from documents
+         where org_id = ${gate.user.orgId} and id = ${resolved.purchaseOrderId}
+         for update
+      `)).rows[0]
+      if (!purchaseOrder || guardSubsidiaryScope(gate, purchaseOrder.subsidiaryId, { orgWideNull: true })) {
+        throw new Error('capture_not_found')
+      }
+    }
     const before = live.normalized
     const headerKeys = ['vendorName', 'vendorTaxId', 'invoiceNumber', 'invoiceDate', 'dueDate', 'purchaseOrderNumber', 'currency', 'subtotal', 'taxTotal', 'total', 'memo'] as const
     for (const key of headerKeys) {
@@ -250,7 +326,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     // Monotonic revision writer (same discipline as document revisions): every
     // committed save advances the token, so equal tokens always mean equal
     // content and a stale tab can never accidentally match.
-    await tx.execute(sql`
+    const savedRow = (await tx.execute<{ id: string }>(sql`
       update ap_capture_items set normalized = ${JSON.stringify(resolved.normalized)}::jsonb,
              validation_issues = ${JSON.stringify(resolved.issues)}::jsonb, status = ${status},
              document_kind = ${kind}, vendor_candidate_id = ${resolved.vendorId},
@@ -258,7 +334,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
              updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'),
              updated_by = ${gate.user.id}
        where org_id = ${gate.user.orgId} and id = ${id}
-    `)
+         and exists (
+           select 1 from ap_capture_items ci
+           left join parties vendor on vendor.id = ci.vendor_candidate_id and vendor.org_id = ci.org_id
+           left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
+           where ci.org_id = ${gate.user.orgId} and ci.id = ${id}
+           ${apCaptureSubsidiaryScope(gate.allowedSubsidiaryIds)}
+         )
+         and ${resolvedAssociationsInScope(gate.user.orgId, gate.allowedSubsidiaryIds, resolved.vendorId, resolved.purchaseOrderId)}
+       returning id
+    `))
+    if (!savedRow.rows[0]) throw new Error('capture_not_found')
     await tx.execute(sql`
       insert into ap_capture_events (org_id, capture_item_id, event_kind, detail, actor_id)
       values (${gate.user.orgId}, ${id}, 'review_saved',

@@ -7,8 +7,16 @@ import { connectGovernedReadClient } from "./db.ts";
  *   - runs as `openbooks_read` (SELECT-only role, no login)
  *   - inside a READ ONLY transaction (DML/DDL refused by Postgres itself)
  *   - SET LOCAL statement_timeout + row cap via wrapper
+ *   - the user query is wrapped as a single SELECT with bound $1/$2 so the
+ *     driver must use the extended protocol (a second command is refused)
+ *   - PostgreSQL measures each row with row_to_json/octet_length and only
+ *     sends the payload when that size is inside USER_SQL_MAX_RESULT_BYTES;
+ *     an oversized cell stays on the server and the host refuses by name
  * The single-statement/SELECT prefix check is defense-in-depth UX, not the
- * security boundary.
+ * security boundary. That checker still has to see the same tokens PostgreSQL
+ * would: comments and quotes are walked left-to-right, dollar-quote tags must
+ * match, and quoted identifiers — including U&"…" unicode escapes — keep
+ * their decoded name so set_config cannot hide behind "set_config".
  */
 
 export interface UserSqlOptions {
@@ -16,7 +24,15 @@ export interface UserSqlOptions {
   orgId: string;
   maxRows?: number;
   timeoutMs?: number;
+  /**
+   * Hard ceiling on JSON-serialized result bytes returned to the caller.
+   * May only tighten the default; it cannot raise USER_SQL_MAX_RESULT_BYTES.
+   */
+  maxBytes?: number;
 }
+
+/** Host-side result budget for runUserSql. Callers cannot raise this. */
+export const USER_SQL_MAX_RESULT_BYTES = 8 * 1024 * 1024;
 
 export interface UserSqlResult {
   columns: string[];
@@ -28,13 +44,158 @@ export interface UserSqlResult {
 
 const FORBIDDEN_PREFIX = /^\s*(insert|update|delete|create|alter|drop|grant|revoke|truncate|copy|vacuum|set|call|do)\b/i;
 const FORBIDDEN_BODY = /\b(?:pg_catalog\.)?set_config\s*\(/i;
-const STRING_OR_DOLLAR_QUOTE = /'(?:[^']|'')*'|"(?:[^"\\]|\\.)*"|\$(?:[A-Za-z_][A-Za-z0-9_]*|)\$[\s\S]*?\$(?:[A-Za-z_][A-Za-z0-9_]*|)\$/g;
+const DOLLAR_TAG = /^\$([A-Za-z_][A-Za-z0-9_]*)?\$/;
+const UNCLOSED_SQL = "unclosed string, comment, or dollar-quote";
+
+/**
+ * Walk SQL the way PostgreSQL lexes it: comments are not tokens inside
+ * quotes, dollar-quote closers must repeat the opener tag, and "ident"
+ * uses "" — not a backslash — as the escape. Quoted identifiers, including
+ * U&"…" / UESCAPE forms, are kept as their decoded name so a later token
+ * check can still see set_config.
+ */
+function isIdentChar(char: string | undefined): boolean {
+  return char != null && /[A-Za-z0-9_$]/.test(char);
+}
+
+function atUnicodeQuoted(input: string, i: number): boolean {
+  if (i + 2 >= input.length) return false;
+  if (input[i] !== "U" && input[i] !== "u") return false;
+  if (input[i + 1] !== "&") return false;
+  if (input[i + 2] !== "'" && input[i + 2] !== '"') return false;
+  return !isIdentChar(input[i - 1]);
+}
+
+function parseQuoted(input: string, start: number, quote: "'" | '"'): { raw: string; next: number } {
+  let i = start + 1;
+  let raw = "";
+  while (i < input.length) {
+    if (input[i] === quote && input[i + 1] === quote) {
+      raw += quote;
+      i += 2;
+      continue;
+    }
+    if (input[i] === quote) {
+      return { raw, next: i + 1 };
+    }
+    raw += input[i];
+    i += 1;
+  }
+  throw new Error(UNCLOSED_SQL);
+}
+
+function parseUescape(input: string, start: number): { escape: string; next: number } | null {
+  let i = start;
+  while (i < input.length && /\s/.test(input[i]!)) i += 1;
+  if (!/^UESCAPE\b/i.test(input.slice(i))) return null;
+  i += "UESCAPE".length;
+  while (i < input.length && /\s/.test(input[i]!)) i += 1;
+  if (input[i] !== "'") throw new Error(UNCLOSED_SQL);
+  const parsed = parseQuoted(input, i, "'");
+  if (parsed.raw.length !== 1) throw new Error("UESCAPE must be a single character");
+  return { escape: parsed.raw, next: parsed.next };
+}
+
+function decodeUnicodeEscapes(raw: string, escape: string): string {
+  let out = "";
+  let i = 0;
+  while (i < raw.length) {
+    if (raw[i] !== escape) {
+      out += raw[i];
+      i += 1;
+      continue;
+    }
+    if (raw[i + 1] === escape) {
+      out += escape;
+      i += 2;
+      continue;
+    }
+    if (raw[i + 1] === "+") {
+      const hex = raw.slice(i + 2, i + 8);
+      if (!/^[0-9A-Fa-f]{6}$/.test(hex)) throw new Error("invalid unicode identifier escape");
+      out += String.fromCodePoint(Number.parseInt(hex, 16));
+      i += 8;
+      continue;
+    }
+    const hex = raw.slice(i + 1, i + 5);
+    if (!/^[0-9A-Fa-f]{4}$/.test(hex)) throw new Error("invalid unicode identifier escape");
+    out += String.fromCodePoint(Number.parseInt(hex, 16));
+    i += 5;
+  }
+  return out;
+}
 
 function stripSqlNoise(input: string): string {
-  return input
-    .replace(/--[^\n]*/g, " ")
-    .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(STRING_OR_DOLLAR_QUOTE, " ");
+  let out = "";
+  let i = 0;
+  while (i < input.length) {
+    if (input.startsWith("--", i)) {
+      const newline = input.indexOf("\n", i + 2);
+      i = newline === -1 ? input.length : newline;
+      out += " ";
+      continue;
+    }
+    if (input.startsWith("/*", i)) {
+      let depth = 1;
+      i += 2;
+      while (i < input.length && depth > 0) {
+        if (input.startsWith("/*", i)) {
+          depth += 1;
+          i += 2;
+          continue;
+        }
+        if (input.startsWith("*/", i)) {
+          depth -= 1;
+          i += 2;
+          continue;
+        }
+        i += 1;
+      }
+      if (depth !== 0) throw new Error(UNCLOSED_SQL);
+      out += " ";
+      continue;
+    }
+    if (input[i] === "$") {
+      const tag = input.slice(i).match(DOLLAR_TAG);
+      if (tag) {
+        const delim = tag[0];
+        const close = input.indexOf(delim, i + delim.length);
+        if (close === -1) throw new Error(UNCLOSED_SQL);
+        i = close + delim.length;
+        out += " ";
+        continue;
+      }
+    }
+    if (atUnicodeQuoted(input, i)) {
+      const quote = input[i + 2] as "'" | '"';
+      const parsed = parseQuoted(input, i + 2, quote);
+      i = parsed.next;
+      const uescape = parseUescape(input, i);
+      const escape = uescape?.escape ?? "\\";
+      if (uescape) i = uescape.next;
+      if (quote === "'") {
+        out += " ";
+        continue;
+      }
+      out += decodeUnicodeEscapes(parsed.raw, escape);
+      continue;
+    }
+    if (input[i] === "'") {
+      const parsed = parseQuoted(input, i, "'");
+      i = parsed.next;
+      out += " ";
+      continue;
+    }
+    if (input[i] === '"') {
+      const parsed = parseQuoted(input, i, '"');
+      i = parsed.next;
+      out += parsed.raw;
+      continue;
+    }
+    out += input[i];
+    i += 1;
+  }
+  return out;
 }
 
 export function validateUserSql(sqlText: string): string {
@@ -47,6 +208,57 @@ export function validateUserSql(sqlText: string): string {
   }
   if (!/^\s*(select|with)\b/i.test(stripped)) throw new Error("queries must start with SELECT or WITH");
   return sqlText.trim().replace(/;\s*$/, "");
+}
+
+function resultByteRefusal(maxBytes: number): Error {
+  return new Error(
+    `query result exceeds ${maxBytes} bytes; add a tighter LIMIT, project fewer columns, or avoid wide text expressions`,
+  );
+}
+
+function asRowBytes(value: unknown): number {
+  if (typeof value === "bigint") return Number(value);
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && /^-?\d+$/.test(value)) return Number(value);
+  throw new Error("query result size was unreadable; add a tighter LIMIT or project fewer columns");
+}
+
+function asRowObject(value: unknown): Record<string, unknown> {
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  if (typeof value === "string") {
+    const parsed: unknown = JSON.parse(value);
+    if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  }
+  throw new Error("query result size was unreadable; add a tighter LIMIT or project fewer columns");
+}
+
+function collectMeasuredRows(
+  rawRows: Record<string, unknown>[],
+  maxRows: number,
+  maxBytes: number,
+): { rows: Record<string, unknown>[]; truncated: boolean } {
+  const kept: Record<string, unknown>[] = [];
+  let bytes = 2;
+  for (const raw of rawRows) {
+    if (kept.length >= maxRows) {
+      return { rows: kept, truncated: true };
+    }
+    const rowBytes = asRowBytes(raw.__ob_row_bytes);
+    if (rowBytes > maxBytes || raw.__ob_row == null) {
+      throw resultByteRefusal(maxBytes);
+    }
+    const extra = kept.length === 0 ? rowBytes : rowBytes + 1;
+    if (bytes + extra > maxBytes) {
+      throw resultByteRefusal(maxBytes);
+    }
+    bytes += extra;
+    kept.push(asRowObject(raw.__ob_row));
+  }
+  return { rows: kept, truncated: false };
 }
 
 async function prepareQueryContext(client: import('pg').PoolClient, orgId: string): Promise<void> {
@@ -100,24 +312,55 @@ async function beginGovernedReadTransaction(
 export async function runUserSql(sqlText: string, opts: UserSqlOptions): Promise<UserSqlResult> {
   const maxRows = Math.min(opts.maxRows ?? 1_000, 50_000);
   const timeoutMs = Math.min(opts.timeoutMs ?? 5_000, 60_000);
+  const requestedBytes = opts.maxBytes ?? USER_SQL_MAX_RESULT_BYTES;
+  const maxBytes = Math.min(
+    Number.isSafeInteger(requestedBytes) && requestedBytes > 0
+      ? requestedBytes
+      : USER_SQL_MAX_RESULT_BYTES,
+    USER_SQL_MAX_RESULT_BYTES,
+  );
 
   const body = validateUserSql(sqlText);
-  const wrapped = `select * from (${body}) __q limit ${maxRows + 1}`;
+  // $1/$2 are real binds: pg 8.22 still uses the simple protocol for
+  // values: []. The CASE keeps an oversized or over-budget row_to_json
+  // payload on the server — the host only sees the byte count and a null.
+  const wrapped =
+    "select __bytes as __ob_row_bytes, "
+    + "case when __bytes > $2::pg_catalog.int8 then null "
+    + "when __running > $2::pg_catalog.int8 then null "
+    + "else pg_catalog.row_to_json(__q) end as __ob_row "
+    + "from ("
+    + "select __q, __bytes, "
+    + "sum(__bytes) over (order by __rn rows between unbounded preceding and current row) as __running "
+    + "from ("
+    + "select __q, "
+    + "octet_length(pg_catalog.row_to_json(__q)::pg_catalog.text)::pg_catalog.int8 as __bytes, "
+    + "row_number() over () as __rn "
+    + `from (${body}) __q limit $1::pg_catalog.int4`
+    + ") __numbered"
+    + ") __sized";
 
   const client = await connectGovernedReadClient();
   const started = Date.now();
   try {
     await prepareQueryContext(client, opts.orgId);
     await beginGovernedReadTransaction(client, opts.orgId, timeoutMs);
-    const res = await client.query(wrapped);
+    const res = await client.query({
+      text: wrapped,
+      values: [maxRows + 1, maxBytes],
+    });
     await client.query("rollback");
-    const truncated = res.rows.length > maxRows;
-    const rows = truncated ? res.rows.slice(0, maxRows) : res.rows;
+    const bounded = collectMeasuredRows(
+      res.rows as Record<string, unknown>[],
+      maxRows,
+      maxBytes,
+    );
+    const columns = bounded.rows.length > 0 ? Object.keys(bounded.rows[0]!) : [];
     return {
-      columns: res.fields.map((f) => f.name),
-      rows,
-      rowCount: rows.length,
-      truncated,
+      columns,
+      rows: bounded.rows,
+      rowCount: bounded.rows.length,
+      truncated: bounded.truncated || res.rows.length > maxRows,
       durationMs: Date.now() - started,
     };
   } catch (e) {

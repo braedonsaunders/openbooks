@@ -1727,8 +1727,9 @@ export async function runSync(
                   ? {
                       [refKey]: doc.sourceRef,
                       controlAccountId: doc.controlAccountId,
+                      connectionId,
                     }
-                  : { [refKey]: doc.sourceRef },
+                  : { [refKey]: doc.sourceRef, connectionId },
               })
               .returning({ id: schema.documents.id });
             await insertImportedLines(
@@ -2172,6 +2173,7 @@ export async function runSync(
             orgId: org.id,
             source: source.name,
             sourceRef: ref,
+            connectionId,
           });
           autoResolvedDeletions.push(ref);
           if (cancelledRefs.has(ref)) mirroredCancelledRefs.add(ref);

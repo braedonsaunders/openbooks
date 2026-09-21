@@ -22,17 +22,6 @@ export default defineConfig([
     "tmp/**",
     ".local/**",
   ]),
-  // Next.js route handlers are server request scopes, not React render scopes;
-  // they contain no components or hooks. The use-prefixed helpers they call
-  // (e.g. useSecureCookies in web/lib/auth-policy.ts) are plain functions whose
-  // name is pinned by the auth-route-contract tests, so the hooks rules cannot
-  // apply here. They remain at error severity everywhere else.
-  {
-    files: ["web/app/api/**/route.ts"],
-    rules: {
-      "react-hooks/rules-of-hooks": "off",
-    },
-  },
   // Debt surfaced when lint coverage was extended to the whole tree. These are
   // warnings pinned by --max-warnings in the `lint` script: the totals may go
   // down but never up. New production code must not add to them.

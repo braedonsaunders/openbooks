@@ -3,7 +3,7 @@ import { db, schema } from "../platform/db.ts";
 import { assertExpenseEmployee, assertExpenseSettlement } from "../records/expense-validation.ts";
 import { assertGeneratedBillingPostable, BillingSourceIntegrityError } from "../projects/billing-source-integrity.ts";
 import { isZero, sum } from "../money/money.ts";
-import { mergeBeforePostCustomMutation, runCustomGlLineScripts, runTriggerScripts, type ScriptContext } from "../scripting/scripting.ts";
+import { mergeBeforePostCustomMutation, resolveScriptUser, runCustomGlLineScripts, runTriggerScripts, type ScriptContext } from "../scripting/scripting.ts";
 import type { ContributedLine } from "../allocations/types.ts";
 import { assertContributorBalance, collectPostContributions, PostAllocationError, type PostContributionResult } from "../allocations/post.ts";
 import { postDriverResolver } from "../allocations/report-runner.ts";
@@ -205,11 +205,13 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     for (const plan of providerPlans) providerComponents.set(plan.line.id, plan.components);
     deps = { ...deps, taxComponentsByLine: providerComponents };
   }
+  const scriptUser = await resolveScriptUser(doc.orgId, options.audit?.actorId ?? null);
   const scriptCtx: ScriptContext = {
     trigger: "before_post",
     document: doc as unknown as Record<string, unknown>,
     lines: lines as unknown as Record<string, unknown>[],
     org: { id: org.id, name: org.name, baseCurrency: org.baseCurrency },
+    ...(scriptUser ? { user: scriptUser } : {}),
   };
 
   // -- user scripts: before_post (veto / mutate) --------------------------

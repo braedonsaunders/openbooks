@@ -1,4 +1,5 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   registerStaticResources,
@@ -132,6 +133,15 @@ const appCatalog = async (
         summarize: (result) =>
           typeof result.note === "string" ? result.note : undefined,
         execute: async (candidate, input) => {
+          // Writes execute directly on the API-key surface (no confirmation
+          // card). The MCP request identity is the invocation key, so a
+          // lost-response retry claims the same row and replays. Reads mint a
+          // nonce so each fetch is a new claim, matching platform.query's
+          // readInvocation.
+          const idempotencyKey =
+            definition.category === "write"
+              ? candidate.requestId
+              : randomUUID();
           const outcome = await runAppTool({
             orgId: candidate.authz.user.orgId,
             user: candidate.authz.user,
@@ -140,6 +150,7 @@ const appCatalog = async (
             input,
             userCan: (perm) => can(candidate.authz, perm),
             allowedSubsidiaryIds: candidate.authz.allowedSubsidiaryIds,
+            idempotencyKey,
           });
           if (!outcome.ok) throw new AssistantToolFailure(outcome.error);
           return { ok: true, data: outcome.result } as unknown as Record<string, unknown>;

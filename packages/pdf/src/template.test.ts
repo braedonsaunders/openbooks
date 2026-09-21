@@ -6,6 +6,7 @@ import {
   renderTemplate,
   sanitizeRenderedHtml,
   sanitizeTemplateHtml,
+  sanitizeTokenizedFragment,
   TEMPLATE_RENDER_LIMITS,
 } from './template'
 
@@ -167,6 +168,53 @@ test('rendered-output sanitizing keeps the merge size policy, not the authored o
 test('rendered-output sanitizing still refuses output past the render limit', () => {
   const over = `<div>${'a'.repeat(TEMPLATE_RENDER_LIMITS.renderOutputChars + 1)}</div>`
   assert.throws(() => sanitizeRenderedHtml(over), /exceeded/)
+})
+
+test('tokenized header/footer fragments drop network resource URLs and keep inline ones', () => {
+  const network = sanitizeTokenizedFragment(
+    '<div>Acme<img src="http://169.254.169.254/latest/meta-data/" alt="mark"></div>',
+  )
+  assert.match(network, /Acme/)
+  assert.match(network, /alt="mark"/)
+  assert.doesNotMatch(network, /169\.254|https?:\/\//i)
+
+  const stylesheet = sanitizeTokenizedFragment(
+    '<link rel="stylesheet" href="https://internal.example/admin"><div>{{page}}</div>',
+  )
+  assert.match(stylesheet, /\{\{page\}\}/)
+  assert.doesNotMatch(stylesheet, /internal\.example|href="https?:/i)
+
+  const css = sanitizeTokenizedFragment(
+    '<style>@import url("https://internal.example/sheet.css"); p{color:red}</style>' +
+      '<div style="background:url(https://internal.example/logo.png)">x</div>',
+  )
+  assert.doesNotMatch(css, /internal\.example|https?:\/\//i)
+  assert.match(css, />x</)
+
+  const imageSet = sanitizeTokenizedFragment(
+    '<div style="background-image:image-set(&quot;https://static.example/logo.png&quot; 1x)">x</div>',
+  )
+  const escapedUrl = sanitizeTokenizedFragment(
+    '<div style="background:\\75rl(https://static.example/logo.png)">x</div>',
+  )
+  const svgPaint = sanitizeTokenizedFragment(
+    '<svg><rect filter="url(https://static.example/paint)" fill="url(https://static.example/paint)" /></svg>',
+  )
+  assert.doesNotMatch(imageSet, /static\.example|https?:\/\//i)
+  assert.doesNotMatch(escapedUrl, /static\.example|https?:\/\//i)
+  assert.doesNotMatch(svgPaint, /static\.example|https?:\/\//i)
+
+  const inline = sanitizeTokenizedFragment('<img src="data:image/png;base64,AAAA" alt="logo">')
+  assert.match(inline, /data:image\/png;base64,AAAA/)
+
+  // Navigation hrefs are not subresource fetches; escaped text is not markup.
+  const link = sanitizeTokenizedFragment('<div><a href="https://example.com/docs">Guide</a></div>')
+  assert.match(link, /href="https:\/\/example\.com\/docs"/)
+  const escaped = sanitizeTokenizedFragment(
+    '<div>&lt;img src=&quot;https://attacker.example/pixel&quot;&gt;note</div>',
+  )
+  assert.match(escaped, /attacker\.example/)
+  assert.doesNotMatch(escaped, /<img/i)
 })
 
 test('the field-ticket conditional sections compile to live conditionals', () => {

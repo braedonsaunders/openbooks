@@ -5,6 +5,13 @@ import { guardFeaturePermission } from '@/lib/feature-gates'
 
 export const runtime = 'nodejs'
 
+const ENDPOINT_POST_ONLY =
+  'endpoint scripts accept POST only; only POST executes — send POST /api/scripts/e/<slug>'
+
+function refuseNonPost() {
+  return NextResponse.json({ error: ENDPOINT_POST_ONLY }, { status: 405 })
+}
+
 /**
  * Endpoint scripts — the platform's RESTlet equivalent. An active user script
  * with trigger 'endpoint' and this slug runs in the QuickJS sandbox with
@@ -16,8 +23,16 @@ export const runtime = 'nodejs'
  * /api/query (queryConsole feature, sql.execute, unrestricted subsidiary
  * scope), so invoking a restlet is never a way to write ledger entries or read
  * the governed catalog past role permissions.
+ *
+ * POST only. The proxy CSRF gate treats GET/HEAD as safe, and ob_session is
+ * SameSite=Lax, so a cross-site top-level GET would send the session cookie
+ * and execute the restlet (including any side-effecting ob.journal.create the
+ * caller is permitted to perform). GET refuses without reaching handle();
+ * handle() also refuses any non-POST before auth or runEndpointScript. POST
+ * remains origin-checked.
  */
 async function handle(req: Request, slug: string) {
+  if (req.method !== 'POST') return refuseNonPost()
   const gate = await guardFeaturePermission('scripts.execute', 'scripts')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
@@ -25,12 +40,9 @@ async function handle(req: Request, slug: string) {
   const url = new URL(req.url)
   const query: Record<string, string> = {}
   url.searchParams.forEach((v, k) => (query[k] = v))
-  let body: Record<string, unknown> | null = null
-  if (req.method === 'POST') {
-    const parsedBody = await parseJsonBody(req, jsonObject)
-    if (!parsedBody.ok) return parsedBody.response
-    body = parsedBody.data
-  }
+  const parsedBody = await parseJsonBody(req, jsonObject)
+  if (!parsedBody.ok) return parsedBody.response
+  const body = parsedBody.data
 
   const outcome = await runEndpointScript(
     slug,
@@ -46,9 +58,9 @@ async function handle(req: Request, slug: string) {
   return NextResponse.json({ ok: true, result: outcome.returned ?? null })
 }
 
-export async function GET(req: Request, { params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params
-  return handle(req, slug)
+/** 405 names POST. Next.js maps HEAD onto GET, so neither executes the script. */
+export async function GET() {
+  return refuseNonPost()
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ slug: string }> }) {

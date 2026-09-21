@@ -124,3 +124,74 @@ test(
     }
   },
 )
+
+test(
+  'custom-record list still hides JSON subsidiary_id rows after the type drops the field',
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const typeKey = `drop-${randomUUID().replaceAll('-', '').slice(0, 12)}`
+    const { org, actorId } = await withBypass(async () => {
+      const created = await createScratchOrg()
+      const actor = (await seedFlowActors(created.orgId)).adminId
+      const branch = randomUUID()
+      const typeId = randomUUID()
+      const fields = [{
+        id: 'main',
+        title: 'Details',
+        fields: [{ id: 'title', type: 'text', label: 'Title' }],
+      }]
+      await db.execute(sql`
+        insert into subsidiaries
+          (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+        values
+          (${branch}, ${created.orgId}, ${created.subsidiaryId}, 'Dropped Field Branch', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)
+      `)
+      await db.execute(sql`
+        insert into custom_record_types
+          (id, org_id, key, name, plural_name, fields, status, created_by, updated_by)
+        values
+          (${typeId}, ${created.orgId}, ${typeKey}, 'Dropped Field', 'Dropped Fields',
+           ${JSON.stringify(fields)}::jsonb, 'published', ${actor}, ${actor})
+      `)
+      for (const [subsidiaryId, title] of [
+        [created.subsidiaryId, 'visible'] as const,
+        [branch, 'hidden'] as const,
+      ]) {
+        await db.execute(sql`
+          insert into custom_records
+            (org_id, type_id, type_key, record_number, data, search_text, status, created_by, updated_by)
+          values
+            (${created.orgId}, ${typeId}, ${typeKey}, ${randomUUID()},
+             ${JSON.stringify({ subsidiary_id: subsidiaryId, title })}::jsonb,
+             ${title}, 'active', ${actor}, ${actor})
+        `)
+      }
+      return { org: created, actorId: actor }
+    })
+
+    state.authz = {
+      user: {
+        id: actorId,
+        orgId: org.orgId,
+        roles: [{ key: 'admin', name: 'Admin' }],
+      },
+      permissions: new Set(['records.read']),
+      allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+    }
+    try {
+      await withOrgContext(org.orgId, async () => {
+        const response = await GET(
+          new Request(`http://localhost/api/records/${typeKey}`),
+          { params: Promise.resolve({ typeKey }) },
+        )
+        assert.equal(response.status, 200)
+        const body = await response.json() as { records: Array<{ data: { title: string } }>; total: number }
+        assert.equal(body.total, 1)
+        assert.deepEqual(body.records.map((record) => record.data.title), ['visible'])
+      })
+    } finally {
+      state.authz = null
+      await withBypass(() => dropScratchOrg(org.orgId))
+    }
+  },
+)

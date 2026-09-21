@@ -4,7 +4,7 @@ import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
 import { PARTY_BUILT_IN_EXPR, PARTY_SORTS, rolePartyWhere } from "./customers";
 import { subsidiaryVisibleFilter } from "../../subsidiaries";
-import { uuidOrFalse } from "../list-query";
+import { pushCustomFieldFilter, uuidOrFalse } from "../list-query";
 
 /* ------------------------------------------------------------------ */
 /* Employee directory (HR-2b)                                          */
@@ -242,6 +242,7 @@ export function employeeWhere(
   const hrmOn = adhoc.hrmEnabled === true;
   const parts: SQL[] = [rolePartyWhere("employee", view, adhoc, orgId, allowedSubsidiaryIds)];
   for (const filter of view.filters) {
+    if (pushCustomFieldFilter(parts, filter, "p")) continue;
     const predicate = employeeDirectoryFilterPredicate(filter, hrmOn);
     if (predicate) parts.push(sql`and ${predicate}`);
   }

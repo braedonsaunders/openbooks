@@ -164,7 +164,15 @@ test(
     try {
       const actorId = await createScratchUser(org.orgId, "Source Delete Dimensions", "admin");
       const documentId = randomUUID();
+      const connectionId = randomUUID();
       const sourceRef = `posted-dims-${randomUUID()}`;
+      await db.execute(sql`
+        insert into connections
+          (id, org_id, source, display_name, status)
+        values (
+          ${connectionId}, ${org.orgId}, 'netsuite',
+          'Reversal field source-deletion test', 'active'
+        )`);
       await db.execute(sql`
         insert into documents
           (id, org_id, kind, status, document_number, subsidiary_id, party_id,
@@ -172,7 +180,7 @@ test(
         values (
           ${documentId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-REV-FIELDS',
           ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '1',
-          '100', '0', '100', ${JSON.stringify({ nsId: sourceRef })}::jsonb
+          '100', '0', '100', ${JSON.stringify({ nsId: sourceRef, connectionId })}::jsonb
         )`);
       await db.execute(sql`
         insert into document_lines
@@ -215,6 +223,7 @@ test(
         orgId: org.orgId,
         source: "netsuite",
         sourceRef,
+        connectionId,
       });
       assert.deepEqual(result, { documentId, deleted: true });
 

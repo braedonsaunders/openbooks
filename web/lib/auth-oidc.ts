@@ -1,7 +1,7 @@
 import "server-only";
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { safeReturnTo } from "./auth-policy";
-import { requireSessionSecret } from "./auth-secret-policy";
+import { isNamedNonProductionEnvironment, requireSessionSecret } from "./auth-secret-policy";
 import { verifyOidcIdToken, type VerifiedOidcClaims } from "./auth-oidc-token";
 
 export const OIDC_FLOW_COOKIE = "ob_oidc_flow";
@@ -42,34 +42,46 @@ type OidcRuntime = typeof globalThis & {
 };
 const runtime = globalThis as OidcRuntime;
 
-function config(): OidcConfig | null {
+function config(
+  environment: Record<string, string | undefined> = process.env,
+): OidcConfig | null {
   // Live reads: db.ts snapshots the environment at module evaluation, so
   // snapshot reads miss values assigned after that import.
-  const issuer = process.env.OPENBOOKS_OIDC_ISSUER?.trim().replace(/\/+$/, "");
-  const clientId = process.env.OPENBOOKS_OIDC_CLIENT_ID?.trim();
-  const appUrl = process.env.OPENBOOKS_APP_URL?.trim().replace(/\/+$/, "");
+  const issuer = environment.OPENBOOKS_OIDC_ISSUER?.trim().replace(/\/+$/, "");
+  const clientId = environment.OPENBOOKS_OIDC_CLIENT_ID?.trim();
+  const appUrl = environment.OPENBOOKS_APP_URL?.trim().replace(/\/+$/, "");
   if (!issuer || !clientId || !appUrl) return null;
-  assertSecureEndpoint(issuer, "OIDC issuer");
+  assertSecureEndpoint(issuer, "OIDC issuer", environment);
   const parsedApp = new URL(appUrl);
-  if (process.env.NODE_ENV === "production" && parsedApp.protocol !== "https:") {
-    throw new Error("OPENBOOKS_APP_URL must use HTTPS when OIDC is enabled in production");
+  if (!isNamedNonProductionEnvironment(environment) && parsedApp.protocol !== "https:") {
+    throw new Error(
+      "OPENBOOKS_APP_URL must use HTTPS when OIDC is enabled unless NODE_ENV is explicitly development or test",
+    );
   }
-  return { issuer, clientId, clientSecret: process.env.OPENBOOKS_OIDC_CLIENT_SECRET?.trim() || null, appUrl };
+  return { issuer, clientId, clientSecret: environment.OPENBOOKS_OIDC_CLIENT_SECRET?.trim() || null, appUrl };
 }
 
-export function oidcEnabled(): boolean {
-  return config() !== null;
+export function oidcEnabled(
+  environment: Record<string, string | undefined> = process.env,
+): boolean {
+  return config(environment) !== null;
 }
 
 export function oidcLabel(): string {
   return process.env.OPENBOOKS_OIDC_LABEL?.trim().slice(0, 80) || "Single sign-on";
 }
 
-function assertSecureEndpoint(value: string, label: string): URL {
+function assertSecureEndpoint(
+  value: string,
+  label: string,
+  environment: Record<string, string | undefined> = process.env,
+): URL {
   const url = new URL(value);
   const local = ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
-  if (url.protocol !== "https:" && !(process.env.NODE_ENV !== "production" && local)) {
-    throw new Error(`${label} must use HTTPS`);
+  if (url.protocol !== "https:" && !(isNamedNonProductionEnvironment(environment) && local)) {
+    throw new Error(
+      `${label} must use HTTPS (HTTP loopback is allowed only when NODE_ENV is explicitly development or test)`,
+    );
   }
   if (url.username || url.password) throw new Error(`${label} must not contain URL credentials`);
   return url;
