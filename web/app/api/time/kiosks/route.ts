@@ -1,10 +1,10 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { guardFeaturePermission } from '../../../lib/feature-gates'
+import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { registerKiosk, revokeKiosk, setWorkerPin } from '@openbooks/engine/src/hrm/field-time/kiosk.ts'
 import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'
-import { isUuid } from '../../../lib/list-params'
+import { isUuid } from '../../../../lib/list-params'
 
 export const runtime = 'nodejs'
 

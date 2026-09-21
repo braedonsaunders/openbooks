@@ -2972,7 +2972,14 @@
       "signEmployee": "従業員が署名",
       "signManager": "マネージャーが署名",
       "signHr": "人事が署名",
-      "acknowledgmentOnly": "確認のみ"
+      "acknowledgmentOnly": "確認のみ",
+      "radiusM": "半径（m）",
+      "center": "中心",
+      "polygon": "多角形",
+      "pinRequired": "PIN必須",
+      "photoRequired": "写真必須",
+      "subjectKind": "対象",
+      "stages": "段階"
     },
     "fieldHelp": {
       "gapless": "欠番なしとは、連番のすべての番号が記録され、番号が飛ばないことを意味します。法令または監査要件で途切れない採番が必要な場合にのみ有効にしてください。",

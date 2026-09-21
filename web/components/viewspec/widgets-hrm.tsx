@@ -470,7 +470,7 @@ export const HRM_WIDGETS = {
       projects={(props.projects as ComponentProps<typeof ClockControls>['projects']) ?? []}
       tasks={(props.tasks as ComponentProps<typeof ClockControls>['tasks']) ?? []}
       photoRequired={props.photoRequired === true}
-      photoFolderId={str(props, 'photoFolderId')}
+      photoFolderId={str(props, 'photoFolderId') ?? null}
       geoHint={str(props, 'geoHint') ?? ''}
       clockOutLabel={str(props, 'clockOutLabel') ?? ''}
     />

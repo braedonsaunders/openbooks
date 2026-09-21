@@ -2859,7 +2859,14 @@
       "signEmployee": "Firma la persona empleada",
       "signManager": "Firma su responsable",
       "signHr": "Firma RR. HH.",
-      "acknowledgmentOnly": "Solo acuse"
+      "acknowledgmentOnly": "Solo acuse",
+      "radiusM": "Radio (m)",
+      "center": "Centro",
+      "polygon": "Polígono",
+      "pinRequired": "PIN obligatorio",
+      "photoRequired": "Foto obligatoria",
+      "subjectKind": "Asunto",
+      "stages": "Etapas"
     },
     "fieldHelp": {
       "gapless": "Sin huecos significa que cada número de la secuencia debe quedar contabilizado, sin números omitidos. Actívelo solo cuando los requisitos legales o de auditoría exijan una numeración ininterrumpida.",

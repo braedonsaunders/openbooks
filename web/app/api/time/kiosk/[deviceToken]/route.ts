@@ -1,7 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { isUuid } from '../../../../lib/list-params'
+import { isUuid } from '../../../../../lib/list-params'
 import { identifyByPin, kioskClockEvent, resolveKioskByToken } from '@openbooks/engine/src/hrm/field-time/kiosk.ts'
 import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'
 

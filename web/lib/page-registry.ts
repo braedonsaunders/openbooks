@@ -2392,6 +2392,42 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/time/clock': {
+    route: '/time/clock',
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/time/clock/view')
+      return {
+        load: () => m.loadClockPage(),
+        spec: (data) => m.clockSpec(data as never),
+      }
+    },
+  },
+  '/time/crew': {
+    route: '/time/crew',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/time/crew/view')
+      return {
+        load: (input) => m.loadCrewPage(input.searchParams ?? {}),
+        spec: (data) => m.crewSpec(data as never),
+      }
+    },
+  },
+  '/time/setup': {
+    route: '/time/setup',
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/time/setup/view')
+      return {
+        load: () => m.loadFieldSetupPage(),
+        spec: (data) => m.fieldSetupSpec(data as never),
+      }
+    },
+  },
   '/timesheets': {
     route: '/timesheets',
     segments: [],

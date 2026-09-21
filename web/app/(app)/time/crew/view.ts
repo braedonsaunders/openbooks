@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -59,12 +59,9 @@ const f = ref<CrewPageData>()
 
 export async function loadCrewPage(sp: Record<string, string | undefined>): Promise<CrewPageData> {
   // Foremen hold time.crew.enter without time.read; approvers the
-  // reverse. Either lands here — redirects stay redirects, never null.
+  // reverse. Either lands here — the static redirect keeps narrowing.
   const session = await getAuthz()
-  if (!session) {
-    const { redirect } = await import('next/navigation')
-    redirect('/login')
-  }
+  if (!session) redirect('/login')
   if (!can(session, 'time.read') && !can(session, 'time.crew.enter')) {
     await requirePermission('time.read')
   }
@@ -225,7 +222,7 @@ export function crewSpec(data: CrewPageData, basePath: string = '/time/crew'): P
               column(f('columns.foreman'), text(item('foreman'))),
               column(f('columns.project'), text(item('project'))),
               column(f('columns.workedOn'), text(item('workedOn'))),
-              column(f('columns.status'), badge(item('status'), { variant: 'neutral' })),
+              column(f('columns.status'), badge(item('status'), { variant: 'secondary' })),
               column(f('columns.hours'), text(item('hours')), { align: 'right', className: 'tabular-nums' }),
               column(f('columns.workers'), text(item('workers')), { align: 'right', className: 'tabular-nums' }),
               column('', link(item('foreman'), item('href'))),

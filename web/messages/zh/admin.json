@@ -2904,7 +2904,14 @@
       "signEmployee": "员工签署",
       "signManager": "经理签署",
       "signHr": "人力资源签署",
-      "acknowledgmentOnly": "仅确认"
+      "acknowledgmentOnly": "仅确认",
+      "radiusM": "半径（米）",
+      "center": "中心",
+      "polygon": "多边形",
+      "pinRequired": "需要PIN",
+      "photoRequired": "需要拍照",
+      "subjectKind": "主题",
+      "stages": "阶段"
     },
     "fieldHelp": {
       "gapless": "无间隔表示序列中的每个编号都必须有记录，不能跳号。仅在法律或审计要求必须连续编号时启用。",

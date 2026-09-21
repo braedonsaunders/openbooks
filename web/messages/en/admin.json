@@ -2904,7 +2904,14 @@
       "signEmployee": "Employee signs",
       "signManager": "Manager signs",
       "signHr": "HR signs",
-      "acknowledgmentOnly": "Acknowledgment only"
+      "acknowledgmentOnly": "Acknowledgment only",
+      "radiusM": "Radius (m)",
+      "center": "Center",
+      "polygon": "Polygon",
+      "pinRequired": "PIN required",
+      "photoRequired": "Photo required",
+      "subjectKind": "Subject",
+      "stages": "Stages"
     },
     "fieldHelp": {
       "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",
