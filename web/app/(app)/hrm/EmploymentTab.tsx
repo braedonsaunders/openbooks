@@ -96,6 +96,22 @@ type EmploymentQualification = {
   expiresOn: string | null
 }
 
+type DrawerFeedback = {
+  id: string
+  kind: string
+  visibility: string
+  body: string
+  recordedAt: string
+}
+
+type DrawerCompetency = {
+  sectionTitle: string
+  competencyName: string
+  assessedRating: string | null
+  levels: { label: string; expectation: string }[]
+}
+}
+
 type RecordState = {
   status: 'loading' | 'ready' | 'refused' | 'error'
   episodes: Episode[]
@@ -108,6 +124,12 @@ type RecordState = {
   benefitDependents: BenefitDependent[]
   qualifications: 'hidden' | 'loading' | 'ready'
   employmentQualifications: EmploymentQualification[]
+  // HR-17: visibility-filtered feedback and expected-vs-assessed
+  // competencies. A 403/404 hides the section — the record is readable
+  // without continuous-performance access.
+  continuous: 'hidden' | 'loading' | 'ready'
+  feedback: DrawerFeedback[]
+  competencies: DrawerCompetency[]
 }
 
 function todayCivil(): string {
@@ -138,6 +160,7 @@ export function EmploymentTab({
   const [state, setState] = useState<RecordState>({
     status: 'loading', episodes: [], asOf: null, asOfRefusal: null, changeRequests: [], refusalMessage: null,
     benefits: 'loading', benefitElections: [], benefitDependents: [], qualifications: 'loading', employmentQualifications: [],
+    continuous: 'loading', feedback: [], competencies: [],
   })
   const requestId = useRef(0)
   const reload = (): void => {
@@ -170,6 +193,9 @@ export function EmploymentTab({
           benefitDependents: [],
           qualifications: 'loading',
           employmentQualifications: [],
+          continuous: 'loading',
+          feedback: [],
+          competencies: [],
         })
         // Qualifications ride the qualifications API beside the record:
         // a 403/404 (no grant, or the feature off) hides the section
@@ -230,6 +256,31 @@ export function EmploymentTab({
         } catch {
           if (cancelled || requestId.current !== current) return
           setState((s) => ({ ...s, benefits: 'hidden' }))
+        }
+        // HR-17: feedback (visibility-filtered by the service) and the
+        // competency profile ride beside the record like benefits do.
+        try {
+          const [feedbackRes, profileRes] = await Promise.all([
+            fetch(`/api/hrm/feedback?subjectEmploymentId=${employmentId}`),
+            fetch(`/api/hrm/competency-profile?employmentId=${employmentId}`),
+          ])
+          if (cancelled || requestId.current !== current) return
+          if (!feedbackRes.ok || !profileRes.ok) {
+            setState((s) => ({ ...s, continuous: 'hidden' }))
+            return
+          }
+          const fb = (await feedbackRes.json()) as { feedback?: DrawerFeedback[] }
+          const cp = (await profileRes.json()) as { profile?: DrawerCompetency[] }
+          if (cancelled || requestId.current !== current) return
+          setState((s) => ({
+            ...s,
+            continuous: 'ready',
+            feedback: Array.isArray(fb.feedback) ? fb.feedback : [],
+            competencies: Array.isArray(cp.profile) ? cp.profile : [],
+          }))
+        } catch {
+          if (cancelled || requestId.current !== current) return
+          setState((s) => ({ ...s, continuous: 'hidden' }))
         }
       } catch (e) {
         if (cancelled || requestId.current !== current) return
@@ -516,6 +567,42 @@ export function EmploymentTab({
                 <span className="ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                   {t.has(`qualifications.statusNames.${q.status}`) ? t(`qualifications.statusNames.${q.status}`) : q.status}
                 </span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </section>
+      ) : null}
+      {state.continuous === 'ready' && (state.feedback.length > 0 || state.competencies.length > 0) ? (
+      <section aria-label={t('employment.continuous.title')}>
+        <h3 className="mb-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+          {t('employment.continuous.title')}
+        </h3>
+        {state.feedback.length > 0 ? (
+          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+            {state.feedback.map((row) => (
+              <li key={row.id} className="py-2">
+                <p className="text-sm text-slate-700 dark:text-slate-200">{row.body}</p>
+                <p className="mt-0.5 text-xs tabular-nums text-slate-400 dark:text-slate-500">
+                  {row.kind} · {row.visibility} · {row.recordedAt.slice(0, 10)}
+                </p>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {state.competencies.length > 0 ? (
+          <ul className="mt-2 divide-y divide-slate-100 dark:divide-slate-800">
+            {state.competencies.map((row) => (
+              <li key={row.sectionTitle} className="py-2">
+                <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                  {row.competencyName}
+                  {row.assessedRating ? ` · ${row.assessedRating}` : ''}
+                </p>
+                {row.levels.length > 0 ? (
+                  <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                    {row.levels.map((l) => `${l.label}: ${l.expectation}`).join(' · ')}
+                  </p>
+                ) : null}
               </li>
             ))}
           </ul>

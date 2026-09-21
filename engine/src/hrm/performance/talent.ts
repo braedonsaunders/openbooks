@@ -66,6 +66,7 @@ async function assertTalentFeature(exec: SqlExecutor, orgId: string): Promise<vo
 export interface TalentReviewDTO {
   readonly id: string;
   readonly employmentId: string;
+  readonly employeeName: string;
   readonly cycleId: string | null;
   readonly performanceKey: string;
   readonly potentialKey: string;
@@ -149,19 +150,23 @@ export async function recordTalentReview(args: {
 
 async function readTalentReview(exec: SqlExecutor, orgId: string, id: string): Promise<TalentReviewDTO | null> {
   const rows = (await exec.execute<{
-    id: string; employment_id: string; cycle_id: string | null; performance_key: string;
+    id: string; employment_id: string; employee_name: string; cycle_id: string | null; performance_key: string;
     potential_key: string; impact_of_loss: LossLevel; risk_of_loss: LossLevel;
     promotion_ready: boolean; notes: string | null; reviewed_by: string | null; reviewed_at: string | null;
   }>(sql`
-    select id, employment_id, cycle_id::text as cycle_id, performance_key, potential_key,
-           impact_of_loss, risk_of_loss, promotion_ready, notes,
-           reviewed_by::text as reviewed_by, reviewed_at::text as reviewed_at
-      from hrm_talent_reviews where org_id = ${orgId} and id = ${id}
+    select t.id, t.employment_id, coalesce(p.display_name, '—') as employee_name,
+           t.cycle_id::text as cycle_id, t.performance_key, t.potential_key,
+           t.impact_of_loss, t.risk_of_loss, t.promotion_ready, t.notes,
+           t.reviewed_by::text as reviewed_by, t.reviewed_at::text as reviewed_at
+      from hrm_talent_reviews t
+      join worker_employments e on e.org_id = t.org_id and e.id = t.employment_id
+      left join parties p on p.org_id = t.org_id and p.id = e.worker_party_id
+     where t.org_id = ${orgId} and t.id = ${id}
   `)).rows;
   const row = rows[0];
   if (!row) return null;
   return {
-    id: row.id, employmentId: row.employment_id, cycleId: row.cycle_id,
+    id: row.id, employmentId: row.employment_id, employeeName: row.employee_name, cycleId: row.cycle_id,
     performanceKey: row.performance_key, potentialKey: row.potential_key,
     impactOfLoss: row.impact_of_loss, riskOfLoss: row.risk_of_loss,
     promotionReady: row.promotion_ready, notes: row.notes,
@@ -258,6 +263,38 @@ export async function resolveTalentScales(args: {
   });
 }
 
+/**
+ * HR directory options for the talent and succession dialogs: every
+ * employment with its person name, and every position with its code and
+ * latest title. HR-only (the dialogs are HR-only).
+ */
+export async function listTalentDirectory(args: {
+  orgId: string;
+  actorId: string;
+}): Promise<{ employments: readonly { id: string; name: string }[]; positions: readonly { id: string; code: string; title: string }[] }> {
+  const orgId = requireId("orgId", args.orgId);
+  const actorId = requireId("actorId", args.actorId);
+  return withOrgTransaction(orgId, async (exec) => {
+    await assertTalentFeature(exec, orgId);
+    await requireAggregatePerformanceManage(exec, orgId, actorId);
+    const employments = (await exec.execute<{ id: string; name: string }>(sql`
+      select e.id, coalesce(p.display_name, '—') as name
+        from worker_employments e
+        left join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
+       where e.org_id = ${orgId}
+       order by name
+    `)).rows;
+    const positions = (await exec.execute<{ id: string; code: string; title: string }>(sql`
+      select pos.id, pos.position_code as code,
+             coalesce((select v.title from position_versions v
+                        where v.org_id = pos.org_id and v.position_id = pos.id
+                        order by v.created_at desc limit 1), '—') as title
+        from positions pos where pos.org_id = ${orgId} order by pos.position_code
+    `)).rows;
+    return { employments, positions };
+  });
+}
+
 export interface NineBoxDTO {
   readonly performance: readonly string[];
   readonly potential: readonly string[];
@@ -310,6 +347,7 @@ export async function nineBoxForCycle(args: {
 export interface SuccessionCandidateDTO {
   readonly id: string;
   readonly employmentId: string;
+  readonly employeeName: string;
   readonly readiness: CandidateReadiness;
   readonly order: number;
   readonly notes: string | null;
@@ -318,7 +356,10 @@ export interface SuccessionCandidateDTO {
 export interface SuccessionPlanDTO {
   readonly id: string;
   readonly positionId: string;
+  readonly positionCode: string;
+  readonly positionTitle: string;
   readonly incumbentEmploymentId: string | null;
+  readonly incumbentName: string | null;
   readonly status: SuccessionPlanStatus;
   readonly candidates: readonly SuccessionCandidateDTO[];
 }
@@ -402,15 +443,37 @@ async function readSuccessionPlan(exec: SqlExecutor, orgId: string, id: string):
   const plan = plans[0];
   if (!plan) return null;
   const candidates = (await exec.execute<{
-    id: string; employment_id: string; readiness: CandidateReadiness; candidate_order: number; notes: string | null;
+    id: string; employment_id: string; employee_name: string; readiness: CandidateReadiness; candidate_order: number; notes: string | null;
   }>(sql`
-    select id, employment_id, readiness, candidate_order, notes
-      from hrm_succession_candidates where org_id = ${orgId} and plan_id = ${id}
-     order by candidate_order, created_at
+    select c.id, c.employment_id, coalesce(p.display_name, '—') as employee_name,
+           c.readiness, c.candidate_order, c.notes
+      from hrm_succession_candidates c
+      join worker_employments e on e.org_id = c.org_id and e.id = c.employment_id
+      left join parties p on p.org_id = c.org_id and p.id = e.worker_party_id
+     where c.org_id = ${orgId} and c.plan_id = ${id}
+     order by c.candidate_order, c.created_at
   `)).rows;
+  const position = (await exec.execute<{ position_code: string; title: string | null }>(sql`
+    select pos.position_code,
+           (select v.title from position_versions v
+             where v.org_id = pos.org_id and v.position_id = pos.id
+             order by v.created_at desc limit 1) as title
+      from positions pos where pos.org_id = ${orgId} and pos.id = ${plan.position_id}
+  `)).rows[0];
+  const incumbent = plan.incumbent_employment_id
+    ? (await exec.execute<{ name: string }>(sql`
+        select coalesce(p.display_name, '—') as name
+          from worker_employments e
+          left join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
+         where e.org_id = ${orgId} and e.id = ${plan.incumbent_employment_id}
+      `)).rows[0] ?? null
+    : null;
   return {
-    id: plan.id, positionId: plan.position_id, incumbentEmploymentId: plan.incumbent_employment_id, status: plan.status,
-    candidates: candidates.map((c) => ({ id: c.id, employmentId: c.employment_id, readiness: c.readiness, order: c.candidate_order, notes: c.notes })),
+    id: plan.id, positionId: plan.position_id,
+    positionCode: position?.position_code ?? '—', positionTitle: position?.title ?? '—',
+    incumbentEmploymentId: plan.incumbent_employment_id, incumbentName: incumbent?.name ?? null,
+    status: plan.status,
+    candidates: candidates.map((c) => ({ id: c.id, employmentId: c.employment_id, employeeName: c.employee_name, readiness: c.readiness, order: c.candidate_order, notes: c.notes })),
   };
 }
 
@@ -481,8 +544,15 @@ export async function addSuccessionCandidate(args: {
         returning id
       `)).rows[0];
       if (!inserted) throw new HrmPerformanceError("REFUSED", "the candidate was not stored — no row was written; retry the action");
+      const named = (await exec.execute<{ name: string }>(sql`
+        select coalesce(p.display_name, '—') as name
+          from worker_employments e
+          left join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
+         where e.org_id = ${orgId} and e.id = ${employmentId}
+      `)).rows[0];
       return {
-        id: inserted.id, employmentId, readiness: args.readiness, order: maxOrder + 1, notes: args.notes ?? null,
+        id: inserted.id, employmentId, employeeName: named?.name ?? '—',
+        readiness: args.readiness, order: maxOrder + 1, notes: args.notes ?? null,
       };
     } catch (e) {
       if (isUniqueViolationOn(e, "hrm_succession_candidates_unique")) {

@@ -97,6 +97,12 @@ export async function meTabs(authz: Authz, activeHref: string): Promise<ModuleHo
   if (hasTeam || activeHref === '/me/team') {
     tabs.push({ href: '/me/team', label: t('me.tabs.team'), active: activeHref === '/me/team' })
   }
+  // HR-17 begin: the 1:1s tab shows only while hrmOneOnOnes is on — the
+  // page itself re-checks and 404s otherwise.
+  if (activeHref === '/me/one-on-ones' || (await meHasOneOnOnes(authz))) {
+    tabs.push({ href: '/me/one-on-ones', label: t('me.tabs.oneOnOnes'), active: activeHref === '/me/one-on-ones' })
+  }
+  // HR-17 end
   // HR-12 begin: the Compensation tab shows only when the feature is on
   // and the person has something to see (a band or a statement) — the
   // page itself re-checks and 404s otherwise.
@@ -128,6 +134,36 @@ async function meHasCompensation(authz: Authz): Promise<boolean> {
   }
 }
 // HR-12 end
+
+// HR-17 begin: Me 1:1s tab visibility — the hrmOneOnOnes switch. Read
+// failures resolve to false (the tab hides) rather than denying the
+// whole Me strip.
+async function meHasOneOnOnes(authz: Authz): Promise<boolean> {
+  try {
+    const { isFeatureEnabled } = await import('../features')
+    return await isFeatureEnabled(authz.user.orgId, 'hrmOneOnOnes')
+  } catch {
+    return false
+  }
+}
+// HR-17 end
+
+// HR-17 begin: Me team roster 1:1 column (hrmOneOnOnes) and per-report
+// praise action (hrmFeedback). Read failures resolve to hidden rather
+// than denying the whole team page.
+async function meContinuousOn(orgId: string): Promise<{ oneOnOnes: boolean; feedback: boolean }> {
+  try {
+    const { isFeatureEnabled } = await import('../features')
+    const [oneOnOnes, feedback] = await Promise.all([
+      isFeatureEnabled(orgId, 'hrmOneOnOnes'),
+      isFeatureEnabled(orgId, 'hrmFeedback'),
+    ])
+    return { oneOnOnes, feedback }
+  } catch {
+    return { oneOnOnes: false, feedback: false }
+  }
+}
+// HR-17 end
 
 function toRefusal(t: Catalog, error: unknown): MeRefusal | null {
   if (error instanceof SelfServiceError || error instanceof HrmAuthorizationError) {
@@ -630,6 +666,24 @@ export interface MeTeamReportRow {
   employmentId: string
   workerName: string
   workerHref: string | null
+  oneOnOneHref: string | null
+  oneOnOneLabel: string | null
+  feedback: {
+    subjectEmploymentId: string
+    requestedFromPartyId: string
+    subjectLabel: string
+    kinds: { value: string; label: string }[]
+    kindLabel: string
+    visibilities: { value: string; label: string }[]
+    visibilityLabel: string
+    bodyLabel: string
+    bodyPlaceholder: string
+    submitLabel: string
+    cancelLabel: string
+    closeHref: string
+    failed: string
+    openLabel: string
+  } | null
   title: string
   department: string
   employer: string
@@ -666,7 +720,8 @@ export interface MeTeamData {
   hasContent: boolean
   asOf: string
   rosterTitle: string
-  rosterColumns: { name: string; title: string; department: string; status: string; serviceStart: string }
+  rosterColumns: { name: string; title: string; department: string; status: string; serviceStart: string; oneOnOne: string; feedback: string }
+  continuousOn: boolean
   roster: MeTeamReportRow[]
   rosterEmpty: string
   stepsTitle: string
@@ -708,7 +763,14 @@ export async function loadMeTeam(authz: Authz): Promise<MeTeamData> {
       department: t('me.team.columns.department'),
       status: t('me.team.columns.status'),
       serviceStart: t('me.team.columns.serviceStart'),
+      oneOnOne: t('me.team.columns.oneOnOne'),
+      feedback: t('me.team.columns.feedback'),
     },
+    // HR-17 begin: the roster's 1:1 column and per-report praise action
+    // render only while their switches are on — rows never promise a
+    // surface that 404s. Resolved beside the roster below.
+    continuousOn: false,
+    // HR-17 end
     rosterEmpty: t('me.team.rosterEmpty'),
     stepsTitle: t('me.team.stepsTitle'),
     stepsColumns: {
@@ -752,14 +814,49 @@ export async function loadMeTeam(authz: Authz): Promise<MeTeamData> {
       loadManagerOwedReviews({ orgId, actorId: authz.user.id }).catch(() => []),
     ])
     const canOpenDrawer = can(authz, 'parties.read')
+    const continuous = await meContinuousOn(orgId).catch(() => ({ oneOnOnes: false, feedback: false }))
+    const feedbackKinds = [
+      { value: 'praise', label: t('performance.continuous.feedback.praise') },
+      { value: 'feedback', label: t('performance.continuous.feedback.feedbackKind') },
+      { value: 'request', label: t('performance.continuous.feedback.request') },
+    ]
+    const feedbackVisibilities = [
+      { value: 'public', label: t('performance.continuous.feedback.publicVis') },
+      { value: 'manager_and_subject', label: t('performance.continuous.feedback.managerAndSubject') },
+      { value: 'manager_only', label: t('performance.continuous.feedback.managerOnly') },
+      { value: 'subject_only', label: t('performance.continuous.feedback.subjectOnly') },
+    ]
     return {
       ...base,
       refusal: null,
       hasContent: true,
       asOf: team.asOf,
+      continuousOn: continuous.oneOnOnes || continuous.feedback,
       roster: team.reports.map((report) => ({
         employmentId: report.employmentId,
         workerName: report.workerName,
+        oneOnOneHref: continuous.oneOnOnes
+          ? `/me/one-on-ones?report=${encodeURIComponent(report.employmentId)}`
+          : null,
+        oneOnOneLabel: continuous.oneOnOnes ? t('me.team.oneOnOneLink') : null,
+        feedback: continuous.feedback
+          ? {
+              subjectEmploymentId: report.employmentId,
+              requestedFromPartyId: report.workerPartyId,
+              subjectLabel: report.workerName,
+              kinds: feedbackKinds,
+              kindLabel: t('performance.continuous.feedback.kindLabel'),
+              visibilities: feedbackVisibilities,
+              visibilityLabel: t('performance.continuous.feedback.visibilityLabel'),
+              bodyLabel: t('performance.continuous.feedback.bodyLabel'),
+              bodyPlaceholder: t('performance.continuous.feedback.bodyPlaceholder'),
+              submitLabel: t('performance.continuous.feedback.submitLabel'),
+              cancelLabel: t('performance.cancel'),
+              closeHref: '/me/team',
+              failed: t('performance.actionFailed'),
+              openLabel: t('performance.continuous.feedback.praiseAction'),
+            }
+          : null,
         // The employee drawer opens on the Employment tab only; a viewer
         // who cannot open the drawer (no parties.read) gets plain names.
         workerHref: canOpenDrawer

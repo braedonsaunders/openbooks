@@ -44,6 +44,85 @@ import { HRM_PERFORMANCE_CONTINUOUS_KEY } from "./one-on-ones.ts";
 
 export const HRM_FEEDBACK_KEY = "hrmFeedback" as const;
 
+export type PublicPraiseBy = "anyone" | "managers_and_hr";
+
+export interface FeedbackSettings {
+  readonly publicPraiseBy: PublicPraiseBy;
+}
+
+export const DEFAULT_FEEDBACK_SETTINGS: FeedbackSettings = { publicPraiseBy: "anyone" };
+
+/**
+ * Feedback settings (who may praise publicly): stored on the org row
+ * beside the feature switches, edited on /hrm/performance by HR, and
+ * enforced in writeFeedback below — never UI-only.
+ */
+export async function getFeedbackSettings(args: { orgId: string; actorId: string }): Promise<FeedbackSettings> {
+  const orgId = requireId("orgId", args.orgId);
+  const actorId = requireId("actorId", args.actorId);
+  return withOrgTransaction(orgId, async (exec) => {
+    await assertFeedbackFeature(exec, orgId);
+    if (!(await hasPerformanceManage(exec, orgId, actorId))) {
+      throw new HrmPerformanceError(
+        "FORBIDDEN",
+        "feedback settings are HR-owned — ask an administrator to grant hrm.performance.manage in /admin/roles",
+      );
+    }
+    const row = (await exec.execute<{ settings: unknown }>(sql`
+      select settings from orgs where id = ${orgId}
+    `)).rows[0];
+    const stored = ((row?.settings ?? {}) as { hrm_feedback?: unknown }).hrm_feedback;
+    if (stored !== null && typeof stored === "object" && !Array.isArray(stored)) {
+      const by = (stored as { public_praise_by?: unknown }).public_praise_by;
+      if (by === "managers_and_hr") return { publicPraiseBy: "managers_and_hr" };
+    }
+    return DEFAULT_FEEDBACK_SETTINGS;
+  });
+}
+
+export async function setFeedbackSettings(args: {
+  orgId: string;
+  actorId: string;
+  publicPraiseBy: PublicPraiseBy;
+}): Promise<FeedbackSettings> {
+  const orgId = requireId("orgId", args.orgId);
+  const actorId = requireId("actorId", args.actorId);
+  if (!["anyone", "managers_and_hr"].includes(args.publicPraiseBy)) {
+    throw new HrmPerformanceError("INVALID_INPUT", "public praise may be opened to anyone or limited to managers_and_hr");
+  }
+  return withOrgTransaction(orgId, async (exec) => {
+    await assertFeedbackFeature(exec, orgId);
+    if (!(await hasPerformanceManage(exec, orgId, actorId))) {
+      throw new HrmPerformanceError(
+        "FORBIDDEN",
+        "feedback settings are HR-owned — ask an administrator to grant hrm.performance.manage in /admin/roles",
+      );
+    }
+    const updated = (await exec.execute<{ id: string }>(sql`
+      update orgs
+         set settings = coalesce(settings, '{}'::jsonb) || ${JSON.stringify({ hrm_feedback: { public_praise_by: args.publicPraiseBy } })}::jsonb
+       where id = ${orgId}
+      returning id
+    `)).rows;
+    if (updated.length !== 1) {
+      throw new HrmPerformanceError("NOT_FOUND", "organization was not found — settings cannot be stored without it");
+    }
+    return { publicPraiseBy: args.publicPraiseBy };
+  });
+}
+
+async function readFeedbackSettings(exec: SqlExecutor, orgId: string): Promise<FeedbackSettings> {
+  const row = (await exec.execute<{ settings: unknown }>(sql`
+    select settings from orgs where id = ${orgId}
+  `)).rows[0];
+  const stored = ((row?.settings ?? {}) as { hrm_feedback?: unknown }).hrm_feedback;
+  if (stored !== null && typeof stored === "object" && !Array.isArray(stored)) {
+    const by = (stored as { public_praise_by?: unknown }).public_praise_by;
+    if (by === "managers_and_hr") return { publicPraiseBy: "managers_and_hr" };
+  }
+  return DEFAULT_FEEDBACK_SETTINGS;
+}
+
 export type FeedbackKind = "praise" | "feedback" | "request" | "retraction";
 export type FeedbackVisibility = "public" | "manager_and_subject" | "manager_only" | "subject_only";
 
@@ -98,6 +177,7 @@ async function hasPerformanceManage(exec: SqlExecutor, orgId: string, actorId: s
 export interface FeedbackDTO {
   readonly id: string;
   readonly subjectEmploymentId: string;
+  readonly subjectName: string;
   readonly authorPartyId: string;
   readonly kind: Exclude<FeedbackKind, "retraction">;
   readonly visibility: FeedbackVisibility;
@@ -111,6 +191,7 @@ type StoredFeedback = {
   id: string;
   subject_employment_id: string;
   subject_party_id: string | null;
+  subject_name: string;
   author_party_id: string;
   kind: FeedbackKind;
   visibility: FeedbackVisibility;
@@ -195,6 +276,7 @@ async function toDTO(
   return {
     id: row.id,
     subjectEmploymentId: row.subject_employment_id,
+    subjectName: row.subject_name,
     authorPartyId: row.author_party_id,
     kind: row.kind,
     visibility: row.visibility,
@@ -269,6 +351,21 @@ export async function writeFeedback(args: {
         "subject employment was not found in this organization — pick the person from the directory",
       );
     }
+    // Feedback settings are enforced at the service boundary: while
+    // public praise is limited to managers and HR, anyone else's public
+    // praise is refused by name (never silently downgraded).
+    if (args.kind === "praise" && args.visibility === "public") {
+      const settings = await readFeedbackSettings(exec, orgId);
+      if (settings.publicPraiseBy === "managers_and_hr" && !(await hasPerformanceManage(exec, orgId, actorId))) {
+        const manages = await isManagerOf(exec, orgId, actorId, subjectEmploymentId);
+        if (!manages) {
+          throw new HrmPerformanceError(
+            "FORBIDDEN",
+            "public praise is limited to managers and HR in feedback settings — share it as manager_and_subject instead",
+          );
+        }
+      }
+    }
     const inserted = (await exec.execute<{ id: string }>(sql`
       insert into hrm_feedback (org_id, subject_employment_id, author_party_id, kind, visibility, body, context, requested_from_party_id, created_by)
       values (${orgId}, ${subjectEmploymentId}, ${person.partyId}, ${args.kind}, ${args.visibility},
@@ -298,11 +395,13 @@ export async function writeFeedback(args: {
     }
     const rows = (await exec.execute<StoredFeedback>(sql`
       select f.id, f.subject_employment_id, e.worker_party_id as subject_party_id,
+             coalesce(p.display_name, '—') as subject_name,
              f.author_party_id, f.kind, f.visibility, f.body, f.context,
              f.requested_from_party_id,
              f.retracts_feedback_id::text as retracts_feedback_id, f.recorded_at::text as recorded_at
         from hrm_feedback f
         join worker_employments e on e.org_id = f.org_id and e.id = f.subject_employment_id
+        left join parties p on p.org_id = f.org_id and p.id = e.worker_party_id
        where f.org_id = ${orgId} and f.id = ${inserted.id}
     `)).rows;
     const dto = rows[0] ? await toDTO(exec, orgId, actorId, rows[0]) : null;
@@ -319,11 +418,13 @@ export async function retractFeedback(args: { orgId: string; actorId: string; id
     await assertFeedbackFeature(exec, orgId);
     const rows = (await exec.execute<StoredFeedback>(sql`
       select f.id, f.subject_employment_id, e.worker_party_id as subject_party_id,
+             coalesce(p.display_name, '—') as subject_name,
              f.author_party_id, f.kind, f.visibility, f.body, f.context,
              f.requested_from_party_id,
              f.retracts_feedback_id::text as retracts_feedback_id, f.recorded_at::text as recorded_at
         from hrm_feedback f
         join worker_employments e on e.org_id = f.org_id and e.id = f.subject_employment_id
+        left join parties p on p.org_id = f.org_id and p.id = e.worker_party_id
        where f.org_id = ${orgId} and f.id = ${id}
     `)).rows;
     const original = rows[0];
@@ -368,11 +469,13 @@ export async function listFeedback(args: {
     const subjectFilter = args.subjectEmploymentId ? sql` and f.subject_employment_id = ${args.subjectEmploymentId}` : sql``;
     const rows = (await exec.execute<StoredFeedback>(sql`
       select f.id, f.subject_employment_id, e.worker_party_id as subject_party_id,
+             coalesce(p.display_name, '—') as subject_name,
              f.author_party_id, f.kind, f.visibility, f.body, f.context,
              f.requested_from_party_id,
              f.retracts_feedback_id::text as retracts_feedback_id, f.recorded_at::text as recorded_at
         from hrm_feedback f
         join worker_employments e on e.org_id = f.org_id and e.id = f.subject_employment_id
+        left join parties p on p.org_id = f.org_id and p.id = e.worker_party_id
        where f.org_id = ${orgId}${subjectFilter}
        order by f.recorded_at desc
     `)).rows;
@@ -404,11 +507,13 @@ export async function listOpenRequestsForParty(args: {
     if (!person.partyId) return [];
     const rows = (await exec.execute<StoredFeedback>(sql`
       select f.id, f.subject_employment_id, e.worker_party_id as subject_party_id,
+             coalesce(p.display_name, '—') as subject_name,
              f.author_party_id, f.kind, f.visibility, f.body, f.context,
              f.requested_from_party_id,
              f.retracts_feedback_id::text as retracts_feedback_id, f.recorded_at::text as recorded_at
         from hrm_feedback f
         join worker_employments e on e.org_id = f.org_id and e.id = f.subject_employment_id
+        left join parties p on p.org_id = f.org_id and p.id = e.worker_party_id
        where f.org_id = ${orgId} and f.kind = 'request' and f.requested_from_party_id = ${person.partyId}
        order by f.recorded_at desc
     `)).rows;
@@ -419,6 +524,7 @@ export async function listOpenRequestsForParty(args: {
       out.push({
         id: row.id,
         subjectEmploymentId: row.subject_employment_id,
+        subjectName: row.subject_name,
         authorPartyId: row.author_party_id,
         kind: "request",
         visibility: row.visibility,
@@ -456,11 +562,13 @@ export async function fulfillRequest(args: {
     // that the request is still open. The request row is never touched.
     const req = (await exec.execute<StoredFeedback>(sql`
       select f.id, f.subject_employment_id, e.worker_party_id as subject_party_id,
+             coalesce(p.display_name, '—') as subject_name,
              f.author_party_id, f.kind, f.visibility, f.body, f.context,
              f.requested_from_party_id,
              f.retracts_feedback_id::text as retracts_feedback_id, f.recorded_at::text as recorded_at
         from hrm_feedback f
         join worker_employments e on e.org_id = f.org_id and e.id = f.subject_employment_id
+        left join parties p on p.org_id = f.org_id and p.id = e.worker_party_id
        where f.org_id = ${orgId} and f.id = ${requestId} and f.kind = 'request'
     `)).rows[0];
     if (!req) throw new HrmPerformanceError("NOT_FOUND", "feedback request was not found — it may already be retracted");
@@ -481,11 +589,13 @@ export async function fulfillRequest(args: {
     if (!inserted) throw new HrmPerformanceError("REFUSED", "the fulfilment was not stored — no row was written; retry the action");
     const rows = (await exec.execute<StoredFeedback>(sql`
       select f.id, f.subject_employment_id, e.worker_party_id as subject_party_id,
+             coalesce(p.display_name, '—') as subject_name,
              f.author_party_id, f.kind, f.visibility, f.body, f.context,
              f.requested_from_party_id,
              f.retracts_feedback_id::text as retracts_feedback_id, f.recorded_at::text as recorded_at
         from hrm_feedback f
         join worker_employments e on e.org_id = f.org_id and e.id = f.subject_employment_id
+        left join parties p on p.org_id = f.org_id and p.id = e.worker_party_id
        where f.org_id = ${orgId} and f.id = ${inserted.id}
     `)).rows;
     const dto = rows[0] ? await toDTO(exec, orgId, actorId, rows[0]) : null;
