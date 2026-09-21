@@ -15,6 +15,7 @@ import {
   parseMacrsVintageAllocations,
   attachTaxBasisSource,
   assertMacrsVintageAllocationsMatchOpen,
+  deriveMacrsDisposedBuyerVintages,
   caDeemedAcquisitionPayment,
   caOrdinaryCapitalGainsInclusion,
   caStatutoryProceeds,
@@ -1311,4 +1312,39 @@ test("service revalidation drops client buyerVintages and reconstructs them from
   assert.equal(invented.buyerVintages?.[0]!.method, "200_db");
   assert.equal(invented.buyerVintages?.[0]!.recoveryPeriodYears, "5");
   assert.notEqual(invented.buyerVintages?.[0]!.adjustedCarryover, "1999.0000");
+});
+
+test("a 9000 bonus split 5250/3750 dated checkpoint conserves original without negative prior", () => {
+  const derived = deriveMacrsDisposedBuyerVintages({
+    open: [{
+      key: "original:2018-01-05",
+      source: "original",
+      parentKey: null,
+      placedInServiceOn: "2018-01-05",
+      transferOn: null,
+      unadjustedBasis: "9000.0000",
+      adjustedCarryover: "3750.0000",
+      section179: "0.0000",
+      priorDepreciation: "5250.0000",
+      recoveryPeriodYears: "5",
+      method: "200_db",
+      convention: "half_year",
+      bonusPercent: "100",
+      businessUsePercent: "100",
+      shortYearMethod: "simplified",
+      section168i7Kind: "nonrecognition",
+    }],
+    allocations: [{
+      source: "original",
+      placedInServiceOn: "2018-01-05",
+      disposedUnadjustedBasis: "9000.0000",
+      remainingUnadjustedBasis: "0.0000",
+    }],
+    transferOn: "2018-08-20",
+  });
+  assert.equal(derived.length, 1);
+  assert.equal(derived[0]!.priorDepreciation, "5250.0000");
+  assert.equal(derived[0]!.adjustedCarryover, "3750.0000");
+  assert.equal(derived[0]!.section179, "0.0000");
+  assert.equal(derived[0]!.bonusPercent, "100");
 });

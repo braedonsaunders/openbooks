@@ -8,6 +8,7 @@ import {
   exclusiveShortYearMonths,
   adjacentShortYearExclusion,
   fiscalMacrsYearWindow,
+  macrsLineageRecoveryWindows,
   macrsOwnershipWindowLoads,
   macrsWindowsPreservingAppliedContext,
   lastThreeMonthsStart,
@@ -864,29 +865,54 @@ test("excess or taxable prior is not left at zero across later recovery years", 
   assert.notEqual(dated.adjustedCarryover, "400.0000");
 });
 
-test("1.1502-13 Example 4 consolidated later-year transfer uses dated remaining and does not monthly-split", () => {
+test("1.1502-13 Example 4 consolidated later-year transfer continues the original schedule", () => {
   const windows = macrsWindowsThroughFiscalCalendar({
     yearStartMonth: 1,
     fromOn: "2023-01-01",
     throughOn: "2026-12-31",
   });
-  const dated = refreshOpenMacrsVintageThrough({
+  const asset = {
     placedInServiceOn: "2023-01-01",
     unadjustedBasis: "10000.0000",
     recoveryPeriodYears: "5",
-    method: "200_db",
-    convention: "half_year",
+    method: "200_db" as const,
+    convention: "half_year" as const,
     section179: "0.0000",
     bonusPercent: "0",
     businessUsePercent: "100",
     adjustedCarryover: null,
     priorDepreciation: null,
     transferOn: null,
-  }, windows, "2025-08-20");
+    section168i7Kind: "consolidated_group" as const,
+  };
+  const dated = refreshOpenMacrsVintageThrough(asset, windows, "2025-08-20");
+  const originalYear3Open = computeMacrsThroughYear({
+    basis: "10000.0000",
+    placedInServiceOn: "2023-01-01",
+    taxYear: 2025,
+    yearStart: "2025-01-01",
+    yearEnd: "2025-12-31",
+    recoveryPeriodYears: 5,
+    method: "200_db",
+    convention: "half_year",
+  }, windows);
+  const originalNext = computeMacrsThroughYear({
+    basis: "10000.0000",
+    placedInServiceOn: "2023-01-01",
+    taxYear: 2026,
+    yearStart: "2026-01-01",
+    yearEnd: "2026-12-31",
+    recoveryPeriodYears: 5,
+    method: "200_db",
+    convention: "half_year",
+  }, windows);
+  assert.equal(dated.adjustedCarryover, formatMoney(originalYear3Open.prior.remainingBasis, 4));
   const next = computeMacrsThroughYear({
     basis: "10000.0000",
     placedInServiceOn: "2023-01-01",
     taxYear: 2026,
+    yearStart: "2026-01-01",
+    yearEnd: "2026-12-31",
     recoveryPeriodYears: 5,
     method: "200_db",
     convention: "half_year",
@@ -894,8 +920,148 @@ test("1.1502-13 Example 4 consolidated later-year transfer uses dated remaining 
     carryoverOn: "2025-08-20",
     section168i7Kind: "consolidated_group",
   }, windows);
-  assert.notEqual(next.current.allowance, "0.00");
-  assert.notEqual(next.current.remainingBasis, dated.adjustedCarryover);
+  assert.equal(next.currentRecoveryYearIndex, originalNext.currentRecoveryYearIndex);
+  assert.equal(next.current.allowance, originalNext.current.allowance);
+  assert.equal(next.current.remainingBasis, originalNext.current.remainingBasis);
+  assert.equal(next.prior.remainingBasis, originalNext.prior.remainingBasis);
+});
+
+test("§168(i)(7) 9000 bonus split 5250/3750 dates without a negative prior", () => {
+  const windows = [{ taxYear: 2018, yearStart: "2018-01-01", yearEnd: "2018-12-31" }];
+  const dated = refreshOpenMacrsVintageThrough({
+    placedInServiceOn: "2018-01-05",
+    unadjustedBasis: "9000.0000",
+    recoveryPeriodYears: "5",
+    method: "200_db",
+    convention: "half_year",
+    section179: "0.0000",
+    bonusPercent: "100",
+    businessUsePercent: "100",
+    adjustedCarryover: null,
+    priorDepreciation: null,
+    transferOn: null,
+    section168i7Kind: "nonrecognition",
+  }, windows, "2018-08-20");
+  assert.equal(dated.priorDepreciation, "5250.0000");
+  assert.equal(dated.adjustedCarryover, "3750.0000");
+  assert.equal(cmp(dated.priorDepreciation, "0") >= 0, true);
+  assert.equal(
+    formatMoney(add(dated.priorDepreciation, dated.adjustedCarryover), 4),
+    "9000.0000",
+  );
+});
+
+test("a later-year transfer with an intervening short year continues the original recovery schedule", () => {
+  const originalCalendar = [
+    { taxYear: 2023, yearStart: "2023-01-01", yearEnd: "2023-12-31" },
+    { taxYear: 2024, yearStart: "2024-01-01", yearEnd: "2024-06-30" },
+    { taxYear: 2024, yearStart: "2024-07-01", yearEnd: "2024-12-31" },
+    { taxYear: 2025, yearStart: "2025-01-01", yearEnd: "2025-12-31" },
+    { taxYear: 2026, yearStart: "2026-01-01", yearEnd: "2026-12-31" },
+  ];
+  const transferor = originalCalendar.slice(0, 4).map((row) => ({
+    ...row,
+    subsidiaryId: "A",
+    regime: "us_macrs",
+  }));
+  const receiver = [
+    { subsidiaryId: "B", regime: "us_macrs", taxYear: 2025, yearStart: "2025-01-01", yearEnd: "2025-12-31" },
+    { subsidiaryId: "B", regime: "us_macrs", taxYear: 2026, yearStart: "2026-01-01", yearEnd: "2026-12-31" },
+  ];
+  const lineage = [...transferor, ...receiver];
+  const asset = {
+    placedInServiceOn: "2023-01-01",
+    unadjustedBasis: "10000.0000",
+    recoveryPeriodYears: "5",
+    method: "200_db" as const,
+    convention: "half_year" as const,
+    section179: "0.0000",
+    bonusPercent: "0",
+    businessUsePercent: "100",
+    adjustedCarryover: null as string | null,
+    priorDepreciation: null as string | null,
+    transferOn: null as string | null,
+    shortYearMethod: "simplified" as const,
+    section168i7Kind: "nonrecognition" as const,
+  };
+  const dated = refreshOpenMacrsVintageThrough(asset, originalCalendar, "2025-08-20");
+  const originalAtTransfer = computeMacrsThroughYear({
+    basis: "10000.0000",
+    placedInServiceOn: "2023-01-01",
+    taxYear: 2025,
+    yearStart: "2025-01-01",
+    yearEnd: "2025-12-31",
+    recoveryPeriodYears: 5,
+    method: "200_db",
+    convention: "half_year",
+    shortYearMethod: "simplified",
+    disposedOn: "2025-08-20",
+    dispositionRecognition: "nontaxable",
+    section168i7Kind: "nonrecognition",
+  }, originalCalendar);
+  assert.equal(
+    dated.adjustedCarryover,
+    formatMoney(remainingAfter(originalAtTransfer.prior.remainingBasis, originalAtTransfer.current.allowance), 4),
+  );
+  const walk = macrsLineageRecoveryWindows({
+    windows: lineage,
+    placedInServiceOn: "2023-01-01",
+    transferOn: "2025-08-20",
+    asOf: "2026-12-31",
+    ownerSubsidiaryId: "B",
+  });
+  assert.deepEqual(walk.map((row) => `${row.subsidiaryId}:${row.yearStart}:${row.yearEnd}`), [
+    "A:2023-01-01:2023-12-31",
+    "A:2024-01-01:2024-06-30",
+    "A:2024-07-01:2024-12-31",
+    "A:2025-01-01:2025-12-31",
+    "B:2026-01-01:2026-12-31",
+  ]);
+  const continued = {
+    basis: "10000.0000",
+    placedInServiceOn: "2023-01-01",
+    taxYear: 2026,
+    yearStart: "2026-01-01",
+    yearEnd: "2026-12-31",
+    recoveryPeriodYears: 5 as const,
+    method: "200_db" as const,
+    convention: "half_year" as const,
+    shortYearMethod: "simplified" as const,
+    adjustedCarryover: dated.adjustedCarryover,
+    carryoverOn: "2025-08-20",
+    section168i7Kind: "nonrecognition" as const,
+  };
+  const originalContinued = computeMacrsThroughYear(continued, originalCalendar);
+  const receivedContinued = computeMacrsThroughYear(continued, walk);
+  assert.equal(receivedContinued.currentRecoveryYearIndex, originalContinued.currentRecoveryYearIndex);
+  assert.equal(receivedContinued.current.allowance, originalContinued.current.allowance);
+  assert.equal(receivedContinued.current.remainingBasis, originalContinued.current.remainingBasis);
+  assert.equal(receivedContinued.prior.remainingBasis, originalContinued.prior.remainingBasis);
+  const collapsed = computeMacrsThroughYear(continued, [transferor[0]!, receiver[1]!]);
+  assert.notEqual(collapsed.currentRecoveryYearIndex, originalContinued.currentRecoveryYearIndex);
+  assert.notEqual(collapsed.current.allowance, originalContinued.current.allowance);
+  const received = {
+    ...asset,
+    adjustedCarryover: dated.adjustedCarryover,
+    priorDepreciation: dated.priorDepreciation,
+    transferOn: "2025-08-20",
+  };
+  const datedThrough2026 = refreshOpenMacrsVintageThrough(received, lineage, "2026-12-31", {
+    ownerSubsidiaryId: "B",
+  });
+  const originalThrough2026 = refreshOpenMacrsVintageThrough(received, originalCalendar, "2026-12-31");
+  assert.equal(datedThrough2026.adjustedCarryover, originalThrough2026.adjustedCarryover);
+  assert.equal(datedThrough2026.priorDepreciation, originalThrough2026.priorDepreciation);
+  assert.throws(
+    () => macrsLineageRecoveryWindows({
+      windows: [transferor[0]!, receiver[1]!],
+      placedInServiceOn: "2023-01-01",
+      transferOn: "2025-08-20",
+      asOf: "2026-12-31",
+      ownerSubsidiaryId: "B",
+    }),
+    /no tax year window covers 2025-08-20|gap between/,
+  );
 });
 
 test("mid-quarter 40% uses the tax window's last three months and vintage tax basis", () => {
