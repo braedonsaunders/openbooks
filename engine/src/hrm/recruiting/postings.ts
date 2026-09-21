@@ -3,7 +3,8 @@ import { db, withBypassContext, withOrgTransaction, type SqlExecutor } from "../
 import { requireHrmRecruitingManage, requireHrmRecruitingManageOrg } from "../authorization.ts";
 import { RecruitingError } from "./errors.ts";
 import { isUniqueViolation, requireActorId, requireId, requireOrgId } from "./input.ts";
-import { requireDepthFeature } from "./depth.ts";
+import { loadFeatureState, requireDepthFeature } from "./depth.ts";
+import { featureEnabled } from "../../organization/feature-registry.ts";
 import { createRecruitingToken, verifyRecruitingToken } from "./tokens.ts";
 
 /**
@@ -419,7 +420,20 @@ export interface ApplyViaPostingQuery {
  * (reused by email when the org already knows them), application with
  * source_posting_id, this_application consent, apply_received event.
  */
-export async function applyViaPosting(query: ApplyViaPostingQuery): Promise<{ applicationId: string; candidateId: string }> {
+/**
+ * The one thing an anonymous applicant is ever told when the application
+ * does not land. Every reason -- the posting is closed, the requisition
+ * is filled, the board feature is off, this candidate already applied --
+ * collapses into this sentence on purpose. A refusal that distinguishes
+ * "already applied" from "closed" turns a guessable email address into a
+ * query against the applicant-tracking system.
+ */
+const NOT_ACCEPTING =
+  "this posting is no longer accepting applications — browse the current openings instead of applying here";
+
+export async function applyViaPosting(
+  query: ApplyViaPostingQuery,
+): Promise<{ applicationId: string; candidateId: string; duplicate: boolean }> {
   const orgId = requireOrgId(query.orgId);
   const postingId = requireId(query.postingId, "postingId");
   if (typeof query.displayName !== "string" || query.displayName.trim().length === 0) {
@@ -430,6 +444,15 @@ export async function applyViaPosting(query: ApplyViaPostingQuery): Promise<{ ap
   const phone =
     query.phone == null || String(query.phone).trim().length === 0 ? null : String(query.phone).trim();
   return withOrgTransaction(orgId, async () => {
+    // The career PAGE 404s when the job board is off; this write is a
+    // separate door and used to stay open behind it. An operator who
+    // switches the board off is entitled to believe nobody can apply.
+    // The refusal is the generic one: an anonymous caller learns nothing
+    // about which features this organization runs.
+    const features = await loadFeatureState(db, orgId);
+    if (!featureEnabled(features, "hrmRecruiting") || !featureEnabled(features, "hrmJobBoards")) {
+      throw new RecruitingError("REFUSED", NOT_ACCEPTING);
+    }
     const posting = (await db.execute<{ requisitionId: string; status: string }>(sql`
       select p.requisition_id as "requisitionId", p.status,
              r.status as "requisitionStatus", r.pipeline_template_id as "pipelineTemplateId"
@@ -440,10 +463,7 @@ export async function applyViaPosting(query: ApplyViaPostingQuery): Promise<{ ap
       | { requisitionId: string; status: string; requisitionStatus: string; pipelineTemplateId: string | null }
       | undefined;
     if (!posting || posting.status !== "published" || posting.requisitionStatus !== "open") {
-      throw new RecruitingError(
-        "REFUSED",
-        "this posting is no longer accepting applications — browse the current openings instead of applying here",
-      );
+      throw new RecruitingError("REFUSED", NOT_ACCEPTING);
     }
     if (!posting.pipelineTemplateId) {
       throw new RecruitingError("REFUSED", "this opening names no pipeline — the hiring team must configure the funnel before taking applications");
@@ -476,10 +496,19 @@ export async function applyViaPosting(query: ApplyViaPostingQuery): Promise<{ ap
        where org_id = ${orgId} and requisition_id = ${posting.requisitionId} and candidate_id = ${candidateId}
     `)).rows[0];
     if (existing) {
-      throw new RecruitingError(
-        "REFUSED",
-        "this candidate already applied to this opening — one candidacy per opening; check its status instead of applying twice",
-      );
+      // One candidacy per opening still holds -- nothing is written. The
+      // applicant is NOT told they already applied, because that answer
+      // to an anonymous caller is a membership oracle: try an email, and
+      // a distinguishable refusal confirms that person is in the pipeline.
+      // The hiring team still sees it: the attempt lands in the posting's
+      // append-only ledger, which only staff can read.
+      await appendPostingEvent(db, {
+        orgId,
+        postingId,
+        kind: "apply_duplicate",
+        payload: { application_id: existing.id },
+      });
+      return { applicationId: existing.id, candidateId, duplicate: true };
     }
     const today = new Date().toISOString().slice(0, 10);
     const application = (await db.execute<{ id: string }>(sql`
@@ -516,7 +545,7 @@ export async function applyViaPosting(query: ApplyViaPostingQuery): Promise<{ ap
       `);
     }
     await appendPostingEvent(db, { orgId, postingId, kind: "apply_received", payload: { application_id: application.id } });
-    return { applicationId: application.id, candidateId };
+    return { applicationId: application.id, candidateId, duplicate: false };
   });
 }
 

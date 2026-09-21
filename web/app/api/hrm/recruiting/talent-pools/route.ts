@@ -18,7 +18,7 @@ async function depthGate(orgId: string) {
   return isFeatureEnabled(orgId, "hrmTalentPool");
 }
 
-export async function GET(_req: Request) {
+export async function GET() {
   const gate = await guardPermission("hrm.recruiting.read");
   if (gate instanceof NextResponse) return gate;
   if (!(await depthGate(gate.user.orgId))) {

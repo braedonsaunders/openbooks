@@ -34,17 +34,24 @@ const PUBLIC_SEGMENT_ROOTS = [
   // connection's user-chosen password, then unguessable session tickets).
   // Same credential-authenticated non-browser model as /api/pay and /api/sign.
   "/api/qbd",
-  // HR-18 begin: recruiting public surface. /careers is the internal career
-  // page, /book and /offer are the candidate self-booking and offer-signing
-  // pages, and /api/recruiting carries only the sessionless token routes
-  // (book/offer/feed by HMAC token, public apply with honeypot + rate
-  // limit). Every route verifies its own credential in-route (recruiting
-  // token or apply controls, fail-closed) — candidates have no account, so
+  // HR-18 begin: recruiting public surface, co-signed by security.
+  // /careers is the public career page, /book and /offer are the candidate
+  // self-booking and offer-signing pages. Candidates have no account, so
   // the session gate would 302 every one of them to /login.
   "/careers",
   "/book",
   "/offer",
-  "/api/recruiting",
+  // The four API routes are named ONE BY ONE on purpose. A bare recruiting
+  // API root would make every future sibling sessionless and CSRF-exempt the
+  // moment the file lands — admin, reports, candidate PII — and a comment
+  // saying otherwise would be a claim about today's folder, not a constraint
+  // the code enforces. Child segments still match, so the token routes below
+  // cover their /<token> children. Adding a fifth route is then a decision
+  // someone records here, which is what this list is for.
+  "/api/recruiting/apply",
+  "/api/recruiting/book",
+  "/api/recruiting/offer",
+  "/api/recruiting/feed",
   // HR-18 end
   // Worker-to-web seam: every /api/internal route authenticates itself with
   // the shared OPENBOOKS_INTERNAL_TOKEN header and fails closed without it.

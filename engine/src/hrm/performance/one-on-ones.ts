@@ -215,7 +215,6 @@ async function loadItems(
   orgId: string,
   oneOnOneId: string,
   authorPartyId: string | null,
-  privileged: boolean,
 ): Promise<OneOnOneItemDTO[]> {
   const rows = (await db.execute<StoredItem>(sql`
     select id, kind, author_party_id, body, visibility, status,
@@ -336,7 +335,7 @@ export async function scheduleOneOnOne(args: {
       const one = await loadOneOnOne(db, orgId, inserted.id);
       if (!one) throw new HrmPerformanceError("REFUSED", "the 1:1 was not stored — no row can be read back; retry the action");
       const person = await loadApprovalPerson(db, orgId, actorId);
-      return toDTO(one, await loadItems(db, orgId, one.id, person.partyId, true));
+      return toDTO(one, await loadItems(db, orgId, one.id, person.partyId));
     } catch (e) {
       if (isUniqueViolationOn(e, "hrm_one_on_ones_unique_slot")) {
         throw new HrmPerformanceError(
@@ -432,7 +431,7 @@ export async function holdOneOnOne(args: { orgId: string; actorId: string; id: s
     }
     const held = await loadOneOnOne(db, orgId, id);
     if (!held) throw new HrmPerformanceError("NOT_FOUND", "1:1 was not found — it may belong to another organization");
-    return toDTO(held, await loadItems(db, orgId, id, person.partyId, true));
+    return toDTO(held, await loadItems(db, orgId, id, person.partyId));
   });
 }
 
@@ -477,7 +476,7 @@ export async function skipOneOnOne(args: {
     const skipped = await loadOneOnOne(db, orgId, id);
     if (!skipped) throw new HrmPerformanceError("NOT_FOUND", "1:1 was not found — it may belong to another organization");
     const person = await loadApprovalPerson(db, orgId, actorId);
-    return toDTO(skipped, await loadItems(db, orgId, id, person.partyId, true));
+    return toDTO(skipped, await loadItems(db, orgId, id, person.partyId));
   });
 }
 
@@ -657,7 +656,7 @@ export async function getOneOnOne(args: { orgId: string; actorId: string; id: st
       throw new HrmPerformanceError("NOT_FOUND", "1:1 was not found — it may belong to another organization");
     }
     const person = await loadApprovalPerson(db, orgId, actorId);
-    return toDTO(one, await loadItems(db, orgId, id, person.partyId, false));
+    return toDTO(one, await loadItems(db, orgId, id, person.partyId));
   });
 }
 
@@ -701,7 +700,7 @@ export async function listOneOnOnes(args: {
           (person.partyId === one.manager_party_id || person.partyId === one.report_party_id)) ||
         (own.includes(one.manager_employment_id) && team.includes(one.report_employment_id));
       if (!visible) continue;
-      out.push(toDTO(one, await loadItems(db, orgId, one.id, person.partyId, false)));
+      out.push(toDTO(one, await loadItems(db, orgId, one.id, person.partyId)));
     }
     return out;
   });

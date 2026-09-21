@@ -14,7 +14,6 @@ import {
   table,
   text,
   widget,
-  widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { compensationAuthz, loadEquity } from '../../../../../lib/hrm/compensation'
