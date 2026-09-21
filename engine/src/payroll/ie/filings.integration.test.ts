@@ -14,6 +14,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
+import { PAYROLL_COUNTRY_PACKS, setPackSlotAccount } from "../packs.ts";
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { db } from "../../platform/db.ts";
@@ -121,6 +122,12 @@ test(
         update subsidiaries set base_currency = 'EUR', country = 'IE', name = 'Dublin HQ'
          where org_id = ${org.orgId} and id = ${org.subsidiaryId}`);
       await seedPayrollComponents(org.orgId, actorId, "IE");
+      // Statutory slots declare no liabilityAccountRole, so seeding alone leaves
+      // every deduction unmapped and run-commit refuses the run. Map them all to
+      // the payroll-deductions control account, as the IT settlement fixture does.
+      for (const slot of PAYROLL_COUNTRY_PACKS.IE!.statutorySlots) {
+        await setPackSlotAccount(org.orgId, actorId, "IE", slot.key, deductionsId);
+      }
 
       const scheduleId = randomUUID();
       await db.execute(sql`

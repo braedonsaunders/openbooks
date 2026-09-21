@@ -22,6 +22,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
+import { PAYROLL_COUNTRY_PACKS, setPackSlotAccount } from "../packs.ts";
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { cmp } from "../../money/money.ts";
@@ -169,6 +170,12 @@ test(
         update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{controlAccounts}',
           '{"payrollDeductions": "${deductionsId}"}'::jsonb) where id = ${org.orgId}`);
       await seedPayrollComponents(org.orgId, actorId, "GB");
+      // Statutory slots declare no liabilityAccountRole, so seeding alone leaves
+      // every deduction unmapped and run-commit refuses the run. Map them all to
+      // the payroll-deductions control account, as the IT settlement fixture does.
+      for (const slot of PAYROLL_COUNTRY_PACKS.GB!.statutorySlots) {
+        await setPackSlotAccount(org.orgId, actorId, "GB", slot.key, deductionsId);
+      }
       // The employer PAYE reference the statements head with.
       await db.execute(sql`
         insert into payroll_filing_accounts(id,org_id,country,program_type,account_number,name,is_default)
