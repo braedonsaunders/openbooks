@@ -8,6 +8,13 @@ import {
 import { db } from "../platform/db.ts";
 import { cmp } from "../money/money.ts";
 import type { PayrollPackFilings } from "./filing-registry.ts";
+// HR-13 begin: labor-compliance declaration types (type-only; the
+// declarations live in the pack country trees, never here).
+import type {
+  LaborComplianceFileFormat,
+  PayrollPackConstruction,
+} from "./labor-compliance.ts";
+// HR-13 end
 import { CA_PAYROLL_PACK } from "./canada/pack.ts";
 import { US_PAYROLL_PACK } from "./us/pack.ts";
 import { GB_PACK } from "./gb/pack.ts";
@@ -836,6 +843,20 @@ export interface PayrollCountryPack {
    * raw key. The generic resolver tries `factorLabels` first.
    */
   describeFactor?: (key: string) => string | null;
+  // HR-13 begin: labor-compliance declarations (HRM construction
+  // compliance). OPTIONAL on both: a pack with no labor-compliance
+  // reporting concept declares no files, and a pack with no
+  // construction carve-outs declares no construction — the generic layer
+  // lists whatever is declared and refuses generation by name when a
+  // pack declares none (absent === empty), never inheriting another
+  // pack's form. Present implies non-empty (see
+  // engine/src/payroll/labor-compliance.test.ts). LAZY like
+  // filings/certificates: the builders sit beside the pack's engine
+  // modules, so the declaration must not be dereferenced at
+  // module-evaluation time.
+  laborComplianceFiles?: () => readonly LaborComplianceFileFormat[];
+  construction?: PayrollPackConstruction;
+  // HR-13 end
 }
 
 /**
