@@ -13,6 +13,31 @@ import { db } from "../../platform/db.ts";
 
 const HR_ROLE_KEYS = ["admin", "controller", "accountant", "approver"];
 
+/**
+ * The org folder without per-user grants — for session-less kiosk
+ * uploads, where the device token (not a login) authorizes the write
+ * and the service verifies the file on the clock event.
+ */
+export async function ensureOrgClockPhotoFolder(orgId: string): Promise<string> {
+  const root = (await db.execute<{ id: string }>(sql`
+    select id::text as id from folders
+     where org_id = ${orgId} and system_kind = 'attachments' limit 1`)).rows[0];
+  if (!root) {
+    throw new Error("the File Cabinet attachments root is missing — open the File Cabinet once before clocking with photos");
+  }
+  await db.execute(sql`select pg_advisory_xact_lock(hashtext(${"field-clock-photos:" + orgId}))`);
+  const existing = (await db.execute<{ id: string }>(sql`
+    select id::text as id from folders
+     where org_id = ${orgId} and parent_folder_id = ${root.id}
+       and name = 'Field time photos' and is_system`)).rows[0];
+  const folderId = existing?.id ?? (await db.execute<{ id: string }>(sql`
+    insert into folders (org_id, parent_folder_id, name, is_system, created_by, updated_by)
+    values (${orgId}, ${root.id}, 'Field time photos', true, null, null)
+    returning id::text as id`)).rows[0]?.id;
+  if (!folderId) throw new Error("the field-time photo folder was not stored — retry");
+  return folderId;
+}
+
 export async function ensureClockPhotoFolder(orgId: string, userId: string): Promise<string> {
   const root = (await db.execute<{ id: string }>(sql`
     select id::text as id from folders
