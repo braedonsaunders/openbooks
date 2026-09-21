@@ -19,6 +19,8 @@ import {
   midQuarterDeemedServiceDate,
   monthsTreatedInService,
   monthsTreatedInServiceExact,
+  remainingAfter,
+  remainingAfterExact,
   shortTaxYearMonths,
   shortTaxYearMonthsExact,
   shortYearPlacementDeduction,
@@ -26,6 +28,22 @@ import {
   subsequentRecoveryDeduction,
   subsequentSimplifiedDeduction,
 } from "./macrs-short-year.ts";
+
+test("dating a conserved split checkpoint preserves sub-cent remaining basis", () => {
+  const remaining = "416.6667";
+  const taken = add("416.6667", "416.6666");
+  assert.equal(remainingAfterExact(remaining, "0"), remaining);
+  assert.equal(add(taken, remainingAfterExact(remaining, "0")), "1250.0000");
+  assert.equal(remainingAfterExact(remaining, "100.00"), "316.6667");
+  assert.equal(add(add(taken, "100.00"), remainingAfterExact(remaining, "100.00")), "1250.0000");
+  const afterFirst = remainingAfterExact(remaining, "33.33");
+  assert.equal(remainingAfterExact(afterFirst, "66.67"), remainingAfterExact(remaining, "100.00"));
+  assert.equal(remainingAfterExact("0.0001", "0"), "0.0001");
+  assert.equal(remainingAfterExact("0.0001", "0.0001"), "0.0000");
+  // Preserve the pre-existing formatting boundary; it must not be reused as
+  // the stored checkpoint whose conservation is proved above.
+  assert.equal(remainingAfter(remaining, "0"), "416.67");
+});
 
 test("actual short-year months preserve both irregular boundaries and leap-month denominators", () => {
   assert.deepEqual(
