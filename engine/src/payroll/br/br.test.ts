@@ -116,10 +116,10 @@ test("BR declares no withholding certificate and one eSocial program type", () =
   );
   const filings = brPackFilings();
   assert.deepEqual(filings.programTypes.map((program) => program.key), ["br_cnpj_esocial"]);
-  assert.deepEqual(filings.yearEnd, []);
+  assert.deepEqual(filings.yearEnd.map((filing) => filing.key), ["informe"]);
 });
 
-test("BR 2026 is the only supported year; both sides refuse", async () => {
+test("BR publishes 2024–2026; both sides refuse outside them", async () => {
   // BR_TAX_YEARS ships on the registered BR pack, so the declaration is
   // already visible via the registry; register only when it is not.
   let registered = false;
@@ -135,12 +135,17 @@ test("BR 2026 is the only supported year; both sides refuse", async () => {
   }
   try {
     assert.equal(payrollTaxYearProblem("BR", 2026), null);
-    assert.equal(payrollTaxYearProblem("BR", 2025)?.kind, "missing");
+    assert.equal(payrollTaxYearProblem("BR", 2025), null);
+    assert.equal(payrollTaxYearProblem("BR", 2024), null);
+    assert.equal(payrollTaxYearProblem("BR", 2023)?.kind, "missing");
     assert.equal(payrollTaxYearProblem("BR", 2027)?.kind, "missing");
   } finally {
     if (registered) unregisterPayrollTaxYears("BR");
   }
-  await assert.rejects(computeBrStatutoryWithRates(brContext({ taxYear: 2025 }), RATES), /2025.*has not been transcribed/);
+  // Prior years compute through their own transcribed tables now.
+  await computeBrStatutoryWithRates(brContext({ taxYear: 2025, run: { pay_date: "2025-06-15" } }), RATES);
+  await computeBrStatutoryWithRates(brContext({ taxYear: 2024, run: { pay_date: "2024-06-15" } }), RATES);
+  await assert.rejects(computeBrStatutoryWithRates(brContext({ taxYear: 2023 }), RATES), /2023.*has not been transcribed/);
   await assert.rejects(computeBrStatutoryWithRates(brContext({ taxYear: 2027 }), RATES), /2027.*has not been transcribed/);
 });
 
