@@ -346,26 +346,36 @@ test("wrapper pushes five lines when no payout is owed, TI/SOMMA factors zero", 
   ]);
 });
 
-test("CU and 770 are declared annually, unpopulated, with refused corrections", async () => {
+test("CU is populated with a slip; the 770 stays declared and refused", async () => {
   assert.equal(IT_PACK_FILINGS.country, "IT");
   assert.deepEqual(
     IT_PACK_FILINGS.yearEnd.map((filing) => [filing.key, filing.cadence]),
     [["cu", "annual"], ["770", "annual"]],
   );
-  for (const filing of IT_PACK_FILINGS.yearEnd) {
-    assert.equal(filing.slip, undefined, `${filing.key} declares no slip builder`);
-    assert.match(filing.downloadRefusal ?? "", /no Entratel/, filing.key);
-    assert.equal(filing.amendment.supported, false, `${filing.key} names its correction gap`);
-    await assert.rejects(
-      filing.population("org", 2025),
-      /no filing population is transcribed/,
-    );
-    await assert.rejects(
-      filing.population("org", 2026),
-      /no filing population is transcribed/,
-    );
-    assert.equal(filing.parseRowId("anything"), null);
-  }
+  const cu = IT_PACK_FILINGS.yearEnd.find((filing) => filing.key === "cu")!;
+  assert.ok(cu.slip, "the CU declares its employee slip builder");
+  assert.match(cu.downloadRefusal ?? "", /Entratel/, "cu names its missing telematic file");
+  assert.equal(cu.amendment.supported, false, "the CU names its correction gap");
+  // Year gates fire before any query, so they run without a database; the
+  // 2025 population itself is DB-owned (see cu.integration.test.ts).
+  await assert.rejects(cu.population("org", 2024), /no transcribed tables/);
+  await assert.rejects(cu.population("org", 2026), /CU 2027/);
+  assert.equal(cu.parseRowId("anything"), null);
+  const employee = "123e4567-e89b-12d3-a456-426614174000";
+  assert.deepEqual(cu.parseRowId(employee), { employees: [employee], accounts: [] });
+  const settanta = IT_PACK_FILINGS.yearEnd.find((filing) => filing.key === "770")!;
+  assert.equal(settanta.slip, undefined, "770 declares no slip builder");
+  assert.match(settanta.downloadRefusal ?? "", /no Entratel/, "770");
+  assert.equal(settanta.amendment.supported, false, "770 names its correction gap");
+  await assert.rejects(
+    settanta.population("org", 2025),
+    /no filing population is transcribed/,
+  );
+  await assert.rejects(
+    settanta.population("org", 2026),
+    /no filing population is transcribed/,
+  );
+  assert.equal(settanta.parseRowId("anything"), null);
   assert.equal(IT_PAYROLL_PACK.filings(), IT_PACK_FILINGS);
 });
 
