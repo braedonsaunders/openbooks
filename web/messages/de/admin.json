@@ -2586,6 +2586,16 @@
         "title": "Bänder",
         "singularTitle": "Band",
         "description": "Versionierte SOLL-Sätze je Geltung: Änderungen sind neue Zeilen, nie Überschreibungen."
+      },
+      "hrm-competency-frameworks": {
+        "title": "Kompetenzrahmen",
+        "singularTitle": "Kompetenzrahmen",
+        "description": "Das wiederverwendbare Skill-Vokabular der Org mit Stufen."
+      },
+      "hrm-competencies": {
+        "title": "Kompetenzen",
+        "singularTitle": "Kompetenz",
+        "description": "Eine Fähigkeit in einem Rahmen, verknüpfbar mit Beurteilungen, Job-Leveln und Positionen."
       }
     },
     "fields": {
@@ -2933,7 +2943,8 @@
       "issuingBody": "Ausstellende Stelle",
       "renewalLeadDays": "Vorlauf Erneuerung (Tage)",
       "requiresEvidence": "Nachweis erforderlich",
-      "extraCategories": "Zusätzliche Kategorien"
+      "extraCategories": "Zusätzliche Kategorien",
+      "frameworkId": "Rahmen"
     },
     "fieldHelp": {
       "gapless": "Lückenlos bedeutet, dass jede Nummer in der Folge belegt sein muss und keine Nummer übersprungen wird. Aktivieren Sie dies nur, wenn gesetzliche oder prüfungsbezogene Vorgaben eine ununterbrochene Nummerierung verlangen.",
@@ -4727,6 +4738,30 @@
     "hrmCertificationAlerts": {
       "title": "Zertifikatswarnungen",
       "description": "Tägliche Ablaufhinweise an Inhaber und Vorgesetzte über den Posteingang."
+    },
+    "hrmPerformance": {
+      "title": "Leistung",
+      "description": "Der Hauptschalter für Beurteilungen, Ziele, 1:1s, Feedback, Kalibrierung, Talent und Nachfolge."
+    },
+    "hrmOneOnOnes": {
+      "title": "1:1-Gespräche",
+      "description": "Geplante Gespräche zwischen Führungskraft und Mitarbeiter mit fortlaufender Agenda."
+    },
+    "hrmFeedback": {
+      "title": "Feedback",
+      "description": "Lob, Feedback und Anfragen, erfasst wenn sie entstehen."
+    },
+    "hrmCompetencies": {
+      "title": "Kompetenzen",
+      "description": "Wiederverwendbares Skill-Vokabular mit Stufen, verknüpft mit Beurteilungen und Job-Leveln."
+    },
+    "hrmCalibration": {
+      "title": "Kalibrierung",
+      "description": "Das Bewertungsraster über einen Beurteilungszyklus mit Prüfpfad."
+    },
+    "hrmSuccession": {
+      "title": "Talent & Nachfolge",
+      "description": "Talentbeurteilungen und Nachfolgepläne pro Position."
     }
   },
   "extensions": {

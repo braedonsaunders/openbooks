@@ -331,6 +331,9 @@
       "title": "資格",
       "viewAll": "すべて見る",
       "empty": "資格が登録されていません。"
+    },
+    "continuous": {
+      "title": "フィードバックとコンピテンシー"
     }
   },
   "directory": {
@@ -744,7 +747,95 @@
     "exitDestination": "転職先",
     "exitNotes": "備考",
     "saveExit": "退職記録を保存",
-    "recordExit": "退職を記録"
+    "recordExit": "退職を記録",
+    "continuous": {
+      "tabs": {
+        "cycles": "サイクル",
+        "calibration": "キャリブレーション",
+        "talent": "タレントと後継"
+      },
+      "calibration": {
+        "title": "キャリブレーション",
+        "description": "評価サイクルに対する格付けグリッド:提案値と調整値を監査証跡付きで。",
+        "newSession": "新規セッション",
+        "sessionsEmpty": "キャリブレーションセッションはまだありません。",
+        "colSession": "セッション",
+        "colStatus": "ステータス",
+        "colOpened": "開始",
+        "gridTitle": "キャリブレーショングリッド",
+        "gridEmpty": "このセッションには提出済みのマネージャー評価がまだありません。",
+        "colReview": "評価",
+        "colProposed": "提案値",
+        "colDecide": "決定",
+        "distributionTitle": "評価の分布",
+        "unrated": "未評価",
+        "missingTitle": "このセッションの未登録",
+        "openSession": "セッションを開始",
+        "closeSession": "セッションを確定",
+        "sessionName": "セッション名",
+        "sessionCycle": "評価サイクル",
+        "createSession": "セッションを作成",
+        "ratingLabel": "調整後の評価",
+        "potentialLabel": "ポテンシャル",
+        "justificationLabel": "根拠",
+        "saveLabel": "評価を保存",
+        "revertLabel": "差し戻し",
+        "revertReasonLabel": "差し戻しの理由"
+      },
+      "talent": {
+        "title": "タレントと後継",
+        "description": "宣言スケール上の9ボックス、タレント表、後継計画。",
+        "newRecord": "新規記録",
+        "cycleLabel": "評価サイクル",
+        "gridTitle": "タレントグリッド",
+        "gridEmpty": "このサイクルのスケールはまだ宣言されていません。",
+        "unplacedNote": "宣言スケール外の配置が{count}件あります",
+        "colEmployee": "従業員",
+        "colPerformance": "業績",
+        "colPotential": "ポテンシャル",
+        "colLoss": "喪失の影響 / リスク",
+        "colReady": "昇進可能",
+        "readyYes": "はい",
+        "readyNo": "まだ",
+        "reviewsEmpty": "このサイクルのタレントレビューはまだありません。",
+        "plansTitle": "後継計画",
+        "plansEmpty": "後継計画はまだありません。",
+        "colPosition": "職位",
+        "colIncumbent": "現任者",
+        "colCandidates": "候補者",
+        "colStatus": "ステータス",
+        "impactLabel": "喪失の影響",
+        "riskLabel": "喪失のリスク",
+        "promotionLabel": "昇進可能",
+        "notesLabel": "メモ",
+        "submitLabel": "記録を保存",
+        "modeLabel": "記録",
+        "modeTalentLabel": "タレントレビュー",
+        "modeSuccessionLabel": "後継計画",
+        "employeeLabel": "従業員",
+        "positionLabel": "職位"
+      },
+      "feedback": {
+        "settingsTitle": "フィードバック設定",
+        "anyoneLabel": "組織内の全員",
+        "managersLabel": "マネージャーと人事のみ",
+        "saveLabel": "設定を保存",
+        "praise": "称賛",
+        "feedbackKind": "フィードバック",
+        "request": "リクエスト",
+        "kindLabel": "種類",
+        "visibilityLabel": "公開範囲",
+        "publicVis": "公開",
+        "managerAndSubject": "マネージャーと本人",
+        "managerOnly": "マネージャーのみ",
+        "subjectOnly": "本人のみ",
+        "bodyLabel": "メッセージ",
+        "bodyPlaceholder": "何が起きたか具体的に書いてください",
+        "submitLabel": "送信",
+        "praiseAction": "称賛する",
+        "respondLabel": "回答する"
+      }
+    }
   },
   "retention": {
     "title": "定着",
@@ -836,7 +927,8 @@
       "reviews": "評価",
       "benefits": "福利厚生",
       "team": "チーム",
-      "compensation": "報酬"
+      "compensation": "報酬",
+      "oneOnOnes": "1:1"
     },
     "refusedTitle": "セルフサービスは利用できません",
     "overview": {
@@ -971,7 +1063,9 @@
         "department": "部門",
         "status": "ステータス",
         "serviceStart": "勤務開始日",
-        "cycle": "サイクル"
+        "cycle": "サイクル",
+        "oneOnOne": "1:1",
+        "feedback": "フィードバック"
       },
       "rosterEmpty": "直属の部下はいません",
       "stepsTitle": "自分に割り当てられたステップ",
@@ -983,7 +1077,8 @@
       "changesEmpty": "決定待ちの変更申請はありません。",
       "owedTitle": "担当の評価",
       "owedEmpty": "オープン中のサイクルに担当の評価はありません。",
-      "openReview": "評価を開く"
+      "openReview": "評価を開く",
+      "oneOnOneLink": "1:1を開く"
     },
     "reviewStatus": {
       "pending": "下書き",
@@ -1088,6 +1183,42 @@
         "expires": "有効期限",
         "status": "ステータス"
       }
+    },
+    "oneOnOnes": {
+      "title": "1:1",
+      "description": "予定と過去の1:1とそのアジェンダ。",
+      "upcoming": "予定",
+      "past": "過去",
+      "requests": "フィードバック依頼",
+      "colWhen": "日時",
+      "colWith": "相手",
+      "colStatus": "ステータス",
+      "upcomingEmpty": "予定された1:1はありません。",
+      "pastEmpty": "過去の1:1はありません。",
+      "requestsEmpty": "未回答の依頼はありません。",
+      "scheduled": "予定",
+      "held": "実施済み",
+      "skipped": "スキップ",
+      "cancelled": "キャンセル",
+      "talkingPoint": "話題",
+      "actionItem": "アクション",
+      "note": "メモ",
+      "shared": "共有",
+      "private": "非公開",
+      "privateNote": "非公開 — あなただけが読めます",
+      "kindLabel": "種類",
+      "bodyLabel": "アジェンダ項目",
+      "bodyPlaceholder": "要点を書いてください",
+      "addItem": "項目を追加",
+      "hold": "1:1を実施",
+      "skip": "スキップ",
+      "skipReason": "スキップの理由",
+      "cancelMeeting": "キャンセル",
+      "carryNote": "実施すると未完了項目がコピーとして引き継がれます — 原本は履歴として残ります。",
+      "done": "完了",
+      "reopen": "再開",
+      "carriedForward": "引継ぎ済み",
+      "actionFailed": "1:1の操作に失敗しました。"
     }
   },
   "options": {

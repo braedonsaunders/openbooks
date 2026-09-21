@@ -17,6 +17,9 @@ import { automations } from './articles/automations'
 import { correctingAndRescinding } from './articles/correcting-and-rescinding'
 // HR-16 end
 import { performanceAndRetention } from './articles/performance-and-retention'
+// HR-17 begin: continuous-performance article.
+import { continuousPerformance } from './articles/continuous-performance'
+// HR-17 end
 import { selfService } from './articles/self-service'
 import { payroll } from './articles/payroll'
 import { employmentMigration } from './articles/employment-migration'
@@ -262,7 +265,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   propertyManagement,
   bankingAndReconciliation,
   periodClose,
-  projectTypes, overheadCosting, laborCosting, laborPricing, payroll, employmentMigration, positionsAndHeadcount, hrmProcesses, inboxAndHome, automations, correctingAndRescinding, performanceAndRetention, selfService, leaveTimeVersusValue, recruitingFunnel, benefitsEnrollment, fieldTickets, subcontractorCompliance, compensationAndTransparency,
+  projectTypes, overheadCosting, laborCosting, laborPricing, payroll, employmentMigration, positionsAndHeadcount, hrmProcesses, inboxAndHome, automations, correctingAndRescinding, performanceAndRetention, continuousPerformance, selfService, leaveTimeVersusValue, recruitingFunnel, benefitsEnrollment, fieldTickets, subcontractorCompliance, compensationAndTransparency,
   // HR-13 begin
   certifiedPayrollPrevailingWagePerDiem,
   // HR-13 end

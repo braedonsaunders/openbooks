@@ -2518,6 +2518,16 @@
         "title": "薪酬带宽",
         "singularTitle": "薪酬带宽",
         "description": "按范围版本化的应付标准：变更一律新增行。"
+      },
+      "hrm-competency-frameworks": {
+        "title": "能力框架",
+        "singularTitle": "能力框架",
+        "description": "组织复用的分级技能词汇。"
+      },
+      "hrm-competencies": {
+        "title": "能力项",
+        "singularTitle": "能力项",
+        "description": "框架中的一项技能,可关联评估、职级与职位。"
       }
     },
     "fields": {
@@ -2865,7 +2875,8 @@
       "issuingBody": "签发机构",
       "renewalLeadDays": "续期提前期（天）",
       "requiresEvidence": "需要证明",
-      "extraCategories": "附加类别"
+      "extraCategories": "附加类别",
+      "frameworkId": "框架"
     },
     "fieldHelp": {
       "gapless": "无间隔表示序列中的每个编号都必须有记录，不能跳号。仅在法律或审计要求必须连续编号时启用。",
@@ -4727,6 +4738,30 @@
     "hrmCertificationAlerts": {
       "title": "认证提醒",
       "description": "通过收件箱向持有人及其主管发送每日到期通知。"
+    },
+    "hrmPerformance": {
+      "title": "绩效",
+      "description": "评估、目标、1:1、反馈、校准、人才与继任的总开关。"
+    },
+    "hrmOneOnOnes": {
+      "title": "1:1",
+      "description": "主管与下属的定期面谈,议程自动结转。"
+    },
+    "hrmFeedback": {
+      "title": "反馈",
+      "description": "在发生时记录的表扬、反馈与请求。"
+    },
+    "hrmCompetencies": {
+      "title": "能力",
+      "description": "与评估和职级挂钩的分级复用技能词汇。"
+    },
+    "hrmCalibration": {
+      "title": "校准",
+      "description": "评估周期上的评分矩阵,并附审计轨迹。"
+    },
+    "hrmSuccession": {
+      "title": "人才与继任",
+      "description": "各职位的人才评估与继任计划。"
     }
   },
   "backupsManager": {

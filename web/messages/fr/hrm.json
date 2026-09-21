@@ -331,6 +331,9 @@
       "title": "Qualifications",
       "viewAll": "Tout voir",
       "empty": "Aucune qualification enregistrée."
+    },
+    "continuous": {
+      "title": "Retours & compétences"
     }
   },
   "directory": {
@@ -744,7 +747,95 @@
     "exitDestination": "Destination",
     "exitNotes": "Notes",
     "saveExit": "Enregistrer la fiche de sortie",
-    "recordExit": "Enregistrer la sortie"
+    "recordExit": "Enregistrer la sortie",
+    "continuous": {
+      "tabs": {
+        "cycles": "Cycles",
+        "calibration": "Calibrage",
+        "talent": "Talents & succession"
+      },
+      "calibration": {
+        "title": "Calibrage",
+        "description": "La grille des notes sur un cycle d'évaluation : proposé face à calibré, avec piste d'audit.",
+        "newSession": "Nouvelle session",
+        "sessionsEmpty": "Aucune session de calibrage pour l'instant.",
+        "colSession": "Session",
+        "colStatus": "Statut",
+        "colOpened": "Ouverte",
+        "gridTitle": "Grille de calibrage",
+        "gridEmpty": "Aucune évaluation manager soumise dans cette session pour l'instant.",
+        "colReview": "Évaluation",
+        "colProposed": "Proposé",
+        "colDecide": "Décider",
+        "distributionTitle": "Distribution des notes",
+        "unrated": "Non noté",
+        "missingTitle": "Absents de cette session",
+        "openSession": "Ouvrir la session",
+        "closeSession": "Clore la session",
+        "sessionName": "Nom de la session",
+        "sessionCycle": "Cycle d'évaluation",
+        "createSession": "Créer la session",
+        "ratingLabel": "Note calibrée",
+        "potentialLabel": "Potentiel",
+        "justificationLabel": "Justification",
+        "saveLabel": "Enregistrer la note",
+        "revertLabel": "Revenir",
+        "revertReasonLabel": "Motif du retour"
+      },
+      "talent": {
+        "title": "Talents & succession",
+        "description": "La grille à 9 cases sur les échelles déclarées, le tableau des talents et les plans de succession.",
+        "newRecord": "Nouvel enregistrement",
+        "cycleLabel": "Cycle d'évaluation",
+        "gridTitle": "Grille des talents",
+        "gridEmpty": "Aucune échelle déclarée pour ce cycle pour l'instant.",
+        "unplacedNote": "{count} positionnements hors des échelles déclarées",
+        "colEmployee": "Collaborateur",
+        "colPerformance": "Performance",
+        "colPotential": "Potentiel",
+        "colLoss": "Impact / risque de départ",
+        "colReady": "Prêt pour promotion",
+        "readyYes": "Oui",
+        "readyNo": "Pas encore",
+        "reviewsEmpty": "Aucune revue de talent pour ce cycle pour l'instant.",
+        "plansTitle": "Plans de succession",
+        "plansEmpty": "Aucun plan de succession pour l'instant.",
+        "colPosition": "Poste",
+        "colIncumbent": "Titulaire",
+        "colCandidates": "Candidats",
+        "colStatus": "Statut",
+        "impactLabel": "Impact d'un départ",
+        "riskLabel": "Risque d'un départ",
+        "promotionLabel": "Prêt pour promotion",
+        "notesLabel": "Notes",
+        "submitLabel": "Enregistrer",
+        "modeLabel": "Enregistrement",
+        "modeTalentLabel": "Revue de talent",
+        "modeSuccessionLabel": "Plan de succession",
+        "employeeLabel": "Collaborateur",
+        "positionLabel": "Poste"
+      },
+      "feedback": {
+        "settingsTitle": "Paramètres des retours",
+        "anyoneLabel": "Tous dans l'organisation",
+        "managersLabel": "Managers et RH uniquement",
+        "saveLabel": "Enregistrer les paramètres",
+        "praise": "Éloge",
+        "feedbackKind": "Retour",
+        "request": "Demande",
+        "kindLabel": "Nature",
+        "visibilityLabel": "Visibilité",
+        "publicVis": "Public",
+        "managerAndSubject": "Manager et concerné",
+        "managerOnly": "Manager uniquement",
+        "subjectOnly": "Concerné uniquement",
+        "bodyLabel": "Message",
+        "bodyPlaceholder": "Dites précisément ce qui s'est passé",
+        "submitLabel": "Envoyer",
+        "praiseAction": "Féliciter",
+        "respondLabel": "Répondre"
+      }
+    }
   },
   "retention": {
     "title": "Rétention",
@@ -836,7 +927,8 @@
       "reviews": "Évaluations",
       "benefits": "Avantages",
       "team": "Équipe",
-      "compensation": "Rémunération"
+      "compensation": "Rémunération",
+      "oneOnOnes": "1:1"
     },
     "refusedTitle": "Le libre-service est indisponible",
     "overview": {
@@ -971,7 +1063,9 @@
         "department": "Service",
         "status": "Statut",
         "serviceStart": "Début de service",
-        "cycle": "Cycle"
+        "cycle": "Cycle",
+        "oneOnOne": "1:1",
+        "feedback": "Retour"
       },
       "rosterEmpty": "Aucun subordonné direct",
       "stepsTitle": "Étapes qui me sont assignées",
@@ -983,7 +1077,8 @@
       "changesEmpty": "Aucune demande de modification à trancher.",
       "owedTitle": "Évaluations que je dois",
       "owedEmpty": "Aucune évaluation due dans le cycle ouvert.",
-      "openReview": "Ouvrir l'évaluation"
+      "openReview": "Ouvrir l'évaluation",
+      "oneOnOneLink": "Ouvrir les 1:1"
     },
     "reviewStatus": {
       "pending": "Brouillon",
@@ -1088,6 +1183,42 @@
         "expires": "Expire",
         "status": "Statut"
       }
+    },
+    "oneOnOnes": {
+      "title": "1:1",
+      "description": "Vos 1:1 à venir et passés avec leurs ordres du jour.",
+      "upcoming": "À venir",
+      "past": "Passés",
+      "requests": "Demandes de retour",
+      "colWhen": "Quand",
+      "colWith": "Avec",
+      "colStatus": "Statut",
+      "upcomingEmpty": "Aucun 1:1 planifié.",
+      "pastEmpty": "Aucun 1:1 passé.",
+      "requestsEmpty": "Aucune demande de retour ouverte.",
+      "scheduled": "Planifié",
+      "held": "Tenu",
+      "skipped": "Ignoré",
+      "cancelled": "Annulé",
+      "talkingPoint": "Point de discussion",
+      "actionItem": "Action",
+      "note": "Note",
+      "shared": "Partagé",
+      "private": "Privé",
+      "privateNote": "Privé — vous seul pouvez le lire",
+      "kindLabel": "Nature",
+      "bodyLabel": "Point d'ordre du jour",
+      "bodyPlaceholder": "Dites de quoi il s'agit",
+      "addItem": "Ajouter un point",
+      "hold": "Tenir le 1:1",
+      "skip": "Ignorer",
+      "skipReason": "Motif",
+      "cancelMeeting": "Annuler",
+      "carryNote": "Tenir reporte les points ouverts en copies — les originaux restent ici comme historique.",
+      "done": "Terminé",
+      "reopen": "Rouvrir",
+      "carriedForward": "Reporté",
+      "actionFailed": "L'action 1:1 a échoué."
     }
   },
   "options": {

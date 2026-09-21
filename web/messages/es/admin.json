@@ -2473,6 +2473,16 @@
         "title": "Bandas",
         "singularTitle": "Banda",
         "description": "Filas versionadas de salario DEBE por ámbito: los cambios son filas nuevas."
+      },
+      "hrm-competency-frameworks": {
+        "title": "Marcos de competencias",
+        "singularTitle": "Marco",
+        "description": "El vocabulario reutilizable de habilidades con niveles."
+      },
+      "hrm-competencies": {
+        "title": "Competencias",
+        "singularTitle": "Competencia",
+        "description": "Una habilidad de un marco, vinculable a evaluaciones, niveles y puestos."
       }
     },
     "fields": {
@@ -2820,7 +2830,8 @@
       "issuingBody": "Entidad emisora",
       "renewalLeadDays": "Antelación de renovación (días)",
       "requiresEvidence": "Requiere evidencia",
-      "extraCategories": "Categorías adicionales"
+      "extraCategories": "Categorías adicionales",
+      "frameworkId": "Marco"
     },
     "fieldHelp": {
       "gapless": "Sin huecos significa que cada número de la secuencia debe quedar contabilizado, sin números omitidos. Actívelo solo cuando los requisitos legales o de auditoría exijan una numeración ininterrumpida.",
@@ -4727,6 +4738,30 @@
     "hrmCertificationAlerts": {
       "title": "Alertas de certificación",
       "description": "Avisos diarios de vencimiento a titulares y responsables por la bandeja."
+    },
+    "hrmPerformance": {
+      "title": "Desempeño",
+      "description": "El interruptor principal de evaluaciones, objetivos, 1:1, comentarios, calibración, talento y sucesión."
+    },
+    "hrmOneOnOnes": {
+      "title": "1:1",
+      "description": "Conversaciones programadas entre mánager y empleado con agenda continua."
+    },
+    "hrmFeedback": {
+      "title": "Comentarios",
+      "description": "Elogios, comentarios y solicitudes capturados cuando ocurren."
+    },
+    "hrmCompetencies": {
+      "title": "Competencias",
+      "description": "Vocabulario de habilidades reutilizable con niveles, vinculado a evaluaciones y niveles."
+    },
+    "hrmCalibration": {
+      "title": "Calibración",
+      "description": "La matriz de calificaciones sobre un ciclo con auditoría."
+    },
+    "hrmSuccession": {
+      "title": "Talento y sucesión",
+      "description": "Revisiones de talento y planes de sucesión por puesto."
     }
   },
   "backupsManager": {

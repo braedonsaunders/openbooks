@@ -14,6 +14,9 @@ import { SETUP_WIDGETS } from './widgets-setup'
 import { AGENTS_WIDGETS } from './widgets-agents'
 import { HOME_WIDGETS } from './widgets-home'
 import { HRM_WIDGETS } from './widgets-hrm'
+// HR-17: continuous-performance widgets live in their own family file —
+// the composition test caps a family at 500 lines.
+import { HRM_CONTINUOUS_WIDGETS } from './widgets-hrm-continuous'
 import { PERSONA_WIDGETS } from './widgets-home-persona'
 import { OPERATIONS_WIDGETS } from './widgets-operations'
 import { RECORDS_WIDGETS } from './widgets-records'
@@ -166,6 +169,9 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   ...AGENTS_WIDGETS,
   ...HOME_WIDGETS,
   ...HRM_WIDGETS,
+  // HR-17: continuous-performance family (1:1s, feedback, calibration,
+  // talent, succession) composes beside its parent family.
+  ...HRM_CONTINUOUS_WIDGETS,
   // HR-15: persona-home widgets (inbox task list, dashboard persona tiles).
   ...PERSONA_WIDGETS,
   ...OPERATIONS_WIDGETS,
