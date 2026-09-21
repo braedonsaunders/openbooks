@@ -139,14 +139,27 @@ test("the GB tax year opens 6 April and is named for the opening year", () => {
   assert.equal(taxYearFor(GB_PACK.taxYear, "2027-04-05"), 2026);
 });
 
-test("filings declare the PAYE program type and no year-end return yet", () => {
+test("filings declare the PAYE program type with the P60 and P45 statements", () => {
   const filings = gbPackFilings();
   assert.equal(filings.country, "GB");
   assert.deepEqual(
     filings.programTypes.map((program) => program.key),
     ["gb_paye"],
   );
-  assert.deepEqual(filings.yearEnd, []);
+  // The pack's year-end contract changed from "none transcribed" to the two
+  // employee statements (RTI and P11D stay out of scope, refused by name on
+  // each filing): the P60 is the annual statement, the P45 the separation one.
+  assert.deepEqual(
+    filings.yearEnd.map((filing) => [filing.key, filing.cadence]),
+    [["p60", "annual"], ["p45", "separation"]],
+  );
+  for (const filing of filings.yearEnd) {
+    assert.ok(typeof filing.population === "function");
+    assert.ok(typeof filing.parseRowId === "function");
+    assert.ok(filing.slip, `${filing.key} declares its slip`);
+    assert.ok(filing.downloadRefusal?.includes("RTI"), `${filing.key} refuses the RTI file by name`);
+    assert.equal(filing.amendment.supported, true);
+  }
 });
 
 
