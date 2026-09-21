@@ -48,6 +48,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'agents-triage-keys',
   'aging-strip',
   'ai-settings-form',
+  'ai-governance-ledger',
   'analytics-hub',
   'ap-capture-link',
   'ap-cockpit',

@@ -17,6 +17,6 @@ export async function generateMetadata() {
  */
 export default async function AiSettingsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = await searchParams
-  const data = await loadAdminAi()
+  const data = await loadAdminAi(sp)
   return <ModuleView spec={adminAiSpec(data)} data={data} searchParams={sp} trusted />
 }

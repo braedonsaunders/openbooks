@@ -9,6 +9,7 @@ import { isFeatureEnabled } from '../../../lib/features'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { isUuid, pickString } from '../../../lib/list-params'
 import { loadFieldDefs } from '../../../lib/custom-fields'
+import { loadOpenFlagsForWeek, type WeekFlagChip } from '../../../lib/hrm/ai-rails'
 import { loadTimePolicy } from '../../../lib/time-policy'
 // HR-20: approver flag chips over the week's clock pairs.
 import { approvalFlags } from '@openbooks/engine/src/hrm/field-time/reads.ts'
@@ -118,6 +119,15 @@ export async function loadTimesheets(
     fieldTimeOnEarly && openEmployeeId && openWeek
       ? await approvalFlags(orgId, { weekStart: openWeek, employeePartyId: openEmployeeId }).catch(() => [])
       : []
+  // HR-21: open anomaly flags overlapping this week ride into the grid
+  // as approval chips. Empty while hrmTimeAnomalies is off or the actor
+  // lacks the flag read scope — the grid renders unchanged either way.
+  let anomalyFlags: WeekFlagChip[] = []
+  if (openEmployeeId && openWeek) {
+    const weekEnd = new Date(`${openWeek}T00:00:00Z`)
+    weekEnd.setUTCDate(weekEnd.getUTCDate() + 6)
+    anomalyFlags = await loadOpenFlagsForWeek(authz, openEmployeeId, openWeek, weekEnd.toISOString().slice(0, 10))
+  }
   const gridProps =
     pickers && weekPayload && openEmployeeId && openWeek
       ? {
@@ -132,6 +142,7 @@ export async function loadTimesheets(
           fieldDefs: lineFieldDefs as never,
           closeHref,
           fieldFlags,
+          anomalyFlags,
         } satisfies WeeklyGridProps
       : null
 

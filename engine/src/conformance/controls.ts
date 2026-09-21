@@ -23,6 +23,7 @@ import { caseDigest } from "../platform/provenance.ts";
 import type { CaseResult, CorpusReport, RunnableCase } from "./types.ts";
 import { ALLOCATION_CONTROL_CASES } from "./cases/allocations.ts";
 import { CORRECTION_CONTROL_CASES } from "./cases/corrections.ts";
+import { AI_GOVERNANCE_CONTROL_CASES } from "./cases/ai-governance.ts";
 
 export interface ControlCase extends RunnableCase {
   title: string;
@@ -44,6 +45,7 @@ export interface ControlCase extends RunnableCase {
 export const CONTROL_CORPUS: readonly ControlCase[] = [
   ...ALLOCATION_CONTROL_CASES,
   ...CORRECTION_CONTROL_CASES,
+  ...AI_GOVERNANCE_CONTROL_CASES,
 ];
 
 /**
@@ -59,6 +61,7 @@ export const CONTROL_FLOORS: readonly {
 }[] = [
   { area: "allocation controls", source: ALLOCATION_CONTROL_CASES, minimum: 7 },
   { area: "correction controls", source: CORRECTION_CONTROL_CASES, minimum: 1 },
+  { area: "ai governance controls", source: AI_GOVERNANCE_CONTROL_CASES, minimum: 3 },
 ];
 
 /** Every control id the evidence set makes a claim about. */

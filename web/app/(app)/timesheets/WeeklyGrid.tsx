@@ -149,6 +149,7 @@ export function WeeklyGrid({
   closeHref = '/timesheets',
   // HR-20: destructured beside the prop it feeds.
   fieldFlags = [],
+  anomalyFlags = [],
 }: {
   employeeId: string | null
   week: string
@@ -171,6 +172,9 @@ export function WeeklyGrid({
   // HR-20: field flag chips over the week's clock pairs — geo/photo/
   // auto-close. Coordinates stay out; the drawer shows flags only.
   fieldFlags?: { entryId: string; workedOn: string; hours: string; geoCheck: string | null; autoClosed: boolean; hasPhoto: boolean }[]
+  /** HR-21: open anomaly flags overlapping this week. Empty while
+   *  hrmTimeAnomalies is off — the grid renders unchanged. */
+  anomalyFlags?: { kind: string; kindLabel: string; severity: string; explanation: string }[]
 }) {
   const t = useTranslations('timesheets')
   const tCommon = useTranslations('common')
@@ -509,6 +513,24 @@ export function WeeklyGrid({
                   {flag.hasPhoto ? ` ${t('field.flagPhoto')}` : null}
                 </span>
               ))}
+        {/* HR-21: open anomaly flags overlapping this week. Informational
+            for the approver — flags never block timesheet approval itself;
+            block severity refuses the pay-run finalize, which is where the
+            checks queue link points. */}
+        {anomalyFlags.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {anomalyFlags.map((flag, index) => (
+              <span
+                key={`${flag.kind}:${index}`}
+                title={flag.explanation}
+                className="inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+              >
+                {flag.kindLabel}
+              </span>
+            ))}
+            <a href="/payroll/anomalies" className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">
+              {t('grid.checksLink')}
+            </a>
           </div>
         ) : null}
 

@@ -184,6 +184,8 @@ enabled on **378 tables**.
 | G14 | A seeded business simulator advances a synthetic company through time and **halts on the first invariant failure**, writing a defect bundle with a reproduction recipe. Its operator protocol requires fixing the product — never the harness, never relaxing the invariant. | `engine/src/sim/` |
 | G15 | The golden harness produces a diffable checkpoint — counts, trial balance, control tie-outs, check results, and report timings — that can be compared across commits to detect an unintended change in reported figures. | `engine/src/harness/scenario.ts` |
 | G16 | A health endpoint reports application and background-worker status. | `GET /api/v1/health?include=worker` |
+| G17 | AI capabilities declare an autonomy ceiling that only moves down: read-only explains from records, draft writes text a human inserts, propose surfaces findings a human decides, and nothing files, submits, approves or pays on its own. Raising a capability above its ceiling is refused with the ceiling named. | `engine/src/hrm/ai/registry.ts`, `engine/src/conformance/cases/ai-governance.ts` (`ai-autonomy-down-only`) |
+| G18 | Every AI-assisted answer appends one row to an append-only decision ledger with its capability, subject, cited sources, a PII-free summary and outcome — prompts and full outputs are never stored, and updates and deletes are refused by the database. Every capability carries the subject notice shown wherever its output appears. | `engine/src/hrm/ai/governance.ts`, `engine/src/conformance/cases/ai-governance.ts` (`ai-subject-notice-present`, `ai-ledger-append-only`) |
 
 ---
 

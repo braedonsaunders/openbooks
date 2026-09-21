@@ -2910,7 +2910,12 @@
       "question": "Question",
       "ratingScale": "Échelle de notation",
       "regionScope": "Portée régionale",
-      "retainMonths": "Mois de conservation"
+      "retainMonths": "Mois de conservation",
+      "zThreshold": "Seuil Z",
+      "retroThreshold": "Seuil rétroactif",
+      "cohortKey": "Cohorte",
+      "biasTerms": "Termes sensibles",
+      "reviewMonths": "Cadence (mois)"
     },
     "fieldHelp": {
       "gapless": "Sans rupture signifie que chaque numéro de la séquence doit être justifié, sans aucun numéro sauté. Activez cette option uniquement si vos obligations légales ou d’audit imposent une numérotation ininterrompue.",
@@ -3005,7 +3010,12 @@
       "hrmRetentionLeadDays": "Jours avant expiration pour demander une prolongation ; vide sans courriel.",
       "hrmRetentionScope": "Région en JSON : applies_to all ou countries avec codes.",
       "hrmTemplateBody": "Texte avec variables pour les données de l'offre.",
-      "hrmTemplateClauses": "Clauses en liste JSON avec key, label, body et default_on."
+      "hrmTemplateClauses": "Clauses en liste JSON avec key, label, body et default_on.",
+      "aiRailsZThreshold": "Signale les gains à plus de tant d'écarts-types de la moyenne (3 par défaut).",
+      "aiRailsRetroThreshold": "Signale les rétroactifs dès ce montant (500 par défaut).",
+      "aiRailsCohort": "Regroupe les salariés par filiale, service, calendrier ou niveau.",
+      "aiRailsBiasTerms": "Mots et tournures de l'organisation signalés au mot près, un par ligne.",
+      "aiRailsReviewMonths": "Cadence en mois (1–36) ; les capacités en retard notifient la boîte setup."
     },
     "options": {
       "timeClassification": {
@@ -3479,6 +3489,12 @@
       "hrmRetentionBasis": {
         "consent": "Consentement",
         "inactivity": "Inactivité"
+      },
+      "aiRailsCohort": {
+        "subsidiary": "Filiale",
+        "department": "Service",
+        "paySchedule": "Calendrier de paie",
+        "jobLevel": "Niveau"
       }
     },
     "laborCosting": {
@@ -4957,6 +4973,34 @@
     "hrmTalentPool": {
       "title": "Vivier de talents",
       "description": "Viviers d'anciens candidats rapprochés des postes ouverts."
+    },
+    "hrmAiAssist": {
+      "title": "Assistance IA",
+      "description": "Interrupteur maître des capacités IA déterministes RH. Rien ici ne dépose, n'approuve ni ne paie seul."
+    },
+    "hrmExplainPay": {
+      "title": "Explications de bulletin",
+      "description": "Traces déterministes avec écart précédent, dans le tiroir Paie."
+    },
+    "hrmPayrollAnomalies": {
+      "title": "Anomalies de paie",
+      "description": "Alertes préalables avec cycle de vie ; le niveau bloc refuse la validation."
+    },
+    "hrmTimeAnomalies": {
+      "title": "Anomalies de temps",
+      "description": "Alertes de temps en pastilles d'approbation et messages."
+    },
+    "hrmDrafting": {
+      "title": "Rédaction sur pièces",
+      "description": "Brouillons depuis des sources citées avec alertes de langage ; jamais auto-envoyés."
+    },
+    "hrmNlReports": {
+      "title": "Rapports en langage naturel",
+      "description": "Définitions validées depuis des questions, avec aperçu et enregistrement en vue."
+    },
+    "aiGovernanceLedger": {
+      "title": "Registre de gouvernance IA",
+      "description": "Miroir des capacités, registre immuable, mentions et cadence."
     }
   },
   "backupsManager": {
@@ -5362,6 +5406,36 @@
       "approvalYes": "Oui",
       "approvalNo": "Non",
       "approvalSave": "Enregistrer"
+    }
+  },
+  "aiLedger": {
+    "title": "Gouvernance IA",
+    "description": "Capacités, leurs plafonds d'autonomie et le registre immuable de chaque réponse assistée par IA.",
+    "capabilitiesTitle": "Capacités",
+    "decisionsTitle": "Décisions",
+    "overdueTitle": "Revues en retard",
+    "overdueDescription": "Ces capacités ont dépassé leur cadence de revue",
+    "export": "Exporter CSV",
+    "sync": "Synchroniser le registre",
+    "syncDone": "Registre synchronisé.",
+    "review": "Consigner la revue",
+    "save": "Enregistrer",
+    "failed": "La modification n'a pas pu être enregistrée.",
+    "enabled": "Activée",
+    "disabled": "Désactivée",
+    "all": "Toutes",
+    "noticeRequired": "Mention requise",
+    "neverReviewed": "Jamais revue",
+    "columns": {
+      "autonomy": "Autonomie",
+      "capability": "Capacité",
+      "enabled": "Activée",
+      "notice": "Mention",
+      "outcome": "Résultat",
+      "reviewed": "Revue",
+      "reviewer": "Relecteur",
+      "summary": "Résumé",
+      "when": "Quand"
     }
   }
 }

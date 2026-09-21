@@ -74,7 +74,8 @@
       "paid": "paid through a pay run",
       "costed": "posted to the ledger",
       "ticketed": "inside a field ticket"
-    }
+    },
+    "checksLink": "Open payroll checks"
   },
   "field": {
     "title": "Field clock",

@@ -39,6 +39,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'agents-triage-hint': { props: ['text'] },
   'agents-triage-keys': { props: [], open: true },
   'aging-strip': { props: ['cells', 'total', 'totalDrill', 'totalLabel'] },
+  'ai-governance-ledger': { props: ['ledger'] },
   'ai-settings-form': { props: ['initial', 'specs'] },
   'allocations-drivers-tab': { props: [] },
   'allocations-rule-drawer': { props: [], open: true },

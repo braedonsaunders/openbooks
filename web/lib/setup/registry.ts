@@ -40,6 +40,7 @@ import {
 // HR-14 begin: qualification taxonomy and vocabulary (rehomed onto the
 // Qualifications page, never the setup rail).
 import { QUALIFICATION_SETTINGS_ENTITY, QUALIFICATION_TYPES_ENTITY } from './hrm-qualifications'
+import { AI_RAILS_SETTINGS_ENTITY } from './hrm-ai-rails'
 // HR-14 end
 // HR-18 begin: recruiting-depth Setup entities (rehomed onto /hrm/recruiting,
 // never the setup rail).
@@ -1854,6 +1855,10 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   TIME_KIOSKS_ENTITY,
   TIME_APPROVAL_STAGES_ENTITY,
   // HR-20 end
+  // HR-21 begin: AI rails thresholds, cohort, bias terms and review
+  // cadence. Declared in ./hrm-ai-rails.ts; rehomed onto /admin/ai.
+  AI_RAILS_SETTINGS_ENTITY,
+  // HR-21 end
   {
     key: 'pay-schedules',
     table: 'pay_schedules',

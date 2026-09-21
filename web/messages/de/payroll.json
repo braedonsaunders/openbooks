@@ -1487,5 +1487,77 @@
   },
   "retro": {
     "title": "Nachzahlung"
+  },
+  "anomalies": {
+    "title": "Lohnprüfungen",
+    "description": "Deterministische Prüfungen vor dem Lohnlauf mit ihren Zahlen. Die Stufe Block verweigert die Freigabe des Lohnlaufs, solange sie offen ist.",
+    "listTitle": "Hinweise",
+    "emptyTitle": "Keine Hinweise für diese Periode",
+    "emptyDescription": "Führen Sie den Scan für diese Periode aus oder erweitern Sie die Filter.",
+    "scan": "Periode scannen",
+    "scanBusy": "Scanne…",
+    "scanFailed": "Der Scan konnte nicht ausgeführt werden.",
+    "open": "Offen",
+    "all": "Alle",
+    "runs": "Läufe",
+    "kindLabel": "Art",
+    "severityLabel": "Stufe",
+    "statusLabel": "Status",
+    "unassigned": "Nicht zugeordnet",
+    "wizardNotice": "{count, plural, one {# blockierender Hinweis verweigert diese Freigabe} other {# blockierende Hinweise verweigern diese Freigabe}} — klären Sie sie oder markieren Sie sie in der Prüfwarteschlange als Fehlalarm.",
+    "wizardLink": "Lohnprüfungen öffnen",
+    "columns": {
+      "employment": "Mitarbeiter",
+      "explanation": "Erklärung",
+      "kind": "Art",
+      "period": "Periode",
+      "severity": "Stufe",
+      "status": "Status"
+    },
+    "tiles": {
+      "blocking": "Blockierend",
+      "warnings": "Warnungen",
+      "acknowledged": "Zur Kenntnis",
+      "falsePositiveRate": "Fehlalarmquote"
+    },
+    "transitions": {
+      "acknowledge": "Zur Kenntnis nehmen",
+      "resolve": "Erledigen",
+      "falsePositive": "Fehlalarm",
+      "reason": "Grund",
+      "reasonPlaceholder": "Was haben Sie geprüft oder behoben?",
+      "submit": "Übernehmen",
+      "failed": "Die Änderung konnte nicht gespeichert werden."
+    },
+    "severity": {
+      "block": "Block",
+      "warn": "Warnung",
+      "info": "Info"
+    },
+    "status": {
+      "open": "Offen",
+      "acknowledged": "Zur Kenntnis",
+      "resolved": "Erledigt",
+      "false_positive": "Fehlalarm"
+    },
+    "kinds": {
+      "terminated_with_pay": "Ausgeschieden mit Lohn",
+      "duplicate_bank": "Doppelte Bankverbindung",
+      "retro_spike": "Rückrechnungs-Spitze",
+      "net_pay_spike": "Nettolohn-Spitze",
+      "zero_hours_with_pay": "Null Stunden mit Lohn",
+      "hours_spike": "Stunden-Spitze",
+      "missing_rate": "Fehlender Satz",
+      "expired_rate": "Abgelaufener Satz",
+      "prevailing_wage_missing": "Fehlender Mindestlohn",
+      "apprentice_ratio_breach": "Azubi-Quote verletzt",
+      "benefit_input_orphan": "Leistung ohne Zuordnung",
+      "leave_input_orphan": "Abwesenheit ohne Zuordnung",
+      "negative_balance": "Negativer Urlaubssaldo",
+      "duplicate_entry": "Doppelter Zeiteintrag",
+      "geofence_outside": "Außerhalb des Bereichs",
+      "unrounded": "Ungerundete Stempelung",
+      "custom": "Eigene"
+    }
   }
 }

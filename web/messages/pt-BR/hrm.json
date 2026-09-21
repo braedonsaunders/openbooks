@@ -583,7 +583,8 @@
       "offer": "Oferta",
       "timeToFill": "Tempo de preenchimento",
       "days": "dias",
-      "missing": "Este registro não está mais visível."
+      "missing": "Este registro não está mais visível.",
+      "description": "Descrição"
     },
     "create": {
       "titleField": "Título",
@@ -1310,6 +1311,25 @@
       "reopen": "Reabrir",
       "carriedForward": "Transferido",
       "actionFailed": "A ação 1:1 falhou."
+    },
+    "pay": {
+      "title": "Folha",
+      "empty": "Ainda não há holerites calculados.",
+      "columns": {
+        "payDate": "Pagamento",
+        "gross": "Bruto",
+        "netPay": "Líquido"
+      },
+      "explain": "Explicar",
+      "drawerTitle": "Explicação do holerite",
+      "linesTitle": "Verbas",
+      "diffTitle": "Mudanças desde o holerite anterior",
+      "diffEmpty": "Sem mudanças desde o holerite anterior.",
+      "inputsTitle": "Dados por trás das verbas",
+      "sourcesTitle": "Registros",
+      "missing": "Esse holerite não existe ou está fora da sua organização.",
+      "close": "Fechar",
+      "failed": "Não foi possível carregar a explicação."
     }
   },
   "options": {
@@ -1903,5 +1923,16 @@
       "kicker": "Oferta",
       "version": "versão {version}"
     }
+  },
+  "aiDraft": {
+    "button": "Redigir das evidências",
+    "title": "Redigir das evidências",
+    "insert": "Inserir no campo",
+    "discard": "Descartar",
+    "failed": "Não foi possível gerar o rascunho.",
+    "sources": "Fontes",
+    "biasFlags": "Linguagem a revisar",
+    "loading": "Redigindo dos registros citados…",
+    "copied": "Sem campo editável aqui — o rascunho foi copiado."
   }
 }

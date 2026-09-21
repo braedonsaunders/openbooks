@@ -3,7 +3,9 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { listFlags, type FlagRow } from '@openbooks/engine/src/hrm/ai/anomalies.ts'
+import { flagsForEmployment, listFlags, type FlagRow } from '@openbooks/engine/src/hrm/ai/anomalies.ts'
+import { AI_CAPABILITIES } from '@openbooks/engine/src/hrm/ai/registry.ts'
+import { ensureAiRailsSettings } from '@openbooks/engine/src/hrm/ai/settings.ts'
 import { explainPayslip, type ExplainPayTrace } from '@openbooks/engine/src/hrm/ai/explain-pay.ts'
 import { listCapabilities, listDecisions, overdueReviews, type CapabilityRow, type DecisionRow } from '@openbooks/engine/src/hrm/ai/governance.ts'
 import { loadAiRailsSettings } from '@openbooks/engine/src/hrm/ai/settings.ts'
@@ -76,28 +78,33 @@ export interface AnomalyChecksData {
   finalizeHref: string;
 }
 
-const KIND_LABELS: Record<string, string> = {
-  terminated_with_pay: 'Terminated with pay',
-  duplicate_bank: 'Duplicate bank details',
-  retro_spike: 'Retro spike',
-  net_pay_spike: 'Net pay spike',
-  zero_hours_with_pay: 'Zero hours with pay',
-  hours_spike: 'Hours spike',
-  missing_rate: 'Missing rate',
-  expired_rate: 'Expired rate',
-  prevailing_wage_missing: 'Prevailing wage missing',
-  apprentice_ratio_breach: 'Apprentice ratio breach',
-  benefit_input_orphan: 'Benefit input orphan',
-  leave_input_orphan: 'Leave input orphan',
-  negative_balance: 'Negative leave balance',
-  duplicate_entry: 'Duplicate time entry',
-  geofence_outside: 'Outside geofence',
-  unrounded: 'Unrounded clock event',
-  custom: 'Custom',
-};
+/**
+ * Known anomaly kinds, mirroring the scan rules. Labels resolve through
+ * the payroll catalog (anomalies.kinds.*) at each call site — an unknown
+ * future kind renders its raw code, never a wrong label.
+ */
+export const ANOMALY_KINDS = [
+  'terminated_with_pay',
+  'duplicate_bank',
+  'retro_spike',
+  'net_pay_spike',
+  'zero_hours_with_pay',
+  'hours_spike',
+  'missing_rate',
+  'expired_rate',
+  'prevailing_wage_missing',
+  'apprentice_ratio_breach',
+  'benefit_input_orphan',
+  'leave_input_orphan',
+  'negative_balance',
+  'duplicate_entry',
+  'geofence_outside',
+  'unrounded',
+  'custom',
+] as const;
 
-export function anomalyKindLabel(kind: string): string {
-  return KIND_LABELS[kind] ?? kind;
+export function anomalyKindLabel(t: (key: string) => string, kind: string): string {
+  return (ANOMALY_KINDS as readonly string[]).includes(kind) ? t(`anomalies.kinds.${kind}`) : kind;
 }
 
 async function employmentLabels(
@@ -134,7 +141,7 @@ function toDisplay(
     id: flag.id,
     severityLabel: t(`anomalies.severity.${flag.severity}`),
     severityVariant: SEVERITY_VARIANTS[flag.severity] ?? 'neutral',
-    kindLabel: anomalyKindLabel(flag.kind),
+    kindLabel: anomalyKindLabel(t, flag.kind),
     periodLabel: `${flag.payPeriodFrom} → ${flag.payPeriodTo}`,
     employmentLabel: employmentLabel ?? t('anomalies.unassigned'),
     explanation: flag.explanation,
@@ -158,7 +165,7 @@ export async function loadAnomalyChecks(
   const t = await getTranslations('payroll');
   const severity = sp.severity === 'info' || sp.severity === 'warn' || sp.severity === 'block' ? sp.severity : undefined;
   const status = sp.status === 'acknowledged' || sp.status === 'resolved' || sp.status === 'false_positive' ? sp.status : 'open';
-  const kind = sp.kind && KIND_LABELS[sp.kind] ? sp.kind : undefined;
+  const kind = sp.kind && (ANOMALY_KINDS as readonly string[]).includes(sp.kind) ? sp.kind : undefined;
   const [open, acknowledged, falsePositives] = await Promise.all([
     listFlags(db, { orgId, actorId, severity, kind, status: 'open' }),
     listFlags(db, { orgId, actorId, status: 'acknowledged' }),
@@ -231,7 +238,7 @@ export async function loadAnomalyChecks(
     warningsTone: warnings > 0 ? 'warning' : 'neutral',
     currentParams,
     severityOptions: ['block', 'warn', 'info'].map((value) => ({ value, label: t(`anomalies.severity.${value}`) })),
-    kindOptions: Object.entries(KIND_LABELS).map(([value, label]) => ({ value, label })),
+    kindOptions: ANOMALY_KINDS.map((value) => ({ value, label: t(`anomalies.kinds.${value}`) })),
     statusOptions: ['open', 'acknowledged', 'resolved', 'false_positive'].map((value) => ({ value, label: t(`anomalies.status.${value}`) })),
     stats: { blocking, warnings, acknowledged: acknowledged.length, falsePositiveRate: fpRate },
     rows,
@@ -394,6 +401,8 @@ export interface AiLedgerData {
   reviewLabel: string;
   saveLabel: string;
   failedLabel: string;
+  disabledLabel: string;
+  allLabel: string;
   capabilityColumns: { capability: string; autonomy: string; reviewer: string; notice: string; reviewed: string; enabled: string };
   decisionColumns: { when: string; capability: string; summary: string; outcome: string; reviewer: string };
   capabilities: (CapabilityRow & { noticeLabel: string; reviewedLabel: string; enabledLabel: string })[];
@@ -407,6 +416,9 @@ export interface AiLedgerData {
 export async function loadAiLedger(authz: Authz): Promise<AiLedgerData> {
   const orgId = authz.user.orgId;
   const t = await getTranslations('admin');
+  // The ledger page ensures the singleton settings row so the Setup
+  // section always has a row to edit (new orgs have none until now).
+  await ensureAiRailsSettings(db, orgId);
   const [capabilities, decisions, settings] = await Promise.all([
     listCapabilities(db, orgId),
     listDecisions(db, { orgId, limit: 50 }),
@@ -426,6 +438,8 @@ export async function loadAiLedger(authz: Authz): Promise<AiLedgerData> {
     reviewLabel: t('aiLedger.review'),
     saveLabel: t('aiLedger.save'),
     failedLabel: t('aiLedger.failed'),
+    disabledLabel: t('aiLedger.disabled'),
+    allLabel: t('aiLedger.all'),
     capabilityColumns: {
       capability: t('aiLedger.columns.capability'),
       autonomy: t('aiLedger.columns.autonomy'),
@@ -443,7 +457,9 @@ export async function loadAiLedger(authz: Authz): Promise<AiLedgerData> {
     },
     capabilities: capabilities.map((c) => ({
       ...c,
-      noticeLabel: c.noticeRequired ? t('aiLedger.noticeRequired') : '—',
+      // The catalog notice text itself, not just its flag — this is the
+      // line users see wherever the capability surfaces.
+      noticeLabel: c.noticeRequired ? (AI_CAPABILITIES.get(c.key)?.noticeText ?? t('aiLedger.noticeRequired')) : '—',
       reviewedLabel: c.lastReviewedAt ?? t('aiLedger.neverReviewed'),
       enabledLabel: c.enabled ? t('aiLedger.enabled') : t('aiLedger.disabled'),
     })),
@@ -528,4 +544,52 @@ export async function loadOpenFlagsForEmployment(
     status: 'open',
   });
   return flags.map((f) => ({ kind: f.kind, severity: f.severity, explanation: f.explanation }));
+}
+
+export interface WeekFlagChip {
+  kind: string;
+  kindLabel: string;
+  severity: string;
+  explanation: string;
+}
+
+/**
+ * Open flags overlapping one timesheet week for the approval chips. The
+ * timesheet surface addresses PARTIES while flags key EMPLOYMENTS, so the
+ * party's employments resolve first. Empty while hrmTimeAnomalies is off
+ * (no chips) or while the actor lacks the flag read scope — the grid
+ * renders the approve flow unchanged either way.
+ */
+export async function loadOpenFlagsForWeek(
+  authz: Authz,
+  partyId: string,
+  weekStart: string,
+  weekEnd: string,
+): Promise<WeekFlagChip[]> {
+  if (!(await isFeatureEnabled(authz.user.orgId, 'hrmTimeAnomalies'))) return [];
+  const t = await getTranslations('payroll');
+  const employments = (await db.execute<{ id: string }>(sql`
+    select id::text as id from worker_employments
+     where org_id = ${authz.user.orgId} and worker_party_id = ${partyId}`)).rows;
+  if (employments.length === 0) return [];
+  const chips: WeekFlagChip[] = [];
+  for (const employment of employments) {
+    let flags;
+    try {
+      flags = await flagsForEmployment(db, {
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        employmentId: employment.id,
+      });
+    } catch {
+      return [];
+    }
+    for (const flag of flags) {
+      if (flag.status !== 'open') continue;
+      // Flag pay periods overlap the timesheet week (ISO dates compare).
+      if (flag.payPeriodFrom > weekEnd || flag.payPeriodTo < weekStart) continue;
+      chips.push({ kind: flag.kind, kindLabel: anomalyKindLabel(t, flag.kind), severity: flag.severity, explanation: flag.explanation });
+    }
+  }
+  return chips;
 }

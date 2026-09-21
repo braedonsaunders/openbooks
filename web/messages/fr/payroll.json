@@ -1487,5 +1487,77 @@
   },
   "retro": {
     "title": "Rappel de paie"
+  },
+  "anomalies": {
+    "title": "Contrôles de paie",
+    "description": "Contrôles déterministes avant le bulletin avec leurs chiffres. Le niveau bloc refuse la validation tant qu'il est ouvert.",
+    "listTitle": "Alertes",
+    "emptyTitle": "Aucune alerte pour cette période",
+    "emptyDescription": "Lancez l'analyse de cette période ou élargissez les filtres.",
+    "scan": "Analyser la période",
+    "scanBusy": "Analyse…",
+    "scanFailed": "L'analyse n'a pas pu s'exécuter.",
+    "open": "Ouvert",
+    "all": "Tous",
+    "runs": "Paies",
+    "kindLabel": "Type",
+    "severityLabel": "Niveau",
+    "statusLabel": "Statut",
+    "unassigned": "Non assigné",
+    "wizardNotice": "{count, plural, one {# alerte bloquante refuse cette validation} other {# alertes bloquantes refusent cette validation}} — résolvez-les ou marquez-les comme faux positif dans la file.",
+    "wizardLink": "Ouvrir les contrôles de paie",
+    "columns": {
+      "employment": "Salarié",
+      "explanation": "Explication",
+      "kind": "Type",
+      "period": "Période",
+      "severity": "Niveau",
+      "status": "Statut"
+    },
+    "tiles": {
+      "blocking": "Bloquantes",
+      "warnings": "Avertissements",
+      "acknowledged": "Prises en compte",
+      "falsePositiveRate": "Taux de faux positifs"
+    },
+    "transitions": {
+      "acknowledge": "Prendre en compte",
+      "resolve": "Résoudre",
+      "falsePositive": "Faux positif",
+      "reason": "Motif",
+      "reasonPlaceholder": "Qu'avez-vous vérifié ou corrigé ?",
+      "submit": "Appliquer",
+      "failed": "La modification n'a pas pu être enregistrée."
+    },
+    "severity": {
+      "block": "Bloc",
+      "warn": "Avertissement",
+      "info": "Info"
+    },
+    "status": {
+      "open": "Ouvert",
+      "acknowledged": "Pris en compte",
+      "resolved": "Résolu",
+      "false_positive": "Faux positif"
+    },
+    "kinds": {
+      "terminated_with_pay": "Sorti avec paie",
+      "duplicate_bank": "Coordonnées bancaires en double",
+      "retro_spike": "Pic rétroactif",
+      "net_pay_spike": "Pic de net",
+      "zero_hours_with_pay": "Zéro heure avec paie",
+      "hours_spike": "Pic d'heures",
+      "missing_rate": "Taux manquant",
+      "expired_rate": "Taux expiré",
+      "prevailing_wage_missing": "Salaire en vigueur manquant",
+      "apprentice_ratio_breach": "Quota d'apprentis non respecté",
+      "benefit_input_orphan": "Avantage non rattaché",
+      "leave_input_orphan": "Absence non rattachée",
+      "negative_balance": "Solde de congés négatif",
+      "duplicate_entry": "Saisie en double",
+      "geofence_outside": "Hors zone",
+      "unrounded": "Pointage non arrondi",
+      "custom": "Personnalisé"
+    }
   }
 }
