@@ -17,7 +17,6 @@ import {
   transitionFlag,
 } from "./anomalies.ts";
 import { explainPay } from "./explain-pay.ts";
-import { AiRailsError } from "./errors.ts";
 
 /**
  * HR-21 AI rails DB coverage (integration partition, gating box runs
@@ -292,22 +291,42 @@ test("explain-pay trace carries lines, treatments, inputs and the diff", { skip:
     const party = (await db.execute<{ partyId: string }>(sql`
       select worker_party_id::text as "partyId" from worker_employments
        where org_id = ${org.orgId} and id = ${employmentId}`)).rows[0]?.partyId;
-    // pay_stubs.pay_run_document_id is a foreign key, so the run document
-    // has to exist before its stubs do. The fixture used a bare uuid and
-    // the insert was refused -- the explain-pay trace was never the thing
-    // failing. Same document shape the payroll fixtures use.
-    const runId = randomUUID();
+    // A pay stub needs the WHOLE run to exist first, and the chain is
+    // three rows deep: pay_schedules <- pay_runs <- pay_stubs, with the
+    // document beside the run. pay_stubs.pay_run_document_id points at
+    // PAY_RUNS(document_id), not at documents, so creating the document
+    // alone still left the stub with nothing to reference. Copied from
+    // web/lib/pdf-templates/ytd-tax-cross-pack.integration.test.ts rather
+    // than re-derived.
+    const scheduleId = randomUUID();
     await db.execute(sql`
-      insert into documents (org_id, id, kind, document_number, subsidiary_id, document_date,
-                             currency, status, created_by, updated_by)
-      values (${org.orgId}, ${runId}, 'pay_run', ${`PAY-${runId.slice(0, 8)}`},
-              ${org.subsidiaryId}, '2026-09-30', 'CAD', 'draft', ${adminId}, ${adminId})`);
+      insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
+                                 pay_date_offset_days, is_active)
+      values (${scheduleId}, ${org.orgId}, ${`Sched ${scheduleId.slice(0, 8)}`}, 'biweekly', 26,
+              '2026-09-30', 3, true)`);
+    // ONE RUN PER PERIOD. pay_stubs is unique on (run, employee), which is
+    // correct -- a person is paid once per run -- so the previous and
+    // current payslips the diff compares cannot share a run document.
+    // Two periods means two runs, each with its own document, which is
+    // also what the explain-pay diff is reading when it names what
+    // changed between them.
     const stubPrev = randomUUID();
     const stubCur = randomUUID();
-    for (const [stubId, payDate, gross, net] of [
-      [stubPrev, "2026-08-31", "5000", "3800"],
-      [stubCur, "2026-09-30", "5600", "4200"],
+    for (const [stubId, periodStart, payDate, gross, net] of [
+      [stubPrev, "2026-08-01", "2026-08-31", "5000", "3800"],
+      [stubCur, "2026-09-01", "2026-09-30", "5600", "4200"],
     ] as const) {
+      const runId = randomUUID();
+      await db.execute(sql`
+        insert into documents (org_id, id, kind, document_number, subsidiary_id, document_date,
+                               currency, status, created_by, updated_by)
+        values (${org.orgId}, ${runId}, 'pay_run', ${`PAY-${runId.slice(0, 8)}`},
+                ${org.subsidiaryId}, ${payDate}, 'CAD', 'draft', ${adminId}, ${adminId})`);
+      await db.execute(sql`
+        insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end,
+                              pay_date, tax_year, run_status)
+        values (${runId}, ${org.orgId}, ${scheduleId}, ${periodStart}, ${payDate},
+                ${payDate}, 2026, 'committed')`);
       await db.execute(sql`
         insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id,
           province, periods_per_year, pay_date, tax_year, currency_code, gross, net_pay, employer_cost)
@@ -331,11 +350,17 @@ test("explain-pay trace carries lines, treatments, inputs and the diff", { skip:
     assert.ok(trace.sources.some((s) => s.kind === "pay_stub" && s.id === stubCur));
     assert.ok((await decisionCount(org.orgId)) > before, "explain-pay must log its decision");
 
-    // Explaining another person's pay without a grant refuses.
+    // Explaining another person's pay without a grant refuses, NAMING the
+    // missing permission. The class is deliberately not pinned: the scope
+    // check delegates to requireHrmSelfRead, so the refusal is the shared
+    // HrmAuthorizationError every other HRM read raises, and hrmRefusal
+    // already surfaces its message to the caller intact. Asserting the
+    // message is the stronger test anyway -- an instanceof pin passes for
+    // a refusal that says nothing useful.
     const outsider = await createScratchUser(org.orgId, "Outsider", "outsider");
     await assert.rejects(
       explainPay(db, { orgId: org.orgId, actorId: outsider, employmentId }),
-      AiRailsError,
+      /hrm\.self\.read/,
     );
   } finally {
     await dropScratchOrg(org.orgId);
