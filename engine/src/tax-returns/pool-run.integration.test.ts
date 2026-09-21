@@ -2,9 +2,39 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { add, formatMoney } from "../money/money.ts";
+import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
 import { runTaxPool, TaxPoolError } from "./pool-run.ts";
-import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from "../testing/fixtures.ts";
+import {
+  ensureTaxYearWindow,
+  taxYearWindowDeleteProblem,
+  taxYearWindowWriteProblem,
+} from "./macrs-calendar.ts";
+import {
+  createScratchOrg,
+  dropScratchOrg,
+  seedApprovalFlow,
+  seedFlowActors,
+  type FlowActors,
+  type ScratchOrg,
+} from "../testing/fixtures.ts";
+import { submitFinancialChange } from "../flows/financial-changes-adapter.ts";
+import { decideGate } from "../flows/gates.ts";
+import { buildSchedule } from "../assets/depreciation.ts";
+import { applyAssetChange, proposeAssetChange } from "../assets/asset-changes.ts";
+import {
+  applyTaxAssetBasis,
+  applyTaxAssetBasisReversal,
+  listTaxAssetBasisSources,
+  proposeTaxAssetBasis,
+  proposeTaxAssetBasisReversal,
+  TaxAssetBasisError,
+} from "./asset-basis-workpaper.ts";
+import {
+  applyTaxMatchingReplay,
+  previewTaxMatchingReplay,
+  proposeTaxMatchingReplay,
+} from "./consolidated-matching-replay.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -78,17 +108,37 @@ interface RunScope {
   subsidiaryId: string;
 }
 
-const runYear = (
+async function declareYear(
   scope: RunScope,
   actorId: string,
   regime: string,
   taxYear: number,
-) =>
-  runTaxPool(scope.orgId, scope.bookId, scope.subsidiaryId, regime, taxYear, {
+  yearStart = `${taxYear}-01-01`,
+  yearEnd = `${taxYear}-12-31`,
+) {
+  return ensureTaxYearWindow(db, scope.orgId, actorId, {
+    subsidiaryId: scope.subsidiaryId,
+    regime,
+    yearStart,
+    yearEnd,
+    filingYear: taxYear,
+    reason: "calendar-year tax window",
+  });
+}
+
+const runYear = async (
+  scope: RunScope,
+  actorId: string,
+  regime: string,
+  taxYear: number,
+) => {
+  await declareYear(scope, actorId, regime, taxYear);
+  return runTaxPool(scope.orgId, scope.bookId, scope.subsidiaryId, regime, taxYear, {
     yearStart: `${taxYear}-01-01`,
     yearEnd: `${taxYear}-12-31`,
     actorId,
   });
+};
 
 type PeriodRow = {
   pool_id: string;
@@ -159,6 +209,8 @@ test("Canadian vehicle cost caps apply to additions and disposition capital cost
       ["10.1", "37000.00", "5550.00", "31450.00"],
     ]);
 
+    // Legacy disposeAsset path: no financial_change_id. The run must keep
+    // lesser-of-proceeds-and-class-cap and must not demand a workpaper.
     await seedDisposalEvent(org, actorId, assetId, "2024-05-01", "60000.00");
     const second = await runYear(org, actorId, "ca_cca", 2024);
     assert.deepEqual(second.lines.map((line) => [line.classCode, line.dispositions, line.recapture, line.closingBalance]), [
@@ -342,7 +394,10 @@ test("years run consecutively: restating or skipping closed years is refused wit
     // …and a skipped year would claim no allowance on the carried balance.
     await assert.rejects(
       runYear(scope, actorId, "ca_cca", 2026),
-      (error: unknown) => error instanceof TaxPoolError && /before tax year 2024/.test(error.message) && /consecutively/.test(error.message),
+      (error: unknown) =>
+        error instanceof TaxPoolError
+        && /next declared year after 2023-12-31/.test(error.message)
+        && /consecutively/.test(error.message),
     );
     let rows = await periodsFor(org.orgId);
     assert.deepEqual(rows.map((r) => r.tax_year), [2023], "refused runs leave the chain untouched");
@@ -385,33 +440,35 @@ test("years run consecutively: restating or skipping closed years is refused wit
   }
 });
 
-test("a MACRS run with a short-year factor is refused before persisting anything", { skip: !DB }, async () => {
-  // Live-Postgres regression: runMacrs accepted shortYearFactor, STORED it on
-  // the period row, but never applied it — a half-year MACRS run claimed the
-  // full-year allowance while its own evidence said 0.5. The stateless
-  // per-year MACRS schedule cannot carry a short-year deferral forward, so a
-  // short MACRS year must fail closed instead of silently over-claiming.
+test("a MACRS short year computes Pub 946 dates and refuses a factor that disagrees", { skip: !DB }, async () => {
   const { org, actorId } = await seededOrg();
   try {
     const cat5 = await seedTaxCategory(org, "5-year property", { us_macrs_class: "gds_5" });
     await seedAsset(org, actorId, cat5, "10000.00", "2023-03-15");
     const scope: RunScope = org;
 
+    await declareYear(scope, actorId, "us_macrs", 2023, "2023-01-01", "2023-06-30");
     await assert.rejects(
       runTaxPool(scope.orgId, scope.bookId, scope.subsidiaryId, "us_macrs", 2023, {
         yearStart: "2023-01-01",
         yearEnd: "2023-06-30",
-        shortYearFactor: "0.5",
+        shortYearFactor: "1",
         actorId,
       }),
-      (error: unknown) => error instanceof TaxPoolError && /short/i.test(error.message),
+      (error: unknown) => error instanceof TaxPoolError && /does not match/.test(error.message),
     );
-    assert.equal((await periodsFor(org.orgId)).length, 0, "refused short MACRS year persists nothing");
-    assert.equal((await poolsFor(org.orgId)).length, 0, "refused short MACRS year creates no pool");
+    assert.equal((await periodsFor(org.orgId)).length, 0, "factor/date disagreement persists nothing");
+    assert.equal((await poolsFor(org.orgId)).length, 0, "factor/date disagreement creates no pool");
 
-    // The full-year run on the same scope still computes.
-    const full = await runYear(scope, actorId, "us_macrs", 2023);
-    assert.equal(full.lines[0]!.allowance, "2000.00");
+    const short = await runTaxPool(scope.orgId, scope.bookId, scope.subsidiaryId, "us_macrs", 2023, {
+      yearStart: "2023-01-01",
+      yearEnd: "2023-06-30",
+      shortYearFactor: "0.5",
+      actorId,
+    });
+    // Half-year deemed April 1 in a January–June year: 3/12 × 40% × $10,000.
+    assert.equal(short.lines[0]!.allowance, "1000.00");
+    assert.equal((await periodsFor(org.orgId)).length, 1);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -444,6 +501,395 @@ test("the MACRS model runs under the same fence: atomic years, chaining, orderin
     assert.equal(rows[1]!.opening_balance, rows[0]!.closing_balance);
     const pools = await poolsFor(org.orgId);
     assert.equal(pools[0]!.opening_balance, rows[1]!.closing_balance);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a MACRS asset placed and taxably disposed in the same tax year takes no deduction", { skip: !DB }, async () => {
+  const { org, actorId } = await seededOrg();
+  try {
+    const cat5 = await seedTaxCategory(org, "5-year property", { us_macrs_class: "gds_5" });
+    const assetId = await seedAsset(org, actorId, cat5, "10000.00", "2023-03-15");
+    await seedDisposalEvent(org, actorId, assetId, "2023-09-01", "4000.00");
+    const result = await runYear(org, actorId, "us_macrs", 2023);
+    assert.equal(result.lines[0]!.allowance, "0.00");
+    assert.equal(result.lines[0]!.closingBalance, "0.00");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a MACRS placement after the tax-year window is not given a deemed first-year date", { skip: !DB }, async () => {
+  const { org, actorId } = await seededOrg();
+  try {
+    const cat5 = await seedTaxCategory(org, "5-year property", { us_macrs_class: "gds_5" });
+    await seedAsset(org, actorId, cat5, "10000.00", "2023-10-01");
+    await declareYear(org, actorId, "us_macrs", 2023, "2023-01-01", "2023-06-30");
+    const result = await runTaxPool(org.orgId, org.bookId, org.subsidiaryId, "us_macrs", 2023, {
+      yearStart: "2023-01-01",
+      yearEnd: "2023-06-30",
+      shortYearFactor: "0.5",
+      actorId,
+    });
+    assert.equal(result.lines.length, 0);
+    assert.equal((await periodsFor(org.orgId)).length, 0);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a 0.49 short-year factor refuses instead of rounding into a six-month year", { skip: !DB }, async () => {
+  const { org, actorId } = await seededOrg();
+  try {
+    const cat5 = await seedTaxCategory(org, "5-year property", { us_macrs_class: "gds_5" });
+    await seedAsset(org, actorId, cat5, "10000.00", "2023-03-15");
+    await declareYear(org, actorId, "us_macrs", 2023, "2023-01-01", "2023-06-30");
+    await assert.rejects(
+      runTaxPool(org.orgId, org.bookId, org.subsidiaryId, "us_macrs", 2023, {
+        yearStart: "2023-01-01",
+        yearEnd: "2023-06-30",
+        shortYearFactor: "0.49",
+        actorId,
+      }),
+      (error: unknown) => error instanceof TaxPoolError && /does not match/.test(error.message),
+    );
+    assert.equal((await periodsFor(org.orgId)).length, 0);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+async function approveChange(org: ScratchOrg, actors: FlowActors, id: string) {
+  await submitFinancialChange(org.orgId, id, actors.submitterId);
+  const gate = (
+    await db.execute<{ id: string }>(sql`
+      select id from flow_gates where org_id=${org.orgId}
+       and subject_id=${id} and status='pending'`)
+  ).rows[0];
+  assert.ok(gate, "the native submission must create an approval gate");
+  await decideGate({
+    gateId: gate.id,
+    userId: actors.approver1Id,
+    decision: "approved",
+  });
+}
+
+test("runTaxPool persists carryover+excess matching and freezes the cited window", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    await withOrgContext(org.orgId, async () => {
+      const actors = await seedFlowActors(org.orgId);
+      await db.execute(sql`
+        insert into user_permission_overrides(org_id,user_id,permission,effect)
+        values(${org.orgId},${actors.submitterId},'assets.manage','grant')`);
+      await seedApprovalFlow(org.orgId, {
+        subjectKind: "financial_change",
+        mode: "any",
+        preventSelfApproval: false,
+        assignees: [{ type: "user", userId: actors.approver1Id }],
+      });
+      const buyer = randomUUID();
+      const elimination = randomUUID();
+      const dueFrom = randomUUID();
+      const dueTo = randomUUID();
+      await db.execute(sql`
+        insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
+        values(${buyer},${org.orgId},${org.subsidiaryId},'Matching buyer','CAD','CA','{}'::jsonb,false,true,'{}'::jsonb),
+          (${elimination},${org.orgId},${org.subsidiaryId},'Matching elimination','CAD','CA','{}'::jsonb,true,true,'{}'::jsonb)`);
+      for (const [id, number, type] of [
+        [dueFrom, "1997", "asset_current_other"],
+        [dueTo, "2997", "liability_current_other"],
+      ]) {
+        await db.execute(sql`
+          insert into accounts(id,org_id,number,name,type,is_summary,is_active,eliminate,reconcilable,
+            required_dimensions,custom,subsidiary_include_children)
+          values(${id},${org.orgId},${number},${number},${type},false,true,true,false,'[]'::jsonb,'{}'::jsonb,true)`);
+      }
+      await db.execute(sql`
+        insert into intercompany_pairs(org_id,from_subsidiary_id,to_subsidiary_id,due_from_account_id,due_to_account_id)
+        values(${org.orgId},${org.subsidiaryId},${buyer},${dueFrom},${dueTo})`);
+      const sellerCategory = randomUUID();
+      const buyerCategory = randomUUID();
+      const assetId = randomUUID();
+      for (const [id, name, attributes] of [
+        [sellerCategory, "Book-only matching seller", {}],
+        [buyerCategory, "MACRS matching buyer", { us_macrs_class: "gds_5" }],
+      ] as const) {
+        await db.execute(sql`
+          insert into asset_categories(id,org_id,name,asset_account_id,accumulated_depreciation_account_id,
+            depreciation_expense_account_id,gain_loss_account_id,default_method,default_life_months,
+            default_convention,tax_attributes)
+          values(${id},${org.orgId},${name},${org.accounts.invAsset},${org.accounts.clearing},
+            ${org.accounts.adjustment},${org.accounts.adjustment},'straight_line',60,'full_month',
+            ${JSON.stringify(attributes)}::jsonb)`);
+      }
+      await db.execute(sql`
+        insert into tax_regimes(org_id,code,name,country_code,calculation_model,class_attribute,is_active)
+        values(${org.orgId},'us_macrs','United States MACRS','US','macrs','us_macrs_class',true)`);
+      await db.execute(sql`
+        insert into fixed_assets(id,org_id,subsidiary_id,category_id,asset_number,name,status,
+          acquired_on,in_service_on,acquisition_cost,salvage_value,useful_life_months)
+        values(${assetId},${org.orgId},${org.subsidiaryId},${sellerCategory},${`MATCH-${assetId}`},
+          'Example 4 matching source','in_service','2023-01-01','2023-01-01',100,0,60)`);
+      await buildSchedule(assetId, org.orgId, actors.submitterId, org.bookId);
+      const transferId = await proposeAssetChange(org.orgId, assetId, actors.submitterId, {
+        operation: "intercompany_transfer",
+        effectiveOn: "2025-08-20",
+        reason: "Sell the asset inside the consolidated group",
+        assessment: "Example 4 taxable intercompany sale with §168(i)(7) carryover and excess",
+        idempotencyKey: randomUUID(),
+        portion: { percent: "100" },
+        proceeds: "130",
+        proceedsAccountId: dueFrom,
+        transfer: {
+          subsidiaryId: buyer,
+          categoryId: buyerCategory,
+          assetNumber: `RECV-${assetId}`,
+          name: "Received Example 4 asset",
+          buyerAmount: "130",
+          buyerSalvage: "0",
+          lifeMonths: 60,
+          payableAccountId: dueTo,
+          eliminationSubsidiaryId: elimination,
+          sellerToGroupRate: "1",
+          buyerToGroupRate: "1",
+          sellerToBuyerRate: "1",
+          ctaAccountId: org.accounts.fxGainLoss,
+          groupAssetAccountId: org.accounts.invAsset,
+          groupAccumulatedAccountId: org.accounts.clearing,
+          groupDepreciationAccountId: org.accounts.adjustment,
+          groupGainLossAccountId: org.accounts.recognized,
+          taxRatePercent: "25",
+          deferredTaxAccountId: org.accounts.deferred,
+          taxExpenseAccountId: org.accounts.fxGainLoss,
+          exchangeRateEvidence: "Both legal entities and group report CAD at a rate of one",
+          groupAssessment: "Preserve the original book cost and eliminate the internal margin",
+        },
+      });
+      await approveChange(org, actors, transferId);
+      await applyAssetChange(org.orgId, transferId, actors.submitterId);
+      for (const [subsidiaryId, years] of [
+        [org.subsidiaryId, [2023, 2024, 2025]],
+        [buyer, [2025]],
+      ] as const) {
+        for (const year of years) {
+          await ensureTaxYearWindow(db, org.orgId, actors.submitterId, {
+            subsidiaryId,
+            regime: "us_macrs",
+            yearStart: `${year}-01-01`,
+            yearEnd: `${year}-12-31`,
+            filingYear: year,
+            reason: "Declared statutory calendar year for matching run",
+          });
+        }
+      }
+      const source = (await listTaxAssetBasisSources(org.orgId, assetId, actors.submitterId))
+        .sources.find((row) => row.sourceChangeId === transferId);
+      assert.ok(source, "the applied book transfer must be a tax source");
+      const taxId = await proposeTaxAssetBasis(org.orgId, assetId, actors.submitterId, {
+        sourceChangeId: transferId,
+        reason: "Record the Example 4 consolidated matching sale",
+        assessment: "Taxable §168(i)(7) carryover 80 and excess 50 with membership 130-80 opening 50",
+        idempotencyKey: randomUUID(),
+        regimes: [{
+          regime: "us_macrs",
+          relationship: "non_arms_length",
+          recognition: "taxable",
+          relatedPerson: true,
+          section168i7Kind: "consolidated_group",
+          originalUnadjustedBasis: "100.00",
+          placedInServiceOn: "2023-01-01",
+          recoveryPeriodYears: "5",
+          method: "200_db",
+          convention: "half_year",
+          section179: "0",
+          bonusPercent: "0",
+          businessUsePercent: "100",
+          priorDepreciation: "20.00",
+          carryoverBasis: "80.00",
+          excessBasis: "50.00",
+          sellerAdjustedBasis: "80.00",
+          statutoryProceeds: "130.00",
+          amountRealizedRule: "amount_realized",
+          buyerCost: "130.00",
+          buyerPlacedInServiceOn: "2025-08-20",
+          buyerRecoveryPeriodYears: "5",
+          buyerMethod: "200_db",
+          buyerConvention: "half_year",
+          consolidatedGroupMembership: {
+            groupKey: "example-4-group",
+            sellerSubsidiaryId: org.subsidiaryId,
+            buyerSubsidiaryId: buyer,
+            effectiveOn: "2025-08-20",
+            throughOn: "2026-12-31",
+          },
+        }],
+      });
+      await approveChange(org, actors, taxId);
+      await applyTaxAssetBasis(org.orgId, taxId, actors.submitterId);
+      const result = await runTaxPool(org.orgId, org.bookId, buyer, "us_macrs", 2025, {
+        yearStart: "2025-01-01",
+        yearEnd: "2025-12-31",
+        actorId: actors.submitterId,
+      });
+      assert.ok(result.consolidatedMatching.length >= 2, "carryover and excess must both match");
+      const openings = result.consolidatedMatching.map((row) => row.deferredOpening);
+      const recomputed = result.consolidatedMatching.map((row) => row.recomputedDeduction);
+      const openingSum = formatMoney(openings.reduce((sum, amount) => add(sum, amount), "0"), 4);
+      assert.equal(openingSum, "50.0000");
+      assert.ok(recomputed.includes("0.00") || recomputed.includes("0.0000"));
+      assert.ok(
+        !recomputed.every((amount) => amount === recomputed[0]),
+        "carryover and excess must not manufacture two identical seller counterfactuals",
+      );
+      const window = (
+        await db.execute<{ id: string }>(sql`
+          select id from tax_year_windows
+           where org_id=${org.orgId} and subsidiary_id=${buyer}
+             and regime='us_macrs' and year_start='2025-01-01'`)
+      ).rows[0];
+      assert.ok(window);
+      const citedDelete = await taxYearWindowDeleteProblem(db, org.orgId, window.id);
+      assert.match(citedDelete ?? "", /posted consolidated matching/);
+      assert.match(citedDelete ?? "", /cannot be deleted/);
+      const citedWrite = await taxYearWindowWriteProblem(db, org.orgId, {
+        id: window.id,
+        yearEnd: "2025-11-30",
+        reason: "attempted rewrite of a matching year",
+      });
+      assert.match(citedWrite ?? "", /posted consolidated matching/);
+      assert.match(citedWrite ?? "", /dates are frozen/);
+      await ensureTaxYearWindow(db, org.orgId, actors.submitterId, {
+        subsidiaryId: buyer,
+        regime: "us_macrs",
+        yearStart: "2026-01-01",
+        yearEnd: "2026-12-31",
+        filingYear: 2026,
+        reason: "Declared the later matching year so 2025 must be replayed",
+      });
+      const later = await runTaxPool(org.orgId, org.bookId, buyer, "us_macrs", 2026, {
+        yearStart: "2026-01-01",
+        yearEnd: "2026-12-31",
+        actorId: actors.submitterId,
+      });
+      assert.ok(later.consolidatedMatching.length >= 2, "later-year matching must keep both receiving vintages");
+      const laterOpenings = formatMoney(
+        later.consolidatedMatching.reduce((sum, row) => add(sum, row.deferredOpening), "0"),
+        4,
+      );
+      assert.notEqual(laterOpenings, "50.0000", "year two must start from posted closings, not the paper opening");
+      const reversalId = await proposeTaxAssetBasisReversal(
+        org.orgId,
+        taxId,
+        actors.submitterId,
+        {
+          reason: "Replace the Example 4 workpaper after the later pool year",
+          idempotencyKey: randomUUID(),
+        },
+      );
+      await approveChange(org, actors, reversalId);
+      await applyTaxAssetBasisReversal(org.orgId, reversalId, actors.submitterId);
+      const replacementId = await proposeTaxAssetBasis(org.orgId, assetId, actors.submitterId, {
+        sourceChangeId: transferId,
+        reason: "Replacement Example 4 paper after the later computed year",
+        assessment: "Taxable §168(i)(7) carryover 80 and excess 50 with membership 130-80 opening 50",
+        idempotencyKey: randomUUID(),
+        regimes: [{
+          regime: "us_macrs",
+          relationship: "non_arms_length",
+          recognition: "taxable",
+          relatedPerson: true,
+          section168i7Kind: "consolidated_group",
+          originalUnadjustedBasis: "100.00",
+          placedInServiceOn: "2023-01-01",
+          recoveryPeriodYears: "5",
+          method: "200_db",
+          convention: "half_year",
+          section179: "0",
+          bonusPercent: "0",
+          businessUsePercent: "100",
+          priorDepreciation: "20.00",
+          carryoverBasis: "80.00",
+          excessBasis: "50.00",
+          sellerAdjustedBasis: "80.00",
+          statutoryProceeds: "130.00",
+          amountRealizedRule: "amount_realized",
+          buyerCost: "130.00",
+          buyerPlacedInServiceOn: "2025-08-20",
+          buyerRecoveryPeriodYears: "5",
+          buyerMethod: "200_db",
+          buyerConvention: "half_year",
+          consolidatedGroupMembership: {
+            groupKey: "example-4-group",
+            sellerSubsidiaryId: org.subsidiaryId,
+            buyerSubsidiaryId: buyer,
+            effectiveOn: "2025-08-20",
+            throughOn: "2026-12-31",
+          },
+        }],
+      });
+      await approveChange(org, actors, replacementId);
+      await applyTaxAssetBasis(org.orgId, replacementId, actors.submitterId);
+      await assert.rejects(
+        () => proposeTaxAssetBasisReversal(
+          org.orgId,
+          replacementId,
+          actors.submitterId,
+          {
+            reason: "Skip required matching replay before reversing the replacement",
+            idempotencyKey: randomUUID(),
+          },
+        ),
+        (error: unknown) =>
+          error instanceof TaxAssetBasisError
+          && /apply tax_matching_replay/.test(error.message)
+          && /do not skip a generation/.test(error.message),
+      );
+      const preview = await previewTaxMatchingReplay(org.orgId, actors.submitterId, replacementId);
+      assert.ok(preview.citedHistoricalPeriodIds.length >= 2, "carryover and excess 2025 rows must both be cited");
+      assert.equal(preview.replacementOpening, "50.0000");
+      const replayedOpening = formatMoney(
+        preview.replayedPeriods
+          .filter((row) => row.yearStart === "2025-01-01")
+          .reduce((sum, row) => add(sum, row.deferredOpening), "0"),
+        4,
+      );
+      assert.equal(replayedOpening, "50.0000");
+      const replayId = await proposeTaxMatchingReplay(org.orgId, actors.submitterId, {
+        replacementWorkpaperChangeId: replacementId,
+        citedHistoricalPeriodIds: preview.citedHistoricalPeriodIds,
+        reason: "Replay the cited 2025 matching years onto the replacement",
+        idempotencyKey: randomUUID(),
+      });
+      await approveChange(org, actors, replayId);
+      const appliedReplay = await applyTaxMatchingReplay(org.orgId, replayId, actors.submitterId);
+      assert.equal(appliedReplay.replayedPeriodIds.length, preview.citedHistoricalPeriodIds.length);
+      const persisted = (
+        await db.execute<{ deferred_opening: string }>(sql`
+          select deferred_opening::text
+            from tax_consolidated_matching_periods
+           where org_id=${org.orgId}
+             and workpaper_id=${preview.replacementWorkpaperId}
+             and replay_change_id=${replayId}
+           order by vintage_key`)
+      ).rows;
+      assert.equal(persisted.length, preview.citedHistoricalPeriodIds.length);
+      assert.equal(
+        formatMoney(persisted.reduce((sum, row) => add(sum, row.deferred_opening), "0"), 4),
+        "50.0000",
+      );
+      const afterReplay = await proposeTaxAssetBasisReversal(
+        org.orgId,
+        replacementId,
+        actors.submitterId,
+        {
+          reason: "Reverse the replacement after its required matching replay",
+          idempotencyKey: randomUUID(),
+        },
+      );
+      assert.ok(afterReplay);
+    });
   } finally {
     await dropScratchOrg(org.orgId);
   }

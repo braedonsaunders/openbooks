@@ -1763,7 +1763,9 @@
         "classes": "税務クラス",
         "firstYear": "初年度ルール",
         "methods": "方法",
-        "books": "帳簿ポリシー"
+        "books": "帳簿ポリシー",
+        "cessation": "適格活動",
+        "years": "税務年度"
       },
       "packsTitle": "国別減価償却パック",
       "packsDescription": "パックをインストールすると、編集可能なテナント設定が作成されます。既存の上書き設定が置き換えられることはありません。",
@@ -1801,6 +1803,14 @@
         "assignments": {
           "title": "資産カテゴリの割り当て",
           "description": "税務属性で各資産カテゴリを税制クラスに割り当てます。"
+        },
+        "cessation": {
+          "title": "CAA 55(4) の終了",
+          "description": "英国の適格活動が終了した日を記録します。balancing allowance はこの日以降にのみ生じます。最後の資産を処分しただけでは終了になりません。"
+        },
+        "years": {
+          "title": "税務年度",
+          "description": "法人・税制ごとに税務年度の日付と理由を登録します。"
         }
       }
     },
@@ -2644,6 +2654,16 @@
         "description": "保持ルール：期限に応じて匿名化または削除。",
         "singularTitle": "保持ルール",
         "title": "保持ルール"
+      },
+      "tax-qualifying-activity-cessations": {
+        "title": "適格活動の終了",
+        "singularTitle": "適格活動の終了",
+        "description": "CAA 55(4) に基づき、法人ごとの英国適格活動の終了日を記録します。balancing allowance はこの日以降にのみ生じます。プールが空であることだけでは足りません。"
+      },
+      "tax-year-windows": {
+        "title": "税務年度",
+        "singularTitle": "税務年度",
+        "description": "法人・税制ごとに短期事業年度を含む税務年度の開始日と終了日を登録してください。各期間の理由が必要です。計算に使用済みの日付は保持されます。"
       }
     },
     "fields": {
@@ -3028,7 +3048,10 @@
       "retroThreshold": "遡及しきい値",
       "cohortKey": "コホート",
       "biasTerms": "配慮語句",
-      "reviewMonths": "レビュー周期（月）"
+      "reviewMonths": "レビュー周期（月）",
+      "yearStart": "年度開始日",
+      "yearEnd": "年度終了日",
+      "filingYear": "申告年度の表示名"
     },
     "fieldHelp": {
       "gapless": "欠番なしとは、連番のすべての番号が記録され、番号が飛ばないことを意味します。法令または監査要件で途切れない採番が必要な場合にのみ有効にしてください。",

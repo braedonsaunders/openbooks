@@ -38,6 +38,7 @@ import { Pagination } from '../../../components/pagination'
 import { JournalEntryLink } from '../../../components/journal-entry-link'
 import { confirmDialog } from '../../../lib/confirm'
 import { GroupValuationButton } from './GroupValuationButton'
+import { TaxBasisButton } from './TaxBasisButton'
 import { AssetChangeButton } from './AssetChangeButton'
 import { DisposeButton } from './DisposeButton'
 import { RemeasureButton } from './RemeasureButton'
@@ -460,7 +461,7 @@ export function AssetDrawer({
     footer={<div className="flex w-full items-center gap-3"><span className={cn('text-xs', saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')}>{mode === 'edit' ? saveState === 'saving' ? tCommon('actions.saving') : dirty ? t('drawer.unsavedChanges') : null : null}</span><span className="flex-1" /><span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">{t('labels.cost')} {money(payload.totals.remainingCost)} · {t('labels.accumulated')} {money(payload.totals.accumulated)} · <strong className="text-slate-900 dark:text-slate-100">{t('labels.nbv')} {money(payload.totals.netBookValue)}</strong></span></div>}
   >
     {tab === 'details' ? <div className="p-1"><HeaderFields layout={effectiveLayout} editable={editable} renderField={renderAssetField} /></div> : null}
-    {tab === 'tax' ? <div className="space-y-5 p-1">{taxConfigurations.map((config) => {
+    {tab === 'tax' ? <div className="space-y-5 p-1">{canManage ? <TaxBasisButton assetId={a.id} /> : null}{taxConfigurations.map((config) => {
       const values = taxValues[config.code] ?? {}
       const categoryDefault = payload.category?.tax_attributes?.[config.class_attribute]
       return <section key={config.code} className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">

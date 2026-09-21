@@ -473,6 +473,10 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // 0238 is a HOLE reserved for the payroll giro renumber, not free).
     "0241_hrm_party_reference_integrity.sql",
     "0236_jl_check_account_evidence_stamp.sql",
+    "0233_tax_asset_basis_workpapers.sql",
+    "0234_tax_year_windows.sql",
+    "0235_tax_year_window_citations.sql",
+    "0239_tax_consolidated_matching_periods.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -964,6 +968,60 @@ test("effective-date overlap guards are exclusion constraints, not racy triggers
   assert.ok(firstRepair >= 0 && firstRepair < firstConstraint);
   assert.match(migration, /consolidation-used policies % and % overlap/);
   assert.match(migration, /RAISE NOTICE 'fair_value_prices repair/);
+});
+
+test("tax year windows exclude overlapping dates per legal entity and regime", () => {
+  const migration = readFileSync("schema/migrations/generated/0234_tax_year_windows.sql", "utf8");
+  assert.match(migration, /CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA public/);
+  assert.match(migration, /ADD CONSTRAINT tax_year_windows_no_overlap\s+EXCLUDE USING gist/);
+  assert.match(migration, /org_id WITH =/);
+  assert.match(migration, /subsidiary_id WITH =/);
+  assert.match(migration, /regime WITH =/);
+  assert.match(migration, /daterange\(year_start, year_end, '\[\]'\) WITH &&/);
+  assert.match(migration, /UNIQUE \(org_id, subsidiary_id, regime, year_start\)/);
+  assert.match(migration, /DROP INDEX IF EXISTS tax_pool_periods_identity/);
+  assert.match(migration, /ON tax_pool_periods \(org_id, pool_id, tax_year_window_id\)/);
+  assert.doesNotMatch(migration, /fiscal_calendars|accounting_periods|tax_provision_runs/);
+});
+
+test("1.1502-13 matching periods are unique per receiving workpaper, vintage and tax year", () => {
+  const migration = readFileSync("schema/migrations/generated/0239_tax_consolidated_matching_periods.sql", "utf8");
+  assert.match(migration, /UNIQUE \(org_id, workpaper_id, vintage_key, tax_year_window_id\)/);
+  assert.match(
+    migration,
+    /ON tax_consolidated_matching_periods\(org_id,workpaper_id,vintage_key,tax_year_window_id\)/,
+  );
+  assert.doesNotMatch(migration, /UNIQUE \(org_id, vintage_key, tax_year_window_id\)/);
+  assert.doesNotMatch(
+    migration,
+    /ON tax_consolidated_matching_periods\(org_id,vintage_key,tax_year_window_id\)/,
+  );
+  assert.match(migration, /replay_change_id uuid/);
+  assert.match(
+    migration,
+    /CHECK \(\(prior_matching_period_id IS NULL\)=\(replay_change_id IS NULL\)\)/,
+  );
+  assert.match(migration, /NEW\.id,NEW\.org_id,NEW\.created_at,NEW\.created_by/);
+  assert.match(migration, /OLD\.id,OLD\.org_id,OLD\.created_at,OLD\.created_by/);
+  assert.match(
+    migration,
+    /SELECT DISTINCT x FROM unnest\(ARRAY\[\s*NEW\.seller_subsidiary_id,\s*NEW\.buyer_subsidiary_id,\s*window_owner\s*\]\)/,
+  );
+  assert.match(migration, /ORDER BY 1/);
+  assert.match(migration, /OpenBooks forward migration 0239_tax_consolidated_matching_periods/);
+  assert.match(migration, /payload->>'replacementWorkpaperId'/);
+  assert.match(migration, /payload->>'replacementWorkpaperChangeId'/);
+  assert.match(migration, /citedHistoricalPeriodIds/);
+  assert.match(migration, /before_state->'replayedPeriods'/);
+  assert.match(migration, /before_state->'membership'->>'groupKey'/);
+  assert.match(migration, /before_state->'membership'->>'sellerSubsidiaryId'/);
+  assert.match(migration, /before_state->'membership'->>'buyerSubsidiaryId'/);
+  assert.match(migration, /prior_row.parent_key IS DISTINCT FROM NEW.parent_key/);
+  assert.match(migration, /registered.regime IS DISTINCT FROM 'us_macrs'/);
+  assert.match(migration, /registered.subsidiary_id IS DISTINCT FROM NEW.buyer_subsidiary_id/);
+  assert.match(migration, /tax_matching_generation_repair/);
+  assert.match(migration, /reversed_by_change_id IS NOT NULL/);
+  assert.match(migration, /same-org unrelated approved replay is not authorization/);
 });
 
 test("one effective tax-rate window per tax code is enforced by storage, not by the racy trigger read", () => {

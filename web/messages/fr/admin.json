@@ -1446,7 +1446,9 @@
         "classes": "Classes fiscales",
         "firstYear": "Règles de première année",
         "methods": "Méthodes",
-        "books": "Politiques par livre"
+        "books": "Politiques par livre",
+        "cessation": "Activité admissible",
+        "years": "Exercices fiscaux"
       },
       "packsTitle": "Packs d’amortissement par pays",
       "packsDescription": "L’installation d’un pack crée une configuration locataire modifiable. Les remplacements existants ne sont jamais remplacés.",
@@ -1484,6 +1486,14 @@
         "assignments": {
           "title": "Affectations par catégorie d’actifs",
           "description": "Affectez chaque catégorie d’actifs à une classe de régime dans les attributs fiscaux."
+        },
+        "cessation": {
+          "title": "Cessation CAA 55(4)",
+          "description": "Enregistrez la date à laquelle une activité admissible britannique cesse pour qu’une balancing allowance soit disponible. Céder le dernier actif n’est pas une cessation."
+        },
+        "years": {
+          "title": "Exercices fiscaux",
+          "description": "Déclarez les dates et le motif de chaque exercice par entité juridique et régime."
         }
       }
     },
@@ -2531,6 +2541,16 @@
         "description": "Règles de conservation : anonymiser ou supprimer selon le calendrier.",
         "singularTitle": "Règle de conservation",
         "title": "Règles de conservation"
+      },
+      "tax-qualifying-activity-cessations": {
+        "title": "Cessations d’activité admissible",
+        "singularTitle": "Cessation d’activité admissible",
+        "description": "Cessation à date d’effet d’une activité admissible britannique par entité juridique, selon CAA 55(4). La balancing allowance n’existe qu’après cette date ; vider le groupe ne suffit pas."
+      },
+      "tax-year-windows": {
+        "title": "Exercices fiscaux",
+        "singularTitle": "Exercice fiscal",
+        "description": "Déclarez les dates des exercices par entité juridique et régime, y compris les exercices courts. Indiquez leur motif ; les dates déjà utilisées dans un calcul sont conservées."
       }
     },
     "fields": {
@@ -2915,7 +2935,10 @@
       "retroThreshold": "Seuil rétroactif",
       "cohortKey": "Cohorte",
       "biasTerms": "Termes sensibles",
-      "reviewMonths": "Cadence (mois)"
+      "reviewMonths": "Cadence (mois)",
+      "yearStart": "Début de l’exercice",
+      "yearEnd": "Fin de l’exercice",
+      "filingYear": "Libellé de l’année déclarative"
     },
     "fieldHelp": {
       "gapless": "Sans rupture signifie que chaque numéro de la séquence doit être justifié, sans aucun numéro sauté. Activez cette option uniquement si vos obligations légales ou d’audit imposent une numérotation ininterrompue.",
