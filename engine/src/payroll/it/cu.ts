@@ -19,7 +19,17 @@
  *   channels is outside what this pack computes.
  * - Punto 21 — "va indicato il totale delle ritenute d'acconto ... quello
  *   che risulta dalle operazioni di conguaglio": the summed income_tax
- *   lines actually withheld on the year's committed stubs.
+ *   lines actually withheld on the year's committed stubs. That sum IS the
+ *   conguaglio total when the conguaglio was settled through payroll (a
+ *   December adjustment committed like any other run lands in this sum) and
+ *   is identical to it for full-year level pay, which is this pack's modeled
+ *   scope. What the product never does is COMPUTE the art. 23 DPR 600/1973
+ *   year-end conguaglio (actual annual income, giorni, spettante
+ *   detrazioni) — for a non-level year the sostituto must settle it in pay
+ *   first, said on the slip. Certifying the withheld sum rather than a
+ *   recomputed liability is deliberate: only moved money reconciles to the
+ *   F24 payments, and a "correct" liability nobody withheld would be the
+ *   false figure.
  * - Punto 22 — "l'addizionale regionale all'IRPEF dovuta ... sul totale dei
  *   redditi di lavoro dipendente e assimilati certificati": the summed
  *   regional_surtax lines. Tenant-deliberated rates, so the figure reports
@@ -177,6 +187,7 @@ function cuSlipNotes(slip: CuSlip): string[] {
     "Addizionale comunale (CU punti 26/27/29) not shown: the engine computes the annual surtax as one figure and the acconto/saldo split is not modelled — settle it from the F24 payments.",
     "Punti 23/24/25/28 (prior years and cessations) not shown: they belong to other years or to cessation-time withholding, not to this year's committed runs.",
     "Imposta lorda and detrazioni (punti 361/367/368/374/375) not shown: an annual conguaglio computation, not a sum of stub lines — the certificate reports what was withheld (punto 21).",
+    "Punto 21 is the IRPEF withheld on the committed runs, conguaglio included only if settled in pay: the art. 23 DPR 600/1973 year-end conguaglio is not computed by this product — verify it before transmitting and, if it moves the withholding, settle it in pay and re-certify.",
     "Giorni and rapporto dates (punti 6/8/9/10/11) not shown: the engine carries no detrazione-day counts or employment dates — take them from the employment relationship.",
     "INPS matricola (Sezione 1 punto 1) not shown: the employer's INPS position, not payroll data — enter it from the INPS registration.",
     "Codice fiscale del percipiente not shown: the national identifier is sealed in the payroll engine and never leaves it — carry it onto the transmitted CU from the anagrafica at render time.",
