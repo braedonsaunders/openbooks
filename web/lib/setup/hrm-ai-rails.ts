@@ -13,6 +13,11 @@ import type { SetupEntity } from './registry'
 export const AI_RAILS_SETTINGS_ENTITY: SetupEntity = {
   key: 'ai-rails-settings',
   table: 'ai_rails_settings',
+  // The singleton is keyed by the org itself -- 0232 gives the table
+  // org_id as its PRIMARY KEY and no id column at all. Without this the
+  // generic setup reader selects and orders by "id" and /admin/ai throws
+  // before it renders anything.
+  idColumn: 'org_id',
   groupKey: 'workforce',
   featureKey: 'aiGovernanceLedger',
   rehomed: true, // section on the Admin → AI page

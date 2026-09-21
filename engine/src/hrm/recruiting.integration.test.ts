@@ -1401,11 +1401,26 @@ test("a public apply captures consents and records the posting source", { skip: 
       select kind from hrm_posting_events where org_id = ${orgId} and posting_id = ${posting.id}
        order by recorded_at`)).rows.map((row) => row.kind);
     assert.ok(kinds.includes("apply_received"), "the board ledger records the apply");
-    await assert.rejects(
-      applyViaPosting({ orgId, postingId: posting.id, displayName: "Public Applicant", email: "public@example.test" }),
-      /already applied/,
-      "one candidacy per opening",
-    );
+    // One candidacy per opening still holds, but a public applicant is
+    // NOT told they already applied: on an anonymous form a
+    // distinguishable refusal answers "is this person in your pipeline?"
+    // for any guessable email. The second apply writes nothing and looks
+    // exactly like the first from outside.
+    const again = await applyViaPosting({
+      orgId, postingId: posting.id, displayName: "Public Applicant", email: "public@example.test",
+    });
+    assert.equal(again.duplicate, true, "the service knows it is a duplicate even though the applicant is not told");
+    assert.equal(again.applicationId, applicationId, "no second candidacy is created");
+    const applications = (await db.execute<{ n: string }>(sql`
+      select count(*)::text as n from hrm_applications
+       where org_id = ${orgId} and candidate_id = ${candidateId}`)).rows[0]?.n;
+    assert.equal(applications, "1", "one candidacy per opening");
+    // The hiring team still sees the attempt: the posting ledger is
+    // staff-only, so recording it there leaks nothing to the applicant.
+    const afterKinds = (await db.execute<{ kind: string }>(sql`
+      select kind from hrm_posting_events where org_id = ${orgId} and posting_id = ${posting.id}
+       order by recorded_at`)).rows.map((row) => row.kind);
+    assert.ok(afterKinds.includes("apply_duplicate"), "the duplicate attempt is recorded for staff");
   });
 });
 // HR-18 end
