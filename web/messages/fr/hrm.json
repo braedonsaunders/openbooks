@@ -666,6 +666,91 @@
       "email": "E-mail",
       "phone": "Téléphone",
       "source": "Origine"
+    },
+    "consent": {
+      "future_roles": "Futurs postes",
+      "talent_pool": "Vivier de talents",
+      "this_application": "Cette candidature"
+    },
+    "depth": {
+      "applies": "{count} candidatures",
+      "blinded": "Les autres s'ouvrent après votre envoi.",
+      "bookedSlots": "{count} réservés",
+      "close": "Fermer",
+      "columns": {
+        "applies": "Candidatures",
+        "board": "Site",
+        "candidate": "Candidat",
+        "job": "Poste",
+        "kind": "Type",
+        "members": "Membres",
+        "name": "Nom",
+        "requisition": "Besoin",
+        "scorecards": "Avis",
+        "signature": "Signature",
+        "slots": "Créneaux",
+        "status": "Statut",
+        "versions": "Versions",
+        "when": "Quand"
+      },
+      "consentTitle": "Consentements",
+      "dispositionLog": "Journal du site",
+      "empty": "Rien ici pour l'instant.",
+      "failed": "Enregistrement impossible.",
+      "kit": "Guide",
+      "matchToOpening": "Rapprocher du poste",
+      "members": "{count} membres",
+      "missing": "manquant",
+      "myScorecard": "Mon avis",
+      "others": "Avis du jury",
+      "overall": "Global",
+      "pause": "Suspendre",
+      "poolMembers": "Membres",
+      "proposedSlots": "{count} proposés",
+      "publish": "Publier",
+      "questions": "Questions",
+      "remove": "Retirer",
+      "retentionDate": "Conservation jusqu'au",
+      "scorecards": "{submitted}/{total} avis",
+      "sendLink": "Envoyer le lien de signature",
+      "signatureState": "Signature",
+      "slots": "Créneaux",
+      "submitScorecard": "Envoyer l'avis",
+      "summary": "Synthèse",
+      "tagsLabel": "Étiquettes (séparées par des virgules)",
+      "versionHistory": "Versions",
+      "versions": "{count} versions",
+      "voidSignature": "Annuler la signature"
+    },
+    "posting": {
+      "closed": "Fermée",
+      "draft": "Brouillon",
+      "error": "Erreur",
+      "paused": "Suspendue",
+      "published": "Publiée"
+    },
+    "postingEvent": {
+      "apply_received": "candidature reçue",
+      "closed": "fermée",
+      "disposition_sent": "décision transmise",
+      "error": "erreur",
+      "paused": "suspendue",
+      "published": "publiée"
+    },
+    "signature": {
+      "declined": "Refusée",
+      "sent": "Envoyée",
+      "signed": "Signée",
+      "unsigned": "Non signée",
+      "viewed": "Vue",
+      "voided": "Annulée"
+    },
+    "tabs": {
+      "interviews": "Entretiens",
+      "offers": "Offres",
+      "openings": "Besoins",
+      "pools": "Vivier",
+      "postings": "Sites"
     }
   },
   "performance": {
@@ -1798,5 +1883,24 @@
     "empty": "Aucune enquête ouverte.",
     "respond": "Répondre",
     "actionFailed": "Cette action a échoué."
+  },
+  "public": {
+    "book": {
+      "empty": "Aucun créneau libre.",
+      "kicker": "Planification des entretiens",
+      "title": "Réservez votre entretien, {name}"
+    },
+    "careers": {
+      "empty": "Aucun poste ouvert pour l'instant.",
+      "kicker": "Carrières · {org}",
+      "title": "Postes ouverts"
+    },
+    "offer": {
+      "alreadySigned": "Déjà signée. Merci.",
+      "closed": "Ce courrier est clos.",
+      "for": "pour {name}",
+      "kicker": "Offre",
+      "version": "version {version}"
+    }
   }
 }

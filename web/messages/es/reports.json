@@ -784,6 +784,30 @@
       "hrm_org_chart": {
         "label": "Organigrama",
         "description": "Una fila por empleo en servicio a la fecha del informe — nombre, cargo, departamento y responsable."
+      },
+      "hrm_interview_slots": {
+        "description": "Una fila por horario propuesto, reservado o rechazado, con ventana y tipo. Ni datos de contacto ni tokens salen de aquí.",
+        "label": "Horarios de entrevista"
+      },
+      "hrm_offers": {
+        "description": "Una fila por oferta con estado comercial, estado de firma y versión. Importes, cartas y evidencias nunca salen por informes.",
+        "label": "Ofertas"
+      },
+      "hrm_pool_members": {
+        "description": "Una fila por miembro de la reserva: reserva, nombre y alta. Solo nombres, nunca datos de contacto.",
+        "label": "Miembros de la reserva"
+      },
+      "hrm_postings": {
+        "description": "Una fila por publicación con estado más candidaturas y respuestas enviadas para medir cada portal (por portal, por vacante).",
+        "label": "Publicaciones"
+      },
+      "hrm_retention_runs": {
+        "description": "Una fila por evaluación de la regla con anonimizados, eliminados y prórrogas solicitadas.",
+        "label": "Ejecuciones de conservación"
+      },
+      "hrm_scorecards": {
+        "description": "Una fila por entrevista con los agregados del panel: enviados y tamaño más la distribución global. El detalle por evaluador nunca sale por informes.",
+        "label": "Veredictos"
       }
     },
     "columns": {
@@ -1725,6 +1749,65 @@
         "department": "Departamento",
         "manager": "Responsable",
         "employment_id": "Empleo (id)"
+      },
+      "hrm_interview_slots": {
+        "booked_on": "Reservado",
+        "candidate": "Candidato",
+        "ends_at": "Fin",
+        "kind": "Tipo",
+        "requisition": "Vacante",
+        "slot_id": "Horario (id)",
+        "starts_at": "Inicio",
+        "timezone": "Zona horaria"
+      },
+      "hrm_offers": {
+        "candidate": "Candidato",
+        "expires_on": "Vence",
+        "job_title": "Puesto",
+        "offer_id": "Oferta (id)",
+        "requisition": "Vacante",
+        "sent_on": "Enviada",
+        "signature_status": "Firma",
+        "signed_on": "Firmada",
+        "status": "Estado",
+        "version": "Versión"
+      },
+      "hrm_pool_members": {
+        "added_on": "Alta",
+        "candidate": "Candidato",
+        "note": "Nota",
+        "pool": "Reserva"
+      },
+      "hrm_postings": {
+        "applies": "Candidaturas",
+        "board": "Portal",
+        "closed_on": "Cierre",
+        "dispositions": "Respuestas",
+        "posting_id": "Publicación (id)",
+        "published_on": "Publicación",
+        "requisition": "Vacante",
+        "status": "Estado"
+      },
+      "hrm_retention_runs": {
+        "anonymized": "Anonimizados",
+        "deleted": "Eliminados",
+        "extensions": "Prórrogas",
+        "ran_at": "Ejecución",
+        "rule": "Regla",
+        "run_id": "Ejecución (id)"
+      },
+      "hrm_scorecards": {
+        "candidate": "Candidato",
+        "interview_id": "Entrevista (id)",
+        "kind": "Tipo",
+        "no": "No",
+        "panel": "Panel de evaluación",
+        "requisition": "Vacante",
+        "scheduled_on": "Programada",
+        "strong_no": "No rotundo",
+        "strong_yes": "Sí rotundo",
+        "submitted": "Enviados",
+        "yes": "Sí"
       }
     },
     "enumValues": {

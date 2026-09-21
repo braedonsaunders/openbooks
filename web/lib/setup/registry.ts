@@ -49,6 +49,16 @@ import {
   TIME_KIOSKS_ENTITY,
 } from './field-time'
 // HR-20 end
+// HR-18 begin: recruiting-depth Setup entities (rehomed onto /hrm/recruiting,
+// never the setup rail).
+  RECRUITING_INTERVIEWER_POOLS_ENTITY,
+  RECRUITING_KIT_ATTRIBUTES_ENTITY,
+  RECRUITING_KIT_QUESTIONS_ENTITY,
+  RECRUITING_KITS_ENTITY,
+  RECRUITING_OFFER_TEMPLATES_ENTITY,
+  RECRUITING_RETENTION_RULES_ENTITY,
+} from './hrm-recruiting'
+// HR-18 end
 
 export type SetupFieldKind =
   | 'text'
@@ -2917,6 +2927,16 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'minorUnits', kind: 'integer', required: true },
     ],
   },
+  // HR-18 begin: recruiting-depth configuration (0229), declared in
+  // ./hrm-recruiting.ts; rehomed onto /hrm/recruiting (kits + pools on the
+  // Interviews tab, offer templates on Offers, retention rules on Pools).
+  RECRUITING_KITS_ENTITY,
+  RECRUITING_KIT_ATTRIBUTES_ENTITY,
+  RECRUITING_KIT_QUESTIONS_ENTITY,
+  RECRUITING_INTERVIEWER_POOLS_ENTITY,
+  RECRUITING_OFFER_TEMPLATES_ENTITY,
+  RECRUITING_RETENTION_RULES_ENTITY,
+  // HR-18 end
 ]
 
 export const SETUP_ENTITY_BY_KEY = new Map(SETUP_ENTITIES.map((e) => [e.key, e]))

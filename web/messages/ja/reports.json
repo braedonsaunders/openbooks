@@ -784,6 +784,30 @@
       "hrm_org_chart": {
         "label": "組織図",
         "description": "基準日時点で在籍中の雇用ごとに1行 — 氏名、役職、部門、上司。"
+      },
+      "hrm_interview_slots": {
+        "description": "提案・予約・辞退の面接枠を1行ずつ。連絡先や予約トークンは外部に出ない。",
+        "label": "面接枠"
+      },
+      "hrm_offers": {
+        "description": "オファーを1行ずつ。業務状態・署名状態・版を持つ。金額・文面・署名証跡は出ない。",
+        "label": "オファー"
+      },
+      "hrm_pool_members": {
+        "description": "タレントプールの所属を1行ずつ。氏名のみ、連絡先は出ない。",
+        "label": "プール所属"
+      },
+      "hrm_postings": {
+        "description": "求人媒体の掲載を1行ずつ。応募数と結果通知数で媒体効果を測る。",
+        "label": "掲載"
+      },
+      "hrm_retention_runs": {
+        "description": "保持ルールの実行を1行ずつ。匿名化・削除・延長数を記録。",
+        "label": "保持実行"
+      },
+      "hrm_scorecards": {
+        "description": "面接を1行ずつ。提出数・人数と総合分布の集計のみ。評価者ごとの明細は出ない。",
+        "label": "評価集計"
       }
     },
     "columns": {
@@ -1725,6 +1749,65 @@
         "department": "部門",
         "manager": "上司",
         "employment_id": "雇用 (ID)"
+      },
+      "hrm_interview_slots": {
+        "booked_on": "予約日",
+        "candidate": "候補者",
+        "ends_at": "終了",
+        "kind": "形式",
+        "requisition": "求人",
+        "slot_id": "枠 (ID)",
+        "starts_at": "開始",
+        "timezone": "タイムゾーン"
+      },
+      "hrm_offers": {
+        "candidate": "候補者",
+        "expires_on": "期限",
+        "job_title": "職種",
+        "offer_id": "オファー (ID)",
+        "requisition": "求人",
+        "sent_on": "送付日",
+        "signature_status": "署名",
+        "signed_on": "署名日",
+        "status": "状態",
+        "version": "版"
+      },
+      "hrm_pool_members": {
+        "added_on": "登録日",
+        "candidate": "候補者",
+        "note": "備考",
+        "pool": "プール"
+      },
+      "hrm_postings": {
+        "applies": "応募数",
+        "board": "媒体",
+        "closed_on": "終了日",
+        "dispositions": "結果通知数",
+        "posting_id": "掲載 (ID)",
+        "published_on": "公開日",
+        "requisition": "求人",
+        "status": "状態"
+      },
+      "hrm_retention_runs": {
+        "anonymized": "匿名化数",
+        "deleted": "削除数",
+        "extensions": "延長数",
+        "ran_at": "実行日時",
+        "rule": "ルール",
+        "run_id": "実行 (ID)"
+      },
+      "hrm_scorecards": {
+        "candidate": "候補者",
+        "interview_id": "面接 (ID)",
+        "kind": "形式",
+        "no": "不採用",
+        "panel": "面接官数",
+        "requisition": "求人",
+        "scheduled_on": "予定日",
+        "strong_no": "強い不採用",
+        "strong_yes": "強い採用",
+        "submitted": "提出数",
+        "yes": "採用"
       }
     },
     "enumValues": {

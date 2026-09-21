@@ -28,9 +28,30 @@ import {
 import { hrmGroupTabs } from '../../../../components/module-home/group-tabs'
 import { can, requirePermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
+import { SETUP_ENTITY_BY_KEY } from '../../../../lib/setup/registry'
 import { rootSubsidiaryId, subsidiaryUiOptions } from '../../../../lib/subsidiaries'
 import type { RecruitingCreateProps } from './RecruitingCreateForm'
 import type { CandidateDrawerData, OfferDrawerData, RequisitionDrawerData } from './sections'
+import {
+  depthTabOptions,
+  hrefForDepth,
+  loadInterviewDrawer,
+  loadInterviewsTab,
+  loadConsentStatus,
+  loadOfferDrawerExtra,
+  loadOffersTab,
+  loadPostingDrawerExtra,
+  loadPostingsTab,
+  loadPoolDrawer,
+  loadPoolsTab,
+  resolveDepthTab,
+  type DepthTab,
+  type InterviewDrawer,
+  type OfferDrawerExtra,
+  type PostingDrawerExtra,
+  type PoolDrawer,
+  type ConsentStatus,
+} from './depth-view'
 
 /**
  * Recruiting tab: requisitions as a shared `table` block with `filter-chips`
@@ -88,6 +109,14 @@ export interface RecruitingPageData {
   empty: string
   totalLabel: string
   totals: { headcount: string; filled: string }
+  // HR-18: sub-tab strip + depth table payload (null on Openings).
+  tab: DepthTab
+  depthTabs: { value: string; label: string; href: string }[]
+  depthRows: { id: string; href: string; [key: string]: string }[] | null
+  depthColumns: Record<string, string> | null
+  depthEmpty: string
+  /** Registry keys of the Setup sections rehomed under this tab (feature-gated). */
+  setupSections: string[]
   drawerOpen: boolean
   drawer: {
     closeHref: string
@@ -96,6 +125,12 @@ export interface RecruitingPageData {
     requisition: RequisitionDrawerData | null
     candidate: CandidateDrawerData | null
     offer: OfferDrawerData | null
+    // HR-18: depth drawer payloads (null unless their param opened).
+    interview: InterviewDrawer | null
+    offerExtra: OfferDrawerExtra | null
+    postingExtra: PostingDrawerExtra | null
+    pool: PoolDrawer | null
+    consents: ConsentStatus | null
     missingDetail: string | null
     create?: RecruitingCreateProps | null
   } | null
@@ -119,6 +154,39 @@ function statusVariant(status: string): RecruitingRow['statusVariant'] {
   }
 }
 
+/**
+ * HR-18 depth table: one linked first column plus text cells, with badge
+ * chips for the known status fields (scorecards, signature, status). The
+ * rows are loader-resolved through the depth services, so the table binds
+ * fields exactly like the openings table above it.
+ */
+function depthTable(data: RecruitingPageData) {
+  const columns = data.depthColumns ?? {}
+  const keys = Object.keys(columns)
+  const [first, ...rest] = keys
+  const chipKey = (key: string): string | null => {
+    if (key === 'scorecards') return 'scorecardsVariant'
+    if (key === 'signature') return 'signatureVariant'
+    if (key === 'status') return 'statusVariant'
+    return null
+  }
+  return table({
+    variant: 'app',
+    rows: f('depthRows'),
+    rowKey: item('id'),
+    empty: { title: f('depthEmpty') },
+    columns: [
+      ...(first ? [column(columns[first]!, link(item(first), item('href')))] : []),
+      ...rest.map((key) => {
+        const variantKey = chipKey(key)
+        return variantKey
+          ? column(columns[key]!, badge(item(key), { variant: item(variantKey) }))
+          : column(columns[key]!, text(item(key), { fallback: '—' }))
+      }),
+    ],
+  })
+}
+
 export function recruitingSpec(data: RecruitingPageData): PageSpec {
   return page({
     route: '/hrm/recruiting',
@@ -139,14 +207,32 @@ export function recruitingSpec(data: RecruitingPageData): PageSpec {
     ],
     body: [
       grid('flex h-full min-h-0 flex-col gap-4', [
+        // HR-18: the route sub-tab strip (Openings + the enabled depth
+        // tabs) rides the same filter-chips widget as the status segments —
+        // same component, never a fork.
         widgetBlock('filter-chips', {
           basePath: '/hrm/recruiting',
-          currentParams: data.currentParams,
-          paramKey: 'status',
+          currentParams: { tab: data.tab },
+          paramKey: 'tab',
           label: data.segmentsLabel,
-          allLabel: data.allLabel,
-          options: data.segmentOptions,
+          hideAll: true,
+          defaultValue: 'openings',
+          options: data.depthTabs,
         }),
+        ...(data.tab === 'openings'
+          ? [
+              widgetBlock('filter-chips', {
+                basePath: '/hrm/recruiting',
+                currentParams: data.currentParams,
+                paramKey: 'status',
+                label: data.segmentsLabel,
+                allLabel: data.allLabel,
+                options: data.segmentOptions,
+              }),
+            ]
+          : []),
+        ...(data.tab === 'openings'
+          ? [
         table({
           variant: 'app',
           rows: f('rows'),
@@ -176,6 +262,20 @@ export function recruitingSpec(data: RecruitingPageData): PageSpec {
             column(data.columns.status, badge(item('statusLabel'), { variant: item('statusVariant') })),
           ],
         }),
+            ]
+          : [depthTable(data)],
+        // HR-18: the Setup lists rehomed under this tab (kits + pools on
+        // Interviews, templates on Offers, retention rules on Pools) ride
+        // the shared setup-section widget — same component as Compliance,
+        // never a fork. Boards ride the existing sync-connections
+        // connector registry, so Postings mounts no section.
+        ...data.setupSections.map((entityKey) =>
+          widgetBlock('setup-section', {
+            entityKey,
+            sp: { tab: data.tab },
+            basePath: '/hrm/recruiting',
+          }),
+        ),
       ]),
       // URL-backed drawers, portaled to <body> wherever they render.
       {
@@ -206,14 +306,20 @@ export async function loadRecruitingPage(
 ): Promise<RecruitingPageData> {
   // The page gate lives here — where the route-gate scanner reads — and the
   // loader enforces nothing twice: it takes the authorized session as input.
+  // HR-18: the HR-6 funnel rides the hrmRecruiting parent (on wherever hrm
+  // is on) — the wrap is additive and changes nothing by default.
   const authz = await requirePermission('hrm.recruiting.read')
   if (!(await isFeatureEnabled(authz.user.orgId, 'hrm'))) notFound()
+  if (!(await isFeatureEnabled(authz.user.orgId, 'hrmRecruiting'))) notFound()
   const t = await getTranslations('hrm')
   const tabs = await hrmGroupTabs(authz, '/hrm/recruiting')
-
   const status = typeof sp.status === 'string' && (STATUSES as readonly string[]).includes(sp.status)
     ? sp.status
     : null
+  // HR-18: route sub-tabs. A tab naming a switched-off surface falls back
+  // to Openings, so feature-off tabs are absent, not errors.
+  const tab: DepthTab = await resolveDepthTab(authz, sp.tab)
+  const depthTabs = await depthTabOptions(authz, t, status)
   const canManage = can(authz, 'hrm.recruiting.manage')
   const creating = sp.requisition === 'new' && canManage
   const requisitionId =
@@ -391,6 +497,37 @@ export async function loadRecruitingPage(
     }
   }
 
+  // HR-18: depth drawers. URL-backed like the rest: ?tab=interviews&
+  // interview= opens the kit/slots/scorecard drawer; ?tab=offers&offer=
+  // gains versions + signature state; ?tab=postings&posting= the
+  // disposition log; ?tab=pools&pool= members + rediscovery.
+  const interviewParam = typeof sp.interview === 'string' && sp.interview.length > 0 ? sp.interview : null
+  const postingParam = typeof sp.posting === 'string' && sp.posting.length > 0 ? sp.posting : null
+  const poolParam = typeof sp.pool === 'string' && sp.pool.length > 0 ? sp.pool : null
+  let interview: InterviewDrawer | null = null
+  let offerExtra: OfferDrawerExtra | null = null
+  let postingExtra: PostingDrawerExtra | null = null
+  let pool: PoolDrawer | null = null
+  let consents: ConsentStatus | null = null
+  if (interviewParam && !requisitionId && !candidateId && !offerId) {
+    interview = await loadInterviewDrawer(authz, t, tab, interviewParam)
+    if (!interview) missingDetail = t('recruiting.drawer.missing')
+  }
+  if (offer && offerId) {
+    offerExtra = await loadOfferDrawerExtra(authz, t, offerId)
+  }
+  if (postingParam && !requisitionId && !candidateId && !offerId && !interviewParam) {
+    postingExtra = await loadPostingDrawerExtra(authz, t, postingParam)
+    if (!postingExtra) missingDetail = t('recruiting.drawer.missing')
+  }
+  if (poolParam && !requisitionId && !candidateId && !offerId && !interviewParam && !postingParam) {
+    pool = await loadPoolDrawer(authz, t, poolParam)
+    if (!pool) missingDetail = t('recruiting.drawer.missing')
+  }
+  if (candidate) {
+    consents = await loadConsentStatus(authz, t, candidateId!)
+  }
+
   // The create form's inputs, resolved here so nothing but strings and ids
   // cross into the client: the visible employers plus the active
   // departments a new opening may name.
@@ -424,7 +561,73 @@ export async function loadRecruitingPage(
 
   const headcountTotal = requisitions.reduce((total, row) => total + row.headcount, 0)
   const filledTotal = requisitions.reduce((total, row) => total + row.filledCount, 0)
-  const drawerOpen = requisition !== null || candidate !== null || offer !== null || missingDetail !== null || create !== null
+  // HR-18: depth tab tables resolve here, beside the openings rows, so the
+  // spec branches on data it already holds.
+  const depthRows =
+    tab === 'interviews'
+      ? await loadInterviewsTab(authz, t, tab)
+      : tab === 'offers'
+        ? await loadOffersTab(authz, t, tab)
+        : tab === 'postings'
+          ? await loadPostingsTab(authz, t, tab)
+          : tab === 'pools'
+            ? await loadPoolsTab(authz, t, tab)
+            : null
+  const depthColumns =
+    tab === 'interviews'
+      ? {
+          candidate: t('recruiting.depth.columns.candidate'),
+          requisition: t('recruiting.depth.columns.requisition'),
+          kind: t('recruiting.depth.columns.kind'),
+          when: t('recruiting.depth.columns.when'),
+          slots: t('recruiting.depth.columns.slots'),
+          scorecards: t('recruiting.depth.columns.scorecards'),
+        }
+      : tab === 'offers'
+        ? {
+            candidate: t('recruiting.depth.columns.candidate'),
+            job: t('recruiting.depth.columns.job'),
+            status: t('recruiting.depth.columns.status'),
+            signature: t('recruiting.depth.columns.signature'),
+            versions: t('recruiting.depth.columns.versions'),
+          }
+        : tab === 'postings'
+          ? {
+              board: t('recruiting.depth.columns.board'),
+              status: t('recruiting.depth.columns.status'),
+              applies: t('recruiting.depth.columns.applies'),
+            }
+          : tab === 'pools'
+            ? { name: t('recruiting.depth.columns.name'), members: t('recruiting.depth.columns.members') }
+            : null
+  // HR-18: the Setup lists rehomed under this tab, each behind its own
+  // sub-switch (a tab being on never implies its Setup surface is — the
+  // interviews tab covers two switches, pools covers two). Unknown keys
+  // stay absent rather than rendering a section the registry cannot serve.
+  const SETUP_BY_TAB: Record<Exclude<DepthTab, 'openings'>, readonly string[]> = {
+    interviews: ['hrm-interview-kits', 'hrm-interviewer-pools'],
+    offers: ['hrm-offer-templates'],
+    postings: [],
+    pools: ['hrm-retention-rules'],
+  }
+  const setupSections: string[] = []
+  if (tab !== 'openings') {
+    for (const entityKey of SETUP_BY_TAB[tab]) {
+      const entry = SETUP_ENTITY_BY_KEY.get(entityKey)
+      if (entry?.featureKey && (await isFeatureEnabled(authz.user.orgId, entry.featureKey))) {
+        setupSections.push(entityKey)
+      }
+    }
+  }
+  const drawerOpen =
+    requisition !== null ||
+    candidate !== null ||
+    offer !== null ||
+    interview !== null ||
+    postingExtra !== null ||
+    pool !== null ||
+    missingDetail !== null ||
+    create !== null
   return {
     title: t('recruiting.title'),
     description: t('recruiting.description'),
@@ -433,6 +636,13 @@ export async function loadRecruitingPage(
     addLabel: t('recruiting.add'),
     addHref: hrefFor(status, { requisition: 'new' }),
     basePath: '/hrm/recruiting',
+    // HR-18: sub-tab strip + depth table payload (null on Openings).
+    tab,
+    depthTabs,
+    depthRows,
+    depthColumns,
+    depthEmpty: t('recruiting.depth.empty'),
+    setupSections,
     segmentsLabel: t('recruiting.segmentsLabel'),
     allLabel: t('recruiting.statusAll'),
     segmentOptions: STATUSES.map((value) => ({ value, label: statusLabel(value), count: counts.get(value) ?? 0 })),
@@ -460,6 +670,12 @@ export async function loadRecruitingPage(
           requisition,
           candidate,
           offer,
+          // HR-18: depth drawer payloads (null unless their param opened).
+          interview,
+          offerExtra,
+          postingExtra,
+          pool,
+          consents,
           missingDetail,
           ...(create ? { create } : {}),
         }

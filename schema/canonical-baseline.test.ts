@@ -430,6 +430,10 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // crew batches, equipment on entries, approval stages (0231).
     "0231_field_time_capture.sql",
     // HR-20 end
+    // HR-18 begin: recruiting depth — kits, scorecards, slots, templates,
+    // postings, retention, pools (0229).
+    "0229_hrm_recruiting_depth.sql",
+    // HR-18 end
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),

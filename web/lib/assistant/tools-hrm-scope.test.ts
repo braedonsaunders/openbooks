@@ -531,3 +531,29 @@ test("registrations: registry spread, scrape lists, matrix entry, playbook, cont
   assert.match(contract, /"hrm_feature_disabled",/);
   assert.match(contract, /hrm_employment_as_of: \{ employmentId: randomUUID\(\), asOf: "2026-06-15" \}/);
 });
+// HR-18 begin: recruiting depth reads ride hrm_recruiting (names and
+// states only, never PII), each refusing by name while its sub-switch is
+// off, through the canonical depth services — never parallel SQL.
+test("hrm_recruiting depth inputs parse and reuse the depth services", () => {
+  const byName = new Map(HRM_TOOLS.map((tool) => [tool.name, tool] as const));
+  const recruiting = byName.get("hrm_recruiting")!;
+  recruiting.inputSchema.parse({ interviewId: UUID });
+  recruiting.inputSchema.parse({ offerId: UUID });
+  recruiting.inputSchema.parse({ requisitionId: UUID, includePostings: true });
+  assert.throws(() => recruiting.inputSchema.parse({ interviewId: "nope" }));
+  assert.throws(() => recruiting.inputSchema.parse({ offerId: "nope" }));
+  for (const service of ["scorecardSummary(", "offerSignatureState(", "listPostings("]) {
+    assert.ok(tools.includes(service), `tools-hrm.ts must reuse ${service}`);
+  }
+  for (const key of ["hrmStructuredInterviews", "hrmOfferSigning", "hrmJobBoards"]) {
+    assert.ok(tools.includes(`"${key}"`), `tools-hrm.ts must gate on ${key}`);
+  }
+  for (const error of [
+    "hrm_structured_interviews_feature_disabled",
+    "hrm_offer_signing_feature_disabled",
+    "hrm_job_boards_feature_disabled",
+  ]) {
+    assert.ok(tools.includes(error), `tools-hrm.ts must refuse with ${error}`);
+  }
+});
+// HR-18 end

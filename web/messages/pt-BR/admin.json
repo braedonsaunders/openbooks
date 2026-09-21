@@ -2546,6 +2546,36 @@
         "title": "Regras de retenção",
         "singularTitle": "Regra de retenção",
         "description": "Por quanto tempo cada categoria é mantida, a partir de qual evento e se o vencimento exclui ou anonimiza. A suspensão legal bloqueia a execução nominalmente."
+      },
+      "hrm-interview-kits": {
+        "description": "Roteiros de entrevista por vaga: perguntas, atributos e escala.",
+        "singularTitle": "Roteiro de entrevista",
+        "title": "Roteiros de entrevista"
+      },
+      "hrm-interviewer-pools": {
+        "description": "Grupos de entrevistadores com disponibilidade declarada e roteiro base.",
+        "singularTitle": "Grupo de entrevistadores",
+        "title": "Grupos de entrevistadores"
+      },
+      "hrm-kit-attributes": {
+        "description": "Atributos avaliados de um roteiro; os de foco são obrigatórios.",
+        "singularTitle": "Atributo do roteiro",
+        "title": "Atributos do roteiro"
+      },
+      "hrm-kit-questions": {
+        "description": "Perguntas sugeridas por roteiro, com atributo opcional.",
+        "singularTitle": "Pergunta do roteiro",
+        "title": "Perguntas do roteiro"
+      },
+      "hrm-offer-templates": {
+        "description": "Modelos de carta de oferta com cláusulas, em PDF versionados.",
+        "singularTitle": "Modelo de oferta",
+        "title": "Modelos de oferta"
+      },
+      "hrm-retention-rules": {
+        "description": "Regras de retenção: anonimizar ou excluir conforme o calendário.",
+        "singularTitle": "Regra de retenção",
+        "title": "Regras de retenção"
       }
     },
     "fields": {
@@ -2911,7 +2941,21 @@
       "pinRequired": "PIN obrigatório",
       "photoRequired": "Foto obrigatória",
       "subjectKind": "Assunto",
-      "stages": "Etapas"
+      "stages": "Etapas",
+      "approvalRequired": "Aprovação exigida",
+      "attribute": "Atributo",
+      "attributeId": "Atributo",
+      "availability": "Disponibilidade",
+      "clauses": "Cláusulas",
+      "consentExtensionLeadDays": "Antecedência da prorrogação",
+      "instructions": "Orientações",
+      "isFocusDefault": "Atributo de foco",
+      "kitId": "Roteiro",
+      "pipelineStageId": "Etapa do funil",
+      "question": "Pergunta",
+      "ratingScale": "Escala de avaliação",
+      "regionScope": "Âmbito regional",
+      "retainMonths": "Meses de retenção"
     },
     "fieldHelp": {
       "gapless": "Sem lacunas significa que todos os números da sequência devem ser contabilizados, sem números pulados. Ative somente quando exigências legais ou de auditoria determinarem uma numeração ininterrupta.",
@@ -2995,7 +3039,18 @@
       "rateScheduleJurisdiction": "Vocabulário do pack, texto livre na camada genérica — o pack interpreta.",
       "perDiemComponent": "Componente de ganho pelo qual cruzam os valores. Seu tratamento fiscal é a única declaração.",
       "hrmQualificationValidity": "Deixe vazio para qualificações que não vencem.",
-      "hrmQualificationExtraCategories": "Vocabulário de categorias próprio além das seis integradas."
+      "hrmQualificationExtraCategories": "Vocabulário de categorias próprio além das seis integradas.",
+      "hrmAttributeFocus": "Atributos de foco entram em todo veredito; o resto é opcional.",
+      "hrmKitInstructions": "Orientação ao painel, impressa em cada veredito.",
+      "hrmKitScale": "Ao menos duas das chaves strong_no, no, yes, strong_yes.",
+      "hrmKitStage": "O roteiro vale para esta etapa, ou todas se vazio.",
+      "hrmPoolAvailability": "Janelas como lista JSON com startsAt, endsAt e timezone.",
+      "hrmPoolKit": "Roteiro base para as sessões deste grupo.",
+      "hrmQuestionAttribute": "Vincula a pergunta a um atributo deste roteiro.",
+      "hrmRetentionLeadDays": "Dias antes para pedir prorrogação; vazio não envia e-mail.",
+      "hrmRetentionScope": "Região como JSON: applies_to all ou countries com códigos.",
+      "hrmTemplateBody": "Texto com marcadores para os dados da oferta.",
+      "hrmTemplateClauses": "Cláusulas como lista JSON com key, label, body e default_on."
     },
     "options": {
       "payFrequency": {
@@ -3461,6 +3516,14 @@
       "approvalSubject": {
         "timesheetWeek": "Semana do timesheet",
         "crewTimeBatch": "Lote de equipe"
+      },
+      "hrmRetentionAction": {
+        "anonymize": "Anonimizar",
+        "delete": "Excluir"
+      },
+      "hrmRetentionBasis": {
+        "consent": "Consentimento",
+        "inactivity": "Inatividade"
       }
     },
     "payroll": {
@@ -4866,6 +4929,34 @@
     "fieldTimeMultiStageApproval": {
       "title": "Aprovação de horas por etapas",
       "description": "Cadeia de supervisor, gerente de projeto e folha para timesheets e lotes."
+    },
+    "hrmRecruiting": {
+      "title": "Recrutamento",
+      "description": "Vagas, candidatos, entrevistas e ofertas: da vaga à contratação."
+    },
+    "hrmStructuredInterviews": {
+      "title": "Entrevistas estruturadas",
+      "description": "Roteiros de entrevista com critérios e vereditos cegos do painel."
+    },
+    "hrmInterviewScheduling": {
+      "title": "Agendamento de entrevistas",
+      "description": "Horários propostos com links de autoagendamento para candidatos."
+    },
+    "hrmOfferSigning": {
+      "title": "Assinatura de ofertas",
+      "description": "Ofertas de modelo em PDFs versionados, assinadas no produto."
+    },
+    "hrmJobBoards": {
+      "title": "Portais de vagas",
+      "description": "Página de carreiras interna e publicação com sincronização de resultados."
+    },
+    "hrmCandidateRetention": {
+      "title": "Retenção de candidatos",
+      "description": "Consentimentos e regras de retenção: anonimizar ou excluir no prazo."
+    },
+    "hrmTalentPool": {
+      "title": "Banco de talentos",
+      "description": "Grupos de candidatos anteriores comparados com vagas abertas."
     }
   },
   "backupsManager": {

@@ -784,6 +784,30 @@
       "hrm_org_chart": {
         "label": "Organograma",
         "description": "Uma linha por vínculo ativo na data do relatório — nome, cargo, departamento e gerência."
+      },
+      "hrm_interview_slots": {
+        "description": "Uma linha por horário proposto, agendado ou recusado, com janela e tipo. Nem contatos nem tokens saem daqui.",
+        "label": "Horários de entrevista"
+      },
+      "hrm_offers": {
+        "description": "Uma linha por oferta com situação comercial, estado de assinatura e versão. Valores, cartas e evidências nunca saem por relatórios.",
+        "label": "Ofertas"
+      },
+      "hrm_pool_members": {
+        "description": "Uma linha por membro do banco: banco, nome e entrada. Só nomes, nunca contatos.",
+        "label": "Membros do banco"
+      },
+      "hrm_postings": {
+        "description": "Uma linha por anúncio com situação, candidaturas e retornos para medir cada portal (por portal, por vaga).",
+        "label": "Anúncios"
+      },
+      "hrm_retention_runs": {
+        "description": "Uma linha por execução da regra com anonimizados, excluídos e prorrogações pedidas.",
+        "label": "Execuções de retenção"
+      },
+      "hrm_scorecards": {
+        "description": "Uma linha por entrevista com os agregados da banca: enviados e tamanho mais a distribuição geral. O detalhe por avaliador nunca sai.",
+        "label": "Vereditos"
       }
     },
     "columns": {
@@ -1725,6 +1749,65 @@
         "department": "Departamento",
         "manager": "Gerência",
         "employment_id": "Vínculo (id)"
+      },
+      "hrm_interview_slots": {
+        "booked_on": "Agendado",
+        "candidate": "Candidato",
+        "ends_at": "Fim",
+        "kind": "Tipo",
+        "requisition": "Vaga",
+        "slot_id": "Horário (id)",
+        "starts_at": "Início",
+        "timezone": "Fuso horário"
+      },
+      "hrm_offers": {
+        "candidate": "Candidato",
+        "expires_on": "Expira",
+        "job_title": "Cargo",
+        "offer_id": "Oferta (id)",
+        "requisition": "Vaga",
+        "sent_on": "Enviada",
+        "signature_status": "Assinatura",
+        "signed_on": "Assinada",
+        "status": "Situação",
+        "version": "Versão"
+      },
+      "hrm_pool_members": {
+        "added_on": "Entrada",
+        "candidate": "Candidato",
+        "note": "Nota",
+        "pool": "Banco"
+      },
+      "hrm_postings": {
+        "applies": "Candidaturas",
+        "board": "Portal",
+        "closed_on": "Fechada",
+        "dispositions": "Retornos",
+        "posting_id": "Anúncio (id)",
+        "published_on": "Publicada",
+        "requisition": "Vaga",
+        "status": "Situação"
+      },
+      "hrm_retention_runs": {
+        "anonymized": "Anonimizados",
+        "deleted": "Excluídos",
+        "extensions": "Prorrogações",
+        "ran_at": "Execução",
+        "rule": "Regra",
+        "run_id": "Execução (id)"
+      },
+      "hrm_scorecards": {
+        "candidate": "Candidato",
+        "interview_id": "Entrevista (id)",
+        "kind": "Tipo",
+        "no": "Não",
+        "panel": "Banca",
+        "requisition": "Vaga",
+        "scheduled_on": "Agendada",
+        "strong_no": "Não forte",
+        "strong_yes": "Sim forte",
+        "submitted": "Enviados",
+        "yes": "Sim"
       }
     },
     "enumValues": {

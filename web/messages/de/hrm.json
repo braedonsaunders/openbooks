@@ -666,6 +666,91 @@
       "email": "E-Mail",
       "phone": "Telefon",
       "source": "Quelle"
+    },
+    "consent": {
+      "future_roles": "Künftige Stellen",
+      "talent_pool": "Talentpool",
+      "this_application": "Diese Bewerbung"
+    },
+    "depth": {
+      "applies": "{count} Bewerbungen",
+      "blinded": "Andere öffnen nach Ihrer Abgabe.",
+      "bookedSlots": "{count} gebucht",
+      "close": "Schließen",
+      "columns": {
+        "applies": "Bewerbungen",
+        "board": "Börse",
+        "candidate": "Kandidat",
+        "job": "Rolle",
+        "kind": "Art",
+        "members": "Mitglieder",
+        "name": "Name",
+        "requisition": "Stelle",
+        "scorecards": "Urteile",
+        "signature": "Signatur",
+        "slots": "Termine",
+        "status": "Status",
+        "versions": "Versionen",
+        "when": "Wann"
+      },
+      "consentTitle": "Einwilligungen",
+      "dispositionLog": "Börsenprotokoll",
+      "empty": "Noch nichts hier.",
+      "failed": "Speichern fehlgeschlagen.",
+      "kit": "Leitfaden",
+      "matchToOpening": "Mit Stelle abgleichen",
+      "members": "{count} Mitglieder",
+      "missing": "ausstehend",
+      "myScorecard": "Mein Urteil",
+      "others": "Panelurteile",
+      "overall": "Gesamt",
+      "pause": "Pausieren",
+      "poolMembers": "Mitglieder",
+      "proposedSlots": "{count} vorgeschlagen",
+      "publish": "Veröffentlichen",
+      "questions": "Fragen",
+      "remove": "Entfernen",
+      "retentionDate": "Aufbewahrung bis",
+      "scorecards": "{submitted}/{total} Urteile",
+      "sendLink": "Signaturlink senden",
+      "signatureState": "Signatur",
+      "slots": "Termine",
+      "submitScorecard": "Urteil abgeben",
+      "summary": "Überblick",
+      "tagsLabel": "Stichwörter (kommagetrennt)",
+      "versionHistory": "Versionen",
+      "versions": "{count} Versionen",
+      "voidSignature": "Signatur zurückziehen"
+    },
+    "posting": {
+      "closed": "Geschlossen",
+      "draft": "Entwurf",
+      "error": "Fehler",
+      "paused": "Pausiert",
+      "published": "Veröffentlicht"
+    },
+    "postingEvent": {
+      "apply_received": "Bewerbung eingegangen",
+      "closed": "geschlossen",
+      "disposition_sent": "Rückmeldung gesendet",
+      "error": "Fehler",
+      "paused": "pausiert",
+      "published": "veröffentlicht"
+    },
+    "signature": {
+      "declined": "Abgelehnt",
+      "sent": "Gesendet",
+      "signed": "Signiert",
+      "unsigned": "Unsigniert",
+      "viewed": "Gesehen",
+      "voided": "Zurückgezogen"
+    },
+    "tabs": {
+      "interviews": "Interviews",
+      "offers": "Angebote",
+      "openings": "Stellen",
+      "pools": "Pools",
+      "postings": "Börsen"
     }
   },
   "performance": {
@@ -1798,5 +1883,24 @@
     "empty": "Derzeit keine offenen Befragungen.",
     "respond": "Antworten",
     "actionFailed": "Diese Aktion ist fehlgeschlagen."
+  },
+  "public": {
+    "book": {
+      "empty": "Keine freien Termine.",
+      "kicker": "Interviewplanung",
+      "title": "Buchen Sie Ihr Interview, {name}"
+    },
+    "careers": {
+      "empty": "Derzeit keine offenen Stellen.",
+      "kicker": "Karriere · {org}",
+      "title": "Offene Stellen"
+    },
+    "offer": {
+      "alreadySigned": "Bereits signiert. Danke.",
+      "closed": "Dieses Schreiben ist geschlossen.",
+      "for": "für {name}",
+      "kicker": "Angebot",
+      "version": "Version {version}"
+    }
   }
 }

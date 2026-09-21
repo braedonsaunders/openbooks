@@ -9,6 +9,13 @@ import { assertStageMoveAllowed } from "./funnel.ts";
 import { requireActorId, requireId, requireOrgId, requireReason, isUniqueViolation } from "./input.ts";
 import { firstStage, loadPipelineTemplate } from "./pipeline.ts";
 import { loadCandidate } from "./candidates.ts";
+// HR-18 begin: disposition sync for posting-sourced applications (0229).
+// Static edge applications→postings only; postings reaches back dynamically,
+// so the module graph stays acyclic. recordDispositionForApplication is a
+// strict no-op unless the application is posting-sourced and hrmJobBoards
+// is on — HR-6 paths are byte-identical with the feature off.
+import { recordDispositionForApplication } from "./postings.ts";
+// HR-18 end
 
 /**
  * Canonical recruiting application service (HR-6, 0195): one candidacy per
@@ -293,6 +300,8 @@ export async function moveApplicationStage(query: MoveApplicationStageQuery): Pr
       toStageId,
       reason,
     });
+    // HR-18: disposition sync for posting-sourced applications (no-op otherwise).
+    await recordDispositionForApplication(db, { orgId, applicationId });
     return toDTO(updated);
   });
 }
@@ -337,6 +346,8 @@ export async function rejectApplication(query: RejectApplicationQuery): Promise<
       fromStageId: current.stageId,
       reason,
     });
+    // HR-18: disposition sync for posting-sourced applications (no-op otherwise).
+    await recordDispositionForApplication(db, { orgId, applicationId });
     return toDTO(updated);
   });
 }
@@ -378,6 +389,8 @@ export async function withdrawApplication(query: WithdrawApplicationQuery): Prom
       kind: "withdrawn",
       fromStageId: current.stageId,
     });
+    // HR-18: disposition sync for posting-sourced applications (no-op otherwise).
+    await recordDispositionForApplication(db, { orgId, applicationId });
     return toDTO(updated);
   });
 }
@@ -417,5 +430,7 @@ export async function markApplicationHired(
     fromStageId: current.stageId,
     toStageId: args.hiredStageId,
   });
+  // HR-18: disposition sync for posting-sourced applications (no-op otherwise).
+  await recordDispositionForApplication(exec, { orgId: args.orgId, applicationId: args.applicationId });
   return toDTO(updated);
 }

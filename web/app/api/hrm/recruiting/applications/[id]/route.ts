@@ -24,7 +24,9 @@ export const runtime = "nodejs";
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission("hrm.recruiting.read");
   if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
+  // HR-18: the HR-6 funnel rides the hrmRecruiting parent (on wherever
+  // hrm is on) — the wrap is additive and changes nothing by default.
+  if (!(await isFeatureEnabled(gate.user.orgId, "hrm")) || !(await isFeatureEnabled(gate.user.orgId, "hrmRecruiting"))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
   const { id } = await params;

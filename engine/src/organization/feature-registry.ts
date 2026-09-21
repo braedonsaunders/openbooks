@@ -235,6 +235,20 @@ export const FEATURES: FeatureDef[] = [
   { key: 'hrmPulseSurveys', defaultEnabled: false, category: 'operations', parentKey: 'hrmSurveys' },
   { key: 'hrmOrgChart', defaultEnabled: true, category: 'operations', parentKey: 'hrm' },
   // HR-19 end
+  // HR-18 begin: recruiting depth — the HR-6 funnel rides the parent (on
+  // wherever hrm is on); kits, scheduling, signing, boards, retention and
+  // pools are opt-in sub-features. hrmOfferSigning will requireAll
+  // hrmDocuments when HR-19 lands; until then it signs through the File
+  // Cabinet HMAC primitive the field-ticket surface uses, so no documents
+  // edge is declared here.
+  { key: 'hrmRecruiting', defaultEnabled: true, category: 'operations', parentKey: 'hrm' },
+  { key: 'hrmStructuredInterviews', defaultEnabled: false, category: 'operations', parentKey: 'hrmRecruiting' },
+  { key: 'hrmInterviewScheduling', defaultEnabled: false, category: 'operations', parentKey: 'hrmRecruiting' },
+  { key: 'hrmOfferSigning', defaultEnabled: false, category: 'operations', parentKey: 'hrmRecruiting' },
+  { key: 'hrmJobBoards', defaultEnabled: false, category: 'operations', parentKey: 'hrmRecruiting' },
+  { key: 'hrmCandidateRetention', defaultEnabled: false, category: 'operations', parentKey: 'hrmRecruiting' },
+  { key: 'hrmTalentPool', defaultEnabled: false, category: 'operations', parentKey: 'hrmRecruiting' },
+  // HR-18 end
 ]
 
 export const FEATURE_BY_KEY = new Map(FEATURES.map((f) => [f.key, f]))

@@ -666,6 +666,91 @@
       "email": "E-mail",
       "phone": "Telefone",
       "source": "Origem"
+    },
+    "consent": {
+      "future_roles": "Vagas futuras",
+      "talent_pool": "Banco de talentos",
+      "this_application": "Esta candidatura"
+    },
+    "depth": {
+      "applies": "{count} candidaturas",
+      "blinded": "Os demais abrem após o seu envio.",
+      "bookedSlots": "{count} agendados",
+      "close": "Fechar",
+      "columns": {
+        "applies": "Candidaturas",
+        "board": "Portal",
+        "candidate": "Candidato",
+        "job": "Cargo",
+        "kind": "Tipo",
+        "members": "Membros",
+        "name": "Nome",
+        "requisition": "Vaga",
+        "scorecards": "Vereditos",
+        "signature": "Assinatura",
+        "slots": "Horários",
+        "status": "Estado",
+        "versions": "Versões",
+        "when": "Quando"
+      },
+      "consentTitle": "Consentimentos",
+      "dispositionLog": "Registro do portal",
+      "empty": "Nada aqui ainda.",
+      "failed": "Não foi possível salvar.",
+      "kit": "Roteiro",
+      "matchToOpening": "Comparar com a vaga",
+      "members": "{count} membros",
+      "missing": "pendente",
+      "myScorecard": "Meu veredito",
+      "others": "Vereditos do painel",
+      "overall": "Geral",
+      "pause": "Pausar",
+      "poolMembers": "Membros",
+      "proposedSlots": "{count} propostos",
+      "publish": "Publicar",
+      "questions": "Perguntas",
+      "remove": "Remover",
+      "retentionDate": "Retenção até",
+      "scorecards": "{submitted}/{total} vereditos",
+      "sendLink": "Enviar link de assinatura",
+      "signatureState": "Assinatura",
+      "slots": "Horários",
+      "submitScorecard": "Enviar veredito",
+      "summary": "Resumo",
+      "tagsLabel": "Marcadores (separados por vírgula)",
+      "versionHistory": "Versões",
+      "versions": "{count} versões",
+      "voidSignature": "Anular assinatura"
+    },
+    "posting": {
+      "closed": "Fechada",
+      "draft": "Rascunho",
+      "error": "Erro",
+      "paused": "Pausada",
+      "published": "Publicada"
+    },
+    "postingEvent": {
+      "apply_received": "candidatura recebida",
+      "closed": "fechada",
+      "disposition_sent": "resultado enviado",
+      "error": "erro",
+      "paused": "pausada",
+      "published": "publicada"
+    },
+    "signature": {
+      "declined": "Recusada",
+      "sent": "Enviada",
+      "signed": "Assinada",
+      "unsigned": "Sem assinatura",
+      "viewed": "Vista",
+      "voided": "Anulada"
+    },
+    "tabs": {
+      "interviews": "Entrevistas",
+      "offers": "Ofertas",
+      "openings": "Vagas",
+      "pools": "Banco",
+      "postings": "Portais"
     }
   },
   "performance": {
@@ -1798,5 +1883,24 @@
     "empty": "Sem pesquisas abertas agora.",
     "respond": "Responder",
     "actionFailed": "Esta ação falhou."
+  },
+  "public": {
+    "book": {
+      "empty": "Sem horários livres.",
+      "kicker": "Agendamento de entrevistas",
+      "title": "Agende sua entrevista, {name}"
+    },
+    "careers": {
+      "empty": "Sem vagas abertas agora.",
+      "kicker": "Carreiras · {org}",
+      "title": "Vagas abertas"
+    },
+    "offer": {
+      "alreadySigned": "Já assinada. Obrigado.",
+      "closed": "Esta carta está encerrada.",
+      "for": "para {name}",
+      "kicker": "Oferta",
+      "version": "versão {version}"
+    }
   }
 }

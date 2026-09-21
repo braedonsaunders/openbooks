@@ -666,6 +666,91 @@
       "email": "メール",
       "phone": "電話",
       "source": "経路"
+    },
+    "consent": {
+      "future_roles": "将来の求人",
+      "talent_pool": "タレントプール",
+      "this_application": "今回の応募"
+    },
+    "depth": {
+      "applies": "{count}件の応募",
+      "blinded": "他の評価はあなたの提出後に開きます。",
+      "bookedSlots": "予約済み{count}件",
+      "close": "閉じる",
+      "columns": {
+        "applies": "応募",
+        "board": "掲示先",
+        "candidate": "候補者",
+        "job": "職種",
+        "kind": "形式",
+        "members": "人数",
+        "name": "名前",
+        "requisition": "求人",
+        "scorecards": "評価",
+        "signature": "署名",
+        "slots": "日程",
+        "status": "状態",
+        "versions": "版",
+        "when": "日時"
+      },
+      "consentTitle": "同意",
+      "dispositionLog": "掲示ログ",
+      "empty": "まだ何もありません。",
+      "failed": "保存できませんでした。",
+      "kit": "キット",
+      "matchToOpening": "求人に照合",
+      "members": "{count}名",
+      "missing": "未提出",
+      "myScorecard": "自分の評価",
+      "others": "パネル評価",
+      "overall": "総合",
+      "pause": "一時停止",
+      "poolMembers": "メンバー",
+      "proposedSlots": "提案中{count}件",
+      "publish": "公開",
+      "questions": "質問",
+      "remove": "外す",
+      "retentionDate": "保持期限",
+      "scorecards": "評価{submitted}/{total}",
+      "sendLink": "署名リンクを送る",
+      "signatureState": "署名",
+      "slots": "日程",
+      "submitScorecard": "評価を提出",
+      "summary": "集計",
+      "tagsLabel": "タグ（カンマ区切り）",
+      "versionHistory": "版履歴",
+      "versions": "{count}版",
+      "voidSignature": "署名を無効化"
+    },
+    "posting": {
+      "closed": "終了",
+      "draft": "下書き",
+      "error": "エラー",
+      "paused": "一時停止中",
+      "published": "公開中"
+    },
+    "postingEvent": {
+      "apply_received": "応募受付",
+      "closed": "終了",
+      "disposition_sent": "結果送信",
+      "error": "エラー",
+      "paused": "一時停止",
+      "published": "公開"
+    },
+    "signature": {
+      "declined": "辞退済み",
+      "sent": "送付済み",
+      "signed": "署名済み",
+      "unsigned": "未署名",
+      "viewed": "開封済み",
+      "voided": "無効"
+    },
+    "tabs": {
+      "interviews": "面接",
+      "offers": "オファー",
+      "openings": "求人",
+      "pools": "プール",
+      "postings": "掲示"
     }
   },
   "performance": {
@@ -1798,5 +1883,24 @@
     "empty": "未回答の調査はありません。",
     "respond": "回答する",
     "actionFailed": "この操作に失敗しました。"
+  },
+  "public": {
+    "book": {
+      "empty": "空き枠がありません。",
+      "kicker": "面接日程調整",
+      "title": "{name}さんの面接を予約"
+    },
+    "careers": {
+      "empty": "現在募集中の求人はありません。",
+      "kicker": "採用 · {org}",
+      "title": "募集中の求人"
+    },
+    "offer": {
+      "alreadySigned": "署名済みです。",
+      "closed": "この書面は終了しています。",
+      "for": "{name}さん宛",
+      "kicker": "オファー",
+      "version": "第{version}版"
+    }
   }
 }

@@ -3014,6 +3014,9 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   // (6 features, 2 setup entities, 1 setup field); zh/pt-BR completeness
   // is asserted per-key below.
   assert.equal(wanted.length, 3908, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  // HR-17 + HR-18: 3906 = 3844 on 12359058e (3825 plus 19 continuous-performance
+  // keys) plus 62 recruiting-depth keys; zh/pt-BR completeness is asserted per-key below.
+  assert.equal(wanted.length, 3906, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3218,6 +3221,9 @@ test('admin copy ships translated in de and ja (i2)', () => {
     'de:admin.features.banking.title',
     'de:admin.features.budgets.title',
     'de:admin.features.crm.title',
+    // HR-18: Recruiting is the German product term (Duden-listed), not
+    // untranslated English.
+    'de:admin.features.hrmRecruiting.title',
     'de:admin.flows.gate.mode',
     'de:admin.flows.new.name',
     'de:admin.flows.runs.table.status',
@@ -3382,6 +3388,11 @@ test('admin copy ships translated in de and ja (i2)', () => {
   // 19 continuous-performance keys; de/ja completeness asserted per-key below.
   const ADMIN_I2_SOURCE_COUNT = 3908
   const ADMIN_I2_SOURCE_HASH = '49f73cec807d1b5b34210cf2e70f80c79f7b4fff99cb288cfee315ec0c0dbd0b'
+  // HR-17 + HR-18: count and hash recomputed over the sorted key inventory
+  // for the continuous-performance and recruiting-depth keys; de/ja completeness
+  // asserted per-key below.
+  const ADMIN_I2_SOURCE_COUNT = 3906
+  const ADMIN_I2_SOURCE_HASH = 'recompute-me'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))
@@ -4565,6 +4576,15 @@ const I14_IDENTICAL_BY_FACT = new Set([
     'fr:reports.catalog.columns.hrm_qualifications.qualification_id|Qualification (id)',
     'fr:reports.catalog.columns.hrm_qualification_alerts.type_name|Type',
     'fr:reports.catalog.columns.hrm_qualification_alerts.qualification_id|Qualification (id)',
+    // HR-18: reviewed cognates in the recruiting-depth report columns —
+    // Signature, Version, Note (fr), No (es), Version, Pool (de) are the
+    // correct terms in those locales, not untranslated English.
+    'fr:reports.catalog.columns.hrm_offers.signature_status|Signature',
+    'fr:reports.catalog.columns.hrm_offers.version|Version',
+    'fr:reports.catalog.columns.hrm_pool_members.note|Note',
+    'es:reports.catalog.columns.hrm_scorecards.no|No',
+    'de:reports.catalog.columns.hrm_offers.version|Version',
+    'de:reports.catalog.columns.hrm_pool_members.pool|Pool',
   "de:accounts.types.assetBank|Bank",
   "de:common.actions.pdf|PDF",
   "de:common.auditTrail.systemActor|System",

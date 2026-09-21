@@ -68,6 +68,20 @@ test("the header carries New requisition first, then the strip, behind the manag
   assert.ok(!form.includes('<table'), "no table in the create form");
 });
 
+// HR-18: depth sub-tabs ride their own switches and mount their Setup lists
+// through the shared setup-section widget — absent when off, never errors.
+test("depth tabs gate per sub-switch and mount rehomed Setup sections", () => {
+  assert.match(view, /resolveDepthTab\(authz, sp\.tab\)/, "an unknown or switched-off tab falls back to Openings");
+  assert.match(view, /depthTabOptions\(authz, t, status\)/, "the strip lists only the enabled depth tabs");
+  assert.match(view, /widgetBlock\('setup-section'/, "Setup lists mount through the shared setup-section widget");
+  assert.match(view, /hrm-interview-kits/, "kits rehome onto the Interviews tab");
+  assert.match(view, /hrm-interviewer-pools/, "interviewer pools rehome onto the Interviews tab");
+  assert.match(view, /hrm-offer-templates/, "offer templates rehome onto the Offers tab");
+  assert.match(view, /hrm-retention-rules/, "retention rules rehome onto the Pools tab");
+  assert.match(view, /entry\?\.featureKey && \(await isFeatureEnabled/, "each section checks its own sub-switch, never the tab's");
+  assert.match(view, /basePath: '\/hrm\/recruiting'/, "sections stay local to the Recruiting page");
+});
+
 test("drawer islands post through the recruiting routes with refusals intact", () => {
   for (const island of [
     'ApplicationAttachIsland',

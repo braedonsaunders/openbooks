@@ -16,7 +16,9 @@ export const runtime = "nodejs";
 export async function POST(req: Request) {
   const gate = await guardPermission("hrm.recruiting.manage");
   if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
+  // HR-18: the HR-6 funnel rides the hrmRecruiting parent (on wherever
+  // hrm is on) — the wrap is additive and changes nothing by default.
+  if (!(await isFeatureEnabled(gate.user.orgId, "hrm")) || !(await isFeatureEnabled(gate.user.orgId, "hrmRecruiting"))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
   const parsedBody = await parseJsonBody(req, scheduleInterviewBody);
@@ -32,6 +34,9 @@ export async function POST(req: Request) {
       durationMinutes: body.durationMinutes,
       location: body.location,
       panelPartyIds: body.panelPartyIds,
+      // HR-18: optional kit + focus pins ride the same call.
+      kitId: body.kitId,
+      panelFocus: body.panelFocus,
     });
     return NextResponse.json({ interview }, { status: 201 });
   } catch (e) {

@@ -784,6 +784,30 @@
       "hrm_org_chart": {
         "label": "Organigramm",
         "description": "Eine Zeile pro aktivem Beschäftigungsverhältnis zum Stichtag — Name, Titel, Abteilung und Führungskraft."
+      },
+      "hrm_interview_slots": {
+        "description": "Eine Zeile je vorgeschlagenem, gebuchtem oder abgelehntem Gesprächstermin mit Fenster und Art. Kontaktdaten und Buchungstoken verlassen das Haus nie.",
+        "label": "Gesprächstermine"
+      },
+      "hrm_offers": {
+        "description": "Eine Zeile je Angebot mit kaufmännischem Stand, Signaturstand und Version. Beträge, Schreiben und Signaturnachweise bleiben außen vor.",
+        "label": "Angebote"
+      },
+      "hrm_pool_members": {
+        "description": "Eine Zeile je Talentpool-Mitgliedschaft: Pool, Kandidatenname und Beitritt. Nur Namen, nie Kontaktdaten.",
+        "label": "Poolmitglieder"
+      },
+      "hrm_postings": {
+        "description": "Eine Zeile je Stellenbörsen-Eintrag mit Stand sowie Bewerbungs- und Rückmeldungszahlen für die Kanalwirkung (je Börse, je Stelle).",
+        "label": "Börseneinträge"
+      },
+      "hrm_retention_runs": {
+        "description": "Eine Zeile je Aufbewahrungslauf mit anonymisierten, gelöschten und verlängerten Zahlen.",
+        "label": "Aufbewahrungsläufe"
+      },
+      "hrm_scorecards": {
+        "description": "Eine Zeile je Gespräch mit den Urteilssummen des Gremiums: abgegebene und Gremiumsanzahl plus Gesamtverteilung. Einzelurteile verlassen die Berichte nie — die Blindregel gilt baulich.",
+        "label": "Urteile"
       }
     },
     "columns": {
@@ -1725,6 +1749,65 @@
         "department": "Abteilung",
         "manager": "Führungskraft",
         "employment_id": "Beschäftigung (ID)"
+      },
+      "hrm_interview_slots": {
+        "booked_on": "Gebucht",
+        "candidate": "Kandidat",
+        "ends_at": "Ende",
+        "kind": "Art",
+        "requisition": "Ausschreibung",
+        "slot_id": "Termin (ID)",
+        "starts_at": "Beginn",
+        "timezone": "Zeitzone"
+      },
+      "hrm_offers": {
+        "candidate": "Kandidat",
+        "expires_on": "Läuft ab",
+        "job_title": "Stellenbezeichnung",
+        "offer_id": "Angebot (ID)",
+        "requisition": "Ausschreibung",
+        "sent_on": "Gesendet",
+        "signature_status": "Signatur",
+        "signed_on": "Signiert",
+        "status": "Stand",
+        "version": "Version"
+      },
+      "hrm_pool_members": {
+        "added_on": "Hinzugefügt",
+        "candidate": "Kandidat",
+        "note": "Notiz",
+        "pool": "Pool"
+      },
+      "hrm_postings": {
+        "applies": "Bewerbungen",
+        "board": "Börse",
+        "closed_on": "Geschlossen",
+        "dispositions": "Rückmeldungen",
+        "posting_id": "Börse (ID)",
+        "published_on": "Veröffentlicht",
+        "requisition": "Ausschreibung",
+        "status": "Stand"
+      },
+      "hrm_retention_runs": {
+        "anonymized": "Anonymisiert",
+        "deleted": "Gelöscht",
+        "extensions": "Verlängerungen",
+        "ran_at": "Lauf",
+        "rule": "Regel",
+        "run_id": "Lauf (ID)"
+      },
+      "hrm_scorecards": {
+        "candidate": "Kandidat",
+        "interview_id": "Gespräch (ID)",
+        "kind": "Art",
+        "no": "Nein",
+        "panel": "Gremium",
+        "requisition": "Ausschreibung",
+        "scheduled_on": "Geplant",
+        "strong_no": "Klares Nein",
+        "strong_yes": "Klares Ja",
+        "submitted": "Abgegeben",
+        "yes": "Ja"
       }
     },
     "enumValues": {
