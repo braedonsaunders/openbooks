@@ -1017,13 +1017,6 @@ async function dropDisposableOrgEscaped(orgId: string, kind: DisposableOrgKind):
       }
       await tx.execute(sql`delete from ap_capture_items where org_id = ${orgId}`);
     }
-    for (const [table, trigger] of HRM_APPEND_ONLY_EVIDENCE) {
-      const present = await tx.execute(sql`select to_regclass(${`public.${table}`}) as reg`);
-      if ((present.rows[0] as { reg: string | null } | undefined)?.reg == null) continue;
-      await tx.execute(sql.raw(`alter table public."${table}" disable trigger ${trigger}`));
-      await tx.execute(sql`delete from ${qualified(table)} where org_id = ${orgId}`);
-      await tx.execute(sql.raw(`alter table public."${table}" enable trigger ${trigger}`));
-    }
     // Payroll bank files are money-moving evidence with UNCONDITIONAL guards
     // (no sandbox-wipe bypass): pay_run_bank_file_immutable forbids their
     // delete outright, and payroll_bank_file_blob_immutable blocks deleting
@@ -1146,54 +1139,6 @@ async function dropDisposableOrgEscaped(orgId: string, kind: DisposableOrgKind):
  * test's own in-flight error, but silently swallowing it is how leaked orgs
  * went unnoticed for months — report it and let the test result stand.
  */
-/**
- * HRM evidence tables whose triggers refuse UPDATE and DELETE outright.
- *
- * These are append-only by design -- a comp decision, a calibration
- * event, a signed offer version, an AI decision record. Unlike the
- * sandbox-wipe guards elsewhere, they carry no bypass GUC, so a scratch
- * org cannot be torn down while any of them holds a row: the generic
- * delete pass fails and takes the whole teardown with it.
- *
- * The disposable-org identity is already fenced by the caller
- * (guardTeardownTransaction), and the ALTER holds a lock that hides the
- * window from writers, which is the same treatment the ap_capture
- * evidence gets.
- *
- * Every trigger that FIRES ON DELETE belongs here, derived from the
- * migrations rather than from the one failure that was observed: the
- * trust run only tripped ai_decisions because that is the only one it
- * wrote. Listing just that one leaves the identical trap for whichever
- * run next records a comp decision, a calibration event or a scorecard.
- * The UPDATE-only guards beside these are deliberately absent -- they do
- * not block a delete, so disabling them would widen the window for
- * nothing.
- */
-const HRM_APPEND_ONLY_EVIDENCE = [
-  ["hrm_allowance_payroll_inputs", "hrm_allowance_payroll_input_no_delete_trigger"],
-  ["hrm_calibration_events", "hrm_calibration_event_no_delete_trigger"],
-  ["hrm_comp_cycle_lines", "hrm_comp_cycle_lines_history"],
-  ["hrm_comp_events", "hrm_comp_events_immutable"],
-  ["hrm_comp_statements", "hrm_comp_statements_history"],
-  ["hrm_compliance_findings", "hrm_compliance_findings_no_delete_trigger"],
-  ["hrm_document_events", "hrm_document_events_immutable"],
-  ["hrm_feedback", "hrm_feedback_no_delete_trigger"],
-  ["hrm_headcount_plan_lines", "hrm_headcount_plan_lines_history"],
-  ["hrm_headcount_plans", "hrm_headcount_plans_history"],
-  ["hrm_offer_versions", "hrm_offer_versions_append_only"],
-  ["hrm_pay_bands", "hrm_pay_bands_history"],
-  ["hrm_pay_gap_snapshots", "hrm_pay_gap_snapshots_frozen"],
-  ["hrm_pay_information_requests", "hrm_pay_information_requests_history"],
-  ["hrm_posting_events", "hrm_posting_events_append_only"],
-  ["hrm_qualification_events", "hrm_qualification_events_no_delete_trigger"],
-  ["hrm_retention_actions", "hrm_retention_actions_immutable"],
-  ["hrm_retention_runs", "hrm_retention_runs_append_only"],
-  ["hrm_scorecards", "hrm_scorecards_submitted_immutable"],
-  ["hrm_survey_responses", "hrm_survey_responses_immutable"],
-  ["hrm_talent_reviews", "hrm_talent_review_no_delete_trigger"],
-  ["ai_decisions", "ai_decisions_refuse_update"],
-] as const;
-
 export async function dropScratchOrgReporting(orgId: string): Promise<void> {
   try {
     await dropScratchOrg(orgId);
@@ -1566,12 +1511,6 @@ async function resetScratchOrgEscaped(org: ScratchOrg, tables: readonly string[]
             if (touched.has("ap_capture_items")) {
               await tx.execute(sql`delete from ap_capture_items where org_id = ${org.orgId}`);
             }
-          }
-          for (const [table, trigger] of HRM_APPEND_ONLY_EVIDENCE) {
-            if (!touched.has(table)) continue;
-            await tx.execute(sql.raw(`alter table public."${table}" disable trigger ${trigger}`));
-            await tx.execute(sql`delete from ${qualified(table)} where org_id = ${org.orgId}`);
-            await tx.execute(sql.raw(`alter table public."${table}" enable trigger ${trigger}`));
           }
         }
         await tx.execute(sql`delete from tax_group_members where tax_group_id in
