@@ -37,6 +37,7 @@ import {
 } from "../packs.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { calculateIeStatutory, ieWeekNumber } from "./compute.ts";
+import { iePayeReconciliationFiling } from "./filings.ts";
 import type {
   PayrollCertificate,
   PayrollPackCertificates,
@@ -328,11 +329,14 @@ function iePackFilings(): PayrollPackFilings {
     programTypes: [
       { key: "ie_paye", label: "PAYE/PRSI/USC employer registration (Revenue Commissioners)" },
     ],
-    // No annual employer return since PAYE Modernisation (January 2019):
+    // No annual employer RETURN since PAYE Modernisation (January 2019):
     // liability is reported in real time with each payroll submission, the
-    // P35 is gone, and employees receive an Employment Detail Summary. An
-    // empty year-end list states that; it is not an omission.
-    yearEnd: [],
+    // P35 is gone, the P60 is abolished, and the Employment Detail Summary
+    // is produced by Revenue — so the pack declares no slip. What it
+    // declares is the reconciliation proving the year's committed runs agree
+    // with what was withheld (see ./filings.ts); the absence of a slip in
+    // that declaration states the abolition, it is not an omission.
+    yearEnd: [iePayeReconciliationFiling()],
   };
 }
 
@@ -502,8 +506,9 @@ export const IE_PAYROLL_PACK: IePayrollPack = {
   // Revenue (Tax Reference Numbers, stamp duty TDM): "PPS numbers contain
   // 7 digits followed by either one or two letters, for example, 1234567D"
   // (Citizens Information: "always 7 numbers followed by either one or
-  // 2 letters"). No year-end filing is declared by this pack, so neededFor
-  // is null and the missing-identifier warnings stay silent for Ireland.
+  // 2 letters"). The pack's one year-end filing is an employer
+  // reconciliation, not an employee slip, so neededFor is null and the
+  // missing-identifier warnings stay silent for Ireland.
   employeeIdentifier: {
     label: "PPSN",
     pattern: "\\d{7}[A-Z]{1,2}",
