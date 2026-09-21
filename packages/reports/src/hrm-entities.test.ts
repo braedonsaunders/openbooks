@@ -291,7 +291,11 @@ test('workforce entities scope to one org and one legal-entity boundary', () => 
     hrm_document_signers: null,
     hrm_retention_actions: null,
     hrm_survey_results: null,
-    hrm_org_chart: null,
+    // The chart reads worker_employments, which carries the legal entity,
+    // so it CLAMPS. Unclamped it would show a subsidiary-scoped reader every
+    // other subsidiary's people — the one entity in this group with a column
+    // to clamp on.
+    hrm_org_chart: 'e.employer_subsidiary_id',
     // HR-19 end
   }
   for (const key of HRM_KEYS) {

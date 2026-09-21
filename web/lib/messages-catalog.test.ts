@@ -3013,8 +3013,7 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   // HR-17: 3844 = 3825 on b4b4fe256 plus 19 continuous-performance keys
   // (6 features, 2 setup entities, 1 setup field); zh/pt-BR completeness
   // is asserted per-key below.
-  assert.equal(wanted.length, 3844, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
-  assert.equal(wanted.length, 3861, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  assert.equal(wanted.length, 3880, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3376,10 +3375,8 @@ test('admin copy ships translated in de and ja (i2)', () => {
   ])
   // HR-17: count and hash recomputed over the sorted key inventory for the
   // 19 continuous-performance keys; de/ja completeness asserted per-key below.
-  const ADMIN_I2_SOURCE_COUNT = 3844
-  const ADMIN_I2_SOURCE_HASH = '2ebe1e5de3a8a2c782a3fa593e8bc22849b615c60ece383e30fbd025ed2a17c8'
-  const ADMIN_I2_SOURCE_COUNT = 3861
-  const ADMIN_I2_SOURCE_HASH = '984d6457c1cd7caa80f913b3c943fac7b190049d153da692d4c7e135c3977527'
+  const ADMIN_I2_SOURCE_COUNT = 3880
+  const ADMIN_I2_SOURCE_HASH = '2564c9020790b151f9097690974e128da6859315c79640a6dbdad675577a1f60'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))
@@ -5223,8 +5220,7 @@ const I14_IDENTICAL_BY_FACT = new Set([
 const I14_FILE_COUNTS: Record<string, number> = {
   "items": 161,
   "inventory": 159,
-  "reports": 1549,
-  "reports": 1557,
+  "reports": 1594,
   "sync": 172,
   "login": 33,
   "accounts": 82,
