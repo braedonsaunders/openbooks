@@ -1067,9 +1067,26 @@ export interface ScriptRunOptions {
  * name and role keys for ob.runtime — or nothing at all. Same join contract
  * as web/lib/auth.ts session roles.
  */
+/**
+ * Resolve the acting user for a script context.
+ *
+ * An EXPLICIT script run claims an actor, so an actor that is not an active
+ * user of the organization is a refusal -- the run would otherwise execute
+ * under an identity nobody can account for.
+ *
+ * A LEDGER trigger is different. Posting and voiding carry whatever actor the
+ * audit trail recorded, which legitimately includes system and service actors
+ * and users who have since been deactivated, and those documents posted fine
+ * before triggers took a user context at all. Refusing there does not harden
+ * the script -- it blocks the POSTING, for every caller whose actor is not a
+ * users row. Those call sites pass `required: false` and run the trigger with
+ * no user, which is strictly less authority than a resolved one: the script
+ * sees no roles, so anything gated on them fails closed.
+ */
 export async function resolveScriptUser(
   orgId: string,
   actorId: string | null,
+  options: { required?: boolean } = {},
 ): Promise<NonNullable<ScriptContext["user"]> | null> {
   if (!actorId) return null;
   const [u] = await db
@@ -1082,7 +1099,10 @@ export async function resolveScriptUser(
         eq(schema.users.isActive, true),
       ),
     );
-  if (!u) throw new ScriptActorError(`run actor ${actorId} is not an active user of organization ${orgId}`);
+  if (!u) {
+    if (options.required === false) return null;
+    throw new ScriptActorError(`run actor ${actorId} is not an active user of organization ${orgId}`);
+  }
   const roles = await db
     .select({ key: schema.appRoles.key })
     .from(schema.roleAssignments)

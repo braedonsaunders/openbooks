@@ -130,7 +130,7 @@ export async function runPostDocumentEffects(
       if (options.alreadyClaimed) throw error;
       return;
     }
-    const scriptUser = await resolveScriptUser(doc.orgId, effectActorId);
+    const scriptUser = await resolveScriptUser(doc.orgId, effectActorId, { required: false });
     const ctx: ScriptContext = {
       trigger: "after_post",
       document: doc as unknown as Record<string, unknown>,

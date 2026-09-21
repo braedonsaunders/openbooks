@@ -205,7 +205,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     for (const plan of providerPlans) providerComponents.set(plan.line.id, plan.components);
     deps = { ...deps, taxComponentsByLine: providerComponents };
   }
-  const scriptUser = await resolveScriptUser(doc.orgId, options.audit?.actorId ?? null);
+  const scriptUser = await resolveScriptUser(doc.orgId, options.audit?.actorId ?? null, { required: false });
   const scriptCtx: ScriptContext = {
     trigger: "before_post",
     document: doc as unknown as Record<string, unknown>,

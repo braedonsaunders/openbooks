@@ -132,7 +132,7 @@ async function runBeforeVoidScripts(input: {
     .from(schema.documentLines)
     .where(and(eq(schema.documentLines.documentId, doc.id), eq(schema.documentLines.orgId, input.orgId)));
   if (!org) throw new DocumentVoidError("organization not found");
-  const user = await resolveScriptUser(input.orgId, input.actorId);
+  const user = await resolveScriptUser(input.orgId, input.actorId, { required: false });
   const scriptCtx: ScriptContext = {
     trigger: "before_void",
     document: doc as unknown as Record<string, unknown>,
