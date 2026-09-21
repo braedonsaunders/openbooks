@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  assertMacrsWindowsCover,
   computePoolYear,
   computeMacrsYear,
   computeMacrsThroughYear,
@@ -582,6 +583,49 @@ test("fiscal calendar windows are first-and-last day bounds, including July–Ju
       throughOn: "2026-09-01",
     }).map((row) => row.taxYear),
     [2023, 2024, 2025, 2026],
+  );
+});
+
+test("two short years ending in the same calendar year both survive and prior is the earlier window", () => {
+  const first = { taxYear: 2024, yearStart: "2024-01-01", yearEnd: "2024-03-31" };
+  const second = { taxYear: 2024, yearStart: "2024-04-01", yearEnd: "2024-12-31" };
+  const covered = assertMacrsWindowsCover([second, first], "2024-01-15", "2024-08-20");
+  assert.deepEqual(
+    covered.map((window) => `${window.yearStart}:${window.yearEnd}`),
+    ["2024-01-01:2024-03-31", "2024-04-01:2024-12-31"],
+  );
+  const walked = computeMacrsThroughYear({
+    basis: "10000",
+    placedInServiceOn: "2024-01-15",
+    taxYear: 2024,
+    yearStart: "2024-04-01",
+    yearEnd: "2024-12-31",
+    recoveryPeriodYears: 5,
+    method: "200_db",
+    convention: "half_year",
+  }, [first, second]);
+  assert.notEqual(walked.prior.allowance, "0.00");
+  assert.notEqual(walked.current.allowance, walked.prior.allowance);
+  assert.throws(
+    () => computeMacrsThroughYear({
+      basis: "10000",
+      placedInServiceOn: "2024-01-15",
+      taxYear: 2024,
+      recoveryPeriodYears: 5,
+      method: "200_db",
+      convention: "half_year",
+    }, [first, second]),
+    /names 2 windows/,
+  );
+});
+
+test("a book-period hole is a refused gap, not a min/max tax year", () => {
+  assert.throws(
+    () => assertMacrsWindowsCover([
+      { taxYear: 2024, yearStart: "2024-01-01", yearEnd: "2024-03-31" },
+      { taxYear: 2024, yearStart: "2024-06-01", yearEnd: "2024-12-31" },
+    ], "2024-01-01", "2024-12-31"),
+    /gap between 2024-03-31 and 2024-06-01/,
   );
 });
 

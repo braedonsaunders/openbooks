@@ -638,6 +638,9 @@ function computeMacrsPub946Year(input: MacrsYearInput & {
 }
 
 export interface MacrsYearWindow {
+  /** Persisted tax_year_windows.id when loaded from the registry. */
+  id?: string;
+  /** Filing-year label. May repeat for two short years ending in the same calendar year. */
   taxYear: number;
   yearStart: string;
   yearEnd: string;
@@ -892,6 +895,28 @@ function applySameYear168i7(args: {
   };
 }
 
+function resolveCurrentMacrsWindow(
+  input: MacrsYearInput,
+  ordered: readonly MacrsYearWindow[],
+): MacrsYearWindow | null {
+  if (input.yearStart && input.yearEnd) {
+    const exact = ordered.find((window) =>
+      window.yearStart === input.yearStart && window.yearEnd === input.yearEnd,
+    );
+    if (exact) return exact;
+    throw new Error(
+      `no tax year window matches ${input.yearStart}–${input.yearEnd}; declare that year — do not identify the current window by a repeated filing-year label`,
+    );
+  }
+  const byYear = ordered.filter((window) => window.taxYear === input.taxYear);
+  if (byYear.length > 1) {
+    throw new Error(
+      `tax year ${input.taxYear} names ${byYear.length} windows (${byYear.map((window) => `${window.yearStart}–${window.yearEnd}`).join(", ")}); identify the current window by yearStart/yearEnd — do not collapse equal filing-year labels`,
+    );
+  }
+  return byYear[0] ?? null;
+}
+
 /** Walk statutory windows so a later partial disposal cannot reprice a prior opening.
  *  Windows track THIS vintage's service — a subsidiary short year before placement
  *  is not this asset's first short year. */
@@ -906,7 +931,15 @@ export function computeMacrsThroughYear(
   allocationFollowYear: boolean;
   currentRecoveryYearIndex: number | null;
 } {
-  const ordered = [...windows].sort((left, right) => left.taxYear - right.taxYear);
+  const ordered = [...windows].sort((left, right) =>
+    left.yearStart.localeCompare(right.yearStart) || left.yearEnd.localeCompare(right.yearEnd),
+  );
+  const currentWindow = resolveCurrentMacrsWindow(input, ordered);
+  const currentIndex = currentWindow
+    ? ordered.findIndex((window) =>
+      window.yearStart === currentWindow.yearStart && window.yearEnd === currentWindow.yearEnd,
+    )
+    : -1;
   const checkpoint = input.adjustedCarryover ? persistMacrsBasis(input.adjustedCarryover) : null;
   const carryoverOn = input.carryoverOn ?? null;
   const originWindow = ordered.find((window) =>
@@ -932,12 +965,12 @@ export function computeMacrsThroughYear(
   let currentRecoveryYearIndex: number | null = null;
   for (let index = 0; index < ordered.length; index += 1) {
     const window = ordered[index]!;
-    if (window.taxYear > input.taxYear) break;
+    if (currentWindow ? window.yearStart > currentWindow.yearStart : window.taxYear > input.taxYear) break;
     if (input.placedInServiceOn > window.yearEnd) continue;
     if (input.disposedOn && input.disposedOn < window.yearStart) {
       const gone = postDisposalZero();
-      if (window.taxYear === input.taxYear - 1) prior = gone;
-      if (window.taxYear === input.taxYear) {
+      if (index === currentIndex - 1) prior = gone;
+      if (index === currentIndex) {
         current = gone;
         currentRecoveryYearIndex = null;
       }
@@ -990,7 +1023,7 @@ export function computeMacrsThroughYear(
       deemedPlacedOn: deemedPlacedOn ?? undefined,
       shortYearFactor: excludedTerminalMonth
         ? windowFactor
-        : window.taxYear === input.taxYear ? input.shortYearFactor : windowFactor,
+        : index === currentIndex ? input.shortYearFactor : windowFactor,
       disposedOn: sameYear168i7 ? undefined : input.disposedOn,
       dispositionRecognition: sameYear168i7 ? undefined : input.dispositionRecognition,
     };
@@ -1045,8 +1078,8 @@ export function computeMacrsThroughYear(
       );
     }
     if (preTransfer) {
-      if (window.taxYear === input.taxYear - 1) prior = { ...zeroMacrs(checkpoint!), remainingBasis: checkpoint! };
-      if (window.taxYear === input.taxYear) {
+      if (index === currentIndex - 1) prior = { ...zeroMacrs(checkpoint!), remainingBasis: checkpoint! };
+      if (index === currentIndex) {
         current = { ...zeroMacrs(checkpoint!), remainingBasis: checkpoint! };
         allocationFollowYear = followYear;
         currentRecoveryYearIndex = serviceYears;
@@ -1093,8 +1126,8 @@ export function computeMacrsThroughYear(
       postTransferTaken = formatMoney(add(postTransferTaken, take), 2);
     }
     adjusted = persistMacrsBasis(applied.remainingBasis);
-    if (window.taxYear === input.taxYear - 1) prior = applied;
-    if (window.taxYear === input.taxYear) {
+    if (index === currentIndex - 1) prior = applied;
+    if (index === currentIndex) {
       current = applied;
       allocationFollowYear = followYear;
       currentRecoveryYearIndex = serviceYears;
@@ -1160,7 +1193,7 @@ export function macrsWindowsThroughFiscalCalendar(args: {
   return windows;
 }
 
-function nextCalendarDay(iso: string): string {
+export function nextCalendarDay(iso: string): string {
   const day = parseCalendarDay(iso);
   if (!day) {
     throw new Error(`MACRS window date ${iso} must be a calendar day`);
@@ -1177,26 +1210,31 @@ export function assertMacrsWindowsCover(
   const ordered = [...windows].sort((left, right) => left.yearStart.localeCompare(right.yearStart));
   if (ordered.length === 0) {
     throw new Error(
-      `tax year windows covering ${fromOn} through ${throughOn} are required to date MACRS checkpoints; load them from the fiscal calendar — do not reuse a prior paper remaining basis`,
+      `tax year windows covering ${fromOn} through ${throughOn} are required to date MACRS checkpoints; declare them on Fixed Assets tax-year setup — do not reuse a prior paper remaining basis`,
     );
   }
   const span = ordered.filter((row) => row.yearEnd >= fromOn && row.yearStart <= throughOn);
   if (!span.some((row) => fromOn >= row.yearStart && fromOn <= row.yearEnd)) {
     throw new Error(
-      `no tax year window covers ${fromOn}; configure the fiscal calendar from that date — do not invent intervening years`,
+      `no tax year window covers ${fromOn}; declare the tax year for that date on Fixed Assets tax-year setup — do not invent a book fiscal year`,
     );
   }
   if (!span.some((row) => throughOn >= row.yearStart && throughOn <= row.yearEnd)) {
     throw new Error(
-      `no tax year window covers ${throughOn}; configure the fiscal calendar through that date — do not reuse an earlier checkpoint`,
+      `no tax year window covers ${throughOn}; declare the tax year through that date on Fixed Assets tax-year setup — do not reuse an earlier checkpoint`,
     );
   }
   for (let index = 0; index < span.length - 1; index += 1) {
     const prev = span[index]!;
     const next = span[index + 1]!;
+    if (next.yearStart <= prev.yearEnd) {
+      throw new Error(
+        `tax year windows overlap ${prev.yearStart}–${prev.yearEnd} and ${next.yearStart}–${next.yearEnd}; correct the declared years — do not min/max them together`,
+      );
+    }
     if (nextCalendarDay(prev.yearEnd) !== next.yearStart) {
       throw new Error(
-        `tax year windows gap between ${prev.yearEnd} and ${next.yearStart}; load the missing fiscal year — do not walk across an invented gap`,
+        `tax year windows gap between ${prev.yearEnd} and ${next.yearStart}; declare the missing tax year — do not walk across a book-period hole`,
       );
     }
   }
@@ -1230,6 +1268,8 @@ export function refreshOpenMacrsVintageThrough(
     basis: vintage.unadjustedBasis,
     placedInServiceOn: vintage.placedInServiceOn,
     taxYear: covering.taxYear,
+    yearStart: covering.yearStart,
+    yearEnd: covering.yearEnd,
     recoveryPeriodYears: vintage.recoveryPeriodYears,
     method: vintage.method,
     convention: vintage.convention,

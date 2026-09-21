@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { runTaxPool, TaxPoolError } from "./pool-run.ts";
+import { ensureTaxYearWindow } from "./macrs-calendar.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -78,17 +79,37 @@ interface RunScope {
   subsidiaryId: string;
 }
 
-const runYear = (
+async function declareYear(
   scope: RunScope,
   actorId: string,
   regime: string,
   taxYear: number,
-) =>
-  runTaxPool(scope.orgId, scope.bookId, scope.subsidiaryId, regime, taxYear, {
+  yearStart = `${taxYear}-01-01`,
+  yearEnd = `${taxYear}-12-31`,
+) {
+  return ensureTaxYearWindow(db, scope.orgId, actorId, {
+    subsidiaryId: scope.subsidiaryId,
+    regime,
+    yearStart,
+    yearEnd,
+    filingYear: taxYear,
+    reason: "calendar-year tax window",
+  });
+}
+
+const runYear = async (
+  scope: RunScope,
+  actorId: string,
+  regime: string,
+  taxYear: number,
+) => {
+  await declareYear(scope, actorId, regime, taxYear);
+  return runTaxPool(scope.orgId, scope.bookId, scope.subsidiaryId, regime, taxYear, {
     yearStart: `${taxYear}-01-01`,
     yearEnd: `${taxYear}-12-31`,
     actorId,
   });
+};
 
 type PeriodRow = {
   pool_id: string;
@@ -344,7 +365,10 @@ test("years run consecutively: restating or skipping closed years is refused wit
     // …and a skipped year would claim no allowance on the carried balance.
     await assert.rejects(
       runYear(scope, actorId, "ca_cca", 2026),
-      (error: unknown) => error instanceof TaxPoolError && /before tax year 2024/.test(error.message) && /consecutively/.test(error.message),
+      (error: unknown) =>
+        error instanceof TaxPoolError
+        && /next declared year after 2023-12-31/.test(error.message)
+        && /consecutively/.test(error.message),
     );
     let rows = await periodsFor(org.orgId);
     assert.deepEqual(rows.map((r) => r.tax_year), [2023], "refused runs leave the chain untouched");
@@ -394,6 +418,7 @@ test("a MACRS short year computes Pub 946 dates and refuses a factor that disagr
     await seedAsset(org, actorId, cat5, "10000.00", "2023-03-15");
     const scope: RunScope = org;
 
+    await declareYear(scope, actorId, "us_macrs", 2023, "2023-01-01", "2023-06-30");
     await assert.rejects(
       runTaxPool(scope.orgId, scope.bookId, scope.subsidiaryId, "us_macrs", 2023, {
         yearStart: "2023-01-01",
@@ -471,6 +496,7 @@ test("a MACRS placement after the tax-year window is not given a deemed first-ye
   try {
     const cat5 = await seedTaxCategory(org, "5-year property", { us_macrs_class: "gds_5" });
     await seedAsset(org, actorId, cat5, "10000.00", "2023-10-01");
+    await declareYear(org, actorId, "us_macrs", 2023, "2023-01-01", "2023-06-30");
     const result = await runTaxPool(org.orgId, org.bookId, org.subsidiaryId, "us_macrs", 2023, {
       yearStart: "2023-01-01",
       yearEnd: "2023-06-30",
@@ -489,6 +515,7 @@ test("a 0.49 short-year factor refuses instead of rounding into a six-month year
   try {
     const cat5 = await seedTaxCategory(org, "5-year property", { us_macrs_class: "gds_5" });
     await seedAsset(org, actorId, cat5, "10000.00", "2023-03-15");
+    await declareYear(org, actorId, "us_macrs", 2023, "2023-01-01", "2023-06-30");
     await assert.rejects(
       runTaxPool(org.orgId, org.bookId, org.subsidiaryId, "us_macrs", 2023, {
         yearStart: "2023-01-01",

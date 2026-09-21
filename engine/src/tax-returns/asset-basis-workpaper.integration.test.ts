@@ -28,6 +28,7 @@ import {
 } from "./asset-basis-workpaper.ts";
 import type { TaxAssetBasisInput } from "./asset-basis-policy.ts";
 import { runTaxPool } from "./pool-run.ts";
+import { ensureTaxYearWindow } from "./macrs-calendar.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 type Fixture = {
@@ -216,12 +217,21 @@ function input(f: Fixture, proceeds = "600.00"): TaxAssetBasisInput {
   };
 }
 
-const runYear = (f: Fixture) =>
-  runTaxPool(f.org.orgId, f.org.bookId, f.org.subsidiaryId, "ca_cca", 2026, {
+const runYear = async (f: Fixture) => {
+  await ensureTaxYearWindow(db, f.org.orgId, f.actors.submitterId, {
+    subsidiaryId: f.org.subsidiaryId,
+    regime: "ca_cca",
+    yearStart: "2026-01-01",
+    yearEnd: "2026-12-31",
+    filingYear: 2026,
+    reason: "calendar-year tax window",
+  });
+  return runTaxPool(f.org.orgId, f.org.bookId, f.org.subsidiaryId, "ca_cca", 2026, {
     yearStart: "2026-01-01",
     yearEnd: "2026-12-31",
     actorId: f.actors.submitterId,
   });
+};
 
 async function usTransferInput(f: Fixture): Promise<TaxAssetBasisInput> {
   assert.ok(
@@ -676,6 +686,14 @@ async function classifyUs(f: Fixture) {
     update asset_categories set tax_attributes=tax_attributes||'{"us_macrs_class":"gds_5"}'::jsonb
      where org_id=${f.org.orgId} and id=${f.categoryId} returning id`);
   assert.equal(updated.rows.length, 1);
+  await ensureTaxYearWindow(db, f.org.orgId, f.actors.submitterId, {
+    subsidiaryId: f.org.subsidiaryId,
+    regime: "us_macrs",
+    yearStart: "2026-01-01",
+    yearEnd: "2026-12-31",
+    filingYear: 2026,
+    reason: "calendar-year tax window",
+  });
 }
 
 function usSellerPaper(
