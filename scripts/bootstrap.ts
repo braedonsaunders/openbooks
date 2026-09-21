@@ -1153,17 +1153,19 @@ async function ensureRuntimeDatabaseRole(
   // governed SQL console switches to openbooks_read before user SQL executes.
   // A re-run over the transferred test login cannot grant on a pg_catalog
   // function it does not own; converge by verifying the grant instead.
-  if (!precreated) try {
-    await pool.query(
-      `grant execute on function pg_catalog.set_config(text, text, boolean) to ${role}`,
-    );
-  } catch (err) {
-    if ((err as { code?: string }).code !== "42501") throw err;
-    const granted = await pool.query<{ ok: boolean }>(
-      `select has_function_privilege($1, 'pg_catalog.set_config(text, text, boolean)', 'EXECUTE') as ok`,
-      [config.roleName],
-    );
-    if (!granted.rows[0]?.ok) throw err;
+  if (!precreated) {
+    try {
+      await pool.query(
+        `grant execute on function pg_catalog.set_config(text, text, boolean) to ${role}`,
+      );
+    } catch (err) {
+      if ((err as { code?: string }).code !== "42501") throw err;
+      const granted = await pool.query<{ ok: boolean }>(
+        `select has_function_privilege($1, 'pg_catalog.set_config(text, text, boolean)', 'EXECUTE') as ok`,
+        [config.roleName],
+      );
+      if (!granted.rows[0]?.ok) throw err;
+    }
   }
   await pool.query(
     `alter default privileges in schema public grant select, insert, update, delete on tables to ${role}`,
@@ -1460,7 +1462,7 @@ async function ensureReadRole(runtimeRoleName?: string): Promise<void> {
       "grant to bootstrap user",
       `do $$ begin
          if not pg_has_role(current_user, 'openbooks_read', 'SET') then
-           grant openbooks_read to current_user;
+           grant openbooks_read to current_user with set true;
          end if;
        end $$;`,
     ],
@@ -1473,7 +1475,7 @@ async function ensureReadRole(runtimeRoleName?: string): Promise<void> {
     // CREATEROLE), so skip when already a member instead of failing.
     steps.push(["grant to runtime user", `do $$ begin
          if not pg_has_role(${runtimeLiteral}, 'openbooks_read', 'SET') then
-           grant openbooks_read to ${runtimeRole};
+           grant openbooks_read to ${runtimeRole} with set true;
          end if;
        end $$;`]);
   }

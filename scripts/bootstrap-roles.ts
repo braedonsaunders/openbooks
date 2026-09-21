@@ -59,7 +59,7 @@ async function verifyLogin(pool: pg.Pool, label: string): Promise<string> {
          and (r.rolsuper or r.rolbypassrls or r.rolcreatedb or r.rolcreaterole or r.rolreplication
            or r.rolname in ('pg_read_server_files', 'pg_write_server_files', 'pg_execute_server_program',
                             'pg_read_all_data', 'pg_write_all_data'))
-    ) as unsafe
+    )::text[] as unsafe
   `);
   const row = result.rows[0];
   if (!row || row.unsafe.length) throw refusal(`${label} has unsafe role privileges: ${row?.unsafe.join(", ") || "posture unavailable"}`);
@@ -151,7 +151,13 @@ export async function verifyPrecreatedObjectAccess(migration: pg.Pool, config: R
          or (n.nspname = 'public' and has_table_privilege('openbooks_read', c.oid, 'SELECT')))
     union all
     select 'schema ' || nspname from pg_namespace where nspname in ('public', 'openbooks_query')
-      and has_schema_privilege('openbooks_read', oid, 'CREATE')
+      and (has_schema_privilege('openbooks_read', oid, 'CREATE') or pg_get_userbyid(nspowner) = 'openbooks_read')
+    union all
+    select n.nspname || '.' || c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname in ('public', 'openbooks_query') and pg_get_userbyid(c.relowner) = 'openbooks_read'
+    union all
+    select p.oid::regprocedure::text from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname in ('public', 'openbooks_query') and pg_get_userbyid(p.proowner) = 'openbooks_read'
     union all
     select p.oid::regprocedure::text from pg_proc p join pg_namespace n on n.oid = p.pronamespace
      where n.nspname in ('public', 'openbooks_query') and p.prosecdef
@@ -166,6 +172,11 @@ export async function verifyPrecreatedObjectAccess(migration: pg.Pool, config: R
      where n.nspname = 'public' and c.relkind in ('r', 'p')
        and not (has_table_privilege($1, c.oid, 'SELECT') and has_table_privilege($1, c.oid, 'INSERT')
          and has_table_privilege($1, c.oid, 'UPDATE') and has_table_privilege($1, c.oid, 'DELETE'))
+    union all
+    select n.nspname || '.' || c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'public' and c.relkind = 'S'
+       and not (has_sequence_privilege($1, c.oid, 'USAGE') and has_sequence_privilege($1, c.oid, 'SELECT')
+         and has_sequence_privilege($1, c.oid, 'UPDATE'))
     union all
     select 'openbooks_query.' || c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
      where n.nspname = 'openbooks_query' and c.relkind = 'v'
