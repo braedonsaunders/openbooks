@@ -194,8 +194,9 @@
   "run": {
     "asOf": "Stichtag",
     "book": "Abschreibungsbuch",
-    "postBook": "{book} buchen",
+    "postBook": "Abschreibung ausführen — {book}",
     "posted": "{count} Buchungen in Höhe von {amount} gebucht",
+    "recorded": "{count} Abschreibungen ohne Hauptbuchbuchung über insgesamt {amount} erfasst",
     "nothingDue": "Nichts zur Abschreibung fällig",
     "nextDue": "Zum {date} nichts zu buchen. Nächste Position: {asset} {period} ({amount}), Ende {endsOn}.",
     "someSkipped": "{count} übersprungen"

@@ -1,5 +1,7 @@
 'use client'
 
+import { readApiErrorMessage } from '@/lib/api-error'
+
 import { useMoney } from '@/components/money-provider'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -8,8 +10,8 @@ import { Play } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button, Label, Popover, Select } from '@openbooks/ui'
 /**
- * List-level "Run depreciation" — posts all due, unposted period entries
- * through the kernel (assets.manage). Idempotent, so a repeat click that finds
+ * List-level "Run depreciation" — recognizes due amounts in the selected
+ * book, with kernel entries only for GL-posting books (assets.manage). Idempotent, so a repeat click that finds
  * nothing due simply reports zero.
  */
 export function RunDepreciationButton({
@@ -30,31 +32,34 @@ export function RunDepreciationButton({
     setBusy(true)
     // A transport or parse failure must toast like any other failure — an
     // uncaught rejection leaves the button spinning with zero feedback.
-    let data: { posted?: number; skipped?: number; totalAmount?: string; problems?: unknown; error?: string; asOfDate?: string; nextDue?: { assetNumber: string; period: string; endsOn: string; amount: string } | null }
+    let data: { posted?: number; recorded?: number; recordedAmount?: string; skipped?: number; totalAmount?: string; problems?: unknown; error?: string; asOfDate?: string; nextDue?: { assetNumber: string; period: string; endsOn: string; amount: string } | null }
     try {
       const res = await fetch('/api/assets/run-depreciation', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ ...(assetId ? { assetId } : {}), bookId }),
       })
-      data = await res.json()
       if (!res.ok) {
-        toast.error(typeof data.error === 'string' && data.error ? data.error : t('drawer.runFailed'))
+        toast.error(await readApiErrorMessage(res, t('drawer.runFailed')))
         setBusy(false)
         return
       }
+      data = await res.json()
     } catch {
       toast.error(t('drawer.runFailed'))
       setBusy(false)
       return
     }
     const posted = data.posted ?? 0
+    const recorded = data.recorded ?? 0
     const skipped = data.skipped ?? 0
-    if (posted > 0) {
-      toast.success(
-        t('run.posted', { count: posted, amount: money(data.totalAmount ?? '0') }) +
-          (skipped > 0 ? ` · ${t('run.someSkipped', { count: skipped })}` : ''),
-      )
+    if (posted > 0 || recorded > 0) {
+      const messages = [
+        ...(posted > 0 ? [t('run.posted', { count: posted, amount: money(data.totalAmount ?? '0') })] : []),
+        ...(recorded > 0 ? [t('run.recorded', { count: recorded, amount: money(data.recordedAmount ?? '0') })] : []),
+        ...(skipped > 0 ? [t('run.someSkipped', { count: skipped })] : []),
+      ]
+      toast.success(messages.join(' · '))
     } else if (skipped === 0 && data.nextDue) {
       // A mid-period run posts nothing while a planned line waits in the open
       // period: name the as-of date and the next due line (F-t07-005).
@@ -84,7 +89,7 @@ export function RunDepreciationButton({
   >
     <div className="w-72 space-y-3 p-3">
       <div className="space-y-1.5"><Label htmlFor="depreciation-book">{t('run.book')}</Label><Select id="depreciation-book" value={bookId} onChange={(event) => setBookId(event.target.value)}>{books.map((book) => <option key={book.id} value={book.id}>{book.name}</option>)}</Select></div>
-      <Button className="w-full" onClick={run} disabled={busy || !bookId}>{t('run.postBook')}</Button>
+      <Button className="w-full" onClick={run} disabled={busy || !bookId}>{t('run.postBook', { book: books.find((book) => book.id === bookId)?.name ?? '' })}</Button>
     </div>
   </Popover>
 }

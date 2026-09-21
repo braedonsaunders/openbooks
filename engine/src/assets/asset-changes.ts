@@ -438,7 +438,7 @@ async function snapshot(
     );
     if (overdue)
       throw new Error(
-        `post depreciation for ${book.name} through ${overdue.ends_on} before proposing this change`,
+        `run depreciation for ${book.name} through ${overdue.ends_on} before proposing this change`,
       );
     const futurePosted = bookLines.find(
       (l) => l.posted_amount !== null && l.ends_on >= input.effectiveOn,

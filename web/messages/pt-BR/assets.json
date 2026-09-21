@@ -227,8 +227,9 @@
   "run": {
     "asOf": "Em",
     "book": "Livro de depreciação",
-    "postBook": "Contabilizar {book}",
+    "postBook": "Executar depreciação — {book}",
     "posted": "{count} lançamentos lançados totalizando {amount}",
+    "recorded": "Registrados {count} encargos sem lançamento no razão, totalizando {amount}",
     "nothingDue": "Nada a depreciar",
     "nextDue": "Nada a contabilizar em {date}. Próximo: {asset} {period} ({amount}), termina em {endsOn}.",
     "someSkipped": "{count} ignorados"

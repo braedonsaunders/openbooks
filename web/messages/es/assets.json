@@ -194,8 +194,9 @@
   "run": {
     "asOf": "Al",
     "book": "Libro de depreciación",
-    "postBook": "Contabilizar {book}",
+    "postBook": "Ejecutar depreciación — {book}",
     "posted": "Se contabilizaron {count, plural, one {# asiento} other {# asientos}} por un total de {amount}",
+    "recorded": "Registrados {count} cargos sin asiento en el libro mayor por un total de {amount}",
     "nothingDue": "Nada que depreciar",
     "nextDue": "Nada que contabilizar al {date}. Siguiente: {asset} {period} ({amount}), termina el {endsOn}.",
     "someSkipped": "{count, plural, one {# omitido} other {# omitidos}}"

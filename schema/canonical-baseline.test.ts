@@ -443,6 +443,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // calibration, talent review and succession (0228).
     "0228_hrm_continuous_performance.sql",
     // HR-17 end
+    "0237_non_gl_depreciation_recognition.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
