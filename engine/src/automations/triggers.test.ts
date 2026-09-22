@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  assertPublishableAutomationActions,
   parseAutomationActions,
   parseAutomationConditions,
   parseAutomationRules,
@@ -47,6 +48,21 @@ test("actions need at least one valid action", () => {
     { kind: "update_field", entity: "employment", field: "department_id", value: "x" },
   ]);
   assert.equal(actions.length, 2);
+});
+
+test("webhook actions refuse publishing with the transport named and a replacement", () => {
+  const actions = parseAutomationActions([{ kind: "webhook", endpointKey: "crm" }]);
+  assert.throws(
+    () => assertPublishableAutomationActions(actions),
+    (e: unknown) =>
+      e instanceof AutomationContractError &&
+      /no outbound webhook transport/.test((e as Error).message) &&
+      /send_notification/.test((e as Error).message),
+  );
+  // Deliverable actions still publish.
+  assertPublishableAutomationActions(
+    parseAutomationActions([{ kind: "send_notification", to: "manager", body: "hi" }]),
+  );
 });
 
 test("conditions default to empty (match-all)", () => {

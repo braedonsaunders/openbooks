@@ -19,6 +19,7 @@ import {
   parseAutomationActions,
   parseAutomationConditions,
   parseAutomationRules,
+  unsupportedAutomationActionRefusal,
   type AutomationAction,
 } from "./triggers.ts";
 
@@ -292,38 +293,22 @@ async function runActionLive(
 }
 
 async function runDeferredAction(
-  orgId: string,
-  runId: string,
-  index: number,
+  _orgId: string,
+  _runId: string,
+  _index: number,
   action: AutomationAction,
 ): Promise<string> {
   if (action.kind === "delay") return `delay ${action.days}d recorded`;
   if (action.kind === "approve_step") return "approve_step recorded";
   if (action.kind === "webhook") {
-    // Org-declared endpoint registry (orgs.settings.automationEndpoints),
-    // never a free-form URL on the action.
-    const orgs = await db.execute<{ endpoints: Record<string, { url?: string }> | null }>(sql`
-      select settings -> 'automationEndpoints' as endpoints from orgs where id = ${orgId} limit 1
-    `);
-    const endpoint = orgs.rows[0]?.endpoints?.[action.endpointKey];
-    if (!endpoint?.url) {
-      throw new AutomationExecuteError(
-        `webhook endpoint '${action.endpointKey}' is not declared for this org — declare it in automation settings first; free-form URLs are never called`,
-      );
-    }
-    await enqueueFlowEmail({
-      orgId,
-      runId,
-      occurrenceKey: `${runId}:automation:${index}`,
-      payload: {
-        to: [],
-        subject: `Webhook deferred: ${action.endpointKey}`,
-        html: `<p>Signed webhook to ${endpoint.url} deferred.</p>`,
-        text: `Signed webhook to ${endpoint.url} deferred.`,
-        meta: { category: "automation_webhook" },
-      },
-    });
-    return `webhook→${action.endpointKey} deferred`;
+    // No outbound webhook transport exists (no outbox kind, no worker, no
+    // endpoint caller), so a stored webhook action can never send: refuse
+    // by name instead of failing every run inside email validation. The
+    // run fails, the recipe surfaces error, and the remedy names the
+    // replacement — publish-time validation stops new rows from arriving.
+    throw new AutomationExecuteError(
+      `${unsupportedAutomationActionRefusal(action)} — edit the automation to replace the webhook action, then re-enable it`,
+    );
   }
   if (action.kind === "start_flow") return `start_flow ${action.subject} recorded`;
   throw new AutomationExecuteError(`action kind '${(action as { kind: string }).kind}' is not executable yet — remove it and save again`);
@@ -524,6 +509,12 @@ export async function executeAutomation(input: {
 
 async function simulateSteps(actions: AutomationAction[], subject: SubjectSnapshot | null): Promise<RunStep[]> {
   return actions.map((action, i) => {
+    // Simulate refuses what live refuses: a step that can never run must
+    // never preview as "simulated" success.
+    const refusal = unsupportedAutomationActionRefusal(action);
+    if (refusal) {
+      return { index: i + 1, kind: action.kind, status: "failed" as const, error: refusal };
+    }
     if (action.kind === "update_field") {
       try {
         assertWritableField(action.entity, action.field);

@@ -19,6 +19,7 @@ import {
   automationsFeatureOn,
 } from "./services.ts";
 import { executeAutomation, AutomationExecuteError } from "./execute.ts";
+import { AutomationContractError } from "./triggers.ts";
 import { simulateAutomation } from "./simulator.ts";
 import { applyExceptionOnly, ApprovalPolicyError, scoreException } from "./approvals.ts";
 import { upsertActionReason, validateSubmitActionReason, ActionReasonError } from "./action-reasons.ts";
@@ -286,26 +287,55 @@ test("simulate writes nothing: row counts identical before and after", { skip: !
   });
 });
 
-test("hostile loops: a webhook to an undeclared endpoint refuses with the registry remedy", { skip: !DB }, async () => {
+test("webhook actions refuse at publish with the missing transport named", { skip: !DB }, async () => {
   await withHarness(async (h) => {
-    const recipe = await createAutomation({
-      orgId: h.org.orgId,
-      actorId: h.adminId,
-      name: "webhook probe",
-      trigger: { kind: "manual" },
-      rules: {},
-      conditions: {},
-      actions: [{ kind: "webhook", endpointKey: "nope" }],
-    });
-    await db.execute(sql`update automations set status = 'enabled' where id = ${recipe.id}`);
+    await assert.rejects(
+      createAutomation({
+        orgId: h.org.orgId,
+        actorId: h.adminId,
+        name: "webhook probe",
+        trigger: { kind: "manual" },
+        rules: {},
+        conditions: {},
+        actions: [{ kind: "webhook", endpointKey: "nope" }],
+      }),
+      (e: unknown) =>
+        e instanceof AutomationContractError &&
+        /no outbound webhook transport/.test((e as Error).message) &&
+        /send_notification/.test((e as Error).message),
+    );
+    const rows = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from automations where org_id = ${h.org.orgId} and name = 'webhook probe'
+    `)).rows[0]!.n;
+    assert.equal(rows, 0, "the refused publish stores nothing");
+  });
+});
+
+test("a legacy stored webhook action fails the run by name and sends nothing", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    // Rows predating the publish refusal bypass the service: insert
+    // directly so execution of a legacy row is what is under test.
+    const legacyId = (await db.execute<{ id: string }>(sql`
+      insert into automations (org_id, name, status, trigger, rules, conditions, actions, created_by, updated_by)
+      values (${h.org.orgId}, 'legacy webhook', 'enabled',
+              '{"kind":"manual"}'::jsonb, '{}'::jsonb, '{}'::jsonb,
+              '[{"kind":"webhook","endpointKey":"legacy"}]'::jsonb, ${h.adminId}, ${h.adminId})
+      returning id
+    `)).rows[0]!.id;
     const result = await executeAutomation({
       orgId: h.org.orgId,
       actorId: h.adminId,
-      automationId: recipe.id,
+      automationId: legacyId,
       triggerPayload: { kind: "manual" },
     });
     assert.equal(result.status, "failed");
-    assert.match(result.steps[result.steps.length - 1]!.error ?? "", /not declared for this org/);
+    assert.match(result.steps[result.steps.length - 1]!.error ?? "", /no outbound webhook transport/);
+    assert.match(result.steps[result.steps.length - 1]!.error ?? "", /send_notification/);
+    const queued = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from scheduler_outbox
+       where org_id = ${h.org.orgId} and subject_id = ${result.runId}
+    `)).rows[0]!.n;
+    assert.equal(queued, 0, "a refused webhook enqueues no outbox job");
   });
 });
 
