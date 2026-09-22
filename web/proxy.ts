@@ -131,13 +131,19 @@ function unavailablePage(requestId: string): string {
     `main{max-width:28rem;padding:2rem;text-align:center}` +
     `h1{font-size:1.25rem;margin:0 0 .5rem}p{color:#475569;font-size:.875rem;line-height:1.5}` +
     `code{font-size:.75rem;background:#e2e8f0;padding:.125rem .375rem;border-radius:.25rem}` +
-    `button{margin-top:1rem;background:#0f766e;color:#fff;border:0;border-radius:.375rem;` +
-    `padding:.625rem 1.25rem;font-size:.875rem;cursor:pointer}</style></head>` +
+    `a.retry{display:inline-block;margin-top:1rem;background:#0f766e;color:#fff;border:0;` +
+    `border-radius:.375rem;padding:.625rem 1.25rem;font-size:.875rem;cursor:pointer;` +
+    `text-decoration:none}</style></head>` +
     `<body><main><h1>Service unavailable</h1>` +
     `<p>The server could not be reached for this request, so nothing was ` +
     `changed. Try again in a moment.</p>` +
     `<p>Reference <code>${requestId}</code></p>` +
-    `<button type="button" onclick="location.reload()">Try again</button>` +
+    // Plain same-document link: replays the current navigation as a GET with
+    // no script, so the retry works under the nonce-only script-src policy
+    // that blocks inline handlers such as onclick. An empty href resolves to
+    // the current URL (query string included); no request target is embedded,
+    // so there is no open-redirect surface.
+    `<a class="retry" href="">Try again</a>` +
     `</main></body></html>`;
 }
 
