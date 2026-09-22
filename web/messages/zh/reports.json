@@ -33,7 +33,8 @@
       "cashFlowIndirectTitle": "现金流量（间接法）",
       "cashFlowIndirectDescription": "间接法 — 净利润调节至经营现金流，附营运资本明细",
       "payrollDescription": "基于工资条的内置工资报表——工资数据需要工资权限。",
-      "hrmDescription": "基于雇佣记录的内置人力报表，需要 HRM 雇佣权限。"
+      "hrmDescription": "基于雇佣记录的内置人力报表，需要 HRM 雇佣权限。",
+      "builtInDescription": "统一报表目录中的内置运营报表。"
     },
     "groups": {
       "financial": "财务报表",
@@ -44,7 +45,12 @@
       "projects": "项目",
       "orders": "销售与订单",
       "payroll": "工资",
-      "hrm": "人力资源"
+      "hrm": "人力资源",
+      "crm": "客户关系管理",
+      "inventory": "库存",
+      "allocations": "分配",
+      "aiGovernance": "AI 治理",
+      "other": "其他报表"
     },
     "customStudio": {
       "title": "自定义报表构建器",

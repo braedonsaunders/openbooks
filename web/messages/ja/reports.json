@@ -33,7 +33,8 @@
       "cashFlowIndirectTitle": "キャッシュ・フロー（間接法）",
       "cashFlowIndirectDescription": "間接法 — 当期純利益を営業キャッシュ・フローに調整（運転資本明細付き）",
       "payrollDescription": "給与明細を対象とする組込み給与レポート — 賃金データには給与権限が必要です。",
-      "hrmDescription": "雇用記録に基づく組み込みの人員レポート。HRM の雇用権限が必要です。"
+      "hrmDescription": "雇用記録に基づく組み込みの人員レポート。HRM の雇用権限が必要です。",
+      "builtInDescription": "統合レポートカタログの組み込み業務レポートです。"
     },
     "groups": {
       "financial": "財務諸表",
@@ -44,7 +45,12 @@
       "projects": "プロジェクト",
       "orders": "販売・受注",
       "payroll": "給与",
-      "hrm": "人事"
+      "hrm": "人事",
+      "crm": "顧客関係管理",
+      "inventory": "在庫",
+      "allocations": "配賦",
+      "aiGovernance": "AI ガバナンス",
+      "other": "その他のレポート"
     },
     "customStudio": {
       "title": "カスタムレポートビルダー",

@@ -33,7 +33,8 @@
       "cashFlowIndirectTitle": "Kapitalfluss (indirekt)",
       "cashFlowIndirectDescription": "Indirekte Methode — Jahresüberschuss zum operativen Cashflow mit Working-Capital-Details",
       "payrollDescription": "Integrierter Lohnbericht über Abrechnungen — Lohndaten erfordern die Lohnabrechnungs-Berechtigung.",
-      "hrmDescription": "Integrierter Personalbericht über Beschäftigungsdatensätze – erfordert die HRM-Beschäftigungsberechtigung."
+      "hrmDescription": "Integrierter Personalbericht über Beschäftigungsdatensätze – erfordert die HRM-Beschäftigungsberechtigung.",
+      "builtInDescription": "Integrierter operativer Bericht aus dem einheitlichen Berichtskatalog."
     },
     "groups": {
       "financial": "Finanzberichte",
@@ -44,7 +45,12 @@
       "projects": "Projekte",
       "orders": "Vertrieb & Aufträge",
       "payroll": "Lohnabrechnung",
-      "hrm": "Personal"
+      "hrm": "Personal",
+      "crm": "Kundenbeziehungen",
+      "inventory": "Bestand",
+      "allocations": "Zuordnungen",
+      "aiGovernance": "KI-Governance",
+      "other": "Weitere Berichte"
     },
     "customStudio": {
       "title": "Benutzerdefinierter Berichtsgenerator",

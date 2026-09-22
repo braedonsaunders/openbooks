@@ -9,7 +9,8 @@
 // silently reading as the calendar year. Every definition run path (interactive,
 // export, drill, scheduled) funnels through that executor.
 
-import { REPORT_ENTITY_MAP, entityColumn } from './entities'
+import { defaultRowsQuery } from './custom-query'
+import { HRM_REPORT_ENTITIES, REPORT_ENTITY_MAP, entityColumn } from './entities'
 import type { ReportCustomQuery, ReportFilterOperator, ReportRule } from './types'
 
 export type BuiltInReportUrlFilter = {
@@ -38,6 +39,25 @@ export type BuiltInReportDefinition = {
    *  without changing the ReportCustomQuery storage contract. */
   urlFilters?: readonly BuiltInReportUrlFilter[]
 }
+
+/**
+ * The former HRM reports page treated every HRM report entity as a separate
+ * side catalog. That made the sources discoverable, but they were not actual
+ * report definitions and disappeared when the page was retired.
+ *
+ * Materialise them as ordinary built-ins instead. They now use the same
+ * definition catalog, executor, exports, schedules, permission gate and
+ * feature gate as every other report. Headcount keeps its curated summary
+ * definition below; every other governed source gets a practical rows-mode
+ * definition generated from its declared columns and stable sort.
+ */
+export const WORKFORCE_BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] =
+  HRM_REPORT_ENTITIES.filter((entity) => entity.key !== 'hrm_headcount').map((entity) => ({
+    slug: `workforce-${entity.key.replace(/^hrm_/, '').replaceAll('_', '-')}`,
+    name: entity.label,
+    description: entity.description,
+    query: defaultRowsQuery(entity),
+  }))
 
 export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   {
@@ -577,6 +597,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
       sorts: [{ column: 'lifecycle_stage', direction: 'asc' }],
     },
   },
+  ...WORKFORCE_BUILT_IN_REPORT_DEFINITIONS,
   {
     slug: 'headcount-statement',
     name: 'Headcount statement',
