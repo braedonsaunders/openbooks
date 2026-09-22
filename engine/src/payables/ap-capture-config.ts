@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { unsealSecret } from "../platform/secrets.ts";
-import { DEFAULT_INVOICE_MODEL, validateAzureDocumentEndpoint } from "./ap-capture.ts";
+import { DEFAULT_INVOICE_MODEL, verifyAzureDocumentEndpoint, type AddressLookup } from "./ap-capture.ts";
 
 export type DocumentCaptureSettings = {
   enabled: boolean;
@@ -82,12 +82,12 @@ export async function getDocumentCaptureSettings(orgId: string): Promise<Documen
 }
 
 /** The worker's only config resolver. Disabled/missing/tampered secrets fail closed. */
-export async function getDocumentCaptureRuntimeConfig(orgId: string): Promise<DocumentCaptureRuntimeConfig | null> {
+export async function getDocumentCaptureRuntimeConfig(orgId: string, lookup?: AddressLookup): Promise<DocumentCaptureRuntimeConfig | null> {
   const { globalEnabled, capture } = await readStored(orgId);
   const settings = normalizeStoredDocumentCapture(capture);
   if (!globalEnabled || !settings.enabled) return null;
   if (!settings.endpoint) return null;
-  validateAzureDocumentEndpoint(settings.endpoint);
+  await verifyAzureDocumentEndpoint(settings.endpoint, lookup);
   const apiKey = unsealSecret(capture.keyEncrypted);
   if (!apiKey) return null;
   return { ...settings, apiKey };

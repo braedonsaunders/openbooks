@@ -8,6 +8,7 @@ import {
   extractAzureInvoice,
   validatePurchaseOrderQuantities,
   validateNormalizedCapture,
+  type AddressLookup,
   type CaptureIssue,
   type CaptureLine,
   type NormalizedCapture,
@@ -441,7 +442,7 @@ export async function resolveAndValidateCapture(input: {
   return { normalized, vendorId, purchaseOrderId, issues, duplicate };
 }
 
-export async function processCaptureItem(input: { orgId: string; captureItemId: string; actorId?: string }): Promise<void> {
+export async function processCaptureItem(input: { orgId: string; captureItemId: string; actorId?: string; fetchImpl?: typeof fetch; lookup?: AddressLookup }): Promise<void> {
   const claimed = (await db.execute<CaptureRow>(sql`
     update ap_capture_items set status = 'extracting', attempts = attempts + 1,
            last_error = null, updated_at = now(), updated_by = ${input.actorId ?? null}
@@ -450,7 +451,7 @@ export async function processCaptureItem(input: { orgId: string; captureItemId: 
   `));
   const item = claimed.rows[0];
   if (!item) return;
-  const settings = await getDocumentCaptureRuntimeConfig(input.orgId);
+  const settings = await getDocumentCaptureRuntimeConfig(input.orgId, input.lookup);
   const attempt = Number((item as unknown as { attempts: number }).attempts);
   const run = (await db.execute<{ id: string }>(sql`
     insert into ap_capture_runs (org_id, capture_item_id, attempt, provider, model, api_version, created_by)
@@ -468,6 +469,8 @@ export async function processCaptureItem(input: { orgId: string; captureItemId: 
       model: settings.model,
       contentType: blob.contentType,
       bytes: blob.bytes,
+      fetchImpl: input.fetchImpl,
+      lookup: input.lookup,
     });
     const resolved = await resolveAndValidateCapture({
       orgId: input.orgId,

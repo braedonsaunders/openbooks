@@ -7,8 +7,10 @@ import {
   extractAzureInvoice,
   normalizeAzureInvoice,
   normalizeCapturedDecimal,
+  testAzureDocumentProvider,
   validateNormalizedCapture,
   validatePurchaseOrderQuantities,
+  verifyAzureDocumentEndpoint,
   type CaptureIssue,
   type NormalizedCapture,
 } from "./ap-capture.ts";
@@ -234,6 +236,7 @@ test("Azure adapter submits bytes and polls the provider operation", async () =>
     contentType: "application/pdf",
     bytes: new Uint8Array([37, 80, 68, 70]),
     fetchImpl: fakeFetch,
+    lookup: async () => ["20.50.100.1"],
   });
   assert.equal(result.normalized.invoiceNumber, "INV-1042");
   assert.match(calls[0]!, /documentintelligence\/documentModels\/prebuilt-invoice:analyze/);
@@ -251,6 +254,53 @@ test("Azure adapter rejects non-provider endpoints before making a request", asy
     }),
     /not an Azure Document Intelligence endpoint/,
   );
+});
+
+test("endpoint verification resolves DNS and refuses non-public addresses", async () => {
+  const verified = await verifyAzureDocumentEndpoint(
+    "https://demo.cognitiveservices.azure.com",
+    async () => ["20.50.100.1"],
+  );
+  assert.equal(verified.hostname, "demo.cognitiveservices.azure.com");
+  // Suffix-pinned but rebound to a private address: the validator used to
+  // pass this, and the request then carried the subscription key there.
+  await assert.rejects(
+    verifyAzureDocumentEndpoint(
+      "https://rebound.cognitiveservices.azure.com",
+      async () => ["10.9.9.9"],
+    ),
+    /did not resolve to a public address/,
+  );
+  await assert.rejects(
+    verifyAzureDocumentEndpoint(
+      "https://unresolvable.cognitiveservices.azure.com",
+      async () => { throw new Error("ENOTFOUND"); },
+    ),
+    /did not resolve to a public address/,
+  );
+});
+
+test("provider failures name the fault without echoing response bodies", async () => {
+  const htmlBody = "<html><body>Something containing document bytes</body></html>";
+  const refused = await extractAzureInvoice({
+    endpoint: "https://demo.cognitiveservices.azure.com",
+    apiKey: "secret",
+    contentType: "application/pdf",
+    bytes: new Uint8Array([37, 80, 68, 70]),
+    fetchImpl: async () => new Response(htmlBody, { status: 502, headers: { "Content-Type": "text/html" } }),
+    lookup: async () => ["20.50.100.1"],
+  }).then(() => null, (error: unknown) => error as Error);
+  assert.ok(refused instanceof Error, "a 502 submission must fail");
+  assert.match(refused.message, /HTTP 502/);
+  assert.ok(!refused.message.includes("document bytes"), "raw response bodies never surface in errors");
+  const structured = await testAzureDocumentProvider({
+    endpoint: "https://demo.cognitiveservices.azure.com",
+    apiKey: "secret",
+    fetchImpl: async () => Response.json({ error: { message: "Invalid subscription key" } }, { status: 401 }),
+    lookup: async () => ["20.50.100.1"],
+  });
+  assert.equal(structured.ok, false);
+  assert.match(structured.message, /Invalid subscription key/);
 });
 
 test("PO matching enforces both ordered and received quantities exactly", () => {
@@ -634,8 +684,11 @@ test(
         pages: [],
       },
     };
-    const previousFetch = globalThis.fetch;
-    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    // Provider I/O rides the adapter's explicit seam: the default path uses
+    // the shared SSRF-guarded fetch, so tests inject both the transport and
+    // the DNS answers rather than patching the ambient fetch the worker
+    // never touches.
+    const stubFetch = (async (input: string | URL | Request, init?: RequestInit) => {
       if (init?.method === "POST") {
         return new Response(null, {
           status: 202,
@@ -645,6 +698,7 @@ test(
       assert.ok(String(input).startsWith(endpoint), "polling stays on the provider host");
       return Response.json(payload);
     }) as typeof fetch;
+    const stubLookup = async () => ["20.50.100.1"];
     try {
       await db.execute(sql`
         insert into folders (id, org_id, name)
@@ -688,7 +742,7 @@ test(
                 '{}'::jsonb, '[]'::jsonb, null, null)
       `);
 
-      await processCaptureItem({ orgId: org.orgId, captureItemId: captureId });
+      await processCaptureItem({ orgId: org.orgId, captureItemId: captureId, fetchImpl: stubFetch, lookup: stubLookup });
 
       const item = (await db.execute<{
         status: string; normalized: NormalizedCapture; validation_issues: CaptureIssue[];
@@ -719,7 +773,6 @@ test(
       assert.equal(run.status, "succeeded");
       assert.ok(run.raw_provider_payload, "raw provider payload is retained");
     } finally {
-      globalThis.fetch = previousFetch;
       // Canonical teardown owns all capture/evidence/blob cleanup, including
       // the append-only trigger handling — no test-local DDL.
       await dropScratchOrg(org.orgId);
