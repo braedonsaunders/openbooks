@@ -310,7 +310,18 @@ export async function approvalFlags(
   }>(sql`
     select te.id::text as "entryId", te.worked_on::text as "workedOn",
            te.hours::text as hours,
-           ev.geo_check as "geoCheck",
+           -- One entry joins every clock event of its pair, so geo_check must
+           -- be aggregated like the flags beside it: the chip shows the
+           -- worst status the week recorded (an outside punch must not be
+           -- masked by an inside one), and a pair with no events stays NULL
+           -- per the declared type. Ungrouped, this column made the whole
+           -- query throw 42803 on every call.
+           case
+             when bool_or(ev.geo_check = 'outside') then 'outside'
+             when bool_or(ev.geo_check = 'unavailable') then 'unavailable'
+             when bool_or(ev.geo_check = 'inside') then 'inside'
+             else max(ev.geo_check)
+           end as "geoCheck",
            coalesce(bool_or(ev.auto_closed), false) as "autoClosed",
            coalesce(bool_or(ev.photo_file_id is not null), false) as "hasPhoto",
            max(ev.photo_file_id::text) as "photoFileId"

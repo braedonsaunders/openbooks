@@ -114,10 +114,13 @@ export async function loadTimesheets(
   // are the same object at runtime.)
   // HR-20: field flags for the drawer — geo/photo/auto-close chips over
   // the week's clock pairs. Coordinates stay out; the drawer shows flags.
+  // No .catch here: a failed flags query must fail the page, not quietly
+  // render a drawer with no chips — that swallow hid a hard 42803 SQL
+  // error behind "no flags" for weeks.
   const fieldTimeOnEarly = await isFeatureEnabled(orgId, 'fieldTime')
   const fieldFlags =
     fieldTimeOnEarly && openEmployeeId && openWeek
-      ? await approvalFlags(orgId, { weekStart: openWeek, employeePartyId: openEmployeeId }).catch(() => [])
+      ? await approvalFlags(orgId, { weekStart: openWeek, employeePartyId: openEmployeeId })
       : []
   // HR-21: open anomaly flags overlapping this week ride into the grid
   // as approval chips. Empty while hrmTimeAnomalies is off or the actor
