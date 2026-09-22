@@ -21,6 +21,7 @@ import {
 import { requirePermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { loadMyLeave, type MyLeaveData } from '../../../../lib/hrm/leave'
+import { meTabs } from '../../../../lib/hrm/self-service'
 
 /**
  * My leave — the employee self-service inbox. Own requests and balances
@@ -129,7 +130,8 @@ export async function loadMyLeavePage(
   // page never lists another worker's rows.
   const authz = await requirePermission('hrm.leave.request')
   if (!(await isFeatureEnabled(authz.user.orgId, 'hrm'))) notFound()
-  return loadMyLeave(authz, sp)
+  const data = await loadMyLeave(authz, sp)
+  return { ...data, tabs: await meTabs(authz, '/hrm/my-leave') }
 }
 
 export async function myLeaveTitle(): Promise<string> {

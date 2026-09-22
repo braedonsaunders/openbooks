@@ -39,6 +39,7 @@ test("surveys spec composes shared primitives: filter chips, table, drawer, dial
 test("rows and results resolve through the read services, aggregate only", () => {
   assert.match(loader, /listSurveys\(\{/, "the register resolves through the canonical surveys read service");
   assert.match(loader, /getSurveyResults\(\{/, "participation and the results panel share the results reader");
+  assert.match(loader, /hrmTalentViewTabs/, "Surveys rides the Talent viewTabs so it stays findable after leaving the group strip");
   assert.match(loader, /getSurvey\(\{/, "the drawer resolves one survey through the same service");
   assert.match(loader, /sp\.survey/, "the open survey comes from the query string");
   assert.match(loader, /sp\.author/, "the author dialog opens through the query string");

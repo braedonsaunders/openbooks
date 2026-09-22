@@ -11,6 +11,7 @@ import {
   table,
   text,
   widget,
+  widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { compensationAuthz, loadHeadcountPlanDetail } from '../../../../../../lib/hrm/compensation'
@@ -40,6 +41,7 @@ export function compPlanSpec(data: NonNullable<Awaited<ReturnType<typeof loadHea
       }),
     ],
     body: [
+      widgetBlock('module-home-tabs', { tabs: data.viewTabs }),
       panel({
         title: f('linesTitle'),
         bodyClassName: 'min-h-0 overflow-y-auto p-0',

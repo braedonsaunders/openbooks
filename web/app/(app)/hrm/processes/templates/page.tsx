@@ -8,6 +8,7 @@ import { ListPageLayout } from '../../../../../components/page-layout'
 import { ModuleHomeTabs } from '../../../../../components/module-home/ui'
 import { SearchInput } from '../../../../../components/search-input'
 import { hrmGroupTabs } from '../../../../../components/module-home/group-tabs'
+import { hrmPeopleViewTabs } from '../../../../../lib/hrm/workspace-tabs'
 import { requirePermission } from '../../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid, pickString } from '../../../../../lib/list-params'
@@ -25,11 +26,12 @@ export default async function ProcessTemplatesPage({
   const sp = await searchParams
   const authz = await requirePermission('hrm.process.manage')
   if (!(await isFeatureEnabled(authz.user.orgId, 'hrm'))) notFound()
-  const [t, tc, templates, tabs, templateRefs, stepRefs] = await Promise.all([
+  const [t, tc, templates, tabs, peopleTabs, templateRefs, stepRefs] = await Promise.all([
     getTranslations('hrm.processes.templates'),
     getTranslations('common'),
     listProcessTemplates({ orgId: authz.user.orgId, actorId: authz.user.id }),
     hrmGroupTabs(authz, '/hrm/processes'),
+    hrmPeopleViewTabs(authz, '/hrm/processes/templates'),
     loadRefOptions(SETUP_ENTITY_BY_KEY.get('hrm-process-templates')!, authz.user.orgId, authz.allowedSubsidiaryIds),
     loadRefOptions(SETUP_ENTITY_BY_KEY.get('hrm-process-template-steps')!, authz.user.orgId, authz.allowedSubsidiaryIds),
   ])
@@ -60,6 +62,7 @@ export default async function ProcessTemplatesPage({
       }
     >
       <div className="flex h-full min-h-0 flex-col gap-4">
+        <ModuleHomeTabs tabs={peopleTabs} />
         <div className="flex flex-wrap items-center gap-2">
           <SearchInput placeholder={t('search')} />
           <Button asChild variant="outline"><Link href="/hrm/processes">{t('backToChecklists')}</Link></Button>

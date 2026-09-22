@@ -18,6 +18,7 @@ test("my leave renders through ModuleView with a loader-owned spec", () => {
   assert.match(page, /searchParams/, "the page forwards search params for the URL-param dialog");
   assert.match(view, /myLeaveSpec/, "view exposes the spec builder");
   assert.match(view, /module-home-tabs/, "header carries the route-tab strip");
+  assert.match(view, /meTabs\(authz, '\/hrm\/my-leave'\)/, "the inbox overlays the Me strip, never the HRM job strip");
 });
 
 test("inbox rows render through the shared table block", () => {

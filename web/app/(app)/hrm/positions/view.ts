@@ -24,6 +24,8 @@ import { getPositionAsOf, getVacancyAsOf } from '@openbooks/engine/src/hrm/posit
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { hrmGroupTabs } from '../../../../components/module-home/group-tabs'
+import { hrmHiringViewTabs } from '../../../../lib/hrm/workspace-tabs'
+import { depthTabOptions } from '../recruiting/depth-view'
 import { can, requirePermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { rootSubsidiaryId, subsidiaryUiOptions } from '../../../../lib/subsidiaries'
@@ -81,6 +83,7 @@ export interface PositionsPageData {
   title: string
   description: string
   tabs: { href: string; label: string; active?: boolean }[]
+  viewTabs: { href: string; label: string; active?: boolean }[]
   /** hrm.position.manage: the header's Add position button and the create form. */
   canManage: boolean
   addLabel: string
@@ -169,6 +172,7 @@ export function positionsSpec(data: PositionsPageData): PageSpec {
         // The as-of date was reachable only by hand-editing `effectiveDate`
         // in the URL before this — a filter with no control is a filter
         // nobody can use.
+        widgetBlock('module-home-tabs', { tabs: data.viewTabs }),
         widgetBlock('list-toolbar', {
           basePath: '/hrm/positions',
           currentParams: data.currentParams,
@@ -423,10 +427,25 @@ export async function loadPositionsPage(
 
   const title = t('positions.title')
   const drawerOpen = detail !== null || missingDetail !== null || create !== null
+  // Depth tabs land on /hrm/recruiting. A positions-only viewer must not
+  // be offered Openings / Interviews / … that access-deny.
+  const depthTabs = can(authz, 'hrm.recruiting.read')
+    ? await depthTabOptions(authz, t, status)
+    : []
+  const viewTabs = await hrmHiringViewTabs(
+    authz,
+    '/hrm/positions',
+    depthTabs.map((option) => ({
+      href: option.href,
+      label: option.label,
+      active: false,
+    })),
+  )
   return {
     title,
     description: t('positions.description'),
     tabs,
+    viewTabs,
     canManage,
     addLabel: t('positions.add'),
     addHref: hrefFor(effectiveDate, status, 'new'),

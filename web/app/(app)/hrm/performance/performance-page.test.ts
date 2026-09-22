@@ -49,6 +49,7 @@ test('drawers open from URL search params through client islands', () => {
   assert.match(continuousView, /'settings'/, 'feedback settings is one of the view tabs')
   assert.match(continuousView, /widgetBlock\('module-home-tabs', \{ tabs: data\.viewTabs \}\)/,
     'the view switch is the shared subtab strip, never an unlabelled dropdown')
+  assert.match(continuousView, /hrmTalentViewTabs/, 'Surveys rides the Talent viewTabs beside cycles')
 })
 
 test('islands use the house form primitives and surface API refusals', () => {

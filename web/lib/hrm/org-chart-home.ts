@@ -4,6 +4,7 @@ import { getTranslations } from 'next-intl/server'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { loadDirectory, loadOrgChart } from '@openbooks/engine/src/hrm/org-chart.ts'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
+import { hrmPeopleViewTabs } from './workspace-tabs'
 import { can, getAuthz, type Authz } from '../authz'
 import { isFeatureEnabled } from '../features'
 
@@ -43,6 +44,7 @@ export async function loadOrgChartHome(
 ) {
   const t = await getTranslations('hrm')
   const tabs = await hrmGroupTabs(authz.session, '/hrm/org-chart')
+  const peopleTabs = await hrmPeopleViewTabs(authz.session, '/hrm/org-chart')
   const today = await businessToday(authz.orgId)
   const asOf = typeof sp.asOf === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(sp.asOf) ? sp.asOf : today
   const view = sp.view === 'directory' ? 'directory' : 'tree'
@@ -96,22 +98,10 @@ export async function loadOrgChartHome(
     directoryHref: `/hrm/org-chart?asOf=${asOf}&view=directory`,
     treeLabel: t('orgChart.tree'),
     directoryLabel: t('orgChart.directory'),
-    // Tree and Directory are the same rows in two shapes — a view switch, so
-    // the shared subtab strip. They used to be two outline BUTTONS sitting
-    // above the route strip: two tab systems on one page, neither of them
-    // the product's.
-    viewTabs: [
-      {
-        href: `/hrm/org-chart?asOf=${asOf}`,
-        label: t('orgChart.tree'),
-        active: view === 'tree',
-      },
-      {
-        href: `/hrm/org-chart?asOf=${asOf}&view=directory`,
-        label: t('orgChart.directory'),
-        active: view === 'directory',
-      },
-    ],
+    // People job strip (employees, org chart, processes, documents,
+    // qualifications). Tree vs directory is the same rows in two shapes —
+    // a list-toolbar view filter, not a second tab strip.
+    viewTabs: peopleTabs,
     search,
     chart,
     directoryRows,

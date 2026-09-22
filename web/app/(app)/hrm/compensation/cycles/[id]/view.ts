@@ -46,6 +46,7 @@ export function compCycleSpec(data: NonNullable<Awaited<ReturnType<typeof loadCo
       }),
     ],
     body: [
+      widgetBlock('module-home-tabs', { tabs: data.viewTabs }),
       widgetBlock('hrm-pacing-bar', { pct: f('pacingPct'), note: f('pacingNote') }),
       widgetBlock('filter-chips', {
         basePath: f('cycleHref'),

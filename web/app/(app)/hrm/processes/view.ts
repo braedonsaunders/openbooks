@@ -71,6 +71,7 @@ export function processesSpec(data: ProcessesPageData): PageSpec {
     ],
     body: [
       grid('flex h-full min-h-0 flex-col gap-4', [
+        widgetBlock('module-home-tabs', { tabs: data.viewTabs }),
         widgetBlock('list-toolbar', {
           basePath: '/hrm/processes',
           currentParams: data.currentParams,

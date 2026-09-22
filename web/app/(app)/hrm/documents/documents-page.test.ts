@@ -54,6 +54,7 @@ test("segments filter server-side and rows resolve through the read service", ()
   assert.match(loader, /segmentOptions/, "filter options resolve in the loader with counts");
   assert.match(loader, /currentParams/, "the query string survives a segment change");
   assert.match(loader, /statusVariant/, "badge presentation resolves in the loader, never in render");
+  assert.match(loader, /hrmPeopleViewTabs/, "Documents rides the People viewTabs so it stays findable after leaving the group strip");
   assert.match(loader, /closeHref/, "the drawer closes by navigation to the segment href");
   assert.ok(!/from hrm_document_signers/.test(loader), "loader issues no direct signer-table reads");
   assert.ok(!/token_hash/.test(loader), "loader never touches token hashes");

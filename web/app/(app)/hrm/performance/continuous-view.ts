@@ -29,6 +29,7 @@ import {
 } from '@openbooks/engine/src/hrm/performance/talent.ts'
 import type { Authz } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
+import { hrmTalentViewTabs } from '../../../../lib/hrm/workspace-tabs'
 
 /**
  * HR-17 continuous-performance tabs on /hrm/performance: Calibration (the
@@ -191,11 +192,10 @@ export async function loadContinuousTab(
     ...(showRetention ? [{ value: 'retention', label: t('retention.title') }] : []),
     ...(showSettings ? [{ value: 'settings', label: t('performance.continuous.tabs.settings') }] : []),
   ]
-  const viewTabs = tabOptions.map((option) => ({
-    href: option.value === 'cycles' ? '/hrm/performance' : `/hrm/performance?tab=${option.value}`,
-    label: option.label,
-    active: option.value === tab,
-  }))
+  const viewTabs = await hrmTalentViewTabs(
+    authz,
+    tab === 'cycles' ? '/hrm/performance' : `/hrm/performance?tab=${tab}`,
+  )
 
   let calibration: ContinuousData['calibration'] = null
   if (tab === 'calibration' && showCalibration) {

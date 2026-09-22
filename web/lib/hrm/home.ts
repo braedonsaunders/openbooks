@@ -12,6 +12,7 @@ import { loadRecruitingOverview } from '@openbooks/engine/src/hrm/recruiting/rec
 import { getOnboardingOverview } from '@openbooks/engine/src/hrm/processes-read.ts'
 import { getLocale } from 'next-intl/server'
 import { can, type Authz } from '../authz'
+import { isFeatureEnabled } from '../features'
 import { isMultiSubsidiary, subsidiaryVisibleFilter } from '../subsidiaries'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import type { DirectoryItem } from '../../components/module-home/ui'
@@ -638,13 +639,67 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   if (canReadLeave) {
     directory.push({
       href: '/hrm/leave',
-      label: t('home.tabs.leave'),
+      label: t('home.tabs.timeOff'),
       iconKey: 'timer',
       badge: {
         value: String(leavePanel?.onLeaveToday.length ?? 0),
         hint: t('home.directory.leaveHint', { count: leavePending }),
         tone: leavePending > 0 ? 'warning' : 'neutral',
       },
+    })
+  }
+  if (await isFeatureEnabled(orgId, 'hrmOrgChart')) {
+    directory.push({
+      href: '/hrm/org-chart',
+      label: t('home.tabs.orgChart'),
+      iconKey: 'workflow',
+    })
+  }
+  directory.push({
+    href: '/hrm/performance',
+    label: t('home.tabs.talent'),
+    iconKey: 'star',
+  })
+  if (can(authz, 'hrm.surveys.manage') && (await isFeatureEnabled(orgId, 'hrmSurveys'))) {
+    directory.push({
+      href: '/hrm/surveys',
+      label: t('home.tabs.surveys'),
+      iconKey: 'message',
+    })
+  }
+  if (can(authz, 'hrm.compensation.read') && (await isFeatureEnabled(orgId, 'hrmCompensation'))) {
+    directory.push({
+      href: '/hrm/compensation',
+      label: t('home.tabs.compensation'),
+      iconKey: 'wallet',
+    })
+  }
+  if (can(authz, 'hrm.benefits.read')) {
+    directory.push({
+      href: '/hrm/benefits',
+      label: t('home.tabs.benefits'),
+      iconKey: 'heart-pulse',
+    })
+  }
+  if (can(authz, 'hrm.documents.read') && (await isFeatureEnabled(orgId, 'hrmDocuments'))) {
+    directory.push({
+      href: '/hrm/documents',
+      label: t('home.tabs.documents'),
+      iconKey: 'file',
+    })
+  }
+  if (can(authz, 'hrm.certifications.read') && (await isFeatureEnabled(orgId, 'hrmCertifications'))) {
+    directory.push({
+      href: '/hrm/qualifications',
+      label: t('home.tabs.qualifications'),
+      iconKey: 'award',
+    })
+  }
+  if (can(authz, 'hrm.construction.read') && (await isFeatureEnabled(orgId, 'hrmConstructionCompliance'))) {
+    directory.push({
+      href: '/hrm/compliance',
+      label: t('home.tabs.compliance'),
+      iconKey: 'shield',
     })
   }
 

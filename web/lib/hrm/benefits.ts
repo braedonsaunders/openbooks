@@ -13,6 +13,7 @@ import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { benefitsCockpit } from '@openbooks/engine/src/hrm/benefits/benefits-read.ts'
 import { can, type Authz } from '../authz'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
+import { hrmRewardsViewTabs } from './workspace-tabs'
 import { loadQueueLabels } from './change-requests'
 
 /**
@@ -153,10 +154,10 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
   const keepView: Record<string, string> = showingEnrolments ? { view: 'enrolments' } : {}
   const currentParams: BenefitsData['currentParams'] = { ...keepView }
   if (sp.segment) currentParams.segment = sp.segment
-  const viewTabs = [
-    { href: benefitsHref(basePath, sp.segment, {}), label: t('benefits.windowsTitle'), active: !showingEnrolments },
-    { href: benefitsHref(basePath, sp.segment, { view: 'enrolments' }), label: t('benefits.enrolmentsTitle'), active: showingEnrolments },
-  ]
+  const viewTabs = await hrmRewardsViewTabs(
+    authz,
+    showingEnrolments ? '/hrm/benefits?view=enrolments' : '/hrm/benefits',
+  )
 
   if (segment === null) {
     return {

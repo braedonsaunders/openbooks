@@ -51,6 +51,7 @@ test("segments filter server-side and rows resolve through the read service", ()
   assert.match(loader, /closeHref/, "the drawer closes by navigation to the segment href");
   assert.match(loader, /segmentOptions/, "filter options resolve in the loader with counts");
   assert.match(loader, /currentParams/, "the active segment survives inside the filter params");
+  assert.match(loader, /hrmPeopleViewTabs/, "Processes rides the People viewTabs so it stays findable after leaving the group strip");
   assert.match(loader, /statusVariant/, "badge presentation resolves in the loader, never in render");
   assert.ok(!/from hrm_processes /.test(loader), "loader issues no direct process-table reads");
   assert.ok(!/from hrm_process_steps/.test(loader), "loader issues no direct step-table reads");

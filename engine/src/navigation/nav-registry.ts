@@ -633,20 +633,8 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'hrm.employment.read',
     featureKey: 'hrm',
   },
-  // HR-13 begin: construction compliance — the Compliance tab under HRM.
-  // Gated on the construction switch with its own read grant; hidden
-  // with the parent when a general-business org never enables it.
-  {
-    key: 'hrm-compliance',
-    href: '/hrm/compliance',
-    label: 'Compliance',
-    iconKey: 'shield-check',
-    group: 'operations',
-    subgroup: 'people',
-    requiredPermission: 'hrm.construction.read',
-    featureKey: 'hrmConstructionCompliance',
-  },
-  // HR-13 end
+  // Construction compliance is a feature-gated tab on the HRM strip, not
+  // a second Operations → People nav module beside Payroll and Me.
   // Me — the person's own workspace (HR-9 self-service), not an HR tab:
   // employment summary, profile, leave, checklists, and the manager's
   // team. Visible with the hrm feature plus hrm.self.read, which every
@@ -947,8 +935,6 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'equipment',
     'employees',
     'hrm',
-    // HR-13: the Compliance tab sits with its HRM parent in the rail order.
-    'hrm-compliance',
     'me',
   ],
   banking: [

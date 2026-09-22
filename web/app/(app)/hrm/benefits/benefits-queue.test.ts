@@ -48,6 +48,7 @@ test("windows and enrolments are TABS, not options inside the status filter", ()
   // control mixed "filter these windows" with "show a different entity".
   assert.doesNotMatch(loader, /'enrolments'\] as const/, "enrolments is not a window status");
   assert.match(loader, /sp\.view === 'enrolments'/, "the view lives on its own search param");
+  assert.match(loader, /hrmRewardsViewTabs/, "Windows and Enrolments fold into the Rewards viewTabs beside Compensation");
 });
 
 test("the primary action is the shared link-button first in the page header", () => {

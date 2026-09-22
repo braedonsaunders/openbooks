@@ -26,14 +26,14 @@ import { loadHrmHome, type HrmHomeData } from '../../../lib/hrm/home'
 
 /**
  * The HRM cockpit, split into a loader and a spec — the banking/purchasing
- * archetype: a four-tile vitals strip, a hero column (the 12-month headcount
- * trend and headcount by department, then the queues that feed them), and a
- * rail that is the work queue (needs attention, the live directory, the
- * 30-day starts and ends, quick actions). ViewSpec composes the grid and
- * the panels; panel bodies are shared blocks and widgets, and every figure
- * arrives loader-resolved through the canonical HRM reads. A single-entity
- * org never sees a subsidiary column: the loader says whether the org runs
- * more than one, and the spec builds the columns from that fact.
+ * archetype: a four-tile vitals strip, a hero column (work queues first,
+ * then the census), and a rail that is the work queue (needs attention,
+ * the live directory of every HRM surface, the 30-day starts and ends,
+ * quick actions). ViewSpec composes the grid and the panels; panel bodies
+ * are shared blocks and widgets, and every figure arrives loader-resolved
+ * through the canonical HRM reads. A single-entity org never sees a
+ * subsidiary column: the loader says whether the org runs more than one,
+ * and the spec builds the columns from that fact.
  */
 
 const f = ref<HrmHomeData>()
@@ -113,131 +113,9 @@ export function hrmSpec(data: HrmHomeData): PageSpec {
         ]),
 
         grid('grid min-h-0 flex-1 grid-cols-1 gap-5 lg:grid-cols-3', [
-          // The hero column: the trend and the headcount table are the
-          // headline objects; the queues that feed them sit below.
+          // The hero column: work queues first (pending, onboarding,
+          // leave, benefits, recruiting, recent), then the census.
           grid('flex min-h-0 flex-col gap-5 overflow-y-auto lg:col-span-2', [
-            panel({
-              title: f('trendTitle'),
-              iconKey: 'trending-up',
-              hint: f('trendHint'),
-              className: 'shrink-0',
-              blocks: [
-                widgetBlock('trend-chart', {
-                  labels: data.trendLabels,
-                  series: [{ name: data.trendSeriesName, data: data.trendData }],
-                  height: 170,
-                  area: true,
-                  format: 'count',
-                }),
-              ],
-            }),
-            panel({
-              title: f('groupsTitle'),
-              iconKey: 'users',
-              className: 'shrink-0',
-              bodyClassName: 'p-0',
-              blocks: [
-                table({
-                  variant: 'app',
-                  rows: f('groups'),
-                  rowKey: item('id'),
-                  empty: { title: f('groupsEmpty') },
-                  // Totals only beside rows: with no groups the `empty`
-                  // state renders instead. A present-but-empty `trailing`
-                  // array would suppress the empty state, so this is
-                  // undefined.
-                  trailing:
-                    data.groups.length > 0
-                      ? [
-                          spanRow({
-                            label: f('totalLabel'),
-                            labelColSpan: data.multiSubsidiary ? 2 : 1,
-                            cells: [
-                              {
-                                cell: text(f('totalValue')),
-                                align: 'right',
-                                className: 'font-semibold tabular-nums',
-                              },
-                            ],
-                          }),
-                        ]
-                      : undefined,
-                  columns: [
-                    // The subsidiary column exists only for an org that runs
-                    // more than one: a single-entity org sees departments.
-                    ...(data.multiSubsidiary ? [column(data.employerColumn, text(item('subsidiary')))] : []),
-                    column(data.departmentColumn, link(item('departmentLabel'), item('href'))),
-                    column(data.headcountColumn, text(item('headcountLabel')), {
-                      align: 'right',
-                      className: 'tabular-nums',
-                    }),
-                  ],
-                }),
-              ],
-            }),
-            ...(data.positions
-              ? [
-                  panel({
-                    title: f('positions.vacancyTitle'),
-                    iconKey: 'briefcase',
-                    className: 'shrink-0',
-                    bodyClassName: 'p-0',
-                    blocks: [
-                      table({
-                        variant: 'app',
-                        rows: f('positions.groups'),
-                        rowKey: item('id'),
-                        empty: { title: f('positions.vacancyEmpty') },
-                        trailing:
-                          data.positions.groups.length > 0
-                            ? [
-                                spanRow({
-                                  label: f('positions.totalLabel'),
-                                  labelColSpan: data.multiSubsidiary ? 2 : 1,
-                                  cells: [
-                                    {
-                                      cell: text(f('positions.totals.positions')),
-                                      align: 'right',
-                                      className: 'font-semibold tabular-nums',
-                                    },
-                                    {
-                                      cell: text(f('positions.totals.plannedFte')),
-                                      align: 'right',
-                                      className: 'font-semibold tabular-nums',
-                                    },
-                                    {
-                                      cell: text(f('positions.totals.fundedFte')),
-                                      align: 'right',
-                                      className: 'font-semibold tabular-nums',
-                                    },
-                                    {
-                                      cell: text(f('positions.totals.filledFte')),
-                                      align: 'right',
-                                      className: 'font-semibold tabular-nums',
-                                    },
-                                    {
-                                      cell: text(f('positions.totals.vacantFte')),
-                                      align: 'right',
-                                      className: 'font-semibold tabular-nums',
-                                    },
-                                  ],
-                                }),
-                              ]
-                            : undefined,
-                        columns: [
-                          ...(data.multiSubsidiary ? [column(data.positions.employerColumn, text(item('employer')))] : []),
-                          column(data.positions.departmentColumn, text(item('department'))),
-                          column(data.positions.positionsColumn, text(item('positions')), { align: 'right', className: 'tabular-nums' }),
-                          column(data.positions.plannedColumn, text(item('plannedFte')), { align: 'right', className: 'tabular-nums' }),
-                          column(data.positions.fundedColumn, text(item('fundedFte')), { align: 'right', className: 'tabular-nums' }),
-                          column(data.positions.filledColumn, text(item('filledFte')), { align: 'right', className: 'tabular-nums' }),
-                          column(data.positions.vacantColumn, text(item('vacantFte')), { align: 'right', className: 'tabular-nums' }),
-                        ],
-                      }),
-                    ],
-                  }),
-                ]
-              : []),
             panel({
               title: f('pendingTitle'),
               iconKey: 'clipboard-check',
@@ -363,6 +241,122 @@ export function hrmSpec(data: HrmHomeData): PageSpec {
                 }),
               ],
             }),
+            panel({
+              title: f('trendTitle'),
+              iconKey: 'trending-up',
+              hint: f('trendHint'),
+              className: 'shrink-0',
+              blocks: [
+                widgetBlock('trend-chart', {
+                  labels: data.trendLabels,
+                  series: [{ name: data.trendSeriesName, data: data.trendData }],
+                  height: 170,
+                  area: true,
+                  format: 'count',
+                }),
+              ],
+            }),
+            panel({
+              title: f('groupsTitle'),
+              iconKey: 'users',
+              className: 'shrink-0',
+              bodyClassName: 'p-0',
+              blocks: [
+                table({
+                  variant: 'app',
+                  rows: f('groups'),
+                  rowKey: item('id'),
+                  empty: { title: f('groupsEmpty') },
+                  trailing:
+                    data.groups.length > 0
+                      ? [
+                          spanRow({
+                            label: f('totalLabel'),
+                            labelColSpan: data.multiSubsidiary ? 2 : 1,
+                            cells: [
+                              {
+                                cell: text(f('totalValue')),
+                                align: 'right',
+                                className: 'font-semibold tabular-nums',
+                              },
+                            ],
+                          }),
+                        ]
+                      : undefined,
+                  columns: [
+                    ...(data.multiSubsidiary ? [column(data.employerColumn, text(item('subsidiary')))] : []),
+                    column(data.departmentColumn, link(item('departmentLabel'), item('href'))),
+                    column(data.headcountColumn, text(item('headcountLabel')), {
+                      align: 'right',
+                      className: 'tabular-nums',
+                    }),
+                  ],
+                }),
+              ],
+            }),
+            ...(data.positions
+              ? [
+                  panel({
+                    title: f('positions.vacancyTitle'),
+                    iconKey: 'briefcase',
+                    className: 'shrink-0',
+                    bodyClassName: 'p-0',
+                    blocks: [
+                      table({
+                        variant: 'app',
+                        rows: f('positions.groups'),
+                        rowKey: item('id'),
+                        empty: { title: f('positions.vacancyEmpty') },
+                        trailing:
+                          data.positions.groups.length > 0
+                            ? [
+                                spanRow({
+                                  label: f('positions.totalLabel'),
+                                  labelColSpan: data.multiSubsidiary ? 2 : 1,
+                                  cells: [
+                                    {
+                                      cell: text(f('positions.totals.positions')),
+                                      align: 'right',
+                                      className: 'font-semibold tabular-nums',
+                                    },
+                                    {
+                                      cell: text(f('positions.totals.plannedFte')),
+                                      align: 'right',
+                                      className: 'font-semibold tabular-nums',
+                                    },
+                                    {
+                                      cell: text(f('positions.totals.fundedFte')),
+                                      align: 'right',
+                                      className: 'font-semibold tabular-nums',
+                                    },
+                                    {
+                                      cell: text(f('positions.totals.filledFte')),
+                                      align: 'right',
+                                      className: 'font-semibold tabular-nums',
+                                    },
+                                    {
+                                      cell: text(f('positions.totals.vacantFte')),
+                                      align: 'right',
+                                      className: 'font-semibold tabular-nums',
+                                    },
+                                  ],
+                                }),
+                              ]
+                            : undefined,
+                        columns: [
+                          ...(data.multiSubsidiary ? [column(data.positions.employerColumn, text(item('employer')))] : []),
+                          column(data.positions.departmentColumn, text(item('department'))),
+                          column(data.positions.positionsColumn, text(item('positions')), { align: 'right', className: 'tabular-nums' }),
+                          column(data.positions.plannedColumn, text(item('plannedFte')), { align: 'right', className: 'tabular-nums' }),
+                          column(data.positions.fundedColumn, text(item('fundedFte')), { align: 'right', className: 'tabular-nums' }),
+                          column(data.positions.filledColumn, text(item('filledFte')), { align: 'right', className: 'tabular-nums' }),
+                          column(data.positions.vacantColumn, text(item('vacantFte')), { align: 'right', className: 'tabular-nums' }),
+                        ],
+                      }),
+                    ],
+                  }),
+                ]
+              : []),
           ]),
 
           // The rail: what needs doing, the workspace as a live directory,

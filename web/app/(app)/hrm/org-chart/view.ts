@@ -88,6 +88,14 @@ export function orgChartSpec(data: OrgChartPageData): PageSpec {
               max: data.today,
               resolved: data.asOf,
             },
+            filters: [
+              {
+                paramKey: 'view',
+                label: data.treeLabel,
+                allLabel: data.treeLabel,
+                options: [{ value: 'directory', label: data.directoryLabel }],
+              },
+            ],
           }),
         ]),
         ...(data.view === 'directory'

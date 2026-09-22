@@ -7,6 +7,7 @@ import { getDocumentDetail, listDocuments } from '@openbooks/engine/src/hrm/docu
 import { listCategories } from '@openbooks/engine/src/hrm/documents/categories.ts'
 import { listTemplates } from '@openbooks/engine/src/hrm/documents/templates.ts'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
+import { hrmPeopleViewTabs } from './workspace-tabs'
 import { can, requirePermission, type Authz } from '../authz'
 import { isFeatureEnabled } from '../features'
 
@@ -121,6 +122,7 @@ export async function loadDocumentsHome(
 ) {
   const t = await getTranslations('hrm')
   const tabs = await hrmGroupTabs(authz.session, '/hrm/documents')
+  const viewTabs = await hrmPeopleViewTabs(authz.session, '/hrm/documents')
   const status =
     typeof sp.status === 'string' && (DOCUMENT_STATUSES as readonly string[]).includes(sp.status)
       ? sp.status
@@ -274,6 +276,7 @@ export async function loadDocumentsHome(
     title: t('documents.title'),
     description: t('documents.description'),
     tabs,
+    viewTabs,
     canManage: authz.canManage,
     addLabel: t('documents.generate.open'),
     addHref: hrefFor(status, null, true),

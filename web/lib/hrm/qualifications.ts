@@ -16,6 +16,7 @@ import {
 import type { DerivedQualificationStatus } from '@openbooks/engine/src/hrm/qualifications/shared.ts'
 import { listRequirements } from '@openbooks/engine/src/hrm/qualifications/requirements.ts'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
+import { hrmPeopleViewTabs } from './workspace-tabs'
 import { loadQueueLabels } from './change-requests'
 import { can, type Authz } from '../authz'
 
@@ -85,6 +86,7 @@ export interface QualificationsPageData {
   title: string
   description: string
   tabs: Awaited<ReturnType<typeof hrmGroupTabs>>
+  viewTabs: Awaited<ReturnType<typeof hrmPeopleViewTabs>>
   canManage: boolean
   recordHref: string
   recordLabel: string
@@ -342,6 +344,7 @@ export async function loadQualificationsPage(
     title: t('qualifications.title'),
     description: t('qualifications.description'),
     tabs: await hrmGroupTabs(authz, '/hrm/qualifications'),
+    viewTabs: await hrmPeopleViewTabs(authz, '/hrm/qualifications'),
     canManage,
     recordHref: href({ ...baseParams({}), record: 'new' }),
     recordLabel: t('qualifications.record'),

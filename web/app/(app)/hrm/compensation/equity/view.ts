@@ -46,6 +46,7 @@ export function equitySpec(data: NonNullable<Awaited<ReturnType<typeof loadEquit
       }),
     ],
     body: [
+      widgetBlock('module-home-tabs', { tabs: data.viewTabs }),
       // A refused snapshot read renders with its remedy intact while the
       // snapshot-specific grid and table stay hidden — a refusal must
       // never present the no-categories claim. Genuine no-snapshot
