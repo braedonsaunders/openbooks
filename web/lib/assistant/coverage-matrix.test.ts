@@ -109,6 +109,7 @@ const MATRIX: Entry[] = [
   { prefix: "reports", tools: ["list_report_definitions", "run_report", "list_report_schedules", "list_reporting_packages", "list_report_runs", "list_email_deliveries", "general_ledger", "aging_detail", "cash_flow_indirect", "partner_statement"] },
   { prefix: "inventory", tools: ["search_items", "get_item", "inventory_levels", "inventory_movements", "inventory_writedowns"] },
   { prefix: "items", tools: ["search_items", "get_item"] },
+  { prefix: "item-rate-books", tools: ["list_setup_entities", "list_setup_records", "get_item"], note: "rate books are a Setup-registry entity (the route resolves them through resolveSetupEntity), so the generic setup readers list the entity and its records; the rate an item resolves to reads through the item master" },
   { prefix: "sales-orders", tools: ["search_orders", "get_order"] },
   { prefix: "purchase-orders", tools: ["search_orders", "get_order"] },
   { prefix: "estimates", tools: ["search_orders", "get_order"], note: "estimate convert flow mirrors orders; convert writes have no application service" },
