@@ -17,7 +17,6 @@ import { CaptureUploadButton } from '../../app/(app)/ap/capture/CaptureUploadBut
 import { FieldTicketDrawer } from '../../app/(app)/field-tickets/FieldTicketDrawer'
 import { ItemDrawer } from '../../app/(app)/items/ItemDrawer'
 import { NewItemButton } from '../../app/(app)/items/NewItemButton'
-import { NewItemRedirect } from '../../app/(app)/items/NewItemRedirect'
 import { NewMovementButton } from '../../app/(app)/inventory/NewMovementButton'
 import { InventoryActionDrawer } from '../../app/(app)/inventory/InventoryActionDrawer'
 import { NewExpenseButton } from '../../app/(app)/expenses/NewExpenseButton'
@@ -199,7 +198,6 @@ export const COMMERCE_WIDGETS = {
     return props.wrap === true ? <div className="flex items-center gap-3">{inner}</div> : inner
   },
   'new-item': () => <NewItemButton />,
-  'new-item-redirect': () => <NewItemRedirect />,
   'item-drawer': (props) => {
     const drawer = props.drawer as (ComponentProps<typeof ItemDrawer> & { remountKey: string }) | null
     if (!drawer) return null

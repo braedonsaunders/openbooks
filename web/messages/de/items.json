@@ -37,8 +37,23 @@
     "discount": "Rabatt",
     "equipment_charge": "Geräteverrechnung"
   },
+  "kindDescriptions": {
+    "service": "Arbeit oder Fachwissen ohne physische Bestandsführung.",
+    "non_inventory": "Eine gekaufte oder verkaufte Ware ohne Bestandsmenge.",
+    "inventory": "Eine Lagerware mit Bestand, Bewertung und Erfüllung.",
+    "assembly": "Ein gefertigter Artikel aus einer Stückliste.",
+    "kit": "Ein verkaufbares Set, dessen Komponenten getrennt bleiben.",
+    "other_charge": "Eine Gebühr, ein Zuschlag, Fracht oder eine andere Belastung.",
+    "equipment_charge": "Abrechenbare Nutzung eigener oder gemieteter Geräte.",
+    "labor": "Arbeitszeit mit Lohnpreis- und Lohnkostenlogik.",
+    "absence": "Bezahlte oder unbezahlte Abwesenheit in der Zeiterfassung.",
+    "discount": "Eine Minderung einer Position oder Transaktionssumme."
+  },
   "drawer": {
+    "tabs": { "overview": "Übersicht", "pricing": "Preise", "accounting": "Buchhaltung", "costing": "Lagerbestand", "revenue": "Umsatzrealisierung" },
     "newItem": "Neuer Artikel",
+    "chooseKindTitle": "Artikeltyp auswählen",
+    "chooseKindDescription": "Beginnen Sie mit dem benötigten buchhalterischen und operativen Verhalten. Vor dem Erstellen können Sie den Typ erneut prüfen.",
     "autosaveHint": "Änderungen werden automatisch gespeichert.",
     "activate": "Aktivieren",
     "deactivate": "Deaktivieren",
@@ -108,8 +123,20 @@
     "saved": "Satzversion gespeichert",
     "empty": "Noch keine Satzversionen.",
     "rates": "Sätze",
-    "tierOverrides": "Stundensatz-Arten:",
+    "tierOverrides": "Zuschlagssätze für Arbeit",
+    "tierOverridesHide": "Zuschlagssätze für Arbeit ausblenden",
     "tierAuto": "auto"
+  },
+  "rateBookDrawer": {
+    "newTitle": "Neues Preisbuch",
+    "editTitle": "{name} bearbeiten",
+    "description": "Verwalten Sie den Preisbuchkopf und den vollständigen, datierten Artikelpreissatz gemeinsam.",
+    "ratesTitle": "Artikelpreise",
+    "ratesHelp": "Beim Speichern geänderter Zeilen wird eine neue unveränderliche Preisversion erstellt; frühere Versionen bleiben für historische Transaktionen erhalten.",
+    "item": "Artikel",
+    "addItem": "Artikelpreis hinzufügen",
+    "inactive": "Inaktiv",
+    "unchangedHelp": "Der Artikelsatz ist unverändert; beim Speichern werden nur die Preisbuchdetails aktualisiert."
   },
   "revrec": {
     "title": "Umsatzrealisierung",

@@ -37,8 +37,23 @@
     "discount": "折扣",
     "equipment_charge": "设备收费"
   },
+  "kindDescriptions": {
+    "service": "不跟踪实物库存的工作或专业服务。",
+    "non_inventory": "不维护在手数量的采购或销售商品。",
+    "inventory": "管理数量、估值和履约的库存商品。",
+    "assembly": "根据物料清单制造的组装件。",
+    "kit": "组件仍分别管理的可销售套件。",
+    "other_charge": "手续费、附加费、运费或其他独立收费。",
+    "equipment_charge": "自有或租用设备的可计费使用。",
+    "labor": "具有人工定价和工资成本行为的工作时间。",
+    "absence": "在工时中记录的带薪或无薪离岗时间。",
+    "discount": "应用于其他行或交易总额的减免。"
+  },
   "drawer": {
+    "tabs": { "overview": "概览", "pricing": "定价", "accounting": "会计", "costing": "库存", "revenue": "收入确认" },
     "newItem": "新建物料",
+    "chooseKindTitle": "选择物料类型",
+    "chooseKindDescription": "先选择此物料需要的会计和运营行为。创建前可再次确认类型。",
     "autosaveHint": "更改会自动保存。",
     "activate": "启用",
     "deactivate": "停用",
@@ -108,8 +123,20 @@
     "saved": "费率版本已保存",
     "empty": "尚无费率版本。",
     "rates": "费率",
-    "tierOverrides": "工时类型费率：",
+    "tierOverrides": "人工加价费率",
+    "tierOverridesHide": "隐藏人工加价费率",
     "tierAuto": "自动"
+  },
+  "rateBookDrawer": {
+    "newTitle": "新建费率簿",
+    "editTitle": "编辑{name}",
+    "description": "统一维护费率簿基本信息及完整的生效日期项目费率表。",
+    "ratesTitle": "项目费率",
+    "ratesHelp": "保存已更改的行会创建新的不可变费率版本；旧版本保留用于历史交易。",
+    "item": "项目",
+    "addItem": "添加项目费率",
+    "inactive": "停用",
+    "unchangedHelp": "项目费率表未更改，保存时只会更新费率簿详细信息。"
   },
   "revrec": {
     "title": "收入确认",

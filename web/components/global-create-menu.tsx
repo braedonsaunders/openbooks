@@ -69,9 +69,11 @@ interface CreateAction {
   group: GroupKey
   enabled: (permissions: GlobalCreatePermissions) => boolean
   icon: typeof Plus
-  endpoint: string
+  endpoint?: string
+  /** URL-only create surfaces do not allocate a record until their Save. */
+  directHref?: string
   body?: Record<string, string>
-  destination: (id: string) => string
+  destination?: (id: string) => string
 }
 
 const ACTIONS: CreateAction[] = [
@@ -95,7 +97,7 @@ const ACTIONS: CreateAction[] = [
   { key: 'customer', group: 'peopleAndLists', enabled: (p) => p.parties, icon: UsersRound, endpoint: '/api/parties/draft', body: { role: 'customer' }, destination: (id) => `/entities/customers?party=${id}&mode=edit` },
   { key: 'vendor', group: 'peopleAndLists', enabled: (p) => p.parties, icon: Building2, endpoint: '/api/parties/draft', body: { role: 'vendor' }, destination: (id) => `/entities/vendors?party=${id}&mode=edit` },
   { key: 'employee', group: 'peopleAndLists', enabled: (p) => p.parties, icon: UserRound, endpoint: '/api/parties/draft', body: { role: 'employee' }, destination: (id) => `/entities/employees?party=${id}&mode=edit` },
-  { key: 'item', group: 'peopleAndLists', enabled: (p) => p.items, icon: Package, endpoint: '/api/items/draft', body: {}, destination: (id) => `/items?item=${id}` },
+  { key: 'item', group: 'peopleAndLists', enabled: (p) => p.items, icon: Package, directHref: '/items?item=new' },
   { key: 'project', group: 'peopleAndLists', enabled: (p) => p.projects, icon: Contact, endpoint: '/api/projects/draft', body: {}, destination: (id) => `/projects?project=${id}` },
 ]
 
@@ -113,9 +115,13 @@ export function GlobalCreateMenu({ permissions }: { permissions: GlobalCreatePer
 
   async function create(action: CreateAction) {
     setOpen(false)
+    if (action.directHref) {
+      router.push(action.directHref as never)
+      return
+    }
     setBusy(action.key)
     try {
-      const response = await fetch(action.endpoint, {
+      const response = await fetch(action.endpoint!, {
         method: 'POST',
         ...(action.body
           ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(action.body) }
@@ -125,7 +131,7 @@ export function GlobalCreateMenu({ permissions }: { permissions: GlobalCreatePer
       if (!response.ok || typeof data.id !== 'string') {
         throw new Error(typeof data.error === 'string' ? data.error : t('createFailed'))
       }
-      router.push(action.destination(data.id) as never)
+      router.push(action.destination!(data.id) as never)
       router.refresh()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('createFailed'))

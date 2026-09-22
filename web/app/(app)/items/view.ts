@@ -8,6 +8,7 @@ import { can, requirePermission } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
 import { isUuid, pickString } from '../../../lib/list-params'
 import { loadFieldDefs } from '../../../lib/custom-fields'
+import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { SETUP_ENTITY_BY_KEY } from '../../../lib/setup/registry'
 import { loadItem } from '../../api/items/_lib'
 import type { ItemDrawer } from './ItemDrawer'
@@ -16,8 +17,7 @@ import type { ItemDrawer } from './ItemDrawer'
  * The item catalog, split into a loader and a spec.
  *
  * Two bodies, chosen by two presence flags the LOADER computes: the catalog
- * entity list (with a flyout drawer fragment — create-redirect plus record
- * flyout, the projects idiom), or the re-homed Rate Books setup surface when
+ * entity list (with one URL-controlled create/edit flyout), or the re-homed Rate Books setup surface when
  * the user can manage configuration, projects are on, and `?view=rate-books`.
  *
  * The Rate Books body is one opaque `setup-entity-section` widget, not spec
@@ -50,7 +50,6 @@ export interface ItemsData {
   // switcher (null unless the user can manage configuration with projects
   // on) plus the New button on the catalog view.
   tabs: { href: string; label: string; active: boolean }[]
-  showNewRedirect: boolean
   drawer: (Record<string, unknown> & { remountKey: string }) | null
 }
 
@@ -98,7 +97,6 @@ export async function loadItems(
       onRateBooks: true,
       onCatalog: false,
       tabs,
-      showNewRedirect: false,
       drawer: null,
     }
   }
@@ -123,15 +121,59 @@ export async function loadItems(
       : null,
   ])
 
+  const resolvedForm = itemId && pickers
+    ? await resolveFormLayout({
+        orgId,
+        userId: authz.user.id,
+        recordType: 'item',
+        userRoles: authz.user.roles.map(({ key }) => key),
+        headerDefs: pickers[2],
+        lineDefs: [],
+        explicitLayoutId: pickString(sp.form),
+      })
+    : null
+
   const requestedReturn = pickString(sp.drawerReturn)
+  const createMode = itemId === 'new' && canManage
   const drawer =
-    openItem && pickers
+    pickers && (openItem || createMode)
       ? {
-          remountKey: String(openItem.item.id),
-          payload: openItem as unknown as ItemDrawerProps['payload'],
+          remountKey: createMode ? 'new' : String(openItem!.item.id),
+          createMode,
+          payload: (openItem ?? {
+            item: {
+              id: 'new',
+              kind: 'service',
+              code: null,
+              name: '',
+              category: null,
+              income_account_id: null,
+              expense_account_id: null,
+              payroll_expense_account_id: null,
+              deferred_account_id: null,
+              cost_recovery_account_id: null,
+              tax_code_id: null,
+              recognition_rule_id: null,
+              default_rate: null,
+              default_cost: null,
+              standalone_selling_price: null,
+              unit: null,
+              description: null,
+              show_on_timesheet: false,
+              is_active: true,
+              create_plans_on: 'billing',
+              revenue_allocation: 'normal',
+              custom: {},
+            },
+            incomeAccountName: null,
+            expenseAccountName: null,
+            payrollCostingAccountName: null,
+            taxCodeName: null,
+          }) as unknown as ItemDrawerProps['payload'],
           accounts: pickers[0].rows,
           taxCodes: pickers[1].rows,
           fieldDefs: pickers[2] as unknown as ItemDrawerProps['fieldDefs'],
+          layout: resolvedForm?.layout,
           recognitionRules: pickers[3].rows,
           canManage,
           basePath: requestedReturn?.startsWith('/items') ? requestedReturn : '/items',
@@ -151,7 +193,6 @@ export async function loadItems(
     onRateBooks: false,
     onCatalog: true,
     tabs,
-    showNewRedirect: itemId === 'new' && canManage,
     drawer,
   }
 }
@@ -187,12 +228,7 @@ export function itemsSpec(data: ItemsData): PageSpec {
           recordType: 'item',
           sp: data.currentParams,
           emptyAction: data.canManage ? newItem : null,
-          // Rendered in the native page's order: the create-redirect first,
-          // then the record flyout.
-          drawer: [
-            data.showNewRedirect ? { widget: 'new-item-redirect', props: {} } : null,
-            data.drawer ? { widget: 'item-drawer', props: { drawer: data.drawer } } : null,
-          ].filter(Boolean),
+          drawer: data.drawer ? { widget: 'item-drawer', props: { drawer: data.drawer } } : null,
         }),
         when: f('onCatalog'),
       },

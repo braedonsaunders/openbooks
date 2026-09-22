@@ -2,13 +2,23 @@
 
 import { useBusinessToday } from '@/components/business-date-provider'
 import { useMoney } from '@/components/money-provider'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { Badge, Button, Card, CardContent, Input, Label, Select } from '@openbooks/ui'
+import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { PagedTable } from '../../../components/paged-table'
-interface Tier { unitCode: string; unitName: string; baseQuantity: string; costRate: string; billRate: string; timeTypeBillRates: Record<string, string> }
+
+export interface Tier extends Record<string, unknown> {
+  unitCode: string
+  unitName: string
+  baseQuantity: string
+  costRate: string
+  billRate: string
+  timeTypeBillRates: Record<string, string>
+}
+
 interface RateData {
   books: { id: string; code: string; name: string; currency: string; is_default: boolean }[]
   profile: { base_unit: string; pricing_policy: string; invoice_presentation: string } | null
@@ -16,91 +26,164 @@ interface RateData {
   timeTypes: { id: string; name: string; bill_multiplier: string }[]
 }
 
+export function defaultRateTiers(
+  itemKind: string,
+  itemUnit: string,
+  names: { day: string; week: string; month: string },
+): Tier[] {
+  if (itemKind === 'equipment_charge') {
+    return [
+      { unitCode: 'day', unitName: names.day, baseQuantity: '1', costRate: '0', billRate: '0', timeTypeBillRates: {} },
+      { unitCode: 'week', unitName: names.week, baseQuantity: '4', costRate: '0', billRate: '0', timeTypeBillRates: {} },
+      { unitCode: 'month', unitName: names.month, baseQuantity: '12', costRate: '0', billRate: '0', timeTypeBillRates: {} },
+    ]
+  }
+  const unitCode = itemKind === 'labor' ? 'hour' : (itemUnit.trim().toLowerCase() || 'each')
+  return [{
+    unitCode,
+    unitName: itemKind === 'labor' ? 'Hour' : (itemUnit.trim() || 'Each'),
+    baseQuantity: '1',
+    costRate: '0',
+    billRate: '0',
+    timeTypeBillRates: {},
+  }]
+}
+
+function errorMessage(payload: unknown, fallback: string): string {
+  if (payload && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string') return payload.error
+  return fallback
+}
+
 export function ItemRatesEditor({
   itemId,
   itemPrice,
   itemCost,
+  itemKind,
+  itemUnit,
   canManage,
 }: {
   itemId: string
   itemPrice: string
   itemCost: string
+  itemKind: string
+  itemUnit: string
   canManage: boolean
 }) {
   const { money } = useMoney()
   const t = useTranslations('items.rates')
   const common = useTranslations('common')
+  const today = useBusinessToday()
+  const defaults = useMemo(() => defaultRateTiers(itemKind, itemUnit, {
+    day: t('defaults.day'), week: t('defaults.week'), month: t('defaults.month'),
+  }), [itemKind, itemUnit, t])
   const [data, setData] = useState<RateData | null>(null)
   const [editing, setEditing] = useState(false)
-  // A read-only viewer must never hold the form in edit mode. Adjusted during
-  // render (same committed value, no extra render).
-  if (!canManage && editing) setEditing(false)
   const [busy, setBusy] = useState(false)
+  const [serverError, setServerError] = useState('')
   const [rateBookId, setRateBookId] = useState('')
-  const [effectiveFrom, setEffectiveFrom] = useState(useBusinessToday())
-  const [baseUnit, setBaseUnit] = useState('day')
+  const [effectiveFrom, setEffectiveFrom] = useState(today)
+  const [baseUnit, setBaseUnit] = useState(itemKind === 'labor' ? 'hour' : (itemUnit || defaults[0]!.unitCode))
   const [pricingPolicy, setPricingPolicy] = useState('capped_ladder')
   const [invoicePresentation, setInvoicePresentation] = useState('rate_components')
-  const [tiers, setTiers] = useState<Tier[]>([
-    { unitCode: 'day', unitName: t('defaults.day'), baseQuantity: '1', costRate: '0', billRate: '0', timeTypeBillRates: {} },
-    { unitCode: 'week', unitName: t('defaults.week'), baseQuantity: '4', costRate: '0', billRate: '0', timeTypeBillRates: {} },
-    { unitCode: 'month', unitName: t('defaults.month'), baseQuantity: '12', costRate: '0', billRate: '0', timeTypeBillRates: {} },
-  ])
+  const [tiers, setTiers] = useState<Tier[]>(defaults)
+  const [showPremiums, setShowPremiums] = useState(false)
 
-  // useCallback, not a bare closure: the effect below depends on it, and a bare
-  // `load` would be a fresh identity every render (refetch loop). Every state
-  // update sits in a promise continuation (the fetch response), never
-  // synchronously in the effect body.
-  const load = useCallback(() => {
-    return fetch(`/api/items/${itemId}/rates`)
-      .then((res) => {
-        if (!res.ok) return
-        return (res.json() as Promise<RateData>).then((next) => {
-          setData(next)
-          setRateBookId(next.books.find((b) => b.is_default)?.id ?? next.books[0]?.id ?? '')
-          if (next.profile) {
-            setBaseUnit(next.profile.base_unit)
-            setPricingPolicy(next.profile.pricing_policy)
-            setInvoicePresentation(next.profile.invoice_presentation)
-          }
-        })
-      })
+  // A read-only viewer must never retain an edit form after permissions change.
+  if (!canManage && editing) setEditing(false)
+
+  const load = useCallback(async () => {
+    const res = await fetch(`/api/items/${itemId}/rates`)
+    if (!res.ok) return
+    const next = await res.json() as RateData
+    setData(next)
+    setRateBookId(next.books.find((book) => book.is_default)?.id ?? next.books[0]?.id ?? '')
+    if (next.profile) {
+      setBaseUnit(next.profile.base_unit)
+      setPricingPolicy(next.profile.pricing_policy)
+      setInvoicePresentation(next.profile.invoice_presentation)
+    }
   }, [itemId])
   useEffect(() => { void load() }, [load])
 
-  function updateTier(index: number, key: keyof Tier, value: string) {
-    setTiers((rows) => rows.map((row, i) => i === index ? { ...row, [key]: value } : row))
-  }
+  const tierTypes = useMemo(
+    () => itemKind === 'labor' && baseUnit === 'hour'
+      ? (data?.timeTypes ?? []).filter((type) => Number(type.bill_multiplier) !== 1)
+      : [],
+    [baseUnit, data?.timeTypes, itemKind],
+  )
+  const columns = useMemo<LineGridColumn<Tier>[]>(() => [
+    { key: 'unitCode', label: t('unitCode'), width: 'minmax(110px,1fr)', type: 'text', required: true },
+    { key: 'unitName', label: t('unitName'), width: 'minmax(140px,1.4fr)', type: 'text', required: true },
+    { key: 'baseQuantity', label: t('baseQuantity'), width: '120px', type: 'decimal', decimalScale: 4, required: true },
+    { key: 'costRate', label: t('costRate'), width: '120px', type: 'amount', required: true },
+    { key: 'billRate', label: t('billRate'), width: '120px', type: 'amount', required: true },
+    ...(showPremiums ? tierTypes.map<LineGridColumn<Tier>>((type) => ({
+      key: `premium_${type.id}`,
+      label: type.name,
+      help: t('tierOverrides'),
+      width: '120px',
+      type: 'amount',
+    })) : []),
+  ], [showPremiums, t, tierTypes])
 
-  function updateTierTypeRate(index: number, timeTypeId: string, value: string) {
-    setTiers((rows) => rows.map((row, i) => {
-      if (i !== index) return row
-      const next = { ...row.timeTypeBillRates }
-      if (value === '') delete next[timeTypeId]
-      else next[timeTypeId] = value
-      return { ...row, timeTypeBillRates: next }
+  function gridRows(): Tier[] {
+    return tiers.map((tier) => ({
+      ...tier,
+      ...Object.fromEntries(tierTypes.map((type) => [`premium_${type.id}`, tier.timeTypeBillRates[type.id] ?? ''])),
     }))
   }
 
-  // Time-type tiers only make sense on hourly/labor lines.
-  const tierTypes = (data?.timeTypes ?? []).filter((x) => Number(x.bill_multiplier) !== 1)
+  function updateRows(rows: Tier[]) {
+    setTiers(rows.map((row) => ({
+      ...row,
+      timeTypeBillRates: {
+        ...row.timeTypeBillRates,
+        ...Object.fromEntries(tierTypes.flatMap((type) => {
+          const value = String(row[`premium_${type.id}`] ?? '')
+          return value === '' ? [] : [[type.id, value]]
+        })),
+      },
+    })))
+  }
+
+  function beginEditing() {
+    const latest = data?.versions.find((version) => version.rate_book_id === rateBookId)
+    setTiers(latest?.tiers.length ? latest.tiers : defaults)
+    setEffectiveFrom(today)
+    setServerError('')
+    setShowPremiums(false)
+    setEditing(true)
+  }
+
   const advancedPricing = data?.profile != null
   const simpleValue = (value: string) => value === '' ? t('notSet') : money(value)
 
   async function save() {
     setBusy(true)
-    const res = await fetch(`/api/items/${itemId}/rates`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rateBookId: rateBookId || null, effectiveFrom, baseUnit, pricingPolicy, invoicePresentation, tiers }),
-    })
-    const result = await res.json()
-    if (!res.ok) toast.error(result.error ?? t('saveFailed'))
-    else {
+    setServerError('')
+    try {
+      const res = await fetch(`/api/items/${itemId}/rates`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rateBookId: rateBookId || null, effectiveFrom, baseUnit, pricingPolicy, invoicePresentation, tiers }),
+      })
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null)
+        const message = errorMessage(payload, t('saveFailed'))
+        setServerError(message)
+        toast.error(message)
+        return
+      }
       toast.success(t('saved'))
       setEditing(false)
       await load()
+    } catch {
+      const message = common('feedback.saveFailed')
+      setServerError(message)
+      toast.error(message)
+    } finally {
+      setBusy(false)
     }
-    setBusy(false)
   }
 
   return (
@@ -119,7 +202,6 @@ export function ItemRatesEditor({
                 {advancedPricing ? t('guide.advancedMode') : t('guide.simpleMode')}
               </Badge>
             </div>
-
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
                 <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{t('guide.price')}</p>
@@ -141,7 +223,6 @@ export function ItemRatesEditor({
                 </p>
               </div>
             </div>
-
             <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">
               <p className="font-medium text-slate-800 dark:text-slate-100">{t('guide.resolutionTitle')}</p>
               <p className="mt-1">{advancedPricing ? t('guide.advancedResolution') : t('guide.simpleResolution')}</p>
@@ -150,6 +231,7 @@ export function ItemRatesEditor({
           </CardContent>
         </Card>
       ) : null}
+
       <div className="flex items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h3>
@@ -157,56 +239,61 @@ export function ItemRatesEditor({
         </div>
         <div className="flex items-center gap-2">
           <Link href="/docs/item-rates" className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">{t('documentation')}</Link>
-          {canManage && !editing ? <Button variant="outline" size="sm" onClick={() => setEditing(true)}>{advancedPricing ? t('newVersion') : t('configure')}</Button> : null}
+          {canManage && !editing ? <Button variant="outline" size="sm" onClick={beginEditing}>{advancedPricing ? t('newVersion') : t('configure')}</Button> : null}
         </div>
       </div>
+
       {editing ? (
-        <Card><CardContent className="space-y-4 p-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            <div className="space-y-1"><Label>{t('rateBook')}</Label><Select value={rateBookId} onChange={(e) => setRateBookId(e.target.value)}>
-              <option value="">{t('standardBook')}</option>{data?.books.map((b) => <option key={b.id} value={b.id}>{b.name} · {b.currency}</option>)}
-            </Select></div>
-            <div className="space-y-1"><Label>{t('effectiveFrom')}</Label><Input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} /></div>
-            <div className="space-y-1"><Label>{t('baseUnit')}</Label><Input value={baseUnit} onChange={(e) => setBaseUnit(e.target.value)} /></div>
-            <div className="space-y-1"><Label>{t('policy')}</Label><Select value={pricingPolicy} onChange={(e) => setPricingPolicy(e.target.value)}>
-              <option value="capped_ladder">{t('policies.capped_ladder')}</option><option value="lowest_cost">{t('policies.lowest_cost')}</option>
-            </Select></div>
-            <div className="space-y-1"><Label>{t('presentation')}</Label><Select value={invoicePresentation} onChange={(e) => setInvoicePresentation(e.target.value)}>
-              <option value="rate_components">{t('presentations.rate_components')}</option><option value="summary">{t('presentations.summary')}</option>
-            </Select></div>
-          </div>
-          <div className="space-y-2">
-            {tiers.map((tier, index) => <div key={index} className="grid gap-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700 sm:grid-cols-6">
-              <Input aria-label={t('unitCode')} value={tier.unitCode} onChange={(e) => updateTier(index, 'unitCode', e.target.value)} placeholder={t('unitCode')} />
-              <Input aria-label={t('unitName')} value={tier.unitName} onChange={(e) => updateTier(index, 'unitName', e.target.value)} placeholder={t('unitName')} />
-              <Input aria-label={t('baseQuantity')} inputMode="decimal" className="text-right tabular-nums" value={tier.baseQuantity} onChange={(e) => updateTier(index, 'baseQuantity', e.target.value)} placeholder={t('baseQuantity')} />
-              <Input aria-label={t('costRate')} inputMode="decimal" className="text-right tabular-nums" value={tier.costRate} onChange={(e) => updateTier(index, 'costRate', e.target.value)} placeholder={t('costRate')} />
-              <Input aria-label={t('billRate')} inputMode="decimal" className="text-right tabular-nums" value={tier.billRate} onChange={(e) => updateTier(index, 'billRate', e.target.value)} placeholder={t('billRate')} />
-              <Button variant="ghost" onClick={() => setTiers((rows) => rows.filter((_, i) => i !== index))}>{common('actions.remove')}</Button>
-              {tierTypes.length > 0 ? <div className="flex flex-wrap items-center gap-2 sm:col-span-6">
-                <span className="text-xs text-slate-500 dark:text-slate-400">{t('tierOverrides')}</span>
-                {tierTypes.map((tt) => <div key={tt.id} className="flex items-center gap-1">
-                  <span className="text-xs text-slate-600 dark:text-slate-300">{tt.name}</span>
-                  <Input aria-label={tt.name} inputMode="decimal" className="h-8 w-24 text-right tabular-nums" value={tier.timeTypeBillRates[tt.id] ?? ''}
-                    placeholder={tier.billRate ? (Number(tier.billRate) * Number(tt.bill_multiplier)).toFixed(2) : t('tierAuto')}
-                    onChange={(e) => updateTierTypeRate(index, tt.id, e.target.value)} />
-                </div>)}
-              </div> : null}
-            </div>)}
-            <Button variant="outline" size="sm" onClick={() => setTiers((rows) => [...rows, { unitCode: '', unitName: '', baseQuantity: '1', costRate: '0', billRate: '0', timeTypeBillRates: {} }])}>{t('addUnit')}</Button>
-          </div>
-          <div className="flex gap-2"><Button disabled={busy} onClick={save}>{busy ? common('actions.saving') : common('actions.save')}</Button><Button variant="outline" onClick={() => setEditing(false)}>{common('actions.cancel')}</Button></div>
-        </CardContent></Card>
+        <Card>
+          <CardContent className="space-y-4 p-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              <div className="space-y-1"><Label>{t('rateBook')}</Label><Select value={rateBookId} onChange={(event) => setRateBookId(event.target.value)}>
+                <option value="">{t('standardBook')}</option>{data?.books.map((book) => <option key={book.id} value={book.id}>{book.name} · {book.currency}</option>)}
+              </Select></div>
+              <div className="space-y-1"><Label>{t('effectiveFrom')}</Label><Input type="date" value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.target.value)} /></div>
+              <div className="space-y-1"><Label>{t('baseUnit')}</Label><Input value={baseUnit} onChange={(event) => setBaseUnit(event.target.value)} /></div>
+              <div className="space-y-1"><Label>{t('policy')}</Label><Select value={pricingPolicy} onChange={(event) => setPricingPolicy(event.target.value)}>
+                <option value="capped_ladder">{t('policies.capped_ladder')}</option><option value="lowest_cost">{t('policies.lowest_cost')}</option>
+              </Select></div>
+              <div className="space-y-1"><Label>{t('presentation')}</Label><Select value={invoicePresentation} onChange={(event) => setInvoicePresentation(event.target.value)}>
+                <option value="rate_components">{t('presentations.rate_components')}</option><option value="summary">{t('presentations.summary')}</option>
+              </Select></div>
+            </div>
+
+            <LineGrid<Tier>
+              columns={columns}
+              rows={gridRows()}
+              onRowsChange={updateRows}
+              emptyRow={() => ({ unitCode: '', unitName: '', baseQuantity: '1', costRate: '0', billRate: '0', timeTypeBillRates: {} })}
+              minRows={1}
+              addLabel={t('addUnit')}
+            />
+
+            {tierTypes.length > 0 ? (
+              <button type="button" onClick={() => setShowPremiums((shown) => !shown)} className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">
+                {showPremiums ? t('tierOverridesHide') : t('tierOverrides')}
+              </button>
+            ) : null}
+            {serverError ? <p role="alert" className="text-sm text-red-600 dark:text-red-400">{serverError}</p> : null}
+            <div className="flex gap-2">
+              <Button disabled={busy} onClick={save}>{busy ? common('actions.saving') : common('actions.save')}</Button>
+              <Button variant="outline" onClick={() => setEditing(false)}>{common('actions.cancel')}</Button>
+            </div>
+          </CardContent>
+        </Card>
       ) : null}
+
       <PagedTable
-        rows={data?.versions ?? []} rowKey={(v) => v.id} searchable
+        rows={data?.versions ?? []}
+        rowKey={(version) => version.id}
+        searchable
         empty={<p className="text-sm text-slate-500 dark:text-slate-400">{t('empty')}</p>}
         columns={[
-          { key: 'book', header: t('rateBook'), cell: (v) => v.rate_book_name, search: (v) => v.rate_book_name },
-          { key: 'from', header: t('effectiveFrom'), cell: (v) => v.effective_from },
-          { key: 'to', header: t('effectiveTo'), cell: (v) => v.effective_to ?? '—' },
-          { key: 'status', header: common('labels.status'), cell: (v) => <Badge variant={v.status === 'active' ? 'success' : 'secondary'}>{v.status}</Badge> },
-          { key: 'rates', header: t('rates'), cell: (v) => v.tiers.map((x) => `${x.unitName}: ${money(x.billRate)}`).join(' · ') },
+          { key: 'book', header: t('rateBook'), cell: (version) => version.rate_book_name, search: (version) => version.rate_book_name },
+          { key: 'from', header: t('effectiveFrom'), cell: (version) => version.effective_from },
+          { key: 'to', header: t('effectiveTo'), cell: (version) => version.effective_to ?? '—' },
+          { key: 'status', header: common('labels.status'), cell: (version) => <Badge variant={version.status === 'active' ? 'success' : 'secondary'}>{version.status}</Badge> },
+          { key: 'rates', header: t('rates'), cell: (version) => version.tiers.map((tier) => `${tier.unitName}: ${money(tier.billRate)}`).join(' · ') },
         ]}
       />
     </section>

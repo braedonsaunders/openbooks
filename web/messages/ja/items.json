@@ -37,8 +37,23 @@
     "discount": "値引き",
     "equipment_charge": "設備使用料"
   },
+  "kindDescriptions": {
+    "service": "物理在庫を追跡せずに販売する作業または専門知識。",
+    "non_inventory": "数量を在庫管理しない購入品または販売品。",
+    "inventory": "在庫数、評価、出庫を管理する在庫品。",
+    "assembly": "BOM から製造される組立品。",
+    "kit": "構成品を個別に保つ販売用セット。",
+    "other_charge": "手数料、追加料金、運賃その他の独立料金。",
+    "equipment_charge": "所有またはレンタル設備の請求可能な利用。",
+    "labor": "労務料金と給与原価を持つ実労時間。",
+    "absence": "勤怠に記録する有給または無給の休暇。",
+    "discount": "他の行または取引合計に適用する値引き。"
+  },
   "drawer": {
+    "tabs": { "overview": "概要", "pricing": "価格", "accounting": "会計", "costing": "在庫", "revenue": "収益認識" },
     "newItem": "新規品目",
+    "chooseKindTitle": "品目タイプを選択",
+    "chooseKindDescription": "必要な会計および運用上の動作から始めます。作成前にタイプを再確認できます。",
     "autosaveHint": "変更は自動的に保存されます。",
     "activate": "有効化",
     "deactivate": "無効化",
@@ -108,8 +123,20 @@
     "saved": "レート版を保存しました",
     "empty": "レート版はまだありません。",
     "rates": "レート",
-    "tierOverrides": "時間種別レート：",
+    "tierOverrides": "労務割増レート",
+    "tierOverridesHide": "労務割増レートを非表示",
     "tierAuto": "自動"
+  },
+  "rateBookDrawer": {
+    "newTitle": "新しいレートブック",
+    "editTitle": "{name}を編集",
+    "description": "レートブックの基本情報と発効日付きの完全な品目レート表を一緒に管理します。",
+    "ratesTitle": "品目レート",
+    "ratesHelp": "変更した行を保存すると新しい不変のレート版が作成され、以前の版は履歴取引用に保持されます。",
+    "item": "品目",
+    "addItem": "品目レートを追加",
+    "inactive": "無効",
+    "unchangedHelp": "品目レート表は変更されていないため、保存するとレートブックの詳細のみ更新されます。"
   },
   "revrec": {
     "title": "収益認識",
