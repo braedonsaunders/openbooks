@@ -870,12 +870,21 @@ export async function categoryWeekly(
         .replace(/{IS_Q_END}/g, monthNum % 3 === 0 && isMonthEnd ? "1" : "0")
         .replace(/{IS_YEAR_END}/g, monthNum === 12 && isMonthEnd ? "1" : "0")
         .replace(/{TAX_RATE}/g, String(taxRate)).replace(/{TRUE}/g, "1").replace(/{FALSE}/g, "0");
-      let result = 0;
+      // A malformed tenant formula is a refusal the operator must see named,
+      // never a silent 0 forecast that looks like "no cash expected" —
+      // forecast-only, but it is the forecast the release gate reads.
+      let result: number;
       try {
         result = evaluateFormula(evalStr);
-        if (!isFinite(result)) result = 0;
-      } catch {
-        result = 0;
+      } catch (e) {
+        throw new Error(
+          `cash forecast formula "${cat.formula}" failed for the week of ${k}: ${(e as Error).message}`,
+        );
+      }
+      if (!isFinite(result)) {
+        throw new Error(
+          `cash forecast formula "${cat.formula}" produced a non-finite value for the week of ${k}`,
+        );
       }
       weekly[i] = normalizeMoneyValue(String(round2(result)));
     });
