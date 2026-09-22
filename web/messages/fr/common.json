@@ -157,7 +157,8 @@
     "paymentHold": "Blocage du paiement",
     "expectedPayDate": "Date de paiement prévue",
     "openBalance": "Solde impayé",
-    "defaultForm": "Formulaire par défaut"
+    "defaultForm": "Formulaire par défaut",
+    "asOf": "Au"
   },
   "status": {
     "draft": "Brouillon",
@@ -178,7 +179,8 @@
     "ok": "OK",
     "pending_approval": "Soumis",
     "calculated": "Calculé",
-    "committed": "Validé"
+    "committed": "Validé",
+    "retired": "Retiré"
   },
   "filters": {
     "showInactive": "Afficher les inactifs"

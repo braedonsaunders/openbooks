@@ -114,8 +114,23 @@
       "search": "搜索科目…",
       "csv": "CSV",
       "all": "全部",
-      "status": { "on-track": "正常", "watch": "关注", "over": "超支", "under": "未达", "no-budget": "无预算" },
-      "columns": { "account": "科目", "type": "类型", "budget": "预算", "actual": "实际", "progress": "进度", "variance": "差异", "variancePct": "差异 %", "status": "状态" },
+      "status": {
+        "on-track": "正常",
+        "watch": "关注",
+        "over": "超支",
+        "under": "未达",
+        "no-budget": "无预算"
+      },
+      "columns": {
+        "account": "科目",
+        "type": "类型",
+        "budget": "预算",
+        "actual": "实际",
+        "progress": "进度",
+        "variance": "差异",
+        "variancePct": "差异 %",
+        "status": "状态"
+      },
       "showing": "显示第 {from}–{to} 项，共 {total} 个科目",
       "previous": "上一页",
       "next": "下一页",
@@ -2035,8 +2050,12 @@
       "duplicateGroup": "{count, plural, one {# 张匹配单据} other {# 张匹配单据}}——同一供应商、类型和金额（{currency} {amount}）{sharedRef}（跨度{daysSpan, plural, one {# 天} other {# 天}}）：{others}",
       "duplicateSharedRef": "，共享参考号{reference}",
       "auditEvent": "{actor} {verb} {table} {row}{fieldsFrag}",
-      "auditFields": "\uff08{fields}\uff09",
-      "auditVerb": { "created": "\u521b\u5efa", "updated": "\u66f4\u65b0", "deleted": "\u5220\u9664" },
+      "auditFields": "（{fields}）",
+      "auditVerb": {
+        "created": "创建",
+        "updated": "更新",
+        "deleted": "删除"
+      },
       "riskGhosts": {
         "area": "幽灵供应商",
         "message": "{count, plural, one {# 个供应商} other {# 个供应商}}与员工吻合"
@@ -2271,7 +2290,10 @@
       "signalNote": "周六/周日的会计日期",
       "signalValue": "单据日期"
     },
-    "yes": "是"
+    "yes": "是",
+    "detection": {
+      "allFlagged": "全部标记"
+    }
   },
   "charts": {
     "history": "历史",

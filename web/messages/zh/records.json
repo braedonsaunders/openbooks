@@ -5,20 +5,62 @@
     "archived": "已归档"
   },
   "fieldTypes": {
-    "text": { "label": "短文本", "description": "单行文本输入" },
-    "long_text": { "label": "长文本", "description": "多行文本区域" },
-    "number": { "label": "数字", "description": "带可选单位的数值输入" },
-    "currency": { "label": "货币", "description": "金额——右对齐，保留两位小数" },
-    "percentage": { "label": "百分比", "description": "百分比值（例如 13 表示 13%）" },
-    "select": { "label": "下拉框", "description": "单选下拉框" },
-    "multi_select": { "label": "多选", "description": "选择多个选项" },
-    "radio": { "label": "单选", "description": "选择一个选项（单选按钮）" },
-    "date": { "label": "日期", "description": "日期选择器" },
-    "datetime": { "label": "日期和时间", "description": "日期 + 时间选择器" },
-    "rating": { "label": "评分", "description": "数值刻度（例如 1–5）" },
-    "formula": { "label": "公式", "description": "由其他字段计算得出" },
-    "gl_account": { "label": "总账科目", "description": "从会计科目表中选择一个科目" },
-    "party": { "label": "往来单位", "description": "选择供应商、客户或员工" }
+    "text": {
+      "label": "短文本",
+      "description": "单行文本输入"
+    },
+    "long_text": {
+      "label": "长文本",
+      "description": "多行文本区域"
+    },
+    "number": {
+      "label": "数字",
+      "description": "带可选单位的数值输入"
+    },
+    "currency": {
+      "label": "货币",
+      "description": "金额——右对齐，保留两位小数"
+    },
+    "percentage": {
+      "label": "百分比",
+      "description": "百分比值（例如 13 表示 13%）"
+    },
+    "select": {
+      "label": "下拉框",
+      "description": "单选下拉框"
+    },
+    "multi_select": {
+      "label": "多选",
+      "description": "选择多个选项"
+    },
+    "radio": {
+      "label": "单选",
+      "description": "选择一个选项（单选按钮）"
+    },
+    "date": {
+      "label": "日期",
+      "description": "日期选择器"
+    },
+    "datetime": {
+      "label": "日期和时间",
+      "description": "日期 + 时间选择器"
+    },
+    "rating": {
+      "label": "评分",
+      "description": "数值刻度（例如 1–5）"
+    },
+    "formula": {
+      "label": "公式",
+      "description": "由其他字段计算得出"
+    },
+    "gl_account": {
+      "label": "总账科目",
+      "description": "从会计科目表中选择一个科目"
+    },
+    "party": {
+      "label": "往来单位",
+      "description": "选择供应商、客户或员工"
+    }
   },
   "types": {
     "title": "自定义记录",
@@ -188,5 +230,6 @@
     "deactivatedToast": "{number} 已停用",
     "deleteConfirm": "删除草稿 {number}？此操作无法撤销。",
     "draftDeleted": "草稿已删除"
-  }
+  },
+  "createFailed": "无法创建记录类型"
 }

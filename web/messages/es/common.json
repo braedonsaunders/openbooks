@@ -157,7 +157,8 @@
     "paymentHold": "Retención de pago",
     "expectedPayDate": "Fecha de pago prevista",
     "openBalance": "Saldo pendiente",
-    "defaultForm": "Formulario predeterminado"
+    "defaultForm": "Formulario predeterminado",
+    "asOf": "Al"
   },
   "status": {
     "draft": "Borrador",
@@ -178,7 +179,8 @@
     "ok": "OK",
     "pending_approval": "Enviado/a",
     "calculated": "Calculado/a",
-    "committed": "Confirmado/a"
+    "committed": "Confirmado/a",
+    "retired": "Retirado/a"
   },
   "filters": {
     "showInactive": "Mostrar inactivos"

@@ -114,8 +114,23 @@
       "search": "Buscar contas…",
       "csv": "CSV",
       "all": "Todas",
-      "status": { "on-track": "No caminho certo", "watch": "Observação", "over": "Acima", "under": "Abaixo", "no-budget": "Sem orçamento" },
-      "columns": { "account": "Conta", "type": "Tipo", "budget": "Orçamento", "actual": "Real", "progress": "Progresso", "variance": "Variação", "variancePct": "Variação %", "status": "Status" },
+      "status": {
+        "on-track": "No caminho certo",
+        "watch": "Observação",
+        "over": "Acima",
+        "under": "Abaixo",
+        "no-budget": "Sem orçamento"
+      },
+      "columns": {
+        "account": "Conta",
+        "type": "Tipo",
+        "budget": "Orçamento",
+        "actual": "Real",
+        "progress": "Progresso",
+        "variance": "Variação",
+        "variancePct": "Variação %",
+        "status": "Status"
+      },
       "showing": "Exibindo {from}–{to} de {total} contas",
       "previous": "Anterior",
       "next": "Próximo",
@@ -2036,7 +2051,11 @@
       "duplicateSharedRef": ", referência compartilhada {reference}",
       "auditEvent": "{actor} {verb} {table} {row}{fieldsFrag}",
       "auditFields": " ({fields})",
-      "auditVerb": { "created": "criou", "updated": "atualizou", "deleted": "excluiu" },
+      "auditVerb": {
+        "created": "criou",
+        "updated": "atualizou",
+        "deleted": "excluiu"
+      },
       "riskGhosts": {
         "area": "Fornecedores fantasmas",
         "message": "{count, plural, one {# fornecedor} other {# fornecedores}} coincidem com funcionários"
@@ -2271,7 +2290,10 @@
       "signalNote": "data contábil em sáb/dom",
       "signalValue": "Data do doc."
     },
-    "yes": "Sim"
+    "yes": "Sim",
+    "detection": {
+      "allFlagged": "Todos sinalizados"
+    }
   },
   "charts": {
     "history": "Histórico",

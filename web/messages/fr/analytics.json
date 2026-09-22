@@ -114,8 +114,23 @@
       "search": "Rechercher des comptes…",
       "csv": "CSV",
       "all": "Tous",
-      "status": { "on-track": "Conforme", "watch": "À surveiller", "over": "Dépassé", "under": "En dessous", "no-budget": "Sans budget" },
-      "columns": { "account": "Compte", "type": "Type", "budget": "Budget", "actual": "Réel", "progress": "Progression", "variance": "Écart", "variancePct": "Écart %", "status": "Statut" },
+      "status": {
+        "on-track": "Conforme",
+        "watch": "À surveiller",
+        "over": "Dépassé",
+        "under": "En dessous",
+        "no-budget": "Sans budget"
+      },
+      "columns": {
+        "account": "Compte",
+        "type": "Type",
+        "budget": "Budget",
+        "actual": "Réel",
+        "progress": "Progression",
+        "variance": "Écart",
+        "variancePct": "Écart %",
+        "status": "Statut"
+      },
       "showing": "Affichage de {from} à {to} sur {total} comptes",
       "previous": "Précédent",
       "next": "Suivant",
@@ -2036,7 +2051,11 @@
       "duplicateSharedRef": ", référence partagée {reference}",
       "auditEvent": "{actor} {verb} {table} {row}{fieldsFrag}",
       "auditFields": " ({fields})",
-      "auditVerb": { "created": "a cr\u00e9\u00e9", "updated": "a mis \u00e0 jour", "deleted": "a supprim\u00e9" },
+      "auditVerb": {
+        "created": "a créé",
+        "updated": "a mis à jour",
+        "deleted": "a supprimé"
+      },
       "riskGhosts": {
         "area": "Fournisseurs fantômes",
         "message": "{count, plural, one {# fournisseur} other {# fournisseurs}} correspondent à des salariés"
@@ -2271,7 +2290,10 @@
       "signalNote": "date comptable un sam./dim.",
       "signalValue": "Date du doc"
     },
-    "yes": "Oui"
+    "yes": "Oui",
+    "detection": {
+      "allFlagged": "Tout signalé"
+    }
   },
   "charts": {
     "history": "Historique",
