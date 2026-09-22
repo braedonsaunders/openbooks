@@ -15,6 +15,9 @@ import {
   compaRatioFor,
 } from '@openbooks/engine/src/hrm/compensation/bands.ts'
 import {
+  countBandHolders,
+} from '@openbooks/engine/src/hrm/compensation/band-headcounts.ts'
+import {
   listJobLevels,
 } from '@openbooks/engine/src/hrm/compensation/architecture.ts'
 import {
@@ -160,33 +163,21 @@ export async function loadCompensationHome(authz: Authz): Promise<CompHomeData |
   ])
   const levelById = new Map(levels.map((l) => [l.id, l]))
   // Headcount per band scope: employments whose position level the band
-  // prices, resolved read-only (placement stays the band service's job).
+  // prices, resolved read-only through the fenced engine counter so the
+  // count matches the caller lens (empty scope sees zero, never the
+  // whole org). Band configuration itself stays visible; placement stays
+  // the band service's job.
   const bandRows: CompBandRow[] = []
   for (const band of bands) {
     const level = levelById.get(band.levelId)
-    const holders = (await db.execute<{ n: string }>(sql`
-      select count(distinct aav.employment_id)::text as n
-        from employment_assignment_versions aav
-        join position_versions pv on pv.org_id = aav.org_id and pv.position_id = aav.position_id
-         and pv.job_level_id = ${band.levelId}
-         and pv.effective_from <= ${today}::date
-         and (pv.effective_to is null or pv.effective_to >= ${today}::date)
-         and pv.recorded_until is null
-        join worker_employment_versions ev on ev.org_id = aav.org_id and ev.employment_id = aav.employment_id
-         and ev.effective_from <= ${today}::date
-         and (ev.effective_to is null or ev.effective_to >= ${today}::date)
-         and ev.recorded_until is null and ev.status in ('active', 'on_leave')
-       where aav.org_id = ${orgId} and aav.is_primary
-         and aav.effective_from <= ${today}::date
-         and (aav.effective_to is null or aav.effective_to >= ${today}::date)
-         and aav.recorded_until is null`)).rows[0]
+    const holders = await countBandHolders({ orgId, actorId: authz.user.id, levelId: band.levelId, asOf: today })
     bandRows.push({
       id: band.id,
       levelCode: level?.code ?? band.levelId.slice(0, 8),
       levelName: level?.name ?? '',
       range: `${band.min} – ${band.max} ${band.currency}`,
       currency: band.currency,
-      headcount: holders?.n ?? '0',
+      headcount: String(holders),
       belowMin: '',
       inRange: '',
       aboveMax: '',
