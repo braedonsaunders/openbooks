@@ -30,7 +30,8 @@ import {
 import {
   listStatements,
 } from '@openbooks/engine/src/hrm/compensation/statements.ts'
-import { loadOwnEmploymentIds } from '@openbooks/engine/src/hrm/authorization.ts'
+import { CompensationError } from '@openbooks/engine/src/hrm/compensation/errors.ts'
+import { HrmAuthorizationError, loadOwnEmploymentIds } from '@openbooks/engine/src/hrm/authorization.ts'
 import { can, getAuthz, type Authz } from '../authz'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import { isFeatureEnabled } from '../features'
@@ -120,6 +121,13 @@ export interface CompHomeData {
   equityLabel: string
   architectureTitle: string
   canSetup: boolean
+  /**
+   * Named domain/auth refusal from the gap-snapshot read (a scoped reader
+   * cannot read org-wide frozen aggregates). Renders as data beside the
+   * tiles — never a zero joint-flag count pretending the read succeeded.
+   * Null when the snapshot read succeeded (or genuinely found no snapshot).
+   */
+  refusal: { title: string; message: string } | null
 }
 
 function cycleStatusVariant(status: string): CompCycleRow['statusVariant'] {
@@ -212,16 +220,31 @@ export async function loadCompensationHome(authz: Authz): Promise<CompHomeData |
     }
   }
   const awaitingPlans = plans.filter((p) => p.status === 'submitted').length
-  let jointFlags = 0
+  // A refused snapshot read (a scoped reader cannot read org-wide frozen
+  // aggregates) travels as data with its remedy intact: the tile shows
+  // unavailable, never a zero that reads as "no flags". A genuinely
+  // absent snapshot still counts zero. Unexpected DB/system failures
+  // propagate — never an empty tile.
+  let jointFlags: number | null = 0
+  let gapRefusal: CompHomeData['refusal'] = null
   if (await isFeatureEnabled(orgId, 'hrmPayTransparency')) {
-    const snapshot = await latestGapSnapshot({ orgId, actorId: authz.user.id }).catch(() => null)
-    jointFlags = snapshot?.categories.filter((c) => c.jointAssessmentDue).length ?? 0
+    try {
+      const snapshot = await latestGapSnapshot({ orgId, actorId: authz.user.id })
+      jointFlags = snapshot?.categories.filter((c) => c.jointAssessmentDue).length ?? 0
+    } catch (error) {
+      if (error instanceof CompensationError || error instanceof HrmAuthorizationError) {
+        gapRefusal = { title: t('compensation.title'), message: error.message }
+        jointFlags = null
+      } else {
+        throw error
+      }
+    }
   }
   const tiles: CompStatTile[] = [
     { iconKey: 'trending-down', accent: 'amber', label: t('compensation.tiles.belowMin'), value: belowMinRound, tone: 'default' },
     { iconKey: 'gauge', accent: 'blue', label: t('compensation.tiles.openCyclePacing'), value: pacingNote || '—', tone: 'default' },
     { iconKey: 'users', accent: 'violet', label: t('compensation.tiles.awaitingPlans'), value: String(awaitingPlans), tone: awaitingPlans > 0 ? 'warning' : 'default' },
-    { iconKey: 'scale', accent: 'rose', label: t('compensation.tiles.jointFlags'), value: String(jointFlags), tone: jointFlags > 0 ? 'warning' : 'default' },
+    { iconKey: 'scale', accent: 'rose', label: t('compensation.tiles.jointFlags'), value: jointFlags === null ? '—' : String(jointFlags), tone: jointFlags !== null && jointFlags > 0 ? 'warning' : 'default' },
   ]
   const planRows: CompPlanRow[] = []
   for (const plan of plans.slice(0, 10)) {
@@ -279,6 +302,7 @@ export async function loadCompensationHome(authz: Authz): Promise<CompHomeData |
     equityLabel: t('compensation.equity'),
     architectureTitle: t('compensation.architectureTitle'),
     canSetup: can(authz, 'admin.setup.manage'),
+    refusal: gapRefusal,
   }
 }
 
@@ -615,6 +639,20 @@ export interface EquityData {
   generateLabel: string
   emptyTitle: string
   emptyDescription: string
+  /**
+   * Named domain/auth refusal from the snapshot read (a scoped reader
+   * cannot read org-wide frozen aggregates). Renders as data with the
+   * snapshot grid and table suppressed — never an empty page pretending
+   * no snapshot was ever computed. Null when the read succeeded,
+   * including a genuine no-snapshot empty state.
+   */
+  refusal: { title: string; message: string } | null
+  /**
+   * False only while a snapshot refusal is present, suppressing the
+   * snapshot-specific grid and table (the leave-queue `hasContent`
+   * pattern). Genuine no-snapshot emptiness still renders its table.
+   */
+  hasContent: boolean
 }
 
 export async function loadEquity(authz: Authz): Promise<EquityData | null> {
@@ -623,7 +661,21 @@ export async function loadEquity(authz: Authz): Promise<EquityData | null> {
   const t = await getTranslations('hrm')
   const orgId = authz.user.orgId
   const tabs = await hrmGroupTabs(authz, '/hrm/compensation')
-  const snapshot = await latestGapSnapshot({ orgId, actorId: authz.user.id }).catch(() => null)
+  // A refused snapshot read travels as data with its remedy intact — never
+  // an empty page pretending no snapshot exists. A genuinely absent
+  // snapshot keeps the empty state. Unexpected DB/system failures
+  // propagate — never an empty page or a misleading business refusal.
+  let snapshot: Awaited<ReturnType<typeof latestGapSnapshot>> = null
+  let refusal: EquityData['refusal'] = null
+  try {
+    snapshot = await latestGapSnapshot({ orgId, actorId: authz.user.id })
+  } catch (error) {
+    if (error instanceof CompensationError || error instanceof HrmAuthorizationError) {
+      refusal = { title: t('equity.title'), message: error.message }
+    } else {
+      throw error
+    }
+  }
   const flags = snapshot?.categories.filter((c) => c.jointAssessmentDue).length ?? 0
   const tiles: CompStatTile[] = snapshot
     ? [
@@ -665,6 +717,8 @@ export async function loadEquity(authz: Authz): Promise<EquityData | null> {
     generateLabel: t('equity.generate'),
     emptyTitle: t('equity.emptyTitle'),
     emptyDescription: t('equity.emptyDescription'),
+    refusal,
+    hasContent: refusal === null,
   }
 }
 

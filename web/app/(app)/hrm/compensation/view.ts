@@ -51,6 +51,9 @@ export function compensationSpec(data: NonNullable<Awaited<ReturnType<typeof loa
       }),
     ],
     body: [
+      // A refused gap-snapshot read renders with its remedy intact — never
+      // a zero joint-flag tile pretending the read succeeded.
+      widgetBlock('empty-state', { title: data.refusal?.title ?? '', description: data.refusal?.message }, f('refusal')),
       grid('grid grid-cols-2 gap-4 xl:grid-cols-4', [
         statTile({ iconKey: f('tiles.0.iconKey'), accent: f('tiles.0.accent'), label: f('tiles.0.label'), value: f('tiles.0.value'), tone: f('tiles.0.tone') }),
         statTile({ iconKey: f('tiles.1.iconKey'), accent: f('tiles.1.accent'), label: f('tiles.1.label'), value: f('tiles.1.value'), tone: f('tiles.1.tone') }),
