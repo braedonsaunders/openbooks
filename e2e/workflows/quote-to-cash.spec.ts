@@ -1,5 +1,6 @@
 import { expect, test, type Browser, type BrowserContext, type Locator, type Page } from '@playwright/test';
 import { authedContext, dismissSetupWizard } from '../auth';
+import { withIdempotencyKey } from "./idempotency";
 
 /**
  * Quote-to-cash end-to-end workflows through the real UI and real APIs.
@@ -108,7 +109,7 @@ async function api(
       }
       return { status: res.status, body: parsed };
     },
-    { method, path, data: body, extra: headers ?? {} },
+    { method, path, data: body, extra: withIdempotencyKey(method, headers) },
   );
   return result as ApiResult;
 }

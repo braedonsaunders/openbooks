@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { authedContext, dismissSetupWizard } from '../auth';
+import { withIdempotencyKey } from "./idempotency";
 
 /**
  * Project cost-to-cash end-to-end (construction / AIA progress billing).
@@ -141,7 +142,7 @@ async function api(page: Page, method: string, path: string, body?: unknown, hea
       }
       throw lastError;
     },
-    { method, path, data: body, retryable, extraHeaders: headers },
+    { method, path, data: body, retryable, extraHeaders: withIdempotencyKey(method, headers) },
   );
 }
 function req(result: ApiResult, url: string): Json {

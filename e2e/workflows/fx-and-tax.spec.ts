@@ -1,5 +1,6 @@
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { authedContext, dismissSetupWizard } from '../auth';
+import { withIdempotencyKey } from "./idempotency";
 
 /**
  * E2E workflow: foreign currency and tax filing lifecycle.
@@ -132,7 +133,7 @@ async function api(
 ): Promise<{ status: number; body: Json }> {
   const res = await page.request.fetch(path, {
     method,
-    headers: { Origin: new URL(page.url()).origin, ...(headers ?? {}) },
+    headers: { Origin: new URL(page.url()).origin, ...withIdempotencyKey(method, headers) },
     data: body === undefined ? undefined : JSON.stringify(body),
   });
   const text = await res.text();

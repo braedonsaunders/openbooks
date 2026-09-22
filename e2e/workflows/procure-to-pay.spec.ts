@@ -1,6 +1,7 @@
 import { expect, request, test, type Browser, type BrowserContext, type Locator, type Page } from "@playwright/test";
 import { createHash } from "node:crypto";
 import { authedContext, dismissSetupWizard } from "../auth";
+import { withIdempotencyKey } from "./idempotency";
 
 /**
  * Procure-to-pay end-to-end workflows through the real UI and real APIs.
@@ -142,7 +143,7 @@ async function api(page: Page, method: string, path: string, body?: unknown, hea
       }
       throw lastError;
     },
-    { method, path, data: body, extra: headers ?? {}, retryable },
+    { method, path, data: body, extra: withIdempotencyKey(method, headers), retryable },
   );
 }
 async function apiText(page: Page, path: string): Promise<{ status: number; text: string }> {

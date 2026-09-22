@@ -19,6 +19,7 @@
  */
 import type { APIRequestContext, Browser } from "@playwright/test";
 import { request } from "@playwright/test";
+import { withIdempotencyKey } from "./idempotency";
 
 /**
  * Run-unique tag so retries and local re-runs never collide on natural keys.
@@ -45,7 +46,7 @@ export async function api(
 ): Promise<{ status: number; json: unknown }> {
   const response = await request.fetch(`${originOf(baseURL)}${path}`, {
     method,
-    headers: { "Content-Type": "application/json", Origin: originOf(baseURL), ...headers },
+    headers: { "Content-Type": "application/json", Origin: originOf(baseURL), ...withIdempotencyKey(method, headers) },
     data: body === undefined ? undefined : body,
   });
   const text = await response.text();
