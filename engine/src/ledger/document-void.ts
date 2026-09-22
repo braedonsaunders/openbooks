@@ -1081,7 +1081,26 @@ async function releaseVoidedPayRun(
      where org_id = ${orgId} and payroll_batch_ref = ${documentId}
   `);
 
-  await tx.execute(sql`
+  // One reversal movement per (run, plan, employee): the unique index
+  // entitlement_ledger_run_movement keeps void replay idempotent, and the CAS
+  // above already refuses a second void of this run — so a conflict here
+  // means some OTHER writer recorded adjustment movements for it, and
+  // silently dropping the reversal would leave entitlement balances wrong
+  // forever behind a run marked voided. Count the groups the reversal owes
+  // and refuse the void (this whole transaction rolls back) if the insert
+  // could not write every one of them.
+  const owed = (await tx.execute<{ n: string }>(sql`
+    select count(*)::text as n
+      from (
+        select l.plan_id, l.employee_party_id
+          from entitlement_ledger l
+         where l.org_id = ${orgId} and l.pay_run_document_id = ${documentId}
+           and l.kind <> 'adjustment'
+         group by l.org_id, l.plan_id, l.employee_party_id
+        having sum(l.amount) <> 0
+      ) owed_groups
+  `)).rows[0];
+  const reversed = (await tx.execute<{ id: string }>(sql`
     insert into entitlement_ledger
       (org_id, plan_id, employee_party_id, movement_date, amount, hours, kind,
        pay_run_document_id, note, created_by, updated_by)
@@ -1098,7 +1117,13 @@ async function releaseVoidedPayRun(
      group by l.org_id, l.plan_id, l.employee_party_id
     having sum(l.amount) <> 0
     on conflict do nothing
-  `);
+    returning id
+  `)).rows;
+  if (Number(owed?.n ?? 0) !== reversed.length) {
+    throw new DocumentVoidError(
+      "entitlement adjustments already exist for this pay run, so the void cannot reverse its entitlements once; reload the run and review its entitlement adjustments before voiding",
+    );
+  }
 }
 
 export async function rejectRequestedDocumentVoid(

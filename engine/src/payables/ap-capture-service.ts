@@ -986,11 +986,20 @@ export async function materializeCapture(input: {
            where id = ${existing.rows[0].id} and org_id = ${input.orgId}
         `);
       } else {
+        // A concurrent capture of the same alias can win the insert race —
+        // the select FOR UPDATE above matched nothing, so no lock is held —
+        // and a dropped conflict silently stalled the confirmation count
+        // that gates auto-activation. The upsert mirrors the update branch
+        // exactly, so the confirmation always counts.
         await tx.execute(sql`
           insert into ap_capture_rules (org_id, rule_kind, match, output, created_by, updated_by)
           values (${input.orgId}, 'vendor_alias', ${JSON.stringify({ alias })}::jsonb,
                   ${JSON.stringify({ partyId: vendorId })}::jsonb, ${input.actorId}, ${input.actorId})
-          on conflict do nothing
+          on conflict (org_id, rule_kind, match, output) do update
+            set confirmation_count = ap_capture_rules.confirmation_count + 1,
+                is_active = ap_capture_rules.confirmation_count + 1 >= 3,
+                updated_at = now(),
+                updated_by = ${input.actorId}
         `);
       }
     }
@@ -1010,13 +1019,19 @@ export async function materializeCapture(input: {
              where id = ${existing.rows[0].id} and org_id = ${input.orgId}
           `);
         } else {
+          // Same race and same remedy as the vendor_alias upsert above: the
+          // concurrent winner's confirmation must still count.
           await tx.execute(sql`
             insert into ap_capture_rules (org_id, rule_kind, match, output, created_by, updated_by)
             values (${input.orgId}, 'vendor_account',
                     ${JSON.stringify({ partyId: vendorId, description })}::jsonb,
                     ${JSON.stringify({ accountId: line.accountId })}::jsonb,
                     ${input.actorId}, ${input.actorId})
-            on conflict do nothing
+            on conflict (org_id, rule_kind, match, output) do update
+              set confirmation_count = ap_capture_rules.confirmation_count + 1,
+                  is_active = ap_capture_rules.confirmation_count + 1 >= 3,
+                  updated_at = now(),
+                  updated_by = ${input.actorId}
           `);
         }
       }

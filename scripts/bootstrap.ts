@@ -2004,6 +2004,9 @@ async function ensureOrg(): Promise<string> {
   await db.execute(sql`
     insert into accounting_books (org_id, code, name, is_primary)
     values (${orgId}, 'primary', 'Primary book', true)
+    -- Fresh org id (minted two lines above) under the bootstrap-wide advisory
+    -- lock: a conflict is not reachable, and doing nothing rather than
+    -- failing keeps a re-run of this ensure idempotent.
     on conflict do nothing
   `);
 
@@ -2020,6 +2023,8 @@ async function ensureOrg(): Promise<string> {
       await db.execute(sql`
         insert into accounting_periods (org_id, fiscal_calendar_id, fiscal_year, period_number, name, starts_on, ends_on)
         values (${orgId}, ${calendarId}, ${y}, ${m}, ${`${y}-${String(m).padStart(2, "0")}`}, ${start}, ${end})
+        -- Fresh org + fresh calendar under the bootstrap-wide advisory lock;
+        -- the conflict is not reachable and do-nothing keeps re-runs idempotent.
         on conflict do nothing
       `);
     }
@@ -2058,6 +2063,10 @@ async function ensureRootSubsidiary(orgId: string): Promise<void> {
        and not exists (
          select 1 from subsidiaries where org_id = ${orgId} and parent_id is null
        )
+    -- The not-exists guard makes the insert conditional; the conflict arm
+    -- only covers a lost race against another ensure, which the bootstrap-
+    -- wide advisory lock already excludes. Do-nothing is the ensure's
+    -- intent, and the re-read below fails loudly if the row is absent.
     on conflict do nothing
   `);
   const root = (await db.execute<{ id: string }>(sql`
