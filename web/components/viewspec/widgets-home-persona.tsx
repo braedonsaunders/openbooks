@@ -17,7 +17,6 @@ export const PERSONA_WIDGETS: Record<string, WidgetRenderer> = {
       labels={{
         open: str(props, 'openLabel') ?? 'Open',
         acted: str(props, 'actedLabel') ?? 'Done',
-        refused: str(props, 'refusedLabel') ?? 'Could not complete: {message}',
         delegatePlaceholder:
           str(props, 'delegatePlaceholder') ?? 'Delegate to…',
       }}

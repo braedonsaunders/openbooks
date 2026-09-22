@@ -35,9 +35,19 @@ test("benefits rows render through the shared table block, not a bespoke table",
   assert.ok(!/<table/.test(drawer), "the drawer island holds no hand-rolled table");
 });
 
-test("benefits segments ride the shared filter chips", () => {
-  assert.match(view, /filter-chips/, "segments ride the shared filter chips");
+test("benefits segments ride the shared list toolbar", () => {
+  assert.match(view, /widgetBlock\('list-toolbar'/, "the window-status filter rides the shared toolbar");
   assert.match(view, /paramKey: 'segment'/, "segments filter on the segment search param");
+  assert.doesNotMatch(view, /widgetBlock\('filter-chips'/, "no second filter treatment beside the toolbar");
+});
+
+test("windows and enrolments are TABS, not options inside the status filter", () => {
+  assert.match(view, /widgetBlock\('module-home-tabs', \{ tabs: data\.viewTabs \}\)/,
+    "the view switch is the shared subtab strip");
+  // The defect this pins: 'enrolments' used to be a STATUS segment, so one
+  // control mixed "filter these windows" with "show a different entity".
+  assert.doesNotMatch(loader, /'enrolments'\] as const/, "enrolments is not a window status");
+  assert.match(loader, /sp\.view === 'enrolments'/, "the view lives on its own search param");
 });
 
 test("the primary action is the shared link-button first in the page header", () => {

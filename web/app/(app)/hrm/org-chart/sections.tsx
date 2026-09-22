@@ -1,8 +1,8 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { Button, Input, Label, UrlDrawer } from '@openbooks/ui'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Button, UrlDrawer } from '@openbooks/ui'
 import type { loadOrgChartHome } from '../../../../lib/hrm/org-chart-home'
 
 /**
@@ -149,26 +149,22 @@ function TreeNode({
 
 export function OrgChartTree({
   chart,
-  search,
-  asOf,
-  today,
   personBaseHref,
-  asOfLabel,
-  searchLabel,
   labels,
 }: {
   chart: Chart
-  search: string
-  asOf: string
-  today: string
   personBaseHref: string
-  asOfLabel: string
-  searchLabel: string
   labels: Record<string, string>
 }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
-  const query = search.trim().toLowerCase()
+  // The as-of date and the search term are TOOLBAR controls now, so the tree
+  // reads the term from the URL rather than carrying its own <form> and
+  // submit button above the content. The as-of date reaches this component
+  // only through `chart` — the loader already resolved it and read the tree
+  // at that date, so there is nothing here to re-derive.
+  const query = (searchParams.get('q') ?? '').trim().toLowerCase()
 
   const expandMatched = useMemo(() => {
     const acc = new Set<string>()
@@ -192,33 +188,18 @@ export function OrgChartTree({
   const flat = useMemo(() => flattenNodes(chart.roots, []), [chart])
   const visible = query.length === 0 ? flat : flat.filter((n) => expandMatched.has(n.employmentId ?? `vacant:${n.positionId}`))
 
+  // An org with no employments has no tree. Saying so beats an empty card
+  // the reader has to interpret.
+  if (chart.roots.length === 0) {
+    return (
+      <p className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+        {msg(labels, 'empty')}
+      </p>
+    )
+  }
+
   return (
     <div className="flex min-h-0 flex-col gap-3">
-      <form
-        className="flex flex-wrap items-end gap-3"
-        action="/hrm/org-chart"
-        method="get"
-        onSubmit={(e) => {
-          e.preventDefault()
-          const data = new FormData(e.currentTarget)
-          const next = new URLSearchParams()
-          const asOfValue = String(data.get('asOf') ?? asOf)
-          const q = String(data.get('q') ?? '').trim()
-          if (asOfValue) next.set('asOf', asOfValue)
-          if (q) next.set('q', q)
-          router.push(`/hrm/org-chart?${next.toString()}`)
-        }}
-      >
-        <div>
-          <Label>{asOfLabel}</Label>
-          <Input type="date" name="asOf" defaultValue={asOf} max={today} />
-        </div>
-        <div>
-          <Label>{searchLabel}</Label>
-          <Input type="search" name="q" defaultValue={search} />
-        </div>
-        <Button type="submit">{searchLabel}</Button>
-      </form>
       {visible.length === 0 && query.length > 0 && (
         <p className="text-sm text-slate-500">{msg(labels, 'noMatch')}</p>
       )}

@@ -20,7 +20,6 @@ import {
   money,
   page,
   pageHeader,
-  panel,
   ref,
   rootRef,
   table,
@@ -32,7 +31,7 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { getAuthz, can } from '../../../lib/authz'
 import { APPROVALS_BULK_BATCH_MAX } from '../../../lib/approvals-limits'
-import { clamp, mergeHref, pickString } from '../../../lib/list-params'
+import { clamp, pickString } from '../../../lib/list-params'
 import { approvalRecordHref } from '../../../lib/approvals-links'
 import { pgTextArrayLiteral } from '../../../lib/pg-array'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
@@ -42,12 +41,21 @@ import type { DelegateOption } from './GateActions'
 /**
  * The approval hub, split into a loader and a spec.
  *
- * Three searchParam-driven tabs over the Flows engine:
+ * FOUR searchParam-driven tabs, on the shared subtab strip (`module-home-tabs`
+ * — the same component the Purchasing route strip uses, and the only one in
+ * the product):
  *
- *   • mine      — everything I can act on (direct, role, delegated-to-me),
+ *   • mine      — approvals I can act on (direct, role, delegated-to-me),
  *                 with counts-by-kind chips, aging, and bulk approve/reject.
+ *   • tasks     — my tasks: the non-decision inbox kinds (signatures,
+ *                 notices, acknowledgements) with their generic actions.
  *   • submitted — where MY documents are: who they're pending with, since when.
  *   • all       — org-wide pending items (flows.manage / admin only).
+ *
+ * `tasks` IS A TAB and not a panel. It used to render as a titled panel
+ * stacked under the approvals table, so one page showed two unrelated
+ * worklists down the screen with no way to see either on its own. A second
+ * list under the first is a tab; it is never a second section.
  *
  * `all` is gated on `flows.manage` in the LOADER, before the query runs — an
  * unauthorized `?tab=all` falls back to `mine` rather than rendering an empty
@@ -58,14 +66,17 @@ import type { DelegateOption } from './GateActions'
  * spec-authored children.
  */
 
-type Tab = 'mine' | 'submitted' | 'all'
+type Tab = 'mine' | 'tasks' | 'submitted' | 'all'
 
-/** Unified inbox filters. `approvals` is the union table; the rest are task lists. */
-type InboxFilter = 'all' | 'approvals' | 'my_tasks' | 'signatures' | 'notices' | 'overdue'
+/**
+ * Task-list filters. `approvals` is gone as a filter: the union table is now
+ * reached by the tab, so a filter that meant "hide the tasks below the table"
+ * has nothing left to hide.
+ */
+type InboxFilter = 'all' | 'my_tasks' | 'signatures' | 'notices' | 'overdue'
 
 const INBOX_FILTERS: readonly InboxFilter[] = [
   'all',
-  'approvals',
   'my_tasks',
   'signatures',
   'notices',
@@ -130,10 +141,14 @@ export interface ApprovalsData {
   emptySubmittedDescription: string
   emptyTitle: string
   emptyDescription: string
-  showChips: boolean
-  chips: { kind: string; label: string; count: number; active: boolean; href: string }[]
-  clearHref: string | null
-  clearLabel: string
+  currentParams: Record<string, string | string[] | undefined>
+  searchPlaceholder: string
+  toolbarFilters: {
+    paramKey: string
+    label: string
+    allLabel: string
+    options: { value: string; label: string; count?: number }[]
+  }[]
   columnDocument: string
   columnKind: string
   columnParty: string
@@ -158,9 +173,8 @@ export interface ApprovalsData {
   paginationParams: Record<string, string>
   /** Submitted tab: flow runs + own budgets combined total. */
   submittedTotal: number
-  /** Unified inbox filter (chips row under the tabs). */
+  /** Unified inbox filter selected through the shared toolbar dropdown. */
   filter: InboxFilter
-  filters: { kind: string; label: string; count: number; active: boolean; href: string }[]
   /** Union table visibility: decision rows show for all/approvals/overdue. */
   showUnion: boolean
   /** Task list (new kinds + notices) for the active filter. */
@@ -168,12 +182,10 @@ export interface ApprovalsData {
   tasksPresent: boolean
   tasksEmpty: boolean
   taskRows: InboxTaskListRow[]
-  tasksTitle: string
   tasksEmptyTitle: string
   tasksEmptyDescription: string
   taskOpenLabel: string
   taskActedLabel: string
-  taskRefusedLabel: string
   taskDelegatePlaceholder: string
 }
 
@@ -193,12 +205,22 @@ export async function loadApprovals(
 
   const rawTab = pickString(sp.tab)
   const tab: Tab =
-    rawTab === 'submitted' ? 'submitted' : rawTab === 'all' && canSeeAll ? 'all' : 'mine'
+    rawTab === 'submitted'
+      ? 'submitted'
+      : rawTab === 'tasks'
+        ? 'tasks'
+        : rawTab === 'all' && canSeeAll
+          ? 'all'
+          : 'mine'
+  /** The two tabs the approvals union backs. */
+  const onApprovals = tab === 'mine' || tab === 'all'
   const kindFilter = pickString(sp.kind) || undefined
+  const query = pickString(sp.q)?.trim() || undefined
   const rawFilter = pickString(sp.filter)
   const filter: InboxFilter = (INBOX_FILTERS as readonly string[]).includes(rawFilter ?? '')
     ? (rawFilter as InboxFilter)
     : 'all'
+  const overdueOnly = onApprovals && filter === 'overdue'
 
   // Server-side window shared by every tab on this page. perPage never
   // exceeds the bulk batch ceiling, so a page-scoped selection always fits
@@ -231,7 +253,13 @@ export async function loadApprovals(
   // request ever scans a whole leg. Same reader family as the dashboard tile
   // (approvalWorklistForAuthz), same doorway, same per-item shape.
   const unionPage = mayApprove
-    ? await approvalWorklistPageForAuthz(authz, { limit: perPage, offset, kind: kindFilter })
+    ? await approvalWorklistPageForAuthz(authz, {
+        limit: perPage,
+        offset,
+        kind: kindFilter,
+        query,
+        overdue: overdueOnly,
+      })
     : { items: [] as ApprovalWorklistItem[], total: 0, kindCounts: new Map<string, number>() }
   const unified: ApprovalWorklistItem[] = unionPage.items
   const unionTotal = unionPage.total
@@ -410,6 +438,8 @@ export async function loadApprovals(
        where r.org_id = ${orgId} and r.status = 'waiting'
          and coalesce(d.created_by, cr.started_by) = ${user.id}
          ${kindFilter ? sql`and coalesce(d.kind, case when cr.id is not null then 'close_run' end, r.subject_kind) = ${kindFilter}` : sql``}
+         ${query ? sql`and position(${query.toLowerCase()} in lower(concat_ws(' ',
+           d.document_number, d.kind, r.subject_kind, f.name, p.display_name, cp.name))) > 0` : sql``}
          ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
        group by r.id, f.name, r.subject_id, d.document_number, d.kind, d.total,
                 d.subsidiary_id, d.status, cr.id, cr.status, cp.name, p.display_name
@@ -456,6 +486,7 @@ export async function loadApprovals(
           from budget_scenarios bs
           left join budget_lines bl on bl.scenario_id = bs.id and bl.org_id = bs.org_id
          where bs.org_id = ${orgId} and bs.status = 'pending_approval' and bs.submitted_by = ${user.id}
+           ${query ? sql`and position(${query.toLowerCase()} in lower(concat_ws(' ', bs.name, bs.fiscal_year::text))) > 0` : sql``}
          group by bs.id
          order by bs.submitted_at, bs.id
          limit 500
@@ -496,9 +527,9 @@ export async function loadApprovals(
   `)
   const delegateUsers = usersRes.rows
 
-  // ---- Kind chips (mine/all tabs) -------------------------------------------
+  // ---- Kind filters (mine/all tabs) -----------------------------------------
   // Counts come from the union aggregates (unfiltered by kind, sorted by code
-  // so chip order is stable across locales); the rows arrive kind-filtered
+  // so dropdown order is stable across locales); the rows arrive kind-filtered
   // from SQL, so there is deliberately no second filter here.
   const rowsForTab = tab === 'all' ? allRows : mineRows
   const chipCounts = new Map<string, number>(
@@ -546,26 +577,79 @@ export async function loadApprovals(
     href: item.subjectHref,
     actions: item.actions.map((action) => ({ ...action })),
   })
-  const showUnion = tab !== 'submitted' && (filter === 'all' || filter === 'approvals' || filter === 'overdue')
-  const unionOverdueRows = visibleRows.filter((row) => row.overdue === true)
-  const unionVisible = filter === 'overdue' ? unionOverdueRows : visibleRows
-  const showTasks = tab !== 'submitted' && filter !== 'approvals'
-  const taskRows = tasksActive.map(toTaskRow)
+  // One worklist per tab. The union table and the task list no longer share
+  // a page, so neither `showUnion` nor `showTasks` reads the filter any more:
+  // the filter narrows the list the tab already chose.
+  const showUnion = onApprovals
+  const unionVisible = visibleRows
+  const showTasks = tab === 'tasks'
+  const taskRows = tasksActive
+    .filter((item) => {
+      if (!query) return true
+      const haystack = [item.title, item.subtitle, item.kind].filter(Boolean).join(' ').toLowerCase()
+      return haystack.includes(query.toLowerCase())
+    })
+    .map(toTaskRow)
   const tasksEmpty = showTasks && taskRows.length === 0
   const filterCount = (key: InboxFilter): number => {
-    if (key === 'all') return unfilteredTotal + tasksAll.length
-    if (key === 'approvals') return unfilteredTotal
+    if (key === 'all') return tasksAll.length
     if (key === 'my_tasks') return tasksMy.length
     if (key === 'signatures') return tasksSig.length
     if (key === 'notices') return tasksNotices.length
-    return tasksOverdue.length + unionOverdueRows.length
+    return tasksOverdue.length
   }
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: 'mine', label: t('tabs.mine'), count: mineCount },
+    { key: 'tasks', label: ti('filters.myTasks'), count: tasksAll.length },
     { key: 'submitted', label: t('tabs.submitted') },
     ...(canSeeAll ? [{ key: 'all' as Tab, label: t('tabs.all') }] : []),
   ]
+
+  // The approvals filters live in the regular shared list toolbar. They used
+  // to be a second row of pills under the route tabs, giving the inbox two
+  // competing tab treatments and no search control.
+  const kindOptions = [...chipCounts.entries()].map(([kind, count]) => ({
+    value: kind,
+    label: kindLabel(kind),
+    count,
+  }))
+  const submittedKindOptions = [...new Set([...KIND_KEYS, 'pay_run'])].map((kind) => ({
+    value: kind,
+    label: kindLabel(kind),
+  }))
+  const toolbarFilters = tab === 'tasks'
+    ? [{
+        paramKey: 'filter',
+        label: ti('columns.task'),
+        allLabel: tc('labels.all'),
+        options: (['my_tasks', 'signatures', 'notices', 'overdue'] as const).map((key) => ({
+          value: key,
+          label: ti(`filters.${key === 'my_tasks' ? 'myTasks' : key}`),
+          count: filterCount(key),
+        })),
+      }]
+    : tab === 'submitted'
+      ? [{
+          paramKey: 'kind',
+          label: t('table.kind'),
+          allLabel: tc('labels.all'),
+          options: submittedKindOptions,
+        }]
+      : [
+          {
+            paramKey: 'kind',
+            label: t('table.kind'),
+            allLabel: tc('labels.all'),
+            options: kindOptions,
+          },
+          {
+            paramKey: 'filter',
+            label: tc('labels.status'),
+            allLabel: tc('labels.all'),
+            options: [{ value: 'overdue', label: ti('filters.overdue') }],
+          },
+        ]
 
   return {
     title: t('title'),
@@ -587,22 +671,9 @@ export async function loadApprovals(
     emptySubmittedDescription: t('emptySubmitted.description'),
     emptyTitle: tab === 'all' ? t('emptyAll.title') : t('empty.title'),
     emptyDescription: tab === 'all' ? t('emptyAll.description') : t('empty.description'),
-    showChips: tab !== 'submitted' && chipCounts.size > 0,
-    chips: [...chipCounts.entries()].map(([kind, count]) => ({
-      kind,
-      label: kindLabel(kind),
-      count,
-      active: kindFilter === kind,
-      // A new filter restarts at page one: the old page may not exist.
-      href: mergeHref('/inbox', sp, {
-        kind: kindFilter === kind ? undefined : kind,
-        page: undefined,
-      }),
-    })),
-    clearHref: kindFilter
-      ? mergeHref('/inbox', sp, { kind: undefined, page: undefined })
-      : null,
-    clearLabel: tc('labels.all'),
+    currentParams: sp,
+    searchPlaceholder: tc('actions.search'),
+    toolbarFilters,
     columnDocument: t('table.document'),
     columnKind: t('table.kind'),
     columnParty: tc('labels.party'),
@@ -624,28 +695,15 @@ export async function loadApprovals(
     paginationParams,
     submittedTotal,
     filter,
-    filters: INBOX_FILTERS.map((key) => ({
-      kind: key,
-      label: ti(`filters.${key === 'my_tasks' ? 'myTasks' : key}`),
-      count: filterCount(key),
-      active: filter === key,
-      // A new filter restarts at page one: the old page may not exist.
-      href: mergeHref('/inbox', sp, { filter: key === 'all' ? undefined : key, page: undefined }),
-    })),
     showUnion,
     showTasks,
     tasksPresent: showTasks && taskRows.length > 0,
     tasksEmpty,
     taskRows,
-    tasksTitle:
-      filter === 'all'
-        ? ti('filters.myTasks')
-        : ti(`filters.${filter === 'my_tasks' ? 'myTasks' : filter}`),
     tasksEmptyTitle: ti('emptyTitle'),
     tasksEmptyDescription: ti('emptyDescription'),
     taskOpenLabel: ti('open'),
     taskActedLabel: ti('acted'),
-    taskRefusedLabel: ti('refused'),
     taskDelegatePlaceholder: ti('delegatePlaceholder'),
   }
 }
@@ -660,26 +718,33 @@ export function approvalsSpec(data: ApprovalsData): PageSpec {
     layout: 'list',
     header: [
       grid('space-y-3', [
+        // The tabs are the LAST header action, the house position for the
+        // shared subtab strip on every page that has one. The hub used to
+        // draw its own row of tab-shaped links under the header instead —
+        // same job, second implementation, different treatment from every
+        // other tabbed page in the product.
         pageHeader({
           title: f('title'),
           description: f('description'),
-          actions: [widget('out-of-office', { users: data.delegateUsers })],
+          actionsClassName: 'flex flex-wrap items-center gap-3',
+          actions: [
+            widget('out-of-office', { users: data.delegateUsers }),
+            widget('module-home-tabs', { tabs: data.tabs }),
+          ],
         }),
         widgetBlock('delegation-banner', { users: data.delegateUsers }),
-        widgetBlock('approval-tabs', { tabs: data.tabs }),
-        // Unified inbox filters (all, approvals, my tasks, signatures,
-        // notices, overdue) ride the shared kind-chips treatment.
-        widgetBlock('kind-chips', {
-          chips: data.filters,
-          clearHref: null,
-          clearLabel: '',
-        }),
       ]),
     ],
     body: [
       frame(
         'tab-content',
         [
+          widgetBlock('list-toolbar', {
+            basePath: '/inbox',
+            currentParams: data.currentParams,
+            search: { paramKey: 'q', placeholder: data.searchPlaceholder },
+            filters: data.toolbarFilters,
+          }),
           {
             ...widgetBlock('empty-state', {
               icon: 'send',
@@ -737,14 +802,6 @@ export function approvalsSpec(data: ApprovalsData): PageSpec {
           },
           {
             ...grid('space-y-3', [
-              {
-                ...widgetBlock('kind-chips', {
-                  chips: data.chips,
-                  clearHref: data.clearHref,
-                  clearLabel: data.clearLabel,
-                }),
-                when: f('showChips'),
-              },
               widgetBlock('approvals-table', {
                 rows: data.approvalRows,
                 users: data.delegateUsers,
@@ -762,33 +819,22 @@ export function approvalsSpec(data: ApprovalsData): PageSpec {
             when: f('gatesPresent'),
           },
           {
-            ...panel({
-              title: f('tasksTitle'),
-              iconKey: 'list-checks',
-              bodyClassName: 'p-3',
-              blocks: [
-                {
-                  ...widgetBlock('inbox-task-list', {
-                    rows: data.taskRows,
-                    users: data.delegateUsers,
-                    openLabel: data.taskOpenLabel,
-                    actedLabel: data.taskActedLabel,
-                    refusedLabel: data.taskRefusedLabel,
-                    delegatePlaceholder: data.taskDelegatePlaceholder,
-                  }),
-                  when: f('tasksPresent'),
-                },
-                {
-                  ...widgetBlock('empty-state', {
-                    icon: 'check-circle',
-                    title: data.tasksEmptyTitle,
-                    description: data.tasksEmptyDescription,
-                  }),
-                  when: f('tasksEmpty'),
-                },
-              ],
+            ...widgetBlock('inbox-task-list', {
+              rows: data.taskRows,
+              users: data.delegateUsers,
+              openLabel: data.taskOpenLabel,
+              actedLabel: data.taskActedLabel,
+              delegatePlaceholder: data.taskDelegatePlaceholder,
             }),
-            when: f('showTasks'),
+            when: f('tasksPresent'),
+          },
+          {
+            ...widgetBlock('empty-state', {
+              icon: 'check-circle',
+              title: data.tasksEmptyTitle,
+              description: data.tasksEmptyDescription,
+            }),
+            when: f('tasksEmpty'),
           },
         ],
         { tabKey: data.tabKey },

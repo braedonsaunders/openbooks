@@ -70,6 +70,10 @@ export interface LeaveQueueData {
   tabs: Awaited<ReturnType<typeof hrmGroupTabs>>
   refusal: LeaveRefusal | null
   hasContent: boolean
+  view: 'requests' | 'calendar'
+  onRequests: boolean
+  onCalendar: boolean
+  viewTabs: { href: string; label: string; active: boolean }[]
   segmentsLabel: string
   allLabel: string
   counts: Record<string, number>
@@ -92,7 +96,6 @@ export interface LeaveQueueData {
   calendarDepartmentLabel: string
   calendarFromLabel: string
   calendarToLabel: string
-  calendarShowLabel: string
   calendarDays: { date: string; entries: { workerName: string; hours: string; leaveTypeCode: string }[] }[]
   calendarEmpty: string
   departmentOptions: { value: string; label: string }[]
@@ -152,6 +155,14 @@ export async function loadLeaveQueue(
   const orgId = authz.user.orgId
   const t = await getTranslations('hrm')
   const today = await businessToday(orgId)
+  // Requests and the department calendar are two VIEWS of leave, not two
+  // sections of one page. Stacked, the calendar sat below a table that fills
+  // the viewport, so nobody scrolled to it and neither surface could be read
+  // on its own.
+  const view: 'requests' | 'calendar' = sp.view === 'calendar' ? 'calendar' : 'requests'
+  const viewHref = (next: 'requests' | 'calendar') =>
+    leaveHref('/hrm/leave', sp.segment, next === 'calendar' ? { view: 'calendar' } : {})
+  const keepView: Record<string, string> = view === 'calendar' ? { view: 'calendar' } : {}
   const base = {
     title: t('leave.title'),
     description: t('leave.description'),
@@ -178,16 +189,25 @@ export async function loadLeaveQueue(
     calendarDepartmentLabel: t('leave.calendarDepartmentLabel'),
     calendarFromLabel: t('leave.calendarFromLabel'),
     calendarToLabel: t('leave.calendarToLabel'),
-    calendarShowLabel: t('leave.calendarShowLabel'),
     calendarEmpty: t('leave.calendarEmpty'),
+    view,
+    onRequests: view === 'requests',
+    onCalendar: view === 'calendar',
+    viewTabs: [
+      { href: viewHref('requests'), label: t('leave.listTitle'), active: view === 'requests' },
+      { href: viewHref('calendar'), label: t('leave.calendarTitle'), active: view === 'calendar' },
+    ],
     queue: { notAvailable: t('queue.notAvailable'), openEmployee: t('queue.openEmployee') },
     currentParams: sp as Record<string, string | string[] | undefined>,
     openRequest: t('leave.openRequest'),
-    fileHref: leaveHref('/hrm/leave', sp.segment, { file: '1' }),
-    recordHref: leaveHref('/hrm/leave', sp.segment, { record: '1' }),
+    // The dialogs keep the active VIEW as well as the segment: filing a
+    // request from the calendar and closing it must not silently move you
+    // to the requests list.
+    fileHref: leaveHref('/hrm/leave', sp.segment, { ...keepView, file: '1' }),
+    recordHref: leaveHref('/hrm/leave', sp.segment, { ...keepView, record: '1' }),
     dialogOpen: sp.file !== undefined || sp.record !== undefined || (typeof sp.request === 'string' && sp.request !== ''),
     dialogRequestId: typeof sp.request === 'string' && sp.request !== '' ? sp.request : null,
-    dialogCloseHref: leaveHref('/hrm/leave', sp.segment, {}),
+    dialogCloseHref: leaveHref('/hrm/leave', sp.segment, keepView),
   }
 
   const segmentParam = sp.segment

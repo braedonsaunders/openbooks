@@ -406,6 +406,7 @@
     "segmentsLabel": "Statut"
   },
   "processes": {
+    "newProcess": "Nouveau processus",
     "title": "Listes de processus",
     "description": "Listes d'intégration, de départ et de transfert avec responsables, échéances et preuves.",
     "listTitle": "Listes",
@@ -842,7 +843,8 @@
       "tabs": {
         "cycles": "Cycles",
         "calibration": "Calibrage",
-        "talent": "Talents & succession"
+        "talent": "Talents & succession",
+        "settings": "Paramètres"
       },
       "calibration": {
         "title": "Calibrage",
@@ -1329,7 +1331,11 @@
       "sourcesTitle": "Pièces",
       "missing": "Ce bulletin est introuvable ou hors de votre organisation.",
       "close": "Fermer",
-      "failed": "L'explication n'a pas pu être chargée."
+      "failed": "L'explication n'a pas pu être chargée.",
+      "employerCost": "Coût employeur",
+      "earnings": "Gains",
+      "deductions": "Retenues",
+      "contributions": "Cotisations employeur"
     }
   },
   "options": {
@@ -1701,6 +1707,12 @@
       "expiresOn": "Expire le",
       "identifier": "Numéro de licence",
       "notes": "Notes"
+    },
+    "tiles": {
+      "expiring": "Bientôt expirées",
+      "expiredAssigned": "Expirées, toujours affectées",
+      "pending": "Vérification en attente",
+      "projectsUnmet": "Projets aux exigences non satisfaites"
     }
   },
   "documents": {
@@ -1868,7 +1880,8 @@
       "close": "Fermer",
       "expand": "Déployer",
       "collapse": "Réduire",
-      "noMatch": "Personne pour cette recherche."
+      "noMatch": "Personne pour cette recherche.",
+      "empty": "Aucun organigramme pour l'instant. Dès qu'un contrat indique un responsable, l'arbre s'affiche ici."
     }
   },
   "meDocuments": {

@@ -14,6 +14,7 @@ const page = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
 const sections = readFileSync(new URL("./sections.tsx", import.meta.url), "utf8");
 const loader = readFileSync(new URL("../../../../lib/hrm/processes-page.ts", import.meta.url), "utf8");
 const panel = readFileSync(new URL("../processes-client.tsx", import.meta.url), "utf8");
+const create = readFileSync(new URL("./ProcessCreateDrawer.tsx", import.meta.url), "utf8");
 
 test("processes page carries the gate where the route-gate scanner reads it", () => {
   assert.match(view, /requirePermission\('hrm\.process\.read'\)/, "the page enforces the process read grant, not the employment one");
@@ -24,9 +25,10 @@ test("processes page carries the gate where the route-gate scanner reads it", ()
   assert.match(page, /generateMetadata/, "tab metadata resolves the translated title");
 });
 
-test("processes spec composes shared primitives: filter chips, table, URL drawer", () => {
+test("processes spec composes shared primitives: list toolbar, table, URL drawer", () => {
   assert.match(view, /route: '\/hrm\/processes'/, "the spec names its own route for the registry");
-  assert.match(view, /widgetBlock\('filter-chips'/, "segments render through the shared filter chips");
+  assert.match(view, /widgetBlock\('list-toolbar'/, "filters ride the shared list toolbar, never a lone dropdown over a bare table");
+  assert.doesNotMatch(view, /widgetBlock\('filter-chips'/, "no second filter treatment beside the toolbar");
   assert.match(view, /paramKey: 'segment'/, "segments filter over the segment search param");
   assert.match(view, /table\(\{/, "the list renders through the shared table block");
   assert.match(view, /variant: 'app'/, "the list uses the shared app table primitives");
@@ -62,4 +64,14 @@ test("the checklist body checks refusals before parsing, on every action", () =>
   }
   assert.match(panel, /if \(!res\.ok\)/, "refusals are checked before parsing");
   assert.match(panel, /readApiErrorMessage\(res,/, "refusal messages render intact");
+});
+
+test("process managers can open a real, permission-gated checklist authoring flow", () => {
+  assert.match(view, /href: '\/hrm\/processes\?new=1'/, "the header exposes the new-process entry point");
+  assert.match(view, /f\('canManage'\)/, "the create action is omitted without the manage grant");
+  assert.match(view, /widgetBlock\('hrm-process-create'/, "creation renders through the registered drawer island");
+  assert.match(loader, /can\(authz, 'hrm\.process\.manage'\)/, "the loader independently resolves the manage grant");
+  assert.match(create, /SearchSelect/, "the employment picker pages and searches instead of truncating the roster");
+  assert.match(create, /fetch\('\/api\/hrm\/processes'/, "the drawer posts the canonical process collection route");
+  assert.ok(create.indexOf("if (!response.ok)") < create.indexOf("await response.json()"), "the API refusal is surfaced before success JSON is parsed");
 });

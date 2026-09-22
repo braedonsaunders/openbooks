@@ -18,6 +18,7 @@ import { HRM_WIDGETS } from './widgets-hrm'
 // the composition test caps a family at 500 lines.
 import { HRM_CONTINUOUS_WIDGETS } from './widgets-hrm-continuous'
 import { HRM_DOCUMENT_WIDGETS } from './widgets-hrm-documents'
+import { HRM_PROCESS_WIDGETS } from './widgets-hrm-processes'
 // HR-20: field-time widgets live in their own family file — the
 // composition test caps a family at 500 lines.
 import { HRM_FIELD_TIME_WIDGETS } from './widgets-hrm-field-time'
@@ -177,6 +178,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   // talent, succession) composes beside its parent family.
   ...HRM_CONTINUOUS_WIDGETS,
   ...HRM_DOCUMENT_WIDGETS,
+  ...HRM_PROCESS_WIDGETS,
   // HR-20: field-time family (clock island, crew workspace, setup).
   ...HRM_FIELD_TIME_WIDGETS,
   // HR-15: persona-home widgets (inbox task list, dashboard persona tiles).

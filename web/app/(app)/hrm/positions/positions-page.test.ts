@@ -23,10 +23,12 @@ test("positions page carries the gate where the route-gate scanner reads it", ()
   assert.match(page, /generateMetadata/, "tab metadata resolves the translated title");
 });
 
-test("positions spec composes shared primitives: filter chips, table, URL drawer", () => {
+test("positions spec composes shared primitives: list toolbar, table, URL drawer", () => {
   assert.match(view, /route: '\/hrm\/positions'/, "the spec names its own route for the registry");
-  assert.match(view, /widgetBlock\('filter-chips'/, "segments render through the shared filter chips");
+  assert.match(view, /widgetBlock\('list-toolbar'/, "filters ride the shared list toolbar, never a lone dropdown over a bare table");
+  assert.doesNotMatch(view, /widgetBlock\('filter-chips'/, "no second filter treatment beside the toolbar");
   assert.match(view, /paramKey: 'status'/, "segments filter over the status search param");
+  assert.match(view, /paramKey: 'effectiveDate'/, "the as-of date is a toolbar control, not URL-only state");
   assert.match(view, /table\(\{/, "the list renders through the shared table block");
   assert.match(view, /variant: 'app'/, "the list uses the shared app table primitives");
   assert.match(view, /badge\(item\('statusLabel'\)/, "status renders through the shared badge cell");

@@ -13,8 +13,19 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Badge, Button, Select } from '@openbooks/ui'
+import {
+  Badge,
+  Button,
+  Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@openbooks/ui'
 import { promptDialog } from '../../../lib/prompt'
 
 export interface InboxTaskAction {
@@ -49,8 +60,16 @@ export function InboxTaskList({
 }: {
   rows: InboxTaskRow[]
   users: { id: string; name: string }[]
-  labels: { open: string; acted: string; refused: string; delegatePlaceholder: string }
+  labels: { open: string; acted: string; delegatePlaceholder: string }
 }) {
+  // `refused` carries an ICU argument, so it is resolved HERE, where the
+  // argument exists. Resolved in the loader it threw FORMATTING_ERROR and
+  // next-intl handed back the key path — and the client then ran
+  // `.replace('{message}', …)` over a string with no placeholder in it, so
+  // every refusal this list can raise reached the operator as the literal
+  // text `inbox.refused`. The service's message was computed, correct, and
+  // dropped on the way out.
+  const t = useTranslations('inbox')
   const router = useRouter()
   const [done, setDone] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState<string | null>(null)
@@ -68,7 +87,7 @@ export function InboxTaskList({
         // Error bodies are checked before they are parsed: a refusal is a
         // message for the operator, never a parse error.
         const data = await res.json().catch(() => ({}))
-        toast.error(labels.refused.replace('{message}', data.error ?? actionKey))
+        toast.error(t('refused', { message: data.error ?? actionKey }))
         return
       }
       setDone((prev) => new Set(prev).add(itemId))
@@ -116,70 +135,75 @@ export function InboxTaskList({
   if (visible.length === 0) return null
 
   return (
-    <ul className="space-y-2">
-      {visible.map((row) => (
-        <li
-          key={row.id}
-          className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:gap-3 dark:border-slate-800 dark:bg-slate-900"
-        >
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <Badge variant="secondary">{row.kindLabel}</Badge>
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>{t('columns.task')}</TableHead>
+          <TableHead>{t('columns.detail')}</TableHead>
+          <TableHead>{t('columns.kind')}</TableHead>
+          <TableHead>{t('columns.due')}</TableHead>
+          <TableHead>{t('columns.priority')}</TableHead>
+          <TableHead>{t('columns.actions')}</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {visible.map((row) => (
+          <TableRow key={row.id}>
+            <TableCell>
+              <Link href={row.href as never} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
+                {row.title}
+              </Link>
+            </TableCell>
+            <TableCell className="max-w-md text-slate-500 dark:text-slate-400">
+              <span className="line-clamp-2">{row.subtitle ?? '—'}</span>
+            </TableCell>
+            <TableCell><Badge variant="secondary">{row.kindLabel}</Badge></TableCell>
+            <TableCell className="tabular-nums text-slate-500 dark:text-slate-400">{row.dueLabel ?? '—'}</TableCell>
+            <TableCell>
               {row.priorityLabel ? (
                 <Badge variant={row.priorityTone === 'slate' ? 'outline' : row.priorityTone === 'amber' ? 'warning' : 'destructive'}>
                   {row.priorityLabel}
                 </Badge>
-              ) : null}
-              {row.dueLabel ? (
-                <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">{row.dueLabel}</span>
-              ) : null}
-            </div>
-            <Link href={row.href as never} className="mt-1 block truncate text-sm font-medium text-slate-900 hover:underline dark:text-slate-100">
-              {row.title}
-            </Link>
-            {row.subtitle ? (
-              <p className="mt-0.5 line-clamp-2 text-xs text-slate-500 dark:text-slate-400">{row.subtitle}</p>
-            ) : null}
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {row.actions.map((action) => (
-              <Button
-                key={action.key}
-                size="sm"
-                variant={actionVariant(action.style)}
-                disabled={busy !== null}
-                onClick={() => run(row, action)}
-              >
-                {action.label}
-              </Button>
-            ))}
-            <Button size="sm" variant="ghost" asChild>
-              <Link href={row.href as never}>{labels.open}</Link>
-            </Button>
-          </div>
-          {delegating === row.id ? (
-            <div className="flex items-center gap-1.5">
-              <span className="w-44">
-                <Select
-                  disabled={busy !== null}
-                  defaultValue=""
-                  onChange={(e) => runDelegate(row, e.target.value)}
-                >
-                  <option value="">{labels.delegatePlaceholder}</option>
-                  {users.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name}
-                    </option>
-                  ))}
-                </Select>
-              </span>
-              <Button size="sm" variant="ghost" onClick={() => setDelegating(null)}>
-                ×
-              </Button>
-            </div>
-          ) : null}
-        </li>
-      ))}
-    </ul>
+              ) : '—'}
+            </TableCell>
+            <TableCell>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {row.actions.map((action) => (
+                  <Button
+                    key={action.key}
+                    size="sm"
+                    variant={actionVariant(action.style)}
+                    disabled={busy !== null}
+                    onClick={() => run(row, action)}
+                  >
+                    {action.label}
+                  </Button>
+                ))}
+                <Button size="sm" variant="ghost" asChild>
+                  <Link href={row.href as never}>{labels.open}</Link>
+                </Button>
+                {delegating === row.id ? (
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-44">
+                      <Select
+                        disabled={busy !== null}
+                        defaultValue=""
+                        onChange={(e) => runDelegate(row, e.target.value)}
+                      >
+                        <option value="">{labels.delegatePlaceholder}</option>
+                        {users.map((u) => (
+                          <option key={u.id} value={u.id}>{u.name}</option>
+                        ))}
+                      </Select>
+                    </span>
+                    <Button size="sm" variant="ghost" onClick={() => setDelegating(null)}>×</Button>
+                  </span>
+                ) : null}
+              </div>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   )
 }

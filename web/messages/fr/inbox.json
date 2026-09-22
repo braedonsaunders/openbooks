@@ -11,6 +11,7 @@
   },
   "columns": {
     "task": "Tâche",
+    "kind": "Type",
     "detail": "Détail",
     "due": "Échéance",
     "priority": "Priorité",

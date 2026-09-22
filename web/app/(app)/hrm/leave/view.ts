@@ -10,7 +10,6 @@ import {
   link,
   page,
   pageHeader,
-  panel,
   ref,
   spanRow,
   table,
@@ -28,13 +27,17 @@ import { loadLeaveQueue, type LeaveQueueData } from '../../../../lib/hrm/leave'
  *
  * Follows the close-list archetype: the rows render through the shared
  * `table` block (variant 'app') over loader-resolved display cells, segments
- * ride the shared `filter-chips` widget on the `segment` search param
- * (pending approval, upcoming, on leave today, history), and "File leave
- * request" plus "Record absence" are page-header primary actions opening a
- * URL-param dialog. The list itself is loader-resolved through the leave
- * read service, newest start first, with subsidiary scope enforced inside
- * it. The department calendar reads through the attendance service on the
- * department/from/to params and stays a component — it is not a list.
+ * ride the shared `list-toolbar` on the `segment` search param (pending
+ * approval, upcoming, on leave today, history), and "File leave request"
+ * plus "Record absence" are page-header primary actions opening a URL-param
+ * dialog. The list itself is loader-resolved through the leave read service,
+ * newest start first, with subsidiary scope enforced inside it.
+ *
+ * Requests and the department calendar are TABS on the shared subtab strip
+ * (`?view=`), not two panels down one page. Stacked, the calendar lived
+ * under a table sized to fill the viewport — so it was below the fold on
+ * every screen, and the page read as a list with something unexplained
+ * bolted to the bottom.
  */
 
 const f = ref<LeaveQueueData>()
@@ -79,20 +82,56 @@ export function leaveQueueSpec(data: LeaveQueueData, basePath: string = '/hrm/le
       ),
       {
         ...grid('flex h-full min-h-0 flex-col gap-4', [
-          widgetBlock('filter-chips', {
-            basePath,
-            currentParams: data.currentParams,
-            paramKey: 'segment',
-            label: data.segmentsLabel,
-            allLabel: data.allLabel,
-            options: data.segments,
-          }),
-          panel({
-            title: f('listTitle'),
-            iconKey: 'calendar',
-            bodyClassName: 'min-h-0 overflow-y-auto p-0',
-            className: 'min-h-0 flex-1',
-            blocks: [
+          // The view switch and the segment filter share one row: the shared
+          // subtab strip on the left, the shared toolbar on the right.
+          grid('flex shrink-0 flex-wrap items-center gap-3', [
+            widgetBlock('module-home-tabs', { tabs: data.viewTabs }),
+            {
+              ...widgetBlock('list-toolbar', {
+                basePath,
+                currentParams: data.currentParams,
+                filters: [
+                  {
+                    paramKey: 'segment',
+                    label: data.segmentsLabel,
+                    allLabel: data.allLabel,
+                    options: data.segments,
+                  },
+                ],
+              }),
+              when: f('onRequests'),
+            },
+            // The calendar's own controls, on the SAME toolbar: department
+            // picks the roster, from/to the window.
+            {
+              ...widgetBlock('list-toolbar', {
+                basePath,
+                currentParams: data.currentParams,
+                filters: [
+                  {
+                    paramKey: 'department',
+                    label: data.calendarDepartmentLabel,
+                    allLabel: data.queue.notAvailable,
+                    options: data.departmentOptions,
+                  },
+                ],
+              }),
+              when: f('onCalendar'),
+            },
+            {
+              ...widgetBlock('date-range-filter', {
+                fromLabel: data.calendarFromLabel,
+                toLabel: data.calendarToLabel,
+                clearLabel: data.allLabel,
+              }),
+              when: f('onCalendar'),
+            },
+          ]),
+          // No panel around either surface: the active tab already names it,
+          // and a card headed "Leave requests" under a tab reading "Leave
+          // requests" is the same words twice with a border between them.
+          {
+            ...grid('flex min-h-0 flex-1 flex-col gap-4', [
               table({
                 variant: 'app',
                 rows: f('rows'),
@@ -134,27 +173,16 @@ export function leaveQueueSpec(data: LeaveQueueData, basePath: string = '/hrm/le
                 },
                 f('dialogOpen'),
               ),
-            ],
-          }),
-          panel({
-            title: f('calendarTitle'),
-            iconKey: 'calendar',
-            bodyClassName: 'p-4',
-            blocks: [
-              widgetBlock('hrm-leave-calendar', {
-                basePath,
-                currentParams: data.currentParams,
-                departmentOptions: data.departmentOptions,
-                departmentLabel: data.calendarDepartmentLabel,
-                fromLabel: data.calendarFromLabel,
-                toLabel: data.calendarToLabel,
-                showLabel: data.calendarShowLabel,
-                days: data.calendarDays,
-                empty: data.calendarEmpty,
-                notAvailable: data.queue.notAvailable,
-              }),
-            ],
-          }),
+            ]),
+            when: f('onRequests'),
+          },
+          {
+            ...widgetBlock('hrm-leave-calendar', {
+              days: data.calendarDays,
+              empty: data.calendarEmpty,
+            }),
+            when: f('onCalendar'),
+          },
         ]),
         when: f('hasContent'),
       },

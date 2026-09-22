@@ -98,8 +98,9 @@ test("the cockpit keeps its hero and adds the workspace panels", () => {
 });
 
 test("quick actions stay permission-gated and the readiness panel links migration help", () => {
-  assert.match(view, /widget\(\s*'new-role-party'/, "the header carries the house New button");
-  assert.match(view, /f\('canCreateEmployee'\)/, "employee creation keeps the parties.manage ref");
+  assert.match(view, /widget\(\s*'hrm-new-menu'/, "the header carries the shared New dropdown");
+  assert.match(view, /canCreateEmployee: data\.canCreateEmployee/, "employee creation keeps its loader-resolved grant");
+  assert.match(view, /canCreateProcess: data\.canCreateProcess/, "process creation keeps its loader-resolved grant");
   assert.match(loader, /\/hrm\/change-requests/, "propose change enters through the queue");
   assert.match(loader, /hrm\.employment\.manage/, "the propose entry keeps the manage grant");
   assert.match(loader, /\/docs\/employment-migration/, "readiness links the migration article");

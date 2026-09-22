@@ -6,6 +6,7 @@ import { KpiStrip } from '../kpi-strip'
 import { DateRangeFilter } from '../date-range-filter'
 import { ForecastSectionHeading, ForecastFilters } from '../../app/(app)/crm/forecasts/sections'
 import { SearchSelectFilter, FilterChips } from '../filter-bar'
+import { ListToolbar } from '../list-toolbar'
 import { SearchInput } from '../search-input'
 import { ShowInactivesToggle } from '../show-inactives-toggle'
 import { Badge, Button } from '@openbooks/ui'
@@ -50,6 +51,20 @@ export const CONTROLS_WIDGETS = {
       paramKey={str(props, 'paramKey')}
       pageParamKey={str(props, 'pageParamKey')}
       className={str(props, 'className')}
+    />
+  ),
+  /**
+   * The house list toolbar — search and filters on ONE row, the same row
+   * EntityListView renders. A list page that wants a filter reaches for this
+   * rather than dropping a lone `filter-chips` above a bare table.
+   */
+  'list-toolbar': (props) => (
+    <ListToolbar
+      basePath={str(props, 'basePath') ?? ''}
+      currentParams={(props.currentParams as ComponentProps<typeof ListToolbar>['currentParams']) ?? {}}
+      search={(props.search as ComponentProps<typeof ListToolbar>['search']) ?? null}
+      filters={(props.filters as ComponentProps<typeof ListToolbar>['filters']) ?? []}
+      date={(props.date as ComponentProps<typeof ListToolbar>['date']) ?? null}
     />
   ),
   'filter-chips': (props) => (

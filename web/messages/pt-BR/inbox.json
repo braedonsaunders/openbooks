@@ -11,6 +11,7 @@
   },
   "columns": {
     "task": "Tarefa",
+    "kind": "Tipo",
     "detail": "Detalhe",
     "due": "Vence",
     "priority": "Prioridade",

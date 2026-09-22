@@ -46,12 +46,7 @@ export const HRM_DOCUMENT_WIDGETS = {
   'org-chart-tree': (props) => (
     <OrgChartTree
       chart={props.chart as ComponentProps<typeof OrgChartTree>['chart']}
-      search={str(props, 'search') ?? ''}
-      asOf={str(props, 'asOf') ?? ''}
-      today={str(props, 'today') ?? ''}
       personBaseHref={str(props, 'personBaseHref') ?? '/hrm/org-chart'}
-      asOfLabel={str(props, 'asOfLabel') ?? ''}
-      searchLabel={str(props, 'searchLabel') ?? ''}
       labels={(props.labels as ComponentProps<typeof OrgChartTree>['labels']) ?? {}}
     />
   ),
