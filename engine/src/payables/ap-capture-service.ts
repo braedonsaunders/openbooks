@@ -273,7 +273,11 @@ async function mapLines(
       let candidates = key
         ? source.rows.filter((row) => row.item_code && normalizedKey(row.item_code) === key && !used.has(row.id))
         : [];
-      if (candidates.length !== 1 && source.rows.length === 1 && capture.lines.length === 1) candidates = source.rows;
+      // The single-line positional fallback is load-bearing for codeless
+      // lines, which carry no code to match on. An explicit product code
+      // that matches no purchase-order line refuses below as
+      // po_line_unmatched instead of force-binding the wrong line.
+      if (!key && candidates.length !== 1 && source.rows.length === 1 && capture.lines.length === 1) candidates = source.rows;
       if (candidates.length !== 1) {
         issues.push(issue("po_line_unmatched", "blocking", { lineIndex }));
         return line;
