@@ -12,6 +12,7 @@ import {
   requireHrmCompensationReadOnEmployment,
 } from "../authorization.ts";
 import { CompensationError } from "./errors.ts";
+import { compareDecimal } from "../../money/exact-decimal.ts";
 import { mul } from "../../money/money.ts";
 import { bandPlacement } from "./compensation-math.ts";
 import { requireActorId, requireId, requireOrgId, requireReason } from "../recruiting/input.ts";
@@ -110,6 +111,20 @@ export interface CreatePayBandQuery {
   readonly reason: string;
 }
 
+/**
+ * The domain refusal for an unordered band, compared exactly: binary floats
+ * cannot tell 4-decimal money apart at the boundary, so the check never
+ * crosses them. Pure, so the unit test names the refusal without a database.
+ */
+export function assertBandOrdered(min: string, target: string, max: string): void {
+  if (!(compareDecimal(min, target) <= 0 && compareDecimal(target, max) <= 0)) {
+    throw new CompensationError(
+      "REFUSED",
+      `band ${min} / ${target} / ${max} is not ordered min <= target <= max — reorder the three figures instead of storing a band nobody can sit in`,
+    );
+  }
+}
+
 /** Open a band version: closes the live row of the same scope first, in one transaction. Never an overwrite. */
 export async function createPayBand(query: CreatePayBandQuery): Promise<PayBandDTO> {
   const orgId = requireOrgId(query.orgId);
@@ -120,12 +135,7 @@ export async function createPayBand(query: CreatePayBandQuery): Promise<PayBandD
   const min = requireMoney(query.min, "band min");
   const target = requireMoney(query.target, "band target");
   const max = requireMoney(query.max, "band max");
-  if (!(Number(min) <= Number(target) && Number(target) <= Number(max))) {
-    throw new CompensationError(
-      "REFUSED",
-      `band ${min} / ${target} / ${max} is not ordered min <= target <= max — reorder the three figures instead of storing a band nobody can sit in`,
-    );
-  }
+  assertBandOrdered(min, target, max);
   if (typeof query.currency !== "string" || !/^[A-Z]{3}$/.test(query.currency)) {
     throw new CompensationError("INVALID_INPUT", "band currency must be an ISO 4217 code (e.g. USD)");
   }

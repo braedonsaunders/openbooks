@@ -18,6 +18,24 @@ describe("compa-ratio", () => {
     assert.equal(compaRatio("85000", "100000"), "0.8500000000");
   });
 
+  test("division is exact, never a binary float", () => {
+    // 106497.9938 / 172193.2558 is 0.6184794713... — (r/t).toFixed(10)
+    // through JS Number prints 0.6184794712, and that wrong digit is what
+    // used to be stored and fed to guideline resolution.
+    assert.equal(compaRatio("106497.9938", "172193.2558"), "0.6184794713");
+    assert.equal(compaRatio("1", "3"), "0.3333333333");
+    assert.equal(compaRatio("2", "3"), "0.6666666667");
+    assert.equal(compaRatio("9999999999999.9999", "1"), "9999999999999.9999000000");
+  });
+
+  test("non-decimal rates are refused, never coerced", () => {
+    assert.throws(() => compaRatio("abc", "100000"), (e: unknown) => {
+      assert.ok(e instanceof CompensationError);
+      assert.match(e.message, /rate "abc" is not a finite decimal/);
+      return true;
+    });
+  });
+
   test("zero target refuses by name instead of dividing", () => {
     assert.throws(() => compaRatio("85000", "0"), (e: unknown) => {
       assert.ok(e instanceof CompensationError);
@@ -37,6 +55,14 @@ describe("compa-ratio", () => {
     assert.equal(compaQuartile("0.8"), "q2");
     assert.equal(compaQuartile("0.95"), "q3");
     assert.equal(compaQuartile("1.1"), "q4");
+  });
+
+  test("quartile boundaries hold at full ratio precision", () => {
+    assert.equal(compaQuartile("0.7999999999"), "q1");
+    assert.equal(compaQuartile("0.8000000000"), "q2");
+    assert.equal(compaQuartile("0.9499999999"), "q2");
+    assert.equal(compaQuartile("1.0999999999"), "q3");
+    assert.equal(compaQuartile("1.1000000000"), "q4");
   });
 });
 
