@@ -232,6 +232,37 @@ test("weekly, biweekly and monthly still derive from their own anchors", () => {
   );
 });
 
+// --- 4b. A misaligned last end must not skip the next regular period --------
+
+/**
+ * An off-cycle run (a final pay, a bonus) ends mid-span: its period_end is
+ * not on the schedule. The next regular period is the first schedule end
+ * AFTER that date — not a whole span later. The old ceil(+1) step used to
+ * jump 2026-07-15 straight to the 2026-08-08 period, silently skipping the
+ * 2026-07-12–25 payday.
+ */
+test("a misaligned last end still lands on the next scheduled period", () => {
+  assert.deepEqual(
+    nextPeriodAfter({ frequency: "biweekly", anchor_period_end: "2026-07-11" }, "2026-07-15"),
+    { periodStart: "2026-07-12", periodEnd: "2026-07-25" },
+  );
+  assert.deepEqual(
+    nextPeriodAfter({ frequency: "weekly", anchor_period_end: "2026-01-03" }, "2026-01-05"),
+    { periodStart: "2026-01-04", periodEnd: "2026-01-10" },
+  );
+});
+
+test("an aligned last end still advances exactly one span", () => {
+  assert.deepEqual(
+    nextPeriodAfter({ frequency: "biweekly", anchor_period_end: "2026-07-11" }, "2026-07-25"),
+    { periodStart: "2026-07-26", periodEnd: "2026-08-08" },
+  );
+  assert.deepEqual(
+    nextPeriodAfter({ frequency: "weekly", anchor_period_end: "2026-01-03" }, "2026-01-10"),
+    { periodStart: "2026-01-11", periodEnd: "2026-01-17" },
+  );
+});
+
 // --- 5. Factor P has to match the calendar the schedule describes ----------
 
 /**

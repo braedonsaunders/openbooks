@@ -151,7 +151,13 @@ export function nextPeriodAfter(
     let end = anchor;
     if (lastPeriodEnd) {
       const last = at(lastPeriodEnd);
-      const steps = Math.max(1, Math.ceil((last.getTime() - anchor.getTime()) / (span * DAY) + 1));
+      // The smallest anchor-aligned end strictly after `last`. A ceil(+1)
+      // used to sit here, which overshoots by a whole span whenever `last`
+      // is NOT on the schedule — e.g. after an off-cycle final-pay run ended
+      // mid-span — silently skipping the next regular period. Flooring lands
+      // on the first schedule end after `last`, aligned or not.
+      const elapsedSpans = (last.getTime() - anchor.getTime()) / (span * DAY);
+      const steps = Math.floor(elapsedSpans) + 1;
       end = new Date(anchor.getTime() + steps * span * DAY);
       while (end.getTime() <= last.getTime()) end = new Date(end.getTime() + span * DAY);
     }
