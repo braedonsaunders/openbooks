@@ -431,12 +431,31 @@ async function createSubscriptionInvoiceInTransaction(
     let lineTax = "0.0000";
     let taxComponents: Awaited<ReturnType<typeof computeLineTaxes>>["components"] = [];
     if (applyTax) {
-      const cfg = await loadTaxComponentConfig(spec.orgId, input.taxCodeId!, spec.invoiceDate);
-      if (cfg.length) {
-        const res = computeLineTaxes(amount, cfg, {});
-        lineTax = res.taxTotal;
-        taxComponents = res.components;
+      const taxCodeId = input.taxCodeId!;
+      const cfg = await loadTaxComponentConfig(spec.orgId, taxCodeId, spec.invoiceDate);
+      if (!cfg.length) {
+        // An inactive or missing code resolves to no config row, which is
+        // distinct from a configured statutory zero rate. Fail closed before
+        // any document/line/evidence write rather than invoicing taxed work
+        // as 0% tax. An active code with no rate on the invoice date already
+        // refuses inside loadTaxComponentConfig; that refusal is preserved.
+        const meta = (await db.execute<{ code: string; isActive: boolean }>(sql`
+          select code, is_active as "isActive" from tax_codes
+           where id = ${taxCodeId} and org_id = ${spec.orgId}`)).rows[0];
+        if (meta && !meta.isActive) {
+          throw new SubscriptionError(
+            `tax code ${meta.code} is inactive on ${spec.invoiceDate}; refusing to invoice it as 0% tax — ` +
+            `reactivate the tax code under Company Settings or point the billing plan/charge at a live tax code before generating`,
+          );
+        }
+        throw new SubscriptionError(
+          `tax code ${meta?.code ?? taxCodeId} is not configured in this organization on ${spec.invoiceDate}; ` +
+          `refusing to invoice it as 0% tax — point the billing plan/charge at a live tax code before generating`,
+        );
       }
+      const res = computeLineTaxes(amount, cfg, {});
+      lineTax = res.taxTotal;
+      taxComponents = res.components;
     }
     netAmount = add(netAmount, amount);
     taxTotal = add(taxTotal, lineTax);
