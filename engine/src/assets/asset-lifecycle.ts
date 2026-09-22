@@ -688,7 +688,13 @@ export interface ReverseAssetEventResult {
 export async function reverseAssetLifecycleEvent(
   orgId: string,
   eventId: string,
-  opts: { date: string; actorId: string; reason: string },
+  opts: {
+    date: string;
+    actorId: string;
+    reason: string;
+    assetId?: string;
+    allowedSubsidiaryIds?: readonly string[] | null;
+  },
 ): Promise<ReverseAssetEventResult> {
   const reason = opts.reason.trim();
   if (reason.length < 8 || reason.length > 500) {
@@ -744,6 +750,16 @@ export async function reverseAssetLifecycleEvent(
     `);
     const source = sourceResult.rows[0];
     if (!source)
+      throw new AssetLifecycleError("asset lifecycle event not found");
+
+    // Confirm the locked source event belongs to the named asset and an
+    // allowed subsidiary; refuse as not-found across boundaries.
+    if (opts.assetId && source.asset_id !== opts.assetId)
+      throw new AssetLifecycleError("asset lifecycle event not found");
+    if (
+      opts.allowedSubsidiaryIds &&
+      !opts.allowedSubsidiaryIds.includes(source.subsidiary_id)
+    )
       throw new AssetLifecycleError("asset lifecycle event not found");
 
     if (source.financial_change_id)
