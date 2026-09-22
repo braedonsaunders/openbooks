@@ -427,7 +427,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'row-counts-cell': { props: ['created', 'failed', 'updated'] },
   'run-bank-rules': { props: ['accounts'] },
   'run-depreciation': { props: ['books', 'candidates', 'periods'] },
-  'run-recognition': { props: [] },
+  'run-recognition': { props: ['books', 'candidates', 'periods'] },
   'sandbox-manager': { props: ['periods', 'sandboxes'] },
   'save-view': { props: [] },
   'saved-view-header': { props: ['backHref', 'backLabel', 'canEdit', 'labels', 'name', 'scope', 'scopeLabel', 'subtitle', 'viewId'] },

@@ -167,7 +167,9 @@ export function ContractDrawer({
                   </Badge>
                 ) : null}
               </div>
-              {canRun ? <RunRecognitionButton obligationId={o.id} /> : null}
+              {canRun ? (
+                <RunRecognitionButton obligationId={o.id} obligationDescription={o.description} />
+              ) : null}
             </div>
             {o.lines.length === 0 ? (
               <p className="text-xs text-slate-500 dark:text-slate-400">

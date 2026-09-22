@@ -92,6 +92,9 @@ const mockSources = new Map<string, string>([
         state.runCalls.push({ scope: allowedSubsidiaryIds == null ? undefined : [...allowedSubsidiaryIds], postedProjectIds: visible.map((project) => project.id) })
         return { posted: visible.length, skipped: 0, totalAmount: '0', entries: [], problems: [] }
       }
+      // The route imports the stale-confirmation class to map it to 409; the
+      // double stands in for the whole module, so it must offer it too.
+      export class StaleRecognitionPreviewError extends Error {}
     `,
   ],
 ])
