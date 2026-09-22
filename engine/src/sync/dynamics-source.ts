@@ -1,6 +1,6 @@
 import { businessToday } from "../platform/business-date.ts";
 import { DynamicsClient } from "../connectors/dynamics.ts";
-import { formatMoney, fromUnits, toUnits } from "../money/money.ts";
+import { formatMoney, fromUnits, roundDiv, toUnits } from "../money/money.ts";
 import { buildNativeFromBC, type BCBuildOpts, type BCDoc } from "./dynamics-native.ts";
 import type { NativeContext, NativeDocument } from "./native.ts";
 import type {
@@ -43,6 +43,81 @@ interface BCAccount { id: string; number?: string; displayName?: string; categor
 interface BCParty { id: string; number?: string; displayName?: string; blocked?: boolean }
 interface BCItem { id: string; number?: string; displayName?: string; type?: string; blocked?: boolean }
 interface BCGLEntry { id: string; postingDate?: string; accountId?: string; debitAmount?: number; creditAmount?: number }
+/** Business Central v2.0 `currencyExchangeRates` resource (Microsoft Learn:
+ * `currencyCode`, `startingDate`, `exchangeRateAmount`,
+ * `relationalCurrencyCode`, `relationalExchangeRateAmount`). The effective
+ * rate for one unit of `currencyCode` in `relationalCurrencyCode` is
+ * exchangeRateAmount / relationalExchangeRateAmount. */
+interface BCFxRate {
+  currencyCode?: string;
+  startingDate?: string;
+  exchangeRateAmount?: number;
+  relationalCurrencyCode?: string;
+  relationalExchangeRateAmount?: number;
+}
+
+/**
+ * Exact decimal division of two positive decimal strings to 10 places
+ * (half-up, the same rounding the money kernel uses), without crossing the
+ * IEEE-754 boundary. API amounts arrive as JSON numbers, but String() keeps
+ * the decimal literal exact and every operation below is BigInt.
+ */
+export function dividePositiveDecimals(numer: string, denom: string, places = 10): string {
+  const parse = (s: string): { digits: bigint; scale: number } => {
+    const t = String(s).trim();
+    if (!/^\d+(\.\d+)?$/.test(t)) throw new Error(`not a positive decimal number: "${s}"`);
+    const [whole, fraction = ""] = t.split(".");
+    return { digits: BigInt(`${whole}${fraction}`), scale: fraction.length };
+  };
+  const n = parse(numer);
+  const d = parse(denom);
+  if (n.digits <= 0n || d.digits <= 0n) throw new Error("exchange-rate division needs positive amounts");
+  const scaled = roundDiv(
+    n.digits * 10n ** BigInt(d.scale + places),
+    d.digits * 10n ** BigInt(n.scale),
+  );
+  const text = scaled.toString().padStart(places + 1, "0");
+  return `${text.slice(0, -places)}.${text.slice(-places)}`;
+}
+
+/**
+ * Dated transaction→base FX resolver over `currencyExchangeRates`. For a
+ * currency and posting date, the latest rate starting on or before that date
+ * wins; rows whose relational currency is not the company base (or whose
+ * amounts are unusable) never resolve — the builder refuses the document
+ * instead of converting at a wrong rate.
+ */
+export function bcFxRateFor(
+  baseCurrency: string,
+  rows: BCFxRate[],
+): (currencyCode: string, date: string) => string | null {
+  const base = baseCurrency.trim().toUpperCase();
+  const byCode = new Map<string, { start: string; rate: BCFxRate }[]>();
+  for (const row of rows) {
+    const code = (row.currencyCode ?? "").trim().toUpperCase();
+    const start = (row.startingDate ?? "").slice(0, 10);
+    if (!code || !/^\d{4}-\d{2}-\d{2}$/.test(start)) continue;
+    const arr = byCode.get(code) ?? [];
+    arr.push({ start, rate: row });
+    byCode.set(code, arr);
+  }
+  for (const arr of byCode.values()) arr.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0));
+  return (currencyCode: string, date: string): string | null => {
+    const cands = byCode.get(currencyCode.trim().toUpperCase()) ?? [];
+    let best: BCFxRate | null = null;
+    for (const c of cands) {
+      if (c.start <= date) best = c.rate;
+      else break;
+    }
+    if (!best) return null;
+    if ((best.relationalCurrencyCode ?? "").trim().toUpperCase() !== base) return null;
+    try {
+      return dividePositiveDecimals(String(best.exchangeRateAmount ?? ""), String(best.relationalExchangeRateAmount ?? 1));
+    } catch {
+      return null;
+    }
+  };
+}
 
 const TXN_ENTITIES: { path: string; entity: string; expand: string }[] = [
   { path: "salesInvoices", entity: "salesInvoice", expand: "salesInvoiceLines" },
@@ -198,7 +273,13 @@ export class DynamicsSource implements MigrationSource {
         if (mag > (expMag.get(e.documentNumber) ?? 0n)) { expMag.set(e.documentNumber, mag); docExpenseAccount.set(e.documentNumber, obId); }
       }
     }
-    const opts: BCBuildOpts = { itemSalesAccount: new Map(), itemPurchaseAccount: new Map(), docIncomeAccount, docExpenseAccount };
+    // Document resources state `currencyCode` but no rate: resolve dated
+    // transaction→base rates from `currencyExchangeRates` once per pull.
+    const fxRateFor = bcFxRateFor(
+      this.baseCurrency,
+      await this.client.list<BCFxRate>("currencyExchangeRates"),
+    );
+    const opts: BCBuildOpts = { fxRateFor, itemSalesAccount: new Map(), itemPurchaseAccount: new Map(), docIncomeAccount, docExpenseAccount };
     const filter = DynamicsClient.modifiedSince(since);
 
     // Bank accounts + per-document bank movement — BC's standard API exposes no
@@ -266,6 +347,9 @@ export class DynamicsSource implements MigrationSource {
             documents.push({
               sourceRef: `${entity}Payment:${t.id}`, kind: isSales ? "customer_payment" : "vendor_payment",
               posting: true, partyId: built.partyId, controlAccountId: null,
+              // The settled delta is denominated in the invoice's currency,
+              // exactly like the invoice it settles.
+              currency: built.currency, fxRate: built.fxRate,
               documentDate: built.documentDate, dueDate: null,
               memo: `Settlement of ${t.number}`, referenceNumber: `PAY-${t.number}`,
               lines: [{ accountId: bank, itemId: null, amount: settledAmount, taxAmount: "0", taxOverridden: false, taxCodeId: null, departmentId: null, projectId: null, description: "Payment", lineNumber: 1 }],

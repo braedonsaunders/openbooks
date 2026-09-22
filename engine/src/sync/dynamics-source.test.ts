@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { NativeContext } from "./native.ts";
-import { DynamicsSource } from "./dynamics-source.ts";
+import { bcFxRateFor, dividePositiveDecimals, DynamicsSource } from "./dynamics-source.ts";
 import type { DynamicsClient } from "../connectors/dynamics.ts";
 
 /**
@@ -60,6 +60,17 @@ function source(): DynamicsSource {
           },
         ];
       }
+      if (path === "currencyExchangeRates") {
+        return [
+          {
+            currencyCode: "EUR",
+            startingDate: "2026-01-01",
+            exchangeRateAmount: 1.1,
+            relationalCurrencyCode: "USD",
+            relationalExchangeRateAmount: 1,
+          },
+        ];
+      }
       return [];
     },
   } as unknown as DynamicsClient;
@@ -79,6 +90,19 @@ const ctx = {
 
 test("invoice settlements and payment applications state the invoice currency with no rate", async () => {
   const changes = await source().nativeChanges(null, ctx);
+  // The €100 invoice settles €40 at the dated EUR→USD rate: every document
+  // carries the invoice currency with the looked-up rate, line amounts stay
+  // in transaction currency, and the links state the invoice currency.
+  assert.deepEqual(changes.unbuildable, []);
+  assert.deepEqual(
+    changes.documents.map((d) => ({ ref: d.sourceRef, kind: d.kind, currency: d.currency, fxRate: d.fxRate })),
+    [
+      { ref: "salesInvoice:inv1", kind: "customer_invoice", currency: "EUR", fxRate: "1.1000000000" },
+      { ref: "salesInvoicePayment:inv1", kind: "customer_payment", currency: "EUR", fxRate: "1.1000000000" },
+      { ref: "customerPayment:pay1", kind: "customer_payment", currency: "EUR", fxRate: "1.1000000000" },
+    ],
+  );
+  assert.equal(changes.documents[0]?.lines[0]?.amount, "100.0000");
   assert.deepEqual(changes.applications, [
     {
       paymentRef: "salesInvoicePayment:inv1",
@@ -171,6 +195,33 @@ test("a blank invoice currency states the base with no rate", async () => {
       rate: null,
     },
   ]);
+});
+
+test("dated exchange rates resolve per posting date without floats", () => {
+  const rateFor = bcFxRateFor("USD", [
+    { currencyCode: "EUR", startingDate: "2026-01-01", exchangeRateAmount: 1.1, relationalCurrencyCode: "USD", relationalExchangeRateAmount: 1 },
+    { currencyCode: "EUR", startingDate: "2026-02-01", exchangeRateAmount: 1.2, relationalCurrencyCode: "USD", relationalExchangeRateAmount: 1 },
+    { currencyCode: "GBP", startingDate: "2026-01-01", exchangeRateAmount: 1.5, relationalCurrencyCode: "EUR", relationalExchangeRateAmount: 1 },
+    { currencyCode: "JPY", startingDate: "not-a-date", exchangeRateAmount: 150, relationalCurrencyCode: "USD", relationalExchangeRateAmount: 1 },
+  ]);
+  assert.equal(rateFor("EUR", "2026-01-15"), "1.1000000000");
+  assert.equal(rateFor("eur", "2026-02-10"), "1.2000000000");
+  // No rate started yet: unknown, never a neighboring rate or 1.
+  assert.equal(rateFor("EUR", "2025-12-31"), null);
+  assert.equal(rateFor("CAD", "2026-02-10"), null);
+  // Relational currency is not the company base: unresolvable, never applied.
+  assert.equal(rateFor("GBP", "2026-02-10"), null);
+  // Malformed rows never resolve.
+  assert.equal(rateFor("JPY", "2026-02-10"), null);
+});
+
+test("rate division is exact to 10 places, halves up", () => {
+  assert.equal(dividePositiveDecimals("1", "3"), "0.3333333333");
+  assert.equal(dividePositiveDecimals("2", "3"), "0.6666666667");
+  assert.equal(dividePositiveDecimals("7.5", "2.5"), "3.0000000000");
+  assert.equal(dividePositiveDecimals("1.1", "1"), "1.1000000000");
+  assert.throws(() => dividePositiveDecimals("1", "0"), /positive/);
+  assert.throws(() => dividePositiveDecimals("-1", "2"), /positive decimal/);
 });
 
 test("purchase open-item truth nets journal applications off the bill total", async () => {
