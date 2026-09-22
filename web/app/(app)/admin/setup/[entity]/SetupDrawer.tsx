@@ -1,7 +1,7 @@
 'use client'
 
 import { LossOfControlButton } from '@/app/(app)/accounting/changes/LossOfControlButton'
-import { Fragment, useMemo, useState, type ReactNode } from 'react'
+import { Fragment, useMemo, useRef, useState, type ReactNode } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -115,6 +115,10 @@ export function SetupDrawer({
   })
   const [busy, setBusy] = useState(false)
   const [officialBusy, setOfficialBusy] = useState(false)
+  // One idempotency key per mounted create session (POST /api/accounts
+  // pattern): assigned once, reused across retries and timeouts so a retried
+  // save replays instead of duplicating. Never sent on PATCH.
+  const createRequestIdRef = useRef<string | null>(null)
   // A blocked save that only fires a transient toast reads as "nothing
   // happened" once it dismisses (F-t06-018): the failure also persists as a
   // form-level alert naming the field, cleared on the next edit.
@@ -193,9 +197,13 @@ export function SetupDrawer({
         body.expectedValue = row!.value
         body.expectedExtensionVersionId = row!.extension_version_id
       }
+      if (creating && !createRequestIdRef.current) createRequestIdRef.current = crypto.randomUUID()
       const res = await fetch(`/api/admin/setup/${entity.key}`, {
         method: creating ? 'POST' : 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(creating ? { 'Idempotency-Key': createRequestIdRef.current! } : {}),
+        },
         body: JSON.stringify(body),
         signal: controller.signal,
       })

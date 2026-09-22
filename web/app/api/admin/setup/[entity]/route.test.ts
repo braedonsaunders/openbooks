@@ -82,6 +82,7 @@ function authenticate(f: { orgId: string; actorId: string }) {
 function postRequest(entity: string, body: unknown): Request {
   return new Request(`http://localhost/api/admin/setup/${entity}`, {
     method: "POST",
+    headers: { "Idempotency-Key": randomUUID() },
     body: JSON.stringify(body),
   });
 }

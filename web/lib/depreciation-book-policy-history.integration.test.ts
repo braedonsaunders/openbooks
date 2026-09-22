@@ -55,7 +55,7 @@ for (const method of ['POST','PATCH','DELETE'] as const) {
       const before=await snapshot();
       const body={...(method==='PATCH'?{id:policyId}:{}),bookId:org.bookId,categoryId:f.categoryId,method:'straight_line',lifeMonths:20,convention:'full_month'};
       const response=await ({POST,PATCH,DELETE}[method])(new Request(`http://audit.local/api/admin/setup/depreciation-book-policies?id=${policyId}`,{
-        method,headers:{'Content-Type':'application/json'},...(method==='DELETE'?{}:{body:JSON.stringify(body)}),
+        method,headers:{'Content-Type':'application/json',...(method==='POST'?{'Idempotency-Key':randomUUID()}:{})},...(method==='DELETE'?{}:{body:JSON.stringify(body)}),
       }),{params:Promise.resolve({entity:'depreciation-book-policies'})});
       const result=await response.json();
       assert.equal(response.status,409,JSON.stringify(result));

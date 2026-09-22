@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { registerHooks } from 'node:module';
 import test from 'node:test';
 registerHooks({resolve(specifier,context,next){if(specifier==='server-only')return{shortCircuit:true,url:'data:text/javascript,export {}'};return next(specifier,context)}});
@@ -29,7 +30,7 @@ for(const channel of ['interactive','import'] as const){
     body.id=created.id;
    }
    if(channel==='interactive'){
-    const response=await (operation==='create'?POST:PATCH)(new Request('http://audit.local/api/admin/setup/pay-components',{method:operation==='create'?'POST':'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),{params:Promise.resolve({entity:'pay-components'})});
+    const response=await (operation==='create'?POST:PATCH)(new Request('http://audit.local/api/admin/setup/pay-components',{method:operation==='create'?'POST':'PATCH',headers:{'Content-Type':'application/json',...(operation==='create'?{'Idempotency-Key':randomUUID()}:{})},body:JSON.stringify(body)}),{params:Promise.resolve({entity:'pay-components'})});
     assert.equal(response.status,200,JSON.stringify(await response.json()));
    }else{
     const outcome=await setupResource(SETUP_ENTITY_BY_KEY.get('pay-components')!,org.orgId).write([body],operation==='create'?'insert':'upsert',{orgId:org.orgId,actorId,dryRun:false});
@@ -53,7 +54,7 @@ for(const channel of ['interactive','import'] as const){
    const actorId=(await seedFlowActors(org.orgId)).adminId;auth.gate={user:{orgId:org.orgId,id:actorId}};
    const body={code:'INVALID-FLAG',name:'Malformed earning',kind:'earning',value:'10',isActive:true,taxable:'false-ish',pensionable:true,insurable:true,vacationable:true,includeInDisposableEarnings:true};
    if(channel==='interactive'){
-    const response=await POST(new Request('http://audit.local/api/admin/setup/pay-components',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),{params:Promise.resolve({entity:'pay-components'})});
+    const response=await POST(new Request('http://audit.local/api/admin/setup/pay-components',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':randomUUID()},body:JSON.stringify(body)}),{params:Promise.resolve({entity:'pay-components'})});
     assert.equal(response.status,400,JSON.stringify(await response.json()));
    }else{
     const outcome=await setupResource(SETUP_ENTITY_BY_KEY.get('pay-components')!,org.orgId).write([body],'insert',{orgId:org.orgId,actorId,dryRun:false});
@@ -72,7 +73,7 @@ for(const operation of ['create','update'] as const){
     const body:Record<string,unknown>={code:'EXPLICIT-FLAGS',name:'Explicit configuration',kind:'earning',value:'10',isActive:true,taxable:false,pensionable:false,insurable:false,vacationable:false,includeInDisposableEarnings:false};
     if(operation==='update')body.id=(await db.execute(sql`insert into pay_components(org_id,code,name,kind,value,created_by,updated_by) values(${org.orgId},'EXPLICIT-FLAGS','Original','earning','10',${actorId},${actorId}) returning id`)).rows[0]!.id;
     if(channel==='interactive'){
-     const response=await (operation==='create'?POST:PATCH)(new Request('http://audit.local/api/admin/setup/pay-components',{method:operation==='create'?'POST':'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),{params:Promise.resolve({entity:'pay-components'})});
+     const response=await (operation==='create'?POST:PATCH)(new Request('http://audit.local/api/admin/setup/pay-components',{method:operation==='create'?'POST':'PATCH',headers:{'Content-Type':'application/json',...(operation==='create'?{'Idempotency-Key':randomUUID()}:{})},body:JSON.stringify(body)}),{params:Promise.resolve({entity:'pay-components'})});
      assert.equal(response.status,200,JSON.stringify(await response.json()));
     }else{
      const outcome=await setupResource(SETUP_ENTITY_BY_KEY.get('pay-components')!,org.orgId).write([body],operation==='create'?'insert':'upsert',{orgId:org.orgId,actorId,dryRun:false});

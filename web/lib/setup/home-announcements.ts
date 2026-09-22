@@ -2,6 +2,7 @@ import 'server-only'
 
 import { sql } from 'drizzle-orm'
 import { randomUUID } from 'node:crypto'
+import { canonicalJson } from '@openbooks/engine/src/platform/canonical-json.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 
 /**
@@ -90,14 +91,35 @@ async function writeList(
   `)
 }
 
+/**
+ * Create one announcement. With `options.id` (the POST route's
+ * Idempotency-Key) the create is idempotent: the key becomes the
+ * announcement id, so an exact retry returns the existing row with no second
+ * write, while a changed payload under the same key is refused as a 409
+ * conflict. Announcements live in org settings JSON rather than a table, so
+ * there is no insert audit to carry the request image — the stored
+ * announcement itself is the immutable image the retry is compared against.
+ */
 export async function createHomeAnnouncementRow(
   orgId: string,
   body: Record<string, unknown>,
+  options: { id?: string } = {},
 ): Promise<{ id: string }> {
   const valid = validateAnnouncement(body)
-  const id = randomUUID()
+  const id = options.id ?? randomUUID()
   await db.transaction(async (tx) => {
+    // Take the writer lock BEFORE reading: the read-modify-write must be
+    // atomic, otherwise a concurrent writer's entry is silently clobbered.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'home-announcements:' + orgId}, 0))`)
     const list = await readList(tx, orgId)
+    const existing = options.id === undefined ? undefined : list.find((row) => row.id === id)
+    if (existing) {
+      if (canonicalJson(existing) === canonicalJson({ id, ...valid })) return
+      throw Object.assign(
+        new Error('This announcement was already saved with different details. Close and reopen the drawer to try again with a fresh request.'),
+        { status: 409, code: 'idempotency-conflict' },
+      )
+    }
     list.push({ id, ...valid })
     await writeList(tx, orgId, list)
   })
