@@ -94,6 +94,53 @@ export async function loadCompensationLens(
 ): Promise<Set<string> | null> {
   return actorAllowedSubsidiaryIds(exec, orgId, actorId);
 }
+
+/**
+ * Per-employment compensation gates for single-subject salary surfaces
+ * (statement list/render/generate/attach, band reads). Same shape as
+ * the leave gates: the live grant decides, then the trusted employment
+ * subject loaded from worker_employments on the trusted runner plus the
+ * employer-subsidiary scope. Unknown, cross-org, and out-of-scope
+ * employments all refuse with the uniform not-visible message, so the
+ * refusal text can never confirm which half failed. No caller-supplied
+ * parties, booleans, or scope at any boundary.
+ */
+async function requireHrmCompensationAccessOnEmployment(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+  permission: HrmCompensationPermission,
+): Promise<TrustedEmploymentSubject> {
+  if (!(await actorHasPermission(exec, orgId, actorId, permission))) {
+    throw new HrmAuthorizationError(
+      `Compensation access requires the ${permission} permission — ask an administrator to grant it in /admin/roles.`,
+    );
+  }
+  const subject = await loadTrustedEmploymentSubject(exec, orgId, employmentId);
+  await assertEmployerScope(exec, orgId, actorId, subject);
+  return subject;
+}
+
+/** Read one employment's salary surface (statement list/render). */
+export async function requireHrmCompensationReadOnEmployment(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+): Promise<TrustedEmploymentSubject> {
+  return requireHrmCompensationAccessOnEmployment(exec, orgId, actorId, employmentId, "hrm.compensation.read");
+}
+
+/** Write one employment's salary surface (statement generate/attach). */
+export async function requireHrmCompensationManageOnEmployment(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+): Promise<TrustedEmploymentSubject> {
+  return requireHrmCompensationAccessOnEmployment(exec, orgId, actorId, employmentId, "hrm.compensation.manage");
+}
 // HR-12 end
 
 /**

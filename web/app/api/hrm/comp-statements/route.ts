@@ -15,13 +15,15 @@ export const runtime = "nodejs";
 
 /**
  * Total-rewards statements. GET lists an employment's statements (HR
- * through comp.read, the person through their own scope in the
- * service); POST freezes a new one. GET ?pdf=<id> renders the stored
+ * through comp.read fenced to the subsidiary lens in the service, the
+ * person through hrm.self.read for their own employment); POST freezes
+ * a new one behind comp.manage. GET ?pdf=<id> renders the stored
  * statement through packages/pdf. The client checks res.ok before
  * parsing.
  */
 export async function GET(req: Request) {
-  const gate = await guardPermission("hrm.compensation.read");
+  const hr = await guardPermission("hrm.compensation.read");
+  const gate = hr instanceof NextResponse ? await guardPermission("hrm.self.read") : hr;
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmCompensation"))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
