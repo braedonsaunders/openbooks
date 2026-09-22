@@ -1062,7 +1062,7 @@ export function DocumentDrawer({
   // next action. Saves, lifecycle actions, deletes, voids and form
   // preference writes all run on the shared action path, whose busy flag
   // always releases through its own finally.
-  const { busy, refusal, execute, refuse } = useAppAction()
+  const { busy, refusal, execute, refuse, runExclusive } = useAppAction()
 
   const taxProfiles = useMemo(() => [
     ...(taxCodes ?? []).map((profile) => ({ ...profile, value: `code:${profile.id}` })),
@@ -1720,7 +1720,12 @@ export function DocumentDrawer({
     setTotals({ subtotal: sourceDoc.subtotal, taxTotal: sourceDoc.tax_total, total: sourceDoc.total })
   }
 
-  async function save() {
+  // Re-entry runs through the shared guard: save awaits the client-script
+  // gate (up to 2 s) before execute sets busy, so a double-click used to
+  // send two saves with the same revision — the second 409ing after the
+  // first succeeded and pinning its error over the success. The guard flips
+  // synchronously at click time and covers the whole preamble.
+  const save = runExclusive(async () => {
     let amendmentReason: string | undefined
     if (isPosted) {
       const reason = await promptDialog({
@@ -1829,7 +1834,7 @@ export function DocumentDrawer({
         },
       },
     )
-  }
+  })
 
   // A dirty editor never closes silently: the X button (via beforeClose) and
   // Cancel both ask first, so typed work survives a stray click (F-t02-003).
@@ -2628,7 +2633,7 @@ export function DocumentDrawer({
         canEditStatus ? (
           mode === 'edit' ? (
             <>
-              <Button size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={save}>
+              <Button size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => void save()}>
                 {busy ? tCommon('actions.saving') : tCommon('actions.save')}
               </Button>
               <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={cancelWithConfirm}>
