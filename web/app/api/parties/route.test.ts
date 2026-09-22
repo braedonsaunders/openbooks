@@ -138,7 +138,9 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/platform/db.ts", "mock:db"],
-  ["@openbooks/engine/src/platform/canonical-json.ts", "mock:db"],
+  // canonical-json.ts is a pure module with no imports of its own: there is
+  // nothing to isolate, and a copy could only drift from the hashing the
+  // audit evidence is reproduced with. It loads for real.
   ["@/lib/api/json", "mock:json"],
   ["../../../lib/authz", "mock:authz"],
   ["../../../lib/features", "mock:features"],

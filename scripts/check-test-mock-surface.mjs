@@ -320,6 +320,43 @@ export function moduleExports(src) {
   return names;
 }
 
+/**
+ * Names a double serves by re-exporting a real module wholesale.
+ *
+ * moduleExports reads DECLARATIONS only, so `export * from` is invisible to
+ * it and every name the target provides reads as missing — even though the
+ * double genuinely serves them at runtime. That is backwards for the shape
+ * this guard most wants to encourage: re-exporting the real module instead of
+ * hand-copying its surface, which is the only version that cannot drift.
+ *
+ * The specifier is taken as the first quoted string on the statement, which
+ * covers both a plain literal and the `new URL('./x.ts', import.meta.url).href`
+ * form the inline doubles use to name a real sibling module.
+ */
+export function starReexports(body, fromFile, root = ROOT) {
+  const names = new Set();
+  for (const line of stripComments(body).split("\n")) {
+    const star = line.match(/export\s*\*\s*from\s*(.+)$/);
+    if (!star) continue;
+    // In the `new URL('./x.ts', import.meta.url).href` form the outer quote
+    // pairs with the interpolation's OWN quote, so a general quoted-run match
+    // captures `${new URL(` and never sees the path between them. A specifier
+    // carries no whitespace, so that pattern fails at the outer quote and the
+    // scan advances to the real one. Both shapes are collected and the first
+    // candidate that actually resolves wins.
+    const candidates = new Set();
+    for (const m of star[1].matchAll(/['"`]([^'"`\s]+)['"`]/g)) candidates.add(m[1]);
+    for (const m of star[1].matchAll(/['"`]([^'"`]+)['"`]/g)) candidates.add(m[1]);
+    for (const candidate of candidates) {
+      const target = cachedResolve(candidate, fromFile, root);
+      if (!target) continue;
+      for (const name of cachedExports(target)) names.add(name);
+      break;
+    }
+  }
+  return names;
+}
+
 function specMatcher(object, method, literal) {
   const value = literal.replace(/\\(['"`\\])/g, "$1");
   if (method === "exact") return { kind: "exact", value };
@@ -864,7 +901,10 @@ export function checkFile(path, root = ROOT) {
   for (const [mockKey, names] of needs) {
     const body = blocks.get(mockKey);
     if (body === undefined) continue;
-    const have = moduleExports(codeOnly(body));
+    const have = new Set([
+      ...moduleExports(codeOnly(body)),
+      ...starReexports(body, path, root),
+    ]);
     const missing = [...names.keys()].filter((name) => !have.has(name));
     if (missing.length > 0) {
       gaps.push({
