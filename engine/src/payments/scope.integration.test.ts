@@ -198,16 +198,24 @@ for (const variant of [
         }
         if (variant === "draft") overrides.posted = false;
         if (variant === "not-open") overrides.open = false;
-        if (variant === "wrong-sign") overrides.amount = "30";
+        // wrong-sign must reach the SIGN guard, which now sits behind the
+        // credit-KIND guard: a plain open item no longer gets that far, it is
+        // refused for not being a credit memo at all. So the credit endpoint
+        // is a real posted customer_credit and the TARGET carries the wrong
+        // sign instead — the sign rule covers both endpoints, and `line()`
+        // derives the document kind from the amount's sign, so a
+        // wrong-signed CREDIT line cannot be built at all.
         const from =
           variant === "missing"
             ? randomUUID()
-            : variant === "valid"
+            : ["valid", "wrong-sign"].includes(variant)
               ? await postedCredit(org, actor)
               : await line(org, overrides);
         const to = ["subsidiary", "party", "account", "book"].includes(variant)
           ? await line(org, { ...overrides, amount: "100" })
-          : target;
+          : variant === "wrong-sign"
+            ? await line(org, { amount: "-100" })
+            : target;
         let claimedSource =
           variant === "missing" ? randomUUID() : await sourceDocument(from);
         if (variant === "source-document")

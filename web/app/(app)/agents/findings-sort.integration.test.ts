@@ -139,8 +139,14 @@ test('workbench loader serves the list source sort, filters, and row shape', { s
       assert.equal(ranked.kpis[0]?.value, '3');
       assert.deepEqual(ranked.kpis[2], { label: 'kpis.overdue', value: '1', tone: 'bad' });
       assert.equal(ranked.kpis[3]?.value, 'kpis.never');
-      // Tabs keep their keys with the Activity door out to Setup.
-      assert.equal(ranked.tabs.find((tab) => tab.key === 'activity')?.href, '/admin/setup/agents/activity');
+      // The operational switcher is exactly Inbox / Proposals / Briefing.
+      // Setup activity deliberately stays OUT of it — agents-home.test.ts
+      // asserts the same decision from the other side
+      // (doesNotMatch /href: '\/admin\/setup\/agents\/activity'/), and this
+      // test still demanded the removed door, so the two contradicted each
+      // other. Pinning the whole key set makes a future re-add fail here
+      // rather than silently satisfying a find() that returns undefined.
+      assert.deepEqual(ranked.tabs.map((tab) => tab.key), ['inbox', 'proposals', 'briefing']);
 
       // Column sort through the URL flips the order.
       const byMateriality = await loadAgents({ sort: 'materiality', dir: 'asc' });

@@ -1321,8 +1321,15 @@ test('load and lock SQL preserve the exact revision token end to end', () => {
   // Every load and every lock projects the exact canonical token — the
   // revision_seq counter, never the display timestamp: the list read,
   // loadDocument's row, loadDocumentEditCurrent's snapshot, the posted-
-  // correction lock, and the edit lock.
-  assert.equal((DOCUMENTS_SOURCE + DOCUMENT_POLICY_SOURCE + DOCUMENT_SERVICE_SOURCE).match(/documentRevisionCounterSql\(sql\.raw\('(d\.)?revision_seq'\)\)/g)?.length, 5)
+  // correction lock, the edit lock, and the create path's in-transaction
+  // snapshot of its own uncommitted claim row (documents.ts, "Mirrors
+  // loadDocumentEditCurrent" — the shared loader cannot see that row yet).
+  //
+  // A bare count only reports that the number moved; it cannot say whether a
+  // new site is projecting the right thing. Each of the six was read before
+  // this was raised from five, and the list above names them so the next
+  // person can do the same instead of just bumping the integer.
+  assert.equal((DOCUMENTS_SOURCE + DOCUMENT_POLICY_SOURCE + DOCUMENT_SERVICE_SOURCE).match(/documentRevisionCounterSql\(sql\.raw\('(d\.)?revision_seq'\)\)/g)?.length, 6)
   assert.match(DOCUMENTS_SOURCE, /select kind, status,[\s\S]*?documentRevisionCounterSql[\s\S]*?for update/)
   // Draft minting is attributable: the insert stamps the creating user, and
   // on_create flows settle before the writer ever receives a token.
