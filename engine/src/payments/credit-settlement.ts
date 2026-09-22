@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { db, withOrgTransaction } from "../platform/db.ts";
+import { db, withBypassContext, withOrgTransaction } from "../platform/db.ts";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { fromUnits, sum, toUnits } from "../money/money.ts";
 import { assertPeriodModulesOpen } from "../close/period-policy.ts";
@@ -188,11 +188,17 @@ export async function applyStandaloneCredits(
         sourceDocumentId: credit.sourceDocumentId,
       })),
     };
-    const priorOwner = (
-      await db.execute<{ org_id: string }>(sql`
+    // The claim reads ACROSS organizations through the sanctioned bypass
+    // context: under RLS the ambient org filter hides another tenant's
+    // application row, so without this the foreign-key detection never fires
+    // and the collision surfaces later as a raw primary-key violation — a
+    // correct refusal arriving as an internal error instead of the named
+    // 409. The row is never returned to the caller; only its org_id is.
+    const priorOwner = await withBypassContext(async () =>
+      (await db.execute<{ org_id: string }>(sql`
         select org_id from applications where id = ${input.idempotencyKey}
-      `)
-    ).rows[0]?.org_id;
+      `)).rows[0]?.org_id,
+    );
     if (priorOwner !== undefined) {
       if (priorOwner !== orgId) throw new CreditApplicationConflictError("foreign-key");
       const prior = (
