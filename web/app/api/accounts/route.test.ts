@@ -141,11 +141,6 @@ const mockSources = new Map<string, string>([
     "export function isUuid(value) { return /^[0-9a-f-]{36}$/i.test(value) }",
   ],
   [
-    "mock:json",
-    `export const jsonObject = {}
-     export async function parseJsonBody(request) { return { ok: true, data: await request.json() } }`,
-  ],
-  [
     "mock:accounts-lib",
     `export async function loadAccount(id, orgId) {
        const state = globalThis[Symbol.for('openbooks.accounts-route-test')]
@@ -161,10 +156,12 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
+// '@/lib/api/json' is not mocked: a parseJsonBody double can only return
+// { ok: true }, never the boundary refusals the route must enforce. The real
+// module loads through tsx.
 const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/platform/db.ts", "mock:db"],
   ["@openbooks/schema", "mock:schema"],
-  ["@/lib/api/json", "mock:json"],
   ["../../../lib/authz", "mock:authz"],
   ["../../../lib/features", "mock:features"],
   ["../../../lib/custom-fields", "mock:custom-fields"],
@@ -174,6 +171,8 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    // The real '@/lib/api/json' imports 'server-only', which is inert here.
+    if (specifier === "server-only") return { url: "data:text/javascript,export {}", shortCircuit: true };
     if (specifier === "@openbooks/engine/src/platform/canonical-json.ts") {
       return {
         url: new URL(

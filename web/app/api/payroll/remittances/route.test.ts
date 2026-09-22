@@ -19,13 +19,6 @@ const routeState: RouteState = { billCalls: [] }
 
 const mockSources = new Map<string, string>([
   [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(req) { return { ok: true, data: await req.json() } }
-    `,
-  ],
-  [
     'mock:feature-gates',
     `
       export async function guardFeaturePermission() {
@@ -63,7 +56,7 @@ const hooks = registerHooks({
     if (specifier === 'server-only') {
       return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
     }
-    if (specifier === '@/lib/api/json') return { url: 'mock:json', shortCircuit: true }
+    // '@/lib/api/json' is not mocked: never double the validation boundary.
     if (specifier === '@openbooks/engine/src/payroll/remittance.ts') {
       return { url: 'mock:payroll-remittance', shortCircuit: true }
     }

@@ -220,7 +220,7 @@ const routeHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier.includes('/lib/authz')) return { url: 'mock:project-route-authz', shortCircuit: true }
     if (specifier.includes('/lib/projects-gate')) return { url: 'mock:project-route-gate', shortCircuit: true }
-    if (specifier === '@/lib/api/json') return { url: 'mock:project-route-json', shortCircuit: true }
+    // '@/lib/api/json' is not mocked: never double the validation boundary.
     if (specifier === 'next/server') return { url: 'mock:project-route-next-server', shortCircuit: true }
     if (specifier === 'server-only') return { url: 'mock:server-only', shortCircuit: true }
     if (specifier === 'drizzle-orm') return { url: 'mock:drizzle', shortCircuit: true }
@@ -244,16 +244,6 @@ const routeHooks = registerHooks({
     }
     if (url === 'mock:project-route-gate') {
       return { format: 'module', source: 'export async function guardProjectsFeature() { return null }', shortCircuit: true }
-    }
-    if (url === 'mock:project-route-json') {
-      return {
-        format: 'module',
-        source: `
-          export const jsonObject = {}
-          export async function parseJsonBody(request) { return { ok: true, data: await request.json() } }
-        `,
-        shortCircuit: true,
-      }
     }
     if (url === 'mock:project-route-next-server') {
       return {

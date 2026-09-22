@@ -45,15 +45,6 @@ const SUBSIDIARY_A = '00000000-0000-4000-8000-000000000006'
 
 const mockSources = new Map<string, string>([
   [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
-  [
     'mock:feature-gates',
     `
       const state = globalThis[Symbol.for('openbooks.budget-actions-route-test')]
@@ -138,8 +129,8 @@ const mockSources = new Map<string, string>([
   ],
 ])
 
+// Never double the shared JSON validation boundary: the real module loads.
 const mockUrls = new Map<string, string>([
-  ['../../../../../lib/api/json', 'mock:json'],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['../../../../../lib/authz', 'mock:authz'],
   ['../../../../../lib/feature-gates', 'mock:feature-gates'],
