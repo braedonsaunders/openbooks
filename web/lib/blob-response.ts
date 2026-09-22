@@ -13,9 +13,11 @@ export interface ServableBlob {
 }
 
 /**
- * Build a cache-friendly `inline` response for a file blob, with a conditional
+ * Build a cache-friendly response for a file blob, with a conditional
  * (304) fast path so reopening a flyout — or an `<img>`/`<iframe>` re-render —
- * never re-downloads bytes the browser already holds.
+ * never re-downloads bytes the browser already holds. Inert types preview
+ * `inline`; active documents (xml/svg/html/xhtml) are served `attachment` so
+ * the browser never renders attacker-influenced markup on the app origin.
  *
  * - ETag is the immutable version id.
  * - `immutable: true` (a specific version was pinned via ?versionId=) caches
@@ -29,6 +31,24 @@ export interface ServableBlob {
  * safety (control chars, quotes, backslashes, non-ASCII stripped) with the
  * original UTF-8 name carried in RFC 5987 `filename*`.
  */
+/**
+ * Content types a browser can render as an active document. XML carrying an
+ * XHTML namespace renders as markup — running script under the app origin
+ * with the operator's session — and XSLT (`<?xml-stylesheet?>`) can turn any
+ * XML into HTML in some browsers; svg/html/xhtml are script-capable by
+ * construction. These are never served `inline`, no matter which caller
+ * stored them or what the uploader claimed. Everything else the cabinet
+ * accepts (pdf, raster images, text/plain, csv, office documents…) is inert
+ * under `nosniff` and stays inline so pdf/image previews keep working.
+ */
+export function isActiveContentType(contentType: string): boolean {
+  const base = contentType.split(';')[0]?.trim().toLowerCase() ?? '';
+  if (base === 'text/html' || base === 'application/xhtml+xml' || base === 'image/svg+xml') return true;
+  if (base === 'application/xml' || base === 'text/xml') return true;
+  if (base.endsWith('+xml')) return true;
+  return false;
+}
+
 export function blobResponse(
   req: Request,
   blob: ServableBlob,
@@ -49,12 +69,16 @@ export function blobResponse(
   const utf8Name = encodeURIComponent(blob.filename)
   const body = new Uint8Array(blob.bytes)
 
+  // Active documents download; inert bytes preview inline. The disposition
+  // is derived from the served type here — callers must not decide it.
+  const disposition = isActiveContentType(blob.contentType) ? 'attachment' : 'inline';
+
   return new NextResponse(body, {
     status: 200,
     headers: {
       'Content-Type': blob.contentType,
       'Content-Length': String(body.byteLength),
-      'Content-Disposition': `inline; filename="${asciiName}"; filename*=UTF-8''${utf8Name}`,
+      'Content-Disposition': `${disposition}; filename="${asciiName}"; filename*=UTF-8''${utf8Name}`,
       'X-Content-Type-Options': 'nosniff',
       'Cache-Control': cacheControl,
       ETag: etag,
