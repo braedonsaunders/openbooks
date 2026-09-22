@@ -456,7 +456,7 @@
       "removeSortAria": "Retirer le niveau de tri",
       "noColumnsSelected": "Aucune colonne sélectionnée — ajoutez-en au moins une.",
       "tabs": {
-        "source": "Source",
+        "source": "Données",
         "columns": "Colonnes",
         "grouping": "Regrouper",
         "sorting": "Trier",
