@@ -86,9 +86,11 @@ test("golden: Tax Tables B-D BR example £3,200 × 20% = £640.00", () => {
 // Mechanism 2: hand-worked cases (arithmetic shown, engine-independent)
 // ---------------------------------------------------------------------------
 
-test("hand-worked: monthly £4,000 1257L month 3, no priors → £171.50", () => {
-  // Free pay to date = 12,570 × 3/12 = £3,142.50. Cumulative pay £4,000.
-  // Taxable = 4,000 − 3,142.50 = £857.50. 20% = £171.50. Nothing paid yet.
+test("hand-worked: monthly £4,000 1257L month 3, no priors → £171.05", () => {
+  // Free pay to date = 12,579 × 3/12 = £3,144.75 (the CODE's allowance:
+  // 1257 × 10 + 9 — not the £12,570 Personal Allowance). Cumulative pay
+  // £4,000. Taxable = 4,000 − 3,144.75 = £855.25. 20% = £171.05.
+  // Nothing paid yet.
   const result = calculateGbPaye({
     code: parseGbTaxCode("1257L"),
     payDate: "2026-06-06",
@@ -99,7 +101,7 @@ test("hand-worked: monthly £4,000 1257L month 3, no priors → £171.50", () =>
     priorTaxPaid: "0",
     periodGrossPay: "4000",
   });
-  assert.equal(result.tax, "171.5000");
+  assert.equal(result.tax, "171.0500");
 });
 
 test("hand-worked: category-A employer NIC £300/wk → £30.60", () => {
@@ -133,10 +135,10 @@ test("hand-worked: employee NIC crosses PT and UEL", () => {
   );
 });
 
-test("hand-worked: full 2026/27 on £27,000 sums to £2,886.00", () => {
+test("hand-worked: full 2026/27 on £27,000 sums to £2,884.20", () => {
   // Twelve monthly £2,250 periods, cumulative 1257L. Each month deducts
-  // £240.50 (free 1,047.50/2,095.00/..., taxable 1,202.50/2,405.00/...);
-  // the year telescopes to the £14,430 × 20% golden above.
+  // £240.35 (free 1,048.25/2,096.50/..., taxable 1,201.75/2,403.50/...);
+  // the year telescopes to £14,421 (27,000 − 12,579) × 20% = £2,884.20.
   const code = parseGbTaxCode("1257L");
   let priorTaxable = "0.0000";
   let priorPaid = "0.0000";
@@ -152,13 +154,14 @@ test("hand-worked: full 2026/27 on £27,000 sums to £2,886.00", () => {
       periodPay: "2250", priorTaxablePay: priorTaxable, priorAddedPay: "0",
       priorTaxPaid: priorPaid, periodGrossPay: "2250",
     });
-    if (index === 0) assert.equal(result.tax, "240.5000");
-    assert.equal(result.tax, "240.5000", `month ${index + 1}`);
+    if (index === 0) assert.equal(result.tax, "240.3500");
+    assert.equal(result.tax, "240.3500", `month ${index + 1}`);
     total += BigInt(result.tax.replace(".", ""));
     priorTaxable = `${(Number(priorTaxable) + 2250).toFixed(4)}`;
     priorPaid = `${(Number(priorPaid) + Number(result.tax)).toFixed(4)}`;
   });
-  assert.equal((total / 10000n).toString(), "2886");
+  assert.equal((total / 10000n).toString(), "2884");
+  assert.equal(Number(total % 10000n), 2000);
 });
 
 test("hand-worked: K code caps the period deduction at half of gross pay", () => {
@@ -221,10 +224,11 @@ test("golden: pro-rated band tops match HMRC Tax Tables B-D Column 1", () => {
 
 test("golden: 1257L £10,000 in month 1 withholds ~£2,952, not ~£1,790", () => {
   // The defect this pins: pricing a month-1 period through the ANNUAL bands
-  // keeps all £8,952.50 (10,000 − 1,047.50) inside the £37,700 basic band and
-  // withholds £1,790.50. HMRC prices month 1 through the month-1 Column 1
+  // keeps all £8,951.75 (10,000 − 1,048.25) inside the £37,700 basic band and
+  // withholds £1,790.35. HMRC prices month 1 through the month-1 Column 1
   // (£3,142 basic, £10,429 higher — see the test above): 3,142 × 20% =
-  // £628.40 plus (8,952.50 − 3,142) = 5,810.50 × 40% = £2,324.20 → £2,952.60.
+  // £628.40 plus (8,951.75 − 3,142) = 5,809.75 × 40% = £2,323.90 → £2,952.30.
+  // (Free pay is the code's £12,579/12 = £1,048.25 — Tables A, PAYE70025.)
   const result = calculateGbPaye({
     code: parseGbTaxCode("1257L"),
     payDate: "2026-04-06",
@@ -235,15 +239,15 @@ test("golden: 1257L £10,000 in month 1 withholds ~£2,952, not ~£1,790", () =>
     priorTaxPaid: "0",
     periodGrossPay: "10000",
   });
-  assert.equal(result.tax, "2952.6000");
+  assert.equal(result.tax, "2952.3000");
 });
 
 test("hand-worked: month-7 cumulative higher earner, £5,000 a month", () => {
   // Six £5,000 months behind, £5,000 in month 7: cumulative pay £35,000,
-  // free pay to date 12,570 × 7/12 = £7,332.50, taxable £27,667.50. Month-7
+  // free pay to date 12,579 × 7/12 = £7,337.75, taxable £27,662.25. Month-7
   // Column 1 (ceiling(37,700 × 7/12) = 21,992 basic; ceiling(125,140 × 7/12)
-  // = 72,999 higher): 21,992 × 20% = £4,398.40 plus (27,667.50 − 21,992) =
-  // 5,675.50 × 40% = £2,270.20 → £6,668.60 cumulative; nothing paid yet.
+  // = 72,999 higher): 21,992 × 20% = £4,398.40 plus (27,662.25 − 21,992) =
+  // 5,670.25 × 40% = £2,268.10 → £6,666.50 cumulative; nothing paid yet.
   const result = calculateGbPaye({
     code: parseGbTaxCode("1257L"),
     payDate: "2026-10-06",
@@ -254,14 +258,14 @@ test("hand-worked: month-7 cumulative higher earner, £5,000 a month", () => {
     priorTaxPaid: "0",
     periodGrossPay: "5000",
   });
-  assert.equal(result.tax, "6668.6000");
+  assert.equal(result.tax, "6666.5000");
 });
 
 test("hand-worked: weekly W1 £2,500 prices through week-1 bands", () => {
-  // Period free 12,570/52 = £241.7307 (truncated at 1e-4); taxable
-  // £2,258.2693. Week-1 Column 1: basic £725, higher ceiling(125,140/52) =
-  // £2,407: 725 × 20% = £145.00 plus (2,258.2693 − 725) = 1,533.2693 × 40%
-  // = £613.3077 → £613.31 → £758.31.
+  // Period free 12,579/52 = £241.9038 (truncated at 1e-4); taxable
+  // £2,258.0962. Week-1 Column 1: basic £725, higher ceiling(125,140/52) =
+  // £2,407: 725 × 20% = £145.00 plus (2,258.0962 − 725) = 1,533.0962 × 40%
+  // = £613.2385 → £613.24 → £758.24.
   const result = calculateGbPaye({
     code: parseGbTaxCode("1257L W1"),
     payDate: "2026-04-08",
@@ -272,15 +276,15 @@ test("hand-worked: weekly W1 £2,500 prices through week-1 bands", () => {
     priorTaxPaid: "0",
     periodGrossPay: "2500",
   });
-  assert.equal(result.tax, "758.3100");
+  assert.equal(result.tax, "758.2400");
 });
 
-test("hand-worked: full 2026/27 on £60,000 telescopes to £11,432.00", () => {
+test("hand-worked: full 2026/27 on £60,000 telescopes to £11,428.40", () => {
   // Twelve monthly £5,000 periods, cumulative 1257L: the year must telescope
-  // to the annual liability on £47,430 (60,000 − 12,570): 37,700 × 20% =
-  // £7,540 plus 9,730 × 40% = £3,892 → £11,432.00. Month 12 prices through
-  // the annual bands exactly, so pro-rating changes the timing, never the
-  // year total.
+  // to the annual liability on £47,421 (60,000 − 12,579): 37,700 × 20% =
+  // £7,540 plus 9,721 × 40% = £3,888.40 → £11,428.40. Month 12 prices
+  // through the annual bands exactly, so pro-rating changes the timing,
+  // never the year total.
   const code = parseGbTaxCode("1257L");
   let priorTaxable = "0.0000";
   let priorPaid = "0.0000";
@@ -296,12 +300,12 @@ test("hand-worked: full 2026/27 on £60,000 telescopes to £11,432.00", () => {
       periodPay: "5000", priorTaxablePay: priorTaxable, priorAddedPay: "0",
       priorTaxPaid: priorPaid, periodGrossPay: "5000",
     });
-    if (index === 0) assert.equal(result.tax, "952.6000");
+    if (index === 0) assert.equal(result.tax, "952.3000");
     total += BigInt(result.tax.replace(".", ""));
     priorTaxable = `${(Number(priorTaxable) + 5000).toFixed(4)}`;
     priorPaid = `${(Number(priorPaid) + Number(result.tax)).toFixed(4)}`;
   });
-  assert.equal(total, 1_143_200_00n);
+  assert.equal(total, 1_142_840_00n);
 });
 
 test("hand-worked: non-cumulative K code prices added pay through month-1 bands", () => {
@@ -324,7 +328,7 @@ test("hand-worked: non-cumulative K code prices added pay through month-1 bands"
 
 test("hand-worked: W1 ignores year to date by definition", () => {
   // 1257L W1 on £2,250 with £9,999.99 already (wrongly) paid: period free
-  // 1,047.50, taxable 1,202.50, due £240.50 — priors untouched.
+  // 1,048.25, taxable 1,201.75, due £240.35 — priors untouched.
   const result = calculateGbPaye({
     code: parseGbTaxCode("1257L W1"),
     payDate: "2027-03-06",
@@ -335,7 +339,7 @@ test("hand-worked: W1 ignores year to date by definition", () => {
     priorTaxPaid: "9999.99",
     periodGrossPay: "2250",
   });
-  assert.equal(result.tax, "240.5000");
+  assert.equal(result.tax, "240.3500");
 });
 
 // ---------------------------------------------------------------------------
@@ -479,10 +483,10 @@ test("sweep: PAYE and NIC never decrease as pay rises, 0 to £20,000 monthly", (
   }
   // The top of the sweep lands in the additional band. A W1 period prices
   // through MONTH-1 bands (Column 1: basic £3,142, higher £10,429):
-  // £20,000 − £1,047.50 = £18,952.50 taxable: 3,142 × 20% = £628.40 plus
-  // (10,429 − 3,142) = 7,287 × 40% = £2,914.80 plus (18,952.50 − 10,429) =
-  // 8,523.50 × 45% = £3,835.575 → £3,835.57 (half down) → £7,378.77.
-  assert.equal(lastTax, "7378.7700");
+  // £20,000 − £1,048.25 = £18,951.75 taxable: 3,142 × 20% = £628.40 plus
+  // (10,429 − 3,142) = 7,287 × 40% = £2,914.80 plus (18,951.75 − 10,429) =
+  // 8,522.75 × 45% = £3,835.2375 → £3,835.24 → £7,378.44.
+  assert.equal(lastTax, "7378.4400");
 });
 
 // ---------------------------------------------------------------------------

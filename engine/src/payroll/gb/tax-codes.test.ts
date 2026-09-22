@@ -12,18 +12,18 @@ import test from "node:test";
 import { PayrollPackError } from "../payroll-error.ts";
 import { parseGbTaxCode } from "./tax-codes.ts";
 
-test("1257L parses cumulative with the £12,570 allowance", () => {
+test("1257L parses cumulative with £12,579 of free pay (code x 10 + 9)", () => {
   assert.deepEqual(parseGbTaxCode("1257L"), {
-    kind: "suffix", allowanceAnnual: "12570", welsh: false, scottish: false, nonCumulative: false,
+    kind: "suffix", freePayAnnual: "12579", welsh: false, scottish: false, nonCumulative: false,
   });
   assert.deepEqual(parseGbTaxCode(" 1257l "), {
-    kind: "suffix", allowanceAnnual: "12570", welsh: false, scottish: false, nonCumulative: false,
+    kind: "suffix", freePayAnnual: "12579", welsh: false, scottish: false, nonCumulative: false,
   });
 });
 
-test("S1257L parses Scottish cumulative with the same £12,570 reserved allowance", () => {
+test("S1257L parses Scottish cumulative with the same £12,579 of free pay", () => {
   assert.deepEqual(parseGbTaxCode("S1257L"), {
-    kind: "suffix", allowanceAnnual: "12570", welsh: false, scottish: true, nonCumulative: false,
+    kind: "suffix", freePayAnnual: "12579", welsh: false, scottish: true, nonCumulative: false,
   });
   for (const code of ["S1257L W1", "S1257L M1", "S1257L X", "S1257LW1"]) {
     const parsed = parseGbTaxCode(code);
@@ -57,19 +57,19 @@ test("flat codes price whole pay at their HMRC rate", () => {
 
 test("Welsh C-prefix codes alias the identical rUK arithmetic", () => {
   assert.deepEqual(parseGbTaxCode("C1257L"), {
-    kind: "suffix", allowanceAnnual: "12570", welsh: true, scottish: false, nonCumulative: false,
+    kind: "suffix", freePayAnnual: "12579", welsh: true, scottish: false, nonCumulative: false,
   });
   assert.deepEqual(parseGbTaxCode("CBR"), { kind: "flat", rate: "0.20", welsh: true, scottish: false });
   assert.deepEqual(parseGbTaxCode("CD0"), { kind: "flat", rate: "0.40", welsh: true, scottish: false });
   assert.deepEqual(parseGbTaxCode("CD1"), { kind: "flat", rate: "0.45", welsh: true, scottish: false });
   assert.deepEqual(parseGbTaxCode("C0T"), {
-    kind: "suffix", allowanceAnnual: "0", welsh: true, scottish: false, nonCumulative: false,
+    kind: "suffix", freePayAnnual: "0", welsh: true, scottish: false, nonCumulative: false,
   });
 });
 
 test("0T, NT and K codes parse", () => {
   assert.deepEqual(parseGbTaxCode("0T"), {
-    kind: "suffix", allowanceAnnual: "0", welsh: false, scottish: false, nonCumulative: false,
+    kind: "suffix", freePayAnnual: "0", welsh: false, scottish: false, nonCumulative: false,
   });
   assert.deepEqual(parseGbTaxCode("NT"), { kind: "none" });
   assert.deepEqual(parseGbTaxCode("K475"), {

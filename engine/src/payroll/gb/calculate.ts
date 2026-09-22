@@ -336,13 +336,21 @@ export function gbTaxWeekNumber(payDate: string, yearStart: string = GB_TAX_YEAR
   return Math.floor((day - start) / (7 * 86_400_000)) + 1;
 }
 
-/** Cumulative free pay for a standard-allowance code: allowance × elapsed / P, capped at annual. */
+/**
+ * Cumulative free pay for a suffix code: the CODE's annual free pay
+ * (number × 10 + 9 — 1257L carries £12,579, not the £12,570 Personal
+ * Allowance; see `freePayAnnual`) × elapsed / P, capped at annual. The
+ * table's personal allowance never enters: today only 1257L/0T parse so the
+ * two coincide all but £9, but the code is authoritative (PAYE70025: free
+ * pay "is a proportion of the employee's maximum tax allowance which is
+ * reflected in the code").
+ */
 function cumulativeFreePayUnits(
   periodsPerYear: number,
   elapsed: number,
-  tables: GbYearTables = GB_2026_TABLES,
+  freePayAnnual: string,
 ): bigint {
-  const annual = annualUnits(tables.personalAllowanceAnnual);
+  const annual = annualUnits(freePayAnnual);
   const free = (annual * BigInt(elapsed)) / BigInt(periodsPerYear);
   return free > annual ? annual : free;
 }
@@ -484,7 +492,7 @@ export function calculateGbPaye(input: {
         periodAddedPay: fromUnits(added),
       };
     }
-    const allowance = code.kind === "suffix" ? toUnits(code.allowanceAnnual) : 0n;
+    const allowance = code.kind === "suffix" ? toUnits(code.freePayAnnual) : 0n;
     const free = allowance / BigInt(periodsPerYear);
     const taxable = period - free;
     const tax = gbRoundPennyUnits(bandLiability(taxable < 0n ? 0n : taxable, 1));
@@ -509,9 +517,11 @@ export function calculateGbPaye(input: {
       periodAddedPay: fromUnits(addedPeriod < 0n ? 0n : addedPeriod),
     };
   }
-  const free = code.allowanceAnnual === "0"
+  // Flat, none and K codes all returned above: only a suffix code reaches
+  // here, so its own free-pay annual prices (never the table's allowance).
+  const free = code.freePayAnnual === "0"
     ? 0n
-    : cumulativeFreePayUnits(periodsPerYear, elapsed, tables);
+    : cumulativeFreePayUnits(periodsPerYear, elapsed, code.freePayAnnual);
   const cumPay = priorPay + period;
   const cumTaxable = cumPay - free;
   const cumLiability = gbRoundPennyUnits(bandLiability(cumTaxable < 0n ? 0n : cumTaxable, elapsed));

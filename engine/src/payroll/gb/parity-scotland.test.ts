@@ -107,10 +107,11 @@ test("golden: S1257L on £27,000 prices £14,430 of taxable income", () => {
 // Mechanism 2: hand-worked cases (arithmetic shown, engine-independent)
 // ---------------------------------------------------------------------------
 
-test("hand-worked: monthly £4,000 S1257L month 3, no priors → £162.92", () => {
-  // Free pay to date = 12,570 × 3/12 = £3,142.50. Cumulative pay £4,000.
-  // Taxable = 4,000 − 3,142.50 = £857.50, all in the 19% starter band:
-  // 857.50 × 19% = £162.925 → £162.92 (half down). Nothing paid yet.
+test("hand-worked: monthly £4,000 S1257L month 3, no priors → £162.50", () => {
+  // Free pay to date = 12,579 × 3/12 = £3,144.75 (the CODE's allowance).
+  // Cumulative pay £4,000. Taxable = 4,000 − 3,144.75 = £855.25, all in the
+  // 19% starter band (month-3 starter top £992): 855.25 × 19% = £162.4975
+  // → £162.50. Nothing paid yet.
   const result = calculateGbPaye({
     code: parseGbTaxCode("S1257L"),
     payDate: "2026-06-06",
@@ -121,7 +122,7 @@ test("hand-worked: monthly £4,000 S1257L month 3, no priors → £162.92", () =
     priorTaxPaid: "0",
     periodGrossPay: "4000",
   });
-  assert.equal(result.tax, "162.9200");
+  assert.equal(result.tax, "162.5000");
 });
 
 test("hand-worked: intermediate/higher boundary £31,092 vs £31,093", () => {
@@ -132,7 +133,7 @@ test("hand-worked: intermediate/higher boundary £31,092 vs £31,093", () => {
   assert.equal(gbSctLiabilityUnits(3_109_300_00n), 632_051_00n);
 });
 
-test("hand-worked: full 2026/27 on £27,000 S1257L telescopes to £2,846.33", () => {
+test("hand-worked: full 2026/27 on £27,000 S1257L telescopes to £2,844.53", () => {
   // Twelve monthly £2,250 periods, cumulative S1257L from zero priors: the
   // period dues telescope to the £14,430 × bands golden above.
   const code = parseGbTaxCode("S1257L");
@@ -151,15 +152,16 @@ test("hand-worked: full 2026/27 on £27,000 S1257L telescopes to £2,846.33", ()
       priorTaxPaid: priorPaid, periodGrossPay: "2250",
     });
     // Month 1 prices through the month-1 Column 1 (starter £331, basic
-    // £1,413): 331 × 19% = £62.89 plus (1,202.50 − 331) = 871.50 × 20% =
-    // £174.30 → £237.19. The year still telescopes to the annual £2,846.33.
-    if (index === 0) assert.equal(result.tax, "237.1900");
+    // £1,413): 331 × 19% = £62.89 plus (1,201.75 − 331) = 870.75 × 20% =
+    // £174.15 → £237.04. The year still telescopes to the annual £2,844.53
+    // (£14,421 at the Scottish starter/basic rates).
+    if (index === 0) assert.equal(result.tax, "237.0400");
     total += BigInt(result.tax.replace(".", ""));
     priorTaxable = `${(Number(priorTaxable) + 2250).toFixed(4)}`;
     priorPaid = `${(Number(priorPaid) + Number(result.tax)).toFixed(4)}`;
   });
-  assert.equal((total / 10000n).toString(), "2846");
-  assert.equal(Number(total % 10000n), 3300);
+  assert.equal((total / 10000n).toString(), "2844");
+  assert.equal(Number(total % 10000n), 5300);
 });
 
 test("hand-worked: Scottish higher is not rUK higher — SD1 vs D0 diverge", () => {
@@ -193,12 +195,12 @@ test("hand-worked: Scottish higher is not rUK higher — SD1 vs D0 diverge", () 
 });
 
 test("golden: S1257L £10,000 in month 1 prices through month-1 Scottish bands", () => {
-  // Free pay 1,047.50, taxable £8,952.50. Month-1 Column 1 (ceiling of each
+  // Free pay 1,048.25, taxable £8,951.75. Month-1 Column 1 (ceiling of each
   // 2026/27 Scottish band / 12: starter £331, basic £1,413, intermediate
   // £2,591, higher £5,203, advanced £10,429 — the starter pin is asserted
   // below): 331 × 19% = £62.89 plus 1,082 × 20% = £216.40 plus 1,178 × 21% =
-  // £247.38 plus 2,612 × 42% = £1,097.04 plus (8,952.50 − 5,203) = 3,749.50
-  // × 45% = £1,687.275 → £1,687.27 (half down) → £3,310.98.
+  // £247.38 plus 2,612 × 42% = £1,097.04 plus (8,951.75 − 5,203) = 3,748.75
+  // × 45% = £1,686.9375 → £1,686.94 → £3,310.65.
   // (Bands: employer rates page Scotland section, cross-checked to the pound
   // against Tax Tables B-D 2026/27 PDF p.3 — see GB_SCT_BANDS. Method:
   // Taxable Pay Tables B-D "Manual Method" Column 1, April 2023 edition
@@ -213,16 +215,16 @@ test("golden: S1257L £10,000 in month 1 prices through month-1 Scottish bands",
     priorTaxPaid: "0",
     periodGrossPay: "10000",
   });
-  assert.equal(result.tax, "3310.9800");
+  assert.equal(result.tax, "3310.6500");
   // The 2026/27 starter pin itself: ceiling(3,967/12) = £331.
   assert.equal(gbPeriodicBandTopUnits("3967", 12, 1), 33_100_00n);
 });
 
 test("hand-worked: S1257L W1 ignores year to date by definition", () => {
   // S1257L W1 on £2,250 with £9,999.99 already (wrongly) paid: period free
-  // 1,047.50, taxable 1,202.50, through the MONTH-1 bands (starter £331,
-  // basic £1,413): 331 × 19% = £62.89 plus 871.50 × 20% = £174.30 →
-  // £237.19 — priors untouched.
+  // 1,048.25, taxable 1,201.75, through the MONTH-1 bands (starter £331,
+  // basic £1,413): 331 × 19% = £62.89 plus 870.75 × 20% = £174.15 →
+  // £237.04 — priors untouched.
   const result = calculateGbPaye({
     code: parseGbTaxCode("S1257L W1"),
     payDate: "2027-03-06",
@@ -233,7 +235,7 @@ test("hand-worked: S1257L W1 ignores year to date by definition", () => {
     priorTaxPaid: "9999.99",
     periodGrossPay: "2250",
   });
-  assert.equal(result.tax, "237.1900");
+  assert.equal(result.tax, "237.0400");
 });
 
 test("NIC is nation-blind: one UK-wide schedule beside either code", () => {
@@ -314,9 +316,9 @@ test("sweep: Scottish PAYE never decreases as pay rises, 0 to £20,000 monthly",
   }
   // A W1 period prices through the MONTH-1 bands (starter £331, basic
   // £1,413, intermediate £2,591, higher £5,203, advanced £10,429):
-  // £20,000 − £1,047.50 = £18,952.50 taxable: 331 × 19% = £62.89 plus
+  // £20,000 − £1,048.25 = £18,951.75 taxable: 331 × 19% = £62.89 plus
   // 1,082 × 20% = £216.40 plus 1,178 × 21% = £247.38 plus 2,612 × 42% =
   // £1,097.04 plus (10,429 − 5,203) = 5,226 × 45% = £2,351.70 plus
-  // (18,952.50 − 10,429) = 8,523.50 × 48% = £4,091.28 → £8,066.69.
-  assert.equal(lastTax, "8066.6900");
+  // (18,951.75 − 10,429) = 8,522.75 × 48% = £4,090.92 → £8,066.33.
+  assert.equal(lastTax, "8066.3300");
 });
