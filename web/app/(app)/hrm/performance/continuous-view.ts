@@ -1,5 +1,7 @@
 import 'server-only'
 
+import type { ModuleHomeTab } from '../../../../components/module-home/tab-types'
+
 import { getTranslations } from 'next-intl/server'
 import {
   badge,
@@ -49,7 +51,7 @@ export interface ContinuousData {
   tab: ContinuousTab
   tabOptions: { value: string; label: string }[]
   /** The tabs as the shared subtab strip reads them. */
-  viewTabs: { href: string; label: string; active: boolean }[]
+  viewTabs: ModuleHomeTab[]
   showCalibration: boolean
   showTalent: boolean
   calibration: {
