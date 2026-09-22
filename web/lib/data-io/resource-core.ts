@@ -21,7 +21,13 @@ import {
   type ResourceRefTarget,
   type WriteOutcome,
 } from './types'
-export const MAX_EXPORT_ROWS = 50_000
+
+/**
+ * Shared export cap, error, and gate live in the dependency-free
+ * ./export-cap so unit doubles can re-export the real implementation
+ * instead of copying it. Re-exported here to preserve existing imports.
+ */
+export { enforceExportRowLimit, ExportRowLimitError, MAX_EXPORT_ROWS } from './export-cap'
 export interface ReadResult {
   fields: ResourceField[]
   /** Ordered export columns (may include keys not in `fields`, e.g. record_number). */

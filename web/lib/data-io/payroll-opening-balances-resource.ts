@@ -23,6 +23,7 @@ import {
 } from '@openbooks/engine/src/payroll/entitlements.ts'
 import type { CellValue, ResourceDescriptor, ResourceField, WriteOutcome } from './types'
 import type { DataResource, WriteCtx } from './resources'
+import { enforceExportRowLimit, MAX_EXPORT_ROWS } from './resource-core'
 import { employeeWriteScopeError } from './write-scope'
 
 /**
@@ -41,8 +42,8 @@ import { employeeWriteScopeError } from './write-scope'
  * carry-in a committed run already consumed.
  */
 
-const MAX_EXPORT_ROWS = 50_000
-
+// Row cap is the canonical MAX_EXPORT_ROWS from ./resource-core (a second
+// local copy would let the two caps drift, silently reintroducing this bug).
 export const PAYROLL_OPENING_BALANCES_KEY = 'payroll-opening-balances'
 
 export const PAYROLL_OPENING_BALANCES_DESCRIPTOR: ResourceDescriptor = {
@@ -204,7 +205,9 @@ export function payrollOpeningBalancesResource(orgId: string): DataResource {
           left join employee_roles er on er.party_id = p.id and er.org_id = b.org_id
          where b.org_id = ${orgId}
          order by b.tax_year desc, p.display_name
-         limit ${MAX_EXPORT_ROWS}`)) as { rows: Record<string, CellValue>[] }
+         limit ${MAX_EXPORT_ROWS + 1}`)) as { rows: Record<string, CellValue>[] }
+      // Sentinel read: refuse rather than truncate a complete-looking file.
+      enforceExportRowLimit(result.rows, PAYROLL_OPENING_BALANCES_DESCRIPTOR.label)
 
       // Component openings pivot onto their parent row. Joining them in SQL
       // would multiply the rows; the export is one row per carry-in.
@@ -485,7 +488,9 @@ export function payrollOpeningEntitlementsResource(orgId: string): DataResource 
           left join employee_roles er on er.party_id = p.id and er.org_id = l.org_id
          where l.org_id = ${orgId} and l.kind = 'opening'
          order by pl.code, p.display_name
-         limit ${MAX_EXPORT_ROWS}`)) as { rows: Record<string, CellValue>[] }
+         limit ${MAX_EXPORT_ROWS + 1}`)) as { rows: Record<string, CellValue>[] }
+      // Sentinel read: refuse rather than truncate a complete-looking file.
+      enforceExportRowLimit(result.rows, PAYROLL_OPENING_ENTITLEMENTS_DESCRIPTOR.label)
       return { fields: resourceFields, columns, rows: result.rows }
     },
     async write(rows, _mode, ctx: WriteCtx) {

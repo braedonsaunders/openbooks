@@ -51,7 +51,9 @@ const mockSources = new Map<string, string>([
   [
     'mock:resource-core',
     `
-      export const MAX_EXPORT_ROWS = 50_000
+      // The pure cap/gate re-export the REAL ./export-cap.ts through this
+      // double — never copied. Only impure surfaces are stubbed below.
+      export * from '${new URL('./export-cap.ts', import.meta.url).href}'
 
       export class RefResolver {
         async resolveId() {

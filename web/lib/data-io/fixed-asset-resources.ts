@@ -7,6 +7,8 @@ import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.
 import { cmp, normalizeMoney, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { canonicalDecimal } from '../exact-decimal'
 import {
+  enforceExportRowLimit,
+  MAX_EXPORT_ROWS,
   RefResolver,
   subsidiaryReadFilter,
   type DataResource,
@@ -35,8 +37,8 @@ import type { CellValue, ResourceDescriptor, ResourceField, WriteOutcome } from 
  * and pre-cutover months are never caught up or double counted.
  */
 
-const MAX_EXPORT_ROWS = 50_000
-
+// Row cap is the canonical MAX_EXPORT_ROWS from ./resource-core (a second
+// local copy would let the two caps drift, silently reintroducing this bug).
 export const FIXED_ASSETS_KEY = 'fixed-assets'
 
 export const FIXED_ASSETS_DESCRIPTOR: ResourceDescriptor = {
@@ -467,7 +469,10 @@ export function fixedAssetsResource(orgId: string): DataResource {
          where a.org_id = ${orgId}
            ${subsidiaryReadFilter(sql`a.subsidiary_id`, readCtx?.allowedSubsidiaryIds)}
          order by a.asset_number
-         limit ${MAX_EXPORT_ROWS}`)).rows
+         limit ${MAX_EXPORT_ROWS + 1}`)).rows
+      // Sentinel read: one row past the cap proves overflow; exactly at the
+      // cap proves completeness. Refuse rather than truncate silently.
+      enforceExportRowLimit(rows, FIXED_ASSETS_DESCRIPTOR.label)
       return { fields: FIELDS, columns: FIELDS.map((f) => ({ key: f.key, label: f.label })), rows }
     },
     async write(rows, mode, ctx: WriteCtx) {

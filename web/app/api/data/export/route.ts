@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { can, guardPermission } from '../../../../lib/authz'
 import { getResource } from '../../../../lib/data-io/resources'
+import { ExportRowLimitError } from '../../../../lib/data-io/resource-core'
+import type { CellValue } from '../../../../lib/data-io/types'
 import { toCsv, toJson, toXlsx } from '../../../../lib/data-io/serialize'
 import { csvResponse, safeName, xlsxResponse } from '../../../../lib/export'
 import { EXPORT_FORMATS, type ExportFormat } from '../../../../lib/data-io/types'
@@ -41,9 +43,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
 
-  const { columns, rows } = await resource.read({
-    allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
-  })
+  // An over-cap resource refuses instead of streaming a truncated file as
+  // complete: the client already checks res.ok before reading the body and
+  // surfaces err.error, so the refusal reaches the operator by name.
+  let columns: { key: string; label: string }[]
+  let rows: Record<string, CellValue>[]
+  try {
+    const result = await resource.read({
+      allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+    })
+    columns = result.columns
+    rows = result.rows
+  } catch (error) {
+    if (error instanceof ExportRowLimitError) {
+      return NextResponse.json({ error: error.message }, { status: 413 })
+    }
+    throw error
+  }
   const selected =
     Array.isArray(body.columns) && body.columns.length > 0
       ? columns.filter((c) => body.columns!.includes(c.key))

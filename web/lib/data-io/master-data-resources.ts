@@ -10,6 +10,7 @@ import { toSnake } from '../setup/registry'
 import { coerceBoolean, UUID_RE } from '../setup/coerce'
 import { loadFieldDefs, validateCustomValues, type CustomFieldDef } from '../custom-fields'
 import {
+  enforceExportRowLimit,
   exportCell,
   MAX_EXPORT_ROWS,
   orgFeatureEnabled,
@@ -291,7 +292,10 @@ export function masterResource(m: MasterEntity, orgId: string): DataResource {
           from ${sql.raw(m.table)}
          where org_id = ${orgId}
          order by ${sql.raw(m.naturalKey === 'shortCode' ? 'display_name' : m.cols[0]!.column)}
-         limit ${MAX_EXPORT_ROWS}`)) as { rows: Record<string, unknown>[] }
+         limit ${MAX_EXPORT_ROWS + 1}`)) as { rows: Record<string, unknown>[] }
+      // Sentinel read: one row past the cap proves overflow; exactly at the
+      // cap proves completeness. Refuse rather than truncate silently.
+      enforceExportRowLimit(result.rows, masterDescriptor(m).label)
       const customDefs = fields.filter((f) => f.custom)
       const out: Record<string, CellValue>[] = []
       for (const raw of result.rows) {

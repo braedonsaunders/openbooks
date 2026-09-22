@@ -12,6 +12,7 @@ import { loadRecordTypeByKey, buildSearchText } from '../records'
 import { lintRecordFields, recordNumberPrefix, stripUnknownData, validateRecordData, withComputedFormulas } from '../record-schema'
 import { auditSetupChange } from '../setup/audit'
 import {
+  enforceExportRowLimit,
   exportCell,
   MAX_EXPORT_ROWS,
   RefResolver,
@@ -168,9 +169,12 @@ export function recordResource(orgId: string, typeKey: string, sections: FormSec
         select record_number, status, data from custom_records
          where org_id = ${orgId} and type_key = ${typeKey}
            ${subsidiaryScope}
-         order by record_number limit ${MAX_EXPORT_ROWS}`)) as {
+         order by record_number limit ${MAX_EXPORT_ROWS + 1}`)) as {
         rows: { record_number: string; status: string; data: FieldValueMap }[]
       }
+      // Sentinel read: one row past the cap proves overflow; exactly at the
+      // cap proves completeness. Refuse rather than truncate silently.
+      enforceExportRowLimit(result.rows, descriptor.label)
       const out: Record<string, CellValue>[] = []
       for (const rec of result.rows) {
         const row: Record<string, CellValue> = { record_number: rec.record_number, status: rec.status }

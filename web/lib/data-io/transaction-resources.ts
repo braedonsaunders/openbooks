@@ -11,6 +11,7 @@ import { nextDocumentNumber } from "../bills.ts";
 import { createPermission, postPermission, readPermission, type DocKindConfig } from '../document-kinds'
 import { canonicalDecimal } from '../exact-decimal'
 import {
+  enforceExportRowLimit,
   MAX_EXPORT_ROWS,
   orgFeatureEnabled,
   RefResolver,
@@ -211,7 +212,7 @@ export function transactionResource(
          where d.org_id = ${orgId} and d.kind = ${cfg.kind}
            ${transactionSubsidiaryFilter(subsidiaryScope)}
          order by d.document_date desc, d.document_number
-         limit ${MAX_EXPORT_ROWS}`)) as {
+         limit ${MAX_EXPORT_ROWS + 1}`)) as {
         rows: {
           id: string
           document_number: string
@@ -225,6 +226,9 @@ export function transactionResource(
           subsidiary: string | null
         }[]
       }
+      // Sentinel read: one row past the cap proves overflow; exactly at the
+      // cap proves completeness. Refuse rather than truncate silently.
+      enforceExportRowLimit(docs.rows, transactionDescriptor(cfg).label)
       const rows: Record<string, CellValue>[] = []
       for (const d of docs.rows) {
         const lineRows = (await db.execute(sql`

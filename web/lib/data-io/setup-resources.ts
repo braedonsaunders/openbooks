@@ -12,6 +12,7 @@ import { buildRow, idColumn } from '../setup/coerce'
 import { isSetupBookEntity, saveSetupBook } from '../setup/books'
 import { auditSetupChange as audit } from '../setup/audit'
 import {
+  enforceExportRowLimit,
   exportCell,
   MAX_EXPORT_ROWS,
   RefResolver,
@@ -67,16 +68,22 @@ function refNaturalKey(ref: string): string {
 async function jsonBackedRows(
   source: NonNullable<SetupEntity['dataSource']>,
   orgId: string,
+  resourceLabel: string,
 ): Promise<Record<string, unknown>[]> {
   switch (source) {
     case 'extension-settings':
-      return (await loadExtensionSettingRows(orgId)).slice(0, MAX_EXPORT_ROWS) as Record<string, unknown>[]
+      // In-memory sources have no LIMIT clause, so the sentinel gate runs
+      // here: refuse rather than slice silently.
+      return enforceExportRowLimit(
+        (await loadExtensionSettingRows(orgId)) as Record<string, unknown>[],
+        resourceLabel,
+      )
     case 'home-announcements': {
       // The exporter reads raw[toSnake(fieldKey)]; this loader hands back
       // the camelCase record shape, so the keys are translated here and
       // not in the domain module.
       const rows = await loadHomeAnnouncementRows(orgId)
-      return rows.slice(0, MAX_EXPORT_ROWS).map((row) => {
+      return enforceExportRowLimit(rows, resourceLabel).map((row) => {
         const out: Record<string, unknown> = {}
         for (const [key, value] of Object.entries(row)) out[toSnake(key)] = value
         return out
@@ -145,14 +152,18 @@ export function setupResource(entity: SetupEntity, orgId: string): DataResource 
       const fields = setupFields(await gatedSetupEntity(entity, orgId))
       const resolver = new RefResolver(orgId)
       const cols = fields.map((f) => sql.raw(toSnake(f.key)))
+      const resourceLabel = setupDescriptor(entity).label
       const result = entity.dataSource
-        ? { rows: await jsonBackedRows(entity.dataSource, orgId) }
+        ? { rows: await jsonBackedRows(entity.dataSource, orgId, resourceLabel) }
         : (await db.execute(sql`
         select ${sql.join(cols, sql`, `)}
           from ${sql.raw(entity.table)}
          ${entity.orgScoped ? sql`where org_id = ${orgId}` : sql``}
          order by ${sql.raw(idColumn(entity))}
-         limit ${MAX_EXPORT_ROWS}`)) as { rows: Record<string, unknown>[] }
+         limit ${MAX_EXPORT_ROWS + 1}`)) as { rows: Record<string, unknown>[] }
+      // Sentinel read: one row past the cap proves overflow; exactly at the
+      // cap proves completeness. Refuse rather than truncate silently.
+      if (!entity.dataSource) enforceExportRowLimit(result.rows, resourceLabel)
       const out: Record<string, CellValue>[] = []
       for (const raw of result.rows) {
         const row: Record<string, CellValue> = {}
