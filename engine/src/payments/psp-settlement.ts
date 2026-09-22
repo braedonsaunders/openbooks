@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "../platform/db.ts";
+import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { assertPeriodModulesOpen } from "../close/period-policy.ts";
 import { cmp, fromUnits, isZero, neg, toUnits } from "../money/money.ts";
 import { sealJson } from "../platform/secrets.ts";
@@ -648,6 +649,17 @@ export async function importSettlementBatch(
   }
   if (parsed.lines.length === 0) {
     throw new PspSettlementError("settlement batch has no evidence lines");
+  }
+  // Provider parsers forward closed_at/date/fallback timestamps as a sliced
+  // calendar day without checking calendar reality, so an impossible day
+  // would otherwise die in Postgres as a raw cast failure (a 500 at the
+  // route, which maps only PspSettlementError to 422). Fail closed here —
+  // the single pre-write choke point every provider and direct caller
+  // passes through — with the same shape the reverse action requires.
+  if (!isIsoCalendarDate(parsed.settlementDate)) {
+    throw new PspSettlementError(
+      "settlement date must be a real calendar date (YYYY-MM-DD)",
+    );
   }
   const currency = parsed.currency.trim().toUpperCase();
   if (!/^[A-Z]{3}$/.test(currency)) {
