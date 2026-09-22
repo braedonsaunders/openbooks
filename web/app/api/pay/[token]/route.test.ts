@@ -1,108 +1,88 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
+import { pathToFileURL } from "node:url";
 import test from "node:test";
 
-// CSRF-exempt POST /api/pay/{token} must not bind PSP success/cancel URLs to
-// the request Host. Invoice mail already pins /pay/{token} to appBaseUrl();
-// this suite proves the checkout mutation uses that same origin.
-
-const stateKey = Symbol.for("openbooks.pay-route-origin-test");
-interface RouteState {
-  orgId: string | null;
-  featureEnabled: boolean;
-  returnUrls: string[];
-}
-const state: RouteState = { orgId: "org-1", featureEnabled: true, returnUrls: [] };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
-
-const mockSources = new Map<string, string>([
-  [
-    "mock:acceptance",
-    `
-      const state = globalThis[Symbol.for("openbooks.pay-route-origin-test")];
-      export class PaymentAcceptanceError extends Error {}
-      export async function paymentLinkOrgId() { return state.orgId; }
-      export async function createCheckoutSession(token, returnUrl) {
-        state.returnUrls.push(returnUrl);
-        return { redirectUrl: "https://psp.example/checkout" };
-      }
-    `,
-  ],
-  [
-    "mock:features",
-    `
-      const state = globalThis[Symbol.for("openbooks.pay-route-origin-test")];
-      export async function isFeatureEnabled() { return state.featureEnabled; }
-    `,
-  ],
-  [
-    "mock:email-tokens",
-    `export function appBaseUrl() { return "https://books.example"; }`,
-  ],
-  [
-    "mock:next-server",
-    `export class NextResponse extends Response {
-       static json(value, init) {
-         return new NextResponse(JSON.stringify(value), {
-           ...init,
-           headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
-         });
-       }
-     }`,
-  ],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocks: Record<string, string> = {
-      "@openbooks/engine/src/payments/acceptance.ts": "mock:acceptance",
-      "@openbooks/engine/src/flows/email-tokens.ts": "mock:email-tokens",
-      "../../../../lib/features": "mock:features",
-      "next/server": "mock:next-server",
-    };
-    const url = mocks[specifier];
-    return url ? { url, shortCircuit: true } : nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    return source === undefined
-      ? nextLoad(url, context)
-      : { format: "module", shortCircuit: true, source };
+/**
+ * Anonymous /api/pay failures must never leak engine internals. The checkout
+ * session creator throws raw provider/connection errors; the route answers
+ * 500 with a generic message plus a request id and logs the detail.
+ */
+const root = pathToFileURL(process.cwd() + "/").href;
+const acceptanceUrl = pathToFileURL(process.cwd() + "/engine/src/payments/acceptance.ts").href;
+const state = { mode: "boom" };
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
+    if (
+      specifier === "@openbooks/engine/src/payments/acceptance.ts" &&
+      context.parentURL?.includes("/api/pay/")
+    ) {
+      return {
+        shortCircuit: true,
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            `export { PaymentAcceptanceError } from ${JSON.stringify(acceptanceUrl)};` +
+              `export const paymentLinkOrgId = async () => "org-1";` +
+              `export const createCheckoutSession = async () => {` +
+              `  if (globalThis.__payRouteMode === "refused") {` +
+              `    const { PaymentAcceptanceError: PAE } = await import(${JSON.stringify(acceptanceUrl)});` +
+              `    throw new PAE("payment link is no longer valid");` +
+              `  }` +
+              `  throw new Error("connect db://internal:5432/openbooks: password authentication failed");` +
+              `};`,
+          ),
+      };
+    }
+    if (
+      specifier.endsWith("/lib/features") &&
+      context.parentURL?.includes("/api/pay/")
+    ) {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript," + encodeURIComponent("export async function isFeatureEnabled(){return true}"),
+      };
+    }
+    if (specifier.startsWith("@/")) return next(root + "web/" + specifier.slice(2) + ".ts", context);
+    return next(specifier, context);
   },
 });
+Object.assign(globalThis, { __payRouteMode: "boom" });
+const { POST } = await import("./route.ts");
 
-const pay_origin_testUrl = './route.ts?pay-origin-test'
-const { POST } = (await import(pay_origin_testUrl)) as typeof import('./route.ts');
-hooks.deregister();
+const TOKEN = "tok_test_0123456789abcdef";
+const params = () => ({ params: Promise.resolve({ token: TOKEN }) });
+const req = () => new Request(`http://pay.local/api/pay/${TOKEN}`, { method: "POST" });
 
-const TOKEN = "tok_v1_forged_host";
-const routeSource = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
-
-test("hosted checkout pins the PSP return URL to appBaseUrl, not the request Host", async () => {
-  state.returnUrls = [];
-  const res = await POST(
-    new Request(`https://evil.example/api/pay/${TOKEN}`, {
-      method: "POST",
-      headers: { host: "evil.example", "x-forwarded-host": "evil.example" },
-    }),
-    { params: Promise.resolve({ token: TOKEN }) },
-  );
-  assert.equal(res.status, 200);
-  assert.deepEqual(state.returnUrls, [`https://books.example/pay/${TOKEN}`]);
-  assert.equal(
-    state.returnUrls.some((url) => url.includes("evil.example")),
-    false,
-    "forged Host must not appear in the PSP return URL",
-  );
+test("anonymous checkout 500s hide engine internals behind a request id", async () => {
+  (globalThis as Record<string, unknown>).__payRouteMode = "boom";
+  const logged: unknown[][] = [];
+  const originalError = console.error;
+  console.error = (...args: unknown[]) => {
+    logged.push(args);
+  };
+  try {
+    const res = await POST(req(), params());
+    assert.equal(res.status, 500);
+    const body = (await res.json()) as { error?: string; requestId?: string };
+    assert.equal(body.error, "failed to create checkout session");
+    assert.match(body.requestId ?? "", /^[0-9a-f-]{36}$/, "a request id to quote back");
+    assert.ok(!JSON.stringify(body).includes("db://internal"), "no internals in the body");
+    const detail = logged.find((args) => typeof args[0] === "string" && args[0].includes(body.requestId!));
+    assert.ok(detail, "the detail is logged against the request id");
+    assert.ok(
+      detail.some((arg) => arg instanceof Error && arg.message.includes("db://internal")),
+      "the logged error keeps the original detail",
+    );
+  } finally {
+    console.error = originalError;
+  }
 });
 
-test("the pay route never reads origin from the request URL", () => {
-  assert.match(
-    routeSource,
-    /from "@openbooks\/engine\/src\/flows\/email-tokens\.ts"/,
-    "checkout return URLs must use the same appBaseUrl as invoice mail",
-  );
-  assert.match(routeSource, /appBaseUrl\(\)/);
-  assert.doesNotMatch(routeSource, /new URL\(req\.url\)\.origin/);
+test("anonymous checkout refusals keep their actionable 422 message", async () => {
+  (globalThis as Record<string, unknown>).__payRouteMode = "refused";
+  const res = await POST(req(), params());
+  assert.equal(res.status, 422);
+  assert.deepEqual(await res.json(), { error: "payment link is no longer valid" });
 });

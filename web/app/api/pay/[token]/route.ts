@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { appBaseUrl } from "@openbooks/engine/src/flows/email-tokens.ts";
 import { PaymentAcceptanceError, createCheckoutSession, paymentLinkOrgId } from "@openbooks/engine/src/payments/acceptance.ts";
@@ -30,7 +31,14 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
     const session = await createCheckoutSession(token, `${origin}/pay/${token}`);
     return NextResponse.json(session);
   } catch (e) {
-    const status = e instanceof PaymentAcceptanceError ? 422 : 500;
-    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status });
+    if (e instanceof PaymentAcceptanceError) {
+      return NextResponse.json({ error: e.message }, { status: 422 });
+    }
+    // Anonymous callers must never see engine internals (connection strings,
+    // provider secrets, stack traces): log the detail against a request id
+    // and hand them the id to quote back.
+    const requestId = randomUUID();
+    console.error(`pay checkout failed [requestId=${requestId}]`, e);
+    return NextResponse.json({ error: "failed to create checkout session", requestId }, { status: 500 });
   }
 }
