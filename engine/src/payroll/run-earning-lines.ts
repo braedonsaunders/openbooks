@@ -13,7 +13,7 @@ import { payrollPack } from "./packs.ts";
 import { type StatutoryHolidayEligibilityFacts } from "./holidays.ts";
 import { componentYearToDate as openingComponentYtd } from "./opening-balances.ts";
 import { loadActiveDerivedRules, resolveDerivedEarnings } from "./derived-earnings.ts";
-import { entitlementBalances, planMovementsForStub, type EntitlementPlan, type EntitlementWarning } from "./entitlements.ts";
+import { entitlementBalances, entitlementMoneyValue, planMovementsForStub, type EntitlementPlan, type EntitlementWarning } from "./entitlements.ts";
 import { applyBasisCaps } from "./limits.ts";
 import { divideMoney, allocateProportionally } from "./run-allocation.ts";
 import { type Line, statutoryHolidayLinesForStub, earningsBase, totalHours, earningJobBuckets, cappableHourLines, resolveEarningExpenseAccount } from "./run-stub-records.ts";
@@ -592,6 +592,8 @@ export async function settleTerminationBankPayouts(
   args: {
     orgId: string; documentId: string; payDate: string;
     employeePartyId: string;
+    /** Employee display name, for the unvalued-hours refusal. */
+    employeeName: string;
     terminationRun: boolean;
     plans: EntitlementPlan[];
     lines: Line[];
@@ -599,7 +601,7 @@ export async function settleTerminationBankPayouts(
   },
 ): Promise<void> {
   const {
-    orgId, documentId, payDate, employeePartyId,
+    orgId, documentId, payDate, employeePartyId, employeeName,
     terminationRun, plans, lines, entitlementMovements,
   } = args;
   // A final pay must clear every accrued bank: the carried balance is paid out
@@ -621,10 +623,18 @@ export async function settleTerminationBankPayouts(
           `entitlement plan ${balance.plan.code} has no payout component — set it in Payroll setup → Entitlement plans`,
         );
       }
+      // The line pays MONEY, never the plan's unit: an hours bank values at
+      // the current wage (40 hours at $30/h pays $1,200, not $40.00), and a
+      // bank with no resolvable wage refuses by name instead of mispricing.
+      // The ledger movement below stays in the plan's unit — the bank IS
+      // hours; only its payout is money.
+      const payoutMoney = entitlementMoneyValue({
+        plan: balance.plan, amount: balance.balance, wage: balance.wage, employeeName,
+      });
       lines.push({
         componentId: balance.plan.payoutComponentId, kind: "earning",
         description: `${balance.plan.name} payout (accrued balance)`,
-        amount: roundMoney(balance.balance, 2), sequence: 44, vacationable: false,
+        amount: payoutMoney, sequence: 44, vacationable: false,
       });
       entitlementMovements.push({
         planId: balance.plan.id, employeePartyId, movementDate: payDate,
@@ -675,6 +685,8 @@ export async function applyEntitlementPlanMovements(
   args: {
     orgId: string; documentId: string; employeePartyId: string;
     payDate: string;
+    /** Employee display name, for the unvalued-hours refusal. */
+    employeeName: string;
     vacationPercent: string | null;
     payVacationInCash: boolean;
     vacationPlan: EntitlementPlan | null;
@@ -685,7 +697,7 @@ export async function applyEntitlementPlanMovements(
   },
 ): Promise<string> {
   const {
-    orgId, documentId, employeePartyId, payDate,
+    orgId, documentId, employeePartyId, payDate, employeeName,
     vacationPercent, payVacationInCash, vacationPlan, plans,
     lines, entitlementMovements, entitlementWarnings,
   } = args;
@@ -715,22 +727,33 @@ export async function applyEntitlementPlanMovements(
         : undefined,
     });
     entitlementWarnings.push(...warnings);
+    // One wage lookup serves every plan's hours valuation for this stub, the
+    // same way entitlementBalances values its hours view. Dynamic import, the
+    // way entitlements-db.ts reaches labor-costing.
+    const { resolveWage } = await import("../projects/labor-costing.ts");
+    const resolvedWage = await resolveWage(orgId, employeePartyId, payDate);
+    const wage = resolvedWage && cmp(resolvedWage.wage, "0") > 0 ? resolvedWage.wage : null;
     for (const movement of movements) {
       if (!movement.componentId) continue;
       const plan = plans.find((p) => p.id === movement.planId)!;
+      // Stub lines pay MONEY, never the plan's unit — an hours-plan movement
+      // of 8 hours values at the wage ($240 at $30/h), and refuses by name
+      // when no wage resolves. The ledger movement queued below stays in the
+      // plan's unit.
+      const money = entitlementMoneyValue({ plan, amount: movement.amount, wage, employeeName });
       if (movement.kind === "accrual") {
         // Employer-side accrual: DR burden / CR the plan's liability account,
         // exactly as the old vacation_accrual line did.
         lines.push({
           componentId: movement.componentId, kind: "employer_contribution",
-          description: plan.name, amount: movement.amount,
+          description: plan.name, amount: money,
           sequence: 240, accrualOnly: true,
         });
-        if (plan.systemKey === "vacation") vacationAccrued = movement.amount;
+        if (plan.systemKey === "vacation") vacationAccrued = money;
       } else if (movement.kind === "payout") {
         lines.push({
           componentId: movement.componentId, kind: "earning",
-          description: `${plan.name} payout`, amount: neg(movement.amount),
+          description: `${plan.name} payout`, amount: neg(money),
           sequence: 46, vacationable: false,
         });
       } else if (movement.kind === "repayment") {
@@ -738,7 +761,7 @@ export async function applyEntitlementPlanMovements(
         // the employer carried during their leave.
         lines.push({
           componentId: movement.componentId, kind: "deduction",
-          description: plan.name, amount: movement.amount, sequence: 180,
+          description: plan.name, amount: money, sequence: 180,
         });
       }
       entitlementMovements.push(movement);

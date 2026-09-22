@@ -497,6 +497,9 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // the column is a sparse pointer. Builds CONCURRENTLY (no-transaction
     // runner mode) so the multi-million-row prod ledger stays writable.
     "0261_ledger_dimension_fk_indexes.sql",
+    // Hours-denominated entitlement plans cannot accrue a percent of (money)
+    // earnings: the dollars would be stored, and later paid, as hours.
+    "0253_hours_plan_percent_accrual_guard.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),

@@ -291,6 +291,7 @@ export async function calculateStub(
 
   await settleTerminationBankPayouts(tx, {
     orgId, documentId, payDate: run.pay_date!, employeePartyId,
+    employeeName: emp.display_name ?? employeePartyId,
     terminationRun, plans, lines, entitlementMovements,
   });
 
@@ -299,6 +300,7 @@ export async function calculateStub(
 
   vacationAccrued = await applyEntitlementPlanMovements(tx, {
     orgId, documentId, employeePartyId, payDate: run.pay_date!,
+    employeeName: emp.display_name ?? employeePartyId,
     vacationPercent, payVacationInCash, vacationPlan, plans,
     lines, entitlementMovements, entitlementWarnings,
   });

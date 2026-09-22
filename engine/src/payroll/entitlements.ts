@@ -55,6 +55,7 @@ export {
 
 export {
   computePlanMovement,
+  entitlementMoneyValue,
   type EntitlementMovement,
   type EntitlementWarning,
   type PlanMovementInput,
