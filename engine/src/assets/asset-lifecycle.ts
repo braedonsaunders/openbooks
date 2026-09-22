@@ -420,6 +420,31 @@ export interface DisposeResult {
   status: "disposed" | "written_off";
 }
 
+/** Invariant: a direct disposal clears exactly one (primary) book, so any other
+ * scheduled posting book refuses here and routes to the approved 100% change path. */
+async function assertSinglePostingBookDisposal(
+  tx: SqlExecutor,
+  orgId: string,
+  assetId: string,
+  assetNumber: string,
+  primaryBookId: string,
+): Promise<void> {
+  const rows = (await tx.execute<{ id: string; name: string; is_active: boolean }>(sql`
+    select b.id, b.name, b.is_active
+      from depreciation_schedules s
+      join accounting_books b on b.id = s.book_id and b.org_id = s.org_id
+     where s.org_id = ${orgId} and s.asset_id = ${assetId}
+       and s.book_id <> ${primaryBookId} and b.posts_gl
+     order by b.id for share of b`)).rows;
+  const books = [...new Map(rows.map((row) => [row.id, row])).values()];
+  if (books.length) {
+    const names = books.map((book) => (book.is_active ? book.name : `${book.name} (inactive)`));
+    throw new AssetLifecycleError(
+      `asset ${assetNumber} is also scheduled in posting book ${names.join(", ")} — a direct disposal clears only the primary book; record an approved Partial disposal / transfer of 100% instead (zero proceeds for a write-off)`,
+    );
+  }
+}
+
 /**
  * Dispose an asset (sale or, with zero proceeds, a write-off): post the disposal
  * journal and flip the asset's status. Accumulated depreciation is taken as the
@@ -514,6 +539,8 @@ export async function disposeAsset(
         "configure a gain/loss on disposal account on the asset category first",
       );
     }
+    // Fail closed before any journal, status flip, or event.
+    await assertSinglePostingBookDisposal(tx, orgId, assetId, asset.asset_number, bookId);
 
     // SCHEDULE TIE — once depreciation posting has begun, the schedule is the
     // authoritative NBV trail: refuse while a planned-but-unposted line's
