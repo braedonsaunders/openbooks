@@ -254,6 +254,35 @@ export function needsStandalonePeriodRefresh(
   return sourceRefs !== null && sourceRefs.length > 0 && !loadEntitiesFirst;
 }
 
+/**
+ * One live connection per source namespace per org. Master-data namespaces
+ * (accounts, parties — every loader keys by the adapter's refKey), the
+ * verification gates, and the true-up are all org-wide per source: a second
+ * same-source connection would merge a foreign chart into ours and let two
+ * connections cross-update each other's `Invoice:123`. Verified real: the
+ * connections table constrains only (org_id, display_name), so nothing stops
+ * a second same-source connection today. Refuse the run naming the sibling
+ * instead of corrupting silently. A connection row deleted and recreated
+ * leaves orphaned documents with a stale connection id — those are adopted,
+ * not refused: only a LIVE sibling blocks.
+ */
+export async function assertNoSiblingConnection(
+  orgId: string,
+  connectionId: string,
+  sourceName: string,
+): Promise<void> {
+  const siblings = (await db.execute<{ id: string; display_name: string }>(sql`
+    select id, display_name from connections
+     where org_id = ${orgId} and source = ${sourceName} and id <> ${connectionId}
+     order by display_name`));
+  if (siblings.rows.length > 0) {
+    const names = siblings.rows.map((row) => row.display_name).join(", ");
+    throw new Error(
+      `organization has another ${sourceName} connection (${names}); document identity is namespaced per source, so two live connections would merge charts and cross-update each other's documents — remove the duplicate connection (or mirror each source system into its own organization) and re-run`,
+    );
+  }
+}
+
 export function sourceDeletionCandidates(
   fullSweep: boolean,
   existingRefs: Iterable<string>,
@@ -914,6 +943,11 @@ export async function preflightFullSync(
     select id from orgs where id = ${opts.orgId}
   `));
   if (!orgRows.rows[0]) throw new Error(`organization ${opts.orgId} not found`);
+  // A preflight that planned across two same-source connections would certify
+  // a write the run then refuses: fail here with the same named refusal.
+  if (opts.connectionId) {
+    await assertNoSiblingConnection(opts.orgId, opts.connectionId, source.name);
+  }
 
   const ctx = await buildNativeContext(
     opts.orgId,
@@ -1368,6 +1402,11 @@ export async function runSync(
   });
 
   try {
+    // -- 0. connection identity comes before every write, including master
+    //    data: the loaders merge by adapter refKey org-wide, so a live
+    //    sibling same-source connection corrupts long before documents.
+    await assertNoSiblingConnection(org.id, connectionId, source.name);
+
     // -- 1. watermark (computed first so high-volume master-data streams — e.g.
     //    time entries — can pull incrementally on a mirror instead of full).
     const [lastOk] = await db
