@@ -364,9 +364,11 @@ export function computeScheduleByFormula(input: FormulaScheduleInput): FormulaSc
   // schedule grows by exactly the periods'-worth that was held back: one month
   // for mid-month, six for a half-year rule on monthly periods. Without this the
   // whole deferred amount was dumped into a single final period.
-  const withheld = Number(EXACT_SCALE - firstPeriodFraction) / Number(EXACT_SCALE);
+  // Integer ratio only: a JS float of (scale − fraction) / scale can flip the
+  // rounded period count (one whole extra or missing charge).
+  const withheldUnits = EXACT_SCALE - firstPeriodFraction;
   const extension = firstPeriodFraction < EXACT_SCALE && endOfLife === "fully_depreciate"
-    ? Math.max(1, Math.round(fractionPeriods * withheld))
+    ? Math.max(1, Number(roundDiv(BigInt(fractionPeriods) * withheldUnits, EXACT_SCALE)))
     : 0;
   const totalPeriods = life + extension;
   const lines: FormulaScheduleLine[] = [];

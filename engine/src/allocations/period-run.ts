@@ -315,7 +315,10 @@ async function assertPeriodOpen(
       });
     } catch (error) {
       if (error instanceof CloseError) {
-        throw new Error(`the GL period ${period.name} is closed and cannot take allocation postings`);
+        throw new AllocationRunError(
+          "INVALID",
+          `the GL period ${period.name} is closed and cannot take allocation postings`,
+        );
       }
       throw error;
     }
@@ -1243,7 +1246,10 @@ async function postStoredJournal(
          = coalesce(${opts.run.subsidiary_id}, '00000000-0000-0000-0000-000000000000'::uuid)
        and status = 'posted' and id <> ${opts.run.id} for share`)).rows[0];
   if (duplicate) {
-    throw new Error("one posted run already exists for this rule, period, book and subsidiary");
+    throw new AllocationRunError(
+      "INVALID",
+      "one posted run already exists for this rule, period, book and subsidiary",
+    );
   }
   // Entry memo from the rule key and period (the per-line memos already carry
   // the rendered memo/line-description templates from preview time).
@@ -1461,7 +1467,7 @@ function requireActor(actorId: string): void {
 function requireReason(reason: string, what: string): string {
   const trimmed = reason.trim();
   if (trimmed.length === 0 || trimmed.length > 500) {
-    throw new Error(`a ${what} reason between 1 and 500 characters is required`);
+    throw new AllocationRunError("INVALID", `a ${what} reason between 1 and 500 characters is required`);
   }
   return trimmed;
 }
@@ -1526,7 +1532,7 @@ async function lockRun(tx: Tx, runId: string): Promise<RunRow> {
   const rows = (await tx.execute<RunRow>(sql`
     select ${RUN_COLUMNS} from allocation_runs where id = ${runId} for update`)).rows;
   const run = rows[0];
-  if (!run) throw new Error(`allocation run ${runId} was not found`);
+  if (!run) throw new AllocationRunError("NOT_FOUND", `allocation run ${runId} was not found`);
   return run;
 }
 
@@ -1555,13 +1561,19 @@ async function openRunApproval(
     select id, subject_kind, enabled from flows
      where id = ${opts.approvalFlowId} and org_id = ${orgId} for share`)).rows[0];
   if (!flow) {
-    throw new Error(`allocation approval flow ${opts.approvalFlowId} is not configured for this organization`);
+    throw new AllocationRunError(
+      "INVALID",
+      `allocation approval flow ${opts.approvalFlowId} is not configured for this organization`,
+    );
   }
   if (flow.subject_kind !== "allocation_run") {
-    throw new Error(`allocation approval flow ${opts.approvalFlowId} is not an allocation_run flow`);
+    throw new AllocationRunError(
+      "INVALID",
+      `allocation approval flow ${opts.approvalFlowId} is not an allocation_run flow`,
+    );
   }
   if (!flow.enabled) {
-    throw new Error(`allocation approval flow ${opts.approvalFlowId} is not enabled`);
+    throw new AllocationRunError("INVALID", `allocation approval flow ${opts.approvalFlowId} is not enabled`);
   }
   // Break the static import cycle (the allocation adapter calls back into
   // postAllocationRun on release).
@@ -1590,7 +1602,8 @@ async function openRunApproval(
          where id in (select jsonb_array_elements_text(${JSON.stringify(openedIds)}::jsonb)::uuid)
            and org_id = ${orgId} and status in ('running', 'waiting')`);
     }
-    throw new Error(
+    throw new AllocationRunError(
+      "INVALID",
       dispatched.failed
         ? "allocation approval routing failed"
         : `allocation approval flow ${opts.approvalFlowId} produced no approval gate`,
@@ -1636,10 +1649,13 @@ export async function postAllocationRun(
       // for exactly this call. Anything else is a double-release or a
       // lifecycle violation — never post it.
       if (run.status !== "pending_approval") {
-        throw new Error(`allocation run ${runId} is ${run.status} and cannot be released from approval`);
+        throw new AllocationRunError(
+          "INVALID",
+          `allocation run ${runId} is ${run.status} and cannot be released from approval`,
+        );
       }
     } else if (run.status !== "previewed") {
-      throw new Error(`allocation run ${runId} is ${run.status} and cannot be posted`);
+      throw new AllocationRunError("INVALID", `allocation run ${runId} is ${run.status} and cannot be posted`);
     }
     const orgId = run.org_id;
     const period = await loadPeriod(tx, orgId, run.period_id);
@@ -1657,7 +1673,8 @@ export async function postAllocationRun(
         from allocation_rule_versions
        where id = ${run.version_id} and org_id = ${orgId} for share`)).rows[0];
     if (!version || version.status !== "published") {
-      throw new Error(
+      throw new AllocationRunError(
+        "INVALID",
         `allocation rule ${ruleKey} version ${run.version_id} is ${version?.status ?? "missing"} and cannot take postings`,
       );
     }
@@ -1688,7 +1705,10 @@ export async function postAllocationRun(
       }
     } catch (error) {
       if (error instanceof Error && "code" in error && (error as { code?: string }).code === "23505") {
-        throw new Error("one posted run already exists for this rule, period, book and subsidiary");
+        throw new AllocationRunError(
+          "INVALID",
+          "one posted run already exists for this rule, period, book and subsidiary",
+        );
       }
       throw error;
     }
@@ -1724,12 +1744,12 @@ export async function reverseAllocationRun(
   requireActor(actorId);
   const cleanReason = reason.trim();
   if (cleanReason.length < 5 || cleanReason.length > 500) {
-    throw new Error("a reversal reason between 5 and 500 characters is required");
+    throw new AllocationRunError("INVALID", "a reversal reason between 5 and 500 characters is required");
   }
   return inDbTransaction(async (tx) => {
     const run = await lockRun(tx, runId);
     if (run.status !== "posted") {
-      throw new Error(`allocation run ${runId} is ${run.status} and cannot be reversed`);
+      throw new AllocationRunError("INVALID", `allocation run ${runId} is ${run.status} and cannot be reversed`);
     }
     const orgId = run.org_id;
     const period = await loadPeriod(tx, orgId, run.period_id);
@@ -1787,12 +1807,12 @@ export async function rerunAllocationRun(
   requireActor(actorId);
   const cleanReason = reason.trim();
   if (cleanReason.length < 5 || cleanReason.length > 500) {
-    throw new Error("a re-run reason between 5 and 500 characters is required");
+    throw new AllocationRunError("INVALID", "a re-run reason between 5 and 500 characters is required");
   }
   return inDbTransaction(async (tx) => {
     const run = await lockRun(tx, runId);
     if (run.status !== "posted" && run.status !== "previewed" && run.status !== "reversed") {
-      throw new Error(`allocation run ${runId} is ${run.status} and cannot be re-run`);
+      throw new AllocationRunError("INVALID", `allocation run ${runId} is ${run.status} and cannot be re-run`);
     }
     const orgId = run.org_id;
     const period = await loadPeriod(tx, orgId, run.period_id);
@@ -1909,7 +1929,10 @@ export async function rerunAllocationRun(
       }
     } catch (error) {
       if (error instanceof Error && "code" in error && (error as { code?: string }).code === "23505") {
-        throw new Error("one posted run already exists for this rule, period, book and subsidiary");
+        throw new AllocationRunError(
+          "INVALID",
+          "one posted run already exists for this rule, period, book and subsidiary",
+        );
       }
       throw error;
     }

@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Download } from 'lucide-react'
 import { Button, PageHeader, Select, cn } from '@openbooks/ui'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 
 interface ResourceDescriptor {
   key: string
@@ -32,10 +33,15 @@ export function ExportClient() {
 
   useEffect(() => {
     fetch('/api/data/resources')
-      .then((r) => r.json())
+      .then(async (r) => {
+        if (!r.ok) throw new Error(await readApiErrorMessage(r, t('export.loadFailed')))
+        return r.json()
+      })
       .then((d) => setResources(d.resources ?? []))
-      .catch(() => setResources([]))
-  }, [])
+      .catch((e) => {
+        toast.error((e as Error).message)
+      })
+  }, [t])
 
   const grouped = useMemo(() => {
     const map = new Map<string, ResourceDescriptor[]>()
@@ -55,18 +61,22 @@ export function ExportClient() {
     }
     setLoadingCols(true)
     fetch(`/api/data/resources?key=${encodeURIComponent(key)}`)
-      .then((r) => r.json())
+      .then(async (r) => {
+        if (!r.ok) throw new Error(await readApiErrorMessage(r, t('export.columnsLoadFailed')))
+        return r.json()
+      })
       .then((d) => {
         const cols: Column[] = d.columns ?? []
         setColumns(cols)
         setSelected(new Set(cols.map((c) => c.key)))
       })
-      .catch(() => {
+      .catch((e) => {
+        toast.error((e as Error).message)
         setColumns([])
         setSelected(new Set())
       })
       .finally(() => setLoadingCols(false))
-  }, [])
+  }, [t])
 
   const onResourceChange = (key: string) => {
     setResource(key)
@@ -95,10 +105,7 @@ export function ExportClient() {
           columns: columns.filter((c) => selected.has(c.key)).map((c) => c.key),
         }),
       })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.error ?? 'export failed')
-      }
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'export failed'))
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')

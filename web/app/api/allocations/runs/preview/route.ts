@@ -2,11 +2,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseJsonBody } from "../../../../../lib/api/json";
 import { guardAllocations } from "../../../../../lib/allocations-gate";
-import {
-  AllocationRunError,
-  previewAllocationRun,
-} from "../../../../../../engine/src/allocations/period-run.ts";
+import { previewAllocationRun } from "../../../../../../engine/src/allocations/period-run.ts";
 import { allocationServiceDeps } from "../../../../../../engine/src/allocations/service.ts";
+import { allocationRunErrorResponse } from "../../_lib.ts";
 
 export const runtime = "nodejs";
 
@@ -49,13 +47,6 @@ export async function POST(req: Request) {
     );
     return NextResponse.json({ computation: run.computation });
   } catch (error) {
-    if (error instanceof AllocationRunError) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: error.code === "NOT_FOUND" ? 404 : 422 },
-      );
-    }
-    console.error("Allocation preview failed", error);
-    return NextResponse.json({ error: "Unable to preview the allocation run." }, { status: 500 });
+    return allocationRunErrorResponse(error, "Unable to preview the allocation run.");
   }
 }

@@ -1,9 +1,9 @@
 import { sql } from "drizzle-orm";
 import { HrmConstructionError } from "./errors.ts";
 import { requireHrmConstructionManage, requireHrmConstructionRead } from "../authorization.ts";
+import { add, cmp, fromUnits, mul, neg } from "../../money/money.ts";
 import {
   applyWeeklyRule,
-  compareDecimal,
   perDiemAmountForDay,
   type DistanceBracket,
   type PerDiemBasis,
@@ -282,17 +282,40 @@ export function haversineKm(a: { lat: number; lng: number }, b: { lat: number; l
   return 2 * 6371 * Math.asin(Math.sqrt(h));
 }
 
-function subtractDecimal(a: string, b: string): string {
-  const scale = (v: string): bigint => {
-    const [i, f = ""] = v.split(".");
-    return BigInt(`${i}${(f + "0000").slice(0, 4)}`);
-  };
-  const diff = scale(a) - scale(b);
-  const negative = diff < 0n ? "-" : "";
-  const abs = (diff < 0n ? -diff : diff).toString().padStart(5, "0");
-  const whole = abs.slice(0, -4);
-  const frac = abs.slice(-4);
-  return `${negative}${whole}.${frac}`;
+/**
+ * Geodesic kilometres cannot be exact (trig is IEEE). Quantize to the
+ * ledger's 4dp quantity once, by name, then every later multiply is
+ * canonical money — never `toFixed` fed into a truncating hand-roll.
+ */
+export function quantizeDistanceKm(km: number): string {
+  if (!Number.isFinite(km)) {
+    throw new HrmConstructionError(
+      "Distance is not a finite number of kilometres — set valid latitude/longitude on both the home base and the project location.",
+    );
+  }
+  if (km < 0) {
+    throw new HrmConstructionError(
+      "Distance cannot be negative — check the home-base and project coordinates.",
+    );
+  }
+  const scaled = Math.round(km * 10_000);
+  if (!Number.isSafeInteger(scaled)) {
+    throw new HrmConstructionError(
+      `Distance ${km} km is out of range — check the home-base and project coordinates.`,
+    );
+  }
+  return fromUnits(BigInt(scaled));
+}
+
+/** Quantity × rate for travel allowances. Both operands are numeric(19,4). */
+export function allowanceProduct(quantity: string, rate: string): string {
+  try {
+    return mul(quantity, rate);
+  } catch (error) {
+    throw new HrmConstructionError(
+      `Cannot price the allowance (${quantity} × ${rate}): ${error instanceof Error ? error.message : String(error)}. Enter the hours or kilometres and the rate as 4-decimal amounts.`,
+    );
+  }
 }
 
 async function employmentParty(
@@ -426,9 +449,9 @@ export async function computeForWeek(
       },
       { distanceKm, hours: day.hours },
     );
-    if (policy.lodgingOffset && compareDecimal(policy.lodgingOffset, "0") > 0 && compareDecimal(amount, "0") > 0) {
-      const reduced = subtractDecimal(amount, policy.lodgingOffset);
-      amount = compareDecimal(reduced, "0") > 0 ? reduced : "0.0000";
+    if (policy.lodgingOffset && cmp(policy.lodgingOffset, "0") > 0 && cmp(amount, "0") > 0) {
+      const reduced = add(amount, neg(policy.lodgingOffset));
+      amount = cmp(reduced, "0") > 0 ? reduced : "0.0000";
     }
     dailyAmounts.push(amount);
     written.push(
@@ -439,7 +462,7 @@ export async function computeForWeek(
         policyId: policy.id,
         amount,
         currency: policy.currency,
-        basisInputs: { distance_km: distanceKm, hours: day.hours },
+        basisInputs: { distance_km: distanceKm == null ? null : quantizeDistanceKm(distanceKm), hours: day.hours },
       }),
     );
   }
@@ -765,7 +788,7 @@ export async function computeTravelForWeek(
           `Policy ${policy.name} has no rules.amount_for_hours — set it before computing hourly travel pay.`,
         );
       }
-      amount = multiplyDecimal(day.hours, rules.amount_for_hours);
+      amount = allowanceProduct(day.hours, rules.amount_for_hours);
     } else {
       if (!home) {
         throw new HrmConstructionError(
@@ -790,14 +813,15 @@ export async function computeTravelForWeek(
         );
       }
       const distanceKm = haversineKm(home, coords);
-      basisInputs.distance_km = distanceKm;
+      const distanceQty = quantizeDistanceKm(distanceKm);
+      basisInputs.distance_km = distanceQty;
       if (input.mode === "per_km") {
         if (!rules.amount_per_km) {
           throw new HrmConstructionError(
             `Policy ${policy.name} has no rules.amount_per_km — set it before computing per-km travel pay.`,
           );
         }
-        amount = multiplyDecimal(distanceKm.toFixed(4), rules.amount_per_km);
+        amount = allowanceProduct(distanceQty, rules.amount_per_km);
       } else {
         amount = perDiemAmountForDay(
           "distance_brackets",
@@ -821,19 +845,6 @@ export async function computeTravelForWeek(
   return written;
 }
 
-function multiplyDecimal(a: string, b: string): string {
-  const scale = (v: string): { negative: boolean; value: bigint } => {
-    const negative = v.trim().startsWith("-");
-    const [i, f = ""] = v.replace("-", "").split(".");
-    return { negative, value: BigInt(`${i}${(f + "0000").slice(0, 4)}`) };
-  };
-  const left = scale(a);
-  const right = scale(b);
-  const product = (left.value * right.value) / 10_000n;
-  const negative = left.negative !== right.negative && product !== 0n;
-  const abs = (product < 0n ? -product : product).toString().padStart(5, "0");
-  return `${negative ? "-" : ""}${abs.slice(0, -4)}.${abs.slice(-4)}`;
-}
 
 /**
  * Seam reads for the payroll coordinator's consumer: pending rows to

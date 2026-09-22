@@ -103,6 +103,17 @@ test("units-of-production charges by usage and retains balance (no plug)", () =>
   assert.equal(lines[2]!.netBookValue, "1000.0000"); // 10000 usage → fully used, lands on salvage
 });
 
+test("first-period extension is an integer ratio, not a JS float of the withheld fraction", () => {
+  // 1/3 withheld across 12 leading periods is exactly 4. A float of
+  // (1e12 − fraction) / 1e12 can land on 3 or 5 and add or drop a whole period.
+  const lines = computeScheduleByFormula(sl({
+    firstPeriodFraction: "0.666666666667",
+    firstFractionPeriods: 12,
+  }));
+  assert.equal(lines.length, 12 + 4);
+  assert.equal(money(lines), toUnits("12000"));
+});
+
 test("a part-period convention prorates period 1 and extends the schedule", () => {
   // Mid-month: half of month 1, full months 2..12, the deferred half in month 13.
   const lines = computeScheduleByFormula(sl({ firstPeriodFraction: 0.5 }));

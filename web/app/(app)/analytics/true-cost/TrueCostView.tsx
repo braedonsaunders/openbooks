@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useFormatter, useTranslations } from 'next-intl'
+import { toast } from 'sonner'
 import {
   AlertTriangle, Building2, Calculator, ChartArea, CheckCircle2, Clock, Coins, DollarSign,
   Grid3X3, Info, Layers, Package, Percent, Pin, PlusCircle, RotateCcw, Scale, SlidersHorizontal,
@@ -16,6 +17,7 @@ import { Panel } from '../_ui/Panel'
 import { Donut } from '../_ui/charts'
 import { DrillDrawer, type DrillTarget } from '../_ui/DrillDrawer'
 import { useBusinessToday } from '../../../../components/business-date-provider'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 import { exportCsv } from '../_ui/exportCsv'
 import { useAnalyticsMoney } from '../_ui/format'
 import { useMoney } from '@/components/money-provider'
@@ -75,9 +77,12 @@ const ALLOCATION_BASE_KEYS = [
 
 /* ---------------------------------------------------------- API mutations */
 
-async function apiCall(path: string, init: RequestInit): Promise<boolean> {
+type ApiResult = { ok: true } | { ok: false; error: string }
+
+async function apiCall(path: string, init: RequestInit): Promise<ApiResult> {
   const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...init })
-  return res.ok
+  if (!res.ok) return { ok: false, error: await readApiErrorMessage(res, 'Request failed') }
+  return { ok: true }
 }
 const pinAccount = (groupId: string, accountId: string) =>
   apiCall(`/api/account-groups/${groupId}/pins`, { method: 'POST', body: JSON.stringify({ accountId }) })
@@ -89,24 +94,25 @@ const patchGroup = (groupId: string, body: { name?: string; color?: string; matc
 /** Read the full engine config, apply a mutation to the ACTIVE profile, PUT it back. */
 type TrueCostConfigResponse = { revision: number; activeProfileId: string; profiles: TrueCostProfile[] }
 
-async function mutateActiveProfile(mutate: (profile: TrueCostProfile) => void): Promise<boolean> {
+async function mutateActiveProfile(mutate: (profile: TrueCostProfile) => void): Promise<ApiResult> {
   const res = await fetch('/api/analytics/true-cost/config')
-  if (!res.ok) return false
+  if (!res.ok) return { ok: false, error: await readApiErrorMessage(res, 'Could not load True Cost configuration') }
   const cfg = await res.json() as TrueCostConfigResponse
   const profile = cfg.profiles.find((p) => p.id === cfg.activeProfileId) ?? cfg.profiles[0]
-  if (!profile) return false
+  if (!profile) return { ok: false, error: 'No True Cost profile is configured — add a profile before saving.' }
   mutate(profile)
-  // The API fences this whole-object replacement on the exact revision read
-  // above, so a competing admin receives a conflict instead of losing edits.
+  // The PUT is fenced on expectedRevision. A 409 names "reload and review";
+  // callers must render that body — collapsing the response to a boolean
+  // discarded the conflict and refreshed as if the write landed.
   return apiCall('/api/analytics/true-cost/config', {
     method: 'PUT',
     body: JSON.stringify({ activeProfileId: cfg.activeProfileId, profiles: cfg.profiles, expectedRevision: cfg.revision }),
   })
 }
 /** Set the active profile, then PUT. */
-async function switchProfile(activeProfileId: string): Promise<boolean> {
+async function switchProfile(activeProfileId: string): Promise<ApiResult> {
   const res = await fetch('/api/analytics/true-cost/config')
-  if (!res.ok) return false
+  if (!res.ok) return { ok: false, error: await readApiErrorMessage(res, 'Could not load True Cost configuration') }
   const cfg = await res.json() as TrueCostConfigResponse
   cfg.activeProfileId = activeProfileId
   return apiCall('/api/analytics/true-cost/config', {
@@ -201,10 +207,11 @@ function CategoryFlyout({ catId, data, onClose, onDrillAccount }: { catId: strin
   if (!cat) return null
 
   const dirty = name !== cat.name || color !== (cat.color ?? FALLBACK) || pattern !== (cat.match.namePattern ?? '')
-  const run = async (fn: () => Promise<boolean>) => {
+  const run = async (fn: () => Promise<ApiResult>) => {
     setBusy(true)
-    await fn()
-    router.refresh()
+    const result = await fn()
+    if (!result.ok) toast.error(result.error)
+    else router.refresh()
     setBusy(false)
   }
   const setAllocation = (patch: Record<string, unknown>) =>
@@ -469,8 +476,9 @@ function CategoriesTab({ data, openCat }: { data: TrueCostData; openCat: (id: st
   }
   const assign = async (groupId: string, accountId: string) => {
     setBusy(true)
-    await pinAccount(groupId, accountId)
-    router.refresh()
+    const result = await pinAccount(groupId, accountId)
+    if (!result.ok) toast.error(result.error)
+    else router.refresh()
     setBusy(false)
   }
   return (
@@ -1139,7 +1147,13 @@ function CompositePanel({ data }: { data: TrueCostData }) {
   const rate = useRate()
   const router = useRouter()
   const [busy, setBusy] = useState(false)
-  const run = async (fn: () => Promise<boolean>) => { setBusy(true); await fn(); router.refresh(); setBusy(false) }
+  const run = async (fn: () => Promise<ApiResult>) => {
+    setBusy(true)
+    const result = await fn()
+    if (!result.ok) toast.error(result.error)
+    else router.refresh()
+    setBusy(false)
+  }
   const [newProfile, setNewProfile] = useState('')
 
   return (
@@ -1168,10 +1182,11 @@ function CompositePanel({ data }: { data: TrueCostData }) {
           <div className="mt-2 flex items-center gap-2">
             <input value={newProfile} onChange={(e) => setNewProfile(e.target.value)} placeholder={t('config.newProfilePlaceholder')} className="h-7 w-40 rounded-md border border-slate-200 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
             <button type="button" disabled={busy || !newProfile.trim()} onClick={() => { const name = newProfile.trim(); setNewProfile(''); void run(async () => {
-              const res = await fetch('/api/analytics/true-cost/config'); if (!res.ok) return false
+              const res = await fetch('/api/analytics/true-cost/config')
+              if (!res.ok) return { ok: false, error: await readApiErrorMessage(res, 'Could not load True Cost configuration') }
               const cfg = await res.json() as TrueCostConfigResponse
               const active = cfg.profiles.find((p) => p.id === cfg.activeProfileId) ?? cfg.profiles[0]
-              if (!active) return false
+              if (!active) return { ok: false, error: 'No True Cost profile is configured — add a profile before duplicating.' }
               const id = `profile_${Math.random().toString(36).slice(2, 10)}`
               cfg.profiles.push({ ...active, id, name })
               cfg.activeProfileId = id
@@ -1255,7 +1270,13 @@ function CustomCategoryManager({ data }: { data: TrueCostData }) {
   const [percentage, setPercentage] = useState('10')
   const [formula, setFormula] = useState('')
 
-  const run = async (fn: () => Promise<boolean>) => { setBusy(true); await fn(); router.refresh(); setBusy(false) }
+  const run = async (fn: () => Promise<ApiResult>) => {
+    setBusy(true)
+    const result = await fn()
+    if (!result.ok) toast.error(result.error)
+    else router.refresh()
+    setBusy(false)
+  }
   const add = () => {
     const cat: CustomCategory = { id: `cat_${crypto.randomUUID().slice(0, 8)}`, name: name.trim(), type, color: '#64748b', allocationBase: 'billed_hours', rateFormat: 'per_hour', includeInComposite: true }
     if (type === 'manual') cat.manualConfig = { entryMode: 'fixed_total', fixedTotal: Number(fixedTotal) || 0 }

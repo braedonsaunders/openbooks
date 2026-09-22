@@ -2,7 +2,10 @@ import 'server-only'
 
 import { NextResponse } from 'next/server'
 import { AllocationRuleError } from '../../../../engine/src/allocations/index.ts'
+import { allocationRunErrorResponse } from '../../../lib/allocations-run-error'
 import { isUuid } from '../../../lib/list-params'
+
+export { allocationRunErrorResponse }
 
 /**
  * Map A1's service errors to HTTP: NOT_FOUND → 404, STALE → 409 (the drawer
