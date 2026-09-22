@@ -1045,6 +1045,46 @@ export async function applyDocumentEdit(
         throw error
       }
 
+      // Conversion children keep the source order's currency: credit control
+      // relieves order exposure only with same-currency posted billing, so a
+      // relabelled child would silently reprice billed totals across
+      // currencies. Refuse a currency change away from the source order's
+      // currency; deleting the draft and reconverting restores it.
+      if (currency !== undefined) {
+        const child = (await tx.execute<{ currency: string; documentNumber: string }>(sql`
+          select currency, document_number as "documentNumber"
+            from documents
+           where id = ${id} and org_id = ${orgId}
+        `)).rows[0]
+        if (child && currency !== child.currency) {
+          // Only order sources establish conversion provenance. Other 'bills'
+          // edges (for example field-ticket billing) are out of scope.
+          const sources = (await tx.execute<{ kind: string; documentNumber: string; currency: string }>(sql`
+            select source.kind, source.document_number as "documentNumber", source.currency
+              from document_links link
+              join documents source
+                on source.id = link.from_document_id
+               and source.org_id = link.org_id
+             where link.org_id = ${orgId}
+               and link.to_document_id = ${id}
+               and link.link_type in ('bills', 'created_from')
+               and source.kind in ('quote', 'sales_order', 'purchase_order')
+             order by source.document_number
+          `)).rows
+          // Any conflicting source refuses: with several edges, picking one
+          // to compare against would be arbitrary.
+          const conflict = sources.find((source) => source.currency !== currency)
+          if (conflict) {
+            throw new DocumentEditError(
+              422,
+              `currency cannot be changed from ${child.currency} to ${currency} on ${child.documentNumber}: ` +
+              `it was converted from ${conflict.kind.replaceAll("_", " ")} ${conflict.documentNumber} (${conflict.currency}) and must keep the source order currency. ` +
+              `Delete this draft and reconvert it from ${conflict.documentNumber} to restore the ${conflict.currency} billing.`,
+            )
+          }
+        }
+      }
+
       const auditBefore = await captureTransactionAuditSnapshot(tx, id, ctx.orgId)
       oldLines = ((await tx.execute<{
         lineNumber: number
