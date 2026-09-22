@@ -2,7 +2,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { db, schema, withOrgTransaction } from "../platform/db.ts";
 import { evaluateBillsForRelease, recordReleaseCheck, type BillReleaseDecision } from "../compliance/compliance.ts";
 import { PaymentError } from "./payment-errors.ts";
-import { decryptAccountNumber, loadEftSettings, type EftSettings, type EftSettingsResult } from "./rail-settings.ts";
+import { decryptAccountNumber, isValidBic, isValidIban, loadEftSettings, type EftSettings, type EftSettingsResult } from "./rail-settings.ts";
 import { loadNachaSettings, nachaCheckDigit } from "./rail-nacha.ts";
 import { loadSepaSettings } from "./rail-sepa.ts";
 export interface RunBlocker {
@@ -133,8 +133,19 @@ function resolveRailBankDetail(
   ) {
     return { ok: false, reason: "missing/invalid 9-digit routing number" };
   }
-  if (method === "sepa" && !/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(iban)) {
+  // Full ISO 13616 checksum, not shape alone: a single-digit typo passes the
+  // regex but must block here — otherwise readiness stays green while the
+  // file writer (which checksums via isValidIban) refuses, or worse, a writer
+  // that never checksums stores the typo. Same function the SEPA credit and
+  // debit writers use; one control language for display, readiness, export.
+  if (method === "sepa" && !isValidIban(iban)) {
     return { ok: false, reason: "missing/invalid IBAN" };
+  }
+  // A present BIC must be valid, even though the pain.008 renderer does not
+  // emit a debtor BIC element. String() first: routing is tenant JSON.
+  const bicCandidate = routing.bic;
+  if (method === "sepa" && bicCandidate != null && String(bicCandidate).trim() !== "" && !isValidBic(String(bicCandidate))) {
+    return { ok: false, reason: "invalid BIC" };
   }
   if (method === "eft" && row.currency !== "CAD") {
     return { ok: false, reason: `CPA-005 CAD file cannot carry ${row.currency}` };
@@ -142,7 +153,9 @@ function resolveRailBankDetail(
   return {
     ok: true,
     routingNumber: /^\d{9}$/.test(aba) ? aba : null,
-    iban: /^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(iban) ? iban : null,
+    // A sepa `ok:true` passed the checksum above, so the IBAN is valid by
+    // construction; every other rail keeps its historical shape projection.
+    iban: method === "sepa" ? iban : (/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(iban) ? iban : null),
     bic: routing.bic ?? null,
     institution: routing.institution ?? null,
     transit: routing.transit ?? null,
@@ -265,6 +278,17 @@ export async function paymentRunReadiness(runId: string, orgId: string): Promise
      where r.id = ${runId} and r.org_id = ${orgId}
   `));
   const method = runInfo.rows[0]?.method;
+  const rail = runInfo.rows[0]?.rail;
+  // Collection runs carry method `direct_debit` regardless of rail, which used
+  // to skip every bank check below and report green while the exporter stored
+  // an unvalidated file. Resolve the rail's own bank method so debtors face
+  // the same evidence gate as payees; originator-settings state (`eft`) stays
+  // the run-method mapping below, unchanged.
+  const bankMethod: RailBankMethod | null =
+    method === "ach" || method === "sepa" || method === "eft" ? method
+    : method === "direct_debit" && rail === "sepa_debit" ? "sepa"
+    : method === "direct_debit" && rail === "nacha_debit" ? "ach"
+    : null;
   let eft: EftSettingsResult;
   if (method === "ach") eft = await loadNachaSettings(orgId, runId) as EftSettingsResult;
   else if (method === "sepa") eft = await loadSepaSettings(orgId, runId) as EftSettingsResult;
@@ -297,8 +321,9 @@ export async function paymentRunReadiness(runId: string, orgId: string): Promise
     }
     // Only the three bank-detail rails carry account evidence; every other
     // method (and any custom value) is gated elsewhere or not at all.
-    if (method !== "ach" && method !== "sepa" && method !== "eft") continue;
-    const detail = resolveRailBankDetail(method, r);
+    // `direct_debit` collection runs resolve through their rail above.
+    if (!bankMethod) continue;
+    const detail = resolveRailBankDetail(bankMethod, r);
     if (!detail.ok) {
       blockers.push({ instructionId: r.id, payee: r.payee, reason: detail.reason });
     }
