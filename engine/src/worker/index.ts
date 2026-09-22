@@ -22,6 +22,7 @@ import { startSandboxScheduler } from "./sandbox-scheduler.ts";
 import { startOverheadScheduler } from "./overhead-scheduler.ts";
 import { createApCaptureWorker } from "./ap-capture-worker.ts";
 import { createBackupWorker } from "./backup-worker.ts";
+import { shutdownWorkerProcess } from "./shutdown.ts";
 import { startBackupScheduler } from "./backup-scheduler.ts";
 import { ensureScheduler } from "../scheduling/scheduler.ts";
 import { assertSafeRuntimeDatabaseRole, pool } from "../platform/db.ts";
@@ -116,7 +117,7 @@ async function main(): Promise<void> {
     shuttingDown = true;
     clearInterval(heartbeatTimer);
     console.log(`[worker] ${signal} — draining…`);
-    await Promise.allSettled([...workers.map((w) => w.close()), closeJobConnections(), stopTelemetry()]);
+    await shutdownWorkerProcess(workers, closeJobConnections, stopTelemetry);
     process.exit(0);
   }
   process.on("SIGINT", () => void shutdown("SIGINT"));

@@ -162,6 +162,15 @@ services:
     image: ${OPENBOOKS_IMAGE:?OPENBOOKS_IMAGE must be a post-clean, scanned image pinned by digest}
     pull_policy: missing
     command: ["node", "scripts/worker.mjs"]
+    # Graceful-drain ceiling sized to the longest job's window (migration
+    # steps hold 5-minute BullMQ locks; close-delivery renders and backups
+    # run for minutes on large installs). SIGTERM starts the drain in
+    # engine/src/worker/index.ts — workers close first while Redis is alive,
+    # then connections — so an ordinary stop exits well before this ceiling;
+    # only a hung job waits it out before SIGKILL, and stalled locks recover
+    # via lockDuration/stalledInterval. Mirror this on the worker service in
+    # the Dokploy-managed swarm stack file, which is not checked in here.
+    stop_grace_period: 5m
     environment:
       <<: *openbooks-runtime-environment
       OPENBOOKS_INTERNAL_URL: http://web:3000
