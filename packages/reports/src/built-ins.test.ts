@@ -6,6 +6,7 @@ import {
   BUILT_IN_REPORT_DEFINITIONS,
 } from './built-ins'
 import { REPORT_ENTITY_MAP } from './entities'
+import { HRM_REPORT_ENTITIES } from './hrm-entities'
 import { compileRule, SqlParams } from './filters'
 import { resolvePreset, PERIOD_PRESET_IDS } from './period-presets'
 import { validateCustomQuery } from './validate'
@@ -59,6 +60,21 @@ describe('built-in report definitions', () => {
         `${def.slug} does not survive the report-query validator`,
       )
     }
+  })
+
+  it('materialises every governed HRM source in the one built-in catalog', () => {
+    const hrmEntityKeys = new Set(HRM_REPORT_ENTITIES.map((entity) => entity.key))
+    const catalogEntityKeys = new Set(
+      BUILT_IN_REPORT_DEFINITIONS
+        .map((definition) => definition.query.entity)
+        .filter((entity) => hrmEntityKeys.has(entity)),
+    )
+    assert.deepEqual(catalogEntityKeys, hrmEntityKeys)
+    assert.equal(
+      BUILT_IN_REPORT_DEFINITIONS.filter((definition) => definition.slug.startsWith('workforce-')).length,
+      HRM_REPORT_ENTITIES.length - 1,
+      'headcount uses its curated statement; every other HRM source gets one workforce built-in',
+    )
   })
 
   it('defines allocation summary and lineage as valid allocations-gated built-ins', () => {

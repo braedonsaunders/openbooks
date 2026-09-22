@@ -5,6 +5,7 @@ import { REPORT_ENTITY_MAP } from '@openbooks/reports'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { frame, page, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import { ensureReportDefinitions } from '@openbooks/engine/src/reports/ensure-report-definitions.ts'
 import { getAuthz, can } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
 import { hiddenReportEntityKeys } from '../../../lib/report-authz'
@@ -48,8 +49,16 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
   const canCreate = !!authz && (can(authz, 'reports.create') || can(authz, '*'))
 
   const orgId = authz?.user.orgId
+  // Materialise the built-in catalog before reading it. The hub reads
+  // `report_definitions` rows, and those rows only exist once something has
+  // called `ensureReportDefinitions` — the builder, the definitions API, the
+  // payroll evidence pack. An org that had never opened one of those saw a
+  // hub with NO built-in reports on it: no Payroll group, no Human-resources
+  // group, and nothing to say they were missing. The call is idempotent and
+  // refuses to overwrite org-tuned rows.
+  if (orgId) await ensureReportDefinitions(orgId)
   const emptySaved = Promise.resolve({ rows: [] as { id: string; name: string; path: string; params: Record<string, string> }[] })
-  const emptyDefs = Promise.resolve({ rows: [] as { id: string; name: string; kind: string; entity: string | null }[] })
+  const emptyDefs = Promise.resolve({ rows: [] as { id: string; slug: string; name: string; description: string | null; kind: string; entity: string | null }[] })
   const [saved, custom, projectsEnabled, payrollEnabled, budgetsEnabled, ordersEnabled, hiddenEntities, hrmEnabled] = await Promise.all([
     orgId
       ? db.execute(sql`select id, name, path, params from saved_reports where org_id = ${orgId} order by created_at desc limit 12`) as Promise<{
@@ -58,9 +67,14 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
       : emptySaved,
     orgId
       ? db.execute(
-          sql`select id, name, kind, query->>'entity' as entity from report_definitions where org_id = ${orgId} and coalesce(report_type, 'query') = 'query' order by updated_at desc limit 12`,
+          // No LIMIT. The catalog is the point of this page: a cap ordered by
+          // `updated_at` meant a module's entire group could vanish because
+          // twelve unrelated reports had been edited more recently, and the
+          // page would look complete while doing it. Saved views below keep
+          // their cap — those really are "the twelve most recent".
+          sql`select id, slug, name, description, kind, query->>'entity' as entity from report_definitions where org_id = ${orgId} and coalesce(report_type, 'query') = 'query' order by name`,
         ) as Promise<{
-          rows: { id: string; name: string; kind: string; entity: string | null }[]
+          rows: { id: string; slug: string; name: string; description: string | null; kind: string; entity: string | null }[]
         }>
       : emptyDefs,
     authz ? isFeatureEnabled(authz.user.orgId, 'projects') : Promise.resolve(false),
@@ -77,21 +91,53 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
   const hidden = new Set(hiddenEntities)
   const visibleDefinitions = custom.rows.filter((row) => !row.entity || !hidden.has(row.entity))
 
-  // Built-in reports over module entities are FIRST-CLASS: they get their own
-  // hub group beside the standard statements. Custom keeps the rest.
+  // Built-ins and user-authored reports share ONE definition catalog, but
+  // they do not share a hub section. Every built-in is classified into a
+  // first-class domain group; Custom & Saved is reserved for definitions the
+  // organization actually authored plus saved views. The old catch-all made
+  // CRM, inventory, allocations and AI governance look like custom reports.
   const entityCategory = (row: { entity: string | null }) =>
-    row.entity ? REPORT_ENTITY_MAP[row.entity]?.category : undefined
+    row.entity ? REPORT_ENTITY_MAP[row.entity]?.category?.toLowerCase() : undefined
+  const builtInDefinitions = visibleDefinitions.filter((row) => row.kind === 'built_in')
+  const customDefinitions = visibleDefinitions.filter((row) => row.kind !== 'built_in')
+  const receivablesPayablesDefinitions = builtInDefinitions.filter((row) =>
+    row.slug === 'ap-aging-by-vendor' || row.slug === 'open-ar-by-customer',
+  )
+  const allocationDefinitions = builtInDefinitions.filter((row) => row.slug.startsWith('allocation-'))
+  const ledgerDefinitions = builtInDefinitions.filter((row) =>
+    entityCategory(row) === 'general_ledger'
+    && !receivablesPayablesDefinitions.some((item) => item.id === row.id)
+    && !allocationDefinitions.some((item) => item.id === row.id),
+  )
+  const crmDefinitions = builtInDefinitions.filter((row) => entityCategory(row) === 'crm')
+  const inventoryDefinitions = builtInDefinitions.filter((row) => entityCategory(row) === 'inventory')
+  const aiDefinitions = builtInDefinitions.filter((row) => entityCategory(row) === 'ai governance')
   const payrollDefinitions = payrollEnabled
-    ? visibleDefinitions.filter((row) => row.kind === 'built_in' && entityCategory(row) === 'payroll')
+    ? builtInDefinitions.filter((row) => entityCategory(row) === 'payroll')
     : []
   // Workforce reports are the HR module's reports — the Reports module is
-  // their ONE home (by review: no HR-side reports page), so the built-ins
-  // over the employment entities get a group of their own here.
+  // their ONE home (by review: no HR-side reports page), so every definition
+  // over a governed HRM entity gets a group of its own here. The definitions
+  // themselves are ordinary rows in the one report catalog; there is no
+  // parallel HRM source catalog.
   const hrmDefinitions = hrmEnabled
-    ? visibleDefinitions.filter((row) => row.kind === 'built_in' && entityCategory(row) === 'hrm')
+    ? builtInDefinitions.filter((row) => entityCategory(row) === 'hrm')
     : []
-  const otherDefinitions = visibleDefinitions.filter(
-    (row) => !payrollDefinitions.some((p) => p.id === row.id) && !hrmDefinitions.some((h) => h.id === row.id),
+  const classifiedBuiltInIds = new Set([
+    ...receivablesPayablesDefinitions,
+    ...allocationDefinitions,
+    ...ledgerDefinitions,
+    ...crmDefinitions,
+    ...inventoryDefinitions,
+    ...aiDefinitions,
+    ...payrollDefinitions,
+    ...hrmDefinitions,
+  ].map((row) => row.id))
+  // A future built-in category must still never leak into Custom & Saved.
+  // Until it receives a more specific domain placement it is visibly listed
+  // under Other reports, making the missing classification reviewable.
+  const otherBuiltInDefinitions = builtInDefinitions.filter(
+    (row) => !classifiedBuiltInIds.has(row.id),
   )
 
   const card = (key: string, href: string, icon: string) => ({
@@ -108,6 +154,17 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
     desc: t('hub.cards.agingDescription'),
     icon: 'CalendarClock',
   })
+
+  const definitionCards = (
+    definitions: typeof builtInDefinitions,
+    icon: string,
+    fallbackDescription: string,
+  ): HubCard[] => definitions.map((definition) => ({
+    href: `/reports/custom/run/${definition.id}`,
+    title: definition.name,
+    desc: definition.description ?? fallbackDescription,
+    icon,
+  }))
 
   const groups: HubGroup[] = [
     {
@@ -126,7 +183,11 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
       key: 'ledger',
       label: t('hub.groups.ledger'),
       accent: 'sky',
-      cards: [card('generalLedger', '/reports/general-ledger', 'BookOpen'), card('journal', '/reports/journal', 'NotebookPen')],
+      cards: [
+        card('generalLedger', '/reports/general-ledger', 'BookOpen'),
+        card('journal', '/reports/journal', 'NotebookPen'),
+        ...definitionCards(ledgerDefinitions, 'BookOpen', t('hub.cards.builtInDescription')),
+      ],
     },
     {
       key: 'receivablesPayables',
@@ -140,8 +201,33 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
         card('registers', '/reports/registers?side=ar', 'Receipt'),
         card('receivables', '/reports/partners?kind=receivable', 'Wallet'),
         card('payables', '/reports/partners?kind=payable', 'Landmark'),
+        ...definitionCards(receivablesPayablesDefinitions, 'Receipt', t('hub.cards.builtInDescription')),
       ],
     },
+    ...(allocationDefinitions.length > 0 ? [{
+      key: 'allocations',
+      label: t('hub.groups.allocations'),
+      accent: 'violet',
+      cards: definitionCards(allocationDefinitions, 'Network', t('hub.cards.builtInDescription')),
+    } satisfies HubGroup] : []),
+    ...(crmDefinitions.length > 0 ? [{
+      key: 'crm',
+      label: t('hub.groups.crm'),
+      accent: 'teal',
+      cards: definitionCards(crmDefinitions, 'BriefcaseBusiness', t('hub.cards.builtInDescription')),
+    } satisfies HubGroup] : []),
+    ...(inventoryDefinitions.length > 0 ? [{
+      key: 'inventory',
+      label: t('hub.groups.inventory'),
+      accent: 'amber',
+      cards: definitionCards(inventoryDefinitions, 'Boxes', t('hub.cards.builtInDescription')),
+    } satisfies HubGroup] : []),
+    ...(aiDefinitions.length > 0 ? [{
+      key: 'aiGovernance',
+      label: t('hub.groups.aiGovernance'),
+      accent: 'sky',
+      cards: definitionCards(aiDefinitions, 'BrainCircuit', t('hub.cards.builtInDescription')),
+    } satisfies HubGroup] : []),
     ...(ordersEnabled ? [{
       key: 'orders',
       label: t('hub.groups.orders'),
@@ -165,23 +251,19 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
       key: 'payroll',
       label: t('hub.groups.payroll'),
       accent: 'emerald',
-      cards: payrollDefinitions.map((c) => ({
-        href: `/reports/custom/run/${c.id}`,
-        title: c.name,
-        desc: t('hub.cards.payrollDescription'),
-        icon: 'HandCoins',
-      })),
+      cards: definitionCards(payrollDefinitions, 'HandCoins', t('hub.cards.payrollDescription')),
     } satisfies HubGroup] : []),
     ...(hrmDefinitions.length > 0 ? [{
       key: 'hrm',
       label: t('hub.groups.hrm'),
       accent: 'teal',
-      cards: hrmDefinitions.map((c) => ({
-        href: `/reports/custom/run/${c.id}`,
-        title: c.name,
-        desc: t('hub.cards.hrmDescription'),
-        icon: 'Users',
-      })),
+      cards: definitionCards(hrmDefinitions, 'Users', t('hub.cards.hrmDescription')),
+    } satisfies HubGroup] : []),
+    ...(otherBuiltInDefinitions.length > 0 ? [{
+      key: 'otherBuiltIns',
+      label: t('hub.groups.other'),
+      accent: 'slate',
+      cards: definitionCards(otherBuiltInDefinitions, 'FileText', t('hub.cards.builtInDescription')),
     } satisfies HubGroup] : []),
     {
       key: 'custom',
@@ -189,10 +271,10 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
       accent: 'slate',
       cards: [
         { href: '/reports/custom', title: t('hub.customStudio.title'), desc: t('hub.customStudio.description'), icon: 'Sparkles' },
-        ...otherDefinitions.filter((c) => projectsEnabled || c.kind !== 'project-profitability').map((c) => ({
+        ...customDefinitions.filter((c) => projectsEnabled || c.kind !== 'project-profitability').map((c) => ({
           href: `/reports/custom/run/${c.id}`,
           title: c.name,
-          desc: c.kind === 'built_in' ? t('custom.kind.builtIn') : t('custom.kind.custom'),
+          desc: c.description ?? t('custom.kind.custom'),
           icon: 'Coins',
         })),
         ...saved.rows.filter((s) =>

@@ -269,6 +269,7 @@ const ES_NEUTRAL_STATUS_EXPECTATIONS: Record<string, string> = {
   'status.pending_approval': 'Enviado/a',
   'status.calculated': 'Calculado/a',
   'status.committed': 'Confirmado/a',
+  'status.retired': 'Retirado/a',
 }
 
 /** The filed agreement key, pinned in every locale. */
@@ -2826,8 +2827,8 @@ test('analytics copy ships translated in fr, es and de', () => {
     'analytics.categoryManager.',
   ]
   const icuWanted = wanted.filter((key) => icuOwned.some((prefix) => key.startsWith(prefix)))
-  assert.equal(icuWanted.length, 1266, 'analytics i4-section inventory changed; translate the new keys everywhere and re-pin')
-  assert.equal(wanted.length, 1901, 'analytics source inventory changed; translate the new keys everywhere and re-pin')
+  assert.equal(icuWanted.length, 1267, 'analytics i4-section inventory changed; translate the new keys everywhere and re-pin')
+  assert.equal(wanted.length, 1902, 'analytics source inventory changed; translate the new keys everywhere and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3119,7 +3120,7 @@ test('analytics copy ships translated in ja, zh and pt-BR', () => {
   ]
   const source = flattenCatalog('en')
   const wanted = [...source.keys()].filter((key) => prefixes.some((prefix) => key.startsWith(prefix)))
-  assert.equal(wanted.length, 1266, 'analytics i5-subtree inventory changed; translate the new keys in ja/zh/pt-BR and re-pin')
+  assert.equal(wanted.length, 1267, 'analytics i5-subtree inventory changed; translate the new keys in ja/zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -5289,15 +5290,15 @@ const I14_IDENTICAL_BY_FACT = new Set([
 ])
 
 const I14_FILE_COUNTS: Record<string, number> = {
-  "items": 161,
+  "items": 176,
   "inventory": 159,
-  "reports": 1744,
+  "reports": 1750,
   "sync": 172,
   "login": 33,
   "accounts": 82,
   "approvals": 69,
   "assistant": 63,
-  "common": 264,
+  "common": 266,
   "crm": 304,
   "customization": 185,
   "dashboard": 203,

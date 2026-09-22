@@ -33,7 +33,8 @@
       "cashFlowIndirectTitle": "Fluxo de caixa (indireto)",
       "cashFlowIndirectDescription": "Método indireto — lucro líquido reconciliado ao caixa operacional com detalhe do capital de giro",
       "payrollDescription": "Relatório de folha integrado sobre contracheques — dados salariais exigem a permissão da folha.",
-      "hrmDescription": "Relatório integrado de força de trabalho sobre registros de emprego — requer a permissão de emprego do RH."
+      "hrmDescription": "Relatório integrado de força de trabalho sobre registros de emprego — requer a permissão de emprego do RH.",
+      "builtInDescription": "Relatório operacional integrado do catálogo unificado de relatórios."
     },
     "groups": {
       "financial": "Demonstrações Financeiras",
@@ -44,7 +45,12 @@
       "projects": "Projetos",
       "orders": "Vendas e pedidos",
       "payroll": "Folha de pagamento",
-      "hrm": "Recursos humanos"
+      "hrm": "Recursos humanos",
+      "crm": "Relacionamento com clientes",
+      "inventory": "Estoque",
+      "allocations": "Alocações",
+      "aiGovernance": "Governança de IA",
+      "other": "Outros relatórios"
     },
     "customStudio": {
       "title": "Construtor de relatórios personalizados",

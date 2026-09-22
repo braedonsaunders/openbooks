@@ -5,6 +5,9 @@ import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import {
   ArrowUpRight,
+  Boxes,
+  BrainCircuit,
+  BriefcaseBusiness,
   Bookmark,
   BookOpen,
   CalendarClock,
@@ -13,6 +16,7 @@ import {
   FileText,
   HandCoins,
   Landmark,
+  Network,
   NotebookPen,
   Receipt,
   Scale,
@@ -43,6 +47,10 @@ const ICONS: Record<string, typeof FileText> = {
   Coins,
   Bookmark,
   HandCoins,
+  Boxes,
+  BrainCircuit,
+  BriefcaseBusiness,
+  Network,
 }
 
 // Full literal accent class sets so Tailwind's scanner keeps them.
