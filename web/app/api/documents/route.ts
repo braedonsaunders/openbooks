@@ -81,6 +81,40 @@ export async function POST(req: Request) {
   if (body.subsidiaryId !== undefined && !subsidiariesInScope(authz, [body.subsidiaryId])) {
     return NextResponse.json({ error: 'invalid subsidiary' }, { status: 422 })
   }
+  // Scope is not existence. An UNRESTRICTED caller is in scope for every
+  // subsidiary, so the check above passes any id at all — including one that
+  // does not exist or belongs to another tenant. The row then reached the
+  // insert and the storage guard refused it as a raw query error
+  // ("subsidiary belongs to another organization"), which is a correct
+  // refusal arriving as an internal failure. Ask the tenant-scoped question.
+  if (body.subsidiaryId !== undefined && body.subsidiaryId !== null) {
+    const known = isUuid(body.subsidiaryId)
+      && (await db.execute<{ id: string }>(sql`
+        select id from subsidiaries
+         where id = ${body.subsidiaryId} and org_id = ${user.orgId}`)).rows.length > 0
+    if (!known) {
+      return NextResponse.json({ error: 'invalid subsidiary' }, { status: 422 })
+    }
+  }
+  // The header date is interpolated into date-effective lookups (tax rates,
+  // FX, periods) downstream. A malformed one was never refused here, so it
+  // reached Postgres as a bind parameter and came back as a raw query failure
+  // — an internal error where a named refusal belonged. Calendar-checked, not
+  // just shape-checked: '2026-02-31' matches the pattern and is not a day.
+  if (body.documentDate !== undefined && body.documentDate !== null) {
+    const raw = body.documentDate
+    const wellFormed = typeof raw === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw)
+    // Date.toISOString() THROWS on an Invalid Date, so validity is checked
+    // before the round-trip rather than through it.
+    const parsed = wellFormed ? new Date(`${raw}T00:00:00Z`) : null
+    const real =
+      parsed !== null
+      && !Number.isNaN(parsed.getTime())
+      && parsed.toISOString().slice(0, 10) === raw
+    if (!real) {
+      return NextResponse.json({ error: 'invalid documentDate' }, { status: 422 })
+    }
+  }
   // Stored inventory / assembly / kit lines stay. Turning Inventory off must
   // 404 a write that would persist a new one of those kinds. Creation has no
   // stored lines, so every item line is new. Mirrors PATCH minus the
