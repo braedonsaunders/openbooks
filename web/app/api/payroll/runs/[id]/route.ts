@@ -15,7 +15,7 @@ import {
 import { submitForApproval } from '@openbooks/engine/src/flows/index.ts'
 import { emailRunStubs } from '../../../../../lib/payroll-outputs'
 import { assemblePayRunEvidence } from '../../../../../lib/payroll-evidence'
-import { canonicalAdjustmentHours, mutatePayRunAdjustment } from '@openbooks/engine/src/payroll/run-adjustments.ts'
+import { canonicalAdjustmentHours, mutatePayRunAdjustment, payRunBulkAdjustmentId, PayRunAdjustmentIdempotencyConflict } from '@openbooks/engine/src/payroll/run-adjustments.ts'
 import { storedHolidayEligibilityForRun } from '@openbooks/engine/src/payroll/holiday-attestations.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
@@ -279,18 +279,73 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (replaceComponent != null && typeof replaceComponent !== 'boolean') {
         return NextResponse.json({ error: `replaceComponent must be true or false — got "${suppliedValue(replaceComponent)}"; pass a boolean or omit it` }, { status: 422 })
       }
+      // A replayed batch (double-clicked Apply, retried request) addresses
+      // the same rows: each row id derives deterministically from the batch
+      // key, so the engine replays instead of inserting twice. Same contract
+      // as document creates — the key becomes the row id.
+      const bulkKey = req.headers.get('Idempotency-Key')?.trim() ?? ''
+      if (bulkKey !== '' && !isUuid(bulkKey)) {
+        return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 400 })
+      }
       const canonicalAmount = normalizeMoney(amountRaw)
-      await withOrgTransaction(gate.user.orgId, async () => {
-        for (const employeePartyId of employees as string[]) {
-          await mutatePayRunAdjustment({
-            orgId: gate.user.orgId,
-            documentId: id,
-            actorId: gate.user.id,
-            allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-            mutation: { action: 'add', employeePartyId, componentId, amount: canonicalAmount, replaceComponent: replaceComponent ?? undefined, note },
-          })
+      const requestIds = bulkKey === ''
+        ? null
+        : (employees as string[]).map((employeePartyId) => payRunBulkAdjustmentId(bulkKey, employeePartyId))
+      if (requestIds) {
+        // Batch-level replay gate: a committed batch is all-or-nothing, so a
+        // partial match means the key was reused for a different batch —
+        // refuse rather than top it up.
+        const existing = (await db.execute<{
+          id: string; employee_party_id: string; component_id: string | null;
+          amount: string | null; hours: string | null; replace_component: boolean; note: string | null;
+        }>(sql`
+          select id::text as id, employee_party_id::text as employee_party_id,
+                 component_id::text as component_id, amount::text as amount,
+                 hours::text as hours, replace_component, note
+            from pay_run_adjustments
+           where org_id = ${gate.user.orgId} and pay_run_document_id = ${id}
+             and adjustment_type = 'line'
+             and id = any(${`{${requestIds.join(',')}}`}::uuid[])
+        `)).rows
+        if (existing.length > 0) {
+          const byId = new Map(existing.map((row) => [row.id, row]))
+          const replay = existing.length === requestIds.length
+            && (employees as string[]).every((employeePartyId, index) => {
+              const row = byId.get(requestIds[index]!)
+              return row !== undefined
+                && row.employee_party_id === employeePartyId
+                && row.component_id === componentId
+                && normalizeMoney(row.amount ?? '0') === canonicalAmount
+                && row.hours == null
+                && row.replace_component === (replaceComponent ?? false)
+                && (row.note ?? null) === (note ?? null)
+            })
+          if (!replay) return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 409 })
+          return NextResponse.json({ ok: true, applied: employees.length })
         }
-      })
+      }
+      try {
+        await withOrgTransaction(gate.user.orgId, async () => {
+          for (const [index, employeePartyId] of (employees as string[]).entries()) {
+            await mutatePayRunAdjustment({
+              orgId: gate.user.orgId,
+              documentId: id,
+              actorId: gate.user.id,
+              allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+              mutation: {
+                action: 'add', employeePartyId, componentId, amount: canonicalAmount,
+                replaceComponent: replaceComponent ?? undefined, note,
+                ...(requestIds ? { idempotencyKey: requestIds[index]! } : {}),
+              },
+            })
+          }
+        })
+      } catch (e) {
+        if (e instanceof PayRunAdjustmentIdempotencyConflict) {
+          return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 409 })
+        }
+        throw e
+      }
       return NextResponse.json({ ok: true, applied: employees.length })
     }
     if (body.action === 'preview-gl') {
@@ -347,13 +402,32 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (replaceComponent != null && typeof replaceComponent !== 'boolean') {
         return NextResponse.json({ error: `replaceComponent must be true or false — got "${suppliedValue(replaceComponent)}"; pass a boolean or omit it` }, { status: 422 })
       }
-      await mutatePayRunAdjustment({
-        orgId: gate.user.orgId,
-        documentId: id,
-        actorId: gate.user.id,
-        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-        mutation: { action: 'add', employeePartyId, componentId, amount: normalizeMoney(amountRaw), hours: hoursRaw, replaceComponent: replaceComponent ?? undefined, note },
-      })
+      // A replayed add (double-clicked Save, retried request) carries the
+      // form session's key, which becomes the adjustment row id — the same
+      // contract as document creates — so the replay returns the original
+      // result instead of a second adjustment.
+      const adjustmentKey = req.headers.get('Idempotency-Key')?.trim() ?? ''
+      if (adjustmentKey !== '' && !isUuid(adjustmentKey)) {
+        return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 400 })
+      }
+      try {
+        await mutatePayRunAdjustment({
+          orgId: gate.user.orgId,
+          documentId: id,
+          actorId: gate.user.id,
+          allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+          mutation: {
+            action: 'add', employeePartyId, componentId, amount: normalizeMoney(amountRaw),
+            hours: hoursRaw, replaceComponent: replaceComponent ?? undefined, note,
+            ...(adjustmentKey === '' ? {} : { idempotencyKey: adjustmentKey }),
+          },
+        })
+      } catch (e) {
+        if (e instanceof PayRunAdjustmentIdempotencyConflict) {
+          return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 409 })
+        }
+        throw e
+      }
       return NextResponse.json({ ok: true })
     }
     if (body.action === 'delete-adjustment') {

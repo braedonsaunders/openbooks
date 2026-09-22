@@ -1,9 +1,49 @@
+import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { normalizeMoney } from "../money/money.ts";
 import { PayrollError } from "./error.ts";
 import { lockAndCheckPayrollRunPopulation, payrollSubsidiaryInScope, type PayrollSubsidiaryScope } from "./scope.ts";
+
+/**
+ * Refusal when a reused adjustment idempotency key cannot replay: the key
+ * names another org's row, or the same key arrived with different details.
+ * The route maps this to 409 invalid_idempotency_key — fail closed, never
+ * the older row as though it matched. The message names the remedy (send a
+ * fresh key), and the remedy exists: the wizard mints one key per form
+ * session and rotates it after every successful add.
+ */
+export class PayRunAdjustmentIdempotencyConflict extends Error {
+  readonly status = 409 as const;
+  readonly code = "idempotency-conflict" as const;
+  constructor(reason: "changed-payload" | "foreign-key") {
+    super(reason === "foreign-key"
+      ? "This request key is already in use by another organization. Reopen the adjustment form to try again with a fresh request."
+      : "This adjustment was already saved with different details. Reopen the adjustment form to try again with a fresh request.");
+  }
+}
+
+/**
+ * Deterministic adjustment row id for one member of an idempotent bulk
+ * batch: UUIDv5 over (batch key, employee), so a replayed batch addresses
+ * the same rows and the engine's per-row claim-or-replay applies unchanged.
+ * The namespace is this derivation's own fixed identity, not a claim about
+ * any external system.
+ */
+const BULK_ADJUSTMENT_NAMESPACE = Buffer.from("payroll.bulk.adj.", "utf8");
+export function payRunBulkAdjustmentId(batchKey: string, employeePartyId: string): string {
+  const hash = createHash("sha1")
+    .update(BULK_ADJUSTMENT_NAMESPACE)
+    .update(batchKey, "utf8")
+    .update(":")
+    .update(employeePartyId, "utf8")
+    .digest();
+  hash[6] = (hash[6]! & 0x0f) | 0x50;
+  hash[8] = (hash[8]! & 0x3f) | 0x80;
+  const hex = hash.subarray(0, 16).toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 
 /**
  * Adjustment money must be an exact 4dp amount the numeric(19,4) column can
@@ -67,6 +107,14 @@ export type PayRunAdjustmentMutation =
       hours?: string | null;
       replaceComponent?: boolean;
       note?: string | null;
+      /**
+       * Client-minted idempotency key (UUID). The key BECOMES the adjustment
+       * row id — the same contract as document creates — so a replayed
+       * request addresses the same row: identical details replay the
+       * original result, anything else (or another org's row) is refused.
+       * Absent for legacy callers, which keep generated ids.
+       */
+      idempotencyKey?: string;
     }
   | { action: "delete"; adjustmentId: string }
   | { action: "exclude"; employeePartyId: string }
@@ -123,7 +171,7 @@ export async function mutatePayRunAdjustment(input: {
   actorId: string;
   allowedSubsidiaryIds?: PayrollSubsidiaryScope;
   mutation: PayRunAdjustmentMutation;
-}): Promise<{ changed: boolean }> {
+}): Promise<{ changed: boolean; replayed: boolean }> {
   const { orgId, documentId, actorId, mutation } = input;
   return db.transaction(async (tx) => {
     const runRows = (await tx.execute<{ run_status: string; pay_schedule_id: string; document_status: string; subsidiary_id: string | null }>(sql`
@@ -191,6 +239,51 @@ export async function mutatePayRunAdjustment(input: {
 
     let changed = false;
     if (mutation.action === "add") {
+      // amount is numeric(19,4) and hours numeric(12,2): the values reach the
+      // columns verbatim, so an oversized paste died at storage with a driver
+      // error and 4dp hours were silently rounded to the column scale. Fail
+      // closed here with a named error before any write. Canonicalized up
+      // front, because the idempotency probe below compares request against
+      // stored row — and a malformed retry must 422 here, never 409 there.
+      const amount = persistAdjustmentMoney(mutation.amount);
+      const hours = mutation.hours == null || mutation.hours === ""
+        ? null
+        : persistAdjustmentHours(mutation.hours);
+      const replaceComponent = mutation.replaceComponent === true;
+      const note = mutation.note ?? null;
+      // Idempotent add: the key becomes the row id (the document-create
+      // contract), so a replayed request addresses the same row. Serialized
+      // on the key's advisory lock: a concurrent duplicate waits, then sees
+      // the winner's committed row and replays instead of inserting twice.
+      // Nothing is claimed on failure — validation below still runs first on
+      // a fresh key, so fixing a refused request and retrying with the same
+      // key works.
+      const key = mutation.idempotencyKey ?? null;
+      if (key != null) {
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${key}))`);
+        const prior = (await tx.execute<{
+          org_id: string; pay_run_document_id: string; employee_party_id: string;
+          component_id: string | null; amount: string | null; hours: string | null;
+          replace_component: boolean; note: string | null;
+        }>(sql`
+          select org_id, pay_run_document_id::text, employee_party_id::text,
+                 component_id::text, amount::text as amount, hours::text as hours,
+                 replace_component, note
+            from pay_run_adjustments where id = ${key}
+        `)).rows[0];
+        if (prior) {
+          if (prior.org_id !== orgId) throw new PayRunAdjustmentIdempotencyConflict("foreign-key");
+          const same = prior.pay_run_document_id === documentId
+            && prior.employee_party_id === mutation.employeePartyId
+            && prior.component_id === mutation.componentId
+            && normalizeMoney(prior.amount ?? "0") === amount
+            && (prior.hours ?? null) === hours
+            && prior.replace_component === replaceComponent
+            && (prior.note ?? null) === note;
+          if (!same) throw new PayRunAdjustmentIdempotencyConflict("changed-payload");
+          return { changed: false, replayed: true };
+        }
+      }
       const component = (await tx.execute(sql`
         select 1
           from pay_components
@@ -199,23 +292,27 @@ export async function mutatePayRunAdjustment(input: {
          limit 1
       `));
       if (component.rows.length === 0) throw new PayrollError("component cannot be adjusted");
-      // amount is numeric(19,4) and hours numeric(12,2): the values reach the
-      // columns verbatim, so an oversized paste died at storage with a driver
-      // error and 4dp hours were silently rounded to the column scale. Fail
-      // closed here with a named error before any write.
-      const amount = persistAdjustmentMoney(mutation.amount);
-      const hours = mutation.hours == null || mutation.hours === ""
-        ? null
-        : persistAdjustmentHours(mutation.hours);
-      await tx.execute(sql`
-        insert into pay_run_adjustments
-          (org_id, pay_run_document_id, employee_party_id, adjustment_type,
-           component_id, amount, hours, replace_component, note, created_by, updated_by)
-        values
-          (${orgId}, ${documentId}, ${mutation.employeePartyId}, 'line',
-           ${mutation.componentId}, ${amount}, ${hours},
-           ${mutation.replaceComponent === true}, ${mutation.note ?? null}, ${actorId}, ${actorId})
-      `);
+      if (key != null) {
+        await tx.execute(sql`
+          insert into pay_run_adjustments
+            (id, org_id, pay_run_document_id, employee_party_id, adjustment_type,
+             component_id, amount, hours, replace_component, note, created_by, updated_by)
+          values
+            (${key}, ${orgId}, ${documentId}, ${mutation.employeePartyId}, 'line',
+             ${mutation.componentId}, ${amount}, ${hours},
+             ${replaceComponent}, ${note}, ${actorId}, ${actorId})
+        `);
+      } else {
+        await tx.execute(sql`
+          insert into pay_run_adjustments
+            (org_id, pay_run_document_id, employee_party_id, adjustment_type,
+             component_id, amount, hours, replace_component, note, created_by, updated_by)
+          values
+            (${orgId}, ${documentId}, ${mutation.employeePartyId}, 'line',
+             ${mutation.componentId}, ${amount}, ${hours},
+             ${replaceComponent}, ${mutation.note ?? null}, ${actorId}, ${actorId})
+        `);
+      }
       changed = true;
     } else if (mutation.action === "delete") {
       const deleted = (await tx.execute<{ id: string }>(sql`
@@ -261,6 +358,6 @@ export async function mutatePayRunAdjustment(input: {
          where org_id = ${orgId} and document_id = ${documentId}
       `);
     }
-    return { changed };
+    return { changed, replayed: false };
   });
 }
