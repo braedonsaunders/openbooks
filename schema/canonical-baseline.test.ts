@@ -478,6 +478,10 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0246_soft_close_posting_fence.sql",
     "0247_customer_role_guard_sandbox_wipe.sql",
     "0248_pay_component_code_country_identity.sql",
+    // The timesheet week lifecycle shipped only inside the canonical baseline
+    // (08f7aec0f) with no forward migration, so upgraded installs never got
+    // the table; this migration carries that delta idempotently.
+    "0249_timesheet_week_lifecycle.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
