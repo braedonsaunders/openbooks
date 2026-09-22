@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, inDbTransaction, schema, type SqlExecutor, withOrgTransaction, withTransactionSavepoint } from "../platform/db.ts";
 import { fromUnits, isZero, sum, toUnits } from "../money/money.ts";
+import { decimalNullRefusal } from "../money/decimal-refusal.ts";
 
 /**
  * Banking: statement parsing (OFX / CSV) → import with dedupe → auto/manual
@@ -353,8 +354,21 @@ function expandTwoDigitYear(yy: string): string {
   return String((twoDigit <= 68 ? 2000 : 1900) + twoDigit);
 }
 
-/** Normalize a raw amount ("1,234.56", "(45.00)", "45.00-", "1.234,56") to a signed decimal string. */
-function normalizeAmount(raw: string, label: string): string {
+/**
+ * Normalize a raw amount ("1,234.56", "(45.00)", "45.00-", "1.234,56") to a
+ * signed decimal string.
+ *
+ * `commaMode` names where the figure came from, because a lone comma means
+ * different things under different grammars. SWIFT MT940 amounts use the
+ * decimal comma and never carry grouping, so there the comma is the point
+ * by spec — not a guess. Human input (CSV cells, pasted figures, manual
+ * statement lines) has no grammar: "1,234" is two readings, and silently
+ * picking one is how a 1000x statement line happens — "12,345" is
+ * twelve-point-three-four-five in every decimal-comma locale and 12345 in
+ * every grouping one. There the ambiguous shape is refused with both
+ * readings named, through the one shared decimal classifier.
+ */
+function normalizeAmount(raw: string, label: string, commaMode: "swift-decimal" | "human" = "human"): string {
   let s = raw.trim().replace(/[$€£\s]/g, "");
   if (!s) throw new BankingError(`${label}: empty amount`);
   let negative = false;
@@ -382,8 +396,26 @@ function normalizeAmount(raw: string, label: string): string {
       s = s.replace(/,/g, "");
     }
   } else if (hasComma) {
-    // "123,45" → decimal comma; "1,234" / "1,234,567" → thousands
-    s = /^\d{1,3}(,\d{3})+$/.test(s) ? s.replace(/,/g, "") : s.replace(/,/g, ".");
+    if (commaMode === "swift-decimal") {
+      // The SWIFT grammar: MT940 amounts carry no grouping separators, so
+      // the comma is the decimal point by spec. "12,345" is 12.345 — the
+      // three-decimal currencies (KWD, BHD, OMR, TND) write exactly this —
+      // and the old grouping guess read it as 12345, a 1000x line.
+      s = s.replace(/,/g, ".");
+    } else {
+      // A decimal comma with a one- or two-digit tail ("123,45") is
+      // twelve-thirty-four written correctly in a decimal-comma locale.
+      // Repeated three-digit groups ("1,234,567") settle the reading the
+      // way a lone comma cannot. One comma with any other tail is two
+      // readings, and a guess is a 1000x statement line — refuse it with
+      // both readings named through the shared classifier; a second
+      // implementation of that refusal would be the defect it prevents.
+      const singleComma = (s.match(/,/g) ?? []).length === 1;
+      if (singleComma && !/^(\d+),(\d{1,2})$/.test(s)) {
+        throw new BankingError(decimalNullRefusal(label, "a statement amount", s, 4));
+      }
+      s = /^\d{1,3}(,\d{3})+$/.test(s) ? s.replace(/,/g, "") : s.replace(/,/g, ".");
+    }
   }
   let units: bigint;
   try {
@@ -861,7 +893,7 @@ export function parseMt940(source: StatementSourceContent): ParsedStatement {
       // a credit takes money out (debit) and a reversal of a debit puts it
       // back (credit), per the SWIFT MT940 debit/credit-mark contract.
       const debit = m[3] === "D" || m[3] === "RC";
-      const amount = normalizeAmount((debit ? "-" : "") + m[5], "MT940 amount");
+      const amount = normalizeAmount((debit ? "-" : "") + m[5], "MT940 amount", "swift-decimal");
       const rest = value.slice(m[0].length);
       const ref = rest.split("//")[0]?.replace(/^N[A-Z]{3}/, "").trim() || null;
       pending = {
@@ -887,7 +919,7 @@ export function parseMt940(source: StatementSourceContent): ParsedStatement {
       }
       if (balanceCurrency) currency = balanceCurrency;
       if ((tag === "62F" || tag === "62M") && m) {
-        closingBalance = normalizeAmount((m[1] === "D" ? "-" : "") + m[4], "MT940 closing balance");
+        closingBalance = normalizeAmount((m[1] === "D" ? "-" : "") + m[4], "MT940 closing balance", "swift-decimal");
         const dm = m[2]!.match(/^(\d{2})(\d{2})(\d{2})$/)!;
         statementDate = assertRealDate(expandTwoDigitYear(dm[1]!), dm[2]!, dm[3]!, "MT940 balance date");
       }

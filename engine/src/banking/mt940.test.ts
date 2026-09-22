@@ -14,6 +14,26 @@ const mt940 = (valueDate: string, balanceDate: string) =>
     "-",
   ].join("\n");
 
+test("MT940 reads the wire comma as the decimal point, never as grouping", () => {
+  // SWIFT MT940 amounts carry no grouping separators: the comma IS the point
+  // by spec. "12,345" is twelve-point-three-four-five — the three-decimal
+  // currencies (KWD, BHD, OMR, TND) write exactly this — and the old
+  // grouping guess read it as 12345, a 1000x statement line feeding
+  // reconciliation.
+  const parsed = parseMt940(
+    [
+      ":20:S1",
+      ":25:ACC",
+      ":28C:1",
+      ":61:2608210821C12,345NTRFNONREF",
+      ":62F:C260821KWD12,345",
+      "-",
+    ].join("\n"),
+  );
+  assert.deepEqual(parsed.lines.map((line) => line.amount), ["12.3450"]);
+  assert.equal(parsed.closingBalance, "12.3450");
+});
+
 test("MT940 expands two-digit years on a fixed pivot, never the wall clock", () => {
   const parsed = parseMt940(mt940("991231", "991231"));
   assert.equal(parsed.lines[0]?.postedOn, "1999-12-31");
