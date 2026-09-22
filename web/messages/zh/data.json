@@ -17,7 +17,9 @@
     "run": "导出",
     "running": "导出中…",
     "empty": "请选择要导出的内容。",
-    "noColumns": "此记录类型没有可导出的列。"
+    "noColumns": "此记录类型没有可导出的列。",
+    "loadFailed": "无法加载可导出的记录类型。",
+    "columnsLoadFailed": "无法加载此记录类型的列。"
   },
   "import": {
     "title": "导入数据",
@@ -81,7 +83,8 @@
       "firstGeneration": "首次复制需生成验证模板，可能需要几分钟",
       "safety": "示例数据将复制到独立且明确标记的工作区。绝不会进入实际账簿，邮件、付款、API 与集成副作用保持禁用。",
       "orFile": "或导入自有文件"
-    }
+    },
+    "loadFailed": "无法加载可导入的记录类型。"
   },
   "history": {
     "title": "导入历史",

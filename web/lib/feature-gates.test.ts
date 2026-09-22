@@ -1932,10 +1932,28 @@ test('the surfaces this test was written for are covered', () => {
     /\{fixedAssetsEnabled \? <Field label=\{t\("fixedAsset"\)\}>/,
     'the property form must hide the fixed-asset picker when Fixed Assets is off',
   )
+  // The inline `coalesce((settings->'features'->>'multiCurrency')::boolean,
+  // false)` this used to grep for is gone: every engine feature reader now
+  // resolves through one machinery (dataDependentFeatureDefault), which is
+  // what keeps an org that never set the flag but already holds
+  // foreign-currency lines working. Grepping for the old SQL would fail for
+  // the refactor rather than for a dropped guard, so assert the GUARD: both
+  // write paths must consult the feature before storing a caller currency.
+  const propertyWrites = read('../engine/src/property/management.ts')
   assert.match(
-    read('../engine/src/property/management.ts'),
-    /coalesce\(\(settings->'features'->>'multiCurrency'\)::boolean, false\)/,
-    'property writes must not store a caller currency when Multi-currency is off — existing values stay',
+    propertyWrites,
+    /dataDependentFeatureDefault\([\s\S]{0,160}"multiCurrency"/,
+    'property multi-currency must resolve through the one feature machinery',
+  )
+  assert.match(
+    propertyWrites,
+    /if \(requestedCurrency && !\(await multiCurrencyFeatureEnabled\(tx, input\.orgId\)\)\)/,
+    'property create must not store a caller currency when Multi-currency is off',
+  )
+  assert.match(
+    propertyWrites,
+    /if \(currencySubmitted && currency !== row\.currentCurrency && !\(await multiCurrencyFeatureEnabled\(tx, input\.orgId\)\)\)/,
+    'property update must not CHANGE currency when Multi-currency is off — existing values stay',
   )
   assert.match(
     read('../engine/src/property/management.ts'),

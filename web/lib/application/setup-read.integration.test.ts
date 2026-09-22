@@ -79,8 +79,12 @@ async function viewerContext(org: ScratchOrg): Promise<ApplicationContext> {
 }
 
 test("getSetupRecord finds a tax code that a 200-row list page omits", { skip: !DB }, async () => {
-  const orgA = await createScratchOrg();
-  const orgB = await createScratchOrg();
+  // Wrapped, not baselined: creating a scratch org reaches across tenants, so
+  // it runs in the sanctioned bypass context the way every other integration
+  // test does. Adding the file to the exposure baseline would have recorded
+  // the hole instead of closing it.
+  const orgA = await withBypassContext(() => createScratchOrg());
+  const orgB = await withBypassContext(() => createScratchOrg());
   try {
     const adminA = await adminContext(orgA);
     const adminB = await adminContext(orgB);

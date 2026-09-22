@@ -5,31 +5,6 @@ import test from "node:test";
 
 const SOURCE = readFileSync(new URL("./tax-read.ts", import.meta.url), "utf8");
 
-test("tax reads reuse the filing-screen engine and keep money exact", () => {
-  // Same readers as the /tax filing screen, its export route, and the
-  // `tax_return` / `list_tax_return_forms` tools — never a parallel engine.
-  assert.match(SOURCE, /computeTaxReturn/);
-  assert.match(SOURCE, /from "@openbooks\/engine\/src\/tax-returns\/return\.ts"/);
-  assert.match(SOURCE, /from tax_return_forms/);
-  // Money as exact decimal strings: engine values canonicalized through the
-  // shared money helper, never floats.
-  assert.match(SOURCE, /normalizeMoneyValue\(String\(box\.value\)\)/);
-  assert.doesNotMatch(SOURCE, /\bnum\(/);
-  // Same gate as the filing screen: reports.read.
-  assert.match(SOURCE, /assertApplicationPermission\(context, "reports\.read"\)/);
-  // Boundary refusals name the remedy.
-  assert.match(SOURCE, /from and to dates \(YYYY-MM-DD\) are required/);
-  assert.match(SOURCE, /TaxReturnError/);
-});
-
-// Tax has no key in the feature registry (the filing screen itself gates only
-// on reports.read), so the wrapper must not invent one: `featureEnabled`
-// resolves unknown keys to false, which would turn every read into a
-// permanent 404 whose "enable it" remedy can never work.
-test("tax reads gate on reports.read, not on an invented feature key", () => {
-  assert.doesNotMatch(SOURCE, /isFeatureEnabled/);
-});
-
 const stateKey = Symbol.for("openbooks.tax-read-test");
 interface TaxReadState {
   dbCalls: number;
@@ -59,11 +34,6 @@ const taxState: TaxReadState = {
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = taxState;
 
-const REAL_DB_URL = new URL(
-  "../../../engine/src/platform/db.ts",
-  import.meta.url,
-).href;
-
 const mockSources = new Map<string, string>([
   [
     "mock:tax-db",
@@ -72,7 +42,7 @@ const mockSources = new Map<string, string>([
     // database boundary, which is exactly what unit tests may double).
     // The explicit `db` below shadows the star export.
     `
-      export * from ${JSON.stringify(REAL_DB_URL)}
+      export * from ${JSON.stringify(new URL("../../../engine/src/platform/db.ts", import.meta.url).href)}
       const state = globalThis[Symbol.for('openbooks.tax-read-test')]
       export const db = {
         execute: async () => {
@@ -121,6 +91,36 @@ const hooks = registerHooks({
 const { listApplicationTaxReturnForms, getApplicationTaxReturn } =
   (await import("./tax-read.ts")) as typeof import("./tax-read.ts");
 hooks.deregister();
+
+// Registered AFTER the dynamic import above. Every test() call must follow the
+// last top-level await: under --test-force-exit an earlier queue can drain
+// while the module is still suspended, and the tests registered afterwards are
+// silently omitted — a pass that never ran anything.
+test("tax reads reuse the filing-screen engine and keep money exact", () => {
+  // Same readers as the /tax filing screen, its export route, and the
+  // `tax_return` / `list_tax_return_forms` tools — never a parallel engine.
+  assert.match(SOURCE, /computeTaxReturn/);
+  assert.match(SOURCE, /from "@openbooks\/engine\/src\/tax-returns\/return\.ts"/);
+  assert.match(SOURCE, /from tax_return_forms/);
+  // Money as exact decimal strings: engine values canonicalized through the
+  // shared money helper, never floats.
+  assert.match(SOURCE, /normalizeMoneyValue\(String\(box\.value\)\)/);
+  assert.doesNotMatch(SOURCE, /\bnum\(/);
+  // Same gate as the filing screen: reports.read.
+  assert.match(SOURCE, /assertApplicationPermission\(context, "reports\.read"\)/);
+  // Boundary refusals name the remedy.
+  assert.match(SOURCE, /from and to dates \(YYYY-MM-DD\) are required/);
+  assert.match(SOURCE, /TaxReturnError/);
+});
+
+// Tax has no key in the feature registry (the filing screen itself gates only
+// on reports.read), so the wrapper must not invent one: `featureEnabled`
+// resolves unknown keys to false, which would turn every read into a
+// permanent 404 whose "enable it" remedy can never work.
+test("tax reads gate on reports.read, not on an invented feature key", () => {
+  assert.doesNotMatch(SOURCE, /isFeatureEnabled/);
+});
+
 
 type Context = Parameters<typeof listApplicationTaxReturnForms>[0];
 function contextWith(
