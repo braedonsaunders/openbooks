@@ -2,25 +2,31 @@ import { CloseError } from "./period-policy.ts";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { canonicalJson } from "../platform/canonical-json.ts";
-import { db, withOrg, inDbTransaction } from "../platform/db.ts";
+import { db, withOrg, inDbTransaction, type SqlExecutor } from "../platform/db.ts";
 import { resolveTaskDependenciesTx } from "./task-dependencies.ts";
 import { runCloseAutomations } from "./run-automation.ts";
-export async function updateCloseTask(args: {
-  orgId: string;
-  runId: string;
-  taskId: string;
-  actorId: string;
-  action:
-    "start" | "submit" | "complete" | "approve" | "request_changes" | "waive";
-  notes?: string;
-}): Promise<void> {
-  const fingerprintRes = (await db.execute<{ data_fingerprint: string | null }>(sql`
-    select data_fingerprint from close_runs where id = ${args.runId} and org_id = ${args.orgId}`));
-  const fingerprint = fingerprintRes.rows[0]?.data_fingerprint;
-  if (!fingerprint)
-    throw new CloseError("validate the close run before updating tasks");
+export type CloseTaskAction =
+  "start" | "submit" | "complete" | "approve" | "request_changes" | "waive";
 
-  await db.transaction(async (tx) => {
+/** Canonical close-task transition shared by the manual path and close
+ * automation. Every guard (blocked, owner, reviewer, evidence, segregation of
+ * duties) and every write (status, signoff, task audit event, dependency
+ * resolution) lives here, so automation cannot complete work the manual path
+ * refuses. This deliberately performs no automation fan-out: callers that
+ * already run inside automation (or that fan out themselves) must not
+ * re-enter runCloseAutomations. */
+export async function transitionCloseTaskTx(
+  tx: SqlExecutor,
+  args: {
+    orgId: string;
+    runId: string;
+    taskId: string;
+    actorId: string | null;
+    action: CloseTaskAction;
+    notes?: string;
+    fingerprint: string;
+  },
+): Promise<void> {
     const taskRes = (await tx.execute(sql`
       select t.*, (select count(*) from close_task_evidence e where e.task_id = t.id) as evidence_count
         from close_run_tasks t where t.id = ${args.taskId} and t.run_id = ${args.runId} and t.org_id = ${args.orgId}
@@ -52,6 +58,15 @@ export async function updateCloseTask(args: {
         "required evidence must be attached before this task can be completed",
       );
     }
+    // A reviewer-gated task can only leave preparation through submit, which
+    // routes to independent review. Completing it directly would silently
+    // absorb the review step, so refuse by name instead: the owner submits
+    // the task for review, and the assigned reviewer approves it.
+    if (args.action === "complete" && task.reviewer_id) {
+      throw new CloseError(
+        "this task requires independent review and cannot be completed directly; submit it for review instead",
+      );
+    }
 
     let status: string;
     if (args.action === "start") status = "in_progress";
@@ -76,7 +91,7 @@ export async function updateCloseTask(args: {
         completed_by = case when ${status} in ('complete','waived') then coalesce(completed_by, ${args.actorId}) else completed_by end,
         reviewed_at = case when ${args.action} = 'approve' then now() else reviewed_at end,
         reviewed_by = case when ${args.action} = 'approve' then ${args.actorId} else reviewed_by end,
-        data_fingerprint = case when ${status} in ('complete','submitted','waived') then ${fingerprint} else data_fingerprint end,
+        data_fingerprint = case when ${status} in ('complete','submitted','waived') then ${args.fingerprint} else data_fingerprint end,
         updated_at = now(), updated_by = ${args.actorId}
        where id = ${args.taskId} and org_id = ${args.orgId}`);
     if (["approve", "waive"].includes(args.action)) {
@@ -86,13 +101,31 @@ export async function updateCloseTask(args: {
         values (${args.orgId}, ${args.runId}, ${args.taskId},
                 ${args.action === "approve" ? "review" : "waive"},
                 ${args.action === "approve" ? "approved" : "waived"},
-                ${args.notes ?? null}, ${fingerprint}, ${args.actorId})`);
+                ${args.notes ?? null}, ${args.fingerprint}, ${args.actorId})`);
     }
     await tx.execute(sql`
       insert into close_events (org_id, run_id, task_id, event_type, actor_id, payload)
       values (${args.orgId}, ${args.runId}, ${args.taskId}, ${`task.${args.action}`}, ${args.actorId},
               ${JSON.stringify({ status, notes: args.notes ?? null })}::jsonb)`);
     await resolveTaskDependenciesTx(tx, args.orgId, args.runId);
+}
+
+export async function updateCloseTask(args: {
+  orgId: string;
+  runId: string;
+  taskId: string;
+  actorId: string;
+  action: CloseTaskAction;
+  notes?: string;
+}): Promise<void> {
+  const fingerprintRes = (await db.execute<{ data_fingerprint: string | null }>(sql`
+    select data_fingerprint from close_runs where id = ${args.runId} and org_id = ${args.orgId}`));
+  const fingerprint = fingerprintRes.rows[0]?.data_fingerprint;
+  if (!fingerprint)
+    throw new CloseError("validate the close run before updating tasks");
+
+  await db.transaction(async (tx) => {
+    await transitionCloseTaskTx(tx, { ...args, fingerprint });
   });
   const ready = (await db.execute<{ id: string; key: string }>(sql`select id, key from close_run_tasks
     where run_id = ${args.runId} and org_id = ${args.orgId} and status = 'ready'`));

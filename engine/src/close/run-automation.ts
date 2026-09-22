@@ -413,29 +413,48 @@ export async function runCloseAutomations(
       } else if (rule.action === "run_check") {
         await refreshCloseRun(context.orgId, context.runId, context.actorId);
       } else if (rule.action === "complete_task") {
-        if (!context.taskId)
+        const taskId = context.taskId;
+        if (!taskId)
           throw new CloseError(
             "complete-task automation requires a task event",
           );
+        // Route through the canonical task transition so automation is bound
+        // by the same owner, blocked, evidence, reviewer, and segregation
+        // controls as the manual path, and writes the same task audit event.
+        // A reviewer-gated task is refused (never auto-approved): the owner
+        // submits it for review and the assigned reviewer approves it. The
+        // shared transition performs no automation fan-out, so this cannot
+        // re-enter runCloseAutomations; the refresh below is the only fan-out.
+        const { transitionCloseTaskTx } = await import("./tasks.ts");
         await db.transaction(async (tx) => {
-          const task = (await tx.execute<{ evidence_required: boolean; evidence_count: string }>(sql`select evidence_required,
-            (select count(*) from close_task_evidence e where e.task_id = t.id and e.org_id = t.org_id) as evidence_count
-            from close_run_tasks t where t.id = ${context.taskId} and t.run_id = ${context.runId}
-              and t.org_id = ${context.orgId} for update`));
+          const task = (await tx.execute<{ status: string; completion_mode: string }>(sql`
+            select status, completion_mode from close_run_tasks
+             where id = ${taskId} and run_id = ${context.runId}
+               and org_id = ${context.orgId} for update`));
           if (!task.rows[0]) throw new CloseError("automation task not found");
           if (
-            task.rows[0].evidence_required &&
-            Number(task.rows[0].evidence_count) === 0
-          ) {
+            task.rows[0].status === "complete" ||
+            task.rows[0].status === "waived"
+          )
+            return;
+          if (task.rows[0].completion_mode === "computed") {
             throw new CloseError(
-              "automatic task requires evidence before completion",
+              "automatic completion is only for manual tasks; computed tasks complete when the close run is validated — run a run_check automation or validate the run",
             );
           }
-          await tx.execute(sql`update close_run_tasks set status = 'complete', completed_at = now(),
-            completed_by = ${context.actorId ?? run.started_by ?? null}, data_fingerprint = ${run.data_fingerprint},
-            updated_at = now(), updated_by = ${context.actorId ?? null}
-            where id = ${context.taskId} and run_id = ${context.runId} and org_id = ${context.orgId} and status not in ('complete','waived')`);
-          await resolveTaskDependenciesTx(tx, context.orgId, context.runId);
+          const fingerprintRes = (await tx.execute<{ data_fingerprint: string | null }>(sql`
+            select data_fingerprint from close_runs where id = ${context.runId} and org_id = ${context.orgId}`));
+          const fingerprint = fingerprintRes.rows[0]?.data_fingerprint;
+          if (!fingerprint)
+            throw new CloseError("validate the close run before updating tasks");
+          await transitionCloseTaskTx(tx, {
+            orgId: context.orgId,
+            runId: context.runId,
+            taskId,
+            actorId: context.actorId ?? run.started_by ?? null,
+            action: "complete",
+            fingerprint,
+          });
         });
         await refreshCloseRun(context.orgId, context.runId, context.actorId);
       } else if (rule.action === "create_task") {
