@@ -53,17 +53,14 @@ export type GbTaxCode =
   | {
     kind: "suffix";
     /**
-     * Annual tax-free pay the code carries ("12579" for 1257L, "0" for 0T):
-     * the code number × 10 + 9, not the £12,570 Personal Allowance. HMRC
-     * Tables A (Pay Adjustment Tables) embody the +9 — e.g. month-1 free pay
-     * for code 1 is £1.59 (ceiling of 19/12), for code 500 £417.42
-     * (ceiling of 5,009/12) — and the PAYE manual states free pay "is a
-     * proportion of the employee's maximum tax allowance which is reflected
-     * in the code" (PAYE70025: week 1 is 1/52, month 1 is 1/12 of it).
-     * Pricing 1257L off 12,570 understates month-1 free pay by 75p
-     * (£1,047.50 instead of £1,048.25).
+     * The code's number (1257 for 1257L, 0 for 0T). Free pay derives from
+     * it per the software spec §4.3.1: week/month n takes n × the
+     * Week1/Month1 value, Week1 = ceiling(((number × 10) + 9)/52) to the
+     * penny (Month1: /12), with the >500 quotient/remainder decomposition —
+     * so 1257L's month-1 free pay is £1,048.26, not £12,570/12. The engine
+     * never pro-rates an annual figure.
      */
-    freePayAnnual: string;
+    number: number;
     /** Welsh C-prefix alias: identical rUK arithmetic, Welsh taxpayer. */
     welsh: boolean;
     /** Scottish S-prefix: prices through GB_SCT_BANDS, never the rUK bands. */
@@ -82,8 +79,13 @@ export type GbTaxCode =
   | { kind: "none" }
   | {
     kind: "k";
-    /** Annual added pay: the code number × 10. */
-    addedAnnual: string;
+    /**
+     * The code's number (475 for K475). Additional pay derives from it per
+     * §4.3.1c: the same Week1/Month1 construction as free pay but with NO
+     * +9 top-up (the code note: each K unit is £10 of additional pay), so
+     * K475's month-1 addition is ceiling(4,750/12) = £395.84.
+     */
+    number: number;
     welsh: boolean;
     /** K codes are never Scottish: SK-numbers are refused by name. */
     scottish: false;
@@ -91,13 +93,6 @@ export type GbTaxCode =
   };
 
 const STANDARD_ALLOWANCE_NUMBER = 1257;
-/**
- * The Tables-A top-up: a suffix code number covers a £10 allowance range and
- * free pay prices at the top of it (code × 10 + 9), so 1257L carries £12,579
- * of annual free pay against the £12,570 Personal Allowance. K codes take no
- * top-up (their added pay is exactly number × 10 — see the K branch below).
- */
-const SUFFIX_FREE_PAY_TOP_UP = 9;
 
 function refuse(code: string, reason: string): never {
   throw new PayrollPackError(
@@ -142,7 +137,7 @@ export function parseGbTaxCode(raw: string): GbTaxCode {
     return { kind: "flat", rate: "0.45", welsh, scottish: false };
   }
   if (rest === "0T") {
-    return { kind: "suffix", freePayAnnual: "0", welsh, scottish: false, nonCumulative };
+    return { kind: "suffix", number: 0, welsh, scottish: false, nonCumulative };
   }
   if (rest === "NT") {
     if (nonCumulative) refuse(raw, "NT carries no W1/M1/X marker — it already deducts nothing");
@@ -156,7 +151,7 @@ export function parseGbTaxCode(raw: string): GbTaxCode {
   if (k) {
     const number = Number(k[1]);
     if (!Number.isSafeInteger(number) || number <= 0) refuse(raw, "a K code carries a positive number");
-    return { kind: "k", addedAnnual: String(number * 10), welsh, scottish: false, nonCumulative };
+    return { kind: "k", number, welsh, scottish: false, nonCumulative };
   }
 
   const suffix = rest.match(/^(\d+)([LMN])$/);
@@ -169,14 +164,10 @@ export function parseGbTaxCode(raw: string): GbTaxCode {
     }
     if (number !== STANDARD_ALLOWANCE_NUMBER) {
       refuse(raw, `only the standard ${STANDARD_ALLOWANCE_NUMBER}L (and 0T) suffix codes are `
-        + "transcribed — any other numeric code needs the Tables A free-pay schedule, which this "
-        + "pack has not transcribed");
+        + "operated — any other numeric code is refused until its Tables-A free pay carries "
+        + "its own golden in this pack");
     }
-    return {
-      kind: "suffix",
-      freePayAnnual: String(number * 10 + SUFFIX_FREE_PAY_TOP_UP),
-      welsh, scottish: false, nonCumulative,
-    };
+    return { kind: "suffix", number, welsh, scottish: false, nonCumulative };
   }
 
   return refuse(raw, "unrecognised code shape — operate only codes HMRC documents at "
@@ -185,8 +176,8 @@ export function parseGbTaxCode(raw: string): GbTaxCode {
 
 /**
  * Parse the body of an S-prefix (Scottish taxpayer) code, after the S is
- * stripped. The transcribed Scottish set is S1257L (suffix, same £12,570
- * reserved allowance as rUK) and the five Tables-B flat codes SBR/SD0–SD3 —
+ * stripped. The transcribed Scottish set is S1257L (suffix, same Tables-A
+ * free-pay schedule as rUK) and the five Tables-B flat codes SBR/SD0–SD3 —
  * everything else S-prefixed is refused BY NAME, never fallen through to
  * the rUK bands (which would be wrong money for every Scottish employee).
  */
@@ -231,15 +222,11 @@ function parseScottishCode(raw: string, rest: string, nonCumulative: boolean): G
         + "this pack has not transcribed — refused by name");
     }
     if (number !== STANDARD_ALLOWANCE_NUMBER) {
-      refuse(raw, `only the standard S${STANDARD_ALLOWANCE_NUMBER}L suffix code is transcribed — `
-        + "any other Scottish numeric code needs the Tables A free-pay schedule, which this "
-        + "pack has not transcribed");
+      refuse(raw, `only the standard S${STANDARD_ALLOWANCE_NUMBER}L suffix code is operated — `
+        + "any other Scottish numeric code is refused until its Tables-A free pay carries "
+        + "its own golden in this pack");
     }
-    return {
-      kind: "suffix",
-      freePayAnnual: String(number * 10 + SUFFIX_FREE_PAY_TOP_UP),
-      welsh: false, scottish: true, nonCumulative,
-    };
+    return { kind: "suffix", number, welsh: false, scottish: true, nonCumulative };
   }
   return refuse(raw, "unrecognised Scottish code shape — the transcribed S-prefix set is S1257L "
     + "(with optional W1/M1/X), SBR, SD0, SD1, SD2 and SD3 "

@@ -127,9 +127,9 @@ test("pay dates outside every transcribed year throw without touching the databa
 });
 
 test("a 2025/26 correction prices the 2025 tables end to end", async () => {
-  // Month 1, £4,000, 1257L cumulative from zero priors: free pay 1,048.25
-  // (12,579 × 1/12 — the code's allowance), taxable 2,951.75 at 20% →
-  // £590.35. NIC from the 2025 thresholds at the 15% employer rate:
+  // Month 1, £4,000, 1257L cumulative from zero priors: free pay £1,048.26
+  // (Tables A), Un = £2,951.74, Tn = £2,951 → Formula 1: £2,951 × 20% =
+  // £590.20. NIC from the 2025 thresholds at the 15% employer rate:
   // employee (4,000 − 1,048) × 8% = £236.16; employer (4,000 − 417) × 15% =
   // £537.45.
   const { ctx, pushed } = gbContext({
@@ -141,8 +141,8 @@ test("a 2025/26 correction prices the 2025 tables end to end", async () => {
     codes: NOTICE_1257L,
   });
   const factors = await computeGbStatutory(ctx);
-  assert.equal(factors.GB_TAX, "590.3500");
-  assert.deepEqual(pushed.map((line) => line.amount), ["590.3500", "236.1600", "537.4500"]);
+  assert.equal(factors.GB_TAX, "590.2000");
+  assert.deepEqual(pushed.map((line) => line.amount), ["590.2000", "236.1600", "537.4500"]);
 });
 
 test("a pay date is never priced from another year's tables", async () => {
@@ -170,8 +170,8 @@ test("SCT with an S-code prices the Scottish bands end to end", async () => {
     codes: { gb_tax_code_notice: { tax_code: "S1257L", non_cumulative: null } },
   });
   const factors = await computeGbStatutory(ctx);
-  assert.equal(pushed[0]!.amount, "237.0400");
-  assert.equal(factors.GB_TAX, "237.0400");
+  assert.equal(pushed[0]!.amount, "236.8900");
+  assert.equal(factors.GB_TAX, "236.8900");
 });
 
 test("an S-code prices Scottish bands in any region; SBR is whole-pay 20%", async () => {
@@ -251,13 +251,13 @@ test("cumulative 1257L in month 1 prices from zero priors", async () => {
   assert.deepEqual(
     pushed.map((line) => [line.systemKey, line.kind, line.amount]),
     [
-      ["paye", "deduction", "240.3500"],
+      ["paye", "deduction", "240.2000"],
       ["nic", "deduction", "96.1600"],
       ["nic", "employer_contribution", "274.9500"],
     ],
   );
   assert.equal(factors.GB_TAXABLE, "2250.0000");
-  assert.equal(factors.GB_TAX, "240.3500");
+  assert.equal(factors.GB_TAX, "240.2000");
 });
 
 test("cumulative 1257L after month 1 with no record is refused", async () => {
@@ -272,9 +272,9 @@ test("cumulative 1257L after month 1 with no record is refused", async () => {
 });
 
 test("declaration A certifies the empty record", async () => {
-  // Month 8 with first-year pay of £9,000: free pay to date
-  // 12,579 × 8/12 = £8,386, taxable £614, due £122.80 — the A declaration
-  // makes zero priors the truth.
+  // Month 8 with first-year pay of £9,000: free pay to date 8 × £1,048.26
+  // = £8,386.08, Un = £613.92, Tn = £613 → Formula 1: £613 × 20% = £122.60.
+  // The A declaration makes zero priors the truth.
   const { ctx, pushed } = gbContext({
     payDate: "2026-11-06",
     tx: stubTx(EMPTY_YTD),
@@ -286,7 +286,7 @@ test("declaration A certifies the empty record", async () => {
     },
   });
   await computeGbStatutory(ctx);
-  assert.equal(pushed[0]!.amount, "122.8000");
+  assert.equal(pushed[0]!.amount, "122.6000");
 });
 
 test("stubs spanning the year start price with priors applied", async () => {
@@ -295,7 +295,7 @@ test("stubs spanning the year start price with priors applied", async () => {
     tx: stubTx({
       taxable: "2250.0000",
       addpay: "0",
-      tax: "240.3500",
+      tax: "240.2000",
       stub_count: "1",
       first_pay: "2026-04-06",
     }),
@@ -304,7 +304,8 @@ test("stubs spanning the year start price with priors applied", async () => {
     codes: NOTICE_1257L,
   });
   await computeGbStatutory(ctx);
-  // Free pay to date £3,144.75; cumulative £4,500; taxable £1,355.25;
-  // liability £271.05 less £240.35 paid = £30.70.
-  assert.equal(pushed[0]!.amount, "30.7000");
+  // Free pay to date 3 × £1,048.26 = £3,144.78; cumulative £4,500;
+  // Un = £1,355.22, Tn = £1,355; liability £271.00 less £240.20 paid =
+  // £30.80.
+  assert.equal(pushed[0]!.amount, "30.8000");
 });
