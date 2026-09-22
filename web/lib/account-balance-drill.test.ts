@@ -19,7 +19,7 @@ import {
 import { encodeReportDrillTarget, parseReportDrillTarget } from './report-drill'
 
 const ACCOUNT_ID = '018f47aa-7c11-7a12-8bc3-1234567890ab'
-const WINDOW = { asOf: '2026-09-22', fiscalYearStart: '2026-04-01' }
+const WINDOW = { from: '2026-09-01', to: '2026-09-30', period: 'this_period' }
 
 test('CoA class types partition the P&L and reuse the statement asset lists', () => {
   assert.deepEqual([...ACCOUNT_CLASS_TYPES.expense], PNL_COST_TYPES)
@@ -32,7 +32,7 @@ test('CoA class types partition the P&L and reuse the statement asset lists', ()
   assert.deepEqual([...ACCOUNT_CLASS_TYPES.equity], EQUITY_TYPES)
 })
 
-test('P&L account balances drill fiscal-YTD flow; balance-sheet balances are lifetime', () => {
+test('CoA balances drill the current period as newest-first flow, P&L and balance-sheet alike', () => {
   const income = accountBalanceDrill({
     accountId: ACCOUNT_ID,
     label: '4000 Sales',
@@ -45,32 +45,29 @@ test('P&L account balances drill fiscal-YTD flow; balance-sheet balances are lif
     type: 'asset_bank',
     ...WINDOW,
   })
-  assert.deepEqual(income, {
+  const expected = {
     kind: 'ledger',
-    label: '4000 Sales',
     accountIds: [ACCOUNT_ID],
     mode: 'flow',
-    from: WINDOW.fiscalYearStart,
-    to: WINDOW.asOf,
-  })
-  assert.deepEqual(bank, {
-    kind: 'ledger',
-    label: '1000 Cash',
-    accountIds: [ACCOUNT_ID],
-    mode: 'balance',
-    to: WINDOW.asOf,
-  })
-  assert.equal(bank && 'from' in bank, false)
+    from: WINDOW.from,
+    to: WINDOW.to,
+    period: 'this_period',
+    newestFirst: true,
+  }
+  assert.deepEqual(income, { ...expected, label: '4000 Sales' })
+  assert.deepEqual(bank, { ...expected, label: '1000 Cash' })
   const parsedIncome = parseReportDrillTarget(encodeReportDrillTarget(income!))
   const parsedBank = parseReportDrillTarget(encodeReportDrillTarget(bank!))
   assert.equal(parsedIncome?.kind, 'ledger')
   assert.equal(parsedBank?.kind, 'ledger')
   if (parsedIncome?.kind !== 'ledger' || parsedBank?.kind !== 'ledger') assert.fail('expected ledger targets')
   assert.equal(parsedIncome.mode, 'flow')
-  assert.equal(parsedIncome.from, WINDOW.fiscalYearStart)
+  assert.equal(parsedIncome.from, WINDOW.from)
+  assert.equal(parsedIncome.period, 'this_period')
+  assert.equal(parsedIncome.newestFirst, true)
   assert.deepEqual(parsedIncome.accountIds, [ACCOUNT_ID])
-  assert.equal(parsedBank.mode, 'balance')
-  assert.equal(parsedBank.from, undefined)
+  assert.equal(parsedBank.mode, 'flow')
+  assert.equal(parsedBank.newestFirst, true)
   assert.deepEqual(parsedBank.accountIds, [ACCOUNT_ID])
 })
 
@@ -79,9 +76,11 @@ test('class-total drills name every type in the class and refuse an unknown clas
   const assets = accountClassBalanceDrill({ classKey: 'asset', label: 'Assets', ...WINDOW })
   assert.deepEqual(income.accountTypes, [...ACCOUNT_CLASS_TYPES.income])
   assert.equal(income.mode, 'flow')
-  assert.equal(income.from, WINDOW.fiscalYearStart)
+  assert.equal(income.from, WINDOW.from)
+  assert.equal(income.period, 'this_period')
+  assert.equal(income.newestFirst, true)
   assert.deepEqual(assets.accountTypes, [...ASSET_TYPES])
-  assert.equal(assets.mode, 'balance')
+  assert.equal(assets.mode, 'flow')
   const roundTripped = parseReportDrillTarget(encodeReportDrillTarget(income))
   assert.equal(roundTripped?.kind, 'ledger')
   assert.equal(roundTripped?.kind === 'ledger' ? roundTripped.mode : null, 'flow')
@@ -104,6 +103,8 @@ test('list balance drill uses the always-selected type and refuses a hidden or i
     WINDOW,
   )
   assert.equal(ok?.mode, 'flow')
+  assert.equal(ok?.period, 'this_period')
+  assert.equal(ok?.newestFirst, true)
   assert.equal(ok?.label, '6100 Rent')
   assert.equal(accountListBalanceDrill({ id: ACCOUNT_ID, type: 'expense' }, 'name', WINDOW), null)
   assert.equal(
@@ -118,19 +119,37 @@ test('every CoA surface opens the shared report drill flyout from the balance nu
   const list = readFileSync(new URL('../components/entity-list-view.tsx', import.meta.url), 'utf8')
   const source = readFileSync(new URL('./list/entity-sources.ts', import.meta.url), 'utf8')
   const hierarchy = readFileSync(new URL('../app/(app)/accounts/AccountsHierarchyTable.tsx', import.meta.url), 'utf8')
+  const host = readFileSync(new URL('../components/global-report-drawer-host.tsx', import.meta.url), 'utf8')
+  const route = readFileSync(new URL('../app/api/reports/drill/route.ts', import.meta.url), 'utf8')
+  const filterBar = readFileSync(new URL('../app/(app)/reports/ReportFilterBar.tsx', import.meta.url), 'utf8')
+  const overlay = readFileSync(new URL('./report-drill-period.ts', import.meta.url), 'utf8')
+  const detail = readFileSync(new URL('./reports/transaction-detail.ts', import.meta.url), 'utf8')
+  const drillData = readFileSync(new URL('./report-drill-data.ts', import.meta.url), 'utf8')
 
   assert.match(page, /accountsWithBalances\(\s*authz\.user\.orgId,\s*asOf,\s*authz\.allowedSubsidiaryIds,?\s*\)/)
   assert.match(page, /drill\(item\('balanceDrill'/)
   assert.match(page, /money\(item\('balance'/)
   assert.match(page, /accountBalanceDrill\(/)
   assert.match(page, /accountClassBalanceDrill\(/)
-  assert.match(page, /fiscalYearRangeFor\(fiscalYearOf\(asOf, startMonth\), startMonth\)\.from/)
+  assert.match(page, /resolvePeriod\('this_period'/)
 
   assert.match(source, /columnDrill:\s*accountListBalanceDrill/)
   assert.match(source, /a\.type as drill_account_type/)
   assert.match(list, /<ReportDrillLink target=\{drill\}/)
   assert.match(list, /source\.columnDrill/)
+  assert.match(list, /resolvePeriod\('this_period'/)
   assert.match(hierarchy, /<ReportDrillLink/)
   assert.match(hierarchy, /target=\{row\.drill\}/)
   assert.match(hierarchy, /target=\{group\.drill\}/)
+
+  assert.match(host, /<ReportFilterBar/)
+  assert.match(host, /REPORT_DRILL_PERIOD_PARAM/)
+  assert.match(host, /search\.set\('period', drillPeriod\)/)
+  assert.match(filterBar, /periodParamKey/)
+  assert.match(filterBar, /resetParamKeys/)
+  assert.match(route, /overlayLedgerDrillPeriod/)
+  assert.match(overlay, /if \(target\.kind !== 'ledger' \|\| !target\.period\) return target/)
+  assert.match(overlay, /resolvePeriod/)
+  assert.match(detail, /newestFirst/)
+  assert.match(drillData, /newestFirst: target\.newestFirst/)
 })

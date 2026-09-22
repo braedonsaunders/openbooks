@@ -1,4 +1,5 @@
-import { accountClassTypes, PNL_TYPES } from './account-types'
+import { isPeriodPreset } from '@openbooks/reports'
+import { accountClassTypes } from './account-types'
 import type { ReportDrillTarget } from './report-drill'
 
 /** Every CoA balance drills the GL ledger, so callers may read the ledger
@@ -9,20 +10,25 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 const ACCOUNT_TYPE = /^[a-z][a-z0-9_]{0,63}$/
 
+/** The flyout window — current accounting period by default — not the
+ *  lifetime/YTD number on the CoA row. The page balance stays as-of today;
+ *  the operator narrows or widens supporting lines with the house period
+ *  filter. */
 export type AccountBalanceDrillWindow = {
-  asOf: string
-  fiscalYearStart: string
+  from: string
+  to: string
+  period?: string
 }
 
-function ledgerWindow(types: readonly string[], ctx: AccountBalanceDrillWindow): Pick<LedgerDrillTarget, 'mode' | 'from' | 'to'> | null {
-  if (!ISO_DATE.test(ctx.asOf) || !ISO_DATE.test(ctx.fiscalYearStart)) return null
-  // CoA balances are fiscal-YTD for the P&L universe and lifetime otherwise.
-  // A mixed set that is not entirely P&L must use lifetime, matching the
-  // balance SQL (`type not in PNL or date >= fy start`).
-  const pnl = types.length > 0 && types.every((type) => PNL_TYPES.includes(type))
-  return pnl
-    ? { mode: 'flow', from: ctx.fiscalYearStart, to: ctx.asOf }
-    : { mode: 'balance', to: ctx.asOf }
+function ledgerWindow(ctx: AccountBalanceDrillWindow): Pick<LedgerDrillTarget, 'mode' | 'from' | 'to' | 'period' | 'newestFirst'> | null {
+  if (!ISO_DATE.test(ctx.from) || !ISO_DATE.test(ctx.to)) return null
+  return {
+    mode: 'flow',
+    from: ctx.from,
+    to: ctx.to,
+    period: ctx.period && isPeriodPreset(ctx.period) ? ctx.period : 'this_period',
+    newestFirst: true,
+  }
 }
 
 /**
@@ -34,12 +40,13 @@ export function accountBalanceDrill(opts: {
   accountId: string
   label: string
   type: string
-  asOf: string
-  fiscalYearStart: string
+  from: string
+  to: string
+  period?: string
 }): LedgerDrillTarget | null {
   const label = opts.label.trim()
   if (!UUID.test(opts.accountId) || !label || !ACCOUNT_TYPE.test(opts.type)) return null
-  const window = ledgerWindow([opts.type], { asOf: opts.asOf, fiscalYearStart: opts.fiscalYearStart })
+  const window = ledgerWindow({ from: opts.from, to: opts.to, period: opts.period })
   if (!window) return null
   return { kind: 'ledger', label, accountIds: [opts.accountId], ...window }
 }
@@ -52,8 +59,9 @@ export function accountBalanceDrill(opts: {
 export function accountClassBalanceDrill(opts: {
   classKey: string
   label: string
-  asOf: string
-  fiscalYearStart: string
+  from: string
+  to: string
+  period?: string
 }): LedgerDrillTarget {
   const accountTypes = accountClassTypes(opts.classKey)
   if (!accountTypes) {
@@ -65,10 +73,10 @@ export function accountClassBalanceDrill(opts: {
   if (!label) {
     throw new Error(`Chart-of-accounts class "${opts.classKey}" needs a non-empty drill label.`)
   }
-  const window = ledgerWindow(accountTypes, { asOf: opts.asOf, fiscalYearStart: opts.fiscalYearStart })
+  const window = ledgerWindow({ from: opts.from, to: opts.to, period: opts.period })
   if (!window) {
     throw new Error(
-      `Chart-of-accounts class "${opts.classKey}" drill needs ISO as-of and fiscal-year-start dates.`,
+      `Chart-of-accounts class "${opts.classKey}" drill needs ISO from and to dates.`,
     )
   }
   return { kind: 'ledger', label, accountTypes: [...accountTypes], ...window }
@@ -95,7 +103,8 @@ export function accountListBalanceDrill(
     accountId: id,
     label: `${number} ${name}`.trim() || id,
     type,
-    asOf: ctx.asOf,
-    fiscalYearStart: ctx.fiscalYearStart,
+    from: ctx.from,
+    to: ctx.to,
+    period: ctx.period,
   })
 }

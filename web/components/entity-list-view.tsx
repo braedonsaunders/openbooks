@@ -33,8 +33,7 @@ import {
 } from '../lib/customization/entity-list-query'
 import { entityListSource, entityOrderClause, plannedPageClauses } from '../lib/list/entity-sources'
 import { ReportDrillLink } from '../app/(app)/reports/ReportDrillLink'
-import { fiscalYearOf, fiscalYearRangeFor } from '@openbooks/reports'
-import { fiscalStartMonth } from '../lib/fiscal'
+import { resolvePeriod } from '../lib/periods'
 import { DRILL_LINK_CLASS } from './viewspec/tone'
 
 /**
@@ -232,14 +231,13 @@ export async function EntityListView({
     cols.filter((c) => c.expr).map((c) => sql`${c.expr} as ${sql.raw(`"${c.key}"`)}`),
     sql`, `,
   )
-  const [allowedSubs, today, startMonth] = await Promise.all([
+  const [allowedSubs, today] = await Promise.all([
     allowedSubsidiaryIds(userId, orgId),
     businessToday(orgId),
-    source.columnDrill ? fiscalStartMonth(orgId) : Promise.resolve(1),
   ])
-  const fiscalYearStart = source.columnDrill
-    ? fiscalYearRangeFor(fiscalYearOf(today, startMonth), startMonth).from
-    : undefined
+  const currentPeriod = source.columnDrill
+    ? await resolvePeriod('this_period', { today, orgId })
+    : null
   const adhoc = {
     q: params.q,
     filters: quickValues,
@@ -415,8 +413,12 @@ export async function EntityListView({
         const formatted = v == null || v === ''
           ? <span className="text-slate-400">—</span>
           : money(String(v), source.currencyField ? { currency: typeof rowCurrency === 'string' ? rowCurrency : undefined } : undefined)
-        const drill = fiscalYearStart && source.columnDrill && v != null && v !== ''
-          ? source.columnDrill(row, c.key, { asOf: today, fiscalYearStart })
+        const drill = currentPeriod && source.columnDrill && v != null && v !== ''
+          ? source.columnDrill(row, c.key, {
+              from: currentPeriod.from,
+              to: currentPeriod.to,
+              period: currentPeriod.presetId,
+            })
           : null
         return (
           <TableCell key={c.key} className="text-right tabular-nums">

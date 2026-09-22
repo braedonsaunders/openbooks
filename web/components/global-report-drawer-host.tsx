@@ -5,10 +5,17 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Skeleton, UrlDrawer, cn } from '@openbooks/ui'
-import type { ReportDrillResponse } from '../lib/report-drill'
+import {
+  parseReportDrillTarget,
+  REPORT_DRILL_FROM_PARAM,
+  REPORT_DRILL_PERIOD_PARAM,
+  REPORT_DRILL_TO_PARAM,
+  type ReportDrillResponse,
+} from '../lib/report-drill'
 import { Pagination } from './pagination'
 import { RelatedTransactionDrawerClient, type RelatedTransactionDrawerData } from './related-transaction-drawer-client'
 import { EntryFlyout } from '../app/(app)/reports/EntryFlyout'
+import { ReportFilterBar } from '../app/(app)/reports/ReportFilterBar'
 import { TxnLink } from '../app/(app)/reports/TxnLink'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../app/(app)/reports/ReportTable'
 import { AccountRegisterDrawer } from './account-register-drawer'
@@ -29,15 +36,21 @@ export function GlobalReportDrawerHost() {
   const t = useTranslations('reports')
   const target = params.get('reportDrill')
   const page = Math.max(1, Number(params.get('reportDrillPage') ?? 1) || 1)
+  const drillPeriod = params.get(REPORT_DRILL_PERIOD_PARAM)
+  const drillFrom = params.get(REPORT_DRILL_FROM_PARAM)
+  const drillTo = params.get(REPORT_DRILL_TO_PARAM)
   const recordId = params.get('reportRecord')
   const recordKind = params.get('reportRecordKind')
+  const parsed = useMemo(() => parseReportDrillTarget(target), [target])
+  const periodBrowsable = parsed?.kind === 'ledger' && Boolean(parsed.period)
   const [data, setData] = useState<ReportDrillResponse | null>(null)
   const [loadedTarget, setLoadedTarget] = useState<string | null>(null)
   const [recordData, setRecordData] = useState<RelatedTransactionDrawerData | null>(null)
   const [loadedRecord, setLoadedRecord] = useState<string | null>(null)
 
   const closeHref = useMemo(() => hrefWithout(pathname, query, [
-    'reportDrill', 'reportDrillPage', 'reportRecord', 'reportRecordKind', 'txn', 'drawerReturn', 'form', 'transactionTab',
+    'reportDrill', 'reportDrillPage', REPORT_DRILL_PERIOD_PARAM, REPORT_DRILL_FROM_PARAM, REPORT_DRILL_TO_PARAM,
+    'reportRecord', 'reportRecordKind', 'txn', 'drawerReturn', 'form', 'transactionTab',
   ]), [pathname, query])
   const recordCloseHref = useMemo(() => hrefWithout(pathname, query, [
     'reportRecord', 'reportRecordKind', 'drawerReturn', 'form', 'transactionTab',
@@ -45,21 +58,28 @@ export function GlobalReportDrawerHost() {
 
   // Clear the drill while (re)loading, during render (same committed values,
   // no extra render). The snapshot mirrors the fetch inputs below exactly.
-  const [prevDrillRequest, setPrevDrillRequest] = useState(() => ({ closeHref, page, router, t, target }))
+  const [prevDrillRequest, setPrevDrillRequest] = useState(() => ({
+    closeHref, drillFrom, drillPeriod, drillTo, page, router, t, target,
+  }))
   if (
     prevDrillRequest.closeHref !== closeHref || prevDrillRequest.page !== page ||
-    prevDrillRequest.router !== router || prevDrillRequest.t !== t || prevDrillRequest.target !== target
+    prevDrillRequest.router !== router || prevDrillRequest.t !== t || prevDrillRequest.target !== target ||
+    prevDrillRequest.drillPeriod !== drillPeriod || prevDrillRequest.drillFrom !== drillFrom ||
+    prevDrillRequest.drillTo !== drillTo
   ) {
-    setPrevDrillRequest({ closeHref, page, router, t, target })
+    setPrevDrillRequest({ closeHref, drillFrom, drillPeriod, drillTo, page, router, t, target })
     setData(null)
     setLoadedTarget(null)
   }
 
   useEffect(() => {
     if (!target) return
-    const selection = `${target}:${page}`
+    const selection = `${target}:${page}:${drillPeriod ?? ''}:${drillFrom ?? ''}:${drillTo ?? ''}`
     const controller = new AbortController()
     const search = new URLSearchParams({ target, page: String(page) })
+    if (drillPeriod) search.set('period', drillPeriod)
+    if (drillFrom) search.set('from', drillFrom)
+    if (drillTo) search.set('to', drillTo)
     fetch(`/api/reports/drill?${search}`, { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error(t('drillDrawer.loadFailed'))
@@ -75,7 +95,7 @@ export function GlobalReportDrawerHost() {
         router.replace(closeHref as never, { scroll: false })
       })
     return () => controller.abort()
-  }, [closeHref, page, router, t, target])
+  }, [closeHref, drillFrom, drillPeriod, drillTo, page, router, t, target])
 
   // Same render-time reset for the nested record drawer. Keyed on the query
   // string (not the search-params object, whose identity is not stable across
@@ -117,8 +137,18 @@ export function GlobalReportDrawerHost() {
     return () => controller.abort()
   }, [params, recordCloseHref, recordId, recordKind, router, t])
 
-  const ready = data && loadedTarget === `${target}:${page}`
+  const ready = data && loadedTarget === `${target}:${page}:${drillPeriod ?? ''}:${drillFrom ?? ''}:${drillTo ?? ''}`
   const currentParams = Object.fromEntries(params.entries())
+  const periodFilter = periodBrowsable ? (
+    <ReportFilterBar
+      controls={{ period: true }}
+      defaultPeriod={parsed?.kind === 'ledger' && parsed.period ? parsed.period : 'this_period'}
+      periodParamKey={REPORT_DRILL_PERIOD_PARAM}
+      fromParamKey={REPORT_DRILL_FROM_PARAM}
+      toParamKey={REPORT_DRILL_TO_PARAM}
+      resetParamKeys={['reportDrillPage']}
+    />
+  ) : null
   return (
     <>
       <UrlDrawer
@@ -129,14 +159,16 @@ export function GlobalReportDrawerHost() {
         size="2xl"
         contextualReturn={false}
       >
-        {!ready ? (
-          <div className="space-y-3">
-            <Skeleton className="h-16 w-full" />
-            <Skeleton className="h-8 w-full" />
-            <Skeleton className="h-8 w-full" />
-            <Skeleton className="h-8 w-2/3" />
-          </div>
-        ) : (
+        <div className="space-y-5">
+          {periodFilter}
+          {!ready ? (
+            <div className="space-y-3">
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-8 w-2/3" />
+            </div>
+          ) : (
           <div className="space-y-5">
             {data.summary.length ? (
               <div className="grid grid-flow-col auto-cols-fr divide-x divide-slate-200 border-y border-slate-200 py-3 dark:divide-slate-700 dark:border-slate-700">
@@ -189,7 +221,8 @@ export function GlobalReportDrawerHost() {
               pageParamKey="reportDrillPage"
             />
           </div>
-        )}
+          )}
+        </div>
       </UrlDrawer>
       <AccountRegisterDrawer />
       {recordData && loadedRecord === `${recordKind}:${recordId}` ? <RelatedTransactionDrawerClient data={recordData} /> : null}

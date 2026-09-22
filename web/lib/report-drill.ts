@@ -1,5 +1,11 @@
+import { isPeriodPreset } from '@openbooks/reports'
 import type { StatementBasis, StatementDimFilter, StatementMode } from './statement-matrix'
 import type { AgingBucket, AgingCurrencyBasis, AgingSide } from './reports'
+
+/** Namespaced so the drill flyout does not rewrite a report page's period. */
+export const REPORT_DRILL_PERIOD_PARAM = 'reportDrillPeriod'
+export const REPORT_DRILL_FROM_PARAM = 'reportDrillFrom'
+export const REPORT_DRILL_TO_PARAM = 'reportDrillTo'
 
 export type ReportDrillTarget =
   | {
@@ -23,6 +29,11 @@ export type ReportDrillTarget =
       profitSigned?: boolean
       /** Only journal entries that touch a bank account; used by Cash Flow. */
       cashOnly?: boolean
+      /** House period-preset id. Present on period-browsable drills (CoA);
+       *  omitted on statement cell drills so the flyout keeps the cell window. */
+      period?: string
+      /** Newest activity first — CoA / register-style browsing, not cell tie-out. */
+      newestFirst?: boolean
     }
   | {
       kind: 'aging'
@@ -79,6 +90,20 @@ export type ReportDrillTarget =
        *  range, or null-bucket marker per breakout. */
       filter?: { field: string; value?: string; from?: string; to?: string; empty?: true }[]
     }
+
+/** Overlay a resolved period window onto a ledger drill without dropping scope. */
+export function applyLedgerDrillWindow(
+  target: Extract<ReportDrillTarget, { kind: 'ledger' }>,
+  window: { from: string; to: string; period: string },
+): Extract<ReportDrillTarget, { kind: 'ledger' }> {
+  return {
+    ...target,
+    mode: 'flow',
+    from: window.from,
+    to: window.to,
+    period: window.period,
+  }
+}
 
 export type ReportDrillCell = string | number | null
 
@@ -186,6 +211,7 @@ export function parseReportDrillTarget(raw: string | null): ReportDrillTarget | 
     if (input.projectSearch !== undefined && !projectSearch) return null
     if (projectCustomerId && input.unassignedProjectCustomer === true) return null
     if (input.accountTypes !== undefined && (!accountTypes || !rawAccountTypes || accountTypes.length !== rawAccountTypes.length)) return null
+    const period = isPeriodPreset(input.period) ? input.period : undefined
     return {
       kind: 'ledger',
       label,
@@ -205,6 +231,8 @@ export function parseReportDrillTarget(raw: string | null): ReportDrillTarget | 
       activeProjectsOnly: input.activeProjectsOnly === true,
       profitSigned: input.profitSigned === true,
       cashOnly: input.cashOnly === true,
+      ...(period ? { period } : {}),
+      ...(input.newestFirst === true ? { newestFirst: true } : {}),
     }
   }
 

@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
-import { encodeReportDrillTarget, parseReportDrillTarget, type ReportDrillTarget } from './report-drill'
+import {
+  applyLedgerDrillWindow,
+  encodeReportDrillTarget,
+  parseReportDrillTarget,
+  type ReportDrillTarget,
+} from './report-drill'
 
 const reportDrillData = readFileSync(new URL('./report-drill-data.ts', import.meta.url), 'utf8')
 
@@ -25,6 +30,8 @@ test('report drill targets round-trip through URL state', () => {
     activeProjectsOnly: true,
     profitSigned: true,
     dims: { projectId: ACCOUNT_ID, segments: { region: PARTY_ID } },
+    period: 'this_period',
+    newestFirst: true,
   }
   const parsed = parseReportDrillTarget(encodeReportDrillTarget(target))
   assert.equal(parsed?.kind, 'ledger')
@@ -39,6 +46,46 @@ test('report drill targets round-trip through URL state', () => {
   assert.equal(parsed.profitSigned, true)
   assert.equal(parsed.dims?.projectId, ACCOUNT_ID)
   assert.deepEqual(parsed.dims?.segments, { region: PARTY_ID })
+  assert.equal(parsed.period, 'this_period')
+  assert.equal(parsed.newestFirst, true)
+})
+
+test('applyLedgerDrillWindow overwrites the flow window and keeps account scope', () => {
+  const next = applyLedgerDrillWindow(
+    {
+      kind: 'ledger',
+      label: '1000 Cash',
+      accountIds: [ACCOUNT_ID],
+      mode: 'balance',
+      to: '2026-12-31',
+      newestFirst: true,
+      period: 'this_period',
+    },
+    { from: '2026-08-01', to: '2026-08-31', period: 'last_period' },
+  )
+  assert.equal(next.mode, 'flow')
+  assert.equal(next.from, '2026-08-01')
+  assert.equal(next.to, '2026-08-31')
+  assert.equal(next.period, 'last_period')
+  assert.deepEqual(next.accountIds, [ACCOUNT_ID])
+  assert.equal(next.newestFirst, true)
+})
+
+test('an unknown period preset is dropped so the encoded from/to still open', () => {
+  const parsed = parseReportDrillTarget(JSON.stringify({
+    kind: 'ledger',
+    label: '1000 Cash',
+    to: '2026-09-30',
+    from: '2026-09-01',
+    mode: 'flow',
+    period: 'not_a_preset',
+    newestFirst: true,
+  }))
+  assert.equal(parsed?.kind, 'ledger')
+  if (parsed?.kind !== 'ledger') assert.fail('expected ledger target')
+  assert.equal(parsed.period, undefined)
+  assert.equal(parsed.from, '2026-09-01')
+  assert.equal(parsed.newestFirst, true)
 })
 
 test('report drill parsing fails closed for malformed or overbroad URL input', () => {
