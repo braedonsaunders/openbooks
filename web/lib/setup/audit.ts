@@ -42,11 +42,13 @@ export async function auditSetupChange(
     action: 'insert' | 'update' | 'delete'
     changes: Record<string, unknown>
     actorId: string
+    /** Idempotency key that created the row (insert only): correlates retries. */
+    requestId?: string
   },
   runner: Pick<typeof db, 'execute'> = db,
 ): Promise<void> {
   await runner.execute(sql`
-    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
     values (${args.orgId}, ${args.table}, ${args.rowId}, ${args.action},
-            ${JSON.stringify(args.changes)}, ${args.actorId})`)
+            ${JSON.stringify(args.changes)}, ${args.actorId}, ${args.requestId ?? null})`)
 }
