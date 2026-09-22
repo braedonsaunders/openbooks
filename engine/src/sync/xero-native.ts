@@ -6,7 +6,8 @@ import type { NativeContext, NativeDocLine, NativeDocument } from "./native.ts";
  *
  *   Invoice ACCREC      → customer_invoice    Invoice ACCPAY      → vendor_bill
  *   CreditNote ACCRECCREDIT → customer_credit ACCPAYCREDIT        → vendor_credit
- *   Payment (by invoice type) → customer/vendor_payment
+ *   Payment (by settled target: Invoice/CreditNote/Prepayment/Overpayment
+ *   type, PaymentType family fallback) → customer/vendor_payment
  *   ManualJournal       → journal             BankTransfer        → transfer
  *   BankTransaction SPEND → check             BankTransaction RECEIVE → deposit
  *
@@ -25,6 +26,14 @@ export interface XeroLineItem {
   LineAmount?: number;
 }
 
+export interface XeroPaymentTarget {
+  InvoiceID?: string;
+  CreditNoteID?: string;
+  PrepaymentID?: string;
+  OverpaymentID?: string;
+  Type?: string;
+}
+
 export interface XeroDoc {
   InvoiceID?: string;
   CreditNoteID?: string;
@@ -33,6 +42,13 @@ export interface XeroDoc {
   BankTransactionID?: string;
   BankTransferID?: string;
   Type?: string;
+  /** Payment-side fields (Xero `Payment` schema): the settled target rides
+   * one of Invoice / CreditNote / Prepayment / Overpayment, and PaymentType
+   * names the payment family. */
+  PaymentType?: string;
+  CreditNote?: XeroPaymentTarget;
+  Prepayment?: XeroPaymentTarget;
+  Overpayment?: XeroPaymentTarget;
   Status?: string;
   Contact?: { ContactID?: string };
   DateString?: string;
@@ -51,7 +67,7 @@ export interface XeroDoc {
   Total?: number;
   TotalTax?: number;
   Amount?: number;
-  Invoice?: { InvoiceID?: string; Type?: string };
+  Invoice?: XeroPaymentTarget;
   Account?: { AccountID?: string; Code?: string };
   BankAccount?: { AccountID?: string; Code?: string };
   FromBankAccount?: { AccountID?: string };
@@ -68,6 +84,107 @@ export interface XeroBuildOpts {
 
 const CANCELLED = new Set(["VOIDED", "DELETED"]);
 const POSTED = new Set(["AUTHORISED", "PAID", "POSTED"]);
+
+/**
+ * Every target-type value Xero's published Accounting API contract defines
+ * for the four payment targets (the `Type` enums on the Invoice, CreditNote,
+ * Prepayment and Overpayment schemas in XeroAPI/xero-openapi
+ * `xero_accounting.yaml`).
+ */
+export type XeroPaymentTargetType =
+  | "ACCREC" | "ACCPAY"
+  | "ACCRECCREDIT" | "ACCPAYCREDIT"
+  | "AROVERPAYMENT" | "APOVERPAYMENT"
+  | "ARPREPAYMENT" | "APPREPAYMENT"
+  | "RECEIVE-PREPAYMENT" | "SPEND-PREPAYMENT"
+  | "RECEIVE-OVERPAYMENT" | "SPEND-OVERPAYMENT";
+
+const XERO_PAYMENT_TARGET_TYPES: ReadonlySet<string> = new Set<string>([
+  "ACCREC", "ACCPAY",
+  "ACCRECCREDIT", "ACCPAYCREDIT",
+  "AROVERPAYMENT", "APOVERPAYMENT",
+  "ARPREPAYMENT", "APPREPAYMENT",
+  "RECEIVE-PREPAYMENT", "SPEND-PREPAYMENT",
+  "RECEIVE-OVERPAYMENT", "SPEND-OVERPAYMENT",
+]);
+
+/**
+ * AR/AP side of one known target type. The `never` arm refuses to compile
+ * when Xero adds a target type without a mapping here.
+ */
+export function xeroPaymentKindForTarget(
+  type: XeroPaymentTargetType,
+): "customer_payment" | "vendor_payment" {
+  switch (type) {
+    case "ACCREC":
+    case "ACCRECCREDIT":
+    case "AROVERPAYMENT":
+    case "ARPREPAYMENT":
+    case "RECEIVE-OVERPAYMENT":
+    case "RECEIVE-PREPAYMENT":
+      return "customer_payment";
+    case "ACCPAY":
+    case "ACCPAYCREDIT":
+    case "APOVERPAYMENT":
+    case "APPREPAYMENT":
+    case "SPEND-OVERPAYMENT":
+    case "SPEND-PREPAYMENT":
+      return "vendor_payment";
+    default: {
+      const _exhaustive: never = type;
+      throw new Error(`unrecognized Xero payment target type ${String(_exhaustive)}`);
+    }
+  }
+}
+
+/**
+ * PaymentType family fallback (same contract, `Payment` schema `PaymentType`
+ * enum: ACCRECPAYMENT, ACCPAYPAYMENT, ARCREDITPAYMENT, APCREDITPAYMENT,
+ * AROVERPAYMENTPAYMENT, ARPREPAYMENTPAYMENT, APPREPAYMENTPAYMENT,
+ * APOVERPAYMENTPAYMENT). Used only when the settled target carries no known
+ * type — a payment whose side neither the target nor the family names is
+ * refused, never guessed.
+ */
+export function xeroPaymentKindForPaymentType(
+  paymentType: string | undefined,
+): "customer_payment" | "vendor_payment" | null {
+  if (!paymentType) return null;
+  if (/^(AR|ACCREC)/.test(paymentType)) return "customer_payment";
+  if (/^(AP|ACCPAY)/.test(paymentType)) return "vendor_payment";
+  return null;
+}
+
+/**
+ * Which side of the books a Xero payment settles. Payments against credit
+ * notes, prepayments and overpayments carry those pointers instead of
+ * `Invoice` — keying only on `Invoice.Type` mapped every one of them to
+ * `vendor_payment`, so customer refunds landed in AP.
+ */
+export function xeroPaymentKind(
+  t: XeroDoc,
+): "customer_payment" | "vendor_payment" | { skip: string } {
+  const targets = [
+    t.Invoice?.InvoiceID ? { label: `Invoice:${t.Invoice.InvoiceID}`, type: t.Invoice.Type } : null,
+    t.CreditNote?.CreditNoteID ? { label: `CreditNote:${t.CreditNote.CreditNoteID}`, type: t.CreditNote.Type } : null,
+    t.Prepayment?.PrepaymentID ? { label: `Prepayment:${t.Prepayment.PrepaymentID}`, type: t.Prepayment.Type } : null,
+    t.Overpayment?.OverpaymentID ? { label: `Overpayment:${t.Overpayment.OverpaymentID}`, type: t.Overpayment.Type } : null,
+  ].filter((x): x is { label: string; type: string | undefined } => x !== null);
+  if (targets.length === 0) {
+    return { skip: "payment without a target invoice, credit note, prepayment or overpayment" };
+  }
+  if (targets.length > 1) {
+    return { skip: `payment settles multiple documents (${targets.map((x) => x.label).join(", ")})` };
+  }
+  const target = targets[0]!;
+  if (target.type && XERO_PAYMENT_TARGET_TYPES.has(target.type)) {
+    return xeroPaymentKindForTarget(target.type as XeroPaymentTargetType);
+  }
+  const fallback = xeroPaymentKindForPaymentType(t.PaymentType);
+  if (fallback) return fallback;
+  return {
+    skip: `unrecognized Xero payment target type ${target.type ?? "(missing)"} with PaymentType ${t.PaymentType ?? "(missing)"}`,
+  };
+}
 
 /** Xero date fields: prefer DateString (local ISO); fall back to /Date(ms)/. */
 function isoDay(d?: string, fallback?: string): string | null {
@@ -176,10 +293,11 @@ export function buildNativeFromXero(
     case "Payment": {
       const counter = byId(t.Account?.AccountID) ?? byCode(t.Account?.Code);
       if (!counter) return { skip: "payment without bank account" };
-      const isAR = (t.Invoice?.Type ?? "").startsWith("ACCREC");
+      const kind = xeroPaymentKind(t);
+      if (typeof kind !== "string") return kind;
       return {
         ...base,
-        kind: isAR ? "customer_payment" : "vendor_payment",
+        kind,
         partyId: party,
         controlAccountId: null,
         lines: [mk(counter, home(t.Amount))],

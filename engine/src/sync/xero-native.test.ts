@@ -169,6 +169,123 @@ test("Xero credit-note tax stays negative on negative lines", () => {
   assert.equal(built.lines[0]!.taxAmount, "-10.0000");
 });
 
+function paymentContext(): NativeContext {
+  return {
+    ...context(),
+    accountByRef: new Map([
+      ["sales", { id: "sales-id", number: "4000", name: "Sales", type: "income" }],
+      ["bankacct", { id: "bank-id", number: "090", name: "Bank", type: "asset_bank" }],
+    ]),
+  };
+}
+
+function payDoc(over: Record<string, unknown>) {
+  return {
+    PaymentID: "pay-1",
+    Status: "AUTHORISED",
+    DateString: "2026-08-27",
+    Account: { AccountID: "bankacct" },
+    Amount: 50,
+    ...over,
+  };
+}
+
+test("Xero customer refund against a credit note posts to AR, not AP", () => {
+  const built = buildNativeFromXero(
+    paymentContext(),
+    "Payment",
+    payDoc({ CreditNote: { CreditNoteID: "cn-1", Type: "ACCRECCREDIT" }, PaymentType: "ARCREDITPAYMENT" }),
+    { accountIdByCode },
+  );
+
+  assert.ok(!("skip" in built));
+  assert.equal(built.kind, "customer_payment");
+});
+
+test("Xero receipt against a receive-prepayment posts to AR", () => {
+  const built = buildNativeFromXero(
+    paymentContext(),
+    "Payment",
+    payDoc({ Prepayment: { PrepaymentID: "pre-1", Type: "RECEIVE-PREPAYMENT" }, PaymentType: "ARPREPAYMENTPAYMENT" }),
+    { accountIdByCode },
+  );
+
+  assert.ok(!("skip" in built));
+  assert.equal(built.kind, "customer_payment");
+});
+
+test("Xero payment against a spend-overpayment posts to AP", () => {
+  const built = buildNativeFromXero(
+    paymentContext(),
+    "Payment",
+    payDoc({ Overpayment: { OverpaymentID: "over-1", Type: "SPEND-OVERPAYMENT" }, PaymentType: "APOVERPAYMENTPAYMENT" }),
+    { accountIdByCode },
+  );
+
+  assert.ok(!("skip" in built));
+  assert.equal(built.kind, "vendor_payment");
+});
+
+test("Xero invoice payments keep their ACCREC/ACCPAY side", () => {
+  const ar = buildNativeFromXero(
+    paymentContext(),
+    "Payment",
+    payDoc({ Invoice: { InvoiceID: "inv-1", Type: "ACCREC" }, PaymentType: "ACCRECPAYMENT" }),
+    { accountIdByCode },
+  );
+  const ap = buildNativeFromXero(
+    paymentContext(),
+    "Payment",
+    payDoc({ Invoice: { InvoiceID: "inv-2", Type: "ACCPAY" }, PaymentType: "ACCPAYPAYMENT" }),
+    { accountIdByCode },
+  );
+
+  assert.ok(!("skip" in ar) && !("skip" in ap));
+  assert.equal(ar.kind, "customer_payment");
+  assert.equal(ap.kind, "vendor_payment");
+});
+
+test("Xero payment with an untyped target falls back to the PaymentType family", () => {
+  const built = buildNativeFromXero(
+    paymentContext(),
+    "Payment",
+    payDoc({ Invoice: { InvoiceID: "inv-9" }, PaymentType: "ACCRECPAYMENT" }),
+    { accountIdByCode },
+  );
+
+  assert.ok(!("skip" in built));
+  assert.equal(built.kind, "customer_payment");
+});
+
+test("Xero payment with an unknown target type refuses by name", () => {
+  const built = buildNativeFromXero(
+    paymentContext(),
+    "Payment",
+    payDoc({ Overpayment: { OverpaymentID: "over-9", Type: "FUTURE-OVERPAYMENT" }, PaymentType: "FUTURE-PAYMENT" }),
+    { accountIdByCode },
+  );
+
+  assert.ok("skip" in built);
+  assert.match(built.skip, /FUTURE-OVERPAYMENT/);
+  assert.match(built.skip, /FUTURE-PAYMENT/);
+});
+
+test("Xero payment settling two documents refuses naming both", () => {
+  const built = buildNativeFromXero(
+    paymentContext(),
+    "Payment",
+    payDoc({
+      Invoice: { InvoiceID: "inv-1", Type: "ACCREC" },
+      CreditNote: { CreditNoteID: "cn-1", Type: "ACCRECCREDIT" },
+    }),
+    { accountIdByCode },
+  );
+
+  assert.ok("skip" in built);
+  assert.match(built.skip, /Invoice:inv-1/);
+  assert.match(built.skip, /CreditNote:cn-1/);
+});
+
 test("Xero unreconciled bank transactions carry negative evidence", () => {
   const codes = new Map([["200", "bank"]]);
   const built = buildNativeFromXero(
