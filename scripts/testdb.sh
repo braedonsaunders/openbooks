@@ -66,7 +66,16 @@ start_container() {
   if container_running; then return; fi
   docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
   echo "testdb: starting $CONTAINER on port $PORT" >&2
+  # --shm-size is not optional. Docker's default is 64 MB, and PostgreSQL
+  # consumes ~61 MB of /dev/shm at baseline, leaving ~3 MB for the dynamic
+  # shared memory a parallel worker needs. Under concurrent suites that runs
+  # out and every affected query dies with "could not resize shared memory
+  # segment ... No space left on device" — which fails WHOLE suites and reads
+  # exactly like a code regression. Measured on one suite: 0 pass / 16 fail
+  # against an exhausted /dev/shm, 15 / 16 with headroom, nothing in between
+  # but the memory. A false red is worse than a slow test.
   docker run -d --name "$CONTAINER" \
+    --shm-size=1g \
     -e POSTGRES_USER="$SUPER" -e POSTGRES_PASSWORD="$SUPERPASS" -e POSTGRES_DB=postgres \
     -p "127.0.0.1:${PORT}:5432" \
     --health-cmd "pg_isready -U $SUPER -d postgres" \
