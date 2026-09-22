@@ -333,14 +333,13 @@ test.describe("inventory receipt to fulfillment to COGS to return", () => {
       shared.stockLocationId = str(req(sloc, "POST setup/stock-locations").id, "stock location id");
 
       itemName = `W3 Widget ${t}`;
-      const draft = await api(page, "POST", "/api/items/draft", {});
-      itemId = str(req(draft, "POST /api/items/draft").id, "item id");
-      req(await api(page, "PATCH", `/api/items/${itemId}`, {
+      const createdItem = await api(page, "POST", "/api/items", {
         kind: "inventory",
         name: itemName,
         incomeAccountId: acct["4000"],
         isActive: true,
-      }), "PATCH /api/items/[id]");
+      }, { "Idempotency-Key": crypto.randomUUID() });
+      itemId = str((req(createdItem, "POST /api/items").item as Json).id, "item id");
       req(await api(page, "PUT", `/api/items/${itemId}/costing`, {
         costingMethod: "fifo",
         tracking: "none",

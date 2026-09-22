@@ -37,8 +37,23 @@
     "discount": "Discount",
     "equipment_charge": "Equipment charge"
   },
+  "kindDescriptions": {
+    "service": "Work or expertise sold without tracking physical stock.",
+    "non_inventory": "A purchased or sold good whose quantity is not kept on hand.",
+    "inventory": "A stocked good with on-hand quantity, valuation, and fulfillment.",
+    "assembly": "A manufactured item built from a bill of materials.",
+    "kit": "A sellable bundle whose component items remain distinct.",
+    "other_charge": "A fee, surcharge, freight, or other standalone charge.",
+    "equipment_charge": "Billable use of owned or rented equipment.",
+    "labor": "Worked time with labor pricing and payroll costing behavior.",
+    "absence": "Paid or unpaid time away recorded against a time entry.",
+    "discount": "A reduction applied to another line or transaction total."
+  },
   "drawer": {
+    "tabs": { "overview": "Overview", "pricing": "Pricing", "accounting": "Accounting", "costing": "Inventory", "revenue": "Revenue recognition" },
     "newItem": "New item",
+    "chooseKindTitle": "Choose an item type",
+    "chooseKindDescription": "Start with the accounting and operational behavior this item needs. You can confirm the type again before creating it.",
     "autosaveHint": "Changes save automatically.",
     "activate": "Activate",
     "deactivate": "Deactivate",
@@ -118,8 +133,20 @@
     "saved": "Rate version saved",
     "empty": "No rate versions yet.",
     "rates": "Rates",
-    "tierOverrides": "Time-type rates:",
+    "tierOverrides": "Labor premium overrides",
+    "tierOverridesHide": "Hide labor premium overrides",
     "tierAuto": "auto"
+  },
+  "rateBookDrawer": {
+    "newTitle": "New rate book",
+    "editTitle": "Edit {name}",
+    "description": "Maintain the rate-book header and its complete effective-dated item rate schedule together.",
+    "ratesTitle": "Item rates",
+    "ratesHelp": "Saving changed lines creates a new immutable rate version; earlier versions remain available for historical transactions.",
+    "item": "Item",
+    "addItem": "Add item rate",
+    "inactive": "Inactive",
+    "unchangedHelp": "The item schedule is unchanged, so saving will update only the rate-book details."
   },
   "costing": {
     "title": "Inventory costing",

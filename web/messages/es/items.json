@@ -37,8 +37,23 @@
     "discount": "Descuento",
     "equipment_charge": "Cargo de equipo"
   },
+  "kindDescriptions": {
+    "service": "Trabajo o experiencia vendidos sin controlar existencias físicas.",
+    "non_inventory": "Un bien comprado o vendido cuya cantidad no se mantiene en inventario.",
+    "inventory": "Un bien almacenado con existencias, valoración y cumplimiento.",
+    "assembly": "Un artículo fabricado a partir de una lista de materiales.",
+    "kit": "Un paquete vendible cuyos componentes permanecen separados.",
+    "other_charge": "Una tarifa, recargo, flete u otro cargo independiente.",
+    "equipment_charge": "Uso facturable de equipos propios o alquilados.",
+    "labor": "Tiempo trabajado con precios de mano de obra y costos de nómina.",
+    "absence": "Tiempo libre pagado o no pagado registrado en horas.",
+    "discount": "Una reducción aplicada a otra línea o al total."
+  },
   "drawer": {
+    "tabs": { "overview": "Resumen", "pricing": "Precios", "accounting": "Contabilidad", "costing": "Inventario", "revenue": "Reconocimiento de ingresos" },
     "newItem": "Nuevo artículo",
+    "chooseKindTitle": "Elija un tipo de artículo",
+    "chooseKindDescription": "Comience por el comportamiento contable y operativo que necesita. Puede confirmar el tipo antes de crearlo.",
     "autosaveHint": "Los cambios se guardan automáticamente.",
     "activate": "Activar",
     "deactivate": "Desactivar",
@@ -118,8 +133,20 @@
     "saved": "Versión de tarifas guardada",
     "empty": "Aún no hay versiones de tarifas.",
     "rates": "Tarifas",
-    "tierOverrides": "Tarifas por tipo de hora:",
+    "tierOverrides": "Recargos de mano de obra",
+    "tierOverridesHide": "Ocultar recargos de mano de obra",
     "tierAuto": "auto"
+  },
+  "rateBookDrawer": {
+    "newTitle": "Nuevo libro de tarifas",
+    "editTitle": "Editar {name}",
+    "description": "Administre conjuntamente el encabezado y el programa completo de tarifas de artículos con fecha de vigencia.",
+    "ratesTitle": "Tarifas de artículos",
+    "ratesHelp": "Guardar líneas modificadas crea una nueva versión inmutable; las versiones anteriores se conservan para transacciones históricas.",
+    "item": "Artículo",
+    "addItem": "Añadir tarifa de artículo",
+    "inactive": "Inactivo",
+    "unchangedHelp": "El programa no cambió; al guardar solo se actualizarán los detalles del libro de tarifas."
   },
   "revrec": {
     "title": "Reconocimiento de ingresos",

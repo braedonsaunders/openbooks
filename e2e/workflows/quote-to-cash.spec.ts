@@ -193,14 +193,12 @@ async function seedScenario(
     expectedUpdatedAt: str((pg.body.party as Json).updated_at, 'party revision'),
   });
   expect(pa.status, JSON.stringify(pa.body).slice(0, 200)).toBe(200);
-  const idr = await api(page, 'POST', '/api/items/draft', {});
-  expect(idr.status).toBe(200);
-  const itemId = str(idr.body.id);
-  const ip = await api(page, 'PATCH', `/api/items/${itemId}`, {
+  const ip = await api(page, 'POST', '/api/items', {
     name: `${t} Consulting Hour`, kind: 'service', defaultRate: '200.00',
     incomeAccountId: incomeId, ...(opts.withTax ? { taxCodeId } : {}), isActive: true,
-  });
-  expect(ip.status, JSON.stringify(ip.body).slice(0, 200)).toBe(200);
+  }, { 'Idempotency-Key': crypto.randomUUID() });
+  expect(ip.status, JSON.stringify(ip.body).slice(0, 200)).toBe(201);
+  const itemId = str((ip.body.item as Json).id);
   return { taxCodeId, incomeId, bankId, partyId, itemId };
 }
 

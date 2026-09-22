@@ -321,7 +321,6 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'new-flow',
   'new-form',
   'new-item',
-  'new-item-redirect',
   'new-journal',
   'new-movement',
   'new-order',

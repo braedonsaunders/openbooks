@@ -365,13 +365,12 @@ test.describe("procure-to-pay workflows", () => {
       shared.stockLocationId = str(req(sloc, "POST setup/stock-locations").id, "stock location id");
 
       // 5. Stock item with a FIFO costing profile (asset/cogs/RNB).
-      const draft = await api(page, "POST", "/api/items/draft", {});
-      itemId = str(req(draft, "POST /api/items/draft").id, "item id");
-      req(await api(page, "PATCH", `/api/items/${itemId}`, {
+      const createdItem = await api(page, "POST", "/api/items", {
         kind: "inventory",
         name: `P2P Widget ${TAG}`,
         isActive: true,
-      }), "PATCH /api/items/[id]");
+      }, { "Idempotency-Key": crypto.randomUUID() });
+      itemId = str((req(createdItem, "POST /api/items").item as Json).id, "item id");
       req(await api(page, "PUT", `/api/items/${itemId}/costing`, {
         costingMethod: "fifo",
         tracking: "none",

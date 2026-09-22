@@ -738,16 +738,47 @@ const ACTIVITY: RecordTypeMeta = {
   ],
 };
 
-/** Catalog items keep their purpose-built pricing/costing drawer, while their
- * register participates in the universal saved-view and custom-column system. */
+/**
+ * Catalog items keep purpose-built pricing/costing panels inside the drawer,
+ * but the record shell is still a tenant-owned form: built-in fields, custom
+ * fields, tab order/visibility, labels and widths all resolve through the same
+ * form-layout contract as projects and transactions.
+ */
 const ITEM: RecordTypeMeta = {
   key: "item",
   labelKey: "customization.recordTypes.item",
   category: "entity",
-  supportsForms: false,
+  supportsForms: true,
   customFieldTable: "items",
   customFieldLineTable: null,
-  headerFields: [],
+  tabs: [
+    { key: "overview", labelKey: "items.drawer.tabs.overview", locked: true },
+    { key: "pricing", labelKey: "items.drawer.tabs.pricing" },
+    { key: "accounting", labelKey: "items.drawer.tabs.accounting" },
+    { key: "costing", labelKey: "items.drawer.tabs.costing", featureKey: "inventory" },
+    { key: "revenue", labelKey: "items.drawer.tabs.revenue", featureKey: "revenueRecognition" },
+  ],
+  headerFields: [
+    { key: "kind", labelKey: "items.labels.kind", level: "header", kind: "select", required: true, locked: true },
+    { key: "name", labelKey: "common.labels.name", level: "header", kind: "text", required: true, locked: true },
+    { key: "code", labelKey: "items.labels.code", level: "header", kind: "text" },
+    { key: "category", labelKey: "items.labels.category", level: "header", kind: "text" },
+    { key: "unit", labelKey: "items.labels.unit", level: "header", kind: "text" },
+    { key: "description", labelKey: "common.labels.description", level: "header", kind: "long_text" },
+    { key: "default_rate", labelKey: "items.labels.defaultRate", level: "header", kind: "currency" },
+    { key: "default_cost", labelKey: "items.labels.defaultCost", level: "header", kind: "currency" },
+    { key: "income_account_id", labelKey: "items.labels.incomeAccount", level: "header", kind: "entity_ref" },
+    { key: "expense_account_id", labelKey: "items.labels.expenseAccount", level: "header", kind: "entity_ref" },
+    { key: "payroll_expense_account_id", labelKey: "items.labels.payrollCostingAccount", level: "header", kind: "entity_ref" },
+    { key: "cost_recovery_account_id", labelKey: "items.labels.recoveryAccount", level: "header", kind: "entity_ref" },
+    { key: "tax_code_id", labelKey: "items.labels.taxCode", level: "header", kind: "entity_ref" },
+    { key: "show_on_timesheet", labelKey: "items.drawer.showOnTimesheet", level: "header", kind: "boolean" },
+    { key: "recognition_rule_id", labelKey: "items.revrec.rule", level: "header", kind: "entity_ref" },
+    { key: "deferred_account_id", labelKey: "items.revrec.deferredAccount", level: "header", kind: "entity_ref" },
+    { key: "standalone_selling_price", labelKey: "items.revrec.standaloneSellingPrice", level: "header", kind: "currency" },
+    { key: "create_plans_on", labelKey: "items.revrec.createPlansOn", level: "header", kind: "select" },
+    { key: "revenue_allocation", labelKey: "items.revrec.allocation", level: "header", kind: "select" },
+  ],
   lineFields: [],
   listColumns: [
     { key: "code", labelKey: "items.labels.code", kind: "text", sortable: true, sortKey: "code" },

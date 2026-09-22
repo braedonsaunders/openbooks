@@ -302,7 +302,6 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'new-flow': { props: [] },
   'new-form': { props: ['recordType'] },
   'new-item': { props: [] },
-  'new-item-redirect': { props: [] },
   'new-journal': { props: [] },
   'new-movement': { props: [] },
   'new-order': { props: ['apiPath', 'base', 'createFailedMessage', 'label', 'param'] },

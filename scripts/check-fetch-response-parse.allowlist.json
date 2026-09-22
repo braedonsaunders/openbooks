@@ -295,31 +295,6 @@
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
-    "path": "web/app/(app)/items/ItemDrawer.tsx",
-    "fn": "save",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/items/ItemDrawer.tsx",
-    "fn": "setActiveState",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/items/ItemRatesEditor.tsx",
-    "fn": "save",
-    "reason": "server always returns JSON; guard adoption pending. POST /api/items/[id]/rates (web/app/api/items/[id]/rates/route.ts): the write transaction sits inside try/catch-all answering NextResponse.json({ error }, { status: 422 }); no rethrow; outside-try work is gates, feature reads, id-gated kind reads, and pure validation. Verified by reading the handler."
-  },
-  {
-    "path": "web/app/(app)/items/NewItemButton.tsx",
-    "fn": "create",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/items/NewItemRedirect.tsx",
-    "fn": "NewItemRedirect",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
     "path": "web/app/(app)/journal/NewJournalButton.tsx",
     "fn": "create",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"

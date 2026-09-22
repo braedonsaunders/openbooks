@@ -37,8 +37,23 @@
     "discount": "Desconto",
     "equipment_charge": "Cobrança de equipamento"
   },
+  "kindDescriptions": {
+    "service": "Trabalho ou conhecimento vendido sem controle de estoque físico.",
+    "non_inventory": "Bem comprado ou vendido cuja quantidade não é mantida em estoque.",
+    "inventory": "Bem estocado com quantidade, avaliação e atendimento.",
+    "assembly": "Item fabricado a partir de uma lista de materiais.",
+    "kit": "Conjunto vendável cujos componentes permanecem distintos.",
+    "other_charge": "Taxa, sobretaxa, frete ou outro encargo independente.",
+    "equipment_charge": "Uso faturável de equipamento próprio ou alugado.",
+    "labor": "Tempo trabalhado com preços de mão de obra e custos de folha.",
+    "absence": "Tempo de ausência pago ou não pago registrado nas horas.",
+    "discount": "Redução aplicada a outra linha ou ao total."
+  },
   "drawer": {
+    "tabs": { "overview": "Visão geral", "pricing": "Preços", "accounting": "Contabilidade", "costing": "Estoque", "revenue": "Reconhecimento de receita" },
     "newItem": "Novo item",
+    "chooseKindTitle": "Escolha um tipo de item",
+    "chooseKindDescription": "Comece pelo comportamento contábil e operacional necessário. Você pode confirmar o tipo antes de criar.",
     "autosaveHint": "As alterações são salvas automaticamente.",
     "activate": "Ativar",
     "deactivate": "Desativar",
@@ -108,8 +123,20 @@
     "saved": "Versão de tarifas salva",
     "empty": "Ainda não há versões de tarifas.",
     "rates": "Tarifas",
-    "tierOverrides": "Taxas por tipo de hora:",
+    "tierOverrides": "Adicionais de mão de obra",
+    "tierOverridesHide": "Ocultar adicionais de mão de obra",
     "tierAuto": "auto"
+  },
+  "rateBookDrawer": {
+    "newTitle": "Novo livro de tarifas",
+    "editTitle": "Editar {name}",
+    "description": "Mantenha juntos o cabeçalho e a tabela completa de tarifas de itens com vigência.",
+    "ratesTitle": "Tarifas de itens",
+    "ratesHelp": "Salvar linhas alteradas cria uma nova versão imutável; versões anteriores permanecem disponíveis para transações históricas.",
+    "item": "Artigo",
+    "addItem": "Adicionar tarifa de item",
+    "inactive": "Inativo",
+    "unchangedHelp": "A tabela não mudou; salvar atualizará somente os detalhes do livro de tarifas."
   },
   "revrec": {
     "title": "Reconhecimento de receita",

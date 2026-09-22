@@ -37,8 +37,23 @@
     "discount": "Remise",
     "equipment_charge": "Frais d’équipement"
   },
+  "kindDescriptions": {
+    "service": "Travail ou expertise vendu sans suivi de stock physique.",
+    "non_inventory": "Bien acheté ou vendu dont la quantité n’est pas suivie en stock.",
+    "inventory": "Bien stocké avec quantité, valorisation et exécution.",
+    "assembly": "Article fabriqué à partir d’une nomenclature.",
+    "kit": "Ensemble vendable dont les composants restent distincts.",
+    "other_charge": "Frais, supplément, transport ou autre charge autonome.",
+    "equipment_charge": "Utilisation facturable d’équipement possédé ou loué.",
+    "labor": "Temps travaillé avec tarification et coûts de paie.",
+    "absence": "Absence payée ou non payée enregistrée dans le temps.",
+    "discount": "Réduction appliquée à une ligne ou au total."
+  },
   "drawer": {
+    "tabs": { "overview": "Vue d’ensemble", "pricing": "Tarification", "accounting": "Comptabilité", "costing": "Inventaire", "revenue": "Comptabilisation des produits" },
     "newItem": "Nouvel article",
+    "chooseKindTitle": "Choisir un type d’article",
+    "chooseKindDescription": "Commencez par le comportement comptable et opérationnel requis. Vous pourrez confirmer le type avant la création.",
     "autosaveHint": "Les modifications s’enregistrent automatiquement.",
     "activate": "Activer",
     "deactivate": "Désactiver",
@@ -118,8 +133,20 @@
     "saved": "Version tarifaire enregistrée",
     "empty": "Aucune version tarifaire.",
     "rates": "Tarifs",
-    "tierOverrides": "Taux par type d'heure :",
+    "tierOverrides": "Majoration de main-d’œuvre",
+    "tierOverridesHide": "Masquer les majorations de main-d’œuvre",
     "tierAuto": "auto"
+  },
+  "rateBookDrawer": {
+    "newTitle": "Nouveau catalogue de tarifs",
+    "editTitle": "Modifier {name}",
+    "description": "Gérez ensemble l'en-tête et la grille complète des tarifs d'articles datés.",
+    "ratesTitle": "Tarifs des articles",
+    "ratesHelp": "L'enregistrement de lignes modifiées crée une nouvelle version immuable; les versions précédentes restent disponibles pour l'historique.",
+    "item": "Article",
+    "addItem": "Ajouter un tarif",
+    "inactive": "Inactif",
+    "unchangedHelp": "La grille est inchangée; l'enregistrement ne mettra à jour que les détails du catalogue."
   },
   "revrec": {
     "title": "Comptabilisation des produits",

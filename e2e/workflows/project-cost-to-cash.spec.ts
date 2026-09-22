@@ -148,8 +148,14 @@ function req(result: ApiResult, url: string): Json {
   expect(result.status, `${url}: HTTP ${result.status} ${JSON.stringify(result.body).slice(0, 500)}`).toBeLessThan(300);
   return result.body;
 }
-async function apiOk(page: Page, method: string, path: string, body?: unknown): Promise<Json> {
-  return req(await api(page, method, path, body), `${method} ${path}`);
+async function apiOk(
+  page: Page,
+  method: string,
+  path: string,
+  body?: unknown,
+  headers?: Record<string, string>,
+): Promise<Json> {
+  return req(await api(page, method, path, body, headers), `${method} ${path}`);
 }
 function str(value: unknown, what = 'id'): string {
   if (typeof value !== 'string' || !value) throw new Error(`expected ${what} string, got ${JSON.stringify(value)?.slice(0, 80)}`);
@@ -523,10 +529,10 @@ function sovFinancialProfile(): Json {
 
       // Items: billable field-labour hour and an equipment usage charge.
       async function item(patch: Json) {
-        const draft = await apiOk(page, 'POST', '/api/items/draft', {});
-        const id = str(draft.id, 'item id');
-        await apiOk(page, 'PATCH', `/api/items/${id}`, { isActive: true, ...patch });
-        return id;
+        const created = await apiOk(page, 'POST', '/api/items', { isActive: true, ...patch }, {
+          'Idempotency-Key': crypto.randomUUID(),
+        });
+        return str((created.item as Json).id, 'item id');
       }
       const labourItem = await item({
         kind: 'service',

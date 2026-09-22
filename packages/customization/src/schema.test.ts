@@ -362,6 +362,25 @@ test('item list-filter options drop inventory kinds when Inventory is off', () =
   assert.ok(shown.includes('inventory') && shown.includes('assembly') && shown.includes('kit'))
 })
 
+test('items expose the universal customizable form and tab contract', () => {
+  const item = getRecordType('item')
+  assert.ok(item)
+  assert.equal(item.supportsForms, true)
+  assert.deepEqual(item.tabs?.map((tab) => tab.key), [
+    'overview',
+    'pricing',
+    'accounting',
+    'costing',
+    'revenue',
+  ])
+  assert.deepEqual(
+    item.headerFields.slice(0, 8).map((field) => field.key),
+    ['kind', 'name', 'code', 'category', 'unit', 'description', 'default_rate', 'default_cost'],
+  )
+  assert.equal(item.headerFields.find((field) => field.key === 'kind')?.locked, true)
+  assert.equal(defaultFormLayout('item').tabs?.[0]?.key, 'overview')
+})
+
 test('the customer list collapses to customers when CRM is off', () => {
   // Off, this is the AR customer roll and nothing else: no other lifecycle
   // option, and no column or filter reading the crm_account_profiles joins

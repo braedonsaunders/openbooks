@@ -276,10 +276,8 @@ test.describe("subscription to revenue", () => {
       const ruleId = str(rule.id, "rule id");
 
       // Service item carrying the deferred treatment.
-      const itemDraft = ok(await api(req, origin, "POST", "/api/items/draft", {}), "item draft");
-      S.itemId = str(itemDraft.id, "item id");
-      ok(
-        await api(req, origin, "PATCH", `/api/items/${S.itemId}`, {
+      const createdItem = ok(
+        await api(req, origin, "POST", "/api/items", {
           name: t("W5 Annual Support"),
           kind: "service",
           defaultRate: "1.00",
@@ -287,9 +285,10 @@ test.describe("subscription to revenue", () => {
           deferredAccountId: S.deferredId,
           recognitionRuleId: ruleId,
           isActive: true,
-        }),
-        "item activate",
+        }, { "Idempotency-Key": crypto.randomUUID() }),
+        "item create",
       );
+      S.itemId = str((createdItem.item as Record<string, unknown>).id, "item id");
 
       S.partyAId = await seedCustomer(page, origin, t("W5 Customer A"), "w5a@example.com");
       S.partyBId = await seedCustomer(page, origin, t("W5 Customer B"), "w5b@example.com");
