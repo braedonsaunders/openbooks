@@ -29,16 +29,20 @@ export function CustomReportActions({
   async function clone() {
     setBusy(true)
     const res = await fetch(`/api/reports/definitions/${id}`)
-    const data = await res.json()
     if (!res.ok) {
-      toast.error(data.error ?? t('loadFailed'))
+      const failure = (await res.json().catch(() => ({}))) as { error?: string }
+      toast.error(failure.error ?? t('loadFailed'))
       setBusy(false)
       return
     }
+    const data = await res.json()
     const def = data.definition
     const created = await fetch('/api/reports/definitions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': crypto.randomUUID(),
+      },
       body: JSON.stringify({
         name: t('copyName', { name: def.name }),
         description: def.description,
@@ -46,12 +50,13 @@ export function CustomReportActions({
         layout: def.layout,
       }),
     })
-    const createdData = await created.json()
     if (!created.ok) {
-      toast.error(createdData.error ?? t('cloneFailed'))
+      const failure = (await created.json().catch(() => ({}))) as { error?: string }
+      toast.error(failure.error ?? t('cloneFailed'))
       setBusy(false)
       return
     }
+    const createdData = await created.json()
     toast.success(t('cloned'))
     router.push(`/reports/custom/builder/${createdData.definition.id}`)
     router.refresh()

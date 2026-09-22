@@ -3,6 +3,7 @@ import 'server-only'
 
 import { notFound, redirect } from 'next/navigation'
 import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import { defaultRowsQuery, REPORT_ENTITY_MAP } from '@openbooks/reports'
 import { requirePermission } from '../../../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../../../lib/features'
 import { isUuid } from '../../../../../../lib/list-params'
@@ -38,35 +39,49 @@ export interface ReportBuilderData {
   inventoryEnabled: boolean
   company: string
   definition: BuilderProps['definition']
+  createMode: boolean
 }
 
 export async function loadReportBuilder(id: string): Promise<ReportBuilderData> {
   const authz = await requirePermission('reports.create')
-  if (!isUuid(id)) notFound()
-  const [definition, branding, inventoryEnabled] = await Promise.all([
-    loadReportDefinition(authz.user.orgId, id),
+  const createMode = id === 'new'
+  if (!createMode && !isUuid(id)) notFound()
+  const [definition, branding, inventoryEnabled, customEntities, hiddenEntityKeys] = await Promise.all([
+    createMode ? Promise.resolve(null) : loadReportDefinition(authz.user.orgId, id),
     orgBranding(),
     isFeatureEnabled(authz.user.orgId, 'inventory'),
+    customRecordReportCatalog(authz),
+    hiddenReportEntityKeys(authz),
   ])
-  if (!definition) notFound()
+  if (!createMode && !definition) notFound()
   // Standard statement reports keep their rich drill-through pages — the entity
   // query-builder edits `query` definitions only.
-  if (definition.report_type === 'statement') redirect(statementPageHref(definition.statement))
-  if (!definition.query || !(await canRunReportEntity(authz, definition.query))) notFound()
+  if (definition?.report_type === 'statement') redirect(statementPageHref(definition.statement))
+  if (definition && (!definition.query || !(await canRunReportEntity(authz, definition.query)))) notFound()
 
   return {
-    customEntities: Object.values(await customRecordReportCatalog(authz)),
-    hiddenEntityKeys: await hiddenReportEntityKeys(authz),
+    customEntities: Object.values(customEntities),
+    hiddenEntityKeys,
     inventoryEnabled,
     company: branding.orgName,
-    definition: {
-      id: definition.id,
-      kind: definition.kind,
-      name: definition.name,
-      description: definition.description,
-      query: definition.query,
-      layout: definition.layout,
-    },
+    definition: definition
+      ? {
+          id: definition.id,
+          kind: definition.kind,
+          name: definition.name,
+          description: definition.description,
+          query: definition.query!,
+          layout: definition.layout,
+        }
+      : {
+          id: '',
+          kind: 'custom',
+          name: '',
+          description: null,
+          query: defaultRowsQuery(REPORT_ENTITY_MAP.ledger_lines!),
+          layout: null,
+        },
+    createMode,
   }
 }
 
@@ -84,6 +99,7 @@ export function reportBuilderSpec(data: ReportBuilderData): PageSpec {
         inventoryEnabled: data.inventoryEnabled,
         company: data.company,
         definition: data.definition,
+        createMode: data.createMode,
       }),
     ],
   })

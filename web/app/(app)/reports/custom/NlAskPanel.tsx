@@ -71,7 +71,10 @@ export function NlAskPanel({ ask, canCreate }: { ask: NlAskLabels | null; canCre
     try {
       const created = await fetch('/api/reports/definitions', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          'Idempotency-Key': crypto.randomUUID(),
+        },
         body: JSON.stringify({
           name: draft.question.slice(0, 120),
           description: draft.question,
