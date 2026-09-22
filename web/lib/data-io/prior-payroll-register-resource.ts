@@ -4,6 +4,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
   comparableSlots,
   savePriorStub,
+  preflightPriorRegisterRow,
   recordUnmappedColumns,
   upsertPriorRegister,
   TOTAL_FIELD_KEYS,
@@ -332,26 +333,20 @@ export function priorPayrollRegisterResource(orgId: string): DataResource {
           }
 
           const sourceColumns = sourceColumnsFrom(src)
-          const amounts: PriorStubWrite['amounts'] = []
+          const rawAmounts: PriorStubWrite['amounts'] = []
           for (const slot of componentSlots) {
             const raw = money(src[slot.fieldKey])
             if (raw === null) continue
-            amounts.push({
+            rawAmounts.push({
               fieldKey: slot.fieldKey,
               amount: raw,
               sourceColumn: sourceColumns[slot.fieldKey] ?? slot.label,
             })
           }
 
-          const stub: PriorStubWrite = {
-            employeePartyId: employee.id,
-            employeeLabel: String(src.employee ?? '').trim(),
-            gross: money(src['total:gross']),
-            netPay: money(src['total:net_pay']),
-            employerCost: money(src['total:employer_cost']),
-            amounts,
-          }
-          if (stub.gross === null || stub.netPay === null) {
+          const gross = money(src['total:gross'])
+          const netPay = money(src['total:net_pay'])
+          if (gross === null || netPay === null) {
             outcome.failed++
             outcome.errors.push({
               row: rowNo,
@@ -359,6 +354,34 @@ export function priorPayrollRegisterResource(orgId: string): DataResource {
                 'the register must state its own gross and net for this employee — the reconciliation proves them against the mapped components, which is how an unmapped amount column is caught',
             })
             continue
+          }
+
+          // One preflight for BOTH modes: the engine's own date and amount
+          // validation, run BEFORE any header row is written and BEFORE the
+          // preview counts the row. It throws with the exact message the
+          // commit path produces, so preview and commit agree on dates and
+          // amounts. Per-row, so one bad row still does not fail its
+          // neighbours; scope, state, or storage failures can still refuse
+          // a row at commit time.
+          const checked = preflightPriorRegisterRow(
+            {
+              periodStart: src.periodStart,
+              periodEnd: src.periodEnd,
+              payDate: src.payDate,
+              gross,
+              netPay,
+              employerCost: money(src['total:employer_cost']),
+              amounts: rawAmounts,
+            },
+            all,
+          )
+          const stub: PriorStubWrite = {
+            employeePartyId: employee.id,
+            employeeLabel: String(src.employee ?? '').trim(),
+            gross: checked.gross,
+            netPay: checked.netPay,
+            employerCost: checked.employerCost,
+            amounts: checked.amounts,
           }
 
           // A dry run validates everything and writes nothing, so the wizard's
@@ -383,9 +406,9 @@ export function priorPayrollRegisterResource(orgId: string): DataResource {
                 actorId: ctx.actorId,
                 name: registerName,
                 providerName: String(src.providerName ?? '').trim() || null,
-                periodStart: String(src.periodStart ?? ''),
-                periodEnd: String(src.periodEnd ?? ''),
-                payDate: String(src.payDate ?? ''),
+                periodStart: checked.periodStart,
+                periodEnd: checked.periodEnd,
+                payDate: checked.payDate,
               }),
             )
           }
