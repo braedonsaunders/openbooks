@@ -114,6 +114,21 @@ test('editing quantity on a derived line re-derives the amount', () => {
   assert.deepEqual(applyQtyPriceToRows(prev, next), [qtyRow('3', '1000', '3000.0000')])
 })
 
+test('a reorder compares each line against itself by client identity, not by position', () => {
+  // Alt+Up moves the discounted line B above line A. Position matching would
+  // compare B against A's old qty/price, mistake B's hand-typed 10.0000 for
+  // a stale derivation of A's line, and overwrite it with 2 x 10 = 20.0000.
+  const prev = [
+    { ...qtyRow('1', '10', '10.0000'), clientKey: 'a' },
+    { ...qtyRow('2', '10', '10.0000'), clientKey: 'b' },
+  ]
+  const next = [
+    { ...qtyRow('2', '10', '10.0000'), clientKey: 'b' },
+    { ...qtyRow('1', '10', '10.0000'), clientKey: 'a' },
+  ]
+  assert.deepEqual(applyQtyPriceToRows(prev, next), next)
+})
+
 test('a hand-typed amount that diverges from qty x price is never overwritten', () => {
   // Discount / reapportioned / tax-adjusted lines keep their manual figure
   // even when the operator edits quantity afterwards.
