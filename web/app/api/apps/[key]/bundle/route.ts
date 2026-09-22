@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { guardFeaturePermission } from '@/lib/feature-gates'
+import { unexpectedServerError } from '@/lib/api/unexpected'
 import { getFrontendBundle, AppError } from '@/lib/apps/store'
 
 export const runtime = 'nodejs'
@@ -22,6 +23,6 @@ export async function GET(
   } catch (e) {
     if (e instanceof AppError)
       return NextResponse.json({ error: e.message }, { status: e.status })
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 })
+    return unexpectedServerError('apps/bundle', e)
   }
 }

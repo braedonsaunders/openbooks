@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { guardPermission, guardSubsidiaryScope } from "../../../../../lib/authz";
+import { unexpectedServerError } from "../../../../../lib/api/unexpected";
 import { isDocKindEnabled } from "../../../../../lib/documents.ts";
 import { pdfResponse, safeName } from "../../../../../lib/export";
 import { isUuid } from "../../../../../lib/list-params";
@@ -59,6 +60,6 @@ export async function GET(
     const stamp = await businessToday(user.orgId);
     return pdfResponse(pdf, safeName(`${meta.docTitle} ${record.reference}-${stamp}`));
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+    return unexpectedServerError('record-pdf', e);
   }
 }
