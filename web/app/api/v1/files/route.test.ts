@@ -5,10 +5,11 @@ import test from "node:test";
 const stateKey = Symbol.for("openbooks.v1-files-route-test");
 interface RouteState {
   uploads: Array<{ authz: unknown; input: Record<string, unknown> }>;
+  listed: Array<{ context: unknown; input: Record<string, unknown> }>;
   claims: Array<{ operation: string; idempotencyKey: string }>;
 }
 
-const routeState: RouteState = { uploads: [], claims: [] };
+const routeState: RouteState = { uploads: [], listed: [], claims: [] };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockSources = new Map<string, string>([
@@ -48,6 +49,14 @@ const mockSources = new Map<string, string>([
     "mock:files",
     `
       const state = globalThis[Symbol.for('openbooks.v1-files-route-test')]
+      // The route's GET reads through this same module. A double that omits an
+      // export the route imports does not fail loudly at that call — the ES
+      // module never instantiates, so the whole file fails to load and every
+      // test in it reports as one opaque failure.
+      export async function listApplicationFiles(context, input) {
+        state.listed.push({ context, input })
+        return { total: 0, offset: input.offset ?? 0, files: [] }
+      }
       export async function uploadCabinetFile(authz, input) {
         state.uploads.push({ authz, input })
         return { id: "file-1", name: input.filename, folderId: input.folderId, folderName: null, contentType: input.contentType, sizeBytes: 4 }

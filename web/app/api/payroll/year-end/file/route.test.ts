@@ -38,9 +38,14 @@ const mockSources = new Map<string, string>([
   [
     'mock:registry',
     `
+      const state = globalThis[Symbol.for('openbooks.payroll-year-end-file-test')]
       export function yearEndFiling(country, filing) {
         return {
           label: \`\${country} \${filing}\`,
+          // Mirrors the real registry: an ISSUED filing declares the body key
+          // its per-employee selection arrives under. orgYearEndFilings copies
+          // this onto the section, so the filing is the earlier source.
+          issue: state.filingIssue,
           download: {
             build: async () => ({
               body: 'file-bytes', contentType: 'text/plain', filename: 'filing.txt',
@@ -86,8 +91,8 @@ const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/payroll/scope.ts', 'mock:payroll-error'],
 ])
 
-type FileRouteTestState = { sections: unknown[]; roeCalls: string[][] }
-const routeState: FileRouteTestState = { sections: [], roeCalls: [] }
+type FileRouteTestState = { sections: unknown[]; roeCalls: string[][]; filingIssue: unknown }
+const routeState: FileRouteTestState = { sections: [], roeCalls: [], filingIssue: null }
 ;(globalThis as Record<symbol, unknown>)[Symbol.for('openbooks.payroll-year-end-file-test')] = routeState
 
 const hooks = registerHooks({
@@ -162,9 +167,10 @@ test('GET and POST accept the boundary years 2020 and 2100', async () => {
 })
 
 test('ROE selection: a malformed employee id is refused at the route before any scope guard runs', async () => {
+  const issue = { param: 'employees', idColumn: 'employeePartyId', maxSelection: 10, commentMaxLength: 100 }
+  routeState.filingIssue = issue
   routeState.sections = [{
-    country: 'CA', key: 'roe', label: 'ROE',
-    issue: { maxSelection: 10, commentMaxLength: 100 },
+    country: 'CA', key: 'roe', label: 'ROE', issue,
     data: { rows: [], rowKey: 'employee' },
   }]
   routeState.roeCalls = []
@@ -179,5 +185,27 @@ test('ROE selection: a malformed employee id is refused at the route before any 
   const wellFormed = await post({ filing: 'roe', employees: `${id}:left the company` })
   assert.notEqual(wellFormed.status, 422, 'a well-formed selection passes the shape boundary')
   assert.deepEqual(routeState.roeCalls, [[id]], 'the scope guard receives exactly the parsed ids')
+})
+
+test('ROE selection: an absent section still refuses a malformed id', async () => {
+  // A section is missing whenever the filing is gated off for the org or the
+  // year holds no data. The selection guards must not hang off the section:
+  // reading `issue` from there let an absent section skip the shape check AND
+  // the subsidiary-scope guard, handing the builder an unvalidated selection.
+  // The filing declaration is org-independent, so it is the one that answers.
+  routeState.filingIssue = {
+    param: 'employees', idColumn: 'employeePartyId', maxSelection: 10, commentMaxLength: 100,
+  }
+  routeState.sections = []
+  routeState.roeCalls = []
+
+  const malformed = await post({ filing: 'roe', employees: 'not-a-uuid:left the company' })
+  assert.equal(malformed.status, 422, 'an absent section must not bypass the shape boundary')
+  assert.deepEqual(routeState.roeCalls, [], 'the scope guard never saw the malformed id')
+
+  const id = '5a1c2b3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d'
+  const wellFormed = await post({ filing: 'roe', employees: `${id}:left the company` })
+  assert.notEqual(wellFormed.status, 422)
+  assert.deepEqual(routeState.roeCalls, [[id]], 'the scope guard still runs without a section')
 })
 

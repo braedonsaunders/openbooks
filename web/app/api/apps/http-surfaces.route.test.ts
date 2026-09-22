@@ -142,6 +142,12 @@ const hooks = registerHooks({
         format: 'module',
         shortCircuit: true,
         source: `
+          // This list is hand-maintained and can only OMIT: every name here is
+          // one some @/ module really exports, and a missing one does not fail
+          // at the call site — the ES module never instantiates, so the route
+          // fails to load and the whole test reports one opaque failure.
+          // Loud, at least, which is the lucky direction for an omission.
+          export function unexpectedServerError() { return globalThis.__obAppsNextResponse.json({ error: 'unexpected' }, { status: 500 }) }
           export const sql = Object.assign((v) => v, { raw: (v) => v })
           export const db = { execute: async () => ({ rows: [] }) }
           export class AppError extends Error { status = 400 }

@@ -4,12 +4,13 @@ import test from "node:test";
 
 const stateKey = Symbol.for("openbooks.v1-banking-routes-test");
 interface RouteState {
+  listed: Array<Record<string, unknown>>;
   started: Array<Record<string, unknown>>;
   signedOff: Array<Record<string, unknown>>;
   matched: Array<Record<string, unknown>>;
 }
 
-const routeState: RouteState = { started: [], signedOff: [], matched: [] };
+const routeState: RouteState = { listed: [], started: [], signedOff: [], matched: [] };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockSources = new Map<string, string>([
@@ -50,6 +51,13 @@ const mockSources = new Map<string, string>([
     "mock:banking",
     `
       const state = globalThis[Symbol.for('openbooks.v1-banking-routes-test')]
+      // The route's GET reads through this same module; see the note in the
+      // v1 files route test. An omitted export breaks module instantiation,
+      // not just the call.
+      export async function listApplicationReconciliations(_context, input) {
+        state.listed.push(input)
+        return { reconciliations: [] }
+      }
       export async function startReconciliationSession(_context, input) {
         state.started.push(input)
         return { replayed: false, result: { reconciliationId: "rec-1" } }
