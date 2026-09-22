@@ -133,6 +133,54 @@ test("an unmapped document kind fails explicitly instead of posting under GL alo
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
+test("an explicitly disabled feature stays off in the close context even when its data survives", async () => {
+  // The previous context clauses (`|| has_assets`, `|| has_recognition`,
+  // `|| has_fx`, `|| entities > 1`) let preserved data re-enable a step the
+  // Features page says is off, so the close demanded depreciation/recognition/
+  // FX artifacts that the disabled feature refuses to produce — an operator
+  // dead end contradicting the switchboard. Resolution now runs through the
+  // shared registry + data-dependent default: an explicit stored boolean
+  // always wins, and only an UNSET data-dependent flag consults the org's
+  // data.
+  const { defaultCloseFeatureContext, defaultCloseStepEnabled } = await import("./features.ts");
+  // Stub the DATABASE (never the classifiers under test): the features row
+  // and the data-dependent probes flatten through drizzle's chunk list.
+  const textOf = (query: unknown): string => {
+    const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
+    if (!Array.isArray(chunks)) return String(query);
+    return chunks
+      .map((chunk) => {
+        if (typeof chunk === "string") return chunk;
+        const value = (chunk as { value?: unknown[] })?.value;
+        if (Array.isArray(value)) return value.map(String).join("");
+        return "";
+      })
+      .join("");
+  };
+  const stubExecutor = {
+    execute: async (query: unknown) => {
+      const text = textOf(query);
+      const features = { fixedAssets: false, revenueRecognition: false, multiCurrency: false };
+      if (/from orgs/.test(text)) {
+        return { rows: [{ features }] };
+      }
+      // dataDependentFeatureDefault probes (fx lines / subsidiaries): return
+      // data that WOULD enable the feature — the explicit false must beat it.
+      if (/journal_lines/.test(text)) return { rows: [{ on: true }] };
+      if (/subsidiaries/.test(text)) return { rows: [{ n: 4 }] };
+      return { rows: [] };
+    },
+  } as unknown as typeof db;
+  const ctx = await defaultCloseFeatureContext(stubExecutor, "00000000-0000-4000-8000-000000000001");
+  assert.equal(ctx.fixedAssets, false, "explicit off beats surviving fixed assets");
+  assert.equal(ctx.revenueRecognition, false, "explicit off beats surviving recognition schedules");
+  assert.equal(ctx.multiCurrency, false, "explicit off beats live FX data");
+  assert.equal(defaultCloseStepEnabled("depreciation-posted", ctx), false);
+  assert.equal(defaultCloseStepEnabled("recognition-posted", ctx), false);
+  assert.equal(defaultCloseStepEnabled("fx-ready", ctx), false);
+  assert.equal(defaultCloseStepEnabled("fx-revalued", ctx), false);
+});
+
 function errorChainMatches(error: unknown, pattern: RegExp): boolean {
   const messages: string[] = [];
   for (

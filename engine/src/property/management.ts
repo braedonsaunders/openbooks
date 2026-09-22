@@ -11,6 +11,7 @@ import type { AdvancedBillingLine } from "../billing/advanced-subscriptions.ts";
 import { inventoryFeatureEnabled } from "../inventory/profile-policy.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
+import { dataDependentFeatureDefault } from "../organization/feature-defaults.ts";
 import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
 
 export class PropertyManagementError extends Error {
@@ -280,11 +281,15 @@ async function fixedAssetsFeatureEnabled(runner: Pick<typeof db, "execute">, org
   return result.rows[0]?.enabled !== false;
 }
 
+/** The shared data-dependent resolver, not a second copy of the SQL: the
+ * previous local read answered "off" for orgs whose flag was never stored
+ * but whose ledger carries foreign-currency lines — precisely the orgs the
+ * default exists to keep working. */
 async function multiCurrencyFeatureEnabled(runner: Pick<typeof db, "execute">, orgId: string): Promise<boolean> {
-  const result = (await runner.execute<{ enabled: boolean }>(sql`
-    select coalesce((settings->'features'->>'multiCurrency')::boolean, false) as enabled from orgs where id=${orgId}
+  const result = (await runner.execute<{ features: Record<string, boolean> | null }>(sql`
+    select settings->'features' as features from orgs where id=${orgId}
   `));
-  return result.rows[0]?.enabled === true;
+  return dataDependentFeatureDefault(runner as Parameters<typeof dataDependentFeatureDefault>[0], orgId, "multiCurrency", result.rows[0]?.features ?? null);
 }
 
 async function audit(tx: Pick<typeof db, "execute">, orgId: string, table: string, rowId: string, action: string, actorId: string | null, changes: unknown, requestId?: string | null) {
