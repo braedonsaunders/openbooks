@@ -70,9 +70,14 @@ export async function createPayRun(input: {
     let periodStart = input.periodStart;
     let periodEnd = input.periodEnd;
     if (!periodStart || !periodEnd) {
+      // Regular-cycle scheduling anchors on the REGULAR schedule only: an
+      // off-cycle bonus, retro or final-pay run landing mid-span must not drag
+      // max(period_end) forward, or the next regular run silently skips the
+      // period the off-cycle run interrupted.
       const last = (await tx.execute<{ last_end: string | null }>(sql`
         select max(period_end) as last_end from pay_runs
          where org_id = ${orgId} and pay_schedule_id = ${schedule.id}
+           and run_type = 'regular'
       `));
       const next = nextPeriodAfter(schedule, last.rows[0]?.last_end ?? null);
       periodStart = next.periodStart;
