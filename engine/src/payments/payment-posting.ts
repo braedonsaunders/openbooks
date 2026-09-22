@@ -90,6 +90,18 @@ export async function postPaymentWithApplications(
     const storedAllocations = custom.allocations ?? [];
     const allocs = allocations ?? storedAllocations;
     const creditAllocs = custom.creditAllocations ?? [];
+    // A payment is the CASH frame: its total is the bank line by contract, so
+    // a payment settling only credits would be a 0.00 receipt sitting in the
+    // payments list, the collected/paid tiles, remittance advice and bank
+    // matching. Credits that move no cash settle through applyStandaloneCredits
+    // (engine/src/payments/credit-settlement.ts), which writes the same
+    // `applications` ledger and no journal entry. Name that path rather than
+    // asking for cash the operator does not have.
+    if (allocs.length === 0 && creditAllocs.length > 0) {
+      throw new PaymentError(
+        "this payment applies credits but moves no cash — apply the credit directly from the credit memo instead of through a payment",
+      );
+    }
     if (allocs.length === 0) throw new PaymentError("select at least one open item to apply");
     validateAllocationInputs(allocs);
     if (
