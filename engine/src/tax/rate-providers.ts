@@ -316,10 +316,17 @@ function wireAmountOrThrow(amount: string): number {
  * Inbound provider amounts may be JSON numbers or decimal strings; either way
  * they parse through String() → toUnits so no arithmetic crosses a float.
  * Responses finer than the ledger's 4dp scale fail closed instead of being
- * silently rounded into posted calculation evidence.
+ * silently rounded into posted calculation evidence. A MISSING amount fails
+ * closed too: a 200 response without the field it owes would otherwise
+ * quote $0.00 tax — indistinguishable from correctly-nil, and the exact
+ * "unconfigured input that is always owed accrues zero" defect.
  */
 function providerMoney(value: unknown, field: string): string {
-  if (value == null) return "0.0000";
+  if (value == null) {
+    throw new TaxRateProviderError(
+      `provider response is missing ${field} — refusing rather than quoting 0 tax`,
+    );
+  }
   try {
     return fromUnits(toUnits(String(value)));
   } catch (e) {
@@ -332,10 +339,15 @@ function providerMoney(value: unknown, field: string): string {
 /**
  * Providers report rates as decimal FRACTIONS of one (0.0825 = 8.25%). Shift
  * the decimal point two places on the exact string form — never rate*100 float
- * math — and fail closed beyond the 4dp percent scale.
+ * math — and fail closed beyond the 4dp percent scale. A missing rate is not
+ * 0%: it would persist zero-rate evidence beside a real collected amount.
  */
-function percentFromRateFraction(value: unknown): string {
-  if (value == null) return "0.0000";
+function percentFromRateFraction(value: unknown, field: string): string {
+  if (value == null) {
+    throw new TaxRateProviderError(
+      `provider response is missing ${field} — refusing rather than recording a 0.0000% rate`,
+    );
+  }
   const raw = String(value).trim();
   if (!/^[-+]?(\d+(\.\d*)?|\.\d+)$/.test(raw)) {
     throw new TaxRateProviderError(`provider returned a non-decimal rate: "${raw}"`);
@@ -464,7 +476,7 @@ export async function quoteViaAvalara(
         jurisdiction: d.jurisdictionType ?? "unknown",
         // Avalara reports the rate as a decimal fraction (0.065 = 6.5%); parse
         // it and the amounts on their exact string forms, never via float math.
-        ratePercent: percentFromRateFraction(d.rate),
+        ratePercent: percentFromRateFraction(d.rate, "summary.rate"),
         taxAmount: providerMoney(d.tax, "summary.tax"),
         taxName: d.taxName,
       }))
@@ -523,7 +535,7 @@ export async function quoteViaTaxJar(
   const tax = (raw as { tax?: Record<string, unknown> }).tax ?? {};
   const amountToCollect = providerMoney(tax.amount_to_collect, "amount_to_collect");
   // Blended combined rate; each jurisdiction's own rate takes precedence below.
-  const blendedRate = percentFromRateFraction(tax.rate);
+  const blendedRate = percentFromRateFraction(tax.rate, "tax.rate");
   const breakdown = (tax.breakdown as Record<string, unknown> | undefined) ?? {};
   const components: TaxComponentQuote[] = [];
   for (const [key, value] of Object.entries(breakdown)) {
@@ -535,7 +547,7 @@ export async function quoteViaTaxJar(
     const ownRate = breakdown[`${jurisdiction}_tax_rate`] ?? breakdown[`${jurisdiction}_tax_remitance_rate`];
     components.push({
       jurisdiction,
-      ratePercent: ownRate == null ? blendedRate : percentFromRateFraction(ownRate),
+      ratePercent: ownRate == null ? blendedRate : percentFromRateFraction(ownRate, `breakdown.${jurisdiction} tax rate`),
       taxAmount: providerMoney(value, `breakdown.${key}`),
       ...(ownRate == null ? { rateIsBlendedFallback: true } : {}),
     });

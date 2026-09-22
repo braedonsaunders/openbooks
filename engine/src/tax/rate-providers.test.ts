@@ -334,6 +334,54 @@ test("provider error statuses surface as TaxRateProviderError without leaking cr
   }
 });
 
+test("a 200 response without the amount it owes is refused by name, never quoted as zero", async () => {
+  // A 200 that omits the headline amount — API shape drift, a misconfigured
+  // baseUrl serving a different API, a proxy truncating the body — used to
+  // produce a successful $0.0000 quote, which the bill writer then posted
+  // with taxOverridden: true: tax silently not owed, indistinguishable from
+  // correctly nil. Both providers now refuse naming the missing field, and a
+  // missing blended rate is not 0% calculation evidence either.
+  const avalara = createServer((_req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ code: "OK", summary: [] }));
+  });
+  const taxjar = createServer((_req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ tax: {} }));
+  });
+  const taxjarNoRate = createServer((_req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ tax: { amount_to_collect: 8.25 } }));
+  });
+  const avalaraOrigin = await listen(avalara);
+  const taxjarOrigin = await listen(taxjar);
+  const taxjarNoRateOrigin = await listen(taxjarNoRate);
+  try {
+    await assert.rejects(
+      () =>
+        quoteViaAvalara(quoteRequest, {
+          accountId: AVALARA_ACCOUNT_ID,
+          licenseKey: AVALARA_LICENSE_KEY,
+          baseUrl: avalaraOrigin,
+          quotedOn: quoteRequest.quotedOn!,
+        }),
+      (e: unknown) => e instanceof TaxRateProviderError && /missing totalTax/.test(e.message),
+    );
+    await assert.rejects(
+      () => quoteViaTaxJar(quoteRequest, { apiKey: TAXJAR_API_KEY, baseUrl: taxjarOrigin }),
+      (e: unknown) => e instanceof TaxRateProviderError && /missing amount_to_collect/.test(e.message),
+    );
+    await assert.rejects(
+      () => quoteViaTaxJar(quoteRequest, { apiKey: TAXJAR_API_KEY, baseUrl: taxjarNoRateOrigin }),
+      (e: unknown) => e instanceof TaxRateProviderError && /missing tax\.rate/.test(e.message),
+    );
+  } finally {
+    await close(avalara);
+    await close(taxjar);
+    await close(taxjarNoRate);
+  }
+});
+
 test("quoteFromRate rejects over-precision rates with the module error type", () => {
   // The rate-provider route maps TaxRateProviderError to 422; the decimal
   // normalization fault escaped as a plain Error (a 500) on rates finer than
