@@ -18,6 +18,7 @@ import pg from "pg";
 import {
   connectMigrationClient,
   describeBootstrapMigrationFailure,
+  isLockNotAvailable,
   releaseMigrationClient,
 } from "./bootstrap-migration-client.ts";
 import { env, longPool, pool } from "../engine/src/platform/db.ts";
@@ -133,6 +134,69 @@ test("bootstrap routes its long DDL through the migration client, not the reques
     );
   }
 });
+
+test("executeTrackedMigration bounds the lock wait, retries 55P03, and honors no-transaction files", () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const source = readFileSync(join(here, "bootstrap.ts"), "utf8");
+  const chunks = source.split(/^(?=async function |function )/m);
+  const body = chunks.find((entry) => entry.startsWith("async function executeTrackedMigration("));
+  assert.ok(body, "executeTrackedMigration not found in bootstrap.ts");
+  // The bound must be imposed by the runner every attempt, not trusted from
+  // the file: a file-level SET would silently disarm it for later statements.
+  assert.ok(
+    body.includes("sanitizeMigrationContent(content)"),
+    "the runner must strip file-level lock_timeout before executing",
+  );
+  assert.ok(
+    body.includes("SET LOCAL lock_timeout"),
+    "each transactional attempt must run under the bounded lock_timeout",
+  );
+  assert.ok(
+    body.includes("isLockNotAvailable(err)"),
+    "only a lock-wait timeout (55P03) may retry the migration",
+  );
+  assert.ok(
+    body.includes("migrationRunsWithoutTransaction(content)"),
+    "no-transaction files (CREATE INDEX CONCURRENTLY) must skip BEGIN/COMMIT",
+  );
+});
+
+test(
+  "a contended lock fires 55P03 under the migration bound, which the runner retries on",
+  { skip: !DB },
+  async () => {
+    const holder = await connectMigrationClient();
+    const waiter = await connectMigrationClient();
+    try {
+      await holder.query("create table if not exists probe_migration_lock_contention (id int)");
+      await holder.query("begin");
+      await holder.query("lock table probe_migration_lock_contention in access exclusive mode");
+      await waiter.query("begin");
+      await waiter.query("SET LOCAL lock_timeout = '200ms'");
+      const failure = await waiter
+        .query("lock table probe_migration_lock_contention in access share mode")
+        .then(
+          () => null,
+          (error: unknown) => error as { code?: string; message: string },
+        );
+      assert.ok(failure, "the contended lock must fail under the bound");
+      assert.equal(failure.code, "55P03");
+      assert.equal(isLockNotAvailable(failure), true);
+      const lockMessage = describeBootstrapMigrationFailure(
+        "generated/0999_probe.sql",
+        failure,
+        200,
+      );
+      assert.ok(lockMessage.includes("pg_stat_activity"));
+    } finally {
+      await waiter.query("rollback").catch(() => {});
+      await holder.query("rollback").catch(() => {});
+      await holder.query("drop table if exists probe_migration_lock_contention");
+      await releaseMigrationClient(waiter);
+      await releaseMigrationClient(holder);
+    }
+  },
+);
 
 test("a client-side timeout names the timer and the remedy", () => {
   const message = describeBootstrapMigrationFailure(
