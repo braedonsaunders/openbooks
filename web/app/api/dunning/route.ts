@@ -6,6 +6,7 @@ import { isDunnableDocumentKind } from "@openbooks/engine/src/receivables/dunnin
 import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { guardPermission } from "../../../lib/authz";
 import { canonicalDecimal, compareDecimal } from "../../../lib/exact-decimal";
+import { isValidEmailAddress } from "@openbooks/emails";
 
 export const runtime = "nodejs";
 
@@ -130,6 +131,15 @@ export async function POST(req: Request) {
   // ladder the admin tried to switch off. Omission stays active.
   if (body.isActive !== undefined && typeof body.isActive !== "boolean") {
     return NextResponse.json({ error: "isActive must be a boolean" }, { status: 400 });
+  }
+  // A malformed reply-to would fail every dunning tick at enqueue time, so
+  // refuse it at the boundary with the address named.
+  if (
+    body.replyTo !== undefined &&
+    body.replyTo !== null &&
+    (typeof body.replyTo !== "string" || !isValidEmailAddress(body.replyTo))
+  ) {
+    return NextResponse.json({ error: "replyTo must be a valid email address" }, { status: 400 });
   }
 
   const id = await db.transaction(async (tx) => {

@@ -332,8 +332,10 @@ export async function sendVia(
 ): Promise<EmailSendOutcome> {
   assertEmailDeliveryKey(identity.deliveryKey)
   const from = transport.from
-  const replyTo = transport.replyTo
   const normalizedInput = normalizeEmailDeliveryInput(input, { requireSingleRecipient: true })
+  // A per-message reply-to (dunning policy, approval flow) wins over the org
+  // transport default; both were validated on the way in.
+  const replyTo = normalizedInput.replyTo ?? transport.replyTo
   const run = (): Promise<EmailSendOutcome> => {
     switch (transport.provider) {
       case 'resend':

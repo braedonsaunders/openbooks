@@ -320,6 +320,10 @@ async function runDunningInternal(
                   html: `<p>${escapeHtml(body).replace(/\n/g, "<br/>")}</p>`,
                   text: body,
                   meta: { category: "dunning" },
+                  // The policy's configured reply-to; absent means the org's
+                  // default transport reply-to. An empty string is not an
+                  // address — it must not reach the payload.
+                  ...(policy.replyTo ? { replyTo: policy.replyTo } : {}),
                 },
               });
               if (!deferred) {

@@ -16,6 +16,8 @@ export type EmailJobData = {
   html: string
   text: string
   attachments?: EmailAttachment[]
+  /** Per-message Reply-To overriding the org transport default. */
+  replyTo?: string
   meta?: {
     userId?: string
     category?: string

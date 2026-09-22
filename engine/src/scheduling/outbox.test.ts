@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { MAX_SCHEDULER_OUTBOX_ATTEMPTS, schedulerOutboxBackoffMs } from "./outbox.ts";
+import {
+  MAX_SCHEDULER_OUTBOX_ATTEMPTS,
+  deliverFlowEmail,
+  parseFlowEmailPayload,
+  schedulerOutboxBackoffMs,
+  type OutboxRow,
+} from "./outbox.ts";
 
 const source = (relative: string) =>
   readFileSync(new URL(relative, import.meta.url), "utf8");
@@ -70,4 +76,48 @@ test("scheduler completions are fenced by the active per-claim lease", () => {
   assert.match(outbox, /SchedulerOutboxLeaseFencedError/);
   const recovery = outbox.slice(outbox.indexOf("recoverStaleSchedulerOutbox"));
   assert.match(recovery, /lease_token=null/);
+});
+
+test("flow email payloads carry an optional reply-to and refuse non-addresses", () => {
+  const base = { to: ["a@example.com"], subject: "s", html: "<p>x</p>", text: "x" };
+  assert.equal(
+    parseFlowEmailPayload({ ...base, replyTo: "ar@example.com" }).replyTo,
+    "ar@example.com",
+  );
+  assert.ok(!("replyTo" in parseFlowEmailPayload(base)));
+  for (const replyTo of ["not-an-address", "", 7, null]) {
+    assert.throws(
+      () => parseFlowEmailPayload({ ...base, replyTo }),
+      /`replyTo` must be an email address/,
+      `replyTo ${JSON.stringify(replyTo)} must not become durable`,
+    );
+  }
+});
+
+test("flow email delivery forwards reply-to to the queue", async () => {
+  const base = { to: ["a@example.com"], subject: "s", html: "<p>x</p>", text: "x" };
+  const row = {
+    id: "row-1",
+    org_id: "org-1",
+    kind: "flow_email",
+    subject_id: null,
+    occurrence_key: "k",
+    attempt_count: 0,
+    lease_token: "t",
+    payload: { ...base, replyTo: "ar@example.com" },
+  } as unknown as OutboxRow;
+  const seen: { replyTo?: string }[] = [];
+  await deliverFlowEmail(row, (async (data) => {
+    seen.push(data);
+  }) as Parameters<typeof deliverFlowEmail>[1]);
+  assert.equal(seen[0]?.replyTo, "ar@example.com");
+
+  const seenAbsent: { replyTo?: string }[] = [];
+  await deliverFlowEmail(
+    { ...row, payload: base } as unknown as OutboxRow,
+    (async (data) => {
+      seenAbsent.push(data);
+    }) as Parameters<typeof deliverFlowEmail>[1],
+  );
+  assert.ok(!("replyTo" in (seenAbsent[0] ?? {})));
 });

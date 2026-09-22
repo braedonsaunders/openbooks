@@ -210,6 +210,7 @@ export function createEmailWorker(): Worker<EmailJobData> {
           html: d.html,
           text: d.text,
           attachments: d.attachments,
+          ...(d.replyTo ? { replyTo: d.replyTo } : {}),
         }, { deliveryKey });
         if (outcome.kind === "sent") {
           await appendEmailAttemptEvent(d.orgId, canonical.id, {
