@@ -66,6 +66,15 @@ export const PAYROLL_OPENING_BALANCES_DESCRIPTOR: ResourceDescriptor = {
  */
 const COMPONENT_PREFIX = 'component:'
 
+/**
+ * Advisory for a row that carries no amounts where no carry-in is stored.
+ * The commit genuinely writes nothing (the engine deletes nothing and counts
+ * nothing), so both preview and commit report the row as a warning rather
+ * than a created/updated count — a blank line in a file must never read as
+ * progress.
+ */
+const NOTHING_TO_WRITE = 'row carries no amounts and no carry-in is stored — nothing to write'
+
 function componentColumnKey(component: OpeningComponentField): string {
   return `${COMPONENT_PREFIX}${component.code}`
 }
@@ -230,24 +239,88 @@ export function payrollOpeningBalancesResource(orgId: string): DataResource {
       const lockCache = new Map<number, Awaited<ReturnType<typeof openingBalanceLocks>>>()
       const existingCache = new Map<number, Set<string>>()
 
+      // Whole-input duplicate guard before any save: per-row saves bypass
+      // the engine's batch guard, so every row sharing a resolved
+      // (employee, tax year) key is refused. Scope runs first so a
+      // restricted caller sees scope errors, never duplicate evidence
+      // about a hidden employee; refusal is per-key (resource outcomes
+      // are per-row, unlike the engine's all-or-nothing batch),
+      // including identical repeats.
+      const preflight: {
+        employeeId: string | null
+        employeeError: string | null
+        taxYear: number | null
+        taxError: string | null
+        scopeError: string | null
+      }[] = []
+      for (const src of rows) {
+        let taxYear: number | null = null
+        let taxError: string | null = null
+        try {
+          taxYear = assertTaxYear(src.taxYear)
+        } catch (error) {
+          taxError = error instanceof Error ? error.message : 'write failed'
+        }
+        let employeeId: string | null = null
+        let employeeError: string | null = null
+        let scopeError: string | null = null
+        if (taxError === null) {
+          const employee = await resolveEmployee(ctx.orgId, src.employee)
+          if ('error' in employee) employeeError = employee.error
+          else employeeId = employee.id
+        }
+        if (taxError === null && employeeError === null && employeeId !== null) {
+          scopeError = await employeeWriteScopeError(ctx.orgId, employeeId, ctx.allowedSubsidiaryIds)
+        }
+        preflight.push({ employeeId, employeeError, taxYear, taxError, scopeError })
+      }
+      const keyUses = new Map<string, number>()
+      for (const p of preflight) {
+        if (p.employeeId !== null && p.taxYear !== null && p.scopeError === null) {
+          const key = `${p.employeeId} ${p.taxYear}`
+          keyUses.set(key, (keyUses.get(key) ?? 0) + 1)
+        }
+      }
+      const duplicated = new Set<number>()
+      preflight.forEach((p, index) => {
+        if (
+          p.employeeId !== null && p.taxYear !== null && p.scopeError === null &&
+          keyUses.get(`${p.employeeId} ${p.taxYear}`)! > 1
+        ) {
+          duplicated.add(index)
+        }
+      })
+      for (const index of [...duplicated].sort((a, b) => a - b)) {
+        const p = preflight[index]!
+        outcome.failed++
+        outcome.errors.push({
+          row: index + 1,
+          message: `employee "${String(rows[index]!.employee).trim()}" appears more than once in this load for tax year ${p.taxYear} — keep only one row per employee and tax year`,
+          field: 'employee',
+        })
+      }
+
       for (let index = 0; index < rows.length; index++) {
+        if (duplicated.has(index)) continue
         const rowNo = index + 1
         const src = rows[index]!
+        const pre = preflight[index]!
         try {
-          const taxYear = assertTaxYear(src.taxYear)
-          const employee = await resolveEmployee(ctx.orgId, src.employee)
-          if ('error' in employee) {
+          if (pre.taxError !== null) throw new Error(pre.taxError)
+          if (pre.employeeError !== null || pre.employeeId === null) {
             outcome.failed++
-            outcome.errors.push({ row: rowNo, message: employee.error, field: 'employee' })
+            outcome.errors.push({ row: rowNo, message: pre.employeeError ?? 'employee is required', field: 'employee' })
             continue
           }
-          // Scope is decided before the preview reports anything: a restricted
-          // importer must not learn, even in dry-run, that a hidden employee
-          // exists and would be created/updated.
-          const scopeError = await employeeWriteScopeError(ctx.orgId, employee.id, ctx.allowedSubsidiaryIds)
-          if (scopeError) {
+          const taxYear = pre.taxYear!
+          const employeeId = pre.employeeId
+          // Scope was decided in the preflight above, before the preview
+          // reports anything: a restricted importer must not learn, even in
+          // dry-run, that a hidden employee exists and would be
+          // created/updated.
+          if (pre.scopeError !== null) {
             outcome.failed++
-            outcome.errors.push({ row: rowNo, message: scopeError, field: 'employee' })
+            outcome.errors.push({ row: rowNo, message: pre.scopeError, field: 'employee' })
             continue
           }
 
@@ -260,7 +333,7 @@ export function payrollOpeningBalancesResource(orgId: string): DataResource {
             }
             existingCache.set(taxYear, new Set(existing.rows.map((r) => r.employee_party_id)))
           }
-          const lock = lockCache.get(taxYear)!.get(employee.id)
+          const lock = lockCache.get(taxYear)!.get(employeeId)
           if (lock) {
             outcome.failed++
             outcome.errors.push({
@@ -276,10 +349,23 @@ export function payrollOpeningBalancesResource(orgId: string): DataResource {
           const normalizedComponents = components === undefined
             ? {}
             : normalizeOpeningComponents(components, await loadComponents())
-          const existed = existingCache.get(taxYear)!.has(employee.id)
+          const existed = existingCache.get(taxYear)!.has(employeeId)
+          const empty = isEmptyOpeningBalance(amounts, normalizedComponents)
           if (ctx.dryRun) {
-            if (isEmptyOpeningBalance(amounts, normalizedComponents) && !existed) outcome.updated++
-            else if (existed) outcome.updated++
+            if (empty && !existed) {
+              // A blank row with nothing stored writes nothing on commit
+              // (the engine deletes nothing and counts nothing), so the
+              // preview must not claim an update either. The advisory keeps
+              // the row visible instead of silently vanishing from the
+              // counts; the commit path below reports the same warning.
+              if (!outcome.warnings) outcome.warnings = []
+              outcome.warnings.push({ row: rowNo, message: NOTHING_TO_WRITE })
+              continue
+            }
+            // An empty row against a STORED carry-in clears it: commit
+            // deletes it (counted as an update below), so preview says
+            // updated. That delete behavior and its audit are unchanged.
+            if (existed) outcome.updated++
             else outcome.created++
             continue
           }
@@ -288,12 +374,17 @@ export function payrollOpeningBalancesResource(orgId: string): DataResource {
             orgId: ctx.orgId,
             actorId: ctx.actorId,
             taxYear,
-            rows: [{ employeePartyId: employee.id, amounts: src, components }],
+            rows: [{ employeePartyId: employeeId, amounts: src, components }],
             allowedSubsidiaryIds: ctx.allowedSubsidiaryIds ?? undefined,
           })
           outcome.created += result.created
           outcome.updated += result.updated + result.deleted
-          if (result.created > 0) existingCache.get(taxYear)!.add(employee.id)
+          if (result.created > 0) existingCache.get(taxYear)!.add(employeeId)
+          if (result.deleted > 0) existingCache.get(taxYear)!.delete(employeeId)
+          if (empty && !existed) {
+            if (!outcome.warnings) outcome.warnings = []
+            outcome.warnings.push({ row: rowNo, message: NOTHING_TO_WRITE })
+          }
         } catch (error) {
           outcome.failed++
           outcome.errors.push({
