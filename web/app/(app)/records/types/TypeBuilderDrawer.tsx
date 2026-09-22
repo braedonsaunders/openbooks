@@ -33,6 +33,7 @@ import {
   cn,
 } from '@openbooks/ui'
 import { confirmDialog } from '@/lib/confirm'
+import { readApiErrorMessage } from '@/lib/api-error'
 import { ICON_KEYS, NavIcon } from '../../../../components/sidebar-nav'
 import {
   RECORD_FIELD_TYPES,
@@ -310,24 +311,29 @@ export function TypeBuilderDrawer({
       if (!ok) return
     }
     setBusy(true)
-    const res = await fetch(`/api/records/types/${type.id}/publish`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action }),
-    })
-    const data = await res.json()
-    if (!res.ok) {
-      toast.error(data.error ?? t('typeBuilder.actionFailed'))
-      if (data.issues) setIssues(data.issues)
-    } else {
+    try {
+      const res = await fetch(`/api/records/types/${type.id}/publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      })
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string; issues?: Issue[] } | null
+        toast.error(body?.error ?? `${t('typeBuilder.actionFailed')} (status ${res.status})`)
+        if (Array.isArray(body?.issues)) setIssues(body.issues)
+        return
+      }
       toast.success(
         action === 'publish'
           ? t('typeBuilder.publishedToast', { name, key })
           : t('typeBuilder.archivedToast'),
       )
+      router.refresh()
+    } catch {
+      toast.error(t('typeBuilder.actionFailed'))
+    } finally {
+      setBusy(false)
     }
-    setBusy(false)
-    router.refresh()
   }
 
   async function destroy() {
@@ -337,16 +343,20 @@ export function TypeBuilderDrawer({
     })
     if (!ok) return
     setBusy(true)
-    const res = await fetch(`/api/records/types/${type.id}`, { method: 'DELETE' })
-    const data = await res.json()
-    if (!res.ok) {
-      toast.error(data.error ?? tc('feedback.deleteFailed'))
+    try {
+      const res = await fetch(`/api/records/types/${type.id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        toast.error(await readApiErrorMessage(res, tc('feedback.deleteFailed')))
+        return
+      }
+      toast.success(t('typeBuilder.draftDeleted'))
+      router.push('/records/types')
+      router.refresh()
+    } catch {
+      toast.error(tc('feedback.deleteFailed'))
+    } finally {
       setBusy(false)
-      return
     }
-    toast.success(t('typeBuilder.draftDeleted'))
-    router.push('/records/types')
-    router.refresh()
   }
 
   /** Create mode only: the single idempotent POST behind explicit Save. */
