@@ -133,9 +133,6 @@ test("public reachability stays an explicit allowlist decision in the proxy poli
     "/api/flows/email-action",
     "/api/login",
     "/api/password-reset",
-    "/api/v1/health",
-    "/api/v1/openapi",
-    "/api/v1/schema",
     "/favicon.ico",
     "/icon.svg",
     "/login",
@@ -157,7 +154,13 @@ test("public reachability stays an explicit allowlist decision in the proxy poli
     "/api/recruiting/feed",
     "/api/recruiting/offer",
     "/api/sign",
-    "/api/v1/records",
+    // The whole versioned API segment is sessionless by design: every v1
+    // route authenticates with an API key in-route (fail-closed 401) and no
+    // v1 route reads the session cookie — derived coverage in
+    // web/lib/public-surface-contract.test.ts refuses a session-cookie read
+    // under /api/v1. The HR/time token roots above follow the same rule one
+    // route at a time instead of enrolling whole parents.
+    "/api/v1",
     "/book",
     "/careers",
     "/offer",

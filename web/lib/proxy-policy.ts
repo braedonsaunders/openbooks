@@ -5,12 +5,9 @@ const EXACT_PUBLIC_PATHS = new Set([
   "/api/password-reset",
   "/api/auth/methods",
   "/api/flows/email-action",
-  "/api/v1/health",
-  "/api/v1/openapi",
-  "/api/v1/schema",
   // Sessionless BY DESIGN: the MCP endpoint authenticates every request with
   // an API key inside the route (resolveApiKeyAuth, fail-closed) — the same
-  // model as /api/v1/records. The session gate would 302 agents to /login.
+  // model as /api/v1. The session gate would 302 agents to /login.
   "/mcp",
   "/favicon.ico",
   "/icon.svg",
@@ -19,7 +16,16 @@ const EXACT_PUBLIC_PATHS = new Set([
 
 const PUBLIC_SEGMENT_ROOTS = [
   "/api/auth/oidc",
-  "/api/v1/records",
+  // The whole versioned API segment is sessionless BY DESIGN: every route
+  // under /api/v1 authenticates with a Bearer API key inside the route
+  // (withV1Request / resolveApiKeyAuth / guardApiKey, all fail-closed 401)
+  // and no v1 route reads the session cookie — the session gate would 401
+  // every API-key client before the route could see the key. /api/v1/health
+  // is the one intentionally unauthenticated route (process liveness).
+  // A new v1 route that relied on the session cookie would silently become
+  // public: web/lib/public-surface-contract.test.ts derives every v1 route
+  // from the filesystem and refuses exactly that.
+  "/api/v1",
   "/pay",
   "/api/pay",
   "/api/payments/webhooks",

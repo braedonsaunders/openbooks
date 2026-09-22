@@ -22,6 +22,10 @@ test("token-authenticated surfaces are CSRF-exempt", async () => {
     "/api/auth/oidc/callback",
     "/api/v1/records",
     "/api/v1/records/contacts/123",
+    "/api/v1/vendors",
+    // /api/v1/health is GET-only liveness: exempt by segment rule, and the
+    // exemption is inert because safe methods skip the CSRF gate entirely.
+    "/api/v1/health",
     "/pay/tok_v1abc",
     "/api/pay/tok_v1abc",
     "/api/payments/webhooks/stripe",
@@ -41,7 +45,6 @@ test("cookie-session and public browser forms are NOT exempt", async () => {
     "/api/password-reset",
     "/api/accounts",
     "/api/accounts/123",
-    "/api/v1/health",
     "/api/flows/email-action",
     "/mcp-evil-lookalike",
   ]) {
