@@ -1,6 +1,7 @@
 import { consolidateAssetTransfers } from "./asset-transfers.ts";import { sql } from "drizzle-orm";
 import { periodLockBlocksPosting } from "../close/period-policy.ts";
 import { CurrencyError, updateFxRate } from "../fx/currencies.ts";
+import { averageSpotRate, lookupSpotRate } from "../fx/spot-rate.ts";
 import { db, orgContext, withOrgContext } from "../platform/db.ts";
 import { financialClosePeriodScope } from "../close/fx-revaluation.ts";
 import {
@@ -857,22 +858,24 @@ async function deriveConsolidatedRatesIn(
   const pairs = await neededPairs(orgId, exec);
   let written = 0;
   for (const pair of pairs) {
+    // Spot coverage is direct-or-inverse through the shared FX lookup: an
+    // org storing only the inverse pair derives exactly like one storing the
+    // direct pair (direct wins same-date ties). Uncovered pairs still refuse
+    // with rates-missing — never a defaulted 1.
+    const spotCurrent = await lookupSpotRate(exec, orgId, pair.from, pair.to, period.ends_on);
+    if (!spotCurrent) {
+      throw new ConsolidationError(
+        `no spot rate for ${pair.from}→${pair.to} on or before ${period.ends_on} — load fx_rates first`,
+      'rates-missing');
+    }
+    const spotAverage = await averageSpotRate(exec, orgId, pair.from, pair.to, period.starts_on, period.ends_on);
     // Historical carries forward from the period immediately preceding this
     // one. An adjustment period shares its final regular period's dates, so
     // "ends before this period starts" would skip that regular period (and
     // any earlier adjustment period of the same year); those same-end-date
     // predecessors are ordered by period number instead.
-    const rates = (await exec.execute<{ current: string | null; average: string | null; historical: string | null }>(sql`
-      select
-        (select rate from fx_rates
-          where org_id = ${orgId} and from_currency = ${pair.from} and to_currency = ${pair.to}
-            and rate_type = 'spot' and as_of <= ${period.ends_on}
-          order by as_of desc limit 1) as current,
-        (select avg(rate)::numeric(19,10) from fx_rates
-          where org_id = ${orgId} and from_currency = ${pair.from} and to_currency = ${pair.to}
-            and rate_type = 'spot'
-            and as_of between ${period.starts_on} and ${period.ends_on}) as average,
-        (select cf.historical_rate from consolidated_fx_rates cf
+    const hist = (await exec.execute<{ historical: string | null }>(sql`
+      select (select cf.historical_rate from consolidated_fx_rates cf
            join accounting_periods p on p.id = cf.period_id and p.org_id = cf.org_id
           where cf.org_id = ${orgId} and cf.from_currency = ${pair.from} and cf.to_currency = ${pair.to}
             and p.id <> ${period.id}
@@ -887,15 +890,10 @@ async function deriveConsolidatedRatesIn(
             )
           order by p.ends_on desc, p.period_number desc limit 1) as historical
     `));
-    const r = rates.rows[0];
-    if (!r?.current) {
-      throw new ConsolidationError(
-        `no spot rate for ${pair.from}→${pair.to} on or before ${period.ends_on} — load fx_rates first`,
-      'rates-missing');
-    }
-    const current = persistDerivedFxRate(r.current);
-    const average = persistDerivedFxRate(r.average ?? r.current);
-    const historical = persistDerivedFxRate(r.historical ?? r.current);
+    const r = hist.rows[0];
+    const current = persistDerivedFxRate(spotCurrent);
+    const average = persistDerivedFxRate(spotAverage ?? spotCurrent);
+    const historical = persistDerivedFxRate(r?.historical ?? spotCurrent);
     const before = (await exec.execute<ConsolidatedRateSnapshot & { id: string }>(sql`
       select id, current_rate::text as current_rate, average_rate::text as average_rate,
              historical_rate::text as historical_rate, source

@@ -97,6 +97,56 @@ async function seedEliminationCurrencyFixture(org: ScratchOrg): Promise<{
   return { childId };
 }
 
+test("rate derivation resolves a pair stored only as the inverse quote", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const childId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries
+        (id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
+      values (${childId},${org.orgId},${org.subsidiaryId},'US Op Co','USD','US','{}'::jsonb,false,true,'{}'::jsonb)
+    `);
+    // The needed pair is USD→CAD, but the org stores only the inverse
+    // CAD→USD quote — posting and revaluation already convert through it,
+    // and derivation must do the same instead of refusing rates-missing.
+    await db.execute(sql`
+      insert into fx_rates (org_id,from_currency,to_currency,as_of,rate_type,rate,source)
+      values (${org.orgId},'CAD','USD','2026-07-15','spot','0.8000000000','manual')
+    `);
+    await deriveConsolidatedRates(org.orgId, org.periodId, actorId);
+    const row = (await db.execute<{ current_rate: string; average_rate: string }>(sql`
+      select current_rate::text as current_rate, average_rate::text as average_rate
+        from consolidated_fx_rates
+       where org_id = ${org.orgId} and period_id = ${org.periodId}
+         and from_currency = 'USD' and to_currency = 'CAD'
+    `)).rows[0];
+    assert.equal(row?.current_rate, "1.2500000000");
+    assert.equal(row?.average_rate, "1.2500000000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("rate derivation still refuses an uncovered pair instead of defaulting", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const childId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries
+        (id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
+      values (${childId},${org.orgId},${org.subsidiaryId},'US Op Co','USD','US','{}'::jsonb,false,true,'{}'::jsonb)
+    `);
+    await assert.rejects(
+      () => deriveConsolidatedRates(org.orgId, org.periodId, actorId),
+      /no spot rate for USD→CAD on or before 2026-07-31/,
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("rate derivation covers source currencies into the elimination entity", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
