@@ -126,8 +126,9 @@ test("the batched list actual-cost reader ties the single-project resolver", { s
       assert.equal(singleB, "500.0000");
 
       const batch = await resolveProjectActualCosts(org.orgId, [withReversal, plain]);
-      assert.equal(batch.get(withReversal), String(singleA));
-      assert.equal(batch.get(plain), String(singleB));
+      assert.equal(batch.costs.get(withReversal), String(singleA));
+      assert.equal(batch.costs.get(plain), String(singleB));
+      assert.equal(batch.profileErrors.size, 0);
 
       // The list wires this reader through the projects source enrichment,
       // overwriting the SQL `actual` placeholder on displayed rows.
@@ -187,8 +188,9 @@ test("the batched reader resolves per-type profiles and plans actual-cost sorts 
       const unpriced = await seedProject(db, org, "JOB-SORT-C", [
         { entryNumber: "SORT-C-1", amount: "1000.0000", status: "posted" },
       ], "0", noneType);
-      // A type row missing its billing method keeps the page zero instead of
-      // failing it, mirroring the single loader's throw-then-catch. A dangling
+      // A type row missing its billing method is per-row error state, never a
+      // fake zero: it stays out of the costs map and names the missing
+      // classification, while the rest of the page still resolves. A dangling
       // type id cannot be inserted: projects_project_type_id_fkey refuses it.
       const brokenType = await seedProjectType(db, org, { source: "none" }, "");
       const broken = await seedProject(db, org, "JOB-SORT-E", [
@@ -199,12 +201,26 @@ test("the batched reader resolves per-type profiles and plans actual-cost sorts 
 
     await withOrgContext(org.orgId, async () => {
       const batch = await resolveProjectActualCosts(org.orgId, [pricey, cheap, unpriced, broken]);
-      assert.equal(batch.get(pricey), "1075.0000");
-      assert.equal(batch.get(cheap), "500.0000");
+      assert.equal(batch.costs.get(pricey), "1075.0000");
+      assert.equal(batch.costs.get(cheap), "500.0000");
       const singleUnpriced = (await resolveProjectFinancials(org.orgId, unpriced, { ...profile, actualCost: { source: "none" } as never })).measures.actual_cost;
       assert.equal(singleUnpriced, "0.0000");
-      assert.equal(batch.get(unpriced), String(singleUnpriced));
-      assert.equal(batch.get(broken), "0.0000");
+      assert.equal(batch.costs.get(unpriced), String(singleUnpriced));
+      assert.ok(!batch.costs.has(broken), "the misconfigured row carries no cost, not a fake zero");
+      assert.match(batch.profileErrors.get(broken) ?? "", /billing classification/);
+
+      // The list enrichment turns that into per-row error state the cell
+      // renders (an em-dash with the reason) instead of overwriting with a
+      // cost, while healthy rows still resolve.
+      const enrichSource = entityListSource("project");
+      const enriched: Record<string, unknown>[] = [
+        { id: broken, actual: "0" },
+        { id: pricey, actual: "0" },
+      ];
+      await enrichSource!.enrichRows!(org.orgId, enriched);
+      assert.equal(enriched[0]!.actual, null);
+      assert.match(String(enriched[0]!.actualError ?? ""), /billing classification/);
+      assert.equal(enriched[1]!.actual, "1075.0000");
 
       const source = entityListSource("project");
       assert.ok(source?.orderedPageIds, "projects source plans actual-cost sorts");

@@ -250,14 +250,23 @@ export async function rescindEmploymentChange(input: {
     await refuseWhenPayrollConsumed(db, input.orgId, target.employmentId, effectiveFrom);
 
     // Pre-rescind state for the event's evidence (as-of now, before reopen).
-    // "Now" is the org's business day, never the UTC day.
-    const preSnapshot = await getEmploymentAsOf({
-      orgId: input.orgId,
-      actorId: input.actorId,
-      employmentId: target.employmentId,
-      effectiveDate: await businessToday(input.orgId),
-      knownAt: new Date().toISOString(),
-    }).catch(() => null);
+    // "Now" is the org's business day, never the UTC day. A snapshot that
+    // cannot be read refuses the rescind: writing the event with a null
+    // prior state would permanently file incomplete audit evidence.
+    let preSnapshot: unknown
+    try {
+      preSnapshot = await getEmploymentAsOf({
+        orgId: input.orgId,
+        actorId: input.actorId,
+        employmentId: target.employmentId,
+        effectiveDate: await businessToday(input.orgId),
+        knownAt: new Date().toISOString(),
+      })
+    } catch {
+      throw new EventVerbError(
+        "the pre-rescind employment snapshot could not be read — the rescind is refused rather than writing audit evidence with no prior state; try again",
+      )
+    }
 
     // Resolve every closure first: the deferred closure-evidence guard
     // requires the event to name each row it closes (table, identity,

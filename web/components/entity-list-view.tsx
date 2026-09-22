@@ -414,9 +414,15 @@ export async function EntityListView({
         // Amount cells come from numeric columns (driver strings/numbers);
         // String() round-trips both exactly, so formatting is unchanged.
         const rowCurrency = source.currencyField ? row[source.currencyField] : undefined
-        const formatted = v == null || v === ''
-          ? <span className="text-slate-400">—</span>
-          : money(String(v), source.currencyField ? { currency: typeof rowCurrency === 'string' ? rowCurrency : undefined } : undefined)
+        // A `<key>Error` companion (e.g. project actualError) is per-row
+        // error state, not a value: the cell renders an amber em-dash
+        // carrying the reason instead of a fake zero.
+        const rowError = row[`${c.key}Error`]
+        const formatted = rowError != null && rowError !== ''
+          ? <span className="text-amber-600 dark:text-amber-400" title={String(rowError)}>—</span>
+          : v == null || v === ''
+            ? <span className="text-slate-400">—</span>
+            : money(String(v), source.currencyField ? { currency: typeof rowCurrency === 'string' ? rowCurrency : undefined } : undefined)
         const drill = currentPeriod && source.columnDrill && v != null && v !== ''
           ? source.columnDrill(row, c.key, {
               from: currentPeriod.from,
