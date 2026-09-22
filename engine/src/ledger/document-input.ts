@@ -21,6 +21,12 @@ export interface BillLineInput {
 
 /** A line as accepted on a document edit (built-ins + dimensions + custom). */
 export interface DocumentLineInput extends BillLineInput {
+  /**
+   * Stable identity of a persisted line being edited (absent/null = new
+   * line). Never trusted for provenance: the server re-attaches native
+   * evidence from its own locked rows and strips caller-supplied native keys.
+   */
+  lineId?: string | null
   itemId?: string | null
   quantity?: string | null
   unit?: string | null
