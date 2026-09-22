@@ -137,10 +137,12 @@ registerHooks({
 
 const { GET, POST, DELETE } = await import("./route.ts");
 
-const applyRequest = (body: unknown): Request =>
+// One key per logical apply, minted by the caller and reused across retries:
+// the panel does the same (crypto.randomUUID per request lifetime).
+const applyRequest = (body: unknown, key = "11111111-2222-4333-8444-555555555555"): Request =>
   new Request("http://localhost/api/payments/credit-applications", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", "Idempotency-Key": key },
     body: JSON.stringify(body),
   });
 
@@ -164,12 +166,14 @@ test("an AR settlement is gated on ar.pay and reaches the engine intact", async 
   assert.equal(state.guardedWith, "ar.pay");
   assert.equal(state.applied.length, 1);
   // The shared money boundary canonicalizes on the way in, so the engine
-  // receives "100.0000" and never has to re-decide what "100" meant.
+  // receives "100.0000" and never has to re-decide what "100" meant; the
+  // idempotency key rides through so a retry resolves to the same fence.
   assert.deepEqual((state.applied[0] as { input: unknown }).input, {
     partyId: PARTY_ID,
     side: "ar",
     appliedOn: "2026-07-15",
     credits: [{ ...validCredits[0]!, amount: "100.0000" }],
+    idempotencyKey: "11111111-2222-4333-8444-555555555555",
   });
 });
 
@@ -216,6 +220,23 @@ test("an empty or malformed settlement never reaches the engine", async () => {
     assert.equal(res.status, 400, `expected 400 for ${JSON.stringify(body)}`);
     assert.equal(state.applied.length, 0);
   }
+});
+
+test("an apply without an Idempotency-Key is refused before any write", async () => {
+  // A retried apply must resolve to the settlement it already wrote, never a
+  // second one beside it - and the key is the fence, so a request without
+  // one refuses by name before the engine is reached.
+  reset();
+  const res = await POST(
+    new Request("http://localhost/api/payments/credit-applications", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ partyId: PARTY_ID, side: "ar", appliedOn: "2026-07-15", credits: validCredits }),
+    }),
+  );
+  assert.equal(res.status, 400);
+  assert.match((await res.json()).error, /Idempotency-Key/);
+  assert.equal(state.applied.length, 0);
 });
 
 test("releasing a settlement reaches the engine when the side matches", async () => {
