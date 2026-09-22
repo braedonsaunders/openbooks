@@ -309,7 +309,15 @@ export async function runDueScheduledFlows(now: Date = new Date()): Promise<{
       db.select().from(schema.flows).where(eq(schema.flows.id, id)));
     if (!flow || !flow.enabled) continue;
     const graph = parseFlowGraph(flow.id, flow.graph);
-    if (!graph) continue;
+    if (!graph) {
+      // Fail closed: an enabled scheduled flow with an invalid graph is a
+      // failed configured flow, not a clean tick — count it in errors and
+      // name it where scheduled-flow failures surface instead of skipping
+      // silently (a skip would read as "nothing due" forever).
+      result.errors++;
+      console.error(`[flows] scheduled flow ${flow.id} ("${flow.name}") has an invalid graph — occurrence not claimed`);
+      continue;
+    }
 
     const anchor = flow.lastScheduledRunAt ?? flow.createdAt;
     const due = dueScheduledNodes(graph, anchor, now);

@@ -214,6 +214,26 @@ test("the noon cron fires exactly once at its pinned instant (determinism pin)",
   assert.equal(lastCronOccurrenceBetween(NOON, new Date("2026-07-10T00:00:00Z"), NOW)?.toISOString(), NOW.toISOString());
 });
 
+test("an enabled scheduled flow with an invalid graph counts as an error, not a clean tick", { skip: !DB }, async () => {
+  await withOrgFixture(async ({ org }) => {
+    // Bypasses the validated flow writer AND the scan's graph-text prefilter
+    // (which looks for '"scheduled"' in the raw jsonb text): unparseable, but
+    // still discovered by the scan like a real misconfigured flow.
+    await db.execute(sql`
+      insert into flows (id, org_id, name, subject_kind, enabled, graph, created_at)
+      values (${crypto.randomUUID()}, ${org.orgId}, 'Broken schedule', 'vendor_bill', true,
+              ${JSON.stringify({ scheduled: true, nodes: "not-an-array" })}::jsonb,
+              ${new Date("2026-07-10T00:00:00Z")})`);
+
+    const result = await runDueScheduledFlows(NOW);
+    assert.equal(result.fired, 0);
+    assert.equal(result.errors, 1, "the invalid configured flow must surface in errors");
+    // Nothing claimed, no run, no occurrence, cursor untouched.
+    assert.equal(await countRuns(org.orgId), 0);
+    assert.equal((await loadOccurrences(org.orgId)).length, 0);
+  });
+});
+
 test("a normal scheduled occurrence runs exactly once and advances the cursor", { skip: !DB }, async () => {
   await withOrgFixture(async ({ org, actors }) => {
     const flowId = await seedFlow(org.orgId, scheduledNotifyGraph(actors.approver1Id));
