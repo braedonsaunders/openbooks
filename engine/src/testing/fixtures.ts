@@ -812,6 +812,12 @@ const GUARDED_EVIDENCE: { table: string; trigger: string }[] = [
   { table: "field_ticket_labor_lines", trigger: "field_ticket_labor_line_immutable" },
   { table: "field_ticket_labor_snapshots", trigger: "field_ticket_labor_snapshot_retention" },
   { table: "project_financial_profile_versions", trigger: "project_financial_profile_version_guard" },
+  // Every org gets a base price level from an AFTER INSERT trigger on orgs
+  // (0244), and price_level_base_guard refuses to delete it unconditionally —
+  // so EVERY teardown hits this, not only tenants that configured pricing.
+  // The sibling customer_roles guard from the same migration is conditional on
+  // live assignments/schedules, which the generic child passes clear first.
+  { table: "price_levels", trigger: "price_level_base_guard" },
 ];
 
 type DisposableOrgKind = "scratch" | "sim";
