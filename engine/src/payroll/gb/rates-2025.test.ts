@@ -247,10 +247,12 @@ test("2025/26 PAYE: monthly £4,000 1257L month 3, no priors → £171.50", () =
   assert.equal(result.tax, "171.5000");
 });
 
-test("2025/26 PAYE: monthly £4,000 S1257L month 3 → £162.92 (half down)", () => {
-  // Taxable £857.50 sits wholly in the starter band: 857.50 × 19% =
-  // £162.925 — an exact half-penny, which Regulation 12(1) disregards, so
-  // £162.92, not £162.93.
+test("2025/26 PAYE: monthly £4,000 S1257L month 3 → £164.43", () => {
+  // Taxable £857.50 through the MONTH-3 bands: the 2025/26 starter band tops
+  // at £2,827, so month 3 allows ceiling(2,827 × 3/12) = £707 at 19%:
+  // 707 × 19% = £134.33 plus (857.50 − 707) = 150.50 × 20% = £30.10 →
+  // £164.43. Pricing through the annual £2,827 band instead keeps it all at
+  // 19% (£162.92) — the pre-pro-rating answer this replaces.
   const result = calculateGbPaye({
     code: parseGbTaxCode("S1257L"),
     payDate: "2025-06-06",
@@ -262,7 +264,7 @@ test("2025/26 PAYE: monthly £4,000 S1257L month 3 → £162.92 (half down)", ()
     periodGrossPay: "4000",
     tables: GB_2025_TABLES,
   });
-  assert.equal(result.tax, "162.9200");
+  assert.equal(result.tax, "164.4300");
 });
 
 test("2025/26: C1257L prices exactly as 1257L — Wales needs no edition", () => {

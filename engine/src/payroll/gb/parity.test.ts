@@ -20,6 +20,7 @@ import {
   calculateGbNic,
   calculateGbPaye,
   gbNicThresholdsForPeriod,
+  gbPeriodicBandTopUnits,
   gbResolveTaxYear,
   gbRoundPennyUnits,
   gbRukLiabilityUnits,
@@ -202,6 +203,125 @@ test("hand-worked: 0T prices full pay through the bands, NT prices nothing", () 
   assert.equal(nt.tax, "0.0000");
 });
 
+test("golden: pro-rated band tops match HMRC Tax Tables B-D Column 1", () => {
+  // HMRC Taxable Pay Tables B-D ("Manual Method"), April 2023 edition: each
+  // month/week row carries its own Column 1, the cumulative basic-rate limit
+  // to date (p.4, English monthly: 3142, 6284, 9425 ... 37700; weekly: 725,
+  // 1450 ... 37700). The annual bands there are £37,700/£125,140, frozen ever
+  // since, so the rows pin the 2026/27 pro-rating method too. The month-2
+  // figure discriminates the rounding: 37,700 × 2/12 = 6,283.33, and the
+  // table prints 6,284 — ceiling, not round-half-up (which gives 6,283).
+  assert.equal(gbPeriodicBandTopUnits("37700", 12, 1), 314_200_00n);
+  assert.equal(gbPeriodicBandTopUnits("37700", 12, 2), 628_400_00n);
+  assert.equal(gbPeriodicBandTopUnits("37700", 12, 12), 3_770_000_00n);
+  assert.equal(gbPeriodicBandTopUnits("37700", 52, 1), 72_500_00n);
+  assert.equal(gbPeriodicBandTopUnits("125140", 12, 1), 1_042_900_00n);
+  assert.equal(gbPeriodicBandTopUnits("125140", 52, 1), 240_700_00n);
+});
+
+test("golden: 1257L £10,000 in month 1 withholds ~£2,952, not ~£1,790", () => {
+  // The defect this pins: pricing a month-1 period through the ANNUAL bands
+  // keeps all £8,952.50 (10,000 − 1,047.50) inside the £37,700 basic band and
+  // withholds £1,790.50. HMRC prices month 1 through the month-1 Column 1
+  // (£3,142 basic, £10,429 higher — see the test above): 3,142 × 20% =
+  // £628.40 plus (8,952.50 − 3,142) = 5,810.50 × 40% = £2,324.20 → £2,952.60.
+  const result = calculateGbPaye({
+    code: parseGbTaxCode("1257L"),
+    payDate: "2026-04-06",
+    periodsPerYear: 12,
+    periodPay: "10000",
+    priorTaxablePay: "0",
+    priorAddedPay: "0",
+    priorTaxPaid: "0",
+    periodGrossPay: "10000",
+  });
+  assert.equal(result.tax, "2952.6000");
+});
+
+test("hand-worked: month-7 cumulative higher earner, £5,000 a month", () => {
+  // Six £5,000 months behind, £5,000 in month 7: cumulative pay £35,000,
+  // free pay to date 12,570 × 7/12 = £7,332.50, taxable £27,667.50. Month-7
+  // Column 1 (ceiling(37,700 × 7/12) = 21,992 basic; ceiling(125,140 × 7/12)
+  // = 72,999 higher): 21,992 × 20% = £4,398.40 plus (27,667.50 − 21,992) =
+  // 5,675.50 × 40% = £2,270.20 → £6,668.60 cumulative; nothing paid yet.
+  const result = calculateGbPaye({
+    code: parseGbTaxCode("1257L"),
+    payDate: "2026-10-06",
+    periodsPerYear: 12,
+    periodPay: "5000",
+    priorTaxablePay: "30000.0000",
+    priorAddedPay: "0",
+    priorTaxPaid: "0",
+    periodGrossPay: "5000",
+  });
+  assert.equal(result.tax, "6668.6000");
+});
+
+test("hand-worked: weekly W1 £2,500 prices through week-1 bands", () => {
+  // Period free 12,570/52 = £241.7307 (truncated at 1e-4); taxable
+  // £2,258.2693. Week-1 Column 1: basic £725, higher ceiling(125,140/52) =
+  // £2,407: 725 × 20% = £145.00 plus (2,258.2693 − 725) = 1,533.2693 × 40%
+  // = £613.3077 → £613.31 → £758.31.
+  const result = calculateGbPaye({
+    code: parseGbTaxCode("1257L W1"),
+    payDate: "2026-04-08",
+    periodsPerYear: 52,
+    periodPay: "2500",
+    priorTaxablePay: "0",
+    priorAddedPay: "0",
+    priorTaxPaid: "0",
+    periodGrossPay: "2500",
+  });
+  assert.equal(result.tax, "758.3100");
+});
+
+test("hand-worked: full 2026/27 on £60,000 telescopes to £11,432.00", () => {
+  // Twelve monthly £5,000 periods, cumulative 1257L: the year must telescope
+  // to the annual liability on £47,430 (60,000 − 12,570): 37,700 × 20% =
+  // £7,540 plus 9,730 × 40% = £3,892 → £11,432.00. Month 12 prices through
+  // the annual bands exactly, so pro-rating changes the timing, never the
+  // year total.
+  const code = parseGbTaxCode("1257L");
+  let priorTaxable = "0.0000";
+  let priorPaid = "0.0000";
+  let total = 0n;
+  const payDates = [
+    "2026-04-06", "2026-05-06", "2026-06-06", "2026-07-06", "2026-08-06",
+    "2026-09-06", "2026-10-06", "2026-11-06", "2026-12-06", "2027-01-06",
+    "2027-02-06", "2027-03-06",
+  ];
+  payDates.forEach((payDate, index) => {
+    const result = calculateGbPaye({
+      code, payDate, periodsPerYear: 12,
+      periodPay: "5000", priorTaxablePay: priorTaxable, priorAddedPay: "0",
+      priorTaxPaid: priorPaid, periodGrossPay: "5000",
+    });
+    if (index === 0) assert.equal(result.tax, "952.6000");
+    total += BigInt(result.tax.replace(".", ""));
+    priorTaxable = `${(Number(priorTaxable) + 5000).toFixed(4)}`;
+    priorPaid = `${(Number(priorPaid) + Number(result.tax)).toFixed(4)}`;
+  });
+  assert.equal(total, 1_143_200_00n);
+});
+
+test("hand-worked: non-cumulative K code prices added pay through month-1 bands", () => {
+  // K475 M1 on £2,250: added pay 4,750/12 = £395.8333, taxable £2,645.8333,
+  // inside the £3,142 month-1 basic band: × 20% = £529.1666 → £529.17. The
+  // 50%-of-pay cap (£1,125) does not bind.
+  const result = calculateGbPaye({
+    code: parseGbTaxCode("K475 M1"),
+    payDate: "2026-07-06",
+    periodsPerYear: 12,
+    periodPay: "2250",
+    priorTaxablePay: "0",
+    priorAddedPay: "0",
+    priorTaxPaid: "0",
+    periodGrossPay: "2250",
+  });
+  assert.equal(result.tax, "529.1700");
+  assert.equal(result.periodAddedPay, "395.8333");
+});
+
 test("hand-worked: W1 ignores year to date by definition", () => {
   // 1257L W1 on £2,250 with £9,999.99 already (wrongly) paid: period free
   // 1,047.50, taxable 1,202.50, due £240.50 — priors untouched.
@@ -357,9 +477,12 @@ test("sweep: PAYE and NIC never decrease as pay rises, 0 to £20,000 monthly", (
     lastEe = nic.employee;
     lastEr = nic.employer;
   }
-  // The top of the sweep lands in the additional band: £20,000 − £1,047.50
-  // = £18,952.50 × 20% = £3,790.50.
-  assert.equal(lastTax, "3790.5000");
+  // The top of the sweep lands in the additional band. A W1 period prices
+  // through MONTH-1 bands (Column 1: basic £3,142, higher £10,429):
+  // £20,000 − £1,047.50 = £18,952.50 taxable: 3,142 × 20% = £628.40 plus
+  // (10,429 − 3,142) = 7,287 × 40% = £2,914.80 plus (18,952.50 − 10,429) =
+  // 8,523.50 × 45% = £3,835.575 → £3,835.57 (half down) → £7,378.77.
+  assert.equal(lastTax, "7378.7700");
 });
 
 // ---------------------------------------------------------------------------
