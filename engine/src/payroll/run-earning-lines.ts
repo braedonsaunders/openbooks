@@ -8,7 +8,7 @@ import { type PayrollSubsidiaryScope } from "./scope.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
-import { add, cmp, mulDecimal, mulPercent, neg, roundMoney, sum } from "../money/money.ts";
+import { add, cmp, mulDecimal, mulPercent, neg, prorateDays, roundMoney, sum } from "../money/money.ts";
 import { payrollPack } from "./packs.ts";
 import { type StatutoryHolidayEligibilityFacts } from "./holidays.ts";
 import { componentYearToDate as openingComponentYtd } from "./opening-balances.ts";
@@ -18,6 +18,7 @@ import { applyBasisCaps } from "./limits.ts";
 import { divideMoney, allocateProportionally } from "./run-allocation.ts";
 import { type Line, statutoryHolidayLinesForStub, earningsBase, totalHours, earningJobBuckets, cappableHourLines, resolveEarningExpenseAccount } from "./run-stub-records.ts";
 import { resolvePayRate } from "./run-calculation-support.ts";
+import { assignmentCoveredDays, assignmentCoversPeriod } from "./assignment-windows.ts";
 export async function appendPeriodicEarnings(
   tx: Pick<typeof db, "execute">,
   args: {
@@ -328,10 +329,14 @@ export async function applyAssignedComponentLines(
     assignedRows: Record<string, unknown>[];
     oneOffRun: boolean;
     lines: Line[];
+    /** The run's period: fixed_amount rows covering only part of it prorate. */
+    periodStart: string;
+    periodEnd: string;
   },
 ): Promise<void> {
   const {
     orgId, employeePartyId, taxYear, documentId, assignedRows, oneOffRun, lines,
+    periodStart, periodEnd,
   } = args;
 /**
  * Same component's amount already taken earlier in the tax year: committed
@@ -381,7 +386,23 @@ export async function applyAssignedComponentLines(
     } else if (c.basis === "percent_of_gross") {
       amount = mulPercent(applyBasisCaps(capped, earningsBase(lines), context), value, 2);
     } else {
-      amount = roundMoney(applyBasisCaps(capped, value, context), 2);
+      // A fixed_amount row covering only part of the period — a mid-period
+      // amendment stored as old-row-ends-15th / new-row-starts-16th, or a row
+      // ending with no successor — pays its covered calendar-day fraction.
+      // Without this both slices of an amendment would each pay a full
+      // period: a double pay. Per-hour and percent-of-gross need no window
+      // math: they already scale with the period's own hours and earnings.
+      // Fully-covering rows skip the math and pay the full value exactly.
+      const window = {
+        effectiveFrom: String(c.effective_from),
+        effectiveTo: c.effective_to == null ? null : String(c.effective_to),
+        periodStart, periodEnd,
+      };
+      const { coveredDays, periodDays } = assignmentCoveredDays(window);
+      const periodValue = assignmentCoversPeriod(window)
+        ? value
+        : prorateDays(value, coveredDays, periodDays);
+      amount = roundMoney(applyBasisCaps(capped, periodValue, context), 2);
     }
     if (cmp(amount, "0") === 0) continue;
     lines.push({

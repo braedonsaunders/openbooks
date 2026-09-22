@@ -196,8 +196,9 @@ export async function calculateStub(
   // re-derived right here as `emp.country === "US" ? "US" : "CA"`.
   // The window predicate is shared with readiness
   // (engine/src/payroll/assignment-windows.ts): an assignment ending
-  // mid-period still applies. A fixed_amount assignment pays its full period
-  // value — the assignment model defines no pro-ration — while per_hour and
+  // mid-period still applies, and a fixed_amount row covering only part of
+  // the period pays its covered calendar-day fraction (a mid-period
+  // amendment's two slices sum to exactly one period). Per_hour and
   // percent_of_gross scale with the period's own hours and earnings.
   //
   // Scoped to this stub's employment: the 0250 overlap guard keys on
@@ -209,7 +210,7 @@ export async function calculateStub(
   // ever attributed them.
   const rosterEmploymentId = emp.employment_id ?? null;
   const assigned = (await tx.execute<Record<string, unknown>>(sql`
-    select a.value as override, c.*
+    select a.value as override, a.effective_from, a.effective_to, c.*
       from employee_pay_components a
       join pay_components c on c.id = a.component_id and c.org_id = a.org_id
      where a.org_id = ${orgId} and a.employee_party_id = ${employeePartyId}
@@ -257,6 +258,7 @@ export async function calculateStub(
   await applyAssignedComponentLines(tx, {
     orgId, employeePartyId, taxYear, documentId,
     assignedRows: assigned.rows, oneOffRun, lines,
+    periodStart: run.period_start!, periodEnd: run.period_end!,
   });
 
   // Run-level 'line' adjustments — one-off inputs for THIS employee in THIS
