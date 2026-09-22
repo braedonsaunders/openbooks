@@ -27,6 +27,7 @@ import { assertVacationPlanResolved } from "./run-setup.ts";
 import { type StubComputation, storedTaxCertificates, resolvePayRate } from "./run-calculation-support.ts";
 import { type Line, installablePackOrThrow, insertPayStubRow, insertPayStubLineRows, persistEntitlementMovements, earningsAssessedSnapshot } from "./run-stub-records.ts";
 import { appendPeriodicEarnings, appendRetroSettlementLines, appendDerivedEarningLines, appendStatutoryHolidayEarningLines, applyAssignedComponentLines, applyRunLineAdjustments, appendUnionFringeLines, settleTerminationBankPayouts, appendCashVacationPay, applyEntitlementPlanMovements } from "./run-earning-lines.ts";
+import { assignmentOverlapsPeriod } from "./assignment-windows.ts";
 import { settleDeductionProtection, recordProtectionShortfalls } from "./run-protection.ts";
 export async function calculateStub(
   tx: Pick<typeof db, "execute">,
@@ -193,6 +194,11 @@ export async function calculateStub(
   // with no country are shared across packs. `country` is the RESOLVED one
   // (see the destructure at the top of this function) — it used to be
   // re-derived right here as `emp.country === "US" ? "US" : "CA"`.
+  // The window predicate is shared with readiness
+  // (engine/src/payroll/assignment-windows.ts): an assignment ending
+  // mid-period still applies. A fixed_amount assignment pays its full period
+  // value — the assignment model defines no pro-ration — while per_hour and
+  // percent_of_gross scale with the period's own hours and earnings.
   const assigned = (await tx.execute<Record<string, unknown>>(sql`
     select a.value as override, c.*
       from employee_pay_components a
@@ -200,8 +206,7 @@ export async function calculateStub(
      where a.org_id = ${orgId} and a.employee_party_id = ${employeePartyId}
        and a.is_active and c.is_active and c.system_key is null
        and (c.country is null or c.country = ${country})
-       and a.effective_from <= ${run.period_end}
-       and (a.effective_to is null or a.effective_to >= ${run.period_end})
+       and ${assignmentOverlapsPeriod(sql`a.effective_from`, sql`a.effective_to`, run.period_start!, run.period_end!)}
      order by c.sequence
   `));
 
