@@ -24,6 +24,33 @@
     },
     "done": "{kind} — {delta}"
   },
+  "reverseEvent": {
+    "label": "Ereignis stornieren",
+    "event": "Lebenszyklusereignis",
+    "date": "Stornodatum",
+    "reason": "Stornogrund",
+    "reasonTooShort": "Geben Sie einen Stornogrund mit mindestens 8 Zeichen ein",
+    "action": "Stornobuchung buchen",
+    "working": "Wird storniert…",
+    "done": "Stornobuchung gebucht",
+    "empty": "Keine stornierbaren Lebenszyklusereignisse.",
+    "loadFailed": "Lebenszyklusereignisse konnten nicht geladen werden",
+    "kinds": {
+      "revalued": "Neubewertet",
+      "impaired": "Wertgemindert",
+      "disposed": "Veräußert",
+      "written_off": "Ausgebucht",
+      "reversed": "Storniert",
+      "unknown": "Ereignis"
+    },
+    "reasons": {
+      "already_reversed": "Bereits storniert.",
+      "accounting_change": "Gehört zu einer genehmigten Änderung mehrerer Bücher — stornieren Sie sie unter Buchhaltungsänderungen.",
+      "entry_not_posted": "Der zugehörige Journalbeleg ist nicht gebucht.",
+      "later_event": "Stornieren Sie zuerst das spätere Ereignis „{kind}“.",
+      "no_reversal_workflow": "Für diesen Ereignistyp gibt es keinen direkten Stornoworkflow."
+    }
+  },
   "tabs": { "register": "Anlagenregister", "taxDepreciation": "Steuerliche Abschreibung" },
   "taxPools": {
     "configure": "Konfigurieren",
