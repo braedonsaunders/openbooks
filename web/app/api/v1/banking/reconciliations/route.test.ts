@@ -95,7 +95,7 @@ const hooks = registerHooks({
   },
 });
 
-const { POST } = (await import("./route.ts?v1-banking-reconciliations")) as typeof import("./route.ts");
+const { POST } = (await import("./route.ts")) as typeof import("./route.ts");
 hooks.deregister();
 
 test("POST /api/v1/banking/reconciliations passes body fields and the idempotency key through", async () => {

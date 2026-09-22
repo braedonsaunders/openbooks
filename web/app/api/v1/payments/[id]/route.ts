@@ -4,9 +4,19 @@ import {
   requireV1IdempotencyKey,
   withV1Request,
 } from "../../../../../lib/api/v1-request";
+import { v1GetRecord } from "../../../../../lib/api/v1-records";
 import { updatePayment } from "../../../../../lib/application/payments";
 
 export const runtime = "nodejs";
+
+/** GET /api/v1/payments/:id — read one payment or receipt document. */
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+): Promise<NextResponse> {
+  const { id } = await params;
+  return v1GetRecord(request, "payments", id, "api/v1/payments/:id");
+}
 
 /** PATCH /api/v1/payments/:id — update a draft payment and its allocations. */
 export async function PATCH(

@@ -1,4 +1,4 @@
-import type { ApiRecordTypeSchema } from "./registry-data";
+import { v1PrettyResourcePath, type ApiRecordTypeSchema } from "./registry-data";
 
 interface OpenApiSchema {
   properties?: Record<string, OpenApiSchema>;
@@ -276,7 +276,48 @@ export function buildOpenApiSpec(
         },
       };
     }
+
+    const pretty = v1PrettyResourcePath(rt.key);
+    if (pretty) {
+      const collection = paths[rt.path];
+      const item = paths[`${rt.path}/{id}`];
+      if (collection) {
+        const existing = paths[pretty] ?? {};
+        paths[pretty] = {
+          ...existing,
+          ...(collection.get && !existing.get ? { get: { ...collection.get, tags: [rt.label] } } : {}),
+          ...(collection.post && !existing.post ? { post: { ...collection.post, tags: [rt.label] } } : {}),
+        };
+      }
+      if (item) {
+        const existingItem = paths[`${pretty}/{id}`] ?? {};
+        paths[`${pretty}/{id}`] = {
+          ...existingItem,
+          ...(item.get && !existingItem.get ? { get: { ...item.get, tags: [rt.label] } } : {}),
+          ...(item.patch && !existingItem.patch ? { patch: { ...item.patch, tags: [rt.label] } } : {}),
+          ...(item.delete && !existingItem.delete ? { delete: { ...item.delete, tags: [rt.label] } } : {}),
+        };
+      }
+    }
   }
+
+  const plainPost = (summary: string, description: string, tag: string): OpenApiOperation => ({
+    summary,
+    description,
+    tags: [tag],
+    security: [{ BearerAuth: [] }],
+    requestBody: {
+      required: true,
+      content: { "application/json": { schema: { type: "object", additionalProperties: true } } },
+    },
+    responses: {
+      "200": { description: "Application command result" },
+      "201": { description: "Created" },
+      "401": { $ref: "#/components/responses/Unauthorized" },
+      "403": { $ref: "#/components/responses/Forbidden" },
+      "422": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+    },
+  });
 
   const idempotentPost = (summary: string, description: string, tag: string): OpenApiOperation => ({
     summary,
@@ -362,9 +403,11 @@ export function buildOpenApiSpec(
     },
   };
   paths["/api/v1/payments"] = {
+    ...(paths["/api/v1/payments"] ?? {}),
     post: { ...idempotentPost("Create a payment draft", "Vendor payment or customer receipt.", "Payments"), responses: { ...idempotentPost("", "", "Payments").responses, "201": { description: "Created" } } },
   };
   paths["/api/v1/payments/{id}"] = {
+    ...(paths["/api/v1/payments/{id}"] ?? {}),
     patch: {
       ...idempotentPost("Update a payment draft", "Header and exact open-item allocations.", "Payments"),
       parameters: [
@@ -428,6 +471,212 @@ export function buildOpenApiSpec(
   paths["/api/v1/close/revaluation"] = {
     post: idempotentPost("Run FX revaluation", "Period FX revaluation through the close application command.", "Close"),
   };
+  paths["/api/v1/setup"] = {
+    get: {
+      summary: "List setup entities",
+      description: "Setup-registry catalog with this organization's feature gates applied.",
+      tags: ["Setup"],
+      security: [{ BearerAuth: [] }],
+      responses: { "200": { description: "Setup entities" } },
+    },
+  };
+  paths["/api/v1/setup/{entityKey}"] = {
+    get: {
+      summary: "List setup records",
+      description: "Records of one Setup-registry entity. Archived rows are excluded where the entity supports is_active.",
+      tags: ["Setup"],
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { name: "entityKey", in: "path", required: true, schema: { type: "string" }, description: "Setup entity key, e.g. tax-codes, departments, payment-terms." },
+        { name: "q", in: "query", schema: { type: "string" }, description: "Match across the entity's list columns" },
+        { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 }, description: "Page size (default 50, max 200)" },
+      ],
+      responses: { "200": { description: "Setup records" }, "404": { description: "Unknown or feature-disabled entity" } },
+    },
+    post: {
+      ...idempotentPost(
+        "Create a setup record",
+        "Create one Setup-entity record via the validated, audited Setup command.",
+        "Setup",
+      ),
+      parameters: [
+        { name: "entityKey", in: "path", required: true, schema: { type: "string" }, description: "Setup entity key, e.g. tax-codes, departments, payment-terms." },
+        idempotencyParameter,
+      ],
+    },
+  };
+  paths["/api/v1/setup/{entityKey}/{id}"] = {
+    get: {
+      summary: "Get a setup record",
+      description: "One Setup-entity record by primary key. Does not scan a paged list.",
+      tags: ["Setup"],
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { name: "entityKey", in: "path", required: true, schema: { type: "string" } },
+        { name: "id", in: "path", required: true, schema: { type: "string" } },
+      ],
+      responses: { "200": { description: "Setup record" }, "404": { description: "Unknown entity or record" } },
+    },
+    patch: {
+      ...idempotentPost(
+        "Update a setup record",
+        "Update one Setup-entity record by id (only changed fields).",
+        "Setup",
+      ),
+      parameters: [
+        { name: "entityKey", in: "path", required: true, schema: { type: "string" } },
+        { name: "id", in: "path", required: true, schema: { type: "string" } },
+        idempotencyParameter,
+      ],
+    },
+    delete: {
+      summary: "Delete a setup record",
+      description: "Delete (or archive, where the entity keeps history) one configuration record by id.",
+      tags: ["Setup"],
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { name: "entityKey", in: "path", required: true, schema: { type: "string" } },
+        { name: "id", in: "path", required: true, schema: { type: "string" } },
+        idempotencyParameter,
+      ],
+      responses: {
+        "200": { description: "Deleted" },
+        "404": { description: "Unknown entity or record" },
+        "409": { description: "Blocked — referenced by postings or other configuration" },
+      },
+    },
+  };
+  paths["/api/v1/layouts"] = {
+    get: {
+      summary: "List page layouts",
+      description: "The routes this org has customized, with the stored layout for each.",
+      tags: ["Layouts"],
+      security: [{ BearerAuth: [] }],
+      responses: { "200": { description: "Customized routes" } },
+    },
+    put: {
+      ...plainPost(
+        "Set a page layout",
+        "Replace what a route renders via { route, spec, note, scope }. A rejected layout returns stored:false with errors, never an exception.",
+        "Layouts",
+      ),
+    },
+    delete: {
+      summary: "Clear a page layout",
+      description: "Drop a layout for a route (?route=, optional ?scope=org|user) so the page returns to its built-in spec.",
+      tags: ["Layouts"],
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { name: "route", in: "query", required: true, schema: { type: "string" } },
+        { name: "scope", in: "query", schema: { type: "string", enum: ["org", "user"] } },
+      ],
+      responses: { "200": { description: "Cleared" } },
+    },
+  };
+  paths["/api/v1/layouts/vocabulary"] = {
+    get: {
+      summary: "Describe the layout vocabulary",
+      description: "Block/cell/widget/frame names a page layout may use, from the live registries.",
+      tags: ["Layouts"],
+      security: [{ BearerAuth: [] }],
+      responses: { "200": { description: "Layout vocabulary" } },
+    },
+  };
+  paths["/api/v1/layouts/describe"] = {
+    get: {
+      summary: "Describe a page layout",
+      description: "What a route renders today: built-in layout, org override, loader field paths.",
+      tags: ["Layouts"],
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { name: "route", in: "query", required: true, schema: { type: "string" }, description: "Next.js route pattern, e.g. /banking or /apps/[key]." },
+        { name: "params", in: "query", schema: { type: "string" }, description: "Optional JSON object of dynamic-segment values." },
+        { name: "searchParams", in: "query", schema: { type: "string" }, description: "Optional JSON object for the query string." },
+      ],
+      responses: { "200": { description: "Page description" } },
+    },
+  };
+  paths["/api/v1/layouts/validate"] = {
+    post: plainPost("Validate a page layout", "Check a draft layout via { spec } without storing it.", "Layouts"),
+  };
+  paths["/api/v1/layouts/preview"] = {
+    post: plainPost("Preview a page layout", "Stage a draft layout via { route, spec, params } for a private expiring preview url.", "Layouts"),
+  };
+  paths["/api/v1/layouts/history"] = {
+    get: {
+      summary: "List layout history",
+      description: "Every layout ever saved for a route (?route=), newest first.",
+      tags: ["Layouts"],
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { name: "route", in: "query", required: true, schema: { type: "string" } },
+      ],
+      responses: { "200": { description: "Layout versions" } },
+    },
+  };
+  paths["/api/v1/layouts/restore"] = {
+    post: plainPost("Restore a page layout", "Republish a past layout version via { route, versionId }.", "Layouts"),
+  };
+  paths["/api/v1/apps"] = {
+    get: {
+      summary: "List app packages",
+      description: "This organization's app packages, their active versions, and status.",
+      tags: ["Apps"],
+      security: [{ BearerAuth: [] }],
+      responses: { "200": { description: "Installed apps" } },
+    },
+  };
+  paths["/api/v1/apps/vocabulary"] = {
+    get: {
+      summary: "Describe app capabilities",
+      description: "The native screen and package contract plus the draft → preview → approve workflow.",
+      tags: ["Apps"],
+      security: [{ BearerAuth: [] }],
+      responses: { "200": { description: "App vocabulary" } },
+    },
+  };
+  paths["/api/v1/apps/drafts"] = {
+    post: plainPost("Prepare an app draft", "Save an immutable unpublished app package via { bundle, reason }. Revisions are new drafts.", "Apps"),
+  };
+  paths["/api/v1/apps/drafts/{id}"] = {
+    get: {
+      summary: "Read an app draft",
+      description: "This author's exact unpublished package, base version and hash.",
+      tags: ["Apps"],
+      security: [{ BearerAuth: [] }],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+      responses: { "200": { description: "App draft" }, "404": { description: "Not found" } },
+    },
+  };
+  paths["/api/v1/apps/drafts/{id}/activate"] = {
+    post: {
+      ...plainPost("Activate a reviewed app draft", "Activate the exact reviewed draft via { contentHash }. Refuses stale bases.", "Apps"),
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+      ],
+    },
+  };
+  paths["/api/v1/apps/drafts/{id}/discard"] = {
+    post: {
+      ...plainPost("Discard an app draft", "Discard an unpublished draft via { contentHash }, preserving source and audit evidence.", "Apps"),
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+      ],
+    },
+  };
+  paths["/api/v1/apps/{key}"] = {
+    get: {
+      summary: "Read an installed app package",
+      description: "The installed package or one historical version (?versionId=).",
+      tags: ["Apps"],
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { name: "key", in: "path", required: true, schema: { type: "string" } },
+        { name: "versionId", in: "query", schema: { type: "string", format: "uuid" } },
+      ],
+      responses: { "200": { description: "App package" }, "404": { description: "Not found" } },
+    },
+  };
   paths["/api/v1/banking/reconciliations"] = {
     post: idempotentPost("Start a bank reconciliation", "One open session per account; match lines then sign off.", "Banking"),
   };
@@ -489,58 +738,51 @@ export function buildOpenApiSpec(
     patch: idempotentPost("Update company settings", "Only passed keys change. Fiscal calendar and base currency refuse once postings exist.", "Settings"),
   };
   paths["/api/v1/settings/features"] = {
+    get: {
+      summary: "List feature gates",
+      description: "The Company Settings → Features switchboard as this organization sees it.",
+      tags: ["Settings"],
+      security: [{ BearerAuth: [] }],
+      responses: { "200": { description: "Feature gates" }, "403": { $ref: "#/components/responses/Forbidden" } },
+    },
     post: idempotentPost("Update feature gates", "The Features switchboard write. Dependencies and load-bearing modules are enforced.", "Settings"),
   };
-  paths["/api/v1/banking/reconciliations"] = {
-    post: { ...idempotentPost("Start a reconciliation", "Start a bank reconciliation session for an account.", "Banking"), responses: { ...idempotentPost("", "", "Banking").responses, "201": { description: "Created" } } },
-  };
-  paths["/api/v1/banking/reconciliations/{id}/sign-off"] = {
-    post: {
-      ...idempotentPost("Sign off a reconciliation", "Sign off a zero-difference session.", "Banking"),
-      parameters: [
-        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
-        idempotencyParameter,
-      ],
+  paths["/api/v1/reports"] = {
+    get: {
+      summary: "List report definitions",
+      description: "Saved report definitions this actor may run — the same catalog as the Reports hub.",
+      tags: ["Reports"],
+      security: [{ BearerAuth: [] }],
+      parameters: [{ name: "q", in: "query", schema: { type: "string" }, description: "Match definition name" }],
+      responses: { "200": { description: "Report definitions" } },
     },
   };
-  paths["/api/v1/banking/lines/{id}/match"] = {
-    post: {
-      ...idempotentPost("Match a bank line", "Pair one unmatched bank line with posted journal lines.", "Banking"),
-      parameters: [
-        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
-        idempotencyParameter,
-      ],
+  paths["/api/v1/reports/{id}"] = {
+    get: {
+      summary: "Get a report definition",
+      tags: ["Reports"],
+      security: [{ BearerAuth: [] }],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+      responses: { "200": { description: "Report definition" }, "404": { description: "Not found" } },
     },
   };
-  paths["/api/v1/banking/lines/{id}/match-journal"] = {
+  paths["/api/v1/reports/{id}/run"] = {
     post: {
-      ...idempotentPost("Match a bank line with a journal", "Create a categorizing journal from one unmatched bank line and match it.", "Banking"),
-      parameters: [
-        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
-        idempotencyParameter,
-      ],
+      summary: "Run a saved report",
+      description: "Execute a definition through the same report engine as the Reports hub. Restricted subsidiary scopes are refused.",
+      tags: ["Reports"],
+      security: [{ BearerAuth: [] }],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: { type: "object", additionalProperties: true } } },
+      },
+      responses: {
+        "200": { description: "Report export data" },
+        "403": { $ref: "#/components/responses/Forbidden" },
+        "404": { description: "Not found" },
+      },
     },
-  };
-  paths["/api/v1/banking/lines/{id}/unmatch"] = {
-    post: {
-      ...idempotentPost("Unmatch a bank line", "Return a statement line to the unmatched queue.", "Banking"),
-      parameters: [
-        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
-        idempotencyParameter,
-      ],
-    },
-  };
-  paths["/api/v1/budgets/{id}/cells"] = {
-    post: {
-      ...idempotentPost("Update budget cells", "Write planning cells into a draft scenario (revision-checked).", "Budgets"),
-      parameters: [
-        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
-        idempotencyParameter,
-      ],
-    },
-  };
-  paths["/api/v1/files"] = {
-    post: { ...idempotentPost("Upload a file", "Upload a small file to a File Cabinet folder.", "Files"), responses: { ...idempotentPost("", "", "Files").responses, "201": { description: "Created" } } },
   };
 
   // Meta endpoints
@@ -577,7 +819,7 @@ export function buildOpenApiSpec(
     info: {
       title: "openbooks REST API",
       description:
-        "The versioned REST API for openbooks. Authenticate with a bearer token (Authorization: Bearer ob_live_…) or X-API-Key header. API keys carry scoped permissions — a request is allowed only when both the key's scopes and the key owner's effective permissions cover the required permission. Every mutation requires Idempotency-Key and uses the same application command layer as MCP.",
+        "The versioned REST API for openbooks. Authenticate with a bearer token (Authorization: Bearer ob_live_…) or X-API-Key header. First-class resource paths (/api/v1/invoices, /api/v1/parties, …) are aliases of /api/v1/records/{typeKey} and use the same application writers. /api/v1/commands exposes the MCP catalog as RPC. Every mutation requires Idempotency-Key.",
       version: "1.0.0",
     },
     servers: [{ url: baseUrl, description: "This instance" }],

@@ -70,7 +70,7 @@ const hooks = registerHooks({
   },
 });
 
-const { GET } = (await import("./route.ts?v1-commands-list")) as typeof import("./route.ts");
+const { GET } = (await import("./route.ts")) as typeof import("./route.ts");
 hooks.deregister();
 
 test("GET /api/v1/commands lists the visible application catalog", async () => {

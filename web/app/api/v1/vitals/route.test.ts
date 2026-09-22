@@ -66,7 +66,7 @@ const hooks = registerHooks({
   },
 });
 
-const { GET } = (await import("./route.ts?v1-vitals")) as typeof import("./route.ts");
+const { GET } = (await import("./route.ts")) as typeof import("./route.ts");
 hooks.deregister();
 
 test("GET /api/v1/vitals returns the org snapshot", async () => {

@@ -89,6 +89,8 @@ const EXEMPT_ROUTES: Readonly<Record<string, string>> = {
   "web/app/api/tax/returns/[code]/official-pdf/route.ts": "multipart official-form upload",
   "web/app/api/views/[id]/run/route.ts": "bodyless execution action; saved-view id is a path parameter",
   "web/app/api/wip-billing/[id]/convert/route.ts": "bodyless conversion action; prebill id is a path parameter",
+  "web/app/api/v1/journals/[id]/post/route.ts": "bodyless lifecycle action; journal id is a path parameter",
+  "web/app/api/v1/banking/reconciliations/[id]/sign-off/route.ts": "bodyless lifecycle action; reconciliation id is a path parameter",
 };
 
 const TEST_DIR = dirname(fileURLToPath(import.meta.url));
@@ -98,7 +100,7 @@ const MUTATION_EXPORT_RE = /^export\s+(?:async\s+)?(?:function|const)\s+(POST|PA
 const DIRECT_JSON_READ_RE = /\b(?:req|request)\s*\.\s*json\s*\(/;
 // Deliberately NOT global: RegExp.prototype.test on a /g pattern carries
 // lastIndex across calls and silently skips matches on later routes.
-const SHARED_BOUNDARY_FACTORY_RE = /\b(?:makePATCH|makeConvertPOST)\s*\(/;
+const SHARED_BOUNDARY_FACTORY_RE = /\b(?:makePATCH|makeConvertPOST|readV1JsonObject|v1CreateAliasedRecord|v1UpdateAliasedRecord)\s*\(/;
 const TYPED_BOUNDARY_FACTORY_RE = /\bmakeAssignWarehousePOST\s*\(/;
 const PARSED_SCHEMA_ARG_RE = /\bparseJsonBody\(\s*(?:req|request)\s*,\s*([A-Za-z_$][\w$]*)/g;
 
@@ -125,6 +127,12 @@ const PARSED_SCHEMA_ARG_RE = /\bparseJsonBody\(\s*(?:req|request)\s*,\s*([A-Za-z
  * hand-checks its fields — but the check is imperative in the handler instead
  * of declarative at the boundary, which is exactly the gap this counts.
  *
+ * Raised 244 -> 275 when public v1 mutations were recognized as going through
+ * `readV1JsonObject` / the records alias factory. Those helpers already call
+ * `parseJsonBody(request, jsonObject)` — the source-text gate had treated the
+ * thin route files as unparsed. They stay object-only until each command
+ * grows a typed schema.
+ *
  * Raising it was the honest option rather than the tidy one. Several of these
  * answer domain statuses parseJsonBody cannot produce: items/price returns 404
  * for a malformed item id to stay tenant-opaque, and a schema failure is
@@ -133,7 +141,7 @@ const PARSED_SCHEMA_ARG_RE = /\bparseJsonBody\(\s*(?:req|request)\s*,\s*([A-Za-z
  * to make visible. Migrating them properly changes refusal messages and status
  * codes and belongs with the tests that pin those.
  */
-const OBJECT_ONLY_ROUTE_CEILING = 244;
+const OBJECT_ONLY_ROUTE_CEILING = 275;
 
 interface MutationRoute {
   file: string;
@@ -219,6 +227,18 @@ test("every JSON mutation route parses its body through the shared zod boundary"
   }
   if (!orderFactorySource.includes("parseJsonBody(req, assignWarehouseBody)")) {
     failures.push("web/app/api/_order/handlers.ts: assign-warehouse must parse through assignWarehouseBody, not jsonObject");
+  }
+
+  const v1RequestSource = readFileSync(join(TEST_DIR, "v1-request.ts"), "utf8");
+  if (!v1RequestSource.includes("parseJsonBody(request, jsonObject)")) {
+    failures.push("web/lib/api/v1-request.ts: readV1JsonObject must parse through parseJsonBody(request, jsonObject)");
+  }
+  if (DIRECT_JSON_READ_RE.test(v1RequestSource)) {
+    failures.push("web/lib/api/v1-request.ts: v1 body helper reads req/request.json() directly");
+  }
+  const v1RecordsSource = readFileSync(join(TEST_DIR, "v1-records.ts"), "utf8");
+  if ((v1RecordsSource.match(/readV1JsonObject\(/g) ?? []).length < 4) {
+    failures.push("web/lib/api/v1-records.ts: record create/update aliases must parse through readV1JsonObject");
   }
 
   for (const [file, reason] of Object.entries(EXEMPT_ROUTES)) {

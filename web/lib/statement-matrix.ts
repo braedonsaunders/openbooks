@@ -758,7 +758,8 @@ export async function statementMatrix(opts: {
     periodLabel: opts.periodLabel,
     bookId: opts.bookId,
   });
-  let { cols, truncated } = built;
+  let { cols } = built;
+  const { truncated } = built;
   if (opts.asOfKind === "prior_fiscal_year_end") {
     const startMonth = await fiscalStartMonth(orgId);
     cols = cols.map((col) => {

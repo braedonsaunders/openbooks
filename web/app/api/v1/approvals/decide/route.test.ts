@@ -76,7 +76,7 @@ const hooks = registerHooks({
   },
 });
 
-const { POST } = (await import("./route.ts?v1-approvals-decide")) as typeof import("./route.ts");
+const { POST } = (await import("./route.ts")) as typeof import("./route.ts");
 hooks.deregister();
 
 test("POST /api/v1/approvals/decide records the decision with the idempotency key", async () => {

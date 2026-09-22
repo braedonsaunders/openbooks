@@ -7,33 +7,33 @@ import {
   withV1Request,
 } from "../../../../../lib/api/v1-request";
 import { executeIdempotent } from "../../../../../lib/application/idempotency";
+import { settleWrite } from "../../../../../lib/application/tool-catalog";
 import { can } from "../../../../../lib/authz";
 import { readCompanySettings, updateCompanySettings } from "../../../../../lib/company-settings";
 
 export const runtime = "nodejs";
 
-function settle(result: { status: number; body: Record<string, unknown> }): Record<string, unknown> {
-  if (result.status < 300) return result.body;
-  const message = typeof result.body.message === "string"
-    ? result.body.message
-    : typeof result.body.error === "string" ? result.body.error : "request refused";
-  if (result.status === 403) throw new ApplicationError("forbidden", "forbidden", 403, result.body);
-  if (result.status === 404) throw new ApplicationError("not_found", message, 404, result.body);
-  if (result.status === 409) throw new ApplicationError("conflict", message, 409, result.body);
-  throw new ApplicationError("invalid_input", message, 422, result.body);
-}
-
-/** GET /api/v1/settings/company */
+/**
+ * GET /api/v1/settings/company — the Company & Accounting settings view.
+ * Reads keep the user-administration view gate (the same two permissions the
+ * `get_company_settings` tool is visible to); refusals settle through the
+ * shared settings/setup write mapping, never as silent nulls.
+ */
 export async function GET(request: Request): Promise<NextResponse> {
   return withV1Request(request, "api/v1/settings/company", async (_auth, context) => {
     if (!can(context.authz, "admin.users.manage") && !can(context.authz, "admin.setup.manage")) {
       throw new ApplicationError("forbidden", "forbidden", 403);
     }
-    return { status: 200, body: settle(await readCompanySettings(context.authz.user.orgId)) };
+    return { status: 200, body: settleWrite(await readCompanySettings(context.authz.user.orgId)) };
   });
 }
 
-/** PATCH /api/v1/settings/company */
+/**
+ * PATCH /api/v1/settings/company — change Company & Accounting settings
+ * (only the keys passed change). Same command as the `update_company_settings`
+ * application tool, so the fiscal-calendar and base-currency immutability
+ * rules, control-account checks, and audit evidence are shared, not copied.
+ */
 export async function PATCH(request: Request): Promise<NextResponse> {
   return withV1Request(request, "api/v1/settings/company", async (_auth, context) => {
     assertApplicationPermission(context, "admin.setup.manage");
@@ -51,7 +51,10 @@ export async function PATCH(request: Request): Promise<NextResponse> {
       operation: "company_settings.update",
       idempotencyKey: requireV1IdempotencyKey(request),
       request: { changes },
-      execute: async () => settle(await updateCompanySettings(context.authz.user, changes)),
+      execute: async () => settleWrite(await updateCompanySettings(
+        { orgId: context.authz.user.orgId, id: context.authz.user.id },
+        changes,
+      )),
     });
     return { status: 200, body: outcome.value, replayed: outcome.replayed };
   });

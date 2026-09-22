@@ -5,9 +5,15 @@ import {
   requireV1IdempotencyKey,
   withV1Request,
 } from "../../../../lib/api/v1-request";
+import { v1ListRecords } from "../../../../lib/api/v1-records";
 import { createPayment } from "../../../../lib/application/payments";
 
 export const runtime = "nodejs";
+
+/** GET /api/v1/payments — list vendor payments and customer receipts. */
+export async function GET(request: Request): Promise<NextResponse> {
+  return v1ListRecords(request, "payments", "api/v1/payments");
+}
 
 /** POST /api/v1/payments — create a vendor payment or customer receipt draft. */
 export async function POST(request: Request): Promise<NextResponse> {

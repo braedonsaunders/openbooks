@@ -101,7 +101,7 @@ const hooks = registerHooks({
   },
 });
 
-const { POST } = (await import("./[name]/route.ts?v1-command-exec")) as typeof import("./[name]/route.ts");
+const { POST } = (await import("./[name]/route.ts")) as typeof import("./[name]/route.ts");
 hooks.deregister();
 
 function post(name: string, body: unknown, idempotencyKey?: string): Promise<Response> {

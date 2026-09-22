@@ -46,6 +46,65 @@ export interface ApiRecordType {
 export const RW: ApiOperation[] = ["list", "get", "create", "update", "delete"];
 export const RO: ApiOperation[] = ["list", "get"];
 
+/**
+ * Static /api/v1 segments that are command or meta folders, not record-type
+ * aliases. The catch-all resource routes refuse these so a custom record
+ * named `close` cannot shadow /api/v1/close/runs.
+ */
+export const V1_RESERVED_STATIC_SEGMENTS = [
+  "commands",
+  "documents",
+  "close",
+  "approvals",
+  "banking",
+  "budgets",
+  "files",
+  "settings",
+  "setup",
+  "layouts",
+  "apps",
+  "vitals",
+  "health",
+  "schema",
+  "openapi",
+  "records",
+  "reports",
+] as const;
+
+const V1_RESERVED_STATIC_SEGMENT_SET = new Set<string>(V1_RESERVED_STATIC_SEGMENTS);
+
+/** First-class resource path, or null when the key is a reserved static folder. */
+export function v1PrettyResourcePath(typeKey: string): string | null {
+  if (V1_RESERVED_STATIC_SEGMENT_SET.has(typeKey)) return null;
+  return `/api/v1/${typeKey}`;
+}
+
+function documentResource(args: {
+  key: string;
+  label: string;
+  description: string;
+  docKind: string;
+  readPermission: string;
+  writePermission: string | null;
+  featureKey?: string;
+}): ApiRecordType {
+  const writable = args.writePermission !== null;
+  return {
+    key: args.key,
+    label: args.label,
+    description: args.description,
+    table: "documents",
+    searchColumn: "document_number",
+    readPermission: args.readPermission,
+    writePermission: args.writePermission,
+    operations: writable ? RW : RO,
+    writer: writable ? { kind: "document", docKind: args.docKind } : { kind: "readonly" },
+    dynamic: false,
+    ...(writable ? {} : { documentKinds: [args.docKind] }),
+    ...(args.featureKey ? { featureKey: args.featureKey } : {}),
+  };
+}
+
 /** Built-in record types exposed through the API. */
 export const API_RECORD_TYPES: ApiRecordType[] = [
   {
@@ -160,6 +219,167 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
     dynamic: false,
     featureKey: "fixedAssets",
   },
+  documentResource({
+    key: "vendor-credits",
+    label: "Vendor Credits",
+    description: "Accounts payable credit memos. Writes create a draft and can submit/post through the posting kernel.",
+    docKind: "vendor_credit",
+    readPermission: "ap.read",
+    writePermission: "ap.create",
+  }),
+  documentResource({
+    key: "customer-credits",
+    label: "Customer Credits",
+    description: "Accounts receivable credit memos. Writes create a draft and can submit/post through the posting kernel.",
+    docKind: "customer_credit",
+    readPermission: "ar.read",
+    writePermission: "ar.create",
+  }),
+  documentResource({
+    key: "card-charges",
+    label: "Card Charges",
+    description: "Card-funded expense documents. Writes create a draft and can post through the posting kernel.",
+    docKind: "card_charge",
+    readPermission: "ap.read",
+    writePermission: "ap.create",
+  }),
+  documentResource({
+    key: "card-refunds",
+    label: "Card Refunds",
+    description: "Card refund documents. Writes create a draft and can post through the posting kernel.",
+    docKind: "card_refund",
+    readPermission: "ap.read",
+    writePermission: "ap.create",
+  }),
+  documentResource({
+    key: "checks",
+    label: "Checks",
+    description: "Bank-funded check documents. Writes create a draft and can post through the posting kernel.",
+    docKind: "check",
+    readPermission: "ap.read",
+    writePermission: "ap.create",
+  }),
+  documentResource({
+    key: "deposits",
+    label: "Deposits",
+    description: "Bank deposits. Writes create a draft and can post through the posting kernel.",
+    docKind: "deposit",
+    readPermission: "gl.read",
+    writePermission: "gl.post",
+  }),
+  documentResource({
+    key: "transfers",
+    label: "Transfers",
+    description: "Inter-account bank transfers. Writes create a draft and can post through the posting kernel.",
+    docKind: "transfer",
+    readPermission: "gl.read",
+    writePermission: "gl.post",
+  }),
+  documentResource({
+    key: "project-charges",
+    label: "Project Charges",
+    description: "Project resource-usage charges. Writes create a draft and can post through the posting kernel.",
+    docKind: "project_charge",
+    readPermission: "gl.read",
+    writePermission: "gl.post",
+    featureKey: "projects",
+  }),
+  documentResource({
+    key: "vendor-payments",
+    label: "Vendor Payments",
+    description: "Vendor payment documents. Read-only here — create and allocate through POST /api/v1/payments.",
+    docKind: "vendor_payment",
+    readPermission: "ap.pay",
+    writePermission: null,
+  }),
+  documentResource({
+    key: "customer-receipts",
+    label: "Customer Receipts",
+    description: "Customer receipt documents. Read-only here — create and allocate through POST /api/v1/payments.",
+    docKind: "customer_payment",
+    readPermission: "ar.pay",
+    writePermission: null,
+  }),
+  documentResource({
+    key: "journals",
+    label: "Journals",
+    description: "Manual journal documents. Read-only here — post through POST /api/v1/journals/{id}/post. Posted ledger projections are journal-entries.",
+    docKind: "journal",
+    readPermission: "gl.read",
+    writePermission: null,
+  }),
+  documentResource({
+    key: "quotes",
+    label: "Quotes",
+    description: "Customer estimates. Read-only in v1 — conversion stays on the order cycle.",
+    docKind: "quote",
+    readPermission: "ar.read",
+    writePermission: null,
+    featureKey: "orders",
+  }),
+  documentResource({
+    key: "sales-orders",
+    label: "Sales Orders",
+    description: "Customer sales orders. Read-only in v1 — fulfillment and billing stay on the order cycle.",
+    docKind: "sales_order",
+    readPermission: "ar.read",
+    writePermission: null,
+    featureKey: "orders",
+  }),
+  documentResource({
+    key: "purchase-orders",
+    label: "Purchase Orders",
+    description: "Vendor purchase orders. Read-only in v1 — receipt and billing stay on the order cycle.",
+    docKind: "purchase_order",
+    readPermission: "ap.read",
+    writePermission: null,
+    featureKey: "orders",
+  }),
+  documentResource({
+    key: "sales-fulfillments",
+    label: "Sales Fulfillments",
+    description: "Shipments against sales orders. Read-only — operational documents are not edited as commercial commitments.",
+    docKind: "sales_fulfillment",
+    readPermission: "ar.read",
+    writePermission: null,
+    featureKey: "orders",
+  }),
+  documentResource({
+    key: "purchase-receipts",
+    label: "Purchase Receipts",
+    description: "Goods receipts against purchase orders. Read-only — operational documents are not edited as commercial commitments.",
+    docKind: "purchase_receipt",
+    readPermission: "ap.read",
+    writePermission: null,
+    featureKey: "orders",
+  }),
+  documentResource({
+    key: "expense-reports",
+    label: "Expense Reports",
+    description: "Employee expense reports. Read-only in v1 — create and submit stay on the expenses workspace.",
+    docKind: "expense_report",
+    readPermission: "expenses.read",
+    writePermission: null,
+    featureKey: "expenses",
+  }),
+  documentResource({
+    key: "field-tickets",
+    label: "Field Tickets",
+    description: "Project field tickets. Read-only in v1 — hours and signatures stay on the field-ticket workspace.",
+    docKind: "field_ticket",
+    readPermission: "projects.read",
+    writePermission: null,
+    featureKey: "fieldTickets",
+  }),
+  documentResource({
+    key: "pay-runs",
+    label: "Pay Runs",
+    description: "Committed payroll GL documents. Read-only — lines are machine-built by the payroll engine.",
+    docKind: "pay_run",
+    readPermission: "payroll.read",
+    writePermission: null,
+    featureKey: "payroll",
+  }),
 ];
 
 export const RECORD_TYPE_BY_KEY = new Map(API_RECORD_TYPES.map((t) => [t.key, t]));

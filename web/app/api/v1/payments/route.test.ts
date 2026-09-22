@@ -66,12 +66,23 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
+  [
+    "mock:v1-records",
+    `
+      const state = globalThis[Symbol.for('openbooks.v1-payments-route-test')]
+      export async function v1ListRecords(_request, typeKey) {
+        state.calls.push({ list: typeKey })
+        return Response.json({ records: [], total: 0, page: 1, perPage: 25, typeKey })
+      }
+    `,
+  ],
 ]);
 
 const mockUrls = new Map<string, string>([
   ["../../../../lib/api/v1-request", "mock:v1"],
   ["../../../../lib/application/errors", "mock:errors"],
   ["../../../../lib/application/payments", "mock:payments"],
+  ["../../../../lib/api/v1-records", "mock:v1-records"],
 ]);
 
 const hooks = registerHooks({
@@ -90,7 +101,7 @@ const hooks = registerHooks({
   },
 });
 
-const { POST } = (await import("./route.ts?v1-payments-create")) as typeof import("./route.ts");
+const { GET, POST } = (await import("./route.ts")) as typeof import("./route.ts");
 hooks.deregister();
 
 function post(body: unknown, idempotencyKey = "payments-key-1"): Promise<Response> {
@@ -124,6 +135,14 @@ test("POST /api/v1/payments creates a vendor payment with the idempotency key", 
   assert.equal(routeState.calls[0]?.kind, "vendor_payment");
   assert.equal(routeState.calls[0]?.partyId, "party-1");
   assert.equal(routeState.calls[0]?.idempotencyKey, "payments-key-2");
+});
+
+test("GET /api/v1/payments lists through the payments record type", async () => {
+  routeState.calls.length = 0;
+  const response = await GET(new Request("http://openbooks.test/api/v1/payments"));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { records: [], total: 0, page: 1, perPage: 25, typeKey: "payments" });
+  assert.equal(routeState.calls[0]?.list, "payments");
 });
 
 test("POST /api/v1/payments creates a customer receipt", async () => {
