@@ -113,6 +113,8 @@ export interface WorklistPage {
   limit: number;
   offset: number;
   kind?: string;
+  query?: string;
+  overdue?: boolean;
 }
 
 /** SQL pre-filter reproducing scopeAllows exactly (a null entity fails closed). */
@@ -125,6 +127,7 @@ function subsidiaryScopeSql(alias: string, allowed: GateSubsidiaryScope): SQL {
 interface LegOpts {
   prefix?: number;
   kind?: string;
+  query?: string;
 }
 
 function worklistDocumentWhere(
@@ -132,7 +135,9 @@ function worklistDocumentWhere(
   userId: string,
   allowedSubsidiaryIds: GateSubsidiaryScope,
   kind?: string,
+  query?: string,
 ): SQL {
+  const needle = query?.trim().toLowerCase()
   return sql`d.org_id = ${orgId} and d.status = 'pending_approval'
     and d.void_requested_at is null
     and (d.submitted_by is null or d.submitted_by <> ${userId})
@@ -142,7 +147,9 @@ function worklistDocumentWhere(
        where g.org_id = d.org_id and g.subject_id = d.id and g.status = 'pending'
     )
     ${subsidiaryScopeSql("d", allowedSubsidiaryIds)}
-    ${kind ? sql`and d.kind = ${kind}` : sql``}`;
+    ${kind ? sql`and d.kind = ${kind}` : sql``}
+    ${needle ? sql`and position(${needle} in lower(concat_ws(' ', d.document_number, d.kind, d.memo,
+      (select p.display_name from parties p where p.id=d.party_id and p.org_id=d.org_id)))) > 0` : sql``}`;
 }
 
 async function worklistDocuments(
@@ -164,7 +171,7 @@ async function worklistDocuments(
            d.submitted_at::text as "submittedAt", d.created_at::text as "createdAt"
       from documents d
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
-     where ${worklistDocumentWhere(orgId, userId, allowedSubsidiaryIds, opts?.kind)}
+     where ${worklistDocumentWhere(orgId, userId, allowedSubsidiaryIds, opts?.kind, opts?.query)}
      order by coalesce(d.submitted_at, d.created_at), d.id
      ${opts?.prefix != null ? sql`limit ${opts.prefix}` : sql``}`)).rows;
   return rows
@@ -177,11 +184,12 @@ async function worklistDocumentKindCounts(
   userId: string,
   allowedSubsidiaryIds: GateSubsidiaryScope,
   kind?: string,
+  query?: string,
 ): Promise<Map<string, number>> {
   const rows = (await db.execute<{ kind: string; n: string }>(sql`
     select d.kind as kind, count(*) as n
       from documents d
-     where ${worklistDocumentWhere(orgId, userId, allowedSubsidiaryIds, kind)}
+     where ${worklistDocumentWhere(orgId, userId, allowedSubsidiaryIds, kind, query)}
      group by d.kind`)).rows;
   return new Map(rows.map((row) => [row.kind, Number(row.n)]));
 }
@@ -192,12 +200,15 @@ function worklistPayRunWhere(
   allowedSubsidiaryIds: GateSubsidiaryScope,
   extra?: SQL,
   kind?: string,
+  query?: string,
 ): SQL {
+  const needle = query?.trim().toLowerCase()
   return sql`r.org_id = ${orgId} and r.status = 'pending_approval'
     and (r.submitted_by is null or r.submitted_by <> ${userId})
     ${subsidiaryScopeSql("r", allowedSubsidiaryIds)}
     ${extra ?? sql``}
-    ${kind && kind !== "pay_run" ? sql`and false` : sql``}`;
+    ${kind && kind !== "pay_run" ? sql`and false` : sql``}
+    ${needle ? sql`and position(${needle} in lower(concat_ws(' ', r.run_number, r.direction, r.purpose))) > 0` : sql``}`;
 }
 
 async function worklistPayRuns(
@@ -217,7 +228,7 @@ async function worklistPayRuns(
            r.subsidiary_id as "subsidiaryId", r.submitted_by as "submittedBy",
            r.submitted_at::text as "submittedAt", r.created_at::text as "createdAt"
       from payment_runs r
-     where ${worklistPayRunWhere(orgId, userId, allowedSubsidiaryIds, opts?.extra, opts?.kind)}
+     where ${worklistPayRunWhere(orgId, userId, allowedSubsidiaryIds, opts?.extra, opts?.kind, opts?.query)}
      order by coalesce(r.submitted_at, r.created_at), r.id
      ${opts?.prefix != null ? sql`limit ${opts.prefix}` : sql``}`)).rows;
   return rows
@@ -231,11 +242,12 @@ async function worklistPayRunCount(
   allowedSubsidiaryIds: GateSubsidiaryScope,
   extra?: SQL,
   kind?: string,
+  query?: string,
 ): Promise<number> {
   const rows = (await db.execute<{ n: string }>(sql`
     select count(*) as n
       from payment_runs r
-     where ${worklistPayRunWhere(orgId, userId, allowedSubsidiaryIds, extra, kind)}`)).rows;
+     where ${worklistPayRunWhere(orgId, userId, allowedSubsidiaryIds, extra, kind, query)}`)).rows;
   return Number(rows[0]?.n ?? 0);
 }
 
@@ -246,14 +258,16 @@ async function worklistPayRunCount(
  * drawer the row links to. The submitter never sees their own submission
  * here, mirroring the document leg.
  */
-function worklistBudgetWhere(orgId: string, userId: string, kind?: string): SQL {
+function worklistBudgetWhere(orgId: string, userId: string, kind?: string, query?: string): SQL {
+  const needle = query?.trim().toLowerCase()
   return sql`bs.org_id = ${orgId} and bs.status = 'pending_approval'
     and (bs.submitted_by is null or bs.submitted_by <> ${userId})
     and not exists (
       select 1 from flow_gates g
        where g.org_id = bs.org_id and g.subject_id = bs.id and g.status = 'pending'
     )
-    ${kind && kind !== "budget_scenario" ? sql`and false` : sql``}`;
+    ${kind && kind !== "budget_scenario" ? sql`and false` : sql``}
+    ${needle ? sql`and position(${needle} in lower(concat_ws(' ', bs.name, bs.fiscal_year::text))) > 0` : sql``}`;
 }
 
 async function worklistBudgets(
@@ -271,19 +285,19 @@ async function worklistBudgets(
            bs.created_at::text as "createdAt"
       from budget_scenarios bs
       left join budget_lines bl on bl.scenario_id = bs.id and bl.org_id = bs.org_id
-     where ${worklistBudgetWhere(orgId, userId, opts?.kind)}
+     where ${worklistBudgetWhere(orgId, userId, opts?.kind, opts?.query)}
      group by bs.id
      order by coalesce(bs.submitted_at, bs.created_at), bs.id
      ${opts?.prefix != null ? sql`limit ${opts.prefix}` : sql``}`)).rows;
   return rows.map((row) => ({ kind: "budget" as const, ...row }));
 }
 
-async function worklistBudgetCount(orgId: string, userId: string, kind?: string): Promise<number> {
+async function worklistBudgetCount(orgId: string, userId: string, kind?: string, query?: string): Promise<number> {
   const rows = (await db.execute<{ n: string }>(sql`
     select count(*) as n from (
       select bs.id
         from budget_scenarios bs
-       where ${worklistBudgetWhere(orgId, userId, kind)}
+       where ${worklistBudgetWhere(orgId, userId, kind, query)}
        group by bs.id
     ) s`)).rows;
   return Number(rows[0]?.n ?? 0);
@@ -329,6 +343,8 @@ export async function worklistApprovalsPage(
 ): Promise<WorklistPageResult> {
   const prefix = page.offset + page.limit;
   const kind = page.kind;
+  const query = page.query;
+  const overdue = page.overdue === true;
   const filtered = kind != null;
   const includeFlows = scope.includeFlows !== false;
   const includeBudgets = scope.includeBudgets === true;
@@ -351,30 +367,30 @@ export async function worklistApprovalsPage(
 
   const [gateRows, documentRows, budgetRows, payRunRows] = await Promise.all([
     includeFlows
-      ? worklistGates(orgId, userId, scope.roles, scope.allowedSubsidiaryIds, { prefix, kind })
+      ? worklistGates(orgId, userId, scope.roles, scope.allowedSubsidiaryIds, { prefix, kind, query, overdue })
       : Promise.resolve([]),
-    includeFlows
-      ? worklistDocuments(orgId, userId, scope.allowedSubsidiaryIds, { prefix, kind })
+    includeFlows && !overdue
+      ? worklistDocuments(orgId, userId, scope.allowedSubsidiaryIds, { prefix, kind, query })
       : Promise.resolve([]),
-    includeBudgets && !skipBudgets
-      ? worklistBudgets(orgId, userId, { prefix, kind })
+    includeBudgets && !skipBudgets && !overdue
+      ? worklistBudgets(orgId, userId, { prefix, kind, query })
       : Promise.resolve([]),
-    includePayRuns && !skipPayRuns
-      ? worklistPayRuns(orgId, userId, scope.allowedSubsidiaryIds, { prefix, kind, extra: payExtra })
+    includePayRuns && !skipPayRuns && !overdue
+      ? worklistPayRuns(orgId, userId, scope.allowedSubsidiaryIds, { prefix, kind, query, extra: payExtra })
       : Promise.resolve([]),
   ]);
   const [gateCounts, documentCounts, budgetCount, payRunCount] = await Promise.all([
     includeFlows
-      ? worklistGateKindCounts(orgId, userId, scope.roles, scope.allowedSubsidiaryIds, kind)
+      ? worklistGateKindCounts(orgId, userId, scope.roles, scope.allowedSubsidiaryIds, kind, query, overdue)
       : Promise.resolve(new Map<string, number>()),
-    includeFlows
-      ? worklistDocumentKindCounts(orgId, userId, scope.allowedSubsidiaryIds, kind)
+    includeFlows && !overdue
+      ? worklistDocumentKindCounts(orgId, userId, scope.allowedSubsidiaryIds, kind, query)
       : Promise.resolve(new Map<string, number>()),
-    includeBudgets && !skipBudgets
-      ? worklistBudgetCount(orgId, userId, kind)
+    includeBudgets && !skipBudgets && !overdue
+      ? worklistBudgetCount(orgId, userId, kind, query)
       : Promise.resolve(0),
-    includePayRuns && !skipPayRuns
-      ? worklistPayRunCount(orgId, userId, scope.allowedSubsidiaryIds, payExtra, kind)
+    includePayRuns && !skipPayRuns && !overdue
+      ? worklistPayRunCount(orgId, userId, scope.allowedSubsidiaryIds, payExtra, kind, query)
       : Promise.resolve(0),
   ]);
   // Kind chips ignore the kind filter (same as the unpaged page), so a
@@ -382,14 +398,14 @@ export async function worklistApprovalsPage(
   const [chipGateCounts, chipDocumentCounts, chipBudgetCount, chipPayRunCount] = filtered
     ? await Promise.all([
         includeFlows
-          ? worklistGateKindCounts(orgId, userId, scope.roles, scope.allowedSubsidiaryIds)
+          ? worklistGateKindCounts(orgId, userId, scope.roles, scope.allowedSubsidiaryIds, undefined, query, overdue)
           : Promise.resolve(new Map<string, number>()),
-        includeFlows
-          ? worklistDocumentKindCounts(orgId, userId, scope.allowedSubsidiaryIds)
+        includeFlows && !overdue
+          ? worklistDocumentKindCounts(orgId, userId, scope.allowedSubsidiaryIds, undefined, query)
           : Promise.resolve(new Map<string, number>()),
-        includeBudgets ? worklistBudgetCount(orgId, userId) : Promise.resolve(0),
-        includePayRuns
-          ? worklistPayRunCount(orgId, userId, scope.allowedSubsidiaryIds, payExtra)
+        includeBudgets && !overdue ? worklistBudgetCount(orgId, userId, undefined, query) : Promise.resolve(0),
+        includePayRuns && !overdue
+          ? worklistPayRunCount(orgId, userId, scope.allowedSubsidiaryIds, payExtra, undefined, query)
           : Promise.resolve(0),
       ])
     : [gateCounts, documentCounts, budgetCount, payRunCount];

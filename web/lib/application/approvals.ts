@@ -114,6 +114,8 @@ export interface ApprovalWorklistWindow {
   limit: number;
   offset: number;
   kind?: string;
+  query?: string;
+  overdue?: boolean;
 }
 
 /**
@@ -149,7 +151,7 @@ export async function approvalWorklistPageForAuthz(
       payDirections,
       payScope: paymentRunScopeSql(authz, "r"),
     },
-    { limit: window.limit, offset: window.offset, kind: window.kind },
+    { limit: window.limit, offset: window.offset, kind: window.kind, query: window.query, overdue: window.overdue },
   );
   // Same application-layer boundary as the full reader, applied to the
   // window: the leg query already scopes + directs in SQL, so this re-check
