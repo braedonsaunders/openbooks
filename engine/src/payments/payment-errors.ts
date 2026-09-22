@@ -23,3 +23,19 @@ export class PaymentRevisionConflictError extends PaymentError {
     this.name = "PaymentRevisionConflictError";
   }
 }
+
+/**
+ * Raised when a reused credit-application idempotency key cannot replay: a
+ * changed payload, or a key colliding with another organization's
+ * application row. The route maps this to 409 — fail closed, never the older
+ * settlement as though it matched — and the message names the remedy, which
+ * exists: reloading the panel shows what already settled.
+ */
+export class CreditApplicationConflictError extends PaymentError {
+  constructor(reason: "changed-payload" | "foreign-key") {
+    super(reason === "foreign-key"
+      ? "This request key is already in use by another organization. Reload the credit panel to start a fresh request."
+      : "This credit application was already saved with different details. Reload the credit panel, review what settled, and start a fresh request.");
+    this.name = "CreditApplicationConflictError";
+  }
+}

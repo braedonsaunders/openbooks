@@ -1,8 +1,10 @@
 import { sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import { db, withOrgTransaction } from "../platform/db.ts";
+import { canonicalJson } from "../platform/canonical-json.ts";
 import { fromUnits, sum, toUnits } from "../money/money.ts";
 import { assertPeriodModulesOpen } from "../close/period-policy.ts";
-import { PaymentError } from "./payment-errors.ts";
+import { CreditApplicationConflictError, PaymentError } from "./payment-errors.ts";
 import { paymentBookId } from "./payment-accounts.ts";
 import { validateCreditAllocations } from "./credit-allocation.ts";
 import { type CreditAllocationInput, type OpenItemSide } from "./payment-contracts.ts";
@@ -146,6 +148,8 @@ export async function applyStandaloneCredits(
     side: OpenItemSide;
     appliedOn: string;
     credits: CreditSettlementInput[];
+    /** The caller's Idempotency-Key: one key, one settlement. */
+    idempotencyKey: string;
   },
 ): Promise<CreditSettlementResult> {
   if (input.credits.length === 0) {
@@ -154,6 +158,67 @@ export async function applyStandaloneCredits(
     );
   }
   return withOrgTransaction(orgId, async () => {
+    // One key, one settlement. The advisory lock is org-scoped so a cross-org
+    // key collision cannot serialize unrelated tenants, and it is held to the
+    // transaction: a concurrent identical submit waits here and then replays
+    // the first result instead of writing a second settlement beside it.
+    // The deferred app_check_open trigger only stops a retry that overdraws
+    // the credit — a partial application duplicated silently, which is why
+    // the key, not the trigger, is the fence.
+    await db.execute(sql`
+      select pg_advisory_xact_lock(
+        hashtextextended(${`credit-application:${orgId}:${input.idempotencyKey}`}, 0)
+      )
+    `);
+    // The request-controlled image a retry must equal under canonical JSON.
+    // Results are excluded: a genuine retry replays them, never compares.
+    // This follows web/lib/api/idempotency.ts's claimSetupCreate contract —
+    // the first application row's id IS the key, so a retry resolves to the
+    // same settlement; the engine cannot import the web helper, so the claim
+    // is spelled out here against the same audit-image convention (match on
+    // the insert audit row, request_id = key).
+    const matchImage = {
+      partyId: input.partyId,
+      side: input.side,
+      appliedOn: input.appliedOn,
+      credits: input.credits.map((credit) => ({
+        fromLineId: credit.fromLineId,
+        toLineId: credit.toLineId,
+        amount: credit.amount,
+        sourceDocumentId: credit.sourceDocumentId,
+      })),
+    };
+    const priorOwner = (
+      await db.execute<{ org_id: string }>(sql`
+        select org_id from applications where id = ${input.idempotencyKey}
+      `)
+    ).rows[0]?.org_id;
+    if (priorOwner !== undefined) {
+      if (priorOwner !== orgId) throw new CreditApplicationConflictError("foreign-key");
+      const prior = (
+        await db.execute<{ match: unknown; result: unknown }>(sql`
+          select changes->'match' as match, (changes->'after'->'result') as result
+            from audit_log
+           where org_id = ${orgId} and table_name = 'applications'
+             and row_id = ${input.idempotencyKey} and request_id = ${input.idempotencyKey}
+             and action = 'insert'
+           order by at asc
+           limit 1
+        `)
+      ).rows[0];
+      if (
+        !prior
+        || !prior.match
+        || typeof prior.match !== "object"
+        || canonicalJson(prior.match) !== canonicalJson(matchImage)
+        || !prior.result
+        || typeof prior.result !== "object"
+        || !Array.isArray((prior.result as CreditSettlementResult).applicationIds)
+      ) {
+        throw new CreditApplicationConflictError("changed-payload");
+      }
+      return prior.result as CreditSettlementResult;
+    }
     const bookId = await paymentBookId(orgId);
     // Derive the control account from the endpoints instead of defaulting to
     // the org's AP/AR control. A credit raised against a non-default control
@@ -224,26 +289,29 @@ export async function applyStandaloneCredits(
       modules: [input.side],
     });
 
-    const applicationIds: string[] = [];
-    for (const credit of input.credits) {
+const applicationIds: string[] = [];
+    for (const [index, credit] of input.credits.entries()) {
+      // The first application row's id IS the idempotency key — the
+      // claimSetupCreate convention — so a retry resolves to this settlement.
+      const applicationId = index === 0 ? input.idempotencyKey : randomUUID();
       // Same-currency by construction: validateCreditAllocations refuses any
       // endpoint whose transaction currency differs from its base currency, so
       // both frames carry the same amount at rate 1 and no realized FX arises.
       const inserted = (await db.execute<{ id: string }>(sql`
         insert into applications
-          (org_id, from_line_id, to_line_id, amount, source_amount,
+          (id, org_id, from_line_id, to_line_id, amount, source_amount,
            source_transaction_amount, source_transaction_currency,
            target_transaction_amount, target_transaction_currency,
            settlement_rate, settlement_rate_source, settlement_rate_reference,
            applied_on, created_by, updated_by)
-        select ${orgId}, ${credit.fromLineId}, ${credit.toLineId}, ${credit.amount},
+        select ${applicationId}, ${orgId}, ${credit.fromLineId}, ${credit.toLineId}, ${credit.amount},
                ${credit.amount}, ${credit.amount}, jl.currency,
                ${credit.amount}, jl.currency,
                '1', 'same_currency', 'credit applied without cash',
                ${input.appliedOn}, ${userId}, ${userId}
           from journal_lines jl
          where jl.id = ${credit.fromLineId} and jl.org_id = ${orgId}
-        returning id
+         returning id
       `)).rows[0];
       // A write that matches zero rows is a failure, not a success.
       if (!inserted) {
@@ -252,6 +320,9 @@ export async function applyStandaloneCredits(
         );
       }
       applicationIds.push(inserted.id);
+      // The key row's insert audit is written after the loop, where the full
+      // settlement result is known — it carries the retry's replay image.
+      if (index === 0) continue;
       await db.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
         values (${orgId}, 'applications', ${inserted.id}, 'insert',
@@ -268,10 +339,36 @@ export async function applyStandaloneCredits(
                     side: input.side,
                   },
                 })}::jsonb,
-                ${userId}, 'payments.credit-settlement')
+                ${userId}, ${input.idempotencyKey})
       `);
     }
-    return { applicationIds, amount: sum(input.credits.map((credit) => credit.amount)) };
+    // The key row's insert audit carries the replay image: `match` is the
+    // request-controlled subset a retry must equal under canonical JSON, and
+    // `after.result` is exactly what the retry returns — the same contract
+    // as setup creates' audit images, so the retry resolves to the settlement
+    // it already wrote instead of a second one beside it.
+    const settlementAmount = sum(input.credits.map((credit) => credit.amount));
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
+      values (${orgId}, 'applications', ${input.idempotencyKey}, 'insert',
+              ${JSON.stringify({
+                mode: "credit_applied_without_cash",
+                source: "payments.credit-settlement",
+                before: null,
+                match: matchImage,
+                after: {
+                  fromLineId: input.credits[0]!.fromLineId,
+                  toLineId: input.credits[0]!.toLineId,
+                  sourceDocumentId: input.credits[0]!.sourceDocumentId,
+                  amount: input.credits[0]!.amount,
+                  appliedOn: input.appliedOn,
+                  side: input.side,
+                  result: { applicationIds, amount: settlementAmount },
+                },
+              })}::jsonb,
+              ${userId}, ${input.idempotencyKey})
+    `);
+    return { applicationIds, amount: settlementAmount };
   });
 }
 

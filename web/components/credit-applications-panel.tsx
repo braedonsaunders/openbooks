@@ -68,6 +68,10 @@ export function CreditApplicationsPanel({
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // One key per logical apply: minted on first submit and reused across
+  // retries until the outcome is visible, so a network retry resolves to the
+  // settlement it already wrote instead of writing a second one beside it.
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
 
   const load = useCallback(() => {
     return fetch(
@@ -129,25 +133,35 @@ export function CreditApplicationsPanel({
     }
     setBusy(true);
     setError(null);
-    const res = await fetch("/api/payments/credit-applications", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        partyId,
-        side,
-        appliedOn: new Date().toISOString().slice(0, 10),
-        credits,
-      }),
-    });
-    const json = (await res.json().catch(() => ({}))) as { error?: string };
-    setBusy(false);
-    if (!res.ok) {
-      setError(json.error ?? res.statusText);
-      return;
+    const key = pendingKey ?? crypto.randomUUID();
+    setPendingKey(key);
+    try {
+      const res = await fetch("/api/payments/credit-applications", {
+        method: "POST",
+        headers: { "content-type": "application/json", "Idempotency-Key": key },
+        body: JSON.stringify({
+          partyId,
+          side,
+          appliedOn: new Date().toISOString().slice(0, 10),
+          credits,
+        }),
+      });
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setError(json.error ?? res.statusText);
+        // A named refusal means this key's settlement cannot serve a retry:
+        // the next attempt must start a fresh request. A network-level
+        // failure keeps the key, so the retry replays rather than re-applies.
+        setPendingKey(null);
+        return;
+      }
+      setPendingKey(null);
+      setOpenItems(null);
+      setAmounts({});
+      await load();
+    } finally {
+      setBusy(false);
     }
-    setOpenItems(null);
-    setAmounts({});
-    await load();
   }
 
   async function release(applicationId: string) {

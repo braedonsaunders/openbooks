@@ -10,6 +10,7 @@ import {
   unapplyCreditSettlement,
 } from "./credit-settlement.ts";
 import { paymentBookId } from "./payment-accounts.ts";
+import { CreditApplicationConflictError } from "./payment-errors.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -118,6 +119,7 @@ test("a full credit settles an invoice with no cash and posts no journal entry",
     const entriesBefore = await entryCount(org.orgId);
     const result = await withBypass(() =>
       applyStandaloneCredits(org.orgId, userId, {
+      idempotencyKey: randomUUID(),
         partyId: org.customerId,
         side: "ar",
         appliedOn: org.date,
@@ -157,6 +159,7 @@ test("a partial credit leaves the remainder open on both sides", { skip: !DB }, 
 
     await withBypass(() =>
       applyStandaloneCredits(org.orgId, userId, {
+      idempotencyKey: randomUUID(),
         partyId: org.customerId,
         side: "ar",
         appliedOn: org.date,
@@ -185,6 +188,7 @@ test("applying more than the credit's open balance is refused", { skip: !DB }, a
       () =>
         withBypass(() =>
           applyStandaloneCredits(org.orgId, userId, {
+      idempotencyKey: randomUUID(),
             partyId: org.customerId,
             side: "ar",
             appliedOn: org.date,
@@ -209,6 +213,7 @@ test("a settlement with no credits is refused rather than reporting success", { 
       () =>
         withBypass(() =>
           applyStandaloneCredits(org.orgId, userId, {
+      idempotencyKey: randomUUID(),
             partyId: org.customerId,
             side: "ar",
             appliedOn: org.date,
@@ -241,6 +246,7 @@ test("a settlement dated into a closed AR period is refused", { skip: !DB }, asy
       () =>
         withBypass(() =>
           applyStandaloneCredits(org.orgId, userId, {
+      idempotencyKey: randomUUID(),
             partyId: org.customerId,
             side: "ar",
             appliedOn: org.date,
@@ -268,6 +274,7 @@ test("releasing a credit settlement reopens both balances exactly once", { skip:
 
     const applied = await withBypass(() =>
       applyStandaloneCredits(org.orgId, userId, {
+      idempotencyKey: randomUUID(),
         partyId: org.customerId,
         side: "ar",
         appliedOn: org.date,
@@ -310,12 +317,14 @@ test("the released credit can be applied again", { skip: !DB }, async () => {
 
     const first = await withBypass(() =>
       applyStandaloneCredits(org.orgId, userId, {
+      idempotencyKey: randomUUID(),
         partyId: org.customerId, side: "ar", appliedOn: org.date, credits,
       }),
     );
     await withBypass(() => unapplyCreditSettlement(org.orgId, userId, first.applicationIds[0]!));
     await withBypass(() =>
       applyStandaloneCredits(org.orgId, userId, {
+      idempotencyKey: randomUUID(),
         partyId: org.customerId, side: "ar", appliedOn: org.date, credits,
       }),
     );
@@ -345,6 +354,7 @@ test("a credit the wrong party owns cannot settle this party's invoice", { skip:
       () =>
         withBypass(() =>
           applyStandaloneCredits(org.orgId, userId, {
+      idempotencyKey: randomUUID(),
             partyId: otherParty,
             side: "ar",
             appliedOn: org.date,
@@ -374,6 +384,7 @@ test("a credit naming the wrong source document is refused", { skip: !DB }, asyn
       () =>
         withBypass(() =>
           applyStandaloneCredits(org.orgId, userId, {
+      idempotencyKey: randomUUID(),
             partyId: org.customerId,
             side: "ar",
             appliedOn: org.date,
@@ -410,6 +421,7 @@ test("the panel's state reports what a credit settled and what is left", { skip:
 
     const applied = await withBypass(() =>
       applyStandaloneCredits(org.orgId, userId, {
+      idempotencyKey: randomUUID(),
         partyId: org.customerId,
         side: "ar",
         appliedOn: org.date,
@@ -456,6 +468,183 @@ test("an unposted credit has no settlement state to show", { skip: !DB }, async 
     // The panel keys off this null and renders nothing, rather than offering
     // an Apply button for a credit with no posted open item behind it.
     assert.equal(await withBypass(() => creditSettlementState(org.orgId, draftId)), null);
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
+// ---------------------------------------------------------------------------
+// The retry fence: one idempotency key, one settlement.
+// ---------------------------------------------------------------------------
+
+test("a retried apply with the same key replays the settlement it already wrote", { skip: !DB }, async () => {
+  // A PARTIAL application is the duplication case: app_check_open only stops
+  // a retry that overdraws the credit, so before the fence a resubmit wrote a
+  // second applications row beside the first and the operator saw success
+  // twice. The retry now replays the first result byte-for-byte.
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const userId = await withBypass(() => createScratchUser(org.orgId, "Credit retrier", "admin"));
+    const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-RETRY-1", "210");
+    const creditId = await postDoc(org, userId, "customer_credit", "CM-RETRY-1", "210");
+    const invoiceLine = await openLineId(org.orgId, invoiceId);
+    const creditLine = await openLineId(org.orgId, creditId);
+    const input = {
+      idempotencyKey: randomUUID(),
+      partyId: org.customerId,
+      side: "ar" as const,
+      appliedOn: org.date,
+      credits: [
+        { fromLineId: creditLine, toLineId: invoiceLine, amount: "40", sourceDocumentId: creditId },
+      ],
+    };
+    const first = await withBypass(() => applyStandaloneCredits(org.orgId, userId, input));
+    assert.equal(first.amount, "40.0000");
+    const retry = await withBypass(() => applyStandaloneCredits(org.orgId, userId, input));
+    assert.deepEqual(retry, first, "the retry must return the settlement it already wrote");
+    assert.equal(retry.applicationIds[0], input.idempotencyKey, "the first row's id IS the key");
+    const rows = await withBypass(async () =>
+      (await db.execute<{ n: string }>(sql`
+        select count(*)::text as n from applications
+         where org_id = ${org.orgId} and from_line_id = ${creditLine}`)).rows[0],
+    );
+    assert.equal(Number(rows!.n), 1, "a retried submit must not write a second settlement");
+    assert.equal(await openBalance(org.orgId, invoiceLine), "170.0000");
+    assert.equal(await sourceOpenBalance(org.orgId, creditLine), "170.0000");
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("the same key with a different payload is a named conflict, never a second settlement", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const userId = await withBypass(() => createScratchUser(org.orgId, "Credit conflict", "admin"));
+    const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-CONFLICT-1", "210");
+    const creditId = await postDoc(org, userId, "customer_credit", "CM-CONFLICT-1", "210");
+    const invoiceLine = await openLineId(org.orgId, invoiceId);
+    const creditLine = await openLineId(org.orgId, creditId);
+    const key = randomUUID();
+    const input = {
+      idempotencyKey: key,
+      partyId: org.customerId,
+      side: "ar" as const,
+      appliedOn: org.date,
+      credits: [
+        { fromLineId: creditLine, toLineId: invoiceLine, amount: "40", sourceDocumentId: creditId },
+      ],
+    };
+    await withBypass(() => applyStandaloneCredits(org.orgId, userId, input));
+    await assert.rejects(
+      () =>
+        withBypass(() =>
+          applyStandaloneCredits(org.orgId, userId, {
+            ...input,
+            credits: [
+              { fromLineId: creditLine, toLineId: invoiceLine, amount: "50", sourceDocumentId: creditId },
+            ],
+          }),
+        ),
+      (e: unknown) =>
+        e instanceof CreditApplicationConflictError && /already saved with different details/.test(e.message),
+    );
+    const rows = await withBypass(async () =>
+      (await db.execute<{ n: string }>(sql`
+        select count(*)::text as n from applications
+         where org_id = ${org.orgId} and from_line_id = ${creditLine}`)).rows[0],
+    );
+    assert.equal(Number(rows!.n), 1, "a conflicting payload must not write beside the keyed settlement");
+    assert.equal(await openBalance(org.orgId, invoiceLine), "170.0000");
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("a key owned by another organization fails closed as a foreign key", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  const other = await withBypass(() => createScratchOrg());
+  try {
+    const userId = await withBypass(() => createScratchUser(org.orgId, "Credit owner", "admin"));
+    const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-FK-1", "100");
+    const creditId = await postDoc(org, userId, "customer_credit", "CM-FK-1", "100");
+    const invoiceLine = await openLineId(org.orgId, invoiceId);
+    const creditLine = await openLineId(org.orgId, creditId);
+    const key = randomUUID();
+    await withBypass(() =>
+      applyStandaloneCredits(org.orgId, userId, {
+        idempotencyKey: key,
+        partyId: org.customerId,
+        side: "ar",
+        appliedOn: org.date,
+        credits: [
+          { fromLineId: creditLine, toLineId: invoiceLine, amount: "100", sourceDocumentId: creditId },
+        ],
+      }),
+    );
+    // The other org has its own posted pair; only the reused KEY is foreign.
+    const otherUser = await withBypass(() => createScratchUser(other.orgId, "Foreign retry", "admin"));
+    const otherInvoice = await postDoc(other, otherUser, "customer_invoice", "INV-FK-2", "100");
+    const otherCredit = await postDoc(other, otherUser, "customer_credit", "CM-FK-2", "100");
+    const otherInvoiceLine = await openLineId(other.orgId, otherInvoice);
+    const otherCreditLine = await openLineId(other.orgId, otherCredit);
+    await assert.rejects(
+      () =>
+        withBypass(() =>
+          applyStandaloneCredits(other.orgId, otherUser, {
+            idempotencyKey: key,
+            partyId: other.customerId,
+            side: "ar",
+            appliedOn: other.date,
+            credits: [
+              { fromLineId: otherCreditLine, toLineId: otherInvoiceLine, amount: "100", sourceDocumentId: otherCredit },
+            ],
+          }),
+        ),
+      (e: unknown) =>
+        e instanceof CreditApplicationConflictError && /already in use by another organization/.test(e.message),
+      "a cross-org key collision must fail closed, not read as a fresh claim",
+    );
+    const otherRows = await withBypass(async () =>
+      (await db.execute<{ n: string }>(sql`
+        select count(*)::text as n from applications where org_id = ${other.orgId}`)).rows[0],
+    );
+    assert.equal(Number(otherRows!.n), 0, "the foreign-key refusal must write nothing");
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+    await withBypass(() => dropScratchOrg(other.orgId));
+  }
+});
+
+test("concurrent identical submits share one settlement through the key fence", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const userId = await withBypass(() => createScratchUser(org.orgId, "Credit racer", "admin"));
+    const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-RACE-1", "210");
+    const creditId = await postDoc(org, userId, "customer_credit", "CM-RACE-1", "210");
+    const invoiceLine = await openLineId(org.orgId, invoiceId);
+    const creditLine = await openLineId(org.orgId, creditId);
+    const input = {
+      idempotencyKey: randomUUID(),
+      partyId: org.customerId,
+      side: "ar" as const,
+      appliedOn: org.date,
+      credits: [
+        { fromLineId: creditLine, toLineId: invoiceLine, amount: "40", sourceDocumentId: creditId },
+      ],
+    };
+    // The advisory lock serializes the two: the loser waits, then replays.
+    const [a, b] = await Promise.all([
+      withBypass(() => applyStandaloneCredits(org.orgId, userId, input)),
+      withBypass(() => applyStandaloneCredits(org.orgId, userId, input)),
+    ]);
+    assert.deepEqual(a, b);
+    const rows = await withBypass(async () =>
+      (await db.execute<{ n: string }>(sql`
+        select count(*)::text as n from applications
+         where org_id = ${org.orgId} and from_line_id = ${creditLine}`)).rows[0],
+    );
+    assert.equal(Number(rows!.n), 1, "both concurrent submits resolve to one settlement");
+    assert.equal(await openBalance(org.orgId, invoiceLine), "170.0000");
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }

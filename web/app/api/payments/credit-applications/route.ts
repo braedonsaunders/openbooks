@@ -7,6 +7,7 @@ import {
   creditSettlementState,
   unapplyCreditSettlement,
 } from '@openbooks/engine/src/payments/credit-settlement.ts'
+import { CreditApplicationConflictError } from '@openbooks/engine/src/payments/payment-errors.ts'
 import { exactMoney, isoDate, parseJsonBody, uuidId } from '@/lib/api/json'
 import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
@@ -92,6 +93,17 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  // One key, one settlement: a retried submit (network timeout, double
+  // click) must resolve to the settlement it already wrote, never a second
+  // one beside it — the deferred app_check_open trigger only stops a retry
+  // that overdraws the credit, so a partial application duplicated silently.
+  const idempotencyKey = req.headers.get('Idempotency-Key') ?? ''
+  if (!isUuid(idempotencyKey)) {
+    return NextResponse.json(
+      { error: 'an Idempotency-Key header with a UUID is required, so a retried apply cannot settle twice' },
+      { status: 400 },
+    )
+  }
   const parsed = await parseJsonBody(req, applyBody)
   if (!parsed.ok) return parsed.response
   const { partyId, side, appliedOn, credits } = parsed.data
@@ -105,9 +117,15 @@ export async function POST(req: Request) {
       side,
       appliedOn,
       credits,
+      idempotencyKey,
     })
     return NextResponse.json(result)
   } catch (e) {
+    // A reused key that cannot replay is a conflict with a named remedy, not
+    // a validation failure: the operator must reload and review what settled.
+    if (e instanceof CreditApplicationConflictError) {
+      return NextResponse.json({ error: e.message }, { status: 409 })
+    }
     return paymentErrorResponse(e)
   }
 }
