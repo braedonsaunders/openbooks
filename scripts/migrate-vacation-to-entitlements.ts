@@ -220,6 +220,9 @@ async function replayLedger(orgId: string, planId: string): Promise<void> {
        and b.tax_year = (select max(b2.tax_year) from payroll_opening_balances b2
                           where b2.org_id = b.org_id and b2.employee_party_id = b.employee_party_id
                             and b2.vacation_balance <> 0)
+    -- One row per (org, plan, employee, kind, date): the unique index makes
+    -- re-running this idempotent — the conflict is a previously migrated
+    -- group, and doing nothing is the migration's intent.
     on conflict do nothing
   `);
 
@@ -237,6 +240,9 @@ async function replayLedger(orgId: string, planId: string): Promise<void> {
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
      where s.org_id = ${orgId} and s.vacation_accrued <> 0
+    -- One row per (org, plan, employee, kind, date): the unique index makes
+    -- re-running this idempotent — the conflict is a previously migrated
+    -- group, and doing nothing is the migration's intent.
     on conflict do nothing
   `);
 
@@ -253,6 +259,9 @@ async function replayLedger(orgId: string, planId: string): Promise<void> {
      where s.org_id = ${orgId} and c.system_key = 'vacation_payout'
      group by s.org_id, s.employee_party_id, s.pay_date, s.pay_run_document_id, s.id
     having sum(l.amount) <> 0
+    -- One row per (org, plan, employee, kind, date): the unique index makes
+    -- re-running this idempotent — the conflict is a previously migrated
+    -- group, and doing nothing is the migration's intent.
     on conflict do nothing
   `);
 }

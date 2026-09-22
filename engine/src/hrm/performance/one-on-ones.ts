@@ -395,6 +395,11 @@ export async function holdOneOnOne(args: { orgId: string; actorId: string; id: s
         insert into hrm_one_on_ones (org_id, manager_employment_id, report_employment_id, scheduled_at, recurrence, series_id, created_by, updated_by)
         values (${orgId}, ${one.manager_employment_id}, ${one.report_employment_id}, ${nextAt}::timestamptz,
                 ${JSON.stringify(one.recurrence)}::jsonb, ${seriesId}, ${actorId}, ${actorId})
+        -- Conflict is expected and benign: the STALE_REVISION CAS below the
+        -- load serializes same-record completions, so the only way this row
+        -- already exists is a prior completion of THIS record creating the
+        -- next occurrence — in which case its open items were already
+        -- carried and skipping them again is correct.
         on conflict do nothing
         returning id
       `)).rows[0];
@@ -470,6 +475,9 @@ export async function skipOneOnOne(args: {
         insert into hrm_one_on_ones (org_id, manager_employment_id, report_employment_id, scheduled_at, recurrence, series_id, created_by, updated_by)
         values (${orgId}, ${one.manager_employment_id}, ${one.report_employment_id}, ${nextAt}::timestamptz,
                 ${JSON.stringify(one.recurrence)}::jsonb, ${seriesId}, ${actorId}, ${actorId})
+        -- Ensure-exists semantics: the STALE_REVISION CAS above makes this
+        -- the only writer for this record's next occurrence, so a conflict
+        -- means it already exists and doing nothing is the whole intent.
         on conflict do nothing
       `);
     }

@@ -996,7 +996,26 @@ export async function recordPaymentFileDownload(fileId: string, orgId: string, u
        returning id
     `));
     if (!delivered.rows[0]) throw new PaymentError("payment file is not approved for delivery");
-    await db.execute(sql`update payment_runs set status = 'delivered', updated_at = now(), updated_by = ${userId} where id = ${file.rows[0].payment_run_id} and org_id = ${orgId} and status = 'generated'`);
+    // Re-downloading an already-delivered run is idempotent (the file update
+    // above accepts 'delivered'), but any OTHER zero-row outcome means the
+    // run moved on while its file was marked delivered — that divergence
+    // must not record silently behind an unobserved update.
+    const runDelivered = (await db.execute<{ id: string }>(sql`
+      update payment_runs set status = 'delivered', updated_at = now(), updated_by = ${userId}
+       where id = ${file.rows[0].payment_run_id} and org_id = ${orgId} and status = 'generated'
+       returning id
+    `));
+    if (!runDelivered.rows[0]) {
+      const runState = (await db.execute<{ status: string }>(sql`
+        select status from payment_runs
+         where id = ${file.rows[0].payment_run_id} and org_id = ${orgId}
+      `)).rows[0];
+      if (runState?.status !== "delivered") {
+        throw new PaymentError(
+          `payment run is ${runState?.status ?? "no longer present"} and cannot be marked delivered; reload the run before recording the delivery`,
+        );
+      }
+    }
     await event({ orgId, runId: file.rows[0].payment_run_id, fileId, actorId: userId, eventType: "file_downloaded", fromStatus: "approved", toStatus: "delivered" });
   });
 }
@@ -1035,7 +1054,24 @@ export async function recordPaymentFileSftpDelivery(opts: {
        returning id
     `));
     if (!delivered.rows[0]) throw new PaymentError("payment file is not approved for delivery");
-    await db.execute(sql`update payment_runs set status = 'delivered', updated_at = now(), updated_by = ${opts.userId} where id = ${file.rows[0].payment_run_id} and org_id = ${opts.orgId} and status = 'generated'`);
+    // Same idempotency rule as the download path: zero rows is benign only
+    // when the run is ALREADY delivered; any other state refuses by name.
+    const runDelivered = (await db.execute<{ id: string }>(sql`
+      update payment_runs set status = 'delivered', updated_at = now(), updated_by = ${opts.userId}
+       where id = ${file.rows[0].payment_run_id} and org_id = ${opts.orgId} and status = 'generated'
+       returning id
+    `));
+    if (!runDelivered.rows[0]) {
+      const runState = (await db.execute<{ status: string }>(sql`
+        select status from payment_runs
+         where id = ${file.rows[0].payment_run_id} and org_id = ${opts.orgId}
+      `)).rows[0];
+      if (runState?.status !== "delivered") {
+        throw new PaymentError(
+          `payment run is ${runState?.status ?? "no longer present"} and cannot be marked delivered; reload the run before recording the delivery`,
+        );
+      }
+    }
     await event({ orgId: opts.orgId, runId: file.rows[0].payment_run_id, fileId: opts.fileId, actorId: opts.userId, eventType: "file_delivered_sftp", fromStatus: "approved", toStatus: "delivered", details: { targetRef: opts.targetRef } });
   });
 }
