@@ -54,6 +54,13 @@ interface TransactionDrawerProps {
   canRemoveAttachments?: boolean
   /** Persistence table for attachments and audit rows. Defaults to documents. */
   targetTable?: 'documents' | 'parties' | 'item_rate_versions'
+  /**
+   * Hide the Attachments and Audit trail tabs. Unsaved-create drawers set
+   * this: both panels read the persisted row the drawer has not written yet,
+   * so mounting them would only probe the API with an empty record id.
+   * Defaults to true.
+   */
+  showEvidenceTabs?: boolean
 }
 
 /**
@@ -84,6 +91,7 @@ export function TransactionDrawer({
   canEditAttachments = false,
   canRemoveAttachments,
   targetTable = 'documents',
+  showEvidenceTabs = true,
 }: TransactionDrawerProps) {
   const t = useTranslations('common')
   const searchParams = useSearchParams()
@@ -91,8 +99,12 @@ export function TransactionDrawer({
   const tabs = [
     { key: 'details', label: detailsLabel ?? t('auditTrail.tabs.details') },
     ...detailTabs.map((tab) => ({ key: tab.key, label: tab.label })),
-    { key: 'attachments', label: t('auditTrail.tabs.attachments') },
-    { key: 'audit', label: t('auditTrail.tabs.audit') },
+    ...(showEvidenceTabs
+      ? [
+          { key: 'attachments', label: t('auditTrail.tabs.attachments') },
+          { key: 'audit', label: t('auditTrail.tabs.audit') },
+        ]
+      : []),
   ]
   // Tab is client-local state (seeded once from the URL for deep-linking). Switching
   // tabs must NOT navigate: a router.replace re-runs the server page and remounts the
@@ -102,7 +114,12 @@ export function TransactionDrawer({
   const [localActiveTab, setLocalActiveTab] = useState(() =>
     ['attachments', 'audit', ...detailTabs.map((d) => d.key)].includes(requestedTab ?? '') ? requestedTab! : 'details',
   )
-  const activeTab = controlledActiveTab ?? localActiveTab
+  const requestedActiveTab = controlledActiveTab ?? localActiveTab
+  // A hidden evidence tab must never stay selected: without a persisted
+  // record there is nothing for those panels to read.
+  const activeTab = !showEvidenceTabs && (requestedActiveTab === 'attachments' || requestedActiveTab === 'audit')
+    ? 'details'
+    : requestedActiveTab
   const hasActions = actions != null || actionsMenuHeader != null
   const requestedReturn = searchParams.get('drawerReturn')
   const nestedReturn = requestedReturn?.startsWith('/') && !requestedReturn.startsWith('//')

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { BookOpen, ChevronDown, Plus, Receipt, Trash2, TrendingUp } from 'lucide-react'
@@ -155,6 +155,8 @@ export function ProjectDrawer({
   locale,
   initialTab = 'overview',
   applicationPermissions,
+  createMode = false,
+  closeHref,
 }: {
   payload: ProjectPayload
   parties: PartyOpt[]
@@ -164,8 +166,10 @@ export function ProjectDrawer({
   basePath?: string
   /** Resolved form layout (custom fields already merged in). */
   layout?: FormLayoutConfig
-  /** Cockpit data for the financial/time/charges/billing/transactions tabs. */
-  cockpit: ProjectCockpitData
+  /** Cockpit data for the financial/time/charges/billing/transactions tabs.
+   *  Null while creating: those tabs need a persisted project, so create mode
+   *  draws only the overview and author-created field tabs. */
+  cockpit: ProjectCockpitData | null
   /** Configurable project types (Setup → Project Types) for the selector. */
   projectTypes?: { id: string; name: string; billingMethod: string | null; billingProcedure: string }[]
   /** Server-resolved Projects → Project Scheduling gate. */
@@ -181,6 +185,15 @@ export function ProjectDrawer({
     canApprove: boolean
     canInvoice: boolean
   }
+  /**
+   * Unsaved-create: the drawer opens editable on a payload with no persisted
+   * row. Cancel navigates away with zero writes; Save persists through one
+   * idempotent POST. Only the overview and author-created field tabs draw —
+   * every cockpit tab needs a persisted project.
+   */
+  createMode?: boolean
+  /** List URL (filters preserved) that Cancel and the close affordance return to. */
+  closeHref?: string
 }) {
   const { currency, money } = useMoney()
   const t = useTranslations('projects')
@@ -218,7 +231,9 @@ export function ProjectDrawer({
   const [custom, setCustom] = useState<Record<string, unknown>>(
     pr.custom ?? {},
   )
-  const [isActive, setIsActive] = useState<boolean>(pr.is_active === true)
+  // Unsaved-create defaults the record to active: the drawer opens on nothing
+  // persisted, so deactivation lifecycle guards have nothing to evaluate yet.
+  const [isActive, setIsActive] = useState<boolean>(createMode ? true : pr.is_active === true)
   const [subsidiaryId, setSubsidiaryId] = useState<string>(pr.subsidiary_id ?? '')
   const [subsidiaryIncludeChildren, setSubsidiaryIncludeChildren] = useState<boolean>(
     pr.subsidiary_include_children !== false,
@@ -226,16 +241,24 @@ export function ProjectDrawer({
 
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [busy, setBusy] = useState(false)
+  const requestIdRef = useRef<string | null>(null)
 
   // source platform-style record: opens READ-ONLY; Edit switches to an explicit-save form.
-  const [mode, setMode] = useState<'view' | 'edit'>('view')
+  // Unsaved-create opens editable: there is no persisted record to read yet.
+  const [mode, setMode] = useState<'view' | 'edit'>(createMode ? 'edit' : 'view')
   const editable = mode === 'edit' && canManage
+  const returnHref = closeHref ?? basePath
 
   // Flyout chrome: subtabs + Actions-menu-driven create forms (repository conventions).
+  // Unsaved-create lands on the overview: every other built-in tab needs a
+  // persisted project (cockpit is null), so a ?projectTab deep link can never
+  // strand the drawer on a missing panel.
   const [tab, setTab] = useState<TabKey>(
-    initialTab === 'work_breakdown' || initialTab === 'schedule'
-      ? 'project_management'
-      : initialTab,
+    createMode
+      ? 'overview'
+      : initialTab === 'work_breakdown' || initialTab === 'schedule'
+        ? 'project_management'
+        : initialTab,
   )
   const [managementTab, setManagementTab] = useState<string>(
     initialTab === 'schedule' ? 'schedule' : 'work_breakdown',
@@ -305,7 +328,51 @@ export function ProjectDrawer({
     setSubsidiaryIncludeChildren(pr.subsidiary_include_children !== false)
   }
 
+  /**
+   * Unsaved-create Save: one idempotent POST. The key is minted once per
+   * drawer session, so a double-click or a retried request returns the same
+   * project instead of a duplicate. Cancel/close before this point wrote
+   * nothing — this is the first and only write.
+   */
+  async function saveNew() {
+    // Unreachable through the UI — Save stays disabled until the name is
+    // valid — but the server refuses nameless creates too, so fail closed
+    // here rather than POSTing a request known to 422.
+    if (!nameValid) {
+      setSaveState('error')
+      toast.error(t('drawer.saveFailedRetry'))
+      return
+    }
+    if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID()
+    setBusy(true)
+    setSaveState('saving')
+    const res = await fetch('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': requestIdRef.current },
+      body: JSON.stringify({ ...savePayload, isActive }),
+    })
+    if (!res.ok) {
+      setSaveState('error')
+      const data = await res.json().catch(() => ({}))
+      toast.error(typeof data.error === 'string' && data.error ? data.error : t('drawer.saveFailedRetry'))
+      setBusy(false)
+      return
+    }
+    const data = await res.json().catch(() => ({}))
+    setSaveState('saved')
+    setDirty(false)
+    setBusy(false)
+    const createdId = typeof data?.project?.id === 'string' ? data.project.id : null
+    const separator = returnHref.includes('?') ? '&' : '?'
+    router.replace((createdId ? `${returnHref}${separator}project=${createdId}` : returnHref) as never)
+    router.refresh()
+  }
+
   async function save() {
+    if (createMode) {
+      await saveNew()
+      return
+    }
     setBusy(true)
     setSaveState('saving')
     const res = await fetch(`/api/projects/${pr.id}`, {
@@ -333,6 +400,12 @@ export function ProjectDrawer({
   }
 
   function cancel() {
+    // Unsaved-create Cancel writes nothing: there is no persisted row to
+    // restore, so leave the URL (and the database) exactly as found.
+    if (createMode) {
+      router.push(returnHref as never)
+      return
+    }
     resetForm()
     setDirty(false)
     setSaveState('saved')
@@ -525,11 +598,14 @@ export function ProjectDrawer({
    * The tabs this cockpit actually draws: the customized order and visibility
    * from the form layout, minus anything whose feature is off. A layout choice
    * can surface a tab, never enable a gated capability — `schedulingEnabled`
-   * comes from the server-resolved Features state.
+   * comes from the server-resolved Features state. Unsaved-create draws only
+   * the overview and author-created field tabs: every cockpit tab (financials,
+   * billing, transactions, WBS, schedule) reads a persisted project.
    */
   const tabs = useMemo(() => {
     return resolveFormTabs(effectiveLayout)
       .filter((placement) => placement.visible)
+      .filter((placement) => !createMode || placement.key === 'overview' || isCustomTabKey(placement.key))
       .map((placement) => ({
         key: placement.key,
         groupIds: placement.groupIds ?? [],
@@ -552,7 +628,7 @@ export function ProjectDrawer({
       .filter((placement) =>
         placement.key !== 'project_management' || placement.subtabs.length > 0,
       )
-  }, [effectiveLayout, schedulingEnabled, t])
+  }, [effectiveLayout, schedulingEnabled, t, createMode])
 
   // A hidden or gated-off tab must never stay selected, during render (same
   // committed value, no extra render).
@@ -579,7 +655,8 @@ export function ProjectDrawer({
     <>
     <UrlDrawer
       open
-      closeHref={basePath}
+      closeHref={returnHref}
+      syncUrlOnClose
       size="2xl"
       title={
         <span className="flex items-center gap-2.5">
@@ -617,11 +694,11 @@ export function ProjectDrawer({
             <Button size="sm" variant="outline" disabled={busy} onClick={cancel}>
               {tCommon('actions.cancel')}
             </Button>
-            <Button size="sm" disabled={busy} onClick={save}>
+            <Button size="sm" disabled={busy || (createMode === true && !nameValid)} onClick={save}>
               {busy ? tCommon('actions.saving') : tCommon('actions.save')}
             </Button>
           </div>
-        ) : canManage || canViewGl || !!cockpit.recognition ? (
+        ) : canManage || canViewGl || !!cockpit?.recognition ? (
           <div className="flex items-center gap-1.5">
             {canManage ? (
               <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" onClick={() => { setTab('overview'); setMode('edit') }}>
@@ -647,7 +724,7 @@ export function ProjectDrawer({
             className="w-56 p-1.5"
           >
             <div className="space-y-0.5">
-              {canViewGl
+              {canViewGl && cockpit
                 ? menuItem(<BookOpen className="h-3.5 w-3.5" aria-hidden />, t('cockpit.viewGeneralLedger'), () => {
                     const params = new URLSearchParams({
                       period: 'custom',
@@ -658,14 +735,14 @@ export function ProjectDrawer({
                     router.push(`/reports/general-ledger?${params.toString()}`)
                   })
                 : null}
-              {cockpit.recognition
+              {cockpit?.recognition
                 ? menuItem(<TrendingUp className="h-3.5 w-3.5" aria-hidden />, t('recognition.title'), () => setRecognitionOpen(true))
                 : null}
               {canManage ? (
                 <>
                   <div className="my-1 border-t border-slate-200 dark:border-slate-800" />
                   {menuItem(<Plus className="h-3.5 w-3.5" aria-hidden />, t('charges.addTitle'), () => { setTab('transactions'); setChargeFormOpen(true) })}
-                  {cockpit.invoicing.billingProcedure !== 'application_for_payment'
+                  {cockpit && cockpit.invoicing.billingProcedure !== 'application_for_payment'
                     ? menuItem(<Receipt className="h-3.5 w-3.5" aria-hidden />, t('billing.requestBilling'), () => { setTab('billing'); setBillingFormOpen(true) })
                     : null}
                   <div className="my-1 border-t border-slate-200 dark:border-slate-800" />
@@ -711,27 +788,41 @@ export function ProjectDrawer({
             <InvoicingPreferenceFields value={invoicingPref} onChange={setInvoicingPref} disabled={ro} />
           </section>
 
-          {!isPlaceholderName ? (
+          {/* Unsaved-create mounts no persisted-record sections: both probe
+              their APIs on mount, and there is no project id to probe with. */}
+          {!isPlaceholderName && !createMode ? (
             <RateBookAssignmentSection scope="project" scopeId={String(pr.id)} editable={editable} />
           ) : null}
 
           {/* HR-20: the clock enforcement place, rehomed onto the project page.
               Off never mounts — the section probes its API on mount. */}
-          {!isPlaceholderName && cockpit.showFieldTime ? (
+          {!isPlaceholderName && !createMode && cockpit?.showFieldTime === true ? (
             <GeofenceSection projectId={String(pr.id)} initial={[]} canManage={editable} />
+          ) : null}
+
+          {createMode && editable ? (
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={isActive}
+                onChange={(e) => setIsActive(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600 dark:bg-slate-950"
+              />
+              <span className="text-sm">{tCommon('labels.active')}</span>
+            </label>
           ) : null}
 
         </div>
       ) : null}
 
-      {tab === 'financials' ? (
+      {tab === 'financials' && cockpit ? (
         <FinancialsTab data={cockpit.financials} />
       ) : null}
 
       {/* HR-20: crew-today rides the cost/time tab. */}
-      {tab === 'cost_time' ? <CostTimeTab data={cockpit.time} projectId={String(pr.id)} crewToday={cockpit.crewToday} /> : null}
+      {tab === 'cost_time' && cockpit ? <CostTimeTab data={cockpit.time} projectId={String(pr.id)} crewToday={cockpit.crewToday} /> : null}
 
-      {tab === 'billing' ? (
+      {tab === 'billing' && cockpit ? (
         <BillingSection
           projectId={pr.id}
           unbilled={cockpit.unbilled}
@@ -790,7 +881,7 @@ export function ProjectDrawer({
         </div>
       ) : null}
 
-      {tab === 'transactions' ? (
+      {tab === 'transactions' && cockpit ? (
         <TransactionsTab
           projectId={pr.id}
           transactions={cockpit.transactions}
@@ -832,7 +923,7 @@ export function ProjectDrawer({
       title={t('recognition.title')}
       description={name.trim() || pr.code || undefined}
     >
-      {cockpit.recognition ? (
+      {cockpit?.recognition ? (
         <RecognitionCard projectId={String(pr.id)} status={cockpit.recognition} canManage={canManage} />
       ) : null}
     </Drawer>

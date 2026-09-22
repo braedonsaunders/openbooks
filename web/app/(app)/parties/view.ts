@@ -23,7 +23,7 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
-import { buildListDrawerHref, isUuid, parseListParams, pickString } from '../../../lib/list-params'
+import { buildListDrawerHref, isUuid, mergeHref, parseListParams, pickString } from '../../../lib/list-params'
 import { loadFieldDefs } from '../../../lib/custom-fields'
 import { loadParty } from '../../api/parties/_lib'
 import { loadComplianceClasses, loadVendorComplianceClass } from '../../../lib/compliance'
@@ -153,6 +153,11 @@ export async function loadParties(
   const tc = await getTranslations('common')
 
   const partyId = typeof sp.party === 'string' ? sp.party : undefined
+  // Unsaved-create: ?partyNew=1 opens an editable drawer on no persisted
+  // row. The loader ships pickers plus an empty payload; opening writes
+  // nothing, Cancel writes nothing, and the drawer's explicit Save is the
+  // single idempotent POST. Gated on manage like the draft flow was.
+  const creating = pickString(sp.partyNew) === '1' && canManage
   const partyTransactionId = pickString(sp.partyTxn)
   const partyTransactionKind = pickString(sp.partyTxnKind)
   const requestedPartyTab = pickString(sp.partyTab)
@@ -236,7 +241,7 @@ export async function loadParties(
     partyId && partyId !== 'new' && isUuid(partyId)
       ? loadParty(partyId, orgId, authz.allowedSubsidiaryIds)
       : null,
-    partyId
+    partyId || creating
       ? Promise.all([
           db.execute<ElementOf<PartyDrawerProps['paymentTerms']>>(
             sql`select id, name from payment_terms where org_id = ${orgId} and is_active order by name`,
@@ -271,7 +276,7 @@ export async function loadParties(
     isFeatureEnabled(orgId, 'subcontractorCompliance'),
   ])
   const resolvedPartyForm =
-    openParty && pickers && role
+    (openParty || creating) && pickers && role
       ? await resolveFormLayout({
           orgId,
           userId: authz.user.id,
@@ -295,11 +300,50 @@ export async function loadParties(
         }
       : null
 
+  // The unsaved-create payload: no row exists, so the drawer edits blanks
+  // and posts them once. Active defaults true; roles start off (the drawer's
+  // role prop forces the list's own role on save); no placeholder name ever
+  // persists — the server refuses the draft sentinels outright.
+  const newPartyPayload = {
+    party: {
+      id: '',
+      display_name: '',
+      legal_name: null,
+      short_code: null,
+      kind: 'company',
+      email: null,
+      phone: null,
+      website: null,
+      subsidiary_id: null,
+      is_active: true,
+      updated_at: '',
+      custom: {},
+      invoicing_preference: null,
+    },
+    customer: null,
+    vendor: null,
+    employee: null,
+    addresses: [],
+    contacts: [],
+    bankAccounts: [],
+    transactionSummary: { count: 0, openCount: 0, lastDate: null, currencies: [] },
+    additionalSubsidiaryIds: [],
+  }
+  const closeHref = mergeHref('/parties', sp, {
+    party: undefined,
+    partyNew: undefined,
+    mode: undefined,
+    partyTab: undefined,
+    partyForm: undefined,
+    partyTxn: undefined,
+    partyTxnKind: undefined,
+    form: undefined,
+  })
   const drawer =
-    openParty && pickers
+    (openParty || creating) && pickers
       ? {
-          remountKey: String(openParty.party.id),
-          payload: openParty as unknown as PartyDrawerProps['payload'],
+          remountKey: creating ? 'new-party' : String(openParty!.party.id),
+          payload: (creating ? newPartyPayload : openParty) as unknown as PartyDrawerProps['payload'],
           paymentTerms: pickers[0].rows,
           departments: pickers[1].rows,
           trades: pickers[2].rows,
@@ -317,8 +361,10 @@ export async function loadParties(
           complianceEnabled,
           canManageCompliance: can(authz, 'compliance.manage'),
           compliance,
-          initialTab: partyTab,
-          initialMode: pickString(sp.mode) === 'edit' ? 'edit' : 'view',
+          initialTab: creating ? 'overview' : partyTab,
+          initialMode: creating || pickString(sp.mode) === 'edit' ? 'edit' : 'view',
+          createMode: creating,
+          closeHref,
           role,
           layout: resolvedPartyForm?.layout,
           forms: resolvedPartyForm?.available ?? [],

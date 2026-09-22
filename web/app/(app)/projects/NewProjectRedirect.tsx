@@ -1,40 +1,25 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
+import { useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { mergeHref } from '../../../lib/list-params'
 
 /**
- * Handles `?project=new` deep links: creates the draft project server-side
- * (instant-into-draft) and swaps the URL to the real id so the flyout opens
- * on a persisted record.
+ * Handles `?project=new` deep links with zero writes: swaps the URL to the
+ * unsaved-create drawer (`?projectNew=1`) so the flyout opens on an editable
+ * draft that is persisted only by its explicit Save.
  */
 export function NewProjectRedirect() {
-  const t = useTranslations('projects')
   const router = useRouter()
-  const started = useRef(false)
+  const searchParams = useSearchParams()
 
   useEffect(() => {
-    if (started.current) return
-    started.current = true
-    ;(async () => {
-      const res = await fetch('/api/projects/draft', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        toast.error(data.error ?? t('list.createDraftFailed'))
-        router.replace('/projects')
-        return
-      }
-      router.replace(`/projects?project=${data.id}`)
-      router.refresh()
-    })()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router])
+    const current = Object.fromEntries(searchParams.entries())
+    router.replace(mergeHref('/projects', current, {
+      project: undefined,
+      projectNew: '1',
+    }) as never)
+  }, [router, searchParams])
 
   return null
 }

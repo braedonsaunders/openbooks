@@ -8,7 +8,7 @@ import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@brae
 import { can, requirePermission } from '../../../../lib/authz'
 import { customerGroupTabs, hrmGroupTabs } from '../../../../components/module-home/group-tabs'
 import { isFeatureEnabled } from '../../../../lib/features'
-import { isUuid, pickString } from '../../../../lib/list-params'
+import { isUuid, mergeHref, pickString } from '../../../../lib/list-params'
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { loadComplianceClasses, loadVendorComplianceClass } from '../../../../lib/compliance'
 import { loadParty } from '../../../api/parties/_lib'
@@ -131,6 +131,9 @@ export async function loadEntityRole(
   const newLabel = t(`roles.${slug}.newLabel`)
 
   const partyId = typeof sp.party === 'string' ? sp.party : undefined
+  // Unsaved-create: ?partyNew=1 opens an editable drawer on no persisted
+  // row — zero writes on open, zero on Cancel, one idempotent POST on Save.
+  const creating = pickString(sp.partyNew) === '1' && canManage
   const partyTransactionId = pickString(sp.partyTxn)
   const partyTransactionKind = pickString(sp.partyTxnKind)
   const requestedPartyTab = pickString(sp.partyTab)
@@ -143,7 +146,7 @@ export async function loadEntityRole(
     : 'overview'
   const [openParty, pickers] = await Promise.all([
     partyId && partyId !== 'new' && isUuid(partyId) ? loadParty(partyId, orgId, authz.allowedSubsidiaryIds) : null,
-    partyId
+    partyId || creating
       ? Promise.all([
           db.execute<ElementOf<PartyDrawerProps['paymentTerms']>>(sql`select id, name from payment_terms where org_id = ${orgId} and is_active order by name`),
           db.execute<ElementOf<PartyDrawerProps['departments']>>(sql`select id, name from departments where org_id = ${orgId} and is_active order by name`),
@@ -173,7 +176,7 @@ export async function loadEntityRole(
         .rows[0]?.lifecycle_stage ?? null)
     : null
 
-  const resolvedPartyForm = openParty && pickers
+  const resolvedPartyForm = (openParty || creating) && pickers
     ? await resolveFormLayout({
         orgId,
         userId: authz.user.id,
@@ -205,10 +208,36 @@ export async function loadEntityRole(
       : null,
     showNewParty: segment !== 'lead' && segment !== 'prospect',
     showNewRedirect: partyId === 'new' && canManage,
-    drawer: openParty && pickers
+    drawer: (openParty || creating) && pickers
       ? {
-          remountKey: String(openParty.party.id),
-          payload: openParty as unknown as PartyDrawerProps['payload'],
+          remountKey: creating ? 'new-party' : String(openParty!.party.id),
+          payload: (creating
+            ? {
+                party: {
+                  id: '',
+                  display_name: '',
+                  legal_name: null,
+                  short_code: null,
+                  kind: 'company',
+                  email: null,
+                  phone: null,
+                  website: null,
+                  subsidiary_id: null,
+                  is_active: true,
+                  updated_at: '',
+                  custom: {},
+                  invoicing_preference: null,
+                },
+                customer: null,
+                vendor: null,
+                employee: null,
+                addresses: [],
+                contacts: [],
+                bankAccounts: [],
+                transactionSummary: { count: 0, openCount: 0, lastDate: null, currencies: [] },
+                additionalSubsidiaryIds: [],
+              }
+            : openParty) as unknown as PartyDrawerProps['payload'],
           canManage,
           complianceEnabled,
           canManageCompliance: can(authz, 'compliance.manage'),
@@ -257,8 +286,19 @@ export async function loadEntityRole(
           payrollEnabled,
           multiCurrency,
           role,
-          initialTab: partyTab,
-          initialMode: pickString(sp.mode) === 'edit' ? 'edit' : 'view',
+          initialTab: creating ? 'overview' : partyTab,
+          initialMode: creating || pickString(sp.mode) === 'edit' ? 'edit' : 'view',
+          createMode: creating,
+          closeHref: mergeHref(basePath, sp, {
+            party: undefined,
+            partyNew: undefined,
+            mode: undefined,
+            partyTab: undefined,
+            partyForm: undefined,
+            partyTxn: undefined,
+            partyTxnKind: undefined,
+            form: undefined,
+          }),
           basePath,
           paymentTerms: pickers[0].rows,
           departments: pickers[1].rows,
