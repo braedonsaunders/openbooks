@@ -97,7 +97,7 @@ test('both chart-of-accounts callers forward subsidiary scope and preserve balan
   // Whitespace-tolerant: the same call, formatted across lines in the loader.
   assert.match(
     page,
-    /accountsWithBalances\(\s*authz\.user\.orgId,\s*undefined,\s*authz\.allowedSubsidiaryIds,?\s*\)/,
+    /accountsWithBalances\(\s*authz\.user\.orgId,\s*asOf,\s*authz\.allowedSubsidiaryIds,?\s*\)/,
   )
   assert.match(assistant, /accountsWithBalances\(authz\.user\.orgId, a\.asOf, authz\.allowedSubsidiaryIds\)/)
   assert.match(assistant, /balance: r\.balance/)

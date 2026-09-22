@@ -23,3 +23,26 @@ export const PNL_TYPES = ["income", "income_other", "cogs", "expense", "expense_
  * The partition is revenue (income, income_other) vs costs (below).
  */
 export const PNL_COST_TYPES = ["cogs", "expense", "expense_other", "expense_deferred"];
+
+/** Balance-sheet asset types the CoA class and the statement engine share. */
+export const ASSET_TYPES = ["asset_bank", "asset_receivable", "asset_current_other", "asset_fixed", "asset_other"];
+export const LIABILITY_TYPES = [
+  "liability_payable",
+  "liability_card",
+  "liability_current_other",
+  "liability_long_term",
+];
+export const EQUITY_TYPES = ["equity"];
+
+/**
+ * Chart-of-accounts statement classes → the account types each class owns.
+ * The CoA hierarchy headers and a class-total GL drill must use this map, not
+ * a second handwritten list that can omit a type the balance roll-up includes.
+ */
+export const ACCOUNT_CLASS_TYPES: Record<string, readonly string[]> = {
+  asset: ASSET_TYPES,
+  liability: LIABILITY_TYPES,
+  equity: EQUITY_TYPES,
+  income: ["income", "income_other"],
+  expense: PNL_COST_TYPES,
+};

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { ChevronDown, ChevronRight, BookOpenText } from 'lucide-react'
 import {
@@ -14,6 +14,8 @@ import {
   cn,
 } from '@openbooks/ui'
 import { AccountRegisterLink } from '../../../components/account-register-link'
+import { ReportDrillLink } from '../reports/ReportDrillLink'
+import type { ReportDrillTarget } from '../../../lib/report-drill'
 
 export interface HierarchyAccountRow {
   id: string
@@ -25,6 +27,7 @@ export interface HierarchyAccountRow {
   isActive: boolean
   balance: string
   balanceNegative: boolean
+  drill: ReportDrillTarget | null
   detailHref: string
 }
 
@@ -34,7 +37,28 @@ export interface HierarchyAccountGroup {
   count: number
   balance: string
   balanceNegative: boolean
+  drill: ReportDrillTarget
   rows: HierarchyAccountRow[]
+}
+
+function BalanceDrill({
+  target,
+  className,
+  children,
+}: {
+  target: ReportDrillTarget | null
+  className: string
+  children: ReactNode
+}) {
+  if (!target) return <span className={className}>{children}</span>
+  return (
+    <ReportDrillLink
+      target={target}
+      className={`${className} hover:text-teal-700 hover:underline dark:hover:text-teal-300`}
+    >
+      {children}
+    </ReportDrillLink>
+  )
 }
 
 export function AccountsHierarchyTable({
@@ -152,11 +176,16 @@ function GroupRows({
             <span className="text-xs tabular-nums text-slate-400 dark:text-slate-500">{group.count}</span>
           </div>
         </TableCell>
-        <TableCell className={cn(
-          'py-2.5 text-right text-sm font-semibold tabular-nums text-slate-700 dark:text-slate-200',
-          group.balanceNegative && 'text-red-600 dark:text-red-400',
-        )}>
-          {group.balance}
+        <TableCell className="py-2.5 text-right">
+          <BalanceDrill
+            target={group.drill}
+            className={cn(
+              'text-sm font-semibold tabular-nums text-slate-700 dark:text-slate-200',
+              group.balanceNegative && 'text-red-600 dark:text-red-400',
+            )}
+          >
+            {group.balance}
+          </BalanceDrill>
         </TableCell>
         <TableCell className="py-2.5" />
       </TableRow>
@@ -204,12 +233,17 @@ function GroupRows({
             <TableCell className="truncate py-2.5 text-xs text-slate-500 dark:text-slate-400">
               {row.typeLabel}
             </TableCell>
-            <TableCell className={cn(
-              'py-2.5 text-right font-medium tabular-nums',
-              row.balanceNegative && 'text-red-600 dark:text-red-400',
-              row.isSummary && 'font-semibold',
-            )}>
-              {row.balance}
+            <TableCell className="py-2.5 text-right">
+              <BalanceDrill
+                target={row.drill}
+                className={cn(
+                  'font-medium tabular-nums',
+                  row.balanceNegative && 'text-red-600 dark:text-red-400',
+                  row.isSummary && 'font-semibold',
+                )}
+              >
+                {row.balance}
+              </BalanceDrill>
             </TableCell>
             <TableCell className="py-2.5 text-right">
               <AccountRegisterLink
