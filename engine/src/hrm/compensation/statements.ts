@@ -1,14 +1,18 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { renderPdfDocument } from "@openbooks/pdf";
+import { actorHasPermission } from "../../organization/actor-permissions.ts";
+import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
 import { db, withOrgTransaction } from "../../platform/db.ts";
 import { businessToday } from "../../platform/business-date.ts";
 import { resolveWage, laborCostingSettings } from "../../projects/labor-costing.ts";
 import { mul } from "../../money/money.ts";
 import {
+  HrmAuthorizationError,
   loadOwnEmploymentIds,
   requireHrmCompensationManage,
-  requireHrmCompensationRead,
+  requireHrmCompensationManageOnEmployment,
+  requireHrmCompensationReadOnEmployment,
 } from "../authorization.ts";
 import { CompensationError } from "./errors.ts";
 import { resolveBandForScope } from "./bands.ts";
@@ -23,8 +27,14 @@ import { requireActorId, requireId, requireOrgId } from "../recruiting/input.ts"
  * employer-paid benefits from hrm_benefit_enrollments amounts, and the
  * latest decided cycle line — and freezes them into payload jsonb.
  * Regeneration is a new row; a delivered statement is never overwritten.
- * The person reads their own statements through hrm.self.read; HR reads
- * any through hrm.compensation.read.
+ *
+ * Authority per call: HR reads through hrm.compensation.read fenced to
+ * the actor's employer-subsidiary lens (an out-of-scope employment
+ * refuses exactly like an unknown one, never salary content); HR writes
+ * through hrm.compensation.manage with the same lens. The person reads
+ * and generates their own statements through hrm.self.read plus identity
+ * (loadOwnEmploymentIds resolves identity only — never a grant).
+ * No caller-supplied scope at any boundary.
  */
 
 export interface StatementDTO {
@@ -60,6 +70,66 @@ function toStatementDTO(row: StatementRow): StatementDTO {
     fileId: row.file_id,
     generatedAt: String(row.generated_at),
   };
+}
+
+/** Unknown, cross-org, and out-of-scope employments share one message. */
+function employmentNotVisible(): CompensationError {
+  return new CompensationError(
+    "NOT_FOUND",
+    "employment is not visible in this organization and legal-entity scope.",
+  );
+}
+
+/** Missing, cross-org, and out-of-scope statements share one message. */
+function statementNotVisible(): CompensationError {
+  return new CompensationError(
+    "NOT_FOUND",
+    "statement is not visible in this organization and legal-entity scope.",
+  );
+}
+
+/**
+ * Own-employment self-service: the hrm.self.read grant plus identity.
+ * Explicit booleans, never a caught permission refusal treated as a
+ * fallback — a database failure must propagate, never read as a grant.
+ */
+async function isOwnEmployment(orgId: string, actorId: string, employmentId: string): Promise<boolean> {
+  if (!(await actorHasPermission(db, orgId, actorId, "hrm.self.read"))) return false;
+  const own = await loadOwnEmploymentIds(db, orgId, actorId);
+  return own.includes(employmentId);
+}
+
+/** HR write leg over one employment: the grant was verified by the caller, so an HrmAuthorizationError here is the subject/scope denial and reports uniform not-found. Non-authorization failures propagate. */
+async function scopedCompensationManage(orgId: string, actorId: string, employmentId: string): Promise<void> {
+  try {
+    await requireHrmCompensationManageOnEmployment(db, orgId, actorId, employmentId);
+  } catch (e) {
+    if (e instanceof HrmAuthorizationError) throw employmentNotVisible();
+    throw e;
+  }
+}
+
+/**
+ * Statement rows for one employment fenced to the actor's lens
+ * (null = unrestricted). Out-of-scope rows contribute nothing — never
+ * an existence oracle, never a refusal.
+ */
+async function fetchStatements(
+  orgId: string,
+  employmentId: string,
+  allowed: Set<string> | null,
+): Promise<StatementRow[]> {
+  return (await db.execute<StatementRow>(sql`
+    select s.id, s.employment_id, s.cycle_id, s.period_from::text as period_from,
+           s.period_to::text as period_to, s.payload, s.file_id, s.generated_at::text as generated_at
+      from hrm_comp_statements s
+      left join worker_employments e on e.org_id = s.org_id and e.id = s.employment_id
+     where s.org_id = ${orgId} and s.employment_id = ${employmentId}
+       and (${allowed === null}::boolean
+            or e.employer_subsidiary_id in (
+              select jsonb_array_elements_text(${JSON.stringify([...(allowed ?? [])])}::jsonb)::uuid
+            ))
+     order by s.generated_at desc`)).rows;
 }
 
 async function buildPayload(
@@ -182,7 +252,7 @@ async function buildPayload(
   };
 }
 
-/** Generate (freeze) a statement. HR may generate for any employment; the person generates their own. */
+/** Generate (freeze) a statement. HR writes any in-lens employment; the person generates their own. */
 export async function generateStatement(query: {
   orgId: string;
   actorId: string;
@@ -195,27 +265,34 @@ export async function generateStatement(query: {
   const actorId = requireActorId(query.actorId);
   const employmentId = requireId(query.employmentId, "employmentId");
   return withOrgTransaction(orgId, async () => {
+    // Subject first: unknown and cross-org ids refuse before any grant is
+    // consulted, so the refusal can never confirm which half failed.
     const employment = (await db.execute<{ worker_party_id: string }>(sql`
       select worker_party_id from worker_employments where org_id = ${orgId} and id = ${employmentId}`)).rows[0];
     if (!employment) {
-      throw new CompensationError("NOT_FOUND", "employment is not visible in this organization");
+      throw employmentNotVisible();
     }
-    // HR's path first; otherwise the person's own employment only.
-    let hr = false;
-    try {
-      await requireHrmCompensationManage(db, orgId, actorId);
-      hr = true;
-    } catch {
-      await requireHrmCompensationRead(db, orgId, actorId);
-      const own = await loadOwnEmploymentIds(db, orgId, actorId);
-      if (!own.includes(employmentId)) {
-        throw new CompensationError(
-          "REFUSED",
-          "statements generate for your own employment — ask HR to generate anyone else's",
-        );
+    // HR's manage path (grant plus employer-subsidiary scope), with a
+    // fallback to the person's own employment through hrm.self.read so a
+    // restricted manage grant never removes existing self-service;
+    // otherwise uniform not-found — the same refusal as a missing id, so
+    // missing, foreign, and hidden employments are indistinguishable.
+    // The gate runs before the payload build and the insert, so a
+    // refused generate writes no statement row.
+    if (await actorHasPermission(db, orgId, actorId, "hrm.compensation.manage")) {
+      try {
+        await scopedCompensationManage(orgId, actorId, employmentId);
+      } catch (e) {
+        if (!(e instanceof CompensationError)) throw e;
+        if (await isOwnEmployment(orgId, actorId, employmentId)) {
+          // Own employment outside a restricted manage lens: self-service.
+        } else {
+          throw e;
+        }
       }
+    } else if (!(await isOwnEmployment(orgId, actorId, employmentId))) {
+      throw employmentNotVisible();
     }
-    void hr;
     const today = await businessToday(orgId);
     const payload = await buildPayload(orgId, employmentId, employment.worker_party_id, query.cycleId ?? null, today);
     const row = (await db.execute<StatementRow>(sql`
@@ -231,37 +308,14 @@ export async function generateStatement(query: {
   });
 }
 
-/** Render a stored statement to PDF through packages/pdf (pure renderer, no Chromium). */
-export async function renderStatementPdf(query: {
-  orgId: string;
-  actorId: string;
-  statementId: string;
-  orgName: string;
-}): Promise<Buffer> {
-  const orgId = requireOrgId(query.orgId);
-  const actorId = requireActorId(query.actorId);
-  const statementId = requireId(query.statementId, "statementId");
-  const row = (await db.execute<StatementRow>(sql`
-    select s.id, s.employment_id, s.cycle_id, s.period_from::text as period_from,
-           s.period_to::text as period_to, s.payload, s.file_id, s.generated_at::text as generated_at
-      from hrm_comp_statements s
-     where s.org_id = ${orgId} and s.id = ${statementId}`)).rows[0];
-  if (!row) throw new CompensationError("NOT_FOUND", "statement is not visible in this organization");
-  try {
-    await requireHrmCompensationRead(db, orgId, actorId);
-  } catch {
-    const own = await loadOwnEmploymentIds(db, orgId, actorId);
-    if (!own.includes(row.employment_id)) {
-      throw new CompensationError("REFUSED", "statements read for your own employment — HR reads the rest");
-    }
-  }
+function renderRowToPdf(row: StatementRow, orgName: string): Buffer {
   const payload = row.payload as Record<string, unknown>;
   const rate = payload.currentRate as { rate?: string; currency?: string } | null;
   const placement = payload.bandPlacement as { placement?: string; compaRatio?: string } | null;
   const benefits = (payload.employerPaidBenefits as Array<{ plan?: string; employer_amount?: string | null; currency?: string }>) ?? [];
   return renderPdfDocument({
     title: "Total rewards statement",
-    branding: { orgName: query.orgName },
+    branding: { orgName },
     dateRangeLabel: `${row.period_from} – ${row.period_to}`,
     generatedAt: new Date(),
     layout: { paperSize: "a4", orientation: "portrait", marginMm: 15, density: "standard" },
@@ -280,6 +334,47 @@ export async function renderStatementPdf(query: {
   });
 }
 
+/** Render a stored statement to PDF through packages/pdf (pure renderer, no Chromium). */
+export async function renderStatementPdf(query: {
+  orgId: string;
+  actorId: string;
+  statementId: string;
+  orgName: string;
+}): Promise<Buffer> {
+  const orgId = requireOrgId(query.orgId);
+  const actorId = requireActorId(query.actorId);
+  const statementId = requireId(query.statementId, "statementId");
+  const row = (await db.execute<StatementRow>(sql`
+    select s.id, s.employment_id, s.cycle_id, s.period_from::text as period_from,
+           s.period_to::text as period_to, s.payload, s.file_id, s.generated_at::text as generated_at
+      from hrm_comp_statements s
+     where s.org_id = ${orgId} and s.id = ${statementId}`)).rows[0];
+  if (!row) throw statementNotVisible();
+  if (await actorHasPermission(db, orgId, actorId, "hrm.compensation.read")) {
+    try {
+      await requireHrmCompensationReadOnEmployment(db, orgId, actorId, row.employment_id);
+      return renderRowToPdf(row, query.orgName);
+    } catch (e) {
+      if (!(e instanceof HrmAuthorizationError)) throw e;
+      // A restricted grant never widens below; only the actor's own
+      // employment through hrm.self.read can still proceed. The denial
+      // names the statement exactly like a missing row, never the
+      // employment or its pay.
+      if (await isOwnEmployment(orgId, actorId, row.employment_id)) {
+        return renderRowToPdf(row, query.orgName);
+      }
+      throw statementNotVisible();
+    }
+  }
+  if (await isOwnEmployment(orgId, actorId, row.employment_id)) {
+    return renderRowToPdf(row, query.orgName);
+  }
+  // No in-scope HR grant and not the actor's own: uniform not-found, the
+  // same code and message as a missing statement id, so missing, foreign,
+  // and hidden statements are indistinguishable.
+  throw statementNotVisible();
+}
+
 /** Store rendered PDF bytes in the File Cabinet (private comp-statements folder) and link the statement. */
 export async function attachStatementPdf(query: {
   orgId: string;
@@ -292,7 +387,21 @@ export async function attachStatementPdf(query: {
   const actorId = requireActorId(query.actorId);
   const statementId = requireId(query.statementId, "statementId");
   return withOrgTransaction(orgId, async () => {
+    // The manage grant first (one uniform refusal for every statement id
+    // when it is missing), then the source row (uniform not-found), then
+    // the employer-subsidiary scope — all before the folder, file,
+    // version, blob, and statement writes, so a refused attach leaves
+    // zero rows and missing, foreign, and hidden ids stay identical.
     await requireHrmCompensationManage(db, orgId, actorId);
+    const source = (await db.execute<{ employment_id: string }>(sql`
+      select employment_id from hrm_comp_statements where org_id = ${orgId} and id = ${statementId}`)).rows[0];
+    if (!source) throw statementNotVisible();
+    try {
+      await requireHrmCompensationManageOnEmployment(db, orgId, actorId, source.employment_id);
+    } catch (e) {
+      if (e instanceof HrmAuthorizationError) throw statementNotVisible();
+      throw e;
+    }
     const existing = (await db.execute<{ id: string }>(sql`
       select id from folders where org_id = ${orgId} and system_kind = 'hrm_comp_statements' limit 1`)).rows[0];
     let folderId = existing?.id;
@@ -330,7 +439,10 @@ export async function attachStatementPdf(query: {
   });
 }
 
-/** List statements: HR sees the employment's; the person sees their own. */
+/**
+ * List statements: HR sees an in-lens employment's rows (out-of-scope
+ * rows fence to none); the person sees their own through hrm.self.read.
+ */
 export async function listStatements(query: {
   orgId: string;
   actorId: string;
@@ -339,19 +451,21 @@ export async function listStatements(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const employmentId = requireId(query.employmentId, "employmentId");
-  try {
-    await requireHrmCompensationRead(db, orgId, actorId);
-  } catch {
-    const own = await loadOwnEmploymentIds(db, orgId, actorId);
-    if (!own.includes(employmentId)) {
-      throw new CompensationError("REFUSED", "statements read for your own employment — HR reads the rest");
+  if (await actorHasPermission(db, orgId, actorId, "hrm.compensation.read")) {
+    const allowed = await actorAllowedSubsidiaryIds(db, orgId, actorId);
+    const rows = await fetchStatements(orgId, employmentId, allowed);
+    if (rows.length > 0) return rows.map(toStatementDTO);
+    // Empty through the lens falls through to self-service: the
+    // employment may be the actor's own outside a restricted HR lens. A
+    // restricted grant never widens here — the self leg demands
+    // hrm.self.read plus identity.
+    if (await isOwnEmployment(orgId, actorId, employmentId)) {
+      return (await fetchStatements(orgId, employmentId, null)).map(toStatementDTO);
     }
+    return rows.map(toStatementDTO);
   }
-  const rows = (await db.execute<StatementRow>(sql`
-    select id, employment_id, cycle_id, period_from::text as period_from, period_to::text as period_to,
-           payload, file_id, generated_at::text as generated_at
-      from hrm_comp_statements
-     where org_id = ${orgId} and employment_id = ${employmentId}
-     order by generated_at desc`)).rows;
-  return rows.map(toStatementDTO);
+  if (await isOwnEmployment(orgId, actorId, employmentId)) {
+    return (await fetchStatements(orgId, employmentId, null)).map(toStatementDTO);
+  }
+  throw new CompensationError("REFUSED", "statements read for your own employment — HR reads the rest");
 }
