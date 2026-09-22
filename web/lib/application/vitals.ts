@@ -8,6 +8,7 @@ import { agingByParty } from "../reports";
 import { listApprovalWorklist } from "./approvals";
 import { listCloseRuns } from "./close";
 import type { ApplicationContext } from "./context";
+import { ApplicationError } from "./errors";
 
 /**
  * One snapshot, one set of numbers. Every figure here comes from the SAME
@@ -81,22 +82,32 @@ async function approvalsSection(context: ApplicationContext) {
 
 async function closeSection(context: ApplicationContext) {
   if (!can(context.authz, "close.run")) return unavailable("close.run");
-  const runs = await listCloseRuns(context, { limit: 5 });
-  const latest = runs[0];
-  return {
-    available: true as const,
-    recentRuns: runs.length,
-    latest: latest
-      ? {
-        runId: latest.id,
-        period: latest.periodName,
-        book: latest.bookCode,
-        status: latest.status,
-        currentStage: latest.currentStage,
-        targetCloseDate: latest.targetCloseDate,
-      }
-      : null,
-  };
+  try {
+    const runs = await listCloseRuns(context, { limit: 5 });
+    const latest = runs[0];
+    return {
+      available: true as const,
+      recentRuns: runs.length,
+      latest: latest
+        ? {
+          runId: latest.id,
+          period: latest.periodName,
+          book: latest.bookCode,
+          status: latest.status,
+          currentStage: latest.currentStage,
+          targetCloseDate: latest.targetCloseDate,
+        }
+        : null,
+    };
+  } catch (error) {
+    // Close diagnostics are organization-wide: a subsidiary-scoped caller is
+    // refused by name, never reported as having no runs. Other failures
+    // rethrow — an unexpected close failure must not masquerade as empty.
+    if (error instanceof ApplicationError && error.code === "forbidden") {
+      return { available: false as const, reason: error.message };
+    }
+    throw error;
+  }
 }
 
 export async function orgVitals(context: ApplicationContext) {

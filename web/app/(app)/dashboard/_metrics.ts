@@ -10,6 +10,7 @@ import { readableContinuousCloseAgents } from '@/lib/continuous-close'
 import { bankingHome } from '@/lib/module-home/banking'
 import { expensesDashboard } from '@/lib/expenses-dashboard'
 import { listCloseRuns } from '@/lib/application/close'
+import { ApplicationError } from '@/lib/application/errors'
 import { applicationContextFromSession } from '@/lib/application/context'
 import { openItems } from '@/lib/cash/open-items'
 import { profitAndLoss } from '@/lib/reports/statements'
@@ -149,6 +150,13 @@ export type DashboardMetrics = {
     stage: string | null
     targetCloseDate: string | null
   }>
+  /**
+   * Named refusal when the caller holds close.run but is subsidiary-scoped:
+   * close diagnostics are organization-wide, so the reader throws and this
+   * carries its message. Null when the runs above are authoritative
+   * (including the honest empty list) or the widget was never queried.
+   */
+  closeRunsUnavailable: string | null
   /** Business day the as-of readers (cash, open AR/AP) were cut — the tiles
    * label it so a figure that excludes future-dated documents says so. */
   asOfDate: string
@@ -243,8 +251,11 @@ export async function loadExpenseSummary(authz: Authz): Promise<{ pendingExpense
  * Period-close readiness for the dashboard widget. Returns null for a caller
  * without `close.run` BEFORE any query runs. Reads `listCloseRuns`, the same
  * reader as the /close workspace (and orgVitals), so the widget and the
- * workspace tie by construction. Subsidiary-scoped callers read [] from the
- * reader itself — the widget reports that honestly as empty.
+ * workspace tie by construction. A subsidiary-scoped caller holding
+ * `close.run` is refused by name — the reader throws ApplicationError 403
+ * (close diagnostics are organization-wide) and this rethrows; the caller
+ * (loadDashboardMetrics) maps that declared outcome into
+ * closeRunsUnavailable, never into an empty list that reads as "no runs".
  */
 export async function loadCloseReadiness(authz: Authz): Promise<DashboardMetrics['closeRuns'] | null> {
   if (!can(authz, 'close.run')) return null
@@ -335,7 +346,7 @@ export async function loadDashboardMetrics(
   const wantArStats = need('expectedReceipts30d', 'receivablesDso')
   const wantApStats = need('expectedPayments30d', 'payablesDpo')
   const wantRunway = need('runwayWeeks', 'runwayStatus', 'projectedCash', 'lowestCash', 'lowestCashWeek')
-  const [totals, banks, baseCurrency, arItems, apItems, recon, expenses, closeRuns, arStats, apStats, pl, runway, recentEntries, draftDocuments, unifiedApprovals, agentFindings] = await Promise.all([
+  const [totals, banks, baseCurrency, arItems, apItems, recon, expenses, closeReadiness, arStats, apStats, pl, runway, recentEntries, draftDocuments, unifiedApprovals, agentFindings] = await Promise.all([
     // Posted-ledger line count and integrity sum come from the maintained
     // gl_month_activity aggregate — counting/summing the raw lines scanned the
     // whole ledger on every dashboard render.
@@ -369,8 +380,20 @@ export async function loadDashboardMetrics(
     need('unreconciledItems') ? loadReconSummary(authz) : Promise.resolve(null),
     // Same gating shape for expenses.read.
     need('pendingExpenses') ? loadExpenseSummary(authz) : Promise.resolve(null),
-    // Same gating shape for close.run.
-    need('closeRuns') ? loadCloseReadiness(authz) : Promise.resolve(null),
+    // Same gating shape for close.run, except the subsidiary-scope refusal is
+    // a declared outcome: map the reader's forbidden into
+    // closeRunsUnavailable (with an empty closeRuns), and let anything else
+    // throw — the refusal must never read as "no runs".
+    need('closeRuns', 'closeRunsUnavailable')
+      ? loadCloseReadiness(authz)
+        .then((runs) => ({ runs, unavailable: null as string | null }))
+        .catch((e: unknown) => {
+          if (e instanceof ApplicationError && e.code === 'forbidden') {
+            return { runs: [] as DashboardMetrics['closeRuns'], unavailable: e.message as string }
+          }
+          throw e
+        })
+      : Promise.resolve({ runs: null as DashboardMetrics['closeRuns'] | null, unavailable: null as string | null }),
     // Settlement-behaviour averages behind the forecast and the DSO/DPO
     // hints — the same paymentStats reader the cockpits feed into
     // scheduleForecast, so the tile prediction and the cockpit worklist
@@ -597,7 +620,8 @@ export async function loadDashboardMetrics(
     lowestCashWeek: runway?.lowestWeek ?? null,
     unreconciledItems: recon?.unreconciledItems ?? 0,
     pendingExpenses: expenses?.pendingExpenses ?? 0,
-    closeRuns: closeRuns ?? [],
+    closeRuns: closeReadiness.runs ?? [],
+    closeRunsUnavailable: closeReadiness.unavailable,
     asOfDate: today,
     recentEntries: recentEntries.rows.map((r) => ({
       id: r.id,
@@ -647,7 +671,7 @@ const WIDGET_METRIC_FIELDS: Record<string, readonly (keyof DashboardMetrics)[]> 
   'kpi-cash-runway': ['baseCurrency', 'runwayWeeks', 'runwayStatus', 'projectedCash', 'lowestCash', 'lowestCashWeek', 'asOfDate'],
   'kpi-items-to-reconcile': ['unreconciledItems'],
   'kpi-expenses-awaiting-approval': ['pendingExpenses'],
-  'list-close-readiness': ['closeRuns'],
+  'list-close-readiness': ['closeRuns', 'closeRunsUnavailable'],
   'list-recent-entries': ['recentEntries'],
   'list-pending-approvals': ['pendingApprovalList'],
   'personal-in-progress': ['draftDocuments'],
@@ -705,6 +729,7 @@ const EMPTY_METRICS: DashboardMetrics = {
   unreconciledItems: 0,
   pendingExpenses: 0,
   closeRuns: [],
+  closeRunsUnavailable: null,
   asOfDate: '',
   recentEntries: [],
   pendingApprovalList: [],

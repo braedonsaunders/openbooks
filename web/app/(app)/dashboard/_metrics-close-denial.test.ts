@@ -45,3 +45,19 @@ function deniedAuthz(): Authz {
 test("loadCloseReadiness returns null before any query for a caller without close.run", async () => {
   assert.equal(await loadCloseReadiness(deniedAuthz()), null);
 });
+
+test("loadCloseReadiness refuses a subsidiary-scoped caller by name instead of an empty list", async () => {
+  const scoped: Authz = {
+    ...deniedAuthz(),
+    permissions: new Set(["dashboard.read", "close.run"]),
+    allowedSubsidiaryIds: new Set(["sub-1"]),
+  };
+  await assert.rejects(
+    loadCloseReadiness(scoped),
+    (error: unknown) => {
+      assert.equal((error as { status?: number }).status, 403);
+      assert.match((error as Error).message, /unrestricted subsidiary visibility/);
+      return true;
+    },
+  );
+});
