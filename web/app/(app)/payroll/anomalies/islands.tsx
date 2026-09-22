@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button, UrlDrawer } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { useBusinessToday } from '../../../../components/business-date-provider'
 import type { AnomalyChecksData } from '../../../../lib/hrm/ai-rails'
 
 /**
@@ -28,13 +29,16 @@ export function AnomalyScanButton({
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
+  // Both scan bounds default to the org's business day from the server — a
+  // local `from` paired with a UTC `to` could invert the range in the
+  // evening for the Americas.
+  const today = useBusinessToday()
   const scan = async (): Promise<void> => {
     setBusy(true)
     setStatus(null)
     try {
-      const now = new Date()
-      const from = currentParams.from ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-      const to = currentParams.to ?? now.toISOString().slice(0, 10)
+      const from = currentParams.from ?? `${today.slice(0, 7)}-01`
+      const to = currentParams.to ?? today
       const res = await fetch('/api/payroll/anomalies', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },

@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, Drawer, Input, Label, SearchSelect, Select, Textarea } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../lib/api-error'
+import { useBusinessToday } from '../../../components/business-date-provider'
 
 /**
  * Native employment change-request authoring. Opens from the Employment tab
@@ -56,10 +57,6 @@ const HRM_ACTIONS = [
 const HIRE_STATUSES = ['offered', 'active', 'on_leave', 'suspended'] as const
 const ALL_STATUSES = ['offered', 'active', 'on_leave', 'suspended', 'terminated'] as const
 
-function todayCivil(): string {
-  return new Date().toISOString().slice(0, 10)
-}
-
 function asText(value: unknown): string {
   return typeof value === 'string' ? value : ''
 }
@@ -81,6 +78,9 @@ export function ChangeRequestDrawer({
   const t = useTranslations('hrm')
   const tCommon = useTranslations('common')
   const router = useRouter()
+  // New dated requests default to the org's business day from the server,
+  // never the browser's UTC day (tomorrow after 5pm Pacific).
+  const today = useBusinessToday()
   const editing = initialRequest !== null
   const initialPayload = (initialRequest?.payload ?? {}) as Record<string, unknown>
 
@@ -93,9 +93,9 @@ export function ChangeRequestDrawer({
       : 'hire',
   )
   const [status, setStatus] = useState(asText(initialPayload.status) || 'active')
-  const [effectiveFrom, setEffectiveFrom] = useState(asText(initialPayload.effectiveFrom) || todayCivil())
+  const [effectiveFrom, setEffectiveFrom] = useState(asText(initialPayload.effectiveFrom) || today)
   const [effectiveTo, setEffectiveTo] = useState(asText(initialPayload.effectiveTo))
-  const [effectiveDate, setEffectiveDate] = useState(asText(initialPayload.effectiveDate) || todayCivil())
+  const [effectiveDate, setEffectiveDate] = useState(asText(initialPayload.effectiveDate) || today)
   const [assignmentKey, setAssignmentKey] = useState(asText(initialPayload.assignmentKey))
   const [jobTitle, setJobTitle] = useState(asText(initialPayload.jobTitle))
   const [departmentId, setDepartmentId] = useState(asText(initialPayload.departmentId))

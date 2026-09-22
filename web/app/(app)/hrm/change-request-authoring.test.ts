@@ -99,12 +99,11 @@ test("create posts the exact collection body shape, edit patches the payload sha
 test("civil dates travel verbatim — no Date coercion touches a payload date", () => {
   const dateInputs = drawer.match(/type="date"/g) ?? [];
   assert.ok(dateInputs.length >= 3, `drawer edits dates through native date controls (found ${dateInputs.length})`);
-  const dateConstructions = drawer.match(/new Date\(/g) ?? [];
   assert.ok(
-    dateConstructions.length <= 1,
-    "at most one Date construction exists in the drawer (the today default)",
+    !/new Date\(/.test(drawer),
+    "no Date construction remains in the drawer: the today default is the org business day, not the browser UTC day",
   );
-  assert.match(drawer, /toISOString\(\)\.slice\(0, 10\)/, "the only default date is today's civil date");
+  assert.match(drawer, /useBusinessToday/, "the today default is the server business day");
   assert.ok(!/Date\.parse/.test(drawer), "no Date.parse touches a payload date");
   assert.ok(!/Number\(fte/.test(drawer), "FTE renders and posts as the exact stored text, never through Number");
   assert.ok(!/parseFloat/.test(drawer), "no parseFloat touches FTE");
