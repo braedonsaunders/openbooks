@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { createHmac, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { sealJson } from "../platform/secrets.ts";
+import { sealJson, sealSecret } from "../platform/secrets.ts";
 import { handleProviderWebhook } from "./acceptance.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
@@ -75,9 +75,9 @@ test("a refund arriving before its success parks, settles, and notes exactly onc
     const intentId = `pi_clawback_${randomUUID().slice(0, 8)}`;
     await db.execute(sql`
       insert into payment_links
-        (id, org_id, token, document_id, party_id, subsidiary_id, provider,
+        (id, org_id, token_hash, token_sealed, document_id, party_id, subsidiary_id, provider,
          bank_account_id, amount, surcharge_amount, currency, created_by, updated_by)
-      values (${linkId}, ${org.orgId}, ${linkToken}, ${invoiceId}, ${org.customerId},
+      values (${linkId}, ${org.orgId}, ${createHash("sha256").update(linkToken, "utf8").digest("hex")}, ${sealSecret(linkToken)}, ${invoiceId}, ${org.customerId},
               ${org.subsidiaryId}, 'stripe', ${org.accounts.bank}, '100', '0', 'CAD',
               ${userId}, ${userId})`);
     await db.execute(sql`
@@ -204,9 +204,9 @@ test("a post-consumption refund redelivery never re-arms its marker", { skip: !D
     const intentId = `pi_rearm_${randomUUID().slice(0, 8)}`;
     await db.execute(sql`
       insert into payment_links
-        (id, org_id, token, document_id, party_id, subsidiary_id, provider,
+        (id, org_id, token_hash, token_sealed, document_id, party_id, subsidiary_id, provider,
          bank_account_id, amount, surcharge_amount, currency, created_by, updated_by)
-      values (${linkId}, ${org.orgId}, ${linkToken}, ${invoiceId}, ${org.customerId},
+      values (${linkId}, ${org.orgId}, ${createHash("sha256").update(linkToken, "utf8").digest("hex")}, ${sealSecret(linkToken)}, ${invoiceId}, ${org.customerId},
               ${org.subsidiaryId}, 'stripe', ${org.accounts.bank}, '100', '0', 'CAD',
               ${userId}, ${userId})`);
     await db.execute(sql`
