@@ -866,6 +866,19 @@ export function buildOpenApiSpec(
       responses: { "200": { description: "Payroll employees" }, "404": { description: "payroll is off" } },
     },
   };
+  paths["/api/v1/search"] = {
+    get: {
+      summary: "Global search",
+      description: "Grouped global search over the same finder as the header search bar. Every group is scoped by the caller's own permissions; restricted scopes are refused, never dropped.",
+      tags: ["Meta"],
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { name: "q", in: "query", required: true, schema: { type: "string" }, description: "Search text" },
+        { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 50 } },
+      ],
+      responses: { "200": { description: "Grouped search hits" }, "422": { description: "q missing" } },
+    },
+  };
   paths["/api/v1/reports"] = {
     get: {
       summary: "List report definitions",
