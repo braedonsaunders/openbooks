@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -31,15 +31,12 @@ type EditableBomLine = Record<string, unknown> & {
   quantityPer: string
 }
 
-const OPEN_NEW_BOM = 'openbooks:inventory-new-bom'
-
-/** Header action that opens the already-loaded editor synchronously. */
+/** Header action whose URL selector creates exactly one drawer instance. */
 export function NewBomButton({ label }: { label: string }) {
   const router = useRouter()
   return (
     <Button
       onClick={() => {
-        window.dispatchEvent(new Event(OPEN_NEW_BOM))
         router.replace('/inventory?inventoryView=bom&bom=new', { scroll: false })
       }}
     >
@@ -65,17 +62,10 @@ export function BomWorkspace({
 }) {
   const tSetup = useTranslations('admin.setup')
   const router = useRouter()
-  const [clientSelected, setClientSelected] = useState<string | undefined>(selected)
-  const activeKey = clientSelected ?? selected
+  const activeKey = selected
   const active = activeKey === 'new'
     ? null
     : assemblies.find((assembly) => assembly.assemblyItemId === activeKey) ?? null
-
-  useEffect(() => {
-    const open = () => setClientSelected('new')
-    window.addEventListener(OPEN_NEW_BOM, open)
-    return () => window.removeEventListener(OPEN_NEW_BOM, open)
-  }, [])
 
   const columns: PagedColumn<BomAssembly>[] = [
     {
@@ -103,7 +93,6 @@ export function BomWorkspace({
         emptyAsRow
         rowKey={(row) => row.assemblyItemId}
         onRowClick={(row) => {
-          setClientSelected(row.assemblyItemId)
           router.replace(`/inventory?inventoryView=bom&bom=${encodeURIComponent(row.assemblyItemId)}`, { scroll: false })
         }}
       />

@@ -26,6 +26,7 @@ test('bill of materials edits one assembly with the shared wide drawer and line 
   assert.match(workspace, /size="2xl"/)
   assert.match(workspace, /expectedVersion: assembly\?\.version \?\? null/)
   assert.match(workspace, /if \(!res\.ok\)[\s\S]*await res\.json/)
+  assert.doesNotMatch(workspace, /dispatchEvent|OPEN_NEW_BOM|setClientSelected/)
 })
 
 test('bill of materials replacement is atomic, build-safe, observable, and audited', () => {
