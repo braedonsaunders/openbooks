@@ -463,15 +463,57 @@ export async function runCloseAutomations(
           /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(config.key)
             ? config.key
             : `automation-${rule.id}`;
-        await db.execute(sql`insert into close_run_tasks
+        const title = String(config.title ?? rule.name);
+        const description =
+          typeof config.description === "string" ? config.description : null;
+        const workstream = String(config.workstream ?? "review");
+        const gateType = String(config.gateType ?? "none");
+        const evidenceRequired = config.evidenceRequired === true;
+        // Invariant: a zero-row insert re-reads the surviving row. Only a
+        // row matching everything this insert promises — the five authored
+        // fields plus the fixed action/manual semantics — is adopted as an
+        // ensure-task replay. Anything else refuses by name below; the
+        // survivor is never updated here. `do nothing` is justified solely
+        // by that identical-replay case.
+        const inserted = (await db.execute<{ id: string }>(sql`insert into close_run_tasks
           (org_id, run_id, key, title, description, workstream, task_type, completion_mode, gate_type,
            status, sort_order, owner_id, due_on, evidence_required, created_by, updated_by)
-          values (${context.orgId}, ${context.runId}, ${key}, ${String(config.title ?? rule.name)},
-                  ${typeof config.description === "string" ? config.description : null},
-                  ${String(config.workstream ?? "review")}, 'action', 'manual', ${String(config.gateType ?? "none")},
+          values (${context.orgId}, ${context.runId}, ${key}, ${title},
+                  ${description},
+                  ${workstream}, 'action', 'manual', ${gateType},
                   'ready', 9000, ${context.actorId ?? run.started_by ?? null}, ${run.target_close_date},
-                  ${config.evidenceRequired === true}, ${context.actorId ?? null}, ${context.actorId ?? null})
-          on conflict (run_id, key) do nothing`);
+                  ${evidenceRequired}, ${context.actorId ?? null}, ${context.actorId ?? null})
+          on conflict (run_id, key) do nothing returning id`));
+        if (inserted.rows.length === 0) {
+          const existing = (await db.execute<{
+            title: string;
+            description: string | null;
+            workstream: string;
+            task_type: string;
+            completion_mode: string;
+            gate_type: string;
+            evidence_required: boolean;
+          }>(sql`select title, description, workstream, task_type, completion_mode, gate_type, evidence_required
+              from close_run_tasks
+             where run_id = ${context.runId} and org_id = ${context.orgId} and key = ${key}`));
+          const row = existing.rows[0];
+          const identical =
+            !!row &&
+            row.title === title &&
+            (row.description ?? null) === description &&
+            row.workstream === workstream &&
+            row.task_type === "action" &&
+            row.completion_mode === "manual" &&
+            row.gate_type === gateType &&
+            row.evidence_required === evidenceRequired;
+          if (!identical) {
+            throw new CloseError(
+              `close automation rule "${String(rule.name)}" cannot create task key "${key}": ` +
+                `a task with that key already exists on this close run with different configuration. ` +
+                `Edit the automation rule to use a unique config.key, or reuse the existing task instead of creating a duplicate.`,
+            );
+          }
+        }
       } else if (rule.action === "generate_report") {
         const report = String(config.report ?? "trial-balance");
         const target =
