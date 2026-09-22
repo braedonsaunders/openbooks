@@ -494,9 +494,10 @@ export async function provisionOrg(profile: Profile, window: { startDate: string
         const id = randomUUID();
         await db.execute(sql`
           insert into subscriptions
-            (id, org_id, customer_id, plan_id, quantity, status, start_on, next_bill_on, current_period_start, auto_post)
+            (id, org_id, customer_id, plan_id, quantity, status, start_on, next_bill_on, current_period_start, auto_post, anchor_day)
           values (${id}, ${orgId}, ${customer.id}, ${plan.id}, ${String(sub.quantity)}, 'active',
-                  ${window.startDate}, ${window.startDate}, ${window.startDate}, true)`);
+                  ${window.startDate}, ${window.startDate}, ${window.startDate}, true,
+                  extract(day from ${window.startDate}::date))`);
         subscriptions.push({
           id, customerId: customer.id, planKey: sub.plan, interval: plan.interval as "monthly" | "annually",
           termMonths: plan.termMonths, amount: plan.amount, quantity: sub.quantity,

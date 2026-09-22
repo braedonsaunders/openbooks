@@ -617,3 +617,29 @@ test("a catch-up occurrence is dated with its occurrence date, not today", { ski
     assert.equal(next.nextRunOn, advanceCadence(occurrence, "monthly"));
   } finally { await dropScratchOrgReporting(org.orgId); }
 });
+
+test("a stored anchor day recovers month-end starts after drift", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "Scheduler", "admin");
+    const scheduleId = await seedInvoiceSchedule(org, actorId, { autoPost: false });
+    // A row the anchor backfill pinned on the 31st whose next run already
+    // sits on Feb 28: the tick must step Mar 31, never Mar 28.
+    await db.execute(sql`
+      update recurring_schedules set next_run_on = '2026-02-28', anchor_day = 31 where id = ${scheduleId}
+    `);
+    const run = await runDueRecurringSchedules("2026-03-15");
+    assert.equal(run.failed, 0);
+    assert.equal(run.generated, 1);
+    const documentId = run.documents[0]!.documentId;
+    const doc = (await db.execute<{ documentDate: string }>(sql`
+      select document_date::text as "documentDate" from documents
+       where id = ${documentId} and org_id = ${org.orgId}
+    `)).rows[0]!;
+    assert.equal(doc.documentDate, "2026-02-28");
+    const next = (await db.execute<{ nextRunOn: string }>(sql`
+      select next_run_on::text as "nextRunOn" from recurring_schedules where id = ${scheduleId}
+    `)).rows[0]!;
+    assert.equal(next.nextRunOn, "2026-03-31");
+  } finally { await dropScratchOrgReporting(org.orgId); }
+});

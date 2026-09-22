@@ -98,11 +98,15 @@ export async function POST(req: Request) {
     if (!tpl.rows.length || !(await isDocKindEnabled(authz.user.orgId, tpl.rows[0]!.kind))) return null;
     if (tpl.rows.length > 1) return "ambiguous" as const;
     const templateDocumentId = tpl.rows[0]!.id;
+    // The anchor day pins month-end starts: a schedule whose first occurrence
+    // is the 31st keeps billing on the 31st (clamped per month) instead of
+    // drifting. nextRunOn is a validated ISO date (checked above).
+    const anchorDay = Number(nextRunOn.slice(8, 10));
     const row = (await tx.execute<Record<string, unknown> & { id: string }>(sql`
       insert into recurring_schedules (org_id, template_document_id, cadence, cron, next_run_on, ends_on,
-                                       auto_post, name, created_by, updated_by)
+                                       auto_post, name, anchor_day, created_by, updated_by)
       values (${authz.user.orgId}, ${templateDocumentId}, ${body.cadence}, ${body.cron ?? null},
-              ${nextRunOn}, ${body.endsOn ?? null}, ${autoPost}, ${body.name ?? null},
+              ${nextRunOn}, ${body.endsOn ?? null}, ${autoPost}, ${body.name ?? null}, ${anchorDay},
               ${authz.user.id}, ${authz.user.id})
       returning *
     `));

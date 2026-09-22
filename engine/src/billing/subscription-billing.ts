@@ -11,6 +11,7 @@ import { loadTaxComponentConfig, persistLineTaxComponents } from "../tax/persist
 import { postDocument } from "../ledger/posting-document.ts";
 import { type PostingDeps } from "../ledger/posting-contracts.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
+import { advanceAnchoredMonth } from "./cadence.ts";
 import {
   advancedBillingSnapshot,
   prepareAdvancedSubscriptionBilling,
@@ -136,10 +137,13 @@ function subscriptionDate(isoDate: string): Date {
 
 /**
  * Advance an ISO date by one billing interval (× intervalCount). Month/quarter/
- * year steps clamp to the end of a shorter target month (Jan 31 +1mo → Feb 28).
- * Pure — unit-tested.
+ * year steps pin the day to the anchor (default: the source date's own day),
+ * clamped to the target month's length — so Jan 31 +1mo → Feb 28, then
+ * Feb 28 +1mo → Mar 31 with the anchor, never Mar 28. Pure — unit-tested.
  */
-export function advanceSubscription(isoDate: string, interval: Interval, intervalCount = 1): string {
+export function advanceSubscription(
+  isoDate: string, interval: Interval, intervalCount = 1, anchorDay?: number | null,
+): string {
   const cadence = normalizeSubscriptionCadence(interval, intervalCount);
   const n = cadence.intervalCount;
   const sourceDate = subscriptionDate(isoDate);
@@ -152,18 +156,19 @@ export function advanceSubscription(isoDate: string, interval: Interval, interva
     }
     return toIso(base);
   }
+  // The DAY comes from the stored anchor, not the already-clamped date.
+  // The anchor is pre-validated here so the shared helper below can only
+  // fail on the target year, keeping the refusal messages stable.
+  const anchor = anchorDay ?? d!;
+  if (!Number.isSafeInteger(anchor) || anchor < 1 || anchor > 31) {
+    throw new SubscriptionError("billing anchor day must be between 1 and 31");
+  }
   const monthStep = (cadence.interval === "monthly" ? 1 : cadence.interval === "quarterly" ? 3 : 12) * n;
-  const targetMonthIndex = m! - 1 + monthStep;
-  const targetYear = y! + Math.floor(targetMonthIndex / 12);
-  if (!Number.isSafeInteger(targetYear) || targetYear > 9999) {
+  try {
+    return advanceAnchoredMonth(y!, m!, monthStep, anchor);
+  } catch {
     throw new SubscriptionError("billing cadence advances outside the supported date range");
   }
-  const targetMonth = ((targetMonthIndex % 12) + 12) % 12;
-  const lastDayDate = new Date(0);
-  lastDayDate.setUTCHours(0, 0, 0, 0);
-  lastDayDate.setUTCFullYear(targetYear, targetMonth + 1, 0);
-  const lastDay = lastDayDate.getUTCDate();
-  return `${String(targetYear).padStart(4, "0")}-${pad(targetMonth + 1)}-${pad(Math.min(d!, lastDay))}`;
 }
 
 /** Normalize a subscription's charge to a monthly figure (analytics only). */
@@ -224,6 +229,8 @@ type SubRow = {
   baseCurrency: string;
   nextBillOn: string;
   currentPeriodStart: string | null;
+  /** Stored anchor day, else the start date's day (see SUB_SELECT). */
+  anchorDay: number;
 };
 
 /**
@@ -576,7 +583,7 @@ async function billOne(
     ? { startsOn: advanced.periodStartsOn, endsOn: advanced.periodEndsOn, revision: advanced.contractRevision }
     : {
         startsOn: billingDate,
-        endsOn: advanceSubscription(billingDate, sub.interval, sub.intervalCount),
+        endsOn: advanceSubscription(billingDate, sub.interval, sub.intervalCount, sub.anchorDay),
         revision: 1,
       };
   const prior = (await db.execute<{ invoiceId: string; documentNumber: string; status: string }>(sql`
@@ -630,7 +637,8 @@ const SUB_SELECT = sql`
            where sub.id = c.subsidiary_id and sub.org_id = s.org_id and sub.is_active) as "trustedSubsidiaryId",
          c.subsidiary_id as "customerSubsidiaryId",
          (select id from subsidiaries where org_id = s.org_id and parent_id is null limit 1) as "rootSubsidiaryId",
-         o.base_currency as "baseCurrency", s.next_bill_on as "nextBillOn", s.current_period_start as "currentPeriodStart"
+         o.base_currency as "baseCurrency", s.next_bill_on as "nextBillOn", s.current_period_start as "currentPeriodStart",
+         coalesce(s.anchor_day, extract(day from s.start_on)::int) as "anchorDay"
     from subscriptions s
     join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
     join parties c on c.id = s.customer_id and c.org_id = s.org_id
@@ -674,10 +682,12 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
       quantity: string;
       priceOverride: string | null;
       planAmount: string;
+      anchorDay: number;
     }>(sql`
       select s.id, s.org_id as "orgId", s.next_bill_on as "nextBillOn",
              s.current_period_start as "currentPeriodStart",
              s.quantity, s.price_override as "priceOverride", p.amount as "planAmount",
+             coalesce(s.anchor_day, extract(day from s.start_on)::int) as "anchorDay",
              coalesce(v.interval, p.interval) as interval, coalesce(v.interval_count, p.interval_count) as "intervalCount"
         from subscriptions s
         join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
@@ -707,7 +717,9 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
       // persistence, so a bypassed or residual row cannot become a charge.
       normalizeSubscriptionMoney(row.quantity, "stored quantity", "positive");
       normalizeSubscriptionMoney(row.priceOverride ?? row.planAmount, "stored price", "nonnegative");
-      advanced = advanceSubscription(row.nextBillOn, row.interval, row.intervalCount);
+      // Month-end starts keep their anchor day (stored, else the start date's
+      // day): Jan 31 steps Feb 28 → Mar 31, never Mar 28.
+      advanced = advanceSubscription(row.nextBillOn, row.interval, row.intervalCount, row.anchorDay);
       const canBill = await prepareAdvancedSubscriptionBilling(row.orgId, row.id, row.nextBillOn);
       if (!canBill) {
         await withBypass(async () => db.execute(sql`
