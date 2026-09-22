@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { mulRate, normalizeDecimal } from "../money/money.ts";
+import { lookupSpotRate } from "../fx/spot-rate.ts";
 import { absorbFxRoundingResidual, intercompanyBalancingLegs, loadSubsidiaryContext, SubsidiaryError, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { type Doc, type KernelLine, PostingError } from "./posting-contracts.ts";
 /**
@@ -95,24 +96,11 @@ export async function applySubsidiaries(
       }
       const cached = rateCache.get(targetCurrency);
       if (cached) return cached;
-      // When the direct pair and an inverted quote share the newest as_of,
-      // the DIRECT row wins (priority 0 beats 1) — the same deterministic
-      // rule as revaluation and labor-costing, so one pair/date always
-      // converts alike. Provider syncs write every directed pair per date,
-      // and double rounding can separate the candidates by a unit.
-      const r = (await runner.execute<{ rate: string }>(sql`
-        select rate::text from (
-          select rate, as_of, 0 as priority from fx_rates
-           where org_id = ${doc.orgId} and from_currency = ${doc.currency}
-             and to_currency = ${targetCurrency} and rate_type = 'spot'
-             and as_of <= ${postingDate}
-          union all
-          select (1 / rate)::numeric(19,10) as rate, as_of, 1 as priority from fx_rates
-           where org_id = ${doc.orgId} and from_currency = ${targetCurrency}
-             and to_currency = ${doc.currency} and rate_type = 'spot'
-             and as_of <= ${postingDate}
-        ) candidates order by as_of desc, priority asc limit 1`));
-      const rate = r.rows[0]?.rate;
+      // Direct-or-inverse through the shared FX lookup (direct wins
+      // same-date ties) — the same conversion consolidation derivation and
+      // statement translation apply, so one pair/date converts alike
+      // everywhere.
+      const rate = await lookupSpotRate(runner, doc.orgId, doc.currency, targetCurrency, postingDate);
       if (!rate) {
         throw new SubsidiaryError(
           `no spot rate for ${doc.currency}→${targetCurrency} on or before ${postingDate}`,
