@@ -10,10 +10,9 @@ import {
 } from "./application/api-key-audit";
 import { setRequestOrg } from "./request-org";
 import {
-  PERMISSION_CATALOGUE,
-  isCataloguePermission,
   permissionSetCovers,
   resolveEffectivePermissions,
+  resolveKeyScopeAuthority,
 } from "./permissions";
 import type { SessionUser } from "./auth";
 import { allowedSubsidiaryIds } from "./subsidiaries";
@@ -113,19 +112,6 @@ interface PermissionOverrideSqlRow {
 }
 
 /**
- * Expand a resolved permission Set (which may contain wildcards like `ap.*`
- * or `*`) into concrete catalogue keys. Used to intersect owner permissions
- * with key scopes.
- */
-function expandToCatalogue(perms: Set<string>): Set<string> {
-  const out = new Set<string>();
-  for (const key of PERMISSION_CATALOGUE) {
-    if (permissionSetCovers(perms, key)) out.add(key);
-  }
-  return out;
-}
-
-/**
  * Resolve an API key from a request. Returns null when the token is absent,
  * invalid, revoked, expired, bound to a user outside the key's org, bound to
  * a non-production org, or when the required last-used write matches zero
@@ -202,20 +188,16 @@ export async function resolveApiKeyAuth(
     overrides: overrides.rows,
   });
 
-  // Expand owner perms to concrete catalogue keys, then intersect with scopes.
-  const expanded = expandToCatalogue(ownerPerms);
   // Fail closed on malformed or residual empty scope sets: storage rejects
   // empty arrays outright (api_keys_scopes_non_empty) and scopes are exact
-  // catalogue keys only — never wildcards or an inherit marker. A key that
-  // cannot state at least one explicit catalogue permission authenticates
-  // nothing.
-  if (!Array.isArray(keyRow.scopes) || keyRow.scopes.length === 0) return null;
-  const scopeSet = new Set(keyRow.scopes.filter((s) => isCataloguePermission(s)));
-  if (scopeSet.size === 0) return null;
-  const scopedSet = new Set<string>();
-  for (const p of expanded) {
-    if (permissionSetCovers(scopeSet, p)) scopedSet.add(p);
-  }
+  // catalogue keys only — never wildcards or an inherit marker. An invalid
+  // scope declaration authenticates nothing (null); a VALID declaration the
+  // owner cannot use still authenticates — to a credential conferring
+  // nothing. The intersection itself is the canonical
+  // resolveKeyScopeAuthority the api-keys management route reuses for its
+  // grant ceilings.
+  const scopedSet = resolveKeyScopeAuthority(ownerPerms, keyRow.scopes);
+  if (scopedSet === null) return null;
 
   const user: SessionUser = {
     id: keyRow.user_id,

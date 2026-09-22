@@ -1011,3 +1011,28 @@ const CATALOGUE_SET: ReadonlySet<string> = new Set(PERMISSION_CATALOGUE);
 export function isCataloguePermission(key: string): key is CataloguePermission {
   return CATALOGUE_SET.has(key);
 }
+
+/**
+ * Canonical key-scope authority: the owner's expanded catalogue permissions
+ * intersected with a key's exact catalogue scopes — the use-time intersection
+ * `resolveApiKeyAuth` (web/lib/api-auth.ts) confers, shared with the api-keys
+ * management route so grant ceilings compare against authority the key would
+ * really carry. An invalid scope DECLARATION (malformed, empty, or fully
+ * non-catalogue) resolves to null — no credential; a VALID declaration the
+ * owner cannot use resolves to an empty set — a credential conferring
+ * nothing. Scopes are exact catalogue keys only — never wildcards or an
+ * inherit marker.
+ */
+export function resolveKeyScopeAuthority(
+  ownerPermissions: ReadonlySet<string>,
+  scopes: unknown,
+): Set<string> | null {
+  if (!Array.isArray(scopes) || scopes.length === 0) return null;
+  const scopeSet = new Set(scopes.filter(isCataloguePermission));
+  if (scopeSet.size === 0) return null;
+  const out = new Set<string>();
+  for (const key of PERMISSION_CATALOGUE) {
+    if (permissionSetCovers(ownerPermissions, key) && permissionSetCovers(scopeSet, key)) out.add(key);
+  }
+  return out;
+}

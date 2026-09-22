@@ -45,7 +45,14 @@ const actorState: RouteActorState = {
 const featureGatesMock = `
   const state = globalThis[Symbol.for("openbooks.api-key-scopes-test")]
   export async function guardFeaturePermission() {
-    return { user: { orgId: state.orgId, id: state.userId } }
+    // Fixture actors own every permission across all entities, so the F21
+    // grant ceiling evaluates and passes here; the ceiling's own refusals
+    // are covered by the api-keys route boundary suite.
+    return {
+      user: { orgId: state.orgId, id: state.userId, isSuperAdmin: false },
+      permissions: new Set(['*']),
+      allowedSubsidiaryIds: null,
+    }
   }
 `;
 
@@ -207,23 +214,30 @@ test("migration 0031 freezes legacy empty scope sets into the explicit current c
 
 test("the resolver fails closed on empty, malformed, or non-catalogue scope sets", () => {
   const source = readFileSync("web/lib/api-auth.ts", "utf8");
-  // The inherit branch is gone; an empty or malformed scope array resolves to
-  // nothing instead of the owner's permission set.
+  // The intersection is the canonical resolveKeyScopeAuthority shared with
+  // the api-keys management route — one implementation, not two. An empty
+  // result still authenticates nothing.
+  assert.match(source, /resolveKeyScopeAuthority\(ownerPerms, keyRow\.scopes\)/);
   assert.match(
     source,
-    /if \(!Array\.isArray\(keyRow\.scopes\) \|\| keyRow\.scopes\.length === 0\) return null;/,
-  );
-  assert.match(
-    source,
-    /if \(scopeSet\.size === 0\) return null;/,
+    /if \(scopedSet === null\) return null;/,
   );
   assert.doesNotMatch(
     source,
     /Array\.isArray\(keyRow\.scopes\) \? keyRow\.scopes : \[\]/,
   );
   assert.doesNotMatch(source, /Empty scopes = inherit/);
-  // Scopes are exact catalogue keys only — a direct-write wildcard is inert.
-  assert.match(source, /keyRow\.scopes\.filter\(\(s\) => isCataloguePermission\(s\)\)/);
+  assert.doesNotMatch(source, /expandToCatalogue/);
+  // The canonical helper itself pins the fail-closed shape: non-array and
+  // empty resolve to nothing, and scopes are exact catalogue keys only — a
+  // direct-write wildcard is inert.
+  const canonical = readFileSync("engine/src/organization/permissions.ts", "utf8");
+  assert.match(
+    canonical,
+    /if \(!Array\.isArray\(scopes\) \|\| scopes\.length === 0\) return null;/,
+  );
+  assert.match(canonical, /scopes\.filter\(isCataloguePermission\)/);
+  assert.match(canonical, /if \(scopeSet\.size === 0\) return null;/);
 });
 
 test("POST refuses to mint a key whose scopes are omitted or empty", async () => {
@@ -343,6 +357,28 @@ test(
       const denied = await withOrgContext(org.orgId, () => guardApiKey("ap.pay", bearer(key.plaintext)));
       assert.ok(denied instanceof NextResponse, "ap.pay must be refused by the guarded transport");
       assert.equal((denied as NextResponse).status, 403);
+    } finally { await dropScratchOrg(org.orgId); }
+  },
+);
+
+test(
+  "a valid scope its owner cannot use still authenticates, to nothing",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      actorState.orgId = org.orgId;
+      const ownerId = await seedOwner(org.orgId, ["ar.read"]);
+      actorState.userId = ownerId;
+      const key = await insertKey(org.orgId, ownerId, "inert", '["payroll.read"]');
+
+      // Valid declaration, zero owner overlap: the original contract returns
+      // a credential conferring nothing — never null, never inherited scope.
+      const auth = await withOrgContext(org.orgId, () => resolveApiKeyAuth(bearer(key.plaintext)));
+      assert.ok(auth, "a valid declaration authenticates even when the owner cannot use it");
+      assert.deepEqual([...auth.permissions], []);
+      assert.equal(canApi(auth, "ar.read"), false);
+      assert.equal(canApi(auth, "payroll.read"), false);
     } finally { await dropScratchOrg(org.orgId); }
   },
 );

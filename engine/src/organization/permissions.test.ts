@@ -7,6 +7,7 @@ import {
   PERMISSION_GROUPS,
   permissionLabelKey,
   permissionSetCovers,
+  resolveKeyScopeAuthority,
   type CataloguePermission,
 } from "./permissions.ts";
 
@@ -163,4 +164,35 @@ test("hrm permissions are catalogued, grouped, and split between admin-only and 
       assert.equal(holds(role, perm), false, `${role} must not hold ${perm}`);
     }
   }
+});
+
+/**
+ * Canonical key-scope authority (F21): the owner's expanded catalogue
+ * permissions intersected with the key's exact catalogue scopes — the same
+ * intersection use-time auth and the api-keys grant ceilings share.
+ */
+test("resolveKeyScopeAuthority intersects owner permissions with exact key scopes", () => {
+  // A wildcard-holding owner confers only the named scopes.
+  assert.deepEqual(
+    [...resolveKeyScopeAuthority(new Set(["ar.*", "payroll.read"]), ["ar.read", "payroll.read"])!],
+    ["ar.read", "payroll.read"],
+  );
+  // Scopes the owner cannot use are inert, not inherited.
+  assert.deepEqual(
+    [...resolveKeyScopeAuthority(new Set(["ar.read"]), ["ar.read", "payroll.read"])!],
+    ["ar.read"],
+  );
+  // An invalid scope DECLARATION (malformed, empty, fully non-catalogue)
+  // resolves to null — no credential.
+  for (const scopes of [undefined, null, "ar.read", [], ["*"], ["not.a.permission"], ["*", "nope"]]) {
+    assert.equal(resolveKeyScopeAuthority(new Set(["*"]), scopes), null, `scopes ${JSON.stringify(scopes)} must resolve to null`);
+  }
+  // A VALID declaration the owner cannot use resolves to an empty set — a
+  // credential conferring nothing — never null.
+  const inert = resolveKeyScopeAuthority(new Set(["ar.read"]), ["payroll.read"]);
+  assert.ok(inert instanceof Set, "valid-but-inert scopes must resolve to a set");
+  assert.deepEqual([...inert], []);
+  const nothingHeld = resolveKeyScopeAuthority(new Set(), ["ar.read"]);
+  assert.ok(nothingHeld instanceof Set, "an owner holding nothing still yields a set for valid scopes");
+  assert.deepEqual([...nothingHeld], []);
 });
