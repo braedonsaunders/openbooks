@@ -165,8 +165,8 @@ export function inventorySpec(data: InventoryData): PageSpec {
         description: f('description'),
         actionsClassName: 'flex items-center gap-3',
         actions: [
-          widget('module-home-tabs', { tabs: data.viewTabs }),
           widget(newMovement.widget, newMovement.props, f('showNewMovement')),
+          widget('module-home-tabs', { tabs: data.viewTabs }),
         ],
       }),
     ],

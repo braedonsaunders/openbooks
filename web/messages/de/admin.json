@@ -2276,6 +2276,7 @@
       },
       "stock-locations": {
         "title": "Lagerorte",
+        "singular": "Lagerort",
         "description": "Physische Behälter, Zonen und Lager unter der Standortdimension."
       },
       "item-inventory-profiles": {

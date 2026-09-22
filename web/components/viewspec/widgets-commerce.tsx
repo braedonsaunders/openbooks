@@ -185,14 +185,15 @@ export const COMMERCE_WIDGETS = {
 
   /* --- items ---------------------------------------------------------------- */
   /** One widget for the whole header slot: the native markup differs per view
-   *  (the catalog wraps tabs+button, rate books passes bare tabs), and `wrap`
-   *  selects between them as data rather than as a branch in the spec. */
+   *  (the catalog wraps button+tabs, rate books passes bare tabs), and `wrap`
+   *  selects between them as data rather than as a branch in the spec. The
+   *  primary New action comes first and the ModuleHomeTabs strip is last. */
   'items-header-actions': (props) => {
     const tabs = (props.tabs as ComponentProps<typeof ModuleHomeTabs>['tabs']) ?? []
     const inner = (
       <>
-        <ModuleHomeTabs tabs={tabs} />
         {props.showNew === true ? <NewItemButton /> : null}
+        <ModuleHomeTabs tabs={tabs} />
       </>
     )
     return props.wrap === true ? <div className="flex items-center gap-3">{inner}</div> : inner

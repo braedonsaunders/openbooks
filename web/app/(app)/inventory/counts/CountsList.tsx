@@ -4,11 +4,28 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
+import { Plus } from 'lucide-react'
 import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks/ui'
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
 import type { StockCountDetail, StockCountSummary } from '@openbooks/engine/src/inventory/stock-count-queries.ts'
 
 const field = 'space-y-1.5'
+const OPEN_NEW_COUNT = 'openbooks:inventory-new-count'
+
+/** Header action that opens the already-loaded count editor synchronously. */
+export function NewCountButton({ label }: { label: string }) {
+  const router = useRouter()
+  return (
+    <Button
+      onClick={() => {
+        window.dispatchEvent(new Event(OPEN_NEW_COUNT))
+        router.replace('/inventory?inventoryView=counts&count=new', { scroll: false })
+      }}
+    >
+      <Plus size={15} /> {label}
+    </Button>
+  )
+}
 
 async function countAction(body: Record<string, unknown>): Promise<Record<string, unknown>> {
   const res = await fetch('/api/inventory/counts', {
@@ -16,10 +33,8 @@ async function countAction(body: Record<string, unknown>): Promise<Record<string
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ idempotencyKey: crypto.randomUUID(), ...body }),
   })
-  // Error bodies are checked before they are parsed: a refusal delivered as
-  // JSON must be read as the refusal, never as a parse error.
-  const data = await res.json().catch(() => ({}))
   if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
     const detail =
       typeof (data as { error?: unknown }).error === 'string' &&
       ((data as { error: string }).error.trim() ? true : false)
@@ -27,7 +42,7 @@ async function countAction(body: Record<string, unknown>): Promise<Record<string
         : 'Request failed'
     throw new Error(detail)
   }
-  return data as Record<string, unknown>
+  return await res.json() as Record<string, unknown>
 }
 
 function StatusBadge({ status, label }: { status: string; label: string }) {
@@ -50,6 +65,8 @@ export function CountsList({
   stockLocations,
   lots,
   canPost,
+  createRequested = false,
+  selectedCountId,
 }: {
   counts: StockCountSummary[]
   locations: { id: string; name: string | null }[]
@@ -58,11 +75,13 @@ export function CountsList({
   stockLocations: { id: string; code: string | null }[]
   lots: { id: string; item_id: string; lot_number: string }[]
   canPost: boolean
+  createRequested?: boolean
+  selectedCountId?: string
 }) {
   const t = useTranslations('inventory')
   const router = useRouter()
-  const [createOpen, setCreateOpen] = useState(false)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [createOpen, setCreateOpen] = useState(createRequested)
+  const [selectedId, setSelectedId] = useState<string | null>(selectedCountId ?? null)
   const [detail, setDetail] = useState<StockCountDetail | null>(null)
   const [detailError, setDetailError] = useState<string | null>(null)
 
@@ -76,18 +95,25 @@ export function CountsList({
 
   const activeDetailFetch = useRef(0)
 
+  useEffect(() => {
+    const open = () => setCreateOpen(true)
+    window.addEventListener(OPEN_NEW_COUNT, open)
+    return () => window.removeEventListener(OPEN_NEW_COUNT, open)
+  }, [])
+
   /** Refetch for event handlers (never called from an effect). */
   async function refetchDetail(id: string): Promise<void> {
     const ticket = ++activeDetailFetch.current
     const res = await fetch(`/api/inventory/counts?id=${encodeURIComponent(id)}`)
-    const data = await res.json().catch(() => ({}))
     if (activeDetailFetch.current !== ticket) return
     if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
       setDetailError(
         typeof data.error === 'string' && data.error.trim() ? data.error.trim() : t('counts.failed'),
       )
       return
     }
+    const data = await res.json()
     setDetail(data as StockCountDetail)
   }
 
@@ -99,14 +125,15 @@ export function CountsList({
     const id = selectedId
     ;(async () => {
       const res = await fetch(`/api/inventory/counts?id=${encodeURIComponent(id)}`)
-      const data = await res.json().catch(() => ({}))
       if (activeDetailFetch.current !== ticket) return
       if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
         setDetailError(
           typeof data.error === 'string' && data.error.trim() ? data.error.trim() : t('counts.failed'),
         )
         return
       }
+      const data = await res.json()
       setDetail(data as StockCountDetail)
     })()
     return () => {
@@ -155,10 +182,9 @@ export function CountsList({
           setDetail(null)
           setDetailError(null)
           setSelectedId(r.id)
+          router.replace(`/inventory?inventoryView=counts&countId=${encodeURIComponent(r.id)}`, { scroll: false })
         }}
-        toolbarAfter={
-          canPost ? <Button onClick={() => setCreateOpen(true)}>{t('counts.newButton')}</Button> : undefined
-        }
+        emptyAsRow
       />
       {createOpen ? (
         <CreateCountDrawer
@@ -169,30 +195,32 @@ export function CountsList({
           lots={lots}
           onClose={() => {
             setCreateOpen(false)
+            router.replace('/inventory?inventoryView=counts')
             router.refresh()
           }}
         />
       ) : null}
       {selectedId ? (
-        <UrlDrawer open closeHref="/inventory/counts" size="xl" title={t('counts.detail.title')}>
+        <UrlDrawer open closeHref="/inventory?inventoryView=counts" size="xl" title={t('counts.detail.title')}>
           {detail ? (
             <CountDetailBody
               key={`${detail.header.id}:${detail.header.status}:${detail.header.countedOn}`}
               detail={detail}
-            itemOptions={itemOptions}
-            stockLocationOptions={stockLocationOptions}
-            canPost={canPost}
-            onDone={() => {
-              setSelectedId(null)
-              router.refresh()
-            }}
-            onChanged={() => {
-              if (!selectedId) return
-              setDetailError(null)
-              void refetchDetail(selectedId)
-              router.refresh()
-            }}
-          />
+              itemOptions={itemOptions}
+              stockLocationOptions={stockLocationOptions}
+              canPost={canPost}
+              onDone={() => {
+                setSelectedId(null)
+                router.replace('/inventory?inventoryView=counts')
+                router.refresh()
+              }}
+              onChanged={() => {
+                if (!selectedId) return
+                setDetailError(null)
+                void refetchDetail(selectedId)
+                router.refresh()
+              }}
+            />
           ) : (
             <p className="p-1 text-sm text-slate-500">
               {detailError ? `${t('counts.failed')}: ${detailError}` : t('counts.detail.loading')}
@@ -265,8 +293,8 @@ function CreateCountDrawer({
   return (
     <UrlDrawer
       open
-      closeHref="/inventory/counts"
-      size="lg"
+      closeHref="/inventory?inventoryView=counts"
+      size="2xl"
       title={t('counts.create.title')}
       headerActions={
         <Button disabled={busy} onClick={submit}>

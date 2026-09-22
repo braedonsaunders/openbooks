@@ -2154,6 +2154,7 @@
       },
       "stock-locations": {
         "title": "Ubicaciones de stock",
+        "singular": "Ubicación de stock",
         "description": "Contenedores, zonas y almacenes físicos bajo la dimensión de ubicaciones."
       },
       "item-inventory-profiles": {

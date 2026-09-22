@@ -85,6 +85,7 @@ export async function SetupEntitySection({
   basePath,
   canManage,
   allowedSubsidiaryIds = null,
+  hideHeader = false,
 }: {
   entity: SetupEntity
   orgId: string
@@ -95,6 +96,8 @@ export async function SetupEntitySection({
   // subsidiary stays org-wide visible) — without this the remittance-vendor
   // listbox cannot scope its options (F-t08-015).
   allowedSubsidiaryIds?: ReadonlySet<string> | null
+  /** Re-homed module tabs own their single page header and create action. */
+  hideHeader?: boolean
 }) {
   const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
   const gated = setupEntityForFeatureState(baseEntity, {
@@ -166,7 +169,7 @@ export async function SetupEntitySection({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between gap-3">
+      {!hideHeader ? <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
             {t(`entities.${entity.key}.title`)}
@@ -187,7 +190,7 @@ export async function SetupEntitySection({
           </p>
         </div>
         {canManage ? <NewSetupButton entityKey={entity.key} label={t('new')} basePath={basePath} /> : null}
-      </div>
+      </div> : null}
 
       <div className="flex flex-wrap items-center gap-2">
         <SearchInput placeholder={t('searchPlaceholder')} />
@@ -244,7 +247,9 @@ export async function SetupEntitySection({
         </Table>
       </div>
 
-      <Pagination basePath={basePath} currentParams={sp} total={total} page={list.page} perPage={list.perPage} />
+      {total > 0 ? (
+        <Pagination basePath={basePath} currentParams={sp} total={total} page={list.page} perPage={list.perPage} />
+      ) : null}
 
       {open && canManage ? (
         <SetupDrawer

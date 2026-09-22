@@ -1611,6 +1611,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     // Stock locations — physical bins/zones under the `locations` dimension.
     key: 'stock-locations',
     table: 'stock_locations',
+    singularTitleKey: 'entities.stock-locations.singular',
     rehomed: true, // lives as a tab on the Inventory module
     actorCols: true,
     groupKey: 'inventory',

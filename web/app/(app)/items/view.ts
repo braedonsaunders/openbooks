@@ -28,9 +28,10 @@ import type { ItemDrawer } from './ItemDrawer'
  * loader: the spec never selects configuration.
  *
  * The header actions keep the native per-view markup: the catalog view wraps
- * `{viewChips}{<NewItemButton/>}` in `flex items-center gap-3` INSIDE
- * `PageHeader`'s own actions container; the rate-books view passes the bare
- * tabs. The `wrap` prop selects between them — data, not branching.
+ * `{<NewItemButton/>}{viewChips}` in `flex items-center gap-3` INSIDE
+ * `PageHeader`'s own actions container, primary action first and the tab
+ * strip last; the rate-books view passes the bare tabs. The `wrap` prop
+ * selects between them — data, not branching.
  *
  * The item drawer keeps its remount key (`key={item.id}` on the native page)
  * so switching items resets its client form state.
@@ -166,8 +167,9 @@ export function itemsSpec(data: ItemsData): PageSpec {
       pageHeader({
         title: f('title'),
         description: f('description'),
-        // The native page wraps the tabs and (on the catalog view) the New
-        // button in a flex div inside the header actions container.
+        // The native page wraps the New button (on the catalog view) and the
+        // tabs in a flex div inside the header actions container, primary
+        // action first and the tab strip last.
         actions: [
           widget('items-header-actions', {
             tabs: data.tabs,

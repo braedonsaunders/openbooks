@@ -441,8 +441,8 @@ export function accountsSpec(data: AccountsData): PageSpec {
         description: f('description'),
         actionsClassName: 'flex flex-wrap items-center gap-3',
         actions: [
-          widget('module-home-tabs', { tabs: data.viewTabs }),
           widget(newAccount.widget, newAccount.props, f('canManageAccounts')),
+          widget('module-home-tabs', { tabs: data.viewTabs }),
         ],
       }),
       {

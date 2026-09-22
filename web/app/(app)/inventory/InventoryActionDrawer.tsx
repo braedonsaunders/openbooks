@@ -24,10 +24,12 @@ export function InventoryActionDrawer({
   items,
   stockLocations,
   accounts,
+  closeHref = '/inventory',
 }: {
   items: ItemOpt[]
   stockLocations: LocOpt[]
   accounts: AccountOpt[]
+  closeHref?: string
 }) {
   const t = useTranslations('inventory')
   const tCommon = useTranslations('common')
@@ -67,41 +69,46 @@ export function InventoryActionDrawer({
     }
     setBusy(true)
     setPostError(null)
-    const res = await fetch('/api/inventory/actions', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        action,
-        itemId,
-        stockLocationId,
-        toStockLocationId: toStockLocationId || undefined,
-        quantity,
-        unitCost: unitCost || undefined,
-        offsetAccountId: offsetAccountId || undefined,
-        basis: action === 'landed' ? basis : undefined,
-        memo: memo || undefined,
-        idempotencyKey: crypto.randomUUID(),
-      }),
-    })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) {
-      const detail =
-        typeof data.error === 'string' && data.error.trim() ? data.error.trim() : t('drawer.failed')
+    try {
+      const res = await fetch('/api/inventory/actions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action,
+          itemId,
+          stockLocationId,
+          toStockLocationId: toStockLocationId || undefined,
+          quantity,
+          unitCost: unitCost || undefined,
+          offsetAccountId: offsetAccountId || undefined,
+          basis: action === 'landed' ? basis : undefined,
+          memo: memo || undefined,
+          idempotencyKey: crypto.randomUUID(),
+        }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(
+          typeof data.error === 'string' && data.error.trim() ? data.error.trim() : t('drawer.failed'),
+        )
+      }
+      const data = await res.json()
+      toast.success(t('drawer.posted', { value: data.value }))
+      router.push(closeHref)
+      router.refresh()
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : t('drawer.failed')
       setPostError(detail)
       toast.error(detail)
+    } finally {
       setBusy(false)
-      return
     }
-    toast.success(t('drawer.posted', { value: data.value }))
-    setBusy(false)
-    router.push('/inventory')
-    router.refresh()
   }
 
   return (
     <UrlDrawer
       open
-      closeHref="/inventory"
+      closeHref={closeHref}
       size="lg"
       title={t('drawer.title')}
       headerActions={

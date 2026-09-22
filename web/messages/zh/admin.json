@@ -2250,6 +2250,7 @@
       },
       "stock-locations": {
         "title": "库存地点",
+        "singular": "库存地点",
         "description": "地点维度下的实体货位、区域和仓库。"
       },
       "item-inventory-profiles": {

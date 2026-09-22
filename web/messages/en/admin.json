@@ -2250,6 +2250,7 @@
       },
       "stock-locations": {
         "title": "Stock Locations",
+        "singular": "Stock Location",
         "description": "Physical bins, zones, and warehouses under the locations dimension."
       },
       "item-inventory-profiles": {
