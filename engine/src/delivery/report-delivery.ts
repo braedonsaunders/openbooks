@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { computeNextRunAt } from "@openbooks/reports";
 import { enqueueEmail, enqueueReportRun, type EnqueueEmailData } from "@openbooks/jobs";
 import { deriveEmailDeliveryKey, isValidEmailAddress, scheduledReportEmail } from "@openbooks/emails";
+import { storeEmailAttachments } from "./email-attachments.ts";
 import { getEmailQueue } from "@openbooks/jobs";
 import { businessToday } from "../platform/business-date.ts";
 import { db } from "../platform/db.ts";
@@ -409,13 +410,18 @@ export async function dispatchReportDeliveries(
     }
     const mail = scheduledReportEmail({ orgName: row.org_name, reportName: row.report_name, attachmentName: row.filename });
     const jobId = `report-delivery|${row.id}|${row.dispatch_count}`;
+    // Stage the rendered bytes outside the queue payload: the worker fetches
+    // them at send time instead of Redis holding file contents for days.
+    const attachments = await storeEmailAttachments([
+      { filename: row.filename, content: Buffer.from(row.bytes).toString("base64"), contentType: row.content_type },
+    ]);
     await enqueue({
       orgId: row.org_id,
       to: row.recipient,
       subject: mail.subject,
       html: mail.html,
       text: mail.text,
-      attachments: [{ filename: row.filename, content: Buffer.from(row.bytes).toString("base64"), contentType: row.content_type }],
+      attachments,
       meta: { category: "report", reportRunId: row.run_id, reportDeliveryId: row.id },
     }, { jobId });
     await db.execute(sql`

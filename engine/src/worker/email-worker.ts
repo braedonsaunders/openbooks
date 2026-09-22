@@ -19,6 +19,7 @@ import {
   resolveOrgEmailTransport,
 } from "../delivery/email-config.ts";
 import { sql } from "drizzle-orm";
+import { deleteStoredEmailAttachments, loadEmailAttachments } from "../delivery/email-attachments.ts";
 import { db, withOrgContext } from "../platform/db.ts";
 import { isSandboxOrg } from "../organization/sandbox-guard.ts";
 import {
@@ -59,6 +60,14 @@ export function createEmailWorker(): Worker<EmailJobData> {
       const reportDeliveryId = d.meta?.reportDeliveryId;
       const paymentRemittanceId = d.meta?.paymentRemittanceId;
       const queueAttempt = job.attemptsMade + 1;
+      // Staged attachment bytes are dropped once the delivery reaches a
+      // terminal state. Best-effort by design: a failed delete must never
+      // fail delivery bookkeeping, and a crash-orphaned blob is never
+      // re-read because only live job payloads reference storage ids.
+      const dropStagedAttachments = (): Promise<void> =>
+        deleteStoredEmailAttachments(d.attachments).catch((error) => {
+          console.error("[worker] email attachment cleanup failed:", error instanceof Error ? error.message : error);
+        });
       if (reportDeliveryId) await markReportDeliveryStarted(d.orgId, reportDeliveryId, job.id ?? null);
       if (paymentRemittanceId) {
         await markPaymentRemittanceAttempt(d.orgId, paymentRemittanceId, queueAttempt);
@@ -90,6 +99,7 @@ export function createEmailWorker(): Worker<EmailJobData> {
           detail: "sandbox environment — email egress blocked",
         });
         await markEmailSuppressed(d.orgId, claimed.id, "sandbox environment — email egress blocked");
+        await dropStagedAttachments();
         if (paymentRemittanceId) {
           await markPaymentRemittanceFailed(
             d.orgId,
@@ -123,6 +133,7 @@ export function createEmailWorker(): Worker<EmailJobData> {
           detail: "email provider not configured",
         });
         await markEmailSuppressed(d.orgId, claimed.id, "email provider not configured");
+        await dropStagedAttachments();
         if (paymentRemittanceId) {
           await markPaymentRemittanceFailed(d.orgId, paymentRemittanceId, "email provider not configured", queueAttempt, true);
         }
@@ -156,6 +167,7 @@ export function createEmailWorker(): Worker<EmailJobData> {
           detail: `not resent — accepted on a previous attempt (${decision.providerMessageId})`,
         });
         await confirmEmailSentGuarded(d.orgId, canonical.id, decision.providerMessageId);
+        await dropStagedAttachments();
         if (paymentRemittanceId) {
           await markPaymentRemittanceSent(d.orgId, paymentRemittanceId);
         }
@@ -198,12 +210,15 @@ export function createEmailWorker(): Worker<EmailJobData> {
           if (!run) throw new Error('Report delivery evidence not found');
           await authorizeReportRun(d.orgId, run.definition_id, run.run_id);
         }
+        // Attachments arrive by reference and are fetched here, at send
+        // time — the queue payload never carries file bytes.
+        const attachments = await loadEmailAttachments(d.attachments);
         const outcome = await sendVia(transport, {
           to: d.to,
           subject: d.subject,
           html: d.html,
           text: d.text,
-          attachments: d.attachments,
+          attachments,
           ...(d.replyTo ? { replyTo: d.replyTo } : {}),
         }, { deliveryKey });
         if (outcome.kind === "sent") {
@@ -213,6 +228,7 @@ export function createEmailWorker(): Worker<EmailJobData> {
             detail: outcome.providerMessageId,
           });
           await markEmailSent(d.orgId, canonical.id, outcome.providerMessageId);
+          await dropStagedAttachments();
           if (paymentRemittanceId) {
             await markPaymentRemittanceSent(d.orgId, paymentRemittanceId);
           }
@@ -249,6 +265,9 @@ export function createEmailWorker(): Worker<EmailJobData> {
             detail: message,
           });
           await markEmailFailed(d.orgId, canonical.id, message);
+          if (job.attemptsMade + 1 >= (job.opts.attempts ?? 1)) {
+            await dropStagedAttachments();
+          }
           if (paymentRemittanceId) {
             await markPaymentRemittanceFailed(
               d.orgId,

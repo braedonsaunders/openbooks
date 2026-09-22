@@ -8,12 +8,31 @@ export type EmailAttachmentPayload = {
   contentType?: string
 }
 
+/**
+ * An attachment stored outside the queue payload: either an object-storage
+ * key (fetched by the worker at send time) or a sealed blob (installs
+ * without object storage). Queue payloads — retained for days in Redis —
+ * must never carry raw file bytes again; see `storeEmailAttachments`.
+ */
+export type EmailAttachmentRef =
+  | { filename: string; contentType?: string; storageKey: string }
+  | { filename: string; contentType?: string; sealed: string }
+
+export type EmailAttachment = EmailAttachmentPayload | EmailAttachmentRef
+
+/** True for references; inline payloads carry `content`. */
+export function isEmailAttachmentRef(
+  attachment: EmailAttachment,
+): attachment is EmailAttachmentRef {
+  return !('content' in attachment)
+}
+
 export type EmailDeliveryInput = {
   to: string | string[]
   subject: string
   html: string
   text: string
-  attachments?: EmailAttachmentPayload[]
+  attachments?: EmailAttachment[]
   /**
    * Per-message Reply-To, overriding the org transport default for this send
    * only (dunning policies, approval flows). Absent means the default.
@@ -23,6 +42,16 @@ export type EmailDeliveryInput = {
 
 export type NormalizedEmailDeliveryInput = Omit<EmailDeliveryInput, 'to'> & {
   to: string[]
+}
+
+/**
+ * Provider wire input: every attachment materialized to inline bytes. The
+ * worker resolves queue references before calling sendVia; a reference that
+ * still reaches this layer means the worker was bypassed, and sendVia
+ * refuses it rather than transmitting a filename with no content.
+ */
+export type TransmittableEmailInput = Omit<NormalizedEmailDeliveryInput, 'attachments'> & {
+  attachments?: EmailAttachmentPayload[]
 }
 
 /**
@@ -101,7 +130,7 @@ function decodedBase64Bytes(value: string): number {
   return (value.length / 4) * 3 - padding
 }
 
-function validateAttachment(attachment: EmailAttachmentPayload, index: number): number {
+function validateAttachmentName(attachment: EmailAttachment, index: number): void {
   const label = `Email attachment ${index + 1}`
   if (
     !attachment.filename ||
@@ -118,6 +147,25 @@ function validateAttachment(attachment: EmailAttachmentPayload, index: number): 
   ) {
     throw new Error(`${label} has an invalid content type.`)
   }
+}
+
+function validateAttachment(attachment: EmailAttachment, index: number): number {
+  validateAttachmentName(attachment, index)
+  if (isEmailAttachmentRef(attachment)) {
+    // References were byte-validated when stored; the queue boundary
+    // re-checks only the addressing metadata, never the bytes it no longer
+    // carries. A non-empty locator is required — an empty storage key or
+    // sealed blob would fail closed at fetch time with no message.
+    const label = `Email attachment ${index + 1}`
+    if ('storageKey' in attachment && !attachment.storageKey) {
+      throw new Error(`${label} has an empty storage reference.`)
+    }
+    if ('sealed' in attachment && !attachment.sealed) {
+      throw new Error(`${label} has an empty sealed blob.`)
+    }
+    return 0
+  }
+  const label = `Email attachment ${index + 1}`
   const maxEncodedChars = Math.ceil(EMAIL_DELIVERY_LIMITS.attachmentBytes / 3) * 4
   if (attachment.content.length > maxEncodedChars || !BASE64_QUANTUM.test(attachment.content)) {
     throw new Error(`${label} is not valid bounded base64 content.`)
@@ -127,6 +175,27 @@ function validateAttachment(attachment: EmailAttachmentPayload, index: number): 
     throw new Error(`${label} exceeds the ${EMAIL_DELIVERY_LIMITS.attachmentBytes}-byte limit.`)
   }
   return decodedBytes
+}
+
+/**
+ * Byte-validate inline attachment payloads before they are stored outside
+ * the queue (object storage or sealed). References are already stored and
+ * carry no bytes to check; passing one here is a caller bug.
+ */
+export function assertValidEmailAttachmentPayloads(attachments: EmailAttachmentPayload[]): void {
+  if (attachments.length > EMAIL_DELIVERY_LIMITS.attachments) {
+    throw new Error(`Email delivery exceeds the ${EMAIL_DELIVERY_LIMITS.attachments}-attachment limit.`)
+  }
+  let totalAttachmentBytes = 0
+  for (const [index, attachment] of attachments.entries()) {
+    if (isEmailAttachmentRef(attachment)) {
+      throw new Error(`Email attachment ${index + 1} is already stored; pass inline bytes.`)
+    }
+    totalAttachmentBytes += validateAttachment(attachment, index)
+    if (totalAttachmentBytes > EMAIL_DELIVERY_LIMITS.totalAttachmentBytes) {
+      throw new Error(`Email attachments exceed the ${EMAIL_DELIVERY_LIMITS.totalAttachmentBytes}-byte total limit.`)
+    }
+  }
 }
 
 /**

@@ -1,5 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { EmailJobData, EnqueueEmailData } from "@openbooks/jobs";
+import type { EmailAttachmentPayload } from "@openbooks/emails";
+import { storeEmailAttachments } from "../delivery/email-attachments.ts";
 import {
   ALLOCATION_RUN_OUTBOX_KIND,
   ensureAllocationRunOutboxRows,
@@ -105,7 +107,7 @@ export interface FlowEmailPayload {
   subject: string;
   html: string;
   text: string;
-  attachments?: EmailJobData["attachments"];
+  attachments?: EmailAttachmentPayload[];
   meta?: EmailJobData["meta"];
   /** Per-message Reply-To (dunning policy setting); absent means the org default. */
   replyTo?: string;
@@ -227,6 +229,9 @@ export async function deliverFlowEmail(
   // authored must fail this attempt loudly (retry → terminal failure with
   // operator visibility), never send garbage.
   const delivery = parseFlowEmailPayload(row.payload);
+  // Stage attachment bytes outside the queue payload; the worker fetches
+  // them at send time instead of Redis holding file contents for days.
+  const attachments = await storeEmailAttachments(delivery.attachments);
   await enqueue(
     {
       orgId: row.org_id,
@@ -234,7 +239,7 @@ export async function deliverFlowEmail(
       subject: delivery.subject,
       html: delivery.html,
       text: delivery.text,
-      ...(delivery.attachments?.length ? { attachments: delivery.attachments } : {}),
+      ...(attachments.length > 0 ? { attachments } : {}),
       ...(delivery.meta ? { meta: delivery.meta } : {}),
       ...(delivery.replyTo ? { replyTo: delivery.replyTo } : {}),
     },
