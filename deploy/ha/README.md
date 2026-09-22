@@ -42,6 +42,14 @@ Create secrets out of band. Do not commit values or leave them in shell history.
 - `S3_ACCESS_KEY_ID`
 - `S3_SECRET_ACCESS_KEY`
 
+`S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` must be a dedicated
+application identity scoped to the app bucket — never the object store's
+root/admin credentials (the Compose stack creates this as `MINIO_APP_USER`
+via minio-init with a bucket-scoped policy; provision the equivalent on
+your store, e.g. with MinIO:
+`mc admin user add`, a custom policy limited to the app bucket, and
+`mc admin policy set`).
+
 `openbooks-bootstrap` must provide `OPENBOOKS_MIGRATION_DB_URL` and
 `OPENBOOKS_RUNTIME_DB_URL`. The migration URL is exposed only to the one-shot
 Job. For a first installation it must also provide `ORG_CURRENCY` and

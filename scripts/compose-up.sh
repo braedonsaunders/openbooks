@@ -99,6 +99,7 @@ if [ ! -f "$env_file" ]; then
   openbooks_db_password=$(random_hex 24)
   redis_password=$(random_hex 24)
   minio_password=$(random_hex 24)
+  minio_app_password=$(random_hex 24)
   session_secret=$(random_hex 48)
   data_key=$(random_hex 32)
   internal_token=$(random_hex 48)
@@ -113,6 +114,8 @@ if [ ! -f "$env_file" ]; then
       "REDIS_PASSWORD=$redis_password" \
       'MINIO_ROOT_USER=openbooks' \
       "MINIO_ROOT_PASSWORD=$minio_password" \
+      'MINIO_APP_USER=openbooks-app' \
+      "MINIO_APP_PASSWORD=$minio_app_password" \
       "SESSION_SECRET=$session_secret" \
       "OPENBOOKS_DATA_KEY=$data_key" \
       "OPENBOOKS_INTERNAL_TOKEN=$internal_token" \
