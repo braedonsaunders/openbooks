@@ -89,8 +89,9 @@ const mockSources = new Map<string, string>([
   ["mock:params", "export function isUuid(v) { return /^[0-9a-f-]{36}$/.test(String(v)) }"],
 ]);
 
+// '@/lib/api/json' is not mocked here: never double the validation boundary.
+// The resolve hook's @/ forwarder already maps it to the real module.
 const mockUrls = new Map<string, string>([
-  ["@/lib/api/json", "mock:json"],
   ["@openbooks/engine/src/platform/db.ts", "mock:db"],
   ["@openbooks/engine/src/projects/financial-profile-versions.ts", "mock:profile"],
   ["@openbooks/engine/src/platform/business-date.ts", "mock:date"],
@@ -112,13 +113,8 @@ const hooks = registerHooks({
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    if (url === "mock:json") {
-      return {
-        format: "module",
-        source: `export const jsonObject = {}; export async function parseJsonBody(r) { return { ok: true, data: await r.json() } }`,
-        shortCircuit: true,
-      };
-    }
+    // '@/lib/api/json' resolves to the real module through the @/ forwarder
+    // above; never double the validation boundary.
     const source = mockSources.get(url);
     if (source !== undefined) return { format: "module", source, shortCircuit: true };
     return nextLoad(url, context);

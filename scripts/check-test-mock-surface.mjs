@@ -421,9 +421,6 @@ export const PROTECTED_DOUBLE_ALLOWLIST = new Map(Object.entries({
   "web/app/api/_order/handlers.test.ts": {
     "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
   },
-  "web/app/api/accounts/route.test.ts": {
-    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
-  },
   "web/app/api/admin/payment-operations/[resource]/[id]/route-patch-required-fields.test.ts": {
     "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
   },
@@ -443,9 +440,6 @@ export const PROTECTED_DOUBLE_ALLOWLIST = new Map(Object.entries({
     "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
   },
   "web/app/api/banking/import/route.test.ts": {
-    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
-  },
-  "web/app/api/budgets/[id]/actions/route.test.ts": {
     "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
   },
   "web/app/api/compliance/waivers/[id]/route.test.ts": {
@@ -478,13 +472,7 @@ export const PROTECTED_DOUBLE_ALLOWLIST = new Map(Object.entries({
   "web/app/api/internal/overhead/publish/route.test.ts": {
     "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
   },
-  "web/app/api/parties/[id]/route.test.ts": {
-    "exact-decimal": "hand double of the decimal classifier; conversion queued - load or re-export the real module",
-  },
   "web/app/api/parties/route.test.ts": {
-    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
-  },
-  "web/app/api/payroll/remittances/route.test.ts": {
     "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
   },
   "web/app/api/payroll/runs/route.test.ts": {
@@ -505,13 +493,7 @@ export const PROTECTED_DOUBLE_ALLOWLIST = new Map(Object.entries({
   "web/app/api/projects/[id]/percent-complete/route.test.ts": {
     "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
   },
-  "web/app/api/projects/route.test.ts": {
-    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
-  },
   "web/app/api/psp/settlements/route.test.ts": {
-    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
-  },
-  "web/app/api/rate-book-assignments/route.test.ts": {
     "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
   },
   "web/app/api/receipts/runs/route.test.ts": {
@@ -534,11 +516,6 @@ export const PROTECTED_DOUBLE_ALLOWLIST = new Map(Object.entries({
   },
   "web/lib/permissions.test.ts": {
     "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
-  },
-  "web/lib/subcontract-feature-integration.test.ts": {
-    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
-    "exact-decimal": "hand double of the decimal classifier; conversion queued - load or re-export the real module",
-    "money": "hand double of the money kernel; conversion queued - load or re-export the real module",
   },
 }));
 

@@ -125,16 +125,11 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  [
-    'mock:exact-decimal',
-    `
-      export function canonicalDecimal(value) { return String(value) }
-      export function compareDecimal(left, right) { return Number(left) - Number(right) }
-      export function fixedDecimal(value) { return String(value) }
-    `,
-  ],
 ])
 
+// Neither the decimal classifier nor the money kernel is mocked: a hand
+// double of either decides amount questions the real module would refuse,
+// so the route's exact-decimal behavior below was never really tested.
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['../../../../lib/authz', 'mock:authz'],
@@ -142,29 +137,18 @@ const mockUrls = new Map<string, string>([
   ['../../../../lib/custom-fields', 'mock:custom-fields'],
   ['../../../../lib/list-params', 'mock:list-params'],
   ['../../../../lib/countries', 'mock:countries'],
-  ['../../../../lib/exact-decimal', 'mock:exact-decimal'],
   ['../_lib', 'mock:party-loader'],
 ])
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    if (specifier === '@/lib/api/json') return { shortCircuit: true, format: 'module', url: 'mock:json' }
+    // '@/lib/api/json' is not mocked: never double the validation boundary.
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
     return nextResolve(specifier, context)
   },
   load(url, context, nextLoad) {
-    if (url === 'mock:json') {
-      return {
-        format: 'module',
-        shortCircuit: true,
-        source: `
-          export const jsonObject = {}
-          export async function parseJsonBody(req) { return { ok: true, data: await req.json() } }
-        `,
-      }
-    }
     const source = mockSources.get(url)
     if (source !== undefined) return { format: 'module', source, shortCircuit: true }
     return nextLoad(url, context)

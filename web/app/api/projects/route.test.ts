@@ -126,11 +126,6 @@ const mockSources = new Map<string, string>([
      export async function findUnownedCustomReferences() { return [] }`,
   ],
   [
-    "mock:json",
-    `export const jsonObject = {}
-     export async function parseJsonBody(request) { return { ok: true, data: await request.json() } }`,
-  ],
-  [
     "mock:projects-lib",
     `export async function loadProject(id, orgId) {
        const state = globalThis[Symbol.for('openbooks.projects-route-test')]
@@ -140,9 +135,9 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
+// '@/lib/api/json' is not mocked: never double the validation boundary.
 const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/platform/db.ts", "mock:db"],
-  ["@/lib/api/json", "mock:json"],
   ["../../../lib/authz", "mock:authz"],
   ["../../../lib/projects-gate", "mock:gate"],
   ["../../../lib/features", "mock:features"],
@@ -152,6 +147,8 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    // The real '@/lib/api/json' imports 'server-only', which is inert here.
+    if (specifier === "server-only") return { url: "data:text/javascript,export {}", shortCircuit: true };
     const mocked = mockUrls.get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };
     return nextResolve(specifier, context);

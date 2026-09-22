@@ -114,7 +114,6 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  ['mock:json', `export const jsonObject = {}; export async function parseJsonBody(request) { return { ok: true, data: await request.json() } }`],
   ['mock:authz', `export async function guardPermission() { return { user: { orgId: 'org-1', id: 'user-1' } } }; export function can() { return true }`],
   ['mock:features', `export async function isFeatureEnabled() { return true }`],
   ['mock:business-date', `export async function businessToday() { return '2026-08-26' }
@@ -126,10 +125,10 @@ const mockSources = new Map<string, string>([
   ['mock:list-params', `export function isUuid(value) { return typeof value === 'string' && value.length > 0 }`],
 ])
 
+// '@/lib/api/json' is not mocked: never double the validation boundary.
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
-  ['@/lib/api/json', 'mock:json'],
   ['../../../lib/authz', 'mock:authz'],
   ['../../../lib/features', 'mock:features'],
   ['../../../lib/list-params', 'mock:list-params'],
@@ -137,6 +136,8 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    // The real '@/lib/api/json' imports 'server-only', which is inert here.
+    if (specifier === 'server-only') return { url: 'data:text/javascript,export {}', shortCircuit: true }
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
     return nextResolve(specifier, context)

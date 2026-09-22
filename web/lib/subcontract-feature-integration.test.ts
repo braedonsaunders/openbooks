@@ -15,15 +15,6 @@ const transitionRouteStateKey = Symbol.for("openbooks.subcontract-transition-rou
 
 const transitionRouteMockSources = new Map<string, string>([
   [
-    "mock:json",
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
-  [
     "mock:authz",
     `
       export async function guardPermission() {
@@ -35,8 +26,6 @@ const transitionRouteMockSources = new Map<string, string>([
   ["mock:subsidiaries", "export function subsidiaryVisibleFilter() { return '' }"],
   ["mock:feature-gate", "export async function guardSubcontractsFeature() { return null }"],
   ["mock:features", "export async function isFeatureEnabled() { return true }"],
-  ["mock:exact-decimal", "export function canonicalDecimal() { return '0.0000' }"],
-  ["mock:money", "export function normalizeMoney(value) { return value }"],
   [
     "mock:db",
     `
@@ -50,13 +39,13 @@ const transitionRouteMockSources = new Map<string, string>([
     "mock:subcontracts",
     `
       const state = globalThis[Symbol.for('openbooks.subcontract-transition-route-test')]
-      export class SubcontractError extends Error {}
-      export function parseSubcontractTransitionAction(value) {
-        if (typeof value !== 'string' || !['substantially_complete', 'close', 'void'].includes(value)) {
-          throw new SubcontractError('Invalid subcontract transition action')
-        }
-        return value
-      }
+      // The pure parser and its error class are re-exported from the REAL
+      // engine module, so the route is judged by the rule the product actually
+      // applies — a hand copy could drift while this file stayed green. The
+      // DB-backed functions stay stubbed: this route test never calls them.
+      export { parseSubcontractTransitionAction, SubcontractError } from ${JSON.stringify(
+        new URL('../../engine/src/projects/subcontracts.ts', import.meta.url).href,
+      )}
       export async function transitionSubcontract() { state.transitionCalls += 1 }
       export function addSubcontractSovLine() {}
       export function approveSubcontract() {}
@@ -80,20 +69,22 @@ const transitionRouteMockSources = new Map<string, string>([
   ],
 ]);
 
+// Neither '@/lib/api/json', the decimal classifier, nor the money kernel is
+// mocked: hand doubles cannot produce the refusals the real modules enforce
+// (the removed canonicalDecimal stub answered '0.0000' for every input).
 const transitionRouteMockUrls = new Map<string, string>([
-  ["@/lib/api/json", "mock:json"],
   ["../../../lib/authz", "mock:authz"],
   ["../../../lib/subcontracts-gate", "mock:feature-gate"],
   ["../../../lib/subsidiaries", "mock:subsidiaries"],
   ["../../../lib/features", "mock:features"],
-  ["../../../lib/exact-decimal", "mock:exact-decimal"],
   ["@openbooks/engine/src/platform/db.ts", "mock:db"],
-  ["@openbooks/engine/src/money/money.ts", "mock:money"],
   ["@openbooks/engine/src/projects/subcontracts.ts", "mock:subcontracts"],
 ]);
 
 const transitionRouteHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    // The real '@/lib/api/json' imports 'server-only', which is inert here.
+    if (specifier === "server-only") return { url: "data:text/javascript,export {}", shortCircuit: true };
     const mocked = transitionRouteMockUrls.get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };
     return nextResolve(specifier, context);
