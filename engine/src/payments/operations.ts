@@ -10,7 +10,8 @@ import {
 import { fromUnits, sum, toUnits } from "../money/money.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { PaymentError } from "./payment-errors.ts";
-import { decryptAccountNumber } from "./rail-settings.ts";
+import { decryptAccountNumber, isValidBic, isValidIban } from "./rail-settings.ts";
+import { lockRunBankEvidence } from "./run-readiness.ts";
 import { validateNachaSettings, type NachaSettings } from "./rail-nacha.ts";
 import { validateSepaSettings, type SepaSettings } from "./rail-sepa.ts";
 import { loadRunFile } from "./run-files.ts";
@@ -656,19 +657,51 @@ export function sepaOriginator(secrets: Record<string, unknown>): SepaSettings &
   };
 }
 
-function sepaDebit(ctx: FormatContext): { filename: string; content: string; contentType: string } {
+type SepaDebitEvidence = Awaited<ReturnType<typeof lockRunBankEvidence>>;
+
+/**
+ * Render the pain.008 file EXCLUSIVELY from the locked bank-evidence snapshot.
+ *
+ * `evidence` is the approved snapshot `lockRunBankEvidence("sepa", …)`
+ * returned: every debtor IBAN/BIC in it was re-validated under the bank-row
+ * locks against the same `isValidIban`/`isValidBic` rules readiness reports,
+ * and any missing, inactive, unapproved, or revoked revision throws there —
+ * before a single byte renders. The unlocked `ctx.payments` routing is never
+ * consulted for bank details (its LEFT JOIN silently NULLs unapproved rows);
+ * it supplies only the mandate reference, the end-to-end reference, and the
+ * payee name. The snapshot's locks are not held through the later artifact
+ * transaction — the render below is pure, so a file always carries exactly
+ * the approved revision, never a concurrent pending edit.
+ */
+function sepaDebit(ctx: FormatContext, evidence: SepaDebitEvidence): { filename: string; content: string; contentType: string } {
   const s = sepaOriginator(ctx.profile.secrets);
   const esc = (v: unknown) => String(v ?? "").replace(/[<>&'\"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '\"': "&quot;" }[c]!));
-  const total = fromUnits(ctx.payments.reduce((n, p) => n + toUnits(p.amount), 0n));
+  const byPayment = new Map(ctx.payments.map((p) => [p.id, p]));
+  const total = fromUnits(evidence.reduce((n, e) => n + toUnits(e.amount), 0n));
   const total2 = bankAmount2(total);
   const collectionDate = String(ctx.run.scheduled_for ?? ctx.businessDate);
-  const tx = ctx.payments.map((p) => {
-    if (!p.mandateReference) throw new PaymentError(`${p.partyName} has no active debit mandate`);
-    const iban = (p.routing.iban ?? p.accountNumber).replace(/\s/g, "");
-    return `      <DrctDbtTxInf><PmtId><EndToEndId>${esc(p.reference)}</EndToEndId></PmtId><InstdAmt Ccy="EUR">${bankAmount2(p.amount)}</InstdAmt><DrctDbtTx><MndtRltdInf><MndtId>${esc(p.mandateReference)}</MndtId></MndtRltdInf><CdtrSchmeId><Id><PrvtId><Othr><Id>${esc(s.creditorId)}</Id><SchmeNm><Prtry>SEPA</Prtry></SchmeNm></Othr></PrvtId></Id></CdtrSchmeId></DrctDbtTx><Dbtr><Nm>${esc(p.partyName)}</Nm></Dbtr><DbtrAcct><Id><IBAN>${esc(iban)}</IBAN></Id></DbtrAcct><RmtInf><Ustrd>${esc(p.reference)}</Ustrd></RmtInf></DrctDbtTxInf>`;
+  const tx = evidence.map((e) => {
+    const p = byPayment.get(e.id);
+    const payee = p?.partyName ?? e.payee;
+    if (!p || !p.mandateReference) throw new PaymentError(`${payee} has no active debit mandate`);
+    // Same validity rules the shared evidence control enforced under lock —
+    // re-asserted here so the renderer can never emit what readiness blocks.
+    const iban = (e.detail.iban ?? "").replace(/\s/g, "").toUpperCase();
+    if (!isValidIban(iban)) {
+      throw new PaymentError(
+        `debtor IBAN for ${payee} is invalid — correct the approved bank account details and re-approve them before generating`,
+      );
+    }
+    const bic = (e.detail.bic ?? "").trim().toUpperCase();
+    if (bic !== "" && !isValidBic(bic)) {
+      throw new PaymentError(
+        `debtor BIC for ${payee} is invalid — correct the approved bank account details and re-approve them before generating`,
+      );
+    }
+    return `      <DrctDbtTxInf><PmtId><EndToEndId>${esc(p.reference)}</EndToEndId></PmtId><InstdAmt Ccy="EUR">${bankAmount2(e.amount)}</InstdAmt><DrctDbtTx><MndtRltdInf><MndtId>${esc(p.mandateReference)}</MndtId></MndtRltdInf><CdtrSchmeId><Id><PrvtId><Othr><Id>${esc(s.creditorId)}</Id><SchmeNm><Prtry>SEPA</Prtry></SchmeNm></Othr></PrvtId></Id></CdtrSchmeId></DrctDbtTx><Dbtr><Nm>${esc(payee)}</Nm></Dbtr><DbtrAcct><Id><IBAN>${esc(iban)}</IBAN></Id></DbtrAcct><RmtInf><Ustrd>${esc(p.reference)}</Ustrd></RmtInf></DrctDbtTxInf>`;
   }).join("\n");
   const message = `DD-${String(ctx.run.run_number)}`;
-  const content = `<?xml version="1.0" encoding="UTF-8"?>\n<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.008.001.02"><CstmrDrctDbtInitn><GrpHdr><MsgId>${esc(message)}</MsgId><CreDtTm>${String(ctx.businessDate)}T00:00:00</CreDtTm><NbOfTxs>${ctx.payments.length}</NbOfTxs><CtrlSum>${total2}</CtrlSum><InitgPty><Nm>${esc(s.originatorName)}</Nm></InitgPty></GrpHdr><PmtInf><PmtInfId>${esc(message)}</PmtInfId><PmtMtd>DD</PmtMtd><NbOfTxs>${ctx.payments.length}</NbOfTxs><CtrlSum>${total2}</CtrlSum><PmtTpInf><SvcLvl><Cd>SEPA</Cd></SvcLvl><LclInstrm><Cd>CORE</Cd></LclInstrm><SeqTp>RCUR</SeqTp></PmtTpInf><ReqdColltnDt>${collectionDate}</ReqdColltnDt><Cdtr><Nm>${esc(s.originatorName)}</Nm></Cdtr><CdtrAcct><Id><IBAN>${esc(s.originatorIban)}</IBAN></Id></CdtrAcct><CdtrAgt><FinInstnId><BIC>${esc(s.originatorBic)}</BIC></FinInstnId></CdtrAgt><ChrgBr>SLEV</ChrgBr>\n${tx}\n</PmtInf></CstmrDrctDbtInitn></Document>\n`;
+  const content = `<?xml version="1.0" encoding="UTF-8"?>\n<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.008.001.02"><CstmrDrctDbtInitn><GrpHdr><MsgId>${esc(message)}</MsgId><CreDtTm>${String(ctx.businessDate)}T00:00:00</CreDtTm><NbOfTxs>${evidence.length}</NbOfTxs><CtrlSum>${total2}</CtrlSum><InitgPty><Nm>${esc(s.originatorName)}</Nm></InitgPty></GrpHdr><PmtInf><PmtInfId>${esc(message)}</PmtInfId><PmtMtd>DD</PmtMtd><NbOfTxs>${evidence.length}</NbOfTxs><CtrlSum>${total2}</CtrlSum><PmtTpInf><SvcLvl><Cd>SEPA</Cd></SvcLvl><LclInstrm><Cd>CORE</Cd></LclInstrm><SeqTp>RCUR</SeqTp></PmtTpInf><ReqdColltnDt>${collectionDate}</ReqdColltnDt><Cdtr><Nm>${esc(s.originatorName)}</Nm></Cdtr><CdtrAcct><Id><IBAN>${esc(s.originatorIban)}</IBAN></Id></CdtrAcct><CdtrAgt><FinInstnId><BIC>${esc(s.originatorBic)}</BIC></FinInstnId></CdtrAgt><ChrgBr>SLEV</ChrgBr>\n${tx}\n</PmtInf></CstmrDrctDbtInitn></Document>\n`;
   return { filename: `SEPA-DEBIT-${String(ctx.run.run_number)}.xml`, content, contentType: ctx.format.contentType };
 }
 
@@ -680,7 +713,16 @@ async function renderPaymentFile(ctx: FormatContext, orgId: string, now: Date) {
     return loadRunFile(String(scoped.run.id), orgId);
   }
   if (scoped.format.rail === "nacha_debit") return { ...nachaDebit(scoped, now), runNumber: String(scoped.run.run_number) };
-  if (scoped.format.rail === "sepa_debit") return { ...sepaDebit(scoped), runNumber: String(scoped.run.run_number) };
+  if (scoped.format.rail === "sepa_debit") {
+    // Same locked-evidence mechanism as the credit writers: debtor bank
+    // details are resolved from rows that were approved and active under
+    // bank-row locks, or generation fails before anything renders — never a
+    // partial file, never a stored artifact, never a status flip. The locks
+    // are released when the evidence transaction commits; the render is pure
+    // and the artifact transaction below re-judges the run lifecycle.
+    const evidence = await lockRunBankEvidence("sepa", String(scoped.run.id), orgId);
+    return { ...sepaDebit(scoped, evidence), runNumber: String(scoped.run.run_number) };
+  }
   if (scoped.format.rail === "cheque") return { ...chequeRegister(scoped), runNumber: String(scoped.run.run_number) };
   if (scoped.format.rail === "positive_pay") return { ...positivePayRegister(scoped), runNumber: String(scoped.run.run_number) };
   if (scoped.format.rail !== "custom") return { ...genericRegister(scoped), runNumber: String(scoped.run.run_number) };
