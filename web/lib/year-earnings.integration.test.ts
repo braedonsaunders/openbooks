@@ -221,3 +221,66 @@ test('July fiscal year start splits June activity into prior-year earnings', { s
     await withBypass(() => dropScratchOrg(scratch.orgId))
   }
 })
+
+test('a 4-4-5 year starting off-month splits boundary P&L on the declared boundary', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const scratch = await withBypass(() => createScratchOrg())
+  try {
+    await withBypass(async () => {
+      // Retail calendar: FY2027 starts Saturday 2026-07-05, mid-month.
+      // Calendar-month math (FY start 2026-01-01) would put both postings in
+      // the current year; the declared boundary puts 07-01 in the prior year.
+      const fixtureCalendar = await fiscalCalendarId(scratch.orgId, scratch.periodId)
+      await db.execute(sql`
+        update fiscal_calendars set is_default = false where id = ${fixtureCalendar}`)
+      const calendarId = randomUUID()
+      await db.execute(sql`
+        insert into fiscal_calendars
+          (id, org_id, name, cadence, year_start_month, week_starts_on, time_zone,
+           adjustment_period_enabled, is_default, is_active, config)
+        values (${calendarId}, ${scratch.orgId}, 'Retail 4-4-5', 'four_four_five',
+                7, 6, 'UTC', false, true, true, '{}'::jsonb)`)
+      const priorPeriodId = await insertPeriod({
+        orgId: scratch.orgId, calendarId, year: 2026, number: 12,
+        name: 'FY2026-P12', from: '2026-06-28', to: '2026-07-04',
+      })
+      const currentPeriodId = await insertPeriod({
+        orgId: scratch.orgId, calendarId, year: 2027, number: 1,
+        name: 'FY2027-P01', from: '2026-07-05', to: '2026-08-01',
+      })
+      await post({
+        orgId: scratch.orgId, bookId: scratch.bookId, subsidiaryId: scratch.subsidiaryId,
+        periodId: priorPeriodId, date: '2026-07-01',
+        debit: scratch.accounts.bank, credit: scratch.accounts.revenue,
+        amount: '80.0000', tag: 'YE-445-PRIOR',
+      })
+      await post({
+        orgId: scratch.orgId, bookId: scratch.bookId, subsidiaryId: scratch.subsidiaryId,
+        periodId: currentPeriodId, date: '2026-07-10',
+        debit: scratch.accounts.bank, credit: scratch.accounts.revenue,
+        amount: '25.0000', tag: 'YE-445-CURRENT',
+      })
+    })
+
+    const bs = await withBypassContext(() => balanceSheet('2026-07-15', scratch.orgId))
+    assert.equal(bs.equity.find((row) => row.id === COMPUTED_RETAINED_EARNINGS_PRIOR_ID)?.balance, '80.0000')
+    assert.equal(bs.equity.find((row) => row.id === COMPUTED_CURRENT_YEAR_EARNINGS_ID)?.balance, '25.0000')
+
+    const tb = await withBypassContext(() => trialBalance('2026-07-15', undefined, scratch.orgId))
+    assert.equal(tb.find((row) => row.id === scratch.accounts.revenue)?.balance, '-25.0000')
+    assert.equal(tb.find((row) => row.id === COMPUTED_RETAINED_EARNINGS_PRIOR_ID)?.credits, '80.0000')
+
+    const view = await withBypassContext(() => balanceSheetView(
+      { from: '2026-07-01', to: '2026-07-15' }, 'July 2026', labels, { orgId: scratch.orgId },
+    ))
+    assert.equal(findLine(view, 'Retained earnings (prior years)').values?.[0], '80.0000')
+    assert.equal(findLine(view, 'Current year earnings').values?.[0], '25.0000')
+    assert.deepEqual(findLine(view, 'Retained earnings (prior years)').drillWindows?.[0], {
+      from: null, to: '2026-07-04', mode: 'balance',
+    })
+    assert.deepEqual(findLine(view, 'Current year earnings').drillWindows?.[0], {
+      from: '2026-07-05', to: '2026-07-15', mode: 'flow',
+    })
+  } finally {
+    await withBypass(() => dropScratchOrg(scratch.orgId))
+  }
+})
