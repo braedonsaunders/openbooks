@@ -488,6 +488,10 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // seal backfill for pre-existing rows runs app-side in bootstrap, where
     // the data key lives).
     "0251_payment_link_token_at_rest.sql",
+    // Negative-stock deficits keyed on org + item + location only, so one
+    // subsidiary's receipt settled another's shortfall (0257, allocated by
+    // the fleet coordinator; 0252 through 0256 belong to other lanes).
+    "0257_provisional_cost_subsidiary.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),

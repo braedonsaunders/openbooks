@@ -184,6 +184,9 @@ export async function receiveInventory(
       },
       "receipt",
     );
+    // Deficits settle only within the receiving legal entity: one
+    // subsidiary's receipt must never consume another's shortfall (its
+    // layers, GL, and on-hand reader are all per-entity).
     const deficits = (await tx.execute<{
         id: string;
         remaining_quantity: string;
@@ -192,6 +195,7 @@ export async function receiveInventory(
       select id,remaining_quantity,provisional_unit_cost
         from inventory_provisional_costs
        where org_id=${orgId} and item_id=${input.itemId} and stock_location_id=${input.stockLocationId}
+         and subsidiary_id=${input.subsidiaryId}
          and remaining_quantity>0 order by created_at,id for update
     `));
     let receiptUnits = toUnits(input.quantity);
@@ -325,7 +329,7 @@ export async function receiveInventory(
       await tx.execute(sql`
         update inventory_provisional_costs
            set remaining_quantity=remaining_quantity-${settlement.quantity},updated_at=now(),updated_by=${actorId}
-         where id=${settlement.id} and org_id=${orgId}
+         where id=${settlement.id} and org_id=${orgId} and subsidiary_id=${input.subsidiaryId}
       `);
       await tx.execute(sql`
         insert into inventory_provisional_settlements
@@ -561,9 +565,9 @@ export async function issueInventory(
     if (!isZero(shortfallQuantity)) {
       await tx.execute(sql`
         insert into inventory_provisional_costs
-          (org_id,item_id,stock_location_id,issue_movement_id,original_quantity,remaining_quantity,
+          (org_id,subsidiary_id,item_id,stock_location_id,issue_movement_id,original_quantity,remaining_quantity,
            provisional_unit_cost,cost_basis,created_by,updated_by)
-        values (${orgId},${input.itemId},${input.stockLocationId},${movementId},${shortfallQuantity},
+        values (${orgId},${input.subsidiaryId},${input.itemId},${input.stockLocationId},${movementId},${shortfallQuantity},
                 ${shortfallQuantity},${provisionalUnitCost},${profile.negativeCostBasis},${actorId},${actorId})
       `);
     }
