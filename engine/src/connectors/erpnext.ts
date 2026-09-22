@@ -7,8 +7,10 @@
  *   getDoc: GET /api/resource/{doctype}/{name}   (full doc incl. child tables)
  */
 
+import { guardedFetch } from "./ssrf-guard.ts";
+
 export interface ErpNextCreds {
-  url: string; // e.g. http://localhost:8080 or https://mycompany.erpnext.com
+  url: string; // e.g. https://mycompany.erpnext.com (must resolve to public addresses)
   apiKey: string;
   apiSecret: string;
 }
@@ -17,22 +19,31 @@ export interface ErpNextCreds {
  *  trusted tenant origin can otherwise redirect a request — carrying its
  *  `Authorization: token key:secret` header — to a host the operator never
  *  configured, where Frappe would happily accept the Administrator key. */
-function erpNextFetch(url: string | URL, init: RequestInit = {}): Promise<Response> {
-  return fetch(url, { ...init, redirect: "error" });
-}
-
 export class ErpNextClient {
-  constructor(private creds: ErpNextCreds) {}
+  /**
+   * `transport` defaults to the shared SSRF-guarded fetch: the saved-time
+   * URL check goes stale when DNS rebinds, so every request re-resolves the
+   * origin, requires public unicast, pins the socket to a checked address,
+   * and refuses redirects. Tests inject a recording transport to exercise
+   * the protocol against loopback servers the guard would refuse.
+   */
+  constructor(
+    private creds: ErpNextCreds,
+    private transport: typeof fetch = guardedFetch,
+  ) {}
 
   private async req<T>(path: string): Promise<T> {
-    const res = await erpNextFetch(`${this.creds.url.replace(/\/$/, "")}${path}`, {
+    const res = await this.transport(`${this.creds.url.replace(/\/$/, "")}${path}`, {
       headers: {
         Authorization: `token ${this.creds.apiKey}:${this.creds.apiSecret}`,
         Accept: "application/json",
       },
+      redirect: "error",
     });
     if (!res.ok) {
-      throw new Error(`ERPNext HTTP ${res.status} ${path.slice(0, 80)}: ${(await res.text()).slice(0, 300)}`);
+      // Status and path only: echoing the response body would reflect
+      // whatever an untrusted host returns into operator-visible errors.
+      throw new Error(`ERPNext HTTP ${res.status} ${path.slice(0, 80)}`);
     }
     return (await res.json()) as T;
   }

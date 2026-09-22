@@ -33,19 +33,19 @@ const creds: ErpNextCreds = {
 // Every credentialed surface of the ERPNext client funnels through req():
 // list/getDoc hit /api/resource and ping hits the auth method — each carries
 // `Authorization: token key:secret` for an Administrator-scoped key.
-function clientAt(url: string): ErpNextClient {
-  return new ErpNextClient({ ...creds, url });
+function clientAt(url: string, transport?: typeof fetch): ErpNextClient {
+  return new ErpNextClient({ ...creds, url }, transport);
 }
 
-/** Track every fetch's redirect mode while transparently delegating to the
- *  real fetch (the client already targets whatever creds.url says). */
-function trackRedirectModes(originalFetch: typeof fetch): Array<RequestRedirect | undefined> {
-  const redirectModes: Array<RequestRedirect | undefined> = [];
-  globalThis.fetch = (input, init) => {
-    redirectModes.push(init?.redirect);
-    return originalFetch(input, init);
+/** Recording transport wrapping the real fetch: the client's default
+ *  transport is the SSRF-guarded fetch, which would refuse these loopback
+ *  test servers before connecting — so tests inject explicitly and record
+ *  the redirect mode the client requests. */
+function recordingTransport(spied: Array<RequestRedirect | undefined>): typeof fetch {
+  return (input, init) => {
+    spied.push(init?.redirect);
+    return fetch(input, init);
   };
-  return redirectModes;
 }
 
 // Every 3xx with a Location must be refused, not followed: undici would
@@ -73,10 +73,9 @@ test("ERPNext calls refuse redirects without forwarding the token Authorization 
     res.end();
   });
   const erpnextOrigin = await listen(redirector);
-  const originalFetch = globalThis.fetch;
-  const redirectModes = trackRedirectModes(originalFetch);
+  const redirectModes: Array<RequestRedirect | undefined> = [];
 
-  const client = clientAt(erpnextOrigin);
+  const client = clientAt(erpnextOrigin, recordingTransport(redirectModes));
   try {
     await assert.rejects(client.listAll("Sales Order", ["name"]), /fetch failed|redirect/i);
     await assert.rejects(client.getDoc("Sales Order", "SO-0001"), /fetch failed|redirect/i);
@@ -98,7 +97,6 @@ test("ERPNext calls refuse redirects without forwarding the token Authorization 
     assert.equal(attackerRequests, 0, "credentials must never reach the redirect target");
     assert.deepEqual(attackerAuth, []);
   } finally {
-    globalThis.fetch = originalFetch;
     await close(redirector);
     await close(attacker);
   }
@@ -131,11 +129,10 @@ test("valid same-origin ERPNext responses pass with the token Authorization head
     res.end(JSON.stringify({ data: [{ name: "SO-0001" }, { name: "SO-0002" }, { name: "SO-0003" }] }));
   });
   const erpnextOrigin = await listen(erpnext);
-  const originalFetch = globalThis.fetch;
-  const redirectModes = trackRedirectModes(originalFetch);
+  const redirectModes: Array<RequestRedirect | undefined> = [];
 
   try {
-    const client = clientAt(erpnextOrigin);
+    const client = clientAt(erpnextOrigin, recordingTransport(redirectModes));
     const rows = await client.listAll<{ name: string }>("Sales Order", ["name"], [["customer", "=", "Acme Ltd"]]);
     assert.deepEqual(rows.map((r) => r.name), ["SO-0001", "SO-0002", "SO-0003"]);
 
@@ -165,7 +162,36 @@ test("valid same-origin ERPNext responses pass with the token Authorization head
     assert.equal(listCall.query.get("fields"), JSON.stringify(["name"]));
     assert.equal(listCall.query.get("filters"), JSON.stringify([["customer", "=", "Acme Ltd"]]));
   } finally {
-    globalThis.fetch = originalFetch;
+    await close(erpnext);
+  }
+});
+
+// The injected transports above bypass the guard by explicit test choice.
+// With the default transport, a non-public origin is refused at request
+// time — even when nothing listens there, because the refusal precedes any
+// socket: a saved URL that later rebinds to internal addresses fails closed.
+test("the default transport refuses non-public origins without connecting", async () => {
+  const loopback = new ErpNextClient({ ...creds, url: "http://127.0.0.1:9" });
+  await assert.rejects(loopback.ping(), /public unicast/);
+  const unresolvable = new ErpNextClient({ ...creds, url: "https://erpnext.invalid" });
+  await assert.rejects(unresolvable.ping(), /public unicast/);
+});
+
+test("error responses name the status, never the response body", async () => {
+  const erpnext = createServer((_req, res) => {
+    res.writeHead(500, { "content-type": "text/html" });
+    res.end("<html>SECRET-MARKER internal trace</html>");
+  });
+  const erpnextOrigin = await listen(erpnext);
+  try {
+    const client = clientAt(erpnextOrigin, recordingTransport([]));
+    await assert.rejects(client.ping(), (error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      assert.match(message, /ERPNext HTTP 500/);
+      assert.doesNotMatch(message, /SECRET-MARKER/);
+      return true;
+    });
+  } finally {
     await close(erpnext);
   }
 });
