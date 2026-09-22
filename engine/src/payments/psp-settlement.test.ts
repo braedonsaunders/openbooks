@@ -751,6 +751,103 @@ test("Stripe positive adjustment rides the signed bucket and still reconciles", 
   assert.equal(summarizeSettlement(parsed.lines).netAmount, "50.0000");
 });
 
+test("Stripe negative fee footing signed books a fee credit, not more expense", () => {
+  // A fee reversal: Stripe returns the $15 dispute fee, so the row foots as
+  // net = amount − fee with the fee SIGNED (−10000 − −1500 = −8500). Booking
+  // another $15 of expense would overstate fees and understate the bank leg.
+  const parsed = parseStripeBalanceTransactions(
+    [{ id: "dp_rev", type: "dispute", amount: -10_000, fee: -1_500, net: -8_500, currency: "usd" }],
+    "po_feerev",
+    "2026-07-01",
+  );
+
+  assert.deepEqual(
+    parsed.lines.map(({ kind, amount }) => ({ kind, amount })),
+    [
+      { kind: "dispute", amount: "-100.0000" },
+      { kind: "fee", amount: "-15.0000" },
+    ],
+  );
+  const summary = summarizeSettlement(parsed.lines);
+  assert.equal(summary.feeAmount, "-15.0000");
+  assert.equal(summary.netAmount, "-85.0000");
+});
+
+test("Stripe negative fee footing under neither convention is refused with both readings", () => {
+  assert.throws(
+    () =>
+      parseStripeBalanceTransactions(
+        [{ id: "ch_badfee", type: "charge", amount: 1_250, fee: -36, net: 1_200, currency: "usd" }],
+        "po_badfee",
+        "2026-07-01",
+      ),
+    (error) =>
+      error instanceof PspSettlementError &&
+      /does not foot \(row 1 ch_badfee\): net 1200 != amount 1250 minus fee -36 \(signed: 1286\) nor minus fee magnitude \(magnitude: 1214\)/.test(
+        error.message,
+      ),
+  );
+});
+
+test("Stripe negative fee without a row net is refused instead of guessed", () => {
+  assert.throws(
+    () =>
+      parseStripeBalanceTransactions(
+        [{ id: "ch_nonet", type: "charge", amount: 1_250, fee: -36, currency: "usd" }],
+        "po_nonet",
+        "2026-07-01",
+      ),
+    (error) =>
+      error instanceof PspSettlementError &&
+      /fee direction is indeterminate \(row 1 ch_nonet\)/.test(error.message),
+  );
+});
+
+test("Stripe returned-payout funds book as transfers inside the later payout", () => {
+  // An earlier $100 payout failed and came back to the balance; the later
+  // $148.50 payout pays it out again. The payout_cancel row is a funding
+  // transfer, and the payout movement row anchors the total.
+  const parsed = parseStripeBalanceTransactions(
+    [
+      { id: "ch_2", type: "charge", amount: 5_000, fee: 150, net: 4_850, currency: "usd" },
+      { id: "pc_1", type: "payout_cancel", amount: 10_000, fee: 0, net: 10_000, currency: "usd" },
+      { id: "po_2", type: "payout", amount: -14_850, fee: 0, net: -14_850, currency: "usd" },
+    ],
+    "po_2",
+    "2026-07-01",
+  );
+
+  assert.deepEqual(
+    parsed.lines.map(({ kind, amount }) => ({ kind, amount })),
+    [
+      { kind: "charge", amount: "50.0000" },
+      { kind: "fee", amount: "1.5000" },
+      { kind: "transfer", amount: "100.0000" },
+    ],
+  );
+  assert.equal(summarizeSettlement(parsed.lines).netAmount, "148.5000");
+});
+
+test("Stripe payout movement outsized against its lines is refused, not half-posted", () => {
+  // The nets-total check passes vacuously here (both sides see only the
+  // charge); only the payout-movement anchor can catch the missing $100 of
+  // returned-payout constituents.
+  assert.throws(
+    () =>
+      parseStripeBalanceTransactions(
+        [
+          { id: "ch_2", type: "charge", amount: 5_000, fee: 150, net: 4_850, currency: "usd" },
+          { id: "po_2", type: "payout", amount: -15_000, fee: 0, net: -15_000, currency: "usd" },
+        ],
+        "po_2",
+        "2026-07-01",
+      ),
+    (error) =>
+      error instanceof PspSettlementError &&
+      /its payout movement totals 150\.0000 but settlement lines net to 48\.5000/.test(error.message),
+  );
+});
+
 test("Chargebee zero adjustment emits no adjustment line", () => {
   const parsed = parseChargebeeSettlement(
     {
