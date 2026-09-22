@@ -191,17 +191,26 @@ test("retention due, grace, legal hold, delete, and anonymize matrix", { skip: !
     const { setLegalHold } = await import("./documents/documents.ts");
     await setLegalHold({ orgId: h.org.orgId, actorId: h.hrId, documentId: heldDoc.document.id, hold: true });
 
-    // Retain clocks stored at completion from the schedule.
-    const clock = (await db.execute<{ retain_until: string }>(sql`
-      select retain_until::text as retain_until from hrm_documents where id = ${deleteId}
-    `)).rows[0]!;
-    assert.ok(clock.retain_until);
+    // Signing stores the database's real completion time, independently of
+    // the template's "today" date. A zero-year schedule is due on that
+    // completion date; use the latest one so crossing midnight is safe.
+    const clocks = (await db.execute<{ completed_on: string; retain_until: string }>(sql`
+      select completed_at::date::text as completed_on, retain_until::text as retain_until
+        from hrm_documents
+       where org_id = ${h.org.orgId} and id in (${deleteId}, ${anonId}, ${heldDoc.document.id})
+    `)).rows;
+    assert.equal(clocks.length, 3);
+    for (const clock of clocks) {
+      assert.ok(clock.completed_on);
+      assert.equal(clock.retain_until, clock.completed_on);
+    }
+    const tickDay = clocks.map((clock) => clock.completed_on).sort().at(-1)!;
 
     // Grace is 0, so one tick flags all three (retention_flagged events
     // + action rows) and executes the two unheld in the same pass: delete
     // purges bytes but keeps the row and events; anonymize clears title
     // and party. The held one blocks with its reason named.
-    const first = await runRetentionTick(h.org.orgId, "2026-09-21");
+    const first = await runRetentionTick(h.org.orgId, tickDay);
     assert.equal(first.flagged, 3);
     assert.equal(first.executed, 2);
     assert.equal(first.blocked, 1);
@@ -210,7 +219,7 @@ test("retention due, grace, legal hold, delete, and anonymize matrix", { skip: !
 
     // A re-run is idempotent: nothing new to flag or execute, and the
     // held action stays open and blocked.
-    const second = await runRetentionTick(h.org.orgId, "2026-09-21");
+    const second = await runRetentionTick(h.org.orgId, tickDay);
     assert.equal(second.flagged, 0);
     assert.equal(second.executed, 0);
     assert.equal(second.blocked, 1);
