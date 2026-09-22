@@ -120,14 +120,15 @@ export function toBaseQuantity(
   if (typeof factor !== "number" || !Number.isFinite(factor) || factor <= 0) {
     throw new InventoryError(
       `${lineLabel} is raised in unit "${trimmed}" with no conversion to the item's base unit "${baseUnit}" — ` +
-        `enter the quantity in ${baseUnit}, or configure a conversion for "${trimmed}" on the item's costing profile`,
+        `enter the quantity in ${baseUnit}, or add a "${trimmed}" row under Unit conversions ` +
+        `on the item's Inventory costing section`,
     );
   }
   const exact = canonicalDecimal(String(factor), 4);
   if (exact === null) {
     throw new InventoryError(
       `${lineLabel} unit "${trimmed}" converts at ${factor} ${baseUnit} per ${trimmed}, which cannot be expressed exactly — ` +
-        `configure an exact conversion on the item's costing profile`,
+        `configure an exact conversion under Unit conversions on the item's Inventory costing section`,
     );
   }
   return fromUnits(mulUnits(toUnits(quantity), toUnits(exact)));

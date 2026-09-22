@@ -183,9 +183,15 @@ export function parseUnitConversions(
   if (value === null) return {};
   if (typeof value !== "object" || Array.isArray(value)) return "invalid";
   const out: Record<string, number> = {};
+  const seenFolded = new Set<string>();
   for (const [rawKey, rawFactor] of Object.entries(value)) {
     const key = rawKey.trim();
     if (!key) return "invalid";
+    // Posting folds case, so "box" beside "BOX" is an ambiguous map, not two
+    // units — refuse it at the boundary rather than resolving it by key order.
+    const folded = key.toLowerCase();
+    if (seenFolded.has(folded)) return "invalid";
+    seenFolded.add(folded);
     if (
       typeof rawFactor !== "number" ||
       !Number.isFinite(rawFactor) ||
