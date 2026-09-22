@@ -11,8 +11,9 @@ const stateKey = Symbol.for('openbooks.internal-overhead-publish-test')
 interface RouteState {
   gateCalls: unknown[]
   publishCalls: unknown[][]
+  failKind: 'refusal' | 'unexpected' | null
 }
-const state: RouteState = { gateCalls: [], publishCalls: [] }
+const state: RouteState = { gateCalls: [], publishCalls: [], failKind: null }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
 
 const ORG_ID = '00000000-0000-4000-8000-00000000c001'
@@ -31,8 +32,11 @@ const mockSources = new Map<string, string>([
     'mock:overhead-publish',
     `
       const state = globalThis[Symbol.for('openbooks.internal-overhead-publish-test')]
+      export class OverheadPublishError extends Error {}
       export async function publishOverheadRates(...args) {
         state.publishCalls.push(args)
+        if (state.failKind === 'refusal') throw new OverheadPublishError('overhead auto-publish blocked: department X has no method')
+        if (state.failKind === 'unexpected') throw new Error('relation "openbooks_secret_table" does not exist')
         return { published: 1 }
       }
     `,
@@ -78,6 +82,7 @@ hooks.deregister()
 function reset(token: string | undefined): void {
   state.gateCalls = []
   state.publishCalls = []
+  state.failKind = null
   if (token === undefined) delete process.env.OPENBOOKS_INTERNAL_TOKEN
   else process.env.OPENBOOKS_INTERNAL_TOKEN = token
 }
@@ -142,4 +147,21 @@ test('the route compares the internal token in constant time through the shared 
   assert.match(source, /from ['"](\.\.\/)+lib\/internal-token['"]|@\/lib\/internal-token/)
   assert.doesNotMatch(source, /provided !== expected/)
   assert.doesNotMatch(source, /!==\s*expected/)
+})
+
+test('a domain refusal is a 409 naming the blocker, not a leaked 500', async () => {
+  reset('worker-secret')
+  state.failKind = 'refusal'
+  const response = await post({ orgId: ORG_ID, effectiveFrom: '2026-09-01' }, 'worker-secret')
+  assert.equal(response.status, 409)
+  assert.match(((await response.json()) as { error: string }).error, /blocked: department X has no method/)
+})
+
+test('an unexpected fault is a generic 500 that discloses nothing', async () => {
+  reset('worker-secret')
+  state.failKind = 'unexpected'
+  const response = await post({ orgId: ORG_ID, effectiveFrom: '2026-09-01' }, 'worker-secret')
+  assert.equal(response.status, 500)
+  const body = (await response.json()) as { error: string }
+  assert.doesNotMatch(body.error, /openbooks_secret_table/)
 })

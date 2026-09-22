@@ -9,6 +9,7 @@ import {
   runScheduledScript,
 } from '@openbooks/engine/src/scripting/scripting.ts'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
+import { unexpectedServerError } from '../../../../../../lib/api/unexpected'
 import { isUuid } from '../../../../../../lib/list-params'
 
 export const runtime = 'nodejs'
@@ -86,6 +87,6 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json(outcome)
   } catch (e) {
     if (e instanceof InvalidScheduledScriptCronError) return invalidCronResponse(e)
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 })
+    return unexpectedServerError('admin/scripts/run', e)
   }
 }
