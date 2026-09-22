@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeEmailDeliveryInput } from "./delivery-input.ts";
+import { normalizeEmailDeliveryInput } from "./delivery-input";
 
 const base = { to: "a@example.com", subject: "s", html: "<p>x</p>", text: "x" };
 

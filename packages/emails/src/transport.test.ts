@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deriveEmailDeliveryKey } from "./outcome.ts";
-import { sendVia, type EmailDeliveryIdentity, type EmailTransport } from "./transport.ts";
+import { deriveEmailDeliveryKey } from "./outcome";
+import { sendVia, type EmailDeliveryIdentity, type EmailTransport } from "./transport";
 
 const ORG = "018f6b2a-7c1d-7d3e-9f4a-2b8c4d5e6f70";
 const base = { to: "customer@example.com", subject: "Invoice overdue", html: "<p>Pay</p>", text: "Pay" };
