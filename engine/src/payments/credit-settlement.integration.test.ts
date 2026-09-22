@@ -10,7 +10,7 @@ import {
   unapplyCreditSettlement,
 } from "./credit-settlement.ts";
 import { paymentBookId } from "./payment-accounts.ts";
-import { CreditApplicationConflictError } from "./payment-errors.ts";
+import { CreditApplicationConflictError, PaymentError } from "./payment-errors.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -612,6 +612,48 @@ test("a key owned by another organization fails closed as a foreign key", { skip
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
     await withBypass(() => dropScratchOrg(other.orgId));
+  }
+});
+
+test("an invoice line cannot masquerade as the credit, even naming its own source document", { skip: !DB }, async () => {
+  // Every check except the kind passes for this input: the from-line is a
+  // posted open item of the right sign on the right control account, and its
+  // entry's source document matches the named one — it is just an INVOICE
+  // line, not a credit memo. Before the kind check, the engine stamped
+  // 'credit applied without cash' settlement evidence on a receivable, and
+  // the unapply refusal then pointed at the destructive void.
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const userId = await withBypass(() => createScratchUser(org.orgId, "Credit kind guard", "admin"));
+    const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-KIND-1", "210");
+    const targetId = await postDoc(org, userId, "customer_invoice", "INV-KIND-2", "210");
+    const invoiceLine = await openLineId(org.orgId, invoiceId);
+    const targetLine = await openLineId(org.orgId, targetId);
+    await assert.rejects(
+      () =>
+        withBypass(() =>
+          applyStandaloneCredits(org.orgId, userId, {
+            idempotencyKey: randomUUID(),
+            partyId: org.customerId,
+            side: "ar",
+            appliedOn: org.date,
+            credits: [
+              { fromLineId: invoiceLine, toLineId: targetLine, amount: "40", sourceDocumentId: invoiceId },
+            ],
+          }),
+        ),
+      (e: unknown) =>
+        e instanceof PaymentError && /must be a posted customer_credit line/.test(e.message),
+      "the from line must be a credit memo, not any posted open item of the right sign",
+    );
+    const rows = await withBypass(async () =>
+      (await db.execute<{ n: string }>(sql`
+        select count(*)::text as n from applications
+         where org_id = ${org.orgId} and (from_line_id = ${invoiceLine} or to_line_id = ${targetLine})`)).rows[0],
+    );
+    assert.equal(Number(rows!.n), 0, "the refused masquerade must write nothing");
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
   }
 });
 

@@ -19,11 +19,13 @@ export async function validateCreditAllocations(
   const rows = (await db.execute<{
     id: string; account_id: string; party_id: string | null; subsidiary_id: string;
     book_id: string; status: string; is_open_item: boolean; amount: string; source_document_id: string | null;
+    source_document_kind: string | null;
     currency: string; base_currency: string; txn_amount: string;
     source_used: string; target_used: string; source_txn_used: string; target_txn_used: string;
   }>(sql`
     select jl.id, jl.account_id, jl.party_id, jl.subsidiary_id, je.book_id, je.status,
            jl.is_open_item, jl.amount, jl.currency, jl.txn_amount, s.base_currency, d.id as source_document_id,
+           d.kind as source_document_kind,
            coalesce(ap.source_used,0) as source_used, coalesce(ap.target_used,0) as target_used,
            coalesce(ap.source_txn_used,0) as source_txn_used, coalesce(ap.target_txn_used,0) as target_txn_used
       from journal_lines jl
@@ -52,6 +54,23 @@ export async function validateCreditAllocations(
   for (const credit of credits) {
     if (!credit.sourceDocumentId || byId.get(credit.fromLineId)?.source_document_id !== credit.sourceDocumentId) {
       throw new PaymentError("credit source document must match the tenant-owned posted credit entry");
+    }
+    // The "credit" in a credit settlement must be a credit MEMO. The source-
+    // document match alone does not say which document kind supplied the
+    // line: any posted open item of the right sign (a receipt's on-account
+    // residual, another invoice's receivable) passes the checks above, and
+    // settling it through the credit path stamps
+    // settlement_rate_source='same_currency', reference='credit applied
+    // without cash' on balance that arose from cash - then its unapply
+    // refusal points at the destructive void for evidence this path
+    // created. The shipped panel only ever names the credit's own line, so
+    // this closes the engine to what the product means, not only what the
+    // UI offers.
+    const expectedKind = scope.side === "ap" ? "vendor_credit" : "customer_credit";
+    if (byId.get(credit.fromLineId)?.source_document_kind !== expectedKind) {
+      throw new PaymentError(
+        `the credit in a ${scope.side} settlement must be a posted ${expectedKind} line; cash-sourced or invoice open items settle through a payment, not the credit path`,
+      );
     }
     for (const [id, source] of [[credit.fromLineId, true], [credit.toLineId, false]] as const) {
       const row = byId.get(id);
