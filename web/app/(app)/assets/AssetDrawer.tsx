@@ -41,6 +41,7 @@ import { GroupValuationButton } from './GroupValuationButton'
 import { AssetChangeButton } from './AssetChangeButton'
 import { DisposeButton } from './DisposeButton'
 import { RemeasureButton } from './RemeasureButton'
+import { ReverseEventButton } from './ReverseEventButton'
 import { DepreciationInputButton } from './DepreciationInputButton'
 import type { AssetPayload } from '../../api/assets/_lib'
 
@@ -452,6 +453,7 @@ export function AssetDrawer({
         {canManage && status === 'in_service' && inputSchedules.length > 0 ? <DepreciationInputButton assetId={a.id} schedules={inputSchedules} /> : null}
         {canManage && ['in_service','fully_depreciated'].includes(status) ? <>{status === 'in_service' ? <RemeasureButton assetId={a.id} /> : null}<AssetChangeButton assetId={a.id} accounts={accountOptions} categories={categories} /><GroupValuationButton assetId={a.id} /></> : null}
         {canManage && (status === 'in_service' || status === 'fully_depreciated') ? <DisposeButton assetId={a.id} accountOptions={accountOptions} /> : null}
+        {canManage && hasAccountingEvidence ? <ReverseEventButton assetId={a.id} /> : null}
         {canCustomize ? <Button asChild variant="ghost"><Link href="/admin/customization?recordType=fixed_asset&tab=forms">{tCommon('actions.customize')}</Link></Button> : null}
         {canManage && isDraft && !hasAccountingEvidence ? <><div className="my-1 border-t border-slate-200 dark:border-slate-800" /><Button variant="ghost" disabled={busy} onClick={remove} className="text-red-600 dark:text-red-400">{tCommon('actions.delete')}</Button></> : null}
       </div>

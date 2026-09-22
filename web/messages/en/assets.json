@@ -24,6 +24,33 @@
     },
     "done": "{kind} — {delta}"
   },
+  "reverseEvent": {
+    "label": "Reverse event",
+    "event": "Lifecycle event",
+    "date": "Reversal date",
+    "reason": "Reason for reversal",
+    "reasonTooShort": "Enter a reversal reason of at least 8 characters",
+    "action": "Post reversal",
+    "working": "Reversing…",
+    "done": "Reversal posted",
+    "empty": "No reversible lifecycle events.",
+    "loadFailed": "Could not load lifecycle events",
+    "kinds": {
+      "revalued": "Revalued",
+      "impaired": "Impaired",
+      "disposed": "Disposed",
+      "written_off": "Written off",
+      "reversed": "Reversed",
+      "unknown": "Event"
+    },
+    "reasons": {
+      "already_reversed": "Already reversed.",
+      "accounting_change": "Owned by an approved multi-book change — reverse it from Accounting changes.",
+      "entry_not_posted": "Its journal is not posted.",
+      "later_event": "Reverse the later {kind} event first.",
+      "no_reversal_workflow": "This event kind has no direct reversal workflow."
+    }
+  },
   "tabs": { "register": "Register", "taxDepreciation": "Tax depreciation" },
   "taxPools": {
     "title": "Tax Depreciation — Class Pools",
