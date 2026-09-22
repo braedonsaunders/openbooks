@@ -50,7 +50,7 @@ export async function upsertUnionFringe(
               false, ${taxTreatment}, ${input.expenseAccountId ?? null},
               ${input.liabilityAccountId}, ${agreement.rows[0].remittance_party_id},
               ${input.sequence ?? 300}, ${actorId}, ${actorId})
-      on conflict (org_id, code) do update
+      on conflict (org_id, country, code) do update
         set name = excluded.name, tax_treatment = excluded.tax_treatment,
             expense_account_id = excluded.expense_account_id,
             liability_account_id = excluded.liability_account_id,
