@@ -7,7 +7,8 @@
     "previousPageAria": "Vorherige Seite",
     "nextPageAria": "Nächste Seite",
     "prev": "Zurück",
-    "pageOf": "Seite {page} von {pages}"
+    "pageOf": "Seite {page} von {pages}",
+    "selectAllMatching": "Alle passenden Zeilen auswählen"
   },
   "search": {
     "placeholder": "Suchen…",

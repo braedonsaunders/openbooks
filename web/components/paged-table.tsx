@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Search } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import {
@@ -23,6 +23,22 @@ export interface PagedColumn<T> {
   search?: (row: T) => string
 }
 
+export interface PagedSelection<T> {
+  getId: (row: T) => string
+  /** Currently selected ids (array or set). */
+  selectedIds: readonly string[] | ReadonlySet<string>
+  onToggle: (id: string) => void
+  /** Toggle the ids passed. The table always passes the WHOLE filtered set
+   *  across all pages — never just the visible page — so a caller
+   *  implementing select-all selects (or clears) every search match, and a
+   *  caller wanting page-only semantics must narrow the ids itself. */
+  onToggleAll: (ids: string[]) => void
+  disabled?: boolean
+}
+
+const checkboxClass =
+  'h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600 dark:bg-slate-950'
+
 /**
  * A client-side searched + paginated table for data already loaded into the
  * flyout/page (repository conventions: ALL tables are paginated). For server-driven lists
@@ -40,6 +56,7 @@ export function PagedTable<T>({
   onRowClick,
   footer,
   emptyAsRow = false,
+  selection,
 }: {
   rows: T[]
   columns: PagedColumn<T>[]
@@ -59,6 +76,9 @@ export function PagedTable<T>({
    *  `empty` as a single spanning row — the SetupEntitySection/departments
    *  composition. Default keeps the bare `empty` slot for existing callers. */
   emptyAsRow?: boolean
+  /** Optional checkbox column with a select-all header over the filtered
+   *  rows. Selection state lives with the caller; this only renders it. */
+  selection?: PagedSelection<T>
 }) {
   const t = useTranslations('common')
   const tp = useTranslations('ui.pagination')
@@ -77,6 +97,26 @@ export function PagedTable<T>({
   const clamped = Math.min(page, pageCount - 1)
   const start = clamped * pageSize
   const view = filtered.slice(start, start + pageSize)
+
+  const selected = useMemo(() => {
+    if (!selection) return null
+    return selection.selectedIds instanceof Set
+      ? selection.selectedIds
+      : new Set(selection.selectedIds)
+  }, [selection])
+  const filteredIds = useMemo(
+    () => (selection ? filtered.map((row) => selection.getId(row)) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [filtered, selection?.getId],
+  )
+  const allFilteredSelected =
+    !!selection && filteredIds.length > 0 && filteredIds.every((id) => selected?.has(id))
+  const someFilteredSelected =
+    !!selection && filteredIds.some((id) => selected?.has(id)) && !allFilteredSelected
+  const selectAllRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (selectAllRef.current) selectAllRef.current.indeterminate = someFilteredSelected
+  }, [someFilteredSelected])
 
   const toolbar = searchable ? (
     toolbarAfter ? (
@@ -125,7 +165,7 @@ export function PagedTable<T>({
           </TableHeader>
           <TableBody>
             <TableRow>
-              <TableCell colSpan={columns.length} className="text-slate-500 dark:text-slate-400">
+              <TableCell colSpan={selection ? columns.length + 1 : columns.length} className="text-slate-500 dark:text-slate-400">
                 {empty}
               </TableCell>
             </TableRow>
@@ -141,6 +181,19 @@ export function PagedTable<T>({
       <Table>
         <TableHeader>
           <TableRow>
+            {selection ? (
+              <TableHead className="w-10">
+                <span className="sr-only">{tp('selectAllMatching')}</span>
+                <input
+                  ref={selectAllRef}
+                  type="checkbox"
+                  className={checkboxClass}
+                  checked={allFilteredSelected}
+                  disabled={selection.disabled || filteredIds.length === 0}
+                  onChange={() => selection.onToggleAll(filteredIds)}
+                />
+              </TableHead>
+            ) : null}
             {columns.map((c) => (
               <TableHead key={c.key} align={c.align === 'right' ? 'right' : undefined} className={c.align === 'right' ? 'text-right' : undefined}>
                 {c.header}
@@ -155,6 +208,18 @@ export function PagedTable<T>({
               className={onRowClick ? `cursor-pointer ${rowClassName?.(row) ?? ''}` : rowClassName?.(row)}
               onClick={onRowClick ? () => onRowClick(row) : undefined}
             >
+              {selection ? (
+                <TableCell>
+                  <input
+                    type="checkbox"
+                    className={checkboxClass}
+                    checked={selected?.has(selection.getId(row)) ?? false}
+                    disabled={selection.disabled}
+                    onChange={() => selection.onToggle(selection.getId(row))}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </TableCell>
+              ) : null}
               {columns.map((c) => (
                 <TableCell key={c.key} className={c.align === 'right' ? 'text-right tabular-nums' : undefined}>
                   {c.cell(row)}

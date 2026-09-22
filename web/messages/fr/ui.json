@@ -7,7 +7,8 @@
     "previousPageAria": "Page précédente",
     "nextPageAria": "Page suivante",
     "prev": "Préc.",
-    "pageOf": "Page {page} sur {pages}"
+    "pageOf": "Page {page} sur {pages}",
+    "selectAllMatching": "Sélectionner toutes les lignes correspondantes"
   },
   "search": {
     "placeholder": "Rechercher…",

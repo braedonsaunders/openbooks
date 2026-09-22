@@ -7,7 +7,8 @@
     "previousPageAria": "Previous page",
     "nextPageAria": "Next page",
     "prev": "Prev",
-    "pageOf": "Page {page} of {pages}"
+    "pageOf": "Page {page} of {pages}",
+    "selectAllMatching": "Select all matching rows"
   },
   "search": {
     "placeholder": "Search…",

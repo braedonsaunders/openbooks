@@ -58,6 +58,8 @@ type AssetTaxRegimeRow = {
   classes: { code: string; name: string }[]
 }
 type AssetMethodRow = { id: string; code: string; name: string }
+type DepreciationCandidateRow = { id: string; asset_number: string; name: string; status: string }
+type DepreciationPeriodRow = { id: string; name: string; starts_on: string; ends_on: string }
 
 export interface AssetsData {
   title: string
@@ -68,6 +70,10 @@ export interface AssetsData {
   docLabel: string
   showActions: boolean
   books: { id: string; name: string; is_primary?: boolean }[]
+  /** Depreciable-register candidates for the review drawer picker. */
+  candidates: { id: string; number: string; name: string; status: string }[]
+  /** Valid accounting periods for the review drawer period control. */
+  periods: { id: string; name: string; startsOn: string; endsOn: string }[]
   /** Compatibility data for tenant PageSpecs saved before Equipment became a tab. */
   equipmentLabel: string
   currentParams: Record<string, string | string[] | undefined>
@@ -111,6 +117,8 @@ export async function loadAssets(
     docLabel: t('equipment.documentation'),
     showActions: false,
     books: [] as AssetsData['books'],
+    candidates: [] as AssetsData['candidates'],
+    periods: [] as AssetsData['periods'],
     equipmentLabel: t('equipment.title'),
     currentParams: sp,
     canManage,
@@ -133,10 +141,16 @@ export async function loadAssets(
     }
   }
 
-  const [multiSub, allSubsidiaries, depreciationBooks] = await Promise.all([
+  const [multiSub, allSubsidiaries, depreciationBooks, depreciationPeriods, depreciationCandidates] = await Promise.all([
     isMultiSubsidiary(orgId),
     subsidiaryOptions(),
     db.execute<AssetBookRow>(sql`select id, name, is_primary from accounting_books where org_id=${orgId} and is_active order by is_primary desc, code`),
+    db.execute<DepreciationPeriodRow>(sql`select id, name, starts_on::text as starts_on, ends_on::text as ends_on from accounting_periods where org_id=${orgId} and not is_adjustment order by starts_on desc`),
+    // Picker rows for the review drawer: live depreciable register only.
+    // Reader-scoped like the drawer payload — never the whole tenant.
+    db.execute<DepreciationCandidateRow>(authz.allowedSubsidiaryIds
+      ? sql`select id, asset_number, name, status from fixed_assets where org_id=${orgId} and status in ('in_service','fully_depreciated') and subsidiary_id = any(${`{${[...authz.allowedSubsidiaryIds].join(",")}}`}::uuid[]) order by asset_number`
+      : sql`select id, asset_number, name, status from fixed_assets where org_id=${orgId} and status in ('in_service','fully_depreciated') order by asset_number`),
   ])
   const subsidiaries = authz.allowedSubsidiaryIds
     ? allSubsidiaries.filter((subsidiary) => authz.allowedSubsidiaryIds!.has(subsidiary.id))
@@ -249,6 +263,7 @@ export async function loadAssets(
       currentFormId: createForm.row?.id ?? null,
       fieldDefs: createFieldDefs as AssetDrawerProps['fieldDefs'],
       depreciationMethods: createPickers[3].rows,
+      periods: [] as AssetDrawerProps['periods'],
       closeHref: createCloseHref,
       createMode: true,
     }
@@ -305,6 +320,12 @@ export async function loadAssets(
         currentFormId: resolvedForm.row?.id ?? null,
         fieldDefs: fieldDefs as AssetDrawerProps['fieldDefs'],
         depreciationMethods: pickers[3].rows,
+        periods: depreciationPeriods.rows.map((row) => ({
+          id: row.id,
+          name: row.name,
+          startsOn: row.starts_on,
+          endsOn: row.ends_on,
+        })),
         closeHref: editRequestedReturn?.startsWith('/assets') ? editRequestedReturn : '/assets',
       }
     }
@@ -314,6 +335,18 @@ export async function loadAssets(
     ...base,
     showActions: canManage,
     books: depreciationBooks.rows as AssetsData['books'],
+    candidates: depreciationCandidates.rows.map((row) => ({
+      id: row.id,
+      number: row.asset_number,
+      name: row.name,
+      status: row.status,
+    })),
+    periods: depreciationPeriods.rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      startsOn: row.starts_on,
+      endsOn: row.ends_on,
+    })),
     showNewRedirect,
     drawer,
   }
@@ -328,7 +361,7 @@ export function assetsSpec(data: AssetsData): PageSpec {
   }
   const runDepreciation = {
     widget: 'run-depreciation',
-    props: { books: data.books },
+    props: { books: data.books, candidates: data.candidates, periods: data.periods },
   }
   return page({
     route: '/assets',
