@@ -52,8 +52,18 @@ import { PayrollPackError } from "../payroll-error.ts";
 export type GbTaxCode =
   | {
     kind: "suffix";
-    /** Annual tax-free pay the code carries ("12570" or "0" for 0T). */
-    allowanceAnnual: string;
+    /**
+     * Annual tax-free pay the code carries ("12579" for 1257L, "0" for 0T):
+     * the code number × 10 + 9, not the £12,570 Personal Allowance. HMRC
+     * Tables A (Pay Adjustment Tables) embody the +9 — e.g. month-1 free pay
+     * for code 1 is £1.59 (ceiling of 19/12), for code 500 £417.42
+     * (ceiling of 5,009/12) — and the PAYE manual states free pay "is a
+     * proportion of the employee's maximum tax allowance which is reflected
+     * in the code" (PAYE70025: week 1 is 1/52, month 1 is 1/12 of it).
+     * Pricing 1257L off 12,570 understates month-1 free pay by 75p
+     * (£1,047.50 instead of £1,048.25).
+     */
+    freePayAnnual: string;
     /** Welsh C-prefix alias: identical rUK arithmetic, Welsh taxpayer. */
     welsh: boolean;
     /** Scottish S-prefix: prices through GB_SCT_BANDS, never the rUK bands. */
@@ -81,7 +91,13 @@ export type GbTaxCode =
   };
 
 const STANDARD_ALLOWANCE_NUMBER = 1257;
-const STANDARD_ALLOWANCE_ANNUAL = "12570";
+/**
+ * The Tables-A top-up: a suffix code number covers a £10 allowance range and
+ * free pay prices at the top of it (code × 10 + 9), so 1257L carries £12,579
+ * of annual free pay against the £12,570 Personal Allowance. K codes take no
+ * top-up (their added pay is exactly number × 10 — see the K branch below).
+ */
+const SUFFIX_FREE_PAY_TOP_UP = 9;
 
 function refuse(code: string, reason: string): never {
   throw new PayrollPackError(
@@ -126,7 +142,7 @@ export function parseGbTaxCode(raw: string): GbTaxCode {
     return { kind: "flat", rate: "0.45", welsh, scottish: false };
   }
   if (rest === "0T") {
-    return { kind: "suffix", allowanceAnnual: "0", welsh, scottish: false, nonCumulative };
+    return { kind: "suffix", freePayAnnual: "0", welsh, scottish: false, nonCumulative };
   }
   if (rest === "NT") {
     if (nonCumulative) refuse(raw, "NT carries no W1/M1/X marker — it already deducts nothing");
@@ -156,7 +172,11 @@ export function parseGbTaxCode(raw: string): GbTaxCode {
         + "transcribed — any other numeric code needs the Tables A free-pay schedule, which this "
         + "pack has not transcribed");
     }
-    return { kind: "suffix", allowanceAnnual: STANDARD_ALLOWANCE_ANNUAL, welsh, scottish: false, nonCumulative };
+    return {
+      kind: "suffix",
+      freePayAnnual: String(number * 10 + SUFFIX_FREE_PAY_TOP_UP),
+      welsh, scottish: false, nonCumulative,
+    };
   }
 
   return refuse(raw, "unrecognised code shape — operate only codes HMRC documents at "
@@ -215,7 +235,11 @@ function parseScottishCode(raw: string, rest: string, nonCumulative: boolean): G
         + "any other Scottish numeric code needs the Tables A free-pay schedule, which this "
         + "pack has not transcribed");
     }
-    return { kind: "suffix", allowanceAnnual: STANDARD_ALLOWANCE_ANNUAL, welsh: false, scottish: true, nonCumulative };
+    return {
+      kind: "suffix",
+      freePayAnnual: String(number * 10 + SUFFIX_FREE_PAY_TOP_UP),
+      welsh: false, scottish: true, nonCumulative,
+    };
   }
   return refuse(raw, "unrecognised Scottish code shape — the transcribed S-prefix set is S1257L "
     + "(with optional W1/M1/X), SBR, SD0, SD1, SD2 and SD3 "
