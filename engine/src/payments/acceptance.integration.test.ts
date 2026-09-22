@@ -541,6 +541,56 @@ test("payment link settles a signed webhook into an applied receipt with a surch
   }
 });
 
+test("a provider outage answering HTML surfaces as the named refusal, never a parse error", { skip: !DB }, async () => {
+  // Before the infallible body read, a WAF's HTML 502 (or an empty gateway
+  // response) made res.json() throw a SyntaxError from inside the adapter,
+  // displacing the composed refusal — the pay-link route turned it into a
+  // 500 "Unexpected token" so an operator could not tell a bad API key from
+  // a provider outage. The refusal must name the provider and the status.
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Outage Tester", "admin");
+    await enableOnlinePayments(org.orgId);
+    const invoiceId = randomUUID();
+    await db.execute(sql`
+      insert into documents
+        (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+         document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
+      values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-OUTAGE-1',
+              ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '1',
+              '100', '0', '100', ${userId})`);
+    await db.execute(sql`
+      insert into document_lines
+        (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
+      values (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '1', '100', '100', '0', '0')`);
+    await db.execute(sql`
+      update documents set status = 'approved', updated_at = now()
+       where id = ${invoiceId} and org_id = ${org.orgId}`);
+    await postDocument(invoiceId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
+    await db.execute(sql`
+      insert into psp_provider_configs
+        (org_id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id, secrets, created_by, updated_by)
+      values (${org.orgId}, 'stripe', 'Stripe', true, true, ${org.accounts.bank},
+              ${sealJson({ apiKey: "sk_test_itest", webhookSecret: "whsec_itest" })}, ${userId}, ${userId})`);
+    const link = await createPaymentLink(org.orgId, userId, { documentId: invoiceId, provider: "stripe" });
+    await assert.rejects(
+      () =>
+        createCheckoutSession(link.token, "https://app.test/pay/" + link.token, async () => ({
+          status: 502,
+          // A WAF's HTML error page: the body is not JSON at all.
+          json: async () => {
+            throw new SyntaxError("Unexpected token '<', \"<html>\" is not valid JSON");
+          },
+        })),
+      (e: unknown) =>
+        e instanceof PaymentAcceptanceError && /stripe checkout failed: 502/.test(e.message),
+      "an HTML outage must surface as the composed refusal naming the provider and status",
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("a receipt keeps the over-collected remainder on-account when another channel paid first", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
