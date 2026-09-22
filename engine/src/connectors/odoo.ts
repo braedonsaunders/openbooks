@@ -8,8 +8,10 @@
  * self-hosted or odoo.sh/online (any version with the external API, 14+).
  */
 
+import { guardedFetch } from "./ssrf-guard.ts";
+
 export interface OdooCreds {
-  url: string; // e.g. http://localhost:8069 or https://mycompany.odoo.com
+  url: string; // e.g. https://mycompany.odoo.com (must resolve to public addresses)
   database: string;
   username: string;
   apiKey: string; // API key or password
@@ -26,18 +28,24 @@ interface JsonRpcResponse<T> {
  *  call carries the tenant database, username, and API key (or password) in its
  *  POST body; following even one 3xx could repost them to a host that was never
  *  configured as the tenant's Odoo origin. */
-function odooFetch(url: string | URL, init: RequestInit = {}): Promise<Response> {
-  return fetch(url, { ...init, redirect: "error" });
-}
-
 export class OdooClient {
   private uid: number | null = null;
   private seq = 0;
 
-  constructor(private creds: OdooCreds) {}
+  /**
+   * `transport` defaults to the shared SSRF-guarded fetch: the saved-time
+   * URL check goes stale when DNS rebinds, so every request re-resolves the
+   * origin, requires public unicast, pins the socket to a checked address,
+   * and refuses redirects. Tests inject a recording transport to exercise
+   * the protocol against loopback servers the guard would refuse.
+   */
+  constructor(
+    private creds: OdooCreds,
+    private transport: typeof fetch = guardedFetch,
+  ) {}
 
   private async rpc<T>(service: string, method: string, args: unknown[]): Promise<T> {
-    const res = await odooFetch(`${this.creds.url.replace(/\/$/, "")}/jsonrpc`, {
+    const res = await this.transport(`${this.creds.url.replace(/\/$/, "")}/jsonrpc`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -46,8 +54,13 @@ export class OdooClient {
         id: ++this.seq,
         params: { service, method, args },
       }),
+      redirect: "error",
     });
-    if (!res.ok) throw new Error(`Odoo HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    // Status only: echoing the raw response body would reflect whatever an
+    // untrusted host returns into operator-visible errors. The structured
+    // JSON-RPC error below stays — it is the protocol's error channel, not
+    // the raw body, and names why the call failed.
+    if (!res.ok) throw new Error(`Odoo HTTP ${res.status}`);
     const data = (await res.json()) as JsonRpcResponse<T>;
     if (data.error) {
       const detail = data.error.data?.message ?? data.error.message;

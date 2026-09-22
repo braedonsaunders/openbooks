@@ -41,15 +41,15 @@ const credsFor = (origin: string): OdooCreds => ({
   apiKey: "secret-api-key",
 });
 
-/** Record the redirect mode every client request is issued with so the tests
- *  can prove the credential-bearing POSTs never opt into following redirects. */
-function spyRedirectMode(originalFetch: typeof fetch): Array<RequestRedirect | undefined> {
-  const redirectModes: Array<RequestRedirect | undefined> = [];
-  globalThis.fetch = (input, init) => {
-    redirectModes.push(init?.redirect);
-    return originalFetch(input, init);
+/** Recording transport wrapping the real fetch: the client's default
+ *  transport is the SSRF-guarded fetch, which would refuse these loopback
+ *  test servers before connecting — so tests inject explicitly and record
+ *  the redirect mode the client requests. */
+function recordingTransport(spied: Array<RequestRedirect | undefined>): typeof fetch {
+  return (input, init) => {
+    spied.push(init?.redirect);
+    return fetch(input, init);
   };
-  return redirectModes;
 }
 
 // Every 3xx with a Location must be refused, not followed: 307/308 preserve
@@ -77,15 +77,14 @@ test("Odoo JSON-RPC calls refuse redirects without reposting credentials", async
     res.end();
   });
   const odooOrigin = await listen(redirector);
-  const originalFetch = globalThis.fetch;
-  const redirectModes = spyRedirectMode(originalFetch);
+  const redirectModes: Array<RequestRedirect | undefined> = [];
 
   try {
     // authenticate() carries db + username + apiKey; execute_kw re-sends them.
-    const authClient = new OdooClient(credsFor(odooOrigin));
+    const authClient = new OdooClient(credsFor(odooOrigin), recordingTransport(redirectModes));
     await assert.rejects(authClient.authenticate(), /fetch failed|redirect/i);
 
-    const searchClient = new OdooClient(credsFor(odooOrigin));
+    const searchClient = new OdooClient(credsFor(odooOrigin), recordingTransport(redirectModes));
     await assert.rejects(
       searchClient.searchReadAll("res.partner", [], ["name"]),
       /fetch failed|redirect/i,
@@ -100,7 +99,6 @@ test("Odoo JSON-RPC calls refuse redirects without reposting credentials", async
     assert.deepEqual(redirectModes, ["error", "error"]);
     assert.equal(attackerRequests, 0, "credentials must never reach the redirect target");
   } finally {
-    globalThis.fetch = originalFetch;
     await close(redirector);
     await close(attacker);
   }
@@ -147,11 +145,10 @@ test("valid same-origin calls succeed: authentication, execute_kw, paginated sea
     res.end(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: page }));
   });
   const odooOrigin = await listen(odoo);
-  const originalFetch = globalThis.fetch;
-  const redirectModes = spyRedirectMode(originalFetch);
+  const redirectModes: Array<RequestRedirect | undefined> = [];
 
   try {
-    const client = new OdooClient(credsFor(odooOrigin));
+    const client = new OdooClient(credsFor(odooOrigin), recordingTransport(redirectModes));
     assert.equal(await client.authenticate(), 42);
     // The cached uid must suppress a second authenticate round-trip.
     assert.equal(await client.authenticate(), 42);
@@ -198,7 +195,6 @@ test("valid same-origin calls succeed: authentication, execute_kw, paginated sea
     await client.searchReadAll("res.partner", [["id", "=", 1]], ["name"]);
     assert.equal(seen.length - beforeSecondPass, 2, "cached uid must skip re-authentication");
   } finally {
-    globalThis.fetch = originalFetch;
     await close(odoo);
   }
 });
@@ -214,19 +210,37 @@ test("same-origin failures surface real errors instead of fake success", async (
       res.end(testCase.payload);
     });
     const odooOrigin = await listen(odoo);
-    const originalFetch = globalThis.fetch;
-    const redirectModes = spyRedirectMode(originalFetch);
+    const redirectModes: Array<RequestRedirect | undefined> = [];
     try {
-      const client = new OdooClient(credsFor(odooOrigin));
+      const client = new OdooClient(credsFor(odooOrigin), recordingTransport(redirectModes));
       if (testCase.status !== undefined) {
-        await assert.rejects(client.authenticate(), /Odoo HTTP 500/);
+        // The status survives; the raw "boom" body must not be reflected.
+        await assert.rejects(client.authenticate(), (error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error);
+          assert.match(message, /Odoo HTTP 500/);
+          assert.doesNotMatch(message, /boom/);
+          return true;
+        });
       } else {
         await assert.rejects(client.authenticate(), /Odoo RPC error: Access Denied/);
       }
       assert.deepEqual(redirectModes, ["error"]);
     } finally {
-      globalThis.fetch = originalFetch;
       await close(odoo);
     }
   }
+});
+
+// The injected transports above bypass the guard by explicit test choice.
+// With the default transport, a non-public origin is refused at request
+// time — even when nothing listens there, because the refusal precedes any
+// socket: a saved URL that later rebinds to internal addresses fails closed.
+test("the default transport refuses non-public origins without connecting", async () => {
+  const loopback = new OdooClient({
+    url: "http://127.0.0.1:9",
+    database: "tenant-db",
+    username: "integration-user",
+    apiKey: "secret-api-key",
+  });
+  await assert.rejects(loopback.authenticate(), /public unicast/);
 });
