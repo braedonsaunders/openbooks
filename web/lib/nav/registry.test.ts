@@ -64,6 +64,19 @@ test('default workspaces follow the approved journey-oriented information archit
     'hrm-compliance',
     'me',
   ])
+  assert.deepEqual(DEFAULT_NAV_ORDER['my-work'], [
+    'dashboard',
+    'approvals',
+    'assistant',
+    'continuous-close',
+    'documents',
+    'apps',
+  ])
+  assert.equal(
+    NAV_MODULES.find((module) => module.key === 'continuous-close')?.group,
+    'my-work',
+  )
+  assert.equal(DEFAULT_NAV_ORDER.accounting.includes('continuous-close'), false)
   assert.deepEqual(
     DEFAULT_NAV_ORDER.accounting.slice(2, 5),
     ['revenue', 'assets', 'tax-depreciation'],

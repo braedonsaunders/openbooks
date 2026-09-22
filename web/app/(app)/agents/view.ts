@@ -406,14 +406,6 @@ export async function loadAgents(
         label: t('tabs.briefing'),
         active: briefingMode,
       },
-      // Runs live in Setup → Agents (c02); the tab links out, same as the
-      // configure action. Never active here — the workbench owns no run UI.
-      {
-        key: 'activity',
-        href: '/admin/setup/agents/activity',
-        label: t('tabs.activity'),
-        active: false,
-      },
     ],
     proposalsOnly,
     briefingMode,
@@ -500,21 +492,25 @@ export function agentsSpec(data: AgentsData): PageSpec {
   return page({
     route: '/agents',
     layout: 'list',
+    // The list layout intentionally supplies no vertical rhythm between body
+    // blocks. Inbox/Proposals need the house separation between KPI strip,
+    // toolbar, table, and paging; Briefing gets the same stable panel rhythm.
+    bodyClassName: 'space-y-5',
     header: [
       pageHeader({
         title: f('title'),
         description: f('description'),
-        // Narrow: the tab strip is ~340px, so the configure action stacks
-        // under the tabs instead of clipping off the row; single row on
-        // desktop.
-        actionsClassName: 'flex flex-col items-end gap-2 sm:flex-row sm:items-center',
+        actionsClassName: 'flex flex-wrap items-center justify-end gap-2',
         actions: [
-          widget('module-home-tabs', { tabs: data.tabs }),
           widget(
             'link-button',
             { href: '/admin/setup/agents', label: data.configureLabel, variant: 'outline', iconKey: 'settings' },
             f('canManage'),
           ),
+          // Briefing actions belong in the action rail, not below the panel.
+          widget('agents-briefing-actions', { ...data.briefingActions }, f('showBriefing')),
+          // The shared route switcher is always the rightmost header action.
+          widget('module-home-tabs', { tabs: data.tabs }),
         ],
       }),
     ],
@@ -545,7 +541,6 @@ export function agentsSpec(data: AgentsData): PageSpec {
               description: data.briefingGeneratedAt,
             }),
             widgetBlock('agents-briefing-body', { text: data.briefingText }),
-            widgetBlock('agents-briefing-actions', { ...data.briefingActions }),
           ]),
         ]),
         when: f('hasBriefing'),
@@ -558,66 +553,24 @@ export function agentsSpec(data: AgentsData): PageSpec {
         when: f('briefingEmpty'),
       },
       {
-        ...widgetBlock('agents-briefing-actions', { ...data.briefingActions }),
-        when: f('briefingEmpty'),
-      },
-      {
         ...widgetBlock('agents-kpi-strip', { items: data.kpis }),
         when: f('showInboxChrome'),
       },
       {
-        ...grid('flex flex-wrap items-center gap-2', [
-        widgetBlock('search-input', { placeholder: data.searchPlaceholder }),
-        widgetBlock('filter-chips', {
+        ...widgetBlock('list-toolbar', {
           basePath: '/agents',
           currentParams: data.currentParams,
-          paramKey: 'packs',
-          label: data.packLabel,
-          options: data.packOptions,
+          search: { paramKey: 'q', placeholder: data.searchPlaceholder },
+          filters: [
+            { paramKey: 'packs', label: data.packLabel, options: data.packOptions },
+            { paramKey: 'status', label: data.statusLabel, options: data.statusOptions },
+            { paramKey: 'severity', label: data.severityLabel, options: data.severityOptions },
+            { paramKey: 'subsidiary', label: data.subsidiaryLabel, options: data.subsidiaryOptions },
+            { paramKey: 'proposals', label: data.proposalLabel, options: data.proposalOptions },
+            { paramKey: 'assigned', label: data.assignmentLabel, options: data.assignmentOptions },
+            { paramKey: 'since', label: data.sinceLabel, options: data.sinceOptions },
+          ],
         }),
-        widgetBlock('filter-chips', {
-          basePath: '/agents',
-          currentParams: data.currentParams,
-          paramKey: 'status',
-          label: data.statusLabel,
-          options: data.statusOptions,
-        }),
-        widgetBlock('filter-chips', {
-          basePath: '/agents',
-          currentParams: data.currentParams,
-          paramKey: 'severity',
-          label: data.severityLabel,
-          options: data.severityOptions,
-        }),
-        widgetBlock('filter-chips', {
-          basePath: '/agents',
-          currentParams: data.currentParams,
-          paramKey: 'subsidiary',
-          label: data.subsidiaryLabel,
-          options: data.subsidiaryOptions,
-        }),
-        widgetBlock('filter-chips', {
-          basePath: '/agents',
-          currentParams: data.currentParams,
-          paramKey: 'proposals',
-          label: data.proposalLabel,
-          options: data.proposalOptions,
-        }),
-        widgetBlock('filter-chips', {
-          basePath: '/agents',
-          currentParams: data.currentParams,
-          paramKey: 'assigned',
-          label: data.assignmentLabel,
-          options: data.assignmentOptions,
-        }),
-        widgetBlock('filter-chips', {
-          basePath: '/agents',
-          currentParams: data.currentParams,
-          paramKey: 'since',
-          label: data.sinceLabel,
-          options: data.sinceOptions,
-        }),
-        ]),
         when: f('showInboxChrome'),
       },
       {

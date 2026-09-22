@@ -36,7 +36,7 @@ test("agents home loads through the shared inbox resolver", () => {
 
 // The inbox table is the shared spec table: sortable severity/materiality/
 // detected columns over the rank default, age + split assignee/due columns,
-// and the since window beside the existing facet chips.
+// and every control composed through the house list toolbar.
 test("inbox table binds the list source sort and shared filters", () => {
   assert.match(view, /sorting: \{ basePath: '\/agents', sort: f\('sort'\), dir: f\('dir'\) \}/);
   assert.match(view, /sort: 'severity'/);
@@ -51,6 +51,9 @@ test("inbox table binds the list source sort and shared filters", () => {
   assert.match(view, /column\(\s*f\('columnDue'\)/);
   assert.match(view, /RelativeTimeFormat/);
   assert.match(view, /column\(f\('columnAssignee'\)/);
+  assert.match(view, /widgetBlock\('list-toolbar', \{/);
+  assert.match(view, /bodyClassName: 'space-y-5'/);
+  assert.doesNotMatch(view, /widgetBlock\('search-input'/);
   // The due column shows the house-formatted date plus a red pill when
   // past due — never the bare word alone.
   assert.match(view, /widgetCell\('agents-due-cell', \{ date: item\('due'\), overdueLabel: item\('dueOverdueLabel'\) \}\)/);
@@ -58,16 +61,17 @@ test("inbox table binds the list source sort and shared filters", () => {
 });
 
 // The header is the shared module-home pill strip (Inbox · Proposals ·
-// Briefing · Activity→Setup) over the shared KPI strip; the proposals lane
+// Briefing) over the shared KPI strip; setup activity stays out of the
+// operational switcher, and briefing actions ride the header action rail.
+// The proposals lane
 // resolves viewer-signed commands up front and renders the chat's review
 // card inline; unresolvable carriers stay visible with a note instead of a
 // dead Apply.
 test("header binds module-home tabs and the KPI strip", () => {
   assert.match(view, /widget\('module-home-tabs', \{ tabs: data\.tabs \}\)/);
-  // Narrow: the configure action stacks under the tab strip instead of
-  // clipping off the row.
-  assert.match(view, /actionsClassName: 'flex flex-col items-end gap-2 sm:flex-row sm:items-center'/);
-  assert.match(view, /href: '\/admin\/setup\/agents\/activity'/);
+  assert.match(view, /actionsClassName: 'flex flex-wrap items-center justify-end gap-2'/);
+  assert.match(view, /widget\('agents-briefing-actions', \{ \.\.\.data\.briefingActions \}, f\('showBriefing'\)\)/);
+  assert.doesNotMatch(view, /href: '\/admin\/setup\/agents\/activity'/);
   assert.match(view, /widgetBlock\('agents-kpi-strip', \{ items: data\.kpis \}\)/);
   assert.match(view, /listAgentRuns\(authz\.user\.orgId, \{ limit: 1 \}\)/);
   assert.doesNotMatch(view, /widgetBlock\('tab-nav'/);
@@ -134,7 +138,8 @@ test("briefing tab serves the cached narrative", () => {
   assert.match(view, /stripBriefingTitle\(briefing\.briefing\?\.text/);
   assert.match(view, /widgetBlock\('section-heading', \{/);
   assert.match(view, /widgetBlock\('agents-briefing-body', \{ text: data\.briefingText \}\)/);
-  assert.match(view, /widgetBlock\('agents-briefing-actions', \{ \.\.\.data\.briefingActions \}\)/);
+  assert.match(view, /widget\('agents-briefing-actions', \{ \.\.\.data\.briefingActions \}, f\('showBriefing'\)\)/);
+  assert.doesNotMatch(view, /widgetBlock\('agents-briefing-actions'/);
   assert.match(view, /when: f\('hasBriefing'\)/);
   assert.match(view, /when: f\('briefingEmpty'\)/);
   assert.match(view, /when: f\('showInboxChrome'\)/);
@@ -166,6 +171,7 @@ test("nav points at the workbench", () => {
   assert.match(nav, /href: '\/agents'/);
   assert.match(nav, /label: 'Agents'/);
   assert.match(nav, /key: 'continuous-close'/);
+  assert.match(nav, /group: 'my-work'/);
 });
 
 // Triage uses the same PATCH transitions as the drawer and never invents a

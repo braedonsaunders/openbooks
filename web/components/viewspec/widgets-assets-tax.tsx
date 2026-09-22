@@ -35,6 +35,8 @@ export const ASSETS_TAX_WIDGETS = {
   'provision-compute-button': () => <ProvisionComputeButton />,
 
   /* --- equipment -------------------------------------------------------------------- */
+  // Kept for tenant PageSpecs saved before the shared ModuleHomeTabs
+  // conversion; the built-in equipment page no longer emits this widget.
   'equipment-header-links': (props) => (
     <EquipmentHeaderLinks
       fixedAssetsLabel={str(props, 'fixedAssetsLabel') ?? ''}
@@ -195,6 +197,8 @@ export const ASSETS_TAX_WIDGETS = {
   },
 
   /* --- fixed assets --------------------------------------------------------- */
+  // The local tabs/equipment-link widgets are compatibility adapters for
+  // stored PageSpecs; current built-ins emit ModuleHomeTabs instead.
   'assets-tabs': (props) => (
     <AssetsTabs tabs={(props.tabs as ComponentProps<typeof AssetsTabs>['tabs']) ?? []} />
   ),

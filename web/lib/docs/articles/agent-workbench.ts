@@ -7,7 +7,7 @@ export const agentWorkbench: DocArticle = {
   order: 3,
   summary:
     'Triage background-agent findings in one ranked inbox, apply governed proposals, assign follow-ups, and start the day with a briefing.',
-  updated: '2026-09-16',
+  updated: '2026-09-21',
   keywords: [
     'agents',
     'agent inbox',
@@ -28,10 +28,11 @@ confidence times age, so the riskiest stale item is always on top. You only
 ever see packs your role can read; without the assistant permission the
 inbox is empty.
 
-The header keeps four vitals above the work queue: open findings, proposals
-awaiting, overdue assignments, and the last agent run. Below them sit the
-Inbox, Proposals, Briefing, and Activity tabs. Activity opens the run
-history in Setup; everything else stays on this page.
+The header keeps the Inbox, Proposals, and Briefing views together. Agent run
+history and pack configuration live in Company Setup → Agents; operational
+activity is not mixed into the workbench switcher. Four vitals sit above the
+work queue: open findings, proposals awaiting, overdue assignments, and the
+last agent run.
 
 ## Inbox filters
 

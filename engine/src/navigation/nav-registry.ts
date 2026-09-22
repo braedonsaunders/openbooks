@@ -535,18 +535,6 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'reports.read',
   },
   {
-    // The Agent Workbench home. The key stays `continuous-close` (tenant
-    // configurations reference module keys); /continuous-close redirects to
-    // /agents, preserving ?item= deep links.
-    key: 'continuous-close',
-    href: '/agents',
-    label: 'Agents',
-    iconKey: 'activity',
-    group: 'accounting',
-    subgroup: 'close',
-    requiredPermission: 'assistant.use',
-  },
-  {
     key: 'close',
     href: '/close',
     label: 'Period Close',
@@ -554,6 +542,18 @@ export const NAV_MODULES: NavModule[] = [
     group: 'accounting',
     subgroup: 'close',
     requiredPermission: 'close.read',
+  },
+
+  // Cross-domain operational work belongs with Inbox and Assistant, not
+  // inside Accounting → Close. The stable key remains `continuous-close`
+  // because tenant nav configurations reference it.
+  {
+    key: 'continuous-close',
+    href: '/agents',
+    label: 'Agents',
+    iconKey: 'activity',
+    group: 'my-work',
+    requiredPermission: 'assistant.use',
   },
 
   // Operations — delivery, catalog, equipment, and people. The unified party directory
@@ -921,7 +921,7 @@ export function resolveStoredHref(stored: unknown): string | null {
 export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
   // HR-15: one My Work entry (Inbox); /notifications stays a route and a
   // Notices filter inside the inbox, but no longer a nav entry.
-  'my-work': ['dashboard', 'approvals', 'assistant', 'documents', 'apps'],
+  'my-work': ['dashboard', 'approvals', 'assistant', 'continuous-close', 'documents', 'apps'],
   customers: [
     'customers',
     'crm-activities',
@@ -971,7 +971,6 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'budgets',
     'tax-filings',
     'tax-provisions',
-    'continuous-close',
     'close',
   ],
   insights: ['reports', 'analytics', 'insights', 'saved-searches'],

@@ -2,15 +2,16 @@ import Link from 'next/link'
 import { cn } from '@openbooks/ui'
 
 /**
- * Pieces of the assets screen that the page and the widget registry share.
+ * Fixed-assets adapters retained for stored PageSpecs plus the live
+ * documentation action used by the built-in page.
  *
- * They live here rather than inside `page.tsx` for the reason SortTh taught:
- * two implementations of the same visual element drift, and a conformance
- * harness that compares one against the other would then be measuring the
- * drift instead of the conversion. One implementation, two callers.
+ * New built-in layouts use ModuleHomeTabs for route switching. The old tab
+ * and equipment-link renderers remain registered so a tenant layout saved
+ * before that conversion still renders instead of falling through the spec
+ * boundary.
  */
 
-/** The register / tax-depreciation tab strip. */
+/** Legacy stored-layout adapter; built-in pages use ModuleHomeTabs. */
 export function AssetsTabs({
   tabs,
 }: {
@@ -49,7 +50,7 @@ export function AssetsDocLink({ label }: { label: string }) {
   )
 }
 
-/** The equipment-register link under the register header. */
+/** Legacy stored-layout adapter; Equipment is now in ModuleHomeTabs. */
 export function AssetsEquipmentLink({ label }: { label: string }) {
   return (
     <Link
