@@ -15,7 +15,7 @@ const { toCsv } = await import('./serialize.ts')
 const { parseImportFile } = await import('./parse.ts')
 hooks.deregister()
 const { sql } = await import('drizzle-orm')
-const { db } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const DB = !!process.env.OPENBOOKS_DB_URL
 const sections: FormSection[] = [
@@ -32,15 +32,18 @@ const sections: FormSection[] = [
   ] },
 ]
 
+// Fixture writes run inside an explicit bypass scope: this file eagerly
+// imports a web reader, which replaces the test bypass resolver, so a bare
+// scratch-org write would touch RLS-governed tables unscoped.
 async function fixture() {
-  const org = await createScratchOrg()
+  const org = await withBypassContext(() => createScratchOrg())
   try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId
+    const actorId = await withBypassContext(async () => (await seedFlowActors(org.orgId)).adminId)
     const typeKey = `numbers-${randomUUID().replaceAll('-', '').slice(0, 12)}`
-    await db.execute(sql`insert into custom_record_types
+    await withBypassContext(() => db.execute(sql`insert into custom_record_types
       (id, org_id, key, name, plural_name, fields, status, created_by, updated_by)
       values (${randomUUID()}, ${org.orgId}, ${typeKey}, 'Measurement', 'Measurements',
-        ${JSON.stringify(sections)}::jsonb, 'published', ${actorId}, ${actorId})`)
+        ${JSON.stringify(sections)}::jsonb, 'published', ${actorId}, ${actorId})`))
     const resource = await getResource(org.orgId, `record:${typeKey}`)
     assert.ok(resource)
     const live = { orgId: org.orgId, actorId, dryRun: false, allowedSubsidiaryIds: null }
