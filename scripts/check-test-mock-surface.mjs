@@ -357,6 +357,246 @@ export function starReexports(body, fromFile, root = ROOT) {
   return names;
 }
 
+// ---------------------------------------------------------------------------
+// Protected surfaces: validation and money kernels are never hand-doubled.
+// ---------------------------------------------------------------------------
+
+// Real modules whose doubles can drift from the one implementation the
+// product relies on. Replacing one with a hand copy is not isolation — it is
+// a fork of validation. A parseJsonBody stub returning { ok: true } is
+// structurally incapable of producing the refusal the boundary exists to
+// enforce, so every malformed-body case behind it reports green untested
+// (the documented worst defect class in AGENTS.md). Money-kernel doubles
+// have the same shape with amounts instead of bodies: a hand normalizeMoney
+// or canonicalDecimal decides money questions the real kernel would refuse.
+const PROTECTED_REAL_PATHS = new Set(
+  [
+    "web/lib/api/json.ts",
+    "web/lib/exact-decimal.ts",
+    "web/lib/payroll-decimal-refusal.ts",
+    "engine/src/money/money.ts",
+    "engine/src/money/exact-decimal.ts",
+    "engine/src/money/decimal-refusal.ts",
+  ].map((relative) => join(ROOT, relative)),
+);
+
+// Export names whose declaration marks a mock body as a hand double of a
+// protected surface no matter which specifier it is wired to — inline data:
+// stubs and renamed wirings included.
+const PROTECTED_EXPORT_NAMES = new Set([
+  "parseJsonBody",
+  "jsonObject",
+  "exactMoney",
+  "canonicalDecimal",
+  "normalizeMoney",
+]);
+
+/**
+ * A mock body is exempt when it is ONLY re-exports of the real protected
+ * module (`export * from '@openbooks/engine/src/money/money.ts'`): it then
+ * serves the genuine implementation and cannot drift, which is the
+ * compliant way to keep one mock serving protected names plus its own
+ * module-local stubs. Any local declaration forfeits the exemption, because
+ * a local export shadows the re-exported one.
+ */
+export function isPureReexportOfProtected(body, fromFile, root = ROOT) {
+  const clean = stripComments(body);
+  if (/export\s+(?:async\s+)?(?:function|class|const|let|var)\s/.test(clean)) return false;
+  const statements = [...clean.matchAll(/export\s*(\{[^}]*\}|\*)\s*from\s*(['"`])([^'"`]+)\2/g)];
+  if (statements.length === 0) return false;
+  const remainder = clean.replace(/export\s*(\{[^}]*\}|\*)\s*from\s*(['"`])([^'"`]+)\2/g, "");
+  if (/\bexport\b/.test(remainder)) return false;
+  return statements.some((statement) => {
+    const target = resolveReal(statement[3], fromFile, root);
+    return target !== null && PROTECTED_REAL_PATHS.has(target);
+  });
+}
+
+// Conversion queue for existing hand doubles. Each entry is a live double
+// still serving a protected surface; the ratchet is bidirectional — a NEW
+// double outside this list fails the build, and a conversion that leaves its
+// entry behind fails it too (stale). Strike the entry in the same commit
+// that deletes the double.
+export const PROTECTED_DOUBLE_ALLOWLIST = new Map(Object.entries({
+  "web/app/api/_order/handlers.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/accounts/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/admin/payment-operations/[resource]/[id]/route-patch-required-fields.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/admin/payment-operations/[resource]/[id]/route-patch-validation.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/admin/payment-operations/[resource]/[id]/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/admin/users/route-party.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/admin/users/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/analytics/cashflow/categories/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+    "money": "hand double of the money kernel; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/analytics/true-cost/config/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+    "decimal": "hand double of the decimal classifier; conversion queued - load or re-export the real module",
+    "money": "hand double of the money kernel; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/apps/marketplace/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/assets/[id]/dispose/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+    "exact-decimal": "hand double of the decimal classifier; conversion queued - load or re-export the real module",
+    "money": "hand double of the money kernel; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/assets/[id]/remeasure/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+    "exact-decimal": "hand double of the decimal classifier; conversion queued - load or re-export the real module",
+    "money": "hand double of the money kernel; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/banking/import/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/banking/reconciliations/[id]/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+    "money": "hand double of the money kernel; conversion queued - load or re-export the real module",
+    "exact-decimal": "hand double of the decimal classifier; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/billing-requests/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+    "exact-decimal": "hand double of the decimal classifier; conversion queued - load or re-export the real module",
+    "money": "hand double of the money kernel; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/budgets/[id]/actions/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/compliance/waivers/[id]/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/crm/opportunities/[id]/route.test.ts": {
+    "money": "hand double of the money kernel; conversion queued - load or re-export the real module",
+    "exact-decimal": "hand double of the decimal classifier; conversion queued - load or re-export the real module",
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/file-cabinet/attachments/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/file-cabinet/bulk-download/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/flows/gates/bulk/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/flows/gates/decide/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/forms/templates/[key]/publish/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/forms/templates/[key]/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/hrm/comp-cycles/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/insights/cards/[id]/route.test.ts": {
+    "money": "hand double of the money kernel; conversion queued - load or re-export the real module",
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/internal/overhead/publish/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/parties/[id]/route.test.ts": {
+    "exact-decimal": "hand double of the decimal classifier; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/parties/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/payroll/remittances/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/payroll/runs/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/payroll/settings/rates/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+    "exact-decimal": "hand double of the decimal classifier; conversion queued - load or re-export the real module",
+    "money": "hand double of the money kernel; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/payroll/year-end/amendments/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/payroll/year-end/file/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/project-charges/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/project-schedule/route.integration.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/projects/[id]/percent-complete/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/projects/[id]/route.integration.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+    "money": "hand double of the money kernel; conversion queued - load or re-export the real module",
+    "decimal": "hand double of the decimal classifier; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/projects/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/psp/settlements/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/rate-book-assignments/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/receipts/runs/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/records/[typeKey]/[id]/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/sign/field-tickets/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/subscriptions/route.test.ts": {
+    "money": "hand double of the money kernel; conversion queued - load or re-export the real module",
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/tax/filings/[id]/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/app/api/tax/filings/route.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/lib/bank-statement-upload.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/lib/pdf-templates/values.test.ts": {
+    "money": "hand double of the money kernel; conversion queued - load or re-export the real module",
+  },
+  "web/lib/permissions.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+  },
+  "web/lib/project-schedule.test.ts": {
+    "money": "hand double of the money kernel; conversion queued - load or re-export the real module",
+  },
+  "web/lib/subcontract-feature-integration.test.ts": {
+    "json": "hand double of the JSON validation boundary; conversion queued - load or re-export the real module",
+    "exact-decimal": "hand double of the decimal classifier; conversion queued - load or re-export the real module",
+    "money": "hand double of the money kernel; conversion queued - load or re-export the real module",
+  },
+}));
+
 function specMatcher(object, method, literal) {
   const value = literal.replace(/\\(['"`\\])/g, "$1");
   if (method === "exact") return { kind: "exact", value };
@@ -806,7 +1046,7 @@ export function hasComparableInlineStub(src) {
 
 export function checkFile(path, root = ROOT) {
   const src = readCached(path);
-  const empty = { gaps: [], lazy: [], unmodeled: false, deadMocks: [] };
+  const empty = { gaps: [], lazy: [], unmodeled: false, deadMocks: [], doubles: [] };
   // The entry gate USED to be `src.includes("mock:")` alone, which skipped an
   // entire class of stub: a loader hook may answer with an inline
   // `data:text/javascript,...` module and never write the string "mock:" at
@@ -832,6 +1072,31 @@ export function checkFile(path, root = ROOT) {
   // so they must not raise it: counting them flagged 48 files that are fine.
   const authoredBlocks = [...blocks.keys()].filter((key) => !key.startsWith("data:"));
   if (rules.length === 0 && authoredBlocks.length > 0) return { ...empty, unmodeled: true };
+  // Protected-surface doubles: a hand copy of the validation or money kernel
+  // cannot produce the refusals the real one enforces, so it is refused here
+  // (allow-listed at the tree level while its conversion is queued). A body
+  // that only re-exports the real module is exempt — it cannot drift.
+  const doubles = [];
+  const seenDoubles = new Set();
+  for (const rule of rules) {
+    if (!rule.mock) continue;
+    const body = blocks.get(rule.mock);
+    if (body === undefined) continue;
+    const declared = moduleExports(codeOnly(body));
+    const protectedNames = [...declared].filter((name) => PROTECTED_EXPORT_NAMES.has(name)).sort();
+    const target = rule.spec.kind === "exact" ? resolveReal(rule.spec.value, path, root) : null;
+    const targetProtected = target !== null && PROTECTED_REAL_PATHS.has(target);
+    if (!targetProtected && protectedNames.length === 0) continue;
+    if (isPureReexportOfProtected(body, path, root)) continue;
+    const key = `${rule.mock}::${protectedNames.join(",")}`;
+    if (seenDoubles.has(key)) continue;
+    seenDoubles.add(key);
+    doubles.push({
+      spec: rule.mock,
+      names: protectedNames,
+      target: targetProtected ? rule.spec.value : null,
+    });
+  }
   const needs = new Map(); // mockKey -> Map(name -> via)
   const lazyNeeds = new Map();
   const visitedStatic = new Set();
@@ -923,18 +1188,36 @@ export function checkFile(path, root = ROOT) {
     const missing = [...names.keys()].filter((name) => !have.has(name) && !gapNames.has(`${mockKey}::${name}`));
     if (missing.length > 0) lazy.push({ spec: mockKey, names: missing.sort() });
   }
-  return { gaps, lazy, unmodeled: false, deadMocks: [] };
+  return { gaps, lazy, unmodeled: false, deadMocks: [], doubles };
 }
 
-export function checkTree(root = ROOT) {
+export function checkTree(root = ROOT, allowlist = PROTECTED_DOUBLE_ALLOWLIST) {
   const files = collectTestFiles(root);
-  const report = { files: files.length, gaps: [], lazy: [], unmodeled: [], checked: 0 };
+  const report = { files: files.length, gaps: [], lazy: [], unmodeled: [], checked: 0, doubles: [], allowedDoubles: [], staleDoubles: [] };
   for (const file of files) {
     const result = checkFile(file, root);
     if (result.unmodeled) report.unmodeled.push(file.replace(root + "/", ""));
     if (result.gaps.length > 0 || result.lazy.length > 0) report.checked++;
     for (const gap of result.gaps) report.gaps.push({ file: file.replace(root + "/", ""), ...gap });
     for (const entry of result.lazy) report.lazy.push({ file: file.replace(root + "/", ""), ...entry });
+    const rel = file.replace(root + "/", "");
+    for (const double of result.doubles) {
+      const entry = allowlist.get(rel);
+      if (entry && Object.prototype.hasOwnProperty.call(entry, double.spec)) {
+        report.allowedDoubles.push({ file: rel, spec: double.spec });
+      } else {
+        report.doubles.push({ file: rel, ...double });
+      }
+    }
+  }
+  // Bidirectional ratchet: an allow-list entry nothing matches any more is
+  // stale and fails, so deleting a double must strike its entry in the same
+  // commit — the list can only shrink.
+  const live = new Set([...report.doubles, ...report.allowedDoubles].map((entry) => `${entry.file}::${entry.spec}`));
+  for (const [file, specs] of allowlist) {
+    for (const spec of Object.keys(specs)) {
+      if (!live.has(`${file}::${spec}`)) report.staleDoubles.push({ file, spec });
+    }
   }
   return report;
 }
@@ -950,12 +1233,22 @@ if (invoked) {
   for (const file of report.unmodeled) {
     console.log(`${file}: mock wiring not modelable; extend parseWiring or model the file explicitly`);
   }
+  for (const double of report.doubles) {
+    const surface = double.target ?? "protected export names";
+    console.log(`${double.file} [mock:${double.spec}] hand double of protected surface ${surface}${double.names.length > 0 ? ` (${double.names.join(", ")})` : ""}; convert to the real module or re-export it, then strike the allow-list entry`);
+  }
+  for (const stale of report.staleDoubles) {
+    console.log(`${stale.file} [mock:${stale.spec}] allow-list entry matches no live double; strike it in the commit that removed the double`);
+  }
+  if (report.allowedDoubles.length > 0) {
+    console.log(`allow-listed protected doubles (conversion queue): ${report.allowedDoubles.length}`);
+  }
   if (report.lazy.length > 0) {
     console.error(`lazy notes (reachable only through dynamic import; warnings, not failures): ${report.lazy.length}`);
     for (const entry of report.lazy.slice(0, 20)) {
       console.error(`  ${entry.file} [mock:${entry.spec}] lazy-missing: ${entry.names.join(", ")}`);
     }
   }
-  console.log(`checked ${report.files} test files; gaps=${report.gaps.length} unmodeled=${report.unmodeled.length}`);
-  process.exit(report.gaps.length > 0 || report.unmodeled.length > 0 ? 1 : 0);
+  console.log(`checked ${report.files} test files; gaps=${report.gaps.length} unmodeled=${report.unmodeled.length} doubles=${report.doubles.length} staleDoubles=${report.staleDoubles.length}`);
+  process.exit(report.gaps.length > 0 || report.unmodeled.length > 0 || report.doubles.length > 0 || report.staleDoubles.length > 0 ? 1 : 0);
 }
