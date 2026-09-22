@@ -308,6 +308,43 @@ test("F15 restricted HR keeps self-service for own employment outside the lens",
   });
 });
 
+test("F16 an unordered band is refused by name even when floats cannot tell the figures apart", { skip: !DB }, async () => {
+  // 999999999999999.9999 and 999999999999999.9998 round to the SAME double,
+  // so a Number comparison reads min <= target and stores a band nobody can
+  // sit in; the exact comparison refuses it with the named remedy. The
+  // storage CHECK hrm_pay_bands_ordered would also stop it, but only as a
+  // raw storage failure — the operator deserves the domain refusal.
+  const org = await createScratchOrg();
+  try {
+    await enableHrm(org.orgId);
+    const hrId = await createScratchUser(org.orgId, "Band HR", "band_hr");
+    await grantPermissions(org.orgId, hrId, ["hrm.compensation.manage"]);
+    await linkPerson(org.orgId, hrId);
+    const family = await createJobFamily({ orgId: org.orgId, actorId: hrId, code: "ENG", name: "Engineering" });
+    const level = await createJobLevel({
+      orgId: org.orgId, actorId: hrId, familyId: family.id, code: "IC3", name: "Engineer III", rank: 3,
+      equalValueCriteria: [{ criterion: "skills", weight: "3" }],
+    });
+    const scope = { familyId: family.id, levelId: level.id, employerSubsidiaryId: null, locationId: null };
+    await assert.rejects(
+      createPayBand({
+        orgId: org.orgId, actorId: hrId, scope, currency: "CAD", basis: "annual",
+        min: "999999999999999.9999", target: "999999999999999.9998", max: "999999999999999.9999",
+        effectiveFrom: "2020-01-01", reason: "unordered band probe",
+      }),
+      /not ordered min <= target <= max/,
+    );
+    const ordered = await createPayBand({
+      orgId: org.orgId, actorId: hrId, scope, currency: "CAD", basis: "annual",
+      min: "999999999999999.9998", target: "999999999999999.9999", max: "999999999999999.9999",
+      effectiveFrom: "2020-01-01", reason: "ordered band probe",
+    });
+    assert.ok(ordered.id, "an exactly ordered band still stores");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("F15 cross-org employment is not visible", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const other = await createScratchOrg();

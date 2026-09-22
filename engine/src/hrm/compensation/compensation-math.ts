@@ -1,44 +1,50 @@
 import { CompensationError } from "./errors.ts";
+import { compareDecimal, divideDecimal, parseExactDecimal } from "../../money/exact-decimal.ts";
 
 /**
  * Compensation math (HR-12): compa-ratio, guideline resolution, the
  * fixed-grammar formula evaluator, and ordinary least squares for the
  * unexplained pay gap.
  *
- * Pure: no DB, no clock, no imports beyond the error type — so the unit
- * test below is a test of the algorithm itself, not of a double. Money
- * arrives as decimal strings; ratios stay decimal strings with 10 places.
- * The OLS fit itself runs on finite numbers (rates are bounded civil
- * amounts, never NaN/Infinity — guarded at the boundary).
+ * Pure: no DB, no clock, no network — exact decimal math only, through the
+ * money module's exact helpers (themselves pure BigInt, nothing to double),
+ * so the unit test below is a test of the algorithm itself, not of a
+ * double. Money arrives as decimal strings; ratios stay decimal strings
+ * with 10 places. The OLS fit itself runs on finite numbers (rates are
+ * bounded civil amounts, never NaN/Infinity — guarded at the boundary).
  */
 
 const RATIO_SCALE = 10;
 
-function toFiniteNumber(value: string, what: string): number {
-  const n = Number(value);
-  if (!Number.isFinite(n)) {
+/**
+ * Exact decimal validation without crossing the binary floating-point
+ * boundary: the parsed plain-decimal string, or a refusal naming the input.
+ */
+function toExactDecimal(value: string, what: string): string {
+  const parsed = parseExactDecimal(value);
+  if (parsed === null) {
     throw new CompensationError("INVALID_INPUT", `${what} ${JSON.stringify(value)} is not a finite decimal — refuse the amount, never coerce it`);
   }
-  return n;
+  return parsed;
 }
 
 /** compaRatio = rate / target, scaled to 10 decimal places. Refuses a non-positive target by name. */
 export function compaRatio(rate: string, target: string): string {
-  const r = toFiniteNumber(rate, "rate");
-  const t = toFiniteNumber(target, "band target");
-  if (!(t > 0)) {
+  const r = toExactDecimal(rate, "rate");
+  const t = toExactDecimal(target, "band target");
+  if (compareDecimal(t, "0") <= 0) {
     throw new CompensationError(
       "REFUSED",
       `band target ${target} is not positive — a compa-ratio against a zero target is undefined; fix the band before placing anyone in it`,
     );
   }
-  if (!(r >= 0)) {
+  if (compareDecimal(r, "0") < 0) {
     throw new CompensationError(
       "REFUSED",
       `rate ${rate} is negative — a negative wage cannot sit in a band; correct the payroll-side rate first`,
     );
   }
-  return (r / t).toFixed(RATIO_SCALE);
+  return divideDecimal(r, t, RATIO_SCALE);
 }
 
 /** Placement of a person against their band: below, in, or above range, with the ratio. */
@@ -48,12 +54,12 @@ export function bandPlacement(
   target: string,
   max: string,
 ): { compaRatio: string; placement: "below_min" | "in_range" | "above_max" } {
-  const r = toFiniteNumber(rate, "rate");
-  const lo = toFiniteNumber(min, "band min");
-  const hi = toFiniteNumber(max, "band max");
+  const r = toExactDecimal(rate, "rate");
+  const lo = toExactDecimal(min, "band min");
+  const hi = toExactDecimal(max, "band max");
   const ratio = compaRatio(rate, target);
-  if (r < lo) return { compaRatio: ratio, placement: "below_min" };
-  if (r > hi) return { compaRatio: ratio, placement: "above_max" };
+  if (compareDecimal(r, lo) < 0) return { compaRatio: ratio, placement: "below_min" };
+  if (compareDecimal(r, hi) > 0) return { compaRatio: ratio, placement: "above_max" };
   return { compaRatio: ratio, placement: "in_range" };
 }
 
@@ -62,10 +68,10 @@ export type CompaQuartile = (typeof COMPA_QUARTILES)[number];
 
 /** Compa-ratio quartile: q1 <0.8, q2 0.8–0.95, q3 0.95–1.1, q4 >1.1. Boundaries belong to the higher quartile. */
 export function compaQuartile(ratio: string): CompaQuartile {
-  const r = toFiniteNumber(ratio, "compa-ratio");
-  if (r < 0.8) return "q1";
-  if (r < 0.95) return "q2";
-  if (r < 1.1) return "q3";
+  const r = toExactDecimal(ratio, "compa-ratio");
+  if (compareDecimal(r, "0.8") < 0) return "q1";
+  if (compareDecimal(r, "0.95") < 0) return "q2";
+  if (compareDecimal(r, "1.1") < 0) return "q3";
   return "q4";
 }
 

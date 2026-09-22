@@ -3,9 +3,11 @@ import test from "node:test";
 import {
   canonicalDecimal,
   compareDecimal,
+  divideDecimal,
   fixedDecimal,
   isPositiveDecimal,
   isZeroDecimal,
+  parseExactDecimal,
 } from "./exact-decimal.ts";
 
 test("canonicalDecimal strips padding and signs without floats", () => {
@@ -75,4 +77,28 @@ test("fixedDecimal pads to width and refuses to round silently", () => {
   assert.equal(fixedDecimal("-0.00", 2), "0.00");
   assert.throws(() => fixedDecimal("1.555", 2), /invalid decimal/);
   assert.throws(() => fixedDecimal("abc", 2), /invalid decimal/);
+});
+
+test("parseExactDecimal accepts finite decimals without Number and refuses the rest", () => {
+  assert.equal(parseExactDecimal("106497.9938"), "106497.9938");
+  assert.equal(parseExactDecimal("  +0.50  "), "0.50");
+  assert.equal(parseExactDecimal("1e3"), "1000");
+  assert.equal(parseExactDecimal("1.5e-3"), "0.0015");
+  assert.equal(parseExactDecimal("-0.00"), "0.00");
+  for (const bad of ["abc", "", "1.2.3", "--1", "0x10", "Infinity", "NaN", null, undefined, 12]) {
+    assert.equal(parseExactDecimal(bad), null, `parseExactDecimal(${String(bad)})`);
+  }
+});
+
+test("divideDecimal divides exactly with halves away from zero", () => {
+  // A float mutant prints 0.6184794712 here; the exact quotient rounds to ...713.
+  assert.equal(divideDecimal("106497.9938", "172193.2558", 10), "0.6184794713");
+  assert.equal(divideDecimal("1", "3", 10), "0.3333333333");
+  assert.equal(divideDecimal("2", "3", 10), "0.6666666667");
+  assert.equal(divideDecimal("-2", "3", 10), "-0.6666666667");
+  assert.equal(divideDecimal("85000", "100000", 10), "0.8500000000");
+  assert.equal(divideDecimal("5", "2", 0), "3");
+  assert.equal(divideDecimal("4", "2", 4), "2.0000");
+  assert.throws(() => divideDecimal("1", "0", 10), /cannot divide/);
+  assert.throws(() => divideDecimal("abc", "1", 10), /not exact decimals/);
 });
