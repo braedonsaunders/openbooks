@@ -92,7 +92,11 @@ for (const boundary of ['creation', 'actions', 'task', 'evidence', 'binder', 'pa
         }
         if (boundary === 'application') {
           const context = {authz:(await getAuthz())!,source:'mcp' as const,requestId:randomUUID(),apiKeyId:null}
-          assert.deepEqual(await applicationClose.listCloseRuns(context,{}),[])
+          await assert.rejects(applicationClose.listCloseRuns(context,{}),(error: unknown) => {
+            assert.equal((error as {status?: number}).status,403)
+            assert.match((error as Error).message,/unrestricted subsidiary visibility/)
+            return true
+          })
           await assert.rejects(applicationClose.getCloseRun(context,runId),{status:403})
           await assert.rejects(applicationClose.startApplicationCloseRun(context,{...target,subsidiaryIds:[org.subsidiaryId],idempotencyKey:randomUUID()}),{status:403})
           await assert.rejects(applicationClose.advanceCloseRun(context,{runId,action:'refresh',idempotencyKey:randomUUID()}),{status:403})

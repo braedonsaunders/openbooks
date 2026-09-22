@@ -17,6 +17,22 @@ import { assertApplicationPermission, assertSubsidiaryAccess } from "./context";
 import { ApplicationError, notFound } from "./errors";
 import { isFeatureEnabled } from "../features";
 import { executeIdempotent } from "./idempotency";
+
+/**
+ * Close diagnostics (run lists, period locks, reopen queues) span the
+ * organization. A restricted subsidiary allowlist must never authorize them
+ * and must never look like "no runs". The remedy is the same role write the
+ * unrestricted half of close-lifecycle-authz already exercises: set the
+ * caller's subsidiary restriction to all organizations.
+ */
+export const CLOSE_ORG_WIDE_DIAGNOSTICS_REFUSAL =
+  "close diagnostics are organization-wide — ask an administrator with unrestricted subsidiary visibility to list them";
+
+function assertUnrestrictedCloseDiagnostics(context: ApplicationContext): void {
+  if (context.authz.allowedSubsidiaryIds !== null) {
+    throw new ApplicationError("forbidden", CLOSE_ORG_WIDE_DIAGNOSTICS_REFUSAL, 403);
+  }
+}
 type CloseRunRow = {
   id: string;
   periodId: string;
@@ -62,7 +78,7 @@ export async function listCloseRuns(
 ): Promise<CloseRunRow[]> {
   assertApplicationPermission(context, "close.run");
   // Declared lock targets do not narrow the organization-wide diagnostics.
-  if (context.authz.allowedSubsidiaryIds !== null) return [];
+  assertUnrestrictedCloseDiagnostics(context);
   const limit = Math.min(Math.max(input.limit ?? 50, 1), 100);
   const result = (await db.execute<CloseRunRow>(sql`
     select r.id, r.period_id as "periodId", p.name as "periodName",

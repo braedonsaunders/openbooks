@@ -234,7 +234,7 @@ export function WidgetCard({
     case 'admin-calendar':
       return <PersonaRows title={t('widgets.adminCalendar')} icon={<CalendarClock size={14} />} rows={(data.adminCalendar ?? []).map((c) => ({ label: c.label, detail: c.date }))} empty={t('persona.nothingUpcoming')} />
     case 'list-close-readiness':
-      return <CloseReadinessList runs={data.closeRuns} />
+      return <CloseReadinessList runs={data.closeRuns} unavailable={data.closeRunsUnavailable} />
     default:
       return (
         <CardShell title={widgetId}>
@@ -683,8 +683,10 @@ function PartyBalanceList({
 
 function CloseReadinessList({
   runs,
+  unavailable,
 }: {
   runs: DashboardMetrics['closeRuns']
+  unavailable: DashboardMetrics['closeRunsUnavailable']
 }) {
   const t = useTranslations('dashboard')
   const tc = useTranslations('close')
@@ -700,6 +702,17 @@ function CloseReadinessList({
       : status === 'in_progress' || status === 'review'
         ? 'warning'
         : 'outline'
+  if (unavailable) {
+    return (
+      <CardShell title={t('widgets.closeReadiness')} icon={<CalendarCheck size={14} />} href="/close">
+        <div className="flex h-full flex-col items-center justify-center gap-1 px-4 py-6 text-center">
+          <span className="text-sm text-slate-500 dark:text-slate-400">
+            {unavailable}
+          </span>
+        </div>
+      </CardShell>
+    )
+  }
   if (runs.length === 0) {
     return (
       <CardShell title={t('widgets.closeReadiness')} icon={<CalendarCheck size={14} />} href="/close">
