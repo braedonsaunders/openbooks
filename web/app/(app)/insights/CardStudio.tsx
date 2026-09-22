@@ -63,6 +63,7 @@ export function CardStudio({
   canPublish,
   sourceKeys,
   inventoryEnabled,
+  createMode = false,
 }: {
   card: CardRow
   canCreate: boolean
@@ -71,12 +72,21 @@ export function CardStudio({
    *  the ones whose permission they lack (payroll wages). */
   sourceKeys: string[]
   inventoryEnabled: boolean
+  /**
+   * Unsaved create (`?card=new`): the studio edits a blank in memory, the
+   * debounced autosave never arms, and the card is POSTed once on explicit
+   * Save. Cancel/close writes nothing.
+   */
+  createMode?: boolean
 }) {
   const t = useTranslations('insights')
   const tCatalog = useTranslations('reports')
   const tCommon = useTranslations('common')
   const router = useRouter()
   const ro = !canCreate
+  // One stable idempotency key per studio session: a double-clicked Save (or
+  // a retried request) resolves to the same card instead of a duplicate.
+  const requestIdRef = useRef<string | null>(null)
 
   const initialQuery = (card.query ?? {}) as InsightQuery
   const [name, setName] = useState(card.name === UNTITLED_CARD ? '' : card.name)
@@ -178,7 +188,9 @@ export function CardStudio({
   const saveSeq = useRef(0)
   const saveAbort = useRef<AbortController | null>(null)
   useEffect(() => {
-    if (ro) return
+    // Create mode is local-only until Save: no revision exists to echo and no
+    // row exists to autosave into, so the debounced PATCH never arms.
+    if (ro || createMode) return
     if (first.current) {
       first.current = false
       return
@@ -275,6 +287,49 @@ export function CardStudio({
     router.refresh()
   }
 
+  /** Create mode only: the single idempotent POST behind explicit Save. */
+  async function createCard() {
+    setBusy(true)
+    if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID()
+    try {
+      const res = await fetch('/api/insights/cards', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': requestIdRef.current,
+        },
+        body: JSON.stringify({
+          name: name.trim() || UNTITLED_CARD,
+          description: description.trim() || null,
+          query,
+          vizType,
+          vizSettings,
+        }),
+      })
+      if (!res.ok) {
+        const failure = (await res.json().catch(() => null)) as { error?: unknown } | null
+        toast.error(
+          typeof failure?.error === 'string' && failure.error
+            ? failure.error
+            : t('cards.createDraftFailed'),
+        )
+        return
+      }
+      const data = (await res.json()) as { id?: unknown }
+      if (typeof data.id !== 'string' || !data.id) {
+        toast.error(t('cards.createDraftFailed'))
+        return
+      }
+      toast.success(t('autosave.saved'))
+      router.replace(`/insights?card=${data.id}`)
+      router.refresh()
+    } catch {
+      toast.error(t('cards.createDraftFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   // When source changes, drop selections that no longer exist.
   function changeSource(next: string) {
     setSourceKey(next)
@@ -305,50 +360,66 @@ export function CardStudio({
           </Badge>
         </span>
       }
-      description={canCreate ? t('cardStudio.autosaveHint') : undefined}
+      description={canCreate && !createMode ? t('cardStudio.autosaveHint') : undefined}
       headerActions={
-        <>
-          {canCreate ? (
-            <Button variant="ghost" size="sm" disabled={busy} onClick={remove}>
-              <Trash2 size={14} /> {tCommon('actions.delete')}
-            </Button>
-          ) : null}
-          {canPublish ? (
-            status === 'published' ? (
-              <Button variant="outline" disabled={busy || saveState !== 'saved'} onClick={() => setPublished(false)}>
-                {t('actions.unpublish')}
+        createMode ? null : (
+          <>
+            {canCreate ? (
+              <Button variant="ghost" size="sm" disabled={busy} onClick={remove}>
+                <Trash2 size={14} /> {tCommon('actions.delete')}
               </Button>
-            ) : (
-              <>
-                {!nameValid ? (
-                  <span className="text-xs text-slate-500 dark:text-slate-400">{t('cardStudio.nameRequiredToPublish')}</span>
-                ) : null}
-                <Button disabled={busy || !nameValid || saveState !== 'saved'} onClick={() => setPublished(true)}>
-                  {t('actions.publish')}
+            ) : null}
+            {canPublish ? (
+              status === 'published' ? (
+                <Button variant="outline" disabled={busy || saveState !== 'saved'} onClick={() => setPublished(false)}>
+                  {t('actions.unpublish')}
                 </Button>
-              </>
-            )
-          ) : null}
-        </>
+              ) : (
+                <>
+                  {!nameValid ? (
+                    <span className="text-xs text-slate-500 dark:text-slate-400">{t('cardStudio.nameRequiredToPublish')}</span>
+                  ) : null}
+                  <Button disabled={busy || !nameValid || saveState !== 'saved'} onClick={() => setPublished(true)}>
+                    {t('actions.publish')}
+                  </Button>
+                </>
+              )
+            ) : null}
+          </>
+        )
       }
       footer={
-        <div className="flex w-full items-center gap-3">
-          <span
-            className={
-              'text-xs ' + (saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')
-            }
-          >
-            {canCreate
-              ? saveState === 'saved'
-                ? t('autosave.saved')
-                : saveState === 'saving'
-                  ? tCommon('actions.saving')
-                  : saveState === 'error'
-                    ? t('cardStudio.saveFailedRetry')
-                    : t('autosave.unsaved')
-              : null}
-          </span>
-        </div>
+        createMode ? (
+          <div className="flex w-full items-center justify-between gap-3">
+            <span className="text-xs text-slate-500 dark:text-slate-400">{t('autosave.unsaved')}</span>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" disabled={busy} onClick={() => router.push('/insights')}>
+                {tCommon('actions.cancel')}
+              </Button>
+              <Button size="sm" disabled={busy} onClick={createCard}>
+                {tCommon('actions.save')}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex w-full items-center gap-3">
+            <span
+              className={
+                'text-xs ' + (saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')
+              }
+            >
+              {canCreate
+                ? saveState === 'saved'
+                  ? t('autosave.saved')
+                  : saveState === 'saving'
+                    ? tCommon('actions.saving')
+                    : saveState === 'error'
+                      ? t('cardStudio.saveFailedRetry')
+                      : t('autosave.unsaved')
+                : null}
+            </span>
+          </div>
+        )
       }
     >
       <div className="grid gap-6 p-1 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">

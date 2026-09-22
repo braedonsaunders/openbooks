@@ -135,7 +135,12 @@ export async function loadInsights(
         )
       : total
 
-  const openCard = cardId && cardId !== 'new' && isUuid(cardId) ? await loadCard(cardId, orgId) : null
+  // Unsaved create: `?card=new` renders the studio over a blank card. Nothing
+  // is read or written for the id itself — the card exists only after an
+  // explicit Save POSTs /api/insights/cards. Create requires the create
+  // grant, mirroring the New button's visibility.
+  const isCreate = cardId === 'new' && canCreate
+  const openCard = cardId && !isCreate && isUuid(cardId) ? await loadCard(cardId, orgId) : null
 
   return {
     title: t('title'),
@@ -179,7 +184,7 @@ export async function loadInsights(
     sort: params.sort,
     dir: params.dir,
     canCreate,
-    studioOpen: Boolean(openCard),
+    studioOpen: Boolean(openCard) || isCreate,
     studioProps: openCard
       ? {
           card: openCard,
@@ -191,9 +196,42 @@ export async function loadInsights(
             (key) => featureEnabled(features, key),
           ).map((s) => s.key),
         }
-      : null,
+      : isCreate
+        ? {
+            card: BLANK_CARD,
+            canCreate,
+            canPublish: false,
+            inventoryEnabled: featureEnabled(features, 'inventory'),
+            sourceKeys: allowedSources(
+              (permission) => can(authz, permission),
+              (key) => featureEnabled(features, key),
+            ).map((s) => s.key),
+            createMode: true,
+          }
+        : null,
   }
 }
+
+/**
+ * Unsaved-create seed: the studio edits this blank in memory and POSTs it on
+ * Save. `updated_at` is empty because no revision exists yet — autosave never
+ * runs in create mode (see CardStudio).
+ */
+const BLANK_CARD = {
+  id: '',
+  name: 'Untitled card',
+  description: null,
+  query: {
+    source: 'ledger_lines',
+    measures: [{ agg: 'sum', field: 'amount' }],
+    dimensions: [{ field: 'posting_date', bin: 'month' }],
+  },
+  viz_type: 'bar',
+  viz_settings: {},
+  status: 'draft',
+  allowed_roles: null,
+  updated_at: '',
+} as const
 
 const f = ref<InsightsData>()
 const item = field
