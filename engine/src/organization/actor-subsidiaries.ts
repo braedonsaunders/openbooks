@@ -3,6 +3,29 @@ import type { SubsidiaryRestriction } from "@openbooks/schema";
 import type { SqlExecutor } from "../platform/db.ts";
 import { actorIdentity } from "./actor-permissions.ts";
 
+/**
+ * Pure delegation-ceiling comparison over already-resolved subsidiary sets.
+ *
+ * Explicit null means unrestricted: only a null (unrestricted) ceiling can
+ * grant it. A finite list — even one that happens to cover every entity in
+ * the org today — is never equivalent to all, because a future entity would
+ * fall outside the list but inside `all`. An empty set grants nothing, so it fits any known ceiling.
+ * Unknown (undefined) on either side fails closed: it can never be treated
+ * as unrestricted.
+ */
+export function subsidiaryScopeWithinCeiling(
+  ceiling: ReadonlySet<string> | null | undefined,
+  granted: ReadonlySet<string> | null | undefined,
+): boolean {
+  if (granted === null) return ceiling === null;
+  if (granted === undefined) return false;
+  if (ceiling === undefined) return false;
+  if (ceiling === null) return true;
+  for (const id of granted) {
+    if (!ceiling.has(id)) return false;
+  }
+  return true;
+}
 /** Shared role visibility policy for HTTP and engine entry points. Identity is resolved
  * across home organizations; role and entity reads retain the caller transaction. */
 export async function actorAllowedSubsidiaryIds(
