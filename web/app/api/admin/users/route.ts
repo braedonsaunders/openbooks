@@ -7,8 +7,15 @@ import {
   withOrgTransaction,
   withTransactionSavepoint,
 } from "@openbooks/engine/src/platform/db.ts";
-import { permissionsOutsideCeiling } from "@openbooks/engine/src/organization/permissions.ts";
-import { guardPermission } from "../../../../lib/authz";
+import { permissionsOutsideCeiling, resolveEffectivePermissions } from "@openbooks/engine/src/organization/permissions.ts";
+import {
+  grantedRestrictionWithinCoverage,
+  loadSubsidiaryGrantCoverage,
+  resolveRoleGrantPolicies,
+  type SubsidiaryGrantCoverage,
+} from "@openbooks/engine/src/organization/actor-subsidiaries.ts";
+import type { SubsidiaryRestriction } from "@openbooks/schema";
+import { guardPermission, type Authz } from "../../../../lib/authz";
 import { authRequestContext, normalizeLoginEmail } from "../../../../lib/auth-policy";
 import { issueInviteSetPasswordLink, setPasswordUrl } from "../../../../lib/auth-reset";
 import { deriveInviteDisplayName, UNUSABLE_PASSWORD_HASH } from "./invite";
@@ -26,10 +33,53 @@ export const runtime = "nodejs";
  * effective set, and never to themselves. Super admins are exempt — they
  * already hold everything. Otherwise this route is a one-call escalation.
  *
+ * Delegation ceiling: the same rule applies to subsidiary scope, judged
+ * against the actor's RAW restriction portfolio (server-derived inside the
+ * transaction — never caller input) on every grant path. Assigning or
+ * inviting with a role the actor's portfolio does not cover is refused —
+ * the target's roles price their access, so even an empty-permission
+ * all-scope role broadens a scoped user, and a finite-list actor cannot
+ * hand out an open-ended subtree. Re-issuing an invite or reactivating a
+ * user restores their stored roles, so both re-check every stored role
+ * policy (resolved canonically, never via actorAllowedSubsidiaryIds on an
+ * inactive identity, which reads empty) plus stored permission overrides.
+ * Removing a role or deactivating needs no such authority.
+ *
  * Separation of duties for identity links: changing a user's linked person
  * (link, unlink, or change) is refused for your own user id, even as
  * superadmin — another authorized administrator must perform and evidence it.
  */
+
+function storedRestriction(value: unknown): SubsidiaryRestriction | null | undefined {
+  // Only an explicit SQL null is legacy-all. Absent/unknown stays unknown
+  // so canonical resolution fails closed instead of guessing unrestricted.
+  if (value === null) return null;
+  if (value === undefined) return undefined;
+  return value as SubsidiaryRestriction;
+}
+
+function scopeRefusedResponse(verb = "grant"): NextResponse {
+  return NextResponse.json(
+    { error: `cannot ${verb} subsidiary access beyond your scope: ask an administrator whose scope covers the requested entities to make this change` },
+    { status: 403 },
+  );
+}
+
+/**
+ * 403 when the granted RAW restriction exceeds the actor's trusted
+ * portfolio (super admins exempt), naming the existing remedy: another
+ * administrator whose scope covers the requested entities.
+ */
+function coverageRefusal(
+  gate: Authz,
+  coverage: SubsidiaryGrantCoverage,
+  granted: SubsidiaryRestriction | null | undefined,
+  verb = "grant",
+): NextResponse | null {
+  if (gate.user.isSuperAdmin) return null;
+  if (grantedRestrictionWithinCoverage(coverage, granted)) return null;
+  return scopeRefusedResponse(verb);
+}
 
 async function audit(
   exec: SqlExecutor,
@@ -88,8 +138,8 @@ export async function POST(req: Request) {
       }
       const roleId = body.roleId.toLowerCase();
       return withOrgTransaction(actor.orgId, () => withTransactionSavepoint(db, async () => {
-        const role = await db.execute<{ id: string; key: string; permissions: unknown }>(sql`
-          select id, key, permissions from app_roles where id = ${roleId} and org_id = ${actor.orgId} for share`);
+        const role = await db.execute<{ id: string; key: string; permissions: unknown; subsidiary_restriction: unknown }>(sql`
+          select id, key, permissions, subsidiary_restriction from app_roles where id = ${roleId} and org_id = ${actor.orgId} for share`);
         if (!role.rows[0])
           return NextResponse.json({ error: "role not found" }, { status: 404 });
         if (!actor.isSuperAdmin) {
@@ -112,6 +162,13 @@ export async function POST(req: Request) {
               { status: 403 },
             );
           }
+          // The target's roles price their access, so a granted role the
+          // actor's portfolio does not cover broadens them even when it
+          // carries no new permission.
+          const widening = coverageRefusal(
+            gate, await loadSubsidiaryGrantCoverage(db, actor.orgId, actor.id),
+            storedRestriction(role.rows[0].subsidiary_restriction));
+          if (widening) return widening;
         }
         if (!await lockTargetUser()) return NextResponse.json({ error: "user not found" }, { status: 404 });
         const inserted = await db.execute<{ id: string }>(sql`
@@ -197,19 +254,62 @@ export async function POST(req: Request) {
         );
       }
       return withOrgTransaction(actor.orgId, () => withTransactionSavepoint(db, async () => {
-        if (!await lockTargetUser()) return NextResponse.json({ error: "user not found" }, { status: 404 });
+        const targetRows = await db.execute<{ id: string; is_active: boolean }>(sql`
+          select id, is_active from users where id = ${userId} and org_id = ${actor.orgId} for update`);
+        const target = targetRows.rows[0];
+        if (!target) return NextResponse.json({ error: "user not found" }, { status: 404 });
         if (body.isActive) {
-          const assignment = await db.execute<{ "?column?": number }>(sql`
-            select 1
+          // No row cap: the grant union is semantic coverage, and a bound
+          // here would silently ignore a high-privilege role past the cut.
+          const assigned = await db.execute<{ role_id: string }>(sql`
+            select role_id
               from role_assignments
              where org_id = ${actor.orgId} and user_id = ${userId}
-             limit 1 for key share
+             for key share
           `);
-          if (!assignment.rows[0]) {
+          if (assigned.rows.length === 0) {
             return NextResponse.json(
               { error: "assign at least one role before activating this user" },
               { status: 409 },
             );
+          }
+          // Only an inactive → active transition restores the target's
+          // stored roles, so only it is judged like a grant. Re-affirming
+          // an already-active user is an idempotent no-op and needs no
+          // authority. Deactivation only removes access and is never judged.
+          if (!target.is_active && !actor.isSuperAdmin) {
+            const policies = await resolveRoleGrantPolicies(
+              db, actor.orgId, assigned.rows.map((row) => row.role_id));
+            // Reactivation restores overrides as well as roles: resolve the
+            // target's stored effective permissions canonically. Grant
+            // overrides above the actor's ceiling refuse; deny overrides
+            // only shrink the set, so they can never cause a false refusal.
+            const overrides = await db.execute<{ permission: string; effect: "grant" | "deny" }>(sql`
+              select permission, effect
+                from user_permission_overrides
+               where user_id = ${userId} and org_id = ${actor.orgId}
+            `);
+            const effective = resolveEffectivePermissions({
+              rolePermissionSets: policies.map((policy) => policy.permissions),
+              overrides: overrides.rows,
+            });
+            const missing = permissionsOutsideCeiling(gate.permissions, effective);
+            if (missing.length > 0) {
+              return NextResponse.json(
+                {
+                  error: `cannot reactivate permissions you do not hold: ${missing.join(", ")}`,
+                  missing,
+                },
+                { status: 403 },
+              );
+            }
+            // Reactivation restores every stored role, so each stored role
+            // policy must sit in the actor's portfolio.
+            const coverage = await loadSubsidiaryGrantCoverage(db, actor.orgId, actor.id);
+            for (const policy of policies) {
+              const widening = coverageRefusal(gate, coverage, policy.restriction, "reactivate");
+              if (widening) return widening;
+            }
           }
         }
         const updated = await db.execute(sql`
@@ -412,8 +512,8 @@ export async function POST(req: Request) {
       // ON CONFLICT DO NOTHING keeps a concurrent double-invite to a single
       // user: the loser sees no row and reports 409 instead of 500.
       const created = await withOrgTransaction(actor.orgId, () => withTransactionSavepoint(db, async () => {
-        const role = await db.execute<{ id: string; key: string; permissions: unknown }>(sql`
-          select id, key, permissions from app_roles where id = ${roleId} and org_id = ${actor.orgId} for share`);
+        const role = await db.execute<{ id: string; key: string; permissions: unknown; subsidiary_restriction: unknown }>(sql`
+          select id, key, permissions, subsidiary_restriction from app_roles where id = ${roleId} and org_id = ${actor.orgId} for share`);
         if (!role.rows[0])
           return NextResponse.json({ error: "role not found" }, { status: 404 });
         if (!actor.isSuperAdmin) {
@@ -430,6 +530,10 @@ export async function POST(req: Request) {
               { status: 403 },
             );
           }
+          const widening = coverageRefusal(
+            gate, await loadSubsidiaryGrantCoverage(db, actor.orgId, actor.id),
+            storedRestriction(role.rows[0].subsidiary_restriction), "invite with");
+          if (widening) return widening;
         }
         const inserted = await db.execute<{ id: string }>(sql`
           insert into users (org_id, email, name, password_hash, is_active, created_by, updated_by)
@@ -535,15 +639,29 @@ export async function POST(req: Request) {
           );
         }
         if (!actor.isSuperAdmin) {
-          const granted = (await db.execute<{ permissions: unknown }>(sql`
-            select r.permissions from role_assignments a
+          const granted = (await db.execute<{ role_id: string; permissions: unknown }>(sql`
+            select a.role_id, r.permissions from role_assignments a
               join app_roles r on r.id = a.role_id and r.org_id = a.org_id
              where a.org_id = ${actor.orgId} and a.user_id = ${found.id}`)).rows;
           const grantedPermissions = granted.flatMap((row) =>
             Array.isArray(row.permissions)
               ? row.permissions.filter((p): p is string => typeof p === "string")
               : []);
-          const missing = permissionsOutsideCeiling(gate.permissions, grantedPermissions);
+          // Re-issuing restores the target's full stored access, so the
+          // ceiling runs over the canonical effective set —
+          // roles plus stored overrides — exactly as reactivation does. A
+          // grant override above the ceiling refuses before any issuance;
+          // deny overrides only shrink the set and never block.
+          const overrides = await db.execute<{ permission: string; effect: "grant" | "deny" }>(sql`
+            select permission, effect
+              from user_permission_overrides
+             where user_id = ${found.id} and org_id = ${actor.orgId}
+          `);
+          const effective = resolveEffectivePermissions({
+            rolePermissionSets: [grantedPermissions],
+            overrides: overrides.rows,
+          });
+          const missing = permissionsOutsideCeiling(gate.permissions, effective);
           if (missing.length > 0) {
             return NextResponse.json(
               {
@@ -552,6 +670,15 @@ export async function POST(req: Request) {
               },
               { status: 403 },
             );
+          }
+          // Re-issuing restores every stored role, so each stored role
+          // policy must sit in the actor's portfolio — a target holding an
+          // open-ended subtree the actor cannot grant stays out of reach.
+          const coverage = await loadSubsidiaryGrantCoverage(db, actor.orgId, actor.id);
+          for (const policy of await resolveRoleGrantPolicies(
+            db, actor.orgId, granted.map((row) => row.role_id))) {
+            const widening = coverageRefusal(gate, coverage, policy.restriction, "re-issue an invite for");
+            if (widening) return widening;
           }
         }
         return { id: found.id, email: found.email, name: found.name };

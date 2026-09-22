@@ -4,6 +4,13 @@ import { sql, type SQL } from "drizzle-orm";
 import { db, withOrgTransaction, withTransactionSavepoint } from "@openbooks/engine/src/platform/db.ts";
 import { seedDashboardDefaultsForOrg } from "@openbooks/engine/src/provisioning/dashboard-defaults.ts";
 import { permissionsOutsideCeiling } from "@openbooks/engine/src/organization/permissions.ts";
+import {
+  grantedRestrictionWithinCoverage,
+  grantedScopeSetWithinCoverage,
+  loadSubsidiaryGrantCoverage,
+  resolveRestrictionEditScopes,
+  type SubsidiaryGrantCoverage,
+} from "@openbooks/engine/src/organization/actor-subsidiaries.ts";
 import type { SubsidiaryRestriction } from "@openbooks/schema";
 import { type Authz, guardPermission } from "../../../../lib/authz";
 import { listActiveExtensionContributions } from "@openbooks/engine/src/extensions/projections.ts";
@@ -25,6 +32,17 @@ export const runtime = "nodejs";
  * escalation). Super admins are exempt. Deleting a role never strands an
  * active user with zero roles: the request must name a replacement role
  * (itself inside the ceiling) or it is refused.
+ *
+ * Delegation ceiling: the same rule applies to subsidiary scope, judged
+ * against the actor's RAW restriction portfolio (server-derived inside the
+ * transaction — never caller input), not just today's enumeration. A finite
+ * list is never equivalent to all, and a subtree grant is open-ended, so a
+ * finite-list actor cannot grant one merely because it matches today, while
+ * a subtree admin delegates freely within its own subtree. Narrowing a
+ * role's scope needs no authority over the removed access; only the ADDED
+ * scope is judged, and retained pre-existing wide access is never
+ * re-judged. Adding permissions (even ones the actor holds) to a role the
+ * actor could not grant is still a broader grant and is refused.
  */
 
 const KEY_RE = /^[a-z0-9][a-z0-9_-]{1,63}$/;
@@ -66,6 +84,38 @@ function ceilingViolation(authz: Authz, granted: readonly string[]): NextRespons
 
 function rolePermissionList(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((p): p is string => typeof p === "string") : [];
+}
+
+function storedRestriction(value: unknown): SubsidiaryRestriction | null | undefined {
+  // Only an explicit SQL null is legacy-all. Absent/unknown stays unknown
+  // so canonical resolution fails closed instead of guessing unrestricted.
+  if (value === null) return null;
+  if (value === undefined) return undefined;
+  return value as SubsidiaryRestriction;
+}
+
+function scopeRefusedResponse(verb = "grant"): NextResponse {
+  return NextResponse.json(
+    { error: `cannot ${verb} subsidiary access beyond your scope: ask an administrator whose scope covers the requested entities to make this change` },
+    { status: 403 },
+  );
+}
+
+/**
+ * 403 naming the delegation problem, or null when the granted RAW
+ * restriction sits inside the actor's trusted portfolio (super admins
+ * exempt). The remedy names an existing path: another administrator whose
+ * scope covers the requested entities.
+ */
+function coverageRefusal(
+  authz: Authz,
+  coverage: SubsidiaryGrantCoverage,
+  granted: SubsidiaryRestriction | null | undefined,
+  verb = "grant",
+): NextResponse | null {
+  if (authz.user.isSuperAdmin) return null;
+  if (grantedRestrictionWithinCoverage(coverage, granted)) return null;
+  return scopeRefusedResponse(verb);
 }
 
 /**
@@ -177,6 +227,12 @@ export async function POST(req: Request) {
   return withOrgTransaction(actor.orgId, () => withTransactionSavepoint(db, async () => {
     await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`extension-projections:${actor.orgId}`}, 0))`);
     if (!await normalizePermissions(permissions, actor.orgId)) return NextResponse.json({ error: "A module permission is no longer active" }, { status: 409 });
+    // An omitted restriction defaults to all, so it is judged like any
+    // other grant: a scoped actor cannot create an all-scope role, and a
+    // finite-list actor cannot create an open-ended subtree.
+    const grantRefusal = coverageRefusal(
+      gate, await loadSubsidiaryGrantCoverage(db, actor.orgId, actor.id), restriction);
+    if (grantRefusal) return grantRefusal;
     const inserted = await db.execute<{ id: string }>(sql`
       insert into app_roles (org_id, key, name, description, is_built_in, permissions,
                              subsidiary_restriction, created_by, updated_by)
@@ -241,6 +297,15 @@ export async function PATCH(req: Request) {
     const changes: Record<string, unknown> = {};
     const sets: SQL[] = [];
 
+    // Normalize a restriction edit first so the permission branch judges
+    // additions against the role's effective (post-edit) scope.
+    let nextRestriction: SubsidiaryRestriction | undefined;
+    if (body.subsidiaryRestriction !== undefined) {
+      const norm = await normalizeSubsidiaryRestriction(body.subsidiaryRestriction, actor.orgId);
+      if ("error" in norm) return NextResponse.json({ error: norm.error }, { status: 400 });
+      nextRestriction = norm.value;
+    }
+
     if (body.permissions !== undefined) {
       const permissions = await normalizePermissions(body.permissions, actor.orgId, rolePermissionList(role.permissions));
       if (!permissions) {
@@ -252,17 +317,50 @@ export async function PATCH(req: Request) {
       // Only what the edit ADDS is a grant; keeping or dropping keys the actor
       // lacks does not widen anyone's access.
       const current = new Set(rolePermissionList(role.permissions));
-      const escalation = ceilingViolation(gate, permissions.filter((p) => !current.has(p)));
+      const added = permissions.filter((p) => !current.has(p));
+      const escalation = ceilingViolation(gate, added);
       if (escalation) return escalation;
+      if (added.length > 0) {
+        // Granting even an own permission to a role the actor could not
+        // grant is still a broader grant.
+        const coverage = await loadSubsidiaryGrantCoverage(db, actor.orgId, actor.id);
+        const widening = coverageRefusal(
+          gate, coverage, nextRestriction ?? storedRestriction(role.subsidiary_restriction));
+        if (widening) return widening;
+      }
       sets.push(sql`permissions = ${JSON.stringify(permissions)}`);
       changes.permissions = [role.permissions, permissions];
     }
     // Like permissions, subsidiary access may change on built-in roles too.
-    if (body.subsidiaryRestriction !== undefined) {
-      const norm = await normalizeSubsidiaryRestriction(body.subsidiaryRestriction, actor.orgId);
-      if ("error" in norm) return NextResponse.json({ error: norm.error }, { status: 400 });
-      sets.push(sql`subsidiary_restriction = ${JSON.stringify(norm.value)}`);
-      changes.subsidiaryRestriction = [role.subsidiary_restriction, norm.value];
+    // Only the ADDED scope is judged: a narrowing-only edit keeps the
+    // legitimate removal contract and needs no authority over removed
+    // access. Additions are policy-aware (a subtree target is open-ended,
+    // so list → subtree is widening even when today's enumeration matches).
+    if (nextRestriction !== undefined) {
+      const edit = await resolveRestrictionEditScopes(
+        db, actor.orgId, storedRestriction(role.subsidiary_restriction), nextRestriction);
+      const coverage = await loadSubsidiaryGrantCoverage(db, actor.orgId, actor.id);
+      let widening: NextResponse | null;
+      if (gate.user.isSuperAdmin) {
+        widening = null;
+      } else if (edit.additions === undefined) {
+        widening = scopeRefusedResponse();
+      } else if (edit.additions === null) {
+        // Unbounded addition (to all, or to a subtree the old policy does
+        // not cover): the NEXT policy itself must sit in the portfolio.
+        widening = coverageRefusal(gate, coverage, nextRestriction);
+      } else if (edit.additions.size > 0) {
+        // Exact enumerated addition of a closed list target: only the new
+        // ids are judged, never retained wide access.
+        widening = grantedScopeSetWithinCoverage(coverage, edit.additions)
+          ? null
+          : scopeRefusedResponse();
+      } else {
+        widening = null;
+      }
+      if (widening) return widening;
+      sets.push(sql`subsidiary_restriction = ${JSON.stringify(nextRestriction)}`);
+      changes.subsidiaryRestriction = [role.subsidiary_restriction, nextRestriction];
     }
     if (body.name !== undefined || body.description !== undefined) {
       if (role.is_built_in) {
@@ -336,8 +434,9 @@ export async function DELETE(req: Request) {
     `);
     const locked = await tx.execute<{
       id: string; key: string; name: string; is_built_in: boolean; permissions: unknown;
+      subsidiary_restriction: unknown;
     }>(sql`
-      select id, key, name, is_built_in, permissions from app_roles
+      select id, key, name, is_built_in, permissions, subsidiary_restriction from app_roles
        where org_id = ${actor.orgId} and (id = ${id} or id = ${replacementId}::uuid)
        order by id for update`);
     const role = locked.rows.find((row) => row.id === id.toLowerCase());
@@ -354,6 +453,12 @@ export async function DELETE(req: Request) {
     if (replacement) {
       const escalation = ceilingViolation(gate, rolePermissionList(replacement.permissions));
       if (escalation) return escalation;
+      // The replacement is a fresh grant to every stranded user: its policy
+      // must sit inside the actor's portfolio as well.
+      const widening = coverageRefusal(
+        gate, await loadSubsidiaryGrantCoverage(tx, actor.orgId, actor.id),
+        storedRestriction(replacement.subsidiary_restriction));
+      if (widening) return widening;
     }
     // Grants hold the role before this user lock; unassignment and activation
     // take the same user lock before inspecting the remaining assignments.
