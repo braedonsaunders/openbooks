@@ -482,6 +482,7 @@ async function generateFromTemplate(
     reference_number: string | null;
     memo: string | null;
     extra_dims: Record<string, unknown> | null;
+    payment_card_id: string | null;
   }>(sql`
     select * from documents where id = ${templateId} and org_id = ${orgId} for share
   `));
@@ -541,15 +542,19 @@ async function generateFromTemplate(
       ? { actorKind: "system", actorReason: "recurring schedule" }
       : {}),
   };
+  // 0171: an expense report's funding card lives on the header — carry it so
+  // company-paid lines keep their card liability instead of mis-posting.
   const created = (await db.execute<{ id: string }>(sql`
     insert into documents (org_id, kind, document_number, party_id, subsidiary_id, document_date,
                            due_date, currency, status, project_id, department_id, location_id, class_id,
-                           billing_method, reference_number, memo, subtotal, tax_total, total, extra_dims, custom, created_by)
+                           billing_method, reference_number, memo, subtotal, tax_total, total, extra_dims, custom, created_by,
+                           payment_card_id)
     values (${orgId}, ${tpl.kind}, ${documentNumber}, ${tpl.party_id}, ${tpl.subsidiary_id},
             ${documentDate}, ${dueDate}, ${tpl.currency}, 'draft', ${tpl.project_id},
             ${tpl.department_id}, ${tpl.location_id}, ${tpl.class_id}, ${tpl.billing_method},
             ${tpl.reference_number}, ${tpl.memo}, '0', '0', '0',
-            ${JSON.stringify(tpl.extra_dims ?? {})}::jsonb, ${JSON.stringify(provenance)}::jsonb, ${context.actorId})
+            ${JSON.stringify(tpl.extra_dims ?? {})}::jsonb, ${JSON.stringify(provenance)}::jsonb, ${context.actorId},
+            ${tpl.payment_card_id})
     returning id
   `));
   const newId = created.rows[0]!.id;
@@ -575,14 +580,17 @@ async function generateFromTemplate(
     }) : null;
     const amount = tax?.netAmount ?? String(l.amount);
     const taxAmount = tax?.taxTotal ?? String(l.tax_amount ?? "0");
+    // 0171 settlement_type is template semantics; the kernel defaults an
+    // unrecorded settlement to out_of_pocket, so carry it verbatim (inert for
+    // other kinds, which never read it).
     const inserted = await db.execute<{ id: string }>(sql`
       insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
             quantity, unit, unit_price, amount, tax_code_id, tax_group_id, tax_input_amount, tax_overridden, tax_amount, department_id, project_id,
-            location_id, class_id, subsidiary_id, extra_dims, party_id, is_billable, custom, created_by)
+            location_id, class_id, subsidiary_id, extra_dims, party_id, is_billable, custom, created_by, settlement_type)
       values (${orgId}, ${newId}, ${l.line_number}, ${l.item_id}, ${l.account_id}, ${l.description},
             ${l.quantity}, ${l.unit}, ${l.unit_price}, ${amount}, ${l.tax_code_id}, ${l.tax_group_id}, ${tax?.inputAmount ?? l.tax_input_amount}, ${tax?.overridden ?? l.tax_overridden},
             ${taxAmount}, ${l.department_id}, ${l.project_id}, ${l.location_id}, ${l.class_id},
-            ${l.subsidiary_id}, ${JSON.stringify(l.extra_dims ?? {})}::jsonb, ${l.party_id}, ${l.is_billable ?? false}, ${JSON.stringify(l.custom ?? {})}::jsonb, ${context.actorId})
+            ${l.subsidiary_id}, ${JSON.stringify(l.extra_dims ?? {})}::jsonb, ${l.party_id}, ${l.is_billable ?? false}, ${JSON.stringify(l.custom ?? {})}::jsonb, ${context.actorId}, ${l.settlement_type})
       returning id
     `);
     if (tax) await persistLineTaxComponents(orgId, inserted.rows[0]!.id, tax.components, context.actorId);
