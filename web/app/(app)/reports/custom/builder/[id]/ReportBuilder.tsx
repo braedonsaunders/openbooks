@@ -31,6 +31,7 @@ export function ReportBuilder({
   customEntities = [],
   hiddenEntityKeys = [],
   inventoryEnabled,
+  createMode = false,
 }: {
   definition: {
     id: string
@@ -45,6 +46,8 @@ export function ReportBuilder({
   customEntities?: ReportEntity[]
   hiddenEntityKeys?: string[]
   inventoryEnabled: boolean
+  /** `builder/new`: local-only until the operator explicitly saves. */
+  createMode?: boolean
 }) {
   const entities = useMemo(() => [...REPORT_ENTITIES, ...customEntities], [customEntities])
   const entityMap = useMemo(() => Object.fromEntries(entities.map(e => [e.key,e])), [entities])
@@ -64,11 +67,12 @@ export function ReportBuilder({
   const [layout, setLayout] = useState<ReportLayoutConfig>(
     resolveReportLayout(definition.layout as Partial<ReportLayoutConfig> | null | undefined),
   )
-  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
+  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>(createMode ? 'dirty' : 'saved')
   const [preview, setPreview] = useState<ReportRunResult | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [previewing, setPreviewing] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [creating, setCreating] = useState(false)
   const [tab, setTab] = useState<Tab>('source')
 
   // PATCH requests can outlive the debounce timer that created them. Keep an
@@ -78,8 +82,11 @@ export function ReportBuilder({
   const revisionRequestRef = useRef<Promise<string | null> | null>(null)
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve())
   const saveGenerationRef = useRef(0)
+  const createRequestIdRef = useRef<string | null>(null)
+  const createInFlightRef = useRef(false)
 
   const ensureRevision = useCallback(async (): Promise<string | null> => {
+    if (createMode) return null
     if (revisionRef.current) return revisionRef.current
     if (!revisionRequestRef.current) {
       const request = fetch(`/api/reports/definitions/${definition.id}`)
@@ -96,7 +103,7 @@ export function ReportBuilder({
     if (!revision) revisionRequestRef.current = null
     revisionRef.current = revision
     return revision
-  }, [definition.id])
+  }, [createMode, definition.id])
 
   const entity = entityMap[query.entity] ?? entityMap.ledger_lines!
   const mode = query.mode ?? 'rows'
@@ -158,6 +165,12 @@ export function ReportBuilder({
   // -- autosave (debounced PATCH) --------------------------------------------
   const firstSave = useRef(true)
   useEffect(() => {
+    // The `new` sentinel has no database row. Its edits stay in memory until
+    // the explicit Save POST below; opening and cancelling are zero-write.
+    if (createMode) {
+      firstSave.current = false
+      return
+    }
     if (firstSave.current) {
       firstSave.current = false
       return
@@ -212,7 +225,47 @@ export function ReportBuilder({
     }, 700)
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, description, query, layout, ensureRevision])
+  }, [name, description, query, layout, ensureRevision, createMode])
+
+  async function createReport() {
+    if (!createMode || createInFlightRef.current) return
+    createInFlightRef.current = true
+    setCreating(true)
+    if (!createRequestIdRef.current) createRequestIdRef.current = crypto.randomUUID()
+    try {
+      const res = await fetch('/api/reports/definitions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': createRequestIdRef.current,
+        },
+        body: JSON.stringify({ name: name.trim(), description: description.trim(), query, layout }),
+      })
+      if (!res.ok) {
+        const failure = (await res.json().catch(() => ({}))) as { error?: unknown }
+        toast.error(
+          typeof failure.error === 'string' && failure.error
+            ? failure.error
+            : tk('newButton.createFailed'),
+        )
+        return
+      }
+      const data = (await res.json()) as { definition?: { id?: unknown } }
+      const id = data.definition?.id
+      if (typeof id !== 'string' || !id) {
+        toast.error(tk('newButton.createFailed'))
+        return
+      }
+      toast.success(t('allChangesSaved'))
+      router.replace(`/reports/custom/builder/${id}`)
+      router.refresh()
+    } catch {
+      toast.error(tk('newButton.createFailed'))
+    } finally {
+      createInFlightRef.current = false
+      setCreating(false)
+    }
+  }
 
   async function removeReport() {
     const confirmed = await confirmDialog({
@@ -242,7 +295,9 @@ export function ReportBuilder({
     ? {
         title: name || t('namePlaceholder'),
         periodPhrase: description || undefined,
-        defaultDrillTarget: { kind: 'custom', source: 'definition', id: definition.id, label: name || t('namePlaceholder') },
+        ...(createMode
+          ? {}
+          : { defaultDrillTarget: { kind: 'custom' as const, source: 'definition' as const, id: definition.id, label: name || t('namePlaceholder') } }),
         summary: preview.summary,
         groups: preview.groups.map((g) => ({
           title: g.title,
@@ -308,34 +363,48 @@ export function ReportBuilder({
             />
           </div>
           <div className="flex items-center gap-3">
-            <span
-              className={
-                'text-xs ' + (saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')
-              }
-            >
-              {saveState === 'saved'
-                ? t('allChangesSaved')
-                : saveState === 'saving'
-                  ? tc('actions.saving')
-                  : saveState === 'error'
-                    ? tc('feedback.saveFailed')
-                    : t('unsavedChanges')}
-            </span>
-            <Button variant="outline" asChild>
-              <Link href={`/reports/custom/run/${definition.id}`}>{t('runAndSchedule')}</Link>
-            </Button>
-            {definition.kind === 'custom' ? (
-              <Button
-                type="button"
-                variant="destructive"
-                size="sm"
-                disabled={deleting}
-                onClick={removeReport}
-              >
-                <Trash2 size={14} />
-                {deleting ? tc('actions.deleting') : tc('actions.delete')}
-              </Button>
-            ) : null}
+            {createMode ? (
+              <>
+                <span className="text-xs text-slate-500 dark:text-slate-400">{t('unsavedChanges')}</span>
+                <Button type="button" variant="outline" disabled={creating} onClick={() => router.push('/reports/custom')}>
+                  {tc('actions.cancel')}
+                </Button>
+                <Button type="button" disabled={creating || !name.trim()} onClick={createReport}>
+                  {creating ? tc('actions.saving') : tc('actions.save')}
+                </Button>
+              </>
+            ) : (
+              <>
+                <span
+                  className={
+                    'text-xs ' + (saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')
+                  }
+                >
+                  {saveState === 'saved'
+                    ? t('allChangesSaved')
+                    : saveState === 'saving'
+                      ? tc('actions.saving')
+                      : saveState === 'error'
+                        ? tc('feedback.saveFailed')
+                        : t('unsavedChanges')}
+                </span>
+                <Button variant="outline" asChild>
+                  <Link href={`/reports/custom/run/${definition.id}`}>{t('runAndSchedule')}</Link>
+                </Button>
+                {definition.kind === 'custom' ? (
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    disabled={deleting}
+                    onClick={removeReport}
+                  >
+                    <Trash2 size={14} />
+                    {deleting ? tc('actions.deleting') : tc('actions.delete')}
+                  </Button>
+                ) : null}
+              </>
+            )}
           </div>
         </div>
       }

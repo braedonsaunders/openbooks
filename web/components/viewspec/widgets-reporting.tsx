@@ -170,6 +170,7 @@ export const REPORTING_WIDGETS = {
       inventoryEnabled={props.inventoryEnabled === true}
       company={str(props, 'company') ?? ''}
       definition={props.definition as ComponentProps<typeof ReportBuilder>['definition']}
+      createMode={props.createMode === true}
     />
   ),
 
