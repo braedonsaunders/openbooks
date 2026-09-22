@@ -1,9 +1,10 @@
-import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor, withBypassContext, withOrg } from "../platform/db.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import { add, cmp, fromUnits, mulPercent, roundDiv, toUnits } from "../money/money.ts";
 import { sealJson, sealSecret, unsealJson, unsealSecret } from "../platform/secrets.ts";
+import { paymentLinkTokenHash } from "./payment-link-seal.ts";
 import {
   ATTR_KIND,
   ATTR_ORG_ID,
@@ -1123,7 +1124,7 @@ export async function createPaymentLink(
     // token_sealed (the panel rebuilds /pay/{token} from listPaymentLinks).
     // A database read alone must not yield a payable link — every other
     // token type in the product is hashed or sealed at rest.
-    const tokenHash = createHash("sha256").update(token, "utf8").digest("hex");
+    const tokenHash = paymentLinkTokenHash(token);
     const id = (await db.execute<{ id: string }>(sql`
       insert into payment_links
         (org_id, token_hash, token_sealed, document_id, party_id, subsidiary_id, provider, bank_account_id,
@@ -1240,7 +1241,7 @@ async function loadLinkByToken(token: string): Promise<LinkWithContext | null> {
   // org-scoped via withOrg once the token resolves. The lookup resolves by
   // the sha256 hash — the raw bearer token is never stored, so a database
   // read alone cannot mint a payable URL.
-  const tokenHash = createHash("sha256").update(token, "utf8").digest("hex");
+  const tokenHash = paymentLinkTokenHash(token);
   const r = await withBypassContext(async () =>
     db.execute(sql`
       select id, org_id as "orgId", ${token} as token, document_id as "documentId", party_id as "partyId",
@@ -1775,7 +1776,7 @@ async function processWebhookEvent(
         from payment_attempts a
         join payment_links l on l.id = a.link_id and l.org_id = a.org_id
        where a.org_id = ${orgId} and a.provider = ${provider}
-         and l.token_hash = ${createHash("sha256").update(event.linkToken, "utf8").digest("hex")}
+         and l.token_hash = ${paymentLinkTokenHash(event.linkToken)}
          and a.status = 'initiated'
        order by a.created_at desc limit 1
     `));
