@@ -155,14 +155,82 @@ export function xeroPaymentKindForPaymentType(
 }
 
 /**
- * Which side of the books a Xero payment settles. Payments against credit
- * notes, prepayments and overpayments carry those pointers instead of
- * `Invoice` — keying only on `Invoice.Type` mapped every one of them to
- * `vendor_payment`, so customer refunds landed in AP.
+ * Cash direction of one known target type. Invoice targets are the normal
+ * flow (receipt IN on AR, payment OUT on AP); credit-note, prepayment and
+ * overpayment targets are REFUNDS flowing the other way (money OUT to the
+ * customer, money IN from the supplier). The `never` arm refuses to compile
+ * when Xero adds a target type without a direction here.
+ */
+export function xeroPaymentTargetIsRefund(type: XeroPaymentTargetType): boolean {
+  switch (type) {
+    case "ACCREC":
+    case "ACCPAY":
+      return false;
+    case "ACCRECCREDIT":
+    case "AROVERPAYMENT":
+    case "ARPREPAYMENT":
+    case "RECEIVE-OVERPAYMENT":
+    case "RECEIVE-PREPAYMENT":
+    case "ACCPAYCREDIT":
+    case "APOVERPAYMENT":
+    case "APPREPAYMENT":
+    case "SPEND-OVERPAYMENT":
+    case "SPEND-PREPAYMENT":
+      return true;
+    default: {
+      const _exhaustive: never = type;
+      throw new Error(`unrecognized Xero payment target type ${String(_exhaustive)}`);
+    }
+  }
+}
+
+/** Receipt-type PaymentType values: the normal flow, not a refund. */
+const XERO_RECEIPT_PAYMENT_TYPES: ReadonlySet<string> = new Set([
+  "ACCRECPAYMENT",
+  "ACCPAYPAYMENT",
+]);
+
+/** Refund-type PaymentType values: cash flows opposite to the normal flow. */
+const XERO_REFUND_PAYMENT_TYPES: ReadonlySet<string> = new Set([
+  "ARCREDITPAYMENT",
+  "APCREDITPAYMENT",
+  "AROVERPAYMENTPAYMENT",
+  "ARPREPAYMENTPAYMENT",
+  "APOVERPAYMENTPAYMENT",
+  "APPREPAYMENTPAYMENT",
+]);
+
+/**
+ * Cash direction of a PaymentType fallback value: null when the family value
+ * itself is unrecognized, so the payment refuses instead of guessing.
+ */
+export function xeroPaymentTypeIsRefund(paymentType: string | undefined): boolean | null {
+  if (!paymentType) return null;
+  if (XERO_RECEIPT_PAYMENT_TYPES.has(paymentType)) return false;
+  if (XERO_REFUND_PAYMENT_TYPES.has(paymentType)) return true;
+  return null;
+}
+
+/** A resolved Xero payment: which side it settles and which way cash flows. */
+export interface XeroPaymentResolution {
+  kind: "customer_payment" | "vendor_payment";
+  /** True for refunds: money OUT to the customer (AR) or IN from the supplier
+   * (AP) — the builder negates the stated magnitude so the payment posts the
+   * correct direction on the correct side. */
+  refund: boolean;
+}
+
+/**
+ * Which side of the books a Xero payment settles, and which way cash flows.
+ * Payments against credit notes, prepayments and overpayments carry those
+ * pointers instead of `Invoice` — keying only on `Invoice.Type` mapped every
+ * one of them to `vendor_payment`, so customer refunds landed in AP. And a
+ * refund settled on the right side but with the receipt direction would post
+ * cash IN instead of OUT — the direction rides along, never guessed.
  */
 export function xeroPaymentKind(
   t: XeroDoc,
-): "customer_payment" | "vendor_payment" | { skip: string } {
+): XeroPaymentResolution | { skip: string } {
   const targets = [
     t.Invoice?.InvoiceID ? { label: `Invoice:${t.Invoice.InvoiceID}`, type: t.Invoice.Type } : null,
     t.CreditNote?.CreditNoteID ? { label: `CreditNote:${t.CreditNote.CreditNoteID}`, type: t.CreditNote.Type } : null,
@@ -177,10 +245,12 @@ export function xeroPaymentKind(
   }
   const target = targets[0]!;
   if (target.type && XERO_PAYMENT_TARGET_TYPES.has(target.type)) {
-    return xeroPaymentKindForTarget(target.type as XeroPaymentTargetType);
+    const known = target.type as XeroPaymentTargetType;
+    return { kind: xeroPaymentKindForTarget(known), refund: xeroPaymentTargetIsRefund(known) };
   }
   const fallback = xeroPaymentKindForPaymentType(t.PaymentType);
-  if (fallback) return fallback;
+  const fallbackRefund = xeroPaymentTypeIsRefund(t.PaymentType);
+  if (fallback && fallbackRefund !== null) return { kind: fallback, refund: fallbackRefund };
   return {
     skip: `unrecognized Xero payment target type ${target.type ?? "(missing)"} with PaymentType ${t.PaymentType ?? "(missing)"}`,
   };
@@ -293,14 +363,18 @@ export function buildNativeFromXero(
     case "Payment": {
       const counter = byId(t.Account?.AccountID) ?? byCode(t.Account?.Code);
       if (!counter) return { skip: "payment without bank account" };
-      const kind = xeroPaymentKind(t);
-      if (typeof kind !== "string") return kind;
+      const resolved = xeroPaymentKind(t);
+      if ("skip" in resolved) return resolved;
+      // Xero states every payment leg as a positive magnitude; a refund flows
+      // the other way, so negate into the native sign convention (the payment
+      // rules post a negative total as cash-out on AR / cash-in on AP).
+      const amount = home(t.Amount);
       return {
         ...base,
-        kind,
+        kind: resolved.kind,
+        lines: [mk(counter, resolved.refund ? -amount : amount)],
         partyId: party,
         controlAccountId: null,
-        lines: [mk(counter, home(t.Amount))],
       };
     }
     case "ManualJournal": {
