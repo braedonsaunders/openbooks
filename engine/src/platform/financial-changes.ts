@@ -4,6 +4,16 @@ import { canonicalJson } from "./canonical-json.ts";
 import { isIsoCalendarDate } from "./business-date.ts";
 import type { SqlExecutor } from "./db.ts";
 
+export {
+  FINANCIAL_CHANGE_DOMAIN_LABELS,
+  FINANCIAL_CHANGE_OPERATION_LABELS,
+  FINANCIAL_CHANGE_STATUS_LABELS,
+  financialChangeDomainLabel,
+  financialChangeEventLabel,
+  financialChangeInboxLabel,
+  financialChangeStatusLabel,
+} from "./financial-change-labels.ts";
+
 /** Workflow evidence only. Financial calculations and subject authorization
  * stay in their owning modules; the existing Flows engine owns decisions. */
 export type FinancialChangeDomain =
@@ -132,6 +142,54 @@ export function assertFinancialChangeApproved(
     );
   }
 }
+export async function loadFinancialChangeSubjectLabel(
+  tx: SqlExecutor,
+  orgId: string,
+  domain: FinancialChangeDomain,
+  subjectId: string,
+): Promise<string | null> {
+  if (domain === "lease") {
+    const row = (
+      await tx.execute<{ label: string }>(sql`
+        select nullif(concat_ws(' — ', lease_number, nullif(btrim(description), '')), '') as label
+          from lease_agreements
+         where org_id=${orgId} and id=${subjectId}
+      `)
+    ).rows[0];
+    return row?.label ?? null;
+  }
+  if (domain === "asset") {
+    const row = (
+      await tx.execute<{ label: string }>(sql`
+        select asset_number || ' — ' || name as label
+          from fixed_assets
+         where org_id=${orgId} and id=${subjectId}
+      `)
+    ).rows[0];
+    return row?.label ?? null;
+  }
+  if (domain === "revenue") {
+    const row = (
+      await tx.execute<{ label: string }>(sql`
+        select nullif(concat_ws(' — ', contract_number, nullif(btrim(memo), '')), '') as label
+          from revenue_contracts
+         where org_id=${orgId} and id=${subjectId}
+      `)
+    ).rows[0];
+    return row?.label ?? null;
+  }
+  const row = (
+    await tx.execute<{ label: string }>(sql`
+      select child.name as label
+        from subsidiary_ownership_interests soi
+        join subsidiaries child
+          on child.id = soi.subsidiary_id and child.org_id = soi.org_id
+       where soi.org_id=${orgId} and soi.id=${subjectId}
+    `)
+  ).rows[0];
+  return row?.label ?? null;
+}
+
 export async function completeFinancialChange(
   tx: SqlExecutor,
   orgId: string,

@@ -1,4 +1,4 @@
-import { lifecycleWhere } from "../customization/entity-list-query/accounting-lifecycles";
+import { financialChangeSubjectExpr, lifecycleWhere } from "../customization/entity-list-query/accounting-lifecycles";
 import 'server-only'
 import { accountListBalanceDrill } from '../account-balance-drill'
 import type { ReportDrillTarget } from '../report-drill'
@@ -720,11 +720,40 @@ const SOURCES: Record<string, EntityListSource> = {
     where:(view,adhoc,orgId,allowed)=>lifecycleWhere('la',view,adhoc,orgId,allowed),drawerParam:'lease',basePath:'/assets/leases',
   },
   financial_change: {
-    recordType:'financial_change',table:'financial_changes',alias:'fc',baseJoins:sql``,
-    builtInExpr:{operation:sql`fc.operation`,domain:sql`fc.domain`,reason:sql`fc.reason`,effective_on:sql`fc.effective_on`,status:sql`fc.status`},
-    sorts:{operation:sql`fc.operation`,domain:sql`fc.domain`,reason:sql`fc.reason`,date:sql`fc.effective_on`,status:sql`fc.status`},
-    defaultSort:sql`fc.created_at`,quickFilters:[{paramKey:'status',filterKey:'status'}],
-    where:(view,adhoc,orgId,allowed)=>lifecycleWhere('fc',view,adhoc,orgId,allowed),drawerParam:'change',basePath:'/accounting/changes',
+    recordType:'financial_change',table:'financial_changes',alias:'fc',
+    baseJoins:sql`left join subsidiaries s on s.id=fc.subsidiary_id and s.org_id=fc.org_id`,
+    builtInExpr:{
+      operation:sql`fc.operation`,
+      subject:financialChangeSubjectExpr('fc'),
+      domain:sql`fc.domain`,
+      subsidiary:sql`s.name`,
+      reason:sql`fc.reason`,
+      effective_on:sql`fc.effective_on`,
+      status:sql`fc.status`,
+    },
+    sorts:{
+      operation:sql`fc.operation`,
+      subject:financialChangeSubjectExpr('fc'),
+      domain:sql`fc.domain`,
+      subsidiary:sql`s.name`,
+      reason:sql`fc.reason`,
+      date:sql`fc.effective_on`,
+      status:sql`fc.status`,
+    },
+    defaultSort:sql`fc.effective_on`,
+    quickFilters:[
+      {paramKey:'queue',filterKey:'queue',defaultValue:'awaiting'},
+      {paramKey:'domain',filterKey:'domain'},
+      {paramKey:'status',filterKey:'status'},
+    ],
+    where:(view,adhoc,orgId,allowed)=>lifecycleWhere('fc',view,adhoc,orgId,allowed),
+    drawerParam:'change',basePath:'/accounting/changes',
+    statusVariant:(_row, value) =>
+      value === 'applied' ? 'success'
+      : value === 'pending' ? 'warning'
+      : value === 'approved' ? 'default'
+      : value === 'rejected' ? 'destructive'
+      : 'outline',
   },
   revenue_contract: {
     recordType: 'revenue_contract',

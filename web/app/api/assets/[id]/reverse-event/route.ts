@@ -107,7 +107,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 }
 
 /** Reverse a posted disposal or remeasurement via the engine; change-owned
- *  events stay on Accounting changes. */
+ *  events stay on Accounting events. */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('assets.manage', 'fixedAssets')
   if (gate instanceof NextResponse) return gate

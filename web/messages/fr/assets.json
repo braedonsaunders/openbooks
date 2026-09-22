@@ -45,7 +45,7 @@
     },
     "reasons": {
       "already_reversed": "Déjà contrepassé.",
-      "accounting_change": "Rattaché à une modification approuvée de plusieurs livres — effectuez la contrepassation depuis Modifications comptables.",
+      "accounting_change": "Rattaché à une modification approuvée de plusieurs livres — effectuez la contrepassation depuis Événements comptables.",
       "entry_not_posted": "Son écriture n’est pas comptabilisée.",
       "later_event": "Contrepassez d’abord l’événement ultérieur « {kind} ».",
       "no_reversal_workflow": "Ce type d’événement ne dispose pas d’un processus de contrepassation directe."

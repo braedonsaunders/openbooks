@@ -54,7 +54,7 @@ export default async function LeasesPage({
                 />
               ) : null}
               <Button asChild variant="outline">
-                <Link href="/accounting/changes">Accounting changes</Link>
+                <Link href="/accounting/changes">Accounting events</Link>
               </Button>
               <ModuleHomeTabs tabs={tabs} />
             </>

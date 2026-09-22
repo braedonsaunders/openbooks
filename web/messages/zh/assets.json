@@ -45,7 +45,7 @@
     },
     "reasons": {
       "already_reversed": "已冲销。",
-      "accounting_change": "属于已批准的多账簿变更，请从“会计变更”中冲销。",
+      "accounting_change": "属于已批准的多账簿变更，请从“会计事件”中冲销。",
       "entry_not_posted": "关联分录尚未过账。",
       "later_event": "请先冲销后续的“{kind}”事件。",
       "no_reversal_workflow": "此事件类型没有直接冲销流程。"

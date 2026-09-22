@@ -45,7 +45,7 @@
     },
     "reasons": {
       "already_reversed": "Bereits storniert.",
-      "accounting_change": "Gehört zu einer genehmigten Änderung mehrerer Bücher — stornieren Sie sie unter Buchhaltungsänderungen.",
+      "accounting_change": "Gehört zu einer genehmigten Änderung mehrerer Bücher — stornieren Sie sie unter Buchungsereignisse.",
       "entry_not_posted": "Der zugehörige Journalbeleg ist nicht gebucht.",
       "later_event": "Stornieren Sie zuerst das spätere Ereignis „{kind}“.",
       "no_reversal_workflow": "Für diesen Ereignistyp gibt es keinen direkten Stornoworkflow."

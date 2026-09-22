@@ -45,7 +45,7 @@
     },
     "reasons": {
       "already_reversed": "Já estornado.",
-      "accounting_change": "Pertence a uma alteração aprovada em vários livros — faça o estorno em Alterações contábeis.",
+      "accounting_change": "Pertence a uma alteração aprovada em vários livros — faça o estorno em Eventos contábeis.",
       "entry_not_posted": "Seu lançamento não está contabilizado.",
       "later_event": "Estorne primeiro o evento posterior «{kind}».",
       "no_reversal_workflow": "Este tipo de evento não possui um fluxo de estorno direto."

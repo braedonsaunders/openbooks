@@ -394,14 +394,18 @@ export async function EntityListView({
     switch (c.kind) {
       case 'reference': {
         const href = openHref(String(row.id), row)
+        const hasOptions = meta.listFilters.some((f) => f.key === c.key && f.options?.length)
+        const display = v == null || v === ''
+          ? ''
+          : hasOptions ? optionLabel(c.key, String(v)) : String(v)
         return (
           <TableCell key={c.key} className="font-medium">
             <Link
               href={(href)}
-              title={String(v ?? '')}
+              title={display}
               className="block max-w-[18rem] truncate text-teal-700 hover:underline dark:text-teal-300"
             >
-              {String(v ?? '')}
+              {display}
             </Link>
           </TableCell>
         )

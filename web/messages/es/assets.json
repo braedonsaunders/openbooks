@@ -45,7 +45,7 @@
     },
     "reasons": {
       "already_reversed": "Ya se ha revertido.",
-      "accounting_change": "Pertenece a un cambio aprobado de varios libros — reviértalo desde Cambios contables.",
+      "accounting_change": "Pertenece a un cambio aprobado de varios libros — reviértalo desde Eventos contables.",
       "entry_not_posted": "Su asiento no está contabilizado.",
       "later_event": "Revierta primero el evento posterior «{kind}».",
       "no_reversal_workflow": "Este tipo de evento no tiene un flujo de reversión directa."

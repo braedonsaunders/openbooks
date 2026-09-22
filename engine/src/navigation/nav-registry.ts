@@ -486,8 +486,10 @@ export const NAV_MODULES: NavModule[] = [
     group: 'accounting', subgroup: 'assets', requiredPermission: 'assets.read',
   },
   {
-    key: 'accounting-changes', href: '/accounting/changes', label: 'Accounting Changes', iconKey: 'journal',
-    group: 'accounting', subgroup: 'ledger', requiredPermission: 'gl.read',
+    // Subsequent-measurement register (lease/asset/revenue/consolidation).
+    // Not ASC 250 / IAS 8. Sits with Period Close, not Journals.
+    key: 'accounting-changes', href: '/accounting/changes', label: 'Accounting events', iconKey: 'journal',
+    group: 'accounting', subgroup: 'close', requiredPermission: 'gl.read',
   },
   {
     key: 'tax-depreciation',
@@ -953,11 +955,11 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'assets',
     'tax-depreciation',
     'leases',
-    'accounting-changes',
     'budgets',
     'tax-filings',
     'tax-provisions',
     'close',
+    'accounting-changes',
   ],
   insights: ['reports', 'analytics', 'insights', 'saved-searches'],
   settings: [

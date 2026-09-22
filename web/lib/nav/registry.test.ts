@@ -81,8 +81,12 @@ test('default workspaces follow the approved journey-oriented information archit
   )
   assert.deepEqual(
     DEFAULT_NAV_ORDER.accounting.slice(5, 7),
-    ['leases', 'accounting-changes'],
+    ['leases', 'budgets'],
   )
+  assert.deepEqual(DEFAULT_NAV_ORDER.accounting.slice(-2), [
+    'close',
+    'accounting-changes',
+  ])
   assert.deepEqual(
     NAV_MODULES.find((module) => module.key === 'tax-depreciation'),
     {
@@ -112,10 +116,10 @@ test('default workspaces follow the approved journey-oriented information archit
     {
       key: 'accounting-changes',
       href: '/accounting/changes',
-      label: 'Accounting Changes',
+      label: 'Accounting events',
       iconKey: 'journal',
       group: 'accounting',
-      subgroup: 'ledger',
+      subgroup: 'close',
       requiredPermission: 'gl.read',
     },
   )

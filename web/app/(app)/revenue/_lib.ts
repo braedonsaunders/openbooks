@@ -171,8 +171,13 @@ export async function loadContract(
   }
 
   const changes = (
-    await db.execute<{ id: string; effective_on: string; status: string }>(
-      sql`select id,effective_on::text,status from financial_changes where org_id=${orgId} and domain='revenue' and subject_id=${id} order by created_at desc`,
+    await db.execute<{
+      id: string;
+      operation: string;
+      effective_on: string;
+      status: string;
+    }>(
+      sql`select id,operation,effective_on::text,status from financial_changes where org_id=${orgId} and domain='revenue' and subject_id=${id} order by created_at desc`,
     )
   ).rows;
   return { contract, obligations, changes };

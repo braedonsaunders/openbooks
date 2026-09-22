@@ -17,6 +17,10 @@ import { CancelRecognitionButton } from "./CancelRecognitionButton";
 import { RunRecognitionButton } from "./RunRecognitionButton";
 import Link from "next/link";
 import { ModifyContractButton } from "./ModifyContractButton";
+import {
+  financialChangeEventLabel,
+  financialChangeStatusLabel,
+} from "@openbooks/engine/src/platform/financial-change-labels.ts";
 import type { RevenueModificationOptions, ContractPayload } from "./_lib";
 
 const STATUS_VARIANT: Record<
@@ -127,16 +131,22 @@ export function ContractDrawer({
             options={modificationOptions}
           />
         ) : null}
-        {payload.changes?.map((change) => (
-          <p key={change.id}>
-            <Link
-              className="underline"
-              href={`/accounting/changes?change=${change.id}`}
-            >
-              Contract amendment {change.effective_on} · {change.status}
-            </Link>
-          </p>
-        ))}
+        {payload.changes?.length ? (
+          <section className="space-y-2">
+            <h3 className="font-semibold">Accounting events</h3>
+            {payload.changes.map((change) => (
+              <p key={change.id}>
+                <Link
+                  className="underline"
+                  href={`/accounting/changes?change=${change.id}`}
+                >
+                  {change.effective_on} · {financialChangeEventLabel(change.operation)} ·{" "}
+                  {financialChangeStatusLabel(change.status)}
+                </Link>
+              </p>
+            ))}
+          </section>
+        ) : null}
         {/* -- obligations + schedules -------------------------------- */}
         {payload.obligations.map((o) => (
           <section
