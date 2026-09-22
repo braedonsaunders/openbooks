@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { db, schema } from "../platform/db.ts";
-import { businessToday } from "../platform/business-date.ts";
+import { businessTimeZone, businessToday, formatTimestampInZone } from "../platform/business-date.ts";
 import { toUnits } from "../money/money.ts";
 import { assertNotSandbox } from "../organization/sandbox-guard.ts";
 import { PaymentError } from "./payment-errors.ts";
@@ -18,9 +18,36 @@ import { lockRunBankEvidence, paymentRunReadiness } from "./run-readiness.ts";
  * or fake files. The file creation number derives from the run number
  * sequence, so re-downloading the same run reproduces the same number.
  */
+/**
+ * Options every run-file loader accepts. `fileCreatedAt` is the run's
+ * stamped first-file instant (payment_runs.file_created_at): re-renders of
+ * the same run reuse it so re-downloads reproduce byte-identical files.
+ * Direct callers without a stamp get the legacy defaults (and legacy
+ * server-local rendering) unchanged.
+ */
+export interface RunFileOptions {
+  fileCreatedAt?: Date;
+}
+
+/**
+ * Resolve the creation instant a file renders: the run's stamped instant in
+ * the org's explicit zone when the artifact flow provides one, otherwise the
+ * caller's legacy fallback with no zone (server-local rendering, exactly as
+ * before — direct/test callers keep byte-identical output).
+ */
+async function creationStamp(
+  orgId: string,
+  fallback: Date,
+  fileCreatedAt?: Date,
+): Promise<{ date: Date; timeZone?: string }> {
+  if (!fileCreatedAt) return { date: fallback };
+  return { date: fileCreatedAt, timeZone: await businessTimeZone(orgId) };
+}
+
 export async function loadCpa005RunFile(
   runId: string,
   orgId: string,
+  opts?: RunFileOptions,
 ): Promise<{ filename: string; content: string; runNumber: string }> {
   await assertNotSandbox(orgId, "generate EFT payment file");
   const [run] = await db.select().from(schema.paymentRuns).where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
@@ -66,11 +93,13 @@ export async function loadCpa005RunFile(
 
   const numeric = run.runNumber.replace(/\D/g, "");
   const fileCreationNumber = ((Number(numeric || "1") - 1) % 9999) + 1;
+  const stamp = await creationStamp(orgId, new Date(`${today}T00:00:00`), opts?.fileCreatedAt);
 
   const content = buildCpa005File({
     settings: eft.settings,
     fileCreationNumber,
-    fileCreationDate: new Date(`${today}T00:00:00`),
+    fileCreationDate: stamp.date,
+    timeZone: stamp.timeZone,
     payments,
   });
   return { filename: `CPA005-${run.runNumber}.txt`, content, runNumber: run.runNumber };
@@ -80,7 +109,11 @@ export async function loadCpa005RunFile(
 // NACHA (US ACH) — orgs.settings.nacha
 // ---------------------------------------------------------------------------
 
-export async function loadNachaRunFile(runId: string, orgId: string): Promise<{ filename: string; content: string; runNumber: string }> {
+export async function loadNachaRunFile(
+  runId: string,
+  orgId: string,
+  opts?: RunFileOptions,
+): Promise<{ filename: string; content: string; runNumber: string }> {
   await assertNotSandbox(orgId, "generate ACH payment file");
   const [run] = await db.select().from(schema.paymentRuns).where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
   if (!run) throw new PaymentError("payment run not found");
@@ -112,11 +145,14 @@ export async function loadNachaRunFile(runId: string, orgId: string): Promise<{ 
   // The modifier is allocated from the run number (shared with payroll's
   // derivation), so a second file the same day carries the next letter
   // instead of colliding on "A" and drawing a bank duplicate-file rejection.
-  // The creation stamp is the real generation instant, not business midnight.
+  // The creation stamp is the run's stamped first-file instant in the org's
+  // zone — never wall-clock time — so a re-download reproduces the header.
+  const stamp = await creationStamp(orgId, new Date(), opts?.fileCreatedAt);
   const content = buildNachaFile({
     settings: settings.settings,
     effectiveDate,
-    creationDate: new Date(),
+    creationDate: stamp.date,
+    timeZone: stamp.timeZone,
     fileIdModifier: nachaFileIdModifierForRunNumber(run.runNumber),
     entries,
   });
@@ -127,7 +163,11 @@ export async function loadNachaRunFile(runId: string, orgId: string): Promise<{ 
 // SEPA — pain.001.001.03 credit transfer, orgs.settings.sepa
 // ---------------------------------------------------------------------------
 
-export async function loadSepaRunFile(runId: string, orgId: string): Promise<{ filename: string; content: string; runNumber: string }> {
+export async function loadSepaRunFile(
+  runId: string,
+  orgId: string,
+  opts?: RunFileOptions,
+): Promise<{ filename: string; content: string; runNumber: string }> {
   await assertNotSandbox(orgId, "generate SEPA payment file");
   const [run] = await db.select().from(schema.paymentRuns).where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
   if (!run) throw new PaymentError("payment run not found");
@@ -150,10 +190,13 @@ export async function loadSepaRunFile(runId: string, orgId: string): Promise<{ f
     remittance: e.documentNumber,
   }));
   const today = await businessToday(orgId);
+  const stamp = await creationStamp(orgId, new Date(`${today}T00:00:00`), opts?.fileCreatedAt);
   const content = buildSepaFile({
     settings: settings.settings,
     messageId: `MSG-${run.runNumber}`,
-    creationDateTime: `${today}T00:00:00`,
+    creationDateTime: stamp.timeZone
+      ? formatTimestampInZone(stamp.date, stamp.timeZone)
+      : `${today}T00:00:00`,
     executionDate: run.scheduledFor ?? today,
     payments,
   });
@@ -161,10 +204,14 @@ export async function loadSepaRunFile(runId: string, orgId: string): Promise<{ f
 }
 
 /** Dispatch a payment run to its bank file by method (eft→CPA-005, ach→NACHA, sepa→pain.001). */
-export async function loadRunFile(runId: string, orgId: string): Promise<{ filename: string; content: string; runNumber: string; contentType: string }> {
+export async function loadRunFile(
+  runId: string,
+  orgId: string,
+  opts?: RunFileOptions,
+): Promise<{ filename: string; content: string; runNumber: string; contentType: string }> {
   const [run] = await db.select().from(schema.paymentRuns).where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
   if (!run) throw new PaymentError("payment run not found");
-  if (run.method === "ach") return { ...(await loadNachaRunFile(runId, orgId)), contentType: "text/plain; charset=us-ascii" };
-  if (run.method === "sepa") return { ...(await loadSepaRunFile(runId, orgId)), contentType: "application/xml" };
-  return { ...(await loadCpa005RunFile(runId, orgId)), contentType: "text/plain; charset=us-ascii" };
+  if (run.method === "ach") return { ...(await loadNachaRunFile(runId, orgId, opts)), contentType: "text/plain; charset=us-ascii" };
+  if (run.method === "sepa") return { ...(await loadSepaRunFile(runId, orgId, opts)), contentType: "application/xml" };
+  return { ...(await loadCpa005RunFile(runId, orgId, opts)), contentType: "text/plain; charset=us-ascii" };
 }

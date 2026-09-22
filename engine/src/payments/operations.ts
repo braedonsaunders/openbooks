@@ -14,7 +14,7 @@ import { decryptAccountNumber, isValidBic, isValidIban } from "./rail-settings.t
 import { lockRunBankEvidence } from "./run-readiness.ts";
 import { validateNachaSettings, type NachaSettings } from "./rail-nacha.ts";
 import { validateSepaSettings, type SepaSettings } from "./rail-sepa.ts";
-import { loadRunFile } from "./run-files.ts";
+import { loadRunFile, type RunFileOptions } from "./run-files.ts";
 import { reversePaymentForReturn } from "./payment-return.ts";
 import { computeNextRunAt, runScript } from "../scripting/scripting.ts";
 import { sealJson, unsealJson } from "../platform/secrets.ts";
@@ -705,12 +705,12 @@ function sepaDebit(ctx: FormatContext, evidence: SepaDebitEvidence): { filename:
   return { filename: `SEPA-DEBIT-${String(ctx.run.run_number)}.xml`, content, contentType: ctx.format.contentType };
 }
 
-async function renderPaymentFile(ctx: FormatContext, orgId: string, now: Date) {
+async function renderPaymentFile(ctx: FormatContext, orgId: string, now: Date, fileOpts?: RunFileOptions) {
   // The org's calendar day backs every formatter's "no scheduled date" default,
   // so bank files never inherit the server's UTC day by accident.
   const scoped: FormatContext = { ...ctx, businessDate: await businessToday(orgId) };
   if (["cpa005_credit", "nacha_credit", "sepa_credit"].includes(scoped.format.rail)) {
-    return loadRunFile(String(scoped.run.id), orgId);
+    return loadRunFile(String(scoped.run.id), orgId, fileOpts);
   }
   if (scoped.format.rail === "nacha_debit") return { ...nachaDebit(scoped, now), runNumber: String(scoped.run.run_number) };
   if (scoped.format.rail === "sepa_debit") {
@@ -830,7 +830,26 @@ export async function generatePaymentFileArtifact(
     if (live) return live;
   }
   const now = opts?.now ?? new Date();
-  const rendered = await renderPaymentFile(ctx, orgId, now);
+  // Stamp the run's first-file instant ONCE (coalesce) before rendering: the
+  // UPDATE's row lock serializes concurrent first generations onto one
+  // instant, and every later render of this run — re-downloads, reprocesses —
+  // reuses it, so identical evidence always renders byte-identical files and
+  // the bank's duplicate-file detection recognizes an accidental re-upload
+  // of the same run. A failed render may leave a stamp with no artifact; the
+  // next attempt reuses it, which keeps the identity stable either way.
+  const fileCreatedAtRaw = (await db.execute<{ file_created_at: Date | string }>(sql`
+    update payment_runs set file_created_at = coalesce(file_created_at, ${now})
+     where id = ${runId} and org_id = ${orgId}
+    returning file_created_at
+  `)).rows[0]?.file_created_at;
+  if (fileCreatedAtRaw == null) throw new PaymentError("payment run not found");
+  // node-postgres returns timestamptz as a string; the renderers need a real
+  // Date (their formatters read getHours(), not string indexes).
+  const fileCreatedAt = fileCreatedAtRaw instanceof Date ? fileCreatedAtRaw : new Date(fileCreatedAtRaw);
+  if (Number.isNaN(fileCreatedAt.getTime())) {
+    throw new PaymentError("payment run file creation stamp is not a valid timestamp");
+  }
+  const rendered = await renderPaymentFile(ctx, orgId, now, { fileCreatedAt });
   const content = Buffer.from(rendered.content, "utf8");
   const hash = createHash("sha256").update(content).digest("hex");
   return withOrgTransaction(orgId, async () => {

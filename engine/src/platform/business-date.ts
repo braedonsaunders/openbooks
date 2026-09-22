@@ -40,6 +40,36 @@ export function formatInZone(date: Date, timeZone: string): string {
   return `${value("year")}-${value("month")}-${value("day")}`;
 }
 
+/**
+ * Format an instant's wall-clock time as HHMM (24-hour) in an IANA zone —
+ * pure, so tests need no database. Bank-file creation stamps (NACHA HHMM,
+ * SEPA CreDtTm) must render in an EXPLICIT zone: reading getHours() off the
+ * Date inherits whatever timezone the server happens to run in.
+ */
+export function formatTimeInZone(date: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  // en-CA midnight formats as "24:00" on some runtimes; normalize to 00.
+  const hour = value("hour") === "24" ? "00" : value("hour");
+  return `${hour}${value("minute")}`;
+}
+
+/**
+ * Format an instant as a zone-local ISO timestamp YYYY-MM-DDTHH:MM:SS
+ * (no offset suffix — the receiver reads it in the originating bank's local
+ * time, exactly like the NACHA header). Pure.
+ */
+export function formatTimestampInZone(date: Date, timeZone: string): string {
+  const hhmm = formatTimeInZone(date, timeZone);
+  return `${formatInZone(date, timeZone)}T${hhmm.slice(0, 2)}:${hhmm.slice(2)}:00`;
+}
+
 /** Accept only zones this runtime actually knows; anything else means UTC. */
 function validZone(value: string | null | undefined): string | null {
   const zone = value?.trim();

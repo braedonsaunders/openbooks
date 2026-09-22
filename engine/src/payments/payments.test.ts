@@ -334,6 +334,62 @@ test("the NACHA modifier allocator advances one letter per file and wraps the al
   );
 });
 
+test("the NACHA creation stamp renders in the explicit zone, not the server clock", () => {
+  // 2026-03-03T04:05Z is March 3rd 04:05 in UTC but March 2nd 23:05 in New
+  // York. A server-local stamp would render whichever the box runs in.
+  const instant = new Date("2026-03-03T04:05:00Z");
+  const file = (timeZone: string) =>
+    buildNachaFile({
+      settings: NACHA,
+      effectiveDate: new Date(2026, 2, 5),
+      creationDate: instant,
+      timeZone,
+      fileIdModifier: "B",
+      entries: [{
+        transactionCode: "22",
+        routingNumber: "021000021",
+        accountNumber: "998877",
+        amountCents: 12500n,
+        individualId: "BILL-0001",
+        individualName: "FIRST PAYEE",
+      }],
+    }).split("\n")[0]!;
+  assert.ok(file("UTC").includes("2603030405B094"), `UTC stamp: ${file("UTC")}`);
+  assert.ok(file("America/New_York").includes("2603022305B094"), `New York stamp: ${file("America/New_York")}`);
+});
+
+test("the NACHA builder refuses an invalid creation time zone instead of guessing", () => {
+  assert.throws(
+    () =>
+      buildNachaFile({
+        settings: NACHA,
+        effectiveDate: new Date(2026, 2, 5),
+        creationDate: new Date("2026-03-03T04:05:00Z"),
+        timeZone: "Not/AZone",
+        fileIdModifier: "B",
+        entries: [{
+          transactionCode: "22",
+          routingNumber: "021000021",
+          accountNumber: "998877",
+          amountCents: 12500n,
+          individualId: "BILL-0001",
+          individualName: "FIRST PAYEE",
+        }],
+      }),
+    (error: Error) => error instanceof PaymentError && /not a valid IANA time zone/.test(error.message),
+  );
+});
+
+test("the CPA-005 creation date renders in the explicit zone, not the server clock", () => {
+  // Same instant: March 3rd in UTC (julian day 62 of 2026) but March 2nd in
+  // New York (day 61).
+  const instant = new Date("2026-03-03T04:05:00Z");
+  const aRecord = (timeZone: string) =>
+    buildCpa005File(cpa005Run({ fileCreationDate: instant, timeZone })).split("\r\n")[0]!;
+  assert.ok(aRecord("UTC").includes("026062"), `UTC creation date: ${aRecord("UTC")}`);
+  assert.ok(aRecord("America/New_York").includes("026061"), `New York creation date: ${aRecord("America/New_York")}`);
+});
+
 test("the NACHA credit file refuses an amount that does not fit its field instead of truncating it", () => {
   // 10,000,000,000 cents is 11 digits: the old slice(0, 10) kept the leading
   // ten and silently dropped the ones place.

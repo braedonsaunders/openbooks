@@ -1,4 +1,5 @@
 import { PaymentError } from "./payment-errors.ts";
+import { formatInZone } from "../platform/business-date.ts";
 import { type EftSettings } from "./rail-settings.ts";
 
 export interface Cpa005Payment {
@@ -22,6 +23,12 @@ export interface Cpa005Run {
   /** 1–9999, unique per file transmitted to the institution. */
   fileCreationNumber: number;
   fileCreationDate: Date;
+  /**
+   * IANA zone the A-record creation date renders in (the org's zone,
+   * resolved by the caller). Without it the stamp reads the server's local
+   * clock, so the same instant renders different bytes per server zone.
+   */
+  timeZone?: string;
   payments: Cpa005Payment[];
 }
 
@@ -43,10 +50,14 @@ function num(value: bigint | number, len: number): string {
 
 /** CPA date format: 0YYDDD (leading zero, 2-digit year, julian day of year). */
 function julian(d: Date): string {
-  const year = d.getFullYear();
+  return julianFromParts(d.getFullYear(), d.getMonth() + 1, d.getDate());
+}
+
+/** 0YYDDD from already-zoned calendar parts — no clock reads, no zone. */
+function julianFromParts(year: number, month: number, dayOfMonth: number): string {
   const start = Date.UTC(year, 0, 1);
   const day =
-    Math.floor((Date.UTC(year, d.getMonth(), d.getDate()) - start) / 86_400_000) + 1;
+    Math.floor((Date.UTC(year, month - 1, dayOfMonth) - start) / 86_400_000) + 1;
   return `0${String(year % 100).padStart(2, "0")}${String(day).padStart(3, "0")}`;
 }
 
@@ -111,6 +122,17 @@ export function buildCpa005File(run: Cpa005Run): string {
   const originatorId = alpha(s.originatorId, 10);
   const fileCreationNo = num(run.fileCreationNumber, 4);
   const originControl = `${originatorId}${fileCreationNo}`; // positions 11–24
+  // The creation date is an instant: render it in the caller's explicit zone
+  // so the same file renders byte-identical bytes on any server.
+  let creationJulian = julian(run.fileCreationDate);
+  if (run.timeZone != null) {
+    try {
+      const [year, month, dayOfMonth] = formatInZone(run.fileCreationDate, run.timeZone).split("-").map(Number);
+      creationJulian = julianFromParts(year!, month!, dayOfMonth!);
+    } catch {
+      throw new PaymentError(`CPA-005 creation time zone "${run.timeZone}" is not a valid IANA time zone`);
+    }
+  }
   const txnType = /^\d{3}$/.test(s.transactionCode ?? "") ? s.transactionCode! : "460";
 
   let recordCount = 0;
@@ -123,7 +145,7 @@ export function buildCpa005File(run: Cpa005Run): string {
       "A" +
       num(recordCount, 9) +
       originControl +
-      julian(run.fileCreationDate) +
+      creationJulian +
       num(Number(s.dataCentre), 5) +
       " ".repeat(20) + // reserved customer-direct clearer communication area
       "CAD"
