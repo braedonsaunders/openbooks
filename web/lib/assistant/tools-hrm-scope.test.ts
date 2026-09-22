@@ -39,6 +39,7 @@ const { AmbiguousRevisionError, NoRevisionError } = await import("@openbooks/eng
 const { HrmPerformanceError } = await import("@openbooks/engine/src/hrm/performance/errors.ts");
 const { HrmQualificationError } = await import("@openbooks/engine/src/hrm/qualifications/errors.ts");
 const { HrmDocumentsError } = await import("@openbooks/engine/src/hrm/documents/errors.ts");
+const { CompensationError } = await import("@openbooks/engine/src/hrm/compensation/errors.ts");
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const tools = read("./tools-hrm.ts");
@@ -405,6 +406,28 @@ test("hrmRefusal carries read-service refusals and rethrows the rest", () => {
     },
   );
   // HR-19 end
+  // F15 begin: the placement gate's refusals (uniform not-found for
+  // unknown/foreign/hidden employments, the named-remedy refusal for
+  // grant-less callers) reach the assistant caller with their message
+  // intact — never empty results, never a throw.
+  assert.deepEqual(hrmRefusal(new CompensationError("NOT_FOUND", "employment is not visible in this organization")), {
+    ok: false,
+    error: "employment is not visible in this organization",
+  });
+  assert.deepEqual(
+    hrmRefusal(
+      new CompensationError(
+        "REFUSED",
+        "band placement for another employment requires the hrm.compensation.read permission — ask an administrator to grant it in /admin/roles, or read your own placement under /me/compensation",
+      ),
+    ),
+    {
+      ok: false,
+      error:
+        "band placement for another employment requires the hrm.compensation.read permission — ask an administrator to grant it in /admin/roles, or read your own placement under /me/compensation",
+    },
+  );
+  // F15 end
   const missing = new NoRevisionError("2026-06-15", "2026-07-01T00:00:00.000000Z");
   const mapped = hrmRefusal(missing);
   assert.equal(mapped.ok, false);

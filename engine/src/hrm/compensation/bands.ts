@@ -2,10 +2,14 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../../platform/db.ts";
 import { businessToday } from "../../platform/business-date.ts";
 import { resolveWage, laborCostingSettings } from "../../projects/labor-costing.ts";
+import { actorHasPermission } from "../../organization/actor-permissions.ts";
 import {
+  HrmAuthorizationError,
+  loadOwnEmploymentIds,
   requireAggregateCompensationRead,
   requireHrmCompensationManage,
   requireHrmCompensationRead,
+  requireHrmCompensationReadOnEmployment,
 } from "../authorization.ts";
 import { CompensationError } from "./errors.ts";
 import { mul } from "../../money/money.ts";
@@ -234,6 +238,22 @@ export async function resolveBandForScope(
   return row ? toBandDTO(row) : null;
 }
 
+/** Unknown, cross-org, and out-of-scope employments share one message. */
+function employmentNotVisible(): CompensationError {
+  return new CompensationError("NOT_FOUND", "employment is not visible in this organization");
+}
+
+/**
+ * Own-employment self-service: the hrm.self.read grant plus identity.
+ * Explicit booleans, never a caught permission refusal treated as a
+ * fallback — a database failure must propagate, never read as a grant.
+ */
+async function isOwnEmployment(orgId: string, actorId: string, employmentId: string): Promise<boolean> {
+  if (!(await actorHasPermission(db, orgId, actorId, "hrm.self.read"))) return false;
+  const own = await loadOwnEmploymentIds(db, orgId, actorId);
+  return own.includes(employmentId);
+}
+
 export interface PlacementRead {
   readonly employmentId: string;
   readonly asOf: string;
@@ -256,11 +276,31 @@ export async function compaRatioFor(
   employmentId: string,
   asOf: string,
 ): Promise<PlacementRead> {
+  // Placement is a single-subject salary surface: the canonical
+  // per-employment compensation gate (hrm.compensation.read plus the
+  // trusted employer-subsidiary scope — never caller-supplied scope),
+  // with a fall-through to the actor's own employment through
+  // hrm.self.read so a restricted HR lens never removes self-service.
   // hrm.compensation.read suffices: a compensation analyst reads
-  // placement without the employment record grant, so the subject loads
-  // directly (org-scoped, never caller-supplied identity) instead of
-  // through the employment-read gate.
-  void actorId;
+  // placement without the employment record grant. Unknown, foreign,
+  // and hidden employments refuse with the uniform not-visible message,
+  // so the refusal can never confirm which half failed or whether a
+  // payroll-side wage covers the subject.
+  if (await actorHasPermission(db, orgId, actorId, "hrm.compensation.read")) {
+    try {
+      await requireHrmCompensationReadOnEmployment(db, orgId, actorId, employmentId);
+    } catch (e) {
+      if (!(e instanceof HrmAuthorizationError)) throw e;
+      if (!(await isOwnEmployment(orgId, actorId, employmentId))) {
+        throw employmentNotVisible();
+      }
+    }
+  } else if (!(await isOwnEmployment(orgId, actorId, employmentId))) {
+    throw new CompensationError(
+      "REFUSED",
+      "band placement for another employment requires the hrm.compensation.read permission — ask an administrator to grant it in /admin/roles, or read your own placement under /me/compensation",
+    );
+  }
   const employment = (await db.execute<{
     worker_party_id: string;
     employer_subsidiary_id: string;
@@ -268,7 +308,7 @@ export async function compaRatioFor(
     select worker_party_id, employer_subsidiary_id
       from worker_employments where org_id = ${orgId} and id = ${employmentId}`)).rows[0];
   if (!employment) {
-    throw new CompensationError("NOT_FOUND", "employment is not visible in this organization");
+    throw employmentNotVisible();
   }
   const primary = (await db.execute<{
     assignment_id: string;
