@@ -61,7 +61,7 @@ export interface ContractPayload {
     sourceInvoiceNumber: string | null;
   };
   obligations: ObligationRow[];
-  changes?: { id: string; effective_on: string; status: string }[];
+  changes?: { id: string; operation: string; effective_on: string; status: string }[];
 }
 
 /**

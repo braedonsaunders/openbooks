@@ -229,6 +229,9 @@ test("multi-line capture against a single PO line is unchanged", { skip: !DB }, 
     const unmatched = resolved.issues.filter((i) => i.code === "po_line_unmatched");
     assert.equal(unmatched.length, 2);
     assert.ok(unmatched.every((i) => i.severity === "blocking"));
+    // Anchor the loop: with no normalized lines every assertion below is
+    // vacuous, and "both lines stay unbound" is exactly what is being proven.
+    assert.equal(resolved.normalized.lines.length, 2);
     for (const mapped of resolved.normalized.lines) {
       assert.equal(mapped.purchaseOrderLineId ?? null, null);
     }

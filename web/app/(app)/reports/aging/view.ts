@@ -22,7 +22,7 @@ import {
   type TableSpanRow,
 } from '@braedonsaunders/appkit-viewspec'
 import { getMoneyFormatter } from '@/lib/money-server'
-import { agingByParty, agingCurrenciesInScope, agingSummaryAndDetail, AgingRatesUnavailableError, dimensionOptions, type AgingCurrencyBasis, type AgingSide } from '../../../../lib/reports'
+import { agingByParty, agingCurrenciesInScope, agingDetail, agingSummaryAndDetail, AgingRatesUnavailableError, dimensionOptions, type AgingCurrencyBasis, type AgingSide } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
 import { MissingRatesError, reportSubsidiaryView, type RatesBlockedNotice } from '../../../../lib/consolidation'
 import { resolvePeriod } from '../../../../lib/periods'

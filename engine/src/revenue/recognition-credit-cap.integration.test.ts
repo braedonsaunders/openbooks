@@ -410,6 +410,9 @@ for (const scenario of [
         where l.org_id=${org.orgId} and l.account_id=${org.accounts.recognized}
           and e.status in ('posted','reversed') group by e.book_id`)).rows;
       assert.deepEqual(new Set(balances.map(r => r.book_id)), new Set([org.bookId, secondBook]));
+      // The set comparison above rides an inline map, so pin the row count
+      // directly: both books must have posted, or the loop proves nothing.
+      assert.equal(balances.length, 2);
       for (const row of balances) assert.equal(row.amount, `-${scenario.earned}`, `earned balance in book ${row.book_id}`);
       const replay = await runRevenueRecognition(org.orgId, "2027-06-30", actors.adminId);
       assert.equal(replay.posted, 0, "held plans cannot release additional revenue on replay");
