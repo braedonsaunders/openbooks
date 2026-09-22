@@ -70,6 +70,65 @@ export async function getS3Blob(versionId: string): Promise<Buffer | null> {
   }
 }
 
+/**
+ * Ephemeral email-attachment objects: rendered PDFs staged for the queue,
+ * fetched by the worker at send time and deleted once the delivery reaches a
+ * terminal state. A separate prefix keeps them out of the file cabinet (they
+ * are transport staging, not tenant records) so cabinet retention and
+ * lifecycle rules never apply to them.
+ */
+const emailAttachmentKey = (id: string) => `email-attachments/${id}`;
+
+/** Storage ids are path segments, never paths: reject anything escapable. */
+function assertEmailAttachmentId(id: string): void {
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) {
+    throw new Error("email attachment storage id is malformed");
+  }
+}
+
+export async function putEmailAttachmentBlob(id: string, bytes: Buffer, contentType: string): Promise<void> {
+  assertEmailAttachmentId(id);
+  await s3().send(new PutObjectCommand({
+    Bucket: env.S3_BUCKET!,
+    Key: emailAttachmentKey(id),
+    Body: bytes,
+    ContentType: contentType,
+  }));
+}
+
+export async function getEmailAttachmentBlob(id: string): Promise<Buffer | null> {
+  assertEmailAttachmentId(id);
+  try {
+    const result = await s3().send(new GetObjectCommand({
+      Bucket: env.S3_BUCKET!,
+      Key: emailAttachmentKey(id),
+    }));
+    if (!result.Body) return null;
+    return Buffer.from(await result.Body.transformToByteArray());
+  } catch (error) {
+    if ((error as { name?: string }).name === "NoSuchKey") return null;
+    throw error;
+  }
+}
+
+/** Best-effort: a failed delete must never fail a delivery. The worker
+ *  deletes eagerly on terminal states; a blob orphaned by a crash between
+ *  send and delete stays under the unlisted prefix until an operator clears
+ *  it — it is never re-read, because only live job payloads reference ids. */
+export async function deleteEmailAttachmentBlobs(ids: string[]): Promise<void> {
+  for (const id of ids) {
+    try {
+      assertEmailAttachmentId(id);
+      await s3().send(new DeleteObjectsCommand({
+        Bucket: env.S3_BUCKET!,
+        Delete: { Objects: [{ Key: emailAttachmentKey(id) }], Quiet: true },
+      }));
+    } catch (error) {
+      console.error("[file-storage] email attachment cleanup failed (object orphaned):", (error as Error).message);
+    }
+  }
+}
+
 export async function deleteS3Blobs(versionIds: string[]): Promise<void> {
   for (let index = 0; index < versionIds.length; index += 1_000) {
     const chunk = versionIds.slice(index, index + 1_000);

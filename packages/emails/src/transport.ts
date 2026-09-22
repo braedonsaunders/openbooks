@@ -15,10 +15,12 @@
 import { resolvePublicHost, unsealSecret } from './crypto'
 import { isEmailProvider, type EmailProvider } from './providers'
 import {
+  isEmailAttachmentRef,
   isValidEmailAddress,
   normalizeEmailDeliveryInput,
   type EmailAttachmentPayload,
   type EmailDeliveryInput,
+  type TransmittableEmailInput,
 } from './delivery-input'
 import {
   assertEmailDeliveryKey,
@@ -29,7 +31,6 @@ import {
   type EmailSendOutcome,
 } from './outcome'
 
-export type EmailAttachment = EmailAttachmentPayload
 export type SendEmailInput = EmailDeliveryInput
 
 /** Per-org email config persisted in JSON (orgs.settings.email). Secret sealed. */
@@ -333,21 +334,28 @@ export async function sendVia(
   assertEmailDeliveryKey(identity.deliveryKey)
   const from = transport.from
   const normalizedInput = normalizeEmailDeliveryInput(input, { requireSingleRecipient: true })
+  const inlineAttachments = (normalizedInput.attachments ?? []).filter(
+    (attachment): attachment is EmailAttachmentPayload => !isEmailAttachmentRef(attachment),
+  )
+  if (inlineAttachments.length !== (normalizedInput.attachments?.length ?? 0)) {
+    throw new Error('Provider delivery requires materialized attachments — queue references must be resolved before sendVia.')
+  }
+  const transmittableInput: TransmittableEmailInput = { ...normalizedInput, attachments: inlineAttachments }
   // A per-message reply-to (dunning policy, approval flow) wins over the org
   // transport default; both were validated on the way in.
   const replyTo = normalizedInput.replyTo ?? transport.replyTo
   const run = (): Promise<EmailSendOutcome> => {
     switch (transport.provider) {
       case 'resend':
-        return sendResend(transport, normalizedInput, from, replyTo, identity.deliveryKey)
+        return sendResend(transport, transmittableInput, from, replyTo, identity.deliveryKey)
       case 'sendgrid':
-        return sendSendgrid(transport, normalizedInput, from, replyTo, identity.deliveryKey)
+        return sendSendgrid(transport, transmittableInput, from, replyTo, identity.deliveryKey)
       case 'mailgun':
-        return sendMailgun(transport, normalizedInput, from, replyTo, identity.deliveryKey)
+        return sendMailgun(transport, transmittableInput, from, replyTo, identity.deliveryKey)
       case 'postmark':
-        return sendPostmark(transport, normalizedInput, from, replyTo, identity.deliveryKey)
+        return sendPostmark(transport, transmittableInput, from, replyTo, identity.deliveryKey)
       case 'smtp':
-        return sendSmtp(transport, normalizedInput, from, replyTo, identity.deliveryKey)
+        return sendSmtp(transport, transmittableInput, from, replyTo, identity.deliveryKey)
     }
   }
   try {
@@ -358,7 +366,7 @@ export async function sendVia(
   }
 }
 
-async function sendResend(t: Extract<EmailTransport, { provider: 'resend' }>, input: SendEmailInput, from: string, replyTo?: string, deliveryKey?: string): Promise<EmailSendOutcome> {
+async function sendResend(t: Extract<EmailTransport, { provider: 'resend' }>, input: TransmittableEmailInput, from: string, replyTo?: string, deliveryKey?: string): Promise<EmailSendOutcome> {
   const res = await providerDispatch('Resend', 'https://api.resend.com/emails', {
     method: 'POST',
     headers: {
@@ -400,7 +408,7 @@ async function sendResend(t: Extract<EmailTransport, { provider: 'resend' }>, in
   return { kind: 'sent', providerMessageId: id }
 }
 
-async function sendSendgrid(t: Extract<EmailTransport, { provider: 'sendgrid' }>, input: SendEmailInput, from: string, replyTo?: string, deliveryKey?: string): Promise<EmailSendOutcome> {
+async function sendSendgrid(t: Extract<EmailTransport, { provider: 'sendgrid' }>, input: TransmittableEmailInput, from: string, replyTo?: string, deliveryKey?: string): Promise<EmailSendOutcome> {
   const content: { type: string; value: string }[] = []
   content.push({ type: 'text/plain', value: input.text || ' ' })
   if (input.html) content.push({ type: 'text/html', value: input.html })
@@ -431,7 +439,7 @@ async function sendSendgrid(t: Extract<EmailTransport, { provider: 'sendgrid' }>
   return { kind: 'sent', providerMessageId: id }
 }
 
-async function sendMailgun(t: Extract<EmailTransport, { provider: 'mailgun' }>, input: SendEmailInput, from: string, replyTo?: string, deliveryKey?: string): Promise<EmailSendOutcome> {
+async function sendMailgun(t: Extract<EmailTransport, { provider: 'mailgun' }>, input: TransmittableEmailInput, from: string, replyTo?: string, deliveryKey?: string): Promise<EmailSendOutcome> {
   const form = new FormData()
   form.set('from', from)
   for (const to of toArray(input.to)) form.append('to', to)
@@ -469,7 +477,7 @@ async function sendMailgun(t: Extract<EmailTransport, { provider: 'mailgun' }>, 
   return { kind: 'sent', providerMessageId: id }
 }
 
-async function sendPostmark(t: Extract<EmailTransport, { provider: 'postmark' }>, input: SendEmailInput, from: string, replyTo?: string, deliveryKey?: string): Promise<EmailSendOutcome> {
+async function sendPostmark(t: Extract<EmailTransport, { provider: 'postmark' }>, input: TransmittableEmailInput, from: string, replyTo?: string, deliveryKey?: string): Promise<EmailSendOutcome> {
   const res = await providerDispatch('Postmark', 'https://api.postmarkapp.com/email', {
     method: 'POST',
     headers: { 'X-Postmark-Server-Token': t.serverToken, 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -505,7 +513,7 @@ async function sendPostmark(t: Extract<EmailTransport, { provider: 'postmark' }>
   return { kind: 'sent', providerMessageId: id }
 }
 
-async function sendSmtp(t: Extract<EmailTransport, { provider: 'smtp' }>, input: SendEmailInput, from: string, replyTo?: string, deliveryKey?: string): Promise<EmailSendOutcome> {
+async function sendSmtp(t: Extract<EmailTransport, { provider: 'smtp' }>, input: TransmittableEmailInput, from: string, replyTo?: string, deliveryKey?: string): Promise<EmailSendOutcome> {
   if (Boolean(t.username) !== Boolean(t.password)) {
     throw new Error('SMTP: username and password must both be provided, or both omitted for an unauthenticated relay')
   }

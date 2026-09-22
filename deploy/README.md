@@ -31,6 +31,26 @@ GRANT CREATE ON DATABASE <database> TO <owner>;
 -- Create openbooks_read once per cluster if it is absent.
 GRANT openbooks_read TO openbooks_runtime WITH INHERIT FALSE, SET TRUE;
 GRANT openbooks_runtime TO <owner> WITH INHERIT TRUE;
+-- Tenant context plumbing: harmless when the default PUBLIC grant is
+-- intact, required when the host has tightened pg_catalog.
+GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO openbooks_runtime;
+```
+
+Division of labour: the operator pre-creates the logins and the grants
+above; bootstrap (constrained mode, inside the release) then grants the
+runtime login table/sequence privileges on every object including ones the
+release itself creates, sets default privileges for future objects, revokes
+function execute, proves the login owns nothing, and RLS-proves it — all
+before the digest swap. The operator never grants on tables directly.
+
+Preflight before the first release with the new login (connect as
+`openbooks_runtime`; all three must hold on a cluster that already has
+data):
+
+```sql
+select current_user; -- openbooks_runtime
+select has_function_privilege('pg_catalog.set_config(text,text,boolean)', 'EXECUTE'); -- true
+select count(*) from orgs; -- 0: FORCE RLS denies cross-tenant reads without a tenant context
 ```
 
 Then, in the Dokploy stack env:

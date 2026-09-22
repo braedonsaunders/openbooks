@@ -431,6 +431,7 @@
         "billing",
         "close",
         "continuous-close",
+        "delivery",
         "flows",
         "fx",
         "ledger",

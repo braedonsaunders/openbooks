@@ -4,13 +4,13 @@ import {
   assertEmailDeliveryKey,
   deriveEmailDeliveryKey,
   normalizeEmailDeliveryInput,
-  type EmailAttachmentPayload,
+  type EmailAttachment,
 } from '@openbooks/emails'
 import { getConnection } from '../connection'
 
 export const EMAIL_QUEUE = 'emails'
 
-export type EmailAttachment = EmailAttachmentPayload
+export type { EmailAttachment }
 
 export type EmailJobData = {
   /** The org this send belongs to — selects the provider transport + logs. */
@@ -68,7 +68,11 @@ export function getEmailQueue(): Queue<EmailJobData> {
     defaultJobOptions: {
       attempts: 5,
       backoff: { type: 'exponential', delay: 30_000 },
-      removeOnComplete: { age: 7 * 24 * 3600 },
+      // Completed email jobs carry the full message body: the durable record
+      // is the email_log row, so completed payloads are trimmed after a day
+      // instead of lingering a week in Redis. Failed payloads keep 30 days
+      // for diagnosis (they now carry references, not file bytes).
+      removeOnComplete: { age: 24 * 3600 },
       removeOnFail: { age: 30 * 24 * 3600 },
     },
   })

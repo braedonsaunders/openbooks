@@ -8,6 +8,7 @@ import {
   type CloseDeliveryJobData,
 } from "@openbooks/jobs";
 import { isValidEmailAddress } from "@openbooks/emails";
+import { storeEmailAttachments } from "../delivery/email-attachments.ts";
 import { db, withOrgContext } from "../platform/db.ts";
 import { ensureReportDefinitions } from "../reports/ensure-report-definitions.ts";
 import { renderReportPdf } from "./render-client.ts";
@@ -237,6 +238,10 @@ export async function processCloseDeliveryJobData(
           `close-package|${orgId}|${data.packageId}|${data.periodId ?? ""}|${data.bookId ?? ""}`,
         );
       }
+      // Stage the rendered bundle outside the queue payload: the email
+      // worker fetches the bytes at send time instead of Redis holding
+      // report contents for days.
+      const attachments = await storeEmailAttachments(files);
       await enqueueEmail(
         {
           orgId,
@@ -244,7 +249,7 @@ export async function processCloseDeliveryJobData(
           subject,
           html,
           text,
-          attachments: files,
+          attachments,
           meta: { category: "close-package" },
         },
         { jobId: emailIntentKey },
