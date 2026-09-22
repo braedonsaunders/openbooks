@@ -168,6 +168,36 @@ export function computePlanMovement(input: PlanMovementInput): PlanMovementResul
   return { movements, warnings, closingBalance: balance };
 }
 
+/**
+ * Money value of a ledger amount held in the plan's unit — the conversion
+ * every stub line pays through.
+ *
+ * Money plans pass through (rounded to cents); hours plans value at the
+ * employee's current hourly wage, the same valuation `entitlementBalances`
+ * reports as `balanceMoney`. There is no wage, there is no price: an hours
+ * bank with no resolvable wage is refused BY NAME rather than paid as its
+ * hour count (40 hours at $30/h paid as $40.00) or, worse, as zero. The
+ * remedy names the fix the operator can actually perform.
+ */
+export function entitlementMoneyValue(args: {
+  plan: EntitlementPlan;
+  /** Ledger amount in the plan's unit — a balance or a movement. */
+  amount: string;
+  /** The employee's hourly wage on the pay date; required for hours plans. */
+  wage: string | null;
+  /** Employee display name, for the refusal. */
+  employeeName: string;
+}): string {
+  if (args.plan.unit === "money") return roundMoney(args.amount, 2);
+  if (args.wage == null || cmp(args.wage, "0") <= 0) {
+    throw new PayrollError(
+      `entitlement plan ${args.plan.code} banks hours but ${args.employeeName} has no hourly wage `
+      + `on the pay date — add a labor cost rate covering the pay date for this employee, then recalculate`,
+    );
+  }
+  return roundMoney(mulDecimal(args.amount, args.wage), 2);
+}
+
 function accrualMovement(
   plan: EntitlementPlan,
   employeePartyId: string,
@@ -195,6 +225,18 @@ function earnedAmount(
 ): string {
   switch (plan.accrualMethod) {
     case "percent_of_earnings":
+      // A percent of (money) earnings IS money. Banking it into an
+      // hours-denominated plan would store dollars as hours — an
+      // 80.00 accrual nobody worked — so the combination is refused at the
+      // source, with the two coherent shapes named. Storage refuses it too
+      // (the entitlement_plans check in the 0253 forward migration).
+      if (plan.unit === "hours") {
+        throw new PayrollError(
+          `entitlement plan ${plan.code} banks hours but accrues a percent of earnings — `
+          + `accrue per hour worked or a fixed amount per period instead, or change the plan's `
+          + `unit to money, in Payroll setup → Entitlement plans`,
+        );
+      }
       return mulPercent(input.earnings, accrualValue, 2);
     case "per_hour_worked":
       return roundMoney(mulDecimal(accrualValue, input.hours), 2);

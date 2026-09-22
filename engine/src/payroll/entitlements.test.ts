@@ -11,6 +11,7 @@ import { db } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
 import {
   computePlanMovement,
+  entitlementMoneyValue,
   limitScopeOf,
   monthsOfService,
   pickPlanLimit,
@@ -145,6 +146,54 @@ test("fixed-per-period and manual plans", () => {
   }));
   assert.deepEqual(manual.movements, []);
   assert.equal(manual.closingBalance, "0.0000");
+});
+
+test("an hours plan cannot accrue a percent of earnings", () => {
+  // A percent of (money) earnings banked as hours would store dollars as
+  // hours — 4% of $2,000 banking "80.00" hours nobody worked. Refused with
+  // both coherent shapes named, so the operator can fix the plan.
+  assert.throws(
+    () => computePlanMovement(move({
+      plan: plan({ unit: "hours", accrualMethod: "percent_of_earnings" }),
+      earnings: "2000.0000",
+    })),
+    (error: unknown) => {
+      assert.ok(error instanceof PayrollError);
+      assert.match(error.message, /BANK-OT banks hours but accrues a percent of earnings/);
+      assert.match(error.message, /per hour worked|fixed amount per period/i);
+      assert.match(error.message, /Payroll setup → Entitlement plans/);
+      return true;
+    },
+  );
+});
+
+test("stub money values an hours bank at the wage, never as its hour count", () => {
+  const hoursPlan = plan({ unit: "hours" });
+  // 40 hours at $30/h pay $1,200 — not $40.00.
+  assert.equal(
+    entitlementMoneyValue({ plan: hoursPlan, amount: "40.0000", wage: "30", employeeName: "A. User" }),
+    "1200.0000",
+  );
+  // Money plans pass through to cents.
+  assert.equal(
+    entitlementMoneyValue({ plan: plan(), amount: "49.3828", wage: null, employeeName: "A. User" }),
+    "49.3800",
+  );
+});
+
+test("an hours bank with no wage is refused by name, never priced as zero", () => {
+  const hoursPlan = plan({ unit: "hours", code: "SICK-HRS" });
+  for (const wage of [null, "0", "0.0000"]) {
+    assert.throws(
+      () => entitlementMoneyValue({ plan: hoursPlan, amount: "40.0000", wage, employeeName: "A. User" }),
+      (error: unknown) => {
+        assert.ok(error instanceof PayrollError);
+        assert.match(error.message, /SICK-HRS banks hours but A\. User has no hourly wage/);
+        assert.match(error.message, /labor cost rate/);
+        return true;
+      },
+    );
+  }
 });
 
 /* ------------------------------------------------------------------ */
