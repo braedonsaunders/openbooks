@@ -488,6 +488,9 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // seal backfill for pre-existing rows runs app-side in bootstrap, where
     // the data key lives).
     "0251_payment_link_token_at_rest.sql",
+    // Hours-denominated entitlement plans cannot accrue a percent of (money)
+    // earnings: the dollars would be stored, and later paid, as hours.
+    "0253_hours_plan_percent_accrual_guard.sql",
     // Negative-stock deficits keyed on org + item + location only, so one
     // subsidiary's receipt settled another's shortfall (0257, allocated by
     // the fleet coordinator; 0252 through 0256 belong to other lanes).
@@ -497,9 +500,6 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // the column is a sparse pointer. Builds CONCURRENTLY (no-transaction
     // runner mode) so the multi-million-row prod ledger stays writable.
     "0261_ledger_dimension_fk_indexes.sql",
-    // Hours-denominated entitlement plans cannot accrue a percent of (money)
-    // earnings: the dollars would be stored, and later paid, as hours.
-    "0253_hours_plan_percent_accrual_guard.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
