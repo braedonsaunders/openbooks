@@ -3902,7 +3902,7 @@ test('I11 close and continuous-close copy ships translated in every locale', () 
   const I11_source = flattenCatalog('en')
   const I11_closeWanted = [...I11_source.keys()].filter((I11_key) => I11_key.startsWith('close.'))
   const I11_ccWanted = [...I11_source.keys()].filter((I11_key) => I11_key.startsWith('continuous-close.'))
-  assert.equal(I11_closeWanted.length, 595, 'close source inventory changed; translate the new keys in every locale and re-pin')
+  assert.equal(I11_closeWanted.length, 598, 'close source inventory changed; translate the new keys in every locale and re-pin')
   assert.equal(I11_ccWanted.length, 222, 'continuous-close source inventory changed; translate the new keys in every locale and re-pin')
   const I11_tokens = (I11_value: string): Set<string> =>
     new Set(I11_value.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
@@ -5297,7 +5297,7 @@ const I14_IDENTICAL_BY_FACT = new Set([
 const I14_FILE_COUNTS: Record<string, number> = {
   "items": 252,
   "inventory": 159,
-  "reports": 1764,
+  "reports": 1766,
   "sync": 172,
   "login": 33,
   "accounts": 82,
@@ -5307,7 +5307,7 @@ const I14_FILE_COUNTS: Record<string, number> = {
   "crm": 304,
   "customization": 185,
   "dashboard": 203,
-  "data": 85,
+  "data": 88,
   "journal": 58,
   "labor-pricing": 128,
   "nav": 109,

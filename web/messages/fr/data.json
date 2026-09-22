@@ -17,7 +17,9 @@
     "run": "Exporter",
     "running": "Exportation…",
     "empty": "Choisissez une table à exporter.",
-    "noColumns": "Cette table n'a aucune colonne exportable."
+    "noColumns": "Cette table n'a aucune colonne exportable.",
+    "loadFailed": "Impossible de charger les types d'enregistrement exportables.",
+    "columnsLoadFailed": "Impossible de charger les colonnes de ce type d'enregistrement."
   },
   "import": {
     "title": "Importer des données",
@@ -81,7 +83,8 @@
       "firstGeneration": "La première copie peut prendre quelques minutes pendant la génération de son modèle vérifié",
       "safety": "Les données exemple sont copiées dans un espace de travail distinct et clairement identifié. Elles n’entrent jamais dans vos livres réels, et les effets courriel, paiement, API et intégration restent désactivés.",
       "orFile": "ou importez votre propre fichier"
-    }
+    },
+    "loadFailed": "Impossible de charger les types d'enregistrement importables."
   },
   "history": {
     "title": "Historique des imports",

@@ -17,7 +17,9 @@
     "run": "Exportieren",
     "running": "Wird exportiert…",
     "empty": "Wählen Sie aus, was exportiert werden soll.",
-    "noColumns": "Dieser Datensatztyp hat keine exportierbaren Spalten."
+    "noColumns": "Dieser Datensatztyp hat keine exportierbaren Spalten.",
+    "loadFailed": "Exportierbare Datensatztypen konnten nicht geladen werden.",
+    "columnsLoadFailed": "Spalten für diesen Datensatztyp konnten nicht geladen werden."
   },
   "import": {
     "title": "Daten importieren",
@@ -81,7 +83,8 @@
       "firstGeneration": "Die erste Kopie kann einige Minuten dauern, während ihre geprüfte Vorlage erzeugt wird",
       "safety": "Beispieldaten werden in einen separaten, klar gekennzeichneten Arbeitsbereich kopiert. Sie gelangen nie in Ihre echten Bücher; E-Mail-, Zahlungs-, API- und Integrationswirkungen bleiben deaktiviert.",
       "orFile": "oder eigene Datei importieren"
-    }
+    },
+    "loadFailed": "Importierbare Datensatztypen konnten nicht geladen werden."
   },
   "history": {
     "title": "Importverlauf",

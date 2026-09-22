@@ -17,7 +17,9 @@
     "run": "Exportar",
     "running": "Exportando…",
     "empty": "Elige una tabla para exportar.",
-    "noColumns": "Esta tabla no tiene columnas exportables."
+    "noColumns": "Esta tabla no tiene columnas exportables.",
+    "loadFailed": "No se pudieron cargar los tipos de registro exportables.",
+    "columnsLoadFailed": "No se pudieron cargar las columnas de este tipo de registro."
   },
   "import": {
     "title": "Importar datos",
@@ -81,7 +83,8 @@
       "firstGeneration": "La primera copia puede tardar unos minutos mientras se genera su plantilla verificada",
       "safety": "Los datos de ejemplo se copian en un espacio de trabajo separado y claramente marcado. Nunca entran en sus libros reales, y los efectos de correo, pago, API e integración quedan desactivados.",
       "orFile": "o importe su propio archivo"
-    }
+    },
+    "loadFailed": "No se pudieron cargar los tipos de registro importables."
   },
   "history": {
     "title": "Historial de importaciones",

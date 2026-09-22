@@ -5,12 +5,6 @@ import test from "node:test";
 
 const SOURCE = readFileSync(new URL("./search-read.ts", import.meta.url), "utf8");
 
-test("search reader reuses the existing finder instead of a parallel index", () => {
-  assert.match(SOURCE, /from "\.\.\/search"/);
-  assert.match(SOURCE, /globalSearch\(context\.authz/);
-  assert.doesNotMatch(SOURCE, /similarity\(|pg_trgm|document_lines|drizzle-orm/);
-});
-
 const stateKey = Symbol.for("openbooks.search-read-test");
 interface SearchReadState {
   calls: Array<{ authz: unknown; rawQ: string }>;
@@ -61,6 +55,17 @@ const hooks = registerHooks({
 
 const { searchApplication } = (await import("./search-read.ts")) as typeof import("./search-read.ts");
 hooks.deregister();
+
+// Registered AFTER the dynamic import above. Every test() call must follow the
+// last top-level await: under --test-force-exit an earlier queue can drain
+// while the module is still suspended, and the tests registered afterwards are
+// silently omitted — a pass that never ran anything.
+test("search reader reuses the existing finder instead of a parallel index", () => {
+  assert.match(SOURCE, /from "\.\.\/search"/);
+  assert.match(SOURCE, /globalSearch\(context\.authz/);
+  assert.doesNotMatch(SOURCE, /similarity\(|pg_trgm|document_lines|drizzle-orm/);
+});
+
 
 const CONTEXT = {
   authz: { user: { orgId: "org-1" }, permissions: new Set(["ap.read"]), allowedSubsidiaryIds: null },
