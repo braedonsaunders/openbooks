@@ -209,6 +209,8 @@ async function writeRecords(
 ): Promise<WriteOutcome> {
   const resolver = new RefResolver(orgId)
   const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] }
+  // Preview sees earlier valid rows of this file without persisting them.
+  const previewNumbers = new Set<string>()
   const type = await loadRecordTypeByKey(orgId, typeKey)
   if (!type) {
     return { created: 0, updated: 0, failed: rows.length, errors: [{ row: 0, message: 'record type not found' }] }
@@ -314,15 +316,17 @@ async function writeRecords(
         before = (found.rows[0] ?? null) as Record<string, unknown> | null
       }
       const existingId = before !== null ? String(before.id) : null
-      if (existingId && mode === 'insert') {
+      const exists = existingId !== null || (ctx.dryRun && previewNumbers.has(recNo))
+      if (exists && mode === 'insert') {
         outcome.failed++
         outcome.errors.push({ row: rowNo, message: `already exists (record_number=${recNo})` })
         continue
       }
 
       const searchText = await buildSearchText(sections, computed, recNo || '')
-      if (existingId) {
+      if (exists) {
         if (!ctx.dryRun) {
+          if (existingId === null) throw new Error('imported record has no persisted identity')
           // Bulk rows carry no revision token, so imports cannot join the
           // compare-and-swap; they still advance the revision monotonically,
           // so any concurrent drawer or API tab fails closed (409) on its
@@ -369,6 +373,7 @@ async function writeRecords(
         }
         outcome.created++
       }
+      if (ctx.dryRun && recNo) previewNumbers.add(recNo)
     } catch (e) {
       outcome.failed++
       outcome.errors.push({ row: rowNo, message: (e as { message?: string })?.message ?? 'write failed' })
