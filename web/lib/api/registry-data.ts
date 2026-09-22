@@ -303,7 +303,7 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
   documentResource({
     key: "journals",
     label: "Journals",
-    description: "Manual journal documents. Read-only here — post through POST /api/v1/journals/{id}/post. Posted ledger projections are journal-entries.",
+    description: "Manual journal documents. Create a balanced draft through POST /api/v1/journals (UUID Idempotency-Key becomes the id). Post through POST /api/v1/journals/{id}/post. Posted ledger projections are journal-entries.",
     docKind: "journal",
     readPermission: "gl.read",
     writePermission: null,
@@ -311,7 +311,7 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
   documentResource({
     key: "quotes",
     label: "Quotes",
-    description: "Customer estimates. Read-only in v1 — conversion stays on the order cycle.",
+    description: "Customer estimates. Create an empty draft through POST /api/v1/quotes; convert through POST /api/v1/quotes/{id}/convert.",
     docKind: "quote",
     readPermission: "ar.read",
     writePermission: null,
@@ -320,7 +320,7 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
   documentResource({
     key: "sales-orders",
     label: "Sales Orders",
-    description: "Customer sales orders. Read-only in v1 — fulfillment and billing stay on the order cycle.",
+    description: "Customer sales orders. Create an empty draft through POST /api/v1/sales-orders; convert through POST /api/v1/sales-orders/{id}/convert.",
     docKind: "sales_order",
     readPermission: "ar.read",
     writePermission: null,
@@ -329,7 +329,7 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
   documentResource({
     key: "purchase-orders",
     label: "Purchase Orders",
-    description: "Vendor purchase orders. Read-only in v1 — receipt and billing stay on the order cycle.",
+    description: "Vendor purchase orders. Create an empty draft through POST /api/v1/purchase-orders; convert through POST /api/v1/purchase-orders/{id}/convert.",
     docKind: "purchase_order",
     readPermission: "ap.read",
     writePermission: null,
@@ -365,7 +365,7 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
   documentResource({
     key: "field-tickets",
     label: "Field Tickets",
-    description: "Project field tickets. Read-only in v1 — hours and signatures stay on the field-ticket workspace.",
+    description: "Project field tickets. Create a draft through POST /api/v1/field-tickets. Hours and signatures stay on the field-ticket workspace.",
     docKind: "field_ticket",
     readPermission: "projects.read",
     writePermission: null,

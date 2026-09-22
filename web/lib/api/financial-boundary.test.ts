@@ -100,7 +100,7 @@ const MUTATION_EXPORT_RE = /^export\s+(?:async\s+)?(?:function|const)\s+(POST|PA
 const DIRECT_JSON_READ_RE = /\b(?:req|request)\s*\.\s*json\s*\(/;
 // Deliberately NOT global: RegExp.prototype.test on a /g pattern carries
 // lastIndex across calls and silently skips matches on later routes.
-const SHARED_BOUNDARY_FACTORY_RE = /\b(?:makePATCH|makeConvertPOST|readV1JsonObject|v1CreateAliasedRecord|v1UpdateAliasedRecord)\s*\(/;
+const SHARED_BOUNDARY_FACTORY_RE = /\b(?:makePATCH|makeConvertPOST|readV1JsonObject|v1CreateAliasedRecord|v1UpdateAliasedRecord|v1CreateOrder|v1ConvertOrder)\s*\(/;
 const TYPED_BOUNDARY_FACTORY_RE = /\bmakeAssignWarehousePOST\s*\(/;
 const PARSED_SCHEMA_ARG_RE = /\bparseJsonBody\(\s*(?:req|request)\s*,\s*([A-Za-z_$][\w$]*)/g;
 
@@ -133,6 +133,10 @@ const PARSED_SCHEMA_ARG_RE = /\bparseJsonBody\(\s*(?:req|request)\s*,\s*([A-Za-z
  * thin route files as unparsed. They stay object-only until each command
  * grows a typed schema.
  *
+ * Raised 275 -> 283 for dedicated journal, order, and field-ticket writes
+ * (`v1CreateOrder` / `v1ConvertOrder` / `readV1JsonObject`). Same factory
+ * hatch: the commands still validate after the object parse.
+ *
  * Raising it was the honest option rather than the tidy one. Several of these
  * answer domain statuses parseJsonBody cannot produce: items/price returns 404
  * for a malformed item id to stay tenant-opaque, and a schema failure is
@@ -141,7 +145,7 @@ const PARSED_SCHEMA_ARG_RE = /\bparseJsonBody\(\s*(?:req|request)\s*,\s*([A-Za-z
  * to make visible. Migrating them properly changes refusal messages and status
  * codes and belongs with the tests that pin those.
  */
-const OBJECT_ONLY_ROUTE_CEILING = 275;
+const OBJECT_ONLY_ROUTE_CEILING = 283;
 
 interface MutationRoute {
   file: string;
@@ -239,6 +243,10 @@ test("every JSON mutation route parses its body through the shared zod boundary"
   const v1RecordsSource = readFileSync(join(TEST_DIR, "v1-records.ts"), "utf8");
   if ((v1RecordsSource.match(/readV1JsonObject\(/g) ?? []).length < 4) {
     failures.push("web/lib/api/v1-records.ts: record create/update aliases must parse through readV1JsonObject");
+  }
+  const v1OrdersSource = readFileSync(join(TEST_DIR, "v1-orders.ts"), "utf8");
+  if ((v1OrdersSource.match(/readV1JsonObject\(/g) ?? []).length < 2) {
+    failures.push("web/lib/api/v1-orders.ts: create/convert must parse through readV1JsonObject");
   }
 
   for (const [file, reason] of Object.entries(EXEMPT_ROUTES)) {
