@@ -14,8 +14,10 @@ test("search reader reuses the existing finder instead of a parallel index", () 
 const stateKey = Symbol.for("openbooks.search-read-test");
 interface SearchReadState {
   calls: Array<{ authz: unknown; rawQ: string }>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  result: any;
+  // The mock module that reads this is an untyped JavaScript string, so a
+  // precise type here would constrain nothing. `unknown` accepts every
+  // fixture the tests assign and keeps the explicit-any ceiling at zero.
+  result: unknown;
   thrown: unknown;
 }
 const searchState: SearchReadState = {

@@ -109,6 +109,16 @@ const connectorPaths = [
   /^schema\/src\/(?:extension|qbd)\.ts$/,
   /^schema\/migrations\/generated\/0045_canonical_customer_parties\.sql$/,
   /^schema\/migrations\/generated\/0109_schema_convergence_and_legacy_evidence\.sql$/,
+  // 0246's header explains that the soft-close posting fence has to hold the
+  // same line a competitor's period-lock date does — connector-mapping
+  // rationale, in a file whose bytes are immutable once applied. A published
+  // migration cannot be reworded: bootstrap re-verifies its digest and
+  // refuses any change without an approved transition, so correcting the
+  // comment would break every database that already ran it. Scope is the
+  // only honest lever here, and it is why 0045 and 0109 are listed above.
+  // NEW migrations must still be vendor-neutral — this list may only be
+  // extended for one that has already been applied somewhere.
+  /^schema\/migrations\/generated\/0246_soft_close_posting_fence\.sql$/,
   // Review-tenant fixtures seed functional connector-branch rows: the stable
   // source keys the /sync UI and engine branch on (the engine/src/sync entry
   // above, and the 0045/0109 migration precedent for functional seeds).
