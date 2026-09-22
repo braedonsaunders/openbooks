@@ -229,6 +229,8 @@ export function PaymentDrawer({
   side,
   basePath,
   layout,
+  createMode = false,
+  closeHref,
 }: {
   payment: PaymentPayload
   initialMode?: DrawerMode
@@ -238,6 +240,15 @@ export function PaymentDrawer({
   side: 'ap' | 'ar'
   basePath: string
   layout?: FormLayoutConfig
+  /** Unsaved-create: no persisted row exists. Cancel/close navigate away
+   *  with zero writes; Save is the first write (one idempotent POST). */
+  createMode?: boolean
+  /** List return URL — Cancel/close land here, and a successful Save opens
+   *  the created payment over it. */
+  closeHref?: string
+  /** Surface label for the unsaved title (no number exists yet). The section
+   *  already translates it per surface — no new keys. */
+  createTitle?: string
 }) {
   const { money } = useMoney()
   const t = useTranslations('payments.drawer')
@@ -252,9 +263,11 @@ export function PaymentDrawer({
   // is EXPLICIT — one Save button, no per-field autosave.
   const canEditStatus = isDraft
   const [mode, setMode] = useState<DrawerMode>(
-    initialDrawerMode(initialMode, canEditStatus),
+    createMode ? 'edit' : initialDrawerMode(initialMode, canEditStatus),
   )
   const editable = mode === 'edit' && canEditStatus
+  const returnHref = closeHref ?? basePath
+  const requestIdRef = useRef<string | null>(null)
   const partyLabel = side === 'ap' ? tCommon('labels.vendor') : tCommon('labels.customer')
   const kindLabel = (kind: string | null) => {
     const key = KIND_KEY[kind ?? '']
@@ -437,7 +450,65 @@ export function PaymentDrawer({
     setAllocs(Object.fromEntries(payment.allocations.map((a) => [a.openLineId, a])))
   }
 
+  /**
+   * Unsaved-create Save: one idempotent POST carrying the whole payment —
+   * kind (fixed by the entry surface), header, and applications. The key is
+   * minted once per drawer session, so a double-click or a retried request
+   * returns the same payment instead of a duplicate. Cancel/close before
+   * this point wrote nothing — this is the first and only write, and the
+   * PAY-/RCPT- number is allocated inside it.
+   */
+  async function saveNew() {
+    if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID()
+    setSaveState('saving')
+    // The create body carries the kind (fixed by the surface: vendor_payment
+    // on /payments, customer_payment on /receipts), never the PATCH revision
+    // token — there is no row to version against here.
+    const createBody = {
+      kind: side === 'ap' ? 'vendor_payment' : 'customer_payment',
+      partyId: partyId || null,
+      bankAccountId: bankAccountId || null,
+      documentDate: documentDate || undefined,
+      referenceNumber,
+      memo,
+      allocations: validAllocations,
+    }
+    const ok = await execute(
+      () =>
+        fetchAction('/api/payments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': requestIdRef.current! },
+          body: JSON.stringify(createBody),
+        }),
+      {
+        fallbackMessage: t('toasts.postFailed'),
+        onOk: (data) => {
+          const createdId = (data as { doc?: { id?: unknown } } | null)?.doc?.id
+          setSaveState('saved')
+          setDirty(false)
+          if (typeof createdId === 'string' && createdId) {
+            const separator = returnHref.includes('?') ? '&' : '?'
+            router.replace(`${returnHref}${separator}payment=${createdId}` as never)
+          } else {
+            router.push(returnHref as never)
+          }
+          router.refresh()
+        },
+        onRefused: () => {
+          // Stay in edit mode with the typed values intact: the form is
+          // still dirty, nothing was persisted, the pin carries the reason.
+          setSaveState('error')
+        },
+      },
+    )
+    if (ok) router.refresh()
+  }
+
   async function save() {
+    if (createMode) {
+      await saveNew()
+      return
+    }
     setSaveState('saving')
     const ok = await execute(
       () =>
@@ -462,6 +533,13 @@ export function PaymentDrawer({
   }
 
   function cancel() {
+    // Unsaved-create Cancel writes nothing: there is no persisted row to
+    // restore, so leave the URL (and the database) exactly as found.
+    if (createMode) {
+      clearRefusal()
+      router.push(returnHref as never)
+      return
+    }
     resetForm()
     setDirty(false)
     setSaveState('saved')
@@ -647,14 +725,18 @@ export function PaymentDrawer({
 
   return (
     <TransactionDrawer
-      closeHref={basePath}
+      closeHref={returnHref}
       recordId={String(doc.id)}
+      // Unsaved-create hides the evidence tabs: both panels read the
+      // persisted row the drawer has not written yet, so mounting them
+      // would only probe the API with an empty record id.
+      showEvidenceTabs={!createMode}
       canEditAttachments={canEditStatus}
       panelClassName={docTypeMeta(String(doc.kind ?? (side === 'ap' ? 'vendor_payment' : 'customer_payment'))).surfaceCls}
       title={
         <span className="flex items-center gap-2.5">
           <DocTypeBadge kind={String(doc.kind ?? (side === 'ap' ? 'vendor_payment' : 'customer_payment'))} />
-          <span className="font-mono">{displayDocumentNumber(doc.document_number, doc.reference_number)}</span>
+          <span className="font-mono">{displayDocumentNumber(doc.document_number, doc.reference_number) || (createMode ? (createTitle ?? '') : '')}</span>
           <Badge variant={STATUS_VARIANT[doc.status] ?? 'secondary'}>
             {statusLabel(String(doc.status))}
           </Badge>
@@ -712,7 +794,9 @@ export function PaymentDrawer({
           )}
         </>
       }
-      detailTabs={[
+      // No approvals tab before the first Save: the history reads the
+      // persisted row the drawer has not written yet.
+      detailTabs={createMode ? [] : [
         {
           key: 'approvals',
           label: tCommon('approvalFlow.historyTitle'),
