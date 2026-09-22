@@ -83,6 +83,21 @@ test("delay, approve_step and start_flow refuse publishing with named remedies",
   );
 });
 
+test("unknown send_email template keys refuse publishing with the valid keys named", () => {
+  assert.throws(
+    () => assertPublishableAutomationActions(
+      parseAutomationActions([{ kind: "send_email", templateKey: "probe", to: "initiator" }]),
+    ),
+    (e: unknown) =>
+      e instanceof AutomationContractError &&
+      /unknown email template 'probe'/.test((e as Error).message) &&
+      /automation_notice/.test((e as Error).message),
+  );
+  assertPublishableAutomationActions(
+    parseAutomationActions([{ kind: "send_email", templateKey: "automation_notice", to: "initiator" }]),
+  );
+});
+
 test("conditions default to empty (match-all)", () => {
   assert.equal(parseAutomationConditions({}).root, undefined);
   const rules = parseAutomationRules(null);

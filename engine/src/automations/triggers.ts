@@ -135,6 +135,14 @@ export const sendEmailAction = z.object({
   to: z.string().min(1),
 });
 
+/**
+ * The closed send_email template registry (keys render through the shared
+ * packages/emails builders in email-templates.ts). The builder lists no
+ * org templates and the packages export no automation set, so this list
+ * IS the vocabulary — an unknown key can never render and refuses here.
+ */
+export const AUTOMATION_EMAIL_TEMPLATE_KEYS = ["automation_notice"] as const;
+
 export const sendNotificationAction = z.object({
   kind: z.literal("send_notification"),
   to: z.string().min(1),
@@ -287,6 +295,11 @@ export function assertPublishableAutomationActions(actions: AutomationAction[]):
     const refusal = unsupportedAutomationActionRefusal(action);
     if (refusal) {
       throw new AutomationContractError(`${refusal} — fix the action list and save again`);
+    }
+    if (action.kind === "send_email" && !(AUTOMATION_EMAIL_TEMPLATE_KEYS as readonly string[]).includes(action.templateKey)) {
+      throw new AutomationContractError(
+        `unknown email template '${action.templateKey}' — use one of: ${AUTOMATION_EMAIL_TEMPLATE_KEYS.join(", ")} — fix the action and save again`,
+      );
     }
   }
 }
