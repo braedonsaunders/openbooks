@@ -36,6 +36,7 @@ import { expect, type APIRequestContext } from "@playwright/test";
 import { createHash } from "node:crypto";
 import { inflateSync } from "node:zlib";
 import { canonicalJson } from "../../../engine/src/platform/canonical-json.ts";
+import { withIdempotencyKey } from "../idempotency";
 
 export const ADMIN_EMAIL = process.env.E2E_EMAIL ?? "e2e@openbooks.test";
 export const ADMIN_NAME = process.env.ADMIN_NAME ?? "E2E Admin";
@@ -100,7 +101,7 @@ export async function api(
 ) {
   const res = await request.fetch(`${baseURL}${path}`, {
     method,
-    headers: { Origin: new URL(baseURL).origin, "Content-Type": "application/json" },
+    headers: { Origin: new URL(baseURL).origin, "Content-Type": "application/json", ...withIdempotencyKey(method) },
     data: body === undefined ? undefined : body,
   });
   const text = await res.text();

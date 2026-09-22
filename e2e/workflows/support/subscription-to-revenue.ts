@@ -22,6 +22,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { withIdempotencyKey } from "../idempotency";
 
 export { expect };
 
@@ -112,7 +113,7 @@ export async function api(
 ) {
   const res = await request.fetch(`${baseURL}${path}`, {
     method,
-    headers: { Origin: new URL(baseURL).origin, "Content-Type": "application/json", ...(headers ?? {}) },
+    headers: { Origin: new URL(baseURL).origin, "Content-Type": "application/json", ...withIdempotencyKey(method, headers) },
     data: body === undefined ? undefined : body,
   });
   const text = await res.text();

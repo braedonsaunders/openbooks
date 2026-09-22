@@ -1,5 +1,6 @@
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { authedContext, dismissSetupWizard } from '../auth';
+import { withIdempotencyKey } from "./idempotency";
 
 /**
  * Bank-to-books end-to-end workflow: bank feed through reconciliation through
@@ -111,7 +112,7 @@ async function api(
       }
       return { status: res.status, body: parsed };
     },
-    { method, path, data: body, extra: headers ?? {} },
+    { method, path, data: body, extra: withIdempotencyKey(method, headers) },
   );
   return result as ApiResult;
 }

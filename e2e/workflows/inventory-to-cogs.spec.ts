@@ -1,5 +1,6 @@
 import { expect, test, type Browser, type BrowserContext, type Locator, type Page } from "@playwright/test";
 import { authedContext, dismissSetupWizard } from "../auth";
+import { withIdempotencyKey } from "./idempotency";
 
 /**
  * Inventory-to-COGS end-to-end workflow through the real UI and real APIs.
@@ -100,7 +101,7 @@ async function api(page: Page, method: string, path: string, body?: unknown, hea
       }
       throw lastError;
     },
-    { method, path, data: body, extra: headers ?? {}, retryable },
+    { method, path, data: body, extra: withIdempotencyKey(method, headers), retryable },
   );
 }
 function req(result: ApiResult, url: string): Json {
