@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { decimalNullRefusal } from "../money/decimal-refusal.ts";
+import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { db, inDbTransaction } from "../platform/db.ts";
 import { cmp, isZero, normalizeMoney } from "../money/money.ts";
 import { PayrollError } from "./error.ts";
@@ -215,12 +216,35 @@ export interface PriorRegisterUpsert {
   allowedSubsidiaryIds?: PayrollSubsidiaryScope;
 }
 
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-
 function assertDate(value: unknown, field: string): string {
+  // Calendar validation, not a shape check: "2026-02-30" matches YYYY-MM-DD
+  // but names no day, and must be refused here rather than failing as a
+  // Postgres cast error (or worse, landing on a different day) downstream.
   const raw = String(value ?? "").trim().slice(0, 10);
-  if (!ISO_DATE.test(raw)) throw new ParallelRunStoreError(`${field} must be a date (YYYY-MM-DD)`);
+  if (!isIsoCalendarDate(raw)) {
+    throw new ParallelRunStoreError(`${field} must be a date (YYYY-MM-DD) — got "${raw}"`);
+  }
   return raw;
+}
+
+/**
+ * The register header's three dates, validated as real calendar days with the
+ * period running forward. Shared by `upsertPriorRegister` and the import
+ * resource's preflight, so preview and commit judge header dates by the same
+ * rule, before any header row is written.
+ */
+function assertPriorRegisterDates(
+  periodStart: unknown,
+  periodEnd: unknown,
+  payDate: unknown,
+): { periodStart: string; periodEnd: string; payDate: string } {
+  const start = assertDate(periodStart, "periodStart");
+  const end = assertDate(periodEnd, "periodEnd");
+  const pay = assertDate(payDate, "payDate");
+  if (end < start) {
+    throw new ParallelRunStoreError("periodEnd cannot fall before periodStart");
+  }
+  return { periodStart: start, periodEnd: end, payDate: pay };
 }
 
 /**
@@ -236,12 +260,11 @@ export async function upsertPriorRegister(
 ): Promise<string> {
   const name = input.name.trim();
   if (!name) throw new ParallelRunStoreError("a prior register needs a name");
-  const periodStart = assertDate(input.periodStart, "periodStart");
-  const periodEnd = assertDate(input.periodEnd, "periodEnd");
-  const payDate = assertDate(input.payDate, "payDate");
-  if (periodEnd < periodStart) {
-    throw new ParallelRunStoreError("periodEnd cannot fall before periodStart");
-  }
+  const { periodStart, periodEnd, payDate } = assertPriorRegisterDates(
+    input.periodStart,
+    input.periodEnd,
+    input.payDate,
+  );
 
   const write = async (tx: ParallelRunExecutor): Promise<string> => {
     await lockParallelRunInputs(tx, input.orgId);
@@ -379,6 +402,93 @@ export function parsePriorStubAmount(value: string | null, field: string): strin
   }
 }
 
+type ParsedPriorAmounts = Map<
+  string,
+  { slot: ComparableSlot; value: string; sourceColumn: string | null }
+>;
+
+/**
+ * Every component amount on one prior-system row, parsed through the
+ * canonical decimal gate and keyed by comparison slot.
+ *
+ * Last amount per slot wins, matching what the per-row upsert this replaced
+ * did when one file mapped two columns onto one component. Shared by
+ * `savePriorStub` and `preflightPriorRegisterRow` so preview and commit judge
+ * amounts by the same rule.
+ */
+function parsePriorStubAmounts(
+  amounts: PriorStubWrite["amounts"],
+  slots: readonly ComparableSlot[],
+): ParsedPriorAmounts {
+  const bySlotField = new Map(slots.map((slot) => [slot.fieldKey, slot]));
+  const parsed: ParsedPriorAmounts = new Map();
+  for (const amount of amounts) {
+    const slot = bySlotField.get(amount.fieldKey);
+    if (!slot) {
+      throw new ParallelRunStoreError(`"${amount.fieldKey}" is not a comparable component`);
+    }
+    if (slot.kind === "total") continue;
+    const value = parsePriorStubAmount(amount.amount, amount.fieldKey);
+    if (value === null) continue;
+    parsed.set(slotKey(slot.kind, slot.slot), { slot, value, sourceColumn: amount.sourceColumn });
+  }
+  return parsed;
+}
+
+/** Raw row figures awaiting validation, as the import resource hands them over. */
+export interface PriorRegisterRowPreflightInput {
+  periodStart: unknown;
+  periodEnd: unknown;
+  payDate: unknown;
+  gross: string | null;
+  netPay: string | null;
+  employerCost: string | null;
+  amounts: PriorStubWrite["amounts"];
+}
+
+/** The same row with every figure validated and normalized, safe to write. */
+export interface PriorRegisterRowPreflight {
+  periodStart: string;
+  periodEnd: string;
+  payDate: string;
+  gross: string | null;
+  netPay: string | null;
+  employerCost: string | null;
+  amounts: PriorStubWrite["amounts"];
+}
+
+/**
+ * Pure preflight for one prior-register row: the header dates (real calendar
+ * days, period running forward) and every amount (canonical decimal gate)
+ * validated with the SAME checks and messages as `upsertPriorRegister` and
+ * `savePriorStub`, BEFORE any header row is written.
+ *
+ * The import resource runs this in BOTH dry-run and commit modes, so preview
+ * and commit agree on date/amount validation. Scope, state, or storage
+ * failures can still refuse a row at commit time.
+ */
+export function preflightPriorRegisterRow(
+  input: PriorRegisterRowPreflightInput,
+  slots: readonly ComparableSlot[],
+): PriorRegisterRowPreflight {
+  const dates = assertPriorRegisterDates(input.periodStart, input.periodEnd, input.payDate);
+  const gross = parsePriorStubAmount(input.gross, "gross");
+  const netPay = parsePriorStubAmount(input.netPay, "netPay");
+  const employerCost = parsePriorStubAmount(input.employerCost, "employerCost");
+  const parsed = parsePriorStubAmounts(input.amounts, slots);
+  return {
+    ...dates,
+    gross,
+    netPay,
+    employerCost,
+    amounts: [...parsed.values()].map((row) => ({
+      fieldKey: row.slot.fieldKey,
+      amount: row.value,
+      sourceColumn: row.sourceColumn,
+    })),
+  };
+}
+
 /**
  * Write one employee's prior-system row.
  *
@@ -402,32 +512,13 @@ export async function savePriorStub(
   },
   slots: readonly ComparableSlot[],
 ): Promise<{ created: boolean }> {
-  const bySlotField = new Map(slots.map((slot) => [slot.fieldKey, slot]));
   const label = input.row.employeeLabel.trim() || input.row.employeePartyId;
 
-  const money = (value: string | null, field: string): string | null =>
-    parsePriorStubAmount(value, field);
+  const gross = parsePriorStubAmount(input.row.gross, "gross");
+  const netPay = parsePriorStubAmount(input.row.netPay, "netPay");
+  const employerCost = parsePriorStubAmount(input.row.employerCost, "employerCost");
 
-  const gross = money(input.row.gross, "gross");
-  const netPay = money(input.row.netPay, "netPay");
-  const employerCost = money(input.row.employerCost, "employerCost");
-
-  // Last amount per slot wins, matching what the per-row upsert this replaces
-  // did when one file mapped two columns onto one component.
-  const amounts = new Map<
-    string,
-    { slot: ComparableSlot; value: string; sourceColumn: string | null }
-  >();
-  for (const amount of input.row.amounts) {
-    const slot = bySlotField.get(amount.fieldKey);
-    if (!slot) {
-      throw new ParallelRunStoreError(`"${amount.fieldKey}" is not a comparable component`);
-    }
-    if (slot.kind === "total") continue;
-    const value = money(amount.amount, amount.fieldKey);
-    if (value === null) continue;
-    amounts.set(slotKey(slot.kind, slot.slot), { slot, value, sourceColumn: amount.sourceColumn });
-  }
+  const amounts = parsePriorStubAmounts(input.row.amounts, slots);
 
   return inDbTransaction(async (tx) => {
     await lockParallelRunInputs(tx, input.orgId);
