@@ -951,6 +951,8 @@ async function resolveWorklistSubsidiaries(orgId: string, gates: WorklistGate[])
 export interface WorklistGatePage {
   prefix: number;
   kind?: string;
+  query?: string;
+  overdue?: boolean;
 }
 
 /**
@@ -979,19 +981,33 @@ function worklistGateKindSql(kind: string | undefined): SQL {
   return sql`and coalesce(d.kind, g.subject_kind) = ${kind}`;
 }
 
+function worklistGateSearchSql(query: string | undefined): SQL {
+  const needle = query?.trim().toLowerCase()
+  if (!needle) return sql``
+  return sql`and position(${needle} in lower(concat_ws(' ', g.title, g.subject_kind, d.document_number, d.memo))) > 0`
+}
+
+function worklistGateOverdueSql(overdue: boolean | undefined): SQL {
+  return overdue ? sql`and g.escalate_at is not null and g.escalate_at < now()` : sql``
+}
+
 function worklistDirectWhere(
   orgId: string,
   userId: string,
   roleList: string[],
   allowedSubsidiaryIds: GateSubsidiaryScope,
   kind: string | undefined,
+  query: string | undefined,
+  overdue: boolean | undefined,
 ): SQL {
   return sql`g.org_id = ${orgId} and g.status = 'pending'
     and (g.assignee_user_id = ${userId}
          or (g.assignee_role is not null and g.assignee_role in
               (select jsonb_array_elements_text(${JSON.stringify(roleList)}::jsonb))))
     ${worklistGateScopeSql(allowedSubsidiaryIds)}
-    ${worklistGateKindSql(kind)}`;
+    ${worklistGateKindSql(kind)}
+    ${worklistGateSearchSql(query)}
+    ${worklistGateOverdueSql(overdue)}`;
 }
 
 export async function worklistGates(
@@ -1013,12 +1029,14 @@ export async function worklistGates(
 ): Promise<WorklistGate[]> {
   const roleList = roles ? [...roles] : [...(await userRoleKeys(orgId, userId))];
   const kind = page?.kind;
+  const query = page?.query;
+  const overdue = page?.overdue;
   // The id tiebreaker pins page boundaries: without a unique order key
   // Postgres may return tied rows in any order and rows duplicate or drop
   // across pages (same rule as the document list order clause).
   const r = (await db.execute<Record<string, unknown>>(sql`
     ${WORKLIST_SELECT}
-     where ${worklistDirectWhere(orgId, userId, roleList, allowedSubsidiaryIds, kind)}
+     where ${worklistDirectWhere(orgId, userId, roleList, allowedSubsidiaryIds, kind, query, overdue)}
      order by g.created_at, g.id
      ${page ? sql`limit ${page.prefix}` : sql``}
   `));
@@ -1043,6 +1061,8 @@ export async function worklistGates(
               (select jsonb_array_elements_text(${JSON.stringify(principals.map((p) => p.id))}::jsonb)::uuid)
          ${worklistGateScopeSql(allowedSubsidiaryIds)}
          ${worklistGateKindSql(kind)}
+         ${worklistGateSearchSql(query)}
+         ${worklistGateOverdueSql(overdue)}
        order by g.created_at, g.id
     `));
     for (const row of d.rows) {
@@ -1075,6 +1095,8 @@ export async function worklistGateKindCounts(
   roles?: Iterable<string>,
   allowedSubsidiaryIds?: GateSubsidiaryScope,
   kind?: string,
+  query?: string,
+  overdue?: boolean,
 ): Promise<Map<string, number>> {
   const roleList = roles ? [...roles] : [...(await userRoleKeys(orgId, userId))];
   const counts = new Map<string, number>();
@@ -1087,7 +1109,7 @@ export async function worklistGateKindCounts(
   accumulate((await db.execute<{ kind: string; n: string }>(sql`
     select coalesce(d.kind, g.subject_kind) as kind, count(*) as n
       ${baseJoins}
-     where ${worklistDirectWhere(orgId, userId, roleList, allowedSubsidiaryIds, kind)}
+     where ${worklistDirectWhere(orgId, userId, roleList, allowedSubsidiaryIds, kind, query, overdue)}
      group by coalesce(d.kind, g.subject_kind)
   `)).rows);
   const principals = await activeDelegationPrincipals(orgId, userId);
@@ -1105,6 +1127,8 @@ export async function worklistGateKindCounts(
                    (select jsonb_array_elements_text(${JSON.stringify(roleList)}::jsonb))))
          ${worklistGateScopeSql(allowedSubsidiaryIds)}
          ${worklistGateKindSql(kind)}
+         ${worklistGateSearchSql(query)}
+         ${worklistGateOverdueSql(overdue)}
        group by coalesce(d.kind, g.subject_kind)
     `)).rows);
   }
