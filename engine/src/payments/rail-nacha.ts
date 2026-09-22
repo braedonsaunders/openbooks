@@ -67,6 +67,52 @@ function nachaField(v: string, len: number, align: "l" | "r" = "l", pad = " "): 
   return align === "l" ? s.padEnd(len, pad) : s.padStart(len, pad);
 }
 
+/**
+ * Unsigned numeric field that refuses overflow instead of truncating.
+ * nachaField truncates text to its width (the spec pads those), but a money
+ * amount or total that does not fit must never silently lose its leading
+ * digits — slice(0, 10) on an 11-digit amount drops the ONES, not the top.
+ */
+function nachaNumeric(v: string, len: number, field: string): string {
+  if (!/^\d+$/.test(v)) throw new PaymentError(`NACHA ${field} must be numeric`);
+  if (v.length > len) {
+    throw new PaymentError(
+      `NACHA ${field} of ${v.length} digits does not fit its ${len}-digit field — refusing to truncate`,
+    );
+  }
+  return v.padStart(len, "0");
+}
+
+/**
+ * File ID modifier alphabet shared with payroll (bank-file-artifact.ts):
+ * one derivation, not two. Consecutive files advance A→B→…→Z→0→…→9 and wrap;
+ * the header's creation date disambiguates across days, and a second file to
+ * the same bank the same day is exactly what the next letter is for.
+ */
+export const NACHA_FILE_ID_MODIFIERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
+export function nachaFileIdModifierForSequence(sequenceValue: number): string {
+  if (!Number.isSafeInteger(sequenceValue) || sequenceValue < 1) {
+    throw new PaymentError("NACHA file ID modifier requires a positive sequence value");
+  }
+  return NACHA_FILE_ID_MODIFIERS[(sequenceValue - 1) % NACHA_FILE_ID_MODIFIERS.length]!;
+}
+
+/**
+ * Derive an AP run file's modifier from its run number — the same
+ * sequence-derivation payroll uses for its artifact numbers, so two runs
+ * never share a modifier and re-downloading one run reproduces its bytes.
+ */
+export function nachaFileIdModifierForRunNumber(runNumber: string): string {
+  const sequenceValue = Number(runNumber.replace(/\D/g, "") || "1");
+  if (!Number.isSafeInteger(sequenceValue) || sequenceValue < 1) {
+    throw new PaymentError(
+      `payment run number "${runNumber}" cannot allocate a NACHA file ID modifier`,
+    );
+  }
+  return nachaFileIdModifierForSequence(sequenceValue);
+}
+
 /** Build a NACHA ACH credit file (94-char records, blocked to 10). */
 export function buildNachaFile(opts: {
   settings: NachaSettings;
@@ -77,6 +123,14 @@ export function buildNachaFile(opts: {
 }): string {
   const s = opts.settings;
   if (opts.entries.length === 0) throw new PaymentError("run has no payments to export");
+  // The modifier is the bank's same-day duplicate-file key: a silent default
+  // would hand every file the same identity. Every caller allocates one
+  // explicitly (payroll from its artifact sequence, AP from its run number —
+  // both through nachaFileIdModifierForSequence above).
+  const modifier = opts.fileIdModifier ?? "";
+  if (!/^[A-Z0-9]$/.test(modifier)) {
+    throw new PaymentError("NACHA file requires an allocated file ID modifier (single character A–Z, 0–9)");
+  }
   const sec = s.entryClassCode ?? "CCD";
   const odfi8 = s.odfiRouting.slice(0, 8);
   const yymmdd = (d: Date) => `${String(d.getFullYear() % 100).padStart(2, "0")}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
@@ -86,7 +140,7 @@ export function buildNachaFile(opts: {
   // 1 — File Header
   rows.push(
     "1" + "01" + nachaField(s.immediateDestination, 10, "r") + nachaField(s.immediateOrigin, 10, "r") +
-    yymmdd(opts.creationDate) + hhmm(opts.creationDate) + (opts.fileIdModifier ?? "A") + "094" + "10" + "1" +
+    yymmdd(opts.creationDate) + hhmm(opts.creationDate) + modifier + "094" + "10" + "1" +
     nachaField(s.destinationName, 23) + nachaField(s.originName, 23) + nachaField("", 8),
   );
   // 5 — Batch Header (220 = credits only)
@@ -115,23 +169,23 @@ export function buildNachaFile(opts: {
     totalCredit += e.amountCents;
     const trace = odfi8 + String(i + 1).padStart(7, "0");
     rows.push(
-      "6" + e.transactionCode + rt8 + checkDigit + nachaField(e.accountNumber, 17) + nachaField(String(e.amountCents), 10, "r", "0") +
+      "6" + e.transactionCode + rt8 + checkDigit + nachaField(e.accountNumber, 17) + nachaNumeric(String(e.amountCents), 10, "payment amount") +
       nachaField(e.individualId, 15) + nachaField(e.individualName, 22) + nachaField("", 2) + "0" + trace,
     );
   });
-  const hashMod = (entryHash % 10_000_000_000n).toString().padStart(10, "0");
+  const hashMod = nachaNumeric((entryHash % 10_000_000_000n).toString(), 10, "entry hash");
   // 8 — Batch Control
   rows.push(
-    "8" + "220" + nachaField(String(opts.entries.length), 6, "r", "0") + hashMod +
-    nachaField("0", 12, "r", "0") + nachaField(String(totalCredit), 12, "r", "0") + nachaField(s.companyId, 10) +
+    "8" + "220" + nachaNumeric(String(opts.entries.length), 6, "entry count") + hashMod +
+    nachaNumeric("0", 12, "debit total") + nachaNumeric(String(totalCredit), 12, "credit total") + nachaField(s.companyId, 10) +
     nachaField("", 19) + nachaField("", 6) + odfi8 + nachaField("0000001", 7, "r", "0"),
   );
   // 9 — File Control
   const entryCount = opts.entries.length;
   const blockCount = Math.ceil((rows.length + 1) / 10);
   rows.push(
-    "9" + nachaField("1", 6, "r", "0") + nachaField(String(blockCount), 6, "r", "0") + nachaField(String(entryCount), 8, "r", "0") +
-    hashMod + nachaField("0", 12, "r", "0") + nachaField(String(totalCredit), 12, "r", "0") + nachaField("", 39),
+    "9" + nachaNumeric("1", 6, "batch count") + nachaNumeric(String(blockCount), 6, "block count") + nachaNumeric(String(entryCount), 8, "entry count") +
+    hashMod + nachaNumeric("0", 12, "debit total") + nachaNumeric(String(totalCredit), 12, "credit total") + nachaField("", 39),
   );
   // pad with 9-filler records to a full 10-record block
   while (rows.length % 10 !== 0) rows.push("9".repeat(94));

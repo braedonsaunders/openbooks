@@ -20,6 +20,7 @@ import {
 } from "./scope.ts";
 import { payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
 import { assertNotSandbox } from "../organization/sandbox-guard.ts";
+import { nachaFileIdModifierForSequence } from "../payments/rail-nacha.ts";
 
 /**
  * Payroll direct-deposit artifacts — the lifecycle.
@@ -76,8 +77,10 @@ const PAYROLL_BANK_FILE_PREFIX = "PBF-";
 const PAYROLL_BANK_FILE_FOLDER_KIND = "payroll_bank_files";
 const PAYROLL_BANK_FILE_FOLDER_NAME = "Payroll bank files";
 
-/** NACHA file ID modifier alphabet — distinguishes files created the same day. */
-const FILE_ID_MODIFIERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+/** NACHA file ID modifiers come from the shared AP allocator (rail-nacha.ts):
+ * one alphabet and one derivation for payroll and payables alike, so the two
+ * can never drift into handing the same bank two same-day files both marked
+ * "A". The artifact's own number_sequences value is the sequence input. */
 
 export type PayRunBankFileStatus = "generated" | "released" | "superseded";
 
@@ -546,7 +549,7 @@ function payrollFileIdModifierFor(
 ): string | null {
   switch (format) {
     case "nacha":
-      return FILE_ID_MODIFIERS[(sequenceValue - 1) % FILE_ID_MODIFIERS.length]!;
+      return nachaFileIdModifierForSequence(sequenceValue);
     case "cpa005":
     case "sepa":
     case "cemtex":
