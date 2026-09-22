@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { NativeContext } from "./native.ts";
-import { XeroSource, xeroReconcilableAccount } from "./xero-source.ts";
+import { XeroSource, xeroCoverageMonths, xeroReconcilableAccount } from "./xero-source.ts";
 import type { XeroClient } from "../connectors/xero.ts";
 
 const ctx = { baseCurrency: "NZD" } as NativeContext;
@@ -39,6 +39,20 @@ function source(routes: {
   } as unknown as XeroClient;
   return new XeroSource(client, { orgId: "org", baseCurrency: "NZD" });
 }
+
+test("coverage months span the full migration horizon, not a fixed window", () => {
+  const months = xeroCoverageMonths("2024-03", new Date(Date.UTC(2026, 8, 22)));
+  assert.equal(months[0], "2024-03");
+  assert.equal(months[months.length - 1], "2026-09");
+  assert.equal(months.length, 31);
+  assert.ok(months.includes("2025-01"));
+
+  const yearTurn = xeroCoverageMonths("2025-11", new Date(Date.UTC(2026, 0, 15)));
+  assert.deepEqual(yearTurn, ["2025-11", "2025-12", "2026-01"]);
+
+  assert.throws(() => xeroCoverageMonths("2024-3", new Date()), /invalid earliest/);
+  assert.throws(() => xeroCoverageMonths("1900-01", new Date()), /exceeds 240 months/);
+});
 
 test("payment links state the invoice currency at the payment rate", async () => {
   const src = source({

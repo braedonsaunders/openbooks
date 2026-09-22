@@ -21,7 +21,10 @@ import type { MigrationSource } from "./source.ts";
  * Trueup lines are is_open_item=false, so AR/AP aging (driven by the native
  * documents + applications) is untouched. Idempotent: once trued, the residual
  * is zero and re-runs post nothing. A NO-OP where native import is already
- * penny-exact (e.g. NetSuite) — nothing is posted.
+ * penny-exact (e.g. NetSuite) — nothing is posted. Only months the source
+ * reported are compared: a month absent from the source population is unknown,
+ * never zero, so activity older than a report-windowed adapter's coverage is
+ * left alone instead of reversed.
  */
 
 export interface TrueUpStats {
@@ -168,8 +171,14 @@ export async function trueUpResidualGl(
       residualByMonth.set(sourceRow.month, monthRows);
       seen.add(key);
     }
+    // Months the source actually reported. A month absent from the source
+    // population is UNKNOWN — never zero: our activity there (e.g. older
+    // than a report-windowed adapter's coverage) must be left alone, not
+    // reversed. Both branches below therefore only fire inside coverage.
+    const coveredMonths = new Set(srcRows.map((row) => row.month));
     for (const [key, amount] of ours) {
       const [accountId, month] = key.split("|") as [string, string];
+      if (!coveredMonths.has(month)) continue;
       if (seen.has(key)) bump(month, accountId, -amount);
       else if (amount !== 0n) bump(month, accountId, -amount);
     }

@@ -68,8 +68,39 @@ interface XeroReportCell { Value?: string; Attributes?: { Id?: string; Value?: s
 interface XeroReportRow { RowType?: string; Cells?: XeroReportCell[]; Rows?: XeroReportRow[] }
 interface XeroReport { Reports?: { Rows?: XeroReportRow[] }[] }
 
-/** How far back the report-based gates look (one TB report call per month). */
-const TB_LOOKBACK_MONTHS = 24;
+/**
+ * Safety cap on report-based coverage (one TrialBalance call per month).
+ * The migration horizon bounds real coverage near ~8 years; anything beyond
+ * this refuses loudly instead of paging the API for a decade.
+ */
+const TB_COVERAGE_MONTH_CAP = 240;
+
+/**
+ * Coverage months from `earliestMonth` (YYYY-MM) through the month containing
+ * `today`, ascending. Pure for testability; the report loop derives each
+ * month-end call from these.
+ */
+export function xeroCoverageMonths(earliestMonth: string, today: Date): string[] {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(earliestMonth)) {
+    throw new Error(`invalid earliest Xero coverage month ${earliestMonth}`);
+  }
+  const [ey, em] = earliestMonth.split("-").map(Number) as [number, number];
+  const months: string[] = [];
+  let y = ey, m = em;
+  const ty = today.getUTCFullYear();
+  const tm = today.getUTCMonth() + 1;
+  while (y < ty || (y === ty && m <= tm)) {
+    months.push(`${y}-${String(m).padStart(2, "0")}`);
+    m++;
+    if (m > 12) { m = 1; y++; }
+  }
+  if (months.length > TB_COVERAGE_MONTH_CAP) {
+    throw new Error(
+      `Xero report coverage from ${earliestMonth} exceeds ${TB_COVERAGE_MONTH_CAP} months; refusing a decade of TrialBalance calls`,
+    );
+  }
+  return months;
+}
 interface XeroOrganisation {
   FinancialYearEndDay?: number;
   FinancialYearEndMonth?: number;
@@ -352,9 +383,24 @@ export class XeroSource implements MigrationSource {
     this.monthlyBuckets ??= (async () => {
       const buckets = new Map<string, bigint>(); // `${accountRef}|${YYYY-MM}` → units
       const today = parseIsoDate(await businessToday(this.orgId));
-      for (let back = TB_LOOKBACK_MONTHS - 1; back >= 0; back--) {
-        const monthEnd = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - back + 1, 0));
-        const month = monthEnd.toISOString().slice(0, 7);
+      // Full migration history, not a fixed window. The earliest sourced
+      // accounting period bounds the migration, and every month from there
+      // through today is reported — a month outside this coverage is UNKNOWN
+      // to the source (the true-up skips it), never zero. A fixed lookback
+      // (previously 24 months) read every older mirrored month as zero and
+      // reversed real history when glTrueup was on.
+      const periods = await this.accountingPeriods();
+      const startsOn = periods
+        .map((p) => String((p.fields as { startsOn?: unknown })?.startsOn ?? ""))
+        .filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s))
+        .sort();
+      if (startsOn.length === 0) {
+        throw new Error("Xero organisation exposes no accounting periods; refusing a windowed trial balance");
+      }
+      const months = xeroCoverageMonths(startsOn[0]!.slice(0, 7), today);
+      for (const month of months) {
+        const [y, mo] = month.split("-").map(Number) as [number, number];
+        const monthEnd = new Date(Date.UTC(y, mo, 0));
         const report = await this.client.get<XeroReport>("Reports/TrialBalance", {
           date: monthEnd.toISOString().slice(0, 10),
         });

@@ -215,3 +215,113 @@ test(
     }
   },
 );
+
+test(
+  "GL true-up leaves months outside the source coverage alone",
+  { skip: !DB },
+  async () => {
+    // A report-windowed adapter (Xero) reports only recent months. Our
+    // activity in an unreported month is UNKNOWN, never zero: the true-up
+    // must true the reported month and post nothing for the older one —
+    // previously both branches reversed it by -amount.
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      await db.execute(sql`
+        update accounts
+           set custom = jsonb_set(custom, '{parityRef}', '"A"'::jsonb)
+         where org_id = ${org.orgId} and id = ${org.accounts.adjustment}
+      `);
+      await db.execute(sql`
+        update accounts
+           set custom = jsonb_set(custom, '{parityRef}', '"B"'::jsonb)
+         where org_id = ${org.orgId} and id = ${org.accounts.clearing}
+      `);
+      const marker = JSON.stringify({
+        sourceProjection: {
+          kind: "connector_trueup",
+          sourceName: "coverage-source",
+          refKey: "parityRef",
+          syncRunId: null,
+        },
+      });
+      const seedMonth = async (entryNumber: string, postingDate: string, aAmount: string, bAmount: string) => {
+        const entryId = randomUUID();
+        await db.execute(sql`
+          insert into journal_entries
+            (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+             period_id, status, origin, custom, created_by, updated_by)
+          values (
+            ${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+            ${entryNumber}, ${postingDate}, ${org.periodId}, 'draft',
+            'migration', ${marker}::jsonb, ${actorId}, ${actorId}
+          )
+        `);
+        await db.execute(sql`
+          insert into journal_lines
+            (org_id, entry_id, line_number, account_id, subsidiary_id,
+             amount, currency, txn_amount, fx_rate, is_open_item)
+          values
+            (${org.orgId}, ${entryId}, 1, ${org.accounts.adjustment},
+             ${org.subsidiaryId}, ${aAmount}, 'CAD', ${aAmount}, 1, false),
+            (${org.orgId}, ${entryId}, 2, ${org.accounts.clearing},
+             ${org.subsidiaryId}, ${bAmount}, 'CAD', ${bAmount}, 1, false)
+        `);
+        await db.execute(sql`
+          update journal_entries
+             set status = 'posted', posted_at = now(), posted_by = ${actorId}
+           where id = ${entryId} and org_id = ${org.orgId}
+        `);
+      };
+      // Ours: +50/-50 in an ancient month the source never reports, and
+      // +100/-100 in the reported month.
+      await seedMonth("COVERAGE-OLD", "2024-03-31", "50.0000", "-50.0000");
+      await seedMonth("COVERAGE-RECENT", "2026-07-15", "100.0000", "-100.0000");
+
+      const source = {
+        name: "coverage-source",
+        refKey: "parityRef",
+        baseCurrency: "CAD",
+        monthlyActivity: async (): Promise<SourceAccountMonthRow[]> => [
+          { accountRef: "A", month: "2026-07", amount: "130.0000" },
+          { accountRef: "B", month: "2026-07", amount: "-130.0000" },
+        ],
+      } as unknown as MigrationSource;
+
+      const result = await trueUpResidualGl(org.orgId, source, { actorId, syncRunId: "coverage-run" });
+      // Only the reported month trues up (+30/-30 residual).
+      assert.deepEqual(
+        { entries: result.entries, lines: result.lines },
+        { entries: 1, lines: 2 },
+      );
+      assert.deepEqual(
+        result.byAccount.map((row) => row.amount).sort(),
+        ["-30.0000", "30.0000"],
+      );
+      // Nothing was posted for the uncovered month, and its balances stand.
+      const oldEntries = (await db.execute<{ entries: number }>(sql`
+        select count(*)::int as entries
+          from journal_entries
+         where org_id = ${org.orgId}
+           and entry_number like 'TRUEUP-2024-03-%'
+      `));
+      assert.equal(oldEntries.rows[0]?.entries, 0);
+      const oldBalances = (await db.execute<{ account: string; total: string }>(sql`
+        select a.custom->>'parityRef' as account, sum(l.amount)::text as total
+          from journal_lines l
+          join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+          join accounts a on a.id = l.account_id and a.org_id = l.org_id
+         where l.org_id = ${org.orgId}
+           and to_char(e.posting_date, 'YYYY-MM') = '2024-03'
+         group by 1
+         order by 1
+      `));
+      assert.deepEqual(oldBalances.rows, [
+        { account: "A", total: "50.0000" },
+        { account: "B", total: "-50.0000" },
+      ]);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
