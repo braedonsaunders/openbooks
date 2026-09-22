@@ -221,7 +221,10 @@ export function summarizeSettlement(lines: ParsedSettlementLine[]): {
         gross += u;
         break;
       case "fee":
-        fee += u < 0n ? -u : u;
+        // Signed: a fee reversal books as a negative fee line (a credit),
+        // which nets off fee expense instead of adding to it. Plain fee
+        // costs are positive, so every existing batch is unaffected.
+        fee += u;
         break;
       case "refund":
         refund += u < 0n ? -u : u;
@@ -328,10 +331,14 @@ function stripeSettlementKind(
     case "transfer_cancel":
     case "transfer_failure":
     case "topup":
-      return "transfer";
-    case "payout":
     case "payout_cancel":
     case "payout_failure":
+      // A returned payout (an earlier payout that failed) comes back as
+      // balance the later payout pays out: dropping it would understate the
+      // bank deposit, so it books as a funding transfer and the payout-total
+      // reconciliation below proves it.
+      return "transfer";
+    case "payout":
       return "excluded";
     default: {
       const _exhaustive: never = rowType;
@@ -366,6 +373,8 @@ export function parseStripeBalanceTransactions(
   let includedRows = 0;
   let rowsWithNet = 0;
   let expectedNetMinor = 0n;
+  let payoutAnchorMinor = 0n;
+  let payoutRows = 0;
   for (const [index, r] of rows.entries()) {
     // Every row carries its own explicit currency: inheriting a previous
     // row's (or a USD default) would silently convert foreign amounts at the
@@ -422,25 +431,39 @@ export function parseStripeBalanceTransactions(
     }
     const mapped = stripeSettlementKind(rowType, r.description, r.amount);
     if (mapped === "excluded") {
-      // The payout's own movement (payout / payout_cancel / payout_failure):
-      // it IS the bank leg this batch will post, not settlement content.
-      // Booking it as a transfer would collapse the computed net toward zero.
+      // The payout's own movement: it IS the bank leg this batch will post,
+      // not settlement content. Booking it as a transfer would collapse the
+      // computed net toward zero. Its negated amount anchors the payout-total
+      // reconciliation below — the independent proof the export is complete.
+      payoutAnchorMinor -= BigInt(r.amount);
+      payoutRows += 1;
       continue;
     }
     const kind: SettlementLineKind = mapped;
-    // Reconcile the export against itself before booking anything: Stripe
-    // reports net = amount − fee per row, so a row whose three figures do
-    // not foot is a corrupt or half-read export, never a booking. The fee is
-    // compared by magnitude: fixtures and some exports carry it negative.
+    // Reconcile the export against itself before booking anything. Stripe's
+    // contract is net = amount − fee with a SIGNED fee — but some exports
+    // (and long-standing fixtures) report a taken fee as a negative number,
+    // under which net = amount − |fee|. Exactly one convention can foot when
+    // the fee is nonzero, so a row footing under either is accepted and the
+    // fee line follows the convention that footed; a row footing under
+    // neither is a corrupt or half-read export, never a booking.
+    const feeSigned = BigInt(r.fee ?? 0);
+    const feeMagnitude = feeSigned < 0n ? -feeSigned : feeSigned;
+    const signedFoots = r.net != null && BigInt(r.net) === BigInt(r.amount) - feeSigned;
+    const magnitudeFoots = r.net != null && BigInt(r.net) === BigInt(r.amount) - feeMagnitude;
     if (r.net != null) {
-      const feeMagnitude = r.fee == null ? 0n : r.fee < 0 ? -BigInt(r.fee) : BigInt(r.fee);
-      if (BigInt(r.net) !== BigInt(r.amount) - feeMagnitude) {
+      if (!signedFoots && !magnitudeFoots) {
+        const readings =
+          feeSigned < 0n
+            ? `net ${r.net} != amount ${r.amount} minus fee ${r.fee} (signed: ${BigInt(r.amount) - feeSigned}) ` +
+              `nor minus fee magnitude (magnitude: ${BigInt(r.amount) - feeMagnitude})`
+            : `net ${r.net} != amount ${r.amount} minus fee ${r.fee ?? 0}`;
         throw new PspSettlementError(
-          `Stripe transaction does not foot (${rowLabel}): net ${r.net} != amount ${r.amount} minus fee ${r.fee ?? 0}; ` +
+          `Stripe transaction does not foot (${rowLabel}): ${readings}; ` +
             `re-export the payout's balance transactions and import payout ${payoutId} again`,
         );
       }
-      expectedNetMinor += BigInt(r.amount) - feeMagnitude;
+      expectedNetMinor += BigInt(r.net);
       rowsWithNet += 1;
     }
     includedRows += 1;
@@ -455,12 +478,28 @@ export function parseStripeBalanceTransactions(
     // Fees ride every row kind — a dispute's $15 fee is fee expense whether
     // the row is a charge, a refund, a dispute, or an adjustment. Splitting
     // them only out of charges overstated the bank leg and understated fees.
-    if (fee != null && r.fee !== 0) {
+    // A negative fee that foots SIGNED is a fee reversal (Stripe returning an
+    // earlier fee): it books as a fee credit — a negative fee line, which the
+    // signed fee bucket nets off fee expense — never as more expense. A
+    // negative fee with no row net cannot be directed at all (cost reported
+    // negative and reversal are indistinguishable), so it is refused rather
+    // than guessed.
+    if (fee != null && r.fee != null && r.fee !== 0) {
+      const rawFee: number = r.fee;
+      if (rawFee < 0 && r.net == null) {
+        throw new PspSettlementError(
+          `Stripe transaction fee direction is indeterminate (${rowLabel}): fee ${rawFee} without a row net reads ` +
+            `as neither a cost nor a reversal; re-export the payout's balance transactions with row nets and import payout ${payoutId} again`,
+        );
+      }
+      const reversal = rawFee < 0 && signedFoots;
       lines.push({
         kind: "fee",
-        amount: fee,
+        amount: reversal
+          ? fromPspMinorUnits(rawFee, "Stripe fee", false, currency)
+          : fee,
         externalRef: `${r.id}_fee`,
-        description: "Stripe processing fee",
+        description: reversal ? "Stripe fee refund" : "Stripe processing fee",
         currency,
       });
     }
@@ -483,6 +522,24 @@ export function parseStripeBalanceTransactions(
       throw new PspSettlementError(
         `Stripe payout ${payoutId} does not reconcile: export nets total ${expectedNet} but settlement lines net to ${computedNet}; ` +
           `re-export the payout's balance transactions and import again`,
+      );
+    }
+  }
+  // Payout-total reconciliation: when the export carries the payout's own
+  // movement row, its negated amount is the payout Stripe actually paid —
+  // the figure the bank will show. Returned-payout funds (payout_cancel /
+  // payout_failure rows) are constituents of that total: dropping them would
+  // still pass the nets-total check above (both sides drop them) while the
+  // booked deposit undershoots the bank leg. Refusing here forces the export
+  // to be complete; the remedy is to re-export without the movement row
+  // (the common API shape, which skips this check) or with every row.
+  if (payoutRows > 0) {
+    const computedNet = summarizeSettlement(lines).netAmount;
+    const payoutTotal = fromMinorUnits(payoutAnchorMinor, currency);
+    if (cmp(computedNet, payoutTotal) !== 0) {
+      throw new PspSettlementError(
+        `Stripe payout ${payoutId} does not reconcile: its payout movement totals ${payoutTotal} but settlement lines net to ${computedNet}; ` +
+          `re-export the payout's balance transactions without the payout movement row and import again`,
       );
     }
   }
