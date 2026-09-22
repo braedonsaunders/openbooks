@@ -2262,6 +2262,8 @@
         "title": "Artikel-Satzbücher",
         "description": "Satzbücher nach Kunde, Projekt und Organisation für Geräte und andere Artikelverrechnungen."
       },
+      "price-levels": { "title": "Preisstufen", "singularTitle": "Preisstufe", "description": "Wiederverwendbare Handels-, Großhandels-, Partner- und kostenbasierte Preisstufen." },
+      "customer-price-level-assignments": { "title": "Kundenpreisstufen", "singularTitle": "Kundenpreisstufe", "description": "Datierte Standardpreisstufen je Kunde." },
       "item-rate-book-assignments": {
         "title": "Satzbuchzuordnungen",
         "description": "Legen Sie fest, welches zeitlich gültige Satzbuch für einen Kunden oder ein Projekt gilt."
@@ -2677,6 +2679,7 @@
       "compoundOnPrevious": "Auf vorherige Komponenten aufschlagen",
       "roundingScale": "Steuer-Rundungsstellen",
       "isActive": "Aktiv",
+      "pricingMethod": "Preismethode", "percentage": "Prozentsatz", "costBasis": "Kostenbasis", "isBase": "Basisstufe", "priceLevelId": "Preisstufe",
       "isPrimary": "Primäres Buch",
       "country": "Land",
       "region": "Region",
@@ -3132,6 +3135,8 @@
       "aiRailsReviewMonths": "Prüfrhythmus in Monaten (1–36); überfällige Fähigkeiten melden sich im Setup-Postfach."
     },
     "options": {
+      "priceLevelMethod": { "explicit": "Explizite Matrixpreise", "markupDiscount": "Aufschlag / Rabatt", "costPlus": "Kosten plus" },
+      "priceCostBasis": { "itemCost": "Artikelkosten", "standardCost": "Standardlagerkosten", "averageCost": "Durchschnittliche Lagerkosten" },
       "timeClassification": {
         "regular": "Regulär",
         "overtime": "Überstunden",

@@ -7,14 +7,20 @@ import {
   BadgePercent,
   Boxes,
   BriefcaseBusiness,
+  Calculator,
   CalendarOff,
+  ChartNoAxesCombined,
   ChevronDown,
+  CircleDollarSign,
   Clock3,
   Layers3,
   Package,
   PackageCheck,
   ReceiptText,
+  Repeat2,
+  Tags,
   Truck,
+  UsersRound,
   type LucideIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -30,6 +36,7 @@ import { CustomFieldInput } from '../../../components/custom-field-input'
 import type { CustomFieldDefClient } from '../../../components/custom-field-inputs'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import { ItemRatesEditor } from './ItemRatesEditor'
+import { ItemPriceMatrixEditor } from './ItemPriceMatrixEditor'
 import { ItemCostingEditor } from './ItemCostingEditor'
 import { FairValuePricesEditor } from './FairValuePricesEditor'
 import { ReadOnlyValue } from '../../../components/read-only-value'
@@ -139,6 +146,8 @@ export function preserveItemDecimal(value: unknown): string {
   return value == null ? '' : String(value)
 }
 
+type PricingView = 'landing' | 'simple' | 'matrix' | 'customer' | 'cost' | 'rules' | 'contract'
+
 export function ItemDrawer({
   payload,
   accounts,
@@ -153,6 +162,8 @@ export function ItemDrawer({
   fairValuePrices = false,
   timeTracking = false,
   equipmentEnabled = false,
+  subscriptionPricing = false,
+  initialPricingView = 'landing',
   createMode = false,
 }: {
   payload: ItemPayload
@@ -174,6 +185,10 @@ export function ItemDrawer({
   timeTracking?: boolean
   /** Equipment-charge kind — Equipment Features switch. */
   equipmentEnabled?: boolean
+  /** Recurring/usage pricing has its own contract lifecycle surface. */
+  subscriptionPricing?: boolean
+  /** Persisted items open in the editor selected by their active pricing data. */
+  initialPricingView?: PricingView
   /** True for `?item=new`: the payload is in-memory and Save performs POST. */
   createMode?: boolean
 }) {
@@ -230,6 +245,7 @@ export function ItemDrawer({
   const [mode, setMode] = useState<'view' | 'edit'>(createMode ? 'edit' : 'view')
   const [createStep, setCreateStep] = useState<'kind' | 'form'>(createMode ? 'kind' : 'form')
   const [tab, setTab] = useState<string>('overview')
+  const [pricingView, setPricingView] = useState<PricingView>(initialPricingView)
   const [actionsOpen, setActionsOpen] = useState(false)
   const editable = mode === 'edit' && canManage
 
@@ -656,9 +672,85 @@ export function ItemDrawer({
 
         {!choosingKind && activeTabKey === 'overview' ? <HeaderFields layout={createOverviewLayout} editable={editable} renderField={renderItemField} /> : null}
 
-        {!choosingKind && activeTabKey === 'pricing' ? <HeaderFields layout={pricingLayout} editable={editable} renderField={renderItemField} /> : null}
+        {!choosingKind && activeTabKey === 'pricing' && pricingView === 'landing' ? (
+          <section className="space-y-4">
+            <div>
+              <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">{t('pricingModes.title')}</h3>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t('pricingModes.description')}</p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <button
+                type="button"
+                onClick={() => setPricingView('simple')}
+                className="group rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-teal-600"
+              >
+                <span className="mb-4 grid h-11 w-11 place-items-center rounded-xl bg-teal-50 text-teal-700 transition-colors group-hover:bg-teal-100 dark:bg-teal-950/60 dark:text-teal-300 dark:group-hover:bg-teal-900/70">
+                  <CircleDollarSign size={22} />
+                </span>
+                <span className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('pricingModes.simpleTitle')}</span>
+                  <Badge variant="secondary">{t('pricingModes.recommended')}</Badge>
+                </span>
+                <span className="mt-2 block text-sm leading-5 text-slate-500 dark:text-slate-400">{t('pricingModes.simpleDescription')}</span>
+                <span className="mt-4 block border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500 dark:border-slate-800 dark:text-slate-400">{t('pricingModes.simpleDetail')}</span>
+              </button>
+              <button
+                type="button"
+                disabled={createMode}
+                onClick={() => setPricingView('matrix')}
+                className="group rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:border-slate-200 disabled:hover:shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:hover:border-teal-600 dark:disabled:hover:border-slate-800"
+              >
+                <span className="mb-4 grid h-11 w-11 place-items-center rounded-xl bg-violet-50 text-violet-700 transition-colors group-hover:bg-violet-100 dark:bg-violet-950/60 dark:text-violet-300 dark:group-hover:bg-violet-900/70">
+                  <ChartNoAxesCombined size={22} />
+                </span>
+                <span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">{t('pricingModes.matrixTitle')}</span>
+                <span className="mt-2 block text-sm leading-5 text-slate-500 dark:text-slate-400">{t('pricingModes.matrixDescription')}</span>
+                <span className="mt-4 block border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                  {createMode ? t('pricingModes.saveFirst') : t('pricingModes.matrixDetail')}
+                </span>
+              </button>
+              {[
+                { key: 'customer' as const, icon: UsersRound, title: 'customerTitle', description: 'customerDescription', detail: 'customerDetail' },
+                { key: 'cost' as const, icon: Calculator, title: 'costTitle', description: 'costDescription', detail: 'costDetail' },
+                { key: 'rules' as const, icon: Tags, title: 'rulesTitle', description: 'rulesDescription', detail: 'rulesDetail' },
+              ].map((option) => {
+                const Icon = option.icon
+                return <button key={option.key} type="button" disabled={createMode} onClick={() => setPricingView(option.key)} className="group rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-teal-600">
+                  <span className="mb-4 grid h-11 w-11 place-items-center rounded-xl bg-slate-100 text-slate-700 dark:bg-slate-900 dark:text-slate-300"><Icon size={22} /></span>
+                  <span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">{t(`pricingModes.${option.title}`)}</span>
+                  <span className="mt-2 block text-sm leading-5 text-slate-500 dark:text-slate-400">{t(`pricingModes.${option.description}`)}</span>
+                  <span className="mt-4 block border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500 dark:border-slate-800 dark:text-slate-400">{createMode ? t('pricingModes.saveFirst') : t(`pricingModes.${option.detail}`)}</span>
+                </button>
+              })}
+              <button type="button" disabled={!laborPricing || createMode} onClick={() => setPricingView('contract')} className="group rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-teal-600">
+                <span className="mb-4 grid h-11 w-11 place-items-center rounded-xl bg-violet-50 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300"><Tags size={22} /></span>
+                <span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">{t('pricingModes.contractTitle')}</span>
+                <span className="mt-2 block text-sm leading-5 text-slate-500 dark:text-slate-400">{t('pricingModes.contractDescription')}</span>
+                <span className="mt-4 block border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500 dark:border-slate-800 dark:text-slate-400">{createMode ? t('pricingModes.saveFirst') : laborPricing ? t('pricingModes.contractDetail') : t('pricingModes.featureRequired')}</span>
+              </button>
+              <button type="button" disabled={!subscriptionPricing || createMode} onClick={() => router.push('/collections')} className="group rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-teal-600">
+                <span className="mb-4 grid h-11 w-11 place-items-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"><Repeat2 size={22} /></span>
+                <span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">{t('pricingModes.subscriptionTitle')}</span>
+                <span className="mt-2 block text-sm leading-5 text-slate-500 dark:text-slate-400">{t('pricingModes.subscriptionDescription')}</span>
+                <span className="mt-4 block border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500 dark:border-slate-800 dark:text-slate-400">{createMode ? t('pricingModes.saveFirst') : subscriptionPricing ? t('pricingModes.subscriptionDetail') : t('pricingModes.subscriptionRequired')}</span>
+              </button>
+            </div>
+          </section>
+        ) : null}
 
-        {!choosingKind && activeTabKey === 'pricing' && laborPricing && !createMode ? (
+        {!choosingKind && activeTabKey === 'pricing' && pricingView !== 'landing' ? (
+          <Button type="button" variant="ghost" size="sm" onClick={() => setPricingView('landing')}>
+            {t('pricingModes.back')}
+          </Button>
+        ) : null}
+
+        {!choosingKind && activeTabKey === 'pricing' && pricingView === 'simple' ? <HeaderFields layout={pricingLayout} editable={editable} renderField={renderItemField} /> : null}
+
+        {!choosingKind && activeTabKey === 'pricing' && ['matrix', 'customer', 'cost', 'rules'].includes(pricingView) && !createMode ? (
+          <ItemPriceMatrixEditor itemId={String(it.id)} canManage={editable} />
+        ) : null}
+
+        {!choosingKind && activeTabKey === 'pricing' && pricingView === 'contract' && laborPricing && !createMode ? (
           <ItemRatesEditor
             itemId={String(it.id)}
             itemPrice={defaultRate}

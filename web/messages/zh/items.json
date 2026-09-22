@@ -76,6 +76,30 @@
     "selectAccount": "选择科目…",
     "showOnTimesheet": "在工时表中显示"
   },
+  "pricingModes": {
+    "title": "选择此项目的定价方式",
+    "description": "定价层可以组合使用。先设置基础价格，再按需添加矩阵、客户条件或合同。",
+    "simpleTitle": "简单价格与成本",
+    "recommended": "推荐",
+    "simpleDescription": "直接在项目上设置一个客户价格和一个内部成本。",
+    "simpleDetail": "适合单价稳定的普通商品和服务。没有匹配的高级费率时，这些值也作为后备。",
+    "matrixTitle": "价格矩阵与数量折扣", "matrixDescription": "在带生效日期的矩阵中设置币种、价格级别和数量价格。", "matrixDetail": "无需启用项目即可按行数量或物料总量计算。",
+    "customerTitle": "客户与分组定价", "customerDescription": "为客户指定绝对物料价格或可复用的价格级别。", "customerDetail": "客户物料价优先于已分配级别和基础价。",
+    "costTitle": "成本基础定价", "costDescription": "按受控成本加成或加价/折扣建立价格级别。", "costDetail": "生成的矩阵值会保存并审计，不会静默重算历史。",
+    "rulesTitle": "定价规则与促销", "rulesDescription": "通过生效区间和范围矩阵管理活动与临时报价。", "rulesDetail": "拒绝重叠的有效规则，确保结果确定。",
+    "contractTitle": "项目与合同费率簿", "contractDescription": "按客户或项目为人工、设备和合同单位包定价。", "contractDetail": "用于单位包分解及按使用日期生效的合同价格。",
+    "subscriptionTitle": "订阅与用量定价", "subscriptionDescription": "配置周期计划、数量、合同版本及变更。", "subscriptionDetail": "打开订阅工作区。", "subscriptionRequired": "启用订阅计费后可配置周期价格。",
+    "saveFirst": "请先保存项目，再配置带生效日期的费率。",
+    "featureRequired": "启用项目功能后可使用费率簿和范围定价。",
+    "back": "更改定价方式"
+  },
+  "pricingMatrix": {
+    "title": "价格矩阵", "description": "按币种、价格级别或客户设置带生效日期的数量价格。", "addSchedule": "添加定价计划", "minimumQuantity": "最低数量", "unitPrice": "单价", "scope": "定价范围",
+    "scopes": { "base": "基础价格", "level": "价格级别", "customer": "指定客户" },
+    "priceLevel": "价格级别", "customer": "客户", "selectCustomer": "选择客户…", "currency": "币种", "quantityBasis": "数量基准",
+    "quantityBases": { "line": "行数量", "overallItem": "此物料总数量" },
+    "effectiveFrom": "生效日期", "effectiveTo": "结束日期", "breaksTitle": "数量阶梯", "breaksDescription": "达到的最高最低数量决定所有单位的单价。", "addBreak": "添加数量阶梯", "saveFailed": "无法保存定价计划。", "loadFailed": "无法加载定价计划。", "saved": "定价计划已保存", "confirmDelete": "删除此定价计划？", "deleteFailed": "无法删除定价计划。", "deleted": "定价计划已删除", "customerTarget": "客户 · {customer}", "baseTarget": "基础价格", "empty": "此物料尚未配置矩阵价格。", "target": "目标", "effective": "生效区间", "breaks": "数量价格"
+  },
   "rates": {
     "title": "高级费率定价",
     "description": "可选的按日期、范围或套餐定价。普通物料无需费率表，直接使用上方的价格和成本。",

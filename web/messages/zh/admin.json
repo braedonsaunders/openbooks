@@ -2236,6 +2236,8 @@
         "title": "物料费率表",
         "description": "用于设备及其他物料收费的客户、项目和组织费率表。"
       },
+      "price-levels": { "title": "价格级别", "singularTitle": "价格级别", "description": "可复用的零售、批发、合作伙伴及成本基础价格级别。" },
+      "customer-price-level-assignments": { "title": "客户价格级别", "singularTitle": "客户价格级别", "description": "分配给客户的带生效日期默认价格级别。" },
       "item-rate-book-assignments": {
         "title": "费率表分配",
         "description": "选择适用于客户或项目的生效日期费率表。"
@@ -2615,6 +2617,7 @@
       "compoundOnPrevious": "基于前序税项复合计算",
       "roundingScale": "税额舍入小数位",
       "isActive": "启用",
+      "pricingMethod": "定价方式", "percentage": "百分比", "costBasis": "成本基础", "isBase": "基础级别", "priceLevelId": "价格级别",
       "isPrimary": "主账簿",
       "country": "国家/地区",
       "region": "地区",
@@ -3064,6 +3067,8 @@
       "aiRailsReviewMonths": "评审周期（月，1–36）；逾期能力会通知 setup 收件箱。"
     },
     "options": {
+      "priceLevelMethod": { "explicit": "显式矩阵价格", "markupDiscount": "加价 / 折扣", "costPlus": "成本加成" },
+      "priceCostBasis": { "itemCost": "物料成本", "standardCost": "标准库存成本", "averageCost": "平均库存成本" },
       "payFrequency": {
         "weekly": "每周",
         "biweekly": "每两周",

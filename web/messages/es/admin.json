@@ -2140,6 +2140,8 @@
         "title": "Libros de tarifas de artículos",
         "description": "Libros por cliente, proyecto y organización para equipos y otros cargos de artículos."
       },
+      "price-levels": { "title": "Niveles de precio", "singularTitle": "Nivel de precio", "description": "Niveles reutilizables minoristas, mayoristas, de socios y basados en costos." },
+      "customer-price-level-assignments": { "title": "Niveles de cliente", "singularTitle": "Nivel de cliente", "description": "Niveles predeterminados con vigencia asignados a clientes." },
       "item-rate-book-assignments": {
         "title": "Asignaciones de libros de tarifas",
         "description": "Elija el libro con vigencia aplicable a un cliente o proyecto."
@@ -2564,6 +2566,7 @@
       "compoundOnPrevious": "Componer sobre componentes anteriores",
       "roundingScale": "Decimales de redondeo fiscal",
       "isActive": "Active",
+      "pricingMethod": "Método de precio", "percentage": "Porcentaje", "costBasis": "Base de costo", "isBase": "Nivel base", "priceLevelId": "Nivel de precio",
       "isPrimary": "Libro principal",
       "country": "Country",
       "region": "Region",
@@ -3019,6 +3022,8 @@
       "aiRailsReviewMonths": "Cadencia en meses (1–36); las capacidades vencidas avisan al inbox de setup."
     },
     "options": {
+      "priceLevelMethod": { "explicit": "Precios matriciales explícitos", "markupDiscount": "Aumento / descuento", "costPlus": "Costo más margen" },
+      "priceCostBasis": { "itemCost": "Costo del artículo", "standardCost": "Costo estándar de inventario", "averageCost": "Costo promedio de inventario" },
       "timeClassification": {
         "regular": "Regular",
         "overtime": "Horas extra",

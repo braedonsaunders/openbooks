@@ -269,6 +269,7 @@ export function ItemRatesEditor({
               emptyRow={() => ({ unitCode: '', unitName: '', baseQuantity: '1', costRate: '0', billRate: '0', timeTypeBillRates: {} })}
               minRows={1}
               addLabel={t('addUnit')}
+              addPlacement="top"
             />
 
             {tierTypes.length > 0 ? (

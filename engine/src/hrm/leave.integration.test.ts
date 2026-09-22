@@ -25,9 +25,11 @@ import {
 } from "./leave.ts";
 import {
   getLeaveRequest,
+  listOrgLeaveRequests,
   myLeaveRequests,
   timeBalanceAsOf,
 } from "./leave-read.ts";
+import { HrmAuthorizationError } from "./authorization.ts";
 import { recordAbsence } from "./attendance.ts";
 import {
   consumeLeavePayrollInputs,
@@ -226,6 +228,32 @@ test("0194 tables exist under org_isolation RLS with no amount column on inputs"
     `)).rows[0]?.n ?? 0;
     assert.equal(amount, 0, "hrm_payroll_inputs carries no amount column: HR sends hours, the run resolves the rate");
     void h;
+  });
+});
+
+test("org leave queue batches visible requests and refuses actors without the read grant", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const workerParty = await linkPerson(h.org.orgId, h.employeeId);
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
+    const type = await seedType(h.org.orgId, h.managerId, { valueCrossing: "none" });
+    await seedPolicy(h.org.orgId, h.managerId, type.id);
+    const draft = await fileLeaveRequest({
+      orgId: h.org.orgId,
+      actorId: h.employeeId,
+      employmentId,
+      leaveTypeId: type.id,
+      startsOn: "2026-09-01",
+      endsOn: "2026-09-01",
+      hours: "8",
+    });
+
+    const visible = await listOrgLeaveRequests(db, h.org.orgId, h.managerId, { limit: 1 });
+    assert.deepEqual(visible.requests.map((row) => row.id), [draft.id]);
+    assert.equal(visible.truncated, false);
+    await assert.rejects(
+      listOrgLeaveRequests(db, h.org.orgId, h.outsiderId, { limit: 1 }),
+      (error: unknown) => error instanceof HrmAuthorizationError && /hrm\.leave\.read/.test(error.message),
+    );
   });
 });
 

@@ -64,15 +64,17 @@ export async function loadItems(
   // as a tab; managing them keeps the admin.setup.manage gate.
   const canSetup = can(authz, 'admin.setup.manage')
   const orgId = authz.user.orgId
-  const [projectsEnabled, inventoryEnabled, revenueRecognitionEnabled, timeTrackingEnabled, equipmentEnabled] = await Promise.all([
+  const [projectsEnabled, inventoryEnabled, revenueRecognitionEnabled, timeTrackingEnabled, equipmentEnabled, subscriptionPricingEnabled] = await Promise.all([
     isFeatureEnabled(orgId, 'projects'),
     isFeatureEnabled(orgId, 'inventory'),
     isFeatureEnabled(orgId, 'revenueRecognition'),
     isFeatureEnabled(orgId, 'timeTracking'),
     isFeatureEnabled(orgId, 'equipment'),
+    isFeatureEnabled(orgId, 'subscriptionBilling'),
   ])
 
   const itemId = typeof sp.item === 'string' ? sp.item : undefined
+  const createMode = itemId === 'new' && canManage
   const view = canSetup && projectsEnabled && pickString(sp.view) === 'rate-books' ? 'rate-books' : 'catalog'
   const rateBooksEntity = view === 'rate-books' ? SETUP_ENTITY_BY_KEY.get('item-rate-books') ?? null : null
 
@@ -101,7 +103,7 @@ export async function loadItems(
     }
   }
 
-  const [openItem, pickers] = await Promise.all([
+  const [openItem, pickers, pricingState] = await Promise.all([
     itemId && itemId !== 'new' && isUuid(itemId) ? loadItem(itemId, orgId) : null,
     itemId
       ? Promise.all([
@@ -119,7 +121,54 @@ export async function loadItems(
             : Promise.resolve({ rows: [] }),
         ])
       : null,
+    itemId && itemId !== 'new' && isUuid(itemId)
+      ? db.execute<{
+          has_customer: boolean
+          has_cost_formula: boolean
+          has_matrix: boolean
+          has_contract: boolean
+        }>(sql`
+          select
+            exists(
+              select 1 from item_price_schedules schedule
+               where schedule.org_id=${orgId} and schedule.item_id=${itemId}
+                 and schedule.customer_id is not null and schedule.is_active
+            ) as has_customer,
+            exists(
+              select 1 from item_price_schedules schedule
+              join price_levels level on level.org_id=schedule.org_id and level.id=schedule.price_level_id
+               where schedule.org_id=${orgId} and schedule.item_id=${itemId}
+                 and schedule.customer_id is null and schedule.is_active
+                 and level.pricing_method in ('markup_discount','cost_plus')
+            ) as has_cost_formula,
+            exists(
+              select 1 from item_price_schedules schedule
+               where schedule.org_id=${orgId} and schedule.item_id=${itemId}
+                 and schedule.customer_id is null and schedule.is_active
+            ) as has_matrix,
+            exists(
+              select 1 from item_rate_lines line
+              join item_rate_versions version on version.org_id=line.org_id and version.id=line.version_id
+               where line.org_id=${orgId} and line.item_id=${itemId} and version.status <> 'retired'
+            ) as has_contract
+        `)
+      : null,
   ])
+
+  const pricing = pricingState?.rows[0]
+  const initialPricingView: ItemDrawerProps['initialPricingView'] = createMode
+    ? 'landing'
+    : pricing?.has_customer
+      ? 'customer'
+      : pricing?.has_cost_formula
+        ? 'cost'
+        : pricing?.has_matrix
+          ? 'matrix'
+          : pricing?.has_contract
+            ? 'contract'
+            : openItem && (openItem.item.default_rate != null || openItem.item.default_cost != null)
+              ? 'simple'
+              : 'landing'
 
   const resolvedForm = itemId && pickers
     ? await resolveFormLayout({
@@ -134,7 +183,6 @@ export async function loadItems(
     : null
 
   const requestedReturn = pickString(sp.drawerReturn)
-  const createMode = itemId === 'new' && canManage
   const drawer =
     pickers && (openItem || createMode)
       ? {
@@ -182,6 +230,8 @@ export async function loadItems(
           fairValuePrices: revenueRecognitionEnabled,
           timeTracking: timeTrackingEnabled,
           equipmentEnabled,
+          subscriptionPricing: subscriptionPricingEnabled,
+          initialPricingView,
         }
       : null
 

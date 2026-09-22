@@ -2,7 +2,7 @@
 
 import { useMoney } from '@/components/money-provider'
 import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -25,7 +25,7 @@ import { ApprovalHistory } from '../../../components/approval-history'
 import { CONVERSION_TARGETS, type OrderKind } from '../../../lib/order-kinds'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import type { FormLayoutConfig, HeaderFieldPlacement } from '@openbooks/customization'
-import { cmp, fromUnits, mul, toUnits } from '@openbooks/engine/src/money/money.ts'
+import { cmp, fromUnits, mul, sum, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { computeLineTaxes, type TaxComponentConfig } from '@openbooks/engine/src/tax/tax.ts'
 type Opt = {
   id: string
@@ -377,6 +377,8 @@ export function OrderDrawer({
   const [rows, setRows] = useState<LineRow[]>(
     order.lines.length > 0 ? order.lines.map((line) => toRow(line, segments)) : [emptyLine(segments)],
   )
+  const resolvedPriceRef = useRef(new Map<number, { itemId: string; unitPrice: string }>())
+  const priceRequestRef = useRef(new Map<number, number>())
   const [totals, setTotals] = useState({ subtotal: doc.subtotal, taxTotal: doc.tax_total, total: doc.total })
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   // Saves, statuses, issues, deletes and converts run on the shared action
@@ -429,6 +431,41 @@ export function OrderDrawer({
   }, [order.lines])
 
   // -- selecting an item defaults description/price/account/tax/unit ----------
+  const resolveSellingPrice = (index: number, row: LineRow, allRows: LineRow[]) => {
+    if (kind === 'purchase_order' || !row.itemId || !row.quantity) return
+    let overallItemQuantity: string
+    try {
+      overallItemQuantity = sum(allRows.filter((candidate) => candidate.itemId === row.itemId).map((candidate) => candidate.quantity || '0'))
+      if (cmp(row.quantity, '0') <= 0 || cmp(overallItemQuantity, '0') <= 0) return
+    } catch { return }
+    const requestNumber = (priceRequestRef.current.get(index) ?? 0) + 1
+    priceRequestRef.current.set(index, requestNumber)
+    void fetch('/api/items/price', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itemId: row.itemId, customerId: partyId || null, currency: doc.currency, onDate: documentDate, lineQuantity: row.quantity, overallItemQuantity }),
+    }).then(async (response) => {
+      if (!response.ok) return null
+      return response.json() as Promise<{ price: { unitPrice: string } | null }>
+    }).then((payload) => {
+      if (!payload?.price || priceRequestRef.current.get(index) !== requestNumber) return
+      setRows((current) => current.map((candidate, rowIndex) => {
+        if (rowIndex !== index || candidate.itemId !== row.itemId || candidate.quantity !== row.quantity) return candidate
+        resolvedPriceRef.current.set(index, { itemId: row.itemId, unitPrice: payload.price!.unitPrice })
+        return { ...candidate, unitPrice: payload.price!.unitPrice }
+      }))
+    }).catch(() => undefined)
+  }
+
+  useEffect(() => {
+    for (const [index, tracked] of resolvedPriceRef.current) {
+      const row = rows[index]
+      if (row?.itemId === tracked.itemId) resolveSellingPrice(index, row, rows)
+    }
+    // Only customer, currency, and pricing date changes re-resolve rows whose
+    // price still came from the hierarchy. Row edits are handled below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partyId, doc.currency, documentDate])
+
   const onRowsChange = (next: LineRow[]) => {
     const prev = rows
     const merged = next.map((row, i) => {
@@ -449,7 +486,20 @@ export function OrderDrawer({
       }
       return row
     })
+    if (merged.length !== prev.length) {
+      resolvedPriceRef.current.clear()
+      priceRequestRef.current.clear()
+    }
     setRows(merged)
+    merged.forEach((row, index) => {
+      const prior = prev[index]
+      const itemChanged = Boolean(row.itemId && row.itemId !== prior?.itemId)
+      const tracked = resolvedPriceRef.current.get(index)
+      const manuallyChanged = Boolean(prior && row.unitPrice !== prior.unitPrice && !itemChanged)
+      if (manuallyChanged) resolvedPriceRef.current.delete(index)
+      const trackedQuantityChanged = Boolean(tracked && tracked.itemId === row.itemId && prior && row.quantity !== prior.quantity && prior.unitPrice === tracked.unitPrice)
+      if (itemChanged || trackedQuantityChanged) resolveSellingPrice(index, row, merged)
+    })
   }
 
   // -- explicit save (no autosave) -------------------------------------------

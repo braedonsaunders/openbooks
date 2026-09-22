@@ -76,6 +76,30 @@
     "selectAccount": "Seleccionar cuenta…",
     "showOnTimesheet": "Mostrar en la hoja de horas"
   },
+  "pricingModes": {
+    "title": "Elija cómo se fija el precio de este artículo",
+    "description": "Las capas de precios pueden combinarse. Empiece con el precio base y añada solo matrices, condiciones de cliente o contratos necesarios.",
+    "simpleTitle": "Precio y costo simples",
+    "recommended": "Recomendado",
+    "simpleDescription": "Defina un precio al cliente y un costo interno directamente en el artículo.",
+    "simpleDetail": "Ideal para bienes y servicios habituales con precio unitario estable. También son los valores de respaldo si no coincide una tarifa avanzada.",
+    "matrixTitle": "Matriz y descuentos por volumen", "matrixDescription": "Defina moneda, nivel y precios por cantidad en una matriz con vigencia.", "matrixDetail": "Calcula por línea o cantidad total sin requerir Proyectos.",
+    "customerTitle": "Precios por cliente y segmento", "customerDescription": "Asigne un precio absoluto o un nivel reutilizable a un cliente.", "customerDetail": "El precio cliente-artículo prevalece sobre niveles y precio base.",
+    "costTitle": "Precios basados en costo", "costDescription": "Cree niveles controlados de costo más margen o aumento/descuento.", "costDetail": "Los valores generados se guardan y auditan sin recalcular el historial.",
+    "rulesTitle": "Reglas y promociones", "rulesDescription": "Use periodos efectivos y matrices para campañas y ofertas.", "rulesDetail": "Se rechazan reglas activas superpuestas para mantener un resultado determinista.",
+    "contractTitle": "Libros de proyecto y contrato", "contractDescription": "Fije mano de obra, equipos y paquetes por cliente o proyecto.", "contractDetail": "Para paquetes y precios contractuales por fecha de uso.",
+    "subscriptionTitle": "Precios de suscripción y uso", "subscriptionDescription": "Configure planes recurrentes, cantidades, versiones y modificaciones.", "subscriptionDetail": "Abrir el área de suscripciones.", "subscriptionRequired": "Active Facturación de suscripciones para precios recurrentes.",
+    "saveFirst": "Guarde el artículo antes de configurar tarifas con vigencia.",
+    "featureRequired": "Active Proyectos para usar libros de tarifas y precios por ámbito.",
+    "back": "Cambiar el modelo de precios"
+  },
+  "pricingMatrix": {
+    "title": "Matriz de precios", "description": "Precios con vigencia por moneda, nivel o cliente y tramos de cantidad.", "addSchedule": "Añadir esquema de precios", "minimumQuantity": "Cantidad mínima", "unitPrice": "Precio unitario", "scope": "Ámbito del precio",
+    "scopes": { "base": "Precio base", "level": "Nivel de precio", "customer": "Cliente específico" },
+    "priceLevel": "Nivel de precio", "customer": "Cliente", "selectCustomer": "Seleccionar cliente…", "currency": "Moneda", "quantityBasis": "Base de cantidad",
+    "quantityBases": { "line": "Cantidad de línea", "overallItem": "Cantidad total del artículo" },
+    "effectiveFrom": "Vigente desde", "effectiveTo": "Vigente hasta", "breaksTitle": "Tramos de cantidad", "breaksDescription": "La mayor cantidad mínima alcanzada fija el precio de todas las unidades.", "addBreak": "Añadir tramo", "saveFailed": "No se pudo guardar el esquema.", "loadFailed": "No se pudieron cargar los esquemas de precios.", "saved": "Esquema guardado", "confirmDelete": "¿Eliminar este esquema?", "deleteFailed": "No se pudo eliminar el esquema.", "deleted": "Esquema eliminado", "customerTarget": "Cliente · {customer}", "baseTarget": "Precio base", "empty": "No hay precios matriciales para este artículo.", "target": "Destino", "effective": "Vigencia", "breaks": "Precios por cantidad"
+  },
   "rates": {
     "title": "Precios avanzados por tarifa",
     "description": "Precios opcionales por fecha, alcance o paquete. Los artículos normales usan el Precio y Costo anteriores sin libro de tarifas.",

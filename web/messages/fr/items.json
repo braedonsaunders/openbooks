@@ -76,6 +76,30 @@
     "selectAccount": "Sélectionner un compte…",
     "showOnTimesheet": "Afficher sur la feuille de temps"
   },
+  "pricingModes": {
+    "title": "Choisir la tarification de cet article",
+    "description": "Les couches tarifaires se combinent. Commencez par le prix de base, puis ajoutez uniquement les matrices, conditions client ou contrats nécessaires.",
+    "simpleTitle": "Prix et coût simples",
+    "recommended": "Recommandé",
+    "simpleDescription": "Définissez un prix client et un coût interne directement sur l'article.",
+    "simpleDetail": "Idéal pour les biens et services courants à prix unitaire stable. Ces valeurs servent aussi de repli lorsqu'aucun tarif avancé ne correspond.",
+    "matrixTitle": "Matrice et remises sur volume", "matrixDescription": "Définissez devise, niveau et prix par quantité dans une matrice datée.", "matrixDetail": "Calcul par ligne ou quantité totale sans activer Projets.",
+    "customerTitle": "Tarifs client et segment", "customerDescription": "Attribuez un prix absolu ou un niveau réutilisable à un client.", "customerDetail": "Le prix client-article précède les niveaux affectés et le prix de base.",
+    "costTitle": "Tarification fondée sur le coût", "costDescription": "Créez des niveaux coût majoré ou majoration/remise contrôlés.", "costDetail": "Les valeurs générées sont enregistrées et auditées sans recalculer l’historique.",
+    "rulesTitle": "Règles et promotions", "rulesDescription": "Utilisez des périodes et matrices ciblées pour campagnes et offres.", "rulesDetail": "Les règles actives qui se chevauchent sont refusées pour un résultat déterministe.",
+    "contractTitle": "Grilles projet et contrat", "contractDescription": "Tarifiez main-d’œuvre, équipement et forfaits par client ou projet.", "contractDetail": "Pour la décomposition des forfaits et les tarifs contractuels datés.",
+    "subscriptionTitle": "Tarification abonnement et usage", "subscriptionDescription": "Configurez plans récurrents, quantités, versions et avenants.", "subscriptionDetail": "Ouvrir l’espace abonnements.", "subscriptionRequired": "Activez Facturation des abonnements pour les tarifs récurrents.",
+    "saveFirst": "Enregistrez l'article avant de configurer des tarifs datés.",
+    "featureRequired": "Activez Projets pour utiliser les catalogues et la tarification ciblée.",
+    "back": "Changer de modèle tarifaire"
+  },
+  "pricingMatrix": {
+    "title": "Matrice tarifaire", "description": "Prix datés par devise, niveau ou client avec paliers de quantité.", "addSchedule": "Ajouter une grille", "minimumQuantity": "Quantité minimale", "unitPrice": "Prix unitaire", "scope": "Portée tarifaire",
+    "scopes": { "base": "Prix de base", "level": "Niveau de prix", "customer": "Client précis" },
+    "priceLevel": "Niveau de prix", "customer": "Client", "selectCustomer": "Sélectionner un client…", "currency": "Devise", "quantityBasis": "Base de quantité",
+    "quantityBases": { "line": "Quantité de ligne", "overallItem": "Quantité totale de l’article" },
+    "effectiveFrom": "En vigueur dès", "effectiveTo": "En vigueur jusqu’au", "breaksTitle": "Paliers de quantité", "breaksDescription": "La plus grande quantité minimale atteinte fixe le prix de toutes les unités.", "addBreak": "Ajouter un palier", "saveFailed": "Impossible d’enregistrer la grille.", "loadFailed": "Impossible de charger les grilles tarifaires.", "saved": "Grille enregistrée", "confirmDelete": "Supprimer cette grille ?", "deleteFailed": "Impossible de supprimer la grille.", "deleted": "Grille supprimée", "customerTarget": "Client · {customer}", "baseTarget": "Prix de base", "empty": "Aucune tarification matricielle pour cet article.", "target": "Cible", "effective": "Dates d’effet", "breaks": "Prix par quantité"
+  },
   "rates": {
     "title": "Tarification avancée",
     "description": "Tarification facultative par date, portée ou forfait. Les articles ordinaires utilisent le Prix et le Coût ci-dessus sans grille tarifaire.",

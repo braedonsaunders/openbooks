@@ -849,6 +849,26 @@ export interface HeadcountDTO {
   readonly groups: readonly HeadcountGroupDTO[];
 }
 
+export interface HeadcountTotalsQuery {
+  readonly orgId: string;
+  readonly actorId: string;
+  /** Ordered civil dates (YYYY-MM-DD). The response preserves this order. */
+  readonly effectiveDates: readonly string[];
+  /** One as-known UTC instant shared by the entire comparable series. */
+  readonly knownAt: string;
+}
+
+export interface HeadcountTotalPointDTO {
+  readonly effectiveDate: string;
+  readonly total: number;
+}
+
+export interface HeadcountTotalsDTO {
+  readonly orgId: string;
+  readonly knownAt: string;
+  readonly points: readonly HeadcountTotalPointDTO[];
+}
+
 /**
  * Employment statuses counted toward headcount: in service, or retained
  * while on leave (leave is presence-neutral for headcount). Offered has not
@@ -865,23 +885,59 @@ type HeadcountEmploymentRow = {
   revision: number;
 };
 
-/**
- * Headcount as-of (effectiveDate, knownAt) by employer subsidiary and
- * primary-assignment department, resolved through the temporal primitives —
- * never a row count. Every in-scope employment resolves through
- * assembleEmploymentAsOf: no applicable revision is legitimately absent
- * (not employed at the as-of point), more than one is a refusal that fails
- * the whole read (AmbiguousRevisionError names the employment) rather than
- * a silently undercounted cockpit. Authority is the aggregate half (grant
- * + employer-subsidiary scope). A referenced subsidiary or department with
- * no name row is a refusal: headcount must never be misattributed.
- */
-export async function loadHeadcountAsOf(exec: SqlExecutor, query: HeadcountQuery): Promise<HeadcountDTO> {
-  const orgId = requireId("orgId", query.orgId);
-  const actorId = requireId("actorId", query.actorId);
-  validateAsOf(query.effectiveDate, query.knownAt);
-  const allowed = await requireAggregateEmploymentRead(exec, orgId, actorId);
+// Standalone type aliases (not interfaces): drizzle's execute row generic
+// requires Record<string, unknown>, which only object-literal type aliases
+// satisfy through the implicit index signature.
+type BatchedEmploymentVersionJson = {
+  id: string;
+  employment_id: string;
+  version_no: number;
+  status: string;
+  effective_from: string;
+  effective_to: string | null;
+  recorded_at: string;
+  recorded_until: string | null;
+};
 
+type BatchedAssignmentVersionJson = {
+  id: string;
+  employment_id: string;
+  assignment_id: string;
+  assignment_key: string;
+  version_no: number;
+  job_title: string | null;
+  department_id: string | null;
+  location_id: string | null;
+  fte: string;
+  is_primary: boolean;
+  effective_from: string;
+  effective_to: string | null;
+  recorded_at: string;
+  recorded_until: string | null;
+};
+
+interface HeadcountTemporalSource {
+  readonly employments: readonly HeadcountEmploymentRow[];
+  readonly versionsByEmployment: ReadonlyMap<string, readonly EmploymentVersionRow[]>;
+  readonly assignmentsByEmployment: ReadonlyMap<string, readonly AssignmentVersionJson[]>;
+}
+
+interface CountedEmployment {
+  readonly subsidiaryId: string;
+  readonly departmentId: string | null;
+}
+
+/**
+ * Load one authorized temporal census. A caller may resolve it at several
+ * effective dates under one known-at snapshot without repeating database
+ * reads. This is still the canonical temporal model, never a row count.
+ */
+async function loadHeadcountTemporalSource(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<HeadcountTemporalSource> {
+  const allowed = await requireAggregateEmploymentRead(exec, orgId, actorId);
   const employments = (await exec.execute<HeadcountEmploymentRow>(sql`
     select id::text as id,
            worker_party_id::text as "workerPartyId",
@@ -893,41 +949,16 @@ export async function loadHeadcountAsOf(exec: SqlExecutor, query: HeadcountQuery
     (row) => row.employerSubsidiaryId !== null && (allowed === null || allowed.has(row.employerSubsidiaryId)),
   );
   if (employments.length === 0) {
-    return { orgId, effectiveDate: query.effectiveDate, knownAt: query.knownAt, total: 0, groups: [] };
+    return {
+      employments,
+      versionsByEmployment: new Map(),
+      assignmentsByEmployment: new Map(),
+    };
   }
 
-  // Batched version reads. Bare JS arrays must never be interpolated into
-  // ANY() (they bind as row constructors); each id is its own parameter.
+  // Bare JS arrays must never be interpolated into ANY() (they bind as row
+  // constructors); each id is its own parameter in these two batched reads.
   const ids = employments.map((row) => sql`${row.id}::uuid`);
-  // Standalone type aliases (not interfaces): drizzle's execute row generic
-  // requires Record<string, unknown>, which only object-literal type aliases
-  // satisfy through the implicit index signature.
-  type BatchedEmploymentVersionJson = {
-    id: string;
-    employment_id: string;
-    version_no: number;
-    status: string;
-    effective_from: string;
-    effective_to: string | null;
-    recorded_at: string;
-    recorded_until: string | null;
-  };
-  type BatchedAssignmentVersionJson = {
-    id: string;
-    employment_id: string;
-    assignment_id: string;
-    assignment_key: string;
-    version_no: number;
-    job_title: string | null;
-    department_id: string | null;
-    location_id: string | null;
-    fte: string;
-    is_primary: boolean;
-    effective_from: string;
-    effective_to: string | null;
-    recorded_at: string;
-    recorded_until: string | null;
-  };
   const versionRows = (await exec.execute<BatchedEmploymentVersionJson>(sql`
     select ev.id::text as id, ev.employment_id::text as employment_id, ev.version_no,
            ev.status,
@@ -976,9 +1007,17 @@ export async function loadHeadcountAsOf(exec: SqlExecutor, query: HeadcountQuery
     list.push(row);
     assignmentsByEmployment.set(row.employment_id, list);
   }
+  return { employments, versionsByEmployment, assignmentsByEmployment };
+}
 
-  const counted: { subsidiaryId: string; departmentId: string | null }[] = [];
-  for (const employment of employments) {
+function resolveCountedEmployments(
+  source: HeadcountTemporalSource,
+  orgId: string,
+  effectiveDate: string,
+  knownAt: string,
+): CountedEmployment[] {
+  const counted: CountedEmployment[] = [];
+  for (const employment of source.employments) {
     const stable: EmploymentStableRow = {
       id: employment.id,
       orgId,
@@ -990,30 +1029,14 @@ export async function loadHeadcountAsOf(exec: SqlExecutor, query: HeadcountQuery
     try {
       dto = assembleEmploymentAsOf(
         stable,
-        versionsByEmployment.get(employment.id) ?? [],
-        groupAssignmentVersions(
-          (assignmentsByEmployment.get(employment.id) ?? []).map((row) => ({
-            id: row.id,
-            assignment_id: row.assignment_id,
-            assignment_key: row.assignment_key,
-            version_no: row.version_no,
-            job_title: row.job_title,
-            department_id: row.department_id,
-            location_id: row.location_id,
-            fte: row.fte,
-            is_primary: row.is_primary,
-            effective_from: row.effective_from,
-            effective_to: row.effective_to,
-            recorded_at: row.recorded_at,
-            recorded_until: row.recorded_until,
-          })),
-        ),
-        { effectiveDate: query.effectiveDate, knownAt: query.knownAt },
+        source.versionsByEmployment.get(employment.id) ?? [],
+        groupAssignmentVersions(source.assignmentsByEmployment.get(employment.id) ?? []),
+        { effectiveDate, knownAt },
       );
     } catch (error) {
       // Not employed at the as-of point (not yet effective, already ended):
       // legitimately absent from headcount, never a gap failure. Ambiguity
-      // (or any other refusal) propagates and fails the read.
+      // (or any other refusal) propagates and fails the whole read.
       if (error instanceof NoRevisionError) continue;
       throw error;
     }
@@ -1023,6 +1046,26 @@ export async function loadHeadcountAsOf(exec: SqlExecutor, query: HeadcountQuery
       departmentId: dto.assignments.find((assignment) => assignment.isPrimary)?.departmentId ?? null,
     });
   }
+  return counted;
+}
+
+/**
+ * Headcount as-of (effectiveDate, knownAt) by employer subsidiary and
+ * primary-assignment department, resolved through the temporal primitives —
+ * never a row count. Every in-scope employment resolves through
+ * assembleEmploymentAsOf: no applicable revision is legitimately absent
+ * (not employed at the as-of point), more than one is a refusal that fails
+ * the whole read (AmbiguousRevisionError names the employment) rather than
+ * a silently undercounted cockpit. Authority is the aggregate half (grant
+ * + employer-subsidiary scope). A referenced subsidiary or department with
+ * no name row is a refusal: headcount must never be misattributed.
+ */
+export async function loadHeadcountAsOf(exec: SqlExecutor, query: HeadcountQuery): Promise<HeadcountDTO> {
+  const orgId = requireId("orgId", query.orgId);
+  const actorId = requireId("actorId", query.actorId);
+  validateAsOf(query.effectiveDate, query.knownAt);
+  const source = await loadHeadcountTemporalSource(exec, orgId, actorId);
+  const counted = resolveCountedEmployments(source, orgId, query.effectiveDate, query.knownAt);
   if (counted.length === 0) {
     // Nothing in service at the as-of point: a resolved zero, and never an
     // empty IN list (which PostgreSQL rejects) on the name lookups below.
@@ -1100,6 +1143,40 @@ export async function loadHeadcountAsOf(exec: SqlExecutor, query: HeadcountQuery
   };
 }
 
+const MAX_HEADCOUNT_TOTAL_DATES = 24;
+
+/**
+ * Resolve a bounded headcount series from one authorized temporal census.
+ * Database work is constant with respect to the number of dates: permission,
+ * scope, employments, versions, and assignments are each loaded once.
+ */
+export async function loadHeadcountTotalsAsOf(
+  exec: SqlExecutor,
+  query: HeadcountTotalsQuery,
+): Promise<HeadcountTotalsDTO> {
+  const orgId = requireId("orgId", query.orgId);
+  const actorId = requireId("actorId", query.actorId);
+  if (!Array.isArray(query.effectiveDates) || query.effectiveDates.length === 0) {
+    throw new EmploymentReadError("effectiveDates must contain at least one civil date");
+  }
+  if (query.effectiveDates.length > MAX_HEADCOUNT_TOTAL_DATES) {
+    throw new EmploymentReadError(
+      `effectiveDates may contain at most ${MAX_HEADCOUNT_TOTAL_DATES} dates per headcount series`,
+    );
+  }
+  for (const effectiveDate of query.effectiveDates) validateAsOf(effectiveDate, query.knownAt);
+
+  const source = await loadHeadcountTemporalSource(exec, orgId, actorId);
+  return {
+    orgId,
+    knownAt: query.knownAt,
+    points: query.effectiveDates.map((effectiveDate) => ({
+      effectiveDate,
+      total: resolveCountedEmployments(source, orgId, effectiveDate, query.knownAt).length,
+    })),
+  };
+}
+
 /**
  * Public boundary: one tenant-scoped transaction, the authoritative HRM
  * feature gate rechecked inside it, then the authorized headcount. Read
@@ -1110,6 +1187,15 @@ export async function getHeadcountAsOf(query: HeadcountQuery): Promise<Headcount
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     return loadHeadcountAsOf(db, query);
+  });
+}
+
+/** Public boundary for a bounded headcount trend under one known-at view. */
+export async function getHeadcountTotalsAsOf(query: HeadcountTotalsQuery): Promise<HeadcountTotalsDTO> {
+  const orgId = requireId("orgId", query.orgId);
+  return withOrgTransaction(orgId, async () => {
+    await assertHrmFeatureOn(db, orgId);
+    return loadHeadcountTotalsAsOf(db, query);
   });
 }
 
