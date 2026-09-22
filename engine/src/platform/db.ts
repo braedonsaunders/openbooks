@@ -8,6 +8,9 @@ import { sql } from "drizzle-orm";
 import pg from "pg";
 import * as schema from "@openbooks/schema";
 import { resolveDatabaseEnvironment } from "./db-environment.ts";
+import { runtimeDatabaseRoleCheckRequired } from "./runtime-database-role.ts";
+
+export { runtimeDatabaseRoleCheckRequired } from "./runtime-database-role.ts";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
@@ -305,12 +308,12 @@ export const pool = basePool;
 const poolDb = drizzle({ client: basePool });
 
 /**
- * Fail closed when a production process is connected with a role capable of
- * bypassing tenant RLS or escalating itself. FORCE ROW LEVEL SECURITY cannot
- * protect a session whose login is SUPERUSER or BYPASSRLS.
+ * Fail closed when a process is connected with a role capable of bypassing
+ * tenant RLS or escalating itself. FORCE ROW LEVEL SECURITY cannot protect
+ * a session whose login is SUPERUSER or BYPASSRLS.
  */
 export async function assertSafeRuntimeDatabaseRole(): Promise<void> {
-  if (env.NODE_ENV !== "production") return;
+  if (!runtimeDatabaseRoleCheckRequired(env.NODE_ENV)) return;
   const result = await pool.query<{
     current_user: string;
     unsafe_roles: string[];
@@ -344,7 +347,7 @@ export async function assertSafeRuntimeDatabaseRole(): Promise<void> {
         .filter(Boolean);
   if (!row || unsafeRoles.length > 0) {
     throw new Error(
-      `[database-security] refusing production startup: role ${row?.current_user ?? "unknown"} can assume unsafe database privileges (${unsafeRoles.join(", ") || "posture unavailable"})`,
+      `[database-security] refusing startup: role ${row?.current_user ?? "unknown"} can assume unsafe database privileges (${unsafeRoles.join(", ") || "posture unavailable"})`,
     );
   }
   console.log(

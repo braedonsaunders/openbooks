@@ -82,6 +82,18 @@ test("OpenAPI documents exactly the operations each type advertises", () => {
   ];
 
   const spec = buildOpenApiSpec(schema, "https://example.test");
+  assert.ok(spec.paths["/api/v1/commands"]?.get, "public v1 must document the application command catalog");
+  assert.ok(spec.paths["/api/v1/commands/{name}"]?.post, "public v1 must document command execution");
+  assert.ok(spec.paths["/api/v1/documents/{id}/{action}"]?.post, "public v1 must document document lifecycle");
+  assert.ok(spec.paths["/api/v1/payments"]?.post, "public v1 must document payment create");
+  assert.ok(spec.paths["/api/v1/close/runs"]?.get && spec.paths["/api/v1/close/runs"]?.post, "public v1 must document close runs");
+  assert.ok(spec.paths["/api/v1/approvals"]?.get, "public v1 must document approvals");
+  assert.ok(spec.paths["/api/v1/vitals"]?.get, "public v1 must document vitals");
+  assert.ok(spec.paths["/api/v1/banking/reconciliations"]?.post, "public v1 must document bank reconciliation");
+  assert.ok(spec.paths["/api/v1/budgets/{id}/cells"]?.post, "public v1 must document budget cell writes");
+  assert.ok(spec.paths["/api/v1/files"]?.post, "public v1 must document file upload");
+  assert.ok(spec.paths["/api/v1/settings/company"]?.get && spec.paths["/api/v1/settings/company"]?.patch, "public v1 must document company settings");
+  assert.ok(spec.paths["/api/v1/settings/features"]?.post, "public v1 must document the Features switchboard");
 
   // Widgets: list+create on the collection path; get+update+delete on /{id}.
   const coll = spec.paths["/api/v1/records/widgets"];

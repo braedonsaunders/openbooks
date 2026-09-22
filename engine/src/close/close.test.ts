@@ -4,9 +4,9 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { addCloseEvidence } from "./tasks.ts";
-import { CloseError, closeModuleForDocument, periodLockBlocksPosting } from "./period-policy.ts";
+import { CloseError, closeModuleForDocument, periodLockBlocksPosting, periodLockRequiresApprovedReopen } from "./period-policy.ts";
 import { decidePeriodReopen, requestPeriodReopen } from "./reopening.ts";
-import { setPeriodLockState } from "./period-locks.ts";
+import { requireLockWriteRow, setPeriodLockState } from "./period-locks.ts";
 import { startCloseRun } from "./run-start.ts";
 import { db, withBypass, withOrgTransaction } from "../platform/db.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
@@ -21,6 +21,54 @@ import {
 import { DOC_KINDS } from "../../../web/lib/document-kinds.ts";
 
 const now = new Date("2026-07-20T12:00:00Z");
+
+test("periodLockBlocksPosting fences soft-closed the same as closed", () => {
+  assert.equal(periodLockBlocksPosting({
+    state: "soft_closed",
+    reopenExpiresAt: null,
+    reason: "month-end review",
+  }, false, now), true);
+  assert.equal(periodLockBlocksPosting({
+    state: "open",
+    reopenExpiresAt: null,
+    reason: null,
+  }, false, now), false);
+  assert.equal(periodLockRequiresApprovedReopen({
+    state: "soft_closed",
+    reopenExpiresAt: null,
+    reason: "month-end review",
+  }, now), false);
+  assert.equal(periodLockRequiresApprovedReopen({
+    state: "closed",
+    reopenExpiresAt: null,
+    reason: "year-end lock",
+  }, now), true);
+});
+
+test("requireLockWriteRow refuses a zero-row lock upsert", () => {
+  assert.throws(
+    () => requireLockWriteRow(undefined),
+    (error: unknown) => error instanceof CloseError && /not persisted/.test(error.message),
+  );
+  assert.deepEqual(requireLockWriteRow({ id: "lock-1" }), { id: "lock-1" });
+});
+
+test("soft-close posting fence is the storage twin of periodLockBlocksPosting", () => {
+  const environments = readFileSync(new URL("../../../schema/migrations/environments.sql", import.meta.url), "utf8");
+  const migration = readFileSync(
+    new URL("../../../schema/migrations/generated/0246_soft_close_posting_fence.sql", import.meta.url),
+    "utf8",
+  );
+  for (const source of [environments, migration]) {
+    const hits = source.match(/when state = 'soft_closed' then true/g);
+    assert.equal(
+      hits?.length,
+      2,
+      "period_module_blocks_write must fence soft_closed on the exact row and the org-wide fallback",
+    );
+    assert.match(source, /Blocks soft-closed and closed-period writes/);
+  }
+});
 
 test("historical replay bypasses only source-imported period locks", () => {
   assert.equal(periodLockBlocksPosting({
@@ -153,6 +201,40 @@ async function lockChangeCounts(
         where org_id = ${org.orgId} and table_name = 'period_locks') as audits`));
   return result.rows[0]!;
 }
+
+test(
+  "soft-close fences posting and unlocks from Setup without a reopen request",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actors = await seedFlowActors(org.orgId);
+      await setPeriodLockState({
+        orgId: org.orgId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        module: "gl",
+        state: "soft_closed",
+        actorId: actors.adminId,
+        reason: "month-end review",
+      });
+      assert.equal(await storageBlocksWrite(org, "gl"), true);
+
+      await setPeriodLockState({
+        orgId: org.orgId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        module: "gl",
+        state: "open",
+        actorId: actors.adminId,
+        reason: "review complete",
+      });
+      assert.equal(await storageBlocksWrite(org, "gl"), false);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test(
   "a scoped lock relaxation cannot shadow an effective org-wide close",

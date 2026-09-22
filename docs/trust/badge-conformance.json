@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "label": "standards conformance",
-  "message": "77 passing, 15 gaps",
+  "message": "85 passing, 7 gaps",
   "color": "brightgreen",
-  "gitSha": "3da98acd30191e6efa219bb1ee28c2447e2b3353"
+  "gitSha": "71bb38d0e18decf2e923c756351ec55f9e4f1ce1"
 }

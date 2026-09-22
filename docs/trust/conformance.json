@@ -1,10 +1,12 @@
 {
-  "at": "2026-09-16T04:50:46.919Z",
-  "gitSha": null,
+  "at": "2026-09-22T14:47:26.098Z",
+  "gitSha": "71bb38d0e18decf2e923c756351ec55f9e4f1ce1",
+  "runId": null,
+  "casesSha256": "4aa709dd3d0d59e18b1c949c1101d4fbbd9270c78d742e9cb008e40b0ad65d7a",
   "totals": {
-    "pass": 77,
+    "pass": 85,
     "fail": 0,
-    "gap": 15,
+    "gap": 7,
     "skipped": 0
   },
   "pass": true,
@@ -173,7 +175,7 @@
         "The item carries a straight-line twelve-period recognition rule.",
         "Recognition is run as at 2026-07-31, the end of the first service month."
       ],
-      "ms": 77
+      "ms": 0
     },
     {
       "id": "rev-recognition-is-idempotent",
@@ -197,7 +199,7 @@
         "A twelve-month service obligation of 1,200.00 invoiced on 2026-07-15.",
         "Recognition is run for 2026-07-31, then run again for the same date."
       ],
-      "ms": 44
+      "ms": 0
     },
     {
       "id": "rev-obligation-created-per-line",
@@ -227,7 +229,7 @@
       "facts": [
         "One invoice with a single distinct twelve-month service promise."
       ],
-      "ms": 24
+      "ms": 0
     },
     {
       "id": "rev-variable-consideration-constraint",
@@ -266,7 +268,7 @@
         "Management concludes only 12,000.00 of the bonus meets the constraint.",
         "The transaction price is therefore 112,000.00, with 8,000.00 constrained out until the uncertainty resolves."
       ],
-      "ms": 1
+      "ms": 0
     },
     {
       "id": "rev-significant-financing-component",
@@ -299,7 +301,7 @@
         "Revenue at inception is 100,000.00; 21,000.00 accretes as interest.",
         "Year one accretes 10,000.00 (10% of 100,000) and year two 11,000.00, carrying the receivable to exactly 121,000.00."
       ],
-      "ms": 1
+      "ms": 0
     },
     {
       "id": "rev-percent-complete-catch-up",
@@ -354,16 +356,15 @@
           "requirement": "A contract modification is a separate contract only when distinct promises are added for consideration reflecting their standalone selling prices."
         }
       ],
-      "support": "not-implemented",
+      "support": "supported",
       "tier": "computation",
-      "status": "gap",
+      "status": "pass",
       "assertion": "Adding distinct services at their standalone selling prices mid-contract creates a separate accounting unit, while other changes remeasure the existing obligation prospectively or with a cumulative catch-up.",
       "facts": [
         "A twelve-month service for 1,200.00 (100.00 a month); 300.00 is recognised in the first three months.",
         "In month four the parties add distinct services priced at their standalone selling price of 900.00 over the remaining nine months.",
         "The modification is a separate contract: the original 100.00 a month continues and 100.00 a month is recognised for the added services."
       ],
-      "gap": "The revenue engine has no contract-modification assessment: setContractPricing can overwrite a contract's total price but nothing classifies a scope-or-price change as a separate contract, a prospective remeasurement, or a cumulative catch-up, and obligations and schedules are never remapped for it.",
       "ms": 0
     },
     {
@@ -403,7 +404,7 @@
         "The incremental borrowing rate is 5%.",
         "The present value of the payments is 86,589.5334."
       ],
-      "ms": 6
+      "ms": 0
     },
     {
       "id": "lease-finance-interest-and-amortization",
@@ -437,7 +438,7 @@
         "The 20,000.00 payment reduces the liability by 15,670.5233 after interest.",
         "Total year-one charge is 21,647.3834, more than the 20,000.00 cash paid."
       ],
-      "ms": 2
+      "ms": 0
     },
     {
       "id": "lease-operating-single-cost",
@@ -469,7 +470,7 @@
         "Total lease cost is 100,000.00 over five years, 20,000.00 a year straight-line.",
         "Year one: imputed interest is 4,329.4767; the liability unwinds by 15,670.5233 and the right-of-use asset reduces by the same amount, keeping the two aligned."
       ],
-      "ms": 1
+      "ms": 0
     },
     {
       "id": "lease-ifrs-single-lessee-model",
@@ -534,7 +535,7 @@
         "Commencement recognises nothing; each month charges 1,000.00 to lease expense.",
         "The election is recorded on the lease as evidence of the policy applied."
       ],
-      "ms": 7
+      "ms": 0
     },
     {
       "id": "lease-lessor-classification",
@@ -574,7 +575,7 @@
         "A sales-type lease with a net investment of 90,000.00 over a carrying amount of 75,000.00 takes 15,000.00 of selling profit at commencement.",
         "The identical economics with the PV test met only through a third-party residual guarantee classify as direct financing, and the 15,000.00 is deferred into the net investment instead."
       ],
-      "ms": 2
+      "ms": 0
     },
     {
       "id": "lease-remeasurement",
@@ -597,9 +598,9 @@
           "requirement": "After commencement a lessee remeasures the lease liability for changes in future payments or the lease term and recognises the adjustment against the right-of-use asset."
         }
       ],
-      "support": "not-implemented",
+      "support": "supported",
       "tier": "computation",
-      "status": "gap",
+      "status": "pass",
       "assertion": "Revised payments re-discount to a revised liability with the difference adjusting the right-of-use asset — the balance sheet keeps reflecting what is actually owed, not what was estimated at commencement.",
       "facts": [
         "A five-year lease of 20,000.00 a year at 5%: opening liability 86,589.5334.",
@@ -607,7 +608,6 @@
         "The parties agree the remaining four payments rise to 22,000.00 a year; the discount rate is unchanged.",
         "The liability remeasures to the present value of four payments of 22,000.00 at 5%, which is 78,010.9111 — an increase of 7,091.9010 carried against the right-of-use asset."
       ],
-      "gap": "The lease engine measures once at commencement and posts the frozen schedule: no API re-discounts the remaining payments, adjusts the liability and right-of-use asset, or spreads the revised interest over the remaining term.",
       "ms": 0
     },
     {
@@ -631,9 +631,9 @@
           "requirement": "A modification that ends the lease removes both the liability and the right-of-use asset from the balance sheet, with the difference recognised in profit or loss."
         }
       ],
-      "support": "not-implemented",
+      "support": "supported",
       "tier": "computation",
-      "status": "gap",
+      "status": "pass",
       "assertion": "Walking away ends the accounting: the remaining liability and the remaining right-of-use asset both leave the balance sheet, the penalty is expensed, and the net difference is a single termination gain or loss — never a stranded balance.",
       "facts": [
         "A five-year finance lease of 20,000.00 a year at 5%: opening liability and right-of-use asset 86,589.5334.",
@@ -641,7 +641,6 @@
         "The lease terminates with a 3,000.00 penalty: the 37,188.2086 liability is derecognised, the 34,635.8133 asset is derecognised, and the penalty is paid.",
         "The net difference is a termination loss of 447.6047."
       ],
-      "gap": "The lease engine has no termination path: nothing derecognises the liability and right-of-use asset before term, books a termination penalty, or measures the termination gain or loss — an ended lease keeps its frozen schedule on the books.",
       "ms": 0
     },
     {
@@ -674,7 +673,7 @@
         "Commencement schedules the six remaining months as sequences 19 to 24, retiring to a zero closing liability, and posts no journal.",
         "The July 2025 payment posts 1,000.00 of principal, leaving the liability at 5,000.00: the carried schedule's own second-row opening."
       ],
-      "ms": 8
+      "ms": 0
     },
     {
       "id": "fx-initial-recognition-at-spot",
@@ -700,7 +699,7 @@
         "The spot rate on 2026-07-15 is 1.3500 CAD per USD.",
         "The translated amount is CAD 1,350.00."
       ],
-      "ms": 17
+      "ms": 0
     },
     {
       "id": "fx-monetary-item-retranslated-at-closing-rate",
@@ -739,7 +738,7 @@
         "The exchange gain of CAD 50.00 is recognised in profit or loss.",
         "Revenue stays at CAD 1,350.00 — it is not a monetary item and is not retranslated."
       ],
-      "ms": 24
+      "ms": 0
     },
     {
       "id": "fx-long-term-debt-retranslated",
@@ -772,7 +771,7 @@
         "The closing rate on 2026-07-31 is 1.4000.",
         "Both the USD cash (a default monetary item) and the USD loan restate by CAD 500.00 in opposite directions; the exchange loss on the loan offsets the gain on the cash."
       ],
-      "ms": 19
+      "ms": 0
     },
     {
       "id": "fx-retranslation-arithmetic",
@@ -854,7 +853,7 @@
         "Translations round independently: revenue 1,763.6571 and 1,093.4857 against a receivable of 2,857.1429 — the individual roundings miss zero by one ledger unit.",
         "That rounding residual is absorbed within the same entry, leaving AR at CAD 2,857.1429 against revenue at CAD −2,857.1429, and every journal line stamped with the ten-decimal rate actually applied."
       ],
-      "ms": 17
+      "ms": 0
     },
     {
       "id": "fx-inverse-rate-statutory-tax-exact",
@@ -880,7 +879,7 @@
         "The per-line translations genuinely miss zero: revenue 41.1481, 41.1481, 41.1605; tax 2.0574, 2.0574, 2.0580; receivable 129.6296 — the roundings leave a one-ledger-unit residual, so the absorption rule actually executes.",
         "The residual is absorbed by the largest revenue line (41.1605 → 41.1606); every tax control line keeps its exact statutory translation, so tax payable shows exactly CAD 6.1728."
       ],
-      "ms": 19
+      "ms": 0
     },
     {
       "id": "fx-settlement-realized-gain",
@@ -972,7 +971,7 @@
         "The closing rate on 2026-07-31 is 1.4000.",
         "The period-end revaluation posts nothing — the equipment stays at CAD 6,750.00."
       ],
-      "ms": 15
+      "ms": 0
     },
     {
       "id": "fx-net-investment-oci",
@@ -1023,7 +1022,7 @@
         "Taxable consideration of $100.00, GST at 5%, tax-exclusive pricing.",
         "Tax is 100.00 × 5% = $5.00; the settlement total is $105.00."
       ],
-      "ms": 1
+      "ms": 0
     },
     {
       "id": "sales-tax-inclusive-extraction",
@@ -1047,30 +1046,30 @@
         "Advertised tax-included price of $105.00, GST at 5% included.",
         "Net is $100.00 and tax is $5.00; net plus tax equals the entered $105.00 exactly."
       ],
-      "ms": 1
+      "ms": 0
     },
     {
-      "id": "sales-tax-compound-qst-on-gst",
-      "title": "QST compounds on the GST-included price",
+      "id": "sales-tax-qst-excludes-gst",
+      "title": "QST and GST both use the pre-tax selling price",
       "standards": [
         "RQ QST"
       ],
       "citations": [
         {
           "standard": "RQ QST",
-          "reference": "RQ calculating GST and QST",
+          "reference": "Revenu Québec — Calculating the Taxes, two-step calculation (https://www.revenuquebec.ca/en/businesses/consumption-taxes/gsthst-and-qst/collecting-gst-and-qst/calculating-the-taxes/; verified 2026-09-19)",
           "kind": "requirement",
-          "requirement": "QST at 9.975% is calculated on the selling price including GST, not on the pre-tax price."
+          "requirement": "GST at 5% and QST at 9.975% are each calculated on the selling price excluding the other tax."
         }
       ],
       "support": "supported",
       "tier": "computation",
       "status": "pass",
-      "assertion": "On a $100.00 Québec sale the engine charges $5.00 of GST and then 9.975% on the GST-included $105.00 — $10.47 of QST — for a $115.47 total. The compounding order is the return-affecting figure, and it is exact.",
+      "assertion": "On a $100.00 Québec sale the engine charges $5.00 of GST and $9.98 of QST, each on the $100.00 selling price, for a $114.98 total. QST does not tax the GST amount.",
       "facts": [
         "Pre-tax price of $100.00; GST at 5% is $5.00.",
-        "The QST base is 100.00 + 5.00 = $105.00; QST is 105.00 × 9.975% = 10.47375, rounded half-up to $10.47.",
-        "Settlement total is 100.00 + 5.00 + 10.47 = $115.47."
+        "The QST base is $100.00; QST is 100.00 × 9.975% = 9.975, rounded half-up to $9.98.",
+        "Settlement total is 100.00 + 5.00 + 9.98 = $114.98."
       ],
       "ms": 0
     },
@@ -1148,7 +1147,7 @@
         "Lines 110–112, 205 and 405 are $0.00, so 113A, 113B and 113C are $30.00, $0.00 and $30.00.",
         "Line 114 (refund) is max(−30.00, 0) = $0.00; line 115 (payment) is max(30.00, 0) = $30.00."
       ],
-      "ms": 2
+      "ms": 0
     },
     {
       "id": "sales-tax-gst34-refund",
@@ -1330,7 +1329,7 @@
         "The enhanced-CPP income deduction (F5) is 85.25 × 1.00/5.95 = $14.33, carried wholly against periodic pay.",
         "Annual taxable income is (1,500.00 − 14.33) × 52 = $77,254.84; federal tax on it is $8,869.87 and Saskatchewan tax is $5,938.39, so the period withholding is (8,869.87 + 5,938.39) / 52 = $284.77."
       ],
-      "ms": 2
+      "ms": 0
     },
     {
       "id": "payroll-cpp2-second-tier",
@@ -1535,7 +1534,7 @@
         "Annualized federal tax is 35.19 × 52 = $1,829.88.",
         "Withholding for the period is $29.59 — the booklet's printed figure."
       ],
-      "ms": 1
+      "ms": 0
     },
     {
       "id": "payroll-cumulative-averaging",
@@ -1567,26 +1566,25 @@
       "id": "payroll-quebec-provincial-tax",
       "title": "Québec provincial income tax (TP-1015)",
       "standards": [
-        "CRA T4127"
+        "RQ TP-1015"
       ],
       "citations": [
         {
-          "standard": "CRA T4127",
-          "reference": "T4127 — Quebec provincial tax administered via TP-1015",
-          "kind": "requirement",
+          "standard": "RQ TP-1015",
+          "reference": "TP-1015.F-V (2026-01), Appendix 1, phase 1",
+          "kind": "illustrative-example",
           "requirement": "Québec employees have provincial income tax withheld under Revenu Québec's TP-1015 source-deduction tables in addition to the federal tax T4127 computes."
         }
       ],
-      "support": "not-implemented",
+      "support": "supported",
       "tier": "computation",
-      "status": "gap",
-      "assertion": "A Québec pay deducts provincial income tax per the TP-1015 tables alongside federal tax, QPP, QPIP and EI — the stub's total withholding is complete for a Québec employee.",
+      "status": "pass",
+      "assertion": "The Québec provincial engine reproduces the published Appendix 1 phase-1 deduction of 444.51; this case establishes provincial calculation, not complete payroll filing or transmission coverage.",
       "facts": [
-        "Québec employment: T4127 covers the federal side (including the abatement) plus QPP, QPIP and EI.",
-        "Provincial income tax under TP-1015 is a further required deduction on the same pay.",
-        "The required outcome is the TP-1015 provincial withholding for the period."
+        "Biweekly income 4,000.00; pension deduction 200.00; QPP 243.52; personal credits 21,830.00; FTQ and Fondaction shares of 100.00 and 150.00 per period.",
+        "The guide gives the workers deduction 55.77, additional-QPP deduction 38.65, annual taxable income 96,345.08 and annual tax 11,557.37.",
+        "Annual tax divided by 26 yields provincial withholding of 444.51. These are the publication's figures, not an expected value recomputed using the implementation."
       ],
-      "gap": "Québec provincial income tax is not implemented: the engine computes the federal side for Québec employment (abatement, K2Q, QPP/QPIP) and provincials for every other jurisdiction, but TP-1015 tables are absent, so a Québec stub understates total withholding by the provincial share.",
       "ms": 0
     },
     {
@@ -1627,7 +1625,7 @@
         "Under FIFO the sale consumes 100 units at 2.00 and 50 units at 3.00, so cost of sales is 350.00.",
         "Fifty units remain, all from the second purchase, carried at 150.00."
       ],
-      "ms": 74
+      "ms": 0
     },
     {
       "id": "inv-weighted-average-cost-formula",
@@ -1660,7 +1658,7 @@
         "Sale: 150 units at 10.00 each, so cost of sales is 150 at 2.50 = 375.00.",
         "Fifty units remain at 2.50, carried at 125.00."
       ],
-      "ms": 60
+      "ms": 0
     },
     {
       "id": "inv-cost-expensed-against-revenue",
@@ -1691,7 +1689,7 @@
         "100 units purchased at 2.00 (200.00), then 40 units sold at 9.00 (360.00).",
         "Cost of sales is 40 at 2.00 = 80.00, recognised with the sale."
       ],
-      "ms": 41
+      "ms": 0
     },
     {
       "id": "inv-purchase-does-not-touch-profit",
@@ -1714,7 +1712,7 @@
       "facts": [
         "A vendor bill for 250 units at 4.00 each (1,000.00)."
       ],
-      "ms": 22
+      "ms": 0
     },
     {
       "id": "inv-lower-of-cost-and-nrv",
@@ -1752,7 +1750,7 @@
         "Net realisable value falls to 2.00 per unit, or 200.00 in total.",
         "A write-down of 100.00 is recognised as an expense; 100 units remain on hand at a carrying amount of 200.00."
       ],
-      "ms": 33
+      "ms": 0
     },
     {
       "id": "inv-writedown-reversal-policy-divergence",
@@ -1785,7 +1783,7 @@
         "Under IFRS the carrying amount returns to 280.00, reversing 80.00 of the write-down.",
         "Under US GAAP the reversal is refused and the carrying amount stays at 200.00."
       ],
-      "ms": 33
+      "ms": 0
     },
     {
       "id": "inv-landed-cost-capitalized",
@@ -1817,7 +1815,7 @@
         "A freight voucher of 100.00 is allocated on a carrying-value basis.",
         "The whole 100.00 capitalizes: inventory rises to 400.00 (4.00 a unit) and 100 units remain on hand."
       ],
-      "ms": 28
+      "ms": 0
     },
     {
       "id": "inv-partial-disassembly",
@@ -2050,16 +2048,15 @@
           "requirement": "A gain or loss on disposal of long-lived assets is recognised for the difference between the proceeds and the carrying amount of the assets disposed of."
         }
       ],
-      "support": "not-implemented",
+      "support": "supported",
       "tier": "computation",
-      "status": "gap",
+      "status": "pass",
       "assertion": "Selling forty percent of a machine removes forty percent of its cost and forty percent of its accumulated depreciation, and the gain is measured against the forty-percent carrying amount — the remaining sixty percent keeps depreciating untouched.",
       "facts": [
         "A machine carried at a cost of 100,000.00 with accumulated depreciation of 40,000.00: carrying amount 60,000.00.",
         "Forty percent is sold for 30,000.00: derecognised cost 40,000.00, derecognised accumulated depreciation 16,000.00, carrying amount disposed 24,000.00.",
         "The gain on the partial disposal is 6,000.00 and the retained sixty percent continues at a carrying amount of 36,000.00."
       ],
-      "gap": "Disposal is whole-asset only: disposeAsset takes the full cost and the full posted accumulated depreciation, with no portion or percentage — a partial sale can only be recorded as a manual journal with no schedule split behind it.",
       "ms": 0
     },
     {
@@ -2083,16 +2080,15 @@
           "requirement": "A gain or loss on disposal of long-lived assets is recognised for the difference between the proceeds and the carrying amount of the assets disposed of."
         }
       ],
-      "support": "not-implemented",
+      "support": "supported",
       "tier": "computation",
-      "status": "gap",
+      "status": "pass",
       "assertion": "An asset moving between legal entities keeps its carrying amount as the group's basis: the transferor's internal gain is eliminated on consolidation, the transferee depreciates the transferred basis, and no depreciation is lost or double-counted in the move.",
       "facts": [
         "A subsidiary holds a machine at a cost of 100,000.00 with accumulated depreciation of 40,000.00: carrying amount 60,000.00.",
         "It transfers the machine to a fellow subsidiary for 70,000.00: the transferor recognises an internal gain of 10,000.00 and the transferee records the asset at 70,000.00.",
         "On consolidation the 10,000.00 internal gain is eliminated and the group carries the machine at 60,000.00 with its remaining life unchanged."
       ],
-      "gap": "No transfer path exists: moving an asset between subsidiaries means a manual disposal in one entity and a manual capitalisation in the other, with no linkage, no basis carryover, and no elimination entry for the internal gain.",
       "ms": 0
     },
     {
@@ -2116,16 +2112,16 @@
           "requirement": "The cost of a long-lived asset, less any salvage value, is depreciated in a systematic and rational manner over the asset's useful life."
         }
       ],
-      "support": "not-implemented",
-      "tier": "computation",
-      "status": "gap",
-      "assertion": "An entity reporting on a 4-4-5 retail calendar depreciates week-based periods — four weeks, four weeks, five weeks — with each period carrying its share of the annual charge, so the full useful life is covered with nothing skipped and nothing doubled.",
+      "support": "partial",
+      "tier": "ledger",
+      "status": "pass",
+      "assertion": "Native monthly depreciation maps into a 4-4-5 fiscal calendar without dropping or duplicating a charge: months sharing a fiscal period are summed into one schedule line.",
       "facts": [
-        "A retail entity reports on a 4-4-5 calendar anchored 2026-02-01: the 2026 year runs 2026-02-01 to 2027-01-30 in twelve week-based periods.",
-        "A 5-week period such as 2026-06-28 to 2026-08-01 spans two calendar month-starts, so two native monthly charges map onto one accounting period.",
-        "The book engine plans one charge per calendar month and refuses when two months land in one period — the schedule cannot be built on this calendar at all."
+        "The retail calendar is anchored 2026-02-02, with twelve 4-4-5 fiscal periods.",
+        "A 1,200.00 asset placed in service 2026-07-01 has six straight-line monthly charges of 200.00 and no salvage value.",
+        "July/August and October/November each share a fiscal period. The four resulting schedule lines are 400.00, 200.00, 400.00 and 200.00, totaling 1,200.00."
       ],
-      "gap": "Book depreciation is monthly-native: computeSchedule plans per calendar month and buildSchedule throws 'multiple native depreciation months map to one accounting period' on any 4-4-5, 4-5-4, 5-4-4, or thirteen-period calendar whose week-based periods span month-starts. Entities on retail calendars cannot schedule depreciation.",
+      "limitation": "The book policy remains monthly-native. Mapping monthly charges into fiscal periods is implemented; this case does not claim depreciation weighted by the number of weeks in each period.",
       "ms": 0
     },
     {
@@ -2159,7 +2155,7 @@
         "Only January 2026 remains of the life: the schedule holds exactly one line for 1,000.00 — no catch-up of the eleven pre-cutover months.",
         "Posting January leaves a carrying amount of 0.00 and the asset fully depreciated: 12,000.00 less 11,000.00 opening less 1,000.00 posted."
       ],
-      "ms": 16
+      "ms": 0
     },
     {
       "id": "tax-total-expense-is-current-plus-deferred",
@@ -2707,7 +2703,7 @@
         "The subsidiary earns CAD 100.00 after acquisition; the NCI share of profit is 100.00 × 20% = CAD 20.00.",
         "The elimination debits subsidiary equity 800.00, fair-value adjustment 200.00 and goodwill 100.00, credits the investment 900.00 and NCI equity 200.00; the income allocation debits NCI income 20.00 and credits NCI equity 20.00, leaving NCI equity at a 220.00 credit."
       ],
-      "ms": 15
+      "ms": 0
     },
     {
       "id": "consol-intercompany-elimination",
@@ -2740,7 +2736,7 @@
         "The elimination entry credits the receivable 1,000.00 and debits the payable 1,000.00 — balanced, with no residual.",
         "Every source line stays posted on its own entity; only the elimination subsidiary carries the reversal."
       ],
-      "ms": 8
+      "ms": 0
     },
     {
       "id": "consol-equity-method",
@@ -2773,7 +2769,7 @@
         "The associate declares CAD 50.00 of dividends; the investor's 15.00 share credits the investment and eliminates the matching dividend income.",
         "The investment moves by 60.00 − 15.00 = CAD 45.00 debit; equity income shows a 60.00 credit and dividend income a 15.00 debit."
       ],
-      "ms": 11
+      "ms": 0
     },
     {
       "id": "consol-proportionate-owned-share",
@@ -2799,7 +2795,7 @@
         "Goodwill is 550.00 − 500.00 = CAD 50.00; the investment eliminates at CAD 550.00.",
         "No NCI is recognised and no income is allocated: only the owned share is combined."
       ],
-      "ms": 10
+      "ms": 0
     },
     {
       "id": "consol-foreign-sub-translation",
@@ -2832,7 +2828,7 @@
         "Acquisition-date equity of USD 1,000.00 at the policy acquisition rate of 1.30 eliminates at CAD 1,300.00 against a CAD 1,200.00 investment, with fair value of 1,400.00 giving a 100.00 adjustment, NCI of 280.00 and goodwill of 80.00.",
         "Period profit of USD 100.00 at the 1.3750 average is CAD 137.50; NCI income is 137.50 × 20% = CAD 27.50, leaving NCI equity at a 307.50 credit."
       ],
-      "ms": 13
+      "ms": 0
     },
     {
       "id": "consol-loss-of-control",
@@ -2848,9 +2844,9 @@
           "requirement": "When control is lost, the former parent derecognises the subsidiary's assets, liabilities and non-controlling interests, recognises any retained investment at fair value, and reclassifies related translation differences to profit or loss."
         }
       ],
-      "support": "not-implemented",
+      "support": "supported",
       "tier": "computation",
-      "status": "gap",
+      "status": "pass",
       "assertion": "Selling down from 80% to 20% removes the subsidiary's net assets and NCI from the consolidated balance sheet, books the retained 20% at its fair value, and recognises the resulting gain or loss with the accumulated translation difference reclassified out of equity.",
       "facts": [
         "A parent sells 60% of an 80%-owned subsidiary, retaining 20% with significant influence.",
@@ -2858,7 +2854,6 @@
         "The retained 20% has a fair value of CAD 400.00; proceeds for the 60% sold are CAD 1,200.00.",
         "The disposal gain is 1,200.00 + 400.00 − (1,180.00 − 280.00) = CAD 700.00."
       ],
-      "gap": "The engine has no loss-of-control accounting: closing or narrowing an ownership policy simply stops future consolidation generations, leaving the parent's investment at cost with no derecognition of the subsidiary's net assets, no release of NCI, no fair-value remeasurement of any retained interest, and no reclassification of translation differences.",
       "ms": 0
     }
   ]

@@ -13,16 +13,35 @@ export const CLOSE_MODULES = [
 ] as const;
 export type CloseModule = (typeof CLOSE_MODULES)[number];
 
+export type PeriodLockView = {
+  state: string;
+  reopenExpiresAt: Date | string | null;
+  reason: string | null;
+};
+
+/**
+ * Statutory reopen — hard close or an expired controlled window. Soft-close
+ * fences posting (see periodLockBlocksPosting) but is released from Setup
+ * without a reopen case, so an approved window cannot escalate it to closed.
+ */
+export function periodLockRequiresApprovedReopen(
+  lock: PeriodLockView | undefined,
+  now = new Date(),
+): boolean {
+  if (!lock) return false;
+  return lock.state === "closed" || (
+    lock.state === "open" && lock.reopenExpiresAt != null && new Date(lock.reopenExpiresAt) <= now
+  );
+}
+
 export function periodLockBlocksPosting(
-  lock: { state: string; reopenExpiresAt: Date | string | null; reason: string | null } | undefined,
+  lock: PeriodLockView | undefined,
   allowImportedLock: boolean,
   now = new Date(),
 ): boolean {
   if (!lock) return false;
   if (allowImportedLock && lock.reason === "close.importedPeriodLockReason") return false;
-  return lock.state === "closed" || (
-    lock.state === "open" && lock.reopenExpiresAt != null && new Date(lock.reopenExpiresAt) <= now
-  );
+  return lock.state === "soft_closed" || periodLockRequiresApprovedReopen(lock, now);
 }
 
 /**

@@ -105,6 +105,7 @@ as $$
       (select case
          when p_allow_imported and reason = 'close.importedPeriodLockReason' then false
          when state = 'closed' then true
+         when state = 'soft_closed' then true
          when state = 'open' and reopen_expires_at is not null and reopen_expires_at <= now() then true
          else false
        end
@@ -114,6 +115,7 @@ as $$
       (select case
          when p_allow_imported and reason = 'close.importedPeriodLockReason' then false
          when state = 'closed' then true
+         when state = 'soft_closed' then true
          when state = 'open' and reopen_expires_at is not null and reopen_expires_at <= now() then true
          else false
        end
@@ -128,7 +130,7 @@ $$;
 comment on function period_module_blocks_write(
   uuid, uuid, uuid, uuid, text, boolean
 ) is
-  'Blocks closed-period writes except source-owned imported locks or a database-authenticated connector replay; never changes the lock itself.';
+  'Blocks soft-closed and closed-period writes except source-owned imported locks or a database-authenticated connector replay; never changes the lock itself.';
 
 -- ---------------------------------------------------------------------------
 -- Row-level security. Tenant isolation is enforced at the database, keyed on two
