@@ -403,16 +403,25 @@ function verifyStripeWebhookDelivery(
   const sigHeader = headers["stripe-signature"];
   const sig = Array.isArray(sigHeader) ? sigHeader[0] : sigHeader;
   if (!sig) return invalidWebhook();
-  const parts = Object.fromEntries(sig.split(",").map((kv) => kv.split("=", 2) as [string, string]));
-  if (!parts.t || !parts.v1) return invalidWebhook();
-  const expected = hmacSha256Hex(secrets.webhookSecret, `${parts.t}.${rawBody}`);
-  if (!safeEqual(expected, parts.v1)) return invalidWebhook();
+  // During a secret roll Stripe sends several v1 signatures (one per active
+  // secret). Keeping only one — e.g. via a last-wins map — 401s every valid
+  // delivery signed with the other secret, so every v1 is collected and the
+  // delivery verifies if ANY of them matches (each compared timing-safe).
+  const entries = sig.split(",").map((kv) => kv.split("=", 2) as [string, (string | undefined)?]);
+  const timestamp = entries.find(([key]) => key === "t")?.[1];
+  const signatures = entries
+    .filter(([key]) => key === "v1")
+    .map(([, value]) => value)
+    .filter((value): value is string => typeof value === "string" && value.length > 0);
+  if (!timestamp || signatures.length === 0) return invalidWebhook();
+  const expected = hmacSha256Hex(secrets.webhookSecret, `${timestamp}.${rawBody}`);
+  if (!signatures.some((candidate) => safeEqual(expected, candidate))) return invalidWebhook();
   // Replay window: far-future timestamps are rejected outright, but retries
   // up to 24h old are accepted — during a provider outage every older
   // delivery would otherwise 401 forever and the settlement would be
   // silently lost. Old-event acceptance is safe because the attempt claim
   // (below) makes processing idempotent.
-  const skew = Date.now() / 1000 - Number(parts.t);
+  const skew = Date.now() / 1000 - Number(timestamp);
   if (skew < -300 || skew > 86_400) return invalidWebhook();
   let event: unknown;
   try {
