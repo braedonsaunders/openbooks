@@ -295,6 +295,58 @@ test(
 );
 
 test(
+  "employer levies: a pre-adoption EHT carry-in consumes the exemption first",
+  { skip: !DB },
+  async () => {
+    // A mid-year adopter's prior provider already paid $600 of Ontario
+    // remuneration this year. The $1,000 exemption has $400 left when the
+    // first OpenBooks stub prices, so $2,400 of earnings is taxable on
+    // $2,000: 2,000 × 1.95% = 39.00. Without the carry-in the same stub
+    // would pay 27.30 (the first test pins that).
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      const harness = await seedWcbHarness(org.orgId, actorId, "30");
+      const ehtPayable = randomUUID();
+      await db.execute(sql`
+        insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
+                              reconcilable, required_dimensions, custom, subsidiary_include_children)
+        values (${ehtPayable}, ${org.orgId}, '2340', 'EHT payable', 'liability_current', false, true,
+                false, false, '[]'::jsonb, '{}'::jsonb, true)`);
+      await db.execute(sql`
+        update orgs
+           set settings = jsonb_set(settings, '{payroll,ca}',
+                                    '{"eht": {"enabled": true, "rate": "1.95", "annualExemption": "1000"}}')
+         where id = ${org.orgId}`);
+      await setPackSlotAccount(org.orgId, actorId, "CA", "eht", ehtPayable);
+      await saveOpeningBalances({
+        orgId: org.orgId, actorId, taxYear: 2026,
+        rows: [{ employeePartyId: harness.employeeId, amounts: { ehtRemunerationYtd: "600" } }],
+      });
+
+      await harness.postHours("2026-07-06", "20", harness.jobA);
+      await harness.postHours("2026-07-08", "20", harness.jobA);
+      await harness.postHours("2026-07-10", "20", harness.jobB);
+      await harness.postHours("2026-07-14", "20", harness.jobB);
+      const run = await createPayRun({
+        orgId: org.orgId, actorId, payScheduleId: harness.scheduleId,
+        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+      });
+      const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      assert.deepEqual(result.errors, []);
+      const stub = ((await db.execute<{ factors: Record<string, string> }>(sql`
+        select factors from pay_stubs
+         where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
+      `))).rows[0]!;
+      assert.equal(stub.factors.EHT_EARN, "2400.0000");
+      assert.equal(stub.factors.EHT, "39.0000");
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
   "employer levies: a positive WCB remainder posts as its own untagged line",
   { skip: !DB },
   async () => {

@@ -1264,16 +1264,21 @@ test("second-order opening amounts normalize, refuse transpositions, and keep a 
 
   // Employer-side capped levies normalize the same way, with no static
   // ceiling: both maximums (QPIP maxEmployer, the group's max_assessable)
-  // move, so only exact money and never-negative apply.
+  // move, so only exact money and never-negative apply. The EHT carry-in
+  // joins them: the exemption moves too, so it is ceiling-less as well.
   const employer = normalizeOpeningBalance({
     pensionableYtd: "60000", insurableYtd: "60000",
     qpipEmployerYtd: "620.06", wcbAssessableYtd: "1000",
+    ehtRemunerationYtd: "500000",
   });
   assert.equal(employer.qpipEmployerYtd, "620.0600");
   assert.equal(employer.wcbAssessableYtd, "1000.0000");
+  assert.equal(employer.ehtRemunerationYtd, "500000.0000");
   assert.throws(() => normalizeOpeningBalance({ qpipEmployerYtd: "-1" }), /cannot be negative/);
   assert.throws(() => normalizeOpeningBalance({ wcbAssessableYtd: "lots" }), /is not a number/);
+  assert.throws(() => normalizeOpeningBalance({ ehtRemunerationYtd: "-1" }), /cannot be negative/);
   assert.equal(isEmptyOpeningBalance({ wcbAssessableYtd: "1000.0000" }, {}), false);
+  assert.equal(isEmptyOpeningBalance({ ehtRemunerationYtd: "1000.0000" }, {}), false);
 
   // Part-to-whole, like every other cross-field check: bonus-attributed
   // history cannot exceed the bonuses, FICA dollars cannot exceed the wages.
@@ -1314,4 +1319,6 @@ test("the pack-declared second-order fields are wired to every consumer", () => 
   assert.deepEqual(byKey.get("qpipEmployerYtd")?.packs, ["CA"]);
   assert.equal(byKey.get("wcbAssessableYtd")?.column, "wcb_assessable_ytd");
   assert.deepEqual(byKey.get("wcbAssessableYtd")?.packs, ["CA"]);
+  assert.equal(byKey.get("ehtRemunerationYtd")?.column, "eht_remuneration_ytd");
+  assert.deepEqual(byKey.get("ehtRemunerationYtd")?.packs, ["CA"]);
 });

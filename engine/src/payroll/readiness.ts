@@ -1511,18 +1511,28 @@ export async function payRunStaleness(
 }
 
 /**
- * Whether another run committed (or voided) employer-aggregate room after
- * this run calculated. Two queries, both scoped narrow:
+ * Whether another run committed (or voided) employer-level room after this
+ * run calculated. Two queries, both scoped narrow:
  *
  * 1. the run's tax year and the countries on its schedule — against which
  *    the pack declarations are read. A pack that refuses the year (nothing
  *    transcribed) contributes no levies here: the run could not have
  *    calculated any, and the refusal must not break the staleness answer
  *    for the inputs it did read;
- * 2. only when a per-run aggregate levy is actually declared, whether any
- *    OTHER run in the year committed or voided after this run calculated.
- *    No roster join: sharing no employee is exactly the case the `ytd` arm
- *    misses, and a shared roster already stales through it.
+ * 2. only when employer-level room is actually declared — a per-run
+ *    aggregate levy, or the Phase-8 earnings-assessed employer levies (CA's
+ *    EHT exemption is employer-level per province and consumes committed
+ *    history only) — whether any OTHER run in the year committed or voided
+ *    after this run calculated. No roster join: sharing no employee is
+ *    exactly the case the `ytd` arm misses, and a shared roster already
+ *    stales through it.
+ *
+ * This is the commit-time half of the committed-only doctrine: calculation
+ * deliberately ignores uncommitted drafts, so without this arm two
+ * disjoint-roster drafts could each claim the full exemption and both
+ * commit cleanly. With it, the second commit refuses as stale
+ * (`employerLevyYtd`) until it recalculates against the first run's
+ * committed room.
  */
 async function employerLevyRoomConsumed(
   orgId: string,
@@ -1550,6 +1560,13 @@ async function employerLevyRoomConsumed(
   let declared = false;
   for (const [country, pack] of Object.entries(PAYROLL_COUNTRY_PACKS)) {
     if (!roster.has(country)) continue;
+    // Phase-8 employer levies manage employer-level room outside the
+    // aggregate channel (CA's EHT exemption), so their presence alone arms
+    // this check — no country branch, just the declared hook.
+    if (pack.applyEmployerLevies != null) {
+      declared = true;
+      break;
+    }
     let levies: readonly { timing: string }[];
     try {
       levies = pack.employerAggregateLevies?.(info.tax_year) ?? [];

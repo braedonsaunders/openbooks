@@ -6,6 +6,7 @@ import { db } from "../platform/db.ts";
 import { cmp, sum } from "../money/money.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
+import { setPackSlotAccount } from "./packs.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { upsertUnionFringe } from "./union.ts";
@@ -367,15 +368,24 @@ test(
 );
 
 /* ------------------------------------------------------------------ */
-/* D6 — a finite annual allowance is consumed by CALCULATED runs too    */
+/* D6 — a finite annual allowance survives two overlapping drafts       */
 /* ------------------------------------------------------------------ */
 
 test(
   "two schedules calculated before either commits cannot both claim the Ontario EHT exemption",
   { skip: !DB },
   async () => {
+    // Committed-only doctrine: uncommitted drafts consume no exemption room,
+    // so the second schedule calculates against the still-open exemption —
+    // and the commit-time staleness arm (`employerLevyYtd`) refuses its
+    // commit once the first run lands, until it recalculates. The property
+    // this pins is unchanged: at most one draft commits with the exemption.
     const fx = await payrollOrg({ eht: { rate: "1.95", annualExemption: "1000" } });
     try {
+      // Committing posts the EHT line, so its liability account must be
+      // mapped (calculation alone never touches the chart).
+      const ehtPayable = await account(fx.orgId, "2340", "EHT payable", "liability_current");
+      await setPackSlotAccount(fx.orgId, fx.actorId, "CA", "eht", ehtPayable);
       const secondSchedule = randomUUID();
       await db.execute(sql`
         insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
@@ -403,11 +413,27 @@ test(
       });
       await calculatePayRun({ orgId: fx.orgId, documentId: runB.documentId, actorId: fx.actorId });
 
-      // (2,400 − 1,000) × 1.95% = 27.30 for the first; the exemption is gone
-      // by the second, so 2,400 × 1.95% = 46.80. Consuming only against
-      // COMMITTED runs gave both of them the full exemption and under-remitted.
+      // A is still a draft, so B calculates against the open exemption too:
+      // (2,400 − 1,000) × 1.95% = 27.30 on both.
       assert.equal((await stubRows(fx.orgId, runA.documentId))[0]!.factors.EHT, "27.3000");
+      assert.equal((await stubRows(fx.orgId, runB.documentId))[0]!.factors.EHT, "27.3000");
+
+      // Recalculating A while B is still a draft must not move A: drafts
+      // consume nothing, so there is no double count to pick up.
+      await calculatePayRun({ orgId: fx.orgId, documentId: runA.documentId, actorId: fx.actorId });
+      assert.equal((await stubRows(fx.orgId, runA.documentId))[0]!.factors.EHT, "27.3000");
+
+      // A commits with the exemption. B's calculation is now stale — the
+      // commit refuses until B recalculates against A's committed room.
+      await commitPayRun({ orgId: fx.orgId, documentId: runA.documentId, actorId: fx.actorId });
+      await assert.rejects(
+        commitPayRun({ orgId: fx.orgId, documentId: runB.documentId, actorId: fx.actorId }),
+        /recalculate before committing/,
+      );
+      await calculatePayRun({ orgId: fx.orgId, documentId: runB.documentId, actorId: fx.actorId });
+      // The exemption is gone by the second: 2,400 × 1.95% = 46.80.
       assert.equal((await stubRows(fx.orgId, runB.documentId))[0]!.factors.EHT, "46.8000");
+      await commitPayRun({ orgId: fx.orgId, documentId: runB.documentId, actorId: fx.actorId });
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
