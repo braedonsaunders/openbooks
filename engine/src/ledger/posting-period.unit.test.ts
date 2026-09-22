@@ -26,10 +26,13 @@ const chain = [
 ];
 const period = [{ id: "period-a", ends_on: "2026-09-30" }];
 
-test("explicit posting period is scoped to the organization; date fallback excludes adjustment periods", async () => {
+test("explicit posting period is scoped to the organization and the posting date's window; date fallback excludes adjustment periods", async () => {
   const explicit = scripted([[{ id: "override" }]]);
   assert.deepEqual(await resolvePostingPeriod(explicit.runner, document("override"), args.postingDate), { id: "override" });
-  assert.deepEqual(explicit.calls[0]!.params, ["override", "org-a"]);
+  // The explicit branch pins BOTH org ownership and the posting-date window:
+  // an imported document dated outside its named period used to post into
+  // that period anyway, disagreeing with every date-window report.
+  assert.deepEqual(explicit.calls[0]!.params, ["override", "org-a", args.postingDate, args.postingDate]);
   explicit.done();
   const dated = scripted([[{ id: "regular" }]]);
   assert.deepEqual(await resolvePostingPeriod(dated.runner, document(null), args.postingDate), { id: "regular" });
@@ -39,7 +42,7 @@ test("explicit posting period is scoped to the organization; date fallback exclu
 });
 
 test("missing override and uncovered date refuse with the applicable remedy context", async () => {
-  for (const [override, message] of [["foreign-period", /foreign-period.*not available for this organization/], [null, /no accounting period covers 2026-09-20/]] as const) {
+  for (const [override, message] of [["foreign-period", /foreign-period does not cover posting date 2026-09-20/], [null, /no accounting period covers 2026-09-20/]] as const) {
     const io = scripted([[]]);
     await assert.rejects(resolvePostingPeriod(io.runner, document(override), args.postingDate), (e: unknown) => e instanceof PostingError && message.test(e.message));
     io.done();
