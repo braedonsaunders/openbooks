@@ -281,7 +281,7 @@ export function resolveTemplateForEmployment(
   if (matching.length === 0) {
     throw new ProcessMathError(
       "TEMPLATE_NOT_FOUND",
-      `no active ${kind} template covers this employment — create or activate one in Setup that covers this employer subsidiary and department`,
+      `no active ${kind} template covers this employment — create or activate one under HRM → Process checklists → Checklist templates for this employer subsidiary and department`,
     );
   }
   const specificity = (template: MatchableTemplate): number =>

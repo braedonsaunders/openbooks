@@ -407,6 +407,7 @@
   },
   "processes": {
     "newProcess": "Nouveau processus",
+    "newChecklist": "Nouvelle liste de contrôle",
     "title": "Listes de processus",
     "description": "Listes d'intégration, de départ et de transfert avec responsables, échéances et preuves.",
     "listTitle": "Listes",
@@ -467,7 +468,18 @@
       "done": "Terminé",
       "skipped": "Ignoré"
     },
-    "segmentsLabel": "Afficher"
+    "segmentsLabel": "Afficher",
+    "templates": {
+      "title": "Checklist templates", "description": "Reusable onboarding, offboarding, and transfer checklists. Opening a checklist snapshots its template so later edits never rewrite history.",
+      "newTemplate": "New template", "editTemplate": "Edit template", "createTemplate": "Create a template", "createDescription": "Define who this checklist covers, then add its ordered steps.", "editDescription": "Edit the reusable definition. Already-opened checklists keep their original snapshot.",
+      "template": "Template", "name": "Name", "kind": "Kind", "scope": "Applies to", "status": "Status", "active": "Active", "retired": "Retired", "subsidiary": "Employer subsidiary", "department": "Department", "allSubsidiaries": "All subsidiaries", "allDepartments": "All departments", "allEmployees": "All employees", "limitedScope": "Limited scope",
+      "steps": "Steps", "stepsDescription": "Ordered work copied into each new checklist.", "addStep": "Add step", "newStep": "New step", "editStep": "Edit step", "deleteStep": "Delete step", "stepTitle": "Step title", "stepDescription": "Description", "owner": "Owner", "namedOwner": "Named person", "dueOffset": "Due offset (days)", "evidence": "Evidence", "required": "Required",
+      "saveBeforeSteps": "Save the template details first, then add at least one step before using it for a checklist.", "noSteps": "This template is not ready. Add at least one step before it can be selected for a checklist.", "noneEligible": "No ready template covers this employee, kind, and date.", "loadFailed": "Templates could not be loaded.", "saveFailed": "The template could not be saved.", "stepSaveFailed": "The template step could not be saved.", "stepDeleteFailed": "The template step could not be deleted.",
+      "created": "Template created. Add its steps before opening a checklist.", "updated": "Template updated.", "stepCreated": "Step added.", "stepUpdated": "Step updated.", "stepDeleted": "Step deleted.", "confirmDeleteStep": "Delete the step “{title}”? Open checklists keep their existing snapshot.", "stepSummary": "{owner} · due {days} days from the effective date", "search": "Search templates", "empty": "No templates match this search.", "backToChecklists": "Back to checklists",
+      "kinds": { "onboarding": "Onboarding", "offboarding": "Offboarding", "transfer": "Transfer" },
+      "owners": { "manager": "Manager", "hr": "HR", "employee": "Employee", "named_party": "Named person" },
+      "evidenceKinds": { "none": "None", "acknowledgement": "Acknowledgement", "attachment": "Attachment" }
+    }
   },
   "leave": {
     "title": "Congés",

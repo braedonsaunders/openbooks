@@ -145,6 +145,10 @@ export interface ProcessTemplateDTO {
   readonly stepCount: number;
 }
 
+export interface ProcessTemplateDetail extends ProcessTemplateDTO {
+  readonly steps: ProcessTemplateStepDTO[];
+}
+
 type TemplateStepRow = {
   id: string;
   org_id: string;
@@ -198,6 +202,108 @@ function toTemplateStepDTO(row: TemplateStepRow): ProcessTemplateStepDTO {
     required: row.required,
     evidenceKind: row.evidence_kind,
   };
+}
+
+/**
+ * Process-template catalogue for the HRM checklist workspace. This is the
+ * canonical read behind both the template list and the explicit template
+ * picker; it deliberately uses the process-management grant rather than the
+ * broader Setup permission because checklist authors own this configuration.
+ */
+export async function listProcessTemplates(query: {
+  readonly orgId: string;
+  readonly actorId: string;
+  readonly activeOnly?: boolean;
+  readonly kind?: ProcessKind;
+  readonly employmentId?: string;
+  readonly effectiveDate?: string;
+}): Promise<ProcessTemplateDTO[]> {
+  const orgId = requireOrgId(query.orgId);
+  const actorId = requireActorId(query.actorId);
+  const kind = query.kind === undefined ? undefined : requireKind(query.kind);
+  const employmentId = query.employmentId === undefined ? undefined : requireId("employmentId", query.employmentId);
+  if ((employmentId === undefined) !== (query.effectiveDate === undefined)) {
+    throw new HrmProcessError(
+      "REFUSED",
+      "employmentId and effectiveDate must be supplied together — choose the employee and date before choosing a template",
+    );
+  }
+  let effectiveDate: string | undefined;
+  if (query.effectiveDate !== undefined) {
+    try {
+      effectiveDate = parseCivilDate(query.effectiveDate);
+    } catch {
+      throw new HrmProcessError(
+        "REFUSED",
+        `effective date ${JSON.stringify(query.effectiveDate)} is not a real YYYY-MM-DD calendar date — choose the checklist date again`,
+      );
+    }
+  }
+  return withOrgTransaction(orgId, async () => {
+    await assertHrmFeatureOn(db, orgId);
+    if (employmentId !== undefined) {
+      await requireHrmProcessManage(db, orgId, actorId, employmentId);
+      await assertLiveVersionOn(db, orgId, employmentId, effectiveDate!);
+    } else {
+      await requireHrmProcessConfig(db, orgId, actorId);
+    }
+    const rows = (await db.execute<TemplateRow & { step_count: number }>(sql`
+      select t.id, t.org_id, t.kind, t.name, t.applies_to, t.is_active,
+             t.created_at, t.created_by, t.updated_at, t.updated_by,
+             count(s.id)::int as step_count
+        from hrm_process_templates t
+        left join hrm_process_template_steps s
+          on s.org_id = t.org_id and s.template_id = t.id
+       where t.org_id = ${orgId}
+         ${query.activeOnly ? sql`and t.is_active` : sql``}
+         ${kind ? sql`and t.kind = ${kind}` : sql``}
+       group by t.id
+       order by t.kind, t.name, t.id
+    `)).rows;
+    if (employmentId === undefined) return rows.map((row) => toTemplateDTO(row, row.step_count));
+    const context = await loadOpeningEmploymentContext(db, orgId, employmentId, effectiveDate!);
+    return rows
+      .filter((row) => {
+        const employer = typeof row.applies_to?.employer_subsidiary_id === "string"
+          ? row.applies_to.employer_subsidiary_id
+          : null;
+        const department = typeof row.applies_to?.department_id === "string"
+          ? row.applies_to.department_id
+          : null;
+        return (employer === null || employer === context.employerSubsidiaryId)
+          && (department === null || department === context.departmentId);
+      })
+      .map((row) => toTemplateDTO(row, row.step_count));
+  });
+}
+
+/** One template and its ordered steps for the unified create/edit drawer. */
+export async function getProcessTemplate(query: {
+  readonly orgId: string;
+  readonly actorId: string;
+  readonly templateId: string;
+}): Promise<ProcessTemplateDetail> {
+  const orgId = requireOrgId(query.orgId);
+  const actorId = requireActorId(query.actorId);
+  const templateId = requireId("templateId", query.templateId);
+  return withOrgTransaction(orgId, async () => {
+    await assertHrmFeatureOn(db, orgId);
+    await requireHrmProcessConfig(db, orgId, actorId);
+    const row = (await db.execute<TemplateRow>(sql`
+      select id, org_id, kind, name, applies_to, is_active,
+             created_at, created_by, updated_at, updated_by
+        from hrm_process_templates
+       where org_id = ${orgId} and id = ${templateId}
+    `)).rows[0];
+    if (!row) {
+      throw new HrmProcessError(
+        "NOT_FOUND",
+        "process template not found in this organization — open it from the template list",
+      );
+    }
+    const steps = await loadTemplateSteps(db, orgId, templateId);
+    return { ...toTemplateDTO(row, steps.length), steps: steps.map(toTemplateStepDTO) };
+  });
 }
 
 const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
@@ -1008,6 +1114,20 @@ async function resolveTemplateChoice(
       throw new HrmProcessError(
         "REFUSED",
         `template ${JSON.stringify(row.name)} is retired — reactivate it before opening a process from it`,
+      );
+    }
+    const context = await loadOpeningEmploymentContext(exec, orgId, employmentId, effectiveDate);
+    const employer = typeof row.applies_to?.employer_subsidiary_id === "string"
+      ? row.applies_to.employer_subsidiary_id
+      : null;
+    const department = typeof row.applies_to?.department_id === "string"
+      ? row.applies_to.department_id
+      : null;
+    if ((employer !== null && employer !== context.employerSubsidiaryId)
+        || (department !== null && department !== context.departmentId)) {
+      throw new HrmProcessError(
+        "REFUSED",
+        `template ${JSON.stringify(row.name)} does not cover this employment on ${effectiveDate} — choose a template offered by the checklist picker`,
       );
     }
     const steps = await loadTemplateSteps(exec, orgId, row.id);
