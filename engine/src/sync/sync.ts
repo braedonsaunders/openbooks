@@ -192,6 +192,22 @@ export function syncVerificationFailures(result: SyncResult): string[] {
     ? result.openItems.checked - result.openItems.matches
     : 0;
   if (openOff > 0) failures.push(`${openOff} open items differ`);
+  // Settlement links the reconciler could not match or fully apply are
+  // otherwise a silent success: the run reports ok while money sits
+  // unsettled. Adapters without open-item truth (QBD has none) have no other
+  // gate that would catch them.
+  if (result.applications) {
+    if (result.applications.skippedNoLine > 0) {
+      failures.push(
+        `${result.applications.skippedNoLine} settlement links could not be matched to open items`,
+      );
+    }
+    if (toUnits(result.applications.unallocated) !== 0n) {
+      failures.push(
+        `unallocated settlement amount ${result.applications.unallocated} could not be applied`,
+      );
+    }
+  }
   const periodOff = result.periods.checked - result.periods.matches;
   if (periodOff > 0) failures.push(`${periodOff} account-month buckets differ`);
   const projectPeriodOff = result.projectPeriods

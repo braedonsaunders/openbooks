@@ -16,6 +16,7 @@ import {
   type SyncResult,
 } from "./sync.ts";
 import type { NativeDocument } from "./native.ts";
+import type { ApplyStats } from "./applications.ts";
 import { TTYPE_KIND } from "./netsuite-native.ts";
 import { OPEN_ITEM_DOCUMENT_KINDS } from "./sync.ts";
 
@@ -83,6 +84,31 @@ test("bounded repairs refresh exact source period identities without loading all
   assert.equal(needsStandalonePeriodRefresh(["102458"], true), false);
   assert.equal(needsStandalonePeriodRefresh([], false), false);
   assert.equal(needsStandalonePeriodRefresh(null, false), false);
+});
+
+test("financial cursor gate fails runs with unmatched or unallocated applications", () => {
+  const stats = (overrides: Partial<ApplyStats> = {}) => ({
+    pairs: 2,
+    inserted: 1,
+    insertedAmount: "50.0000",
+    alreadySettled: 0,
+    skippedNoLine: 0,
+    unallocated: "0.0000",
+    ...overrides,
+  });
+  // A fully settled run stays green, with or without application links.
+  assert.deepEqual(syncVerificationFailures(result({ applications: stats() })), []);
+  assert.deepEqual(syncVerificationFailures(result()), []);
+  // Links no open line could settle are a run failure, not a silent ok —
+  // otherwise money sits unsettled while the run reports success.
+  assert.deepEqual(
+    syncVerificationFailures(result({ applications: stats({ skippedNoLine: 2 }) })),
+    ["2 settlement links could not be matched to open items"],
+  );
+  assert.deepEqual(
+    syncVerificationFailures(result({ applications: stats({ unallocated: "50.0000" }) })),
+    ["unallocated settlement amount 50.0000 could not be applied"],
+  );
 });
 
 test("financial cursor gate reports every independent divergence", () => {
