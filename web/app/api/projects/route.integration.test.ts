@@ -71,12 +71,29 @@ function postRequest(key: string, body: unknown): Request {
   });
 }
 
-async function enableProjects(orgId: string): Promise<void> {
+/**
+ * Set the Projects gate explicitly.
+ *
+ * `projects` is defaultEnabled: true in the feature registry, so a fresh
+ * scratch org already has it ON — a test that wants to exercise the refusal
+ * must turn it OFF rather than assume a disabled default.
+ *
+ * jsonb_set, not `||`: a top-level concat of {"features":{...}} REPLACES the
+ * whole features object, silently dropping the payroll flag the shared
+ * fixture seeds.
+ */
+async function setProjectsFeature(orgId: string, enabled: boolean): Promise<void> {
   await db.execute(sql`
     update orgs
-       set settings = coalesce(settings, '{}'::jsonb) || '{"features":{"projects":true}}'::jsonb
+       set settings = jsonb_set(
+             coalesce(settings, '{}'::jsonb), '{features,projects}',
+             to_jsonb(${enabled}::boolean), true)
      where id = ${orgId}
   `);
+}
+
+async function enableProjects(orgId: string): Promise<void> {
+  await setProjectsFeature(orgId, true);
 }
 
 async function auditInserts(orgId: string, rowId: string): Promise<{ request_id: string | null; actor_id: string | null }[]> {
@@ -145,6 +162,8 @@ test(
       await enableProjects(org.orgId);
 
       // Feature off in `other`: the entry guard refuses before any write.
+      // Turned off explicitly — the registry default is ON.
+      await setProjectsFeature(other.orgId, false);
       routeState.authz = { user: { orgId: other.orgId, id: otherAdmin }, allowedSubsidiaryIds: null };
       const refused = await POST(postRequest(randomUUID(), { name: "Harbourview Tower" }));
       assert.equal(refused.status, 404);

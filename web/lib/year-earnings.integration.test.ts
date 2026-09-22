@@ -76,7 +76,16 @@ async function post(args: {
       (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
     values (${args.orgId}, ${entry}, 1, ${args.debit}, ${args.subsidiaryId}, ${args.amount}, 'CAD', ${args.amount}, '1'),
            (${args.orgId}, ${entry}, 2, ${args.credit}, ${args.subsidiaryId}, ${`-${args.amount}`}, 'CAD', ${`-${args.amount}`}, '1')`)
-  await withBypassContext(() => db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entry}`))
+  // Runs in the caller's bypass scope, NOT a nested withBypassContext: the
+  // inserts above inherit the outer withBypass, and opening a second
+  // mechanism inside it lost the scope, so this UPDATE matched zero rows.
+  // RLS filters an UPDATE, it does not raise — so the seed silently left
+  // every entry in 'draft' and the statements correctly reported nothing.
+  // Asserting the row count is what turns that back into a failure.
+  const posted = await db.execute(sql`
+    update journal_entries set status = 'posted', posted_at = now()
+     where id = ${entry} returning id`)
+  assert.equal(posted.rows.length, 1, `seed failed to post entry ${args.tag}`)
 }
 
 function findLine(view: Awaited<ReturnType<typeof balanceSheetView>>, label: string) {

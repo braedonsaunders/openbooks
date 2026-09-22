@@ -73,9 +73,15 @@ const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] =
   ["employee_pay_components", "employee_party_id"],
   ["employee_roles", "supervisor_id"],
   ["field_ticket_labor_lines", "employee_party_id"],
+  // 0244 item-pricing hierarchy: both point at a customer party, and neither
+  // was followed by the merge — absorbing a duplicate customer left its price
+  // level and price schedules pointing at a party that no longer trades.
+  // Simple moves: uniqueness on both tables is id-only, so no collision.
+  ["customer_price_level_assignments", "customer_id"],
   ["field_ticket_policies", "customer_party_id"],
   ["field_tickets", "foreman_party_id"],
   ["fixed_assets", "custodian_party_id"],
+  ["item_price_schedules", "customer_id"],
   ["item_rate_book_assignments", "customer_id"],
   ["lien_waivers", "party_id"],
   ["party_bank_accounts", "party_id"],
