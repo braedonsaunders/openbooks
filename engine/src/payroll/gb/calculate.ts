@@ -29,15 +29,19 @@
  *   daily pro-rating ("dividing the annual figures by 365 ... In all cases
  *   the resulting figures should be calculated to the nearest penny. Amounts
  *   of £0.005 or less should be disregarded").
- * - PAYE: HMRC publishes no software rounding rule — the manual tables it
- *   does publish round "taxable pay" down to the pound AND state on their
- *   cover that real-time software employers must not use them ("If you're an
- *   employer operating PAYE in real time you're no longer able to run your
- *   payroll manually and you do not need to use these manual tables. Instead
- *   you should be using software ..."). This engine is that software: it
- *   computes the cumulative liability exactly and rounds the cumulative
- *   figure half-down to the penny, so the year total is rounding-stable and
- *   only each period's split can move ±1p against any alternative rule.
+ * - PAYE: HMRC's "Specification for PAYE Tax Table Routines" (the
+ *   payroll-software spec) governs every rounding step, and this engine
+ *   implements it literally: Taxable Pay to date Un is rounded DOWN to the
+ *   whole pound (Tn) before the formulae (§4.4.4); Income Tests compare the
+ *   unrounded Un against the £1-ceiling Cvalues (Definitions 9–10); each Tax
+ *   Formula computes to 4dp with no correction on the exact thresholds and
+ *   threshold taxes, then floors to the penny (§4.4.4–4.4.5); free and
+ *   additional pay are elapsed × the penny-ceiled Week1/Month1 value with
+ *   the >500 decomposition (§4.3.1–4.3.2); the Maxrate cap floors to the
+ *   penny (§4.5.2). The manual Tax Tables B-D print the Cvalues (Column 1)
+ *   but compute their tax on the exact amounts (§2.5) — pricing the tax
+ *   through the printed £1 figures is pennies off the spec. `gbRoundPennyUnits`
+ *   (half down) below now serves NIC only.
  *
  * Cumulative PAYE needs the complete in-year record. `resolveGbCumulativeBasis`
  * refuses (by name) exactly the cases no product record can price: a P45
@@ -173,11 +177,11 @@ export function calculateGbNic(input: {
 }
 
 /**
- * Liability on taxable pay units across a transcribed band table. Every rate
- * here is a whole percent parsed exactly (no float ever prices money); the
- * only rounding in the pack is the penny rounding at the PAYE entry point.
- * The tops here are ANNUAL (a full year's taxable pay): period and
- * to-date pricing goes through `gbPeriodicLiabilityUnits` below, never here.
+ * Liability on ANNUAL taxable pay units across a transcribed band table, in
+ * 1e4 units. Annual semantics only: a full year's taxable pay (the
+ * K475/1257L goldens price here). Every rate is a whole percent parsed
+ * exactly — no float ever prices money. Period and to-date pay prices
+ * through the spec Tax Formulae (`gbSpecTaxToDateUnits`) below, never here.
  */
 function gbBandedLiabilityUnits(
   bands: readonly { upTo: string | null; rate: string }[],
@@ -198,121 +202,166 @@ function gbBandedLiabilityUnits(
   return liability;
 }
 
-/**
- * One band top pro-rated to the elapsed part of the year, in 1e4 units.
- *
- * HMRC prices PAYE against the elapsed fraction of the annual bands, not the
- * annual bands themselves: a non-cumulative (W1/M1) period sees 1/P of each
- * band, and a cumulative period sees elapsed/P (HMRC Taxable Pay Tables B-D,
- * "Manual Method": each month/week row carries its own Column 1 — the
- * cumulative basic-rate limit to date — e.g. April 2023 edition p.4, English
- * monthly: 3142, 6284, 9425 ... 37700; weekly: 725, 1450 ... 37700. The
- * annual bands there are £37,700/£125,140, frozen ever since, so the rows
- * pin the 2026/27 method too).
- *
- * Rounding is CEILING to the whole pound, read off those rows, not assumed:
- * 37,700 × 2/12 = 6,283.33 rounds to 6,284 (month 2),
- * 125,140 × 1/12 = 10,428.33 rounds to 10,429 (higher month 1), and the
- * Scottish starter rows (p.12: 181, 361, 541 ... — 2,162 × 2/12 = 360.33
- * rounds to 361) agree. Round-half-up would give 6,283 / 10,428 / 360, so
- * the tables discriminate and ceiling wins. Exact annual figures stay exact
- * (month 12 is the annual band to the pound).
- */
-export function gbPeriodicBandTopUnits(
-  annualUpTo: string,
-  periodsPerYear: number,
-  elapsed: number,
-): bigint {
-  if (!Number.isInteger(periodsPerYear) || periodsPerYear <= 0) {
-    throw new PayrollPackError(`GB PAYE bands need a positive integer periods-per-year, got ${periodsPerYear}`);
-  }
-  if (!Number.isInteger(elapsed) || elapsed <= 0) {
-    throw new PayrollPackError(`GB PAYE bands need a positive integer elapsed-period count, got ${elapsed}`);
-  }
-  // Week 53 (a 53-week year) prices against the annual bands: there is no
-  // 53rd slice of free pay or band, so the elapsed fraction clamps at one.
-  const capped = Math.min(elapsed, periodsPerYear);
-  const num = annualUnits(annualUpTo) * BigInt(capped);
-  const den = BigInt(periodsPerYear) * 10_000n;
-  return ((num + den - 1n) / den) * 10_000n;
+/** Floor non-negative 1e4 units down to the whole pound. */
+function gbFloorPoundUnits(units: bigint): bigint {
+  return (units / 10_000n) * 10_000n;
+}
+
+/** Floor non-negative 1e4 units down to the penny. */
+function gbFloorPennyUnits(units: bigint): bigint {
+  return (units / 100n) * 100n;
 }
 
 /**
- * Liability on taxable pay units across pro-rated band tops: each annual
- * `upTo` scaled to ceiling(annual × elapsed / P) whole pounds, widths
- * derived top-minus-previous-top. Non-cumulative prices with elapsed 1;
- * cumulative with the tax month/week number.
+ * Ceiling an exact non-negative rational num/den (1e4 units per £1) up to
+ * the penny, in one division: flooring first and then ceiling can mis-ceil
+ * when the fraction sits within a unit above a penny boundary, so the
+ * ceiling is taken on the unrounded quotient.
  */
-function gbPeriodicLiabilityUnits(
+function gbCeilPennyQuotientUnits(num: bigint, den: bigint): bigint {
+  return ((num + den * 100n - 1n) / (den * 100n)) * 100n;
+}
+
+function gbSpecPeriodGuard(periodsPerYear: number, elapsed: number): void {
+  if (periodsPerYear !== 12 && periodsPerYear !== 52) {
+    throw new PayrollPackError(
+      `GB PAYE runs on weekly or monthly payrolls only (periods-per-year ${periodsPerYear}): `
+      + "the software spec's tax routines are weekly/monthly tables, anything else defers to "
+      + "the CWG2 week/month mapping, which this pack has not transcribed",
+    );
+  }
+  if (!Number.isInteger(elapsed) || elapsed < 1 || elapsed > periodsPerYear) {
+    throw new PayrollPackError(`GB PAYE needs an elapsed-period count within the year, got ${elapsed}`);
+  }
+}
+
+/**
+ * A spec Cvalue (Definition 10): the Income-Test top for one annual band at
+ * elapsed/P of the year — the exact threshold (Definition 9, cumulative
+ * bandwidth × n / 52 or /12, 4dp, no correction) rounded UP to the whole
+ * pound where needed. These are the round-pound Column 1 figures in the
+ * manual Tax Tables C (month-1 basic £3,142, month-2 £6,284, higher month-1
+ * £10,429, week-1 £725) — but the tax itself is NEVER priced through them
+ * (§2.5: "the amount of tax is correctly computed on the exact amounts").
+ * Cvalues choose the formula; exact thresholds price it.
+ */
+export function gbCvalueUnits(annualUpTo: string, periodsPerYear: number, elapsed: number): bigint {
+  gbSpecPeriodGuard(periodsPerYear, elapsed);
+  const num = annualUnits(annualUpTo) * BigInt(elapsed);
+  const den = BigInt(periodsPerYear);
+  // Ceiling on the unrounded quotient: flooring to 4dp first can mis-ceil
+  // when the fraction sits within a unit above a pound boundary.
+  return ((num + den * 10_000n - 1n) / (den * 10_000n)) * 10_000n;
+}
+
+/**
+ * Tables-A value (free pay for suffix codes, additional pay for K codes) for
+ * week/month `elapsed`: elapsed × the Week1/Month1 value, per §4.3.1–4.3.2.
+ * The Week1 value is the code's annual value / 52 rounded UP to the penny
+ * (Month1: /12); codes over 500 decompose into the ≤500 remainder value
+ * plus quotient × £96.16 weekly / £416.67 monthly (§4.3.1c iv), each part
+ * already rounded so the sum takes no further rounding. The annual value is
+ * (number × 10) + 9 for free pay, number × 10 for additional pay (K codes
+ * take no top-up — the code note prices each K unit at £10). Code 0 prices
+ * zero (§4.3.1a). Only weekly/monthly payrolls: the spec has no other
+ * tables (§13 defers to the CWG2 week/month mapping).
+ */
+export function gbTablesAValueUnits(
+  codeNumber: number,
+  periodsPerYear: number,
+  elapsed: number,
+  kind: "free" | "additional",
+): bigint {
+  gbSpecPeriodGuard(periodsPerYear, elapsed);
+  if (!Number.isSafeInteger(codeNumber) || codeNumber < 0) {
+    throw new PayrollPackError(`GB Tables-A value needs a non-negative code number, got ${codeNumber}`);
+  }
+  if (codeNumber === 0) return 0n;
+  const quotient = Math.floor((codeNumber - 1) / 500);
+  const remainder = ((codeNumber - 1) % 500) + 1;
+  const remainderAnnual = BigInt(remainder * 10 + (kind === "free" ? 9 : 0)) * 10_000n;
+  const chunk = periodsPerYear === 52 ? 9_616_00n : 41_667_00n;
+  const first = gbCeilPennyQuotientUnits(remainderAnnual, BigInt(periodsPerYear))
+    + BigInt(quotient) * chunk;
+  return first * BigInt(elapsed);
+}
+
+/**
+ * Tax to date (spec value Ln) on UNROUNDED taxable pay to date Un, through
+ * one year's transcribed bands, at elapsed/P of the year — the Stage-3 Tax
+ * Formulae (§4.4.4–4.4.5, summary Appendix E):
+ *
+ * - Income Tests run on Un against the Cvalues (Definition 10): the first
+ *   band whose Cvalue reaches Un selects the formula.
+ * - The selected formula prices Tn — Un rounded DOWN to the whole pound —
+ *   through the EXACT thresholds (Definition 9: cumulative bandwidth × n /
+ *   P, 4dp, no correction) and threshold taxes (Definition 11, likewise):
+ *   Ln = k + (Tn − c) × rate, computed to 4dp with no correction.
+ * - Ln is floored to the penny (§4.4.4: "round down the result if necessary
+ *   to the nearest multiple of 1p below").
+ *
+ * The transcribed tables start at the first chargeable band, but the spec's
+ * band 1 is the zero-width 10% starting band (B1 = 0 in every transcribed
+ * year and region), so its test (Un ≤ 0) never fires for the Un > 0 this
+ * function receives and its formula (0 + Tn × R1) is subsumed by the first
+ * transcribed band priced from the (0, 0) origin below. The §16.2 refined
+ * formulae are deliberately NOT used (§16.4: "their use is not recommended").
+ */
+function gbSpecTaxToDateUnits(
+  unUnits: bigint,
   bands: readonly { upTo: string | null; rate: string }[],
-  taxableUnits: bigint,
   periodsPerYear: number,
   elapsed: number,
 ): bigint {
-  if (taxableUnits <= 0n) return 0n;
-  let remaining = taxableUnits;
-  let liability = 0n;
-  let lower = 0n;
+  gbSpecPeriodGuard(periodsPerYear, elapsed);
+  if (unUnits <= 0n) return 0n;
+  const tn = gbFloorPoundUnits(unUnits);
+  let prevThreshold = 0n;
+  let prevThresholdTax = 0n;
+  let cumTop = 0n;
+  let cumTax = 0n;
   for (const band of bands) {
-    if (remaining <= 0n) break;
-    const width = band.upTo == null
-      ? null
-      : gbPeriodicBandTopUnits(band.upTo, periodsPerYear, elapsed) - lower;
-    const inBand = width == null ? remaining : (remaining < width ? remaining : (width < 0n ? 0n : width));
-    liability += applyRate(inBand, band.rate);
-    remaining -= inBand;
-    if (width != null) lower += width > 0n ? width : 0n;
+    if (band.upTo != null) {
+      const top = annualUnits(band.upTo);
+      cumTax += applyRate(top - cumTop, band.rate);
+      cumTop = top;
+      const threshold = (cumTop * BigInt(elapsed)) / BigInt(periodsPerYear);
+      const thresholdTax = (cumTax * BigInt(elapsed)) / BigInt(periodsPerYear);
+      // The Cvalue ceilings the unrounded threshold, never the truncated one.
+      const rawTop = cumTop * BigInt(elapsed);
+      const cvalue = ((rawTop + BigInt(periodsPerYear) * 10_000n - 1n)
+        / (BigInt(periodsPerYear) * 10_000n)) * 10_000n;
+      if (unUnits <= cvalue) {
+        return gbFloorPennyUnits(prevThresholdTax + applyRate(tn - prevThreshold, band.rate));
+      }
+      prevThreshold = threshold;
+      prevThresholdTax = thresholdTax;
+    }
   }
-  return liability;
+  const top = bands[bands.length - 1];
+  if (top == null || top.upTo != null) {
+    throw new PayrollPackError("GB PAYE bands must end in one open top band");
+  }
+  return gbFloorPennyUnits(prevThresholdTax + applyRate(tn - prevThreshold, top.rate));
 }
 
 /**
  * rUK liability on ANNUAL taxable pay units, priced from the given year's
- * bands. Annual semantics only: a full year's taxable pay (the K475/1257L
- * goldens below price here). Period and to-date pay prices through
- * `gbRukPeriodicLiabilityUnits`, never here.
+ * bands. Annual semantics only (the K475/1257L annual goldens price here).
+ * Welsh C-prefix codes price here too — the Welsh bands are identical.
  */
 export function gbRukLiabilityUnits(taxableUnits: bigint, tables: GbYearTables = GB_2026_TABLES): bigint {
   return gbBandedLiabilityUnits(tables.rukBands, taxableUnits);
 }
 
 /**
- * rUK liability on a period's (non-cumulative, elapsed 1) or to-date
- * (cumulative, elapsed = tax month/week number) taxable pay: each annual
- * band pro-rated to ceiling(annual × elapsed / P) whole pounds. Welsh
- * C-prefix codes price here too — the Welsh bands are identical to rUK.
- */
-export function gbRukPeriodicLiabilityUnits(
-  taxableUnits: bigint,
-  periodsPerYear: number,
-  elapsed: number,
-  tables: GbYearTables = GB_2026_TABLES,
-): bigint {
-  return gbPeriodicLiabilityUnits(tables.rukBands, taxableUnits, periodsPerYear, elapsed);
-}
-
-/**
- * Scottish liability on taxable pay units, priced from the given year's
- * starter..top bands. NIC is untouched — it remains reserved and UK-wide,
- * so only the PAYE entry point below selects this table (never the NIC one).
+ * Scottish liability on ANNUAL taxable pay units, priced from the given
+ * year's starter..top bands. NIC is untouched — it remains reserved and
+ * UK-wide, so only the PAYE entry point below selects this table (never the
+ * NIC one).
  */
 export function gbSctLiabilityUnits(taxableUnits: bigint, tables: GbYearTables = GB_2026_TABLES): bigint {
   return gbBandedLiabilityUnits(tables.sctBands, taxableUnits);
-}
-
-/**
- * Scottish liability on a period's or to-date taxable pay, pro-rated exactly
- * like the rUK twin above but through the starter..top bands. NIC is
- * untouched — it remains reserved and UK-wide, so only the PAYE entry point
- * below selects this table (never the NIC one).
- */
-export function gbSctPeriodicLiabilityUnits(
-  taxableUnits: bigint,
-  periodsPerYear: number,
-  elapsed: number,
-  tables: GbYearTables = GB_2026_TABLES,
-): bigint {
-  return gbPeriodicLiabilityUnits(tables.sctBands, taxableUnits, periodsPerYear, elapsed);
 }
 
 /** HMRC tax-month number (1–12) for a pay date in 2026/27. Month 1 = 6 Apr–5 May. */
@@ -334,25 +383,6 @@ export function gbTaxWeekNumber(payDate: string, yearStart: string = GB_TAX_YEAR
     Number(payDate.slice(0, 4)), Number(payDate.slice(5, 7)) - 1, Number(payDate.slice(8, 10)),
   );
   return Math.floor((day - start) / (7 * 86_400_000)) + 1;
-}
-
-/**
- * Cumulative free pay for a suffix code: the CODE's annual free pay
- * (number × 10 + 9 — 1257L carries £12,579, not the £12,570 Personal
- * Allowance; see `freePayAnnual`) × elapsed / P, capped at annual. The
- * table's personal allowance never enters: today only 1257L/0T parse so the
- * two coincide all but £9, but the code is authoritative (PAYE70025: free
- * pay "is a proportion of the employee's maximum tax allowance which is
- * reflected in the code").
- */
-function cumulativeFreePayUnits(
-  periodsPerYear: number,
-  elapsed: number,
-  freePayAnnual: string,
-): bigint {
-  const annual = annualUnits(freePayAnnual);
-  const free = (annual * BigInt(elapsed)) / BigInt(periodsPerYear);
-  return free > annual ? annual : free;
 }
 
 export type GbStarterDeclaration = "A" | "B" | "C" | null;
@@ -405,16 +435,37 @@ export interface GbPayeResult {
 }
 
 /**
- * One period of rUK PAYE for an operated code.
+ * One period of PAYE for an operated code, priced by HMRC's "Specification
+ * for PAYE Tax Table Routines" (the payroll-software spec):
  *
- * periodPay is the period's taxable pay (income + non-periodic − pre-tax
- * pension, derived by the caller); priors are the in-year sums from committed
- * stubs. Cumulative codes price (priors + period) through the bands and
- * deduct what is already paid; period-only codes price the period alone.
- * K codes add number×10 across the year and cap the period deduction at half
- * of period gross pay. The 50%-of-pay cap is HMRC's ("You should not deduct
- * more than 50% of your employees pay in tax", Tax Tables B-D; "cannot be
- * more than half an employee's pre-tax pay", tax-code letters page).
+ * - periodPay is the period's taxable pay (income + non-periodic − pre-tax
+ *   pension, derived by the caller); priors are the in-year sums from
+ *   committed stubs.
+ * - Cumulative suffix/K codes (§4): free/additional pay to date from Tables
+ *   A (§4.3.1: elapsed × the ceiled Week1/Month1 value), Taxable Pay to date
+ *   Un (§4.3.3), tax to date Ln from the Stage-3 formulae (§4.4.4–4.4.5),
+ *   due = Ln − tax already paid (Stage 4).
+ * - Non-cumulative codes (§8) price exactly as Week 1/Month 1 (§8.1–8.3):
+ *   elapsed 1, no priors, no carry-forward of any capped amount.
+ * - A week-53 payment on a cumulative code prices non-cumulatively on the
+ *   Week 1 tables (§14: "Tables for Weeks 1, 2 or 4 as appropriate on a
+ *   non-cumulative basis" — a weekly payroll's extra payment covers one
+ *   week, so Week 1; monthly payrolls have no week 53).
+ * - The regulatory Maxrate cap (§4.5.2, M = 50%: Ln may not exceed
+ *   L(n−1) + 50% × (pay − payrolled benefits)) applies to every banded
+ *   path: here due = min(due, floor(50% × period gross)), and any unrelieved
+ *   amount carries forward automatically because the next period deducts
+ *   from what was actually paid. There is no payrolled-benefits channel, so
+ *   the cap base is the whole period gross pay. Flat-rate codes need no cap:
+ *   48% is the highest flat rate, below Maxrate by construction.
+ *   Negative pay is refused at entry, so §4.5.4 (negative pay forces the
+ *   limit to zero) is unreachable.
+ * - Flat-rate codes (BR/D0/D1, SBR/SD0–SD3) operate period-basis per §9
+ *   (payment floored to £1, rate applied, result floored to 1p). The
+ *   cumulative flat operation (§5/§6, taxing cumulative pay to date less
+ *   prior paid) has no channel here — flat codes never read priors — so for
+ *   varying pay with pennies this path can differ pennies from §5; steady
+ *   pay telescopes identically.
  */
 export function calculateGbPaye(input: {
   code: GbTaxCode;
@@ -429,8 +480,12 @@ export function calculateGbPaye(input: {
 }): GbPayeResult {
   const { code, payDate, periodsPerYear } = input;
   const tables = input.tables ?? GB_2026_TABLES;
-  if (!Number.isInteger(periodsPerYear) || periodsPerYear <= 0) {
-    throw new PayrollPackError(`GB PAYE needs a positive integer periods-per-year, got ${periodsPerYear}`);
+  if (periodsPerYear !== 12 && periodsPerYear !== 52) {
+    throw new PayrollPackError(
+      `GB PAYE runs on weekly or monthly payrolls only (periods-per-year ${periodsPerYear}): `
+      + "the software spec's tax routines are weekly/monthly tables, anything else defers to "
+      + "the CWG2 week/month mapping, which this pack has not transcribed",
+    );
   }
   const period = toUnits(input.periodPay);
   const priorPay = toUnits(input.priorTaxablePay);
@@ -446,88 +501,67 @@ export function calculateGbPaye(input: {
     return { tax: "0.0000", periodTaxablePay: input.periodPay, periodAddedPay: "0.0000" };
   }
   if (code.kind === "flat") {
-    // The rate rides the code itself (Tables B): SBR/SD0–SD3 carry their
-    // Scottish rates, BR/D0/D1 their rUK ones — no table lookup here.
-    const tax = gbRoundPennyUnits(applyRate(period, code.rate));
+    // §9.1–9.2: the payment floored to the whole pound, the whole of it at
+    // the code's rate, the result floored to the penny. The rate rides the
+    // code itself: SBR/SD0–SD3 carry Scottish rates, BR/D0/D1 rUK ones.
+    const tax = gbFloorPennyUnits(applyRate(gbFloorPoundUnits(period), code.rate));
     return { tax: fromUnits(tax), periodTaxablePay: input.periodPay, periodAddedPay: "0.0000" };
   }
   // Scottish-taxpayer status follows the S-prefix code (the employee's main
   // home is in Scotland — letters page), so the CODE selects the band table:
-  // S1257L prices through the Scottish starter..top bands, everything else
-  // through rUK. The free-pay schedule is shared (£12,570 reserved
-  // allowance); only the bands differ. NIC never reaches this selector.
-  // The bands — and the free-pay allowance below — come from the year's
-  // tables (2026/27 when omitted), so a prior-year correction prices that
-  // year's bands, never the current year's.
-  // Bands are pro-rated to the elapsed part of the year (HMRC Taxable Pay
-  // Tables B-D Column 1): a non-cumulative period prices through 1/P of each
-  // band, a cumulative one through elapsed/P. Pricing period or to-date pay
-  // through the ANNUAL bands instead under-withholds every higher-rate
-  // earner before month 12 — e.g. 1257L £10,000 in month 1 withheld ~£1,790
-  // (all 20%) where HMRC takes ~£2,952 (see gbPeriodicBandTopUnits).
-  const bandLiability = code.scottish
-    ? (units: bigint, elapsedPeriods: number) =>
-      gbSctPeriodicLiabilityUnits(units, periodsPerYear, elapsedPeriods, tables)
-    : (units: bigint, elapsedPeriods: number) =>
-      gbRukPeriodicLiabilityUnits(units, periodsPerYear, elapsedPeriods, tables);
+  // S-codes price through the Scottish starter..top bands, everything else
+  // (including Welsh C-prefix codes, whose bands are identical to rUK)
+  // through rUK. The bands come from the year's tables (2026/27 when
+  // omitted), so a prior-year correction prices that year's bands, never the
+  // current year's. NIC never reaches this selector.
+  const bands = code.scottish ? tables.sctBands : tables.rukBands;
+  // The 50%-of-pay regulatory cap (§4.5.2, M = 50%), floored to the penny
+  // like every formula result. `due` below is already penny-exact.
+  const maxrateCap = gbFloorPennyUnits(gross / 2n);
+  const cap = (due: bigint): bigint => (due > maxrateCap ? maxrateCap : due);
 
-  const cumulative = !code.nonCumulative;
-  if (cumulative && periodsPerYear !== 12 && periodsPerYear !== 52) {
-    throw new PayrollPackError(
-      `GB cumulative PAYE runs on weekly or monthly payrolls only (periods-per-year ${periodsPerYear}): `
-      + "the free-pay/add-pay schedule follows HMRC's published tax weeks and months",
-    );
-  }
-
-  if (!cumulative) {
-    if (code.kind === "k") {
-      const added = (toUnits(code.addedAnnual) / BigInt(periodsPerYear));
-      const taxable = period + added;
-      let tax = gbRoundPennyUnits(bandLiability(taxable < 0n ? 0n : taxable, 1));
-      const cap = gross / 2n;
-      if (tax > cap) tax = cap;
-      return {
-        tax: fromUnits(tax),
-        periodTaxablePay: input.periodPay,
-        periodAddedPay: fromUnits(added),
-      };
-    }
-    const allowance = code.kind === "suffix" ? toUnits(code.freePayAnnual) : 0n;
-    const free = allowance / BigInt(periodsPerYear);
-    const taxable = period - free;
-    const tax = gbRoundPennyUnits(bandLiability(taxable < 0n ? 0n : taxable, 1));
-    return { tax: fromUnits(tax), periodTaxablePay: input.periodPay, periodAddedPay: "0.0000" };
-  }
+  const priceUnrounded = (unUnits: bigint, elapsed: number): bigint =>
+    gbSpecTaxToDateUnits(unUnits, bands, periodsPerYear, elapsed);
 
   const elapsed = periodsPerYear === 12
     ? gbTaxMonthNumber(payDate)
     : gbTaxWeekNumber(payDate, tables.yearStart);
-  if (code.kind === "k") {
-    const addedAnnual = toUnits(code.addedAnnual);
-    const addedToDate = (addedAnnual * BigInt(elapsed)) / BigInt(periodsPerYear);
-    const addedPeriod = addedToDate - priorAdded;
-    const cumTaxable = priorPay + period + addedToDate;
-    const cumLiability = gbRoundPennyUnits(bandLiability(cumTaxable < 0n ? 0n : cumTaxable, elapsed));
-    let due = cumLiability - priorPaid;
-    const cap = gross / 2n;
-    if (due > cap) due = cap;
+  // Week 53 (§14) and W1/M1/X markers (§8) both price non-cumulatively on
+  // the week/month-1 tables: elapsed 1, priors ignored, no carry-forward.
+  const periodOnly = code.nonCumulative || elapsed > periodsPerYear;
+  if (periodOnly) {
+    if (code.kind === "k") {
+      const added = gbTablesAValueUnits(code.number, periodsPerYear, 1, "additional");
+      return {
+        tax: fromUnits(cap(priceUnrounded(period + added, 1))),
+        periodTaxablePay: input.periodPay,
+        periodAddedPay: fromUnits(added),
+      };
+    }
+    const free = gbTablesAValueUnits(code.number, periodsPerYear, 1, "free");
     return {
-      tax: fromUnits(due),
+      tax: fromUnits(cap(priceUnrounded(period - free, 1))),
+      periodTaxablePay: input.periodPay,
+      periodAddedPay: "0.0000",
+    };
+  }
+
+  if (code.kind === "k") {
+    const addedToDate = gbTablesAValueUnits(code.number, periodsPerYear, elapsed, "additional");
+    const addedPeriod = addedToDate - priorAdded;
+    const cumLiability = priceUnrounded(priorPay + period + addedToDate, elapsed);
+    return {
+      tax: fromUnits(cap(cumLiability - priorPaid)),
       periodTaxablePay: input.periodPay,
       periodAddedPay: fromUnits(addedPeriod < 0n ? 0n : addedPeriod),
     };
   }
   // Flat, none and K codes all returned above: only a suffix code reaches
-  // here, so its own free-pay annual prices (never the table's allowance).
-  const free = code.freePayAnnual === "0"
-    ? 0n
-    : cumulativeFreePayUnits(periodsPerYear, elapsed, code.freePayAnnual);
-  const cumPay = priorPay + period;
-  const cumTaxable = cumPay - free;
-  const cumLiability = gbRoundPennyUnits(bandLiability(cumTaxable < 0n ? 0n : cumTaxable, elapsed));
-  const due = cumLiability - priorPaid;
+  // here, priced through its own Tables-A free pay (§4.3.1).
+  const free = gbTablesAValueUnits(code.number, periodsPerYear, elapsed, "free");
+  const cumLiability = priceUnrounded(priorPay + period - free, elapsed);
   return {
-    tax: fromUnits(due),
+    tax: fromUnits(cap(cumLiability - priorPaid)),
     periodTaxablePay: input.periodPay,
     periodAddedPay: "0.0000",
   };

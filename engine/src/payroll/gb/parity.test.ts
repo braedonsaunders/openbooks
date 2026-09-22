@@ -20,7 +20,8 @@ import {
   calculateGbNic,
   calculateGbPaye,
   gbNicThresholdsForPeriod,
-  gbPeriodicBandTopUnits,
+  gbCvalueUnits,
+  gbTablesAValueUnits,
   gbResolveTaxYear,
   gbRoundPennyUnits,
   gbRukLiabilityUnits,
@@ -56,7 +57,7 @@ test("golden: K475 on £27,000 prices £31,750 of taxable income", () => {
   // rates is £6,350.00 of annual liability — the band engine must agree.
   const code = parseGbTaxCode("K475");
   assert.equal(code.kind, "k");
-  assert.equal((code as { addedAnnual: string }).addedAnnual, "4750");
+  assert.equal((code as { number: number }).number, 475);
   assert.equal(gbRukLiabilityUnits(3_175_000_00n), 635_000_00n);
 });
 
@@ -86,11 +87,11 @@ test("golden: Tax Tables B-D BR example £3,200 × 20% = £640.00", () => {
 // Mechanism 2: hand-worked cases (arithmetic shown, engine-independent)
 // ---------------------------------------------------------------------------
 
-test("hand-worked: monthly £4,000 1257L month 3, no priors → £171.05", () => {
-  // Free pay to date = 12,579 × 3/12 = £3,144.75 (the CODE's allowance:
-  // 1257 × 10 + 9 — not the £12,570 Personal Allowance). Cumulative pay
-  // £4,000. Taxable = 4,000 − 3,144.75 = £855.25. 20% = £171.05.
-  // Nothing paid yet.
+test("hand-worked: monthly £4,000 1257L month 3, no priors → £171.00", () => {
+  // Spec §4: free pay to date = 3 × Month1(1257) = 3 × £1,048.26 (Tables A:
+  // 1257 = 2 chunks + remainder 257 → £214.92 + 2 × £416.67). Cumulative pay
+  // £4,000, so Un = £855.22, Tn = £855. Income Test 1: 855.22 ≤ month-3
+  // Cvalue £9,425 → Formula 1: £855 × 20% = £171.00, floored. Nothing paid.
   const result = calculateGbPaye({
     code: parseGbTaxCode("1257L"),
     payDate: "2026-06-06",
@@ -101,7 +102,7 @@ test("hand-worked: monthly £4,000 1257L month 3, no priors → £171.05", () =>
     priorTaxPaid: "0",
     periodGrossPay: "4000",
   });
-  assert.equal(result.tax, "171.0500");
+  assert.equal(result.tax, "171.0000");
 });
 
 test("hand-worked: category-A employer NIC £300/wk → £30.60", () => {
@@ -135,10 +136,13 @@ test("hand-worked: employee NIC crosses PT and UEL", () => {
   );
 });
 
-test("hand-worked: full 2026/27 on £27,000 sums to £2,884.20", () => {
-  // Twelve monthly £2,250 periods, cumulative 1257L. Each month deducts
-  // £240.35 (free 1,048.25/2,096.50/..., taxable 1,201.75/2,403.50/...);
-  // the year telescopes to £14,421 (27,000 − 12,579) × 20% = £2,884.20.
+test("hand-worked: full 2026/27 on £27,000 sums to £2,884.00", () => {
+  // Twelve monthly £2,250 periods, cumulative 1257L. Month 1 deducts £240.20
+  // (free £1,048.26, Un £1,201.74, Tn £1,201 × 20%); later months ripple
+  // ±41p as each month's formula floors independently — the spec prices
+  // every month, it does not copy month 1. The year telescopes to the
+  // annual liability on Tn £14,420 (27,000 − 12 × 1,048.26): × 20% =
+  // £2,884.00.
   const code = parseGbTaxCode("1257L");
   let priorTaxable = "0.0000";
   let priorPaid = "0.0000";
@@ -154,19 +158,19 @@ test("hand-worked: full 2026/27 on £27,000 sums to £2,884.20", () => {
       periodPay: "2250", priorTaxablePay: priorTaxable, priorAddedPay: "0",
       priorTaxPaid: priorPaid, periodGrossPay: "2250",
     });
-    if (index === 0) assert.equal(result.tax, "240.3500");
-    assert.equal(result.tax, "240.3500", `month ${index + 1}`);
+    if (index === 0) assert.equal(result.tax, "240.2000");
     total += BigInt(result.tax.replace(".", ""));
     priorTaxable = `${(Number(priorTaxable) + 2250).toFixed(4)}`;
     priorPaid = `${(Number(priorPaid) + Number(result.tax)).toFixed(4)}`;
   });
-  assert.equal((total / 10000n).toString(), "2884");
-  assert.equal(Number(total % 10000n), 2000);
+  assert.equal(total, 288_400_00n);
 });
 
 test("hand-worked: K code caps the period deduction at half of gross pay", () => {
-  // K2000, month 12, £500 of pay, no priors: added to date £20,000,
-  // cumulative taxable £20,500, liability £4,100 — capped at £250.
+  // K2000, month 12, £500 of pay, no priors: added to date 12 × £1,666.68
+  // (§4.3.1c: remainder 500 → ceiling(5,000/12) + 3 × £416.67) = £20,000.16,
+  // cumulative taxable £20,500.16, liability far above half of pay — the
+  // §4.5.2 Maxrate cap holds the deduction at £250.
   const result = calculateGbPaye({
     code: parseGbTaxCode("K2000"),
     payDate: "2027-03-06",
@@ -206,29 +210,85 @@ test("hand-worked: 0T prices full pay through the bands, NT prices nothing", () 
   assert.equal(nt.tax, "0.0000");
 });
 
-test("golden: pro-rated band tops match HMRC Tax Tables B-D Column 1", () => {
-  // HMRC Taxable Pay Tables B-D ("Manual Method"), April 2023 edition: each
-  // month/week row carries its own Column 1, the cumulative basic-rate limit
-  // to date (p.4, English monthly: 3142, 6284, 9425 ... 37700; weekly: 725,
-  // 1450 ... 37700). The annual bands there are £37,700/£125,140, frozen ever
-  // since, so the rows pin the 2026/27 pro-rating method too. The month-2
-  // figure discriminates the rounding: 37,700 × 2/12 = 6,283.33, and the
-  // table prints 6,284 — ceiling, not round-half-up (which gives 6,283).
-  assert.equal(gbPeriodicBandTopUnits("37700", 12, 1), 314_200_00n);
-  assert.equal(gbPeriodicBandTopUnits("37700", 12, 2), 628_400_00n);
-  assert.equal(gbPeriodicBandTopUnits("37700", 12, 12), 3_770_000_00n);
-  assert.equal(gbPeriodicBandTopUnits("37700", 52, 1), 72_500_00n);
-  assert.equal(gbPeriodicBandTopUnits("125140", 12, 1), 1_042_900_00n);
-  assert.equal(gbPeriodicBandTopUnits("125140", 52, 1), 240_700_00n);
+test("golden: Cvalues match HMRC Tax Tables B-D Column 1", () => {
+  // Spec Definitions 9–10: the Income-Test tops are the exact thresholds
+  // ceiled to the pound. They are the round-pound Column 1 figures in Tax
+  // Tables B-D ("Manual Method"), April 2023 edition (p.4, English monthly:
+  // 3142, 6284, 9425 ... 37700; weekly: 725, 1450 ... 37700 — the annual
+  // bands there are £37,700/£125,140, frozen ever since, so the rows pin the
+  // 2026/27 values too). The month-2 figure discriminates the rounding:
+  // 37,700 × 2/12 = 6,283.33 prints 6,284 — ceiling, not round-half-up.
+  // Cvalues CHOOSE the formula; the tax itself prices through the exact
+  // thresholds (§2.5) — see the £10,000 test below.
+  assert.equal(gbCvalueUnits("37700", 12, 1), 314_200_00n);
+  assert.equal(gbCvalueUnits("37700", 12, 2), 628_400_00n);
+  assert.equal(gbCvalueUnits("37700", 12, 12), 3_770_000_00n);
+  assert.equal(gbCvalueUnits("37700", 52, 1), 72_500_00n);
+  assert.equal(gbCvalueUnits("125140", 12, 1), 1_042_900_00n);
+  assert.equal(gbCvalueUnits("125140", 52, 1), 240_700_00n);
 });
 
-test("golden: 1257L £10,000 in month 1 withholds ~£2,952, not ~£1,790", () => {
+test("golden: Tables-A values follow the §4.3.1 decomposition", () => {
+  // 1257L month 1: 1257 = 2 × 500 + 257 → remainder value
+  // ceiling(2,579/12) = £214.92 plus 2 × £416.67 = £1,048.26. Week 1:
+  // ceiling(2,579/52) = £49.60 plus 2 × £96.16 = £241.92. K475 month 1
+  // (no +9): ceiling(4,750/12) = £395.84. Each verified against the
+  // Tables-A lookup the spec automates (§4.3.1c).
+  assert.equal(gbTablesAValueUnits(1257, 12, 1, "free"), 104_826_00n);
+  assert.equal(gbTablesAValueUnits(1257, 52, 1, "free"), 24_192_00n);
+  assert.equal(gbTablesAValueUnits(1257, 12, 3, "free"), 3n * 104_826_00n);
+  assert.equal(gbTablesAValueUnits(475, 12, 1, "additional"), 39_584_00n);
+  assert.equal(gbTablesAValueUnits(0, 12, 1, "free"), 0n);
+  // Manual Example 3's Tables-A leg (p.4): code 431L at week 11. 431 needs
+  // no decomposition (quotient 0, remainder 431): 11 × ceiling(4,319/52) =
+  // 11 × £83.06 = £913.66 — the figure the example subtracts.
+  assert.equal(gbTablesAValueUnits(431, 52, 11, "free"), 91_366_00n);
+});
+
+test("golden: manual Examples 5 and 6 price through this engine unchanged", () => {
+  // Tax Tables B-D pp.7–8, worked examples on the 2023/24 print (whose rUK
+  // bands match 2026/27). Both use whole-pound taxable pay with no free pay,
+  // so a 0T month-4 period replays them exactly:
+  // - Example 5: Tn £20,300 → Formula 2 on the exact month-4 threshold
+  //   (£12,566.6666) and threshold tax (£2,513.3333): £2,513.3333 +
+  //   (20,300 − 12,566.6666) = 7,733.3334 × 40% = £3,093.3333 → £5,606.6666
+  //   floored to £5,606.66 (the example's £3,093.20 + £2,513.46).
+  // - Example 6: Tn £49,214 → Formula 3 on £41,713.3333 / £14,172.00:
+  //   £14,172.00 + (49,214 − 41,713.3333) = 7,500.6667 × 45% = £3,375.30 →
+  //   £17,547.30 (the example's £3,375.00 + £14,172.30).
+  const ex5 = calculateGbPaye({
+    code: parseGbTaxCode("0T"),
+    payDate: "2026-07-06",
+    periodsPerYear: 12,
+    periodPay: "20300",
+    priorTaxablePay: "0",
+    priorAddedPay: "0",
+    priorTaxPaid: "0",
+    periodGrossPay: "20300",
+  });
+  assert.equal(ex5.tax, "5606.6600");
+  const ex6 = calculateGbPaye({
+    code: parseGbTaxCode("0T"),
+    payDate: "2026-07-06",
+    periodsPerYear: 12,
+    periodPay: "49214",
+    priorTaxablePay: "0",
+    priorAddedPay: "0",
+    priorTaxPaid: "0",
+    periodGrossPay: "49214",
+  });
+  assert.equal(ex6.tax, "17547.3000");
+});
+
+test("golden: 1257L £10,000 in month 1 withholds £2,952.06", () => {
   // The defect this pins: pricing a month-1 period through the ANNUAL bands
-  // keeps all £8,951.75 (10,000 − 1,048.25) inside the £37,700 basic band and
-  // withholds £1,790.35. HMRC prices month 1 through the month-1 Column 1
-  // (£3,142 basic, £10,429 higher — see the test above): 3,142 × 20% =
-  // £628.40 plus (8,951.75 − 3,142) = 5,809.75 × 40% = £2,323.90 → £2,952.30.
-  // (Free pay is the code's £12,579/12 = £1,048.25 — Tables A, PAYE70025.)
+  // withholds ~£1,790 (all 20%). The spec prices month 1 through Formula 2
+  // (§4.4.4): free pay £1,048.26, Un = £8,951.74, Tn = £8,951; Income Test 2
+  // (8,951.74 ≤ higher Cvalue £10,429) selects it. Exact month-1 threshold
+  // 37,700/12 = £3,141.6666 and threshold tax 7,540/12 = £628.3333:
+  // £628.3333 + (8,951 − 3,141.6666) = 5,809.3334 × 40% = £2,323.7333 →
+  // £2,952.0666, floored to £2,952.06. Pricing through the printed £3,142
+  // Cvalue instead gives £2,952.30 — pennies off the spec (§2.5).
   const result = calculateGbPaye({
     code: parseGbTaxCode("1257L"),
     payDate: "2026-04-06",
@@ -239,33 +299,54 @@ test("golden: 1257L £10,000 in month 1 withholds ~£2,952, not ~£1,790", () =>
     priorTaxPaid: "0",
     periodGrossPay: "10000",
   });
-  assert.equal(result.tax, "2952.3000");
+  assert.equal(result.tax, "2952.0600");
 });
 
-test("hand-worked: month-7 cumulative higher earner, £5,000 a month", () => {
-  // Six £5,000 months behind, £5,000 in month 7: cumulative pay £35,000,
-  // free pay to date 12,579 × 7/12 = £7,337.75, taxable £27,662.25. Month-7
-  // Column 1 (ceiling(37,700 × 7/12) = 21,992 basic; ceiling(125,140 × 7/12)
-  // = 72,999 higher): 21,992 × 20% = £4,398.40 plus (27,662.25 − 21,992) =
-  // 5,670.25 × 40% = £2,268.10 → £6,666.50 cumulative; nothing paid yet.
+test("hand-worked: month-7 cumulative higher earner, £10,000 a month", () => {
+  // Six £10,000 months behind (£60,000, £17,714.00 paid — the true chain),
+  // £10,000 in month 7: free pay to date 7 × £1,048.26 = £7,337.82, Un =
+  // £62,662.18, Tn = £62,662. Income Test 2 (62,662.18 ≤ £72,999) selects
+  // Formula 2 on the exact month-7 threshold (37,700 × 7/12 = £21,991.6666)
+  // and threshold tax (7,540 × 7/12 = £4,398.3333): £4,398.3333 +
+  // (62,662 − 21,991.6666) = 40,670.3334 × 40% = £16,268.1333 → £20,666.4666
+  // floored to £20,666.46 to date, less £17,714.00 paid = £2,952.46 due.
   const result = calculateGbPaye({
     code: parseGbTaxCode("1257L"),
     payDate: "2026-10-06",
     periodsPerYear: 12,
-    periodPay: "5000",
-    priorTaxablePay: "30000.0000",
+    periodPay: "10000",
+    priorTaxablePay: "60000.0000",
     priorAddedPay: "0",
-    priorTaxPaid: "0",
-    periodGrossPay: "5000",
+    priorTaxPaid: "17714.0000",
+    periodGrossPay: "10000",
   });
-  assert.equal(result.tax, "6666.5000");
+  assert.equal(result.tax, "2952.4600");
+});
+
+test("hand-worked: week-53 payment prices non-cumulatively on Week 1 (§14)", () => {
+  // 2027-04-05 is week 53 of 2026/27. A cumulative 1257L code still prices
+  // it on the Week 1 tables, non-cumulatively: free £241.92, Un = £2,008.08,
+  // Tn = £2,008; Income Test 2 (2,008.08 ≤ £2,407) selects Formula 2:
+  // week-1 threshold tax 7,540/52 = £145.00 plus (2,008 − 725) = 1,283 × 40%
+  // = £513.20 → £658.20. Priors are ignored even when supplied.
+  const result = calculateGbPaye({
+    code: parseGbTaxCode("1257L"),
+    payDate: "2027-04-05",
+    periodsPerYear: 52,
+    periodPay: "2250",
+    priorTaxablePay: "99999.0000",
+    priorAddedPay: "0",
+    priorTaxPaid: "9999.0000",
+    periodGrossPay: "2250",
+  });
+  assert.equal(result.tax, "658.2000");
 });
 
 test("hand-worked: weekly W1 £2,500 prices through week-1 bands", () => {
-  // Period free 12,579/52 = £241.9038 (truncated at 1e-4); taxable
-  // £2,258.0962. Week-1 Column 1: basic £725, higher ceiling(125,140/52) =
-  // £2,407: 725 × 20% = £145.00 plus (2,258.0962 − 725) = 1,533.0962 × 40%
-  // = £613.2385 → £613.24 → £758.24.
+  // Period free £241.92 (§4.3.1c); Un = £2,258.08, Tn = £2,258. Income
+  // Test 2 (2,258.08 ≤ £2,407) selects Formula 2: week-1 threshold tax
+  // 7,540/52 = £145.00 plus (2,258 − 725) = 1,533 × 40% = £613.20 → £758.20,
+  // floored. Tn truncation of the 8p costs 4p of tax against exact pennies.
   const result = calculateGbPaye({
     code: parseGbTaxCode("1257L W1"),
     payDate: "2026-04-08",
@@ -276,15 +357,15 @@ test("hand-worked: weekly W1 £2,500 prices through week-1 bands", () => {
     priorTaxPaid: "0",
     periodGrossPay: "2500",
   });
-  assert.equal(result.tax, "758.2400");
+  assert.equal(result.tax, "758.2000");
 });
 
-test("hand-worked: full 2026/27 on £60,000 telescopes to £11,428.40", () => {
+test("hand-worked: full 2026/27 on £60,000 telescopes to £11,428.00", () => {
   // Twelve monthly £5,000 periods, cumulative 1257L: the year must telescope
-  // to the annual liability on £47,421 (60,000 − 12,579): 37,700 × 20% =
-  // £7,540 plus 9,721 × 40% = £3,888.40 → £11,428.40. Month 12 prices
-  // through the annual bands exactly, so pro-rating changes the timing,
-  // never the year total.
+  // to the annual liability on Tn £47,420 (60,000 − 12 × 1,048.26):
+  // 37,700 × 20% = £7,540 plus 9,720 × 40% = £3,888 → £11,428.00. Each
+  // month's formula floors independently, so months ripple 952.06–952.47;
+  // only month 1 and the year total are pinned.
   const code = parseGbTaxCode("1257L");
   let priorTaxable = "0.0000";
   let priorPaid = "0.0000";
@@ -300,18 +381,19 @@ test("hand-worked: full 2026/27 on £60,000 telescopes to £11,428.40", () => {
       periodPay: "5000", priorTaxablePay: priorTaxable, priorAddedPay: "0",
       priorTaxPaid: priorPaid, periodGrossPay: "5000",
     });
-    if (index === 0) assert.equal(result.tax, "952.3000");
+    if (index === 0) assert.equal(result.tax, "952.0600");
     total += BigInt(result.tax.replace(".", ""));
     priorTaxable = `${(Number(priorTaxable) + 5000).toFixed(4)}`;
     priorPaid = `${(Number(priorPaid) + Number(result.tax)).toFixed(4)}`;
   });
-  assert.equal(total, 1_142_840_00n);
+  assert.equal(total, 1_142_800_00n);
 });
 
 test("hand-worked: non-cumulative K code prices added pay through month-1 bands", () => {
-  // K475 M1 on £2,250: added pay 4,750/12 = £395.8333, taxable £2,645.8333,
-  // inside the £3,142 month-1 basic band: × 20% = £529.1666 → £529.17. The
-  // 50%-of-pay cap (£1,125) does not bind.
+  // K475 M1 on £2,250: added pay ceiling(4,750/12) = £395.84 (§4.3.1c, no
+  // +9 for K), Un = £2,645.84, Tn = £2,645; Income Test 1 (2,645.84 ≤
+  // £3,142) selects Formula 1: £2,645 × 20% = £529.00, floored. The §4.5.2
+  // cap (£1,125) does not bind.
   const result = calculateGbPaye({
     code: parseGbTaxCode("K475 M1"),
     payDate: "2026-07-06",
@@ -322,13 +404,14 @@ test("hand-worked: non-cumulative K code prices added pay through month-1 bands"
     priorTaxPaid: "0",
     periodGrossPay: "2250",
   });
-  assert.equal(result.tax, "529.1700");
-  assert.equal(result.periodAddedPay, "395.8333");
+  assert.equal(result.tax, "529.0000");
+  assert.equal(result.periodAddedPay, "395.8400");
 });
 
 test("hand-worked: W1 ignores year to date by definition", () => {
   // 1257L W1 on £2,250 with £9,999.99 already (wrongly) paid: period free
-  // 1,048.25, taxable 1,201.75, due £240.35 — priors untouched.
+  // £1,048.26, Un = £1,201.74, Tn = £1,201 → Formula 1: £240.20 — priors
+  // untouched.
   const result = calculateGbPaye({
     code: parseGbTaxCode("1257L W1"),
     payDate: "2027-03-06",
@@ -339,7 +422,7 @@ test("hand-worked: W1 ignores year to date by definition", () => {
     priorTaxPaid: "9999.99",
     periodGrossPay: "2250",
   });
-  assert.equal(result.tax, "240.3500");
+  assert.equal(result.tax, "240.2000");
 });
 
 // ---------------------------------------------------------------------------
@@ -482,11 +565,11 @@ test("sweep: PAYE and NIC never decrease as pay rises, 0 to £20,000 monthly", (
     lastEr = nic.employer;
   }
   // The top of the sweep lands in the additional band. A W1 period prices
-  // through MONTH-1 bands (Column 1: basic £3,142, higher £10,429):
-  // £20,000 − £1,048.25 = £18,951.75 taxable: 3,142 × 20% = £628.40 plus
-  // (10,429 − 3,142) = 7,287 × 40% = £2,914.80 plus (18,951.75 − 10,429) =
-  // 8,522.75 × 45% = £3,835.2375 → £3,835.24 → £7,378.44.
-  assert.equal(lastTax, "7378.4400");
+  // Formula 3 on the exact month-1 threshold (125,140/12 = £10,428.3333)
+  // and threshold tax (42,516/12 = £3,543.00): Un = £18,951.74, Tn =
+  // £18,951; £3,543.00 + (18,951 − 10,428.3333) = 8,522.6667 × 45% =
+  // £3,835.20 → £7,378.20, floored.
+  assert.equal(lastTax, "7378.2000");
 });
 
 // ---------------------------------------------------------------------------

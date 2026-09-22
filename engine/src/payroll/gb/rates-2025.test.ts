@@ -230,10 +230,10 @@ test("2025/26 NIC: weekly £2,300 pays £84.66 employee, £330.60 employer", () 
   assert.equal(result.employer, "330.6000");
 });
 
-test("2025/26 PAYE: monthly £4,000 1257L month 3, no priors → £171.05", () => {
-  // Free pay to date = 12,579 × 3/12 = £3,144.75 (the code's allowance,
-  // shared across years). Taxable = 4,000 − 3,144.75 = £855.25.
-  // 20% = £171.05. Nothing paid yet.
+test("2025/26 PAYE: monthly £4,000 1257L month 3, no priors → £171.00", () => {
+  // Free pay to date = 3 × £1,048.26 = £3,144.78 (Tables A, shared across
+  // years). Un = £855.22, Tn = £855 → Formula 1: £855 × 20% = £171.00,
+  // floored. Nothing paid yet.
   const result = calculateGbPaye({
     code: parseGbTaxCode("1257L"),
     payDate: "2025-06-06",
@@ -245,15 +245,15 @@ test("2025/26 PAYE: monthly £4,000 1257L month 3, no priors → £171.05", () =
     periodGrossPay: "4000",
     tables: GB_2025_TABLES,
   });
-  assert.equal(result.tax, "171.0500");
+  assert.equal(result.tax, "171.0000");
 });
 
-test("2025/26 PAYE: monthly £4,000 S1257L month 3 → £163.98", () => {
-  // Taxable £857.50 through the MONTH-3 bands: the 2025/26 starter band tops
-  // at £2,827, so month 3 allows ceiling(2,827 × 3/12) = £707 at 19%:
-  // 707 × 19% = £134.33 plus (855.25 − 707) = 148.25 × 20% = £29.65 →
-  // £163.98. Pricing through the annual £2,827 band instead keeps it all at
-  // 19% (£162.92) — the pre-pro-rating answer this replaces.
+test("2025/26 PAYE: monthly £4,000 S1257L month 3 → £163.93", () => {
+  // Un = £855.22, Tn = £855. The 2025/26 starter band tops at £2,827, so
+  // month-3 Income Test 1 (855.22 ≤ Cvalue £707) fails and Formula 2 prices
+  // the exact month-3 starter threshold (£706.75) and threshold tax
+  // (537.13 × 3/12 = £134.2825): £134.2825 + (855 − 706.75) = 148.25 × 20%
+  // = £29.65 → £163.9325, floored to £163.93.
   const result = calculateGbPaye({
     code: parseGbTaxCode("S1257L"),
     payDate: "2025-06-06",
@@ -265,7 +265,7 @@ test("2025/26 PAYE: monthly £4,000 S1257L month 3 → £163.98", () => {
     periodGrossPay: "4000",
     tables: GB_2025_TABLES,
   });
-  assert.equal(result.tax, "163.9800");
+  assert.equal(result.tax, "163.9300");
 });
 
 test("2025/26: C1257L prices exactly as 1257L — Wales needs no edition", () => {
@@ -282,7 +282,7 @@ test("2025/26: C1257L prices exactly as 1257L — Wales needs no edition", () =>
     periodGrossPay: "4000",
     tables: GB_2025_TABLES,
   });
-  assert.equal(welsh.tax, "171.0500");
+  assert.equal(welsh.tax, "171.0000");
 });
 
 test("2025/26: BR £3,200 × 20% = £640.00; 1257L X is period-only", () => {
