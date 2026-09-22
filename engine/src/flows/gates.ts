@@ -185,6 +185,22 @@ async function assertGateSubsidiaryScope(
   }
 }
 
+/**
+ * Separation-of-duties identities for a subject: the submitter AND the maker
+ * (author). A third-party submit rebinds submitted_by but never unbinds
+ * authorship — excluding only the submitter lets the maker approve their own
+ * record. Adapters that do not separate the two leave makerUserId unset and
+ * behave exactly as before.
+ */
+export function sodBlockedIds(
+  subject: Pick<FlowSubjectContext, "submitterUserId" | "makerUserId"> | null,
+): ReadonlySet<string> {
+  const ids = new Set<string>();
+  if (subject?.submitterUserId) ids.add(subject.submitterUserId);
+  if (subject?.makerUserId) ids.add(subject.makerUserId);
+  return ids;
+}
+
 /** Viewer-aware decision capability for contextual record drawers. */
 export async function gateDecisionCapability(
   gateId: string,
@@ -203,9 +219,8 @@ export async function gateDecisionCapability(
     return { canAct: false, signatureRequired: gate.signatureRequired };
   }
   const adapter = getFlowAdapter(gate.subjectKind);
-  const submitterUserId =
-    (await adapter?.loadContext(gate.subjectId))?.submitterUserId ?? null;
-  if (submitterUserId === userId) {
+  const subject = await adapter?.loadContext(gate.subjectId);
+  if (subject && sodBlockedIds(subject).has(userId)) {
     const node = await gateNodeData(gate.orgId, gate.flowId, gate.nodeId);
     if (
       adapter?.selfApprovalPolicy === "forbidden" ||
@@ -369,20 +384,26 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0] & {
   }
 
   // Separation of duties, enforced at DECISION time (not just gate creation):
-  // the record's submitter may never decide their own approval — closing the
-  // admin / later-role-grant / delegated-actor bypasses. Secure by default;
-  // only an explicit preventSelfApproval:false on the gate node opts out.
+  // the record's submitter AND its maker may never decide their own approval —
+  // closing the admin / later-role-grant / delegated-actor bypasses, plus the
+  // third-party-submit bypass (submitting rebinds submitted_by but never
+  // unbinds authorship). Secure by default; only an explicit
+  // preventSelfApproval:false on the gate node opts out. Submitting someone
+  // else's draft stays legal — only the decision is refused, so legitimate
+  // teamwork (maker, submitter, and an independent approver) keeps working.
   const preAdapter = getFlowAdapter(pre.subjectKind);
-  const submitterUserId =
-    (await preAdapter?.loadContext(pre.subjectId))?.submitterUserId ?? null;
-  if (submitterUserId && submitterUserId === userId) {
+  const preSubject = await preAdapter?.loadContext(pre.subjectId);
+  if (preSubject && sodBlockedIds(preSubject).has(userId)) {
     const node = await gateNodeData(pre.orgId, pre.flowId, pre.nodeId);
     if (
       preAdapter?.selfApprovalPolicy === "forbidden" ||
       !node ||
       node.preventSelfApproval !== false
     ) {
-      throw new GateError("you cannot approve your own submission");
+      throw new GateError(
+        "you cannot approve your own submission — you created or submitted this record. " +
+          "Route it to another approver to decide.",
+      );
     }
   }
 
@@ -1343,17 +1364,18 @@ async function escalateGate(gateId: string, now: Date): Promise<boolean> {
   const targetCtx = { orgId: gate.orgId, submitterUserId, values };
 
   // escalateTo → submitter's supervisor → org admins. Each stage skips the
-  // submitter whenever separation of duties would block them (the same
-  // predicate decideGate enforces): a replacement the submitter could never
+  // submitter AND the maker whenever separation of duties would block them
+  // (the same predicate decideGate enforces): a replacement neither could
   // decide would strand the gate — replacements carry escalateAt=null, so
   // nothing would ever re-fire it and the run would wait forever.
   const sodApplies =
     adapter?.selfApprovalPolicy === "forbidden" ||
     !nodeGate ||
     nodeGate.preventSelfApproval !== false;
+  const blocked = sodBlockedIds(subject);
   const eligible = (users: ResolvedUser[]) => users.filter((user) =>
     user.id !== gate.assigneeUserId &&
-    !(sodApplies && submitterUserId && user.id === submitterUserId));
+    !(sodApplies && blocked.has(user.id)));
   let replacements = nodeGate?.escalateTo
     ? eligible(await resolveAssigneeUsers([nodeGate.escalateTo], targetCtx))
     : [];
