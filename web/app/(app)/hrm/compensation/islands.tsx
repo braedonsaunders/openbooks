@@ -2,37 +2,23 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { Button, Input, Label, Select, Textarea } from '@openbooks/ui'
-import { readApiErrorMessage } from '../../../../lib/api-error'
+import { useAppAction } from '@/lib/use-app-action'
 
 /**
  * Compensation client islands — one drawer/dialog per mutation, each
- * posting through the same /api/hrm/* routes the API clients use, with
- * refusals rendered as the error (readApiErrorMessage checks res.ok
- * before parsing, so a refusal never becomes a parse error). Every
- * string arrives loader-resolved; closing navigates the URL param away.
+ * posting through the same /api/hrm/* routes the API clients use. Every
+ * mutation runs on the shared action path (useAppAction + fetchAction):
+ * the refusal toasts through the hook and renders inline, busy always
+ * releases, and a refusal never becomes a parse error. Every string
+ * arrives loader-resolved; closing navigates the URL param away.
  */
 
 export interface CompLabels {
   failed: string
   submit: string
   cancel: string
-}
-
-async function postJson(url: string, body: unknown): Promise<{ ok: boolean; error?: string; data?: Record<string, unknown> }> {
-  const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
-  if (!res.ok) return { ok: false, error: await readApiErrorMessage(res, 'Request failed') }
-  return { ok: true, data: (await res.json().catch(() => ({}))) as Record<string, unknown> }
-}
-
-async function patchJson(url: string, action: string, body: unknown): Promise<{ ok: boolean; error?: string }> {
-  const res = await fetch(`${url}?action=${action}`, {
-    method: 'PATCH',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  if (!res.ok) return { ok: false, error: await readApiErrorMessage(res, 'Request failed') }
-  return { ok: true }
 }
 
 function useClose(closeHref: string) {
@@ -63,29 +49,38 @@ export function CycleCreateForm({
   const [kind, setKind] = useState(kinds[0]?.value ?? 'merit')
   const [effectiveOn, setEffectiveOn] = useState('')
   const [currency, setCurrency] = useState('CAD')
-  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Shared action path: the refusal pins and toasts through the hook, and
+  // busy always releases — a dead network can never wedge the button.
+  const { busy, execute } = useAppAction()
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setBusy(true)
     setError(null)
-    const outcome = await postJson('/api/hrm/comp-cycles', {
-      name: name.trim(),
-      kind,
-      effectiveOn: effectiveOn || null,
-      currency: currency.trim().toUpperCase(),
-      guidelineKind: 'matrix',
-      guideline: { rows: [], cols: ['q1', 'q2', 'q3', 'q4'], cells: {}, unratedRow: null },
-    })
-    setBusy(false)
-    if (!outcome.ok) {
-      setError(outcome.error ?? labels.failed)
-      return
-    }
-    const id = (outcome.data?.cycle as { id?: unknown } | undefined)?.id
-    router.push(typeof id === 'string' ? `/hrm/compensation/cycles/${id}` : '/hrm/compensation')
-    router.refresh()
+    await execute(
+      () =>
+        fetchAction<{ cycle?: { id?: unknown } }>('/api/hrm/comp-cycles', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            name: name.trim(),
+            kind,
+            effectiveOn: effectiveOn || null,
+            currency: currency.trim().toUpperCase(),
+            guidelineKind: 'matrix',
+            guideline: { rows: [], cols: ['q1', 'q2', 'q3', 'q4'], cells: {}, unratedRow: null },
+          }),
+        }),
+      {
+        fallbackMessage: labels.failed,
+        onOk: (data) => {
+          const id = data.cycle?.id
+          router.push(typeof id === 'string' ? `/hrm/compensation/cycles/${id}` : '/hrm/compensation')
+          router.refresh()
+        },
+        onRefused: (actionError) => setError(actionError.displayMessage(labels.failed)),
+      },
+    )
   }
 
   return (
@@ -148,25 +143,32 @@ export function LineProposeForm({
   const [pct, setPct] = useState('')
   const [rate, setRate] = useState('')
   const [reason, setReason] = useState('')
-  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { busy, execute } = useAppAction()
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setBusy(true)
     setError(null)
-    const outcome = await patchJson(`/api/hrm/comp-cycles/${cycleId}/lines/${lineId}`, 'propose', {
-      proposedPct: mode === 'pct' && pct !== '' ? Number(pct) : null,
-      proposedRate: mode === 'rate' && rate !== '' ? rate.trim() : null,
-      reason: reason.trim() || null,
-    })
-    setBusy(false)
-    if (!outcome.ok) {
-      setError(outcome.error ?? labels.failed)
-      return
-    }
-    router.push(closeHref)
-    router.refresh()
+    await execute(
+      () =>
+        fetchAction(`/api/hrm/comp-cycles/${cycleId}/lines/${lineId}?action=propose`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            proposedPct: mode === 'pct' && pct !== '' ? Number(pct) : null,
+            proposedRate: mode === 'rate' && rate !== '' ? rate.trim() : null,
+            reason: reason.trim() || null,
+          }),
+        }),
+      {
+        fallbackMessage: labels.failed,
+        onOk: () => {
+          router.push(closeHref)
+          router.refresh()
+        },
+        onRefused: (actionError) => setError(actionError.displayMessage(labels.failed)),
+      },
+    )
   }
 
   return (
@@ -223,21 +225,24 @@ export function LineDecideButtons({
 }) {
   const router = useRouter()
   const [reason, setReason] = useState('')
-  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { busy, execute } = useAppAction()
 
   async function act(action: 'approve' | 'reject' | 'reopen') {
-    setBusy(true)
     setError(null)
-    const outcome = await patchJson(`/api/hrm/comp-cycles/${cycleId}/lines/${lineId}`, action, {
-      reason: reason.trim() || null,
-    })
-    setBusy(false)
-    if (!outcome.ok) {
-      setError(outcome.error ?? labels.failed)
-      return
-    }
-    router.refresh()
+    await execute(
+      () =>
+        fetchAction(`/api/hrm/comp-cycles/${cycleId}/lines/${lineId}?action=${action}`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ reason: reason.trim() || null }),
+        }),
+      {
+        fallbackMessage: labels.failed,
+        onOk: () => router.refresh(),
+        onRefused: (actionError) => setError(actionError.displayMessage(labels.failed)),
+      },
+    )
   }
 
   return (
@@ -280,22 +285,27 @@ export function CycleMoveButtons({
   cancelLabel: string
 }) {
   const router = useRouter()
-  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { busy, execute } = useAppAction()
 
   async function act(action: 'open' | 'submit' | 'push' | 'close' | 'cancel') {
-    setBusy(true)
     setError(null)
-    const outcome = await postJson(`/api/hrm/comp-cycles/${cycleId}`, {
-      action,
-      reason: action === 'cancel' ? 'cancelled from the cycle page' : undefined,
-    })
-    setBusy(false)
-    if (!outcome.ok) {
-      setError(outcome.error ?? labels.failed)
-      return
-    }
-    router.refresh()
+    await execute(
+      () =>
+        fetchAction(`/api/hrm/comp-cycles/${cycleId}`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            action,
+            reason: action === 'cancel' ? 'cancelled from the cycle page' : undefined,
+          }),
+        }),
+      {
+        fallbackMessage: labels.failed,
+        onOk: () => router.refresh(),
+        onRefused: (actionError) => setError(actionError.displayMessage(labels.failed)),
+      },
+    )
   }
 
   return (
@@ -340,26 +350,33 @@ export function PlanCreateForm({
   const [name, setName] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
-  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { busy, execute } = useAppAction()
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setBusy(true)
     setError(null)
-    const outcome = await postJson('/api/hrm/headcount-plans', {
-      name: name.trim(),
-      fiscalPeriodFrom: from || null,
-      fiscalPeriodTo: to || null,
-    })
-    setBusy(false)
-    if (!outcome.ok) {
-      setError(outcome.error ?? labels.failed)
-      return
-    }
-    const id = (outcome.data?.plan as { id?: unknown } | undefined)?.id
-    router.push(typeof id === 'string' ? `/hrm/compensation/plans/${id}` : '/hrm/compensation')
-    router.refresh()
+    await execute(
+      () =>
+        fetchAction<{ plan?: { id?: unknown } }>('/api/hrm/headcount-plans', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            name: name.trim(),
+            fiscalPeriodFrom: from || null,
+            fiscalPeriodTo: to || null,
+          }),
+        }),
+      {
+        fallbackMessage: labels.failed,
+        onOk: (data) => {
+          const id = data.plan?.id
+          router.push(typeof id === 'string' ? `/hrm/compensation/plans/${id}` : '/hrm/compensation')
+          router.refresh()
+        },
+        onRefused: (actionError) => setError(actionError.displayMessage(labels.failed)),
+      },
+    )
   }
 
   return (
@@ -403,20 +420,25 @@ export function PlanLineApproveButton({
   approveLabel: string
 }) {
   const router = useRouter()
-  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { busy, execute } = useAppAction()
   if (lineStatus !== 'proposed') return null
 
   async function approve() {
-    setBusy(true)
     setError(null)
-    const outcome = await postJson(`/api/hrm/headcount-plans/${planId}/lines/${lineId}`, { action: 'approve' })
-    setBusy(false)
-    if (!outcome.ok) {
-      setError(outcome.error ?? labels.failed)
-      return
-    }
-    router.refresh()
+    await execute(
+      () =>
+        fetchAction(`/api/hrm/headcount-plans/${planId}/lines/${lineId}`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ action: 'approve' }),
+        }),
+      {
+        fallbackMessage: labels.failed,
+        onOk: () => router.refresh(),
+        onRefused: (actionError) => setError(actionError.displayMessage(labels.failed)),
+      },
+    )
   }
 
   return (
@@ -447,25 +469,32 @@ export function EquityGenerateForm({
   const [asOf, setAsOf] = useState('')
   const [groupA, setGroupA] = useState('')
   const [groupB, setGroupB] = useState('')
-  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { busy, execute } = useAppAction()
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setBusy(true)
     setError(null)
-    const outcome = await postJson('/api/hrm/pay-gap-snapshots', {
-      asOf: asOf || null,
-      groupA: groupA.trim(),
-      groupB: groupB.trim(),
-    })
-    setBusy(false)
-    if (!outcome.ok) {
-      setError(outcome.error ?? labels.failed)
-      return
-    }
-    router.push('/hrm/compensation/equity')
-    router.refresh()
+    await execute(
+      () =>
+        fetchAction('/api/hrm/pay-gap-snapshots', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            asOf: asOf || null,
+            groupA: groupA.trim(),
+            groupB: groupB.trim(),
+          }),
+        }),
+      {
+        fallbackMessage: labels.failed,
+        onOk: () => {
+          router.push('/hrm/compensation/equity')
+          router.refresh()
+        },
+        onRefused: (actionError) => setError(actionError.displayMessage(labels.failed)),
+      },
+    )
   }
 
   return (
@@ -505,19 +534,24 @@ export function PayInfoRequestButton({
   requestLabel: string
 }) {
   const router = useRouter()
-  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { busy, execute } = useAppAction()
 
   async function request() {
-    setBusy(true)
     setError(null)
-    const outcome = await postJson('/api/hrm/pay-information-requests', { employmentId })
-    setBusy(false)
-    if (!outcome.ok) {
-      setError(outcome.error ?? labels.failed)
-      return
-    }
-    router.refresh()
+    await execute(
+      () =>
+        fetchAction('/api/hrm/pay-information-requests', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ employmentId }),
+        }),
+      {
+        fallbackMessage: labels.failed,
+        onOk: () => router.refresh(),
+        onRefused: (actionError) => setError(actionError.displayMessage(labels.failed)),
+      },
+    )
   }
 
   return (
@@ -553,30 +587,31 @@ export function CompensationSettingsForm({
   const [responseDays, setResponseDays] = useState(initial.responseDays)
   const [rounding, setRounding] = useState(initial.fteRounding)
   const [burden, setBurden] = useState(initial.burdenRate)
-  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { busy, execute } = useAppAction()
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setBusy(true)
     setError(null)
-    const res = await fetch('/api/hrm/compensation-settings', {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        comparisonAttributeKey: attributeKey.trim() || null,
-        gapThresholdPct: threshold.trim() === '' ? null : Number(threshold),
-        responseDays: responseDays.trim() === '' ? null : Number.parseInt(responseDays, 10),
-        fteRounding: rounding,
-        burdenRate: burden.trim() || null,
-      }),
-    })
-    setBusy(false)
-    if (!res.ok) {
-      setError(await readApiErrorMessage(res, labels.failed))
-      return
-    }
-    router.refresh()
+    await execute(
+      () =>
+        fetchAction('/api/hrm/compensation-settings', {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            comparisonAttributeKey: attributeKey.trim() || null,
+            gapThresholdPct: threshold.trim() === '' ? null : Number(threshold),
+            responseDays: responseDays.trim() === '' ? null : Number.parseInt(responseDays, 10),
+            fteRounding: rounding,
+            burdenRate: burden.trim() || null,
+          }),
+        }),
+      {
+        fallbackMessage: labels.failed,
+        onOk: () => router.refresh(),
+        onRefused: (actionError) => setError(actionError.displayMessage(labels.failed)),
+      },
+    )
   }
 
   return (

@@ -7,7 +7,8 @@ import test from "node:test";
 // proves the UI uses the native Drawer + remote SearchSelect (per-query
 // bounded search, selected preserved, stale races dropped), never a custom
 // list/table, with localized labels, accessible controls, and res.ok before
-// parsing plus toast/inline error on save.
+// parsing plus toast/inline error on save (the save itself rides the shared
+// fetchAction/execute path, which owns the ok-first read and the toast).
 const actions = readFileSync(new URL("./UserActions.tsx", import.meta.url), "utf8");
 const sections = readFileSync(new URL("./sections.tsx", import.meta.url), "utf8");
 const view = readFileSync(new URL("./view.ts", import.meta.url), "utf8");
@@ -46,7 +47,8 @@ test("link save reaches the audited endpoint with concurrency, reason, and attes
     "API failure is detected with res.ok before parsing",
   );
   assert.match(actions, /await res\.json\(\)\.catch/, "payload parsing never throws on an error body");
-  assert.match(actions, /toast\.error/, "failures toast through the existing channel");
+  assert.match(actions, /useAppAction/, "the save toasts failures through the shared action path");
+  assert.match(actions, /execute\(/, "the save runs on the shared execute so busy always releases");
   assert.match(actions, /role="alert"/, "failures also render an inline error");
   assert.match(actions, /router\.refresh\(\)/, "success refreshes the native list");
 });

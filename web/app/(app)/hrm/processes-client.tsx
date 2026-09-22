@@ -3,10 +3,10 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
+import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { Button, Label, SearchSelect, Textarea } from '@openbooks/ui'
 import type { ProcessDetail } from '@openbooks/engine/src/hrm/processes-read.ts'
-import { readApiErrorMessage } from '../../../lib/api-error'
+import { useAppAction } from '../../../lib/use-app-action'
 
 /**
  * The checklist drawer body: owners, due dates, evidence, and the
@@ -25,15 +25,13 @@ import { readApiErrorMessage } from '../../../lib/api-error'
 
 type FileOption = { value: string; label: string }
 
-async function readError(res: Response, fallback: string): Promise<string> {
-  return readApiErrorMessage(res, fallback)
-}
-
 export function ProcessChecklistBody({ detail }: { detail: ProcessDetail }) {
   const t = useTranslations('hrm')
   const router = useRouter()
   const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+  // Shared action path: the refusal toasts through the hook and renders
+  // inline, and busy always releases — a dead network can never wedge it.
+  const { busy, execute } = useAppAction()
   const [reason, setReason] = useState('')
   const [reasonFor, setReasonFor] = useState<{ action: 'skip' | 'cancel'; stepId?: string } | null>(null)
   const [attachmentId, setAttachmentId] = useState('')
@@ -61,25 +59,25 @@ export function ProcessChecklistBody({ detail }: { detail: ProcessDetail }) {
   }, [fileQuery])
 
   async function mutate(url: string, body: unknown): Promise<boolean> {
-    setBusy(true)
     setError(null)
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    setBusy(false)
-    if (!res.ok) {
-      const message = await readError(res, t('processes.actionFailed'))
-      setError(message)
-      toast.error(message)
-      return false
-    }
-    setReason('')
-    setReasonFor(null)
-    setAttachmentId('')
-    router.refresh()
-    return true
+    return execute(
+      () =>
+        fetchAction(url, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        }),
+      {
+        fallbackMessage: t('processes.actionFailed'),
+        onOk: () => {
+          setReason('')
+          setReasonFor(null)
+          setAttachmentId('')
+          router.refresh()
+        },
+        onRefused: (actionError) => setError(actionError.displayMessage(t('processes.actionFailed'))),
+      },
+    )
   }
 
   const isOpen = detail.status === 'open'
