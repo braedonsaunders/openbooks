@@ -492,6 +492,11 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // subsidiary's receipt settled another's shortfall (0257, allocated by
     // the fleet coordinator; 0252 through 0256 belong to other lanes).
     "0257_provisional_cost_subsidiary.sql",
+    // Dimension FK backing for the three big ledger tables (journal_lines,
+    // document_lines, time_entries): composite (org_id, fk), partial where
+    // the column is a sparse pointer. Builds CONCURRENTLY (no-transaction
+    // runner mode) so the multi-million-row prod ledger stays writable.
+    "0261_ledger_dimension_fk_indexes.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),

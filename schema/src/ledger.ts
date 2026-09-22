@@ -302,6 +302,26 @@ export const journalLines = pgTable(
     index("jl_org_project").on(t.orgId, t.projectId),
     index("jl_org_party_open").on(t.orgId, t.partyId, t.isOpenItem),
     /**
+     * Dimension FK backing (0261): deleting a department, class, location,
+     * tax code, payment card, or equipment unit fires one FK check per
+     * referencing row — without these, each check scans all of the org's
+     * lines. department/class/location double as P&L filter dimensions
+     * (full); tax/card/equipment ride a few line kinds (partial, proven to
+     * serve both the parameterized FK-check shape and org-scoped filters).
+     */
+    index("jl_org_department").on(t.orgId, t.departmentId),
+    index("jl_org_class").on(t.orgId, t.classId),
+    index("jl_org_location").on(t.orgId, t.locationId),
+    index("jl_org_tax_code")
+      .on(t.orgId, t.taxCodeId)
+      .where(sql`${t.taxCodeId} IS NOT NULL`),
+    index("jl_org_payment_card")
+      .on(t.orgId, t.paymentCardId)
+      .where(sql`${t.paymentCardId} IS NOT NULL`),
+    index("jl_org_equipment_unit")
+      .on(t.orgId, t.equipmentUnitId)
+      .where(sql`${t.equipmentUnitId} IS NOT NULL`),
+    /**
      * "Has this org ever posted foreign currency?" — the multi-currency
      * feature default probes this on every request. Partial, so it is empty
      * for a single-currency tenant and answers the negative case instantly
