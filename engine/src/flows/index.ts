@@ -9,9 +9,16 @@ export {
   FlowRetryError,
   emitStatusChange,
   parseFlowGraph,
+  type RecordFlowRun,
   type RecordFlowsResult,
   type RetryFlowRunResult,
 } from "./run.ts";
+export {
+  FlowDispatchError,
+  cancelDispatchRuns,
+  dispatchFailureReason,
+  findGatingRun,
+} from "./dispatch-result.ts";
 export { executeFlowPlan, type ExecuteFlowPlanResult } from "./execute.ts";
 export {
   submitForApproval,
