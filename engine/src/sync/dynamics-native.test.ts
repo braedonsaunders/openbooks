@@ -67,6 +67,57 @@ test("Dynamics invoices keep tax amounts and codes on their matching detail line
   );
 });
 
+test("Dynamics foreign invoice carries its currency and dated rate, amounts unconverted", () => {
+  const built = buildNativeFromBC(
+    context(),
+    "salesInvoice",
+    {
+      id: "invoice-fx",
+      number: "INV-FX",
+      invoiceDate: "2026-08-27",
+      customerId: "customer-1",
+      currencyCode: "eur",
+      lines: [
+        { lineType: "Account", accountId: "sales-a", amountExcludingTax: 1000, totalTaxAmount: 200, taxCode: "tax-a" },
+      ],
+    },
+    {
+      itemSalesAccount: new Map(),
+      itemPurchaseAccount: new Map(),
+      fxRateFor: (code, date) => (code === "EUR" && date === "2026-08-27" ? "1.5" : null),
+    },
+  );
+
+  assert.ok(!("skip" in built));
+  // €1,000 at 1.5 must post as €1,000 @ 1.5 — never as $1,000 at face value.
+  assert.equal(built.currency, "EUR");
+  assert.equal(built.fxRate, "1.5");
+  assert.equal(built.lines[0]!.amount, "1000.0000");
+  assert.equal(built.lines[0]!.taxAmount, "200.0000");
+});
+
+test("Dynamics foreign invoice without a dated rate refuses with the remedy", () => {
+  const built = buildNativeFromBC(
+    context(),
+    "salesInvoice",
+    {
+      id: "invoice-norate",
+      number: "INV-NORATE",
+      invoiceDate: "2026-08-27",
+      customerId: "customer-1",
+      currencyCode: "EUR",
+      lines: [
+        { lineType: "Account", accountId: "sales-a", amountExcludingTax: 1000, totalTaxAmount: 200, taxCode: "tax-a" },
+      ],
+    },
+    { itemSalesAccount: new Map(), itemPurchaseAccount: new Map() },
+  );
+
+  assert.ok("skip" in built);
+  assert.match(built.skip, /EUR/);
+  assert.match(built.skip, /currencyExchangeRates/);
+});
+
 test("Dynamics tax keeps its sign when one tax code spans a reduction line", () => {
   // +100 with 10 tax and −20 with −2 tax must net to 8 tax, not 12:
   // abs()'ing the tax overstated AR and the tax control.

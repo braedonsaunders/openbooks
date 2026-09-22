@@ -61,6 +61,13 @@ export interface BCDoc {
 }
 
 export interface BCBuildOpts {
+  /**
+   * Dated transaction→base FX rates, resolved by the source from Business
+   * Central `currencyExchangeRates` (the v2.0 document resources expose
+   * `currencyCode` but no rate). Returns the rate as a decimal string, or
+   * null when no usable rate exists for the code on that date.
+   */
+  fxRateFor?: (currencyCode: string, date: string) => string | null;
   /** Item id → its GL posting account id (sales or purchase side by doc kind). */
   itemSalesAccount: Map<string, string>;
   itemPurchaseAccount: Map<string, string>;
@@ -92,12 +99,28 @@ export function buildNativeFromBC(
 
   const docDate = isoDay(t.invoiceDate ?? t.creditMemoDate ?? t.postingDate ?? t.documentDate);
   if (!docDate) return { skip: "missing date" };
+  // BC states the document currency per resource (`currencyCode`; blank means
+  // LCY = the company base) but exposes no rate, so the source resolves the
+  // dated rate from `currencyExchangeRates`. Posting a foreign amount at face
+  // value as base currency would silently misstate it by the whole rate — a
+  // foreign document with no usable rate is unbuildable, never coerced to 1.
+  const currency = (t.currencyCode ?? "").trim().toUpperCase() || ctx.baseCurrency.toUpperCase();
+  let fxRate = "1";
+  if (currency !== ctx.baseCurrency.toUpperCase()) {
+    const rate = opts.fxRateFor?.(currency, docDate) ?? null;
+    if (!rate) {
+      return { skip: `source transaction ${sourceRef} states currency ${currency} with no exchange rate to ${ctx.baseCurrency} on ${docDate} — add the dated rate in Business Central currencyExchangeRates and re-run` };
+    }
+    fxRate = rate;
+  }
   const base = {
     sourceRef,
     // F-t12-004: without this the writer falls back to sourceRef, so the
     // invoice list renders the internal "salesInvoice:<uuid>" as the number.
     documentNumber: t.number ?? null,
     posting: true,
+    currency,
+    fxRate,
     documentDate: docDate,
     dueDate: isoDay(t.dueDate),
     memo: t.externalDocumentNumber ?? null,
