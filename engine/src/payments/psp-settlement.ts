@@ -101,20 +101,52 @@ export interface ParsedSettlement {
 const CHARGEBEE_ZERO_DECIMAL = new Set(["JPY", "KRW", "XAF", "XOF"]);
 
 /**
+ * Shared ISO 4217 shape check behind the provider-named currency refusals.
+ * Trim and uppercase before validating, exactly like the Stripe row parser,
+ * so a padded " jpy " is accepted as JPY and every caller compares one form.
+ */
+function requireSettlementCurrency(
+  code: unknown,
+  missingMessage: string,
+  malformedMessage: string,
+): string {
+  const normalized = typeof code === "string" ? code.trim().toUpperCase() : "";
+  if (normalized === "") {
+    throw new PspSettlementError(missingMessage);
+  }
+  if (!/^[A-Z]{3}$/.test(normalized)) {
+    throw new PspSettlementError(malformedMessage);
+  }
+  return normalized;
+}
+
+/**
  * Chargebee invoices always carry currency_code (Chargebee invoice docs:
  * required ISO 4217 string), so a missing code is refused rather than
  * guessed: defaulting a currency-less JPY payload to USD would convert
  * whole-yen amounts as cents and misbook by 100x.
  */
 function requireChargebeeCurrency(code: unknown): string {
-  const normalized = typeof code === "string" ? code.trim().toUpperCase() : "";
-  if (normalized === "") {
-    throw new PspSettlementError("Chargebee currency_code is required");
-  }
-  if (!/^[A-Z]{3}$/.test(normalized)) {
-    throw new PspSettlementError("Chargebee currency_code must be a three-letter currency code");
-  }
-  return normalized;
+  return requireSettlementCurrency(
+    code,
+    "Chargebee currency_code is required",
+    "Chargebee currency_code must be a three-letter currency code",
+  );
+}
+
+/**
+ * Recurly settlements always carry an explicit currency, so a missing code
+ * is refused rather than defaulted to USD: a default would silently book a
+ * foreign-currency settlement (e.g. whole-yen JPY amounts) as dollars.
+ * The remedy names the import action that re-parses the provider payload,
+ * so the operator can correct the payload and import again.
+ */
+function requireRecurlyCurrency(code: unknown): string {
+  return requireSettlementCurrency(
+    code,
+    "Recurly currency is required; re-import the settlement with an explicit three-letter currency code",
+    "Recurly currency must be a three-letter currency code; re-import the settlement with a corrected currency code",
+  );
 }
 
 function rejectThreeDecimal(field: string, code: string): void {
@@ -336,7 +368,7 @@ export function parseStripeBalanceTransactions(
 export function parseRecurlySettlement(payload: {
   id: string;
   closed_at?: string;
-  currency?: string;
+  currency?: string | null;
   charge_amount?: string | number;
   refund_amount?: string | number;
   fee_amount?: string | number;
@@ -348,7 +380,10 @@ export function parseRecurlySettlement(payload: {
     description?: string;
   }[];
 }, fallbackDate?: string): ParsedSettlement {
-  const currency = (payload.currency ?? "USD").toUpperCase();
+  // Currency is never defaulted: a currency-less payload booked as USD would
+  // silently mislabel every foreign-currency settlement. Same explicit-code
+  // contract as the Stripe and Chargebee parsers.
+  const currency = requireRecurlyCurrency(payload.currency);
   const date = (payload.closed_at ?? fallbackDate ?? new Date().toISOString()).slice(0, 10);
   const lines: ParsedSettlementLine[] = [];
   if (payload.lines?.length) {
