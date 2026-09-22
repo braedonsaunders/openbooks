@@ -29,6 +29,15 @@ export interface FlowSubjectContext {
   values: Record<string, unknown>;
   rows?: Record<string, Array<Record<string, unknown>>>;
   submitterUserId?: string | null;
+  /**
+   * The record's maker (author/creator — documents.created_by), distinct from
+   * whoever submitted it. Populated only by adapters whose record separates
+   * the two; decision-time separation of duties excludes BOTH identities
+   * under the gate's existing self-approval policy, so a third-party submit
+   * can never launder the maker's approval. Submitting someone else's draft
+   * stays legal — only the maker's DECISION is refused.
+   */
+  makerUserId?: string | null;
 }
 
 export interface FlowSubjectAdapter {

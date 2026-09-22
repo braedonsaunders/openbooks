@@ -211,6 +211,10 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
         values,
         rows: { lines: lines as unknown as Array<Record<string, unknown>> },
         submitterUserId: doc.submittedBy ?? doc.createdBy ?? null,
+        // Authorship never rebinds: submitted_by names whoever submitted, so
+        // the maker stays excluded from approving even after a third-party
+        // submit (decision-time separation of duties reads both identities).
+        makerUserId: doc.createdBy ?? null,
       };
     },
 

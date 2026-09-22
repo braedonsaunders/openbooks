@@ -2,6 +2,7 @@ import { sql, type SQL } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import {
   gateSubsidiaryScopeAllows,
+  sodBlockedIds,
   worklistGateKindCounts,
   worklistGates,
   type GateSubsidiaryScope,
@@ -135,6 +136,7 @@ function worklistDocumentWhere(
   return sql`d.org_id = ${orgId} and d.status = 'pending_approval'
     and d.void_requested_at is null
     and (d.submitted_by is null or d.submitted_by <> ${userId})
+    and (d.created_by is null or d.created_by <> ${userId})
     and not exists (
       select 1 from flow_gates g
        where g.org_id = d.org_id and g.subject_id = d.id and g.status = 'pending'
@@ -472,10 +474,11 @@ export async function decideDocumentApproval(
   return withOrgTransaction(orgId, async () => {
     const rows = (await db.execute<{
       id: string; status: string; subsidiaryId: string | null;
-      submittedBy: string | null; voidRequested: boolean;
+      submittedBy: string | null; createdBy: string | null; voidRequested: boolean;
     }>(sql`
       select id, status::text as status, subsidiary_id as "subsidiaryId",
-             submitted_by as "submittedBy", (void_requested_at is not null) as "voidRequested"
+             submitted_by as "submittedBy", created_by as "createdBy",
+             (void_requested_at is not null) as "voidRequested"
         from documents where id = ${documentId} and org_id = ${orgId} for update`)).rows;
     const doc = rows[0];
     if (!doc) throw new DocumentApprovalError("approval not found");
@@ -488,8 +491,14 @@ export async function decideDocumentApproval(
     if (gated) {
       throw new DocumentApprovalError("this approval is routed: decide through the assigned approval");
     }
-    if (doc.submittedBy === userId) {
-      throw new DocumentApprovalError("the submitter cannot approve their own document");
+    // The maker stays excluded even when someone else submitted: authorship
+    // never rebinds, so a third-party submit can never launder the maker's
+    // approval on the direct path either. Same centralized identity set the
+    // routed gate path enforces — one predicate, no maker/submitter drift.
+    if (sodBlockedIds({ submitterUserId: doc.submittedBy, makerUserId: doc.createdBy }).has(userId)) {
+      throw new DocumentApprovalError(
+        "the submitter or author cannot approve their own document — route it to another approver",
+      );
     }
     if (!scopeAllows(allowedSubsidiaryIds, doc.subsidiaryId)) {
       throw new DocumentApprovalError("approval not found");
