@@ -4,10 +4,12 @@ import { z } from 'zod'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
   applyStandaloneCredits,
+  creditSettlementState,
   unapplyCreditSettlement,
 } from '@openbooks/engine/src/payments/credit-settlement.ts'
 import { exactMoney, isoDate, parseJsonBody, uuidId } from '@/lib/api/json'
 import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
+import { isUuid } from '../../../../lib/list-params'
 import { paymentErrorResponse } from '../lib'
 
 export const runtime = 'nodejs'
@@ -55,6 +57,38 @@ async function guardParty(
   if (!party.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
   // Null-subsidiary parties are org-wide, like every other party reader here.
   return guardSubsidiaryScope(gate, party.rows[0].subsidiaryId, { orgWideNull: true })
+}
+
+/**
+ * What a posted credit has settled and what is left to apply. The panel reads
+ * this so its remaining figure and the engine's open-balance check come from
+ * the same rows.
+ */
+export async function GET(req: Request) {
+  const url = new URL(req.url)
+  const side = url.searchParams.get('side')
+  if (side !== 'ap' && side !== 'ar') {
+    return NextResponse.json({ error: 'side must be ap or ar' }, { status: 400 })
+  }
+  const documentId = url.searchParams.get('documentId') ?? ''
+  if (!isUuid(documentId)) {
+    return NextResponse.json({ error: 'documentId is required' }, { status: 400 })
+  }
+  const gate = await guardPermission(side === 'ap' ? 'ap.read' : 'ar.read')
+  if (gate instanceof NextResponse) return gate
+  // Bind the document to the side it claims before reading its settlements:
+  // an AR reader must not learn what a vendor credit paid.
+  const doc = (await db.execute<{ partyId: string | null }>(sql`
+    select party_id as "partyId" from documents
+     where id = ${documentId} and org_id = ${gate.user.orgId}
+       and kind = ${side === 'ap' ? 'vendor_credit' : 'customer_credit'}
+  `))
+  if (!doc.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (doc.rows[0].partyId) {
+    const denied = await guardParty(gate, doc.rows[0].partyId)
+    if (denied) return denied
+  }
+  return NextResponse.json({ state: await creditSettlementState(gate.user.orgId, documentId) })
 }
 
 export async function POST(req: Request) {

@@ -269,5 +269,18 @@
     "deliverHint": "Escribe el archivo bancario de este lote en la carpeta de salida de un servidor SFTP para que el banco lo recoja.",
     "sftpServer": "Servidor SFTP",
     "noSftpServers": "No hay servidores SFTP configurados. Agrega uno en Configuración → Servidores SFTP."
+  },
+  "creditApplications": {
+    "title": "Aplicaciones de la nota de crédito",
+    "remaining": "{amount} pendiente",
+    "apply": "Aplicar a partidas abiertas",
+    "confirmApply": "Aplicar crédito",
+    "release": "Liberar",
+    "document": "Documento",
+    "openAmount": "Abierto",
+    "applyAmount": "Aplicar",
+    "appliedOn": "Aplicado el",
+    "noOpenItems": "Este tercero no tiene partidas abiertas a las que aplicar el crédito.",
+    "nothingSelected": "Introduzca un importe en al menos una partida abierta."
   }
 }

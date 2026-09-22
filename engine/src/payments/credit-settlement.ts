@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
-import { sum } from "../money/money.ts";
+import { fromUnits, sum, toUnits } from "../money/money.ts";
 import { assertPeriodModulesOpen } from "../close/period-policy.ts";
 import { PaymentError } from "./payment-errors.ts";
 import { paymentBookId } from "./payment-accounts.ts";
@@ -33,6 +33,89 @@ import { type CreditAllocationInput, type OpenItemSide } from "./payment-contrac
 
 /** One credit memo line settling one invoice/bill line, in base currency. */
 export type CreditSettlementInput = CreditAllocationInput;
+
+export interface CreditSettlementState {
+  /** The credit's open-item line, or null when the credit is not posted. */
+  lineId: string | null;
+  /** Absolute original amount of the credit's control line. */
+  amount: string;
+  /** Sum of live settlements consuming it. */
+  applied: string;
+  /** amount − applied: what is still available to apply. */
+  open: string;
+  currency: string;
+  settlements: {
+    applicationId: string;
+    documentId: string | null;
+    documentNumber: string | null;
+    documentKind: string | null;
+    documentDate: string | null;
+    amount: string;
+    appliedOn: string;
+  }[];
+}
+
+/**
+ * What a posted credit memo has settled so far, and what is left to apply.
+ *
+ * The panel that applies and releases credits reads this, so its "remaining"
+ * figure and the engine's open-balance check come from the same `applications`
+ * rows rather than two independently drifting summaries.
+ */
+export async function creditSettlementState(
+  orgId: string,
+  documentId: string,
+): Promise<CreditSettlementState | null> {
+  const line = (await db.execute<{
+    id: string; amount: string; currency: string; applied: string;
+  }>(sql`
+    select jl.id, abs(jl.amount)::text as amount, jl.currency,
+           coalesce(ap.applied, 0)::numeric(19,4)::text as applied
+      from journal_lines jl
+      join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
+      left join lateral (
+        select sum(a.source_amount) as applied
+          from applications a
+         where a.from_line_id = jl.id and a.org_id = jl.org_id and a.unapplied_at is null
+      ) ap on true
+     where jl.org_id = ${orgId} and je.source_document_id = ${documentId} and jl.is_open_item
+     limit 1
+  `)).rows[0];
+  if (!line) return null;
+  const settlements = (await db.execute<{
+    application_id: string; document_id: string | null; document_number: string | null;
+    document_kind: string | null; document_date: string | null; amount: string; applied_on: string;
+  }>(sql`
+    select a.id as application_id, settled.id as document_id,
+           settled.document_number, settled.kind as document_kind,
+           settled.document_date::text as document_date,
+           a.amount::text as amount, a.applied_on::text as applied_on
+      from applications a
+      join journal_lines target on target.id = a.to_line_id and target.org_id = a.org_id
+      join journal_entries target_entry
+        on target_entry.id = target.entry_id and target_entry.org_id = a.org_id
+      left join documents settled
+        on settled.id = target_entry.source_document_id and settled.org_id = a.org_id
+     where a.org_id = ${orgId} and a.from_line_id = ${line.id} and a.unapplied_at is null
+     order by a.applied_on desc, a.created_at desc
+  `)).rows;
+  return {
+    lineId: line.id,
+    amount: line.amount,
+    applied: line.applied,
+    open: fromUnits(toUnits(line.amount) - toUnits(line.applied)),
+    currency: line.currency,
+    settlements: settlements.map((row) => ({
+      applicationId: row.application_id,
+      documentId: row.document_id,
+      documentNumber: row.document_number,
+      documentKind: row.document_kind,
+      documentDate: row.document_date,
+      amount: row.amount,
+      appliedOn: row.applied_on,
+    })),
+  };
+}
 
 export interface CreditSettlementResult {
   /** Ids of the `applications` rows written, in input order. */

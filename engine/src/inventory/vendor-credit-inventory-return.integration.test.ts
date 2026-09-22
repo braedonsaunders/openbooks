@@ -163,11 +163,14 @@ test("vendor-return evidence is strict and the documented workflow names its acc
   assert.match(docsSource, /account-only credit/i);
   assert.doesNotMatch(docsSource, /does not currently offer/i);
   assert.doesNotMatch(docsSource, /only in the inventory engine/i);
-  // Still true, so still pinned: the engine can settle a credit that needs no
-  // cash (applyStandaloneCredits), but no operator-facing action reaches it
-  // yet. This assertion is the tripwire for shipping that action and leaving
-  // the article claiming the workflow is missing.
-  assert.match(docsSource, /no cash due cannot be applied on its own/i);
+  // The article used to say a credit that fully offsets a bill "cannot be
+  // applied on its own and may remain open in aging". The Credit applications
+  // panel is that workflow, so the sentence is now false and its replacement
+  // is pinned here — including the property that makes the panel correct
+  // rather than merely present: applying a credit posts no journal entry.
+  assert.doesNotMatch(docsSource, /cannot be applied on its own/i);
+  assert.match(docsSource, /\*\*Credit applications\*\* panel on the credit/i);
+  assert.match(docsSource, /No cash moves and no journal entry is posted/i);
 });
 
 test(

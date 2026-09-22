@@ -276,5 +276,18 @@
     "deliverHint": "将此批次的付款文件投递到银行或合作伙伴的 SFTP 文件夹供其提取。",
     "sftpServer": "SFTP 登录账号",
     "noSftpServers": "暂无 SFTP 登录账号。请在 设置 → SFTP 中添加一个。"
+  },
+  "creditApplications": {
+    "title": "贷项凭证核销",
+    "remaining": "剩余 {amount}",
+    "apply": "核销未结项目",
+    "confirmApply": "核销贷项",
+    "release": "撤销",
+    "document": "单据",
+    "openAmount": "未结",
+    "applyAmount": "核销金额",
+    "appliedOn": "核销日期",
+    "noOpenItems": "该往来单位没有可供核销贷项的未结项目。",
+    "nothingSelected": "请至少为一个未结项目输入金额。"
   }
 }

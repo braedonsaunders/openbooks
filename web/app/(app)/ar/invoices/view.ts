@@ -73,6 +73,7 @@ export interface ArInvoicesDrawer {
   paymentLinks: { documentId: string; canManage: boolean } | null
   allocationsEntryEnabled: boolean
   appliedPayments: { payments: AppliedPayment[]; currency: string } | null
+  creditApplications: { documentId: string; side: 'ap' | 'ar'; partyId: string | null; canApply: boolean } | null
 }
 
 export interface ArInvoicesData {
@@ -191,9 +192,13 @@ export async function loadArInvoices(
   // submittable; unrestricted orgs keep the factory root default.
   const createSeed = isCreate && createKind ? await createDocumentSeed(authz.user.orgId, createKind) : null
 
-  // Active open-item applications into this document's lines (receipts,
-  // credits), so a paid invoice names what paid it instead of showing only
-  // a zero balance.
+  // Active open-item applications INTO this document's lines (receipts,
+  // credits), so a paid invoice names what paid it instead of showing only a
+  // zero balance. The join direction is load-bearing and was inverted: it
+  // matched documents this one SETTLED, which an invoice never does, so the
+  // panel was empty on every invoice it exists for while quietly working on
+  // credit memos. `from_line` is the settling side, `to_line` the item being
+  // settled (schema/src/ledger.ts).
   const appliedRows = drawerOpen && openDoc && !isCreate
     ? (await db.execute<{
         id: string; number: string; kind: string; date: string | null; amount: string; appliedOn: string | null
@@ -202,12 +207,12 @@ export async function loadArInvoices(
                d.document_date::text as date, ap.amount::text as amount,
                ap.applied_on::text as "appliedOn"
           from applications ap
-          join journal_lines target on target.id = ap.from_line_id and target.org_id = ap.org_id
-          join journal_entries target_entry on target_entry.id = target.entry_id and target_entry.org_id = target.org_id
-          join journal_lines source on source.id = ap.to_line_id and source.org_id = ap.org_id
-          join journal_entries source_entry on source_entry.id = source.entry_id and source_entry.org_id = source.org_id
-          join documents d on d.id = source_entry.source_document_id and d.org_id = source_entry.org_id
-         where ap.org_id = ${authz.user.orgId} and target_entry.source_document_id = ${openDoc.doc.id}
+          join journal_lines settled on settled.id = ap.to_line_id and settled.org_id = ap.org_id
+          join journal_entries settled_entry on settled_entry.id = settled.entry_id and settled_entry.org_id = settled.org_id
+          join journal_lines settler on settler.id = ap.from_line_id and settler.org_id = ap.org_id
+          join journal_entries settler_entry on settler_entry.id = settler.entry_id and settler_entry.org_id = settler.org_id
+          join documents d on d.id = settler_entry.source_document_id and d.org_id = settler_entry.org_id
+         where ap.org_id = ${authz.user.orgId} and settled_entry.source_document_id = ${openDoc.doc.id}
            and ap.unapplied_at is null
          order by ap.applied_on desc, ap.created_at desc
       `)).rows
@@ -238,6 +243,17 @@ export async function loadArInvoices(
           appliedPayments: appliedRows.length > 0 && openDoc
             ? { payments: appliedRows as AppliedPayment[], currency: String(openDoc.doc.currency) }
             : null,
+          // Only a posted credit memo can settle anything. The panel reads its
+          // own state; the loader supplies identity and the permission.
+          creditApplications:
+            openDoc && drawerKind === 'customer_credit' && String(openDoc.doc.status) === 'posted'
+              ? {
+                  documentId: String(openDoc.doc.id),
+                  side: 'ar' as const,
+                  partyId: openDoc.doc.party_id ? String(openDoc.doc.party_id) : null,
+                  canApply: can(authz, 'ar.pay'),
+                }
+              : null,
           config: DOC_KINDS[drawerKind]!,
           initialMode: (isCreate || pickString(sp.mode) === 'edit' ? 'edit' : 'view') as 'edit' | 'view',
           parties: pickers[0],

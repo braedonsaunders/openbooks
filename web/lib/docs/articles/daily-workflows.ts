@@ -61,6 +61,15 @@ Returned units come back at the cost they left at, not at today's cost. The
 credit's selling price is a separate commercial fact and never changes the
 inventory valuation, so a return cannot create a margin.
 
+Apply a posted credit from the **Credit applications** panel on the credit
+itself: it lists the customer's open invoices, takes an amount against each,
+and shows what is left. No cash moves and no journal entry is posted — the
+credit and the invoice already sit on the same receivable account, so applying
+one to the other only records which balance closed which. Record a customer
+receipt instead when cash actually arrives. Release from the same panel to
+reopen both balances, which is also what a void asks for when it refuses a
+document that still has credits applied to it.
+
 ## Receipt and application
 
 Record the customer receipt to the correct bank or clearing account, then apply
@@ -145,11 +154,16 @@ accounts and credits accounts payable.
 
 Use a vendor credit for price adjustments and other genuine reductions. Enter
 an account-only credit — a non-inventory account line that moves no stock —
-against the relevant expense or adjustment account. A credit applies toward a
-bill through a vendor payment, and only where cash is still due: a credit that
-fully offsets a bill with no cash due cannot be applied on its own and may
-remain open in aging. Do not bury vendor credits in manual control-account
-journals.
+against the relevant expense or adjustment account. Do not bury vendor credits
+in manual control-account journals.
+
+Apply a posted credit from the **Credit applications** panel on the credit
+itself: it lists the vendor's open bills, takes an amount against each, and
+shows what is left. No cash moves and no journal entry is posted — the credit
+and the bill already sit on the same payable account, so applying one to the
+other only records which balance closed which. Use a vendor payment instead
+when cash is actually leaving; a payment may carry credits alongside the cash
+it pays. Release from the same panel to reopen both balances.
 
 For a physical return of stock, put the item on the credit line and choose the
 originating receipt in the **Returns receipt** column. The list offers only

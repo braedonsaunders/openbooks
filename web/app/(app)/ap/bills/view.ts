@@ -41,6 +41,8 @@ import { resolveFormLayout } from '../../../../lib/customization/resolve'
 
 export interface ApBillsDrawer {
   remountKey: string
+  /** Posted vendor credits carry the cash-free credit-application panel. */
+  creditApplications?: { documentId: string; side: 'ap' | 'ar'; partyId: string | null; canApply: boolean } | null
   basePath: string
   payload: unknown
   /** Unsaved create: the drawer edits a blank payload; Save POSTs the collection. */
@@ -234,6 +236,21 @@ export async function loadApBills(
           currentLayoutId: resolvedForm.row?.id ?? null,
           recordType: drawerKind,
           canCustomize: can(authz, 'admin.customization.manage'),
+          // Only a posted vendor credit can settle a bill without cash. The
+          // panel reads its own state; the loader supplies identity and the
+          // permission, mirroring the customer-credit side.
+          creditApplications:
+            openDoc && drawerKind === 'vendor_credit'
+              && String((openDoc.doc as Record<string, unknown>).status) === 'posted'
+              ? {
+                  documentId: String((openDoc.doc as Record<string, unknown>).id),
+                  side: 'ap' as const,
+                  partyId: (openDoc.doc as Record<string, unknown>).party_id
+                    ? String((openDoc.doc as Record<string, unknown>).party_id)
+                    : null,
+                  canApply: can(authz, 'ap.pay'),
+                }
+              : null,
         }
       : null
 
