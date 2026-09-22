@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { claimIdempotentCreate, resolveIdempotentReplay } from '../../../../lib/api/idempotency'
+import { claimIdempotentCreate, resolveIdempotentReplay } from '../../../lib/api/idempotency'
 import { cmp, sum } from '@openbooks/engine/src/money/money.ts'
 import { allocateDocumentNumber } from '@openbooks/engine/src/records/numbering.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
@@ -14,10 +14,10 @@ import {
   type AllocationInput,
 } from '@openbooks/engine/src/payments/settlement-policy.ts'
 import { loadPaymentDocument, openItemsForParty } from '@openbooks/engine/src/payments/payment-queries.ts'
-import { can, getAuthz, guardSubsidiaryScope } from '../../../../lib/authz'
-import { isUuid } from '../../../../lib/list-params'
-import { exactMoney, isoDate, nullableUuidId, parseJsonBody } from '../../../../lib/api/json'
-import { assertAllocationTargetsInScope, isPaymentKind, paymentErrorResponse, paymentPermission } from '../lib'
+import { can, getAuthz, guardSubsidiaryScope } from '../../../lib/authz'
+import { isUuid } from '../../../lib/list-params'
+import { exactMoney, isoDate, nullableUuidId, parseJsonBody } from '../../../lib/api/json'
+import { assertAllocationTargetsInScope, isPaymentKind, paymentErrorResponse, paymentPermission } from './lib'
 
 export const runtime = 'nodejs'
 

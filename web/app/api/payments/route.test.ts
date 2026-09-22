@@ -140,6 +140,12 @@ const mockSources = new Map<string, string>([
           },
         }),
       }
+      // Modules the route pulls in transitively (subsidiaries, segments)
+      // import the tenant-context helpers from this same module; the double
+      // stands in for the whole module, so it must offer them too.
+      export function ambientTenantOrgId() { return '${ORG_ID}' }
+      export function withBypassContext(fn) { return fn() }
+      export function withOrgContext(_orgId, fn) { return fn() }
     `,
   ],
   [
@@ -175,7 +181,7 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/platform/db.ts", "mock:db"],
-  ["../../../../lib/authz", "mock:authz"],
+  ["../../../lib/authz", "mock:authz"],
   ["@/lib/authz", "mock:authz"],
   ["@openbooks/engine/src/payments/payment-queries.ts", "mock:payment-queries"],
   ["@openbooks/engine/src/platform/business-date.ts", "mock:clock"],
@@ -183,6 +189,16 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    // Server-module guard: the route's transitive imports mark themselves
+    // server-only, which throws outside a Next render. The repo's route
+    // tests neutralize it the same way.
+    if (specifier === "server-only") {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url: "data:text/javascript,export {}",
+      };
+    }
     const mocked = mockUrls.get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };
     return nextResolve(specifier, context);
