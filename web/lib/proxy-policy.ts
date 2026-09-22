@@ -40,6 +40,20 @@ const PUBLIC_SEGMENT_ROOTS = [
   // connection's user-chosen password, then unguessable session tickets).
   // Same credential-authenticated non-browser model as /api/pay and /api/sign.
   "/api/qbd",
+  // Sessionless HR/time surfaces: each carries its own unguessable token in
+  // the path, verified inside every route (fail-closed) — the holders
+  // (external signers, survey respondents, kiosk devices) have no account,
+  // so the session gate would 401/302 them all. Named one by one like the
+  // recruiting surface below: a bare /api/documents, /api/surveys, or
+  // /api/time root would enroll every future sibling sessionless the moment
+  // the file lands. Each root below covers exactly one token route file.
+  // web/lib/public-surface-contract.test.ts derives those route files from
+  // the filesystem and refuses a root without its token check.
+  "/api/documents/sign",
+  "/api/surveys/respond",
+  "/api/time/kiosk",
+  "/survey",
+  "/kiosk",
   // HR-18 begin: recruiting public surface, co-signed by security.
   // /careers is the public career page, /book and /offer are the candidate
   // self-booking and offer-signing pages. Candidates have no account, so

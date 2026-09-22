@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { isPublicPath } from "./proxy-policy";
+import { isCsrfExemptPath, isPublicPath } from "./proxy-policy";
 
 /**
  * Public-surface contract: the edge session gate (web/proxy.ts) lets a
@@ -49,6 +49,17 @@ function routeSamplePath(file: string): string {
     .replace(/\[[^\]]+\]/g, "x") || "/";
 }
 
+/** web/app/survey/[token]/page.tsx -> /survey/x. */
+function pageSamplePath(file: string): string {
+  const rel = file.slice(webApp.length).replace(/\\/g, "/");
+  const withoutSuffix = rel.replace(/\/page\.tsx$/, "");
+  const withoutGroup = withoutSuffix
+    .split("/")
+    .filter((segment) => !(segment.startsWith("(") && segment.endsWith(")")))
+    .join("/");
+  return withoutGroup.replace(/\[[^\]]+\]/g, "x") || "/";
+}
+
 /** In-route API-key auth for the versioned API (all fail closed 401). */
 const V1_AUTH = /withV1Request|resolveApiKeyAuth|guardApiKey|v1-orders|v1-records/;
 /** The one documented-unauthenticated v1 route (process liveness). */
@@ -91,10 +102,94 @@ test("every /api/v1 route authenticates in-route and never reads the session coo
   }
 });
 
-test("no public v1 route lacks in-route API-key auth", () => {
+type TokenSurface = {
+  dir: string;
+  kind: "api" | "page";
+  /** Token verification that must appear in the route/page (or its engine service). */
+  tokenMarker: RegExp;
+  /** Refusal the surface must render/return for a bad token. */
+  refusalMarker: RegExp;
+};
+
+const TOKEN_SURFACES: TokenSurface[] = [
+  {
+    dir: join(webApp, "api", "documents", "sign"),
+    kind: "api",
+    tokenMarker: /readTokenDocument|signTokenDocument|declineTokenDocument|acknowledgeDocument/,
+    refusalMarker: /hrmDocumentsErrorResponse/,
+  },
+  {
+    dir: join(webApp, "api", "surveys", "respond"),
+    kind: "api",
+    tokenMarker: /verifySurveyInvitationToken/,
+    refusalMarker: /invalid or expired|no longer available/,
+  },
+  {
+    dir: join(webApp, "api", "time", "kiosk"),
+    kind: "api",
+    tokenMarker: /resolveKioskByToken/,
+    refusalMarker: /\bbad\(error\.message, 404\)/,
+  },
+  {
+    dir: join(webApp, "sign", "[token]"),
+    kind: "page",
+    tokenMarker: /verifyDocumentSignerToken/,
+    refusalMarker: /notFound\(\)/,
+  },
+  {
+    dir: join(webApp, "survey"),
+    kind: "page",
+    tokenMarker: /verifySurveyInvitationToken/,
+    refusalMarker: /notFound\(\)/,
+  },
+  {
+    dir: join(webApp, "kiosk"),
+    kind: "page",
+    tokenMarker: /resolveKioskByToken/,
+    refusalMarker: /notFound\(\)/,
+  },
+];
+
+test("sessionless HR/time surfaces are public, token-authenticated in-route, and CSRF-exempt only as APIs", () => {
+  for (const surface of TOKEN_SURFACES) {
+    const files = surface.kind === "api"
+      ? walkFiles(surface.dir, "route.ts")
+      : walkFiles(surface.dir, "page.tsx");
+    assert.ok(files.length > 0, `expected route files under ${surface.dir}`);
+    for (const file of files) {
+      const source = readFileSync(file, "utf8");
+      const rel = file.slice(webApp.length + 1);
+      const urlPath = surface.kind === "api" ? routeSamplePath(file) : pageSamplePath(file);
+      assert.equal(isPublicPath(urlPath), true, `${urlPath} must be public (${rel})`);
+      assert.match(source, surface.tokenMarker, `${rel} must verify its path token in-route`);
+      assert.match(source, surface.refusalMarker, `${rel} must refuse bad tokens, not render them`);
+      assert.doesNotMatch(source, SESSION_READ, `${rel} must not read the session cookie`);
+      if (surface.kind === "api") {
+        // POST/PUT here carry the path token (an explicit credential browsers
+        // never attach cross-site), never the ambient cookie — origin-checking
+        // them would 403 every signer, respondent, and device.
+        assert.equal(isCsrfExemptPath(urlPath), true, `${urlPath} must be CSRF-exempt (${rel})`);
+      }
+    }
+  }
+  // The document-signing engine service behind the route verifies the HMAC
+  // token itself — the route marker above is not a pass-through claim.
+  const documents = readFileSync(
+    join(repoRoot, "engine", "src", "hrm", "documents", "documents.ts"),
+    "utf8",
+  );
+  assert.match(documents, /verifyDocumentSignerToken\(token\)/);
+});
+
+test("no public API root covers a route without its surface's auth marker", () => {
   const v1Files = walkFiles(join(webApp, "api", "v1"), "route.ts");
   for (const file of v1Files) {
     if (V1_HEALTH.test(file)) continue;
     assert.match(readFileSync(file, "utf8"), V1_AUTH, `${file} sits under public /api/v1 without API-key auth`);
+  }
+  for (const surface of TOKEN_SURFACES.filter((surface) => surface.kind === "api")) {
+    for (const file of walkFiles(surface.dir, "route.ts")) {
+      assert.match(readFileSync(file, "utf8"), surface.tokenMarker, `${file} sits on a public token root without its token check`);
+    }
   }
 });
