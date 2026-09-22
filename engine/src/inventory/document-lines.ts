@@ -14,7 +14,8 @@ export interface DocumentInventoryLine {
   lineNumber: number;
   itemId: string;
   stockLocationId: string;
-  /** base-unit quantity for the line (absolute). */
+  /** base-unit quantity for the line. Always positive: negative-quantity
+   * inventory lines are refused at load time (see below), never absorbed. */
   quantity: string;
   /** line extended amount (for unit-cost derivation on receipts). */
   amount: string;
@@ -65,6 +66,7 @@ export async function loadDocumentInventoryLines(
       amount: string;
       stock_location_id: string | null;
       document_subsidiary_id: string | null;
+      document_kind: string;
       asset_account_id: string;
       received_not_billed_account_id: string | null;
       adjustment_account_id: string | null;
@@ -78,6 +80,7 @@ export async function loadDocumentInventoryLines(
     }>(sql`
     select dl.id as line_id, dl.line_number, dl.item_id, dl.quantity, dl.amount,
            dl.stock_location_id, d.subsidiary_id as document_subsidiary_id,
+           d.kind as document_kind,
            p.asset_account_id, p.received_not_billed_account_id,
            p.adjustment_account_id, p.variance_account_id, p.costing_method,
            p.tracking,
@@ -123,16 +126,25 @@ export async function loadDocumentInventoryLines(
       }
       throw error;
     }
+    // A negative-quantity inventory line is never a return: sales returns
+    // restore stock at original cost through a customer credit carrying
+    // custom.inventoryReturn evidence, and purchase returns relieve it
+    // through a vendor credit. Absorbing the sign here issued stock on a
+    // "return" invoice line (revenue down, inventory down too) and priced
+    // bill lines at a negative unit cost, so refuse with the flow that
+    // actually exists for this document kind.
+    const rawQuantity = toUnits(row.quantity);
+    if (rawQuantity < 0n) {
+      throw new InventoryError(
+        `${lineLabel} has a negative quantity (${row.quantity}); ${negativeLineRemedy(row.document_kind)}`,
+      );
+    }
     out.push({
       lineId: row.line_id,
       lineNumber: row.line_number,
       itemId: row.item_id,
       stockLocationId: loc,
-      quantity: fromUnits(
-        toUnits(row.quantity) < 0n
-          ? -toUnits(row.quantity)
-          : toUnits(row.quantity),
-      ),
+      quantity: fromUnits(rawQuantity),
       amount: row.amount,
       assetAccountId: row.asset_account_id,
       clearingAccountId: row.received_not_billed_account_id,
@@ -147,6 +159,34 @@ export async function loadDocumentInventoryLines(
     });
   }
   return out;
+}
+
+/**
+ * The return flow that actually exists for a document kind, named so a
+ * negative-quantity refusal tells the operator what to do instead. Both
+ * remedies are live engine paths (customer/vendor credit inventory returns
+ * with custom.inventoryReturn evidence), not aspirations.
+ */
+export function negativeLineRemedy(documentKind: string): string {
+  if (documentKind === "customer_invoice") {
+    return (
+      "a negative invoice line is not a return — record the return on a " +
+      "customer credit with custom.inventoryReturn evidence naming the " +
+      "source shipment instead"
+    );
+  }
+  if (documentKind === "vendor_bill") {
+    return (
+      "a negative bill line is not a return — record the return on a " +
+      "vendor credit with custom.inventoryReturn evidence naming the " +
+      "source receipt instead"
+    );
+  }
+  return (
+    "negative-quantity inventory lines are refused — record the return " +
+    "through the customer-credit / vendor-credit return flow with " +
+    "custom.inventoryReturn evidence instead"
+  );
 }
 
 export const UUID_RE =
