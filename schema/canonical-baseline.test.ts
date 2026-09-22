@@ -482,6 +482,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // (08f7aec0f) with no forward migration, so upgraded installs never got
     // the table; this migration carries that delta idempotently.
     "0249_timesheet_week_lifecycle.sql",
+    "0250_employee_pay_component_overlap_guard.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
