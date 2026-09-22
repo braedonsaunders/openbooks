@@ -8,9 +8,8 @@ import test from "node:test";
  * remain ledger history and must be aggregated with the linked posted
  * reversal. Operational commands may require literal `posted`, but financial
  * reporting modules must never silently drop the original. Reconciliation is
- * one of those operational workflows: it matches the currently posted
- * bank-facing entry, while the reporting modules below retain both lifecycle
- * rows.
+ * one of those operational workflows: matching requires the currently posted
+ * entry, while its opening-balance proof retains both lifecycle rows.
  */
 const FINANCIAL_REPORT_MODULES = [
   "engine/src/continuous-close/continuous-close.ts",
@@ -49,21 +48,29 @@ test("financial reporting never excludes reversed posted history", () => {
   }
 });
 
-const ACTIVE_ONLY_OPERATION_MODULES = ["engine/src/banking/banking.ts"] as const;
-
-test("bank reconciliation is active-only without changing reporting history", () => {
-  for (const file of ACTIVE_ONLY_OPERATION_MODULES) {
-    const source = readFileSync(resolve(process.cwd(), file), "utf8");
-    assert.match(source, /\bje\.status\s*=\s*['"]posted['"]/);
+test("bank matching stays active-only while the opening proof retains ledger history", () => {
+  const source = readFileSync(resolve(process.cwd(), "engine/src/banking/banking.ts"), "utf8");
+  for (const [start, end] of [
+    ["export async function autoMatch(", "type MatchOptions ="],
+    ["async function createMatchInTransaction(", "export async function createMatchWithJournal("],
+  ]) {
+    const startAt = source.indexOf(start!);
+    const endAt = source.indexOf(end!, startAt);
+    assert.ok(startAt >= 0 && endAt > startAt, `cannot locate ${start}`);
+    const matching = source.slice(startAt, endAt);
+    assert.match(matching, /\bje\.status\s*=\s*['"]posted['"]/, `${start} must require a posted match`);
     assert.doesNotMatch(
-      source,
+      matching,
       /\bje\.status\s+in\s*\(\s*['"]posted['"]\s*,\s*['"]reversed['"]\s*\)/,
-      `${file} admits reversed originals to active reconciliation matching`,
-    );
-    assert.match(
-      source,
-      /\bbool_or\(je\.status\s*<>\s*['"]posted['"]\)/,
-      `${file} must reject a previously stored match that became reversed`,
+      `${start} admits reversed originals to active matching`,
     );
   }
+  assert.match(
+    source,
+    /\bbool_or\(je\.status\s*<>\s*['"]posted['"]\)/,
+    "sign-off must reject a previously stored match that became reversed",
+  );
+  const opening = source.slice(source.indexOf("async function firstReconciliationCarry("), source.indexOf("export interface ReconciliationTotals"));
+  assert.match(opening, /\bje\.status\s+in\s*\(\s*['"]posted['"]\s*,\s*['"]reversed['"]\s*\)/,
+    "the opening balance must include the original and dated reversal");
 });
