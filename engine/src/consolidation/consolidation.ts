@@ -3,6 +3,7 @@ import { periodLockBlocksPosting } from "../close/period-policy.ts";
 import { CurrencyError, updateFxRate } from "../fx/currencies.ts";
 import { averageSpotRate, lookupSpotRate } from "../fx/spot-rate.ts";
 import { db, orgContext, withOrgContext } from "../platform/db.ts";
+import { PNL_TYPES } from "../records/account-types.ts";
 import { financialClosePeriodScope } from "../close/fx-revaluation.ts";
 import {
   add,
@@ -555,17 +556,38 @@ export async function runOwnershipConsolidationIn(
         !acquisitionExists[0] &&
         interest.acquisition_date <= period.ends_on
       ) {
+        // Book equity at acquisition = stated equity accounts PLUS the
+        // subsidiary's cumulative P&L through the acquisition date. Retained
+        // earnings are virtual (no closing entries exist by design — the
+        // balance sheet computes RE as lifetime P&L), so reading only
+        // a.type='equity' silently drops accumulated pre-acquisition profit:
+        // book net assets understate, the FV adjustment absorbs the
+        // difference, and consolidated RE keeps the subsidiary's pre-acq
+        // earnings. The P&L filter is the balance sheet's own universe
+        // (PNL_TYPES, shared not re-derived). Post-acquisition P&L stays
+        // out: the window ends at the acquisition date.
         const equity = await tx.execute<{
           account_id: string;
+          account_type: string;
           amount: string;
         }>(sql`
-          select l.account_id,coalesce(sum(l.amount),0)::text as amount
+          select l.account_id,a.type as account_type,coalesce(sum(l.amount),0)::text as amount
             from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id
-            join accounts a on a.id=l.account_id and a.org_id=l.org_id and a.type='equity'
+            join accounts a on a.id=l.account_id and a.org_id=l.org_id
+             and (a.type='equity' or a.type in ${PNL_TYPES})
            where e.org_id=${orgId} and e.book_id=${bookId} and e.status in ('posted','reversed')
              and l.subsidiary_id=${interest.subsidiary_id} and e.posting_date <= ${interest.acquisition_date}
-           group by l.account_id having sum(l.amount)<>0
+           group by l.account_id,a.type having sum(l.amount)<>0
         `);
+        const equityTypeByAccount = new Map(equity.rows.map((line) => [line.account_id, line.account_type]));
+        // Pre-acquisition P&L eliminates as retained earnings, not as its
+        // source income/expense accounts' activity: same balance, truthful memo.
+        const eliminationMemo = (accountId: string, owned: boolean): string =>
+          `${owned ? "Eliminate owned share of " : "Eliminate "}${
+            equityTypeByAccount.get(accountId) === "equity"
+              ? "acquisition-date equity"
+              : "pre-acquisition retained earnings"
+          }`;
         const translatedEquity = equity.rows.map((line) => ({
           accountId: line.account_id,
           balance: mulRate(line.amount, interest.acquisition_rate),
@@ -597,7 +619,7 @@ export async function runOwnershipConsolidationIn(
             ...ownedEquity.map((line) => ({
               accountId: line.accountId,
               amount: neg(line.balance),
-              memo: "Eliminate owned share of acquisition-date equity",
+              memo: eliminationMemo(line.accountId, true),
             })),
             {
               accountId: interest.fair_value_adjustment_account_id!,
@@ -635,7 +657,7 @@ export async function runOwnershipConsolidationIn(
             ...translatedEquity.map((line) => ({
               accountId: line.accountId,
               amount: neg(line.balance),
-              memo: "Eliminate acquisition-date equity",
+              memo: eliminationMemo(line.accountId, false),
             })),
             {
               accountId: interest.fair_value_adjustment_account_id!,
