@@ -276,5 +276,18 @@
     "deliverHint": "この処理の支払ファイルを銀行またはパートナーの SFTP フォルダに送付し、取得してもらいます。",
     "sftpServer": "SFTP ログイン",
     "noSftpServers": "SFTP ログインがまだありません。設定 → SFTP で追加してください。"
+  },
+  "creditApplications": {
+    "title": "クレジットの充当",
+    "remaining": "残り {amount}",
+    "apply": "未決済項目に充当",
+    "confirmApply": "クレジットを充当",
+    "release": "解除",
+    "document": "伝票",
+    "openAmount": "未決済",
+    "applyAmount": "充当額",
+    "appliedOn": "充当日",
+    "noOpenItems": "この取引先には、クレジットを充当できる未決済項目がありません。",
+    "nothingSelected": "少なくとも 1 件の未決済項目に金額を入力してください。"
   }
 }

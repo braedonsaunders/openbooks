@@ -4483,6 +4483,11 @@ const I14_IDENTICAL_BY_FACT = new Set([
   // spelled identically to the English. de/es/ja/pt-BR/zh all differ, which is
   // what distinguishes a genuine cognate here from an untranslated string.
   'fr:reports.custom.nl.question|Question',
+  // The credit-application panel's document column: "Document" is the French
+  // word, spelled identically. de (Beleg), es/pt-BR (Documento), ja (伝票) and
+  // zh (单据) all differ, which is what separates a genuine cognate here from
+  // a string nobody translated.
+  'fr:payments.creditApplications.document|Document',
   // Likewise "Status" in German, which the automations columns below already
   // record as a reviewed identical term.
   'de:reports.custom.nl.status|Status',
@@ -5307,7 +5312,7 @@ const I14_FILE_COUNTS: Record<string, number> = {
   "labor-pricing": 128,
   "nav": 109,
   "parties": 221,
-  "payments": 255,
+  "payments": 266,
   "pdfTemplates": 50,
   "purchaseOrders": 55,
   "records": 185,

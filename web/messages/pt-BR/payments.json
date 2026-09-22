@@ -276,5 +276,18 @@
     "deliverHint": "Entregue o arquivo de pagamento desta remessa na pasta SFTP de um banco ou parceiro para que eles o busquem.",
     "sftpServer": "Login SFTP",
     "noSftpServers": "Nenhum login SFTP ainda. Adicione um em Configuração → SFTP."
+  },
+  "creditApplications": {
+    "title": "Aplicações do crédito",
+    "remaining": "{amount} restante",
+    "apply": "Aplicar a itens em aberto",
+    "confirmApply": "Aplicar crédito",
+    "release": "Liberar",
+    "document": "Documento",
+    "openAmount": "Em aberto",
+    "applyAmount": "Aplicar",
+    "appliedOn": "Aplicado em",
+    "noOpenItems": "Este parceiro não tem itens em aberto para aplicar o crédito.",
+    "nothingSelected": "Informe um valor em pelo menos um item em aberto."
   }
 }

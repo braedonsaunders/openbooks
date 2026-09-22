@@ -4,7 +4,11 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass } from "../platform/db.ts";
 import { postDocument } from "../ledger/posting-document.ts";
-import { applyStandaloneCredits, unapplyCreditSettlement } from "./credit-settlement.ts";
+import {
+  applyStandaloneCredits,
+  creditSettlementState,
+  unapplyCreditSettlement,
+} from "./credit-settlement.ts";
 import { paymentBookId } from "./payment-accounts.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
@@ -382,6 +386,76 @@ test("a credit naming the wrong source document is refused", { skip: !DB }, asyn
       /source document/i,
     );
     assert.equal(await openBalance(org.orgId, invoiceLine), "45.0000");
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("the panel's state reports what a credit settled and what is left", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const userId = await withBypass(() => createScratchUser(org.orgId, "State reader", "admin"));
+    const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-STATE-1", "400");
+    const creditId = await postDoc(org, userId, "customer_credit", "CM-STATE-1", "250");
+    const invoiceLine = await openLineId(org.orgId, invoiceId);
+    const creditLine = await openLineId(org.orgId, creditId);
+
+    // Before any settlement: the whole credit is available and nothing is listed.
+    const before = await withBypass(() => creditSettlementState(org.orgId, creditId));
+    assert.equal(before!.lineId, creditLine);
+    assert.equal(before!.amount, "250.0000");
+    assert.equal(before!.applied, "0.0000");
+    assert.equal(before!.open, "250.0000");
+    assert.deepEqual(before!.settlements, []);
+
+    const applied = await withBypass(() =>
+      applyStandaloneCredits(org.orgId, userId, {
+        partyId: org.customerId,
+        side: "ar",
+        appliedOn: org.date,
+        credits: [
+          { fromLineId: creditLine, toLineId: invoiceLine, amount: "150", sourceDocumentId: creditId },
+        ],
+      }),
+    );
+
+    // After: the remaining figure the panel shows and the balance the engine
+    // checks against are the same `applications` rows, so they cannot drift.
+    const after = await withBypass(() => creditSettlementState(org.orgId, creditId));
+    assert.equal(after!.applied, "150.0000");
+    assert.equal(after!.open, "100.0000");
+    assert.equal(after!.settlements.length, 1);
+    assert.equal(after!.settlements[0]!.applicationId, applied.applicationIds[0]);
+    assert.equal(after!.settlements[0]!.documentNumber, "INV-STATE-1");
+    assert.equal(after!.settlements[0]!.amount, "150.0000");
+
+    // A released settlement leaves the list and returns its amount.
+    await withBypass(() => unapplyCreditSettlement(org.orgId, userId, applied.applicationIds[0]!));
+    const released = await withBypass(() => creditSettlementState(org.orgId, creditId));
+    assert.equal(released!.open, "250.0000");
+    assert.deepEqual(released!.settlements, []);
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("an unposted credit has no settlement state to show", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const userId = await withBypass(() => createScratchUser(org.orgId, "Draft reader", "admin"));
+    const draftId = randomUUID();
+    await withBypass(async () => {
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+           document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
+        values (${draftId}, ${org.orgId}, 'customer_credit', 'draft', 'CM-DRAFT-1',
+                ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '1',
+                '50', '0', '50', ${userId})`);
+    });
+    // The panel keys off this null and renders nothing, rather than offering
+    // an Apply button for a credit with no posted open item behind it.
+    assert.equal(await withBypass(() => creditSettlementState(org.orgId, draftId)), null);
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }

@@ -269,5 +269,18 @@
     "deliverHint": "Écrit le fichier bancaire de ce lot dans le dossier sortant d'un serveur SFTP pour que la banque le récupère.",
     "sftpServer": "Serveur SFTP",
     "noSftpServers": "Aucun serveur SFTP configuré. Ajoutez-en un dans Configuration → Serveurs SFTP."
+  },
+  "creditApplications": {
+    "title": "Affectations de l’avoir",
+    "remaining": "{amount} restant",
+    "apply": "Affecter à des postes ouverts",
+    "confirmApply": "Affecter l’avoir",
+    "release": "Libérer",
+    "document": "Document",
+    "openAmount": "Ouvert",
+    "applyAmount": "Affecter",
+    "appliedOn": "Affecté le",
+    "noOpenItems": "Ce tiers n’a aucun poste ouvert auquel affecter l’avoir.",
+    "nothingSelected": "Saisissez un montant sur au moins un poste ouvert."
   }
 }

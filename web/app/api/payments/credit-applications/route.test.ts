@@ -27,6 +27,8 @@ interface RouteState {
   scopeDenied: boolean;
   partyRow: { subsidiaryId: string | null } | null;
   settlementRow: { kind: string | null; partyId: string | null } | null;
+  documentRow: { partyId: string | null } | null;
+  stateCalls: string[];
   applied: unknown[];
   released: string[];
 }
@@ -37,6 +39,8 @@ const state: RouteState = {
   scopeDenied: false,
   partyRow: { subsidiaryId: null },
   settlementRow: { kind: "customer_credit", partyId: PARTY_ID },
+  documentRow: { partyId: PARTY_ID },
+  stateCalls: [],
   applied: [],
   released: [],
 };
@@ -44,11 +48,13 @@ const state: RouteState = {
 
 function reset(overrides: Partial<RouteState> = {}): void {
   Object.assign(state, {
-    permissions: ["ap.pay", "ar.pay"],
+    permissions: ["ap.pay", "ar.pay", "ap.read", "ar.read"],
     guardedWith: null,
     scopeDenied: false,
     partyRow: { subsidiaryId: null },
     settlementRow: { kind: "customer_credit", partyId: PARTY_ID },
+    documentRow: { partyId: PARTY_ID },
+    stateCalls: [],
     applied: [],
     released: [],
   }, overrides);
@@ -101,6 +107,7 @@ registerHooks({
           async execute(query) {
             const text = String(query?.queryChunks?.map?.((c) => (typeof c === "string" ? c : c?.value ?? "")).join("") ?? "");
             if (text.includes("from parties")) return { rows: s.partyRow ? [s.partyRow] : [] };
+            if (text.includes("from documents")) return { rows: s.documentRow ? [s.documentRow] : [] };
             return { rows: s.settlementRow ? [s.settlementRow] : [] };
           },
           async transaction(fn) { return fn(db); },
@@ -114,6 +121,10 @@ registerHooks({
           s.applied.push({ orgId, userId, input });
           return { applicationIds: [${JSON.stringify(APPLICATION_ID)}], amount: "100.0000" };
         }
+        export async function creditSettlementState(orgId, documentId) {
+          s.stateCalls.push(documentId);
+          return { lineId: "line", amount: "100.0000", applied: "0.0000", open: "100.0000", currency: "CAD", settlements: [] };
+        }
         export async function unapplyCreditSettlement(orgId, userId, applicationId) {
           s.released.push(applicationId);
           return { amount: "100.0000" };
@@ -124,7 +135,7 @@ registerHooks({
   },
 });
 
-const { POST, DELETE } = await import("./route.ts");
+const { GET, POST, DELETE } = await import("./route.ts");
 
 const applyRequest = (body: unknown): Request =>
   new Request("http://localhost/api/payments/credit-applications", {
@@ -239,4 +250,44 @@ test("an unknown settlement id is a tenant-opaque 404", async () => {
   const res = await DELETE(releaseRequest({ applicationId: APPLICATION_ID, side: "ar" }));
   assert.equal(res.status, 404);
   assert.deepEqual(state.released, []);
+});
+
+const stateRequest = (query: string): Request =>
+  new Request(`http://localhost/api/payments/credit-applications?${query}`);
+
+test("reading a credit's settlement state is gated on the side's read permission", async () => {
+  reset({ permissions: ["ar.read"] });
+  const res = await GET(stateRequest(`side=ar&documentId=${APPLICATION_ID}`));
+  assert.equal(res.status, 200);
+  assert.equal(state.guardedWith, "ar.read");
+  assert.deepEqual(state.stateCalls, [APPLICATION_ID]);
+});
+
+test("a credit whose kind does not match the named side is a 404", async () => {
+  // The document lookup binds id AND kind, so an AR reader naming a vendor
+  // credit finds nothing rather than learning what it settled.
+  reset({ documentRow: null });
+  const res = await GET(stateRequest(`side=ar&documentId=${APPLICATION_ID}`));
+  assert.equal(res.status, 404);
+  assert.deepEqual(state.stateCalls, []);
+});
+
+test("state reads refuse a malformed side or document id before any read", async () => {
+  for (const query of [
+    `side=gl&documentId=${APPLICATION_ID}`,
+    "side=ar&documentId=not-a-uuid",
+    "side=ar",
+  ]) {
+    reset();
+    const res = await GET(stateRequest(query));
+    assert.equal(res.status, 400, `expected 400 for ${query}`);
+    assert.deepEqual(state.stateCalls, []);
+  }
+});
+
+test("an out-of-scope party hides the credit's settlement state", async () => {
+  reset({ scopeDenied: true });
+  const res = await GET(stateRequest(`side=ar&documentId=${APPLICATION_ID}`));
+  assert.equal(res.status, 403);
+  assert.deepEqual(state.stateCalls, []);
 });

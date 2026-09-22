@@ -276,5 +276,18 @@
     "deliverHint": "Übermitteln Sie die Zahlungsdatei dieses Laufs an den SFTP-Ordner einer Bank oder eines Partners zum Abholen.",
     "sftpServer": "SFTP-Login",
     "noSftpServers": "Noch keine SFTP-Logins. Fügen Sie einen unter Einrichtung → SFTP hinzu."
+  },
+  "creditApplications": {
+    "title": "Gutschriftverwendungen",
+    "remaining": "{amount} verbleibend",
+    "apply": "Auf offene Posten anwenden",
+    "confirmApply": "Gutschrift anwenden",
+    "release": "Freigeben",
+    "document": "Beleg",
+    "openAmount": "Offen",
+    "applyAmount": "Anwenden",
+    "appliedOn": "Angewendet am",
+    "noOpenItems": "Für diesen Geschäftspartner gibt es keine offenen Posten, auf die die Gutschrift angewendet werden kann.",
+    "nothingSelected": "Geben Sie für mindestens einen offenen Posten einen Betrag ein."
   }
 }

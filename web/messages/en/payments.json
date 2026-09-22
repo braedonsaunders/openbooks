@@ -276,5 +276,18 @@
     "deliverHint": "Deliver this run's payment file to a bank or partner's SFTP folder for them to fetch.",
     "sftpServer": "SFTP login",
     "noSftpServers": "No SFTP logins yet. Add one in Setup → SFTP."
+  },
+  "creditApplications": {
+    "title": "Credit applications",
+    "remaining": "{amount} remaining",
+    "apply": "Apply to open items",
+    "confirmApply": "Apply credit",
+    "release": "Release",
+    "document": "Document",
+    "openAmount": "Open",
+    "applyAmount": "Apply",
+    "appliedOn": "Applied on",
+    "noOpenItems": "This party has no open items to apply the credit to.",
+    "nothingSelected": "Enter an amount on at least one open item."
   }
 }

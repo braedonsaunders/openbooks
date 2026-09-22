@@ -27,6 +27,7 @@ import { DocumentRowActions } from '../document-row-actions'
 import { NewDocumentButton } from '../new-document-button'
 import { PaymentLinksPanel } from '../payment-links-panel'
 import { AppliedPaymentsPanel, type AppliedPayment } from '../applied-payments-panel'
+import { CreditApplicationsPanel } from '../credit-applications-panel'
 import { DOC_KINDS } from '../../lib/document-kinds'
 import { NewPartyButton } from '../../app/(app)/parties/NewPartyButton'
 import { NewPartyRedirect } from '../../app/(app)/parties/NewPartyRedirect'
@@ -238,19 +239,33 @@ export const RECORDS_WIDGETS = {
           remountKey: string
           paymentLinks?: { documentId: string; canManage: boolean } | null
           appliedPayments?: { payments: AppliedPayment[]; currency: string } | null
+          creditApplications?: {
+            documentId: string
+            side: 'ap' | 'ar'
+            partyId: string | null
+            canApply: boolean
+          } | null
         })
       | null
     if (!drawer) return null
-    const { remountKey, paymentLinks, appliedPayments, ...rest } = drawer
+    const { remountKey, paymentLinks, appliedPayments, creditApplications, ...rest } = drawer
     return (
       <DocumentDrawer
         key={remountKey}
         {...rest}
         afterContent={
-          paymentLinks || appliedPayments ? (
+          paymentLinks || appliedPayments || creditApplications ? (
             <>
               {appliedPayments ? (
                 <AppliedPaymentsPanel payments={appliedPayments.payments} currency={appliedPayments.currency} />
+              ) : null}
+              {creditApplications ? (
+                <CreditApplicationsPanel
+                  documentId={creditApplications.documentId}
+                  side={creditApplications.side}
+                  partyId={creditApplications.partyId}
+                  canApply={creditApplications.canApply}
+                />
               ) : null}
               {paymentLinks ? (
                 <PaymentLinksPanel documentId={paymentLinks.documentId} canManage={paymentLinks.canManage} />
