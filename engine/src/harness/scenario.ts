@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { businessToday } from "../platform/business-date.ts";
 import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
 import { abs, cmp, fromUnits, toUnits } from "../money/money.ts";
 import { runUserSql } from "../platform/sqlapi.ts";
@@ -97,7 +98,9 @@ export async function runScenario(
           join period_locks pl on pl.period_id = p.id and pl.module = 'gl' and pl.state = 'closed'
          where p.org_id = ${orgId}
       ) then 'last-closed-gl-period' else 'prior-month-end (no closed GL period)' end as src`);
-  const cutoff = cut.cutoff ?? new Date().toISOString().slice(0, 10);
+  // With no closed period and no postings to anchor on, the checks run as of
+  // the org's business day, never the UTC day.
+  const cutoff = cut.cutoff ?? (await businessToday(orgId));
   const cutoffSource = cut.src;
   const fyStart = `${cutoff.slice(0, 4)}-01-01`;
 

@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { normalizeDecimal } from '@openbooks/engine/src/money/money.ts'
 import {
   PAYROLL_COUNTRY_PACKS,
@@ -254,7 +255,9 @@ export async function POST(req: Request) {
     // Backdating across a later certificate would fork the history the
     // engine reads as of a pay date: refuse, so the operator supersedes
     // forward instead.
-    const effective = effectiveFrom ?? new Date().toISOString().slice(0, 10)
+    // A new certificate takes effect on the org's business day, never the UTC
+    // day (which is tomorrow in the evening for the Americas).
+    const effective = effectiveFrom ?? (await businessToday(orgId))
     for (const row of open) {
       if (row.effective_from !== null && row.effective_from > effective) {
         return NextResponse.json(

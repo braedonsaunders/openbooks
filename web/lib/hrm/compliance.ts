@@ -3,6 +3,7 @@ import 'server-only'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { listFindings } from '@openbooks/engine/src/hrm/construction/findings.ts'
 import { listSchedules } from '@openbooks/engine/src/hrm/construction/rates.ts'
 import { listRuns, listFormats } from '@openbooks/engine/src/hrm/construction/certified.ts'
@@ -308,7 +309,8 @@ export async function loadCompliancePage(
       packName = null
     }
     // Certified due: scoped projects whose current week has no generated run.
-    const today = new Date().toISOString().slice(0, 10)
+    // "Current" is the org's business day, never the UTC day.
+    const today = await businessToday(orgId)
     const due = weekEndingSunday(today)
     const generatedWeeks = new Set(runs.filter((run) => run.status !== 'draft').map((run) => `${run.projectId}|${run.weekEnding}`))
     const scopedProjects = new Set<string>()

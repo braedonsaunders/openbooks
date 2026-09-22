@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
+import { businessToday } from "../../platform/business-date.ts";
 import { HrmConstructionError } from "./errors.ts";
 import { requireHrmConstructionManage, requireHrmConstructionRead } from "../authorization.ts";
 import { classificationAsOf } from "./classifications.ts";
@@ -625,7 +626,8 @@ export async function projectComplianceSummary(
          and project_id is not distinct from ${project}::uuid
     `)
   ).rows[0];
-  const weekEnd = weekEndingSunday(todayIso());
+  // "This week" is the org's business week, never the UTC day's.
+  const weekEnd = weekEndingSunday(await businessToday(orgId));
   const breach = (
     await exec.execute<{ id: string }>(sql`
       select id from hrm_compliance_findings
@@ -655,10 +657,6 @@ export async function projectComplianceSummary(
     ratioBreachThisWeek: !!breach,
     lastRun: lastRun ?? null,
   };
-}
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
 }
 
 /** Sunday closing the week that holds the given day. */

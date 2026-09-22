@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { listEntryRulesInEffect, matchLine, selectRule } from '@openbooks/engine/src/allocations/match.ts'
 import type { LineCoordinate, RuleInEffect } from '@openbooks/engine/src/allocations/types.ts'
 import { resolveAccountGroups } from '@openbooks/engine/src/records/account-groups.ts'
@@ -72,7 +73,9 @@ export async function GET(request: Request): Promise<NextResponse> {
   }
 
   const documentKind = param('documentKind')
-  const rawDate = param('documentDate') ?? new Date().toISOString().slice(0, 10)
+  // The default document date is the org's business day, never the UTC day
+  // (which is tomorrow in the evening for the Americas).
+  const rawDate = param('documentDate') ?? (await businessToday(user.orgId))
   if (!DATE_RE.test(rawDate)) return invalid('invalid_documentDate')
   const documentDate = rawDate
 

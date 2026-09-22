@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { businessToday } from "../platform/business-date.ts";
 import { db } from "../platform/db.ts";
 import { flowTranslation, translateFlowAmount } from "../fx/translation.ts";
 import { add, normalizeMoney } from "../money/money.ts";
@@ -38,7 +39,9 @@ export async function directSubcontractOpenCommitment(
        and s.purchase_order_id is null
      group by 1
   `));
-  const today = new Date().toISOString().slice(0, 10);
+  // FX "as of" is the org's business day, never the UTC day (which is tomorrow
+  // in the evening for the Americas).
+  const today = await businessToday(orgId);
   const ctx = await flowTranslation(
     orgId,
     result.rows.map((r) => ({ func: r.func ?? null, date: today })),

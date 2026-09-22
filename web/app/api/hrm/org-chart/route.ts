@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { loadDirectory, loadOrgChart } from "@openbooks/engine/src/hrm/org-chart.ts";
+import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { hrmDocumentsErrorResponse } from "../documents/_lib";
@@ -31,7 +32,9 @@ export async function GET(req: Request) {
       });
       return NextResponse.json({ directory });
     }
-    const asOf = params.get("asOf") ?? new Date().toISOString().slice(0, 10);
+    // The default as-of is the org's business day, never the UTC day (which is
+    // tomorrow in the evening for the Americas).
+    const asOf = params.get("asOf") ?? (await businessToday(actor.user.orgId));
     if (!civilDate.safeParse(asOf).success) {
       return NextResponse.json({ error: "asOf must be YYYY-MM-DD" }, { status: 400 });
     }

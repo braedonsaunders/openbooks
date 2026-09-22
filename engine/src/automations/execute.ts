@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { businessToday } from "../platform/business-date.ts";
 import { db, schema, withOrg, withTransactionSavepoint } from "../platform/db.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { getFlowAdapter } from "../flows/registry.ts";
@@ -273,7 +274,9 @@ async function runActionLive(
         actorId: initiatorUserId ?? "",
         employmentId,
         kind: "onboarding",
-        effectiveDate: new Date().toISOString().slice(0, 10),
+        // The opened process is effective on the org's business day, never the
+        // UTC day (which is tomorrow in the evening for the Americas).
+        effectiveDate: await businessToday(orgId),
         templateId: action.templateId,
         openedByChangeId: null,
       });
