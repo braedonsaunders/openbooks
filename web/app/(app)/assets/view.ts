@@ -15,17 +15,20 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
+import { isFeatureEnabled } from '../../../lib/features'
 import { isUuid, pickString } from '../../../lib/list-params'
 import { loadAsset, type AssetPayload } from '../../api/assets/_lib'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../lib/subsidiaries'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { loadFieldDefs } from '../../../lib/custom-fields'
 import type { AssetDrawer } from './AssetDrawer'
+import { assetWorkspaceTabs } from './tabs'
 
 /**
  * The fixed-asset register, split into a loader and a spec.
  *
- * Two searchParam-driven tabs over very different machinery:
+ * Two searchParam-driven fixed-asset views over very different machinery,
+ * presented in the shared header switcher beside the Equipment route:
  *
  *  - `register` is the universal EntityListView (`fixed_asset`), so the list
  *    itself arrives through the slot that re-derives Authz server-side. The
@@ -35,11 +38,10 @@ import type { AssetDrawer } from './AssetDrawer'
  *    button plus a result table kept in component state), so it is one widget,
  *    like the approvals table.
  *
- * Two wrappers the spec cannot re-express: the register tab strip is a small
- * local nav (exact classes the native page uses), and the drawer is the
- * AssetDrawer with its remount key riding along as a prop — switching assets
+ * The drawer keeps its remount key riding along as a prop: switching assets
  * must reset the drawer's client state, and a widget at a fixed position
- * would otherwise be reused.
+ * would otherwise be reused. Route switching itself uses ModuleHomeTabs,
+ * exactly like every other page-level subtab strip.
  */
 
 type AssetDrawerProps = Parameters<typeof AssetDrawer>[0]
@@ -66,6 +68,7 @@ export interface AssetsData {
   docLabel: string
   showActions: boolean
   books: { id: string; name: string; is_primary?: boolean }[]
+  /** Compatibility data for tenant PageSpecs saved before Equipment became a tab. */
   equipmentLabel: string
   currentParams: Record<string, string | string[] | undefined>
   canManage: boolean
@@ -89,15 +92,15 @@ export async function loadAssets(
   const orgId = authz.user.orgId
 
   const tab = pickString(sp.tab) === 'tax-depreciation' ? 'tax-depreciation' : 'register'
-  const tabs = [
-    { key: 'register', href: '/assets', label: t('tabs.register'), active: tab === 'register' },
-    {
-      key: 'tax-depreciation',
-      href: '/assets?tab=tax-depreciation',
-      label: t('tabs.taxDepreciation'),
-      active: tab === 'tax-depreciation',
-    },
-  ]
+  const equipmentEnabled = await isFeatureEnabled(orgId, 'equipment')
+  const tabs = assetWorkspaceTabs({
+    active: tab,
+    registerLabel: t('tabs.register'),
+    taxDepreciationLabel: t('tabs.taxDepreciation'),
+    equipmentLabel: t('equipment.title'),
+    showFixedAssets: true,
+    showEquipment: equipmentEnabled,
+  })
 
   const base = {
     title: t('list.title'),
@@ -223,35 +226,17 @@ export function assetsSpec(data: AssetsData): PageSpec {
     route: '/assets',
     layout: 'list',
     header: [
-      // Two headers, not one with conditional actions: the native tax tab
-      // renders PageHeader with NO actions prop (no actions wrapper at all),
-      // while the register tab always renders the doc link plus — for a
-      // manager — the run/create buttons inside a flex row of its own.
-      {
-        ...pageHeader({
-          title: f('title'),
-          description: f('description'),
-          actionsClassName: 'flex flex-wrap items-center gap-2',
-          actions: [
-            widget('assets-doc-link', { label: data.docLabel }),
-            widget(runDepreciation.widget, runDepreciation.props, f('showActions')),
-            widget(newAsset.widget, newAsset.props, f('showActions')),
-          ],
-        }),
-        when: f('onRegister'),
-      },
-      {
-        ...pageHeader({
-          title: f('title'),
-          description: f('description'),
-        }),
-        when: f('onTax'),
-      },
-      widgetBlock('assets-tabs', { tabs: data.tabs }),
-      {
-        ...widgetBlock('assets-equipment-link', { label: data.equipmentLabel }),
-        when: f('onRegister'),
-      },
+      pageHeader({
+        title: f('title'),
+        description: f('description'),
+        actionsClassName: 'flex flex-wrap items-center justify-end gap-2',
+        actions: [
+          widget('assets-doc-link', { label: data.docLabel }, f('onRegister')),
+          widget(runDepreciation.widget, runDepreciation.props, f('showActions')),
+          widget(newAsset.widget, newAsset.props, f('showActions')),
+          widget('module-home-tabs', { tabs: data.tabs }),
+        ],
+      }),
     ],
     body: [
       {

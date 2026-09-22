@@ -2,20 +2,17 @@ import Link from 'next/link'
 import { KpiStrip, type Kpi } from '../../../../components/kpi-strip'
 
 /**
- * Pieces of the equipment register that the page and the widget registry share.
+ * Equipment adapters retained for stored PageSpecs plus the KPI strip used by
+ * the built-in page.
  *
- * They live here rather than inside `page.tsx` for the reason SortTh taught:
- * two implementations of the same visual element drift, and a conformance
- * harness that compares one against the other would then be measuring the
- * drift instead of the conversion. One implementation, two callers.
- *
- * The header link row is one composite the grid vocabulary cannot name: three
- * next/link anchors in a flex-wrap row, the first two present only while the
- * Fixed Assets feature is on. The KPI strip is KpiStrip markup, not
- * stat-tile — values arrive already formatted from the loader.
+ * New built-in layouts use ModuleHomeTabs for the Fixed Assets / Tax
+ * Depreciation / Equipment switch. The old link-row renderer remains
+ * registered so tenant layouts saved before that conversion still render.
+ * The KPI strip is KpiStrip markup, not stat-tile — values arrive already
+ * formatted from the loader.
  */
 
-/** The fixed-assets / tax-depreciation / documentation link row under the header. */
+/** Legacy stored-layout adapter; built-in pages use ModuleHomeTabs. */
 export function EquipmentHeaderLinks({
   fixedAssetsLabel,
   taxDepreciationLabel,

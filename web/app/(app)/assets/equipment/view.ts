@@ -11,6 +11,7 @@ import { isUuid, pickString } from '../../../../lib/list-params'
 import { loadEquipment } from '../../../api/equipment/_lib'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../lib/features'
 import type { EquipmentDrawer } from './EquipmentDrawer'
+import { assetWorkspaceTabs } from '../tabs'
 
 /**
  * The equipment register, split into a loader and a spec.
@@ -28,8 +29,8 @@ import type { EquipmentDrawer } from './EquipmentDrawer'
  * carries only the record type, the current params, and widget refs for the
  * drawer and the empty-state action — never an org id.
  *
- * Two wrappers the spec cannot re-express: the header link row (exact classes
- * the native page uses) and the KPI strip (KpiStrip markup is not stat-tile).
+ * The header composes the same ModuleHomeTabs route switcher as /assets; the
+ * KPI strip remains a widget because KpiStrip markup is not stat-tile.
  */
 
 type EquipmentDrawerProps = Parameters<typeof EquipmentDrawer>[0]
@@ -55,6 +56,8 @@ export interface EquipmentData {
   currentParams: Record<string, string | string[] | undefined>
   canManage: boolean
   kpis: { label: string; value: string }[]
+  tabs: { key: string; href: string; label: string; active: boolean }[]
+  /** Compatibility data for tenant PageSpecs saved before the shared tabs. */
   fixedAssetsLabel: string
   taxDepreciationLabel: string
   documentationLabel: string
@@ -80,7 +83,10 @@ export async function loadEquipmentPage(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<EquipmentData> {
   const { money } = await getMoneyFormatter()
-  const t = await getTranslations('assets.equipment')
+  const [t, ta] = await Promise.all([
+    getTranslations('assets.equipment'),
+    getTranslations('assets'),
+  ])
   const authz = await requirePermission('assets.read')
   await requireFeatureEnabled(authz.user.orgId, 'equipment')
   const canManage = can(authz, 'assets.manage')
@@ -135,6 +141,14 @@ export async function loadEquipmentPage(
       { label: t('metrics.recovery'), value: money(summary.rows[0]?.recovery) },
       { label: t('metrics.billable'), value: money(summary.rows[0]?.billable) },
     ],
+    tabs: assetWorkspaceTabs({
+      active: 'equipment',
+      registerLabel: ta('tabs.register'),
+      taxDepreciationLabel: ta('tabs.taxDepreciation'),
+      equipmentLabel: t('title'),
+      showFixedAssets: fixedAssetsEnabled,
+      showEquipment: true,
+    }),
     fixedAssetsLabel: t('fixedAssets'),
     taxDepreciationLabel: t('taxDepreciation'),
     documentationLabel: t('documentation'),
@@ -157,16 +171,16 @@ export function equipmentSpec(data: EquipmentData): PageSpec {
       pageHeader({
         title: f('title'),
         description: f('description'),
-        actions: [widget(newEquipment.widget, newEquipment.props, f('canManage'))],
-      }),
-      // One composite, not three conditional links: the native row is a single
-      // flex div whose first two anchors appear only while Fixed Assets is on.
-      // Two presence-gated blocks would emit two divs when the feature is on.
-      widgetBlock('equipment-header-links', {
-        fixedAssetsLabel: data.fixedAssetsLabel,
-        taxDepreciationLabel: data.taxDepreciationLabel,
-        documentationLabel: data.documentationLabel,
-        showFixedAssetsLinks: data.showFixedAssetsLinks,
+        actionsClassName: 'flex flex-wrap items-center justify-end gap-2',
+        actions: [
+          widget('link-button', {
+            href: '/docs/item-rates',
+            label: data.documentationLabel,
+            variant: 'outline',
+          }),
+          widget(newEquipment.widget, newEquipment.props, f('canManage')),
+          widget('module-home-tabs', { tabs: data.tabs }),
+        ],
       }),
     ],
     // The native body wraps the KPI strip and the list in a `space-y-5` div;
