@@ -298,8 +298,16 @@ async function runDeferredAction(
   _index: number,
   action: AutomationAction,
 ): Promise<string> {
-  if (action.kind === "delay") return `delay ${action.days}d recorded`;
-  if (action.kind === "approve_step") return "approve_step recorded";
+  // Every formerly "deferred" kind refuses: delay has no continuation
+  // store, approve_step cannot mint a gate, start_flow has no dispatch
+  // entrypoint, webhook has no transport. Returning a success string
+  // would stamp the step succeeded for work that never happened, so each
+  // branch throws the same named remedy publish-time validation gives.
+  if (action.kind === "delay" || action.kind === "approve_step" || action.kind === "start_flow") {
+    throw new AutomationExecuteError(
+      `${unsupportedAutomationActionRefusal(action)} — edit the automation to remove the action, then re-enable it`,
+    );
+  }
   if (action.kind === "webhook") {
     // No outbound webhook transport exists (no outbox kind, no worker, no
     // endpoint caller), so a stored webhook action can never send: refuse
@@ -310,7 +318,6 @@ async function runDeferredAction(
       `${unsupportedAutomationActionRefusal(action)} — edit the automation to replace the webhook action, then re-enable it`,
     );
   }
-  if (action.kind === "start_flow") return `start_flow ${action.subject} recorded`;
   throw new AutomationExecuteError(`action kind '${(action as { kind: string }).kind}' is not executable yet — remove it and save again`);
 }
 
