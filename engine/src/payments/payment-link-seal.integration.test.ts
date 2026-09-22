@@ -166,27 +166,71 @@ test("already-hashed rows are untouched (engine-written links)", { skip: !DB }, 
   }
 });
 
+test("upgraded-install rows (migration hash + leftover plaintext) are sealed and nulled", { skip: !DB }, async () => {
+  // This is the state 0251 itself leaves on an upgraded install: the
+  // migration backfilled the hash in SQL but could not seal or null the
+  // plaintext without the data key.
+  const secret = `link-secret-${randomUUID()}`;
+  const row = await insertLink({ token: secret, tokenSealed: null, tokenHash: paymentLinkTokenHash(secret) });
+  try {
+    await sealLegacyPaymentLinkTokens();
+    const after = await readLink(row.id);
+    assert.equal(after.token, null, "no plaintext may persist at rest");
+    assert.ok(after.tokenSealed, "display seal must be set");
+    assert.equal(after.tokenHash, paymentLinkTokenHash(secret), "verified hash must be kept");
+    assert.equal(await resolveByHash(paymentLinkTokenHash(secret)), row.id, "link must resolve by hash");
+    assert.equal(unsealSecret(after.tokenSealed), secret, "display path must recover the secret");
+  } finally {
+    await removeLink(row.id);
+  }
+});
+
+test("a stored hash that does not match the secret refuses instead of overwriting", { skip: !DB }, async () => {
+  const row = await insertLink({
+    token: `link-secret-${randomUUID()}`,
+    tokenSealed: null,
+    tokenHash: "0".repeat(64),
+  });
+  try {
+    await assert.rejects(sealLegacyPaymentLinkTokens(), /hash-mismatch/);
+  } finally {
+    await removeLink(row.id);
+  }
+});
+
 test("planner prefers plaintext, keeps an existing seal, refuses empty rows", () => {
   const crypto = {
     seal: (plain: string) => `sealed(${plain})`,
     unseal: (sealed: string) => (sealed === "good-seal" ? "unsealed-secret" : null),
     hash: (plain: string) => `hash(${plain})`,
   };
-  const legacy = planPaymentLinkSeal({ id: "a", token: "plain", token_sealed: null }, crypto);
+  const legacy = planPaymentLinkSeal({ id: "a", token: "plain", token_sealed: null, token_hash: null }, crypto);
   assert.deepEqual(legacy, { id: "a", tokenHash: "hash(plain)", tokenSealed: "sealed(plain)" });
 
-  const partial = planPaymentLinkSeal({ id: "b", token: "plain", token_sealed: "existing" }, crypto);
+  const partial = planPaymentLinkSeal({ id: "b", token: "plain", token_sealed: "existing", token_hash: null }, crypto);
   assert.deepEqual(partial, { id: "b", tokenHash: "hash(plain)", tokenSealed: "existing" });
 
-  const healed = planPaymentLinkSeal({ id: "c", token: null, token_sealed: "good-seal" }, crypto);
+  // The 0251-upgraded shape: hash already present and matching, plaintext
+  // still present, no seal — seal it, null it, keep the verified hash.
+  const upgraded = planPaymentLinkSeal(
+    { id: "b2", token: "plain", token_sealed: null, token_hash: "hash(plain)" },
+    crypto,
+  );
+  assert.deepEqual(upgraded, { id: "b2", tokenHash: "hash(plain)", tokenSealed: "sealed(plain)" });
+
+  const healed = planPaymentLinkSeal({ id: "c", token: null, token_sealed: "good-seal", token_hash: null }, crypto);
   assert.deepEqual(healed, { id: "c", tokenHash: "hash(unsealed-secret)", tokenSealed: "good-seal" });
 
-  assert.deepEqual(planPaymentLinkSeal({ id: "d", token: null, token_sealed: "bad-seal" }, crypto), {
-    id: "d",
-    unrecoverable: true,
-  });
-  assert.deepEqual(planPaymentLinkSeal({ id: "e", token: null, token_sealed: null }, crypto), {
-    id: "e",
-    unrecoverable: true,
-  });
+  assert.deepEqual(
+    planPaymentLinkSeal({ id: "d", token: null, token_sealed: "bad-seal", token_hash: null }, crypto),
+    { id: "d", unrecoverable: true, reason: "missing-secret" },
+  );
+  assert.deepEqual(
+    planPaymentLinkSeal({ id: "e", token: null, token_sealed: null, token_hash: null }, crypto),
+    { id: "e", unrecoverable: true, reason: "missing-secret" },
+  );
+  assert.deepEqual(
+    planPaymentLinkSeal({ id: "f", token: "plain", token_sealed: null, token_hash: "hash(other)" }, crypto),
+    { id: "f", unrecoverable: true, reason: "hash-mismatch" },
+  );
 });
