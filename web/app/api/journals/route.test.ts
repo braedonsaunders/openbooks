@@ -121,6 +121,12 @@ const mockSources = new Map<string, string>([
           },
         }),
       }
+      // Modules the route pulls in transitively (subsidiaries, segments)
+      // import the tenant-context helpers from this same module; the double
+      // stands in for the whole module, so it must offer them too.
+      export function ambientTenantOrgId() { return '${ORG_ID}' }
+      export function withBypassContext(fn) { return fn() }
+      export function withOrgContext(_orgId, fn) { return fn() }
     `,
   ],
   [
@@ -140,19 +146,38 @@ const mockSources = new Map<string, string>([
   ],
   [
     "mock:clock",
-    `export async function businessToday() { return globalThis[Symbol.for('openbooks.journals-route-test')].clockDate }`,
+    `export async function businessToday() { return globalThis[Symbol.for('openbooks.journals-route-test')].clockDate }
+     // Custom-field validation runs REAL and reads its date predicate from
+     // this same module, so the double carries the real rule rather than a
+     // stub that would let any string through.
+     export function isIsoCalendarDate(value) {
+       if (typeof value !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false
+       const [y, m, d] = value.split('-').map(Number)
+       const date = new Date(Date.UTC(y, m - 1, d))
+       return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d
+     }`,
   ],
 ]);
 
 const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/platform/db.ts", "mock:db"],
-  ["../../../../lib/authz", "mock:authz"],
-  ["../../../../lib/journals", "mock:journals-lib"],
+  ["../../../lib/authz", "mock:authz"],
+  ["../../../lib/journals", "mock:journals-lib"],
   ["@openbooks/engine/src/platform/business-date.ts", "mock:clock"],
 ]);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    // Server-module guard: the route's transitive imports mark themselves
+    // server-only, which throws outside a Next render. The repo's route
+    // tests neutralize it the same way.
+    if (specifier === "server-only") {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url: "data:text/javascript,export {}",
+      };
+    }
     const mocked = mockUrls.get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };
     return nextResolve(specifier, context);
