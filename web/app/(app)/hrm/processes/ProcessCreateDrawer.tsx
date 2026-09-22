@@ -72,49 +72,55 @@ export function ProcessCreateDrawer({ create }: { create: ProcessCreateData | nu
   }, [create, employmentId, query, t])
 
   useEffect(() => {
-    setTemplateId('')
-    if (!create || !employmentId || !effectiveDate) {
-      setTemplateOptions([])
-      setTemplateStatus(undefined)
-      setTemplatesLoading(false)
-      return
-    }
-    const requestId = (templateRequest.current += 1)
-    const params = new URLSearchParams({
-      active: 'true',
-      employment: employmentId,
-      effectiveDate,
-      kind,
-    })
-    setTemplatesLoading(true)
-    fetch(`/api/hrm/process-templates?${params.toString()}`, { method: 'GET' })
-      .then(async (response) => {
-        if (requestId !== templateRequest.current) return
-        if (!response.ok) {
-          setTemplateStatus(await readApiErrorMessage(response, t('processes.templates.loadFailed')))
-          setTemplateOptions([])
-          setTemplatesLoading(false)
-          return
-        }
-        const payload = (await response.json()) as {
-          templates?: { id?: unknown; name?: unknown; stepCount?: unknown }[]
-        }
-        if (requestId !== templateRequest.current) return
-        const ready = (payload.templates ?? []).flatMap((template) =>
-          typeof template.id === 'string' && typeof template.name === 'string' && Number(template.stepCount) > 0
-            ? [{ value: template.id, label: template.name }]
-            : [],
-        )
-        setTemplateOptions(ready)
-        setTemplateStatus(ready.length === 0 ? t('processes.templates.noneEligible') : undefined)
-        setTemplatesLoading(false)
-      })
-      .catch(() => {
-        if (requestId !== templateRequest.current) return
+    // The whole block runs async so the reset and the gate-off branch below
+    // never set state synchronously in the effect body (cascading renders).
+    // Staleness is already handled by the requestId fence, not by unmounting.
+    const run = async (): Promise<void> => {
+      setTemplateId('')
+      if (!create || !employmentId || !effectiveDate) {
         setTemplateOptions([])
-        setTemplateStatus(t('processes.templates.loadFailed'))
+        setTemplateStatus(undefined)
         setTemplatesLoading(false)
+        return
+      }
+      const requestId = (templateRequest.current += 1)
+      const params = new URLSearchParams({
+        active: 'true',
+        employment: employmentId,
+        effectiveDate,
+        kind,
       })
+      setTemplatesLoading(true)
+      await fetch(`/api/hrm/process-templates?${params.toString()}`, { method: 'GET' })
+        .then(async (response) => {
+          if (requestId !== templateRequest.current) return
+          if (!response.ok) {
+            setTemplateStatus(await readApiErrorMessage(response, t('processes.templates.loadFailed')))
+            setTemplateOptions([])
+            setTemplatesLoading(false)
+            return
+          }
+          const payload = (await response.json()) as {
+            templates?: { id?: unknown; name?: unknown; stepCount?: unknown }[]
+          }
+          if (requestId !== templateRequest.current) return
+          const ready = (payload.templates ?? []).flatMap((template) =>
+            typeof template.id === 'string' && typeof template.name === 'string' && Number(template.stepCount) > 0
+              ? [{ value: template.id, label: template.name }]
+              : [],
+          )
+          setTemplateOptions(ready)
+          setTemplateStatus(ready.length === 0 ? t('processes.templates.noneEligible') : undefined)
+          setTemplatesLoading(false)
+        })
+        .catch(() => {
+          if (requestId !== templateRequest.current) return
+          setTemplateOptions([])
+          setTemplateStatus(t('processes.templates.loadFailed'))
+          setTemplatesLoading(false)
+        })
+    }
+    void run()
   }, [create, effectiveDate, employmentId, kind, t])
 
   if (!create) return null

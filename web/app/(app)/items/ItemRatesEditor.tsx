@@ -77,7 +77,7 @@ export function ItemRatesEditor({
     day: t('defaults.day'), week: t('defaults.week'), month: t('defaults.month'),
   }), [itemKind, itemUnit, t])
   const [data, setData] = useState<RateData | null>(null)
-  const [editing, setEditing] = useState(false)
+  const [editingRequested, setEditingRequested] = useState(false)
   const [busy, setBusy] = useState(false)
   const [serverError, setServerError] = useState('')
   const [rateBookId, setRateBookId] = useState('')
@@ -88,22 +88,26 @@ export function ItemRatesEditor({
   const [tiers, setTiers] = useState<Tier[]>(defaults)
   const [showPremiums, setShowPremiums] = useState(false)
 
-  // A read-only viewer must never retain an edit form after permissions change.
-  useEffect(() => {
-    if (!canManage) setEditing(false)
-  }, [canManage])
+  // A read-only viewer must never retain an edit form after permissions
+  // change. Derived rather than reset from an effect: an effect would leave
+  // the form rendered for the render in which the permission was lost.
+  const editing = editingRequested && canManage
 
-  const load = useCallback(async () => {
-    const res = await fetch(`/api/items/${itemId}/rates`)
-    if (!res.ok) return
-    const next = await res.json() as RateData
-    setData(next)
-    setRateBookId(next.books.find((book) => book.is_default)?.id ?? next.books[0]?.id ?? '')
-    if (next.profile) {
-      setBaseUnit(next.profile.base_unit)
-      setPricingPolicy(next.profile.pricing_policy)
-      setInvoicePresentation(next.profile.invoice_presentation)
-    }
+  // Fetch chain rather than an async body: every state update below sits in a
+  // promise continuation (the fetch response), never synchronously in the
+  // effect that calls this. The promise is returned so callers can await it.
+  const load = useCallback(() => {
+    return fetch(`/api/items/${itemId}/rates`).then(async (res) => {
+      if (!res.ok) return
+      const next = await res.json() as RateData
+      setData(next)
+      setRateBookId(next.books.find((book) => book.is_default)?.id ?? next.books[0]?.id ?? '')
+      if (next.profile) {
+        setBaseUnit(next.profile.base_unit)
+        setPricingPolicy(next.profile.pricing_policy)
+        setInvoicePresentation(next.profile.invoice_presentation)
+      }
+    })
   }, [itemId])
   useEffect(() => { void load() }, [load])
 
@@ -154,7 +158,7 @@ export function ItemRatesEditor({
     setEffectiveFrom(today)
     setServerError('')
     setShowPremiums(false)
-    setEditing(true)
+    setEditingRequested(true)
   }
 
   const advancedPricing = data?.profile != null
@@ -177,7 +181,7 @@ export function ItemRatesEditor({
         return
       }
       toast.success(t('saved'))
-      setEditing(false)
+      setEditingRequested(false)
       await load()
     } catch {
       const message = common('feedback.saveFailed')
@@ -280,7 +284,7 @@ export function ItemRatesEditor({
             {serverError ? <p role="alert" className="text-sm text-red-600 dark:text-red-400">{serverError}</p> : null}
             <div className="flex gap-2">
               <Button disabled={busy} onClick={save}>{busy ? common('actions.saving') : common('actions.save')}</Button>
-              <Button variant="outline" onClick={() => setEditing(false)}>{common('actions.cancel')}</Button>
+              <Button variant="outline" onClick={() => setEditingRequested(false)}>{common('actions.cancel')}</Button>
             </div>
           </CardContent>
         </Card>
