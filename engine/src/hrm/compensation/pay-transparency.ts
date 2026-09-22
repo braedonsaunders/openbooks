@@ -2,7 +2,6 @@ import { sql } from "drizzle-orm";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
 import { db, withOrgTransaction } from "../../platform/db.ts";
-import { businessToday } from "../../platform/business-date.ts";
 import { laborFxQuote, resolveWage, type LaborFxQuote } from "../../projects/labor-costing.ts";
 import { mul, mulRate } from "../../money/money.ts";
 import {
@@ -168,8 +167,9 @@ function toStoredCategories(categories: readonly GapCategory[]): Record<string, 
   }));
 }
 
-function fromStoredCategories(stored: unknown): GapCategory[] {
-  return (stored as Array<Record<string, unknown>>).map((c) => ({
+function fromStoredCategory(stored: unknown): GapCategory {
+  const c = stored as Record<string, unknown>;
+  return {
     levelId: c.level_id as string,
     levelCode: c.level_code as string,
     familyId: (c.family_id ?? null) as string | null,
@@ -180,7 +180,11 @@ function fromStoredCategories(stored: unknown): GapCategory[] {
     unexplainedGapPct: (c.unexplained_gap_pct ?? null) as number | null,
     method: c.method as string,
     jointAssessmentDue: c.joint_assessment_due === true,
-  }));
+  };
+}
+
+function fromStoredCategories(stored: unknown): GapCategory[] {
+  return (stored as Array<Record<string, unknown>>).map(fromStoredCategory);
 }
 
 export interface GapSnapshotDTO {
@@ -654,7 +658,15 @@ export async function requestPayInformation(query: {
   });
 }
 
-/** Fulfil a request from the latest snapshot covering the worker's category. Refuses when none does. */
+/**
+ * Fulfil a request from the latest snapshot covering the worker's
+ * category AS OF THAT SNAPSHOT'S DATE. The category resolves through
+ * effective-dated assignment and position rows at each candidate
+ * snapshot date (newest first); the first snapshot covering the
+ * worker's then-current level answers. A later promotion — or an
+ * ended assignment — never misjoins fulfilment onto today's level.
+ * Refuses when no snapshot covers the worker's category at its date.
+ */
 export async function fulfilPayInformationRequest(query: {
   orgId: string;
   actorId: string;
@@ -696,46 +708,102 @@ export async function fulfilPayInformationRequest(query: {
     // Fulfilment copies org-wide frozen category averages: a restricted
     // lens must not launder them through a request it was refused directly.
     await requireUnrestrictedGapScope(orgId, actorId, "fulfil");
-    // The worker's level category at the snapshot date.
+    // The worker's level category AS OF THE ANSWERING snapshot's date:
+    // one query joins every snapshot to the worker's then-current level
+    // through effective-dated assignment and position rows (the same
+    // predicates the snapshot computation uses — never today's
+    // assignment relabelled as historical) and keeps the newest snapshot
+    // whose frozen categories cover that level, so historical coverage
+    // survives later promotions and ended assignments. Only the winning
+    // row's matched category crosses the wire (LIMIT 1) — the SELECT
+    // returns the answering category element itself, so there is no
+    // second find that could disagree with the coverage the statement
+    // just proved. Older covering history stays discoverable because
+    // selection scans the full ordered set inside the database. Ties
+    // break on generated_at then id, deterministically.
     const snapshot = (await db.execute<{
       id: string;
-      categories: unknown;
+      as_of: string;
+      category: unknown;
+      level_id: string;
+      level_code: string;
     }>(sql`
-      select id, categories from hrm_pay_gap_snapshots
-       where org_id = ${orgId}
-       order by as_of desc, generated_at desc limit 1`)).rows[0];
+      select s.id, s.as_of::text as as_of, cat.category, lvl.id as level_id, lvl.code as level_code
+        from hrm_pay_gap_snapshots s
+        cross join lateral (
+          select lvl.id, lvl.code
+            from employment_assignment_versions aav
+            join position_versions pv
+              on pv.org_id = aav.org_id and pv.position_id = aav.position_id
+             and pv.effective_from <= s.as_of
+             and (pv.effective_to is null or pv.effective_to >= s.as_of)
+             and pv.recorded_until is null
+            join hrm_job_levels lvl
+              on lvl.org_id = ${orgId} and lvl.id = pv.job_level_id
+           where aav.org_id = ${orgId} and aav.employment_id = ${request.employment_id} and aav.is_primary
+             and aav.effective_from <= s.as_of
+             and (aav.effective_to is null or aav.effective_to >= s.as_of)
+             and aav.recorded_until is null
+             and aav.position_id is not null
+           order by aav.effective_from desc limit 1
+        ) lvl
+        cross join lateral (
+          select c as category from jsonb_array_elements(s.categories) c
+           where c->>'level_id' = lvl.id::text
+           limit 1
+        ) cat
+       where s.org_id = ${orgId}
+       order by s.as_of desc, s.generated_at desc, s.id desc
+       limit 1`)).rows[0];
     if (!snapshot) {
+      const anySnapshot = (await db.execute<{ id: string }>(sql`
+        select id from hrm_pay_gap_snapshots where org_id = ${orgId} limit 1`)).rows[0];
+      if (!anySnapshot) {
+        throw new CompensationError(
+          "REFUSED",
+          "no gap snapshot exists — compute a snapshot before answering pay-information requests",
+        );
+      }
+      // Bounded diagnostic (one row): the lateral drops snapshots with
+      // no positioned assignment, so this names the newest *resolved*
+      // level across snapshot dates — not necessarily the newest
+      // snapshot's date — and an empty result means no positioned
+      // assignment on any snapshot date.
+      const newestLevel = (await db.execute<{ level_code: string }>(sql`
+        select lvl.code as level_code
+          from hrm_pay_gap_snapshots s
+          cross join lateral (
+            select lvl.code
+              from employment_assignment_versions aav
+              join position_versions pv
+                on pv.org_id = aav.org_id and pv.position_id = aav.position_id
+               and pv.effective_from <= s.as_of
+               and (pv.effective_to is null or pv.effective_to >= s.as_of)
+               and pv.recorded_until is null
+              join hrm_job_levels lvl
+                on lvl.org_id = ${orgId} and lvl.id = pv.job_level_id
+             where aav.org_id = ${orgId} and aav.employment_id = ${request.employment_id} and aav.is_primary
+               and aav.effective_from <= s.as_of
+               and (aav.effective_to is null or aav.effective_to >= s.as_of)
+               and aav.recorded_until is null
+               and aav.position_id is not null
+             order by aav.effective_from desc limit 1
+          ) lvl
+         where s.org_id = ${orgId}
+         order by s.as_of desc, s.generated_at desc, s.id desc
+         limit 1`)).rows[0];
       throw new CompensationError(
         "REFUSED",
-        "no gap snapshot exists — compute a snapshot before answering pay-information requests",
+        !newestLevel
+          ? "no snapshot covers this worker's category — the worker held no positioned assignment on any snapshot date; compute a snapshot covering a date they held their level before answering"
+          : `no snapshot covers this worker's category (level ${JSON.stringify(newestLevel.level_code)}) — compute a snapshot including their level before answering`,
       );
     }
-    const today = await businessToday(orgId);
-    const position = (await db.execute<{ level_id: string | null }>(sql`
-      select pv.job_level_id as level_id
-        from employment_assignment_versions aav
-        join position_versions pv
-          on pv.org_id = aav.org_id and pv.position_id = aav.position_id
-         and pv.effective_from <= ${today}::date
-         and (pv.effective_to is null or pv.effective_to >= ${today}::date)
-         and pv.recorded_until is null
-       where aav.org_id = ${orgId} and aav.employment_id = ${request.employment_id} and aav.is_primary
-         and aav.effective_from <= ${today}::date
-         and (aav.effective_to is null or aav.effective_to >= ${today}::date)
-         and aav.recorded_until is null
-         and aav.position_id is not null
-       order by aav.effective_from desc limit 1`)).rows[0];
-    const category = position?.level_id
-      ? fromStoredCategories(snapshot.categories).find((c) => c.levelId === position.level_id) ?? null
-      : null;
-    if (!category) {
-      throw new CompensationError(
-        "REFUSED",
-        "no snapshot covers this worker's category — compute a snapshot including their level before answering",
-      );
-    }
+    const category = fromStoredCategory(snapshot.category);
     const averages = {
       snapshotId: snapshot.id,
+      snapshotAsOf: snapshot.as_of,
+      levelId: category.levelId,
       levelCode: category.levelCode,
       countA: category.countA,
       countB: category.countB,
