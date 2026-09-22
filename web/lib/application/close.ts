@@ -170,6 +170,17 @@ export async function runPeriodRevaluation(context: ApplicationContext, input: {
 }): Promise<{ replayed: boolean; result: Record<string, unknown> }> {
   assertApplicationPermission(context, "close.run");
   const allowed = context.authz.allowedSubsidiaryIds;
+  // Fail closed before the idempotent execution is recorded: an empty caller
+  // scope would otherwise run zero subsidiaries and report success with no
+  // observable work. Mirrors the run-revaluation route guard with the same
+  // wording; null stays the explicit unrestricted sentinel.
+  if (allowed !== null && allowed.size === 0) {
+    throw new ApplicationError(
+      "forbidden",
+      "no subsidiaries are in the caller's close scope — ask an administrator with unrestricted subsidiary visibility to run this close action",
+      403,
+    );
+  }
   const outcome = await executeIdempotent({
     context,
     operation: "close.revaluation.run",

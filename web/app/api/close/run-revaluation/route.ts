@@ -37,6 +37,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'invalid book' }, { status: 422 })
   }
 
+  // A restricted caller whose visibility resolves to an empty subsidiary set
+  // must fail closed like the sibling close runs and posting-periods routes:
+  // spreading the empty set into [] loops zero subsidiaries and reports 200
+  // {posted:[],skipped:[],problems:[]} with no observable work. Null is the
+  // explicit unrestricted sentinel and passes through untouched.
+  if (gate.allowedSubsidiaryIds !== null && gate.allowedSubsidiaryIds.size === 0) {
+    return NextResponse.json(
+      { error: "no subsidiaries are in the caller's close scope — ask an administrator with unrestricted subsidiary visibility to run this close action" },
+      { status: 403 },
+    )
+  }
+
   try {
     const result = await runRevaluation(
       user.orgId,
