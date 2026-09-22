@@ -502,6 +502,16 @@ async function billOne(
   // a concurrent caller waits, then replays the committed invoice instead of
   // leaving an orphan duplicate document.
   await db.execute(sql`select id from subscriptions where id = ${sub.id} and org_id = ${sub.orgId} for update`);
+  // Re-read status UNDER the lock: the caller's SubRow was loaded before the
+  // lock and is stale — a subscription canceled (or vanished) between that
+  // read and this claim must refuse instead of cutting a new invoice.
+  const live = (await db.execute<{ status: string }>(sql`
+    select status from subscriptions where id = ${sub.id} and org_id = ${sub.orgId}
+  `)).rows[0];
+  if (!live) throw new SubscriptionError("subscription not found");
+  if (live.status === "canceled") {
+    throw new SubscriptionError("subscription is canceled — set its status back to active before billing");
+  }
   const price = sub.priceOverride ?? sub.planAmount;
   const advanced = await advancedBillingSnapshot(sub.orgId, sub.id, billingDate, periodStartOverride);
   if (advanced && !advanced.lines.length) throw new SubscriptionError("subscription has no billable components for this period");
@@ -925,6 +935,11 @@ export async function prorateFirstInvoice(
   return withOrg(orgId, async () => {
     await db.execute(sql`select id from subscriptions where id = ${subscriptionId} and org_id = ${orgId} for update`);
     const row = await loadSubRow(subscriptionId, orgId);
+    // loadSubRow reads under the row lock, so this status is current — a
+    // canceled subscription must refuse instead of cutting a first invoice.
+    if (row.status === "canceled") {
+      throw new SubscriptionError("subscription is canceled — set its status back to active before billing");
+    }
     // Single-fire: create inserts next_bill_on = firstBillOn and
     // current_period_start = startOn — the same two columns a successful
     // proration writes. The real post-proration evidence is the invoice
