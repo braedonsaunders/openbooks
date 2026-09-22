@@ -4,7 +4,7 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 import { sealSecret, unsealSecret } from "../secrets";
 import {
   isAiProvider,
-  validateAiBaseUrl,
+  validateAiBaseUrlLive,
   type AiConfig,
   type AiProvider,
 } from "./client";
@@ -249,14 +249,16 @@ export async function getOrgAiConfig(orgId: string): Promise<AiConfig | null> {
 
 /**
  * Merge form input over the previously-stored config, re-sealing the key only
- * when a new one was typed. Throws on an invalid base URL.
+ * when a new one was typed. Throws on an invalid base URL — including one
+ * whose DNS answers private/loopback/link-local, which is resolved live
+ * here so a hostile name cannot be saved for later key-bearing requests.
  */
 export async function saveOrgAiSettings(
   orgId: string,
   userId: string,
   input: AiSettingsInput,
 ): Promise<void> {
-  const baseUrl = validateAiBaseUrl(input.provider, input.baseUrl) ?? "";
+  const baseUrl = (await validateAiBaseUrlLive(input.provider, input.baseUrl)) ?? "";
   await db.transaction(async (tx) => {
     const r = (await tx.execute<{ ai: unknown }>(sql`
       select settings->'ai' as ai from orgs where id = ${orgId} for update
