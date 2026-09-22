@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import { ActionError, type ActionResult } from '@braedonsaunders/appkit-errors'
 import { useAction, type ExecuteOptions } from '@braedonsaunders/appkit-errors/react'
 import { toast } from 'sonner'
@@ -63,5 +63,32 @@ export function useAppAction() {
     },
     [setRefusal],
   )
-  return { busy, refusal, execute, clearRefusal, refuse }
+  /**
+   * Synchronous re-entry guard for actions with a multi-await preamble
+   * before `execute` sets busy (client-script gates, confirm prompts):
+   * wrap the whole action — `const save = runExclusive(async () => {...})`
+   * — so the flag flips in the same tick as the click and a second click
+   * lands on a set flag instead of racing the preamble and sending the
+   * write twice with the same revision. The wrapper returns false for a
+   * dropped run. Do not nest it: a guarded action that triggers another
+   * guarded action on the same hook would drop the inner one, so
+   * follow-ups ride plain `execute` inside `onOk`.
+   */
+  const exclusive = useRef(false)
+  const runExclusive = useCallback(
+    <T extends unknown[]>(action: (...args: T) => Promise<void>): ((...args: T) => Promise<boolean>) => {
+      return async (...args) => {
+        if (exclusive.current) return false
+        exclusive.current = true
+        try {
+          await action(...args)
+          return true
+        } finally {
+          exclusive.current = false
+        }
+      }
+    },
+    [],
+  )
+  return { busy, refusal, execute, clearRefusal, refuse, runExclusive }
 }
