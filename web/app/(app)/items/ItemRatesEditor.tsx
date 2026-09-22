@@ -89,7 +89,9 @@ export function ItemRatesEditor({
   const [showPremiums, setShowPremiums] = useState(false)
 
   // A read-only viewer must never retain an edit form after permissions change.
-  if (!canManage && editing) setEditing(false)
+  useEffect(() => {
+    if (!canManage) setEditing(false)
+  }, [canManage])
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/items/${itemId}/rates`)

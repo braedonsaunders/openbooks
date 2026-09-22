@@ -141,6 +141,8 @@
     "newTitle": "Nouveau catalogue de tarifs",
     "editTitle": "Modifier {name}",
     "description": "Gérez ensemble l'en-tête et la grille complète des tarifs d'articles datés.",
+    "tabsAria": "Sections du catalogue de tarifs",
+    "tabs": { "overview": "Vue d'ensemble", "rates": "Tarifs des articles" },
     "ratesTitle": "Tarifs des articles",
     "ratesHelp": "L'enregistrement de lignes modifiées crée une nouvelle version immuable; les versions précédentes restent disponibles pour l'historique.",
     "item": "Article",
