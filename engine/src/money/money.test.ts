@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { abs, cmp, div, divRate, formatMoney, isZero, mul, mulDecimal, mulDecimalFactors, mulPercent, mulRate, mulRatio, normalizeDecimal, normalizeMoney, roundDiv, roundMoney, sum, toUnits } from "./money.ts";
+import { abs, cmp, div, divRate, formatMoney, isZero, mul, mulDecimal, mulDecimalFactors, mulPercent, mulRate, mulRatio, normalizeDecimal, normalizeMoney, prorateDays, roundDiv, roundMoney, sum, toUnits } from "./money.ts";
 
 test("mul handles quantity math, zero rates and exact rounding", () => {
   assert.equal(mul("3", "12.3456"), "37.0368");
@@ -38,6 +38,19 @@ test("mulRatio allocates exact partial carrying values", () => {
   assert.equal(mulRatio("120.0000", 1n, 3n), "40.0000");
   assert.equal(mulRatio("100.0000", 1n, 6n), "16.6667");
   assert.equal(toUnits(mulRatio("100.0000", 5n, 6n)) + toUnits("16.6667"), toUnits("100.0000"));
+});
+
+test("prorateDays prices covered days, clamps coverage, zeroes degenerate periods", () => {
+  // 15 of 31 July days of a 3000.00 allowance.
+  assert.equal(prorateDays("3000.0000", 15, 31), "1451.6129");
+  // Full coverage is exactly the full amount — no rounding dust.
+  assert.equal(prorateDays("50.0000", 14, 14), "50.0000");
+  // Over-coverage clamps; no coverage zeroes.
+  assert.equal(prorateDays("50.0000", 99, 14), "50.0000");
+  assert.equal(prorateDays("50.0000", 0, 14), "0.0000");
+  assert.equal(prorateDays("50.0000", -3, 14), "0.0000");
+  // A degenerate period prices as zero rather than throwing.
+  assert.equal(prorateDays("50.0000", 3, 0), "0.0000");
 });
 
 test("normalization and rational rounding never depend on binary floats", () => {

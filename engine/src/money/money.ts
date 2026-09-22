@@ -203,6 +203,22 @@ export function mulRatio(amount: string, numerator: bigint, denominator: bigint)
   return fromUnits(roundDiv(toUnits(amount) * numerator, denominator));
 }
 
+/**
+ * Pro-rata share of a period amount for the days a window covers: full ×
+ * coveredDays / totalDays, rounded to ledger precision.
+ *
+ * Day counting is the CALLER's window semantics, not this function's: pass
+ * whole calendar days on whatever inclusive/exclusive basis the window uses.
+ * Degenerate input (no days in the period) prices as zero rather than
+ * throwing, and coverage is clamped to [0, totalDays], so full coverage is
+ * exactly the full amount and a window outside the period is exactly zero.
+ */
+export function prorateDays(fullAmount: string, coveredDays: number, totalDays: number): string {
+  if (!(totalDays > 0)) return "0.0000";
+  const covered = Math.max(0, Math.min(totalDays, Math.floor(coveredDays)));
+  return mulRatio(fullAmount, BigInt(covered), BigInt(totalDays));
+}
+
 /** Canonicalize a money input to the ledger's numeric(19,4) representation. */
 export function normalizeMoney(value: string | number): string {
   return fromUnits(toUnits(value));
