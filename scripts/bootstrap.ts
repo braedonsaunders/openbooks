@@ -622,14 +622,515 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
 }> = [
   {
     filename: "generated/0001_baseline.sql",
-    from: "74a3b21e956f2f02334f5245f54b37fe235af732a8eb3345d86a9ea9611df007",
-    to: "780dfaf134f8d98a40c5e9d143291c161194fec196151aca30d1d4f6f4fbade6",
+    from: "f65211f25eb7d6fb31669612b9be2cfcafd1c24717902adc8f1cffa3fb121f5b",
+    to: "51397fe175d9c3c6f10853625847cf6f9b8615fc52701ac5973095c3dca2360e",
     strategy: "restamp",
     reason:
-      "regenerated from a dump of the database it builds: twelve payroll views "
-      + "gained the tenant filter the refresh function already applied, "
-      + "entitlement_plans regained base-table column order, and hand-appended "
-      + "objects returned to pg_dump order. Verified: dumps identical.",
+      "the canonical baseline was regenerated repeatedly across August 2026 (this "
+      + "identity was published at 7c8c5d5a4) without per-hop transition entries, so "
+      + "a ledger recorded at it aborted the whole chain at 0001 with 'changed after "
+      + "it was applied'. This entry advances the identity to the current canonical "
+      + "digest; the schema delta that regeneration family introduced beyond the "
+      + "runtime-refreshed views - the timesheet week lifecycle - is carried "
+      + "idempotently by forward migration 0248. Restamp, not reapply: the baseline "
+      + "is ~48k lines of pg_dump output whose replay would corrupt tenant data. A "
+      + "database at this identity additionally predates the baseline-only "
+      + "absorptions that landed later and never had forward migrations of their own "
+      + "(payroll filing submissions, employee tax certificates, party payment stats, "
+      + "GL month activity, payroll opening balance components); reconciliation "
+      + "migrations for those are pending, and past this transition any use of them "
+      + "surfaces as a named failure instead of the blanket immutability refusal.",
+  },
+  {
+    filename: "generated/0001_baseline.sql",
+    from: "1fadf5ee6e4639f7755844d9b1b36b5739deeb9b0f58590ff7c3de2f0aa02659",
+    to: "51397fe175d9c3c6f10853625847cf6f9b8615fc52701ac5973095c3dca2360e",
+    strategy: "restamp",
+    reason:
+      "the canonical baseline was regenerated repeatedly across August 2026 (this "
+      + "identity was published at 3a4f4ccf4) without per-hop transition entries, so "
+      + "a ledger recorded at it aborted the whole chain at 0001 with 'changed after "
+      + "it was applied'. This entry advances the identity to the current canonical "
+      + "digest; the schema delta that regeneration family introduced beyond the "
+      + "runtime-refreshed views - the timesheet week lifecycle - is carried "
+      + "idempotently by forward migration 0248. Restamp, not reapply: the baseline "
+      + "is ~48k lines of pg_dump output whose replay would corrupt tenant data. A "
+      + "database at this identity additionally predates the baseline-only "
+      + "absorptions that landed later and never had forward migrations of their own "
+      + "(payroll filing submissions, employee tax certificates, party payment stats, "
+      + "GL month activity, payroll opening balance components); reconciliation "
+      + "migrations for those are pending, and past this transition any use of them "
+      + "surfaces as a named failure instead of the blanket immutability refusal.",
+  },
+  {
+    filename: "generated/0001_baseline.sql",
+    from: "b4e3aa7d8dee59e79e7e3317d2faff4a425676af8549297681a35345efa19b9d",
+    to: "51397fe175d9c3c6f10853625847cf6f9b8615fc52701ac5973095c3dca2360e",
+    strategy: "restamp",
+    reason:
+      "the canonical baseline was regenerated repeatedly across August 2026 (this "
+      + "identity was published at eee5886ab) without per-hop transition entries, so "
+      + "a ledger recorded at it aborted the whole chain at 0001 with 'changed after "
+      + "it was applied'. This entry advances the identity to the current canonical "
+      + "digest; the schema delta that regeneration family introduced beyond the "
+      + "runtime-refreshed views - the timesheet week lifecycle - is carried "
+      + "idempotently by forward migration 0248. Restamp, not reapply: the baseline "
+      + "is ~48k lines of pg_dump output whose replay would corrupt tenant data. A "
+      + "database at this identity additionally predates the baseline-only "
+      + "absorptions that landed later and never had forward migrations of their own "
+      + "(payroll filing submissions, employee tax certificates, party payment stats, "
+      + "GL month activity, payroll opening balance components); reconciliation "
+      + "migrations for those are pending, and past this transition any use of them "
+      + "surfaces as a named failure instead of the blanket immutability refusal.",
+  },
+  {
+    filename: "generated/0001_baseline.sql",
+    from: "51442b77d6796b1e0ef042839e01e4098ab4888281e9d611873227fc0a7cb5c9",
+    to: "51397fe175d9c3c6f10853625847cf6f9b8615fc52701ac5973095c3dca2360e",
+    strategy: "restamp",
+    reason:
+      "the canonical baseline was regenerated repeatedly across August 2026 (this "
+      + "identity was published at f6018a4ae) without per-hop transition entries, so "
+      + "a ledger recorded at it aborted the whole chain at 0001 with 'changed after "
+      + "it was applied'. This entry advances the identity to the current canonical "
+      + "digest; the schema delta that regeneration family introduced beyond the "
+      + "runtime-refreshed views - the timesheet week lifecycle - is carried "
+      + "idempotently by forward migration 0248. Restamp, not reapply: the baseline "
+      + "is ~48k lines of pg_dump output whose replay would corrupt tenant data. A "
+      + "database at this identity additionally predates the baseline-only "
+      + "absorptions that landed later and never had forward migrations of their own "
+      + "(payroll filing submissions, employee tax certificates, party payment stats, "
+      + "GL month activity, payroll opening balance components); reconciliation "
+      + "migrations for those are pending, and past this transition any use of them "
+      + "surfaces as a named failure instead of the blanket immutability refusal.",
+  },
+  {
+    filename: "generated/0001_baseline.sql",
+    from: "197b4a0d018dbbeb93a80786ebddf1a2171c671b9f80a1254d202a8b0dcbb049",
+    to: "51397fe175d9c3c6f10853625847cf6f9b8615fc52701ac5973095c3dca2360e",
+    strategy: "restamp",
+    reason:
+      "the canonical baseline was regenerated repeatedly across August 2026 (this "
+      + "identity was published at a544960bd) without per-hop transition entries, so "
+      + "a ledger recorded at it aborted the whole chain at 0001 with 'changed after "
+      + "it was applied'. This entry advances the identity to the current canonical "
+      + "digest; the schema delta that regeneration family introduced beyond the "
+      + "runtime-refreshed views - the timesheet week lifecycle - is carried "
+      + "idempotently by forward migration 0248. Restamp, not reapply: the baseline "
+      + "is ~48k lines of pg_dump output whose replay would corrupt tenant data. A "
+      + "database at this identity additionally predates the baseline-only "
+      + "absorptions that landed later and never had forward migrations of their own "
+      + "(payroll filing submissions, employee tax certificates, party payment stats, "
+      + "GL month activity, payroll opening balance components); reconciliation "
+      + "migrations for those are pending, and past this transition any use of them "
+      + "surfaces as a named failure instead of the blanket immutability refusal.",
+  },
+  {
+    filename: "generated/0001_baseline.sql",
+    from: "ab9387ff76b968fb9c3edbeacfabc8dbc355f14597e85ee2886436e6a188b834",
+    to: "51397fe175d9c3c6f10853625847cf6f9b8615fc52701ac5973095c3dca2360e",
+    strategy: "restamp",
+    reason:
+      "the canonical baseline was regenerated repeatedly across August 2026 (this "
+      + "identity was published at 60e5b4fca) without per-hop transition entries, so "
+      + "a ledger recorded at it aborted the whole chain at 0001 with 'changed after "
+      + "it was applied'. This entry advances the identity to the current canonical "
+      + "digest; the schema delta that regeneration family introduced beyond the "
+      + "runtime-refreshed views - the timesheet week lifecycle - is carried "
+      + "idempotently by forward migration 0248. Restamp, not reapply: the baseline "
+      + "is ~48k lines of pg_dump output whose replay would corrupt tenant data. A "
+      + "database at this identity additionally predates the baseline-only "
+      + "absorptions that landed later and never had forward migrations of their own "
+      + "(payroll filing submissions, employee tax certificates, party payment stats, "
+      + "GL month activity, payroll opening balance components); reconciliation "
+      + "migrations for those are pending, and past this transition any use of them "
+      + "surfaces as a named failure instead of the blanket immutability refusal.",
+  },
+  {
+    filename: "generated/0001_baseline.sql",
+    from: "f6ecbacdf37ff464d5cf2625594fbe6e69288e719f5428a60c63d7b07c84fb5e",
+    to: "51397fe175d9c3c6f10853625847cf6f9b8615fc52701ac5973095c3dca2360e",
+    strategy: "restamp",
+    reason:
+      "the canonical baseline was regenerated repeatedly across August 2026 (this "
+      + "identity was published at 672b72ffa) without per-hop transition entries, so "
+      + "a ledger recorded at it aborted the whole chain at 0001 with 'changed after "
+      + "it was applied'. This entry advances the identity to the current canonical "
+      + "digest; the schema delta that regeneration family introduced beyond the "
+      + "runtime-refreshed views - the timesheet week lifecycle - is carried "
+      + "idempotently by forward migration 0248. Restamp, not reapply: the baseline "
+      + "is ~48k lines of pg_dump output whose replay would corrupt tenant data. A "
+      + "database at this identity additionally predates the baseline-only "
+      + "absorptions that landed later and never had forward migrations of their own "
+      + "(payroll filing submissions, employee tax certificates, party payment stats, "
+      + "GL month activity, payroll opening balance components); reconciliation "
+      + "migrations for those are pending, and past this transition any use of them "
+      + "surfaces as a named failure instead of the blanket immutability refusal.",
+  },
+  {
+    filename: "generated/0001_baseline.sql",
+    from: "f932387099f3e8eed708f7caf113b5747bf06665b33053112366f8b9ddbc30e2",
+    to: "51397fe175d9c3c6f10853625847cf6f9b8615fc52701ac5973095c3dca2360e",
+    strategy: "restamp",
+    reason:
+      "the canonical baseline was regenerated repeatedly across August 2026 (this "
+      + "identity was published at febe8f2d6) without per-hop transition entries, so "
+      + "a ledger recorded at it aborted the whole chain at 0001 with 'changed after "
+      + "it was applied'. This entry advances the identity to the current canonical "
+      + "digest; the schema delta that regeneration family introduced beyond the "
+      + "runtime-refreshed views - the timesheet week lifecycle - is carried "
+      + "idempotently by forward migration 0248. Restamp, not reapply: the baseline "
+      + "is ~48k lines of pg_dump output whose replay would corrupt tenant data. A "
+      + "database at this identity additionally predates the baseline-only "
+      + "absorptions that landed later and never had forward migrations of their own "
+      + "(payroll filing submissions, employee tax certificates, party payment stats, "
+      + "GL month activity, payroll opening balance components); reconciliation "
+      + "migrations for those are pending, and past this transition any use of them "
+      + "surfaces as a named failure instead of the blanket immutability refusal.",
+  },
+  {
+    filename: "generated/0001_baseline.sql",
+    from: "0779993e7ab72be43b9f87e80fe928ba34adb97d6fdecce5e31dac83f8e9f5b5",
+    to: "51397fe175d9c3c6f10853625847cf6f9b8615fc52701ac5973095c3dca2360e",
+    strategy: "restamp",
+    reason:
+      "the canonical baseline was regenerated repeatedly across August 2026 (this "
+      + "identity was published at b5bbbb084) without per-hop transition entries, so "
+      + "a ledger recorded at it aborted the whole chain at 0001 with 'changed after "
+      + "it was applied'. This entry advances the identity to the current canonical "
+      + "digest; the schema delta that regeneration family introduced beyond the "
+      + "runtime-refreshed views - the timesheet week lifecycle - is carried "
+      + "idempotently by forward migration 0248. Restamp, not reapply: the baseline "
+      + "is ~48k lines of pg_dump output whose replay would corrupt tenant data. A "
+      + "database at this identity additionally predates the baseline-only "
+      + "absorptions that landed later and never had forward migrations of their own "
+      + "(payroll filing submissions, employee tax certificates, party payment stats, "
+      + "GL month activity, payroll opening balance components); reconciliation "
+      + "migrations for those are pending, and past this transition any use of them "
+      + "surfaces as a named failure instead of the blanket immutability refusal.",
+  },
+  {
+    filename: "generated/0001_baseline.sql",
+    from: "6e9a1efeb9093df663ca8168881c818dfa492f4a4f36f7ad61536cefb5731795",
+    to: "51397fe175d9c3c6f10853625847cf6f9b8615fc52701ac5973095c3dca2360e",
+    strategy: "restamp",
+    reason:
+      "the canonical baseline was regenerated repeatedly across August 2026 (this "
+      + "identity was published at ca3250a9f) without per-hop transition entries, so "
+      + "a ledger recorded at it aborted the whole chain at 0001 with 'changed after "
+      + "it was applied'. This entry advances the identity to the current canonical "
+      + "digest; the schema delta that regeneration family introduced beyond the "
+      + "runtime-refreshed views - the timesheet week lifecycle - is carried "
+      + "idempotently by forward migration 0248. Restamp, not reapply: the baseline "
+      + "is ~48k lines of pg_dump output whose replay would corrupt tenant data. A "
+      + "database at this identity additionally predates the baseline-only "
+      + "absorptions that landed later and never had forward migrations of their own "
+      + "(payroll filing submissions, employee tax certificates, party payment stats, "
+      + "GL month activity, payroll opening balance components); reconciliation "
+      + "migrations for those are pending, and past this transition any use of them "
+      + "surfaces as a named failure instead of the blanket immutability refusal.",
+  },
+  {
+    filename: "generated/0001_baseline.sql",
+    from: "b564ecd1e31e1a67a74e88c41620e6dc9428092942913a3b03dba023f30ad61e",
+    to: "51397fe175d9c3c6f10853625847cf6f9b8615fc52701ac5973095c3dca2360e",
+    strategy: "restamp",
+    reason:
+      "the canonical baseline was regenerated repeatedly across August 2026 (this "
+      + "identity was published at dddf430d4) without per-hop transition entries, so "
+      + "a ledger recorded at it aborted the whole chain at 0001 with 'changed after "
+      + "it was applied'. This entry advances the identity to the current canonical "
+      + "digest; the schema delta that regeneration family introduced beyond the "
+      + "runtime-refreshed views - the timesheet week lifecycle - is carried "
+      + "idempotently by forward migration 0248. Restamp, not reapply: the baseline "
+      + "is ~48k lines of pg_dump output whose replay would corrupt tenant data. A "
+      + "database at this identity additionally predates the baseline-only "
+      + "absorptions that landed later and never had forward migrations of their own "
+      + "(payroll filing submissions, employee tax certificates, party payment stats, "
+      + "GL month activity, payroll opening balance components); reconciliation "
+      + "migrations for those are pending, and past this transition any use of them "
+      + "surfaces as a named failure instead of the blanket immutability refusal.",
+  },
+  {
+    filename: "generated/0001_baseline.sql",
+    from: "c05effa006b6cce26a3f1a3e9fcd64720a0ddc3dca24141a56defceb5109c083",
+    to: "51397fe175d9c3c6f10853625847cf6f9b8615fc52701ac5973095c3dca2360e",
+    strategy: "restamp",
+    reason:
+      "the canonical baseline was regenerated repeatedly across August 2026 (this "
+      + "identity was published at 10b048323) without per-hop transition entries, so "
+      + "a ledger recorded at it aborted the whole chain at 0001 with 'changed after "
+      + "it was applied'. This entry advances the identity to the current canonical "
+      + "digest; the schema delta that regeneration family introduced beyond the "
+      + "runtime-refreshed views - the timesheet week lifecycle - is carried "
+      + "idempotently by forward migration 0248. Restamp, not reapply: the baseline "
+      + "is ~48k lines of pg_dump output whose replay would corrupt tenant data. A "
+      + "database at this identity additionally predates the baseline-only "
+      + "absorptions that landed later and never had forward migrations of their own "
+      + "(payroll filing submissions, employee tax certificates, party payment stats, "
+      + "GL month activity, payroll opening balance components); reconciliation "
+      + "migrations for those are pending, and past this transition any use of them "
+      + "surfaces as a named failure instead of the blanket immutability refusal.",
+  },
+  {
+    filename: "generated/0001_baseline.sql",
+    from: "74a3b21e956f2f02334f5245f54b37fe235af732a8eb3345d86a9ea9611df007",
+    to: "51397fe175d9c3c6f10853625847cf6f9b8615fc52701ac5973095c3dca2360e",
+    strategy: "restamp",
+    reason:
+      "the canonical baseline was regenerated repeatedly across August 2026 (this "
+      + "identity was published at 9f47d9479) without per-hop transition entries, so "
+      + "a ledger recorded at it aborted the whole chain at 0001 with 'changed after "
+      + "it was applied'. This entry advances the identity to the current canonical "
+      + "digest; the schema delta that regeneration family introduced beyond the "
+      + "runtime-refreshed views - the timesheet week lifecycle - is carried "
+      + "idempotently by forward migration 0248. Restamp, not reapply: the baseline "
+      + "is ~48k lines of pg_dump output whose replay would corrupt tenant data. A "
+      + "database at this identity additionally predates the baseline-only "
+      + "absorptions that landed later and never had forward migrations of their own "
+      + "(payroll filing submissions, employee tax certificates, party payment stats, "
+      + "GL month activity, payroll opening balance components); reconciliation "
+      + "migrations for those are pending, and past this transition any use of them "
+      + "surfaces as a named failure instead of the blanket immutability refusal.",
+  },
+  {
+    filename: "generated/0001_baseline.sql",
+    from: "780dfaf134f8d98a40c5e9d143291c161194fec196151aca30d1d4f6f4fbade6",
+    to: "51397fe175d9c3c6f10853625847cf6f9b8615fc52701ac5973095c3dca2360e",
+    strategy: "restamp",
+    reason:
+      "the canonical baseline was regenerated repeatedly across August 2026 (this "
+      + "identity was published at 2521e288d) without per-hop transition entries, so "
+      + "a ledger recorded at it aborted the whole chain at 0001 with 'changed after "
+      + "it was applied'. This entry advances the identity to the current canonical "
+      + "digest; the schema delta that regeneration family introduced beyond the "
+      + "runtime-refreshed views - the timesheet week lifecycle - is carried "
+      + "idempotently by forward migration 0248. Restamp, not reapply: the baseline "
+      + "is ~48k lines of pg_dump output whose replay would corrupt tenant data. A "
+      + "database at this identity additionally predates the baseline-only "
+      + "absorptions that landed later and never had forward migrations of their own "
+      + "(payroll filing submissions, employee tax certificates, party payment stats, "
+      + "GL month activity, payroll opening balance components); reconciliation "
+      + "migrations for those are pending, and past this transition any use of them "
+      + "surfaces as a named failure instead of the blanket immutability refusal.",
+  },
+  {
+    filename: "generated/0001_baseline.sql",
+    from: "4456055b785a98bd396ae0f79cf1f667567a51c4a048771dea8ca4af650f4403",
+    to: "51397fe175d9c3c6f10853625847cf6f9b8615fc52701ac5973095c3dca2360e",
+    strategy: "restamp",
+    reason:
+      "the canonical baseline was regenerated repeatedly across August 2026 (this "
+      + "identity was published at c10ef0b98) without per-hop transition entries, so "
+      + "a ledger recorded at it aborted the whole chain at 0001 with 'changed after "
+      + "it was applied'. This entry advances the identity to the current canonical "
+      + "digest; the schema delta that regeneration family introduced beyond the "
+      + "runtime-refreshed views - the timesheet week lifecycle - is carried "
+      + "idempotently by forward migration 0248. Restamp, not reapply: the baseline "
+      + "is ~48k lines of pg_dump output whose replay would corrupt tenant data. A "
+      + "database at this identity additionally predates the baseline-only "
+      + "absorptions that landed later and never had forward migrations of their own "
+      + "(payroll filing submissions, employee tax certificates, party payment stats, "
+      + "GL month activity, payroll opening balance components); reconciliation "
+      + "migrations for those are pending, and past this transition any use of them "
+      + "surfaces as a named failure instead of the blanket immutability refusal.",
+  },
+  {
+    filename: "generated/0001_baseline.sql",
+    from: "e55af0e3d57075639ca9295c8935b34d031892bd2ec6d77c73c322e1f0fc4041",
+    to: "51397fe175d9c3c6f10853625847cf6f9b8615fc52701ac5973095c3dca2360e",
+    strategy: "restamp",
+    reason:
+      "the canonical baseline was regenerated repeatedly across August 2026 (this "
+      + "identity was published at 9020552e9) without per-hop transition entries, so "
+      + "a ledger recorded at it aborted the whole chain at 0001 with 'changed after "
+      + "it was applied'. This entry advances the identity to the current canonical "
+      + "digest; the schema delta that regeneration family introduced beyond the "
+      + "runtime-refreshed views - the timesheet week lifecycle - is carried "
+      + "idempotently by forward migration 0248. Restamp, not reapply: the baseline "
+      + "is ~48k lines of pg_dump output whose replay would corrupt tenant data. A "
+      + "database at this identity additionally predates the baseline-only "
+      + "absorptions that landed later and never had forward migrations of their own "
+      + "(payroll filing submissions, employee tax certificates, party payment stats, "
+      + "payroll opening balance components); reconciliation migrations for those are "
+      + "pending, and past this transition any use of them surfaces as a named "
+      + "failure instead of the blanket immutability refusal.",
+  },
+  {
+    filename: "generated/0001_baseline.sql",
+    from: "be286c62810e6bd5a83c1296e7b3edba0905b35790411c6e93d4fba7c69d59e8",
+    to: "51397fe175d9c3c6f10853625847cf6f9b8615fc52701ac5973095c3dca2360e",
+    strategy: "restamp",
+    reason:
+      "the canonical baseline was regenerated repeatedly across August 2026 (this "
+      + "identity was published at 6697ee99c) without per-hop transition entries, so "
+      + "a ledger recorded at it aborted the whole chain at 0001 with 'changed after "
+      + "it was applied'. This entry advances the identity to the current canonical "
+      + "digest; the schema delta that regeneration family introduced beyond the "
+      + "runtime-refreshed views - the timesheet week lifecycle - is carried "
+      + "idempotently by forward migration 0248. Restamp, not reapply: the baseline "
+      + "is ~48k lines of pg_dump output whose replay would corrupt tenant data. A "
+      + "database at this identity additionally predates the baseline-only "
+      + "absorptions that landed later and never had forward migrations of their own "
+      + "(payroll filing submissions, employee tax certificates, party payment stats, "
+      + "GL month activity, payroll opening balance components); reconciliation "
+      + "migrations for those are pending, and past this transition any use of them "
+      + "surfaces as a named failure instead of the blanket immutability refusal.",
+  },
+  {
+    filename: "generated/0001_baseline.sql",
+    from: "8441c24678ddb20770d3d8dc7974b05006fe875f6fc1ab81e409f03853468582",
+    to: "51397fe175d9c3c6f10853625847cf6f9b8615fc52701ac5973095c3dca2360e",
+    strategy: "restamp",
+    reason:
+      "the canonical baseline was regenerated repeatedly across August 2026 (this "
+      + "identity was published at 4193046ba) without per-hop transition entries, so "
+      + "a ledger recorded at it aborted the whole chain at 0001 with 'changed after "
+      + "it was applied'. This entry advances the identity to the current canonical "
+      + "digest; the schema delta that regeneration family introduced beyond the "
+      + "runtime-refreshed views - the timesheet week lifecycle - is carried "
+      + "idempotently by forward migration 0248. Restamp, not reapply: the baseline "
+      + "is ~48k lines of pg_dump output whose replay would corrupt tenant data. A "
+      + "database at this identity additionally predates the baseline-only "
+      + "absorptions that landed later and never had forward migrations of their own "
+      + "(payroll filing submissions, employee tax certificates, party payment "
+      + "stats); reconciliation migrations for those are pending, and past this "
+      + "transition any use of them surfaces as a named failure instead of the "
+      + "blanket immutability refusal.",
+  },
+  {
+    filename: "generated/0001_baseline.sql",
+    from: "25d4e4da19a70b0c802b628b452909c458ee993ffbc1e85391f302a0a420f897",
+    to: "51397fe175d9c3c6f10853625847cf6f9b8615fc52701ac5973095c3dca2360e",
+    strategy: "restamp",
+    reason:
+      "the canonical baseline was regenerated repeatedly across August 2026 (this "
+      + "identity was published at e2951940b) without per-hop transition entries, so "
+      + "a ledger recorded at it aborted the whole chain at 0001 with 'changed after "
+      + "it was applied'. This entry advances the identity to the current canonical "
+      + "digest; the schema delta that regeneration family introduced beyond the "
+      + "runtime-refreshed views - the timesheet week lifecycle - is carried "
+      + "idempotently by forward migration 0248. Restamp, not reapply: the baseline "
+      + "is ~48k lines of pg_dump output whose replay would corrupt tenant data. A "
+      + "database at this identity additionally predates the baseline-only "
+      + "absorptions that landed later and never had forward migrations of their own "
+      + "(payroll filing submissions, employee tax certificates, party payment "
+      + "stats); reconciliation migrations for those are pending, and past this "
+      + "transition any use of them surfaces as a named failure instead of the "
+      + "blanket immutability refusal.",
+  },
+  {
+    filename: "generated/0001_baseline.sql",
+    from: "d28acf11d61654a936db58830475d3cd190dd4c55454d5e9d24f3d53b485277a",
+    to: "51397fe175d9c3c6f10853625847cf6f9b8615fc52701ac5973095c3dca2360e",
+    strategy: "restamp",
+    reason:
+      "the canonical baseline was regenerated repeatedly across August 2026 (this "
+      + "identity was published at c57edc899) without per-hop transition entries, so "
+      + "a ledger recorded at it aborted the whole chain at 0001 with 'changed after "
+      + "it was applied'. This entry advances the identity to the current canonical "
+      + "digest; the schema delta that regeneration family introduced beyond the "
+      + "runtime-refreshed views - the timesheet week lifecycle - is carried "
+      + "idempotently by forward migration 0248. Restamp, not reapply: the baseline "
+      + "is ~48k lines of pg_dump output whose replay would corrupt tenant data. A "
+      + "database at this identity additionally predates the baseline-only "
+      + "absorptions that landed later and never had forward migrations of their own "
+      + "(payroll filing submissions, employee tax certificates, party payment "
+      + "stats); reconciliation migrations for those are pending, and past this "
+      + "transition any use of them surfaces as a named failure instead of the "
+      + "blanket immutability refusal.",
+  },
+  {
+    filename: "generated/0001_baseline.sql",
+    from: "fbb2e1ddcceecba7d35c9d6cb96699a4ff05e27652cf1313983ffaa79f08b245",
+    to: "51397fe175d9c3c6f10853625847cf6f9b8615fc52701ac5973095c3dca2360e",
+    strategy: "restamp",
+    reason:
+      "the canonical baseline was regenerated repeatedly across August 2026 (this "
+      + "identity was published at de2de5c8f) without per-hop transition entries, so "
+      + "a ledger recorded at it aborted the whole chain at 0001 with 'changed after "
+      + "it was applied'. This entry advances the identity to the current canonical "
+      + "digest; the schema delta that regeneration family introduced beyond the "
+      + "runtime-refreshed views - the timesheet week lifecycle - is carried "
+      + "idempotently by forward migration 0248. Restamp, not reapply: the baseline "
+      + "is ~48k lines of pg_dump output whose replay would corrupt tenant data. A "
+      + "database at this identity additionally predates the baseline-only "
+      + "absorptions that landed later and never had forward migrations of their own "
+      + "(payroll filing submissions, employee tax certificates, party payment "
+      + "stats); reconciliation migrations for those are pending, and past this "
+      + "transition any use of them surfaces as a named failure instead of the "
+      + "blanket immutability refusal.",
+  },
+  {
+    filename: "generated/0001_baseline.sql",
+    from: "44f9d9aee56eaa87d51b37fab43e3ae96f9a0ba453351bed27ad230e5628f05c",
+    to: "51397fe175d9c3c6f10853625847cf6f9b8615fc52701ac5973095c3dca2360e",
+    strategy: "restamp",
+    reason:
+      "the canonical baseline was regenerated repeatedly across August 2026 (this "
+      + "identity was published at f7b392df9) without per-hop transition entries, so "
+      + "a ledger recorded at it aborted the whole chain at 0001 with 'changed after "
+      + "it was applied'. This entry advances the identity to the current canonical "
+      + "digest; the schema delta that regeneration family introduced beyond the "
+      + "runtime-refreshed views - the timesheet week lifecycle - is carried "
+      + "idempotently by forward migration 0248. Restamp, not reapply: the baseline "
+      + "is ~48k lines of pg_dump output whose replay would corrupt tenant data. A "
+      + "database at this identity additionally predates the baseline-only "
+      + "absorptions that landed later and never had forward migrations of their own "
+      + "(payroll filing submissions, employee tax certificates, party payment "
+      + "stats); reconciliation migrations for those are pending, and past this "
+      + "transition any use of them surfaces as a named failure instead of the "
+      + "blanket immutability refusal.",
+  },
+  {
+    filename: "generated/0001_baseline.sql",
+    from: "700b5d03f383c3d85924d1cfdbd39eceb157727751878260f14eeb2d59378c65",
+    to: "51397fe175d9c3c6f10853625847cf6f9b8615fc52701ac5973095c3dca2360e",
+    strategy: "restamp",
+    reason:
+      "the canonical baseline was regenerated repeatedly across August 2026 (this "
+      + "identity was published at bf47ae3e7) without per-hop transition entries, so "
+      + "a ledger recorded at it aborted the whole chain at 0001 with 'changed after "
+      + "it was applied'. This entry advances the identity to the current canonical "
+      + "digest; the schema delta that regeneration family introduced beyond the "
+      + "runtime-refreshed views - the timesheet week lifecycle - is carried "
+      + "idempotently by forward migration 0248. Restamp, not reapply: the baseline "
+      + "is ~48k lines of pg_dump output whose replay would corrupt tenant data. A "
+      + "database at this identity additionally predates the baseline-only "
+      + "absorptions that landed later and never had forward migrations of their own "
+      + "(payroll filing submissions, employee tax certificates); reconciliation "
+      + "migrations for those are pending, and past this transition any use of them "
+      + "surfaces as a named failure instead of the blanket immutability refusal.",
+  },
+  {
+    filename: "generated/0001_baseline.sql",
+    from: "7c403687f332814513f33ff3a5628265f8f4aca6e28742e5cfa167e74918c851",
+    to: "51397fe175d9c3c6f10853625847cf6f9b8615fc52701ac5973095c3dca2360e",
+    strategy: "restamp",
+    reason:
+      "the canonical baseline was regenerated repeatedly across August 2026 (this "
+      + "identity was published at ae8c64e49) without per-hop transition entries, so "
+      + "a ledger recorded at it aborted the whole chain at 0001 with 'changed after "
+      + "it was applied'. This entry advances the identity to the current canonical "
+      + "digest; the schema delta that regeneration family introduced beyond the "
+      + "runtime-refreshed views - the timesheet week lifecycle - is carried "
+      + "idempotently by forward migration 0248. Restamp, not reapply: the baseline "
+      + "is ~48k lines of pg_dump output whose replay would corrupt tenant data.",
+  },
+  {
+    filename: "generated/0001_baseline.sql",
+    from: "35ce0c7a8efe59c6a3f19a36be64a9a87ea62e826b2b3d3c26aec818aa361612",
+    to: "51397fe175d9c3c6f10853625847cf6f9b8615fc52701ac5973095c3dca2360e",
+    strategy: "restamp",
+    reason:
+      "the canonical baseline was regenerated repeatedly across August 2026 (this "
+      + "identity was published at c608d5d22) without per-hop transition entries, so "
+      + "a ledger recorded at it aborted the whole chain at 0001 with 'changed after "
+      + "it was applied'. This entry advances the identity to the current canonical "
+      + "digest; the schema delta that regeneration family introduced beyond the "
+      + "runtime-refreshed views - the timesheet week lifecycle - is carried "
+      + "idempotently by forward migration 0248. Restamp, not reapply: the baseline "
+      + "is ~48k lines of pg_dump output whose replay would corrupt tenant data.",
   },
   {
     filename: "generated/0026_scheduler_outbox_terminal_audit.sql",
@@ -767,19 +1268,6 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "the reviewed digest restamp.",
   },
   {
-    filename: "generated/0062_recognition_events.sql",
-    from: "8a21bbb92ccc5ae295ed23572888e396e9099eb96f49403aecc6167b203bebc2",
-    to: "3d9146e6152005ced41915a7ad45c3f16c7524a7ba13703126c0a4a4626d9a7b",
-    strategy: "restamp",
-    reason:
-      "corrective RLS policy revision changes TO openbooks_app to TO PUBLIC "
-      + "while preserving the tenant predicate; environments.sql already "
-      + "replaces org_isolation with the PUBLIC form on every run where the "
-      + "policy comment is not openbooks:org_isolation:v1, so databases that "
-      + "applied the prior migration already have an equivalent schema before "
-      + "and after the restamp.",
-  },
-  {
     filename: "generated/0079_budget_subsidiary.sql",
     from: "1bec7d225490c8a1fcb0b8a69dccc5b22b77d6da13447d2992a20bc044998353",
     to: "fabec3977b4b5345923a8871098ce46c183fc8bf52a9d7e8026cb4b092f99fac",
@@ -794,16 +1282,20 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
   },
   {
     filename: "generated/0080_payment_instruction_claim_fence_bundle_guard.sql",
-    from: "091062cfeecd8047d8eb22f21eaa8c1917b4735b4d822f294e1bfb9c8186f759",
-    to: "98c8992c32ed83463ea2709a2f4b9a929a0ce366b05a271e65f954997712c93c",
+    from: "98c8992c32ed83463ea2709a2f4b9a929a0ce366b05a271e65f954997712c93c",
+    to: "091062cfeecd8047d8eb22f21eaa8c1917b4735b4d822f294e1bfb9c8186f759",
     strategy: "restamp",
     reason:
-      "local/origin reconciliation: both lines published 0080 with divergent "
-      + "bytes and no transition. The local revision is authoritative because it "
-      + "moves the claim-fence bundle guard forward and retains the sandbox "
-      + "teardown carve-out; the installed trigger and its guard semantics are "
-      + "equivalent before and after, so a ledger recorded at the origin digest "
-      + "advances safely.",
+      "local/origin reconciliation, corrected direction: both lines published "
+      + "0080 with divergent bytes. The local revision advanced the file and was "
+      + "then reverted to the origin bytes, which are what the tree publishes "
+      + "today - so the published digest is this entry's former 'from', not its "
+      + "'to'. As previously written the entry could never fire (a ledger only "
+      + "advances when from matches the recorded digest AND to matches the "
+      + "published one), and a ledger recorded at the local digest 98c8992c "
+      + "stayed wedged. Flipped, those ledgers advance back to the published "
+      + "origin identity; the installed trigger and its guard semantics are "
+      + "equivalent on both sides, so only the recorded bytes move.",
   },
 ];
 
