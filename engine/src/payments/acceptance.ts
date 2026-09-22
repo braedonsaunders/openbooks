@@ -132,9 +132,15 @@ function jsonObject(value: unknown): Record<string, unknown> {
   return isJsonRecord(value) ? value : {};
 }
 
-/** Read one provider JSON body as a field bag, consuming the response once. */
+/** Read one provider JSON body as a field bag, consuming the response once.
+ * The read is infallible by design: a non-JSON error body — a WAF's HTML
+ * 502, an empty gateway response, a truncated proxy — must surface through
+ * the caller's composed refusal, which names the provider and falls back to
+ * the HTTP status, never as a SyntaxError thrown from this line that
+ * displaces it. An unparseable body reads as an empty bag, so `?? res.status`
+ * is what the operator sees. */
 async function fetchJsonBody(res: { json: () => Promise<unknown> }): Promise<Record<string, unknown>> {
-  return jsonObject(await res.json());
+  return jsonObject(await res.json().catch(() => null));
 }
 
 function invalidProviderEndpoint(provider: AcceptanceProvider): PaymentAcceptanceError {
