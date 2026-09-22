@@ -112,6 +112,9 @@ test(
       assert.equal(preview.created, 0);
       assert.equal(preview.updated, 0);
       assert.equal(preview.failed, 2);
+      // Anchor the loop: `failed` is a count, not evidence that two errors
+      // were actually reported, so an empty list would satisfy the loop.
+      assert.equal(preview.errors.length, 2);
       for (const error of preview.errors) {
         assert.equal(error.field, "employee");
         assert.match(error.message, /more than once/);
@@ -122,6 +125,7 @@ test(
       assert.equal(committed.created, 0);
       assert.equal(committed.updated, 0);
       assert.equal(committed.failed, 2);
+      assert.equal(committed.errors.length, 2);
       for (const error of committed.errors) {
         assert.equal(error.field, "employee");
         assert.match(error.message, /more than once/);
@@ -192,6 +196,7 @@ test(
       assert.equal(preview.failed, 2);
       assert.equal(preview.created, 0);
       assert.equal(preview.updated, 0);
+      assert.equal(preview.errors.length, 2);
       for (const error of preview.errors) {
         assert.equal(error.field, "employee");
         assert.match(error.message, /outside the caller's subsidiary scope/);

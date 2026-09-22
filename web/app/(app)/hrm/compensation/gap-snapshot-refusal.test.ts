@@ -34,7 +34,14 @@ registerHooks({
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
     }
     const parent = context.parentURL ?? "";
-    const owned = parent.endsWith("/web/lib/hrm/compensation.ts");
+    // The translations seam must follow the loader's callees, not just the
+    // loader: loadEquity now builds its tab strip through workspace-tabs.ts,
+    // and an import that falls through here resolves next-intl's CLIENT build,
+    // which throws `getTranslations is not supported in Client Components`
+    // from a module this test never meant to exercise.
+    const owned =
+      parent.endsWith("/web/lib/hrm/compensation.ts") ||
+      parent.endsWith("/web/lib/hrm/workspace-tabs.ts");
     if (owned && specifier === "next-intl/server") {
       return {
         shortCircuit: true,
