@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   parseChargebeeSettlement,
+  parseRecurlySettlement,
   parseStripeBalanceTransactions,
   PspSettlementError,
   summarizeSettlement,
@@ -518,6 +519,101 @@ test("Chargebee negative amount paid is refused instead of booking a negative re
       error instanceof PspSettlementError &&
       error.message === "Chargebee amount paid must not be negative",
   );
+});
+
+// Recurly never defaults a missing currency to USD: a currency-less JPY
+// settlement booked as dollars would silently mislabel every amount, the
+// same failure the Stripe and Chargebee parsers already refuse by name.
+for (const [label, currency] of [
+  ["missing", undefined],
+  ["null", null],
+  ["blank", ""],
+  ["whitespace-only", "   "],
+  ["non-string", 840],
+] as const) {
+  test(`Recurly refuses a ${label} currency instead of defaulting to USD`, () => {
+    assert.throws(
+      () =>
+        parseRecurlySettlement(
+          {
+            id: "r_noccy",
+            closed_at: "2026-06-15T00:00:00Z",
+            currency: currency as unknown as string,
+            charge_amount: "99.00",
+          },
+          "2026-06-15",
+        ),
+      (error) =>
+        error instanceof PspSettlementError &&
+        error.message ===
+          "Recurly currency is required; re-import the settlement with an explicit three-letter currency code",
+    );
+  });
+}
+
+for (const currency of ["US", "USDD", "12", "U$D"] as const) {
+  test(`Recurly refuses malformed currency ${JSON.stringify(currency)} instead of booking it`, () => {
+    assert.throws(
+      () =>
+        parseRecurlySettlement(
+          {
+            id: "r_badccy",
+            closed_at: "2026-06-15T00:00:00Z",
+            currency,
+            charge_amount: "99.00",
+          },
+          "2026-06-15",
+        ),
+      (error) =>
+        error instanceof PspSettlementError &&
+        error.message ===
+          "Recurly currency must be a three-letter currency code; re-import the settlement with a corrected currency code",
+    );
+  });
+}
+
+test("Recurly books USD, CAD, and JPY with identical amount math and an explicit batch currency", () => {
+  for (const code of ["USD", "CAD", "JPY"] as const) {
+    const parsed = parseRecurlySettlement(
+      {
+        id: `r_${code.toLowerCase()}`,
+        closed_at: "2026-06-15T00:00:00Z",
+        currency: code,
+        charge_amount: "99.00",
+        refund_amount: "10.00",
+        fee_amount: "2.50",
+      },
+      "2026-06-15",
+    );
+    assert.equal(parsed.currency, code);
+    assert.deepEqual(
+      parsed.lines.map(({ kind, amount, currency: lineCurrency }) => ({
+        kind,
+        amount,
+        currency: lineCurrency,
+      })),
+      [
+        { kind: "charge", amount: "99.0000", currency: code },
+        { kind: "refund", amount: "10.0000", currency: code },
+        { kind: "fee", amount: "2.5000", currency: code },
+      ],
+    );
+  }
+});
+
+test("Recurly trims and uppercases currency exactly like the sibling parsers", () => {
+  const parsed = parseRecurlySettlement(
+    {
+      id: "r_trim",
+      closed_at: "2026-06-15T00:00:00Z",
+      currency: " jpy ",
+      lines: [{ type: "charge", amount: "5000", id: "l1" }],
+    },
+    "2026-06-15",
+  );
+  assert.equal(parsed.currency, "JPY");
+  assert.equal(parsed.lines[0]?.currency, "JPY");
+  assert.equal(parsed.lines[0]?.amount, "5000.0000");
 });
 
 test("Chargebee zero adjustment emits no adjustment line", () => {
