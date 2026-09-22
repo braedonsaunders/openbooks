@@ -43,8 +43,16 @@ function layerWeights(
 ): string[] {
   return layers.map((l) => {
     if (basis === "quantity") return l.remaining_quantity;
-    if (basis === "weight")
-      return extendCost(l.remaining_quantity, weightsByLayer?.get(l.id) ?? "0");
+    if (basis === "weight") {
+      // Fail closed: a missing weight row must never price as zero. Callers
+      // refuse with item/location/layer identifiers before reaching here.
+      const w = weightsByLayer?.get(l.id);
+      if (w === undefined)
+        throw new InventoryError(
+          `weight-basis landed cost refused: layer ${l.id} has no weight row — choose a value, quantity, or manual basis instead`,
+        );
+      return extendCost(l.remaining_quantity, w);
+    }
     return extendCost(l.remaining_quantity, l.unit_cost);
   });
 }
@@ -101,6 +109,7 @@ export async function postLandedCostVoucher(
       layers: OpenLayer[];
       shareWeight: string;
       manualAmount: string | null;
+      weightsByLayer: Map<string, string> | undefined;
     }[] = [];
     for (const target of input.targets) {
       const profile = await resolveProfile(orgId, target.itemId, tx, true);
@@ -132,6 +141,7 @@ export async function postLandedCostVoucher(
     }
     const manualAmount = target.manualAmount ?? null;
     let shareWeight = "0";
+    let weightsByLayer: Map<string, string> | undefined;
     if (input.basis === "manual") {
       if (!manualAmount || cmp(manualAmount, "0") <= 0) {
         throw new InventoryError(
@@ -139,7 +149,10 @@ export async function postLandedCostVoucher(
         );
       }
     } else {
-      let weightsByLayer: Map<string, string> | undefined;
+      // Weight evidence is loaded once per target, inside this transaction
+      // after the layer locks, and the same map serves both the target share
+      // and the later per-layer sub-apportionment — one read per financial
+      // decision, no second query after mutations begin.
       if (input.basis === "weight") {
         weightsByLayer = new Map();
         const w = (await tx.execute<{ cost_layer_id: string; weight: string }>(sql`
@@ -147,6 +160,22 @@ export async function postLandedCostVoucher(
            where org_id = ${orgId} and cost_layer_id in (${joinIds(layers.map((l) => l.id))})`));
         for (const row of w.rows)
           weightsByLayer.set(row.cost_layer_id, row.weight);
+        // Narrow once for the closure below: the map is fully loaded here.
+        const loadedWeights = weightsByLayer;
+        // An absent weight row is unconfigured input, not zero: refusing by
+        // name beats accruing zero. An explicit zero row (weight '0') is a
+        // configured value and keeps its existing meaning — it contributes
+        // no share, and an all-zero target still hits the no-basis refusal
+        // below. There is no supported production writer for weight rows,
+        // so the remedy names the bases the operator can choose instead.
+        const missing = layers
+          .filter((l) => !loadedWeights.has(l.id))
+          .map((l) => l.id);
+        if (missing.length > 0) {
+          throw new InventoryError(
+            `weight-basis landed cost refused: item ${target.itemId} at location ${target.stockLocationId} has ${missing.length} on-hand layer(s) without a weight (layer ${missing.join(", ")}) — choose a value, quantity, or manual basis instead`,
+          );
+        }
       }
       const weights = layerWeights(layers, input.basis, weightsByLayer);
       shareWeight = sum(weights);
@@ -156,7 +185,7 @@ export async function postLandedCostVoucher(
         );
       }
     }
-    resolved.push({ target, profile, layers, shareWeight, manualAmount });
+    resolved.push({ target, profile, layers, shareWeight, manualAmount, weightsByLayer });
     }
 
     const shares =
@@ -254,16 +283,10 @@ export async function postLandedCostVoucher(
              ${r.layers[0]!.id}, 'standard_variance', ${shareAmount}, null,
              ${actorId}, ${actorId})`);
       } else {
-        // Sub-apportion the share across the target's own layers on the same basis.
-        let weightsByLayer: Map<string, string> | undefined;
-        if (input.basis === "weight") {
-          weightsByLayer = new Map();
-          const w = (await tx.execute<{ cost_layer_id: string; weight: string }>(sql`
-            select cost_layer_id, weight from cost_layer_weights
-             where org_id = ${orgId} and cost_layer_id in (${joinIds(r.layers.map((l) => l.id))})`));
-          for (const row of w.rows)
-            weightsByLayer.set(row.cost_layer_id, row.weight);
-        }
+        // Sub-apportion the share across the target's own layers on the same
+        // basis, reusing the weight evidence loaded before any mutation —
+        // the decision and its execution read the same snapshot.
+        const weightsByLayer = r.weightsByLayer;
         // A manual share is the operator's explicit amount for this target;
         // it spreads across the target's layers pro rata to carrying value.
         // Layers received free of charge carry none, so a target that is
