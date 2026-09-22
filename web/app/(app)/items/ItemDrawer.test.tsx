@@ -76,3 +76,33 @@ test('persisted pricing opens its configured editor and keeps the style chooser 
   assert.match(viewSource, /pricing\?\.has_matrix/)
   assert.match(viewSource, /pricing\?\.has_contract/)
 })
+
+test('the pricing-mode chooser is inert outside edit mode', () => {
+  // Choosing how an item is priced changes the item, so every card that
+  // switches pricing mode goes through the one gate — never a bare
+  // `disabled={createMode}`, which left the chooser live in view mode.
+  const landingStart = source.indexOf("pricingView === 'landing'")
+  const landingEnd = source.indexOf("pricingView !== 'landing'", landingStart)
+  assert.ok(landingStart >= 0 && landingEnd > landingStart, 'the pricing landing renders')
+  const landing = source.slice(landingStart, landingEnd)
+
+  const switchers = [...landing.matchAll(/setPricingView\((?:'(\w+)'|option\.key)\)/g)]
+  // simple, matrix, the three mapped options, contract — the subscription
+  // card links out to /collections instead of switching the local view.
+  assert.equal(switchers.length, 4, 'every mode-switching card is covered')
+  for (const match of switchers) {
+    const card = landing.slice(Math.max(0, match.index - 900), match.index)
+    const gate = card.lastIndexOf('disabled=')
+    assert.ok(gate >= 0, `the ${match[1] ?? 'option'} card carries a disabled gate`)
+    assert.match(
+      card.slice(gate),
+      /pricingModeUnavailable\(/,
+      `the ${match[1] ?? 'option'} card gates on pricingModeUnavailable`,
+    )
+  }
+
+  assert.match(source, /createMode \|\| \(!editable && !configuredPricingViews\.includes\(view\)\)/)
+  // A mode that already holds data stays readable; the loader names those.
+  assert.match(viewSource, /configuredPricingViews/)
+  assert.match(viewSource, /pricing\?\.has_cost_formula \? \(\['cost'\] as const\)/)
+})

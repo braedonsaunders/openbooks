@@ -260,11 +260,6 @@
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
-    "path": "web/app/(app)/journal/NewJournalButton.tsx",
-    "fn": "create",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
     "path": "web/app/(app)/knowledge/views/ViewStudio.tsx",
     "fn": "ViewStudio",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
@@ -282,11 +277,6 @@
   {
     "path": "web/app/(app)/parties/PartyDrawer.tsx",
     "fn": "TransactionSublist",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/payments/NewPaymentButton.tsx",
-    "fn": "create",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
@@ -457,11 +447,6 @@
   {
     "path": "web/components/assistant/proposal-card.tsx",
     "fn": "apply",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/components/new-document-button.tsx",
-    "fn": "create",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {

@@ -65,7 +65,7 @@ test('operational built-ins are classified into their domain groups', () => {
   assert.match(view, /key: 'hrm'/, 'the workforce group exists')
   // The HR module has no reports page of its own — this is where they live.
   assert.throws(
-    () => readFileSync(new URL('../hrm/reports/page.tsx', import.meta.url), 'utf8'),
+    () => readFileSync(new URL('../hrm/reports/page.tsx', import.meta.url), 'utf8'), // source-path: synthetic — the absence IS the assertion
     'no second reports page may exist under /hrm',
   )
 })
