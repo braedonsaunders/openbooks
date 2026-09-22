@@ -99,6 +99,8 @@ CREATE TABLE public.item_price_schedules (
     (customer_id IS NULL AND price_level_id IS NOT NULL)
     OR (customer_id IS NOT NULL AND price_level_id IS NULL)
   ),
+  CONSTRAINT item_price_schedule_currency_fk FOREIGN KEY (currency)
+    REFERENCES public.currencies (code) ON DELETE RESTRICT,
   CONSTRAINT item_price_schedule_item_fk FOREIGN KEY (org_id, item_id)
     REFERENCES public.items (org_id, id),
   CONSTRAINT item_price_schedule_level_fk FOREIGN KEY (org_id, price_level_id)
@@ -215,21 +217,70 @@ CREATE TRIGGER org_base_price_level AFTER INSERT ON public.orgs
 CREATE FUNCTION public.protect_org_base_price_level() RETURNS trigger
 LANGUAGE plpgsql AS $func$
 BEGIN
-  IF OLD.is_base THEN
-    IF TG_OP = 'DELETE' THEN
+  IF TG_OP = 'DELETE' THEN
+    IF OLD.is_base THEN
       RAISE EXCEPTION 'The organization base price level must remain active; edit its name or add another price level instead';
     END IF;
-    IF NOT NEW.is_base OR NOT NEW.is_active OR NEW.org_id <> OLD.org_id THEN
-      RAISE EXCEPTION 'The organization base price level must remain active; edit its name or add another price level instead';
+    IF EXISTS (
+      SELECT 1 FROM public.customer_price_level_assignments assignment
+       WHERE assignment.org_id = OLD.org_id AND assignment.price_level_id = OLD.id AND assignment.is_active
+      UNION ALL
+      SELECT 1 FROM public.item_price_schedules schedule
+       WHERE schedule.org_id = OLD.org_id AND schedule.price_level_id = OLD.id AND schedule.is_active
+    ) THEN
+      RAISE EXCEPTION 'Price level % is still in use; deactivate its customer assignments and item pricing schedules first', OLD.id;
     END IF;
+    RETURN OLD;
   END IF;
-  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  IF OLD.is_base AND (NOT NEW.is_base OR NOT NEW.is_active OR NEW.org_id <> OLD.org_id) THEN
+    RAISE EXCEPTION 'The organization base price level must remain active; edit its name or add another price level instead';
+  END IF;
+  IF OLD.is_active AND NOT NEW.is_active AND EXISTS (
+    SELECT 1 FROM public.customer_price_level_assignments assignment
+     WHERE assignment.org_id = OLD.org_id AND assignment.price_level_id = OLD.id AND assignment.is_active
+    UNION ALL
+    SELECT 1 FROM public.item_price_schedules schedule
+     WHERE schedule.org_id = OLD.org_id AND schedule.price_level_id = OLD.id AND schedule.is_active
+  ) THEN
+    RAISE EXCEPTION 'Price level % is still in use; deactivate its customer assignments and item pricing schedules first', OLD.id;
+  END IF;
   RETURN NEW;
 END;
 $func$;
 CREATE TRIGGER price_level_base_guard
   BEFORE UPDATE OR DELETE ON public.price_levels
   FOR EACH ROW EXECUTE FUNCTION public.protect_org_base_price_level();
+
+CREATE FUNCTION public.protect_pricing_customer_role() RETURNS trigger
+LANGUAGE plpgsql AS $func$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    IF OLD.is_active AND EXISTS (
+      SELECT 1 FROM public.customer_price_level_assignments assignment
+       WHERE assignment.org_id = OLD.org_id AND assignment.customer_id = OLD.party_id AND assignment.is_active
+      UNION ALL
+      SELECT 1 FROM public.item_price_schedules schedule
+       WHERE schedule.org_id = OLD.org_id AND schedule.customer_id = OLD.party_id AND schedule.is_active
+    ) THEN
+      RAISE EXCEPTION 'Customer % has active pricing; deactivate its price-level assignments and item pricing schedules first', OLD.party_id;
+    END IF;
+    RETURN OLD;
+  END IF;
+  IF OLD.is_active AND NOT NEW.is_active AND EXISTS (
+    SELECT 1 FROM public.customer_price_level_assignments assignment
+     WHERE assignment.org_id = OLD.org_id AND assignment.customer_id = OLD.party_id AND assignment.is_active
+    UNION ALL
+    SELECT 1 FROM public.item_price_schedules schedule
+     WHERE schedule.org_id = OLD.org_id AND schedule.customer_id = OLD.party_id AND schedule.is_active
+  ) THEN
+    RAISE EXCEPTION 'Customer % has active pricing; deactivate its price-level assignments and item pricing schedules first', OLD.party_id;
+  END IF;
+  RETURN NEW;
+END;
+$func$;
+CREATE TRIGGER customer_role_pricing_guard
+  BEFORE UPDATE OR DELETE ON public.customer_roles
+  FOR EACH ROW EXECUTE FUNCTION public.protect_pricing_customer_role();
 
 DO $rls$
 DECLARE tbl text;
