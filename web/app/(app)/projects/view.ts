@@ -7,7 +7,7 @@ import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@brae
 import { requireProjectsFeature } from '../../../lib/projects-gate'
 import { isFeatureEnabled } from '../../../lib/features'
 import { can, requirePermission } from '../../../lib/authz'
-import { isUuid, pickString } from '../../../lib/list-params'
+import { isUuid, mergeHref, pickString } from '../../../lib/list-params'
 import { subsidiaryUiOptions } from '../../../lib/subsidiaries'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { loadFieldDefs } from '../../../lib/custom-fields'
@@ -70,6 +70,9 @@ export async function loadProjects(
   const projectId = typeof sp.project === 'string' ? sp.project : undefined
   const projectTransactionId = pickString(sp.projectTxn)
   const projectTransactionKind = pickString(sp.projectTxnKind)
+  // Unsaved-create: ?projectNew=1 opens an editable drawer on no persisted
+  // row — zero writes on open, zero on Cancel, one idempotent POST on Save.
+  const creating = pickString(sp.projectNew) === '1' && canManage
 
   const openProject =
     projectId && projectId !== 'new' && isUuid(projectId)
@@ -77,17 +80,20 @@ export async function loadProjects(
       : null
 
   // party pickers + resolved form layout + cockpit data for the flyout
-  // (only when a project is open).
-  const [parties, subsidiaries, cockpit, projectTypesRes] = openProject
+  // (only when a project is open; creation loads the form inputs but no
+  // cockpit — those tabs need a persisted project and stay hidden).
+  const [parties, subsidiaries, cockpit, projectTypesRes] = openProject || creating
     ? await Promise.all([
         db.execute<PartyOption>(sql`
           select id, display_name from parties
            where org_id = ${orgId} and is_active
            order by display_name limit 2000`),
         subsidiaryUiOptions(orgId),
-        loadProjectCockpit(orgId, openProject.project.id as string, {
-          includeApplicationBilling: applicationPermissions.canRead,
-        }),
+        openProject
+          ? loadProjectCockpit(orgId, openProject.project.id as string, {
+              includeApplicationBilling: applicationPermissions.canRead,
+            })
+          : Promise.resolve(null),
         db.execute<ProjectTypeOption>(sql`
           select id, name, billing_method as "billingMethod",
                  invoicing_profile->>'billingProcedure' as "billingProcedure"
@@ -103,7 +109,7 @@ export async function loadProjects(
     getLocale(),
   ])
 
-  const resolvedForm = openProject
+  const resolvedForm = openProject || creating
     ? await resolveFormLayout({
         orgId,
         userId: authz.user.id,
@@ -122,20 +128,60 @@ export async function loadProjects(
     currentParams: sp,
     showNewRedirect: projectId === 'new' && canManage,
     drawer:
-      openProject && parties && cockpit
+      (openProject || creating) && parties
         ? {
-            remountKey: String(openProject.project.id),
-            payload: openProject as unknown as ProjectDrawerProps['payload'],
+            remountKey: creating ? 'new-project' : String(openProject!.project.id),
+            // The unsaved-create payload: no row exists, so the drawer edits
+            // blanks and posts them once. Active defaults true; no
+            // placeholder name ever persists — the server refuses it.
+            payload: (creating
+              ? {
+                  project: {
+                    id: '',
+                    code: null,
+                    name: '',
+                    is_active: true,
+                    custom: {},
+                    customer_id: null,
+                    foreman_id: null,
+                    manager_id: null,
+                    status: 'active',
+                    customer_po_number: null,
+                    starts_on: null,
+                    ends_on: null,
+                    notes: null,
+                    subsidiary_id: null,
+                    subsidiary_include_children: true,
+                    project_type_id: null,
+                    invoicing_preference: null,
+                  },
+                  contractValue: null,
+                  customerName: null,
+                  foremanName: null,
+                  managerName: null,
+                  tasks: [],
+                  customFieldDefs: [],
+                }
+              : openProject) as unknown as ProjectDrawerProps['payload'],
             parties: parties.rows,
             subsidiaries,
             canManage,
             canViewGl,
             layout: resolvedForm?.layout,
-            cockpit,
+            cockpit: openProject ? cockpit : null,
             projectTypes,
             schedulingEnabled,
             locale,
-            initialTab: pickString(sp.projectTab) ?? 'overview',
+            initialTab: creating ? 'overview' : (pickString(sp.projectTab) ?? 'overview'),
+            createMode: creating,
+            closeHref: mergeHref('/projects', sp, {
+              project: undefined,
+              projectNew: undefined,
+              projectTab: undefined,
+              form: undefined,
+              projectTxn: undefined,
+              projectTxnKind: undefined,
+            }),
             applicationPermissions,
           }
         : null,

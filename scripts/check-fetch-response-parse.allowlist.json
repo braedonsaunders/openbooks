@@ -285,16 +285,6 @@
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
-    "path": "web/app/(app)/parties/NewPartyButton.tsx",
-    "fn": "create",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/parties/NewPartyRedirect.tsx",
-    "fn": "NewPartyRedirect",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
     "path": "web/app/(app)/parties/PartyDrawer.tsx",
     "fn": "ActivitySublist",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
@@ -372,16 +362,6 @@
   {
     "path": "web/app/(app)/payroll/retro/RetroWorkspace.tsx",
     "fn": "call",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/projects/NewProjectButton.tsx",
-    "fn": "create",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/projects/NewProjectRedirect.tsx",
-    "fn": "NewProjectRedirect",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {

@@ -27,8 +27,6 @@ test('new record creation entry points carry explicit edit intent', () => {
     source('app/(app)/payments/NewPaymentButton.tsx'),
     source('app/(app)/expenses/NewExpenseButton.tsx'),
     source('app/(app)/journal/NewJournalButton.tsx'),
-    source('app/(app)/parties/NewPartyButton.tsx'),
-    source('app/(app)/parties/NewPartyRedirect.tsx'),
     source('app/(app)/ap/capture/CaptureReviewDrawer.tsx'),
     source('app/(app)/crm/OpportunityDrawer.tsx'),
     source('app/(app)/projects/tabs/BillingSection.tsx'),
@@ -37,4 +35,28 @@ test('new record creation entry points carry explicit edit intent', () => {
   for (const creationSource of creationSources) {
     assert.match(creationSource, /mode=edit/)
   }
+})
+
+// The Parties/Projects slice opens unsaved-create drawers (?partyNew=1 /
+// ?projectNew=1) instead of persisted drafts, so its entry points carry no
+// mode=edit param — the marker IS the intent, and the drawers start in edit
+// mode through createMode. Same property (creation opens editable), carried
+// end to end: entry marker, loader create mode, drawer edit default.
+test('unsaved-create entry points open editable drawers through createMode', () => {
+  for (const entry of [
+    source('app/(app)/parties/NewPartyButton.tsx'),
+    source('app/(app)/parties/NewPartyRedirect.tsx'),
+    source('app/(app)/projects/NewProjectButton.tsx'),
+    source('app/(app)/projects/NewProjectRedirect.tsx'),
+  ]) {
+    assert.match(entry, /partyNew: '1'|projectNew: '1'/)
+  }
+  assert.match(
+    source('app/(app)/parties/PartyDrawer.tsx'),
+    /createMode \? 'edit' : initialDrawerMode\(/,
+  )
+  assert.match(
+    source('app/(app)/projects/ProjectDrawer.tsx'),
+    /useState<'view' \| 'edit'>\(createMode \? 'edit' : 'view'\)/,
+  )
 })

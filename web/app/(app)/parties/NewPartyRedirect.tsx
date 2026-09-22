@@ -1,15 +1,15 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
+import { useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { mergeHref } from '../../../lib/list-params'
 
 /**
- * Handles `?party=new` deep links: creates the draft party server-side
- * (instant-into-draft) and swaps the URL to the real id so the flyout opens
- * on a persisted record. `basePath`/`role` mirror NewPartyButton so an entity
- * list keeps its own path and pre-selects its role.
+ * Handles `?party=new` deep links with zero writes: swaps the URL to the
+ * unsaved-create drawer (`?partyNew=1`) so the flyout opens on an editable
+ * draft that is persisted only by its explicit Save. `basePath`/`role`
+ * mirror NewPartyButton so an entity list keeps its own path and
+ * pre-selects its role.
  */
 export function NewPartyRedirect({
   basePath = '/parties',
@@ -18,29 +18,17 @@ export function NewPartyRedirect({
   basePath?: string
   role?: 'customer' | 'vendor' | 'employee'
 } = {}) {
-  const t = useTranslations('parties.newParty')
   const router = useRouter()
-  const started = useRef(false)
+  const searchParams = useSearchParams()
 
   useEffect(() => {
-    if (started.current) return
-    started.current = true
-    ;(async () => {
-      const res = await fetch('/api/parties/draft', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(role ? { role } : {}),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        toast.error(data.error ?? t('createFailed'))
-        router.replace(basePath)
-        return
-      }
-      router.replace(`${basePath}?party=${data.id}&mode=edit`)
-      router.refresh()
-    })()
-  }, [router, basePath, role, t])
+    const current = Object.fromEntries(searchParams.entries())
+    router.replace(mergeHref(basePath, current, {
+      party: undefined,
+      partyNew: '1',
+      ...(role ? { role } : {}),
+    }) as never)
+  }, [router, searchParams, basePath, role])
 
   return null
 }

@@ -2,7 +2,7 @@
 
 import { useMoney } from '@/components/money-provider'
 import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
@@ -298,6 +298,8 @@ export function PartyDrawer({
   initialTab = 'overview',
   initialMode = 'view',
   basePath = '/parties',
+  createMode = false,
+  closeHref,
   layout,
   forms = [],
   currentFormId = null,
@@ -367,6 +369,15 @@ export function PartyDrawer({
   currentFormId?: string | null
   recordType?: 'customer' | 'vendor' | 'employee'
   canCustomize?: boolean
+  /**
+   * Unsaved-create: the drawer opens editable on a payload with no persisted
+   * row. Cancel navigates away with zero writes; Save persists through one
+   * idempotent POST. Only the overview, invoicing, contacts, addresses, and
+   * accounting tabs draw — every other tab reads a persisted party.
+   */
+  createMode?: boolean
+  /** List URL (filters preserved) that Cancel and the close affordance return to. */
+  closeHref?: string
 }) {
   const t = useTranslations('parties.drawer')
   const tc = useTranslations('common')
@@ -397,8 +408,17 @@ export function PartyDrawer({
    */
   const preCustomerStage = lifecycleStage === 'lead' || lifecycleStage === 'prospect'
   const forcesCustomerRole = role === 'customer' && !preCustomerStage
-  const allowedInitialTab =
-    (initialTab === 'wages' && (role !== 'employee' || !canManageWages)) ||
+  // Unsaved-create draws only the tabs that work without a persisted party:
+  // identity, role selection, invoicing, and the local contacts/addresses
+  // lists. Everything else (transactions, compliance, payroll, employment,
+  // relationship, attachments, audit) reads the row this drawer has not
+  // written yet.
+  const CREATE_TABS: ReadonlySet<PartyTab> = new Set<PartyTab>([
+    'overview', 'invoicing', 'contacts', 'addresses', 'accounting',
+  ])
+  const allowedInitialTab = createMode
+    ? 'overview'
+    : (initialTab === 'wages' && (role !== 'employee' || !canManageWages)) ||
     (initialTab === 'payroll' && (role !== 'employee' || !canManagePayroll)) ||
     (initialTab === 'activities' && !canReadActivities) ||
     (initialTab === 'relationship' && !showRelationshipTab) ||
@@ -465,7 +485,11 @@ export function PartyDrawer({
   const [phone, setPhone] = useState<string>(p.phone ?? '')
   const [website, setWebsite] = useState<string>(p.website ?? '')
   const [customValues, setCustomValues] = useState<Record<string, unknown>>(p.custom ?? {})
-  const [isActive, setIsActive] = useState<boolean>(p.is_active === true)
+  // Unsaved-create defaults the record to active: the drawer opens on nothing
+  // persisted, so deactivation lifecycle guards have nothing to evaluate yet.
+  const [isActive, setIsActive] = useState<boolean>(createMode ? true : p.is_active === true)
+  const returnHref = closeHref ?? basePath
+  const requestIdRef = useRef<string | null>(null)
   // The server sends [] when the feature is disabled and the full picker when
   // enabled, even before a second subsidiary has been added.
   const multiSubsidiary = subsidiaries.some((s) => !s.isElimination)
@@ -532,9 +556,10 @@ export function PartyDrawer({
   const { busy, refusal, execute, clearRefusal, refuse } = useAppAction()
 
   // Existing parties default to read-only; creation flows can explicitly
-  // request edit mode. Permission checks remain authoritative.
+  // request edit mode. Permission checks remain authoritative. Unsaved-create
+  // opens editable: there is no persisted record to read yet.
   const [mode, setMode] = useState<DrawerMode>(
-    initialDrawerMode(initialMode, canManage),
+    createMode ? 'edit' : initialDrawerMode(initialMode, canManage),
   )
   const editable = mode === 'edit' && canManage
 
@@ -670,6 +695,36 @@ export function PartyDrawer({
   async function saveRelatedRows(kind: 'addresses' | 'contacts') {
     const draft = kind === 'addresses' ? addressDraft : contactDraft
     if (!draft) return
+    // Unsaved-create keeps related rows local: there is no persisted party to
+    // PATCH, so the dialog confirms into form state and the single create
+    // POST persists everything together. Zero writes here by construction.
+    if (createMode) {
+      if (kind === 'addresses') {
+        const nextAddress = draft.row as AddressRow
+        const base = (draft.index === null
+          ? [...addresses, draft.row]
+          : addresses.map((row, index) => index === draft.index ? draft.row : row)) as AddressRow[]
+        setAddresses(base.map((row, index) => ({
+          ...row,
+          isDefaultBilling: nextAddress.isDefaultBilling === 'true' && index !== (draft.index ?? base.length - 1) ? 'false' : row.isDefaultBilling,
+          isDefaultShipping: nextAddress.isDefaultShipping === 'true' && index !== (draft.index ?? base.length - 1) ? 'false' : row.isDefaultShipping,
+        })))
+        setAddressDraft(null)
+      } else {
+        const nextContact = draft.row as ContactRow
+        const base = (draft.index === null
+          ? [...contacts, draft.row]
+          : contacts.map((row, index) => index === draft.index ? draft.row : row)) as ContactRow[]
+        // Selecting a new primary is an explicit reassignment, matching the
+        // persisted path below: untouched rows keep their flags.
+        setContacts(base.map((row, index) => ({
+          ...row,
+          isPrimary: nextContact.isPrimary === 'true' && index !== (draft.index ?? base.length - 1) ? 'false' : row.isPrimary,
+        })))
+        setContactDraft(null)
+      }
+      return
+    }
     const currentRows = kind === 'addresses' ? addresses : contacts
     let nextRows = draft.index === null
       ? [...currentRows, draft.row]
@@ -722,7 +777,81 @@ export function PartyDrawer({
     }
   }
 
+  /**
+   * Unsaved-create Save: one idempotent POST carrying the whole form —
+   * identity, roles, addresses, and contacts. The key is minted once per
+   * drawer session, so a double-click or a retried request returns the same
+   * party instead of a duplicate. Cancel/close before this point wrote
+   * nothing — this is the first and only write.
+   */
+  async function saveNew() {
+    // A blank display name must never persist a nameless record: fail fast
+    // with an inline error instead of POSTing a request known to 422.
+    if (!nameValid) {
+      setNameError(true)
+      setSaveState('error')
+      refuse(t('nameRequired'), t('autosaveFailed'))
+      return
+    }
+    if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID()
+    setSaveState('saving')
+    // The create body is picked field-by-field: expectedUpdatedAt belongs to
+    // the PATCH concurrency token (no row to version against here), and
+    // isActive rides along explicitly — creates default to active.
+    const createBody = {
+      kind: savePayload.kind,
+      displayName: savePayload.displayName,
+      legalName: savePayload.legalName,
+      shortCode: savePayload.shortCode,
+      email: savePayload.email,
+      phone: savePayload.phone,
+      website: savePayload.website,
+      custom: savePayload.custom,
+      invoicingPreference: savePayload.invoicingPreference,
+      subsidiaryId: savePayload.subsidiaryId,
+      additionalSubsidiaryIds: savePayload.additionalSubsidiaryIds,
+      roles: savePayload.roles,
+      addresses: savePayload.addresses,
+      contacts: savePayload.contacts,
+      isActive,
+    }
+    const ok = await execute(
+      () =>
+        fetchAction(`/api/parties`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': requestIdRef.current! },
+          body: JSON.stringify(createBody),
+        }),
+      {
+        fallbackMessage: t('autosaveFailed'),
+        successMessage: tc('feedback.saved'),
+        onOk: (data) => {
+          const createdId = (data as { party?: { id?: unknown } } | null)?.party?.id
+          setSaveState('saved')
+          setDirty(false)
+          if (typeof createdId === 'string' && createdId) {
+            const separator = returnHref.includes('?') ? '&' : '?'
+            router.replace(`${returnHref}${separator}party=${createdId}` as never)
+          } else {
+            router.push(returnHref as never)
+          }
+          router.refresh()
+        },
+        onRefused: () => {
+          // Stay in edit mode with the typed values intact: the form is
+          // still dirty, nothing was persisted, the pin carries the reason.
+          setSaveState('error')
+        },
+      },
+    )
+    if (ok) router.refresh()
+  }
+
   async function save() {
+    if (createMode) {
+      await saveNew()
+      return
+    }
     // A blank display name must never persist a nameless record: the API
     // accepts the 'New party' placeholder on inactive drafts, so the drawer
     // fails fast with an inline error instead of saving silently.
@@ -776,6 +905,13 @@ export function PartyDrawer({
   }
 
   function cancel() {
+    // Unsaved-create Cancel writes nothing: there is no persisted row to
+    // restore, so leave the URL (and the database) exactly as found.
+    if (createMode) {
+      clearRefusal()
+      router.push(returnHref as never)
+      return
+    }
     resetForm()
     setDirty(false)
     setSaveState('saved')
@@ -924,7 +1060,7 @@ export function PartyDrawer({
   // then what we have done with it, then (appended by the shell) the record's
   // own evidence. These ride the shared flyout's strip as `detailTabs`, so
   // the shell renders no second strip above them.
-  const tabs: Array<{ key: PartyTab; label: string; count?: number }> = [
+  const allTabs: Array<{ key: PartyTab; label: string; count?: number }> = [
     { key: 'overview', label: t('tabs.overview') },
     ...(role === 'customer' && !isPlaceholderName ? [{ key: 'pulse' as const, label: t('tabs.pulse') }] : []),
     ...(showRelationshipTab ? [{ key: 'relationship' as const, label: t('tabs.relationship') }] : []),
@@ -945,6 +1081,7 @@ export function PartyDrawer({
     // own panels, so the shell appends them itself — listing them here would
     // duplicate the buttons.
   ]
+  const tabs = allTabs.filter((item) => !createMode || CREATE_TABS.has(item.key))
 
   const selectForm = (formId: string) => {
     const next = new URLSearchParams(searchParams.toString())
@@ -956,10 +1093,11 @@ export function PartyDrawer({
 
   return (
     <TransactionDrawer
-      closeHref={basePath}
-      recordId={String(p.id)}
+      closeHref={returnHref}
+      recordId={createMode ? '' : String(p.id)}
       targetTable="parties"
-      canEditAttachments={canManage}
+      canEditAttachments={canManage && !createMode}
+      showEvidenceTabs={!createMode}
       detailsLabel={t('tabs.overview')}
       keepChildrenMounted
       detailTabs={tabs
@@ -993,7 +1131,9 @@ export function PartyDrawer({
       ) : undefined}
       actions={canManage || canCustomize || payload.customer || payload.vendor ? (
         <>
-          {canManage ? isActive ? (
+          {/* Activation targets a persisted row: unsaved-create carries its
+              active default into the create POST instead. */}
+          {!createMode && canManage ? isActive ? (
             <Button disabled={busy} onClick={() => setActiveState(false)}>{t('deactivate')}</Button>
           ) : (
             <Button disabled={busy || !nameValid} onClick={() => setActiveState(true)}>{t('activate')}</Button>
@@ -1037,7 +1177,7 @@ export function PartyDrawer({
           </span>
           {mode === 'edit' ? (
             <div className="ml-auto flex items-center gap-2">
-              <Button disabled={busy} onClick={save}>{busy ? tc('actions.saving') : tc('actions.save')}</Button>
+              <Button disabled={busy || (createMode && !nameValid)} onClick={save}>{busy ? tc('actions.saving') : tc('actions.save')}</Button>
             </div>
           ) : null}
         </div>
@@ -1110,6 +1250,15 @@ export function PartyDrawer({
             <Label>{t('website')}</Label>
             {editable ? <Input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder={t('websitePlaceholder')} /> : partyValue(website)}
           </div>
+          {createMode && editable ? (
+            <div className={field}>
+              <Label>{tc('labels.active')}</Label>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} className={checkboxClass} />
+                <span className="text-sm">{isActive ? tc('status.active') : tc('status.inactive')}</span>
+              </label>
+            </div>
+          ) : null}
         </section>
 
         <CustomFieldInputs defs={fieldDefs} values={customValues} onChange={setCustomValues} readOnly={ro} />
@@ -2160,6 +2309,11 @@ function BankAccountsPanel({
     if (status === 'rejected') return tc('status.rejected')
     return tc('status.pendingApproval')
   }
+
+  // Bank accounts are issued against a persisted party: an unsaved-create
+  // drawer passes an empty id, so the panel stays unmounted instead of
+  // offering an Add flow whose first write can only 404.
+  if (!partyId) return null
 
   return (
     <section className="space-y-3">

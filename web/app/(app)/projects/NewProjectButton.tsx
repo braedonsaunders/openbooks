@@ -1,42 +1,32 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Plus } from 'lucide-react'
-import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
+import { mergeHref } from '../../../lib/list-params'
 
 /**
- * Instant-into-draft: creates the inactive project server-side, opens its flyout.
+ * Unsaved-create: opens a URL-controlled unsaved drawer (`?projectNew=1`).
+ * Zero writes on open — the project is persisted only by the drawer's
+ * explicit Save (one idempotent POST to /api/projects).
  */
 export function NewProjectButton({ label }: { label?: string } = {}) {
   const t = useTranslations('projects')
-  const tCommon = useTranslations('common')
-  const [busy, setBusy] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const current = Object.fromEntries(searchParams.entries())
 
-  async function create() {
-    setBusy(true)
-    const res = await fetch('/api/projects/draft', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({}),
-    })
-    const data = await res.json()
-    if (!res.ok) {
-      toast.error(data.error ?? t('list.createDraftFailed'))
-      setBusy(false)
-      return
-    }
-    router.push(`/projects?project=${data.id}`)
-    router.refresh()
-    setBusy(false)
+  function open() {
+    router.push(mergeHref('/projects', current, {
+      project: undefined,
+      projectNew: '1',
+    }) as never)
   }
 
   return (
-    <Button onClick={create} disabled={busy}>
-      <Plus size={15} /> {busy ? tCommon('actions.creating') : (label ?? t('list.newButton'))}
+    <Button onClick={open}>
+      <Plus size={15} /> {label ?? t('list.newButton')}
     </Button>
   )
 }
