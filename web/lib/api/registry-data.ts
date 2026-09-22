@@ -75,6 +75,7 @@ export const V1_RESERVED_STATIC_SEGMENTS = [
   "inventory",
   "payroll",
   "search",
+  "tax",
 ] as const;
 
 const V1_RESERVED_STATIC_SEGMENT_SET = new Set<string>(V1_RESERVED_STATIC_SEGMENTS);
