@@ -17,6 +17,7 @@ import {
   profileColumnChoices,
   profileColumnCountBounds,
   profileColumnField,
+  regionWithholdingCertificate,
   type PayrollCertificate,
 } from '@openbooks/engine/src/payroll/certificates.ts'
 import type { PayrollProfileExemptionFlag } from '@openbooks/engine/src/payroll/packs.ts'
@@ -619,21 +620,28 @@ export async function POST(req: Request) {
   const provincialClaimBounds = profileColumnCountBounds(country, 'provincial_claim_code')
   const federalClaimCode = claimCode(body.federalClaimCode, federalClaimBounds)
   const provincialClaimCode = claimCode(body.provincialClaimCode, provincialClaimBounds)
+  // A jurisdiction that identifies its claim by an AMOUNT (the pack's
+  // claimIdentity declaration on its regional certificate) has no claim code,
+  // so a code on such a profile is a data-entry error the engine would have to
+  // guess at. Read the rule off the pack — never a country/region literal
+  // here; the next amount-based jurisdiction declares it and this branch
+  // covers it without an edit.
+  const provincialClaimCertificate = regionWithholdingCertificate(country, province)
+  if (
+    provincialClaimCertificate?.claimIdentity === 'amount'
+    && body.provincialClaimCode !== null && body.provincialClaimCode !== undefined && body.provincialClaimCode !== ''
+  ) {
+    return NextResponse.json(
+      { error: `${provincialClaimCertificate.form} identifies the claim by an amount, not a claim code — enter the amount and leave the provincial claim code empty` },
+      { status: 422 },
+    )
+  }
   if (federalClaimCode === 'invalid' || provincialClaimCode === 'invalid') {
     // Name the band the pack actually declares: a hardcoded 0–10 here would
     // be a third copy of the TD1's shape.
     const band = federalClaimCode === 'invalid' ? federalClaimBounds : provincialClaimBounds
     return NextResponse.json(
       { error: band ? `claim code must be ${band.min}–${band.max}` : 'claim code is not declared by this pack' },
-      { status: 422 },
-    )
-  }
-  // TP-1015.3-V carries an AMOUNT (line 10) — Québec has no claim codes, so a
-  // code on a QC profile is a data-entry error the engine would have to guess
-  // at. Enter the TP-1015.3-V line 10 amount instead (provincialClaimAmount).
-  if (country === 'CA' && province === 'QC' && provincialClaimCode !== null) {
-    return NextResponse.json(
-      { error: 'Québec uses a TP-1015.3-V claim AMOUNT, not a claim code — enter the amount and leave the provincial claim code empty' },
       { status: 422 },
     )
   }
