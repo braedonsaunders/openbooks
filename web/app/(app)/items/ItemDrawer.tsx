@@ -164,6 +164,7 @@ export function ItemDrawer({
   equipmentEnabled = false,
   subscriptionPricing = false,
   initialPricingView = 'landing',
+  configuredPricingViews = [],
   createMode = false,
 }: {
   payload: ItemPayload
@@ -189,6 +190,12 @@ export function ItemDrawer({
   subscriptionPricing?: boolean
   /** Persisted items open in the editor selected by their active pricing data. */
   initialPricingView?: PricingView
+  /**
+   * Pricing modes this item already holds data in. Picking a pricing mode is
+   * an edit, so the chooser only acts in edit mode; a read-only drawer still
+   * opens a configured mode, because opening one is reading.
+   */
+  configuredPricingViews?: readonly PricingView[]
   /** True for `?item=new`: the payload is in-memory and Save performs POST. */
   createMode?: boolean
 }) {
@@ -248,6 +255,11 @@ export function ItemDrawer({
   const [pricingView, setPricingView] = useState<PricingView>(initialPricingView)
   const [actionsOpen, setActionsOpen] = useState(false)
   const editable = mode === 'edit' && canManage
+  // Choosing how an item is priced is a change to the item, so the chooser is
+  // inert outside edit mode. A mode that already holds data stays reachable
+  // read-only — the sub-editors take `canManage={editable}` and refuse writes.
+  const pricingModeUnavailable = (view: PricingView) =>
+    createMode || (!editable && !configuredPricingViews.includes(view))
 
   const nameValid = name.trim().length > 0
 
@@ -681,6 +693,7 @@ export function ItemDrawer({
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <button
                 type="button"
+                disabled={pricingModeUnavailable('simple')}
                 onClick={() => setPricingView('simple')}
                 className="group rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-teal-600"
               >
@@ -696,7 +709,7 @@ export function ItemDrawer({
               </button>
               <button
                 type="button"
-                disabled={createMode}
+                disabled={pricingModeUnavailable('matrix')}
                 onClick={() => setPricingView('matrix')}
                 className="group rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:border-slate-200 disabled:hover:shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:hover:border-teal-600 dark:disabled:hover:border-slate-800"
               >
@@ -715,14 +728,14 @@ export function ItemDrawer({
                 { key: 'rules' as const, icon: Tags, title: 'rulesTitle', description: 'rulesDescription', detail: 'rulesDetail' },
               ].map((option) => {
                 const Icon = option.icon
-                return <button key={option.key} type="button" disabled={createMode} onClick={() => setPricingView(option.key)} className="group rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-teal-600">
+                return <button key={option.key} type="button" disabled={pricingModeUnavailable(option.key)} onClick={() => setPricingView(option.key)} className="group rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-teal-600">
                   <span className="mb-4 grid h-11 w-11 place-items-center rounded-xl bg-slate-100 text-slate-700 dark:bg-slate-900 dark:text-slate-300"><Icon size={22} /></span>
                   <span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">{t(`pricingModes.${option.title}`)}</span>
                   <span className="mt-2 block text-sm leading-5 text-slate-500 dark:text-slate-400">{t(`pricingModes.${option.description}`)}</span>
                   <span className="mt-4 block border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500 dark:border-slate-800 dark:text-slate-400">{createMode ? t('pricingModes.saveFirst') : t(`pricingModes.${option.detail}`)}</span>
                 </button>
               })}
-              <button type="button" disabled={!laborPricing || createMode} onClick={() => setPricingView('contract')} className="group rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-teal-600">
+              <button type="button" disabled={!laborPricing || pricingModeUnavailable('contract')} onClick={() => setPricingView('contract')} className="group rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-teal-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-teal-600">
                 <span className="mb-4 grid h-11 w-11 place-items-center rounded-xl bg-violet-50 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300"><Tags size={22} /></span>
                 <span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">{t('pricingModes.contractTitle')}</span>
                 <span className="mt-2 block text-sm leading-5 text-slate-500 dark:text-slate-400">{t('pricingModes.contractDescription')}</span>

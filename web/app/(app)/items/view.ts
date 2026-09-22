@@ -170,6 +170,19 @@ export async function loadItems(
               ? 'simple'
               : 'landing'
 
+  // Which pricing modes this item ACTUALLY has data in. Choosing a pricing
+  // mode is an edit, so a read-only drawer must not offer the chooser; it may
+  // still open a mode that already holds data, because that is reading.
+  const configuredPricingViews: ItemDrawerProps['configuredPricingViews'] = [
+    ...(openItem && (openItem.item.default_rate != null || openItem.item.default_cost != null)
+      ? (['simple'] as const)
+      : []),
+    ...(pricing?.has_matrix ? (['matrix'] as const) : []),
+    ...(pricing?.has_customer ? (['customer'] as const) : []),
+    ...(pricing?.has_cost_formula ? (['cost'] as const) : []),
+    ...(pricing?.has_contract ? (['contract'] as const) : []),
+  ]
+
   const resolvedForm = itemId && pickers
     ? await resolveFormLayout({
         orgId,
@@ -232,6 +245,7 @@ export async function loadItems(
           equipmentEnabled,
           subscriptionPricing: subscriptionPricingEnabled,
           initialPricingView,
+          configuredPricingViews,
         }
       : null
 
