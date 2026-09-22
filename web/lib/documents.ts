@@ -168,7 +168,19 @@ export async function createPostedCorrectionDraft(
       await applyDocumentEdit(
         replacement.id,
         row,
-        { ...body, expectedUpdatedAt: row.updatedAt },
+        {
+          ...body,
+          expectedUpdatedAt: row.updatedAt,
+          // The drawer copies the SOURCE document's rows into the correction
+          // body, identities included: on the fresh replacement those are
+          // foreign, so the copy boundary treats every copied line as new.
+          lines: body.lines?.map((line) => {
+            if (line.lineId === undefined || line.lineId === null) return line
+            const copy = { ...line }
+            delete copy.lineId
+            return copy
+          }),
+        },
         {
           ...ctx,
           source: 'posted_correction',
@@ -398,6 +410,134 @@ export function validateEditableDocumentLines(lines: DocumentLineInput[]): Docum
     }
     return l
   })
+}
+
+/**
+ * Native line-provenance keys: conversion evidence (`purchaseOrderLineId`,
+ * `convertedFrom`) and AP-capture evidence (`apCaptureEvidence`). Never
+ * accepted from a caller (echoed or forged) and never colliding with tenant
+ * definitions: stripped from input and validated output, then re-attached
+ * from the locked rows onto identity-matched lines (see the mutate block).
+ * Goods-receipt `receipt` evidence is never whitelisted here.
+ */
+const NATIVE_LINE_CUSTOM_KEYS = [
+  'purchaseOrderLineId',
+  'convertedFrom',
+  'apCaptureEvidence',
+] as const
+
+/** Drop caller-supplied native provenance keys; tenant values pass through. */
+function stripNativeLineCustom(
+  values: Record<string, unknown> | undefined | null,
+): Record<string, unknown> {
+  if (!values || typeof values !== 'object') return {}
+  const out = { ...values }
+  for (const key of NATIVE_LINE_CUSTOM_KEYS) delete out[key]
+  return out
+}
+
+/** Reference equality for source-bound line fields: null and '' are both blank. */
+function normLineRef(value: unknown): string | null {
+  if (value === undefined || value === null) return null
+  const text = String(value)
+  return text === '' ? null : text
+}
+
+/** Quantity equality at the quantity column's own 8dp scale. */
+function sameLineQuantity(a: unknown, b: unknown): boolean {
+  const left = normLineRef(a)
+  const right = normLineRef(b)
+  if (left === null || right === null) return left === right
+  const exactLeft = canonicalDecimal(left, 8)
+  const exactRight = canonicalDecimal(right, 8)
+  return exactLeft !== null && exactLeft === exactRight
+}
+
+/** True when a persisted custom bag carries conversion/capture evidence. */
+function persistedLineProvenance(custom: unknown): Record<string, unknown> | null {
+  if (!custom || typeof custom !== 'object') return null
+  const bag = custom as Record<string, unknown>
+  const out: Record<string, unknown> = {}
+  let found = false
+  for (const key of NATIVE_LINE_CUSTOM_KEYS) {
+    if (bag[key] !== undefined) {
+      out[key] = bag[key]
+      found = true
+    }
+  }
+  return found ? out : null
+}
+
+/**
+ * Classify persisted native evidence. 'source-bound' lines advance a
+ * billed-quantity cover on a source order line and take the identity and
+ * source-bound guards; 'audit-only' lines (capture evidence with no PO
+ * reference — materializeCapture writes it on every line) are preserved by
+ * identity but otherwise edit like ordinary lines; 'malformed' reservation
+ * evidence fails closed with a reconcile remedy.
+ */
+function nativeReservationKind(custom: unknown): 'source-bound' | 'audit-only' | 'malformed' | null {
+  const evidence = persistedLineProvenance(custom)
+  if (!evidence) return null
+  let bound = false
+  let audit = false
+  const conv = evidence.convertedFrom
+  if (conv !== undefined) {
+    if (!conv || typeof conv !== 'object') return 'malformed'
+    const parts = conv as Record<string, unknown>
+    if (
+      typeof parts.lineId !== 'string' || !isUuid(parts.lineId) ||
+      typeof parts.quantity !== 'string' || canonicalDecimal(parts.quantity, 8) === null
+    ) {
+      return 'malformed'
+    }
+    bound = true
+  }
+  const direct = evidence.purchaseOrderLineId
+  if (direct !== undefined) {
+    if (typeof direct !== 'string' || !isUuid(direct)) return 'malformed'
+    bound = true
+  }
+  const capture = evidence.apCaptureEvidence
+  if (capture !== undefined) {
+    if (!capture || typeof capture !== 'object') return 'malformed'
+    const poLine = (capture as Record<string, unknown>).purchaseOrderLineId
+    if (poLine === null || poLine === undefined) {
+      audit = true
+    } else if (typeof poLine === 'string' && isUuid(poLine)) {
+      bound = true
+    } else {
+      return 'malformed'
+    }
+  }
+  if (bound) return 'source-bound'
+  return audit ? 'audit-only' : null
+}
+
+/**
+ * Human label for a conversion child's source order(s), for refusal messages
+ * (same 'bills'/'created_from' order edges the currency guard reads).
+ * Capture-only bills carry no edge and read as "its purchase order".
+ */
+async function conversionSourceLabel(
+  tx: DocumentTransaction,
+  orgId: string,
+  documentId: string,
+): Promise<string> {
+  const sources = (await tx.execute<{ kind: string; documentNumber: string }>(sql`
+    select source.kind, source.document_number as "documentNumber"
+      from document_links link
+      join documents source
+        on source.id = link.from_document_id
+       and source.org_id = link.org_id
+     where link.org_id = ${orgId}
+       and link.to_document_id = ${documentId}
+       and link.link_type in ('bills', 'created_from')
+       and source.kind in ('quote', 'sales_order', 'purchase_order')
+     order by source.document_number
+  `)).rows
+  if (sources.length === 0) return 'its purchase order'
+  return sources.map((source) => `${source.kind.replaceAll('_', ' ')} ${source.documentNumber}`).join(', ')
 }
 
 /**
@@ -780,6 +920,11 @@ export async function applyDocumentEdit(
   // or no lines were submitted). Declared beside preparedLines so the write
   // transaction below can persist its stamps and lineage rows.
   let entryPlan: EntryPlan | null = null
+  // Stable line identities for the native-provenance match below, aligned
+  // with body.lines order (and with preparedLines while the entry plan did
+  // not explode the line set — the same index correspondence the
+  // distribution stamps rely on). Null = new line.
+  let submittedLineKeys: (string | null)[] | null = null
   let preparedLines:
     | { accountId: string; itemId: string | null; description: string | null; quantity: string | null; unit: string | null; unitPrice: string | null; amount: string; taxCodeId: string | null; taxGroupId: string | null; taxInputAmount: string; taxAmount: string; taxOverridden: boolean; taxComponents: ReturnType<typeof computeBillTotals>['lines'][number]['taxComponents']; providerQuote?: ReturnType<typeof computeBillTotals>['lines'][number]['providerQuote']; partyId: string | null; departmentId: string | null; projectId: string | null; locationId: string | null; classId: string | null; stockLocationId: string | null; extraDims: Record<string, string>; custom: Record<string, unknown>; distributionGroupId: string | null; distributionRuleId: string | null; distributionVersionId: string | null; distributionLocked: boolean }[]
     | null = null
@@ -803,6 +948,46 @@ export async function applyDocumentEdit(
         `${current.kind} lines carry an immutable rate snapshot and cannot be edited here; ` +
           `change them on the source record`,
       )
+    }
+    // Native provenance is never caller-supplied (echoed or forged): strip
+    // it here and from the validated output; trusted evidence is re-attached
+    // from the locked rows in the write transaction.
+    body.lines = body.lines.map((l) => {
+      const custom = l.custom
+      if (!custom || typeof custom !== 'object') return l
+      if (!NATIVE_LINE_CUSTOM_KEYS.some((key) => (custom as Record<string, unknown>)[key] !== undefined)) {
+        return l
+      }
+      return { ...l, custom: stripNativeLineCustom(custom as Record<string, unknown>) }
+    })
+    // Stable line identities ride the save for provenance matching. Shape and
+    // duplicates fail here; ownership is proven under the document lock in
+    // the write transaction (a pre-lock check could go stale).
+    submittedLineKeys = body.lines.map((l) => {
+      const raw = l.lineId
+      if (raw === undefined || raw === null || raw === '') return null
+      if (typeof raw !== 'string' || !isUuid(raw)) {
+        const at = body.lines!.findIndex((other) => other.lineId === raw) + 1
+        throw new DocumentEditError(422, `Line ${at}: invalid line identity — reload the document and save again`)
+      }
+      // UUIDs are case-equivalent (routes already treat them so): canonicalize
+      // before duplicate detection and matching, or 'A…' and 'a…' read as two
+      // lines and a valid uppercase identity misses its persisted row.
+      return raw.toLowerCase()
+    })
+    if (submittedLineKeys.some((key) => key !== null)) {
+      const seen = new Set<string>()
+      for (let i = 0; i < submittedLineKeys.length; i++) {
+        const key = submittedLineKeys[i]!
+        if (key === null) continue
+        if (seen.has(key)) {
+          throw new DocumentEditError(
+            422,
+            `Line ${i + 1}: duplicate line identity — reload the document and save again; nothing was changed`,
+          )
+        }
+        seen.add(key)
+      }
     }
     // Silent single-warehouse default (F-t07-003 pickers): a stocked line
     // with no explicit warehouse takes the org's only active location, so
@@ -937,6 +1122,10 @@ export async function applyDocumentEdit(
       const l = computed.lines[i]! as (typeof computed.lines)[number] & DocumentLineInput
       const lv = validateCustomValues(lineDefs, l.custom)
       if (!lv.ok) throw new DocumentEditError(422, `Line ${i + 1}: ${Object.values(lv.errors)[0]}`, lv.errors)
+      // A tenant definition colliding with a native key cannot smuggle a
+      // caller value past the input strip above: native keys never survive
+      // into the persisted bag except from the locked rows below.
+      for (const key of NATIVE_LINE_CUSTOM_KEYS) delete lv.cleaned[key]
       // Lines are replaced wholesale, so the whole submitted line bag is
       // newly supplied: refuse foreign or dangling reference ids here, the
       // same tenant-opaque 404 the native line-ref precheck above returns.
@@ -1032,6 +1221,178 @@ export async function applyDocumentEdit(
           422,
           `a ${locked.status} document cannot be edited — return it to draft or create a controlled correction`,
         )
+      }
+
+      // Native line provenance: a description-only save used to strip
+      // conversion/capture evidence (tenant validation drops keys outside
+      // the definitions), so posting received the stock a second time.
+      // Trusted evidence is re-attached here from the locked persisted rows,
+      // matched by stable line identity — never by position, never from the
+      // caller. Only this document's row (already locked above) and its own
+      // lines are read; source order rows are never written, so no new lock
+      // order is introduced. Every refusal below fires before any delete, so
+      // a refused edit changes nothing. Documents without persisted evidence
+      // keep the legacy identity-less path; their supplied identities are
+      // still validated below.
+      if (preparedLines && submittedLineKeys) {
+        const persisted = (await tx.execute<{
+          id: string
+          itemId: string | null
+          quantity: string | null
+          unit: string | null
+          stockLocationId: string | null
+          custom: unknown
+        }>(sql`
+          select id, item_id as "itemId", quantity::text as "quantity", unit,
+                 stock_location_id as "stockLocationId", custom
+            from document_lines
+           where document_id = ${id} and org_id = ${orgId}
+           order by line_number
+           for update
+        `)).rows
+        // Persisted ids compare in the same canonical form: the driver returns
+        // uuid columns lowercase, but the match must not depend on that.
+        const byId = new Map(persisted.map((row) => [row.id.toLowerCase(), row]))
+        // Ownership under the lock, on every edit carrying identities — even
+        // when no line carries provenance. A foreign or stale identity is the
+        // tenant-opaque 404 the line-account and reference prechecks return,
+        // never a silently ignored line. Identity-less saves keep the legacy
+        // path unless provenance below requires identities.
+        for (let i = 0; i < submittedLineKeys.length; i++) {
+          const key = submittedLineKeys[i]!
+          if (key !== null && !byId.has(key)) {
+            throw new DocumentEditError(
+              404,
+              `Line ${i + 1}: line not found in this document — reload the document and save again`,
+            )
+          }
+        }
+        const evidenceOf = (row: (typeof persisted)[number]) => persistedLineProvenance(row.custom)
+        const kindOf = (row: (typeof persisted)[number]) => nativeReservationKind(row.custom)
+        // Unreadable reservation evidence fails closed before any matching:
+        // neither the guards below nor the delete/void unwind can interpret
+        // it, so the edit names reconciliation instead of preserving a cover
+        // no read can observe.
+        const malformed = persisted.find((row) => kindOf(row) === 'malformed')
+        if (malformed) {
+          const at = persisted.findIndex((row) => row.id === malformed.id) + 1
+          throw new DocumentEditError(
+            422,
+            `Line ${at}: this line carries unreadable billing provenance — ` +
+              `reconcile it before editing; nothing was changed`,
+          )
+        }
+        // An allocation explosion rebuilds the line set the identities were
+        // read for, so no identity can be trusted past it while any native
+        // evidence exists (source-bound or audit-only): refuse explicitly
+        // rather than attaching by a stale position.
+        const hasEvidence = persisted.some(
+          (row) => kindOf(row) === 'source-bound' || kindOf(row) === 'audit-only',
+        )
+        if (hasEvidence) {
+          if (entryPlan?.exploded) {
+            const at = persisted.findIndex((row) => kindOf(row) !== null) + 1
+            throw new DocumentEditError(
+              422,
+              `Line ${at}: an entry-allocation split cannot preserve this line's conversion provenance — ` +
+                `clear the distribution key on the line to save; nothing was changed`,
+            )
+          }
+          if (submittedLineKeys.length !== preparedLines.length) {
+            throw new DocumentEditError(409, DOCUMENT_EDIT_REVISION_CONFLICT)
+          }
+        }
+        // Only source-bound lines take the identity and source-bound guards:
+        // capture evidence without a PO reference is audit metadata, kept by
+        // identity in the reattachment below but otherwise editable like an
+        // ordinary line.
+        const provenanceRows = persisted.filter((row) => kindOf(row) === 'source-bound')
+        if (provenanceRows.length > 0) {
+          const matched = new Set(submittedLineKeys.filter((key): key is string => key !== null))
+          const removed = provenanceRows.filter((row) => !matched.has(row.id.toLowerCase()))
+          // An explicitly emptied line set removes every provenance line;
+          // a populated but identity-less save is a legacy client. Both
+          // refuse; only the first names line removal.
+          if (removed.length > 0 && (submittedLineKeys.length === 0 || matched.size > 0)) {
+            // A removed provenance line keeps its billed-quantity cover on
+            // the source order: the canonical release runs only on
+            // whole-draft delete/void, and there is no per-line release
+            // machinery — so removal is refused with that existing remedy
+            // rather than silently detached.
+            const sources = await conversionSourceLabel(tx, orgId, id)
+            throw new DocumentEditError(
+              422,
+              `Line ${persisted.findIndex((row) => row.id === removed[0]!.id) + 1}: ` +
+                `removing a line converted from ${sources} is not supported here — ` +
+                `keep the source-backed line, or delete the entire draft to undo its source-order quantity changes; ` +
+                `nothing was changed`,
+            )
+          }
+          if (matched.size === 0) {
+            // A legacy identity-less save over source-backed lines: position
+            // cannot say which line is which once lines reorder, so refuse
+            // with the reload remedy instead of guessing.
+            const sources = await conversionSourceLabel(tx, orgId, id)
+            throw new DocumentEditError(
+              422,
+              `This ${current.kind} carries conversion provenance on ${provenanceRows.length} ` +
+                `line(s) from ${sources}: lines must be saved with their stable identities — ` +
+                `reload (or reopen) the document and save again; nothing was changed`,
+            )
+          }
+          for (let i = 0; i < preparedLines.length; i++) {
+            const key = submittedLineKeys[i]!
+            if (key === null) continue
+            const stored = byId.get(key)!
+            if (kindOf(stored) !== 'source-bound') continue
+            const line = preparedLines[i]!
+            // Source-bound semantics: the child must still bill what its
+            // source line provided. Repricing (unit price, amount),
+            // descriptions, tax, dimensions, and tenant custom stay editable;
+            // item, quantity, unit, or warehouse changes would misinterpret
+            // the source line, so the remedy is to keep the converted value.
+            const mismatch =
+              normLineRef(line.itemId) !== normLineRef(stored.itemId) ? 'item'
+              : !sameLineQuantity(line.quantity, stored.quantity) ? 'quantity'
+              : normLineRef(line.unit) !== normLineRef(stored.unit) ? 'unit'
+              : normLineRef(line.stockLocationId) !== normLineRef(stored.stockLocationId) ? 'stock location'
+              : null
+            if (mismatch === 'quantity') {
+              const sources = await conversionSourceLabel(tx, orgId, id)
+              throw new DocumentEditError(
+                422,
+                `Line ${i + 1}: quantity cannot be changed on a line converted from ${sources} — ` +
+                  `keep the converted quantity (${stored.quantity}); nothing was changed`,
+              )
+            }
+            if (mismatch !== null) {
+              const sources = await conversionSourceLabel(tx, orgId, id)
+              const keep =
+                mismatch === 'item'
+                  ? 'keep the ordered item'
+                  : mismatch === 'unit'
+                    ? `keep the converted unit (${stored.unit ?? ''})`
+                    : 'keep the received warehouse'
+              throw new DocumentEditError(
+                422,
+                `Line ${i + 1}: ${mismatch} cannot be changed on a line converted from ${sources} — ` +
+                  `${keep}; nothing was changed`,
+              )
+            }
+          }
+        }
+        // Reattachment by identity for every matched evidence line, outside
+        // the source-bound block: audit-only documents keep their metadata
+        // too. Lengths already match whenever evidence exists (409 above).
+        if (hasEvidence && submittedLineKeys.length === preparedLines.length) {
+          for (let i = 0; i < preparedLines.length; i++) {
+            const key = submittedLineKeys[i]!
+            if (key === null) continue
+            const evidence = evidenceOf(byId.get(key)!)
+            if (evidence === null) continue
+            preparedLines[i]!.custom = { ...preparedLines[i]!.custom, ...evidence }
+          }
+        }
       }
 
       try {

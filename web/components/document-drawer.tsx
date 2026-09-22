@@ -98,6 +98,9 @@ interface BuiltinSegmentOpt {
 const EMPTY_SEGMENTS: SegmentOpt[] = []
 const EMPTY_BUILTIN_SEGMENTS: BuiltinSegmentOpt[] = []
 interface LineRow extends Record<string, unknown> {
+  /** Loader line id this row edits (empty = new row); the save round-trips
+   *  it and a redraw adopts replacement ids via toRow. */
+  lineId: string
   accountId: string
   itemId: string
   description: string
@@ -567,6 +570,7 @@ export function DocumentDrawerTitle({
 }
 
 const emptyLine = (): LineRow => ({
+  lineId: '',
   accountId: '',
   itemId: '',
   description: '',
@@ -671,6 +675,7 @@ function isLineMap(v: unknown): v is Record<string, unknown> {
 
 function toRow(l: Record<string, unknown>, lineDefs: CustomFieldDefClient[], segments: SegmentOpt[]): LineRow {
   const row: LineRow = {
+    lineId: lineText(l.id),
     accountId: lineText(l.account_id),
     itemId: lineText(l.item_id),
     description: lineText(l.description),
@@ -1418,6 +1423,9 @@ export function DocumentDrawer({
             lines: rows
               .filter((r) => isPricedDrawerLine(r))
               .map((r) => ({
+                // Server provenance match needs the identity; native custom
+                // is never sent (the server re-attaches its locked rows).
+                lineId: r.lineId || null,
                 accountId: r.accountId,
                 itemId: r.itemId || null,
                 description: r.description,
