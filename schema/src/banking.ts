@@ -16,6 +16,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type { PgTableExtraConfigValue } from "drizzle-orm/pg-core";
 import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
+import { accounts } from "./coa";
 import { paymentSchedules } from "./payment-operations";
 
 /**
@@ -344,6 +345,10 @@ export const sftpServers = pgTable(
     ...auditColumns,
   },
   (t) => [
+    // Exact organization and id key required by tenant-coherent references
+    // (0242): a schedule names its server as an (org_id, id) pair, so the
+    // pair must be provably unique on the server side.
+    uniqueIndex("sftp_servers_org_id_id_unique").on(t.orgId, t.id),
     // The daemon routes a login to a tenant by username alone, across every
     // organization — the global unique index (0029) is what makes that
     // routing deterministic; per-org uniqueness is sftp_servers_org_username.
@@ -380,7 +385,25 @@ export const sftpImportSchedules = pgTable(
     lastResult: jsonb("last_result"),
     ...auditColumns,
   },
-  (t) => [index("sftp_import_schedules_active").on(t.orgId, t.isActive)],
+  (t): PgTableExtraConfigValue[] => [
+    index("sftp_import_schedules_active").on(t.orgId, t.isActive),
+    // Tenant-coherent parents (0242): the schedule list and the import scan
+    // join both parents by (org_id, id), so a plain REFERENCES (id) would
+    // let one organization cite another's server or account — saved with
+    // 200, invisible in GET, unrunnable. The composite pair makes that
+    // unrepresentable. DEFERRABLE matches the 0195/0241 party edges; NO
+    // ACTION keeps a server that still feeds schedules refusing deletion.
+    foreignKey({
+      name: "sftp_import_schedules_sftp_server_id_tenant_fkey",
+      columns: [t.orgId, t.sftpServerId],
+      foreignColumns: [sftpServers.orgId, sftpServers.id],
+    }),
+    foreignKey({
+      name: "sftp_import_schedules_account_id_tenant_fkey",
+      columns: [t.orgId, t.accountId],
+      foreignColumns: [accounts.orgId, accounts.id],
+    }),
+  ],
 );
 
 export const paymentInstructions = pgTable(
