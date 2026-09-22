@@ -2889,11 +2889,14 @@ export async function packSlotState(
     .map((country) => PAYROLL_COUNTRY_PACKS[country])
     .filter((pack): pack is PayrollCountryPack => Boolean(pack));
   if (packs.length === 0) return [];
-  const components = (await db.execute<{ code: string; liability_account_id: string | null }>(sql`
-    select code, liability_account_id from pay_components
+  const components = (await db.execute<{ country: string | null; code: string; liability_account_id: string | null }>(sql`
+    select country, code, liability_account_id from pay_components
      where org_id = ${orgId} and system_key is not null
   `));
-  const byCode = new Map(components.rows.map((c) => [c.code, c.liability_account_id]));
+  // Keyed by country as well as code: two packs may declare the same code
+  // (Canada and Australia both use WCB, 0248), and a code-only map would
+  // collapse them to whichever row was read last.
+  const byCountryCode = new Map(components.rows.map((c) => [`${c.country ?? ""}:${c.code}`, c.liability_account_id]));
   return packs.map((pack) => ({
     country: pack.country,
     name: pack.name,
@@ -2901,7 +2904,7 @@ export async function packSlotState(
       .filter((slot) => packSlotAppliesToPopulation(slot, pack.country, regionsByCountry))
       .map((slot) => {
         const fromComponents = slot.components
-          .map((component) => byCode.get(component.code))
+          .map((component) => byCountryCode.get(`${pack.country}:${component.code}`))
           .find((accountId) => accountId != null);
         const legacy = slot.legacySettingsKey
           ? ((legacySettings[slot.legacySettingsKey] as string | null | undefined) ?? null)
@@ -2992,7 +2995,8 @@ export async function setPackSlotAccount(
   const updated = await db.execute(sql`
     update pay_components
        set liability_account_id = ${accountId}, updated_by = ${actorId}, updated_at = now()
-     where org_id = ${orgId} and code = any(${`{${slot.components.map((c) => c.code).join(",")}}`}::text[])
+     where org_id = ${orgId} and country = ${country}
+       and code = any(${`{${slot.components.map((c) => c.code).join(",")}}`}::text[])
   `);
   // A mapping that touches no component row is a lost save: the setup surface
   // would report success while the slot stays unmapped (the pack's components
@@ -3054,6 +3058,7 @@ export async function ensurePackSlotRoleAccounts(
       update pay_components
          set liability_account_id = ${accountId}, updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId}
+         and country = ${country}
          and code = any(${`{${slot.components.map((c) => c.code).join(",")}}`}::text[])
          and liability_account_id is null
     `);

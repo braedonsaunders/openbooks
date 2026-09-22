@@ -4,7 +4,8 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext } from "../platform/db.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
-import { createScratchOrg, dropScratchOrgReporting } from "../testing/fixtures.ts";
+import { setPackSlotAccount } from "./packs.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -114,6 +115,78 @@ test(
         customs.some((row) => row.code === "CUSTOM-A") && customs.some((row) => row.code === "CUSTOM-B"),
         "NULL-key user rows must both persist",
       );
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+/**
+ * Migration 0248: a pay component's CODE is scoped to its country too.
+ *
+ * 0189 gave the SYSTEM key a country, but left the older (org, code) unique
+ * index in place. Canada and Australia each declare a component coded `WCB`,
+ * so installing AU after CA died on pay_components_org_code. This pins the
+ * code identity on both sides — same code in two countries coexists, the same
+ * code twice in one country (or twice with NULL country) still refuses — and
+ * that a slot-account write reaches only its own country's row.
+ */
+function isCodeViolation(error: unknown): boolean {
+  const cause = (error as { cause?: { message?: unknown } })?.cause;
+  const text = `${(error as Error)?.message ?? ""} ${cause?.message ?? ""}`;
+  return /pay_components_org_country_code/.test(text);
+}
+
+test(
+  "CA and AU each own their WCB code; a slot write stays country-scoped",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      // Installing AU after CA is the exact operation 0247 could not complete.
+      await withBypassContext(async () => {
+        await seedPayrollComponents(org.orgId, null, "CA");
+        await seedPayrollComponents(org.orgId, null, "AU");
+      });
+
+      const wcb = (await withBypassContext(async () => (await db.execute<{ country: string | null }>(sql`
+        select country from pay_components where org_id = ${org.orgId} and code = 'WCB'`)).rows));
+      assert.deepEqual(
+        wcb.map((row) => row.country).sort(),
+        ["AU", "CA"],
+        "both packs must own a WCB row",
+      );
+
+      // Same (org, country, code) is still refused.
+      await assert.rejects(
+        insertRaw(org.orgId, "WCB", "employer_contribution", "dup_wcb_key", "CA"),
+        (error: unknown) => {
+          assert.ok(isCodeViolation(error), `expected pay_components_org_country_code violation, got: ${String(error)}`);
+          return true;
+        },
+        "duplicate (org, country, code) must be refused",
+      );
+      // The old guarantee survives: two NULL-country rows with the same code
+      // are refused (what NULLS NOT DISTINCT buys).
+      await insertRaw(org.orgId, "SHAREDCODE", "earning", null, null);
+      await assert.rejects(
+        insertRaw(org.orgId, "SHAREDCODE", "earning", null, null),
+        (error: unknown) => isCodeViolation(error),
+        "duplicate NULL-country code must still be refused",
+      );
+
+      // A slot write reaches only its own country's WCB row.
+      const userId = await createScratchUser(org.orgId, "Payroll Admin", "payroll_admin");
+      await withBypassContext(async () => {
+        await setPackSlotAccount(org.orgId, userId, "AU", "wcb", org.accounts.ap);
+      });
+      const after = (await withBypassContext(async () => (await db.execute<{ country: string | null; liability_account_id: string | null }>(sql`
+        select country, liability_account_id from pay_components
+         where org_id = ${org.orgId} and code = 'WCB'`)).rows));
+      const au = after.find((row) => row.country === "AU");
+      const ca = after.find((row) => row.country === "CA");
+      assert.equal(au?.liability_account_id, org.accounts.ap, "the AU WCB slot must take the mapped account");
+      assert.equal(ca?.liability_account_id, null, "the CA WCB slot must be untouched by an AU slot write");
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
