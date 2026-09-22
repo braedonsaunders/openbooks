@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  assertUuid,
   deferredDeletionTables,
   deletionOrder,
   insertionOrder,
@@ -93,4 +94,22 @@ test("sandbox insertion opens the deferred document-ledger cycle at the declared
     rebaseSet: new Set(),
   });
   assert.ok(order.indexOf("documents") < order.indexOf("journal_entries"));
+});
+
+/**
+ * The boundary guard that makes the wipe's one remaining raw-SQL interpolation
+ * (PARENT_FILTER's org id) provably safe: a value that passes here is a
+ * canonical UUID and cannot carry a quote or a statement.
+ */
+test("assertUuid accepts a canonical uuid and refuses anything that could carry SQL", () => {
+  assert.equal(assertUuid("00000000-0000-4000-8000-00000000c001"), "00000000-0000-4000-8000-00000000c001");
+  for (const hostile of [
+    "00000000-0000-4000-8000-00000000c001'; drop table orgs;--",
+    "not-a-uuid",
+    "",
+    "00000000-0000-4000-8000-00000000c00",
+    "00000000-0000-4000-8000-00000000c00z",
+  ]) {
+    assert.throws(() => assertUuid(hostile), /not a uuid/, `must refuse ${JSON.stringify(hostile)}`);
+  }
 });

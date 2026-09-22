@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, longPool, orgContext, schema, withMaintenanceTransaction, withOrg, type MaintenanceTransactionOptions } from "../platform/db.ts";
 import {
+  assertUuid,
   deferredDeletionTables,
   deletionOrder,
   loadCatalog,
@@ -234,6 +235,14 @@ async function asOfPeriodOf(
 /** Delete a sandbox's copied rows for `tables` (org tables + org-less children).
  * Runs unscoped with the kernel-migration GUC so posted rows can be removed. */
 async function wipeSandbox(sandboxOrgId: string, tableNames: Set<string>): Promise<void> {
+  // This path deletes a whole tenant. The org id is bound as a parameter in
+  // every statement below EXCEPT the PARENT_FILTER branch, which reuses a
+  // shared string builder (clone.ts uses it too) whose only interpolation is
+  // this id. Assert it is a canonical UUID at this boundary so that one
+  // remaining interpolation is provably a value that cannot carry a quote or a
+  // statement — a reader can verify that from this line plus PARENT_FILTER's
+  // three constant templates.
+  assertUuid(sandboxOrgId);
   const cat = await loadCatalog();
   const targetTables = cat.tenantTables.filter(
     (t) => tableNames.has(t.name) && t.name !== "sandboxes",
@@ -265,24 +274,30 @@ async function wipeSandbox(sandboxOrgId: string, tableNames: Set<string>): Promi
       // stranding its org behind orgs_sandbox_of_fkey. Keep the pre-null only
       // for tables deleted under immediate constraints.
       if (deferred.has(table)) continue;
-      await db.execute(sql.raw(
-        `update "${table}" set ${columns.map((column) => `"${column}" = null`).join(", ")} `
-          + `where org_id = '${sandboxOrgId}'`,
-      ));
+      await db.execute(sql`
+        update ${sql.identifier(table)}
+           set ${sql.join(columns.map((column) => sql`${sql.identifier(column)} = null`), sql`, `)}
+         where org_id = ${sandboxOrgId}
+      `);
     }
     // Pre-null self-referential FK columns (e.g. folders.parent_folder_id, which
     // is ON DELETE RESTRICT) so a single delete-all can't trip its own hierarchy.
     for (const t of targetTables) {
       if (!t.hasOrgId) continue;
       for (const col of selfRefColumns(t)) {
-        await db.execute(sql.raw(`update "${t.name}" set "${col}" = null where org_id = '${sandboxOrgId}'`));
+        await db.execute(sql`
+          update ${sql.identifier(t.name)}
+             set ${sql.identifier(col)} = null
+           where org_id = ${sandboxOrgId}
+        `);
       }
     }
     const remove = async (name: string) => {
       const t = byName.get(name)!;
       if (t.hasOrgId) {
-        await db.execute(sql.raw(`delete from "${name}" where org_id = '${sandboxOrgId}'`));
+        await db.execute(sql`delete from ${sql.identifier(name)} where org_id = ${sandboxOrgId}`);
       } else if (PARENT_FILTER[name]) {
+        // Shared string builder; sandboxOrgId is assertUuid-checked at the top.
         await db.execute(sql.raw(`delete from "${name}" where ${PARENT_FILTER[name](sandboxOrgId)}`));
       }
     };
