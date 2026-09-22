@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../../platform/db.ts";
 import { businessToday } from "../../platform/business-date.ts";
 import { resolveWage, laborCostingSettings } from "../../projects/labor-costing.ts";
-import { mul } from "../../money/money.ts";
+import { add, cmp, isZero, mul, mulDecimal, normalizeDecimal, normalizeMoney } from "../../money/money.ts";
 import {
   requireHrmCompensationManage,
   requireHrmCompensationRead,
@@ -150,27 +150,85 @@ export function requisitionHeadcountFor(roundedFte: number): number {
   return Math.max(1, Math.ceil(roundedFte));
 }
 
+/**
+ * Validate a declared burden fraction (e.g. "0.14" = 14%). The setting is
+ * an exact decimal fraction, never a float: fractions up to 10 decimals
+ * are applied exactly by {@link applyBurden}, anything beyond that is
+ * refused by name instead of rounded silently.
+ */
+export function requireBurdenRate(raw: unknown): string {
+  const rate = typeof raw === "string" ? raw.trim() : "";
+  if (!/^\d+(\.\d+)?$/.test(rate)) {
+    throw new CompensationError(
+      "REFUSED",
+      `the declared burden rate ${JSON.stringify(raw)} is not a decimal fraction — fix it in compensation settings before costing plan lines`,
+    );
+  }
+  try {
+    normalizeDecimal(rate, 10);
+  } catch {
+    throw new CompensationError(
+      "REFUSED",
+      `the declared burden rate ${JSON.stringify(rate)} carries more than 10 decimal places — round it to at most 10 decimals in compensation settings before costing plan lines`,
+    );
+  }
+  return rate;
+}
+
+/**
+ * Compose the fallback burden fraction from labor-costing wage-percentage
+ * components. Each component value is a PERCENT (8.5 = 8.5%, the same
+ * semantics `computeCostRate` prices), so the fraction is their exact sum
+ * over 100 — never a float accumulation. Non-money, zero, and negative
+ * values add no burden, matching the previous leniency and the labor-costing
+ * engine's skip of unusable components.
+ */
+export function composeFallbackBurdenRate(values: readonly (number | string)[]): string {
+  let total = "0.0000";
+  for (const value of values) {
+    let percent: string;
+    try {
+      percent = normalizeMoney(value);
+    } catch {
+      continue;
+    }
+    if (cmp(percent, "0") <= 0) continue;
+    total = add(total, percent);
+  }
+  if (isZero(total)) return "0";
+  // Percent to fraction is an exact two-place shift, not money division:
+  // `div` would round the fraction to 4 money decimals (0.005% -> 0.0001,
+  // doubling a 60000-base charge from 3.0000 to 6.0000). `normalizeDecimal`
+  // accepts exponent notation exactly, so e-2 at scale 6 preserves all 4
+  // percent decimals. `mulPercent` is not a fraction converter either —
+  // it also returns 4 money decimals.
+  return normalizeDecimal(`${total}e-2`, 6);
+}
+
+/**
+ * Load a costed base with an exact burden fraction: base + base×rate.
+ * The fraction applies via `mulDecimal` (exact to 10 decimals), so a
+ * configured "0.1400" prices exactly — the old `String(1 + Number(rate))`
+ * float multiplier produced "1.1400000000000001" and threw.
+ */
+export function applyBurden(base: string, burdenRate: string): string {
+  return add(base, mulDecimal(base, burdenRate));
+}
+
 /** The burden fraction: declared setting first, else the labor-costing wage-percentage components. */
 async function burdenRateFor(orgId: string): Promise<{ rate: string; source: string }> {
   const settings = await compensationSettings(orgId);
   if (settings.burdenRate !== null) {
-    if (!/^\d+(\.\d+)?$/.test(settings.burdenRate)) {
-      throw new CompensationError(
-        "REFUSED",
-        `the declared burden rate ${JSON.stringify(settings.burdenRate)} is not a decimal fraction — fix it in compensation settings before costing plan lines`,
-      );
-    }
-    return { rate: settings.burdenRate, source: "compensation_settings" };
+    return { rate: requireBurdenRate(settings.burdenRate), source: "compensation_settings" };
   }
   const costing = await laborCostingSettings(orgId);
-  let total = 0;
+  const percents: (number | string)[] = [];
   for (const component of costing.components) {
     if (component.kind === "percent_of_wage" || component.kind === "worker_comp") {
-      const value = Number(component.value);
-      if (Number.isFinite(value) && value > 0) total += value / 100;
+      percents.push(component.value);
     }
   }
-  return { rate: String(total), source: "labor_costing_components" };
+  return { rate: composeFallbackBurdenRate(percents), source: "labor_costing_components" };
 }
 
 interface CostedLine {
@@ -260,7 +318,8 @@ async function costLine(
       "a plan line needs a job level or an incumbent to cost — name the level the hire will sit on",
     );
   }
-  const loaded = mul(mul(annualTarget, args.plannedFte), String(1 + Number(burden.rate)));
+  const base = mul(annualTarget, args.plannedFte);
+  const loaded = applyBurden(base, burden.rate);
   // Stored snake_case (the 0222 cost_basis shape CHECK pins basis and
   // burden_rate); the DTO surfaces the same document.
   const costBasis = {
