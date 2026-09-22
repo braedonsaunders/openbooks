@@ -616,6 +616,141 @@ test("Recurly trims and uppercases currency exactly like the sibling parsers", (
   assert.equal(parsed.lines[0]?.amount, "5000.0000");
 });
 
+test("Stripe dispute rows book their fee as fee expense, not as a dropped cost", () => {
+  // The headline scenario: a −$100 dispute carrying the $15 dispute fee.
+  // Before the fix the fee line was split out of charges only, so the bank
+  // leg posted −$100 while the $15 fee expense vanished.
+  const parsed = parseStripeBalanceTransactions(
+    [{ id: "dp_1", type: "dispute", amount: -10_000, fee: 1_500, net: -11_500, currency: "usd" }],
+    "po_dispute",
+    "2026-07-01",
+  );
+
+  assert.deepEqual(
+    parsed.lines.map(({ kind, amount }) => ({ kind, amount })),
+    [
+      { kind: "dispute", amount: "-100.0000" },
+      { kind: "fee", amount: "15.0000" },
+    ],
+  );
+  assert.equal(summarizeSettlement(parsed.lines).netAmount, "-115.0000");
+});
+
+test("Stripe refund and adjustment rows book their fees as fee expense", () => {
+  const parsed = parseStripeBalanceTransactions(
+    [
+      { id: "rf_1", type: "refund", amount: -5_000, fee: 100, net: -5_100, currency: "usd" },
+      { id: "ad_1", type: "adjustment", amount: -2_000, fee: 50, net: -2_050, currency: "usd" },
+    ],
+    "po_fee_rows",
+    "2026-07-01",
+  );
+
+  assert.deepEqual(
+    parsed.lines.map(({ kind, amount }) => ({ kind, amount })),
+    [
+      { kind: "refund", amount: "-50.0000" },
+      { kind: "fee", amount: "1.0000" },
+      { kind: "adjustment", amount: "-20.0000" },
+      { kind: "fee", amount: "0.5000" },
+    ],
+  );
+  assert.equal(summarizeSettlement(parsed.lines).netAmount, "-71.5000");
+});
+
+test("Stripe payout movement rows are excluded so the computed net is the payout", () => {
+  const parsed = parseStripeBalanceTransactions(
+    [
+      { id: "ch_1", type: "charge", amount: 1_250, fee: 36, net: 1_214, currency: "usd" },
+      { id: "po_1", type: "payout", amount: -1_214, fee: 0, net: -1_214, currency: "usd" },
+    ],
+    "po_1",
+    "2026-07-01",
+  );
+
+  assert.deepEqual(
+    parsed.lines.map(({ kind, amount }) => ({ kind, amount })),
+    [
+      { kind: "charge", amount: "12.5000" },
+      { kind: "fee", amount: "0.3600" },
+    ],
+  );
+  assert.equal(summarizeSettlement(parsed.lines).netAmount, "12.1400");
+});
+
+test("Stripe payout-only export is refused instead of posting an empty batch", () => {
+  assert.throws(
+    () =>
+      parseStripeBalanceTransactions(
+        [{ id: "po_1", type: "payout", amount: -1_214, fee: 0, net: -1_214, currency: "usd" }],
+        "po_only",
+        "2026-07-01",
+      ),
+    (error) =>
+      error instanceof PspSettlementError &&
+      /has no evidence lines/.test(error.message),
+  );
+});
+
+test("Stripe unknown balance-transaction types are refused, never booked as charges", () => {
+  assert.throws(
+    () =>
+      parseStripeBalanceTransactions(
+        [{ id: "xx_1", type: "issuing_transaction", amount: 500, fee: 0, net: 500, currency: "usd" }],
+        "po_unknown",
+        "2026-07-01",
+      ),
+    (error) =>
+      error instanceof PspSettlementError &&
+      /unsupported Stripe balance transaction type "issuing_transaction" \(row 1 xx_1\)/.test(error.message),
+  );
+});
+
+test("Stripe row whose net does not foot to amount minus fee is refused", () => {
+  assert.throws(
+    () =>
+      parseStripeBalanceTransactions(
+        [{ id: "ch_bad", type: "charge", amount: 1_250, fee: 36, net: 1_200, currency: "usd" }],
+        "po_badnet",
+        "2026-07-01",
+      ),
+    (error) =>
+      error instanceof PspSettlementError &&
+      /does not foot \(row 1 ch_bad\): net 1200 != amount 1250 minus fee 36/.test(error.message),
+  );
+});
+
+test("Stripe positive-amount refund is refused by total reconciliation, not misbooked", () => {
+  // A +$5 "refund" would land in the magnitude-based refund bucket and book
+  // −$5 while the export says +$5. The per-row check passes (it foots), so
+  // only the export-total comparison can catch the mis-assignment.
+  assert.throws(
+    () =>
+      parseStripeBalanceTransactions(
+        [{ id: "rf_pos", type: "refund", amount: 500, fee: 0, net: 500, currency: "usd" }],
+        "po_posrefund",
+        "2026-07-01",
+      ),
+    (error) =>
+      error instanceof PspSettlementError &&
+      /does not reconcile: export nets total 5\.0000 but settlement lines net to -5\.0000/.test(error.message),
+  );
+});
+
+test("Stripe positive adjustment rides the signed bucket and still reconciles", () => {
+  const parsed = parseStripeBalanceTransactions(
+    [{ id: "ad_pos", type: "adjustment", amount: 5_000, fee: 0, net: 5_000, currency: "usd" }],
+    "po_posadj",
+    "2026-07-01",
+  );
+
+  assert.deepEqual(
+    parsed.lines.map(({ kind, amount }) => ({ kind, amount })),
+    [{ kind: "other", amount: "50.0000" }],
+  );
+  assert.equal(summarizeSettlement(parsed.lines).netAmount, "50.0000");
+});
+
 test("Chargebee zero adjustment emits no adjustment line", () => {
   const parsed = parseChargebeeSettlement(
     {

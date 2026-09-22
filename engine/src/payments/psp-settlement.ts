@@ -255,6 +255,93 @@ export function summarizeSettlement(lines: ParsedSettlementLine[]): {
   };
 }
 
+/**
+ * Stripe balance-transaction types this importer understands. Every arm of
+ * the kind mapping below cases one of these; anything else is refused by
+ * name so a new Stripe type can never silently book as a charge.
+ */
+const STRIPE_KNOWN_BALANCE_TYPES = [
+  "charge",
+  "payment",
+  "refund",
+  "payment_refund",
+  "dispute",
+  "adjustment",
+  "stripe_fee",
+  "fee",
+  "application_fee",
+  "application_fee_refund",
+  "transfer",
+  "transfer_refund",
+  "transfer_cancel",
+  "transfer_failure",
+  "topup",
+  "payout",
+  "payout_cancel",
+  "payout_failure",
+] as const;
+
+type KnownStripeBalanceType = (typeof STRIPE_KNOWN_BALANCE_TYPES)[number];
+
+function isKnownStripeBalanceType(value: string): value is KnownStripeBalanceType {
+  return (STRIPE_KNOWN_BALANCE_TYPES as readonly string[]).includes(value);
+}
+
+/**
+ * Map one validated Stripe balance-transaction type to its settlement kind.
+ * Returns "excluded" for the payout movement itself (see below), never a
+ * bookable kind. Exhaustive over KnownStripeBalanceType: adding a type to
+ * the list without casing it here fails tsc on the never arm.
+ */
+function stripeSettlementKind(
+  rowType: KnownStripeBalanceType,
+  description: string | null | undefined,
+  amountMinor: number,
+): SettlementLineKind | "excluded" {
+  switch (rowType) {
+    case "charge":
+    case "payment":
+    case "application_fee":
+      return "charge";
+    case "refund":
+    case "payment_refund":
+    case "application_fee_refund":
+      return "refund";
+    case "dispute":
+      return "dispute";
+    case "adjustment": {
+      // A bare "adjustment" whose narrative names a dispute is the dispute
+      // itself under Stripe's older reporting shape; keep that routing.
+      if ((description ?? "").toLowerCase().includes("dispute")) return "dispute";
+      // summarizeSettlement books "adjustment" as a magnitude that REDUCES
+      // the net, which is exactly a non-positive Stripe adjustment. A
+      // positive adjustment (Stripe crediting the merchant) would book
+      // backwards there, so it rides the signed miscellaneous bucket
+      // instead — the total reconciliation below proves either choice.
+      return amountMinor > 0 ? "other" : "adjustment";
+    }
+    case "stripe_fee":
+    case "fee":
+      return "fee";
+    case "transfer":
+    case "transfer_refund":
+    case "transfer_cancel":
+    case "transfer_failure":
+    case "topup":
+      return "transfer";
+    case "payout":
+    case "payout_cancel":
+    case "payout_failure":
+      return "excluded";
+    default: {
+      const _exhaustive: never = rowType;
+      throw new PspSettlementError(
+        `unsupported Stripe balance transaction type "${String(_exhaustive)}"`,
+      );
+    }
+  }
+}
+
 /** Stripe balance transaction export row shape (subset). */
 export function parseStripeBalanceTransactions(
   rows: {
@@ -276,6 +363,9 @@ export function parseStripeBalanceTransactions(
   }
   const lines: ParsedSettlementLine[] = [];
   let currency = "";
+  let includedRows = 0;
+  let rowsWithNet = 0;
+  let expectedNetMinor = 0n;
   for (const [index, r] of rows.entries()) {
     // Every row carries its own explicit currency: inheriting a previous
     // row's (or a USD default) would silently convert foreign amounts at the
@@ -316,26 +406,44 @@ export function parseStripeBalanceTransactions(
     // (plus the provider id when the row carries one) so the payload can be
     // repaired field-by-field.
     const rowType = typeof r.type === "string" ? r.type : "";
+    const rowIdSuffix =
+      typeof r.id === "string" && r.id !== "" ? ` ${r.id}` : "";
+    const rowLabel = `row ${index + 1}${rowIdSuffix}`;
     if (rowType === "") {
-      const rowId =
-        typeof r.id === "string" && r.id !== "" ? ` ${r.id}` : "";
       throw new PspSettlementError(
-        `Stripe transaction type is required (row ${index + 1}${rowId})`,
+        `Stripe transaction type is required (${rowLabel})`,
       );
     }
-    const kind: SettlementLineKind =
-      rowType === "stripe_fee" || rowType === "fee"
-        ? "fee"
-        : rowType === "refund" || rowType === "payment_refund"
-          ? "refund"
-          : rowType === "adjustment" &&
-              (r.description ?? "").toLowerCase().includes("dispute")
-            ? "dispute"
-            : rowType === "payout" || rowType === "transfer"
-              ? "transfer"
-              : rowType.includes("dispute")
-                ? "dispute"
-                : "charge";
+    if (!isKnownStripeBalanceType(rowType)) {
+      throw new PspSettlementError(
+        `unsupported Stripe balance transaction type "${rowType}" (${rowLabel}): ` +
+          `re-export the payout's balance transactions without it, or extend the importer to map it, before importing payout ${payoutId}`,
+      );
+    }
+    const mapped = stripeSettlementKind(rowType, r.description, r.amount);
+    if (mapped === "excluded") {
+      // The payout's own movement (payout / payout_cancel / payout_failure):
+      // it IS the bank leg this batch will post, not settlement content.
+      // Booking it as a transfer would collapse the computed net toward zero.
+      continue;
+    }
+    const kind: SettlementLineKind = mapped;
+    // Reconcile the export against itself before booking anything: Stripe
+    // reports net = amount − fee per row, so a row whose three figures do
+    // not foot is a corrupt or half-read export, never a booking. The fee is
+    // compared by magnitude: fixtures and some exports carry it negative.
+    if (r.net != null) {
+      const feeMagnitude = r.fee == null ? 0n : r.fee < 0 ? -BigInt(r.fee) : BigInt(r.fee);
+      if (BigInt(r.net) !== BigInt(r.amount) - feeMagnitude) {
+        throw new PspSettlementError(
+          `Stripe transaction does not foot (${rowLabel}): net ${r.net} != amount ${r.amount} minus fee ${r.fee ?? 0}; ` +
+            `re-export the payout's balance transactions and import payout ${payoutId} again`,
+        );
+      }
+      expectedNetMinor += BigInt(r.amount) - feeMagnitude;
+      rowsWithNet += 1;
+    }
+    includedRows += 1;
     lines.push({
       kind,
       amount: major,
@@ -344,7 +452,10 @@ export function parseStripeBalanceTransactions(
       currency,
       meta: { stripeType: rowType, fee: r.fee, net: r.net },
     });
-    if (fee != null && r.fee !== 0 && kind === "charge") {
+    // Fees ride every row kind — a dispute's $15 fee is fee expense whether
+    // the row is a charge, a refund, a dispute, or an adjustment. Splitting
+    // them only out of charges overstated the bank leg and understated fees.
+    if (fee != null && r.fee !== 0) {
       lines.push({
         kind: "fee",
         amount: fee,
@@ -352,6 +463,27 @@ export function parseStripeBalanceTransactions(
         description: "Stripe processing fee",
         currency,
       });
+    }
+  }
+  if (includedRows === 0) {
+    throw new PspSettlementError(
+      `settlement batch has no evidence lines: payout ${payoutId} carries only its own payout movement`,
+    );
+  }
+  // Total reconciliation: when every content row carries its export net, the
+  // booked net must equal the export's own total. A drift means the kind
+  // mapping mis-assigned a row's economics (or the export is partial), and
+  // posting would debit the bank with a computed net no row observes.
+  // Rows without a net cannot participate, so a partially-evidenced export
+  // skips this check rather than failing on missing data.
+  if (rowsWithNet === includedRows) {
+    const computedNet = summarizeSettlement(lines).netAmount;
+    const expectedNet = fromMinorUnits(expectedNetMinor, currency);
+    if (cmp(computedNet, expectedNet) !== 0) {
+      throw new PspSettlementError(
+        `Stripe payout ${payoutId} does not reconcile: export nets total ${expectedNet} but settlement lines net to ${computedNet}; ` +
+          `re-export the payout's balance transactions and import again`,
+      );
     }
   }
   return {
