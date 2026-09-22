@@ -143,7 +143,7 @@ async function setLaborCostingComponents(orgId: string, components: Record<strin
   await db.execute(sql`update orgs set settings = ${JSON.stringify(next)}::jsonb where id = ${orgId}`);
 }
 
-async function seedBand(orgId: string, hrId: string, subsidiaryId: string) {
+async function seedBand(orgId: string, hrId: string, _subsidiaryId: string) {
   const family = await createJobFamily({ orgId, actorId: hrId, code: "ENG", name: "Engineering" });
   const level = await createJobLevel({
     orgId,
