@@ -298,14 +298,20 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       )
     }
     if (e instanceof CostingPolicyChangeBlockedError) {
-      await db.execute(sql`
-        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${orgId}, 'item_inventory_profiles', ${id}, 'update',
-                ${JSON.stringify({
-                  refused: true,
-                  requested: { costingMethod, tracking },
-                  reason: e.message,
-                })}, ${actorId})`).catch(() => {})
+      try {
+        await db.execute(sql`
+          insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+          values (${orgId}, 'item_inventory_profiles', ${id}, 'update',
+                  ${JSON.stringify({
+                    refused: true,
+                    requested: { costingMethod, tracking },
+                    reason: e.message,
+                  })}, ${actorId})`)
+      } catch (auditError) {
+        // The refusal still reaches the operator, but a missing audit row is
+        // itself a control failure: surface it rather than swallow it.
+        console.error('[items/costing] failed to record the refused costing-policy change', auditError)
+      }
       return NextResponse.json({ error: e.message }, { status: 409 })
     }
     // FK violation → an account id doesn't belong to this org / isn't postable.
