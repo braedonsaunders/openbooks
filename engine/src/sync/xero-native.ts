@@ -123,14 +123,17 @@ export function buildNativeFromXero(
       const a = byCode(l.AccountCode);
       if (!a) return { skip: `unmapped account code ${l.AccountCode}` };
       out.push(mk(a, home(l.LineAmount), l.Description ?? null));
+      // Tax keeps its sign: a −20 line with −2 tax is a reduction of the
+      // +100/+10 line, so the bucket nets to 8 — abs()'ing here overstated
+      // AR and tax (12) and flipped credit-note tax outright.
       const tax = home(l.TaxAmount);
       if (tax !== 0n && l.TaxType) {
         const bucket = taxByType.get(l.TaxType);
         if (bucket) {
-          bucket.amount += tax < 0n ? -tax : tax;
+          bucket.amount += tax;
         } else {
           taxByType.set(l.TaxType, {
-            amount: tax < 0n ? -tax : tax,
+            amount: tax,
             carrier: out[out.length - 1]!,
           });
         }
