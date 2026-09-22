@@ -272,6 +272,21 @@ print_env() {
   # by name without it. Emitting it here is what keeps a local run from
   # ever reaching their refusal.
   echo "export OPENBOOKS_TEST_ADMIN_DB_URL='$(admin_url_for "$db")'"
+  # The ephemeral marker, read back from the database's own comment. The
+  # fixtures refuse to touch a database whose comment does not carry the
+  # marker they were handed (engine/src/testing/fixtures.ts), so a caller who
+  # eval'd these exports and still had to stamp it by hand would see EVERY
+  # fixture insert fail with a refusal that reads like a broken suite. Emitting
+  # it here is what makes `eval "$(scripts/testdb.sh new x)"` sufficient on its
+  # own. `env` prints the marker the database already carries, so a second
+  # shell joins the same database rather than inventing a marker it rejects.
+  local marker
+  marker=$(psql_super -tAc "select shobj_description(oid, 'pg_database') from pg_database where datname = '$db'" 2>/dev/null | tr -d ' ')
+  case "$marker" in
+    openbooks-ci-ephemeral-*) echo "export OPENBOOKS_TEST_DB_MARKER='$marker'" ;;
+    *) echo "# testdb: $db carries no ephemeral marker; fixtures will refuse it" >&2 ;;
+  esac
+  echo "export OPENBOOKS_TEST_DB_ISOLATED=1"
   echo "export OPENBOOKS_DB_PASSWORD='${RUNTIME_PASS}'"
   echo "export PGPASSWORD='${SUPERPASS}'"
   echo "export NODE_ENV=test"
@@ -286,6 +301,14 @@ print_env() {
 # and `drop` must resolve a caller's name identically, or a drop of the name a
 # shard was HANDED silently misses (drop used to take the raw argument while
 # new prefixed it, and `if exists` turned that miss into a printed success).
+# A per-copy nonce for the ephemeral marker. uuidgen is present on macOS and
+# in the CI image; the /proc fallback keeps this working in a bare container.
+marker_nonce() {
+  if command -v uuidgen >/dev/null 2>&1; then uuidgen | tr 'A-Z' 'a-z'
+  elif [ -r /proc/sys/kernel/random/uuid ]; then cat /proc/sys/kernel/random/uuid
+  else printf '%s-%s' "$$" "$(date +%s)"; fi
+}
+
 test_db_name() {
   local raw=$1
   case "$raw" in ob_*) raw=${raw#ob_} ;; esac
@@ -354,6 +377,12 @@ case "$cmd" in
     # stamp (a template's built_at says nothing about when the copy was made).
     psql_super -d "$db" -c "alter table openbooks_testdb_meta add column if not exists copied_at timestamptz;
       update openbooks_testdb_meta set copied_at = now();" >/dev/null
+    # Stamp the ephemeral marker the fixtures check. Without it every scratch
+    # fixture refuses ("scratch fixtures require OPENBOOKS_TEST_DB_MARKER"),
+    # which fails a WHOLE suite in seconds and reads like a code regression —
+    # three separate lanes hit it today. The marker is per-copy, so it cannot
+    # be reused to point a runner at a database it was not handed.
+    psql_super -c "comment on database ${db} is 'openbooks-ci-ephemeral-$(marker_nonce)'" >/dev/null
     release_lock
     echo "testdb: $db ready (copied from $TEMPLATE)" >&2
     print_env "$db"
