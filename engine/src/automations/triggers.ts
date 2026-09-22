@@ -230,3 +230,34 @@ export function parseAutomationActions(raw: unknown): AutomationAction[] {
   }
   return parsed.data;
 }
+
+/**
+ * Publish-time refusal for actions the builder vocabulary names but the
+ * executor cannot deliver. Parsing stays purely syntactic (old stored rows
+ * must still READ); publishing (create / update / enable) and execution
+ * refuse through this one wording so the remedy is identical everywhere.
+ */
+export function unsupportedAutomationActionRefusal(action: AutomationAction): string | null {
+  if (action.kind === "webhook") {
+    // There is no outbound webhook transport: no outbox kind, no worker,
+    // no endpoint caller anywhere in the engine carries automation
+    // webhooks (the only webhook code is inbound payments). Enqueuing the
+    // call as a flow email with no recipients fails every run with an
+    // email-validation error, so the honest behavior is a named refusal.
+    return (
+      `webhook action to endpoint '${action.endpointKey}' cannot run: automations have no outbound webhook transport, ` +
+      `so the call would never leave OpenBooks — remove the webhook action and use send_notification, send_email, or create_task instead`
+    );
+  }
+  return null;
+}
+
+/** Refuse publishing any action the executor cannot deliver, naming the remedy. */
+export function assertPublishableAutomationActions(actions: AutomationAction[]): void {
+  for (const action of actions) {
+    const refusal = unsupportedAutomationActionRefusal(action);
+    if (refusal) {
+      throw new AutomationContractError(`${refusal} — fix the action list and save again`);
+    }
+  }
+}

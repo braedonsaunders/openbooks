@@ -5,6 +5,7 @@ import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { featureEnabled } from "../organization/feature-registry.ts";
 import { AUTOMATION_STATUSES } from "@openbooks/schema/src/hrm-automations.ts";
 import {
+  assertPublishableAutomationActions,
   parseAutomationActions,
   parseAutomationConditions,
   parseAutomationRules,
@@ -120,6 +121,7 @@ export async function createAutomation(input: {
   const rules = parseAutomationRules(parsed.data.rules);
   const conditions = parseAutomationConditions(parsed.data.conditions);
   const actions = parseAutomationActions(parsed.data.actions);
+  assertPublishableAutomationActions(actions);
   return withOrgTransaction(input.orgId, async () => {
     const rows = await db.execute<AutomationDTO>(sql`
       insert into automations
@@ -171,7 +173,11 @@ export async function updateAutomation(input: {
     if (input.trigger !== undefined) patch["trigger"] = JSON.stringify(parseAutomationTrigger(input.trigger));
     if (input.rules !== undefined) patch["rules"] = JSON.stringify(parseAutomationRules(input.rules));
     if (input.conditions !== undefined) patch["conditions"] = JSON.stringify(parseAutomationConditions(input.conditions));
-    if (input.actions !== undefined) patch["actions"] = JSON.stringify(parseAutomationActions(input.actions));
+    if (input.actions !== undefined) {
+      const actions = parseAutomationActions(input.actions);
+      assertPublishableAutomationActions(actions);
+      patch["actions"] = JSON.stringify(actions);
+    }
     if (input.priority !== undefined) patch["priority"] = String(input.priority);
     const rows = await db.execute<AutomationDTO>(sql`
       update automations
@@ -215,7 +221,7 @@ export async function setAutomationStatus(input: {
     if (input.status === "enabled") {
       // A broken recipe can never be enabled: re-validate on the way in.
       parseAutomationTrigger(row.trigger);
-      parseAutomationActions(row.actions);
+      assertPublishableAutomationActions(parseAutomationActions(row.actions));
     }
     const updated = await db.execute<AutomationDTO>(sql`
       update automations
