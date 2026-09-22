@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
-import { add, isZero, neg, toUnits } from "../money/money.ts";
-import { extendCost, receiveStandard, unitCostPerQuantity } from "./costing.ts";
+import { add, cmp, isZero, neg, toUnits } from "../money/money.ts";
+import { extendCost, unitCostPerQuantity } from "./costing.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
 import { assertMovementOwner, inventoryFeatureEnabled } from "./profile-policy.ts";
@@ -62,18 +62,21 @@ export async function assertBillReceiptsPostable(
       );
     }
     if (line.costingMethod === "standard" && !line.clearingAccountId) {
-      const actualUnitCost = isZero(line.quantity)
-        ? "0"
-        : unitCostPerQuantity(line.amount, line.quantity)!;
-      const standardUnitCost = profile.standard_cost ?? actualUnitCost;
-      const receipt = receiveStandard(
-        line.quantity,
-        actualUnitCost,
-        standardUnitCost,
+      // Same exact math the receipt books: the extended amount less the
+      // standard value is the variance, not quantity × a rounded rate. A
+      // rounded precheck could pass a line the engine then refuses
+      // post-commit — after the bill's GL has posted without stock.
+      const standardUnitCost = profile.standard_cost
+        ?? (isZero(line.quantity)
+          ? "0"
+          : unitCostPerQuantity(line.amount, line.quantity)!);
+      const variance = add(
+        line.amount,
+        neg(extendCost(line.quantity, standardUnitCost)),
       );
-      if (!isZero(receipt.variance)) {
+      if (!isZero(variance)) {
         throw new InventoryError(
-          `standard-cost receipt of item ${line.itemId} books purchase price variance of ${receipt.variance} but has no received-not-billed account`,
+          `standard-cost receipt of item ${line.itemId} books purchase price variance of ${variance} but has no received-not-billed account`,
         );
       }
     }
@@ -126,14 +129,13 @@ export async function applyBillInventoryReceipts(
         continue;
       }
     }
-    const unitCost = isZero(line.quantity)
-      ? "0"
-      : unitCostPerQuantity(line.amount, line.quantity)!;
+    // The bill already debited inventory at the line's extended amount: that
+    // total is authoritative for the layer, never quantity × a rounded rate.
     await receiveInventory(orgId, actorId, {
       itemId: line.itemId,
       stockLocationId: line.stockLocationId,
       quantity: line.quantity,
-      unitCost,
+      totalValue: line.amount,
       subsidiaryId,
       offsetAccountId: line.clearingAccountId ?? undefined,
       postJournal: line.clearingAccountId != null,
@@ -207,8 +209,16 @@ async function settleReceivedBillLineVariance(
       `document line ${line.lineNumber} (item ${line.itemId}) was received against its purchase order but the item has no received-not-billed account`,
     );
   }
-  const receiptUnitCost = unitCostPerQuantity(received.value, received.quantity) ?? "0";
-  const expected = extendCost(line.quantity, receiptUnitCost);
+  // A bill for exactly what was received clears at the received value
+  // itself, never quantity × a rounded rate — otherwise received-not-billed
+  // nets to a rounding penny instead of zero on non-terminating amounts.
+  const expected =
+    cmp(line.quantity, received.quantity) === 0
+      ? received.value
+      : extendCost(
+          line.quantity,
+          unitCostPerQuantity(received.value, received.quantity) ?? "0",
+        );
   const variance = add(line.amount, neg(expected));
   if (isZero(variance)) return;
   if (!line.varianceAccountId) {
@@ -309,12 +319,11 @@ export async function applyPurchaseReceiptInventory(
        limit 1`));
     if (seen.rows[0]) continue;
     const evidence = purchaseReceiptEvidence(line);
-    const unitCost = isZero(line.quantity) ? "0" : unitCostPerQuantity(line.amount, line.quantity)!;
     await receiveInventory(orgId, actorId, {
       itemId: line.itemId,
       stockLocationId: line.stockLocationId,
       quantity: line.quantity,
-      unitCost,
+      totalValue: line.amount,
       subsidiaryId: movementSubsidiaryId,
       offsetAccountId: line.clearingAccountId!,
       postJournal: true,

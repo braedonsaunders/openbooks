@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { add, cmp, fromUnits, isZero, neg, toUnits } from "../money/money.ts";
-import { extendCost, receiveStandard } from "./costing.ts";
+import { extendCost, receiveStandard, unitCostPerQuantity } from "./costing.ts";
 import { loadSubsidiaryContext, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
 import { normalizeMovementIdempotencyKey } from "./action-idempotency.ts";
@@ -24,8 +24,15 @@ export interface ReceiveInput {
   /** Actual unit cost paid. Omit only for write-ups without a source price:
    *  the receipt then carries at the position's prevailing average, re-read
    *  under the position lock so a concurrent movement cannot strand it on a
-   *  stale pre-lock snapshot. */
+   *  stale pre-lock snapshot. Must be omitted when totalValue is given: the
+   *  rate is derived from the authoritative total instead, so two sources
+   *  can never disagree by a rounding unit. */
   unitCost?: string;
+  /** Authoritative extended value the source document already booked to the
+   *  GL (bill and goods-receipt lines). The cost layer carries exactly this
+   *  — never quantity × a rounded rate, which strands a penny on non-
+   *  terminating amounts ($100.00 / 3 → 99.9999 vs 100.00 debited). */
+  totalValue?: string;
   subsidiaryId: string;
   /** GL account the receipt credits (GRNI / clearing). Required unless
    *  postJournal is false (the source document already moved the GL). */
@@ -75,6 +82,17 @@ export async function receiveInventory(
   // unitCost may be omitted (average fallback); when supplied it prices the
   // same journal math, so it takes the same early gate.
   if (input.unitCost !== undefined) persistReceiptMoney(input.unitCost, "receipt unit cost");
+  // totalValue is the GL-authoritative extended amount: one source of truth,
+  // so it must arrive alone and non-negative. A negative extended value on a
+  // positive quantity used to escape as a bare Error from the layer writer.
+  const authoritativeTotal =
+    input.totalValue !== undefined
+      ? persistReceiptMoney(input.totalValue, "receipt total value")
+      : null;
+  if (authoritativeTotal !== null && input.unitCost !== undefined)
+    throw new InventoryError("receipt takes a unit cost or a total value, not both");
+  if (authoritativeTotal !== null && cmp(authoritativeTotal, "0") < 0)
+    throw new InventoryError("receipt total value must not be negative");
   const period = await periodForDate(orgId, input.date);
   if (!period)
     throw new InventoryError(`no accounting period for ${input.date}`);
@@ -119,8 +137,18 @@ export async function receiveInventory(
     // cost carries at the average prevailing at commit time — a pre-lock
     // snapshot would let a concurrent movement strand it on a stale value.
     // Only the receiving entity's layers feed that average.
-    let layerUnitCost = input.unitCost;
-    if (layerUnitCost === undefined) {
+    // The pricing rate: derived from the authoritative total when the
+    // document booked one (never supplied beside it), else the caller's unit
+    // cost, else the average prevailing under the position lock.
+    let layerUnitCost: string;
+    if (authoritativeTotal !== null) {
+      layerUnitCost = unitCostPerQuantity(
+        authoritativeTotal,
+        input.quantity,
+      )!;
+    } else if (input.unitCost !== undefined) {
+      layerUnitCost = input.unitCost;
+    } else {
       const onHand = await getOnHandWith(
         tx,
         orgId,
@@ -130,14 +158,31 @@ export async function receiveInventory(
       );
       layerUnitCost = isZero(onHand.unitCost) ? "0" : onHand.unitCost;
     }
-    let inventoryValue = extendCost(input.quantity, layerUnitCost);
+    let inventoryValue: string;
     let variance = "0";
-    if (profile.costingMethod === "standard") {
-      const std = profile.standardCost ?? layerUnitCost;
-      const rs = receiveStandard(input.quantity, layerUnitCost, std);
-      inventoryValue = rs.inventoryValue;
-      variance = rs.variance;
-      layerUnitCost = std;
+    if (authoritativeTotal !== null) {
+      // The document already booked the extended amount: carry exactly it.
+      if (profile.costingMethod === "standard") {
+        // Inventory carries at standard; the document's extended amount
+        // less the standard value is the purchase price variance.
+        const std = profile.standardCost ?? layerUnitCost;
+        inventoryValue = extendCost(input.quantity, std);
+        variance = fromUnits(
+          toUnits(authoritativeTotal) - toUnits(inventoryValue),
+        );
+        layerUnitCost = std;
+      } else {
+        inventoryValue = authoritativeTotal;
+      }
+    } else {
+      inventoryValue = extendCost(input.quantity, layerUnitCost);
+      if (profile.costingMethod === "standard") {
+        const std = profile.standardCost ?? layerUnitCost;
+        const rs = receiveStandard(input.quantity, layerUnitCost, std);
+        inventoryValue = rs.inventoryValue;
+        variance = rs.variance;
+        layerUnitCost = std;
+      }
     }
     const offsetTotal = add(inventoryValue, variance); // = qty × actual
 
@@ -200,6 +245,7 @@ export async function receiveInventory(
     `));
     let receiptUnits = toUnits(input.quantity);
     let provisionalValueUnits = 0n;
+    let settledReceiptValueUnits = 0n;
     const settlements: {
       id: string;
       quantity: string;
@@ -225,12 +271,19 @@ export async function receiveInventory(
         ),
       });
       provisionalValueUnits += toUnits(provisionalValue);
+      settledReceiptValueUnits += toUnits(receiptValue);
       receiptUnits -= take;
     }
     const excessQuantity = fromUnits(receiptUnits);
+    // The excess layer carries the exact residual: with an authoritative
+    // total that is the total less what the settlements already priced, so
+    // no rounding penny lands in COGS or goes missing from the layer.
+    const excessLayerValue =
+      authoritativeTotal !== null && profile.costingMethod !== "standard"
+        ? fromUnits(toUnits(authoritativeTotal) - settledReceiptValueUnits)
+        : extendCost(excessQuantity, layerUnitCost);
     const assetDelta = fromUnits(
-      provisionalValueUnits +
-        toUnits(extendCost(excessQuantity, layerUnitCost)),
+      provisionalValueUnits + toUnits(excessLayerValue),
     );
     const correction = fromUnits(toUnits(inventoryValue) - toUnits(assetDelta));
     const lines: JournalLineInput[] = postJournal
@@ -342,7 +395,7 @@ export async function receiveInventory(
 
     if (receiptUnits > 0n) {
       await addLayerAtCost(tx, orgId, input.subsidiaryId, input.itemId,
-        input.stockLocationId, excessQuantity, extendCost(excessQuantity, layerUnitCost),
+        input.stockLocationId, excessQuantity, excessLayerValue,
         profile.costingMethod, movementId, input.date, actorId, layerUnitCost);
     }
 
