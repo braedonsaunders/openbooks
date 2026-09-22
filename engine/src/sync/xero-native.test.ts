@@ -125,6 +125,50 @@ test("Xero bank transactions propagate the header reconciled marker", () => {
   }
 });
 
+test("Xero tax keeps its sign when one tax type spans a reduction line", () => {
+  // +100 with 10 tax and −20 with −2 tax must net to 8 tax, not 12:
+  // abs()'ing the tax overstated AR and the tax control.
+  const built = buildNativeFromXero(
+    context(),
+    "Invoice",
+    {
+      InvoiceID: "invoice-sign",
+      Type: "ACCREC",
+      Status: "AUTHORISED",
+      DateString: "2026-08-27",
+      LineItems: [
+        { AccountCode: "4000", LineAmount: 100, TaxType: "OUTPUT", TaxAmount: 10 },
+        { AccountCode: "4000", LineAmount: -20, TaxType: "OUTPUT", TaxAmount: -2 },
+      ],
+    },
+    { accountIdByCode },
+  );
+
+  assert.ok(!("skip" in built));
+  assert.equal(built.lines[0]!.taxAmount, "8.0000");
+  assert.equal(built.lines[0]!.taxOverridden, true);
+});
+
+test("Xero credit-note tax stays negative on negative lines", () => {
+  const built = buildNativeFromXero(
+    context(),
+    "CreditNote",
+    {
+      CreditNoteID: "cn-sign",
+      Type: "ACCRECCREDIT",
+      Status: "AUTHORISED",
+      DateString: "2026-08-27",
+      LineItems: [
+        { AccountCode: "4000", LineAmount: -100, TaxType: "OUTPUT", TaxAmount: -10 },
+      ],
+    },
+    { accountIdByCode },
+  );
+
+  assert.ok(!("skip" in built));
+  assert.equal(built.lines[0]!.taxAmount, "-10.0000");
+});
+
 test("Xero unreconciled bank transactions carry negative evidence", () => {
   const codes = new Map([["200", "bank"]]);
   const built = buildNativeFromXero(

@@ -66,3 +66,27 @@ test("Dynamics invoices keep tax amounts and codes on their matching detail line
     ],
   );
 });
+
+test("Dynamics tax keeps its sign when one tax code spans a reduction line", () => {
+  // +100 with 10 tax and −20 with −2 tax must net to 8 tax, not 12:
+  // abs()'ing the tax overstated AR and the tax control.
+  const built = buildNativeFromBC(
+    context(),
+    "salesInvoice",
+    {
+      id: "invoice-sign",
+      number: "INV-SIGN",
+      invoiceDate: "2026-08-27",
+      customerId: "customer-1",
+      lines: [
+        { lineType: "Account", accountId: "sales-a", amountExcludingTax: 100, totalTaxAmount: 10, taxCode: "tax-a" },
+        { lineType: "Account", accountId: "sales-b", amountExcludingTax: -20, totalTaxAmount: -2, taxCode: "tax-a" },
+      ],
+    },
+    { itemSalesAccount: new Map(), itemPurchaseAccount: new Map() },
+  );
+
+  assert.ok(!("skip" in built));
+  assert.equal(built.lines[0]!.taxAmount, "8.0000");
+  assert.equal(built.lines[0]!.taxOverridden, true);
+});

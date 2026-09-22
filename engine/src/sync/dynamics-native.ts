@@ -129,9 +129,11 @@ export function buildNativeFromBC(
       } else if (l.accountId) acct = byId(l.accountId);
       if (!acct) return { skip: `unresolved ${l.lineType} line account (${l.lineObjectNumber ?? l.itemId ?? "?"})` };
       out.push(mk(acct, home(l.amountExcludingTax), l.description ?? null));
+      // Tax keeps its sign: a −20 line with −2 tax reduces the +100/+10
+      // line, so the code nets to 8 — abs()'ing here overstated AR and tax.
       const tax = home(l.totalTaxAmount);
       if (tax !== 0n && l.taxCode) {
-        taxByCode.set(l.taxCode, (taxByCode.get(l.taxCode) ?? 0n) + (tax < 0n ? -tax : tax));
+        taxByCode.set(l.taxCode, (taxByCode.get(l.taxCode) ?? 0n) + tax);
         // Keep each source tax code on a detail line that carries that code.
         // A single carrier can represent the aggregate for repeated lines with
         // the same code, but different codes must remain separate for posting.
