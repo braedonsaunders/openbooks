@@ -1,5 +1,7 @@
 import 'server-only'
 
+import type { ModuleHomeTab } from '../../../../components/module-home/tab-types'
+
 import { getTranslations } from 'next-intl/server'
 import { notFound } from 'next/navigation'
 import {
@@ -118,7 +120,7 @@ export interface RecruitingPageData {
   tab: DepthTab
   depthTabs: { value: string; label: string; href: string }[]
   /** The depth tabs as the shared strip reads them. */
-  viewTabs: { href: string; label: string; active: boolean }[]
+  viewTabs: ModuleHomeTab[]
   /** The status filter's own label — never the strip's. */
   statusLabel: string
   depthRows: InterviewTabRow[] | OfferTabRow[] | PostingTabRow[] | PoolTabRow[] | null

@@ -1,5 +1,7 @@
 import 'server-only'
 
+import type { ModuleHomeTab } from '../../components/module-home/tab-types'
+
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -74,7 +76,7 @@ export interface BenefitsData {
   hasContent: boolean
   segmentsLabel: string
   /** Windows / Enrolments — the two views, on the shared subtab strip. */
-  viewTabs: { href: string; label: string; active: boolean }[]
+  viewTabs: ModuleHomeTab[]
   allLabel: string
   segments: BenefitsSegment[]
   currentParams: Record<string, string | string[] | undefined>
