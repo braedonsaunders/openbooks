@@ -24,6 +24,33 @@
     },
     "done": "{kind} — {delta}"
   },
+  "reverseEvent": {
+    "label": "Contrepasser l’événement",
+    "event": "Événement du cycle de vie",
+    "date": "Date de contrepassation",
+    "reason": "Motif de la contrepassation",
+    "reasonTooShort": "Saisissez un motif de contrepassation d’au moins 8 caractères",
+    "action": "Comptabiliser la contrepassation",
+    "working": "Contrepassation en cours…",
+    "done": "Contrepassation comptabilisée",
+    "empty": "Aucun événement du cycle de vie ne peut être contrepassé.",
+    "loadFailed": "Impossible de charger les événements du cycle de vie",
+    "kinds": {
+      "revalued": "Réévalué",
+      "impaired": "Déprécié",
+      "disposed": "Cédé",
+      "written_off": "Sorti de l’actif",
+      "reversed": "Contrepassé",
+      "unknown": "Événement"
+    },
+    "reasons": {
+      "already_reversed": "Déjà contrepassé.",
+      "accounting_change": "Rattaché à une modification approuvée de plusieurs livres — effectuez la contrepassation depuis Modifications comptables.",
+      "entry_not_posted": "Son écriture n’est pas comptabilisée.",
+      "later_event": "Contrepassez d’abord l’événement ultérieur « {kind} ».",
+      "no_reversal_workflow": "Ce type d’événement ne dispose pas d’un processus de contrepassation directe."
+    }
+  },
   "tabs": { "register": "Registre", "taxDepreciation": "Amortissement fiscal" },
   "taxPools": {
     "configure": "Configurer",

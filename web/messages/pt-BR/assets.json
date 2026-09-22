@@ -24,6 +24,33 @@
     },
     "done": "{kind} — {delta}"
   },
+  "reverseEvent": {
+    "label": "Estornar evento",
+    "event": "Evento do ciclo de vida",
+    "date": "Data do estorno",
+    "reason": "Motivo do estorno",
+    "reasonTooShort": "Informe um motivo para o estorno com pelo menos 8 caracteres",
+    "action": "Contabilizar estorno",
+    "working": "Estornando…",
+    "done": "Estorno contabilizado",
+    "empty": "Não há eventos do ciclo de vida que possam ser estornados.",
+    "loadFailed": "Não foi possível carregar os eventos do ciclo de vida",
+    "kinds": {
+      "revalued": "Reavaliado",
+      "impaired": "Reduzido ao valor recuperável",
+      "disposed": "Alienado",
+      "written_off": "Baixado",
+      "reversed": "Estornado",
+      "unknown": "Evento"
+    },
+    "reasons": {
+      "already_reversed": "Já estornado.",
+      "accounting_change": "Pertence a uma alteração aprovada em vários livros — faça o estorno em Alterações contábeis.",
+      "entry_not_posted": "Seu lançamento não está contabilizado.",
+      "later_event": "Estorne primeiro o evento posterior «{kind}».",
+      "no_reversal_workflow": "Este tipo de evento não possui um fluxo de estorno direto."
+    }
+  },
   "tabs": {
     "register": "Registro",
     "taxDepreciation": "Depreciação fiscal"

@@ -24,6 +24,33 @@
     },
     "done": "{kind} — {delta}"
   },
+  "reverseEvent": {
+    "label": "冲销事件",
+    "event": "生命周期事件",
+    "date": "冲销日期",
+    "reason": "冲销原因",
+    "reasonTooShort": "请输入至少8个字符的冲销原因",
+    "action": "过账冲销分录",
+    "working": "正在冲销…",
+    "done": "冲销分录已过账",
+    "empty": "没有可冲销的生命周期事件。",
+    "loadFailed": "无法加载生命周期事件",
+    "kinds": {
+      "revalued": "重估",
+      "impaired": "减值",
+      "disposed": "处置",
+      "written_off": "报废核销",
+      "reversed": "已冲销",
+      "unknown": "事件"
+    },
+    "reasons": {
+      "already_reversed": "已冲销。",
+      "accounting_change": "属于已批准的多账簿变更，请从“会计变更”中冲销。",
+      "entry_not_posted": "关联分录尚未过账。",
+      "later_event": "请先冲销后续的“{kind}”事件。",
+      "no_reversal_workflow": "此事件类型没有直接冲销流程。"
+    }
+  },
   "tabs": { "register": "登记簿", "taxDepreciation": "税务折旧" },
   "taxPools": {
     "configure": "配置",

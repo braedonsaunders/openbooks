@@ -24,6 +24,33 @@
     },
     "done": "{kind} — {delta}"
   },
+  "reverseEvent": {
+    "label": "Revertir evento",
+    "event": "Evento del ciclo de vida",
+    "date": "Fecha de reversión",
+    "reason": "Motivo de la reversión",
+    "reasonTooShort": "Introduzca un motivo de reversión de al menos 8 caracteres",
+    "action": "Contabilizar reversión",
+    "working": "Revirtiendo…",
+    "done": "Reversión contabilizada",
+    "empty": "No hay eventos del ciclo de vida que puedan revertirse.",
+    "loadFailed": "No se pudieron cargar los eventos del ciclo de vida",
+    "kinds": {
+      "revalued": "Revaluado",
+      "impaired": "Deteriorado",
+      "disposed": "Enajenado",
+      "written_off": "Dado de baja",
+      "reversed": "Revertido",
+      "unknown": "Evento"
+    },
+    "reasons": {
+      "already_reversed": "Ya se ha revertido.",
+      "accounting_change": "Pertenece a un cambio aprobado de varios libros — reviértalo desde Cambios contables.",
+      "entry_not_posted": "Su asiento no está contabilizado.",
+      "later_event": "Revierta primero el evento posterior «{kind}».",
+      "no_reversal_workflow": "Este tipo de evento no tiene un flujo de reversión directa."
+    }
+  },
   "tabs": { "register": "Registro", "taxDepreciation": "Depreciación fiscal" },
   "taxPools": {
     "configure": "Configurar",

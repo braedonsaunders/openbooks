@@ -24,6 +24,33 @@
     },
     "done": "{kind} — {delta}"
   },
+  "reverseEvent": {
+    "label": "イベントを取り消す",
+    "event": "ライフサイクルイベント",
+    "date": "取消日",
+    "reason": "取消理由",
+    "reasonTooShort": "取消理由を8文字以上で入力してください",
+    "action": "取消仕訳を転記",
+    "working": "取消処理中…",
+    "done": "取消仕訳を転記しました",
+    "empty": "取り消し可能なライフサイクルイベントはありません。",
+    "loadFailed": "ライフサイクルイベントを読み込めませんでした",
+    "kinds": {
+      "revalued": "再評価",
+      "impaired": "減損",
+      "disposed": "処分",
+      "written_off": "除却",
+      "reversed": "取消済み",
+      "unknown": "イベント"
+    },
+    "reasons": {
+      "already_reversed": "すでに取り消されています。",
+      "accounting_change": "承認済みの複数帳簿変更に属しています。「会計変更」から取り消してください。",
+      "entry_not_posted": "関連する仕訳は転記されていません。",
+      "later_event": "先に後続の「{kind}」イベントを取り消してください。",
+      "no_reversal_workflow": "このイベント種別には直接取り消すワークフローがありません。"
+    }
+  },
   "tabs": { "register": "台帳", "taxDepreciation": "税務減価償却" },
   "taxPools": {
     "configure": "設定",
