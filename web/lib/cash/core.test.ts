@@ -109,6 +109,41 @@ test("formula TAX_RATE resolves each org default and fails closed", () => {
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
 
+test("a malformed forecast formula refuses by name instead of forecasting zero", () => {
+  // The formula_expression strategy used to answer 0 for every week a
+  // malformed tenant formula threw — a forecast that reads "no cash
+  // expected", indistinguishable from correctly nil, which is exactly the
+  // silent-zero class. Run under React's server condition like the other
+  // core behavior checks; the money formatter is stubbed at the module edge
+  // (display-only), while the formula evaluator under test is the real one.
+  const source = `
+    import assert from "node:assert/strict";
+    import { registerHooks } from "node:module";
+    registerHooks({
+      resolve(specifier, context, nextResolve) {
+        if (specifier === "../money-server") return { url: "data:text/javascript,export async function getMoneyFormatter() { return { money: String, moneyCompact: String } }", shortCircuit: true };
+        return nextResolve(specifier, context);
+      },
+    });
+    const { categoryWeekly } = await import("./web/lib/cash/core.ts");
+    const weeks = ["2026-09-07"];
+    const context = { arWeekly: {}, apWeekly: {}, cashStart: "0" };
+    try {
+      await categoryWeekly("org-1", { id: "cat-broken", name: "Broken", method: "formula_expression", formula: "{AR_IN} + not-a-token(", amount: "0", enabled: true }, "2026-09-01", weeks, context);
+      assert.fail("a malformed formula must refuse, never forecast");
+    } catch (e) {
+      assert.match(String(e), /cash forecast formula .* failed for the week of 2026-09-07/);
+    }
+    console.log("malformed formula refusal passed");
+  `;
+  const result = spawnSync(
+    process.execPath,
+    ["--conditions=react-server", "--import", "tsx", "--input-type=module", "-e", source],
+    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+});
+
 test("forecast buckets place a 90-day-old item in 90+", () => {
   assert.match(coreSource, /if \(daysPastDue < 90\) return "61-90";/);
 });
