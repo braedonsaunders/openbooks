@@ -66,3 +66,32 @@ test("an unverifiable session fails closed per request, never as a bare proxy th
   assert.ok(body.includes(pageId!), "503 page must show its request id");
   assert.ok(/retry|try again/i.test(body), "503 page must offer a retry");
 });
+
+// F06: the 503 page once retried via <button onclick="location.reload()">,
+// which the nonce-only script-src policy blocks, so the click did nothing.
+// The retry must be a script-free same-document navigation that works under
+// that CSP without widening it to 'unsafe-inline'.
+test("503 page retry works without inline handlers under the nonce-only CSP", async () => {
+  const cookie = await mintSessionCookie();
+  const page = await proxy(
+    new NextRequest("http://localhost:4780/inbox", { headers: { cookie: `ob_session=${cookie}` } }),
+  );
+  assert.equal(page.status, 503);
+  const body = await page.text();
+  assert.ok(
+    body.includes('<a class="retry" href="">Try again</a>'),
+    "503 page must retry via a same-document link that replays the current navigation as a GET",
+  );
+  assert.ok(!/<script[\s>]/i.test(body), "503 page must not depend on any script tag");
+  assert.ok(!/\son[a-z]+\s*=/i.test(body), "503 page must not use inline event handlers blocked by CSP");
+  const csp = page.headers.get("content-security-policy") ?? "";
+  const scriptSrc = csp
+    .split(";")
+    .map((directive) => directive.trim())
+    .find((directive) => directive.startsWith("script-src")) ?? "";
+  assert.ok(scriptSrc.length > 0, "503 response must carry a script-src policy");
+  assert.ok(
+    !scriptSrc.includes("'unsafe-inline'"),
+    "retry must work without 'unsafe-inline' in script-src",
+  );
+});
