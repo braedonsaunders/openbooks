@@ -109,3 +109,35 @@ test('server required-field refusals render through the field label (F-t06-022 f
     'server required-field refusals must render through the field label',
   )
 })
+
+test('creates mint one idempotency key per mounted session and reuse it across retries', () => {
+  // The drawer opens ?row=new with zero writes and POSTs once on Save: a
+  // timeout or a second click retries the same payload, and without a stable
+  // key the retry inserts a second row. The key must be assigned once per
+  // mounted create session (never regenerated per attempt) so the retry
+  // replays instead of duplicating.
+  assert.match(
+    source,
+    /createRequestIdRef = useRef<string \| null>\(null\)/,
+    'the drawer must hold one create-session key in a ref',
+  )
+  assert.match(
+    source,
+    /if \(creating && !createRequestIdRef\.current\) createRequestIdRef\.current = crypto\.randomUUID\(\)/,
+    'the key must be assigned once and reused, never regenerated per save',
+  )
+})
+
+test('the idempotency key travels only on create POSTs, never on PATCH', () => {
+  // POST /api/admin/setup/[entity] requires the key; PATCH must not send
+  // one, so an edit can never collide with (or replay as) a create.
+  assert.match(
+    source,
+    /\.\.\.\(creating \? \{ 'Idempotency-Key': createRequestIdRef\.current! \} : \{\}\)/,
+    'save() must send Idempotency-Key only when creating',
+  )
+  assert.ok(
+    !/Idempotency-Key/.test(source.slice(source.indexOf('async function remove()'))),
+    'delete must not send an idempotency key',
+  )
+})

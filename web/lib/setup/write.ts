@@ -1,5 +1,8 @@
 import 'server-only'
+import { randomUUID } from 'node:crypto'
 import { uuidId } from '../api/json'
+import { claimSetupCreate, SetupCreateConflict } from '../api/idempotency'
+import { isUuid } from '../list-params'
 import { saveExtensionSettingRow } from './extension-settings'
 import { createHomeAnnouncementRow, deleteHomeAnnouncementRow, saveHomeAnnouncementRow } from './home-announcements'
 import { sql } from 'drizzle-orm'
@@ -97,8 +100,14 @@ type SetupTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 async function setupWriteTransaction<T>(
   entity: SetupEntity, orgId: string, body: Record<string, unknown> | undefined,
   rowId: string | undefined, write: (tx: SetupTransaction) => Promise<T>,
+  options: { idempotencyKey?: string } = {},
 ): Promise<T> {
   return db.transaction(async (tx) => {
+    // Same-key retries serialize here, before any create effect: the second
+    // claimant blocks until the first commits, then replays off its audit.
+    if (options.idempotencyKey) {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'setup-create:' + options.idempotencyKey}, 0))`)
+    }
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${featureGateLockKey(orgId)}, 0))`)
     if (!(await setupEntityEnabled(entity, orgId, tx))) throw new SetupWriteRefusal('unknown setup entity', 404)
     if (body) {
@@ -1448,11 +1457,24 @@ function overlapConflict(entityKey: string): { status: 409; body: { error: strin
   return { status: 409, body: { error, code: 'overlap' } }
 }
 
-/** Create one setup record (the POST semantics of /api/admin/setup/[entity]). */
+/**
+ * Create one setup record (the POST semantics of /api/admin/setup/[entity]).
+ *
+ * Every create carries an idempotency key that becomes the new row's id (or,
+ * for home announcements, the announcement id): the HTTP route passes the
+ * caller's `Idempotency-Key` header, while direct command callers (assistant
+ * tools, imports) omit it and each call mints a fresh key. A retried key
+ * replays the original result with no second row, audit event, or side
+ * effect; a changed payload or cross-org collision is refused as 409.
+ *
+ * `extension-settings` declares allowCreate: false, so its creates stay 405
+ * above — it is explicitly refused, never silently exempted from the claim.
+ */
 export async function createSetupRecord(
   actor: SetupActor,
   entityKey: string,
   rawBody: Record<string, unknown>,
+  options: { requestId?: string } = {},
 ): Promise<SetupWriteResult> {
   const { orgId, id: actorId } = actor
   const entity = resolveEntity(entityKey)
@@ -1460,11 +1482,18 @@ export async function createSetupRecord(
   if (!(await setupEntityEnabled(entity, orgId))) return { status: 404, body: { error: 'unknown setup entity' } }
   if (entity.allowCreate === false) return { status: 405, body: { error: 'This configuration is declared by its module' } }
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
+  const requestId = options.requestId ?? randomUUID()
+  if (!isUuid(requestId)) {
+    return { status: 400, body: { error: 'Idempotency-Key must be a UUID', code: 'invalid' } }
+  }
 
   // HR-15: home announcements create into org settings JSON.
   if (entity.dataSource === 'home-announcements') {
-    try { return { status: 200, body: await createHomeAnnouncementRow(orgId, rawBody) } }
+    try { return { status: 200, body: await createHomeAnnouncementRow(orgId, rawBody, { id: requestId }) } }
     catch (error) {
+      if (error instanceof Error && (error as { status?: unknown }).status === 409) {
+        return { status: 409, body: { error: error.message, code: 'idempotency-conflict' } }
+      }
       return { status: 400, body: { error: error instanceof Error ? error.message : 'Invalid announcement' } }
     }
   }
@@ -1494,13 +1523,33 @@ export async function createSetupRecord(
     return { status: 400, body: { error: integrityError, code: 'invalid' } }
   }
 
+  // Request-controlled match image for the book entities: submitted values
+  // only. The selected/active flags derive from concurrent table state
+  // (first-book auto-promotion), so comparing them would turn a genuine
+  // retry into a conflict; the claim compares this image against the stored
+  // one, never against the derived row.
+  const setupBookMatch = (): Record<string, unknown> => ({
+    code: String(body.code),
+    name: String(body.name),
+    ...(entity.key === 'accounting-books'
+      ? { is_primary: body.isPrimary === undefined ? null : coerceBoolean(body.isPrimary) }
+      : { is_default: body.isDefault === undefined ? null : coerceBoolean(body.isDefault) }),
+    is_active: body.isActive === undefined ? null : coerceBoolean(body.isActive),
+    ...(entity.key === 'accounting-books' || body.currency === undefined ? {} : { currency: String(body.currency) }),
+    org_id: orgId,
+    created_by: actorId,
+    updated_by: actorId,
+  })
+
   if (entity.key === 'accounting-books') {
     try {
       const id = await setupWriteTransaction(entity, orgId, body, undefined, (tx) =>
-        saveSetupBook(entity, orgId, actorId, body, tx))
+        saveSetupBook(entity, orgId, actorId, body, tx, { idempotencyKey: requestId, match: setupBookMatch() }),
+        { idempotencyKey: requestId })
       return { status: 200, body: { id } }
     } catch (e) {
       if (e instanceof SetupWriteRefusal) return { status: e.status, body: { error: e.message } }
+      if (e instanceof SetupCreateConflict) return { status: e.status, body: { error: e.message, code: e.code } }
       return { status: 400, body: { error: describeDbError(e) } }
     }
   }
@@ -1514,15 +1563,21 @@ export async function createSetupRecord(
     }
     try {
       const id = await setupWriteTransaction(entity, orgId, body, undefined, (tx) =>
-        saveSetupBook(entity, orgId, actorId, body, tx))
+        saveSetupBook(entity, orgId, actorId, body, tx, { idempotencyKey: requestId, match: setupBookMatch() }),
+        { idempotencyKey: requestId })
       return { status: 200, body: { id } }
     } catch (e) {
       if (e instanceof SetupWriteRefusal) return { status: e.status, body: { error: e.message } }
+      if (e instanceof SetupCreateConflict) return { status: e.status, body: { error: e.message, code: e.code } }
       return { status: 400, body: { error: describeDbError(e) } }
     }
   }
 
   // Natural-key uniqueness (these tables mostly lack a DB unique constraint).
+  // The check selects ids so a retried idempotency key passes through: when
+  // the duplicate row IS this key's own row, the claim inside the transaction
+  // replays an exact retry (200) or refuses a changed payload (409) instead
+  // of misreporting the retry as a natural-key duplicate.
   if (entity.naturalKey) {
     const col = toSnake(entity.naturalKey)
     const val = String(body[entity.naturalKey] ?? '')
@@ -1534,9 +1589,12 @@ export async function createSetupRecord(
       ? sql` and effective_from = ${String(body.effectiveFrom ?? '')}`
       : sql``
     const dup = ((await db.execute(sql`
-      select 1 from ${sql.raw(entity.table)}
+      select id from ${sql.raw(entity.table)}
        where ${sql.raw(col)} = ${val}${orgFilter}${effectiveFilter} limit 1`)))
-    if (dup.rows.length > 0) return duplicateConflict(entity.key)
+    if (dup.rows.length > 0
+      && !(dup.rows as { id: unknown }[]).some((row) => String(row.id) === requestId)) {
+      return duplicateConflict(entity.key)
+    }
   }
 
   // Rule-slot entities: generated slot columns are never written and the
@@ -1561,6 +1619,25 @@ export async function createSetupRecord(
     cols.push({ column: 'created_by', value: actorId })
     cols.push({ column: 'updated_by', value: actorId })
   }
+  // The idempotency key becomes the row id, claimed atomically
+  // (on conflict do nothing) at each insert below; a lost race re-resolves
+  // the claim in the same transaction instead of reporting success for a row
+  // it did not write.
+  cols.push({ column: 'id', value: requestId })
+
+  // Request-controlled match image for the replay comparison: the exact
+  // coerced columns the insert stores (actor/org context included, so a
+  // different actor reusing the key fails closed), plus join-table members
+  // where the entity has them. Derived values never enter here — version
+  // closures and book promotions compute theirs after the claim.
+  const setupCreateMatch = (extra: Record<string, unknown> = {}): Record<string, unknown> => {
+    const match: Record<string, unknown> = { ...extra }
+    for (const column of cols) {
+      if (column.column === 'id') continue
+      match[column.column] = column.value
+    }
+    return match
+  }
 
   const colSql = sql.raw(cols.map((c) => c.column).join(', '))
   const valSql = sql.join(
@@ -1572,8 +1649,14 @@ export async function createSetupRecord(
     // A direct create of a later active version follows the same timeline rule
     // as an edit: close the currently-effective active row before inserting the
     // successor, and keep both operations plus their evidence atomic.
+    const match = setupCreateMatch()
+    const claimMatch = { orgId, table: entity.table, key: requestId, match, orgScoped: entity.orgScoped }
     try {
       const newId = await setupWriteTransaction(entity, orgId, body, undefined, async (tx) => {
+        // The claim resolves before the version closure below, so an exact
+        // retry returns without closing (or re-closing) the prior version.
+        const claim = await claimSetupCreate(tx, claimMatch)
+        if (claim.kind === 'replay') return claim.id
         const effectiveFrom = String(body.effectiveFrom)
         const prior = coerceBoolean(body.isActive)
           ? ((await tx.execute(sql`
@@ -1602,21 +1685,33 @@ export async function createSetupRecord(
         }
         const inserted = ((await tx.execute(sql`
           insert into ${sql.raw(entity.table)} (${colSql}) values (${valSql})
+          on conflict (id) do nothing
           returning ${sql.raw(idColumn(entity))} as id`)))
-        const id = String(inserted.rows[0]?.id)
+        const insertedRow = inserted.rows[0]
+        if (!insertedRow) {
+          // Lost the same-key insert race: the winner's row (and its insert
+          // audit) is visible now, so re-resolve the claim in this same
+          // transaction — replay, or refuse.
+          const raced = await claimSetupCreate(tx, claimMatch)
+          if (raced.kind === 'replay') return raced.id
+          throw new Error('not found')
+        }
+        const id = String(insertedRow.id)
         await audit({
           orgId: entity.orgScoped ? orgId : null,
           table: entity.table,
           rowId: id,
           action: 'insert',
-          changes: { after: await loadSetupAuditRow(entity, orgId, id, tx) },
+          changes: { after: await loadSetupAuditRow(entity, orgId, id, tx), match },
           actorId,
+          requestId,
         }, tx)
         return id
-      })
+      }, { idempotencyKey: requestId })
       return { status: 200, body: { id: newId } }
     } catch (e) {
       if (e instanceof SetupWriteRefusal) return { status: e.status, body: { error: e.message } }
+      if (e instanceof SetupCreateConflict) return { status: e.status, body: { error: e.message, code: e.code } }
       if (pgErrorCode(e) === '23505' || pgErrorCode(e) === '23P01') {
         return duplicateConflict(entity.key)
       }
@@ -1625,12 +1720,30 @@ export async function createSetupRecord(
   }
 
   try {
+    const members = multirefField(entity)
+    const memberIds = members && Array.isArray(body[members.key])
+      ? [...new Set((body[members.key] as unknown[]).map(String).filter((v) => UUID_RE.test(v)))]
+      : undefined
+    const match = setupCreateMatch(memberIds === undefined ? {} : { members: memberIds })
+    const claimMatch = { orgId, table: entity.table, key: requestId, match, orgScoped: entity.orgScoped }
     const newId = await setupWriteTransaction(entity, orgId, body, undefined, async (tx) => {
+      // The claim resolves before the insert and the member sync below, so
+      // an exact retry returns having written neither.
+      const claim = await claimSetupCreate(tx, claimMatch)
+      if (claim.kind === 'replay') return claim.id
       const inserted = ((await tx.execute(sql`
         insert into ${sql.raw(entity.table)} (${colSql}) values (${valSql})
+        on conflict (id) do nothing
         returning ${sql.raw(idColumn(entity))} as id`)))
-      const id = String(inserted.rows[0]?.id)
-      const members = multirefField(entity)
+      const insertedRow = inserted.rows[0]
+      if (!insertedRow) {
+        // Lost the same-key insert race: re-resolve the claim in this same
+        // transaction — replay, or refuse.
+        const raced = await claimSetupCreate(tx, claimMatch)
+        if (raced.kind === 'replay') return raced.id
+        throw new Error('not found')
+      }
+      const id = String(insertedRow.id)
       if (members && Array.isArray(body[members.key])) {
         await syncMembers(orgId, id, (body[members.key] as unknown[]).map(String), tx)
       }
@@ -1639,14 +1752,16 @@ export async function createSetupRecord(
         table: entity.table,
         rowId: id,
         action: 'insert',
-        changes: { after: await loadSetupAuditRow(entity, orgId, id, tx) },
+        changes: { after: await loadSetupAuditRow(entity, orgId, id, tx), match },
         actorId,
+        requestId,
       }, tx)
       return id
-    })
+    }, { idempotencyKey: requestId })
     return { status: 200, body: { id: newId } }
   } catch (e) {
     if (e instanceof SetupWriteRefusal) return { status: e.status, body: { error: e.message } }
+    if (e instanceof SetupCreateConflict) return { status: e.status, body: { error: e.message, code: e.code } }
     const databaseError = e as { constraint?: string; cause?: { constraint?: string; message?: string }; message?: string }
     if ((databaseError.cause?.constraint ?? databaseError.constraint) === 'depreciation_book_posted_policy') {
       return { status: 409, body: { error: databaseError.cause?.message ?? databaseError.message } }

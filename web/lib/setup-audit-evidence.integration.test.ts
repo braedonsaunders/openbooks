@@ -29,7 +29,7 @@ async function authenticate(org: ScratchOrg) {
 }
 function send(method: 'POST'|'PATCH'|'DELETE', entity: string, body: Record<string,unknown>) {
   const request = new Request(`http://audit.local/api/admin/setup/${entity}${method==='DELETE' ? '?id='+body.id : ''}`, {
-    method, headers: { 'Content-Type':'application/json' }, ...(method==='DELETE' ? {} : {body:JSON.stringify(body)}),
+    method, headers: { 'Content-Type':'application/json', ...(method==='POST' ? { 'Idempotency-Key': randomUUID() } : {}) }, ...(method==='DELETE' ? {} : {body:JSON.stringify(body)}),
   });
   return ({POST,PATCH,DELETE})[method](request,{params:Promise.resolve({entity})});
 }
@@ -77,7 +77,14 @@ for (const action of ['insert','update','delete'] as const) {
       } else if(action==='delete') {
         const response=await send('DELETE','departments',{id});assert.equal(response.status,200);expected={before};
       }
-      const audit=await evidence(id,action);assert.deepEqual(audit.changes,json(expected));assert.equal(audit.actor_id,actorId);
+      const audit=await evidence(id,action);
+      if(action==='insert'){
+        // Idempotent creates persist the request-controlled match image
+        // alongside the stored snapshot for replay comparison.
+        assert.deepEqual(audit.changes.after,json(before));
+        assert.ok(audit.changes.match && typeof audit.changes.match==='object');
+      } else assert.deepEqual(audit.changes,json(expected));
+      assert.equal(audit.actor_id,actorId);
     } finally {state.gate=null;await dropScratchOrg(org.orgId);}
   });
 }
@@ -92,7 +99,7 @@ test('tax group evidence preserves ordered members through creation, edit and de
   const body={code:'EVIDENCE-GROUP',name:'Evidence group',priceIncludesTax:false,isActive:true,members};
   const created=await send('POST','tax-groups',body);assert.equal(created.status,200,JSON.stringify(await created.clone().json()));
   const {id}=await created.json();const before={...await row('tax_groups',id),members};
-  assert.deepEqual((await evidence(id,'insert')).changes,json({after:before}));
+  const creation=await evidence(id,'insert');assert.deepEqual(creation.changes.after,json(before));assert.ok(creation.changes.match && typeof creation.changes.match==='object');
   const next=[members[1]!,members[0]!];const updated=await send('PATCH','tax-groups',{...body,id,members:next});assert.equal(updated.status,200);
   const after={...await row('tax_groups',id),members:next};assert.deepEqual((await evidence(id,'update')).changes,json({before,after}));
   const deleted=await send('DELETE','tax-groups',{id});assert.equal(deleted.status,200);

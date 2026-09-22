@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { registerHooks } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
@@ -28,7 +29,7 @@ async function authenticate(org: ScratchOrg) {
 }
 function send(method: 'POST'|'PATCH'|'DELETE', entity: string, body: Record<string,unknown>) {
   const request = new Request(`http://audit.local/api/admin/setup/${entity}${method==='DELETE' ? '?id='+body.id : ''}`, {
-    method, headers: { 'Content-Type':'application/json' }, ...(method==='DELETE' ? {} : {body:JSON.stringify(body)}),
+    method, headers: { 'Content-Type':'application/json', ...(method==='POST' ? { 'Idempotency-Key': randomUUID() } : {}) }, ...(method==='DELETE' ? {} : {body:JSON.stringify(body)}),
   });
   return ({POST,PATCH,DELETE})[method](request,{params:Promise.resolve({entity})});
 }

@@ -28,7 +28,7 @@ async function authenticate(org: ScratchOrg) {
 }
 function send(method: 'POST'|'PATCH'|'DELETE', entity: string, body: Record<string,unknown>) {
   const request = new Request(`http://audit.local/api/admin/setup/${entity}${method==='DELETE' ? '?id='+body.id : ''}`, {
-    method, headers: { 'Content-Type':'application/json' }, ...(method==='DELETE' ? {} : {body:JSON.stringify(body)}),
+    method, headers: { 'Content-Type':'application/json', ...(method==='POST' ? { 'Idempotency-Key': randomUUID() } : {}) }, ...(method==='DELETE' ? {} : {body:JSON.stringify(body)}),
   });
   return ({POST,PATCH,DELETE})[method](request,{params:Promise.resolve({entity})});
 }
@@ -57,7 +57,7 @@ for(const entity of ['accounting-books','item-rate-books'] as const){
      const promoted=await send('PATCH',entity,{...body,id,[flag]:true});assert.equal(promoted.status,200,JSON.stringify(await promoted.json()));
      assert.deepEqual((await evidence(id,'update')).changes,json({before:inserted,after:await row(table,id)}));
     }
-    const creation=await evidence(id,'insert');assert.equal(creation.actor_id,actorId);assert.deepEqual(creation.changes,json({after:inserted}));
+    const creation=await evidence(id,'insert');assert.equal(creation.actor_id,actorId);assert.deepEqual(creation.changes.after,json(inserted));assert.ok(creation.changes.match && typeof creation.changes.match==='object');
     const demotion=await evidence(priorId,'update');assert.equal(demotion.actor_id,actorId);
     assert.deepEqual(demotion.changes,json({before:prior,after:await row(table,priorId),reason:entity==='accounting-books'?'primary-book-reassigned':'default-rate-book-reassigned'}));
    }finally{state.gate=null;await dropScratchOrg(org.orgId);}
@@ -78,9 +78,9 @@ for(const method of ['POST','PATCH'] as const){
    const f=await seedRule(org);const before=await row('pay_derived_rules',f.id);
    const response=await send(method,'pay-derived-rules',{...f.body,...(method==='PATCH'?{id:f.id}:{}),name:'Successor rule',effectiveFrom:'2026-07-01',rateValue:'25'});
    assert.equal(response.status,200,JSON.stringify(await response.clone().json()));const {id}=await response.json();assert.notEqual(id,f.id);
-   assert.deepEqual((await evidence(f.id,'insert')).changes,json({after:before}));
+   const firstInsert=await evidence(f.id,'insert');assert.deepEqual(firstInsert.changes.after,json(before));assert.ok(firstInsert.changes.match && typeof firstInsert.changes.match==='object');
    assert.deepEqual((await evidence(f.id,'update')).changes,json({before,after:await row('pay_derived_rules',f.id)}));
-   const inserted=await evidence(id,'insert');assert.equal(inserted.actor_id,f.actorId);assert.deepEqual(inserted.changes,json({after:await row('pay_derived_rules',id)}));
+   const inserted=await evidence(id,'insert');assert.equal(inserted.actor_id,f.actorId);assert.deepEqual(inserted.changes.after,json(await row('pay_derived_rules',id)));assert.ok(inserted.changes.match && typeof inserted.changes.match==='object');
   }finally{state.gate=null;await dropScratchOrg(org.orgId);}
  });
 }

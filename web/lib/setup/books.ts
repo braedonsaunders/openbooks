@@ -2,6 +2,7 @@ import 'server-only'
 
 import { sql } from 'drizzle-orm'
 import type { SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import { claimSetupCreate } from '../api/idempotency'
 import { auditSetupChange as audit } from './audit'
 import { coerceBoolean } from './coerce'
 import type { SetupEntity } from './registry'
@@ -20,7 +21,23 @@ export async function saveSetupBook(
   actorId: string,
   body: Record<string, unknown>,
   tx: SqlExecutor,
-  options: { id?: string; source?: 'import'; dryRun?: boolean } = {},
+  options: {
+    id?: string
+    source?: 'import'
+    dryRun?: boolean
+    /**
+     * Idempotent-create support (POST /api/admin/setup/[entity] only): the
+     * caller's Idempotency-Key becomes the new row's id, and the insert audit
+     * carries it as request_id with the request-controlled `match` image so a
+     * retried request replays instead of duplicating. The claim resolves at
+     * the top of this function, before the demotion below, so a replay never
+     * re-demotes the other books. Import and single-purpose routes omit both
+     * and keep the historical behavior byte-for-byte (database-assigned id,
+     * no request image).
+     */
+    idempotencyKey?: string
+    match?: Record<string, unknown>
+  } = {},
 ): Promise<string | null> {
   if (!isSetupBookEntity(entity)) throw new Error('unsupported book entity')
   const accounting = entity.key === 'accounting-books'
@@ -29,6 +46,17 @@ export async function saveSetupBook(
   const table = sql.identifier(entity.table)
   const source = options.source ? { source: options.source } : {}
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${entity.key}:${orgId}`}, 0))`)
+  // The idempotent claim resolves BEFORE any create effect below (demotion,
+  // insert, audit), so an exact retry returns here having written nothing.
+  // The caller's transaction already holds the key's advisory lock ahead of
+  // this fence, serializing concurrent retries of the same key.
+  if (!options.id && options.idempotencyKey) {
+    const claim = await claimSetupCreate(tx, {
+      orgId, table: entity.table, key: options.idempotencyKey,
+      match: options.match ?? {}, orgScoped: entity.orgScoped,
+    })
+    if (claim.kind === 'replay') return claim.id
+  }
   if (accounting) {
     // First-history journal inserts retain the primary row before the FK
     // checks their explicit (possibly secondary) book. Match that order even
@@ -98,6 +126,10 @@ export async function saveSetupBook(
   }
   if (options.dryRun) return options.id ?? null
 
+  const idempotentCreate = !before && options.idempotencyKey !== undefined
+  const createId = idempotentCreate ? sql`id, ` : sql``
+  const createIdValue = idempotentCreate ? sql`${options.idempotencyKey}, ` : sql``
+  const createConflict = idempotentCreate ? sql`on conflict (id) do nothing ` : sql``
   const stored = before
     ? await tx.execute<Record<string, unknown>>(sql`
         update ${table} set name = ${String(body.name)}, ${sql.identifier(flag)} = ${selected},
@@ -105,14 +137,31 @@ export async function saveSetupBook(
           ${accounting ? sql`` : sql`, currency = ${currency}`}
          where id = ${options.id} and org_id = ${orgId} returning *`)
     : await tx.execute<Record<string, unknown>>(sql`
-        insert into ${table} (org_id, code, name, ${sql.identifier(flag)}, is_active, created_by, updated_by
+        insert into ${table} (${createId}org_id, code, name, ${sql.identifier(flag)}, is_active, created_by, updated_by
           ${accounting ? sql`` : sql`, currency`})
-        values (${orgId}, ${String(body.code)}, ${String(body.name)}, ${selected}, ${active}, ${actorId}, ${actorId}
-          ${accounting ? sql`` : sql`, ${currency}`}) returning *`)
-  const after = stored.rows[0]
+        values (${createIdValue}${orgId}, ${String(body.code)}, ${String(body.name)}, ${selected}, ${active}, ${actorId}, ${actorId}
+          ${accounting ? sql`` : sql`, ${currency}`})
+        ${createConflict}returning *`)
+  let after = stored.rows[0]
+  if (!after && idempotentCreate) {
+    // Lost the same-key insert race: the winner's row (and its insert audit)
+    // is visible now, so re-resolve the claim — replay, or refuse.
+    const claim = await claimSetupCreate(tx, {
+      orgId, table: entity.table, key: options.idempotencyKey!,
+      match: options.match ?? {}, orgScoped: entity.orgScoped,
+    })
+    if (claim.kind === 'replay') return claim.id
+    after = undefined
+  }
   if (!after) throw new Error('not found')
   const id = String(after.id)
+  // A write that matches zero rows is a failure, not a success: the explicit
+  // id must be the row that was stored, otherwise a mis-scoped insert would
+  // report success for a row no read can observe.
+  if (!before && options.idempotencyKey && id !== options.idempotencyKey) throw new Error('not found')
   await audit({ orgId, table: entity.table, rowId: id, action: before ? 'update' : 'insert',
-    changes: { ...source, ...(before ? { before } : options.source ? { before: null } : {}), after }, actorId }, tx)
+    changes: { ...source, ...(before ? { before } : options.source ? { before: null } : {}), after,
+      ...(before || !options.idempotencyKey ? {} : { match: options.match ?? {} }) },
+    actorId, ...(before || !options.idempotencyKey ? {} : { requestId: options.idempotencyKey }) }, tx)
   return id
 }
