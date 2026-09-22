@@ -131,19 +131,28 @@ accounts and credits accounts payable.
 
 ## Vendor credit
 
-Use a vendor credit for returned goods, price adjustments, and other genuine
-reductions. For a physical return, use an inventory item line and select the
-originating posted receipt. Select the exact lot or serial when the item is
-tracked. Posting reduces accounts payable, relieves only the selected on-hand
-cost layers at carried cost, and leaves any difference between the vendor's
-credit and carried cost in the item's configured variance or adjustment
-account. A return is rejected if its receipt evidence is missing, belongs to a
-different vendor, or no longer has enough on-hand quantity.
+Use a vendor credit for price adjustments and other genuine reductions. Enter
+an account-only credit — a non-inventory account line that moves no stock —
+against the relevant expense or adjustment account. A credit applies toward a
+bill through a vendor payment, and only where cash is still due: a credit that
+fully offsets a bill with no cash due cannot be applied on its own and may
+remain open in aging. Do not bury vendor credits in manual control-account
+journals.
 
-For a price-only adjustment that does not move stock, use the appropriate
-non-inventory account line. Apply the credit to the relevant bill or leave it
-open for a future application. Do not bury vendor credits in manual
-control-account journals.
+For a physical return of stock, the editor does not currently offer
+receipt-linked stock-return selection: there is no control to select the
+originating posted receipt, or its lot or serial. Correct the finances and the
+stock as two separate steps. Post the account-only vendor credit above to the
+item's inventory adjustment account — or its cost-of-goods-sold account when
+no adjustment account is configured — then remove the units separately with
+Inventory Adjust, which relieves them at carried cost against the same
+account. Use the same account for both steps, so any difference between the
+vendor's credit and the carried cost remains there as the residual.
+
+Receipt-linked returns that relieve the selected on-hand cost layers at
+carried cost, with lot or serial evidence checked against the originating
+posted receipt, exist only in the inventory engine — not in the vendor credit
+editor — so the editor cannot produce that combined stock-and-finance return.
 
 ## Payment
 

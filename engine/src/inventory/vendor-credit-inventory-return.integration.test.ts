@@ -152,9 +152,11 @@ test("vendor-return evidence is strict and the documented workflow names its acc
     () => parseVendorCreditInventoryReturnSelection({}),
     /requires custom\.inventoryReturn evidence/,
   );
-  assert.match(docsSource, /select the\noriginating posted receipt/i);
-  assert.match(docsSource, /relieves only the selected on-hand\ncost layers at carried cost/i);
-  assert.match(docsSource, /price-only adjustment that does not move stock/i);
+  assert.match(docsSource, /does not currently offer\nreceipt-linked stock-return selection/i);
+  assert.match(docsSource, /account-only credit/i);
+  assert.match(docsSource, /Inventory Adjust, which relieves them at carried cost/i);
+  assert.match(docsSource, /only in the inventory engine/i);
+  assert.match(docsSource, /no cash due cannot be applied on its own/i);
 });
 
 test(
