@@ -4,18 +4,19 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
+import Link from 'next/link'
 import { Button, Drawer, Input, Label, SearchSelect, Select } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 
 export interface ProcessCreateData {
   closeHref: string
   effectiveDate: string
+  templatesHref: string
 }
 
-/** New checklist drawer. Template selection remains canonical and automatic:
- * the service resolves the most-specific active template for the employment,
- * kind and effective date, and returns its precise refusal when setup is
- * ambiguous or missing. */
+/** New checklist drawer. The template is explicit and is loaded only after
+ * the employee, kind and effective date establish which active templates
+ * actually cover this checklist. */
 export function ProcessCreateDrawer({ create }: { create: ProcessCreateData | null }) {
   const t = useTranslations('hrm')
   const tc = useTranslations('common')
@@ -26,8 +27,13 @@ export function ProcessCreateDrawer({ create }: { create: ProcessCreateData | nu
   const [loadingOptions, setLoadingOptions] = useState(true)
   const [optionStatus, setOptionStatus] = useState<string | undefined>()
   const optionRequest = useRef(0)
+  const templateRequest = useRef(0)
   const [kind, setKind] = useState<'onboarding' | 'offboarding' | 'transfer'>('onboarding')
   const [effectiveDate, setEffectiveDate] = useState(create?.effectiveDate ?? '')
+  const [templateId, setTemplateId] = useState('')
+  const [templateOptions, setTemplateOptions] = useState<{ value: string; label: string }[]>([])
+  const [templatesLoading, setTemplatesLoading] = useState(false)
+  const [templateStatus, setTemplateStatus] = useState<string | undefined>()
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -65,6 +71,52 @@ export function ProcessCreateDrawer({ create }: { create: ProcessCreateData | nu
       })
   }, [create, employmentId, query, t])
 
+  useEffect(() => {
+    setTemplateId('')
+    if (!create || !employmentId || !effectiveDate) {
+      setTemplateOptions([])
+      setTemplateStatus(undefined)
+      setTemplatesLoading(false)
+      return
+    }
+    const requestId = (templateRequest.current += 1)
+    const params = new URLSearchParams({
+      active: 'true',
+      employment: employmentId,
+      effectiveDate,
+      kind,
+    })
+    setTemplatesLoading(true)
+    fetch(`/api/hrm/process-templates?${params.toString()}`, { method: 'GET' })
+      .then(async (response) => {
+        if (requestId !== templateRequest.current) return
+        if (!response.ok) {
+          setTemplateStatus(await readApiErrorMessage(response, t('processes.templates.loadFailed')))
+          setTemplateOptions([])
+          setTemplatesLoading(false)
+          return
+        }
+        const payload = (await response.json()) as {
+          templates?: { id?: unknown; name?: unknown; stepCount?: unknown }[]
+        }
+        if (requestId !== templateRequest.current) return
+        const ready = (payload.templates ?? []).flatMap((template) =>
+          typeof template.id === 'string' && typeof template.name === 'string' && Number(template.stepCount) > 0
+            ? [{ value: template.id, label: template.name }]
+            : [],
+        )
+        setTemplateOptions(ready)
+        setTemplateStatus(ready.length === 0 ? t('processes.templates.noneEligible') : undefined)
+        setTemplatesLoading(false)
+      })
+      .catch(() => {
+        if (requestId !== templateRequest.current) return
+        setTemplateOptions([])
+        setTemplateStatus(t('processes.templates.loadFailed'))
+        setTemplatesLoading(false)
+      })
+  }, [create, effectiveDate, employmentId, kind, t])
+
   if (!create) return null
 
   function close() {
@@ -73,12 +125,12 @@ export function ProcessCreateDrawer({ create }: { create: ProcessCreateData | nu
   }
 
   async function save() {
-    if (!employmentId || !effectiveDate) return
+    if (!employmentId || !effectiveDate || !templateId) return
     setSaving(true)
     const response = await fetch('/api/hrm/processes', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ employmentId, kind, effectiveDate }),
+      body: JSON.stringify({ employmentId, kind, effectiveDate, templateId }),
     })
     setSaving(false)
     if (!response.ok) {
@@ -95,7 +147,7 @@ export function ProcessCreateDrawer({ create }: { create: ProcessCreateData | nu
   }
 
   return (
-    <Drawer open onClose={close} title={t('processes.newProcess')} size="md">
+    <Drawer open onClose={close} title={t('processes.newChecklist')} size="md">
       <div className="flex flex-col gap-4 p-4">
         <div>
           <Label htmlFor="process-employment">{t('processes.columns.employee')}</Label>
@@ -135,11 +187,34 @@ export function ProcessCreateDrawer({ create }: { create: ProcessCreateData | nu
           <Label htmlFor="process-effective">{t('processes.columns.effective')}</Label>
           <Input id="process-effective" type="date" value={effectiveDate} onChange={(event) => setEffectiveDate(event.target.value)} />
         </div>
+        <div>
+          <Label htmlFor="process-template">{t('processes.templates.template')}</Label>
+          <SearchSelect
+            id="process-template"
+            value={templateId}
+            onChange={setTemplateId}
+            options={templateOptions}
+            ariaLabel={t('processes.templates.template')}
+            sheetTitle={t('processes.templates.template')}
+            emptyLabel="—"
+            loading={templatesLoading}
+            statusMessage={templateStatus}
+            statusTone={templateStatus ? 'muted' : undefined}
+          />
+          {templateStatus ? (
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              {templateStatus}{' '}
+              <Link href={create.templatesHref} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
+                {t('processes.templates.createTemplate')}
+              </Link>
+            </p>
+          ) : null}
+        </div>
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={close}>
             {tc('actions.cancel')}
           </Button>
-          <Button disabled={saving || !employmentId || !effectiveDate} onClick={save}>
+          <Button disabled={saving || !employmentId || !effectiveDate || !templateId} onClick={save}>
             {saving ? tc('actions.creating') : tc('actions.create')}
           </Button>
         </div>

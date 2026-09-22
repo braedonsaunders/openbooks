@@ -76,10 +76,15 @@ export interface ProcessesPageData {
   rows: ProcessRow[]
   empty: string
   canManage: boolean
-  newProcessLabel: string
+  newLabel: string
+  newBusyLabel: string
+  newChecklistLabel: string
+  newTemplateLabel: string
+  templatesLabel: string
   create: {
     closeHref: string
     effectiveDate: string
+    templatesHref: string
   } | null
   detail: ProcessDetail | null
   missingDetail: string | null
@@ -109,7 +114,7 @@ export async function loadProcessesPage(authz: Authz, sp: Record<string, string 
   // requirePermission plus the hrm switch with a 404. This loader never
   // re-checks either; it resolves data for the authorized session it is
   // given.
-  const t = await getTranslations('hrm')
+  const [t, tc] = await Promise.all([getTranslations('hrm'), getTranslations('common')])
   const segment: ProcessSegment =
     sp.segment === 'open' || sp.segment === 'overdue' || sp.segment === 'completed' || sp.segment === 'cancelled' ? sp.segment : 'open'
   const processId = typeof sp.process === 'string' && sp.process.length > 0 ? sp.process : null
@@ -251,11 +256,16 @@ export async function loadProcessesPage(authz: Authz, sp: Record<string, string 
     rows,
     empty: t('processes.empty'),
     canManage,
-    newProcessLabel: t('processes.newProcess'),
+    newLabel: tc('actions.newRecord'),
+    newBusyLabel: tc('actions.creating'),
+    newChecklistLabel: t('processes.newChecklist'),
+    newTemplateLabel: t('processes.templates.newTemplate'),
+    templatesLabel: t('processes.templates.title'),
     create: createOpen
       ? {
           closeHref: hrefFor(segment, null),
           effectiveDate,
+          templatesHref: '/hrm/processes/templates?template=new',
         }
       : null,
     detail,

@@ -1,6 +1,7 @@
 import type { ComponentProps } from 'react'
 import { NewHrmButton } from '../../app/(app)/hrm/NewHrmButton'
 import { ProcessCreateDrawer } from '../../app/(app)/hrm/processes/ProcessCreateDrawer'
+import { ProcessNewMenu } from '../../app/(app)/hrm/processes/ProcessNewMenu'
 import { str, type WidgetRenderer } from './widget-props'
 
 /** HRM process authoring entry points, isolated so registry families stay bounded. */
@@ -17,5 +18,13 @@ export const HRM_PROCESS_WIDGETS = {
   ),
   'hrm-process-create': (props) => (
     <ProcessCreateDrawer create={(props.create as ComponentProps<typeof ProcessCreateDrawer>['create']) ?? null} />
+  ),
+  'hrm-process-new-menu': (props) => (
+    <ProcessNewMenu
+      newLabel={str(props, 'newLabel') ?? ''}
+      busyLabel={str(props, 'busyLabel') ?? ''}
+      checklistLabel={str(props, 'checklistLabel') ?? ''}
+      templateLabel={str(props, 'templateLabel') ?? ''}
+    />
   ),
 } satisfies Record<string, WidgetRenderer>

@@ -229,6 +229,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'hrm-position-drawer',
   'hrm-process-drawer',
   'hrm-process-create',
+  'hrm-process-new-menu',
   'hrm-profile-dialog',
   'hrm-recent-changes',
   'hrm-recruiting-drawer',

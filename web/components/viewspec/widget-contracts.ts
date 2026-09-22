@@ -225,6 +225,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'hrm-position-drawer': { props: ['drawer'] },
   'hrm-process-create': { props: ['create'] },
   'hrm-process-drawer': { props: ['drawer'] },
+  'hrm-process-new-menu': { props: ['busyLabel', 'checklistLabel', 'newLabel', 'templateLabel'] },
   'hrm-profile-dialog': { props: ['closeHref', 'dialog'] },
   'hrm-propose-change-dialog': { props: ['closeHref', 'departmentOptions', 'employmentLabel', 'employmentPlaceholder', 'emptyLabel', 'requestFailed'] },
   'hrm-qualification-dialog': { props: ['closeHref', 'qualificationId', 'recordOpen'] },

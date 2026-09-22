@@ -15,6 +15,9 @@ const sections = readFileSync(new URL("./sections.tsx", import.meta.url), "utf8"
 const loader = readFileSync(new URL("../../../../lib/hrm/processes-page.ts", import.meta.url), "utf8");
 const panel = readFileSync(new URL("../processes-client.tsx", import.meta.url), "utf8");
 const create = readFileSync(new URL("./ProcessCreateDrawer.tsx", import.meta.url), "utf8");
+const newMenu = readFileSync(new URL("./ProcessNewMenu.tsx", import.meta.url), "utf8");
+const templateDrawer = readFileSync(new URL("./templates/ProcessTemplateDrawer.tsx", import.meta.url), "utf8");
+const templatePage = readFileSync(new URL("./templates/page.tsx", import.meta.url), "utf8");
 
 test("processes page carries the gate where the route-gate scanner reads it", () => {
   assert.match(view, /requirePermission\('hrm\.process\.read'\)/, "the page enforces the process read grant, not the employment one");
@@ -67,11 +70,23 @@ test("the checklist body checks refusals before parsing, on every action", () =>
 });
 
 test("process managers can open a real, permission-gated checklist authoring flow", () => {
-  assert.match(view, /href: '\/hrm\/processes\?new=1'/, "the header exposes the new-process entry point");
+  assert.match(view, /hrm-process-new-menu/, "the header uses the shared New dropdown");
+  assert.match(newMenu, /\/hrm\/processes\?new=1/, "the menu exposes the new-checklist entry point");
+  assert.match(newMenu, /\/hrm\/processes\/templates\?template=new/, "the same menu exposes template creation");
   assert.match(view, /f\('canManage'\)/, "the create action is omitted without the manage grant");
   assert.match(view, /widgetBlock\('hrm-process-create'/, "creation renders through the registered drawer island");
   assert.match(loader, /can\(authz, 'hrm\.process\.manage'\)/, "the loader independently resolves the manage grant");
   assert.match(create, /SearchSelect/, "the employment picker pages and searches instead of truncating the roster");
+  assert.match(create, /\/api\/hrm\/process-templates/, "the checklist picker loads eligible templates explicitly");
+  assert.match(create, /templateId/, "the selected template crosses the create boundary");
   assert.match(create, /fetch\('\/api\/hrm\/processes'/, "the drawer posts the canonical process collection route");
   assert.ok(create.indexOf("if (!response.ok)") < create.indexOf("await response.json()"), "the API refusal is surfaced before success JSON is parsed");
+});
+
+test("template authoring is in HRM and create/edit share one drawer", () => {
+  assert.match(templatePage, /requirePermission\('hrm\.process\.manage'\)/, "template authoring uses the process-management grant, not hidden Setup access");
+  assert.match(templatePage, /ProcessTemplateDrawer/, "the template list mounts the shared editor");
+  assert.match(templateDrawer, /creating \? 'POST' : 'PATCH'/, "one drawer owns both create and edit writes");
+  assert.match(templateDrawer, /process-templates\/\$\{template\.id\}\/steps/, "template steps stay in the same authoring surface");
+  assert.match(templateDrawer, /editDescription/, "the editor renders the snapshot-immutability explanation");
 });

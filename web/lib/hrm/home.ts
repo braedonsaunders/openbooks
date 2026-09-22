@@ -725,7 +725,7 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
       role: 'employee',
       label: t('overview.actions.newEmployee'),
     },
-    newProcessLabel: t('processes.newProcess'),
+    newProcessLabel: t('processes.newChecklist'),
     onboarding,
     headcountLabel: t('home.vitals.headcount'),
     headcountValue: String(headcount.total),

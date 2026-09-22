@@ -24,7 +24,7 @@ A move across legal employers is a termination plus a rehire, never an edit, so 
 
 ## Templates
 
-Checklist configuration lives under Setup → Workforce → Process Templates, with the ordered steps beside it under Process Template Steps. Each template names its kind (onboarding, offboarding, or transfer) and an applies-to filter: an employer subsidiary, a department, both, or neither (all). When several templates cover one employment, the most specific wins; an exact tie is refused so nobody silently picks a checklist for you.
+Checklist configuration lives on HRM → Process checklists → Checklist templates. The same drawer creates and edits a template and its ordered steps; it is part of the HRM workflow rather than a hidden Setup prerequisite. Each template names its kind (onboarding, offboarding, or transfer) and an applies-to filter: an employer subsidiary, a department, both, or neither (all). When opening a checklist, the template picker shows only active, ready templates that cover the selected employee and effective date.
 
 A checklist is a snapshot: opening copies the template's steps with concrete due dates, and later template edits never rewrite history. Retire a template with its active switch instead of deleting it — a template that opened checklists is retained as history and names the remedy when deletion is attempted.
 

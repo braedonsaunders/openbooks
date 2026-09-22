@@ -2227,6 +2227,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     groupKey: 'workforce',
     featureKey: 'hrm',
     iconKey: 'clipboard-check',
+    rehomed: true, // unified template + step drawer on /hrm/processes/templates
     orgScoped: true,
     orderBy: 'kind, name',
     hasActive: true,
@@ -2265,6 +2266,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     groupKey: 'workforce',
     featureKey: 'hrm',
     iconKey: 'list-checks',
+    rehomed: true, // nested inside the process-template drawer
     orgScoped: true,
     orderBy: 'position',
     hasActive: false,
@@ -2964,5 +2966,4 @@ export function setupEntitiesByGroup(): Map<string, SetupEntity[]> {
 export function toSnake(key: string): string {
   return key.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)
 }
-
 

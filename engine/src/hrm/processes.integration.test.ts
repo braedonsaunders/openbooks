@@ -24,6 +24,7 @@ import {
   createProcessTemplate,
   deleteProcessTemplate,
   HrmProcessError,
+  listProcessTemplates,
   openProcess,
   skipProcessStep,
   upsertProcessTemplateStep,
@@ -260,6 +261,46 @@ test("open snapshots the template and refuses duplicates and versionless employm
         error.code === "NO_LIVE_VERSION" &&
         /has no live version on 2026-09-01/.test(error.message),
     );
+  });
+});
+
+test("the template picker and explicit open both enforce the employment scope", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const otherSubsidiaryId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+      values (${otherSubsidiaryId}, ${h.org.orgId}, ${h.org.subsidiaryId}, 'Other employer', 'USD', 'US')
+    `);
+    const templateId = await seedTemplate(h.org.orgId, h.managerId, "onboarding", {
+      appliesTo: { employerSubsidiaryId: otherSubsidiaryId },
+    });
+    const offered = await listProcessTemplates({
+      orgId: h.org.orgId,
+      actorId: h.managerId,
+      activeOnly: true,
+      kind: "onboarding",
+      employmentId: h.employmentId,
+      effectiveDate: "2026-09-01",
+    });
+    assert.deepEqual(offered, [], "the picker never offers a template outside this employment's scope");
+    await assert.rejects(
+      openProcess({
+        orgId: h.org.orgId,
+        actorId: h.managerId,
+        employmentId: h.employmentId,
+        kind: "onboarding",
+        effectiveDate: "2026-09-01",
+        templateId,
+      }),
+      (error: unknown) =>
+        error instanceof HrmProcessError &&
+        error.code === "REFUSED" &&
+        /does not cover this employment.*choose a template offered by the checklist picker/.test(error.message),
+    );
+    const written = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from hrm_processes where org_id = ${h.org.orgId} and employment_id = ${h.employmentId}
+    `)).rows[0]!.n;
+    assert.equal(written, 0, "the refused explicit template wrote no checklist");
   });
 });
 
@@ -552,7 +593,7 @@ test("hire without a template applies the hire and opens no checklist; the expli
         kind: "onboarding",
         effectiveDate: "2026-09-14",
       }),
-      /no active onboarding template covers this employment — create or activate one in Setup that covers this employer subsidiary and department/,
+      /no active onboarding template covers this employment — create or activate one under HRM → Process checklists → Checklist templates/,
     );
     const stillNone = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from hrm_processes where employment_id = ${employmentId}`)).rows[0]!.n;
