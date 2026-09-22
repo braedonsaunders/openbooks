@@ -127,19 +127,27 @@ test("drawers cancel with zero writes and save with one idempotent POST", () => 
   assert.match(payment, /showEvidenceTabs=\{!createMode\}/);
 });
 
-test("create routes serialize on the key and replay only exact requests", () => {
+test("create routes serialize on the key and replay only the request-controlled match", () => {
   for (const file of [JOURNALS_ROUTE, PAYMENTS_ROUTE]) {
     const body = src(file);
     assert.match(body, /Idempotency-Key/);
     assert.match(body, /pg_advisory_xact_lock\(hashtextextended/);
+    assert.match(body, /claimIdempotentCreate/);
+    assert.match(body, /resolveIdempotentReplay/);
     assert.match(body, /on conflict \(id\) do nothing/);
     assert.match(body, /idempotency_key_conflict/);
     assert.match(body, /insert into audit_log/);
     assert.match(body, /request_id/);
-    // Same-org pre-read only: a key minted in another org is never read
-    // across the tenant boundary — its collision surfaces at the insert.
-    assert.match(body, /where id = \$\{requestId\} and org_id = \$\{user\.orgId\}/);
-    assert.doesNotMatch(body, /from documents where id = \$\{requestId\} for update/);
+    // The scoped claim lives in the shared helper — no inline by-id
+    // documents read that could cross the tenant boundary.
+    assert.doesNotMatch(body, /from documents where id/);
+    // The persisted image carries the full snapshot, but replay compares
+    // only the request-controlled match: server-derived defaults (date,
+    // subsidiary, currency, totals, number) live outside `request`, so a
+    // clock or config change under a defaulted field cannot 409 a retry.
+    // A null date/subsidiary in the match means "the caller omitted it".
+    assert.match(body, /request: match/);
+    assert.match(body, /documentDate: body\.documentDate \?\? null/);
   }
   assert.match(src(JOURNALS_ROUTE), /allocateDocumentNumber\(tx, user\.orgId, 'journal', 'JE-'\)/);
   assert.match(src(PAYMENTS_ROUTE), /allocateDocumentNumber\(tx, user\.orgId, kind, NUMBER_PREFIX\[kind\]\)/);

@@ -23,6 +23,7 @@ const LINE_ID = "00000000-0000-4000-8000-00000000d006";
 
 interface RouteState {
   requestKey: string | null;
+  clockDate: string;
   inserted: boolean;
   orgMatch: boolean;
   authenticated: boolean;
@@ -47,6 +48,7 @@ interface RouteState {
 
 const state: RouteState = {
   requestKey: null,
+  clockDate: "2026-09-22",
   inserted: false,
   orgMatch: true,
   authenticated: true,
@@ -89,6 +91,15 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.payments-route-test')]
       const sqlText = globalThis.openbooksPaymentsSqlText
+      // The shared claim helper reads through sql.identifier, whose chunk
+      // shape this double does not render — match the claim by its
+      // same-org by-id predicate instead, excluding every owned-table read.
+      function isPriorRead(text) {
+        if (!text.includes('where id =') || !text.includes('and org_id =')) return false
+        const owned = ['from parties', 'from subsidiaries', 'from accounts', 'from departments',
+          'from projects', '_roles', 'from orgs', 'audit_log', 'is_open_item']
+        return !owned.some((fragment) => text.includes(fragment))
+      }
       function respond(query) {
         const text = sqlText(query)
         if (text.includes('pg_advisory_xact_lock')) return { rows: [{}] }
@@ -106,7 +117,7 @@ const mockSources = new Map<string, string>([
           state.auditInserts++
           return { rows: [] }
         }
-        if (text.includes('from documents where id')) {
+        if (isPriorRead(text)) {
           return { rows: state.inserted && state.orgMatch ? [{ id: state.requestKey }] : [] }
         }
         if (text.includes('from audit_log')) return { rows: state.auditAfter ? [{ after: state.auditAfter }] : [] }
@@ -158,7 +169,7 @@ const mockSources = new Map<string, string>([
   ],
   [
     "mock:clock",
-    `export async function businessToday() { return '2026-09-22' }`,
+    `export async function businessToday() { return globalThis[Symbol.for('openbooks.payments-route-test')].clockDate }`,
   ],
 ]);
 
@@ -190,6 +201,7 @@ hooks.deregister();
 
 function reset(): void {
   state.requestKey = null;
+  state.clockDate = "2026-09-22";
   state.inserted = false;
   state.orgMatch = true;
   state.authenticated = true;
@@ -387,6 +399,37 @@ test("allocating beyond the open balance is refused with the remedy", async () =
   assert.equal(over.status, 422);
   const body = (await over.json()) as { error: string };
   assert.match(body.error, /exceeds the open transaction balance 50\.00/);
+});
+
+test("an identical retry without a date replays 200 even after the business date changes", async () => {
+  reset();
+  const key = "00000000-0000-4000-8000-00000000d020";
+  // The drawer sends no date until the operator picks one
+  // (documentDate: ... || undefined): the server defaults it from the clock.
+  const dateless = {
+    kind: "vendor_payment",
+    partyId: VENDOR_ID,
+    bankAccountId: BANK_ID,
+    referenceNumber: "EFT-1",
+    memo: "rent",
+  };
+
+  const first = await post(key, dateless);
+  assert.equal(first.status, 201);
+  captureAuditAfter();
+  assert.match(
+    JSON.stringify(state.auditAfter),
+    /"document_date":"2026-09-22"/,
+    "the persisted snapshot keeps the server-derived date",
+  );
+
+  // The clock moves before the retry arrives — the persisted date is now
+  // stale, but the request is identical, so it must still replay.
+  state.clockDate = "2026-09-23";
+  const replay = await post(key, dateless);
+  assert.equal(replay.status, 200);
+  assert.equal(state.sequenceAllocations, 1, "the retry must not allocate a second number");
+  assert.equal(state.auditInserts, 1, "the retry must not write a second audit row");
 });
 
 test("a key minted in another org cannot claim the row", async () => {
