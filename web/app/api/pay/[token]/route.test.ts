@@ -10,7 +10,6 @@ import test from "node:test";
  */
 const root = pathToFileURL(process.cwd() + "/").href;
 const acceptanceUrl = pathToFileURL(process.cwd() + "/engine/src/payments/acceptance.ts").href;
-const state = { mode: "boom" };
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
