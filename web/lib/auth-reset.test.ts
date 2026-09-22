@@ -20,6 +20,7 @@ interface ResetHarnessState {
   failedMarks: Array<Record<string, unknown>>;
   uncertainMarks: Array<Record<string, unknown>>;
   passwordHashes: number;
+  networkResetCount: number;
   execute(query: Query): Promise<{ rows: unknown[] }>;
 }
 
@@ -35,10 +36,14 @@ const state: ResetHarnessState = {
   failedMarks: [],
   uncertainMarks: [],
   passwordHashes: 0,
+  networkResetCount: 0,
   async execute(query) {
     this.queries.push(query);
     if (query.text.includes("from users u")) {
       return { rows: this.user ? [this.user] : [] };
+    }
+    if (query.text.includes("network_hash")) {
+      return { rows: [{ n: this.networkResetCount }] };
     }
     if (query.text.includes("select count(*)::int as n")) {
       return { rows: [{ n: 0 }] };
@@ -176,7 +181,24 @@ function resetState(): void {
   state.failedMarks.length = 0;
   state.uncertainMarks.length = 0;
   state.passwordHashes = 0;
+  state.networkResetCount = 0;
 }
+
+test("a network past its reset-request cap is refused before the user lookup", async () => {
+  // The per-user cap limits mail to one mailbox; the network cap limits the
+  // anonymous request itself. Without it an unauthenticated caller could
+  // force a DB lookup and a 500ms-held connection per request against any
+  // address. Over the cap the request must not even reach the user lookup,
+  // and the outcome stays indistinguishable from a normal refusal.
+  resetState();
+  state.user = { id: "user-1", org_id: "org-1", name: "Ada Example", email: "ada@example.test" };
+  state.transport = { provider: "smtp" };
+  state.networkResetCount = 20;
+  await requestPasswordReset("ada@example.test", { networkAddress: "192.0.2.1", userAgent: "probe" });
+  assert.equal(state.transportLookups.length, 0, "no user or transport work past the network cap");
+  assert.equal(resetMutations().length, 0, "no bearer credential minted past the network cap");
+  assert.equal(state.emailLogs.length, 0);
+});
 
 test("unknown reset credentials do not consume the shared password KDF", async () => {
   resetState();
@@ -256,5 +278,8 @@ test("configured email transport delivers a hashed one-use credential without en
     userAgent: "reset-test",
   });
   assert.equal(unknownResult, knownResult);
-  assert.equal(state.queries.length + state.deliveries.length + state.emailLogs.length, sideEffectCount + 1);
+  // Two queries now: the network-cap count (new) plus the user lookup. The
+  // cap is the point — an anonymous prober's requests stop at counting its
+  // own network's attempts once the window is spent.
+  assert.equal(state.queries.length + state.deliveries.length + state.emailLogs.length, sideEffectCount + 2);
 });

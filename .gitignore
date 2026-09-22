@@ -29,6 +29,9 @@ dump.rdb
 __pycache__/
 *.pyc
 
+/*.pdf
+# a real tenant statement was once protected from commit only by a machine-local
+# exclude; the shared ignore must carry it
 # generated report/pdf output
 output/
 

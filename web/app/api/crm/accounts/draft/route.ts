@@ -1,13 +1,20 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
+import { z } from 'zod'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { ensureCrmDefaults } from '@openbooks/engine/src/crm/crm.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
+import { parseJsonBody } from '@/lib/api/json'
 
 export const runtime = 'nodejs'
 
 const DRAFT_STAGES = ['lead', 'prospect'] as const
 type DraftStage = (typeof DRAFT_STAGES)[number]
+
+// Bodyless-tolerant on the shared boundary: {} or an empty body means a lead,
+// and only the optional stage is read. The zod boundary still refuses array
+// and non-object bodies the hand parse accepted.
+const draftBody = z.looseObject({ lifecycleStage: z.string().optional() })
 
 export async function POST(req: Request) {
   const gate = await guardFeaturePermission('crm.accounts.create', 'crm')
@@ -18,10 +25,9 @@ export async function POST(req: Request) {
   // only an optional stage: the unified account list's New button passes the
   // lifecycle segment it is on, so prospects come through this same endpoint.
   // Anything else fails closed instead of silently minting a lead.
-  const rawBody: unknown = await req.json().catch(() => ({}))
-  const rawStage = typeof rawBody === 'object' && rawBody !== null && !Array.isArray(rawBody)
-    ? (rawBody as Record<string, unknown>).lifecycleStage
-    : undefined
+  const parsed = await parseJsonBody(req, draftBody, { status: 422 })
+  if (!parsed.ok) return parsed.response
+  const rawStage = parsed.data.lifecycleStage
   const stage: DraftStage = rawStage === undefined ? 'lead' : rawStage as DraftStage
   if (!DRAFT_STAGES.includes(stage)) return NextResponse.json({ error: 'invalid lifecycle stage' }, { status: 422 })
   // 'New lead' stays the shared inactive-placeholder sentinel for both stages:

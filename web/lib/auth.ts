@@ -130,16 +130,11 @@ function makeSessionTokenFor(userId: string, sessionId: string, expiresEpoch: nu
   return `${payload}.${sign(sessionSigningInput(payload))}`;
 }
 
-export function verifySessionTokenParts(token: string | undefined): ParsedSessionToken | null {
+function verifySessionTokenParts(token: string | undefined): ParsedSessionToken | null {
   const parsed = parseSessionTokenFormat(token);
   if (!parsed || parsed.expiresEpoch < Date.now() / 1000) return null;
   const expected = sign(sessionSigningInput(parsed.payload));
   return signaturesEqual(parsed.signature, expected) ? parsed : null;
-}
-
-/** Signature-only compatibility helper. Authorization must use validateSessionToken/currentUser. */
-export function verifySessionToken(token: string | undefined): string | null {
-  return verifySessionTokenParts(token)?.userId ?? null;
 }
 
 function makeChallengeToken(userId: string, challengeId: string, expiresEpoch: number): string {
