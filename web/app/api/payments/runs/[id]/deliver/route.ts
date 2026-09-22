@@ -5,6 +5,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { deliverRunToSftp } from '@openbooks/engine/src/sftp/import-job.ts'
 import { PaymentError } from "@openbooks/engine/src/payments/payment-errors.ts";
 import { isUuid } from '../../../../../../lib/list-params'
+import { unexpectedServerError } from '../../../../../../lib/api/unexpected'
 import { parseJsonBody, uuidId } from '../../../../../../lib/api/json'
 import { guardPaymentRunPermission } from '../../../lib'
 
@@ -44,6 +45,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ ok: true, ...res })
   } catch (e) {
     if (e instanceof PaymentError) return NextResponse.json({ error: e.message }, { status: 422 })
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 })
+    return unexpectedServerError('payments/deliver', e)
   }
 }

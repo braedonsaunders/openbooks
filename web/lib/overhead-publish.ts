@@ -19,6 +19,16 @@ export interface PublishedRate {
   ratePerHour: string
 }
 
+/**
+ * A refusal the caller can act on — a control that blocks publication (an
+ * unsupported method combination) or a department with no exact rate. Typed so
+ * the route answers 409 with the named remedy instead of collapsing it into a
+ * generic 500; the message names the departments and the reason.
+ */
+export class OverheadPublishError extends Error {
+  readonly name = 'OverheadPublishError'
+}
+
 export async function computeLiveOverheadRates(orgId: string): Promise<PublishedRate[]> {
   const to = await businessToday(orgId)
   const [y, m, d] = to.split('-').map(Number)
@@ -32,12 +42,12 @@ export async function computeLiveOverheadRates(orgId: string): Promise<Published
     tc.categories.map((c) => ({ id: c.id, name: c.name, rateFormat: c.rateFormat, includeInComposite: c.includeInComposite })),
   )
   if (blockers.length > 0) {
-    throw new Error(`overhead auto-publish blocked: ${blockers.map((b) => b.reason).join('; ')}`)
+    throw new OverheadPublishError(`overhead auto-publish blocked: ${blockers.map((b) => b.reason).join('; ')}`)
   }
   return tc.departments
     .filter((d) => d.composite > 0)
     .map((d) => {
-      if (!d.compositeExact) throw new Error(`overhead auto-publish has no exact rate for department ${d.id}`)
+      if (!d.compositeExact) throw new OverheadPublishError(`overhead auto-publish has no exact rate for department ${d.id}`)
       return { departmentId: d.id, ratePerHour: d.compositeExact }
     })
 }

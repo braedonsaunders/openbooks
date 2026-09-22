@@ -26,6 +26,7 @@ import {
   requestDocumentVoid,
 } from '@openbooks/engine/src/ledger/document-void.ts'
 import { assignWarehouseBody, jsonObject, parseJsonBody } from '@/lib/api/json'
+import { unexpectedServerError } from '../../../lib/api/unexpected'
 
 /**
  * Shared GET / PATCH / convert handlers for the three order-cycle modules.
@@ -684,7 +685,7 @@ export function makeConvertPOST(cfg: OrderHandlerConfig) {
           { status: e.status },
         )
       }
-      return NextResponse.json({ error: (e as Error).message }, { status: 500 })
+      return unexpectedServerError('orders/create', e)
     }
   }
 }
@@ -749,7 +750,7 @@ export function makeAssignWarehousePOST(cfg: OrderHandlerConfig) {
           { status: e.status },
         )
       }
-      return NextResponse.json({ error: (e as Error).message }, { status: 500 })
+      return unexpectedServerError('orders/assign-warehouse', e)
     }
   }
 }

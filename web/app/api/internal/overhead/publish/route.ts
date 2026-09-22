@@ -1,8 +1,9 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { parseInternalOrgId, requestHasInternalToken } from '../../../../../lib/internal-token'
-import { publishOverheadRates } from '../../../../../lib/overhead-publish'
+import { OverheadPublishError, publishOverheadRates } from '../../../../../lib/overhead-publish'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
+import { unexpectedServerError } from '../../../../../lib/api/unexpected'
 
 export const runtime = 'nodejs'
 
@@ -37,6 +38,9 @@ export async function POST(req: Request) {
     const result = await publishOverheadRates(orgId, null, effectiveFrom)
     return NextResponse.json({ ok: true, ...result })
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 })
+    if (e instanceof OverheadPublishError) {
+      return NextResponse.json({ error: e.message }, { status: 409 })
+    }
+    return unexpectedServerError('internal/overhead/publish', e)
   }
 }
