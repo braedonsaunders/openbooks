@@ -685,9 +685,13 @@ test(
         const opened = await loadStoredDocument(org.orgId, serializedId)
         const blocker = await withOrgContext(org.orgId, async () => pool.connect())
         let blockerCommitted = false
-        let firstWrite: Promise<Settled<void>> | undefined
-        let secondWrite: Promise<Settled<void>> | undefined
-        let results: [Settled<void>, Settled<void>] | undefined
+        // The edit returns the deferred flow event (or nothing) — this test
+        // only observes WHEN each writer settles, so it follows the writer's
+        // own result type rather than pinning a shape it never reads.
+        type EditSettled = Settled<Awaited<ReturnType<typeof applyDocumentEdit>>>
+        let firstWrite: Promise<EditSettled> | undefined
+        let secondWrite: Promise<EditSettled> | undefined
+        let results: [EditSettled, EditSettled] | undefined
         try {
           await blocker.query('begin')
           await blocker.query(
@@ -729,7 +733,7 @@ test(
           if (!blockerCommitted) await blocker.query('rollback').catch(() => undefined)
           blocker.release()
           if (!results) {
-            await Promise.all([firstWrite, secondWrite].filter(Boolean) as Promise<Settled<void>>[])
+            await Promise.all([firstWrite, secondWrite].filter(Boolean) as Promise<EditSettled>[])
           }
         }
 

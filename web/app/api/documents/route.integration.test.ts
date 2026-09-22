@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import test from 'node:test'
-import type { SessionUser } from '../../../../lib/auth'
+import type { SessionUser } from '../../../lib/auth'
 
 /**
  * POST /api/documents: uniform unsaved-create Save for the nine shared
