@@ -295,7 +295,7 @@ export async function executeAppInvocation(args: {
     await db.execute(sql`
       update application_idempotency_keys
          set response = ${JSON.stringify(attempt.response ?? null)}::jsonb, completed_at = now()
-       where id = ${claimId}`);
+       where id = ${claimId} and org_id = ${orgId}`);
     await args.audit({
       ...auditBase,
       status: "ok",

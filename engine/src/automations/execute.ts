@@ -451,7 +451,7 @@ export async function executeAutomation(input: {
       if (verdict === "no_match") {
         await db.execute(sql`
           update automation_runs set status = 'skipped_no_match', finished_at = now(), updated_at = now()
-           where id = ${runId}
+           where id = ${runId} and org_id = ${input.orgId}
         `);
         return { runId, status: "skipped_no_match", steps: [] };
       }
@@ -480,12 +480,12 @@ export async function executeAutomation(input: {
            set status = 'failed', finished_at = now(), updated_at = now(),
                error = ${JSON.stringify({ message })}::jsonb,
                steps = ${JSON.stringify(steps)}::jsonb
-         where id = ${runId}
+         where id = ${runId} and org_id = ${input.orgId}
       `);
       // The automation itself surfaces the breakage until fixed.
       await db.execute(sql`
         update automations set status = 'error', error_message = ${message}, updated_at = now()
-         where id = ${input.automationId}
+         where id = ${input.automationId} and org_id = ${input.orgId}
       `);
       // Owner visibility: a run row the inbox shows (HR-15 automation_error
       // adapter) plus a notification to the actor who fired it — same table,
@@ -509,11 +509,11 @@ export async function executeAutomation(input: {
       update automation_runs
          set status = 'succeeded', finished_at = now(), updated_at = now(),
              steps = ${JSON.stringify(steps)}::jsonb
-       where id = ${runId}
+       where id = ${runId} and org_id = ${input.orgId}
     `);
     await db.execute(sql`
       update automations set last_run_at = now(), updated_at = now()
-       where id = ${input.automationId}
+       where id = ${input.automationId} and org_id = ${input.orgId}
     `);
     return { runId, status: "succeeded", steps };
   });

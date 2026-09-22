@@ -104,7 +104,7 @@ export async function resolveKioskByToken(deviceToken: string): Promise<KioskRow
   }
   const kiosk = row!;
   await requireKioskFeature(kiosk.orgId);
-  await db.execute(sql`update time_kiosks set last_seen_at = now() where id = ${kiosk.id}`);
+  await db.execute(sql`update time_kiosks set last_seen_at = now() where id = ${kiosk.id} and org_id = ${kiosk.orgId}`);
   return kiosk;
 }
 

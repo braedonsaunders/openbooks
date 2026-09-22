@@ -330,7 +330,7 @@ async function createPaymentRunWithinTransaction(
       update payment_schedule_occurrences
          set payment_run_id = ${run.id}, status = ${opts.sourceOccurrence!.status},
              updated_at = now()
-       where id = ${occurrenceId} and payment_run_id is null
+       where id = ${occurrenceId} and payment_run_id is null and org_id = ${opts.orgId}
     `);
   }
 
