@@ -393,6 +393,17 @@ export function buildOpenApiSpec(
       ],
     },
   };
+  paths["/api/v1/journals"] = {
+    ...(paths["/api/v1/journals"] ?? {}),
+    post: {
+      ...idempotentPost(
+        "Create a journal",
+        "Balanced-line manual journal. The Idempotency-Key must be a UUID; it becomes the document id. Same writer as POST /api/journals.",
+        "Documents",
+      ),
+      responses: { ...idempotentPost("", "", "Documents").responses, "201": { description: "Created" } },
+    },
+  };
   paths["/api/v1/journals/{id}/post"] = {
     post: {
       ...idempotentPost("Post a journal", "Journals skip the generic document lifecycle.", "Documents"),
@@ -400,6 +411,47 @@ export function buildOpenApiSpec(
         { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
         idempotencyParameter,
       ],
+    },
+  };
+  for (const [path, kind, convertFrom] of [
+    ["/api/v1/quotes", "quote", "quote"],
+    ["/api/v1/sales-orders", "sales order", "sales_order"],
+    ["/api/v1/purchase-orders", "purchase order", "purchase_order"],
+  ] as const) {
+    paths[path] = {
+      ...(paths[path] ?? {}),
+      post: {
+        ...idempotentPost(
+          `Create a ${kind} draft`,
+          "Empty commercial-order draft — same writer as the New Order drawer. Add lines through the document update on the returned id.",
+          "Orders",
+        ),
+        responses: { ...idempotentPost("", "", "Orders").responses, "201": { description: "Created" } },
+      },
+    };
+    paths[`${path}/{id}/convert`] = {
+      post: {
+        ...idempotentPost(
+          `Convert a ${kind}`,
+          `Same writer as the order-cycle convert action. ${convertFrom} targets are listed in the 422 refusal.`,
+          "Orders",
+        ),
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+          idempotencyParameter,
+        ],
+      },
+    };
+  }
+  paths["/api/v1/field-tickets"] = {
+    ...(paths["/api/v1/field-tickets"] ?? {}),
+    post: {
+      ...idempotentPost(
+        "Create a field ticket",
+        "Draft a field ticket on a project. Same writer as POST /api/field-tickets. Feature-off is a 404.",
+        "Projects",
+      ),
+      responses: { ...idempotentPost("", "", "Projects").responses, "201": { description: "Created" } },
     },
   };
   paths["/api/v1/payments"] = {
