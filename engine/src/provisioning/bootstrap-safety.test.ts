@@ -42,9 +42,17 @@ test("constrained schema-owner mode is migration-only and fail-closed", () => {
   assert.match(bootstrap, /role\.rolcreatedb/);
   assert.match(bootstrap, /role\.rolcreaterole/);
   assert.match(bootstrap, /role\.rolreplication/);
-  assert.match(bootstrap, /posture\.current_user !== runtimeConfig\.roleName/);
-  assert.match(bootstrap, /posture\.current_database !== runtimeDatabase/);
   assert.match(bootstrap, /posture\.unowned_tables !== 0/);
+  // The old contract pinned the migration login to the runtime role
+  // (`current_user !== runtimeConfig.roleName` as a requirement), which is
+  // exactly the single-role bypass this mode must not allow in production.
+  // The new contract refuses identical logins outside development/test.
+  assert.doesNotMatch(
+    bootstrap,
+    /posture\.current_user !== runtimeConfig\.roleName/,
+  );
+  assert.match(bootstrap, /refuses a runtime role identical to the migration login/);
+  assert.match(bootstrap, /sameTarget\(migrationUrl, runtimeUrl\)/);
 
   const constrainedOwnerBranch = bootstrap.slice(
     bootstrap.indexOf("if (constrainedSchemaOwnerMigration)"),
@@ -54,10 +62,17 @@ test("constrained schema-owner mode is migration-only and fail-closed", () => {
     constrainedOwnerBranch,
     /await assertConstrainedSchemaOwnerMigrationRole/,
   );
+  assert.match(constrainedOwnerBranch, /await requireRuntimeLoginRole/);
   assert.match(constrainedOwnerBranch, /await migrate\(\)/);
+  // The migration owner grants the separate runtime login after the chain
+  // (new tables included) and verifies it non-owner + RLS-proved — the
+  // branch still seeds nothing and creates no roles.
+  assert.match(constrainedOwnerBranch, /await ensureRuntimeDatabaseRole\(runtimeConfig, true\)/);
+  assert.match(constrainedOwnerBranch, /await verifyRuntimeOwnership/);
+  assert.match(constrainedOwnerBranch, /await verifyRuntimeDatabaseRole/);
   assert.match(constrainedOwnerBranch, /return;/);
   assert.doesNotMatch(constrainedOwnerBranch, /ensureReadRole/);
-  assert.doesNotMatch(constrainedOwnerBranch, /ensureRuntimeDatabaseRole/);
+  assert.doesNotMatch(constrainedOwnerBranch, /ensureRuntimeRoleExists/);
   assert.doesNotMatch(constrainedOwnerBranch, /seed[A-Z]/);
 });
 
@@ -103,12 +118,16 @@ test("test ownership transfer is explicit, production-refused, and verified", ()
   );
   // The transfer runs after seeds and before the runtime-role proof, so the
   // fail-closed/tenant proof attests the transferred state, not the pre-state.
+  // Scoped past the constrained-owner branch, which has its own earlier
+  // verifyRuntimeDatabaseRole call for the separate runtime login.
+  const fullMode = bootstrap.slice(bootstrap.indexOf("// Some migrations grant privileges"));
+  assert.ok(fullMode.indexOf("// Some migrations grant privileges") === 0);
   assert.ok(
-    bootstrap.indexOf("await transferTestOwnershipToRuntimeRole") <
-      bootstrap.indexOf("await verifyRuntimeDatabaseRole"),
+    fullMode.indexOf("await transferTestOwnershipToRuntimeRole") <
+      fullMode.indexOf("await verifyRuntimeDatabaseRole"),
   );
   assert.ok(
-    bootstrap.indexOf("await seedAdmin") <
-      bootstrap.indexOf("await transferTestOwnershipToRuntimeRole"),
+    fullMode.indexOf("await seedAdmin") <
+      fullMode.indexOf("await transferTestOwnershipToRuntimeRole"),
   );
 });

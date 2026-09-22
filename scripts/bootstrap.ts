@@ -26,6 +26,7 @@ import {
   verifyPrecreatedRoles,
   verifyPrecreatedObjectAccess,
   verifyReadRoleAssumption,
+  verifyRuntimeOwnership,
   type RuntimeDatabaseConfig,
 } from "./bootstrap-roles.ts";
 import { db, env, longPool, pool, withBypassContext } from "../engine/src/platform/db.ts";
@@ -169,23 +170,69 @@ async function assertConstrainedSchemaOwnerMigrationRole(
      where role.rolname = current_user
   `);
   const posture = result.rows[0];
-  const runtimeDatabase = decodeURIComponent(
-    new URL(runtimeConfig.connectionString).pathname.replace(/^\//, ""),
-  );
+  const runtimeUrl = new URL(runtimeConfig.connectionString);
+  if (!env.OPENBOOKS_DB_URL?.trim()) {
+    throw new Error("constrained schema-owner migration requires OPENBOOKS_DB_URL (the migration login)");
+  }
+  const migrationUrl = new URL(env.OPENBOOKS_DB_URL);
+  const sameTarget = (a: URL, b: URL): boolean =>
+    a.hostname === b.hostname &&
+    (a.port || "5432") === (b.port || "5432") &&
+    decodeURIComponent(a.pathname) === decodeURIComponent(b.pathname);
+  // Fail closed: the escape hatch this flag opens (migrating as the schema
+  // owner instead of a dedicated migration login) must never collapse the
+  // migration and runtime logins into one outside explicit development/test
+  // environments. Same-role constrained runs in production are how the
+  // application ends up serving as the schema owner. An unset NODE_ENV (a
+  // hand-run maintenance script) is treated as production.
+  const nodeEnv = process.env.NODE_ENV;
+  if (
+    posture?.current_user === runtimeConfig.roleName &&
+    nodeEnv !== "development" &&
+    nodeEnv !== "test"
+  ) {
+    throw new Error(
+      "constrained schema-owner migration refuses a runtime role identical to the migration login outside development/test; " +
+        "provision a separate non-owner runtime role and set OPENBOOKS_RUNTIME_DB_URL to it — " +
+        "see docs/operations/communal-postgres.md and deploy/README.md",
+    );
+  }
   if (
     !posture ||
-    posture.current_user !== runtimeConfig.roleName ||
-    posture.current_database !== runtimeDatabase ||
+    posture.current_database !== decodeURIComponent(runtimeUrl.pathname.replace(/^\//, "")) ||
+    !sameTarget(migrationUrl, runtimeUrl) ||
     posture.unsafe ||
     posture.unowned_tables !== 0
   ) {
     throw new Error(
-      "constrained schema-owner migration requires a restricted role that owns every public table",
+      "constrained schema-owner migration requires a restricted role that owns every public table, " +
+        "with the runtime URL targeting the same host, port and database",
     );
   }
   console.log(
     `[bootstrap] constrained schema owner ${posture.current_user} verified for migration-only mode`,
   );
+}
+
+/**
+ * The constrained migration login cannot create roles (it is deliberately
+ * unprivileged), so the runtime login must already exist. Refuse with the
+ * exact host step instead of failing later on the first GRANT.
+ */
+async function requireRuntimeLoginRole(config: RuntimeDatabaseConfig): Promise<void> {
+  const existing = await pool.query<{ login: boolean }>(
+    "select rolcanlogin as login from pg_roles where rolname = $1",
+    [config.roleName],
+  );
+  if (!existing.rows[0]?.login) {
+    throw new Error(
+      `[bootstrap] runtime role ${config.roleName} does not exist with LOGIN; ` +
+        `ask the database host to provision it per docs/operations/communal-postgres.md ` +
+        `(CREATE ROLE ${config.roleName} LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION ` +
+        `PASSWORD '<at least 24 characters>'; GRANT CONNECT, TEMPORARY ON DATABASE <database> TO ${config.roleName}), ` +
+        `then retry bootstrap`,
+    );
+  }
 }
 
 function sha256(s: string): string {
@@ -2224,7 +2271,24 @@ async function main(): Promise<void> {
           );
         }
         await assertConstrainedSchemaOwnerMigrationRole(runtimeConfig);
+        // The runtime login must already exist (this login cannot create
+        // roles); grants for tables this run creates are applied after the
+        // migration chain, then the runtime login is verified non-owner and
+        // RLS-proved before anything serves it.
+        await requireRuntimeLoginRole(runtimeConfig);
         await migrate();
+        await ensureRuntimeDatabaseRole(runtimeConfig, true);
+        await verifyRuntimeOwnership(pool, runtimeConfig.roleName);
+        const firstOrg = await pool.query<{ id: string }>(
+          "select id from orgs order by created_at limit 1",
+        );
+        if (firstOrg.rows[0]) {
+          await verifyRuntimeDatabaseRole(runtimeConfig, firstOrg.rows[0].id);
+        } else {
+          console.log(
+            "[bootstrap] no organizations yet; runtime RLS proofs are deferred to the first deploy with an organization",
+          );
+        }
         return;
       }
       // Some migrations grant privileges to openbooks_read, so a fresh database
