@@ -288,6 +288,8 @@
     "applyAmount": "Anwenden",
     "appliedOn": "Angewendet am",
     "noOpenItems": "Für diesen Geschäftspartner gibt es keine offenen Posten, auf die die Gutschrift angewendet werden kann.",
-    "nothingSelected": "Geben Sie für mindestens einen offenen Posten einen Betrag ein."
+    "nothingSelected": "Geben Sie für mindestens einen offenen Posten einen Betrag ein.",
+    "applyFailed": "Die Gutschrift konnte nicht zugeordnet werden.",
+    "releaseFailed": "Die Zuordnung konnte nicht freigegeben werden."
   }
 }

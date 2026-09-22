@@ -281,6 +281,8 @@
     "applyAmount": "Affecter",
     "appliedOn": "Affecté le",
     "noOpenItems": "Ce tiers n’a aucun poste ouvert auquel affecter l’avoir.",
-    "nothingSelected": "Saisissez un montant sur au moins un poste ouvert."
+    "nothingSelected": "Saisissez un montant sur au moins un poste ouvert.",
+    "applyFailed": "Le crédit n'a pas pu être appliqué.",
+    "releaseFailed": "L'affectation n'a pas pu être annulée."
   }
 }

@@ -288,6 +288,8 @@
     "applyAmount": "充当額",
     "appliedOn": "充当日",
     "noOpenItems": "この取引先には、クレジットを充当できる未決済項目がありません。",
-    "nothingSelected": "少なくとも 1 件の未決済項目に金額を入力してください。"
+    "nothingSelected": "少なくとも 1 件の未決済項目に金額を入力してください。",
+    "applyFailed": "クレジットを適用できませんでした。",
+    "releaseFailed": "適用を解除できませんでした。"
   }
 }

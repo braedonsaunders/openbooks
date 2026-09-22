@@ -288,6 +288,8 @@
     "applyAmount": "核销金额",
     "appliedOn": "核销日期",
     "noOpenItems": "该往来单位没有可供核销贷项的未结项目。",
-    "nothingSelected": "请至少为一个未结项目输入金额。"
+    "nothingSelected": "请至少为一个未结项目输入金额。",
+    "applyFailed": "无法应用该笔抵免。",
+    "releaseFailed": "无法释放该笔应用。"
   }
 }
