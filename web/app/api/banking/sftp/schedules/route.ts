@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
+import { pgErrorCode } from '../../../../../lib/setup/coerce'
 
 export const runtime = 'nodejs'
 const FORMATS = new Set(['auto', 'ofx', 'csv', 'camt053', 'bai2', 'mt940'])
@@ -34,13 +35,57 @@ export async function POST(req: Request) {
   if (!body.sftpServerId || !isUuid(body.sftpServerId) || !body.accountId || !isUuid(body.accountId)) {
     return NextResponse.json({ error: 'sftpServerId and accountId are required' }, { status: 400 })
   }
+  // Both parents are joined by (org_id, id) in GET and in the import scan,
+  // so a valid-shaped id owned by another organization (or by no row at
+  // all) would save with 200 yet never appear in GET and could never run.
+  // Fail closed before any write, keeping foreign ids indistinguishable
+  // from absent (tenant non-disclosure, like the [id] route).
+  const server = (await db.execute(sql`
+    select 1 from sftp_servers where id = ${body.sftpServerId} and org_id = ${user.orgId}
+  `))
+  if (!server.rows[0]) return NextResponse.json({ error: 'SFTP server not found' }, { status: 404 })
+  // Account eligibility mirrors the engine import path: importStatement
+  // refuses anything this predicate rejects (missing or foreign account, or
+  // one that is not a live reconcilable account). Currency needs no
+  // separate check — accounts_reconcilable_currency_required guarantees an
+  // explicit currency on every reconcilable row. The message intentionally
+  // matches the engine's so missing, foreign, and ineligible read alike.
+  const account = (await db.execute<{ currency: string | null }>(sql`
+    select currency_restriction as currency from accounts
+     where id = ${body.accountId} and org_id = ${user.orgId}
+       and reconcilable and is_active and not is_summary
+  `))
+  if (!account.rows[0]) {
+    return NextResponse.json({ error: 'Account not found or not reconcilable' }, { status: 422 })
+  }
+  if (!account.rows[0].currency) {
+    return NextResponse.json({ error: 'Reconcilable accounts require an explicit currency before statement import or reconciliation' }, { status: 422 })
+  }
   const format = FORMATS.has(String(body.format)) ? body.format : 'auto'
   const folder = (String(body.folder ?? 'inbound').trim() || 'inbound').replace(/^\/+|\/+$/g, '')
-  const r = (await db.execute<{ id: string }>(sql`
-    insert into sftp_import_schedules (org_id, sftp_server_id, account_id, format, folder, csv_mapping, created_by)
-    values (${user.orgId}, ${body.sftpServerId}, ${body.accountId}, ${format}, ${folder},
-            ${body.csvMapping ? JSON.stringify(body.csvMapping) : null}::jsonb, ${user.id})
-    returning id
-  `))
-  return NextResponse.json({ id: r.rows[0]!.id })
+  try {
+    const r = (await db.execute<{ id: string }>(sql`
+      insert into sftp_import_schedules (org_id, sftp_server_id, account_id, format, folder, csv_mapping, created_by)
+      values (${user.orgId}, ${body.sftpServerId}, ${body.accountId}, ${format}, ${folder},
+              ${body.csvMapping ? JSON.stringify(body.csvMapping) : null}::jsonb, ${user.id})
+      returning id
+    `))
+    return NextResponse.json({ id: r.rows[0]!.id })
+  } catch (e) {
+    // A parent deleted between the checks above and the insert still refuses
+    // at the storage layer (0242 composite FKs) — surface the same typed
+    // refusal the checks return instead of a raw 500.
+    if (pgErrorCode(e) === '23503') {
+      const constraint = String(
+        (e as { constraint?: unknown }).constraint
+          ?? (e as { cause?: { constraint?: unknown } }).cause?.constraint
+          ?? '',
+      )
+      if (constraint.includes('sftp_server')) {
+        return NextResponse.json({ error: 'SFTP server not found' }, { status: 404 })
+      }
+      return NextResponse.json({ error: 'Account not found or not reconcilable' }, { status: 422 })
+    }
+    throw e
+  }
 }
