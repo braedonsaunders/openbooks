@@ -113,6 +113,14 @@ interface LineRow extends Record<string, unknown> {
   /** Loader line id this row edits (empty = new row); the save round-trips
    *  it and a redraw adopts replacement ids via toRow. */
   lineId: string
+  /**
+   * Client-only React identity for the line grid (never serialized — the
+   * save payload picks explicit fields). Server ids are empty for new rows
+   * and are replaced on every redraw, so neither can key the grid: without
+   * this, a reorder/duplicate leaves two rows sharing one key and an
+   * uncommitted cell draft commits onto the wrong line.
+   */
+  clientKey: string
   accountId: string
   itemId: string
   description: string
@@ -608,6 +616,7 @@ export function DocumentDrawerTitle({
 
 const emptyLine = (): LineRow => ({
   lineId: '',
+  clientKey: crypto.randomUUID(),
   accountId: '',
   itemId: '',
   description: '',
@@ -689,8 +698,19 @@ type QtyPriceRow = { quantity: string; unitPrice: string; amount: string }
  * tax-adjusted figure — is never overwritten.
  */
 export function applyQtyPriceToRows<Row extends QtyPriceRow>(prev: Row[], next: Row[]): Row[] {
+  // Rows carry a client identity (document-drawer LineRow.clientKey) that
+  // survives reorder: match the previous row by identity so a moved line is
+  // compared against itself, not against whichever line used to sit at its
+  // position. Rows without an identity (and the unit tests) fall back to
+  // position, preserving the previous behaviour exactly.
+  const prevByKey = new Map<string, Row>()
+  for (const row of prev) {
+    const key = (row as { clientKey?: unknown }).clientKey
+    if (typeof key === 'string' && key !== '') prevByKey.set(key, row)
+  }
   return next.map((row, i) => {
-    const old = prev[i]
+    const key = (row as { clientKey?: unknown }).clientKey
+    const old = (typeof key === 'string' && key !== '' ? prevByKey.get(key) : undefined) ?? prev[i]
     if (!old || (old.quantity === row.quantity && old.unitPrice === row.unitPrice)) return row
     const derived = lineAmountFromQtyPrice(row.quantity, row.unitPrice)
     if (derived === null || row.amount === derived) return row
@@ -714,6 +734,9 @@ function isLineMap(v: unknown): v is Record<string, unknown> {
 function toRow(l: Record<string, unknown>, lineDefs: CustomFieldDefClient[], segments: SegmentOpt[]): LineRow {
   const row: LineRow = {
     lineId: lineText(l.id),
+    // Fresh client identity on every load: the grid's React key must be
+    // unique among the live rows, and a redraw replaces every row object.
+    clientKey: crypto.randomUUID(),
     accountId: lineText(l.account_id),
     itemId: lineText(l.item_id),
     description: lineText(l.description),
@@ -2889,6 +2912,8 @@ export function DocumentDrawer({
               rows={rows}
               onRowsChange={handleGridRowsChange}
               emptyRow={emptyLine}
+              getRowKey={(row, i) => row.clientKey !== '' ? row.clientKey : `row-${i}`}
+              cloneRow={(row) => ({ ...row, clientKey: crypto.randomUUID() })}
               readOnly={!editable || config.kind === 'project_charge'}
               formatAmount={(value) => money(value, { currency: doc.currency })}
               distribution={distribution}

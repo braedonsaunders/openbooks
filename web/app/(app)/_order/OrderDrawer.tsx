@@ -44,6 +44,13 @@ type Opt = {
   has_inventory_profile?: boolean | null
 };
 interface LineRow extends Record<string, unknown> {
+  /**
+   * Client-only React identity for the line grid (never serialized — the
+   * save payload picks explicit fields). Lets cell commits and price
+   * tracking follow the row across reorder/duplicate/remove instead of the
+   * position it used to occupy.
+   */
+  clientKey: string
   itemId: string
   accountId: string
   description: string
@@ -267,6 +274,7 @@ function docHref(kind: string, id: string): string {
 }
 
 const emptyLine = (segments: SegmentOption[] = []): LineRow => ({
+  clientKey: crypto.randomUUID(),
   itemId: '',
   accountId: '',
   description: '',
@@ -292,6 +300,9 @@ function isLineMap(v: unknown): v is Record<string, unknown> {
 function toRow(l: Record<string, unknown>, segments: SegmentOption[]): LineRow {
   const extraDims = isLineMap(l.extra_dims) ? l.extra_dims : null
   return {
+    // Fresh client identity on every load (see the field comment): the
+    // grid's React key must be unique among the live rows.
+    clientKey: crypto.randomUUID(),
     itemId: lineText(l.item_id),
     accountId: lineText(l.account_id),
     description: lineText(l.description),
@@ -464,6 +475,9 @@ export function OrderDrawer({
     } catch { return }
     const requestNumber = (priceRequestRef.current.get(index) ?? 0) + 1
     priceRequestRef.current.set(index, requestNumber)
+    // The response lands asynchronously: bind it to the row's identity, not
+    // its position, so a reorder mid-flight cannot price the wrong line.
+    const rowKey = row.clientKey
     void fetch('/api/items/price', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ itemId: row.itemId, customerId: partyId || null, currency: doc.currency, onDate: documentDate, lineQuantity: row.quantity, overallItemQuantity }),
@@ -473,7 +487,7 @@ export function OrderDrawer({
     }).then((payload) => {
       if (!payload?.price || priceRequestRef.current.get(index) !== requestNumber) return
       setRows((current) => current.map((candidate, rowIndex) => {
-        if (rowIndex !== index || candidate.itemId !== row.itemId || candidate.quantity !== row.quantity) return candidate
+        if (rowIndex !== index || candidate.clientKey !== rowKey || candidate.itemId !== row.itemId || candidate.quantity !== row.quantity) return candidate
         resolvedPriceRef.current.set(index, { itemId: row.itemId, unitPrice: payload.price!.unitPrice })
         return { ...candidate, unitPrice: payload.price!.unitPrice }
       }))
@@ -492,8 +506,14 @@ export function OrderDrawer({
 
   const onRowsChange = (next: LineRow[]) => {
     const prev = rows
+    // Match the previous row by client identity: after a reorder, prev[i]
+    // is a different line, and comparing against it would "detect" an item
+    // change and overwrite the moved line's price/account/tax from defaults.
+    const prevByKey = new Map(prev.map((r) => [r.clientKey, r] as const))
+    const priorOf = (row: LineRow, i: number): LineRow | undefined =>
+      (row.clientKey !== '' ? prevByKey.get(row.clientKey) : undefined) ?? prev[i]
     const merged = next.map((row, i) => {
-      if (row.itemId && row.itemId !== prev[i]?.itemId) {
+      if (row.itemId && row.itemId !== priorOf(row, i)?.itemId) {
         const it = itemById.get(row.itemId)
         if (it) {
           return {
@@ -510,13 +530,16 @@ export function OrderDrawer({
       }
       return row
     })
-    if (merged.length !== prev.length) {
+    // Position-keyed price tracking goes stale on any membership or order
+    // change: drop it so a later resolution can never land on the row that
+    // merely inherited the position.
+    if (merged.length !== prev.length || merged.some((row, i) => row.clientKey !== prev[i]?.clientKey)) {
       resolvedPriceRef.current.clear()
       priceRequestRef.current.clear()
     }
     setRows(merged)
     merged.forEach((row, index) => {
-      const prior = prev[index]
+      const prior = priorOf(row, index)
       const itemChanged = Boolean(row.itemId && row.itemId !== prior?.itemId)
       const tracked = resolvedPriceRef.current.get(index)
       const manuallyChanged = Boolean(prior && row.unitPrice !== prior.unitPrice && !itemChanged)
@@ -1230,6 +1253,8 @@ export function OrderDrawer({
             rows={rows}
             onRowsChange={onRowsChange}
             emptyRow={() => emptyLine(segments)}
+            getRowKey={(row, i) => row.clientKey !== '' ? row.clientKey : `row-${i}`}
+            cloneRow={(row) => ({ ...row, clientKey: crypto.randomUUID() })}
             readOnly={!editable}
             formatAmount={(value) => money(value, { currency: doc.currency })}
           />

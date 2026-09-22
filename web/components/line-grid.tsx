@@ -17,7 +17,7 @@
  *    (autosave) and computed values (tax, totals) via readonly columns
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, Copy, GripVertical, Lock, LockOpen, Plus, RotateCcw, Split, Trash2 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Badge, Button, ContextMenu, FieldLabel, Popover, SearchSelect, Select, cn, useContextMenu, type ContextMenuEntry } from '@openbooks/ui'
@@ -83,20 +83,55 @@ function invalidAmount(value: unknown): boolean {
   try { normalizeMoney(String(value)); return false } catch { return true }
 }
 
-function DecimalCell({
+/**
+ * A cell edit folded back into its row. Cells publish theirs while a draft is
+ * uncommitted so a reorder/remove/duplicate can carry the typed value along
+ * with its row instead of leaving it behind at the old position.
+ */
+export type LineGridDraftApplier<Row extends Record<string, unknown>> = (row: Row) => Row
+
+function applyRowFields<Row extends Record<string, unknown>>(row: Row, fields: Record<string, unknown>): Row {
+  return Object.assign({}, row, fields)
+}
+
+function DecimalCell<Row extends Record<string, unknown>>({
   value,
   scale,
   inputBase,
   onChange,
+  rowKey,
+  colKey,
+  registerDraft,
 }: {
   value: unknown
   scale: number
   inputBase: string
   onChange: (value: string) => void
+  rowKey: string
+  colKey: string
+  registerDraft: (rowKey: string, colKey: string, apply: LineGridDraftApplier<Row> | null) => void
 }) {
   const [draft, setDraft] = useState<string | null>(null)
   const shown = draft ?? displayLineDecimal(value, scale)
   const invalid = invalidLineDecimal(shown, scale)
+
+  // While a draft is uncommitted the grid may reorder the rows underneath
+  // this input (Alt+↑/↓, delete). The applier carries the normalized commit
+  // value so the structural edit applies it to this row first — a late blur
+  // then re-commits the same value to the same row by identity (idempotent),
+  // never to whichever row now occupies the old position.
+  useEffect(() => {
+    if (draft === null) {
+      registerDraft(rowKey, colKey, null)
+      return
+    }
+    const snapshot = draft
+    const normalized = normalizeLineDecimal(snapshot, scale) ?? snapshot
+    registerDraft(rowKey, colKey, (row) => applyRowFields(row, { [colKey]: normalized }))
+    return () => {
+      registerDraft(rowKey, colKey, null)
+    }
+  }, [draft, rowKey, colKey, scale, registerDraft])
 
   return (
     <input
@@ -160,6 +195,8 @@ export function LineGrid<Row extends Record<string, unknown>>({
   addPlacement = 'bottom',
   formatAmount,
   distribution,
+  getRowKey,
+  cloneRow,
 }: {
   columns: LineGridColumn<Row>[]
   rows: Row[]
@@ -177,6 +214,22 @@ export function LineGrid<Row extends Record<string, unknown>>({
    */
   formatAmount?: (value: string) => React.ReactNode
   distribution?: LineGridDistribution<Row>
+  /**
+   * Stable per-row identity used for React keys and for addressing cell
+   * commits. It must survive reorder/duplicate/remove: a server line id, or
+   * a client id minted when the row is created (which the save payload must
+   * NOT send unless it is the server's own line id). Without it rows are
+   * keyed by position and a reorder can only carry committed values — the
+   * draft flush below still protects every caller, but focus follows the
+   * position rather than the row.
+   */
+  getRowKey?: (row: Row, index: number) => string
+  /**
+   * Clone a row for duplicate. The default shallow copy preserves a
+   * caller-supplied identity field, so callers that pass `getRowKey` must
+   * also mint a fresh identity here.
+   */
+  cloneRow?: (row: Row) => Row
 }) {
   const t = useTranslations('ui.lineGrid')
   const tEntry = useTranslations('allocations')
@@ -193,36 +246,131 @@ export function LineGrid<Row extends Record<string, unknown>>({
     ? columns.map((c) => c.width).join(' ')
     : `34px ${columns.map((c) => c.width).join(' ')}${showDist ? ' 150px' : ''}`
 
-  const setCell = useCallback(
-    (i: number, key: string, value: unknown) => {
-      onRowsChange(rows.map((r, j) => (j === i ? { ...r, [key]: value } : r)))
+  const clone = cloneRow ?? ((row: Row) => ({ ...row }))
+  const resolveKey = useCallback(
+    (row: Row, index: number) => getRowKey?.(row, index) ?? String(index),
+    [getRowKey],
+  )
+  // The latest committed rows, for commit handlers that fire after the rows
+  // have moved (a blur landing after a reorder): commits resolve the row by
+  // identity against this ref, never by a stale render-time position. All
+  // readers run in event handlers, which always fire after effects flush.
+  const rowsRef = useRef(rows)
+  useEffect(() => {
+    rowsRef.current = rows
+  }, [rows])
+  const rowKeys = rows.map((row, i) => resolveKey(row, i))
+
+  /**
+   * Uncommitted cell drafts by row identity, then column. A reorder or
+   * delete moves focus (which fires the cell's blur commit), but the blur
+   * may land after the rows have already moved — so every structural edit
+   * first folds the published drafts into the array it operates on. Either
+   * order is then correct: an early blur commits to the pre-move position,
+   * a late blur re-commits the same value to the same row by identity.
+   */
+  const pendingDrafts = useRef(new Map<string, Map<string, LineGridDraftApplier<Row>>>())
+  const registerDraft = useCallback(
+    (rowKey: string, colKey: string, apply: LineGridDraftApplier<Row> | null) => {
+      const byRow = pendingDrafts.current
+      if (apply === null) {
+        const cols = byRow.get(rowKey)
+        if (cols) {
+          cols.delete(colKey)
+          if (cols.size === 0) byRow.delete(rowKey)
+        }
+        return
+      }
+      let cols = byRow.get(rowKey)
+      if (!cols) {
+        cols = new Map()
+        byRow.set(rowKey, cols)
+      }
+      cols.set(colKey, apply)
     },
-    [rows, onRowsChange],
+    [],
   )
 
+  const commitCell = useCallback(
+    (rowKey: string, key: string, value: unknown) => {
+      const current = rowsRef.current
+      const index = current.findIndex((row, i) => resolveKey(row, i) === rowKey)
+      if (index === -1) return
+      onRowsChange(current.map((r, j) => (j === index ? applyRowFields(r, { [key]: value }) : r)))
+    },
+    [resolveKey, onRowsChange],
+  )
+
+  const commitTax = useCallback(
+    (rowKey: string, column: LineGridColumn<Row>, next: { taxAmount: string; overridden: boolean }) => {
+      const current = rowsRef.current
+      const index = current.findIndex((row, i) => resolveKey(row, i) === rowKey)
+      if (index === -1) return
+      column.onTaxChange?.(index, next)
+    },
+    [resolveKey],
+  )
+
+  /**
+   * The rows with every published draft folded in, in current order. Blurs
+   * the grid's focused cell first so its commit lands pre-move; the fold
+   * covers a blur that lands late. Clears the registry: the folded values
+   * ride in the returned array, and a late blur re-commits them idempotently
+   * through the identity path above.
+   */
+  const takeCommittedRows = useCallback(() => {
+    const active = document.activeElement as HTMLElement | null
+    if (active && containerRef.current?.contains(active) && typeof active.blur === 'function') {
+      active.blur()
+    }
+    const base = rowsRef.current
+    if (pendingDrafts.current.size === 0) return base
+    const drafts = pendingDrafts.current
+    pendingDrafts.current = new Map()
+    const liveKeys = new Set(base.map((row, i) => resolveKey(row, i)))
+    for (const key of [...drafts.keys()]) {
+      if (!liveKeys.has(key)) drafts.delete(key)
+    }
+    if (drafts.size === 0) return base
+    return base.map((row, i) => {
+      const cols = drafts.get(resolveKey(row, i))
+      if (!cols) return row
+      let next = row
+      for (const apply of cols.values()) next = apply(next)
+      return next
+    })
+  }, [resolveKey])
+
   const insertRow = (at: number) => {
-    const next = [...rows]
+    const base = takeCommittedRows()
+    const next = [...base]
     next.splice(at, 0, emptyRow())
     onRowsChange(next)
     focusCell(at, 0)
   }
   const duplicateRow = (i: number) => {
-    const next = [...rows]
-    next.splice(i + 1, 0, { ...rows[i]! })
+    const base = takeCommittedRows()
+    if (i < 0 || i >= base.length) return
+    const next = [...base]
+    next.splice(i + 1, 0, clone(base[i]!))
     onRowsChange(next)
     focusCell(i + 1, 0)
   }
   const removeRow = (i: number) => {
-    if (rows.length <= minRows) {
-      onRowsChange(rows.map((r, j) => (j === i ? emptyRow() : r)))
+    const base = takeCommittedRows()
+    if (base.length <= minRows) {
+      onRowsChange(base.map((r, j) => (j === i ? emptyRow() : r)))
       return
     }
-    onRowsChange(rows.filter((_, j) => j !== i))
+    const removedKey = resolveKey(base[i]!, i)
+    pendingDrafts.current.delete(removedKey)
+    onRowsChange(base.filter((_, j) => j !== i))
   }
   const moveRow = (i: number, delta: number) => {
     const j = i + delta
-    if (j < 0 || j >= rows.length) return
-    const next = [...rows]
+    if (j < 0 || j >= rowsRef.current.length) return
+    const base = takeCommittedRows()
+    const next = [...base]
     const [row] = next.splice(i, 1)
     next.splice(j, 0, row!)
     onRowsChange(next)
@@ -248,8 +396,8 @@ export function LineGrid<Row extends Record<string, unknown>>({
       const isOpenListbox = (e.target as HTMLElement).getAttribute('aria-expanded') === 'true'
       if (isOpenListbox) return
       e.preventDefault()
-      if (i === rows.length - 1) {
-        onRowsChange([...rows, emptyRow()])
+      if (i === rowsRef.current.length - 1) {
+        onRowsChange([...takeCommittedRows(), emptyRow()])
         focusCell(i + 1, tag === 'SELECT' ? colIndex : colIndex)
       } else {
         focusCell(i + 1, colIndex)
@@ -385,14 +533,17 @@ export function LineGrid<Row extends Record<string, unknown>>({
           {/* rows */}
           {rows.map((row, i) => (
             <RowCells
-              key={i}
+              key={rowKeys[i]!}
               row={row}
+              rowKey={rowKeys[i]!}
               index={i}
               columns={columns}
               readOnly={readOnly}
               cellBase={cellBase}
               inputBase={inputBase}
-              setCell={setCell}
+              commitCell={commitCell}
+              commitTax={commitTax}
+              registerDraft={registerDraft}
               handleKeyDown={handleKeyDown}
               menuOpen={menuRow === i}
               setMenuOpen={(open) => setMenuRow(open ? i : null)}
@@ -455,16 +606,36 @@ export function LineGrid<Row extends Record<string, unknown>>({
  * overridden and the typed value is kept verbatim. An amber dot + a reset button
  * make the override transparent; reset clears the flag and recomputes.
  */
+/**
+ * The override a raw tax-cell entry resolves to. Shared by the blur commit
+ * and the published draft applier so a reorder carries the same outcome the
+ * blur would have produced.
+ */
+function taxDraftOutcome(raw: string, computed: string): { taxAmount: string; overridden: boolean } {
+  let normalized: string
+  try { normalized = normalizeMoney(raw) } catch { normalized = '' }
+  if (raw.trim() === '' || normalized === '') {
+    // Empty / invalid → treat as "reset to computed".
+    return { taxAmount: computed, overridden: false }
+  }
+  // Only an actual divergence from the computed value flags an override.
+  return { taxAmount: normalized, overridden: cmp(normalized, computed) !== 0 }
+}
+
 function TaxCell<Row extends Record<string, unknown>>({
   row,
   column,
-  index,
+  rowKey,
   inputBase,
+  registerDraft,
+  onCommit,
 }: {
   row: Row
   column: LineGridColumn<Row>
-  index: number
+  rowKey: string
   inputBase: string
+  registerDraft: (rowKey: string, colKey: string, apply: LineGridDraftApplier<Row> | null) => void
+  onCommit: (next: { taxAmount: string; overridden: boolean }) => void
 }) {
   const t = useTranslations('ui.lineGrid.tax')
   const overridden = row.taxOverridden === true
@@ -474,19 +645,27 @@ function TaxCell<Row extends Record<string, unknown>>({
   const [draft, setDraft] = useState<string | null>(null)
   const shown =
     draft != null ? draft : overridden ? String(row.taxAmount ?? '') : cmp(computed, '0') !== 0 ? computed : ''
+  const colKey = 'tax'
+
+  // Same draft-carry contract as DecimalCell: a reorder folds the pending
+  // override into this row before moving it.
+  useEffect(() => {
+    if (draft === null) {
+      registerDraft(rowKey, colKey, null)
+      return
+    }
+    const outcome = taxDraftOutcome(draft, computed)
+    registerDraft(rowKey, colKey, (r) =>
+      applyRowFields(r, { taxAmount: outcome.taxAmount, taxOverridden: outcome.overridden }),
+    )
+    return () => {
+      registerDraft(rowKey, colKey, null)
+    }
+  }, [draft, computed, rowKey, registerDraft])
 
   const commit = (raw: string) => {
     setDraft(null)
-    let normalized: string
-    try { normalized = normalizeMoney(raw) } catch { normalized = '' }
-    if (raw.trim() === '' || normalized === '') {
-      // Empty / invalid → treat as "reset to computed".
-      column.onTaxChange?.(index, { taxAmount: computed, overridden: false })
-      return
-    }
-    // Only an actual divergence from the computed value flags an override.
-    const isOverride = cmp(normalized, computed) !== 0
-    column.onTaxChange?.(index, { taxAmount: normalized, overridden: isOverride })
+    onCommit(taxDraftOutcome(raw, computed))
   }
 
   return (
@@ -523,7 +702,7 @@ function TaxCell<Row extends Record<string, unknown>>({
           title={t('resetTitle', { amount: computed })}
           onClick={() => {
             setDraft(null)
-            column.onTaxChange?.(index, { taxAmount: computed, overridden: false })
+            onCommit({ taxAmount: computed, overridden: false })
           }}
           className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
         >
@@ -536,12 +715,15 @@ function TaxCell<Row extends Record<string, unknown>>({
 
 function RowCells<Row extends Record<string, unknown>>({
   row,
+  rowKey,
   index: i,
   columns,
   readOnly,
   cellBase,
   inputBase,
-  setCell,
+  commitCell,
+  commitTax,
+  registerDraft,
   handleKeyDown,
   menuOpen,
   setMenuOpen,
@@ -559,12 +741,15 @@ function RowCells<Row extends Record<string, unknown>>({
   onUnsplitGroup,
 }: {
   row: Row
+  rowKey: string
   index: number
   columns: LineGridColumn<Row>[]
   readOnly: boolean
   cellBase: string
   inputBase: string
-  setCell: (i: number, key: string, value: unknown) => void
+  commitCell: (rowKey: string, key: string, value: unknown) => void
+  commitTax: (rowKey: string, column: LineGridColumn<Row>, next: { taxAmount: string; overridden: boolean }) => void
+  registerDraft: (rowKey: string, colKey: string, apply: LineGridDraftApplier<Row> | null) => void
   handleKeyDown: (e: React.KeyboardEvent, i: number, col: number) => void
   menuOpen: boolean
   setMenuOpen: (open: boolean) => void
@@ -706,7 +891,7 @@ function RowCells<Row extends Record<string, unknown>>({
               <SearchSelect
                 options={c.options ?? []}
                 value={(value as string) ?? ''}
-                onChange={(v) => setCell(i, c.key, v ?? '')}
+                onChange={(v) => commitCell(rowKey, c.key, v ?? '')}
                 placeholder={c.placeholder ?? '—'}
                 className="w-full"
                 triggerClassName="h-auto min-h-0 rounded-sm border-0 bg-transparent px-1.5 py-1 shadow-none focus:ring-0"
@@ -714,7 +899,7 @@ function RowCells<Row extends Record<string, unknown>>({
             ) : c.type === 'select' ? (
               <Select
                 value={(value as string) ?? ''}
-                onChange={(e) => setCell(i, c.key, e.target.value)}
+                onChange={(e) => commitCell(rowKey, c.key, e.target.value)}
                 className="w-full border-0 bg-transparent shadow-none"
               >
                 {(c.options ?? []).map((o) => (
@@ -731,8 +916,8 @@ function RowCells<Row extends Record<string, unknown>>({
                 aria-invalid={
                   invalidAmount(value) || undefined
                 }
-                onChange={(e) => setCell(i, c.key, e.target.value)}
-                onBlur={(e) => setCell(i, c.key, normalizeAmount(e.target.value))}
+                onChange={(e) => commitCell(rowKey, c.key, e.target.value)}
+                onBlur={(e) => commitCell(rowKey, c.key, normalizeAmount(e.target.value))}
                 className={cn(
                   inputBase,
                   'text-right tabular-nums',
@@ -741,24 +926,29 @@ function RowCells<Row extends Record<string, unknown>>({
                 )}
               />
             ) : c.type === 'decimal' ? (
-              <DecimalCell
+              <DecimalCell<Row>
                 value={value}
                 scale={c.decimalScale ?? 8}
                 inputBase={inputBase}
-                onChange={(next) => setCell(i, c.key, next)}
+                onChange={(next) => commitCell(rowKey, c.key, next)}
+                rowKey={rowKey}
+                colKey={c.key}
+                registerDraft={registerDraft}
               />
             ) : c.type === 'tax' ? (
               <TaxCell
                 row={row}
                 column={c}
-                index={i}
+                rowKey={rowKey}
                 inputBase={inputBase}
+                registerDraft={registerDraft}
+                onCommit={(next) => commitTax(rowKey, c, next)}
               />
             ) : (
               <input
                 value={(value as string) ?? ''}
                 placeholder={c.placeholder}
-                onChange={(e) => setCell(i, c.key, e.target.value)}
+                onChange={(e) => commitCell(rowKey, c.key, e.target.value)}
                 className={inputBase}
               />
             )}
