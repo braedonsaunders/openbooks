@@ -74,8 +74,16 @@ interface CustomerRoleRow extends Record<string, unknown> {
  *
  * Exposure is the sum of:
  *   1. the committed remainder of every pending-approval or approved sales
- *      order: order total less posted, linked customer-invoice totals; and
+ *      order: order total less posted, linked customer-invoice totals that
+ *      still carry the order's own party; and
  *   2. open_balance on posted customer invoices for the customer.
+ *
+ * Billed totals relieve an order only when the posted billing carries the
+ * source order's party. A conversion child relabelled to another party (or
+ * legacy billing written that way before the edit guard existed) must not
+ * release the source commitment: the order keeps its full remainder while
+ * the stray invoice counts — if at all — against its own party. That fails
+ * closed: the customer can look over-limit, never under.
  *
  * The order being issued is then added at its full total. A draft invoice does
  * not prematurely release the commitment: the order remainder drops only when
@@ -157,6 +165,7 @@ async function creditDecision(
                   and billed.kind = 'customer_invoice'
                   and billed.status = 'posted'
                  and billed.currency = exposure.currency
+                 and billed.party_id = exposure.party_id
                 where link.org_id = exposure.org_id
                   and link.from_document_id = exposure.id
              ), 0),
@@ -198,6 +207,7 @@ async function creditDecision(
                  and billed.kind = 'customer_invoice'
                  and billed.status = 'posted'
                  and billed.currency = ${role.currency}
+                 and billed.party_id = issued.party_id
                where link.org_id = issued.org_id
                  and link.from_document_id = issued.id
             ), 0),

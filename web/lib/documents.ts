@@ -1406,26 +1406,41 @@ export async function applyDocumentEdit(
         throw error
       }
 
-      // Conversion children keep the source order's currency: credit control
-      // relieves order exposure only with same-currency posted billing, so a
-      // relabelled child would silently reprice billed totals across
-      // currencies. Refuse a currency change away from the source order's
-      // currency; deleting the draft and reconverting restores it.
-      if (currency !== undefined) {
-        const child = (await tx.execute<{ currency: string; documentNumber: string }>(sql`
-          select currency, document_number as "documentNumber"
+      // Conversion children keep the source order's currency and party: credit
+      // control relieves order exposure only with same-currency, same-party
+      // posted billing, so a relabelled child would silently reprice billed
+      // totals across currencies or release another customer's commitment.
+      // Refuse a currency or party change away from the source order's
+      // values; deleting the draft and reconverting restores them.
+      // Stored uuids compare case-insensitively: the driver returns them
+      // lowercase, but the match must not depend on that.
+      const wantedParty = body.partyId === undefined
+        ? undefined
+        : body.partyId === null
+          ? null
+          : body.partyId.toLowerCase()
+      if (currency !== undefined || wantedParty !== undefined) {
+        const child = (await tx.execute<{ currency: string; partyId: string | null; documentNumber: string }>(sql`
+          select currency, party_id as "partyId", document_number as "documentNumber"
             from documents
            where id = ${id} and org_id = ${orgId}
         `)).rows[0]
-        if (child && currency !== child.currency) {
+        const storedParty = child == null || child.partyId == null ? child?.partyId ?? null : child.partyId.toLowerCase()
+        const currencyChange = currency !== undefined && child != null && currency !== child.currency
+        const partyChange = wantedParty !== undefined && child != null && wantedParty !== storedParty
+        if (currencyChange || partyChange) {
           // Only order sources establish conversion provenance. Other 'bills'
           // edges (for example field-ticket billing) are out of scope.
-          const sources = (await tx.execute<{ kind: string; documentNumber: string; currency: string }>(sql`
-            select source.kind, source.document_number as "documentNumber", source.currency
+          const sources = (await tx.execute<{ kind: string; documentNumber: string; currency: string; partyId: string | null; partyName: string | null }>(sql`
+            select source.kind, source.document_number as "documentNumber", source.currency,
+                   source.party_id as "partyId", party.display_name as "partyName"
               from document_links link
               join documents source
                 on source.id = link.from_document_id
                and source.org_id = link.org_id
+              left join parties party
+                on party.id = source.party_id
+               and party.org_id = link.org_id
              where link.org_id = ${orgId}
                and link.to_document_id = ${id}
                and link.link_type in ('bills', 'created_from')
@@ -1434,14 +1449,29 @@ export async function applyDocumentEdit(
           `)).rows
           // Any conflicting source refuses: with several edges, picking one
           // to compare against would be arbitrary.
-          const conflict = sources.find((source) => source.currency !== currency)
-          if (conflict) {
-            throw new DocumentEditError(
-              422,
-              `currency cannot be changed from ${child.currency} to ${currency} on ${child.documentNumber}: ` +
-              `it was converted from ${conflict.kind.replaceAll("_", " ")} ${conflict.documentNumber} (${conflict.currency}) and must keep the source order currency. ` +
-              `Delete this draft and reconvert it from ${conflict.documentNumber} to restore the ${conflict.currency} billing.`,
-            )
+          if (currencyChange) {
+            const conflict = sources.find((source) => source.currency !== currency)
+            if (conflict) {
+              throw new DocumentEditError(
+                422,
+                `currency cannot be changed from ${child!.currency} to ${currency} on ${child!.documentNumber}: ` +
+                `it was converted from ${conflict.kind.replaceAll("_", " ")} ${conflict.documentNumber} (${conflict.currency}) and must keep the source order currency. ` +
+                `Delete this draft and reconvert it from ${conflict.documentNumber} to restore the ${conflict.currency} billing.`,
+              )
+            }
+          }
+          if (partyChange) {
+            const conflict = sources.find((source) =>
+              (source.partyId == null ? null : source.partyId.toLowerCase()) !== wantedParty)
+            if (conflict) {
+              const sourceParty = conflict.partyName ?? 'the source order party'
+              throw new DocumentEditError(
+                422,
+                `party cannot be changed on ${child!.documentNumber}: ` +
+                `it was converted from ${conflict.kind.replaceAll("_", " ")} ${conflict.documentNumber} and must keep the source order party (${sourceParty}). ` +
+                `Delete this draft and reconvert it from ${conflict.documentNumber} to restore the original billing.`,
+              )
+            }
           }
         }
       }
