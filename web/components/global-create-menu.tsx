@@ -94,11 +94,11 @@ const ACTIONS: CreateAction[] = [
   { key: 'deposit', group: 'accounting', enabled: (p) => p.journal, icon: Landmark, endpoint: '/api/documents/draft', body: { kind: 'deposit' }, destination: (id) => `/banking/transactions?doc=${id}&mode=edit` },
   { key: 'transfer', group: 'accounting', enabled: (p) => p.journal, icon: Send, endpoint: '/api/documents/draft', body: { kind: 'transfer' }, destination: (id) => `/banking/transactions?doc=${id}&mode=edit` },
   { key: 'asset', group: 'accounting', enabled: (p) => p.assets, icon: Landmark, directHref: '/assets?assetNew=1' },
-  { key: 'customer', group: 'peopleAndLists', enabled: (p) => p.parties, icon: UsersRound, endpoint: '/api/parties/draft', body: { role: 'customer' }, destination: (id) => `/entities/customers?party=${id}&mode=edit` },
-  { key: 'vendor', group: 'peopleAndLists', enabled: (p) => p.parties, icon: Building2, endpoint: '/api/parties/draft', body: { role: 'vendor' }, destination: (id) => `/entities/vendors?party=${id}&mode=edit` },
-  { key: 'employee', group: 'peopleAndLists', enabled: (p) => p.parties, icon: UserRound, endpoint: '/api/parties/draft', body: { role: 'employee' }, destination: (id) => `/entities/employees?party=${id}&mode=edit` },
+  { key: 'customer', group: 'peopleAndLists', enabled: (p) => p.parties, icon: UsersRound, directHref: '/entities/customers?partyNew=1&role=customer' },
+  { key: 'vendor', group: 'peopleAndLists', enabled: (p) => p.parties, icon: Building2, directHref: '/entities/vendors?partyNew=1&role=vendor' },
+  { key: 'employee', group: 'peopleAndLists', enabled: (p) => p.parties, icon: UserRound, directHref: '/entities/employees?partyNew=1&role=employee' },
   { key: 'item', group: 'peopleAndLists', enabled: (p) => p.items, icon: Package, directHref: '/items?item=new' },
-  { key: 'project', group: 'peopleAndLists', enabled: (p) => p.projects, icon: Contact, endpoint: '/api/projects/draft', body: {}, destination: (id) => `/projects?project=${id}` },
+  { key: 'project', group: 'peopleAndLists', enabled: (p) => p.projects, icon: Contact, directHref: '/projects?projectNew=1' },
 ]
 
 const GROUPS: GroupKey[] = ['sales', 'purchases', 'accounting', 'peopleAndLists']

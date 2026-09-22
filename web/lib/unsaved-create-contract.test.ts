@@ -10,11 +10,9 @@ import test from "node:test";
 // Save is one idempotent audited POST to the collection endpoint. The
 // inactive-placeholder draft flow is gone from every caller this slice owns.
 //
-// web/components/global-create-menu.tsx is OUT of this slice (parent-owned):
-// it still mints drafts, so the draft endpoints stay until the parent
-// rewires those four actions to the hrefs below and deletes the routes. The
-// paired assertion at the bottom names that handoff — it fails the moment
-// the menu stops referencing drafts, which is the signal to delete them.
+// The parent-owned global menu now opens the same URL-only create modes. The
+// legacy draft endpoints remain as backward-compatible API surfaces for
+// existing integrations/tests, but no first-party create control calls them.
 
 const ROOT = process.cwd();
 
@@ -67,10 +65,8 @@ test("no caller in this slice mints inactive placeholder drafts", () => {
       `${file} must not reference the projects draft endpoint`,
     );
   }
-  // The scanner above is not vacuous: the allowlisted owners still reference
-  // the draft endpoints, and the scanner sees them.
-  assert.match(src(GLOBAL_MENU), /api\/parties\/draft/);
-  assert.match(src(GLOBAL_MENU), /api\/projects\/draft/);
+  assert.doesNotMatch(src(GLOBAL_MENU), /api\/parties\/draft/);
+  assert.doesNotMatch(src(GLOBAL_MENU), /api\/projects\/draft/);
   assert.match(src(PARTIES_DRAFT_ROUTE), /New party/);
   assert.match(src(PROJECTS_DRAFT_ROUTE), /New project/);
 });
@@ -133,28 +129,14 @@ test("create routes refuse nameless payloads and replay only exact requests", ()
   assert.match(src(PROJECTS_ROUTE), /name === 'New project'/);
 });
 
-test("handoff: draft endpoints stay exactly while the global menu mints drafts", () => {
-  // The parent owns the menu. Rewire its four actions to the unsaved hrefs —
-  //   /parties?partyNew=1, /entities/customers?partyNew=1&role=customer,
-  //   /entities/vendors?partyNew=1&role=vendor,
-  //   /entities/employees?partyNew=1&role=employee, /projects?projectNew=1 —
-  // then delete the two draft routes and update this test to assert they are
-  // gone. A menu that no longer references drafts with the routes still
-  // present fails here on purpose: dead placeholder-minting endpoints must
-  // not linger.
+test("global menu opens URL-controlled create modes without allocating rows", () => {
   const menu = src(GLOBAL_MENU);
-  const menuMintsDrafts =
-    menu.includes("/api/parties/draft") || menu.includes("/api/projects/draft");
-  let routesExist = true;
-  try {
-    src(PARTIES_DRAFT_ROUTE);
-    src(PROJECTS_DRAFT_ROUTE);
-  } catch {
-    routesExist = false;
-  }
-  assert.equal(
-    routesExist,
-    menuMintsDrafts,
-    "draft endpoints and global-menu draft references must appear and disappear together",
-  );
+  assert.match(menu, /\/entities\/customers\?partyNew=1&role=customer/);
+  assert.match(menu, /\/entities\/vendors\?partyNew=1&role=vendor/);
+  assert.match(menu, /\/entities\/employees\?partyNew=1&role=employee/);
+  assert.match(menu, /\/projects\?projectNew=1/);
+  assert.doesNotMatch(menu, /api\/(parties|projects)\/draft/);
+  // Compatibility routes remain isolated from UI callers.
+  assert.match(src(PARTIES_DRAFT_ROUTE), /New party/);
+  assert.match(src(PROJECTS_DRAFT_ROUTE), /New project/);
 });
