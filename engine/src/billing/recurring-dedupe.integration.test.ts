@@ -3,7 +3,8 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "../platform/db.ts";
-import { runDueRecurringSchedules, runScheduleNow } from "./recurring.ts";
+import { addCalendarDays } from "../platform/business-date.ts";
+import { advanceCadence, runDueRecurringSchedules, runScheduleNow } from "./recurring.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -581,5 +582,38 @@ test("malformed recurring cron records a failure without changing cadence or abo
     assert.equal(stored.nextRunOn, org.date);
     assert.match(stored.error, /cron/);
     assert.equal(await journalEntryCount(org.orgId), 1);
+  } finally { await dropScratchOrgReporting(org.orgId); }
+});
+
+test("a catch-up occurrence is dated with its occurrence date, not today", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "Scheduler", "admin");
+    // Draft only: dating must not depend on posting, and the old-period
+    // document must not require that period to be open.
+    const scheduleId = await seedInvoiceSchedule(org, actorId, { autoPost: false });
+    // Two cadences back-dated (e.g. after a scheduler outage): the tick
+    // generates the oldest occurrence first.
+    const occurrence = addCalendarDays(org.date, -62);
+    await db.execute(sql`
+      update recurring_schedules set next_run_on = ${occurrence} where id = ${scheduleId}
+    `);
+    const run = await runDueRecurringSchedules(org.date);
+    assert.equal(run.failed, 0);
+    assert.equal(run.generated, 1);
+    assert.equal(run.posted, 0);
+    const documentId = run.documents[0]!.documentId;
+    const doc = (await db.execute<{ documentDate: string; dueDate: string }>(sql`
+      select document_date::text as "documentDate", due_date::text as "dueDate"
+        from documents where id = ${documentId} and org_id = ${org.orgId}
+    `)).rows[0]!;
+    // The template carries same-day terms, so the due date follows the
+    // occurrence too — not today.
+    assert.equal(doc.documentDate, occurrence);
+    assert.equal(doc.dueDate, occurrence);
+    const next = (await db.execute<{ nextRunOn: string }>(sql`
+      select next_run_on::text as "nextRunOn" from recurring_schedules where id = ${scheduleId}
+    `)).rows[0]!;
+    assert.equal(next.nextRunOn, advanceCadence(occurrence, "monthly"));
   } finally { await dropScratchOrgReporting(org.orgId); }
 });
