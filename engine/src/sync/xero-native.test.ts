@@ -190,19 +190,22 @@ function payDoc(over: Record<string, unknown>) {
   };
 }
 
-test("Xero customer refund against a credit note posts to AR, not AP", () => {
+test("Xero customer refund against a credit note posts cash OUT of AR", () => {
   const built = buildNativeFromXero(
     paymentContext(),
     "Payment",
-    payDoc({ CreditNote: { CreditNoteID: "cn-1", Type: "ACCRECCREDIT" }, PaymentType: "ARCREDITPAYMENT" }),
+    payDoc({ CreditNote: { CreditNoteID: "cn-1", Type: "ACCRECCREDIT" }, PaymentType: "ARCREDITPAYMENT", Amount: 50 }),
     { accountIdByCode },
   );
 
   assert.ok(!("skip" in built));
   assert.equal(built.kind, "customer_payment");
+  // A refund pays money OUT: the bank leg carries the negated magnitude so
+  // the rule posts CR bank 50 / DR AR 50 — never cash IN.
+  assert.equal(built.lines[0]!.amount, "-50.0000");
 });
 
-test("Xero receipt against a receive-prepayment posts to AR", () => {
+test("Xero receipt against a receive-prepayment posts cash IN to AR", () => {
   const built = buildNativeFromXero(
     paymentContext(),
     "Payment",
@@ -214,35 +217,40 @@ test("Xero receipt against a receive-prepayment posts to AR", () => {
   assert.equal(built.kind, "customer_payment");
 });
 
-test("Xero payment against a spend-overpayment posts to AP", () => {
+test("Xero supplier refund against a spend-overpayment posts cash IN to AP", () => {
   const built = buildNativeFromXero(
     paymentContext(),
     "Payment",
-    payDoc({ Overpayment: { OverpaymentID: "over-1", Type: "SPEND-OVERPAYMENT" }, PaymentType: "APOVERPAYMENTPAYMENT" }),
+    payDoc({ Overpayment: { OverpaymentID: "over-1", Type: "SPEND-OVERPAYMENT" }, PaymentType: "APOVERPAYMENTPAYMENT", Amount: 50 }),
     { accountIdByCode },
   );
 
   assert.ok(!("skip" in built));
   assert.equal(built.kind, "vendor_payment");
+  // A supplier refund brings money IN: the negated magnitude posts DR bank
+  // 50 / CR AP 50 under the vendor_payment rule.
+  assert.equal(built.lines[0]!.amount, "-50.0000");
 });
 
-test("Xero invoice payments keep their ACCREC/ACCPAY side", () => {
-  const ar = buildNativeFromXero(
+test("Xero normal invoice payments keep the receipt/payment direction", () => {
+  const receipt = buildNativeFromXero(
     paymentContext(),
     "Payment",
-    payDoc({ Invoice: { InvoiceID: "inv-1", Type: "ACCREC" }, PaymentType: "ACCRECPAYMENT" }),
+    payDoc({ Invoice: { InvoiceID: "inv-1", Type: "ACCREC" }, PaymentType: "ACCRECPAYMENT", Amount: 50 }),
     { accountIdByCode },
   );
-  const ap = buildNativeFromXero(
+  const payment = buildNativeFromXero(
     paymentContext(),
     "Payment",
-    payDoc({ Invoice: { InvoiceID: "inv-2", Type: "ACCPAY" }, PaymentType: "ACCPAYPAYMENT" }),
+    payDoc({ Invoice: { InvoiceID: "inv-2", Type: "ACCPAY" }, PaymentType: "ACCPAYPAYMENT", Amount: 50 }),
     { accountIdByCode },
   );
 
-  assert.ok(!("skip" in ar) && !("skip" in ap));
-  assert.equal(ar.kind, "customer_payment");
-  assert.equal(ap.kind, "vendor_payment");
+  assert.ok(!("skip" in receipt) && !("skip" in payment));
+  assert.equal(receipt.kind, "customer_payment");
+  assert.equal(receipt.lines[0]!.amount, "50.0000");
+  assert.equal(payment.kind, "vendor_payment");
+  assert.equal(payment.lines[0]!.amount, "50.0000");
 });
 
 test("Xero payment with an untyped target falls back to the PaymentType family", () => {
@@ -257,6 +265,27 @@ test("Xero payment with an untyped target falls back to the PaymentType family",
   assert.equal(built.kind, "customer_payment");
 });
 
+test("Xero PaymentType fallback carries the refund direction too", () => {
+  const refund = buildNativeFromXero(
+    paymentContext(),
+    "Payment",
+    payDoc({ Invoice: { InvoiceID: "inv-9" }, PaymentType: "ARCREDITPAYMENT", Amount: 50 }),
+    { accountIdByCode },
+  );
+  const receipt = buildNativeFromXero(
+    paymentContext(),
+    "Payment",
+    payDoc({ Invoice: { InvoiceID: "inv-8" }, PaymentType: "ACCPAYPAYMENT", Amount: 50 }),
+    { accountIdByCode },
+  );
+
+  assert.ok(!("skip" in refund) && !("skip" in receipt));
+  assert.equal(refund.kind, "customer_payment");
+  assert.equal(refund.lines[0]!.amount, "-50.0000");
+  assert.equal(receipt.kind, "vendor_payment");
+  assert.equal(receipt.lines[0]!.amount, "50.0000");
+});
+
 test("Xero payment with an unknown target type refuses by name", () => {
   const built = buildNativeFromXero(
     paymentContext(),
@@ -268,6 +297,17 @@ test("Xero payment with an unknown target type refuses by name", () => {
   assert.ok("skip" in built);
   assert.match(built.skip, /FUTURE-OVERPAYMENT/);
   assert.match(built.skip, /FUTURE-PAYMENT/);
+
+  // A family-looking PaymentType outside the contract enum still refuses:
+  // the side prefix alone must not invent a direction.
+  const familyOnly = buildNativeFromXero(
+    paymentContext(),
+    "Payment",
+    payDoc({ Invoice: { InvoiceID: "inv-9" }, PaymentType: "ARFOO" }),
+    { accountIdByCode },
+  );
+  assert.ok("skip" in familyOnly);
+  assert.match(familyOnly.skip, /ARFOO/);
 });
 
 test("Xero payment settling two documents refuses naming both", () => {

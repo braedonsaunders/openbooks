@@ -680,6 +680,35 @@ test("zero discount, zero fee, and a fee equal to the receipt post without extra
   );
 });
 
+test("payment refunds post the opposite direction on the same side", () => {
+  // Connector refund imports (e.g. a Xero payment against an ACCRECCREDIT
+  // credit note) arrive as a negative bank line: a customer refund of 50
+  // posts CR bank 50 / DR AR 50, and a supplier refund of 50 posts DR bank
+  // 50 / CR AP 50 — the mirror image of the normal flow on the same side.
+  const refundLine = (lineNumber: number) =>
+    ({ id: `r${lineNumber}`, lineNumber, accountId: "bank", amount: "-50.0000" }) as unknown as PostingDocumentLine;
+  const paymentDeps = { control: { ap: "ap", ar: "ar", bank: "bank" } };
+  const customerRefund = (custom: Record<string, unknown>) =>
+    ({ id: "cp", kind: "customer_payment", partyId: "customer", subsidiaryId: "sub", currency: "CAD", fxRate: "1", custom }) as unknown as PostingDocument;
+  const vendorRefund = (custom: Record<string, unknown>) =>
+    ({ id: "vp", kind: "vendor_payment", partyId: "vendor", subsidiaryId: "sub", currency: "CAD", fxRate: "1", custom }) as unknown as PostingDocument;
+  assert.deepEqual(
+    RULES.customer_payment!(customerRefund({ feeAmount: "0" }), [refundLine(1)], paymentDeps).map((row) => [row.accountId, row.amount]),
+    [["bank", "-50.0000"], ["ar", "50.0000"]],
+  );
+  assert.deepEqual(
+    RULES.vendor_payment!(vendorRefund({ discountAmount: "0" }), [refundLine(1)], paymentDeps).map((row) => [row.accountId, row.amount]),
+    [["ap", "-50.0000"], ["bank", "50.0000"]],
+  );
+  // No acceptance surcharge exists on money returned to the customer: a fee
+  // riding a refund is refused by name instead of miscompared against a
+  // negative receipt.
+  assert.throws(
+    () => RULES.customer_payment!(customerRefund({ feeAmount: "5.0000", feeIncomeAccountId: "fee" }), [refundLine(1)], paymentDeps),
+    (error: Error) => error instanceof PostingError && /cannot carry a payment-acceptance fee/.test(error.message),
+  );
+});
+
 test("transfer posts dust amounts but refuses unresolvable line accounts", () => {
   // A shifted positivity bound rejects the smallest legal transfer; an
   // inverted account check lets an empty account reach the ledger.

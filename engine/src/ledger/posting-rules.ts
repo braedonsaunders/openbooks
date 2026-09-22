@@ -398,7 +398,14 @@ export const RULES: Record<string, RuleFn> = {
         : null;
     if (toUnits(fee) < 0n)
       throw new PostingError("customer payment fee cannot be negative");
-    if (cmp(fee, total) > 0)
+    if (cmp(total, "0") < 0) {
+      // A refund pays cash OUT (negative total): no payment-acceptance
+      // surcharge exists on money returned to the customer, so any fee riding
+      // a refund is a data error, refused by name instead of miscompared
+      // against a negative receipt.
+      if (!isZero(fee))
+        throw new PostingError("customer refund cannot carry a payment-acceptance fee");
+    } else if (cmp(fee, total) > 0)
       throw new PostingError("customer payment fee exceeds the receipt");
     if (!isZero(fee) && !feeAccountId)
       throw new PostingError("customer payment fee income account is required");
