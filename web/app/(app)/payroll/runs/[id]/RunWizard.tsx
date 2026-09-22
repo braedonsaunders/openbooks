@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -376,6 +376,11 @@ export function RunWizard(props: {
 
   const [step, setStep] = useState<WizardStep>(props.initialStep)
   const [busy, setBusy] = useState(false)
+  // Re-entry guard for adjustment edits: setBusy is state (async), so a
+  // double-click lands twice before the buttons disable. The ref closes that
+  // gap; try/finally in adjust() always releases it, so a failed request
+  // never wedges the wizard.
+  const adjustInflight = useRef(false)
   // The loader is the authority on the persisted refusal record: these start
   // from the run row (so the FIRST calculate's exceptions survive a refresh)
   // and are re-synced whenever a refresh delivers a newer row.
@@ -667,13 +672,29 @@ export function RunWizard(props: {
     }
   }
 
-  async function adjust(body: Record<string, unknown>) {
+  /**
+   * Returns true when the edit AND its recalculation both landed. A failure
+   * keeps the drawer's idempotency key: the retry replays instead of writing
+   * a second adjustment — so callers must only clear/close on true.
+   */
+  async function adjust(body: Record<string, unknown>): Promise<boolean> {
+    if (adjustInflight.current) return false
+    adjustInflight.current = true
     setBusy(true)
     try {
+      // The drawers mint one idempotency key per form session; it travels as
+      // the Idempotency-Key header (the document-create contract), never as
+      // a stored adjustment field.
+      const { idempotencyKey, ...action } = body
       const res = await fetch(`/api/payroll/runs/${run.document_id}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        headers: {
+          'Content-Type': 'application/json',
+          ...(typeof idempotencyKey === 'string' && idempotencyKey !== ''
+            ? { 'Idempotency-Key': idempotencyKey }
+            : {}),
+        },
+        body: JSON.stringify(action),
       })
       // The status is checked before the body is parsed (see act above).
       if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
@@ -688,9 +709,12 @@ export function RunWizard(props: {
       setGl({ state: 'idle', legs: [], debitTotal: '0', error: '' })
       toast.success(t('wizard.adjust.applied'))
       router.refresh()
+      return true
     } catch (e) {
       toast.error((e as Error).message)
+      return false
     } finally {
+      adjustInflight.current = false
       setBusy(false)
     }
   }
@@ -923,6 +947,7 @@ export function RunWizard(props: {
           adjustments={props.adjustments}
           components={props.adjustableComponents}
           canAdjust={props.canRun && docDraft && run.run_status !== 'committed'}
+          busy={busy}
           onAdjust={adjust}
           onAnswered={() => act('calculate')}
           previousNet={props.previousNet}
@@ -1534,6 +1559,7 @@ function ReviewStep({
   adjustments,
   components,
   canAdjust,
+  busy,
   onAdjust,
   onAnswered,
   anomalyBlocks,
@@ -1554,7 +1580,14 @@ function ReviewStep({
   adjustments: AdjustmentRow[]
   components: ComponentOption[]
   canAdjust: boolean
-  onAdjust: (body: Record<string, unknown>) => Promise<void>
+  /** Parent in-flight mutation state: disables drawer buttons while a request runs. */
+  busy: boolean
+  /**
+   * True when the edit and its recalculation both landed. Drawers clear,
+   * close and rotate their idempotency key only on true — a failure keeps
+   * the key so the retry replays instead of duplicating.
+   */
+  onAdjust: (body: Record<string, unknown>) => Promise<boolean>
   onAnswered: () => void
   /** HR-21: open block-severity anomaly flags — the banner with the link. */
   anomalyBlocks: number
@@ -1639,7 +1672,8 @@ function ReviewStep({
               {row.employee_name}
               {canAdjust && (
                 <button
-                  className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
+                  className="text-xs font-medium text-teal-700 hover:underline disabled:opacity-50 dark:text-teal-300"
+                  disabled={busy}
                   onClick={() => void onAdjust({ action: 'include-employee', employeePartyId: row.employee_party_id })}
                 >
                   {t('wizard.adjust.include')}
@@ -1848,6 +1882,7 @@ function ReviewStep({
           )}
           components={components}
           canAdjust={canAdjust}
+          busy={busy}
           onAdjust={onAdjust}
           buckets={registerBuckets}
           regionLabel={regionLabel}
@@ -1860,9 +1895,11 @@ function ReviewStep({
         <BulkEditDrawer
           count={selected.size}
           components={components}
+          busy={busy}
           onClose={() => setBulkOpen(false)}
           onApply={async (body) => {
-            await onAdjust({ ...body, action: 'bulk-adjustment', employeePartyIds: [...selected] })
+            const applied = await onAdjust({ ...body, action: 'bulk-adjustment', employeePartyIds: [...selected] })
+            if (!applied) return
             setBulkOpen(false)
             setSelected(new Set())
           }}
@@ -1876,11 +1913,14 @@ function ReviewStep({
 function BulkEditDrawer({
   count,
   components,
+  busy,
   onClose,
   onApply,
 }: {
   count: number
   components: ComponentOption[]
+  /** Parent in-flight mutation state: Apply disables and shows progress while it runs. */
+  busy: boolean
   onClose: () => void
   onApply: (body: Record<string, unknown>) => Promise<void>
 }) {
@@ -1890,6 +1930,10 @@ function BulkEditDrawer({
   const [amount, setAmount] = useState('')
   const [note, setNote] = useState('')
   const [replace, setReplace] = useState(false)
+  // One stable idempotency key per drawer session: a double-clicked Apply (or
+  // a retried request) reuses it and replays instead of writing twice. The
+  // drawer unmounts on close, so the next Apply mints a fresh key.
+  const [requestKey] = useState(() => crypto.randomUUID())
   const valid = componentId !== '' && /^-?\d+(\.\d{1,2})?$/.test(amount)
   return (
     <Drawer
@@ -1902,10 +1946,11 @@ function BulkEditDrawer({
         <div className="flex items-center justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>{tCommon('actions.cancel')}</Button>
           <Button
-            disabled={!valid}
-            onClick={() => void onApply({ componentId, amount, note: note || undefined, replaceComponent: replace })}
+            disabled={!valid || busy}
+            onClick={() => void onApply({ componentId, amount, note: note || undefined, replaceComponent: replace, idempotencyKey: requestKey })}
           >
-            {t('wizard.review.bulkApply', { count })}
+            {busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : null}
+            {busy ? tCommon('actions.saving') : t('wizard.review.bulkApply', { count })}
           </Button>
         </div>
       }
@@ -1967,6 +2012,7 @@ function StubDrawer({
   adjustments,
   components,
   canAdjust,
+  busy,
   onAdjust,
   buckets,
   regionLabel,
@@ -1981,13 +2027,16 @@ function StubDrawer({
   adjustments: AdjustmentRow[]
   components: ComponentOption[]
   canAdjust: boolean
-  onAdjust: (body: Record<string, unknown>) => Promise<void>
+  /** Parent in-flight mutation state: the add/exclude/remove buttons disable while it runs. */
+  busy: boolean
+  onAdjust: (body: Record<string, unknown>) => Promise<boolean>
   buckets: RegisterBucket[]
   regionLabel: string
   traceEngines: Record<string, string>
   factorLabels: Record<string, Record<string, string>>
 }) {
   const t = useTranslations('payroll')
+  const tCommon = useTranslations('common')
   const held = withholding(stub, buckets)
   // The trace heads the filing regime the numbers were computed under
   // (T4127 for CA, Pub 15-T for US) — never a hardcoded country (F-t08-012).
@@ -2007,6 +2056,11 @@ function StubDrawer({
   const [adjAmount, setAdjAmount] = useState('')
   const [adjNote, setAdjNote] = useState('')
   const [adjReplace, setAdjReplace] = useState(false)
+  // One idempotency key per form session: a double-clicked Add (or a retried
+  // request) reuses it and replays instead of writing twice. Rotated after
+  // every SUCCESSFUL add only — a failed attempt keeps its key, so the retry
+  // replays instead of duplicating.
+  const [requestKey, setRequestKey] = useState(() => crypto.randomUUID())
   return (
     <Drawer
       open
@@ -2025,6 +2079,7 @@ function StubDrawer({
             {canAdjust && (
               <Button
                 variant="outline"
+                disabled={busy}
                 onClick={() => void onAdjust({ action: 'exclude-employee', employeePartyId: stub.employee_party_id }).then(onClose)}
               >
                 {t('wizard.adjust.exclude')}
@@ -2170,7 +2225,8 @@ function StubDrawer({
                       <span className="tabular-nums">{fmt(row.amount)}</span>
                       {canAdjust && (
                         <button
-                          className="text-xs font-medium text-rose-600 hover:underline dark:text-rose-400"
+                          className="text-xs font-medium text-rose-600 hover:underline dark:text-rose-400 disabled:opacity-50"
+                          disabled={busy}
                           onClick={() => void onAdjust({ action: 'delete-adjustment', adjustmentId: row.id })}
                         >
                           {t('wizard.adjust.remove')}
@@ -2228,7 +2284,7 @@ function StubDrawer({
                 <div className="flex justify-end">
                   <Button
                     size="sm"
-                    disabled={!adjComponent || !/^-?\d+(\.\d{1,2})?$/.test(adjAmount)}
+                    disabled={!adjComponent || !/^-?\d+(\.\d{1,2})?$/.test(adjAmount) || busy}
                     onClick={() => {
                       void onAdjust({
                         action: 'add-adjustment',
@@ -2237,12 +2293,16 @@ function StubDrawer({
                         amount: adjAmount,
                         note: adjNote || undefined,
                         replaceComponent: adjReplace,
-                      }).then(() => {
+                        idempotencyKey: requestKey,
+                      }).then((added) => {
+                        if (!added) return
                         setAdjComponent(''); setAdjAmount(''); setAdjNote(''); setAdjReplace(false)
+                        setRequestKey(crypto.randomUUID())
                       })
                     }}
                   >
-                    {t('wizard.adjust.add')}
+                    {busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : null}
+                    {busy ? tCommon('actions.saving') : t('wizard.adjust.add')}
                   </Button>
                 </div>
               </div>
