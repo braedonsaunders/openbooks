@@ -31,7 +31,6 @@
 -- through the issuing movement, which this migration makes explicit.
 
 SET statement_timeout = 0;
-SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
 SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
@@ -87,17 +86,21 @@ CREATE INDEX IF NOT EXISTS inventory_provisional_subsidiary_fifo
   ON public.inventory_provisional_costs USING btree (org_id, item_id, stock_location_id, subsidiary_id);
 
 -- A deficit exists only under a real subsidiary of its own org...
-ALTER TABLE public.inventory_provisional_costs
-  ADD CONSTRAINT inv_provisional_org_subsidiary_fk
-  FOREIGN KEY (org_id, subsidiary_id)
-  REFERENCES public.subsidiaries (org_id, id);
+-- (guarded: the runner retries on lock timeouts, so every constraint add
+-- below must be re-runnable).
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'inv_provisional_org_subsidiary_fk') THEN
+  ALTER TABLE public.inventory_provisional_costs
+    ADD CONSTRAINT inv_provisional_org_subsidiary_fk
+    FOREIGN KEY (org_id, subsidiary_id)
+    REFERENCES public.subsidiaries (org_id, id); END IF; END $$;
 
 -- ...and belongs to the same entity as the issue movement that created it,
 -- so one subsidiary's receipt can never settle another's shortfall again.
-ALTER TABLE public.inventory_provisional_costs
-  ADD CONSTRAINT inv_provisional_issue_movement_entity_fk
-  FOREIGN KEY (org_id, subsidiary_id, issue_movement_id)
-  REFERENCES public.inventory_movements (org_id, subsidiary_id, id);
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'inv_provisional_issue_movement_entity_fk') THEN
+  ALTER TABLE public.inventory_provisional_costs
+    ADD CONSTRAINT inv_provisional_issue_movement_entity_fk
+    FOREIGN KEY (org_id, subsidiary_id, issue_movement_id)
+    REFERENCES public.inventory_movements (org_id, subsidiary_id, id); END IF; END $$;
 
 -- Owner-fill: writers omit ownership at their peril; storage derives it from
 -- the row's own issue movement instead of accepting ownerless deficits.
