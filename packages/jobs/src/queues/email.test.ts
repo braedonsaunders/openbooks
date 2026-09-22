@@ -4,7 +4,7 @@ import {
   buildEmailJobs,
   newEmailIntentKey,
   resolveEmailDeliveryKey,
-} from "./email.ts";
+} from "./email";
 
 const ORG = "018f6b2a-7c1d-7d3e-9f4a-2b8c4d5e6f70";
 
