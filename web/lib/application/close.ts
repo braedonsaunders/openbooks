@@ -12,9 +12,10 @@ import {
   RevaluationFeatureDisabledError,
   runRevaluation,
 } from "@openbooks/engine/src/close/fx-revaluation.ts";
+import { can } from "../authz";
 import type { ApplicationContext } from "./context";
 import { assertApplicationPermission, assertSubsidiaryAccess } from "./context";
-import { ApplicationError, notFound } from "./errors";
+import { ApplicationError, forbidden, notFound } from "./errors";
 import { isFeatureEnabled } from "../features";
 import { executeIdempotent } from "./idempotency";
 
@@ -151,6 +152,67 @@ export async function listPeriodLocks(
       lockedBy: lock.locked_by_name,
       reason: lock.reason,
       reopenExpiresAt: lock.reopen_expires_at,
+    })),
+  };
+}
+
+const REOPEN_STATUSES = new Set(["requested", "approved", "rejected", "expired", "reclosed"]);
+
+/** Reopen requests — same query shape as `list_period_reopen_requests`. Org-wide diagnostics. */
+export async function listPeriodReopenRequests(
+  context: ApplicationContext,
+  input: { status?: string; periodId?: string; limit?: number },
+) {
+  if (!can(context.authz, "close.reopen") && !can(context.authz, "periods.manage")) {
+    throw forbidden("close.reopen");
+  }
+  assertUnrestrictedCloseDiagnostics(context);
+  if (input.status && !REOPEN_STATUSES.has(input.status)) {
+    throw new ApplicationError(
+      "invalid_input",
+      "status must be requested, approved, rejected, expired, or reclosed",
+      422,
+    );
+  }
+  const limit = Math.min(Math.max(input.limit ?? 50, 1), 100);
+  let where = sql`r.org_id = ${context.authz.user.orgId}`;
+  if (input.status) where = sql`${where} and r.status = ${input.status}`;
+  if (input.periodId) where = sql`${where} and r.period_id = ${input.periodId}`;
+  const [rows, count] = await Promise.all([
+    db.execute<Record<string, unknown>>(sql`
+      select r.id, r.modules, r.reason, r.status, r.expires_at, r.reclosed_at, r.created_at,
+             p.name as period_name, b.name as book_name, b.code as book_code,
+             s.name as subsidiary_name,
+             req.name as requested_by_name, app.name as approved_by_name, r.approved_at
+        from close_reopen_requests r
+        join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id
+        join accounting_books b on b.id = r.book_id and b.org_id = r.org_id
+        left join subsidiaries s on s.id = r.subsidiary_id and s.org_id = r.org_id
+        left join users req on req.id = r.requested_by
+        left join users app on app.id = r.approved_by
+       where ${where}
+       order by r.created_at desc
+       limit ${limit}
+    `),
+    db.execute<{ n: string }>(sql`select count(*) as n from close_reopen_requests r where ${where}`),
+  ]);
+  return {
+    total: Number(count.rows[0]?.n ?? 0),
+    requests: rows.rows.map((row) => ({
+      id: row.id,
+      period: row.period_name,
+      book: row.book_name,
+      bookCode: row.book_code,
+      subsidiary: row.subsidiary_name,
+      modules: row.modules,
+      reason: row.reason,
+      status: row.status,
+      requestedBy: row.requested_by_name,
+      approvedBy: row.approved_by_name,
+      approvedAt: row.approved_at,
+      expiresAt: row.expires_at,
+      reclosedAt: row.reclosed_at,
+      createdAt: row.created_at,
     })),
   };
 }

@@ -4,7 +4,9 @@ import {
   accessAtLeast,
   createFile,
   folderAccessLevel,
+  getFile,
   getFolder,
+  getFolderTree,
   listFiles,
   type AccessLevel,
   type FileViewer,
@@ -105,6 +107,61 @@ export async function listApplicationFiles(
       updatedAt: file.updatedAt,
       uploadedBy: file.createdBy,
       createdAt: file.createdAt,
+    })),
+  };
+}
+
+/** One file's metadata — same `getFile` reader as the files screen. Never contents. */
+export async function getApplicationFile(context: ApplicationContext, fileId: string) {
+  assertApplicationPermission(context, "documents.read");
+  if (!isUuid(fileId)) throw invalidInput("file id must be a UUID");
+  const file = await getFile(context.authz.user.orgId, fileId, cabinetViewer(context.authz));
+  if (!file) throw notFound("file");
+  return {
+    id: file.id,
+    name: file.name,
+    extension: file.extension,
+    folderId: file.folderId,
+    folderName: file.folderName,
+    fileType: file.fileType,
+    contentType: file.contentType,
+    sizeBytes: file.sizeBytes,
+    isInactive: file.isInactive,
+    versionCount: file.versionCount,
+    createdAt: file.createdAt,
+    uploadedBy: file.createdBy,
+    updatedAt: file.updatedAt,
+    updatedBy: file.updatedBy,
+    versions: file.versions.map((version) => ({
+      versionNumber: version.versionNumber,
+      sizeBytes: version.sizeBytes,
+      contentType: version.contentType,
+      createdAt: version.createdAt,
+      createdBy: version.createdBy,
+    })),
+    attachments: file.attachments.map((attachment) => ({
+      targetTable: attachment.targetTable,
+      targetId: attachment.targetId,
+      attachedAt: attachment.createdAt,
+    })),
+  };
+}
+
+/** Visible folders — same `getFolderTree` reader as the files screen. */
+export async function listApplicationFolders(context: ApplicationContext) {
+  assertApplicationPermission(context, "documents.read");
+  const folders = await getFolderTree(context.authz.user.orgId, cabinetViewer(context.authz));
+  return {
+    total: folders.length,
+    folders: folders.map((folder) => ({
+      id: folder.id,
+      name: folder.name,
+      parentId: folder.parentId,
+      isSystem: folder.isSystem,
+      systemKind: folder.systemKind,
+      isPrivate: folder.isPrivate,
+      childCount: folder.childCount,
+      fileCount: folder.fileCount,
     })),
   };
 }

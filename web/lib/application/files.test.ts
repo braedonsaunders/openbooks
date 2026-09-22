@@ -50,3 +50,15 @@ test("file list reuses the cabinet reader and refuses a non-UUID folder", () => 
   assert.match(SOURCE, /assertApplicationPermission\(context, "documents\.read"\)/);
   assert.match(SOURCE, /folderId must be a UUID/);
 });
+
+test("file get and folder list reuse the cabinet readers and never return contents", () => {
+  const getStart = SOURCE.indexOf("export async function getApplicationFile");
+  const folderStart = SOURCE.indexOf("export async function listApplicationFolders");
+  const folderEnd = SOURCE.indexOf("\nfunction cabinetViewer", folderStart);
+  const getBody = SOURCE.slice(getStart, folderStart);
+  const folderBody = SOURCE.slice(folderStart, folderEnd === -1 ? undefined : folderEnd);
+  assert.match(getBody, /getFile\(/);
+  assert.match(folderBody, /getFolderTree\(/);
+  assert.doesNotMatch(getBody, /getFileBlob|contentBase64/);
+  assert.doesNotMatch(folderBody, /getFileBlob|contentBase64/);
+});

@@ -81,6 +81,10 @@ export const V1_RESERVED_STATIC_SEGMENTS = [
   "customers",
   "vendors",
   "employees",
+  "aging",
+  "trial-balance",
+  "crm",
+  "statements",
 ] as const;
 
 const V1_RESERVED_STATIC_SEGMENT_SET = new Set<string>(V1_RESERVED_STATIC_SEGMENTS);
