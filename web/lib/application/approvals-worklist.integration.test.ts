@@ -129,7 +129,11 @@ test("decide paths resolve each subject kind with separation of duties", { skip:
 
     await assert.rejects(
       decideApproval(submitter, { documentId: ids.sodId, decision: "approved", idempotencyKey: randomUUID() }),
-      /submitter cannot approve/,
+      // The refusal names the MAKER as well as the submitter — authorship
+      // never rebinds, so a third-party submit cannot launder the author's
+      // own approval. Matching the shared clause rather than one role keeps
+      // this green when the message names both.
+      /cannot approve their own document/,
       "submitter cannot self-approve a pending document",
     );
 
