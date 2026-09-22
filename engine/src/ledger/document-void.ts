@@ -1041,6 +1041,31 @@ async function releaseVoidedPayRun(
     );
   }
 
+  // A voided source with a committed retro top-up double-pays on reissue:
+  // refuse while any non-voided dependent retro run is committed. All such
+  // rows are locked first in document order; commitPayRun holds this same
+  // row to its flip and never locks the source, so either order serializes.
+  const dependents = (await tx.execute<{ document_number: string; run_status: string; doc_status: string }>(sql`
+    select retro_doc.document_number, rr.run_status, retro_doc.status as doc_status
+      from payroll_retro_settlements st
+      join pay_runs rr
+        on rr.org_id = st.org_id and rr.document_id = st.retro_pay_run_document_id
+      join documents retro_doc
+        on retro_doc.id = rr.document_id and retro_doc.org_id = rr.org_id
+     where st.org_id = ${orgId} and st.source_pay_run_document_id = ${documentId}
+       and rr.run_status <> 'voided'
+     order by rr.document_id
+     for update of rr
+  `)).rows;
+  const blocking = dependents.find(
+    (row) => row.run_status === "committed" && row.doc_status !== "voided",
+  );
+  if (blocking) {
+    throw new DocumentVoidError(
+      `this pay run is settled by committed retro pay run ${blocking.document_number}; void the retro run first`,
+    );
+  }
+
   const run = (await tx.execute<{ document_id: string }>(sql`
     update pay_runs
        set run_status = 'voided', updated_at = now()
