@@ -56,10 +56,12 @@ export type BuilderRun = {
 }
 
 const TRIGGER_KINDS = ['schedule', 'date_relative', 'field_change', 'event', 'document', 'manual'] as const
-// webhook is not offered: automations have no outbound webhook transport,
-// so a webhook action could never send (the API refuses it at publish with
-// the replacement named). Stored legacy rows still render as JSON below.
-const ACTION_KINDS = ['create_task', 'send_email', 'send_notification', 'start_process', 'start_flow', 'update_field', 'delay', 'approve_step'] as const
+// delay, approve_step, start_flow and webhook are not offered: none has
+// real execution semantics (no continuation store, no gate minting, no
+// flow dispatch, no webhook transport), so offering them would report
+// success for work that never happened. The API refuses them at publish
+// with the remedy named; stored legacy rows still render as JSON below.
+const ACTION_KINDS = ['create_task', 'send_email', 'send_notification', 'start_process', 'update_field'] as const
 const CONDITION_OPS = ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'in', 'contains', 'is_null', 'changed_to'] as const
 
 type ConditionLeaf = { field: string; op: string; value: string }

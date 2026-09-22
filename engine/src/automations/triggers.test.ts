@@ -65,6 +65,24 @@ test("webhook actions refuse publishing with the transport named and a replaceme
   );
 });
 
+test("delay, approve_step and start_flow refuse publishing with named remedies", () => {
+  const cases: { actions: unknown; pattern: RegExp }[] = [
+    { actions: [{ kind: "delay", days: 3 }], pattern: /no resumable continuation/ },
+    { actions: [{ kind: "approve_step" }], pattern: /cannot mint approval gates/ },
+    { actions: [{ kind: "start_flow", subject: "onboarding" }], pattern: /no named dispatch/ },
+  ];
+  for (const { actions, pattern } of cases) {
+    assert.throws(
+      () => assertPublishableAutomationActions(parseAutomationActions(actions)),
+      (e: unknown) => e instanceof AutomationContractError && pattern.test((e as Error).message),
+    );
+  }
+  // Deliverable actions still publish.
+  assertPublishableAutomationActions(
+    parseAutomationActions([{ kind: "send_notification", to: "manager", body: "hi" }]),
+  );
+});
+
 test("conditions default to empty (match-all)", () => {
   assert.equal(parseAutomationConditions({}).root, undefined);
   const rules = parseAutomationRules(null);

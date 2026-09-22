@@ -339,6 +339,60 @@ test("a legacy stored webhook action fails the run by name and sends nothing", {
   });
 });
 
+test("deferred actions refuse at publish; a legacy delay fails the run and runs nothing after it", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const refused: { actions: unknown; pattern: RegExp }[] = [
+      { actions: [{ kind: "delay", days: 2 }], pattern: /no resumable continuation/ },
+      { actions: [{ kind: "approve_step" }], pattern: /cannot mint approval gates/ },
+      { actions: [{ kind: "start_flow", subject: "onboarding" }], pattern: /no named dispatch/ },
+    ];
+    for (const { actions, pattern } of refused) {
+      await assert.rejects(
+        createAutomation({
+          orgId: h.org.orgId,
+          actorId: h.adminId,
+          name: "deferred probe",
+          trigger: { kind: "manual" },
+          rules: {},
+          conditions: {},
+          actions,
+        }),
+        (e: unknown) => e instanceof AutomationContractError && pattern.test((e as Error).message),
+      );
+    }
+    // A row predating the refusal: the delay is followed by a
+    // notification, proving the delay neither pauses nor passes.
+    const legacyId = (await db.execute<{ id: string }>(sql`
+      insert into automations (org_id, name, status, trigger, rules, conditions, actions, created_by, updated_by)
+      values (${h.org.orgId}, 'legacy delay', 'enabled',
+              '{"kind":"manual"}'::jsonb, '{}'::jsonb, '{}'::jsonb,
+              '[{"kind":"delay","days":2},{"kind":"send_notification","to":"initiator","body":"after delay"}]'::jsonb,
+              ${h.adminId}, ${h.adminId})
+      returning id
+    `)).rows[0]!.id;
+    const result = await executeAutomation({
+      orgId: h.org.orgId,
+      actorId: h.adminId,
+      automationId: legacyId,
+      triggerPayload: { kind: "manual" },
+    });
+    assert.equal(result.status, "failed");
+    assert.match(result.steps[result.steps.length - 1]!.error ?? "", /no resumable continuation/);
+    const afterDelay = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from notifications
+       where org_id = ${h.org.orgId} and kind = 'automation' and body = 'after delay'
+    `)).rows[0]!.n;
+    assert.equal(afterDelay, 0, "the action after a refused delay never runs");
+    const simulations = await simulateAutomation({
+      orgId: h.org.orgId,
+      actorId: h.adminId,
+      automationId: legacyId,
+    });
+    assert.equal(simulations[0]!.steps[0]!.status, "failed");
+    assert.match(simulations[0]!.steps[0]!.error ?? "", /no resumable continuation/);
+  });
+});
+
 test("feature-off: triggers must not fire", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const recipe = await createAutomation({

@@ -238,6 +238,35 @@ export function parseAutomationActions(raw: unknown): AutomationAction[] {
  * refuse through this one wording so the remedy is identical everywhere.
  */
 export function unsupportedAutomationActionRefusal(action: AutomationAction): string | null {
+  if (action.kind === "delay") {
+    // Runs execute their actions immediately in one transaction: there is
+    // no deferred continuation store and the tick never resumes partial
+    // runs, so a delay could not pause later actions — they would all run
+    // at once while the step text claimed a pause.
+    return (
+      `delay action of ${action.days} day(s) cannot run: automation runs execute all actions immediately with no resumable continuation, ` +
+      `so later actions would run at once instead of waiting — remove the delay action and stage the work with a second automation on a schedule or date_relative trigger instead`
+    );
+  }
+  if (action.kind === "approve_step") {
+    // Approval gates are minted by configured approval flows with quorum,
+    // delegation, and separation-of-duties semantics (flows/gates.ts); an
+    // automation step cannot mint or decide one, so the step would report
+    // success while no approval ever existed.
+    return (
+      `approve_step action cannot run: automations cannot mint approval gates — approvals live in the record's own approval flow, ` +
+      `decided in Approvals — remove the approve_step action and route the record through submit-for-approval instead`
+    );
+  }
+  if (action.kind === "start_flow") {
+    // Flows start from their own graph triggers; there is no named-flow
+    // dispatch entrypoint an automation could call, so the step would
+    // report success while no flow ever started.
+    return (
+      `start_flow action for '${action.subject}' cannot run: flows start only from their own triggers and expose no named dispatch, ` +
+      `so no flow would ever start — remove the start_flow action and configure the flow's own trigger instead`
+    );
+  }
   if (action.kind === "webhook") {
     // There is no outbound webhook transport: no outbox kind, no worker,
     // no endpoint caller anywhere in the engine carries automation
