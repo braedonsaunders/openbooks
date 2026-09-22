@@ -80,30 +80,40 @@ function initialSections(stored: unknown): FormSection[] {
 }
 
 /**
- * The record-type builder flyout — create (instant draft), edit (autosave),
+ * The record-type builder flyout — create (unsaved), edit (autosave),
  * publish/archive. A type is an ordered list of SECTIONS: non-repeating header
  * groups and repeating line lists (sublists/tables). Field definitions use the
  * forms-core field model; the server lints on every save and publishing
  * requires a clean definition. Published types stay editable (changes go live
  * immediately); only the key is pinned after publish.
+ *
+ * In create mode (`?type=new`) the form is local-only: autosave never runs,
+ * and the type is POSTed once on explicit Save. Cancel/close writes nothing.
  */
 export function TypeBuilderDrawer({
   type,
   roles,
+  createMode = false,
 }: {
   type: RecordTypePayload
   roles: { key: string; name: string }[]
+  createMode?: boolean
 }) {
   const router = useRouter()
   const t = useTranslations('records')
   const tc = useTranslations('common')
   const isDraft = type.status === 'draft'
+  // One stable idempotency key per drawer session: a double-clicked Save (or
+  // a retried request) resolves to the same type instead of a duplicate.
+  const requestIdRef = useRef<string | null>(null)
 
   const [name, setName] = useState(type.name)
   const [pluralName, setPluralName] = useState(type.pluralName)
   const [key, setKey] = useState(type.key)
   const [keyTouched, setKeyTouched] = useState(!isDraft || type.key !== slugifyTypeKey(type.name))
-  const [pluralTouched, setPluralTouched] = useState(type.pluralName !== `${type.name}s`)
+  const [pluralTouched, setPluralTouched] = useState(
+    createMode ? false : type.pluralName !== `${type.name}s`,
+  )
   const [iconKey, setIconKey] = useState(type.iconKey)
   const [description, setDescription] = useState(type.description ?? '')
   const [showInNav, setShowInNav] = useState(type.showInNav)
@@ -147,6 +157,9 @@ export function TypeBuilderDrawer({
   }, [type.updated_at])
   const first = useRef(true)
   useEffect(() => {
+    // Create mode is local-only until Save: no revision exists to echo and no
+    // row exists to autosave into, so the debounced PATCH never arms.
+    if (createMode) return
     if (first.current) {
       first.current = false
       return
@@ -336,7 +349,54 @@ export function TypeBuilderDrawer({
     router.refresh()
   }
 
-  const canPublish = saveState === 'saved' && !busy && fieldCount > 0 && issues.length === 0
+  /** Create mode only: the single idempotent POST behind explicit Save. */
+  async function createType() {
+    // The Save button stays disabled until a name exists, so this is only a
+    // backstop against a programmatic call — never the visible refusal path.
+    if (!name.trim()) return
+    setBusy(true)
+    if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID()
+    try {
+      const res = await fetch('/api/records/types', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': requestIdRef.current,
+        },
+        body: JSON.stringify({
+          name: name.trim(),
+          pluralName: pluralName.trim() || `${name.trim()}s`,
+          ...(key.trim() ? { key: key.trim() } : {}),
+          iconKey,
+          description: description.trim() || null,
+          showInNav,
+          sortOrder,
+          allowedRoles: allowedRoles.length > 0 ? allowedRoles : null,
+          fields: sections,
+        }),
+      })
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: unknown; issues?: Issue[] }
+        if (Array.isArray(data.issues)) setIssues(data.issues)
+        toast.error(typeof data.error === 'string' && data.error ? data.error : t('createFailed'))
+        return
+      }
+      const data = (await res.json()) as { id?: unknown }
+      if (typeof data.id !== 'string' || !data.id) {
+        toast.error(t('createFailed'))
+        return
+      }
+      toast.success(t('typeBuilder.allSaved'))
+      router.replace(`/records/types?type=${data.id}`)
+      router.refresh()
+    } catch {
+      toast.error(t('createFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const canPublish = !createMode && saveState === 'saved' && !busy && fieldCount > 0 && issues.length === 0
   const publishBlockedReason =
     fieldCount === 0
       ? t('typeBuilder.publishNeedsField')
@@ -368,40 +428,56 @@ export function TypeBuilderDrawer({
             : t('typeBuilder.descriptionArchived')
       }
       headerActions={
-        <>
-          {isDraft ? (
-            <Button variant="ghost" disabled={busy} onClick={destroy}>
-              <Trash2 size={14} /> {t('typeBuilder.deleteDraft')}
-            </Button>
-          ) : null}
-          {type.status === 'published' ? (
-            <>
-              <Button variant="outline" asChild>
-                <Link href={(`/records/${key}`)}>
-                  <ExternalLink size={14} /> {t('typeBuilder.openModule')}
-                </Link>
+        createMode ? null : (
+          <>
+            {isDraft ? (
+              <Button variant="ghost" disabled={busy} onClick={destroy}>
+                <Trash2 size={14} /> {t('typeBuilder.deleteDraft')}
               </Button>
-              <Button variant="outline" disabled={busy} onClick={() => lifecycle('archive')}>
-                {t('typeBuilder.archive')}
+            ) : null}
+            {type.status === 'published' ? (
+              <>
+                <Button variant="outline" asChild>
+                  <Link href={(`/records/${key}`)}>
+                    <ExternalLink size={14} /> {t('typeBuilder.openModule')}
+                  </Link>
+                </Button>
+                <Button variant="outline" disabled={busy} onClick={() => lifecycle('archive')}>
+                  {t('typeBuilder.archive')}
+                </Button>
+              </>
+            ) : (
+              <Button disabled={!canPublish} onClick={() => lifecycle('publish')} title={!canPublish ? publishBlockedReason : undefined}>
+                {type.status === 'archived' ? t('typeBuilder.publishAgain') : t('typeBuilder.publish')}
               </Button>
-            </>
-          ) : (
-            <Button disabled={!canPublish} onClick={() => lifecycle('publish')} title={!canPublish ? publishBlockedReason : undefined}>
-              {type.status === 'archived' ? t('typeBuilder.publishAgain') : t('typeBuilder.publish')}
-            </Button>
-          )}
-        </>
+            )}
+          </>
+        )
       }
       footer={
-        <div className="flex w-full items-center gap-3">
-          <span className="text-xs text-slate-500 dark:text-slate-400">
-            {saveState === 'saved'
-              ? t('typeBuilder.allSaved')
-              : saveState === 'saving'
-                ? tc('actions.saving')
-                : t('typeBuilder.unsaved')}
-          </span>
-        </div>
+        createMode ? (
+          <div className="flex w-full items-center justify-between gap-3">
+            <span className="text-xs text-slate-500 dark:text-slate-400">{t('typeBuilder.unsaved')}</span>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" disabled={busy} onClick={() => router.push('/records/types')}>
+                {tc('actions.cancel')}
+              </Button>
+              <Button disabled={busy || !name.trim()} onClick={createType}>
+                {tc('actions.save')}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex w-full items-center gap-3">
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {saveState === 'saved'
+                ? t('typeBuilder.allSaved')
+                : saveState === 'saving'
+                  ? tc('actions.saving')
+                  : t('typeBuilder.unsaved')}
+            </span>
+          </div>
+        )
       }
     >
       <div className="space-y-6 p-1">
