@@ -5,6 +5,7 @@ import {
   StalePreviewError,
 } from '@openbooks/engine/src/assets/depreciation.ts'
 import { DepreciationFormulaError } from '@openbooks/engine/src/assets/depreciation-formula.ts'
+import { unexpectedServerError } from '../api/unexpected'
 
 /**
  * Map a thrown depreciation error to its real HTTP status.
@@ -35,9 +36,5 @@ export function depreciationFailure(e: unknown): NextResponse {
   if (e instanceof DepreciationFormulaError) {
     return NextResponse.json({ error: e.message }, { status: 422 })
   }
-  console.error('[assets/run-depreciation] unexpected failure', e)
-  return NextResponse.json(
-    { error: 'depreciation run failed; retry, and contact support if it persists' },
-    { status: 500 },
-  )
+  return unexpectedServerError('assets/run-depreciation', e)
 }

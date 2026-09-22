@@ -2,6 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { compileTemplateHtml, sanitizeTokenizedFragment } from "@openbooks/pdf";
 import { can, guardPermission } from "../../../../lib/authz";
+import { unexpectedServerError } from "../../../../lib/api/unexpected";
 import { isDocKindEnabled } from "../../../../lib/documents.ts";
 import { pdfResponse } from "../../../../lib/export";
 import { PDF_RECORD_TYPE_BY_KEY, sampleValues } from "../../../../lib/pdf-templates/catalog";
@@ -76,6 +77,6 @@ export async function POST(req: Request) {
     );
     return pdfResponse(pdf, `${meta.label} preview`);
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+    return unexpectedServerError('pdf-templates/preview', e);
   }
 }

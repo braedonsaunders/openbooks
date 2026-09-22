@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getAuthz } from '../../../lib/authz'
 import { globalSearch } from '../../../lib/search'
+import { unexpectedServerError } from '../../../lib/api/unexpected'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -22,6 +23,6 @@ export async function GET(req: Request) {
     const result = await globalSearch(authz, q)
     return NextResponse.json(result, { headers: { 'cache-control': 'no-store' } })
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message ?? 'search failed' }, { status: 500 })
+    return unexpectedServerError('search', e)
   }
 }
