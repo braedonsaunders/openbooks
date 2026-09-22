@@ -131,6 +131,8 @@
     "newTitle": "Neues Preisbuch",
     "editTitle": "{name} bearbeiten",
     "description": "Verwalten Sie den Preisbuchkopf und den vollständigen, datierten Artikelpreissatz gemeinsam.",
+    "tabsAria": "Preisbuchbereiche",
+    "tabs": { "overview": "Übersicht", "rates": "Artikelpreise" },
     "ratesTitle": "Artikelpreise",
     "ratesHelp": "Beim Speichern geänderter Zeilen wird eine neue unveränderliche Preisversion erstellt; frühere Versionen bleiben für historische Transaktionen erhalten.",
     "item": "Artikel",

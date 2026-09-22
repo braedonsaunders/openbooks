@@ -131,6 +131,8 @@
     "newTitle": "Novo livro de tarifas",
     "editTitle": "Editar {name}",
     "description": "Mantenha juntos o cabeçalho e a tabela completa de tarifas de itens com vigência.",
+    "tabsAria": "Seções do livro de tarifas",
+    "tabs": { "overview": "Visão geral", "rates": "Tarifas de itens" },
     "ratesTitle": "Tarifas de itens",
     "ratesHelp": "Salvar linhas alteradas cria uma nova versão imutável; versões anteriores permanecem disponíveis para transações históricas.",
     "item": "Artigo",

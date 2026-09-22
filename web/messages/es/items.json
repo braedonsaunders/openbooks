@@ -141,6 +141,8 @@
     "newTitle": "Nuevo libro de tarifas",
     "editTitle": "Editar {name}",
     "description": "Administre conjuntamente el encabezado y el programa completo de tarifas de artículos con fecha de vigencia.",
+    "tabsAria": "Secciones del libro de tarifas",
+    "tabs": { "overview": "Resumen", "rates": "Tarifas de artículos" },
     "ratesTitle": "Tarifas de artículos",
     "ratesHelp": "Guardar líneas modificadas crea una nueva versión inmutable; las versiones anteriores se conservan para transacciones históricas.",
     "item": "Artículo",

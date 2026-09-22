@@ -131,6 +131,8 @@
     "newTitle": "新建费率簿",
     "editTitle": "编辑{name}",
     "description": "统一维护费率簿基本信息及完整的生效日期项目费率表。",
+    "tabsAria": "费率簿部分",
+    "tabs": { "overview": "概览", "rates": "项目费率" },
     "ratesTitle": "项目费率",
     "ratesHelp": "保存已更改的行会创建新的不可变费率版本；旧版本保留用于历史交易。",
     "item": "项目",

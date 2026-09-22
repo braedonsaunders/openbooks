@@ -21,6 +21,7 @@ import { resolveDynamicSetupOptions } from '../../../../../lib/setup/dynamic-opt
 import { loadRefOptions, orderExpr } from '../../../../../lib/setup/ref-options'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../../lib/features'
 import { NewSetupButton, SetupDrawer } from './SetupDrawer'
+import { RateBookDrawer, type RateBookLine, type RateBookItemOption } from './RateBookDrawer'
 
 /**
  * Registry-driven list + drawer for one configuration entity, mountable under
@@ -167,6 +168,64 @@ export async function SetupEntitySection({
         })()
     : null
 
+  const rateBookDrawerData = open && entity.key === 'item-rate-books'
+    ? await (async () => {
+        const bookId = open.row ? String(open.row.id) : null
+        const [versionResult, itemsResult, orgResult] = await Promise.all([
+          bookId
+            ? db.execute<{ id: string; effective_from: string }>(sql`
+                select id, effective_from
+                  from item_rate_versions
+                 where org_id = ${orgId} and rate_book_id = ${bookId} and status = 'active'
+                 order by effective_from desc
+                 limit 1`)
+            : Promise.resolve({ rows: [] as { id: string; effective_from: string }[] }),
+          db.execute<{ id: string; code: string | null; name: string; kind: string; unit: string | null; is_active: boolean }>(sql`
+            select id, code, name, kind, unit, is_active
+              from items
+             where org_id = ${orgId}
+             order by is_active desc, name, code`),
+          db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`),
+        ])
+        const version = versionResult.rows[0]
+        const linesResult = version
+          ? await db.execute<{
+              item_id: string; unit_code: string; unit_name: string; base_quantity: string;
+              cost_rate: string | null; bill_rate: string | null; time_type_bill_rates: Record<string, string> | null;
+              base_unit: string | null; pricing_policy: string | null; invoice_presentation: string | null;
+            }>(sql`
+              select line.item_id, line.unit_code, line.unit_name, line.base_quantity,
+                     line.cost_rate, line.bill_rate, line.time_type_bill_rates,
+                     profile.base_unit, profile.pricing_policy, profile.invoice_presentation
+                from item_rate_lines line
+                left join item_rate_profiles profile
+                  on profile.org_id = line.org_id and profile.item_id = line.item_id
+               where line.org_id = ${orgId} and line.version_id = ${version.id}
+               order by line.sort_order, line.item_id, line.unit_code`)
+          : { rows: [] }
+        return {
+          latestEffectiveFrom: version?.effective_from ? String(version.effective_from).slice(0, 10) : null,
+          lines: linesResult.rows.map((line): RateBookLine => ({
+            itemId: String(line.item_id),
+            unitCode: String(line.unit_code),
+            unitName: String(line.unit_name),
+            baseQuantity: String(line.base_quantity),
+            costRate: line.cost_rate == null ? '0' : String(line.cost_rate),
+            billRate: line.bill_rate == null ? '0' : String(line.bill_rate),
+            baseUnit: line.base_unit ? String(line.base_unit) : String(line.unit_code),
+            pricingPolicy: line.pricing_policy ? String(line.pricing_policy) : 'capped_ladder',
+            invoicePresentation: line.invoice_presentation ? String(line.invoice_presentation) : 'rate_components',
+            timeTypeBillRates: line.time_type_bill_rates ?? {},
+          })),
+          items: itemsResult.rows.map((item): RateBookItemOption => ({
+            id: String(item.id), code: item.code, name: item.name, kind: item.kind,
+            unit: item.unit, isActive: item.is_active,
+          })),
+          baseCurrency: String(orgResult.rows[0]?.base_currency ?? open.row?.currency ?? 'USD'),
+        }
+      })()
+    : null
+
   return (
     <div className="space-y-4">
       {!hideHeader ? <div className="flex items-start justify-between gap-3">
@@ -229,7 +288,7 @@ export async function SetupEntitySection({
               <TableRow key={String(row[idColumn])}>
                 {entity.columns.map((c, i) => (
                   <TableCell key={c.key}>
-                    {i === 0 && canManage ? (
+                    {canManage && (i === 0 || entity.key === 'item-rate-books') ? (
                       <Link
                         href={mergeHref(basePath, sp, { row: String(row[idColumn]) })}
                         className="font-medium text-teal-700 hover:underline dark:text-teal-300"
@@ -251,7 +310,18 @@ export async function SetupEntitySection({
         <Pagination basePath={basePath} currentParams={sp} total={total} page={list.page} perPage={list.perPage} />
       ) : null}
 
-      {open && canManage ? (
+      {open && canManage && entity.key === 'item-rate-books' && rateBookDrawerData ? (
+        <RateBookDrawer
+          row={open.row as Record<string, unknown> | null}
+          latestEffectiveFrom={rateBookDrawerData.latestEffectiveFrom}
+          lines={rateBookDrawerData.lines}
+          items={rateBookDrawerData.items}
+          currencies={refOptions.currencies ?? []}
+          baseCurrency={rateBookDrawerData.baseCurrency}
+          multiCurrency={multiCurrency}
+          closeHref={closeHref}
+        />
+      ) : open && canManage ? (
         <SetupDrawer
           entity={entity}
           row={open.row}

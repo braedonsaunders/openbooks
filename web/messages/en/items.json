@@ -141,6 +141,8 @@
     "newTitle": "New rate book",
     "editTitle": "Edit {name}",
     "description": "Maintain the rate-book header and its complete effective-dated item rate schedule together.",
+    "tabsAria": "Rate book sections",
+    "tabs": { "overview": "Overview", "rates": "Item rates" },
     "ratesTitle": "Item rates",
     "ratesHelp": "Saving changed lines creates a new immutable rate version; earlier versions remain available for historical transactions.",
     "item": "Item",
