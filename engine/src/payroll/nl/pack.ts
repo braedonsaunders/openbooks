@@ -191,6 +191,7 @@ export const NL_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "
   // A key naming a field that does not exist looks wired. Null until
   // Orchestrate adds a Belastingdienst remittance-party settings field.
   remittanceVendorSettingsKey: null,
+  remittanceRegionalCalendars: {},
   // No remittance schedule is declared: the aangifte/betaling due-date rule
   // is not transcribed, and the field is optional. A guessed timetable would
   // date real vendor bills.

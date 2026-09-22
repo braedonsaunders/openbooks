@@ -41,29 +41,32 @@ async function serveFile(gate: Authz, input: FileInput) {
   const { country, filing: filingKey, year, params } = input
   const section = (await orgYearEndFilings(gate.user.orgId, year))
     .find((candidate) => candidate.country === country && candidate.key === filingKey)
-  const selected = params.employees
-  const isRoeSelection = selected != null && country === 'CA' && filingKey === 'roe'
-  if (section && !isRoeSelection) {
+  // A filing that is ISSUED per employee declares an `issue` block, and
+  // `issue.param` names the body key its selection travels under. That
+  // declaration is the whole test: asking instead whether this is Canada's
+  // ROE made the generic route the place that knew which country files what,
+  // and it would have silently skipped the guard swap for the next pack that
+  // declares an issued filing. The pack says so; the route reads it.
+  const issue = section?.issue
+  const selected = issue ? params[issue.param] : undefined
+  const isIssuedSelection = selected != null
+  if (section && !isIssuedSelection) {
     const denied = await guardPayrollFilingData(gate, country, filingKey, section.data, year)
     if (denied) return denied
   }
-  // ROE's pack-owned employee selection is an additional direct boundary. It
+  // The pack-owned employee selection is an additional direct boundary. It
   // can name a subset (or a row absent from the current population), so guard
   // the submitted identities before the pack builds any bytes. The registry's
   // declared limit is enforced before this query, keeping the POST bounded.
-  if (isRoeSelection) {
-    const issue = section?.issue
+  if (issue && selected != null) {
     const entries = selected.split(',').filter(Boolean)
     // `commentMaxLength` is the decoded limit. Six is the maximum number of
     // URI characters per UTF-16 code unit after encodeURIComponent; the fixed
     // allowance covers each UUID/reason delimiter. This keeps malformed or
     // hand-crafted bodies bounded before any subsidiary lookup runs.
-    const maxEncodedSelectionLength = issue
-      ? issue.maxSelection * (256 + issue.commentMaxLength * 6)
-      : 0
+    const maxEncodedSelectionLength = issue.maxSelection * (256 + issue.commentMaxLength * 6)
     if (
-      !issue
-      || entries.length > issue.maxSelection
+      entries.length > issue.maxSelection
       || selected.length > maxEncodedSelectionLength
     ) {
       return NextResponse.json({ error: 'invalid employee selection' }, { status: 422 })

@@ -158,7 +158,7 @@ test("the Québec calendar variant counts on CA-CRA-QC from the same data", () =
   assert.equal(dueQc("accelerated_2", "2026-06-21"), "2026-06-25");
   assert.equal(
     dueQc("accelerated_2", "2026-06-21"),
-    remittanceDueDateExplained("2026-06-21", "accelerated_2", { quebec: true }).dueDate,
+    remittanceDueDateExplained("2026-06-21", "accelerated_2", { regionalCalendar: "CA-CRA-QC" }).dueDate,
   );
   assert.equal(remittanceDueDateExplained("2026-06-21", "accelerated_2").dueDate, "2026-06-24");
   // The Civic Holiday, Monday August 3 2026, runs the other way: recognized
@@ -166,7 +166,7 @@ test("the Québec calendar variant counts on CA-CRA-QC from the same data", () =
   assert.equal(dueQc("accelerated_2", "2026-07-31"), "2026-08-05");
   assert.equal(
     dueQc("accelerated_2", "2026-07-31"),
-    remittanceDueDateExplained("2026-07-31", "accelerated_2", { quebec: true }).dueDate,
+    remittanceDueDateExplained("2026-07-31", "accelerated_2", { regionalCalendar: "CA-CRA-QC" }).dueDate,
   );
   assert.equal(remittanceDueDateExplained("2026-07-31", "accelerated_2").dueDate, "2026-08-06");
 });

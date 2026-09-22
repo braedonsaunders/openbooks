@@ -28,11 +28,9 @@ import { pathToFileURL } from "node:url";
 // exempt without an edit; a generic subdirectory added under engine/src/payroll
 // would be a deliberate decision (it would be treated as a pack), not silence.
 //
-// Six shared-layer sites name a country today and are exempted by path with a
-// reason (see PAYROLL_SHARED_COUNTRY_LITERAL_EXEMPTIONS). They are the F-f7
-// payroll country-neutrality work (the same slice this comment's predecessor
-// deferred to); the list may only shrink — a stale entry (a path that no
-// longer names a country) fails the gate.
+// No shared-layer site names a country: PAYROLL_SHARED_COUNTRY_LITERAL_EXEMPTIONS
+// is empty and the ratchet keeps it so. The list may only shrink — a stale
+// entry (a path that no longer names a country) fails the gate.
 //
 // What the gate does NOT cover, by decision: SQL migrations (data history
 // legitimately names forms — 0147 healed CA_GST34 rows by code), `??`/`||`
@@ -83,19 +81,19 @@ const payrollSharedLayerPaths = [
 const countryLiteralLayerPaths = [...taxLayerPaths, ...payrollSharedLayerPaths];
 
 /**
- * Shared-payroll sites that still name a country today — the F-f7 payroll
- * country-neutrality work. Keyed by path; the list may only SHRINK (a stale
- * entry, a path that no longer names a country, fails the gate). Each names
- * why it is still here and what the fix is.
+ * Shared-payroll sites that still name a country. Keyed by path; the list may
+ * only SHRINK — a stale entry (a path that no longer names a country) fails
+ * the gate, so an amnesty cannot outlive the fix it was granted for.
  */
 export const PAYROLL_SHARED_COUNTRY_LITERAL_EXEMPTIONS = [
-  { path: "engine/src/payroll/remittance.ts", reason: "remittanceGroupUsesQuebecCalendar branches on 'QC'; belongs in the CA pack's remittance-calendar declaration (F-f7)" },
-  { path: "engine/src/payroll/rl1.ts", reason: "Québec RL-1 slip builder branches on 'QC'; the file is Québec-specific and belongs under canada/quebec/ (F-f7)" },
-  { path: "engine/src/payroll/roexml.ts", reason: "federal ROE renderer branches on 'CA'; Canada-specific, belongs under canada/ (F-f7)" },
-  { path: "engine/src/payroll/t4xml.ts", reason: "T4 slip builder branches on 'QC' for the Québec box; Canada-specific (F-f7)" },
-  { path: "engine/src/payroll/yearend.ts", reason: "year-end orchestration branches on 'QC' for RL-1 seeding; needs a pack declaration (F-f7)" },
-  { path: "web/app/api/payroll/year-end/file/route.ts", reason: "ROE selection bypasses the filing-data guard on country === 'CA'; the bypass belongs on the filing declaration (F-f7)" },
-];
+  // EMPTY, and the ratchet below keeps it that way. The six F-f7 sites that
+  // lived here are gone: rl1/rl1xml moved to canada/quebec/, t4xml/roexml to
+  // canada/ (the form IS the jurisdiction, so the structural rule exempts
+  // them without an entry), and remittance.ts, yearend.ts and the year-end
+  // file route now read pack DECLARATIONS — remittanceRegionalCalendars,
+  // QPIP_PROVINCE, and the filing's own `issue` block — instead of comparing
+  // against a country. An entry added here must name its removal plan.
+]
 
 export function isPackPath(filePath) {
   return packPaths.some((pattern) => pattern.test(filePath));
@@ -131,10 +129,11 @@ export function isExemptPayrollCountryLiteral(filePath) {
 export function staleCountryLiteralExemptions(
   files,
   readSource = (file) => readFileSync(file, "utf8"),
+  entries = PAYROLL_SHARED_COUNTRY_LITERAL_EXEMPTIONS,
 ) {
   const present = new Set(files);
   const stale = [];
-  for (const entry of PAYROLL_SHARED_COUNTRY_LITERAL_EXEMPTIONS) {
+  for (const entry of entries) {
     if (!present.has(entry.path)) {
       stale.push(`${entry.path}: listed exemption is not a tracked file`);
       continue;

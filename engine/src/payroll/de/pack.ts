@@ -308,6 +308,7 @@ export const DE_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & {
   // SV contributions to the Krankenkasse as Einzugsstelle (§28h SGB IV).
   // Null declares that split rather than inheriting another authority.
   remittanceVendorSettingsKey: null,
+  remittanceRegionalCalendars: {},
   // §39b Abs. 3 EStG: Nachzahlungen and other back pay are sonstige Bezüge,
   // taxed by the difference method — never annualized as period income.
   retroactivePayTreatment: "non_periodic",

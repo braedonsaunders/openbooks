@@ -17,7 +17,7 @@ import {
   type PayrollFilingData,
   type PayrollFilingIssue,
 } from "./filing-registry.ts";
-import { RATES_2026_JAN } from "./canada/rates.ts";
+import { QPIP_PROVINCE, RATES_2026_JAN } from "./canada/rates.ts";
 import {
   assertPayrollTaxYearSupported,
   payrollFilingYearOptions,
@@ -374,7 +374,7 @@ export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]>
   const openings = await openingYearEndYtdByEmployee(orgId, taxYear, "CA");
   const stubSlips = rows.rows.map((row) => {
       const province = String(row.province ?? "");
-      const isQuebec = province === "QC";
+      const isQuebec = province === QPIP_PROVINCE;
       return {
         employeePartyId: String(row.employee_party_id),
         employeeName: String(row.display_name),
@@ -407,7 +407,7 @@ export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]>
       employeePartyId,
       employeeName: profile?.name ?? employeePartyId,
       province,
-      isQuebec: province === "QC",
+      isQuebec: province === QPIP_PROVINCE,
       filingAccountId: profile?.filingAccountId ?? null,
       box14EmploymentIncome: "0",
       box16Cpp: "0",

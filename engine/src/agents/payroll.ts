@@ -14,7 +14,6 @@ import {
 import {
   payrollRemittanceSummary,
   remittanceDueDateExplained,
-  remittanceGroupUsesQuebecCalendar,
 } from "../payroll/remittance.ts";
 import { packWarnsOnMissingIdentifier, payrollTaxYearForDate } from "../payroll/packs.ts";
 import { classifyForensicItem, moneyAbs } from "./measure.ts";
@@ -111,7 +110,7 @@ export async function payrollFindings(
         const cra = scheduled
           ? null
           : remittanceDueDateExplained(month.to, group.filingAccount.remitterType, {
-              quebec: remittanceGroupUsesQuebecCalendar(group.provinces),
+              regionalCalendar: group.regionalCalendar,
             });
         const dueDate = scheduled?.dueDate ?? cra!.dueDate;
         if (dueDate > horizon) continue;

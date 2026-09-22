@@ -72,6 +72,7 @@ export const BR_PAYROLL_PACK: PayrollCountryPack = {
   // surface unassigned until configured, as with the FR pack; FGTS rides a
   // per-component destination like the ES pack's TGSS lines.
   remittanceVendorSettingsKey: null,
+  remittanceRegionalCalendars: {},
   // IRRF is assessed on the month's accumulated rendimentos (every amount
   // paid in the month joins the base) and INSS on the monthly
   // salary-de-contribuição — a retro amount paid now joins this month, taxed

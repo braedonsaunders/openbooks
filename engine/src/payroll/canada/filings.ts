@@ -3,8 +3,8 @@ import { db } from "../../platform/db.ts";
 import { add } from "../../money/money.ts";
 import { keyedFingerprint, unsealSecret } from "../../platform/secrets.ts";
 import { filingAccountRef, filingAccountsById } from "../filing.ts";
-import { buildRoeXml, type RoeIssueInput } from "../roexml.ts";
-import { buildT4Xml, t4SlipFromReported } from "../t4xml.ts";
+import { buildRoeXml, type RoeIssueInput } from "./roexml.ts";
+import { buildT4Xml, t4SlipFromReported } from "./t4xml.ts";
 import { PayrollError } from "../error.ts";
 import { roeCandidates, roeRecord, t4Slips, t4Summary, ROE_REASON_CODES, type RoeReasonCode } from "../yearend.ts";
 import type {
@@ -20,9 +20,10 @@ import { rl1Filing } from "./quebec/rl1-filing.ts";
 /**
  * The CA pack's filing declaration: what Canada files, under which program
  * accounts, with which builders. The T4/ROE builders themselves live in
- * engine/src/payroll/t4xml.ts, payroll-roexml.ts and payroll-yearend.ts and
- * are unchanged — this module is the declaration that lets the generic
- * year-end surface reach them without naming Canada anywhere.
+ * engine/src/payroll/canada/t4xml.ts and engine/src/payroll/canada/roexml.ts,
+ * beside this declaration; the generic orchestration they feed is
+ * engine/src/payroll/yearend.ts. This module is the declaration that lets the
+ * generic year-end surface reach them without naming Canada anywhere.
  *
  * Destined for `PAYROLL_COUNTRY_PACKS.CA.filings` (see the packs.ts handoff);
  * until then engine/src/payroll/filing-registry.ts serves it as a built-in.

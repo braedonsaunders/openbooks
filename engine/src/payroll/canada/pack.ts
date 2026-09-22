@@ -79,6 +79,10 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
   // Source deductions are remitted to the Receiver General through the
   // org-configured CRA remittance vendor.
   remittanceVendorSettingsKey: "craRemittancePartyId",
+  // The CRA keeps a separate Québec public-holiday calendar: Saint-Jean-Baptiste
+  // Day is a holiday there and the Civic Holiday is not, so a Québec-only
+  // payroll's remittance deadline moves differently from the rest of Canada's.
+  remittanceRegionalCalendars: { QC: "CA-CRA-QC" },
   // Québec-source amounts remit to Revenu Québec on TPZ-1015.R, on Revenu
   // Québec's own frequencies — never on the CRA schedule below. See
   // engine/src/payroll/canada/quebec/remittance.ts for the transcribed rules.

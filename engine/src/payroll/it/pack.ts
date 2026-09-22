@@ -96,6 +96,7 @@ export const IT_PAYROLL_PACK: ItPayrollPackDeclaration = {
   // per-component destinations are set. The F24 monthly cadence (D.Lgs. 9
   // luglio 1997, n. 241) is not transcribed as schedule data yet.
   remittanceVendorSettingsKey: null,
+  remittanceRegionalCalendars: {},
   // Arretrati for prior years fall under art. 17 TUIR tassazione separata
   // (average-rate separate taxation) — a regime this channel cannot name yet
   // (proposed to Orchestrate as a third value). non_periodic is declared

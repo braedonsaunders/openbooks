@@ -8,7 +8,7 @@ import { calculateT4127 } from "./canada/t4127.ts";
 import { calculateTp1015 } from "./canada/quebec/tp1015.ts";
 import { setPackSlotAccount } from "./packs.ts";
 import { yearEndFiling } from "./filing-registry.ts";
-import { rl1Population } from "./rl1.ts";
+import { rl1Population } from "./canada/quebec/rl1.ts";
 import { createRemittanceBill, payrollRemittanceSummary } from "./remittance.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";

@@ -622,6 +622,26 @@ export interface PayrollCountryPack {
    */
    remittanceSchedules?: readonly PayrollRemittanceSchedule[];
   /**
+   * region code → the `tax_administration` calendar key whose holidays move
+   * a statutory remittance deadline for a payroll worked WHOLLY in that
+   * region, when the country's tax authority keeps a regional calendar that
+   * differs from its national one.
+   *
+   * Canada's is the CRA's Québec calendar (`CA-CRA-QC`): Saint-Jean-Baptiste
+   * Day is a holiday there and the Civic Holiday is not, so a Québec-only
+   * payroll's deadline lands on a different day from an Ontario one. That is
+   * a fact about the CRA, and the shared remittance layer used to hold it as
+   * `province === "QC"` with a boolean option named `quebec` — which made one
+   * country's regional exception the generic layer's vocabulary and gave
+   * every other pack a Canadian answer it never asked for.
+   *
+   * REQUIRED, and `{}` is the answer for a country whose authority keeps one
+   * calendar nationwide. An omitted declaration would read as `{}` anyway,
+   * so requiring it is the difference between a pack that says "no region
+   * differs here" and a pack whose author never considered the question.
+   */
+  remittanceRegionalCalendars: Readonly<Record<string, string>>;
+  /**
    * How a RETROACTIVE payment is taxed here (see the type). REQUIRED: retro
    * pay is a generic concept with a jurisdictional answer, and a pack that
    * inherits another's answer withholds the wrong tax on the largest

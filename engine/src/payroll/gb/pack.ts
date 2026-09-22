@@ -156,6 +156,7 @@ export const GB_PACK: Omit<PayrollCountryPack, "country"> & {
   // the CRA remittance vendor does, so withholdings surface unassigned until
   // per-component destinations are set (the US pack's EFTPS answer).
   remittanceVendorSettingsKey: null,
+  remittanceRegionalCalendars: {},
   // PAYE has no supplemental-wages method: arrears, bonuses and back pay are
   // taxed as ordinary pay of the period they are PAID in (reported on time via
   // RTI), so a retro amount annualizes with the period like any other pay.

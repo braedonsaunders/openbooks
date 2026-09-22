@@ -71,6 +71,7 @@ export const AU_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "
   // remittance vendor. (The ATO's own due-date timetable by withholding size
   // is not transcribed, so no schedule is declared.)
   remittanceVendorSettingsKey: "atoRemittancePartyId",
+  remittanceRegionalCalendars: {},
   // ATO arrears and lump-sum payments are taxed outside ordinary period
   // annualisation (lump sum payment in arrears treatment, Schedule 5 back
   // payments). Provisional: confirm against the transcribed schedules.

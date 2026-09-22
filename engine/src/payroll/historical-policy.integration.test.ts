@@ -4,7 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, env } from "../platform/db.ts";
 import pg from "pg";
-import { rl1Slips } from "./rl1.ts";
+import { rl1Slips } from "./canada/quebec/rl1.ts";
 import { PAYROLL_COUNTRY_PACKS } from "./packs.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";

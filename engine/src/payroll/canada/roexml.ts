@@ -1,16 +1,16 @@
 import { sql } from "drizzle-orm";
-import { businessToday } from "../platform/business-date.ts";
-import { db } from "../platform/db.ts";
-import { formatMoney } from "../money/money.ts";
-import { unsealSecret } from "../platform/secrets.ts";
-import { PayrollError } from "./error.ts";
+import { businessToday } from "../../platform/business-date.ts";
+import { db } from "../../platform/db.ts";
+import { formatMoney } from "../../money/money.ts";
+import { unsealSecret } from "../../platform/secrets.ts";
+import { PayrollError } from "../error.ts";
 import {
   ROE_REASON_CODES, roeRecord, type RoeRecord, type RoeReasonCode,
-} from "./yearend.ts";
+} from "../yearend.ts";
 
 /**
  * Service Canada ROE Web bulk-upload XML — the same shape as the CRA T4 file
- * builder (engine/src/payroll/t4xml.ts): one transmittal element wrapping one
+ * builder (engine/src/payroll/canada/t4xml.ts): one transmittal element wrapping one
  * record per employee, built from the SAME committed-stub data the year-end
  * worksheets show, so the file always reconciles to the on-screen blocks.
  *

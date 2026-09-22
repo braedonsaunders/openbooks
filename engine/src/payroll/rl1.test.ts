@@ -8,13 +8,13 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { assembleRl1Slip, openingYtdIntoRl1Aggregates, rl1YearCaps, RL1_UNSUPPORTED_BOXES, type Rl1SlipAggregates } from "./rl1.ts";
+import { assembleRl1Slip, openingYtdIntoRl1Aggregates, rl1YearCaps, RL1_UNSUPPORTED_BOXES, type Rl1SlipAggregates } from "./canada/quebec/rl1.ts";
 import type { OpeningYearEndYtd } from "./yearend.ts";
 import {
   RL1_XML_DOWNLOAD_REFUSAL,
   rl1TransmitterProblems,
   rl1XmlFilename,
-} from "./rl1xml.ts";
+} from "./canada/quebec/rl1xml.ts";
 import { registerRl1Filing } from "./canada/quebec/rl1-filing.ts";
 import { payrollPackFilings, yearEndFiling } from "./filing-registry.ts";
 
@@ -148,7 +148,7 @@ test("RL-1 carry-in is capped with the stubs, not after them", () => {
 });
 
 test("RL-1 artifacts pin slips and totals to one repeatable-read snapshot", () => {
-  const source = readFileSync(new URL("./rl1.ts", import.meta.url), "utf8");
+  const source = readFileSync(new URL("./canada/quebec/rl1.ts", import.meta.url), "utf8");
   const returnStart = source.indexOf("export async function rl1Return");
   const populationStart = source.indexOf("export async function rl1Population");
   assert.ok(returnStart >= 0 && populationStart > returnStart);

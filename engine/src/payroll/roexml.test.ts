@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { businessToday } from "../platform/business-date.ts";
 import { withSimClock } from "../platform/clock.ts";
 import { db } from "../platform/db.ts";
-import { buildRoeXml, isRoeReasonCode, renderRoeXml, type RoeRecordToFile } from "./roexml.ts";
+import { buildRoeXml, isRoeReasonCode, renderRoeXml, type RoeRecordToFile } from "./canada/roexml.ts";
 import { sealSecret } from "../platform/secrets.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
 import type { RoeRecord } from "./yearend.ts";

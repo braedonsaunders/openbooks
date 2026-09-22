@@ -386,6 +386,19 @@ export const RATES_2026_JAN: EditionRates = {
   provinces: PROVINCES_2026_JAN,
 };
 
+/**
+ * The province of employment that runs its own parental-insurance plan
+ * (QPIP/RQAP) in place of the federal EI parental benefit, and therefore the
+ * only province whose T4 completes box 56 (QPIP insurable earnings) against
+ * `qpip.mie` rather than reporting zero.
+ *
+ * Declared HERE, in the pack, because the shared year-end layer used to carry
+ * it as `province === "QC"` — a Canadian fact stated in the module every
+ * country's year end runs through. The pack states which province; the
+ * generic layer compares against whatever it is told and knows no province.
+ */
+export const QPIP_PROVINCE = "QC";
+
 /** 123rd edition: only BC, NL, PE changed (Option-1 prorated for Jul–Dec). */
 export const RATES_2026_JUL: EditionRates = {
   ...RATES_2026_JAN,

@@ -104,6 +104,7 @@ export const JP_PAYROLL_PACK: JpPayrollPack = {
   // pension to the JPS and health to the 協会けんぽ branch or 健康保険組合.
   // Null until Orchestrate adds NTA/JPS remittance-party settings fields.
   remittanceVendorSettingsKey: null,
+  remittanceRegionalCalendars: {},
   // Retroactive salary differentials (給与の改訂差額) join the payment
   // month's 給与等の金額 for 月額表 lookup — taxed as ordinary income of
   // the period paid, with no annualization and no bonus method. The 月額表

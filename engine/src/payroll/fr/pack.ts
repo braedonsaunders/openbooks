@@ -368,6 +368,7 @@ export const FR_PAYROLL_PACK = {
   // `tax_authority` withholdings surface unassigned until configured, as with
   // the US pack's EFTPS arrangement.
   remittanceVendorSettingsKey: null,
+  remittanceRegionalCalendars: {},
   // PAS applies the employee's personal rate to each month's net imposable:
   // exceptional payments (primes, rappels) join the month's base with no
   // annualization and no bonus method — taxed as ordinary income of the period

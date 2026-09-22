@@ -38,6 +38,11 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 const FREEDONIA: PayrollCountryPack = {
   country: "ZZ" as PayrollCountryPack["country"],
   name: "Freedonia",
+  // Freedonia's tax authority keeps one calendar nationwide. Stating `{}` is
+  // the pack ANSWERING the question, which is the point of the field being
+  // required — a pack that never considered regional deadlines and a pack
+  // that considered them and has none must not look identical.
+  remittanceRegionalCalendars: {},
   // Freedonia answers the identifier question like every pack must: a
   // required 5-digit payroll number no filing needs (Freedonia files
   // nothing), so the missing-identifier warnings stay silent for ZZ.

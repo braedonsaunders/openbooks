@@ -130,12 +130,19 @@ export interface RemittanceGroup {
    */
   schedule: RemittanceGroupSchedule | null;
   /**
-   * Sorted distinct stub provinces behind this group. The CRA's holiday
-   * calendar is province-sensitive (Saint-Jean-Baptiste Day in Quebec, the
-   * Civic Holiday everywhere but Quebec), so the bill's due date is computed
-   * from these — see `remittanceGroupUsesQuebecCalendar`.
+   * Sorted distinct stub regions behind this group. A tax authority's holiday
+   * calendar can be region-sensitive, so the bill's due date is computed from
+   * these — see `remittanceGroupRegionalCalendar`.
    */
   provinces: string[];
+  /**
+   * The pack-declared regional tax-administration calendar governing this
+   * group's deadline, or null for the pack's national one. Derived once here,
+   * from the group's own regions and the declaring pack, so the read path
+   * (the agent's due-date forecast) and the write path (the bill) cannot
+   * disagree about which calendar applies.
+   */
+  regionalCalendar: string | null;
   components: RemittanceComponentLine[];
   total: string;
   /**
@@ -856,19 +863,43 @@ export type RemittanceRow = {
 };
 
 /**
- * Whether a remittance group's deadline follows the CRA's Québec holiday
- * calendar (CA-CRA-QC) rather than the federal one (CA-CRA).
+ * The regional tax-administration calendar a remittance group's deadline
+ * moves against, or `null` for the pack's national one.
  *
- * True exactly when every stub province behind the group is Québec: a
- * Québec-only payroll remits on Québec's schedule, where Saint-Jean-Baptiste
- * Day is a holiday and the Civic Holiday is not. Anything else — another
- * province, a mix, or no evidence at all — keeps the federal calendar the
- * bill always used. A mixed payroll's governing province is the employer's
- * province of record, which the product does not model, so mixing never
- * flips the calendar by itself.
+ * Non-null exactly when every stub region behind the group is the SAME
+ * region and the pack declares a calendar for it
+ * (`remittanceRegionalCalendars`). A payroll worked wholly in one such
+ * region remits on that region's schedule; anything else — another region, a
+ * mix, or no evidence at all — keeps the national calendar the bill always
+ * used. A mixed payroll's governing region is the employer's region of
+ * record, which the product does not model, so mixing never flips the
+ * calendar by itself.
+ *
+ * The region and the calendar key are both the PACK's, never this module's.
+ * This used to read `province === "QC"` and hand back a boolean named
+ * `quebec`, which made Canada's regional exception the vocabulary every
+ * other pack had to inherit.
  */
-export function remittanceGroupUsesQuebecCalendar(provinces: readonly string[]): boolean {
-  return provinces.length > 0 && provinces.every((province) => province === "QC");
+export function remittanceGroupRegionalCalendar(
+  provinces: readonly string[],
+  regionalCalendars: Readonly<Record<string, string>>,
+): string | null {
+  const [first, ...rest] = provinces;
+  if (first === undefined) return null;
+  if (!rest.every((province) => province === first)) return null;
+  return regionalCalendars[first] ?? null;
+}
+
+/**
+ * The regional-calendar declaration for a filing account's country, or `{}`
+ * when the country is not one this deployment has a pack for. An unknown
+ * country declares nothing rather than borrowing another pack's regions.
+ */
+export function remittanceRegionalCalendarsFor(
+  country: string | null,
+): Readonly<Record<string, string>> {
+  if (!country) return {};
+  return PAYROLL_COUNTRY_PACKS[country]?.remittanceRegionalCalendars ?? {};
 }
 
 /**
@@ -898,6 +929,9 @@ export function groupRemittanceRows(input: {
 }): Map<string, RemittanceGroup> {
   const groups = new Map<string, RemittanceGroup>();
   const provincesByGroup = new Map<string, Set<string>>();
+  // The pack country stamped on the group's own component rows — the same
+  // country-first resolution the vendor declarations use.
+  const countryByGroup = new Map<string, string>();
   const vendorKeysByGroup = new Map<string, Set<string>>();
   const slicesByGroup = new Map<string, Map<string, {
     components: RemittanceComponentLine[]; total: string; currencies: Set<string>;
@@ -915,6 +949,7 @@ export function groupRemittanceRows(input: {
       vendorKeys: [],
       schedule: null,
       provinces: [],
+      regionalCalendar: null,
       components: [], total: "0",
       slices: [],
       grossPayroll: runContext?.gross ?? "0",
@@ -972,6 +1007,7 @@ export function groupRemittanceRows(input: {
     const provinces = provincesByGroup.get(key) ?? new Set<string>();
     provinces.add(row.province);
     provincesByGroup.set(key, provinces);
+    if (row.country && !countryByGroup.has(key)) countryByGroup.set(key, row.country);
     const vendorKey = input.resolveVendorKey?.(row);
     if (vendorKey) {
       const vendorKeys = vendorKeysByGroup.get(key) ?? new Set<string>();
@@ -981,6 +1017,14 @@ export function groupRemittanceRows(input: {
   }
   for (const [key, group] of groups) {
     group.provinces = [...(provincesByGroup.get(key) ?? [])].sort();
+    // The declaring pack is the one stamped on the group's own component
+    // rows. Rows naming no country declare no regions, so a group the pack
+    // layer cannot place keeps the national calendar rather than borrowing
+    // some other authority's regional exception.
+    group.regionalCalendar = remittanceGroupRegionalCalendar(
+      group.provinces,
+      remittanceRegionalCalendarsFor(countryByGroup.get(key) ?? null),
+    );
     group.vendorKeys = [...(vendorKeysByGroup.get(key) ?? [])].sort();
     group.slices = [...(slicesByGroup.get(key) ?? [])]
       .sort(([a], [b]) => a.localeCompare(b))
@@ -1034,8 +1078,8 @@ function remittanceMemo(
  *
  * Source: https://www.canada.ca/en/revenue-agency/services/tax/public-holidays.html
  */
-function craCalendar(around: string, quebec: boolean): ReadonlySet<string> {
-  return scheduleCalendar(around, quebec ? "CA-CRA-QC" : "CA-CRA");
+function craCalendar(around: string, regionalCalendar: string | null): ReadonlySet<string> {
+  return scheduleCalendar(around, regionalCalendar ?? "CA-CRA");
 }
 
 /**
@@ -1111,10 +1155,10 @@ export interface RemittanceDue {
 export function remittanceDueDateExplained(
   periodTo: string,
   remitterType: PayrollFilingAccount["remitterType"] | null,
-  options: { quebec?: boolean } = {},
+  options: { regionalCalendar?: string | null } = {},
 ): RemittanceDue {
   const date = periodTo.slice(0, 10);
-  const holidays = craCalendar(date, options.quebec === true);
+  const holidays = craCalendar(date, options.regionalCalendar ?? null);
   const day = Number(date.slice(8, 10));
   // No filing account configured = the CRA's default registration for a new
   // employer, which is a regular remitter. Previous single-account behaviour,
@@ -1173,7 +1217,7 @@ export function remittanceDueDateExplained(
 export function remittanceDueDate(
   periodTo: string,
   remitterType: PayrollFilingAccount["remitterType"] | null,
-  options: { quebec?: boolean } = {},
+  options: { regionalCalendar?: string | null } = {},
 ): string {
   return remittanceDueDateExplained(periodTo, remitterType, options).dueDate;
 }
@@ -1776,7 +1820,7 @@ export async function createRemittanceBill(
     // CRA-function behaviour.
     const dueDate = group.schedule?.dueDate
       ?? remittanceDueDate(input.to, group.filingAccount.remitterType, {
-        quebec: remittanceGroupUsesQuebecCalendar(group.provinces),
+        regionalCalendar: group.regionalCalendar,
       });
     const doc = (await tx.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, document_number, party_id, subsidiary_id, document_date,

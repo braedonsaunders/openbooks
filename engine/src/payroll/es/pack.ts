@@ -98,6 +98,7 @@ export const ES_PAYROLL_PACK: EsPayrollPack = {
   // cra/rq today. A key naming a field that does not exist looks wired.
   // Null until Orchestrate adds an AEAT remittance-party settings field.
   remittanceVendorSettingsKey: null,
+  remittanceRegionalCalendars: {},
   // Atrasos (arrears) are imputed to the year they became due (LIRPF art. 14)
   // and regularised on declaración complementaria — a re-spread the two-value
   // channel cannot express (proposed to Orchestrate). At WITHHOLDING time the
