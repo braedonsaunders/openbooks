@@ -50,7 +50,9 @@
     "formSetPreferred": "自分の優先フォームに設定",
     "formSetPreferredDone": "優先フォームを保存しました",
     "formPreferredCleared": "優先フォームをクリアしました",
-    "formPreferredFailed": "優先フォームを保存できませんでした"
+    "formPreferredFailed": "優先フォームを保存できませんでした",
+    "returnsShipment": "返品対象の出荷",
+    "returnsNone": "在庫の返品なし"
   },
   "toasts": {
     "actionFailed": "アクションに失敗しました",

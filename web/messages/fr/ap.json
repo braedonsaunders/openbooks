@@ -54,7 +54,9 @@
     "formSetPreferred": "Définir comme préféré",
     "formSetPreferredDone": "Formulaire préféré enregistré",
     "formPreferredCleared": "Formulaire préféré effacé",
-    "formPreferredFailed": "Impossible d’enregistrer le formulaire préféré"
+    "formPreferredFailed": "Impossible d’enregistrer le formulaire préféré",
+    "returnsReceipt": "Retourne la réception",
+    "returnsNone": "Aucun stock retourné"
   },
   "capture": {
     "title": "Capture de factures",

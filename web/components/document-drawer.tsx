@@ -97,6 +97,18 @@ interface BuiltinSegmentOpt {
 // an ever-churning identity re-renders forever.
 const EMPTY_SEGMENTS: SegmentOpt[] = []
 const EMPTY_BUILTIN_SEGMENTS: BuiltinSegmentOpt[] = []
+/** One posted receipt or shipment a credit memo may still return against. */
+interface ReturnableSourceOption {
+  movementId: string
+  movedAt: string
+  documentNumber: string | null
+  remaining: string
+  lotId: string | null
+  lotCode: string | null
+  serialId: string | null
+  serialCode: string | null
+}
+
 interface LineRow extends Record<string, unknown> {
   /** Loader line id this row edits (empty = new row); the save round-trips
    *  it and a redraw adopts replacement ids via toRow. */
@@ -118,6 +130,10 @@ interface LineRow extends Record<string, unknown> {
   /** Warehouse for inventory receipt/issue effects; blank unless the line's
    *  item is stocked (F-t07-003 pickers). */
   stockLocationId: string
+  /** On a credit memo, the posted receipt or shipment this line returns.
+   *  Blank = a purely financial credit line that moves no stock. The chosen
+   *  movement carries its own lot/serial, so the row stores only its id. */
+  returnSourceMovementId: string
   taxProfileId: string
   amount: string
   taxInputAmount: string
@@ -607,6 +623,7 @@ const emptyLine = (): LineRow => ({
   locationId: '',
   classId: '',
   stockLocationId: '',
+  returnSourceMovementId: '',
   taxProfileId: '',
   amount: '',
   taxInputAmount: '',
@@ -712,6 +729,8 @@ function toRow(l: Record<string, unknown>, lineDefs: CustomFieldDefClient[], seg
     locationId: lineText(l.location_id),
     classId: lineText(l.class_id),
     stockLocationId: lineText(l.stock_location_id),
+    // Overwritten below from native return evidence when the line carries it.
+    returnSourceMovementId: '',
     taxProfileId: l.tax_group_id ? `group:${l.tax_group_id}` : l.tax_code_id ? `code:${l.tax_code_id}` : '',
     amount: l.amount != null ? String(l.amount) : '',
     taxInputAmount: l.tax_input_amount != null ? String(l.tax_input_amount) : '',
@@ -721,6 +740,12 @@ function toRow(l: Record<string, unknown>, lineDefs: CustomFieldDefClient[], seg
   }
   const custom = isLineMap(l.custom) ? l.custom : null
   const extraDims = isLineMap(l.extra_dims) ? l.extra_dims : null
+  // Native return evidence: the server owns both spellings (a vendor credit
+  // names a receipt, a customer credit a shipment) and only ever writes one.
+  const inventoryReturn = custom && isLineMap(custom.inventoryReturn) ? custom.inventoryReturn : null
+  row.returnSourceMovementId = lineText(
+    inventoryReturn?.sourceReceiptMovementId ?? inventoryReturn?.sourceIssueMovementId,
+  )
   for (const def of lineDefs) row[`cf_${def.key}`] = custom?.[def.key] ?? ''
   for (const segment of segments) row[`seg_${segment.key}`] = extraDims?.[segment.key] ?? ''
   return row
@@ -1407,6 +1432,78 @@ export function DocumentDrawer({
     }
   }
 
+  // Stocked lines relieve a warehouse at posting, so a customer invoice for
+  // stocked goods must name one per line. The picker appears only when the
+  // choice is real (several active locations) and only on stocked rows; a
+  // single location is stamped silently by the edit writer instead.
+  const stockedItemIds = useMemo(
+    () => new Set((items ?? []).filter((item) => item.has_inventory_profile === true).map((item) => item.id)),
+    [items],
+  )
+  // A credit memo may return stock. The engine settles the return against the
+  // posted movement the goods left or arrived on, so the operator picks that
+  // movement here; leaving a row blank keeps it a purely financial credit.
+  // The same reader answers this list and the save-time check, so the picker
+  // cannot offer a source the save refuses.
+  const returnSide =
+    recordType === 'vendor_credit' ? 'purchase' : recordType === 'customer_credit' ? 'sales' : null
+  const returnRowsKey = rows
+    .map((row) => `${row.itemId}:${row.stockLocationId}`)
+    .filter((key) => key !== ':')
+    .join('|')
+  const [returnSources, setReturnSources] = useState<ReturnableSourceOption[]>([])
+  useEffect(() => {
+    let cancelled = false
+    const run = async (): Promise<void> => {
+      if (!returnSide || !partyId || returnRowsKey === '') {
+        if (!cancelled) setReturnSources([])
+        return
+      }
+      try {
+        const res = await fetch(
+          `/api/inventory/returnable-sources?side=${returnSide}&partyId=${encodeURIComponent(partyId)}`,
+        )
+        // Inventory off, credit kind off, or no permission: no picker, and no
+        // console noise for a refusal the drawer already knows how to absorb.
+        if (!res.ok) {
+          if (!cancelled) setReturnSources([])
+          return
+        }
+        const body = (await res.json()) as { sources?: ReturnableSourceOption[] }
+        if (!cancelled) setReturnSources(Array.isArray(body.sources) ? body.sources : [])
+      } catch {
+        if (!cancelled) setReturnSources([])
+      }
+    }
+    void run()
+    return () => {
+      cancelled = true
+    }
+  }, [returnSide, partyId, returnRowsKey])
+  const showReturnPicker = returnSide !== null && returnSources.length > 0
+  const returnSourceColumn = useMemo<LineGridColumn<LineRow> | null>(() => {
+    if (!showReturnPicker) return null
+    return {
+      key: 'returnSourceMovementId',
+      label: returnSide === 'purchase' ? t('drawer.returnsReceipt') : t('drawer.returnsShipment'),
+      width: '190px',
+      type: 'select',
+      options: [
+        { value: '', label: t('drawer.returnsNone') },
+        ...returnSources.map((source) => ({
+          value: source.movementId,
+          label: `${source.documentNumber ?? source.movedAt} · ${source.remaining}${
+            source.lotCode ? ` · ${source.lotCode}` : source.serialCode ? ` · ${source.serialCode}` : ''
+          }`,
+        })),
+      ],
+      // Only a stocked row in a named warehouse can carry a return: the save
+      // refuses one without both, so do not offer the choice before then.
+      isCellEditable: (row) =>
+        stockedItemIds.has(String(row.itemId ?? '')) && String(row.stockLocationId ?? '') !== '',
+    }
+  }, [showReturnPicker, returnSide, returnSources, stockedItemIds, t])
+
   const payload_ = useMemo(() => {
     if (isTransfer) {
       return {
@@ -1486,6 +1583,26 @@ export function DocumentDrawer({
                 locationId: r.locationId || null,
                 classId: r.classId || null,
                 stockLocationId: r.stockLocationId || null,
+                // Tri-state, and only on kinds that can return stock: absent
+                // preserves the stored selection, null clears it, an object
+                // replaces it. The chosen movement carries its own lot and
+                // serial, so they ride from the offered source rather than
+                // being retyped — the save refuses any mismatch.
+                ...(returnSourceColumn
+                  ? {
+                      inventoryReturnSource: r.returnSourceMovementId
+                        ? {
+                            movementId: r.returnSourceMovementId,
+                            lotId:
+                              returnSources.find((s) => s.movementId === r.returnSourceMovementId)
+                                ?.lotId ?? null,
+                            serialId:
+                              returnSources.find((s) => s.movementId === r.returnSourceMovementId)
+                                ?.serialId ?? null,
+                          }
+                        : null,
+                    }
+                  : {}),
                 // Entry-mode distribution staging for A4's save path: a
                 // blank key is skipped server-side; the lock rides as the
                 // tri-state's explicit edge (absent would mean "stored").
@@ -1502,7 +1619,7 @@ export function DocumentDrawer({
               })),
           }),
     }
-  }, [isTransfer, transfer, partyId, paymentCardId, documentDate, dueDate, referenceNumber, memo, postingDate, departmentId, projectIdHeader, locationId, classId, subsidiaryId, multiSub, expectedPayDate, paymentHoldReason, internalNotes, billingMethod, isFinalInvoice, customValues, extraDims, rows, lineDefs, segments, config, taxByProfile])
+  }, [isTransfer, transfer, partyId, paymentCardId, documentDate, dueDate, referenceNumber, memo, postingDate, departmentId, projectIdHeader, locationId, classId, subsidiaryId, multiSub, expectedPayDate, paymentHoldReason, internalNotes, billingMethod, isFinalInvoice, customValues, extraDims, rows, lineDefs, segments, config, taxByProfile, returnSourceColumn, returnSources])
 
   const [dirty, setDirty] = useState(false)
   useEffect(() => {
@@ -1832,14 +1949,6 @@ export function DocumentDrawer({
   }
 
   // -- line warehouse picker (F-t07-003) ------------------------------------
-  // Stocked lines relieve a warehouse at posting, so a customer invoice for
-  // stocked goods must name one per line. The picker appears only when the
-  // choice is real (several active locations) and only on stocked rows; a
-  // single location is stamped silently by the edit writer instead.
-  const stockedItemIds = useMemo(
-    () => new Set((items ?? []).filter((item) => item.has_inventory_profile === true).map((item) => item.id)),
-    [items],
-  )
   const showWarehousePicker =
     recordType === 'customer_invoice' &&
     (stockLocations ?? []).length > 1 &&
@@ -1886,6 +1995,7 @@ export function DocumentDrawer({
       },
     ]
     if (warehouseColumn) cols.push(warehouseColumn)
+    if (returnSourceColumn) cols.push(returnSourceColumn)
     if (config.hasTax) {
       cols.push({
         key: 'taxProfileId',
@@ -1935,7 +2045,7 @@ export function DocumentDrawer({
       return !storage || lineVisibility.get(storage) !== false
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accounts, departments, projects, taxProfiles, lineDefs, segments, builtinSegments, config, t, tCommon, warehouseColumn])
+  }, [accounts, departments, projects, taxProfiles, lineDefs, segments, builtinSegments, config, t, tCommon, warehouseColumn, returnSourceColumn])
 
   const field = 'space-y-1.5'
   const accountName = (id: unknown): string => {
@@ -2121,15 +2231,17 @@ export function DocumentDrawer({
         }
       })
       .filter((c): c is LineGridColumn<LineRow> => c !== null)
-    // The warehouse picker is force-shown like the subsidiary header field:
-    // tenant layouts predate the key, so placement alone would hide it.
+    // The warehouse and return pickers are force-shown like the subsidiary
+    // header field: tenant layouts predate those keys, so placement alone
+    // would hide them.
     return [
       ...configured,
       ...(warehouseColumn ? [warehouseColumn] : []),
+      ...(returnSourceColumn ? [returnSourceColumn] : []),
       ...columns.filter((column) => String(column.key).startsWith('seg_')),
     ]
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layout, accounts, departments, projects, locations, classes, items, taxProfiles, lineDefs, cfColumns, columns, recordType, builtinSegments, t, tCommon, warehouseColumn])
+  }, [layout, accounts, departments, projects, locations, classes, items, taxProfiles, lineDefs, cfColumns, columns, recordType, builtinSegments, t, tCommon, warehouseColumn, returnSourceColumn])
 
   const headerDefByDefKey = useMemo(() => new Map(headerDefs.map((d) => [d.key, d])), [headerDefs])
   const defLabelForHeader = (key: string): string => {

@@ -54,7 +54,9 @@
     "formSetPreferred": "自分の優先に設定",
     "formSetPreferredDone": "優先フォームを保存しました",
     "formPreferredCleared": "優先フォームをクリアしました",
-    "formPreferredFailed": "優先フォームを保存できませんでした"
+    "formPreferredFailed": "優先フォームを保存できませんでした",
+    "returnsReceipt": "返品対象の入庫",
+    "returnsNone": "在庫の返品なし"
   },
   "capture": {
     "title": "仕入請求書の取込",

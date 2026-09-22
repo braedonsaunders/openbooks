@@ -50,7 +50,9 @@
     "formSetPreferred": "Définir comme préféré",
     "formSetPreferredDone": "Formulaire préféré enregistré",
     "formPreferredCleared": "Formulaire préféré effacé",
-    "formPreferredFailed": "Impossible d’enregistrer le formulaire préféré"
+    "formPreferredFailed": "Impossible d’enregistrer le formulaire préféré",
+    "returnsShipment": "Retourne l'expédition",
+    "returnsNone": "Aucun stock retourné"
   },
   "toasts": {
     "actionFailed": "Échec de l’action",

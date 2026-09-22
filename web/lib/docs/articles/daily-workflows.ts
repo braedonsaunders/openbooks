@@ -49,6 +49,18 @@ to the appropriate invoice rather than posting an unrelated journal against the
 receivables control account. Correct data-entry errors according to the
 transaction lifecycle and period state.
 
+When the customer sends goods back, put the item on the credit line and choose
+the originating shipment in the **Returns shipment** column. The list offers
+only posted, unreversed shipments for that customer, item, and warehouse that
+still have quantity left to return, and each entry carries its own lot or
+serial. Posting brings the units back into stock and relieves cost of sales in
+the same step that records the credit. Leave the column blank for a goodwill or
+price credit: a line with no selected shipment moves no stock.
+
+Returned units come back at the cost they left at, not at today's cost. The
+credit's selling price is a separate commercial fact and never changes the
+inventory valuation, so a return cannot create a margin.
+
 ## Receipt and application
 
 Record the customer receipt to the correct bank or clearing account, then apply
@@ -139,20 +151,19 @@ fully offsets a bill with no cash due cannot be applied on its own and may
 remain open in aging. Do not bury vendor credits in manual control-account
 journals.
 
-For a physical return of stock, the editor does not currently offer
-receipt-linked stock-return selection: there is no control to select the
-originating posted receipt, or its lot or serial. Correct the finances and the
-stock as two separate steps. Post the account-only vendor credit above to the
-item's inventory adjustment account — or its cost-of-goods-sold account when
-no adjustment account is configured — then remove the units separately with
-Inventory Adjust, which relieves them at carried cost against the same
-account. Use the same account for both steps, so any difference between the
-vendor's credit and the carried cost remains there as the residual.
+For a physical return of stock, put the item on the credit line and choose the
+originating receipt in the **Returns receipt** column. The list offers only
+posted, unreversed receipts for that vendor, item, and warehouse that still
+have quantity left to return, and each entry carries its own lot or serial —
+so selecting a receipt selects its lot or serial with it. Posting then relieves
+the selected on-hand cost layers at carried cost in the same step that records
+the credit. Leave the column blank for a price adjustment: a line with no
+selected receipt moves no stock.
 
-Receipt-linked returns that relieve the selected on-hand cost layers at
-carried cost, with lot or serial evidence checked against the originating
-posted receipt, exist only in the inventory engine — not in the vendor credit
-editor — so the editor cannot produce that combined stock-and-finance return.
+The credit and the stock are deliberately valued separately. The credit is the
+amount the vendor agreed to; the stock leaves at the cost it is carried at. Any
+difference between the two remains in the line's inventory variance or
+adjustment account as the residual.
 
 ## Payment
 
