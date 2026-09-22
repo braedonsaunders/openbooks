@@ -60,21 +60,33 @@ async function setup() {
   )
   // Second bank account (transfer legs) + card-liability account (card control).
   const bank2 = randomUUID()
+  const bank3 = randomUUID()
   const cardLiability = randomUUID()
   await withBypassContext(async () => {
+    // A reconcilable account must name the single currency it reconciles in:
+    // accounts_reconcilable_currency_required refuses `reconcilable` with a
+    // null currency_restriction, because a bank account that mixes currencies
+    // cannot be reconciled against one statement. Taken from the org's own
+    // root subsidiary rather than hardcoded, so the fixture follows
+    // ORG_CURRENCY instead of pinning these legs to one jurisdiction.
+    const baseCurrency = sql`(select base_currency from subsidiaries
+      where org_id = ${org.orgId} and parent_id is null limit 1)`
     await db.execute(sql`
-      insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
-      values (${bank2}, ${org.orgId}, '1001', 'Savings', 'asset_bank', false, true, false, true, '[]'::jsonb, '{}'::jsonb, true)`)
+      insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, currency_restriction, required_dimensions, custom, subsidiary_include_children)
+      values (${bank2}, ${org.orgId}, '1001', 'Savings', 'asset_bank', false, true, false, true, ${baseCurrency}, '[]'::jsonb, '{}'::jsonb, true)`)
     await db.execute(sql`
-      insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
-      values (${cardLiability}, ${org.orgId}, '2100', 'Corp Card', 'liability_card', false, true, false, true, '[]'::jsonb, '{}'::jsonb, true)`)
+      insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, currency_restriction, required_dimensions, custom, subsidiary_include_children)
+      values (${bank3}, ${org.orgId}, '1002', 'Operating', 'asset_bank', false, true, false, true, ${baseCurrency}, '[]'::jsonb, '{}'::jsonb, true)`)
+    await db.execute(sql`
+      insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, currency_restriction, required_dimensions, custom, subsidiary_include_children)
+      values (${cardLiability}, ${org.orgId}, '2100', 'Corp Card', 'liability_card', false, true, false, true, ${baseCurrency}, '[]'::jsonb, '{}'::jsonb, true)`)
   })
   state.user = {
     id: actor, orgId: org.orgId, name: 'Doc creator', email: 'creator@scratch.test',
     roles: [], isSuperAdmin: false, envKind: 'production',
     productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor,
   }
-  return { org, actor, bank2, cardLiability }
+  return { org, actor, bank2, bank3, cardLiability }
 }
 
 const docCount = (orgId: string, id: string) =>
@@ -102,7 +114,7 @@ const seqNext = (orgId: string, kind: string) =>
     ).rows[0]?.n ?? null,
   )
 
-const bodies = (org: Awaited<ReturnType<typeof setup>>['org'], bank2: string, cardLiability: string) => ({
+const bodies = (org: Awaited<ReturnType<typeof setup>>['org'], bank2: string, bank3: string, cardLiability: string) => ({
   customer_invoice: {
     kind: 'customer_invoice', partyId: org.customerId, documentDate: org.date,
     lines: [{ accountId: org.accounts.revenue, amount: '100', description: 'Widget' }],
@@ -130,18 +142,18 @@ const bodies = (org: Awaited<ReturnType<typeof setup>>['org'], bank2: string, ca
   },
   check: {
     kind: 'check', documentDate: org.date, referenceNumber: '1234',
-    custom: { controlAccountId: org.accounts.bank },
+    custom: { controlAccountId: bank2 },
     lines: [{ accountId: org.accounts.cogs, amount: '75', description: 'Rent' }],
   },
   deposit: {
     kind: 'deposit', documentDate: org.date,
-    custom: { controlAccountId: org.accounts.bank },
+    custom: { controlAccountId: bank2 },
     lines: [{ accountId: org.accounts.revenue, amount: '200', description: 'Cash' }],
   },
   transfer: {
     kind: 'transfer', documentDate: org.date,
     lines: [
-      { accountId: org.accounts.bank, amount: '50' },
+      { accountId: bank3, amount: '50' },
       { accountId: bank2, amount: '0' },
     ],
   },
@@ -153,9 +165,9 @@ const PREFIX: Record<string, string> = {
 }
 
 test('every supported kind creates a draft with a Save-allocated number', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const { org, bank2, cardLiability } = await setup()
+  const { org, bank2, bank3, cardLiability } = await setup()
   try {
-    const all = bodies(org, bank2, cardLiability)
+    const all = bodies(org, bank2, bank3, cardLiability)
     await withOrgContext(org.orgId, async () => {
       for (const kind of Object.keys(all)) {
         const key = randomUUID()
@@ -183,10 +195,10 @@ test('every supported kind creates a draft with a Save-allocated number', { skip
 })
 
 test('first create emits exactly two audit events: insert image plus initialization-to-final update', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const { org, bank2, cardLiability } = await setup()
+  const { org, bank2, bank3, cardLiability } = await setup()
   try {
     const key = randomUUID()
-    const all = bodies(org, bank2, cardLiability)
+    const all = bodies(org, bank2, bank3, cardLiability)
     let number = ''
     await withOrgContext(org.orgId, async () => {
       const response = await post(all.customer_invoice, key)
@@ -203,19 +215,30 @@ test('first create emits exactly two audit events: insert image plus initializat
     assert.equal(insertAfter.document_number, number)
     assert.equal(insertAfter.status, 'draft')
     // The paired update shows initialization → final saved state.
-    const updateChanges = audits[1]!.changes as { mode: string; after: { total: string } }
+    // The saved image is the record's full shape, so the header total lives
+    // under `document` — asserting a flat `after.total` read undefined and
+    // compared NaN, which is a pass-shaped failure waiting for a real total to
+    // be wrong. Name the envelope so a reshape fails loudly instead.
+    const updateChanges = audits[1]!.changes as {
+      mode: string
+      after: { document: { total: string } }
+    }
     assert.equal(updateChanges.mode, 'record_update')
-    assert.equal(Number(updateChanges.after.total), 100)
+    assert.deepEqual(
+      Object.keys(updateChanges.after).sort(),
+      ['applications', 'document', 'glImpact', 'lines', 'taxComponents'],
+    )
+    assert.equal(Number(updateChanges.after.document.total), 100)
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
 
 test('exact replay returns 200 with no new rows and no sequence burn', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const { org, bank2, cardLiability } = await setup()
+  const { org, bank2, bank3, cardLiability } = await setup()
   try {
     const key = randomUUID()
-    const all = bodies(org, bank2, cardLiability)
+    const all = bodies(org, bank2, bank3, cardLiability)
     let first: { doc: Record<string, unknown> }
     await withOrgContext(org.orgId, async () => {
       const created = await post(all.vendor_bill, key)
@@ -240,10 +263,10 @@ test('exact replay returns 200 with no new rows and no sequence burn', { skip: !
 })
 
 test('changed payload on the same key is a 409 and changes nothing', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const { org, bank2, cardLiability } = await setup()
+  const { org, bank2, bank3, cardLiability } = await setup()
   try {
     const key = randomUUID()
-    const all = bodies(org, bank2, cardLiability)
+    const all = bodies(org, bank2, bank3, cardLiability)
     await withOrgContext(org.orgId, async () => {
       assert.equal((await post(all.check, key)).status, 201)
       const changed = { ...all.check, referenceNumber: '9999' }
@@ -263,7 +286,7 @@ test('changed payload on the same key is a 409 and changes nothing', { skip: !pr
 })
 
 test('cross-org key collision is a 409 that discloses nothing', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const { org, bank2, cardLiability } = await setup()
+  const { org, bank2, bank3, cardLiability } = await setup()
   const other = await withBypassContext(() => createScratchOrg())
   try {
     const key = randomUUID()
@@ -272,7 +295,7 @@ test('cross-org key collision is a 409 that discloses nothing', { skip: !process
         insert into documents (id, org_id, kind, status, document_number, subsidiary_id, document_date, currency, subtotal, tax_total, total, created_by)
         values (${key}, ${other.orgId}, 'vendor_bill', 'draft', 'BILL-X', ${other.subsidiaryId}, ${other.date}, 'CAD', '0', '0', '0', ${other.orgId})`)
     })
-    const all = bodies(org, bank2, cardLiability)
+    const all = bodies(org, bank2, bank3, cardLiability)
     await withOrgContext(org.orgId, async () => {
       const response = await post(all.vendor_bill, key)
       assert.equal(response.status, 409)
@@ -287,10 +310,10 @@ test('cross-org key collision is a 409 that discloses nothing', { skip: !process
 })
 
 test('late writer failure rolls back everything: zero row, zero audit, zero sequence, reusable key', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const { org, bank2, cardLiability } = await setup()
+  const { org, bank2, bank3, cardLiability } = await setup()
   try {
     const key = randomUUID()
-    const all = bodies(org, bank2, cardLiability)
+    const all = bodies(org, bank2, bank3, cardLiability)
     // A foreign line account passes every route precheck and fails deep in
     // the shared writer — after the claim, number, and audit would have
     // committed in a non-atomic design.
@@ -319,10 +342,10 @@ test('late writer failure rolls back everything: zero row, zero audit, zero sequ
 })
 
 test('pre-transaction provider/shape refusal writes nothing', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const { org, bank2, cardLiability } = await setup()
+  const { org, bank2, bank3, cardLiability } = await setup()
   try {
     const key = randomUUID()
-    const all = bodies(org, bank2, cardLiability)
+    const all = bodies(org, bank2, bank3, cardLiability)
     const bad = {
       ...all.vendor_bill,
       lines: [{ accountId: org.accounts.cogs, amount: 'not-an-amount', description: 'Bad' }],
@@ -339,10 +362,10 @@ test('pre-transaction provider/shape refusal writes nothing', { skip: !process.e
 })
 
 test('tenant and field refusals name the remedy with exact drawer messages', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const { org, bank2, cardLiability } = await setup()
+  const { org, bank2, bank3, cardLiability } = await setup()
   const other = await withBypassContext(() => createScratchOrg())
   try {
-    const all = bodies(org, bank2, cardLiability)
+    const all = bodies(org, bank2, bank3, cardLiability)
     await withOrgContext(org.orgId, async () => {
       // Missing party on a party-role kind.
       let response = await post({ ...all.customer_invoice, partyId: null }, randomUUID())
@@ -386,9 +409,9 @@ test('tenant and field refusals name the remedy with exact drawer messages', { s
 })
 
 test('omitted currency uses the org base with multi-currency off; explicit currency stays gated', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const { org, bank2, cardLiability } = await setup()
+  const { org, bank2, bank3, cardLiability } = await setup()
   try {
-    const all = bodies(org, bank2, cardLiability)
+    const all = bodies(org, bank2, bank3, cardLiability)
     await withOrgContext(org.orgId, async () => {
       const plain = await post(all.customer_invoice, randomUUID())
       assert.equal(plain.status, 201, JSON.stringify(await plain.clone().json()))
