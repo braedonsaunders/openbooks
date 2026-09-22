@@ -90,3 +90,46 @@ test("dunning writes reject an invalid grace period or an empty name", { skip: !
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
+
+test("dunning writes reject an invalid reply-to and store a valid one", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    state.user = { orgId: org.orgId, id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId };
+    const replyOf = async (id: string) =>
+      (await withBypassContext(() =>
+        db.execute<{ replyTo: string | null }>(
+          sql`select reply_to as "replyTo" from dunning_policies where id = ${id} and org_id = ${org.orgId}`,
+        ),
+      )).rows[0]?.replyTo;
+
+    // POST: malformed reply-to values are 400s and create nothing.
+    for (const replyTo of ["not-an-email", "", 7]) {
+      const refused = await create(json("POST", { name: "Chase", gracePeriodDays: 3, stages: [], replyTo }));
+      assert.equal(refused.status, 400, `POST replyTo ${JSON.stringify(replyTo)}`);
+    }
+    const count = await withBypassContext(() =>
+      db.execute<{ n: number }>(sql`select count(*)::int as n from dunning_policies where org_id = ${org.orgId}`),
+    );
+    assert.equal(count.rows[0]!.n, 0, "a refused policy must not be created");
+
+    // POST: a valid reply-to stores; omission stores null (org default applies).
+    const stored = await create(
+      json("POST", { name: "Collections", gracePeriodDays: 3, stages: [], replyTo: "ar@example.com" }),
+    );
+    assert.equal(stored.status, 201, JSON.stringify(await stored.clone().json()));
+    const { id } = (await stored.json()) as { id: string };
+    assert.equal(await replyOf(id), "ar@example.com");
+
+    // PATCH enforces the same contract, and null clears back to the default.
+    for (const replyTo of ["also-bad", 9]) {
+      const refused = await patch(json("PATCH", { replyTo }), params(id));
+      assert.equal(refused.status, 400, `PATCH replyTo ${JSON.stringify(replyTo)}`);
+    }
+    assert.equal(await replyOf(id), "ar@example.com", "a refused patch must not change the row");
+    const cleared = await patch(json("PATCH", { replyTo: null }), params(id));
+    assert.equal(cleared.status, 200, JSON.stringify(await cleared.clone().json()));
+    assert.equal(await replyOf(id), null);
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});

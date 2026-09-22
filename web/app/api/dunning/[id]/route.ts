@@ -7,6 +7,7 @@ import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { guardPermission } from "../../../../lib/authz";
 import { canonicalDecimal, compareDecimal } from "../../../../lib/exact-decimal";
 import { isUuid } from "../../../../lib/list-params";
+import { isValidEmailAddress } from "@openbooks/emails";
 
 export const runtime = "nodejs";
 
@@ -106,6 +107,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   if ("isActive" in body && typeof body.isActive !== "boolean") {
     return NextResponse.json({ error: "isActive must be a boolean" }, { status: 400 });
+  }
+  if (
+    "replyTo" in body &&
+    body.replyTo !== null &&
+    (typeof body.replyTo !== "string" || !isValidEmailAddress(body.replyTo))
+  ) {
+    return NextResponse.json({ error: "replyTo must be a valid email address" }, { status: 400 });
   }
   let gracePeriodDays: number | undefined;
   if ("gracePeriodDays" in body) {

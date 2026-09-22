@@ -14,6 +14,11 @@ export type EmailDeliveryInput = {
   html: string
   text: string
   attachments?: EmailAttachmentPayload[]
+  /**
+   * Per-message Reply-To, overriding the org transport default for this send
+   * only (dunning policies, approval flows). Absent means the default.
+   */
+  replyTo?: string
 }
 
 export type NormalizedEmailDeliveryInput = Omit<EmailDeliveryInput, 'to'> & {
@@ -153,6 +158,12 @@ export function normalizeEmailDeliveryInput(
     throw new Error('Provider delivery requires exactly one recipient per message.')
   }
 
+  let replyTo: string | undefined
+  if (input.replyTo !== undefined) {
+    replyTo = input.replyTo.trim()
+    if (!isValidEmailAddress(replyTo)) throw new Error('Email reply-to address is invalid.')
+  }
+
   const subject = normalizeEmailSubject(input.subject)
   if (!subject) throw new Error('Email subject is required.')
   if (byteLength(input.html) > EMAIL_DELIVERY_LIMITS.htmlBytes) throw new Error(`Email HTML exceeds the ${EMAIL_DELIVERY_LIMITS.htmlBytes}-byte limit.`)
@@ -171,5 +182,5 @@ export function normalizeEmailDeliveryInput(
     }
   }
 
-  return { to, subject, html: input.html, text: input.text, ...(attachments ? { attachments } : {}) }
+  return { to, subject, html: input.html, text: input.text, ...(attachments ? { attachments } : {}), ...(replyTo ? { replyTo } : {}) }
 }

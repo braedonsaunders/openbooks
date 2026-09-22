@@ -107,6 +107,8 @@ export interface FlowEmailPayload {
   text: string;
   attachments?: EmailJobData["attachments"];
   meta?: EmailJobData["meta"];
+  /** Per-message Reply-To (dunning policy setting); absent means the org default. */
+  replyTo?: string;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -125,7 +127,7 @@ function malformed(detail: string): Error {
  */
 export function parseFlowEmailPayload(raw: unknown): FlowEmailPayload {
   if (!isPlainObject(raw)) throw malformed("expected an object");
-  const { to, subject, html, text } = raw;
+  const { to, subject, html, text, replyTo } = raw;
   if (!Array.isArray(to) || to.length === 0) throw malformed("`to` must be a non-empty array");
   for (const recipient of to) {
     if (typeof recipient !== "string" || !recipient.includes("@")) {
@@ -164,7 +166,21 @@ export function parseFlowEmailPayload(raw: unknown): FlowEmailPayload {
     }
     meta = raw.meta as EmailJobData["meta"];
   }
-  return { to, subject, html, text, ...(attachments ? { attachments } : {}), ...(meta ? { meta } : {}) };
+  // The strict mailbox check runs downstream at enqueue (normalize), but a
+  // value that is not even shaped like an address must not become durable.
+  let parsedReplyTo: string | undefined;
+  if (replyTo !== undefined) {
+    if (typeof replyTo !== "string" || !replyTo.includes("@")) {
+      throw malformed("`replyTo` must be an email address");
+    }
+    parsedReplyTo = replyTo;
+  }
+  return {
+    to, subject, html, text,
+    ...(attachments ? { attachments } : {}),
+    ...(meta ? { meta } : {}),
+    ...(parsedReplyTo ? { replyTo: parsedReplyTo } : {}),
+  };
 }
 
 /**
@@ -220,6 +236,7 @@ export async function deliverFlowEmail(
       text: delivery.text,
       ...(delivery.attachments?.length ? { attachments: delivery.attachments } : {}),
       ...(delivery.meta ? { meta: delivery.meta } : {}),
+      ...(delivery.replyTo ? { replyTo: delivery.replyTo } : {}),
     },
     // One stable identity per row closes the DB/Redis crash gap: if the
     // process dies between this enqueue and the PG success mark, the
