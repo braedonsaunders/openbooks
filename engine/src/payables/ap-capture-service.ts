@@ -654,14 +654,32 @@ export async function materializeCapture(input: {
     }
     const unresolved = capture.lines.findIndex((line) => !line.accountId);
     if (unresolved >= 0) throw new CaptureMaterializationError(`Line ${unresolved + 1} needs an account`);
-    // Serialize on vendor + normalized invoice number, not on the source file:
-    // two uploads of one vendor invoice (different content hashes) must still
-    // exclude each other, or the duplicate check below passes in both and two
-    // draft bills are born for one invoice. The key normalizes exactly like
-    // the documents duplicate check so 'INV-001' and 'inv 001' fence together.
-    await tx.execute(sql`
-      select pg_advisory_xact_lock(hashtextextended(${`ap-capture-materialize:${input.orgId}:${vendorId}:${normalizedKey(capture.invoiceNumber)}`}, 0))
-    `);
+    // Serialize on BOTH the vendor invoice identity and the source file, in
+    // canonical (sorted) key order so concurrent materializes never take the
+    // two fences in opposite orders and deadlock:
+    // - vendor + normalized invoice number: two uploads of one vendor invoice
+    //   (different content hashes) must still exclude each other, or the
+    //   duplicate check below passes in both and two draft bills are born
+    //   for one invoice. The key normalizes exactly like the documents
+    //   duplicate check so 'INV-001' and 'inv 001' fence together.
+    // - org + content hash: two captures of one source file whose invoice
+    //   numbers diverge (duplicate upload plus a review correction, or
+    //   divergent OCR reads) share no vendor+invoice identity, so without
+    //   this fence both pass the duplicate SELECTs below before either
+    //   commits and one file births two drafts.
+    // Both keys carry the org id, so separate orgs never fence each other.
+    // The capture-row lock above stays first and the PO parent/line locks
+    // below stay last, so every path keeps the single global order
+    // capture row -> fences -> PO and cannot invert it.
+    const materializeFences = [
+      `ap-capture-materialize:${input.orgId}:${vendorId}:${normalizedKey(capture.invoiceNumber)}`,
+      `ap-capture-materialize:source:${input.orgId}:${item.content_hash}`,
+    ].sort();
+    for (const fence of materializeFences) {
+      await tx.execute(sql`
+        select pg_advisory_xact_lock(hashtextextended(${fence}, 0))
+      `);
+    }
     const validVendor = (await tx.execute(sql`
       select 1 from parties p join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id
        where p.org_id = ${input.orgId} and p.id = ${vendorId} and p.is_active and vr.is_active
