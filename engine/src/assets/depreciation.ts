@@ -12,14 +12,25 @@ import { assertFinalKernelBalance } from "../ledger/posting-invariants.ts";
 import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 
+/**
+ * An operator-facing depreciation refusal: a missing or invalid asset/book/
+ * period/category configuration, or an input the operator can correct. The
+ * message names the remedy. Boundary routes map it to a 4xx with that message
+ * instead of collapsing it into a 500; internal invariants (an out-of-balance
+ * preview, a claim that recorded no line) stay plain Error and remain 500.
+ */
+export class DepreciationRefusalError extends Error {
+  readonly name = "DepreciationRefusalError";
+}
+
 /** Persist a manual/usage depreciation fact through exact decimal then ledger money. Fail closed. */
 function persistDepreciationInputValue(value: unknown): string {
   const exact = canonicalDecimal(value, 4);
-  if (exact === null) throw new Error("depreciation value must be an exact decimal");
+  if (exact === null) throw new DepreciationRefusalError("depreciation value must be an exact decimal");
   try {
     return normalizeMoney(exact);
   } catch {
-    throw new Error("depreciation value must be an exact decimal");
+    throw new DepreciationRefusalError("depreciation value must be an exact decimal");
   }
 }
 
@@ -131,13 +142,13 @@ export function computeUnitsOfProductionCharge(input: UnitsOfProductionChargeInp
   const period = toUnits(input.periodUnits);
   const priorUnits = toUnits(input.unitsAlreadyRecorded ?? "0");
   const already = toUnits(input.depreciationAlreadyPlanned);
-  if (basis < 0n) throw new Error("salvage value cannot exceed acquisition cost");
-  if (lifetime <= 0n) throw new Error("expected lifetime production units must be greater than zero");
-  if (period === 0n) throw new Error("period production units must be non-zero");
+  if (basis < 0n) throw new DepreciationRefusalError("salvage value cannot exceed acquisition cost");
+  if (lifetime <= 0n) throw new DepreciationRefusalError("expected lifetime production units must be greater than zero");
+  if (period === 0n) throw new DepreciationRefusalError("period production units must be non-zero");
   if (priorUnits < 0n || priorUnits > lifetime || priorUnits + period < 0n || priorUnits + period > lifetime) {
-    throw new Error("recorded production must remain between zero and expected lifetime units");
+    throw new DepreciationRefusalError("recorded production must remain between zero and expected lifetime units");
   }
-  if (already < 0n || already > basis) throw new Error("existing depreciation exceeds the depreciable basis");
+  if (already < 0n || already > basis) throw new DepreciationRefusalError("existing depreciation exceeds the depreciable basis");
   const remaining = basis - already;
   if (priorUnits + period === lifetime) return fromUnits(remaining);
   const magnitude = toUnits(mulRatio(fromUnits(basis), period < 0n ? -period : period, lifetime));
@@ -240,9 +251,9 @@ function formulaForMethod(
     case "straight_line":
       return { formula: BUILTIN_FORMULAS.straight_line };
     case "manual":
-      throw new Error("manual depreciation requires a recorded period amount and evidence");
+      throw new DepreciationRefusalError("manual depreciation requires a recorded period amount and evidence");
     case "units_of_production":
-      throw new Error("units-of-production depreciation requires recorded period usage and lifetime units");
+      throw new DepreciationRefusalError("units-of-production depreciation requires recorded period usage and lifetime units");
     default: {
       const exhaustive: never = method;
       throw new Error(`unsupported depreciation method ${exhaustive}`);
@@ -258,7 +269,7 @@ function formulaForMethod(
 async function primaryBookId(runner: SqlExecutor, orgId: string): Promise<string> {
   const result = (await runner.execute<{ id: string }>(sql`
     select id from accounting_books where org_id = ${orgId} and is_primary limit 1`));
-  if (!result.rows[0]) throw new Error("no primary accounting book");
+  if (!result.rows[0]) throw new DepreciationRefusalError("no primary accounting book");
   return result.rows[0].id;
 }
 
@@ -279,7 +290,7 @@ export async function assetDepreciationCalendar(
   `)
   ).rows;
   if (retained.length > 1)
-    throw new Error(
+    throw new DepreciationRefusalError(
       "asset depreciation schedule spans multiple fiscal calendars",
     );
   if (retained[0]) return retained[0].id;
@@ -289,7 +300,7 @@ export async function assetDepreciationCalendar(
   `)
   ).rows;
   if (defaults.length !== 1)
-    throw new Error(
+    throw new DepreciationRefusalError(
       "asset depreciation requires one active default fiscal calendar",
     );
   return defaults[0]!.id;
@@ -331,8 +342,8 @@ async function loadUnremeasuredAssetPlan(
            opening_accumulated_as_of::text as opening_accumulated_as_of
       from fixed_assets where id = ${assetId} and org_id = ${orgId} for update`);
   const asset = assetRes.rows[0];
-  if (!asset) throw new Error("asset not found");
-  if (!asset.in_service_on) throw new Error("asset has no in-service date");
+  if (!asset) throw new DepreciationRefusalError("asset not found");
+  if (!asset.in_service_on) throw new DepreciationRefusalError("asset has no in-service date");
 
   const catRes = await runner.execute<{
     default_method: DepreciationMethod;
@@ -343,7 +354,7 @@ async function loadUnremeasuredAssetPlan(
     select default_method, default_depreciation_method_id, default_life_months, default_convention
       from asset_categories where id = ${asset.category_id} and org_id = ${orgId} for update`);
   const category = catRes.rows[0];
-  if (!category) throw new Error("asset category not found");
+  if (!category) throw new DepreciationRefusalError("asset category not found");
 
   const bookId = forBookId ?? (await primaryBookId(runner, orgId));
   const calendarId = await assetDepreciationCalendar(
@@ -417,7 +428,7 @@ async function loadUnremeasuredAssetPlan(
   `)
   ).rows[0];
   if (drift)
-    throw new Error(
+    throw new DepreciationRefusalError(
       "historical depreciation policy differs from the retained schedule; reconcile the policy before rebuilding or restoring impairment",
     );
   if (
@@ -425,13 +436,13 @@ async function loadUnremeasuredAssetPlan(
       (method !== "manual" && method !== "units_of_production")) &&
     (!lifeMonths || lifeMonths <= 0)
   ) {
-    throw new Error("asset has no useful life (months)");
+    throw new DepreciationRefusalError("asset has no useful life (months)");
   }
   if (
     method === "units_of_production" &&
     (unitsTotal == null || cmp(unitsTotal, "0") <= 0)
   ) {
-    throw new Error(
+    throw new DepreciationRefusalError(
       "units-of-production depreciation requires positive expected lifetime units",
     );
   }
@@ -454,7 +465,7 @@ async function loadUnremeasuredAssetPlan(
      where org_id = ${orgId} and id = ${depreciationMethodId} and is_active limit 1
      for share`);
   if (depreciationMethodId && !custom2.rows[0])
-    throw new Error(
+    throw new DepreciationRefusalError(
       "configured depreciation formula is inactive or unavailable",
     );
   const { firstPeriodFraction, firstFractionPeriods } =
@@ -499,7 +510,7 @@ async function loadUnremeasuredAssetPlan(
   const openingAmount = asset.opening_accumulated_depreciation;
   const openingAsOf = asset.opening_accumulated_as_of;
   if ((openingAmount === null) !== (openingAsOf === null)) {
-    throw new Error(
+    throw new DepreciationRefusalError(
       "opening accumulated depreciation requires both an amount and an as-of date",
     );
   }
@@ -580,7 +591,7 @@ export async function unimpairedAssetCarryingValue(
         neg(asset.salvage_value),
       );
       if (cmp(input.held_depreciable, "0") <= 0)
-        throw new Error(
+        throw new DepreciationRefusalError(
           "historical depreciation has no retained physical basis",
         );
       const originalEquivalent = (value: string) =>
@@ -591,7 +602,7 @@ export async function unimpairedAssetCarryingValue(
         );
       if (method === "manual") {
         if (input.manual_amount === null)
-          throw new Error(
+          throw new DepreciationRefusalError(
             "manual depreciation evidence is unavailable for the restoration ceiling",
           );
         depreciation = add(
@@ -600,7 +611,7 @@ export async function unimpairedAssetCarryingValue(
         );
       } else {
         if (input.production_units === null || unitsTotal === null) {
-          throw new Error(
+          throw new DepreciationRefusalError(
             "production evidence is unavailable for the restoration ceiling",
           );
         }
@@ -643,7 +654,7 @@ export async function unimpairedAssetCarryingValue(
           period.ends_on >= line.periodMonth,
       );
       if (!period)
-        throw new Error(
+        throw new DepreciationRefusalError(
           `accounting period missing for restoration ceiling (${line.periodMonth})`,
         );
       if (period.ends_on <= asOfDate) {
@@ -706,9 +717,9 @@ export async function buildScheduleWithRunner(
   // catch-up (no opening fields at all) is the way to recognise those months.
   const openingAmount = opening ? opening.amount : "0";
   if (opening && cmp(openingAmount, "0") > 0) {
-    if (!asset.in_service_on) throw new Error("asset has no in-service date");
+    if (!asset.in_service_on) throw new DepreciationRefusalError("asset has no in-service date");
     if (monthStart(opening.asOf) < monthStart(asset.in_service_on)) {
-      throw new Error(
+      throw new DepreciationRefusalError(
         `opening accumulated as-of ${opening.asOf} precedes the in-service month ${monthStart(asset.in_service_on)}`,
       );
     }
@@ -718,7 +729,7 @@ export async function buildScheduleWithRunner(
     cmp(openingAmount, "0") === 0 &&
     plan.some((p) => p.periodMonth <= opening.asOf)
   ) {
-    throw new Error(
+    throw new DepreciationRefusalError(
       "opening accumulated depreciation is zero but pre-cutover months would be dropped — clear the opening fields for full-life catch-up",
     );
   }
@@ -743,7 +754,7 @@ export async function buildScheduleWithRunner(
            where org_id = ${orgId} and schedule_id = ${scheduleId} and source <> 'formula'
            limit 1 for update`);
         if (evidence.rows[0]) {
-          throw new Error(
+          throw new DepreciationRefusalError(
             "depreciation method cannot change after manual or production evidence exists",
           );
         }
@@ -856,7 +867,7 @@ export async function buildScheduleWithRunner(
     if (
       cmp(unpostedReserved, add(afterPosted, neg(basisChange.accumulated))) > 0
     ) {
-      throw new Error(
+      throw new DepreciationRefusalError(
         "retained unposted depreciation exceeds the remaining depreciable basis; reconcile earlier projections before remeasurement",
       );
     }
@@ -871,7 +882,7 @@ export async function buildScheduleWithRunner(
       neg(basisChange.accumulated),
     );
     if (cmp(remainingBase, "0") < 0) {
-      throw new Error(
+      throw new DepreciationRefusalError(
         "opening accumulated depreciation exceeds the remaining depreciable basis; reconcile the opening figure before rebuilding",
       );
     }
@@ -919,13 +930,13 @@ export async function buildScheduleWithRunner(
       for (const line of retained) {
         if (line.posted_amount === null) continue;
         if (line.ends_on <= opening.asOf) {
-          throw new Error(
+          throw new DepreciationRefusalError(
             `posted depreciation for period ending ${line.ends_on} overlaps the opening accumulated as-of ${opening.asOf} — clear the opening fields or reverse the overlapping posting before rebuilding`,
           );
         }
         const native = nativeByPeriod.get(line.period_id);
         if (native !== undefined && toUnits(line.planned_amount) > native) {
-          throw new Error(
+          throw new DepreciationRefusalError(
             `posted depreciation for period ending ${line.ends_on} carries pre-period catch-up already covered by the opening accumulated as-of ${opening.asOf} — clear the opening fields or reverse the overlapping posting before rebuilding`,
           );
         }
@@ -956,7 +967,7 @@ export async function buildScheduleWithRunner(
           remeasurement.cutoff &&
           p.periodMonth < monthStart(remeasurement.cutoff)
         ) {
-          throw new Error(
+          throw new DepreciationRefusalError(
             `historical accounting period missing for depreciation projection (${p.periodMonth})`,
           );
         }
@@ -978,13 +989,13 @@ export async function buildScheduleWithRunner(
         period.ends_on < remeasurement.cutoff &&
         !prior
       ) {
-        throw new Error(
+        throw new DepreciationRefusalError(
           `historical depreciation projection missing (${p.periodMonth}); reconcile retained evidence before rebuilding`,
         );
       }
       if (period && preservedPeriods.has(period.id)) continue;
       if (prior && prior.source !== "formula")
-        throw new Error(
+        throw new DepreciationRefusalError(
           "formula rebuild cannot reinterpret depreciation input evidence",
         );
       // Caught-up history lands in the next mapped, unposted period — the
@@ -1018,7 +1029,7 @@ export async function buildScheduleWithRunner(
       }
     }
     if (pendingCatchUp !== "0") {
-      throw new Error(
+      throw new DepreciationRefusalError(
         `historical accounting period missing for depreciation projection (${firstUnplacedMonth}); provision the period or shorten the depreciable life before rebuilding`,
       );
     }
@@ -1033,7 +1044,7 @@ export async function buildScheduleWithRunner(
       future.length === 0 &&
       cmp(remainingBase, "0") > 0
     ) {
-      throw new Error(
+      throw new DepreciationRefusalError(
         `no depreciable months remain after the opening accumulated as-of ${opening.asOf} but ${remainingBase} of basis is unfunded — raise the opening figure or extend the useful life`,
       );
     }
@@ -1170,14 +1181,14 @@ export async function recordDepreciationInput(
 ): Promise<RecordDepreciationInputResult> {
   const memo = args.memo.trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(args.effectiveDate))
-    throw new Error("effective date is required");
-  if (!memo) throw new Error("an accounting memo is required");
+    throw new DepreciationRefusalError("effective date is required");
+  if (!memo) throw new DepreciationRefusalError("an accounting memo is required");
   if (
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
       args.evidenceFileId,
     )
   ) {
-    throw new Error("an attached evidence file is required");
+    throw new DepreciationRefusalError("an attached evidence file is required");
   }
   const value = persistDepreciationInputValue(args.value);
 
@@ -1221,13 +1232,13 @@ export async function recordDepreciationInput(
        for update of s, a, p`);
     const row = schedule.rows[0];
     if (!row)
-      throw new Error(
+      throw new DepreciationRefusalError(
         "no depreciation schedule or accounting period covers the effective date",
       );
     if (row.status !== "in_service")
-      throw new Error("depreciation inputs require an in-service asset");
+      throw new DepreciationRefusalError("depreciation inputs require an in-service asset");
     if (args.effectiveDate < row.in_service_on)
-      throw new Error("depreciation cannot precede the in-service date");
+      throw new DepreciationRefusalError("depreciation cannot precede the in-service date");
     // One period gate: the shared assets+GL check replaces the raw
     // period_module_is_closed projection. Recording new evidence is local
     // activity, not historical replay, so source-owned imported locks refuse
@@ -1242,13 +1253,13 @@ export async function recordDepreciationInput(
       });
     } catch (error) {
       if (error instanceof CloseError)
-        throw new Error("the asset or GL period is closed");
+        throw new DepreciationRefusalError("the asset or GL period is closed");
       throw error;
     }
     const expectedMethod =
       args.kind === "manual" ? "manual" : "units_of_production";
     if (row.method !== expectedMethod)
-      throw new Error(
+      throw new DepreciationRefusalError(
         `schedule method is ${row.method}, not ${expectedMethod}`,
       );
     const evidence = await tx.execute(sql`
@@ -1259,7 +1270,7 @@ export async function recordDepreciationInput(
          and fa.target_table = 'fixed_assets' and fa.target_id = ${args.assetId}
        limit 1`);
     if (!evidence.rows[0])
-      throw new Error("evidence file must be attached to this asset");
+      throw new DepreciationRefusalError("evidence file must be attached to this asset");
 
     const source = args.kind === "manual" ? "manual" : "production_usage";
     const priorLine = await tx.execute<{
@@ -1293,7 +1304,7 @@ export async function recordDepreciationInput(
       row.book_id,
     );
     if (basisChange.cutoff && args.effectiveDate < basisChange.cutoff)
-      throw new Error(
+      throw new DepreciationRefusalError(
         "depreciation input cannot precede the approved asset basis change",
       );
     const currentCost = add(row.acquisition_cost, basisChange.cost),
@@ -1304,13 +1315,13 @@ export async function recordDepreciationInput(
       )
     ).rows[0]!;
     if (valuation.cutoff && args.effectiveDate < valuation.cutoff)
-      throw new Error(
+      throw new DepreciationRefusalError(
         "depreciation input cannot precede the retained asset valuation; correct that valuation before changing its historical inputs",
       );
     const basis =
       toUnits(add(currentCost, valuation.delta)) - toUnits(currentSalvage);
     if (basis < 0n)
-      throw new Error("salvage value cannot exceed acquisition cost");
+      throw new DepreciationRefusalError("salvage value cannot exceed acquisition cost");
     // Continue-from-accumulated (migration 0156): evidence caps run against
     // the REMAINING basis — the opening figure already consumed part of it.
     const alreadyPlanned = add(
@@ -1320,19 +1331,19 @@ export async function recordDepreciationInput(
     let plannedAmount: string;
     if (args.kind === "manual") {
       if (cmp(value, "0") === 0)
-        throw new Error("manual depreciation must be non-zero");
+        throw new DepreciationRefusalError("manual depreciation must be non-zero");
       const next = toUnits(alreadyPlanned) + toUnits(value);
       if (next < 0n || next > basis) {
-        throw new Error(
+        throw new DepreciationRefusalError(
           "manual depreciation must keep accumulated depreciation between zero and the salvage floor",
         );
       }
       plannedAmount = value;
     } else {
       if (cmp(value, "0") === 0)
-        throw new Error("production units must be non-zero");
+        throw new DepreciationRefusalError("production units must be non-zero");
       if (!row.units_total || cmp(row.units_total, "0") <= 0) {
-        throw new Error(
+        throw new DepreciationRefusalError(
           "expected lifetime production units are not configured",
         );
       }
@@ -1372,7 +1383,7 @@ export async function recordDepreciationInput(
         cutoverTotals?.used_units ?? totals.rows[0]?.used_units ?? "0";
       const nextUnits = toUnits(usedUnits) + toUnits(value);
       if (nextUnits < 0n || nextUnits > toUnits(lifetimeUnits))
-        throw new Error(
+        throw new DepreciationRefusalError(
           cutoff
             ? "recorded production must remain between zero and the approved remaining capacity"
             : "recorded production must remain between zero and expected lifetime units",
@@ -2345,7 +2356,7 @@ export async function runDepreciation(
           select id from asset_categories
            where id = ${assetKey.category_id} and org_id = ${orgId}
            for update`));
-        if (!categoryLock.rows[0]) throw new Error("asset category not found");
+        if (!categoryLock.rows[0]) throw new DepreciationRefusalError("asset category not found");
 
         // Restriction validation depends on the complete subsidiary tree. Lock
         // that tree before loading it so parent/active-state edits cannot race
