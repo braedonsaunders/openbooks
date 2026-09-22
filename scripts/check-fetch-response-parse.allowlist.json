@@ -505,11 +505,6 @@
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
-    "path": "web/app/(app)/reports/custom/builder/[id]/ReportBuilder.tsx",
-    "fn": "ReportBuilder",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
     "path": "web/app/(app)/reports/custom/run/[id]/delivery/DeliveryPanel.tsx",
     "fn": "runNow",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"

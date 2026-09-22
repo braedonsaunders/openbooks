@@ -3,15 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Filter, Play, Settings2, Table2, Trash2 } from 'lucide-react'
+import { ArrowUpDown, Columns3, Database, Filter, ListTree, Play, Settings2, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useTranslations } from 'next-intl'
-import { Badge, Button, Input, Label, Select, cn } from '@openbooks/ui'
+import { Badge, Button, Input, Label, SearchSelect, Select, cn } from '@openbooks/ui'
 import {
   REPORT_ENTITIES,
   type ReportEntity,
   defaultColumnsFor,
-  isOperationalColumn,
   resolveReportLayout,
   type ReportCustomQuery,
   type ReportLayoutConfig,
@@ -22,8 +21,9 @@ import { confirmDialog } from '../../../../../../lib/confirm'
 import { FilterTree } from '../../FilterTree'
 import { PaperView, type PaperData } from '../../../PaperView'
 import { RowsConfig, SortConfig, SummarizeConfig } from '../../../query-config'
+import { availableReportEntities } from '../../../../../../lib/report-builder-catalog'
 
-type Tab = 'data' | 'filter' | 'format'
+type Tab = 'source' | 'columns' | 'grouping' | 'sorting' | 'filter' | 'format'
 
 export function ReportBuilder({
   definition,
@@ -48,6 +48,10 @@ export function ReportBuilder({
 }) {
   const entities = useMemo(() => [...REPORT_ENTITIES, ...customEntities], [customEntities])
   const entityMap = useMemo(() => Object.fromEntries(entities.map(e => [e.key,e])), [entities])
+  const visibleEntities = useMemo(
+    () => availableReportEntities(entities, hiddenEntityKeys),
+    [entities, hiddenEntityKeys],
+  )
   const t = useTranslations('reports.custom.builder')
   const tk = useTranslations('reports.custom')
   const ta = useTranslations('reports.custom.actions')
@@ -65,7 +69,7 @@ export function ReportBuilder({
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [previewing, setPreviewing] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [tab, setTab] = useState<Tab>('data')
+  const [tab, setTab] = useState<Tab>('source')
 
   // PATCH requests can outlive the debounce timer that created them. Keep an
   // exact server revision and serialize saves so a late response can never
@@ -127,14 +131,16 @@ export function ReportBuilder({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: plan }),
       })
-      const data = await res.json()
-      if (res.ok) {
-        setPreview(data.result)
-        setPreviewError(null)
-      } else {
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string }
         setPreview(null)
         setPreviewError(data.error ?? t('previewFailed'))
+        setPreviewing(false)
+        return
       }
+      const data = (await res.json()) as { result: ReportRunResult }
+      setPreview(data.result)
+      setPreviewError(null)
       setPreviewing(false)
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -208,8 +214,6 @@ export function ReportBuilder({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, description, query, layout, ensureRevision])
 
-  const selectableColumns = useMemo(() => entity.columns.filter(isOperationalColumn), [entity])
-
   async function removeReport() {
     const confirmed = await confirmDialog({
       message: ta('deleteConfirm'),
@@ -251,8 +255,35 @@ export function ReportBuilder({
     : null
 
   const field = 'space-y-1.5'
-  const tabs: { key: Tab; label: string; icon: typeof Table2 }[] = [
-    { key: 'data', label: t('tabs.data'), icon: Table2 },
+  const sourceGroupLabel = (category: string) => {
+    const normalized = category.toLocaleLowerCase()
+    if (normalized === 'general_ledger') return tReports('hub.groups.ledger')
+    if (normalized === 'transactions') return tReports('hub.groups.receivablesPayables')
+    if (normalized === 'inventory') return tReports('hub.groups.inventory')
+    if (normalized === 'payroll') return tReports('hub.groups.payroll')
+    if (normalized === 'hrm') return tReports('hub.groups.hrm')
+    if (normalized === 'crm') return tReports('hub.groups.crm')
+    if (normalized === 'ai governance') return tReports('hub.groups.aiGovernance')
+    if (normalized === 'catalog') return tReports('hub.groups.custom')
+    return category.replaceAll('_', ' ').replace(/^./, (letter) => letter.toLocaleUpperCase())
+  }
+  const entityLabel = (candidate: ReportEntity) => (
+    candidate.key.startsWith('custom:') ? candidate.label : tReports(`catalog.entities.${candidate.key}.label`)
+  )
+  const entityDescription = (candidate: ReportEntity) => (
+    candidate.key.startsWith('custom:') ? candidate.description : tReports(`catalog.entities.${candidate.key}.description`)
+  )
+  const sourceOptions = visibleEntities.map((candidate) => ({
+    value: candidate.key,
+    label: entityLabel(candidate),
+    hint: entityDescription(candidate),
+    group: sourceGroupLabel(candidate.category),
+  }))
+  const tabs: { key: Tab; label: string; icon: typeof Database }[] = [
+    { key: 'source', label: t('tabs.source'), icon: Database },
+    { key: 'columns', label: t('tabs.columns'), icon: Columns3 },
+    { key: 'grouping', label: t('tabs.grouping'), icon: ListTree },
+    { key: 'sorting', label: t('tabs.sorting'), icon: ArrowUpDown },
     { key: 'filter', label: t('tabs.filter'), icon: Filter },
     { key: 'format', label: t('tabs.format'), icon: Settings2 },
   ]
@@ -260,19 +291,17 @@ export function ReportBuilder({
   return (
     <DetailPageLayout
       header={
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 space-y-1">
-            <div className="flex items-center gap-2">
-              <Input
-                className="h-9 w-72 text-base font-semibold"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder={t('namePlaceholder')}
-              />
-              {definition.kind === 'built_in' ? <Badge variant="secondary">{tk('kind.builtIn')}</Badge> : null}
-            </div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 sm:flex-nowrap">
             <Input
-              className="h-8 w-full max-w-xl text-sm"
+              className="h-9 w-full text-base font-semibold sm:w-64 sm:shrink-0"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={t('namePlaceholder')}
+            />
+            {definition.kind === 'built_in' ? <Badge className="shrink-0" variant="secondary">{tk('kind.builtIn')}</Badge> : null}
+            <Input
+              className="h-9 min-w-56 flex-1 text-sm"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder={t('descriptionPlaceholder')}
@@ -311,10 +340,10 @@ export function ReportBuilder({
         </div>
       }
     >
-      <div className="grid gap-6 lg:grid-cols-[minmax(320px,1fr)_2fr]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(360px,1fr)_2fr]">
         {/* --- control panel (1/3) with subtabs --- */}
         <div className="space-y-4">
-          <div className="inline-flex rounded-lg border border-slate-200 p-0.5 dark:border-slate-800">
+          <div className="grid grid-cols-3 gap-0.5 rounded-lg border border-slate-200 p-0.5 dark:border-slate-800">
             {tabs.map((tb) => {
               const Icon = tb.icon
               return (
@@ -322,8 +351,9 @@ export function ReportBuilder({
                   key={tb.key}
                   type="button"
                   onClick={() => setTab(tb.key)}
+                  aria-pressed={tab === tb.key}
                   className={cn(
-                    'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                    'flex min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors sm:text-sm',
                     tab === tb.key
                       ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
                       : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100',
@@ -335,18 +365,20 @@ export function ReportBuilder({
             })}
           </div>
 
-          {tab === 'data' ? (
+          {tab === 'source' ? (
             <div className="space-y-5">
               <div className={field}>
                 <Label>{t('source')}</Label>
-                <Select value={query.entity} onChange={(e) => changeEntity(e.target.value)}>
-                  {entities.filter((e) => !hiddenEntityKeys.includes(e.key)).map((e) => (
-                    <option key={e.key} value={e.key}>
-                      {e.key.startsWith('custom:') ? e.label : tReports(`catalog.entities.${e.key}.label`)}
-                    </option>
-                  ))}
-                </Select>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{entity.key.startsWith('custom:') ? entity.description : tReports(`catalog.entities.${entity.key}.description`)}</p>
+                <SearchSelect
+                  value={query.entity}
+                  onChange={changeEntity}
+                  options={sourceOptions}
+                  searchable
+                  searchPlaceholder={t('sourceSearchPlaceholder')}
+                  sheetTitle={t('source')}
+                  ariaLabel={t('source')}
+                />
+                <p className="text-xs text-slate-500 dark:text-slate-400">{entityDescription(entity)}</p>
               </div>
 
               <div className={field}>
@@ -366,26 +398,39 @@ export function ReportBuilder({
                 </div>
               </div>
 
-              {mode === 'rows' ? (
-                <RowsConfig entity={entity} query={query} patch={patch} columns={selectableColumns} />
-              ) : (
-                <SummarizeConfig entity={entity} query={query} patch={patch} />
-              )}
-
-              <SortConfig entity={entity} query={query} patch={patch} />
-
               <div className={field}>
                 <Label>{t('rowLimit')}</Label>
                 <Input
                   type="number"
                   min={1}
-                  max={10000}
+                  step={1}
                   value={query.limit ?? 1000}
-                  onChange={(e) => patch({ limit: Math.min(Math.max(Number(e.target.value) || 1, 1), 10000) })}
+                  onChange={(event) => {
+                    const requested = Number(event.target.value)
+                    patch({
+                      limit: Number.isFinite(requested)
+                        ? Math.min(Math.max(Math.trunc(requested), 1), Number.MAX_SAFE_INTEGER)
+                        : 1,
+                    })
+                  }}
                 />
                 <p className="text-xs text-slate-500 dark:text-slate-400">{t('rowLimitHint', { previewRows: 200 })}</p>
               </div>
             </div>
+          ) : tab === 'columns' ? (
+            mode === 'rows' ? (
+              <RowsConfig entity={entity} query={query} patch={patch} columns={entity.columns} section="columns" />
+            ) : (
+              <SummarizeConfig entity={entity} query={query} patch={patch} section="measures" />
+            )
+          ) : tab === 'grouping' ? (
+            mode === 'rows' ? (
+              <RowsConfig entity={entity} query={query} patch={patch} columns={entity.columns} section="grouping" />
+            ) : (
+              <SummarizeConfig entity={entity} query={query} patch={patch} section="grouping" />
+            )
+          ) : tab === 'sorting' ? (
+            <SortConfig entity={entity} query={query} patch={patch} />
           ) : tab === 'filter' ? (
             <div className={field}>
               <Label>{tc('labels.filters')}</Label>
@@ -434,6 +479,15 @@ export function ReportBuilder({
                   />
                 </div>
               </div>
+              <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-slate-300 accent-teal-600"
+                  checked={layout.showSummary !== false}
+                  onChange={(event) => setLayout((current) => ({ ...current, showSummary: event.currentTarget.checked }))}
+                />
+                {t('pageSetup.showSummary')}
+              </label>
             </div>
           )}
         </div>

@@ -374,6 +374,7 @@
       "unsavedChanges": "Nicht gespeicherte Änderungen…",
       "runAndSchedule": "Ausführen & planen",
       "source": "Quelle",
+      "sourceSearchPlaceholder": "Berichtsquellen durchsuchen…",
       "mode": "Modus",
       "detailRows": "Detailzeilen",
       "summarize": "Zusammenfassen",
@@ -383,7 +384,7 @@
       "descending": "Absteigend",
       "ascending": "Aufsteigend",
       "rowLimit": "Zeilenlimit",
-      "rowLimitHint": "Begrenzt auf 10.000 Zeilen. Vorschauen zeigen die ersten {previewRows}.",
+      "rowLimitHint": "Vollständige Läufe verwenden dieses Limit. Live-Vorschauen zeigen die ersten {previewRows} Zeilen.",
       "pageSetup": {
         "title": "PDF-Seiteneinrichtung",
         "hint": "Steuert, wie dieser Bericht als PDF gedruckt wird (Papier, Ausrichtung, Dichte, Ränder).",
@@ -397,7 +398,8 @@
         "density": "Dichte",
         "densityStandard": "Standard",
         "densityCompact": "Kompakt (mehr Zeilen pro Seite)",
-        "marginMm": "Ränder (mm)"
+        "marginMm": "Ränder (mm)",
+        "showSummary": "Zusammenfassungsleiste anzeigen"
       },
       "livePreview": "Live-Vorschau",
       "previewFailed": "Vorschau fehlgeschlagen",
@@ -433,6 +435,17 @@
       },
       "running": "Läuft…",
       "selectedColumns": "Ausgewählte Spalten",
+      "columnPickerHint": "Durchsuchen Sie alle Felder dieser Quelle, einschließlich verknüpfter Datensätze und stabiler Kennungen.",
+      "columnSearchPlaceholder": "Spalten durchsuchen…",
+      "useDefaults": "Standard",
+      "selectAll": "Alle auswählen",
+      "clearAll": "Leeren",
+      "noColumnsMatch": "Keine verfügbare Spalte entspricht dieser Suche.",
+      "fieldGroups": {
+        "record": "Datensatzfelder",
+        "related": "Verknüpfte Felder",
+        "identifiers": "Kennungen"
+      },
       "addColumn": "Spalte hinzufügen",
       "labelOverridePlaceholder": "Umbenennen…",
       "moveUpAria": "Nach oben verschieben",
@@ -443,7 +456,10 @@
       "removeSortAria": "Sortierebene entfernen",
       "noColumnsSelected": "Keine Spalten ausgewählt – fügen Sie mindestens eine hinzu.",
       "tabs": {
-        "data": "Daten",
+        "source": "Quelle",
+        "columns": "Spalten",
+        "grouping": "Gruppen",
+        "sorting": "Sortieren",
         "filter": "Filter",
         "format": "Format"
       }

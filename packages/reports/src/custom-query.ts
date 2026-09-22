@@ -27,7 +27,9 @@ import {
 } from './types'
 
 export const DEFAULT_REPORT_LIMIT = 1000
-export const MAX_REPORT_ROWS = 10_000
+/** Compatibility value for callers that need an explicit "full run" clamp.
+ * It is the numeric/SQL safety boundary, not a product row ceiling. */
+export const MAX_REPORT_ROWS = Number.MAX_SAFE_INTEGER
 /** Reserved raw-row key carrying COUNT(*) OVER() for a paged result. */
 export const REPORT_TOTAL_ROWS_COLUMN = '__report_total_rows'
 
@@ -78,7 +80,7 @@ export type CompileCustomQueryOpts = {
    *  leaves the entity unclamped for explicit cross-book analysis; an empty
    *  array matches nothing. Ignored by book-independent entities. */
   allowedBookIds?: readonly string[] | null;
-  /** Extra clamp under MAX_REPORT_ROWS (e.g. 50 for studio previews). */
+  /** Optional caller-owned clamp (e.g. 200 for studio previews). */
   maxRows?: number
   /** Org fiscal-year start month (1–12) for the `fiscal_*` temporal bins. The
    *  engine stays DB-free — the caller supplies it. Defaults to 1 (calendar). */
@@ -738,10 +740,31 @@ export function measureLabel(entity: ReportEntity, m: ReportMeasure): string {
 }
 
 export function resolveLimit(requested: number | null | undefined, maxRows?: number): number {
-  const n = Number(requested ?? DEFAULT_REPORT_LIMIT)
-  let limit = Math.min(Math.max(Number.isFinite(n) ? n : DEFAULT_REPORT_LIMIT, 1), MAX_REPORT_ROWS)
-  if (maxRows) limit = Math.min(limit, maxRows)
+  let limit = normalizeReportLimit(requested)
+  if (Number.isFinite(maxRows) && Number(maxRows) > 0) {
+    limit = Math.min(limit, normalizeReportLimit(maxRows))
+  }
   return limit
+}
+
+/**
+ * Normalize an untrusted requested result size without imposing an arbitrary
+ * product-wide ceiling. Preview, export, and delivery callers may still pass
+ * an explicit operational clamp; a full report otherwise honours its saved
+ * row limit up to JavaScript/Postgres' shared safe-integer boundary.
+ */
+export function normalizeReportLimit(
+  requested: number | null | undefined,
+  fallback = DEFAULT_REPORT_LIMIT,
+): number {
+  const requestedNumber = Number(requested ?? fallback)
+  const fallbackNumber = Number(fallback)
+  const n = Number.isFinite(requestedNumber)
+    ? requestedNumber
+    : Number.isFinite(fallbackNumber)
+      ? fallbackNumber
+      : DEFAULT_REPORT_LIMIT
+  return Math.min(Math.max(Math.trunc(n), 1), Number.MAX_SAFE_INTEGER)
 }
 
 /** Normalize untrusted page numbers against the entity-authored policy. */
@@ -753,10 +776,7 @@ export function resolveReportPage(
   if (!entity.pagination) {
     throw new Error(`entity ${entity.key} does not support paged execution`)
   }
-  const configuredMax = Math.min(
-    Math.max(Math.trunc(entity.pagination.maxPageSize) || 1, 1),
-    MAX_REPORT_ROWS,
-  )
+  const configuredMax = normalizeReportLimit(entity.pagination.maxPageSize, 1)
   const effectiveMax = Number.isFinite(maxRows) && Number(maxRows) > 0
     ? Math.min(configuredMax, Math.max(1, Math.trunc(Number(maxRows))))
     : configuredMax

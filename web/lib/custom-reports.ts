@@ -44,9 +44,6 @@ import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
  * user-authored report_definitions / report_schedules / report_runs surface.
  */
 
-/** Hard ceiling on rows any report may materialise, matching the engine cap. */
-export const REPORT_MAX_ROWS = 10_000
-
 /** Ops whose meaning is "a time window on this field" — replaced wholesale
  *  when the viewer picks a period in the report screen's filter bar. */
 const TEMPORAL_OPS = new Set([
@@ -227,7 +224,8 @@ export function mergeReportFilters(
 
 /**
  * Execute a validated plan against the org, using the engine executor over the
- * shared pg pool (a PgQueryable). `maxRows` clamps under the engine's 10k cap.
+ * shared pg pool (a PgQueryable). Full runs honour the definition's requested
+ * limit; callers such as the live studio preview may supply a smaller clamp.
  * Shaped display strings (headings, group titles, summary labels) come out in
  * the request locale; pass `labels` to override (e.g. a future scheduled
  * pipeline pinning the org default outside a request).
@@ -241,13 +239,13 @@ export function mergeReportFilters(
 export async function executeReport(
   orgId: string,
   query: ReportCustomQuery,
-  maxRows: number = REPORT_MAX_ROWS,
+  maxRows?: number,
   labels?: ReportRunLabels,
 ): Promise<ReportRunResult> {
   const prepared = await prepareReportExecution(orgId, query, labels)
   return runCustomQuery(pool, prepared.query, {
     ...prepared.options,
-    maxRows: Math.min(maxRows, REPORT_MAX_ROWS),
+    ...(maxRows === undefined ? {} : { maxRows }),
   })
 }
 
@@ -268,8 +266,8 @@ export async function executeReportPage(
 }
 
 /**
- * Materialize every page for an export without falling back to the legacy
- * 10,000-row query cap. All pages run inside one repeatable-read, read-only
+ * Materialize every page for an export. All pages run inside one
+ * repeatable-read, read-only
  * transaction: inserts or corrections arriving while a large export runs
  * cannot shift page boundaries and duplicate or omit movements.
  *
@@ -283,7 +281,7 @@ export async function executeReportAllPages(
 ): Promise<ReportRunResult> {
   const entity = REPORT_ENTITY_MAP[query.entity]
   if (query.mode !== 'rows' || !entity?.pagination) {
-    return executeReport(orgId, query, REPORT_MAX_ROWS, labels)
+    return executeReport(orgId, query, undefined, labels)
   }
 
   const prepared = await prepareReportExecution(orgId, query, labels)
@@ -828,7 +826,7 @@ export async function recordReportRun(args: {
   const runId = inserted.rows[0]!.id
 
   try {
-    const result = await withReportAuthz(authz, () => executeReport(args.orgId, args.query, args.maxRows ?? REPORT_MAX_ROWS))
+    const result = await withReportAuthz(authz, () => executeReport(args.orgId, args.query, args.maxRows))
     // The stored CSV artifact bakes the locale of whoever triggered the run.
     const csv = reportResultToCsv(result, await reportCsvOptions())
     await db.execute(sql`

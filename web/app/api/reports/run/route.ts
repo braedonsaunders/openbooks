@@ -4,7 +4,6 @@ import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../lib/authz'
 import { guardReportEntity } from '../../../../lib/report-authz'
 import {
-  REPORT_MAX_ROWS,
   REPORT_PREVIEW_ROWS,
   executeReport,
   loadReportDefinition,
@@ -20,8 +19,8 @@ export const runtime = 'nodejs'
  *   { query }                 — ad-hoc plan (studio live preview). Clamped to
  *                               REPORT_PREVIEW_ROWS unless `preview:false`, and
  *                               NOT recorded as a run.
- *   { definitionId }          — run a saved definition, capped at 10k rows and
- *                               recorded as a manual report_runs row (so it has
+ *   { definitionId }          — run a saved definition at its configured row
+ *                               limit and record a manual report_runs row (so it has
  *                               a downloadable CSV artifact).
  */
 export async function POST(req: Request) {
@@ -60,7 +59,6 @@ export async function POST(req: Request) {
       definitionId: def.id,
       query: def.query,
       trigger: 'manual',
-      maxRows: REPORT_MAX_ROWS,
     })
     if (run.error) return NextResponse.json({ error: run.error }, { status: 422 })
     return NextResponse.json({ result: run.result, runId: run.runId })
@@ -78,7 +76,7 @@ export async function POST(req: Request) {
   }
   const deniedAdhoc = await entityGate(query.entity)
   if (deniedAdhoc) return deniedAdhoc
-  const maxRows = body.preview === false ? REPORT_MAX_ROWS : REPORT_PREVIEW_ROWS
+  const maxRows = body.preview === false ? undefined : REPORT_PREVIEW_ROWS
   try {
     const result = await executeReport(user.orgId, query, maxRows)
     return NextResponse.json({ result })
