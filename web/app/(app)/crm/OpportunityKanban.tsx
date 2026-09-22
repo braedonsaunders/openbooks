@@ -22,6 +22,7 @@ import {
 } from '@openbooks/ui'
 import { toast } from 'sonner'
 import { displayOpportunityStatusName } from '../../../lib/crm-status-display'
+import { useBusinessToday } from '../../../components/business-date-provider'
 
 export interface KanbanStatus {
   id: string
@@ -118,6 +119,10 @@ export function OpportunityKanbanBoard({
   const t = useTranslations('crm')
   const tc = useTranslations('common')
   const router = useRouter()
+  // Overdue compares calendar days in the org's business day: `new
+  // Date('YYYY-MM-DD')` is UTC midnight, so anything due today read as
+  // overdue for the whole day. YYYY-MM-DD strings compare lexically.
+  const today = useBusinessToday()
 
   const [search, setSearch] = useState('')
   const [movingId, setMovingId] = useState<string | null>(null)
@@ -274,9 +279,10 @@ export function OpportunityKanbanBoard({
                 {colOpps.map((op) => {
                   const isBusy = movingId === op.id
                   const isOverdue =
-                    op.expectedCloseDate &&
+                    op.expectedCloseDate != null &&
+                    op.expectedCloseDate !== '' &&
                     !status.isClosed &&
-                    new Date(op.expectedCloseDate) < new Date()
+                    op.expectedCloseDate < today
 
                   return (
                     <Card
