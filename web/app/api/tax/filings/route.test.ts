@@ -23,6 +23,7 @@ interface RouteState {
   permissionChecks: string[]
   engineCalls: EngineCall[]
   markFiledError: unknown
+  filingInserts: string[]
 }
 
 const stateKey = Symbol.for('openbooks.tax-filing-route-test')
@@ -31,6 +32,7 @@ const routeState: RouteState = {
   permissionChecks: [],
   engineCalls: [],
   markFiledError: null,
+  filingInserts: [],
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
 ;(globalThis as typeof globalThis & Record<string, unknown>).openbooksTaxFilingNextResponse =
@@ -92,6 +94,7 @@ const mockSources = new Map<string, string>([
             execute(query) {
               const text = sqlText(query)
               if (text.includes('insert into tax_filings')) {
+                state.filingInserts.push(text)
                 return { rows: [{ id: 'filing-1', version: 2 }] }
               }
               if (text.includes('from tax_filings')) return { rows: [{ version: 2 }] }
@@ -107,6 +110,7 @@ const mockSources = new Map<string, string>([
     'mock:tax-filing',
     `
       const state = globalThis[Symbol.for('openbooks.tax-filing-route-test')]
+      export const TAX_FILING_SNAPSHOT_VERSION = 2
       export class TaxFilingError extends Error {
         constructor(code, message) { super(message ?? code); this.code = code }
       }
@@ -127,7 +131,14 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.tax-filing-route-test')]
       export async function computeTaxReturn(orgId, code, from, to) {
         state.engineCalls.push({ op: 'compute', orgId, userId: 'user-1' })
-        return { formCode: code, formName: 'Form ' + code, from, to, submissionChannel: 'paper', boxes: [] }
+        // The double must produce the full return identity the prepare path
+        // freezes: a double that cannot produce it would let the insert
+        // silently persist NULL posture without any test noticing.
+        return {
+          formCode: code, formName: 'Form ' + code, from, to, submissionChannel: 'paper', boxes: [],
+          registrationNumber: '123456789RT0001', registrationId: '33333333-3333-4333-8333-333333333333',
+          functionalCurrency: 'CAD', subsidiaryIds: [], translation: null,
+        }
       }
     `,
   ],
@@ -185,6 +196,7 @@ function reset(permissions: string[]): void {
   routeState.permissionChecks.length = 0
   routeState.engineCalls.length = 0
   routeState.markFiledError = null
+  routeState.filingInserts.length = 0
 }
 
 function post(): Promise<Response> {
@@ -226,6 +238,30 @@ test('POST prepare demands compliance.file and freezes the snapshot under it', a
   })
   assert.deepEqual(routeState.permissionChecks, ['compliance.file'])
   assert.deepEqual(routeState.engineCalls, [{ op: 'compute', orgId: 'org-1', userId: 'user-1' }])
+})
+
+// The prepare insert must freeze the return's identity and currency posture
+// (0265): a reprint or staleness check that reads live configuration instead
+// is the D2/D3 defect, so the insert text itself is asserted here.
+test('POST prepare freezes the return identity and snapshot version', async () => {
+  reset(['compliance.file'])
+
+  const response = await post()
+
+  assert.equal(response.status, 201)
+  assert.equal(routeState.filingInserts.length, 1)
+  const insert = routeState.filingInserts[0]!
+  for (const column of [
+    'functional_currency',
+    'presentation_currency',
+    'translation',
+    'subsidiary_ids',
+    'registration_id',
+    'registration_number',
+    'snapshot_version',
+  ]) {
+    assert.match(insert, new RegExp(column), `prepare insert must freeze ${column}`)
+  }
 })
 
 test('PATCH mark-filed demands compliance.file, not the report authority', async () => {

@@ -510,6 +510,11 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // the column is a sparse pointer. Builds CONCURRENTLY (no-transaction
     // runner mode) so the multi-million-row prod ledger stays writable.
     "0261_ledger_dimension_fk_indexes.sql",
+    // Frozen filing evidence (s14_tax_compliance): tax_filings gains the
+    // return's frozen denomination, identity and scope posture plus the
+    // snapshot schema version (documents ship-to halves land with D1 in the
+    // same file — the shard's schema ships in one ordinal).
+    "0265_filing_currency_and_ship_to_snapshot.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),

@@ -27,6 +27,7 @@ import { startCloseRun } from "../close/run-start.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import {
   TaxFilingError,
+  TAX_FILING_SNAPSHOT_VERSION,
   buildTaxFilingSnapshot,
   markTaxFilingFiled,
 } from "./filing.ts";
@@ -1021,10 +1022,17 @@ async function postTaxJournal(
 }
 
 /** The prepare path: compute live, freeze the snapshot + fingerprint (route
- *  web/app/api/tax/filings/route.ts POST, through the shared engine builder). */
-async function prepareFiling(org: ScratchOrg, userId: string): Promise<{ id: string; snapshotHash: string }> {
+ *  web/app/api/tax/filings/route.ts POST, through the shared engine builder).
+ *  Mirrors the route's frozen-posture insert exactly (0265): identity,
+ *  currency, scope and snapshot version travel with the boxes. */
+async function prepareFiling(
+  org: ScratchOrg,
+  userId: string,
+  opts: { snapshotVersion?: 1 | 2 } = {},
+): Promise<{ id: string; snapshotHash: string }> {
+  const snapshotVersion = opts.snapshotVersion ?? TAX_FILING_SNAPSHOT_VERSION;
   const result = await computeTaxReturn(org.orgId, 'FP_GST', '2026-07-01', '2026-07-31', {});
-  const { snapshot, snapshotHash } = buildTaxFilingSnapshot(result, {});
+  const { snapshot, snapshotHash } = buildTaxFilingSnapshot(result, {}, snapshotVersion);
   const filingId = randomUUID();
   const versions = (await db.execute<{ version: number }>(sql`
     select coalesce(max(version), 0)::int + 1 as version from tax_filings
@@ -1033,10 +1041,18 @@ async function prepareFiling(org: ScratchOrg, userId: string): Promise<{ id: str
   await db.execute(sql`
     insert into tax_filings
       (id, org_id, form_code, form_name, country, period_from, period_to, version, status,
-       submission_channel, boxes, adjustments, snapshot_hash, created_by, updated_by)
+       submission_channel, boxes, adjustments, snapshot_hash,
+       functional_currency, presentation_currency, translation, subsidiary_ids,
+       registration_id, registration_number, snapshot_version,
+       created_by, updated_by)
     values (${filingId}, ${org.orgId}, ${result.formCode}, ${result.formName}, 'CA',
             ${result.from}, ${result.to}, ${versions.version}, 'prepared', ${result.submissionChannel},
-            ${JSON.stringify(snapshot.boxes)}::jsonb, '{}'::jsonb, ${snapshotHash}, ${userId}, ${userId})`);
+            ${JSON.stringify(snapshot.boxes)}::jsonb, '{}'::jsonb, ${snapshotHash},
+            ${result.functionalCurrency}, ${result.translation?.presentationCurrency ?? null},
+            ${result.translation ? JSON.stringify(result.translation) : null}::jsonb,
+            ${`{${result.subsidiaryIds.join(',')}}`}::uuid[],
+            ${result.registrationId}, ${result.registrationNumber}, ${snapshotVersion},
+            ${userId}, ${userId})`);
   return { id: filingId, snapshotHash };
 }
 
@@ -1098,6 +1114,69 @@ test("mark-filed rejects a filing whose source ledger moved after preparation", 
     assert.notEqual(fresh.id, prepared.id);
     assert.notEqual(fresh.snapshotHash, prepared.snapshotHash);
     assert.equal((await filingState(org.orgId, fresh.id)).status, "prepared");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("mark-filed trips stale when the registration changes after preparation", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
+    const taxCodeId = await seedFilingFingerprintFixture(org);
+    await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-REG", taxAmount: "13.00" });
+    // Prepared while unregistered: registrationId null is the frozen posture.
+    const prepared = await prepareFiling(org, userId);
+
+    // The org registers for this form afterwards. No box moves — the ledger
+    // is untouched — but the return's identity changed, so the v2 fingerprint
+    // must no longer reproduce and the filing is stale, not fileable.
+    const jurisdictionId = randomUUID();
+    await db.execute(sql`
+      insert into tax_jurisdictions (id, org_id, code, name, country, level, tax_type)
+      values (${jurisdictionId}, ${org.orgId}, 'FP-REG', 'Fingerprint jurisdiction', 'CA', 'country', 'gst')`);
+    await db.execute(sql`
+      insert into tax_registrations
+        (id, org_id, jurisdiction_id, registration_number, filing_frequency, return_form_code, is_active)
+      values (${randomUUID()}, ${org.orgId}, ${jurisdictionId}, '111222333RT0001', 'quarterly', 'FP_GST', true)`);
+    await closeCoveredPeriod(org);
+
+    await assert.rejects(
+      () => markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-REG"),
+      (error: unknown) => error instanceof TaxFilingError && error.code === "stale",
+    );
+    assert.equal((await filingState(org.orgId, prepared.id)).status, "prepared");
+    assert.equal((await filingAudits(org.orgId, prepared.id)).rows[0]!.n, 0);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a pre-identity (v1) filing still verifies after a registration change", { skip: !DB }, async () => {
+  // Documented versioning contract: rows prepared before the identity columns
+  // existed verify boxes only, so a posture change the old snapshot never
+  // fingerprinted cannot strand them as stale. New filings (v2) verify
+  // posture — see the test above.
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
+    const taxCodeId = await seedFilingFingerprintFixture(org);
+    await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-REGV1", taxAmount: "13.00" });
+    const prepared = await prepareFiling(org, userId, { snapshotVersion: 1 });
+
+    const jurisdictionId = randomUUID();
+    await db.execute(sql`
+      insert into tax_jurisdictions (id, org_id, code, name, country, level, tax_type)
+      values (${jurisdictionId}, ${org.orgId}, 'FP-REGV1', 'Fingerprint jurisdiction', 'CA', 'country', 'gst')`);
+    await db.execute(sql`
+      insert into tax_registrations
+        (id, org_id, jurisdiction_id, registration_number, filing_frequency, return_form_code, is_active)
+      values (${randomUUID()}, ${org.orgId}, ${jurisdictionId}, '111222333RT0001', 'quarterly', 'FP_GST', true)`);
+    await closeCoveredPeriod(org);
+
+    const filed = await markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-REGV1");
+    assert.equal(filed.id, prepared.id);
+    assert.equal((await filingState(org.orgId, prepared.id)).status, "filed");
   } finally {
     await dropScratchOrg(org.orgId);
   }

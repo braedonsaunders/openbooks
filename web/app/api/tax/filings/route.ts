@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { computeTaxReturn } from '@openbooks/engine/src/tax-returns/return.ts'
-import { buildTaxFilingSnapshot } from '@openbooks/engine/src/tax-returns/filing.ts'
+import { buildTaxFilingSnapshot, TAX_FILING_SNAPSHOT_VERSION } from '@openbooks/engine/src/tax-returns/filing.ts'
 import { loadOrgFilingCalendar } from '@openbooks/engine/src/tax/nexus-ledger.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
@@ -87,21 +87,33 @@ export async function POST(req: Request) {
          where org_id = ${gate.user.orgId} and form_code = ${result.formCode}
            and period_from = ${result.from} and period_to = ${result.to}`))
       const version = Number(versions.rows[0]?.version ?? 1)
+      // The filing freezes the return's identity and currency posture
+      // alongside its boxes: the export reprint and the mark-filed staleness
+      // check read these columns, never the org's live configuration. An
+      // org-wide (legacy-scope) return stores an empty scope, not NULL —
+      // NULL means pre-snapshot (unknown scope, v1 semantics).
       const inserted = (await tx.execute<{ id: string; version: number }>(sql`
         insert into tax_filings
           (org_id, form_code, form_name, country, period_from, period_to, version,
            status, submission_channel, boxes, adjustments, snapshot_hash,
+           functional_currency, presentation_currency, translation, subsidiary_ids,
+           registration_id, registration_number, snapshot_version,
            created_by, updated_by)
         values (${gate.user.orgId}, ${result.formCode}, ${result.formName}, ${form.rows[0]?.country ?? null},
                 ${result.from}, ${result.to}, ${version}, 'prepared', ${result.submissionChannel},
                 ${JSON.stringify(snapshot.boxes)}::jsonb, ${JSON.stringify(normalizedAdjustments)}::jsonb,
-                ${snapshotHash}, ${gate.user.id}, ${gate.user.id})
+                ${snapshotHash},
+                ${result.functionalCurrency}, ${result.translation?.presentationCurrency ?? null},
+                ${result.translation ? JSON.stringify(result.translation) : null}::jsonb,
+                ${`{${result.subsidiaryIds.join(',')}}`}::uuid[],
+                ${result.registrationId}, ${result.registrationNumber}, ${TAX_FILING_SNAPSHOT_VERSION},
+                ${gate.user.id}, ${gate.user.id})
         returning id, version`))
       const row = inserted.rows[0]!
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${gate.user.orgId}, 'tax_filings', ${row.id}, 'insert',
-                ${JSON.stringify({ status: 'prepared', formCode: result.formCode, from: result.from, to: result.to, version, snapshotHash })}::jsonb,
+                ${JSON.stringify({ status: 'prepared', formCode: result.formCode, from: result.from, to: result.to, version, snapshotHash, snapshotVersion: TAX_FILING_SNAPSHOT_VERSION })}::jsonb,
                 ${gate.user.id})`)
       return row
     })
