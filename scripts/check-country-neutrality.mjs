@@ -13,13 +13,26 @@ import { pathToFileURL } from "node:url";
 // code, fixtures naming the pack under test) but never as a comparison.
 //
 // Rule 2 — no equality branch against a bare two-letter country literal
-// ('CA', 'US', ...) inside the indirect-tax layer. Deliberately scoped to
-// the tax layer rather than repo-wide: a bare two-letter literal collides
-// with ordinary code ("NO" nullability checks, "IF" keywords, "RC"
-// debit flags), so a repo-wide literal ban would false-positive and teach
-// everyone to ignore the gate. The tax layer is held to zero; payroll's
-// country handling is tracked separately (F-f7-001..F-f7-005) and its slice
-// extends this gate when it lands.
+// ('CA', 'US', ...) inside the generic country-branching layer: the
+// indirect-tax layer AND the shared payroll layer. Deliberately scoped to
+// those layers rather than repo-wide: a bare two-letter literal collides with
+// ordinary code ("NO" nullability checks, "IF" keywords, "RC" debit flags), so
+// a repo-wide literal ban would false-positive and teach everyone to ignore
+// the gate.
+//
+// The payroll shared layer is a file DIRECTLY under engine/src/payroll/ (no
+// subdirectory) plus web/app/api/payroll/**. A payroll country pack — every
+// direct subdirectory of engine/src/payroll/ (au, br, canada, de, ...) — may
+// name its own country: that is what a pack declaring rather than the generic
+// layer branching means. The line is structural, so a new pack directory is
+// exempt without an edit; a generic subdirectory added under engine/src/payroll
+// would be a deliberate decision (it would be treated as a pack), not silence.
+//
+// Six shared-layer sites name a country today and are exempted by path with a
+// reason (see PAYROLL_SHARED_COUNTRY_LITERAL_EXEMPTIONS). They are the F-f7
+// payroll country-neutrality work (the same slice this comment's predecessor
+// deferred to); the list may only shrink — a stale entry (a path that no
+// longer names a country) fails the gate.
 //
 // What the gate does NOT cover, by decision: SQL migrations (data history
 // legitimately names forms — 0147 healed CA_GST34 rows by code), `??`/`||`
@@ -58,6 +71,32 @@ const taxLayerPaths = [
   /^engine\/src\/tax\/pack-provisioning\.ts$/,
 ];
 
+// The shared payroll layer (Rule 2): files DIRECTLY under engine/src/payroll/
+// (a subdirectory is a country pack and may name its own country) plus the
+// payroll API routes.
+const payrollSharedLayerPaths = [
+  /^engine\/src\/payroll\/[^/]+\.ts$/,
+  /^web\/app\/api\/payroll\//,
+];
+
+// Rule 2 applies to the tax layer and the shared payroll layer together.
+const countryLiteralLayerPaths = [...taxLayerPaths, ...payrollSharedLayerPaths];
+
+/**
+ * Shared-payroll sites that still name a country today — the F-f7 payroll
+ * country-neutrality work. Keyed by path; the list may only SHRINK (a stale
+ * entry, a path that no longer names a country, fails the gate). Each names
+ * why it is still here and what the fix is.
+ */
+export const PAYROLL_SHARED_COUNTRY_LITERAL_EXEMPTIONS = [
+  { path: "engine/src/payroll/remittance.ts", reason: "remittanceGroupUsesQuebecCalendar branches on 'QC'; belongs in the CA pack's remittance-calendar declaration (F-f7)" },
+  { path: "engine/src/payroll/rl1.ts", reason: "Québec RL-1 slip builder branches on 'QC'; the file is Québec-specific and belongs under canada/quebec/ (F-f7)" },
+  { path: "engine/src/payroll/roexml.ts", reason: "federal ROE renderer branches on 'CA'; Canada-specific, belongs under canada/ (F-f7)" },
+  { path: "engine/src/payroll/t4xml.ts", reason: "T4 slip builder branches on 'QC' for the Québec box; Canada-specific (F-f7)" },
+  { path: "engine/src/payroll/yearend.ts", reason: "year-end orchestration branches on 'QC' for RL-1 seeding; needs a pack declaration (F-f7)" },
+  { path: "web/app/api/payroll/year-end/file/route.ts", reason: "ROE selection bypasses the filing-data guard on country === 'CA'; the bypass belongs on the filing declaration (F-f7)" },
+];
+
 export function isPackPath(filePath) {
   return packPaths.some((pattern) => pattern.test(filePath));
 }
@@ -68,6 +107,50 @@ export function isScopedPath(filePath, roots = scopedRoots) {
 
 export function isTaxLayerPath(filePath, layer = taxLayerPaths) {
   return layer.some((pattern) => pattern.test(filePath));
+}
+
+/** The full Rule 2 scope: the indirect-tax layer plus the shared payroll layer. */
+export function isCountryLiteralLayerPath(filePath, layer = countryLiteralLayerPaths) {
+  return layer.some((pattern) => pattern.test(filePath));
+}
+
+const EXEMPT_PAYROLL_LITERAL_PATHS = new Set(
+  PAYROLL_SHARED_COUNTRY_LITERAL_EXEMPTIONS.map((entry) => entry.path),
+);
+
+/** True when `filePath` names a country in the Rule 2 scope but is a known F-f7 exemption. */
+export function isExemptPayrollCountryLiteral(filePath) {
+  return EXEMPT_PAYROLL_LITERAL_PATHS.has(filePath);
+}
+
+/**
+ * Exemption paths that no longer name a country — the ratchet. A path listed
+ * but clean means the fix landed and the entry must be removed; returning it
+ * fails the gate rather than letting the list rot into permanent amnesty.
+ */
+export function staleCountryLiteralExemptions(
+  files,
+  readSource = (file) => readFileSync(file, "utf8"),
+) {
+  const present = new Set(files);
+  const stale = [];
+  for (const entry of PAYROLL_SHARED_COUNTRY_LITERAL_EXEMPTIONS) {
+    if (!present.has(entry.path)) {
+      stale.push(`${entry.path}: listed exemption is not a tracked file`);
+      continue;
+    }
+    let source;
+    try {
+      source = readSource(entry.path);
+    } catch {
+      stale.push(`${entry.path}: listed exemption could not be read`);
+      continue;
+    }
+    if (!firstViolationLine(source, [countryComparison, countryCase])) {
+      stale.push(`${entry.path}: no longer names a country — remove it from PAYROLL_SHARED_COUNTRY_LITERAL_EXEMPTIONS`);
+    }
+  }
+  return stale;
 }
 
 function firstViolationLine(source, patterns) {
@@ -90,7 +173,7 @@ function firstViolationLine(source, patterns) {
  */
 export function auditCountryNeutrality(publicFiles, overrides = {}) {
   const roots = overrides.roots ?? scopedRoots;
-  const layer = overrides.taxLayer ?? taxLayerPaths;
+  const layer = overrides.taxLayer ?? countryLiteralLayerPaths;
   const violations = [];
 
   for (const filePath of publicFiles) {
@@ -114,11 +197,11 @@ export function auditCountryNeutrality(publicFiles, overrides = {}) {
       );
       continue;
     }
-    if (isTaxLayerPath(filePath, layer)) {
+    if (isCountryLiteralLayerPath(filePath, layer) && !isExemptPayrollCountryLiteral(filePath)) {
       const countryHit = firstViolationLine(source, [countryComparison, countryCase]);
       if (countryHit) {
         violations.push(
-          `${filePath}:${countryHit.lineNumber}: country branch in the indirect-tax layer (${countryHit.match.trim()})`,
+          `${filePath}:${countryHit.lineNumber}: country branch in the generic country-branching layer (${countryHit.match.trim()})`,
         );
       }
     }
@@ -136,15 +219,21 @@ function discoverPublicFiles() {
 }
 
 function main() {
-  const violations = auditCountryNeutrality(discoverPublicFiles());
+  const files = discoverPublicFiles();
+  const violations = auditCountryNeutrality(files);
+  const stale = staleCountryLiteralExemptions(files);
 
-  if (violations.length > 0) {
+  if (violations.length > 0 || stale.length > 0) {
     console.error("Country-neutrality audit failed:");
     for (const violation of violations) console.error(`- ${violation}`);
+    for (const entry of stale) console.error(`- ${entry}`);
     process.exit(1);
   }
 
-  console.log("Country-neutrality audit passed.");
+  console.log(
+    `Country-neutrality audit passed (${PAYROLL_SHARED_COUNTRY_LITERAL_EXEMPTIONS.length} `
+      + "shared-payroll exemption(s) tracked for F-f7).",
+  );
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
