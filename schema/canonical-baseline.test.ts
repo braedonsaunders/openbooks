@@ -475,6 +475,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0243_comp_cycle_budget_evidence.sql",
     "0244_item_pricing_hierarchy.sql",
     "0245_price_level_guard_sandbox_wipe.sql",
+    "0246_soft_close_posting_fence.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),

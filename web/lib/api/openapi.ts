@@ -278,6 +278,271 @@ export function buildOpenApiSpec(
     }
   }
 
+  const idempotentPost = (summary: string, description: string, tag: string): OpenApiOperation => ({
+    summary,
+    description,
+    tags: [tag],
+    security: [{ BearerAuth: [] }],
+    parameters: [idempotencyParameter],
+    requestBody: {
+      required: true,
+      content: { "application/json": { schema: { type: "object", additionalProperties: true } } },
+    },
+    responses: {
+      "200": { description: "Application command result" },
+      "401": { $ref: "#/components/responses/Unauthorized" },
+      "403": { $ref: "#/components/responses/Forbidden" },
+      "422": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+    },
+  });
+
+  paths["/api/v1/commands"] = {
+    get: {
+      summary: "List application commands",
+      description: "The same application catalog MCP exposes, filtered to this API key's permissions and feature gates.",
+      tags: ["Commands"],
+      security: [{ BearerAuth: [] }],
+      responses: { "200": { description: "Visible commands" } },
+    },
+  };
+  paths["/api/v1/commands/{name}"] = {
+    post: {
+      ...idempotentPost(
+        "Execute an application command",
+        "Runs the named application-layer command. Mutations accept Idempotency-Key on the header when the body omitted idempotencyKey.",
+        "Commands",
+      ),
+      parameters: [
+        { name: "name", in: "path", required: true, schema: { type: "string" } },
+        idempotencyParameter,
+      ],
+    },
+  };
+  paths["/api/v1/vitals"] = {
+    get: {
+      summary: "Organization vitals",
+      description: "Cash, AR/AP aging, approvals, and close snapshot for the authenticated tenant.",
+      tags: ["Vitals"],
+      security: [{ BearerAuth: [] }],
+      responses: { "200": { description: "Vitals snapshot" } },
+    },
+  };
+  paths["/api/v1/approvals"] = {
+    get: {
+      summary: "List approvals",
+      tags: ["Approvals"],
+      security: [{ BearerAuth: [] }],
+      responses: { "200": { description: "Current worklist" } },
+    },
+  };
+  paths["/api/v1/approvals/decide"] = {
+    post: idempotentPost("Decide an approval", "Approve or reject one visible pending subject.", "Approvals"),
+  };
+  paths["/api/v1/documents/{id}/{action}"] = {
+    post: {
+      ...idempotentPost(
+        "Document lifecycle",
+        "action is submit, post, void, or correct. Uses the same application commands as MCP.",
+        "Documents",
+      ),
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        { name: "action", in: "path", required: true, schema: { type: "string", enum: ["submit", "post", "void", "correct"] } },
+        idempotencyParameter,
+      ],
+    },
+  };
+  paths["/api/v1/journals/{id}/post"] = {
+    post: {
+      ...idempotentPost("Post a journal", "Journals skip the generic document lifecycle.", "Documents"),
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        idempotencyParameter,
+      ],
+    },
+  };
+  paths["/api/v1/payments"] = {
+    post: { ...idempotentPost("Create a payment draft", "Vendor payment or customer receipt.", "Payments"), responses: { ...idempotentPost("", "", "Payments").responses, "201": { description: "Created" } } },
+  };
+  paths["/api/v1/payments/{id}"] = {
+    patch: {
+      ...idempotentPost("Update a payment draft", "Header and exact open-item allocations.", "Payments"),
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        idempotencyParameter,
+      ],
+    },
+  };
+  paths["/api/v1/payments/{id}/post"] = {
+    post: {
+      ...idempotentPost("Post a payment", "Submit and post with open-item applications.", "Payments"),
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        idempotencyParameter,
+      ],
+    },
+  };
+  paths["/api/v1/close/runs"] = {
+    get: {
+      summary: "List close runs",
+      tags: ["Close"],
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { name: "status", in: "query", schema: { type: "string" } },
+        { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100 } },
+      ],
+      responses: { "200": { description: "Close runs" } },
+    },
+    post: idempotentPost("Start a close run", "Start or resume the period-close checklist.", "Close"),
+  };
+  paths["/api/v1/close/runs/{id}"] = {
+    get: {
+      summary: "Get a close run",
+      tags: ["Close"],
+      security: [{ BearerAuth: [] }],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+      responses: { "200": { description: "Close run" } },
+    },
+  };
+  paths["/api/v1/close/runs/{id}/advance"] = {
+    post: {
+      ...idempotentPost("Advance a close run", "refresh, request_approval, attest, close, or publish.", "Close"),
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        idempotencyParameter,
+      ],
+    },
+  };
+  paths["/api/v1/close/reopen"] = {
+    post: idempotentPost("Request a period reopen", "Hard-closed scopes only. Soft-close unlocks from Setup.", "Close"),
+  };
+  paths["/api/v1/close/reopen/{id}/decide"] = {
+    post: {
+      ...idempotentPost("Decide a reopen request", "Independent approval of a controlled reopen.", "Close"),
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        idempotencyParameter,
+      ],
+    },
+  };
+  paths["/api/v1/close/revaluation"] = {
+    post: idempotentPost("Run FX revaluation", "Period FX revaluation through the close application command.", "Close"),
+  };
+  paths["/api/v1/banking/reconciliations"] = {
+    post: idempotentPost("Start a bank reconciliation", "One open session per account; match lines then sign off.", "Banking"),
+  };
+  paths["/api/v1/banking/reconciliations/{id}/sign-off"] = {
+    post: {
+      ...idempotentPost("Sign off a reconciliation", "Zero-difference sessions only. Permanent.", "Banking"),
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        idempotencyParameter,
+      ],
+    },
+  };
+  paths["/api/v1/banking/lines/{id}/match"] = {
+    post: {
+      ...idempotentPost("Match a bank line", "Pair one unmatched statement line with posted journal lines.", "Banking"),
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        idempotencyParameter,
+      ],
+    },
+  };
+  paths["/api/v1/banking/lines/{id}/match-journal"] = {
+    post: {
+      ...idempotentPost("Match a bank line with a journal", "Create a categorizing journal and match it in-session.", "Banking"),
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        idempotencyParameter,
+      ],
+    },
+  };
+  paths["/api/v1/banking/lines/{id}/unmatch"] = {
+    post: {
+      ...idempotentPost("Unmatch a bank line", "Signed-off sessions refuse.", "Banking"),
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        idempotencyParameter,
+      ],
+    },
+  };
+  paths["/api/v1/budgets/{id}/cells"] = {
+    post: {
+      ...idempotentPost("Update budget cells", "Draft scenarios only. expectedRevision must match.", "Budgets"),
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        idempotencyParameter,
+      ],
+    },
+  };
+  paths["/api/v1/files"] = {
+    post: idempotentPost("Upload a File Cabinet file", "Same storage and folder grants as the files screen. At most 1 MB.", "Files"),
+  };
+  paths["/api/v1/settings/company"] = {
+    get: {
+      summary: "Get company settings",
+      tags: ["Settings"],
+      security: [{ BearerAuth: [] }],
+      responses: { "200": { description: "Company & accounting settings" } },
+    },
+    patch: idempotentPost("Update company settings", "Only passed keys change. Fiscal calendar and base currency refuse once postings exist.", "Settings"),
+  };
+  paths["/api/v1/settings/features"] = {
+    post: idempotentPost("Update feature gates", "The Features switchboard write. Dependencies and load-bearing modules are enforced.", "Settings"),
+  };
+  paths["/api/v1/banking/reconciliations"] = {
+    post: { ...idempotentPost("Start a reconciliation", "Start a bank reconciliation session for an account.", "Banking"), responses: { ...idempotentPost("", "", "Banking").responses, "201": { description: "Created" } } },
+  };
+  paths["/api/v1/banking/reconciliations/{id}/sign-off"] = {
+    post: {
+      ...idempotentPost("Sign off a reconciliation", "Sign off a zero-difference session.", "Banking"),
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        idempotencyParameter,
+      ],
+    },
+  };
+  paths["/api/v1/banking/lines/{id}/match"] = {
+    post: {
+      ...idempotentPost("Match a bank line", "Pair one unmatched bank line with posted journal lines.", "Banking"),
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        idempotencyParameter,
+      ],
+    },
+  };
+  paths["/api/v1/banking/lines/{id}/match-journal"] = {
+    post: {
+      ...idempotentPost("Match a bank line with a journal", "Create a categorizing journal from one unmatched bank line and match it.", "Banking"),
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        idempotencyParameter,
+      ],
+    },
+  };
+  paths["/api/v1/banking/lines/{id}/unmatch"] = {
+    post: {
+      ...idempotentPost("Unmatch a bank line", "Return a statement line to the unmatched queue.", "Banking"),
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        idempotencyParameter,
+      ],
+    },
+  };
+  paths["/api/v1/budgets/{id}/cells"] = {
+    post: {
+      ...idempotentPost("Update budget cells", "Write planning cells into a draft scenario (revision-checked).", "Budgets"),
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        idempotencyParameter,
+      ],
+    },
+  };
+  paths["/api/v1/files"] = {
+    post: { ...idempotentPost("Upload a file", "Upload a small file to a File Cabinet folder.", "Files"), responses: { ...idempotentPost("", "", "Files").responses, "201": { description: "Created" } } },
+  };
+
   // Meta endpoints
   paths["/api/v1/openapi"] = {
     get: {

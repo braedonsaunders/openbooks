@@ -1,4 +1,4 @@
-import { CloseError, CLOSE_MODULES, periodLockBlocksPosting, type CloseModule } from "./period-policy.ts";
+import { CloseError, CLOSE_MODULES, periodLockRequiresApprovedReopen, type CloseModule } from "./period-policy.ts";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext, type SqlExecutor } from "../platform/db.ts";
 import { assertCloseScope, upsertLock, periodScopeAdvisoryLock } from "./period-locks.ts";
@@ -130,19 +130,20 @@ export async function decidePeriodReopen(args: {
            and module = 'gl'
          order by (subsidiary_id is not null) desc limit 1`));
       const governing = gl.rows[0];
-      if (periodLockBlocksPosting(governing && {
+      if (periodLockRequiresApprovedReopen(governing && {
         state: governing.state, reopenExpiresAt: governing.reopen_expires_at, reason: null,
-      }, false)) {
+      })) {
         throw new CloseError("GL must be included before a closed subledger can be reopened");
       }
     }
-    // A window on a scope that is not actually closed is a pure time bomb:
+    // A window on a scope that is not hard-closed is a pure time bomb:
     // the lock row it writes (state 'open' plus an expiry) blocks posting
-    // once stale, and the automatic re-close then flips an open period to
-    // 'closed'. Every requested module must currently block posting — the
-    // same effective-lock resolution the posting fence uses (exact row, else
-    // the org-wide row) — so a mistaken or padded request is refused and the
-    // operator narrows it to the closed modules instead.
+    // once stale, and the automatic re-close then flips the period to
+    // 'closed'. Soft-close fences posting but unlocks from Setup; treating
+    // it as reopenable would escalate a management lock into a statutory
+    // close. Every requested module must currently require an approved
+    // reopen — exact row, else the org-wide row — so a padded request is
+    // refused and the operator narrows it to the hard-closed modules.
     const openModules: CloseModule[] = [];
     for (const module of modules) {
       const governing = (await tx.execute<{ state: string; reopen_expires_at: Date | null }>(sql`
@@ -152,11 +153,11 @@ export async function decidePeriodReopen(args: {
            and (subsidiary_id is not distinct from ${row.subsidiary_id}::uuid or subsidiary_id is null)
          order by (subsidiary_id is not null) desc limit 1`));
       const lock = governing.rows[0];
-      if (!periodLockBlocksPosting(lock && {
+      if (!periodLockRequiresApprovedReopen(lock && {
         state: lock.state,
         reopenExpiresAt: lock.reopen_expires_at,
         reason: null,
-      }, false)) {
+      })) {
         openModules.push(module);
       }
     }
@@ -195,6 +196,7 @@ export async function decidePeriodReopen(args: {
              and book_id = ${row.book_id} and module = ${module}
              and subsidiary_id is not null
              and (state = 'closed'
+               or state = 'soft_closed'
                or (state = 'open' and reopen_expires_at is not null and reopen_expires_at <= now()))
            for update`));
         for (const child of children.rows) {

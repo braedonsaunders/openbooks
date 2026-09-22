@@ -804,7 +804,7 @@ type ConsolidatedRateSnapshot = {
  * closed (org-wide OR for any legal entity — the rates translate every
  * entity in the tree), re-deriving them would silently restate published
  * consolidated statements. Refuse with the close's own lock semantics
- * (periodLockBlocksPosting: closed, or an expired reopen window).
+ * (periodLockBlocksPosting: soft-closed, closed, or an expired reopen window).
  */
 async function assertConsolidatedRatesOpen(
   orgId: string,

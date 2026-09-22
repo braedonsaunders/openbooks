@@ -1,4 +1,9 @@
-import { CloseError, periodLockBlocksPosting, type CloseModule } from "./period-policy.ts";
+import {
+  CloseError,
+  periodLockBlocksPosting,
+  periodLockRequiresApprovedReopen,
+  type CloseModule,
+} from "./period-policy.ts";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 export async function assertCloseScope(
@@ -91,8 +96,7 @@ export async function upsertLock(args: {
       version = period_locks.version + 1, updated_at = now(), updated_by = excluded.updated_by
     where period_locks.org_id = ${args.orgId}
     returning id, state, locked_at, locked_by, reason, reopen_expires_at`));
-  const row = after.rows[0];
-  if (!row) return;
+  const row = requireLockWriteRow(after.rows[0]);
   const periodState = {
     periodId: args.periodId,
     bookId: args.bookId,
@@ -146,8 +150,18 @@ export function periodScopeAdvisoryLock(executor: SqlExecutor, orgId: string, pe
     )`);
 }
 
-/** Administrative lock control used by Setup. A closed scope can only be
- * reopened through the independently approved reopen-case workflow. */
+/** A lock upsert that matches no row did not persist. Callers must not
+ * treat the requested state as stored — no later read can observe it. */
+export function requireLockWriteRow<T>(row: T | undefined): T {
+  if (row) return row;
+  throw new CloseError(
+    "period lock write returned no row — the lock was not persisted; confirm the period, book, and organization still exist and retry",
+  );
+}
+
+/** Administrative lock control used by Setup. A hard-closed scope can only
+ * be reopened through the independently approved reopen-case workflow.
+ * Soft-close fences posting and is released from Setup without that case. */
 export async function setPeriodLockState(args: {
   orgId: string;
   periodId: string;
@@ -182,13 +196,12 @@ export async function setPeriodLockState(args: {
       order by (subsidiary_id is not null) desc limit 1`));
     if (
       args.state !== "closed" &&
-      periodLockBlocksPosting(
+      periodLockRequiresApprovedReopen(
         governing.rows[0] && {
           state: governing.rows[0].state,
           reopenExpiresAt: governing.rows[0].reopen_expires_at,
           reason: null,
         },
-        false,
       )
     ) {
       throw new CloseError(
@@ -223,15 +236,17 @@ export async function setPeriodLockState(args: {
           and book_id = ${args.bookId} and module = 'gl'
           and (${args.subsidiaryId ? sql`subsidiary_id = ${args.subsidiaryId} or ` : sql``}subsidiary_id is null)
         order by (subsidiary_id is not null) desc limit 1`));
+      const glLock = gl.rows[0] && {
+        state: gl.rows[0].state,
+        reopenExpiresAt: gl.rows[0].reopen_expires_at,
+        reason: null,
+      };
+      // Opening a subledger while GL already fences posting is a no-op for
+      // journals (assertPeriodModulesOpen always includes GL) and a lie in
+      // Setup. Soft-closing under a hard-closed GL still needs reopen.
       if (
-        periodLockBlocksPosting(
-          gl.rows[0] && {
-            state: gl.rows[0].state,
-            reopenExpiresAt: gl.rows[0].reopen_expires_at,
-            reason: null,
-          },
-          false,
-        )
+        (args.state === "open" && periodLockBlocksPosting(glLock, false)) ||
+        (args.state === "soft_closed" && periodLockRequiresApprovedReopen(glLock))
       )
         throw new CloseError(
           "GL must be reopened before a subledger can be opened",

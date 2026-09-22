@@ -4,9 +4,9 @@ Each row is one requirement of a published accounting standard, encoded as an ex
 
 The wording of each requirement is our own restatement. Verify a row by reading the cited paragraph in an authoritative copy of the standard.
 
-**77 passing · 0 failing · 15 gaps · 0 not run**
+**85 passing · 0 failing · 7 gaps · 0 not run**
 
-2026-09-16T04:50:46.919Z
+Commit `71bb38d0e18decf2e923c756351ec55f9e4f1ce1` · 2026-09-22T14:47:26.098Z
 
 ## AL DOR
 
@@ -38,16 +38,10 @@ The wording of each requirement is our own restatement. Verify a row by reading 
 | **Variable consideration is constrained to the amount not subject to significant reversal**<br><sub>A contingent bonus is estimated by the stated method, the constraint caps what enters the transaction price, and the held-back amount is carried explicitly — so revenue can never include consideration management has judged subject to significant reversal.</sub> | ASC 606 606-10-32-11<br>ASC 606 606-10-32-8<br>IFRS 15.56 | PASS | Implemented |
 | **A significant financing component is separated from revenue**<br><sub>Revenue on a contract paid materially in arrears is measured at the cash selling price — the promised amount discounted at the rate a separate financing would carry — and the difference accretes as interest, year by year, landing exactly on the billed amount.</sub> | ASC 606 606-10-32-15<br>IFRS 15.60 | PASS | Implemented |
 | **A change in the progress estimate is caught up in the current period**<br><sub>Revising the estimated progress restates the cumulative target and books only the delta in the current period — an upward revision recognises more, a downward revision reverses what was already recognised, and prior periods are never restated.</sub> | ASC 606 606-10-25-31<br>IFRS 15.39 | PASS | Implemented |
-| **A contract modification is assessed as a separate contract or as part of the existing one**<br><sub>Adding distinct services at their standalone selling prices mid-contract creates a separate accounting unit, while other changes remeasure the existing obligation prospectively or with a cumulative catch-up.</sub> | ASC 606 606-10-25-10<br>IFRS 15.18 | GAP | Not implemented |
+| **A contract modification is assessed as a separate contract or as part of the existing one**<br><sub>Adding distinct services at their standalone selling prices mid-contract creates a separate accounting unit, while other changes remeasure the existing obligation prospectively or with a cumulative catch-up.</sub> | ASC 606 606-10-25-10<br>IFRS 15.18 | PASS | Implemented |
 | **A progress application measures work done, withholds retainage, and states the amount due**<br><sub>Each schedule line reports what was completed this period, the retainage held back on it, and the net now due — and the application's totals are exactly the sum of its lines, so nothing is lost between the detail and the invoice.</sub> | ASC 606 606-10-25-27<br>IFRS 15.35 | PASS | Implemented |
 | **An approved change order revises the contract value but never below work already billed**<br><sub>Additions and deductions move the schedule line's capacity by exactly the change amount — but a deduction that would erase already-billed work is refused, so billed revenue can never be stranded without a contract value behind it.</sub> | ASC 606 606-10-25-10<br>IFRS 15.18 | PASS | Implemented |
 | **Cost-to-cost measures progress by the share of budget consumed**<br><sub>Progress is the exact share of budget consumed — a quarter of the budget spent is 25% complete — capped at 100% when costs overrun, and zero when there is no budget or no cost yet, so an unbudgeted project can never report phantom progress.</sub> | ASC 606 606-10-25-31<br>IFRS 15.39 | PASS | Implemented |
-
-### ASC 606 — shortfalls
-
-**rev-contract-modification — A contract modification is assessed as a separate contract or as part of the existing one**
-
-> The revenue engine has no contract-modification assessment: setContractPricing can overwrite a contract's total price but nothing classifies a scope-or-price change as a separate contract, a prospective remeasurement, or a cumulative catch-up, and obligations and schedules are never remapped for it.
 
 ## ASC 740
 
@@ -71,18 +65,8 @@ The wording of each requirement is our own restatement. Verify a row by reading 
 | **A lessee recognises a right-of-use asset and a lease liability at commencement**<br><sub>Commencing a lease puts both an asset and a liability on the balance sheet at the exact present value of the payments — leased capacity and the obligation to pay for it are visible, not off balance sheet, and the discounting is exact to the hundredth of a cent.</sub> | ASC 842 842-20-30-1<br>IFRS 16.26<br>IFRS 16.23 | PASS | Implemented |
 | **A finance lease reports interest and amortisation separately**<br><sub>A finance lease produces a front-loaded total charge with the interest element presented in finance costs rather than operating expenses — the split that changes reported operating profit and every coverage ratio computed from it.</sub> | ASC 842 842-20-25-5<br>IFRS 16.49 | PASS | Implemented |
 | **A US GAAP operating lease reports a single straight-line lease cost**<br><sub>A lease meeting no finance criterion classifies as operating under US GAAP and charges one flat amount to operating expense each year — while still carrying the asset and liability on the balance sheet, the liability unwinding on the interest method and the right-of-use asset absorbing the difference.</sub> | ASC 842 842-20-25-6<br>ASC 842 842-10-25-2 | PASS | Implemented |
-| **A change in the lease payments or term remeasures the liability and the right-of-use asset**<br><sub>Revised payments re-discount to a revised liability with the difference adjusting the right-of-use asset — the balance sheet keeps reflecting what is actually owed, not what was estimated at commencement.</sub> | ASC 842 842-10-35-4<br>IFRS 16.39 | GAP | Not implemented |
-| **Terminating a lease early derecognises both balances and recognises the net difference**<br><sub>Walking away ends the accounting: the remaining liability and the remaining right-of-use asset both leave the balance sheet, the penalty is expensed, and the net difference is a single termination gain or loss — never a stranded balance.</sub> | ASC 842 842-10-40-1<br>IFRS 16.46 | GAP | Not implemented |
-
-### ASC 842 — shortfalls
-
-**lease-remeasurement — A change in the lease payments or term remeasures the liability and the right-of-use asset**
-
-> The lease engine measures once at commencement and posts the frozen schedule: no API re-discounts the remaining payments, adjusts the liability and right-of-use asset, or spreads the revised interest over the remaining term.
-
-**lease-early-termination — Terminating a lease early derecognises both balances and recognises the net difference**
-
-> The lease engine has no termination path: nothing derecognises the liability and right-of-use asset before term, books a termination penalty, or measures the termination gain or loss — an ended lease keeps its frozen schedule on the books.
+| **A change in the lease payments or term remeasures the liability and the right-of-use asset**<br><sub>Revised payments re-discount to a revised liability with the difference adjusting the right-of-use asset — the balance sheet keeps reflecting what is actually owed, not what was estimated at commencement.</sub> | ASC 842 842-10-35-4<br>IFRS 16.39 | PASS | Implemented |
+| **Terminating a lease early derecognises both balances and recognises the net difference**<br><sub>Walking away ends the accounting: the remaining liability and the remaining right-of-use asset both leave the balance sheet, the penalty is expensed, and the net difference is a single termination gain or loss — never a stranded balance.</sub> | ASC 842 842-10-40-1<br>IFRS 16.46 | PASS | Implemented |
 
 ## CDTFA Reg 1684
 
@@ -107,17 +91,12 @@ The wording of each requirement is our own restatement. Verify a row by reading 
 | **Québec pay carries QPP, QPIP and reduced EI with the federal abatement**<br><sub>A $1,500.00 weekly Québec pay deducts $90.26 of QPP, $19.50 of EI at the Québec rate, and $6.45 of QPIP, while federal tax is reduced by the 16.5% abatement to a $141.63 period withholding — with no provincial T4127 tax, which Revenu Québec administers separately.</sub> | CRA T4127 T4127 122nd edition — Quebec factors (QPP, QPIP, abatement) | PASS | Implemented |
 | **A small bonus is taxed at the lump-sum rate, not the marginal rate**<br><sub>A $2,000.00 bonus paid with no other income in the year attracts exactly $300.00 of tax at the 15% lump-sum rate — while CPP and EI still apply to the bonus as pensionable and insurable earnings.</sub> | CRA T4127 T4127 122nd edition — tax on non-periodic payments (TB) | PASS | Implemented |
 | **Cumulative averaging (Option 2) for uneven pay**<br><sub>An employee paid unevenly through the year has income tax averaged cumulatively across elapsed periods, so a large early payment does not over-withhold against the annual liability.</sub> | CRA T4127 T4127 — Option 2 cumulative averaging | GAP | Not implemented |
-| **Québec provincial income tax (TP-1015)**<br><sub>A Québec pay deducts provincial income tax per the TP-1015 tables alongside federal tax, QPP, QPIP and EI — the stub's total withholding is complete for a Québec employee.</sub> | CRA T4127 T4127 — Quebec provincial tax administered via TP-1015 | GAP | Not implemented |
 
 ### CRA T4127 — shortfalls
 
 **payroll-cumulative-averaging — Cumulative averaging (Option 2) for uneven pay**
 
 > The engine implements only the Option-1 periodic method (plus the YTD variant of the K2 credit basis, which is not Option 2). There is no cumulative-averaging computation: uneven pay is annualized period by period, which over-withholds early lump sums relative to the guide's Option 2.
-
-**payroll-quebec-provincial-tax — Québec provincial income tax (TP-1015)**
-
-> Québec provincial income tax is not implemented: the engine computes the federal side for Québec employment (abatement, K2Q, QPP/QPIP) and provincials for every other jurisdiction, but TP-1015 tables are absent, so a Québec stub understates total withholding by the provincial share.
 
 ## ETA
 
@@ -146,23 +125,15 @@ The wording of each requirement is our own restatement. Verify a row by reading 
 | Requirement | Citation | Status | Conformance |
 | --- | --- | --- | --- |
 | **Scrapping an asset with no proceeds recognises the whole carrying amount as a loss**<br><sub>A write-off with no proceeds charges the full remaining carrying amount to profit or loss and produces a balanced entry with no proceeds line at all.</sub> | IAS 16.67<br>ASC 360 360-10-40-5 | PASS | Implemented |
-| **Selling part of an asset derecognises the pro-rata carrying amount**<br><sub>Selling forty percent of a machine removes forty percent of its cost and forty percent of its accumulated depreciation, and the gain is measured against the forty-percent carrying amount — the remaining sixty percent keeps depreciating untouched.</sub> | IAS 16.68<br>ASC 360 360-10-40-1 | GAP | Not implemented |
-| **Moving an asset between subsidiaries carries its basis and eliminates the internal gain**<br><sub>An asset moving between legal entities keeps its carrying amount as the group's basis: the transferor's internal gain is eliminated on consolidation, the transferee depreciates the transferred basis, and no depreciation is lost or double-counted in the move.</sub> | IAS 16.67<br>ASC 360 360-10-40-1 | GAP | Not implemented |
-| **Depreciation follows the entity's fiscal calendar including retail 4-4-5 patterns**<br><sub>An entity reporting on a 4-4-5 retail calendar depreciates week-based periods — four weeks, four weeks, five weeks — with each period carrying its share of the annual charge, so the full useful life is covered with nothing skipped and nothing doubled.</sub> | IAS 16.60<br>ASC 360 360-10-35-4 | GAP | Not implemented |
+| **Selling part of an asset derecognises the pro-rata carrying amount**<br><sub>Selling forty percent of a machine removes forty percent of its cost and forty percent of its accumulated depreciation, and the gain is measured against the forty-percent carrying amount — the remaining sixty percent keeps depreciating untouched.</sub> | IAS 16.68<br>ASC 360 360-10-40-1 | PASS | Implemented |
+| **Moving an asset between subsidiaries carries its basis and eliminates the internal gain**<br><sub>An asset moving between legal entities keeps its carrying amount as the group's basis: the transferor's internal gain is eliminated on consolidation, the transferee depreciates the transferred basis, and no depreciation is lost or double-counted in the move.</sub> | IAS 16.67<br>ASC 360 360-10-40-1 | PASS | Implemented |
+| **Depreciation follows the entity's fiscal calendar including retail 4-4-5 patterns**<br><sub>Native monthly depreciation maps into a 4-4-5 fiscal calendar without dropping or duplicating a charge: months sharing a fiscal period are summed into one schedule line.</sub> | IAS 16.60<br>ASC 360 360-10-35-4 | PASS | Partial |
 
 ### IAS 16 — shortfalls
 
-**ppe-partial-disposal — Selling part of an asset derecognises the pro-rata carrying amount**
-
-> Disposal is whole-asset only: disposeAsset takes the full cost and the full posted accumulated depreciation, with no portion or percentage — a partial sale can only be recorded as a manual journal with no schedule split behind it.
-
-**ppe-intercompany-transfer — Moving an asset between subsidiaries carries its basis and eliminates the internal gain**
-
-> No transfer path exists: moving an asset between subsidiaries means a manual disposal in one entity and a manual capitalisation in the other, with no linkage, no basis carryover, and no elimination entry for the internal gain.
-
 **ppe-depreciation-445-calendar — Depreciation follows the entity's fiscal calendar including retail 4-4-5 patterns**
 
-> Book depreciation is monthly-native: computeSchedule plans per calendar month and buildSchedule throws 'multiple native depreciation months map to one accounting period' on any 4-4-5, 4-5-4, 5-4-4, or thirteen-period calendar whose week-based periods span month-starts. Entities on retail calendars cannot schedule depreciation.
+> The book policy remains monthly-native. Mapping monthly charges into fiscal periods is implemented; this case does not claim depreciation weighted by the number of weeks in each period.
 
 ## IAS 2
 
@@ -240,13 +211,7 @@ The wording of each requirement is our own restatement. Verify a row by reading 
 | --- | --- | --- | --- |
 | **Full consolidation eliminates the subsidiary and recognises NCI**<br><sub>Acquiring 80% of a subsidiary eliminates its acquisition-date equity against the parent's investment, recognises the 20% non-controlling interest at its proportionate share of fair value with goodwill for the remainder, and allocates 20% of the period's profit to NCI — every leg exact to the cent.</sub> | IFRS 10.22<br>IFRS 10.B94<br>ASC 810-10-45-16 | PASS | Implemented |
 | **Intercompany balances eliminate to zero while standalone views stay untouched**<br><sub>A CAD 1,000.00 intercompany receivable on the parent exactly offsets the subsidiary's CAD 1,000.00 payable, and the elimination entry reverses both — the consolidated view nets to zero while the source postings on each entity stand unchanged.</sub> | IFRS 10.B86<br>ASC 810-10-45-1 | PASS | Implemented |
-| **Loss of control derecognises the subsidiary and remeasures any retained interest**<br><sub>Selling down from 80% to 20% removes the subsidiary's net assets and NCI from the consolidated balance sheet, books the retained 20% at its fair value, and recognises the resulting gain or loss with the accumulated translation difference reclassified out of equity.</sub> | IFRS 10.25 | GAP | Not implemented |
-
-### IFRS 10 — shortfalls
-
-**consol-loss-of-control — Loss of control derecognises the subsidiary and remeasures any retained interest**
-
-> The engine has no loss-of-control accounting: closing or narrowing an ownership policy simply stops future consolidation generations, leaving the parent's investment at cost with no derecognition of the subsidiary's net assets, no release of NCI, no fair-value remeasurement of any retained interest, and no reclassification of translation differences.
+| **Loss of control derecognises the subsidiary and remeasures any retained interest**<br><sub>Selling down from 80% to 20% removes the subsidiary's net assets and NCI from the consolidated balance sheet, books the retained 20% at its fair value, and recognises the resulting gain or loss with the accumulated translation difference reclassified out of equity.</sub> | IFRS 10.25 | PASS | Implemented |
 
 ## IFRS 11
 
@@ -285,7 +250,13 @@ The wording of each requirement is our own restatement. Verify a row by reading 
 
 | Requirement | Citation | Status | Conformance |
 | --- | --- | --- | --- |
-| **QST compounds on the GST-included price**<br><sub>On a $100.00 Québec sale the engine charges $5.00 of GST and then 9.975% on the GST-included $105.00 — $10.47 of QST — for a $115.47 total. The compounding order is the return-affecting figure, and it is exact.</sub> | RQ QST RQ calculating GST and QST | PASS | Implemented |
+| **QST and GST both use the pre-tax selling price**<br><sub>On a $100.00 Québec sale the engine charges $5.00 of GST and $9.98 of QST, each on the $100.00 selling price, for a $114.98 total. QST does not tax the GST amount.</sub> | RQ QST Revenu Québec — Calculating the Taxes, two-step calculation (https://www.revenuquebec.ca/en/businesses/consumption-taxes/gsthst-and-qst/collecting-gst-and-qst/calculating-the-taxes/; verified 2026-09-19) | PASS | Implemented |
+
+## RQ TP-1015
+
+| Requirement | Citation | Status | Conformance |
+| --- | --- | --- | --- |
+| **Québec provincial income tax (TP-1015)**<br><sub>The Québec provincial engine reproduces the published Appendix 1 phase-1 deduction of 444.51; this case establishes provincial calculation, not complete payroll filing or transmission coverage.</sub> | RQ TP-1015 TP-1015.F-V (2026-01), Appendix 1, phase 1 | PASS | Implemented |
 
 ## SD v. Wayfair
 
