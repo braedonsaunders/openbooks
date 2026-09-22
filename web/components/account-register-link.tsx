@@ -1,8 +1,9 @@
 'use client'
 
-import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { accountRegisterHref } from '../lib/account-register-navigation'
+import { OverlayLink } from './overlay-link'
+import { useReportOverlayOptional } from './navigation-provider'
 
 /**
  * Opens an account register over the current workspace. Keeping the current
@@ -26,13 +27,19 @@ export function AccountRegisterLink({
   title?: string
   children: React.ReactNode
 }) {
-  const pathname = usePathname() ?? '/accounts'
-  const current = useSearchParams()
-  const href = accountRegisterHref(pathname, current.toString(), accountId, { from, to })
+  const nextPath = usePathname() ?? '/accounts'
+  const nextSearch = useSearchParams()
+  const overlay = useReportOverlayOptional()
+  const href = accountRegisterHref(
+    overlay?.pathname ?? nextPath,
+    overlay?.search ?? nextSearch.toString(),
+    accountId,
+    { from, to },
+  )
 
   return (
-    <Link href={href as never} className={className} aria-label={ariaLabel} title={title} scroll={false}>
+    <OverlayLink href={href} className={className} aria-label={ariaLabel} title={title}>
       {children}
-    </Link>
+    </OverlayLink>
   )
 }

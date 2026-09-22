@@ -154,6 +154,7 @@ const mockUrls = new Map<string, string>([
   ['../lib/account-register-navigation', 'mock:register-navigation'],
   ['./account-register-export-menu', 'mock:export-menu'],
   ['./search-input', 'mock:search-input'],
+  ['./navigation-provider', 'mock:overlay'],
 ])
 
 const mockSources = new Map<string, string>([
@@ -211,6 +212,7 @@ const mockSources = new Map<string, string>([
   ['mock:register-navigation', `export function accountRegisterCloseHref() { return '/accounts' }`],
   ['mock:export-menu', `export function AccountRegisterExportMenu() { return null }`],
   ['mock:search-input', `export function SearchInput() { return null }`],
+  ['mock:overlay', `export function useReportOverlayOptional() { return null }`],
 ])
 
 const hooks = registerHooks({

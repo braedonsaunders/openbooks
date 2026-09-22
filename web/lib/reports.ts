@@ -41,6 +41,7 @@ export {
   type AgingRow,
   type AgingSide,
   agingByParty,
+  agingSummaryAndDetail,
   agingCurrenciesInScope,
   AgingRatesUnavailableError,
   resolveAgingAsOf,

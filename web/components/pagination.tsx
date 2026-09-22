@@ -2,6 +2,9 @@ import Link from 'next/link'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { mergeHref } from '@/lib/list-params'
+import { isReportOverlayParam } from '@/lib/report-overlay'
+import { OverlayLink } from './overlay-link'
+import { useReportOverlayOptional } from './navigation-provider'
 
 export function Pagination({
   basePath,
@@ -21,6 +24,8 @@ export function Pagination({
 }) {
   const t = useTranslations('ui.pagination')
   const tCommon = useTranslations('common')
+  const overlay = useReportOverlayOptional()
+  const overlayNav = Boolean(overlay && isReportOverlayParam(pageParamKey))
   const pageCount = Math.max(1, Math.ceil(total / perPage))
   const isOutOfRange = total > 0 && page > pageCount
   const from = total === 0 ? 0 : (page - 1) * perPage + 1
@@ -57,6 +62,7 @@ export function Pagination({
       {isOutOfRange ? (
         <PageButton
           href={lastPageHref}
+          overlayNav={overlayNav}
           aria-label={t('goToLastPageAria', { page: pageCount.toLocaleString() })}
         >
           <ChevronLeft size={14} />
@@ -64,14 +70,14 @@ export function Pagination({
         </PageButton>
       ) : pageCount > 1 ? (
         <div className="flex items-center gap-1">
-          <PageButton href={prevHref} disabled={page <= 1} aria-label={t('previousPageAria')}>
+          <PageButton href={prevHref} overlayNav={overlayNav} disabled={page <= 1} aria-label={t('previousPageAria')}>
             <ChevronLeft size={14} />
             {t('prev')}
           </PageButton>
           <span className="px-2 text-slate-500 dark:text-slate-400">
             {t('pageOf', { page, pages: pageCount })}
           </span>
-          <PageButton href={nextHref} disabled={page >= pageCount} aria-label={t('nextPageAria')}>
+          <PageButton href={nextHref} overlayNav={overlayNav} disabled={page >= pageCount} aria-label={t('nextPageAria')}>
             {tCommon('actions.next')}
             <ChevronRight size={14} />
           </PageButton>
@@ -84,13 +90,16 @@ export function Pagination({
 function PageButton({
   href,
   disabled,
+  overlayNav,
   children,
   ...rest
 }: {
   href: string
   disabled?: boolean
+  overlayNav?: boolean
   children: React.ReactNode
 } & React.HTMLAttributes<HTMLAnchorElement>) {
+  const className = "inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800/60"
   if (disabled) {
     return (
       <span
@@ -101,10 +110,17 @@ function PageButton({
       </span>
     )
   }
+  if (overlayNav) {
+    return (
+      <OverlayLink href={href} className={className} {...(rest as object)}>
+        {children}
+      </OverlayLink>
+    )
+  }
   return (
     <Link
-      href={(href)}
-      className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800/60"
+      href={href}
+      className={className}
       {...(rest as object)}
     >
       {children}

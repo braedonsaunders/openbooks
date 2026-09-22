@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState, type ReactNode } from 'react'
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { ChevronsDown, ChevronsUp, SlidersHorizontal } from 'lucide-react'
@@ -9,6 +9,8 @@ import { PERIOD_PRESETS, type PeriodPresetGroup } from '@openbooks/reports'
 import { SearchInput } from '../../../components/search-input'
 import { DEFAULT_SEGMENT_ALL_KEY, isDefaultSegmentName, type BuiltinSegmentKey } from '../../../lib/segment-labels'
 import { setAllReportSections } from './report-section-events'
+import { isOverlayOnlyHrefChange, stripReportOverlay } from '../../../lib/report-overlay'
+import { useReportOverlayOptional } from '../../../components/navigation-provider'
 
 type DimOption = { id: string; name: string }
 type SegmentOption = { key: string; name: string; pluralName: string; showInReports: boolean; values: DimOption[] }
@@ -123,22 +125,33 @@ export function ReportFilterBar({
   const t = useTranslations('reports.filterBar')
   const router = useRouter()
   const pathname = usePathname()
-  const params = useSearchParams()
+  const nextParams = useSearchParams()
+  const overlay = useReportOverlayOptional()
+  const liveSearch = overlay?.search ?? nextParams.toString()
+  const params = useMemo(() => new URLSearchParams(liveSearch), [liveSearch])
   const [optionsOpen, setOptionsOpen] = useState(false)
 
   const resetKeys = resetParamKeys ?? EMPTY_RESET_KEYS
   const setParams = useCallback(
     (updates: Record<string, string | null>) => {
-      const next = new URLSearchParams(params.toString())
+      const next = new URLSearchParams(liveSearch)
       for (const [k, v] of Object.entries(updates)) {
         const key = k === 'period' ? periodParamKey : k === 'from' ? fromParamKey : k === 'to' ? toParamKey : k
         if (v === null || v === '') next.delete(key)
         else next.set(key, v)
       }
       for (const key of resetKeys) next.delete(key)
-      router.replace(`${pathname}?${next.toString()}`)
+      const currentHref = `${pathname}${liveSearch ? `?${liveSearch}` : ''}`
+      const nextHref = `${pathname}?${next.toString()}`
+      if (overlay && isOverlayOnlyHrefChange(currentHref, nextHref)) {
+        overlay.replace(nextHref)
+        return
+      }
+      const stripped = stripReportOverlay(next)
+      overlay?.beginReload()
+      router.replace(`${pathname}?${stripped.toString()}`)
     },
-    [fromParamKey, params, pathname, periodParamKey, resetKeys, router, toParamKey],
+    [fromParamKey, liveSearch, overlay, pathname, periodParamKey, resetKeys, router, toParamKey],
   )
 
   const periodFrom = params.get(fromParamKey)

@@ -22,7 +22,7 @@ import {
   type TableSpanRow,
 } from '@braedonsaunders/appkit-viewspec'
 import { getMoneyFormatter } from '@/lib/money-server'
-import { agingByParty, agingCurrenciesInScope, agingDetail, AgingRatesUnavailableError, dimensionOptions, type AgingCurrencyBasis, type AgingSide } from '../../../../lib/reports'
+import { agingByParty, agingCurrenciesInScope, agingSummaryAndDetail, AgingRatesUnavailableError, dimensionOptions, type AgingCurrencyBasis, type AgingSide } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
 import { MissingRatesError, reportSubsidiaryView, type RatesBlockedNotice } from '../../../../lib/consolidation'
 import { resolvePeriod } from '../../../../lib/periods'
@@ -206,10 +206,13 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
   if (subView && scope) {
     const runOpts = { basis: currencyBasis, reportingCurrency: target }
     try {
-      ;[summary, detailResult] = await Promise.all([
-        agingByParty(side, asOf, dims, undefined, runOpts),
-        detail ? agingDetail(side, asOf, dims, undefined, runOpts) : null,
-      ])
+      if (detail) {
+        const both = await agingSummaryAndDetail(side, asOf, dims, undefined, runOpts)
+        summary = both.summary
+        detailResult = both.detail
+      } else {
+        summary = await agingByParty(side, asOf, dims, undefined, runOpts)
+      }
     } catch (e) {
       // Same banner contract as underived consolidated rates (F-t06-027): a
       // txn-basis report whose spots are underived renders the derive link,

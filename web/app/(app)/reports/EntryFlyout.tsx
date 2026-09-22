@@ -1,8 +1,8 @@
 'use client'
 
 import { useMoney } from '@/components/money-provider'
-import { useEffect, useState } from 'react'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { useEffect, useMemo, useState } from 'react'
+import { usePathname, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { ArrowUpRight } from 'lucide-react'
 import { Badge, Button, Drawer, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
@@ -11,6 +11,8 @@ import { AccountRegisterLink } from '../../../components/account-register-link'
 import { ContributorGroupHeading, groupEntryLinesByContributor } from '../../../components/journal-entry-link'
 import { entryTotals } from './entry-totals'
 import { decimalCmp, decimalNeg } from '../../../lib/statement-format'
+import { hrefWithoutKeys } from '../../../lib/report-overlay'
+import { useReportOverlayOptional } from '../../../components/navigation-provider'
 
 type EntryData = {
   entry: {
@@ -53,9 +55,14 @@ type EntryData = {
  */
 export function EntryFlyout() {
   const { money } = useMoney()
-  const params = useSearchParams()
-  const router = useRouter()
-  const pathname = usePathname()
+  const nextParams = useSearchParams()
+  const nextPath = usePathname()
+  const overlay = useReportOverlayOptional()
+  const pathname = overlay?.pathname ?? nextPath
+  const params = useMemo(
+    () => new URLSearchParams(overlay?.search ?? nextParams.toString()),
+    [overlay?.search, nextParams],
+  )
   const t = useTranslations('journal')
   const tc = useTranslations('common')
   const tr = useTranslations('reports')
@@ -94,9 +101,9 @@ export function EntryFlyout() {
   }, [txn])
 
   const close = () => {
-    const next = new URLSearchParams(params.toString())
-    next.delete('txn')
-    router.replace(`${pathname}${next.toString() ? `?${next}` : ''}`, { scroll: false })
+    const href = hrefWithoutKeys(pathname ?? '/', params.toString(), ['txn'])
+    if (overlay) overlay.replace(href)
+    else window.location.assign(href)
   }
 
   const entry = data?.entry

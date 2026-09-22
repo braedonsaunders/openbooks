@@ -10,6 +10,8 @@ import {
   createSearchInputEditState,
   reconcileSearchInputUrl,
 } from '../lib/search-input-state'
+import { isReportOverlayParam } from '../lib/report-overlay'
+import { useReportOverlayOptional } from './navigation-provider'
 
 export function SearchInput({
   placeholder,
@@ -27,7 +29,11 @@ export function SearchInput({
   const pathname = usePathname()
   const router = useRouter()
   const search = useSearchParams()
-  const urlValue = search.get(paramKey) ?? ''
+  const overlay = useReportOverlayOptional()
+  const liveSearch = overlay?.search ?? search.toString()
+  const liveParams = new URLSearchParams(liveSearch)
+  const urlValue = liveParams.get(paramKey) ?? ''
+  const overlayNav = Boolean(overlay && isReportOverlayParam(paramKey))
   const [edit, setEdit] = useState(() => createSearchInputEditState(urlValue))
   const [navigationPending, startTransition] = useTransition()
   // Reconcile the edit buffer with the URL during render (same committed
@@ -42,24 +48,27 @@ export function SearchInput({
       // No-op when the input already matches the URL (mount, external URL
       // change) — navigating anyway would strip the page param and reset
       // deep-linked/refreshed pagination back to page 1.
-      if (value === (search.get(paramKey) ?? '')) return
-      const next = new URLSearchParams(search.toString())
+      if (value === (new URLSearchParams(liveSearch).get(paramKey) ?? '')) return
+      const next = new URLSearchParams(liveSearch)
       if (value) next.set(paramKey, value)
       else next.delete(paramKey)
       // Reset to page 1 when search changes
       next.delete(pageParamKey)
       const qs = next.toString()
-      // Wrap the navigation in a transition so the App Router keeps the current
-      // page (and this input's focus) mounted while the new RSC streams in,
-      // instead of swapping in loading.tsx — otherwise the field loses focus on
-      // every keystroke and you have to click back in. `scroll: false` keeps the
-      // list from jumping to the top while filtering.
+      const href = qs ? `${pathname}?${qs}` : pathname
+      // Overlay chrome (register search) must not re-run the page loader.
+      // List search still goes through the App Router in a transition so
+      // the field keeps focus while the new RSC streams in.
+      if (overlayNav && overlay) {
+        overlay.replace(href)
+        return
+      }
       startTransition(() => {
-        router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+        router.replace(href, { scroll: false })
       })
     }, 250)
     return () => clearTimeout(handle)
-  }, [pageParamKey, paramKey, pathname, router, search, startTransition, value])
+  }, [liveSearch, overlay, overlayNav, pageParamKey, paramKey, pathname, router, startTransition, value])
 
   return (
     <div className={cn('relative w-full sm:w-72', className)}>

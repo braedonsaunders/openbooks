@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Skeleton, UrlDrawer, cn } from '@openbooks/ui'
@@ -12,6 +11,7 @@ import {
   REPORT_DRILL_TO_PARAM,
   type ReportDrillResponse,
 } from '../lib/report-drill'
+import { hrefWithoutKeys } from '../lib/report-overlay'
 import { Pagination } from './pagination'
 import { RelatedTransactionDrawerClient, type RelatedTransactionDrawerData } from './related-transaction-drawer-client'
 import { EntryFlyout } from '../app/(app)/reports/EntryFlyout'
@@ -19,20 +19,14 @@ import { ReportFilterBar } from '../app/(app)/reports/ReportFilterBar'
 import { TxnLink } from '../app/(app)/reports/TxnLink'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../app/(app)/reports/ReportTable'
 import { AccountRegisterDrawer } from './account-register-drawer'
-
-function hrefWithout(pathname: string, query: string, keys: string[]): string {
-  const params = new URLSearchParams(query)
-  for (const key of keys) params.delete(key)
-  const next = params.toString()
-  return next ? `${pathname}?${next}` : pathname
-}
+import { useReportOverlay } from './navigation-provider'
 
 /** Shell-level report drill stack: result rows over the report, native record over rows. */
 export function GlobalReportDrawerHost() {
-  const pathname = usePathname() ?? '/'
-  const router = useRouter()
-  const params = useSearchParams()
-  const query = params.toString()
+  const overlay = useReportOverlay()
+  const pathname = overlay.pathname
+  const query = overlay.search
+  const params = useMemo(() => new URLSearchParams(query), [query])
   const t = useTranslations('reports')
   const target = params.get('reportDrill')
   const page = Math.max(1, Number(params.get('reportDrillPage') ?? 1) || 1)
@@ -48,33 +42,31 @@ export function GlobalReportDrawerHost() {
   const [recordData, setRecordData] = useState<RelatedTransactionDrawerData | null>(null)
   const [loadedRecord, setLoadedRecord] = useState<string | null>(null)
 
-  const closeHref = useMemo(() => hrefWithout(pathname, query, [
-    'reportDrill', 'reportDrillPage', REPORT_DRILL_PERIOD_PARAM, REPORT_DRILL_FROM_PARAM, REPORT_DRILL_TO_PARAM,
-    'reportRecord', 'reportRecordKind', 'txn', 'drawerReturn', 'form', 'transactionTab',
-  ]), [pathname, query])
-  const recordCloseHref = useMemo(() => hrefWithout(pathname, query, [
-    'reportRecord', 'reportRecordKind', 'drawerReturn', 'form', 'transactionTab',
-  ]), [pathname, query])
+  const closeHref = useMemo(
+    () => hrefWithoutKeys(pathname, query, [
+      'reportDrill', 'reportDrillPage', REPORT_DRILL_PERIOD_PARAM, REPORT_DRILL_FROM_PARAM, REPORT_DRILL_TO_PARAM,
+      'reportRecord', 'reportRecordKind', 'txn', 'drawerReturn', 'form', 'transactionTab',
+    ]),
+    [pathname, query],
+  )
+  const recordCloseHref = useMemo(
+    () => hrefWithoutKeys(pathname, query, ['reportRecord', 'reportRecordKind', 'drawerReturn', 'form', 'transactionTab']),
+    [pathname, query],
+  )
 
-  // Clear the drill while (re)loading, during render (same committed values,
-  // no extra render). The snapshot mirrors the fetch inputs below exactly.
-  const [prevDrillRequest, setPrevDrillRequest] = useState(() => ({
-    closeHref, drillFrom, drillPeriod, drillTo, page, router, t, target,
-  }))
-  if (
-    prevDrillRequest.closeHref !== closeHref || prevDrillRequest.page !== page ||
-    prevDrillRequest.router !== router || prevDrillRequest.t !== t || prevDrillRequest.target !== target ||
-    prevDrillRequest.drillPeriod !== drillPeriod || prevDrillRequest.drillFrom !== drillFrom ||
-    prevDrillRequest.drillTo !== drillTo
-  ) {
-    setPrevDrillRequest({ closeHref, drillFrom, drillPeriod, drillTo, page, router, t, target })
+  // Fetch identity is the drill target and its window — not the close href
+  // or a nested record. Opening a transaction over the drill must not
+  // discard rows the operator is still looking at.
+  const drillRequest = `${target ?? ''}:${page}:${drillPeriod ?? ''}:${drillFrom ?? ''}:${drillTo ?? ''}`
+  const [prevDrillRequest, setPrevDrillRequest] = useState(drillRequest)
+  if (prevDrillRequest !== drillRequest) {
+    setPrevDrillRequest(drillRequest)
     setData(null)
     setLoadedTarget(null)
   }
 
   useEffect(() => {
     if (!target) return
-    const selection = `${target}:${page}:${drillPeriod ?? ''}:${drillFrom ?? ''}:${drillTo ?? ''}`
     const controller = new AbortController()
     const search = new URLSearchParams({ target, page: String(page) })
     if (drillPeriod) search.set('period', drillPeriod)
@@ -87,35 +79,26 @@ export function GlobalReportDrawerHost() {
       })
       .then((body) => {
         setData(body)
-        setLoadedTarget(selection)
+        setLoadedTarget(drillRequest)
       })
       .catch((error) => {
         if (error instanceof DOMException && error.name === 'AbortError') return
         toast.error(error instanceof Error ? error.message : t('drillDrawer.loadFailed'))
-        router.replace(closeHref as never, { scroll: false })
+        overlay.replace(closeHref)
       })
     return () => controller.abort()
-  }, [closeHref, drillFrom, drillPeriod, drillTo, page, router, t, target])
+  }, [closeHref, drillFrom, drillPeriod, drillRequest, drillTo, overlay, page, t, target])
 
-  // Same render-time reset for the nested record drawer. Keyed on the query
-  // string (not the search-params object, whose identity is not stable across
-  // renders) plus the other fetch inputs.
-  const [prevRecordRequest, setPrevRecordRequest] = useState(() => ({
-    query, recordCloseHref, recordId, recordKind, router, t,
-  }))
-  if (
-    prevRecordRequest.query !== query || prevRecordRequest.recordCloseHref !== recordCloseHref ||
-    prevRecordRequest.recordId !== recordId || prevRecordRequest.recordKind !== recordKind ||
-    prevRecordRequest.router !== router || prevRecordRequest.t !== t
-  ) {
-    setPrevRecordRequest({ query, recordCloseHref, recordId, recordKind, router, t })
+  const recordRequest = `${recordKind ?? ''}:${recordId ?? ''}:${params.get('form') ?? ''}`
+  const [prevRecordRequest, setPrevRecordRequest] = useState(recordRequest)
+  if (prevRecordRequest !== recordRequest) {
+    setPrevRecordRequest(recordRequest)
     setRecordData(null)
     setLoadedRecord(null)
   }
 
   useEffect(() => {
     if (!recordId || !recordKind) return
-    const selection = `${recordKind}:${recordId}`
     const controller = new AbortController()
     const search = new URLSearchParams({ id: recordId, kind: recordKind })
     const form = params.get('form')
@@ -127,17 +110,17 @@ export function GlobalReportDrawerHost() {
       })
       .then((body) => {
         setRecordData(body)
-        setLoadedRecord(selection)
+        setLoadedRecord(recordRequest)
       })
       .catch((error) => {
         if (error instanceof DOMException && error.name === 'AbortError') return
         toast.error(error instanceof Error ? error.message : t('drillDrawer.recordLoadFailed'))
-        router.replace(recordCloseHref as never, { scroll: false })
+        overlay.replace(recordCloseHref)
       })
     return () => controller.abort()
-  }, [params, recordCloseHref, recordId, recordKind, router, t])
+  }, [overlay, params, recordCloseHref, recordId, recordKind, recordRequest, t])
 
-  const ready = data && loadedTarget === `${target}:${page}:${drillPeriod ?? ''}:${drillFrom ?? ''}:${drillTo ?? ''}`
+  const ready = data && loadedTarget === drillRequest
   const currentParams = Object.fromEntries(params.entries())
   const periodFilter = periodBrowsable ? (
     <ReportFilterBar
@@ -153,6 +136,7 @@ export function GlobalReportDrawerHost() {
     <>
       <UrlDrawer
         open={!!target}
+        openKey={target ?? ''}
         closeHref={closeHref}
         title={ready ? data.title : t('drillDrawer.title')}
         description={ready ? data.description : undefined}
@@ -225,7 +209,7 @@ export function GlobalReportDrawerHost() {
         </div>
       </UrlDrawer>
       <AccountRegisterDrawer />
-      {recordData && loadedRecord === `${recordKind}:${recordId}` ? <RelatedTransactionDrawerClient data={recordData} /> : null}
+      {recordData && loadedRecord === recordRequest ? <RelatedTransactionDrawerClient data={recordData} /> : null}
       <EntryFlyout />
     </>
   )
