@@ -16,7 +16,9 @@ import { documentRevisionCounterSql } from '@openbooks/engine/src/records/revisi
 import { sql } from 'drizzle-orm'
 import { canonicalJson } from '@openbooks/engine/src/platform/canonical-json.ts'
 import { allocateDocumentNumber } from '@openbooks/engine/src/records/numbering.ts'
-import { db, schema, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { db, schema, withOrgTransaction, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import { assertReturnSourceSelectable, type ReturnSide } from '@openbooks/engine/src/inventory/returnable-sources.ts'
+import { InventoryError } from '@openbooks/engine/src/inventory/contracts.ts'
 import { cmp, normalizeDecimal, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/records/transaction-audit.ts'
@@ -480,6 +482,12 @@ const NATIVE_LINE_CUSTOM_KEYS = [
   'purchaseOrderLineId',
   'convertedFrom',
   'apCaptureEvidence',
+  // Stock-return evidence on a credit memo. The operator CHOOSES the source
+  // movement, but they choose it through the typed `inventoryReturnSource`
+  // line field: the server validates that choice and writes this bag itself.
+  // Listing it here keeps a caller from forging it directly, and keeps a
+  // description-only save from stripping a return the credit already claims.
+  'inventoryReturn',
 ] as const
 
 /** Drop caller-supplied native provenance keys; tenant values pass through. */
@@ -566,8 +574,127 @@ function nativeReservationKind(custom: unknown): 'source-bound' | 'audit-only' |
       return 'malformed'
     }
   }
+  // Stock-return evidence is audit-only: it binds the credit to a movement,
+  // not to a source order line's billed-quantity cover, so it takes no
+  // source-bound guard — but it MUST be classified, or a description-only save
+  // would find no evidence on the document, skip reattachment entirely, and
+  // silently drop the return the credit claims. Its shape is checked here
+  // because a bag nothing can interpret must fail closed rather than reach
+  // posting as an unreadable return.
+  const inventoryReturn = evidence.inventoryReturn
+  if (inventoryReturn !== undefined) {
+    if (!inventoryReturn || typeof inventoryReturn !== 'object') return 'malformed'
+    const parts = inventoryReturn as Record<string, unknown>
+    const receipt = parts.sourceReceiptMovementId
+    const issue = parts.sourceIssueMovementId
+    const named = [receipt, issue].filter((value) => value !== undefined)
+    // Exactly one leg: a bag naming both would let the two return engines
+    // disagree about which movement this credit consumed.
+    if (named.length !== 1) return 'malformed'
+    if (typeof named[0] !== 'string' || !isUuid(named[0])) return 'malformed'
+    for (const optional of [parts.lotId, parts.serialId]) {
+      if (optional === undefined || optional === null) continue
+      if (typeof optional !== 'string' || !isUuid(optional)) return 'malformed'
+    }
+    audit = true
+  }
   if (bound) return 'source-bound'
   return audit ? 'audit-only' : null
+}
+
+/** Credit kinds that may return stock, and which leg each one returns. */
+const RETURN_SIDE_BY_KIND: Record<string, ReturnSide> = {
+  vendor_credit: 'purchase',
+  customer_credit: 'sales',
+}
+
+/**
+ * Turn the operator's chosen return source into trusted `custom.inventoryReturn`
+ * evidence, inside the write transaction that already holds the document lock.
+ *
+ * The caller names a movement; the server decides whether that movement is
+ * returnable and writes the bag. `assertReturnSourceSelectable` reads the same
+ * query the picker lists from, so the editor cannot offer a source the save
+ * refuses, and cannot save one the picker never offered.
+ *
+ * Tri-state per line: absent preserves what reattachment restored, null clears
+ * the return, an object replaces it.
+ */
+async function applyInventoryReturnSelections(
+  tx: SqlExecutor,
+  orgId: string,
+  documentId: string,
+  kind: string,
+  submitted: DocumentLineInput[],
+  preparedLines: { itemId: string | null; stockLocationId: string | null; custom: Record<string, unknown> }[],
+): Promise<void> {
+  if (submitted.length !== preparedLines.length) return
+  const touched = submitted.some((line) => line.inventoryReturnSource !== undefined)
+  if (!touched) return
+  const side = RETURN_SIDE_BY_KIND[kind]
+  if (!side) {
+    const at = submitted.findIndex((line) => line.inventoryReturnSource !== undefined) + 1
+    throw new DocumentEditError(
+      422,
+      `Line ${at}: only a vendor credit or a customer credit can return stock — ` +
+        `a ${kind} has no shipment or receipt to return against; nothing was changed`,
+    )
+  }
+  const party = (await tx.execute<{ partyId: string | null }>(sql`
+    select party_id as "partyId" from documents where id = ${documentId} and org_id = ${orgId}
+  `)).rows[0]
+  for (let i = 0; i < submitted.length; i++) {
+    const selection = submitted[i]!.inventoryReturnSource
+    if (selection === undefined) continue
+    const prepared = preparedLines[i]!
+    if (selection === null) {
+      // Clearing is explicit: drop the bag rather than leaving a return the
+      // operator removed from the line they are looking at.
+      const { inventoryReturn: _cleared, ...rest } = prepared.custom
+      prepared.custom = rest
+      continue
+    }
+    if (!party?.partyId) {
+      throw new DocumentEditError(
+        422,
+        `Line ${i + 1}: select the ${side === 'purchase' ? 'vendor' : 'customer'} before choosing what this credit returns; nothing was changed`,
+      )
+    }
+    if (!prepared.itemId || !prepared.stockLocationId) {
+      throw new DocumentEditError(
+        422,
+        `Line ${i + 1}: a returned line needs both an item and a warehouse before its ` +
+          `${side === 'purchase' ? 'receipt' : 'shipment'} can be selected; nothing was changed`,
+      )
+    }
+    try {
+      await assertReturnSourceSelectable(
+        tx,
+        orgId,
+        {
+          side,
+          partyId: party.partyId,
+          itemId: prepared.itemId,
+          stockLocationId: prepared.stockLocationId,
+          movementId: selection.movementId,
+          lotId: selection.lotId ?? null,
+          serialId: selection.serialId ?? null,
+        },
+        `Line ${i + 1}`,
+      )
+    } catch (error) {
+      if (error instanceof InventoryError) throw new DocumentEditError(422, `${error.message}; nothing was changed`)
+      throw error
+    }
+    prepared.custom = {
+      ...prepared.custom,
+      inventoryReturn: {
+        [side === 'purchase' ? 'sourceReceiptMovementId' : 'sourceIssueMovementId']: selection.movementId,
+        ...(selection.lotId ? { lotId: selection.lotId } : {}),
+        ...(selection.serialId ? { serialId: selection.serialId } : {}),
+      },
+    }
+  }
 }
 
 /**
@@ -1463,6 +1590,13 @@ export async function applyDocumentEdit(
             preparedLines[i]!.custom = { ...preparedLines[i]!.custom, ...evidence }
           }
         }
+      }
+
+      // AFTER reattachment: an explicit selection on this save must win over
+      // the stored one, or changing a return source would silently keep the
+      // old movement while the drawer showed the new one.
+      if (preparedLines && body.lines) {
+        await applyInventoryReturnSelections(tx, orgId, id, locked.kind, body.lines, preparedLines)
       }
 
       try {
