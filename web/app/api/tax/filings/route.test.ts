@@ -214,7 +214,16 @@ test('POST prepare demands compliance.file and freezes the snapshot under it', a
   const response = await post()
 
   assert.equal(response.status, 201)
-  assert.deepEqual(await response.json(), { id: 'filing-1', version: 2 })
+  // The creation response echoes the filing's persisted (engine-clamped)
+  // window alongside the version, so a narrowed multi-period request is
+  // visible to the operator instead of hidden behind {id, version}.
+  assert.deepEqual(await response.json(), {
+    id: 'filing-1',
+    version: 2,
+    formCode: 'GST-Q',
+    from: '2026-01-01',
+    to: '2026-03-31',
+  })
   assert.deepEqual(routeState.permissionChecks, ['compliance.file'])
   assert.deepEqual(routeState.engineCalls, [{ op: 'compute', orgId: 'org-1', userId: 'user-1' }])
 })

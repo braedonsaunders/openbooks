@@ -105,7 +105,11 @@ export async function POST(req: Request) {
                 ${gate.user.id})`)
       return row
     })
-    return NextResponse.json(filing, { status: 201 })
+    // The creation response exposes the persisted filing window, not the requested range.
+    return NextResponse.json(
+      { ...filing, formCode: result.formCode, from: result.from, to: result.to },
+      { status: 201 },
+    )
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'could not save filing' }, { status: 422 })
   }
