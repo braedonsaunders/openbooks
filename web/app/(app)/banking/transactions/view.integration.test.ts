@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import test from 'node:test'
-import type { SessionUser } from '../../../../../lib/auth'
+import type { SessionUser } from '../../../../lib/auth'
 
 /**
  * Unsaved-create loader contract for the three document lists.
@@ -39,8 +39,8 @@ const { db, withBypassContext, withOrgContext } = await import('@openbooks/engin
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { loadBankingTransactions } = await import('./view')
-const { loadArInvoices } = await import('../../../ar/invoices/view')
-const { loadApBills } = await import('../../../ap/bills/view')
+const { loadArInvoices } = await import('../../ar/invoices/view')
+const { loadApBills } = await import('../../ap/bills/view')
 
 const sessionFor = (orgId: string, actor: string): SessionUser => ({
   id: actor, orgId, name: 'Loader', email: 'loader@scratch.test',

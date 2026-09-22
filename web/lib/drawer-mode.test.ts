@@ -20,15 +20,16 @@ test('edit intent cannot override lifecycle or permission enforcement', () => {
 
 test('new record creation entry points carry explicit edit intent', () => {
   const creationSources = [
-    source('components/new-document-button.tsx'),
+    // The shared document kinds carry the intent one level in: the button is
+    // URL-only and every href it can build comes from documentCreateHref,
+    // which appends mode=edit for exactly the creatable kinds.
+    source('lib/document-kinds.ts'),
     source('components/global-create-menu.tsx'),
     // NewOrderButton keeps a legacy instant-into-draft branch (mode=edit)
     // for the field-tickets caller until its own slice migrates it; the
     // three order kinds take the URL-only createParam branch above.
     source('app/(app)/_order/NewOrderButton.tsx'),
-    source('app/(app)/payments/NewPaymentButton.tsx'),
     source('app/(app)/expenses/NewExpenseButton.tsx'),
-    source('app/(app)/journal/NewJournalButton.tsx'),
     source('app/(app)/ap/capture/CaptureReviewDrawer.tsx'),
     source('app/(app)/crm/OpportunityDrawer.tsx'),
     source('app/(app)/projects/tabs/BillingSection.tsx'),
@@ -37,6 +38,9 @@ test('new record creation entry points carry explicit edit intent', () => {
   for (const creationSource of creationSources) {
     assert.match(creationSource, /mode=edit/)
   }
+  // The button itself must not hand-roll a href: routing through the shared
+  // builder is what keeps its intent (and its kind refusal) honest.
+  assert.match(source('components/new-document-button.tsx'), /documentCreateHref\(/)
 })
 
 // The Parties/Projects/Orders slices open unsaved-create drawers
@@ -53,8 +57,13 @@ test('unsaved-create entry points open editable drawers through createMode', () 
     source('app/(app)/projects/NewProjectRedirect.tsx'),
     source('app/(app)/_order/NewOrderButton.tsx'),
     source('app/(app)/_order/NewOrderRedirect.tsx'),
+    source('app/(app)/payments/NewPaymentButton.tsx'),
+    source('app/(app)/journal/NewJournalButton.tsx'),
   ]) {
-    assert.match(entry, /partyNew: '1'|projectNew: '1'|\[createParam!?\]: '1'/)
+    assert.match(
+      entry,
+      /partyNew: '1'|projectNew: '1'|paymentNew: '1'|entryNew: '1'|\[createParam!?\]: '1'/,
+    )
   }
   assert.match(
     source('app/(app)/parties/PartyDrawer.tsx'),
