@@ -32,6 +32,10 @@ import {
   EMPLOYEE_HRM_FILTER_KEYS,
 } from '../lib/customization/entity-list-query'
 import { entityListSource, entityOrderClause, plannedPageClauses } from '../lib/list/entity-sources'
+import { ReportDrillLink } from '../app/(app)/reports/ReportDrillLink'
+import { fiscalYearOf, fiscalYearRangeFor } from '@openbooks/reports'
+import { fiscalStartMonth } from '../lib/fiscal'
+import { DRILL_LINK_CLASS } from './viewspec/tone'
 
 /**
  * The universal ENTITY list — the non-`documents` twin of RecordListView. Renders
@@ -228,10 +232,14 @@ export async function EntityListView({
     cols.filter((c) => c.expr).map((c) => sql`${c.expr} as ${sql.raw(`"${c.key}"`)}`),
     sql`, `,
   )
-  const [allowedSubs, today] = await Promise.all([
+  const [allowedSubs, today, startMonth] = await Promise.all([
     allowedSubsidiaryIds(userId, orgId),
     businessToday(orgId),
+    source.columnDrill ? fiscalStartMonth(orgId) : Promise.resolve(1),
   ])
+  const fiscalYearStart = source.columnDrill
+    ? fiscalYearRangeFor(fiscalYearOf(today, startMonth), startMonth).from
+    : undefined
   const adhoc = {
     q: params.q,
     filters: quickValues,
@@ -404,9 +412,19 @@ export async function EntityListView({
         // Amount cells come from numeric columns (driver strings/numbers);
         // String() round-trips both exactly, so formatting is unchanged.
         const rowCurrency = source.currencyField ? row[source.currencyField] : undefined
+        const formatted = v == null || v === ''
+          ? <span className="text-slate-400">—</span>
+          : money(String(v), source.currencyField ? { currency: typeof rowCurrency === 'string' ? rowCurrency : undefined } : undefined)
+        const drill = fiscalYearStart && source.columnDrill && v != null && v !== ''
+          ? source.columnDrill(row, c.key, { asOf: today, fiscalYearStart })
+          : null
         return (
           <TableCell key={c.key} className="text-right tabular-nums">
-            {v == null || v === '' ? <span className="text-slate-400">—</span> : money(String(v), source.currencyField ? { currency: typeof rowCurrency === 'string' ? rowCurrency : undefined } : undefined)}
+            {drill ? (
+              <ReportDrillLink target={drill} className={DRILL_LINK_CLASS}>
+                {formatted}
+              </ReportDrillLink>
+            ) : formatted}
           </TableCell>
         )
       }

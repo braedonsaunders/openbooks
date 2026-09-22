@@ -5,7 +5,7 @@ import { addDays, addMonthsIso, declaredPeriodColumns, declaredPeriodsCover, dec
 import { resolveOrgId } from './org-scope'
 import { glActivityBuckets, glSummaryEligibleDims, bucketSubsidiaryFilter, statementBookExpr, type ActivityBoundary } from './gl-summary'
 import { MissingRatesError } from './consolidation'
-import { PNL_TYPES } from './account-types'
+import { ASSET_TYPES, EQUITY_TYPES, LIABILITY_TYPES, PNL_TYPES } from './account-types'
 import { fiscalStartMonth, defaultFiscalCalendarPeriods } from './fiscal'
 import {
   decimalAdd,
@@ -1080,15 +1080,7 @@ export function combineTotals(matrix: StatementMatrix, vectors: StatementValue[]
 
 // Single definition lives in ./account-types; this re-export keeps existing
 // importers working without a second literal that could drift.
-export { PNL_TYPES };
-export const ASSET_TYPES = ['asset_bank', 'asset_receivable', 'asset_current_other', 'asset_fixed', 'asset_other']
-export const LIABILITY_TYPES = [
-  'liability_payable',
-  'liability_card',
-  'liability_current_other',
-  'liability_long_term',
-]
-export const EQUITY_TYPES = ['equity']
+export { ASSET_TYPES, EQUITY_TYPES, LIABILITY_TYPES, PNL_TYPES };
 
 export type StatementViewLine = {
   kind: 'section' | 'account' | 'subtotal' | 'total'

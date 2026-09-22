@@ -6,6 +6,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
   column,
+  drill,
   field,
   grid,
   money,
@@ -21,6 +22,12 @@ import {
   widgetCell,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { fiscalYearOf, fiscalYearRangeFor } from '@openbooks/reports'
+import { ACCOUNT_CLASS_TYPES } from '../../../lib/account-types'
+import { accountBalanceDrill, accountClassBalanceDrill } from '../../../lib/account-balance-drill'
+import { fiscalStartMonth } from '../../../lib/fiscal'
+import type { ReportDrillTarget } from '../../../lib/report-drill'
 import { isUuid, mergeHref, parseListParams, pickString } from '../../../lib/list-params'
 import { accountsWithBalances, orgInfo } from '../../../lib/data'
 import { can, requirePermission } from '../../../lib/authz'
@@ -66,25 +73,12 @@ const TYPE_KEYS: Record<string, string> = {
   expense_other: 'expenseOther',
   expense_deferred: 'expenseDeferred',
 }
-// Group the 16 detailed types into the 5 statement classes for the filter.
-const CLASS_OF: Record<string, string> = {
-  asset_bank: 'asset',
-  asset_receivable: 'asset',
-  asset_current_other: 'asset',
-  asset_fixed: 'asset',
-  asset_other: 'asset',
-  liability_payable: 'liability',
-  liability_card: 'liability',
-  liability_current_other: 'liability',
-  liability_long_term: 'liability',
-  equity: 'equity',
-  income: 'income',
-  income_other: 'income',
-  cogs: 'expense',
-  expense: 'expense',
-  expense_other: 'expense',
-  expense_deferred: 'expense',
-}
+// Group the detailed types into the 5 statement classes for the filter.
+const CLASS_OF: Record<string, string> = Object.fromEntries(
+  Object.entries(ACCOUNT_CLASS_TYPES).flatMap(([classKey, types]) =>
+    types.map((type) => [type, classKey]),
+  ),
+)
 // statement class → message key under accounts.classes.* (unknown values render verbatim).
 const CLASS_KEYS: Record<string, string> = {
   asset: 'asset',
@@ -112,6 +106,7 @@ export interface AccountSearchRow {
   typeLabel: string
   balance: string
   balanceTone: 'negative' | 'default'
+  balanceDrill: ReportDrillTarget | null
   registerAriaLabel: string
 }
 
@@ -176,9 +171,14 @@ export async function loadAccounts(
   const canManageAccounts = can(authz, 'gl.manage')
   const creating = pickString(sp.accountNew) === '1' && canManageAccounts
 
+  const [asOf, startMonth] = await Promise.all([
+    businessToday(authz.user.orgId),
+    fiscalStartMonth(authz.user.orgId),
+  ])
+  const fiscalYearStart = fiscalYearRangeFor(fiscalYearOf(asOf, startMonth), startMonth).from
   const accounts = await accountsWithBalances(
     authz.user.orgId,
-    undefined,
+    asOf,
     authz.allowedSubsidiaryIds,
   )
   const visibleAccounts = showInactive ? accounts : accounts.filter((account) => account.is_active)
@@ -337,6 +337,12 @@ export async function loadAccounts(
               count: classAccounts.length,
               balance: formatMoney(classBalance),
               balanceNegative: decimalCmp(classBalance, '0.0000') < 0,
+              drill: accountClassBalanceDrill({
+                classKey,
+                label: t(`classes.${CLASS_KEYS[classKey]}`),
+                asOf,
+                fiscalYearStart,
+              }),
               rows: ordered.map((account) => {
                 const balance = rolled.get(account.id) ?? '0.0000'
                 return {
@@ -349,6 +355,13 @@ export async function loadAccounts(
                   isActive: account.is_active,
                   balance: formatMoney(balance),
                   balanceNegative: decimalCmp(balance, '0.0000') < 0,
+                  drill: accountBalanceDrill({
+                    accountId: account.id,
+                    label: `${account.number ?? ''} ${account.name}`.trim(),
+                    type: account.type,
+                    asOf,
+                    fiscalYearStart,
+                  }),
                   detailHref: mergeHref('/accounts', sp, {
                     account: account.id,
                     accountNew: undefined,
@@ -400,6 +413,13 @@ export async function loadAccounts(
         typeLabel: typeLabel(a.type),
         balance: formatMoney(bal),
         balanceTone: decimalCmp(bal, '0.0000') < 0 ? ('negative' as const) : ('default' as const),
+        balanceDrill: accountBalanceDrill({
+          accountId: a.id,
+          label: `${a.number ?? ''} ${a.name}`.trim(),
+          type: a.type,
+          asOf,
+          fiscalYearStart,
+        }),
         registerAriaLabel: `${t('list.viewRegister')}: ${a.number ?? ''} ${a.name}`.trim(),
       }
     }),
@@ -493,9 +513,11 @@ export function accountsSpec(data: AccountsData): PageSpec {
             column(rootF('columnType'), text(item('typeLabel')), {
               className: 'text-slate-500 dark:text-slate-400',
             }),
-            column(rootF('columnBalance'), money(item('balance'), { tone: item('balanceTone') }), {
-              align: 'right',
-            }),
+            column(
+              rootF('columnBalance'),
+              drill(item('balanceDrill'), money(item('balance'), { tone: item('balanceTone') })),
+              { align: 'right' },
+            ),
             column(
               rootF('columnActions'),
               widgetCell('account-register-cell', {

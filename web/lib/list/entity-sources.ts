@@ -1,5 +1,7 @@
 import { lifecycleWhere } from "../customization/entity-list-query/accounting-lifecycles";
 import 'server-only'
+import { accountListBalanceDrill } from '../account-balance-drill'
+import type { ReportDrillTarget } from '../report-drill'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { resolveProjectActualCosts } from '@openbooks/engine/src/projects/financials.ts'
@@ -149,6 +151,16 @@ export interface EntityListSource {
   hasInactive?: boolean
   /** Always-selected extra fields (e.g. is_active for row styling). */
   extraSelect?: SQL
+  /**
+   * Amount-cell drill. The list wraps the formatted number in ReportDrillLink
+   * when this returns a target. Receives the same as-of / fiscal-year window
+   * the list used to compute the number, so the flyout cannot drift from it.
+   */
+  columnDrill?: (
+    row: Record<string, unknown>,
+    columnKey: string,
+    ctx: { asOf: string; fiscalYearStart: string },
+  ) => ReportDrillTarget | null
   /** Row field containing the ISO currency for amount cells. */
   currencyField?: string
   /** Record-specific status semantics layered over the shared badge palette. */
@@ -564,7 +576,8 @@ const SOURCES: Record<string, EntityListSource> = {
     drawerParam: 'account',
     basePath: '/accounts',
     hasInactive: true,
-    extraSelect: sql`a.is_active`,
+    extraSelect: sql`a.is_active, a.type as drill_account_type, a.number as drill_account_number, a.name as drill_account_name`,
+    columnDrill: accountListBalanceDrill,
     statusVariant: (row) => row.is_active ? 'success' : 'outline',
   },
   journal: {
