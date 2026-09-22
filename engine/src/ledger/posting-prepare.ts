@@ -13,6 +13,7 @@ import { runRecordFlows } from "../flows/run.ts";
 import { assertBillReceiptsPostable, resolveBillInventoryAccounts } from "../inventory/documents-purchasing.ts";
 import { assertInvoiceIssuesPostable } from "../inventory/documents-sales.ts";
 import { assertVendorCreditInventoryReturnsPostable, resolveVendorCreditInventoryAccounts } from "../inventory/documents-vendor-credits.ts";
+import { assertCustomerCreditInventoryReturnsPostable } from "../inventory/documents-customer-credits.ts";
 
 import { assertBillPostingAllowed, ComplianceError } from "../compliance/compliance.ts";
 
@@ -144,6 +145,27 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
   if (doc.kind === "vendor_credit" && !deps.migration) {
     try {
       await assertVendorCreditInventoryReturnsPostable(
+        db,
+        doc.orgId,
+        doc.id,
+        doc.partyId,
+        await postingEffectSubsidiaryId(doc.orgId, doc.subsidiaryId),
+      );
+    } catch (error) {
+      if (error instanceof PostingError) throw error;
+      throw new PostingError(
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
+  if (doc.kind === "customer_credit" && !deps.migration) {
+    // Same backstop as the vendor leg: a return whose evidence cannot be
+    // satisfied must fail BEFORE the journal commits, not inside the
+    // post-commit effects drain where the credit is already posted and the
+    // stock silently never comes back.
+    try {
+      await assertCustomerCreditInventoryReturnsPostable(
         db,
         doc.orgId,
         doc.id,
