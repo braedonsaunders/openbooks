@@ -42,8 +42,10 @@ interface TaxReadState {
     adjustments: unknown;
     opts: unknown;
   }>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  computeResult: any;
+  // The mock module that reads this is an untyped JavaScript string, so a
+  // precise type here would constrain nothing. `unknown` accepts every
+  // fixture the tests assign and keeps the explicit-any ceiling at zero.
+  computeResult: unknown;
   computeError: unknown;
   errorCtor: (new (message: string) => Error) | null;
 }
