@@ -76,7 +76,7 @@ async function post(args: {
       (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
     values (${args.orgId}, ${entry}, 1, ${args.debit}, ${args.subsidiaryId}, ${args.amount}, 'CAD', ${args.amount}, '1'),
            (${args.orgId}, ${entry}, 2, ${args.credit}, ${args.subsidiaryId}, ${`-${args.amount}`}, 'CAD', ${`-${args.amount}`}, '1')`)
-  await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entry}`)
+  await withBypassContext(() => db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entry}`))
 }
 
 function findLine(view: Awaited<ReturnType<typeof balanceSheetView>>, label: string) {
