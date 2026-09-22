@@ -211,11 +211,41 @@ type SubRow = {
   taxCodeId: string | null;
   interval: Interval;
   intervalCount: number;
-  subsidiaryId: string | null;
+  /**
+   * The customer's own legal entity when it resolves to an active subsidiary
+   * of this organization; null when the customer carries no entity or its
+   * entity cannot be trusted (see resolveBillingSubsidiary).
+   */
+  trustedSubsidiaryId: string | null;
+  /** The customer's raw entity assignment (parties.subsidiary_id). */
+  customerSubsidiaryId: string | null;
+  /** The org root, used only for org-wide (entity-less) customers. */
+  rootSubsidiaryId: string | null;
   baseCurrency: string;
   nextBillOn: string;
   currentPeriodStart: string | null;
 };
+
+/**
+ * Resolve the legal entity a subscription invoice posts to. The invoice
+ * follows the customer — the same boundary subscriptionScopeSql and the
+ * customer scope guards authorize by (a null customer entity is org-wide) —
+ * never the hardcoded org root. An explicit customer entity must resolve to
+ * an active subsidiary of this organization (the FK already pins it
+ * same-org); only a legacy null assignment may fall back to the root, mirroring
+ * the revenue owner contract. Anything else refuses by name instead of
+ * posting to the wrong entity: reassign the customer to an active subsidiary
+ * in the party record (or clear the assignment for an org-wide customer)
+ * before billing.
+ */
+function resolveBillingSubsidiary(row: Pick<SubRow, "trustedSubsidiaryId" | "customerSubsidiaryId" | "rootSubsidiaryId">): string | null {
+  if (row.trustedSubsidiaryId) return row.trustedSubsidiaryId;
+  if (row.customerSubsidiaryId == null) return row.rootSubsidiaryId;
+  throw new SubscriptionError(
+    "the subscription customer is assigned to a subsidiary that is not active in this organization — " +
+    "reassign the customer to an active subsidiary (or clear the assignment for an org-wide customer) before billing",
+  );
+}
 
 /** Whole-day count b − a (both ISO). */
 function dayDiff(a: string, b: string): number {
@@ -562,7 +592,7 @@ async function billOne(
     orgId: sub.orgId,
     actorId: actor.actorId,
     customerId: sub.customerId,
-    subsidiaryId: sub.subsidiaryId,
+    subsidiaryId: resolveBillingSubsidiary(sub),
     currency: sub.planCurrency ?? sub.baseCurrency,
     incomeAccountId: sub.incomeAccountId,
     itemId: sub.itemId,
@@ -592,10 +622,18 @@ const SUB_SELECT = sql`
          p.name as "planName", p.amount as "planAmount", p.currency_code as "planCurrency",
          p.income_account_id as "incomeAccountId", p.item_id as "itemId", p.tax_code_id as "taxCodeId",
          coalesce(v.interval, p.interval) as interval, coalesce(v.interval_count, p.interval_count) as "intervalCount",
-         (select id from subsidiaries where org_id = s.org_id and parent_id is null limit 1) as "subsidiaryId",
+         -- The invoice follows the customer entity (parties.subsidiary_id),
+         -- the same boundary subscriptionScopeSql authorizes by; the org root
+         -- below is only the null-customer (org-wide) fallback. Never select
+         -- a caller-supplied entity: both legs are same-org lookups.
+         (select sub.id from subsidiaries sub
+           where sub.id = c.subsidiary_id and sub.org_id = s.org_id and sub.is_active) as "trustedSubsidiaryId",
+         c.subsidiary_id as "customerSubsidiaryId",
+         (select id from subsidiaries where org_id = s.org_id and parent_id is null limit 1) as "rootSubsidiaryId",
          o.base_currency as "baseCurrency", s.next_bill_on as "nextBillOn", s.current_period_start as "currentPeriodStart"
     from subscriptions s
     join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
+    join parties c on c.id = s.customer_id and c.org_id = s.org_id
     left join subscription_lifecycles l on l.subscription_id = s.id and l.org_id = s.org_id
     left join subscription_plan_versions v on v.id = l.plan_version_id and v.org_id = s.org_id
     join orgs o on o.id = s.org_id`;
@@ -827,13 +865,20 @@ async function loadSubRow(subscriptionId: string, orgId: string): Promise<SubDet
            p.name as "planName", p.amount as "planAmount", p.currency_code as "planCurrency",
            p.income_account_id as "incomeAccountId", p.item_id as "itemId", p.tax_code_id as "taxCodeId",
            p.interval, p.interval_count as "intervalCount",
-           (select id from subsidiaries where org_id = s.org_id and parent_id is null limit 1) as "subsidiaryId",
+           -- Same customer-entity derivation as SUB_SELECT: the invoice
+           -- follows parties.subsidiary_id; the root is only the org-wide
+           -- (null customer entity) fallback.
+           (select entity.id from subsidiaries entity
+             where entity.id = c.subsidiary_id and entity.org_id = s.org_id and entity.is_active) as "trustedSubsidiaryId",
+           c.subsidiary_id as "customerSubsidiaryId",
+           (select id from subsidiaries where org_id = s.org_id and parent_id is null limit 1) as "rootSubsidiaryId",
            o.base_currency as "baseCurrency", s.next_bill_on as "nextBillOn",
            s.current_period_start as "currentPeriodStart", s.start_on as "startOn", s.status,
            s.last_invoice_id as "lastInvoiceId", s.run_count as "runCount",
            exists(select 1 from subscription_lifecycles l where l.subscription_id = s.id and l.org_id = s.org_id) as "advancedLifecycle"
       from subscriptions s
       join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
+      join parties c on c.id = s.customer_id and c.org_id = s.org_id
       join orgs o on o.id = s.org_id
      where s.id = ${subscriptionId} and s.org_id = ${orgId} limit 1
   `));
@@ -903,7 +948,7 @@ export async function changeSubscription(
         orgId,
         actorId,
         customerId: row.customerId,
-        subsidiaryId: row.subsidiaryId,
+        subsidiaryId: resolveBillingSubsidiary(row),
         currency: row.planCurrency ?? row.baseCurrency,
         incomeAccountId: row.incomeAccountId,
         itemId: row.itemId,
@@ -977,7 +1022,7 @@ export async function prorateFirstInvoice(
       orgId,
       actorId,
       customerId: row.customerId,
-      subsidiaryId: row.subsidiaryId,
+      subsidiaryId: resolveBillingSubsidiary(row),
       currency: row.planCurrency ?? row.baseCurrency,
       incomeAccountId: row.incomeAccountId,
       itemId: row.itemId,
