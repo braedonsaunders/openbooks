@@ -1460,6 +1460,25 @@ export async function recognitionUnearnedRemaining(
  return {remaining:sum([row.allocated,neg(row.recognized),neg(credited)]),credited,exposure};
 }
 
+/**
+ * Cumulative net earned for one obligation on one book: posted recognition
+ * less historical reversals. Uses the same canonical predicate as the
+ * unearned-remaining helper and the schedule rebuild — a line counts only
+ * once its journal is posted, and a line carrying a reversal journal never
+ * counts (the compensating reversal journal unwinds the ledger; counting the
+ * original too would double-count earned). Unposted plan lines never count.
+ */
+async function recognitionNetRecognized(
+ tx:SqlExecutor,input:{orgId:string;obligationId:string;bookId:string},
+):Promise<string> {
+ const row=(await tx.execute<{net:string}>(sql`
+  select coalesce((select sum(case when l.journal_entry_id is not null and l.reversal_journal_entry_id is null then coalesce(l.recognized_amount,0) else 0 end)
+    from recognition_schedule_lines l
+    join recognition_schedules s on s.id=l.schedule_id and s.org_id=l.org_id
+   where l.org_id=${input.orgId} and s.obligation_id=${input.obligationId} and s.book_id=${input.bookId}),0)::text as net`)).rows[0];
+ return row?.net ?? "0";
+}
+
 function recognitionObligationScope(orgId: string, allowedSubsidiaryIds?: readonly string[]) {
   if (allowedSubsidiaryIds === undefined) return sql`true`;
   return sql`exists (
@@ -1650,6 +1669,21 @@ export async function runRevenueRecognition(
             return { status: "credit_capped" as const, credited: cap.credited, row };
           }
           posting = cmp(planned, cap.remaining) > 0 ? cap.remaining : planned;
+        } else if (cmp(planned, "0") < 0) {
+          // A negative plan line is a correction reversing earned revenue. It
+          // can never drive cumulative net earned negative on its book: with
+          // nothing (or too little) earned, the correction reverses unearned
+          // revenue that was never recognized. Hold the whole line unposted
+          // with an explanatory problem — never floor it at zero, which would
+          // silently drop the operator's evidence. The unearned cap above
+          // constrains positive postings only, so an exhausted remainder never
+          // blocks a legitimate negative.
+          const net = await recognitionNetRecognized(tx, {
+            orgId, obligationId: row.obligation_id, bookId: row.book_id,
+          });
+          if (cmp(add(net, planned), "0") < 0) {
+            return { status: "negative_floor" as const, net, planned, row };
+          }
         }
         if (!row.subsidiary_id || !row.base_currency) {
           throw new RevenueRecognitionError("recognition legal entity and functional currency are required");
@@ -1725,6 +1759,13 @@ export async function runRevenueRecognition(
         result.skipped++;
         result.problems.push(
           `${posted.row.contract_number} ${posted.row.obligation_desc}: fully credited — ${posted.credited} relieved to deferred, nothing remains unearned; plan line held`,
+        );
+        continue;
+      }
+      if (posted.status === "negative_floor") {
+        result.skipped++;
+        result.problems.push(
+          `${posted.row.contract_number} ${posted.row.obligation_desc}: correction of ${posted.planned} exceeds the ${posted.net} recognized to date — held unposted; record an offsetting recognition event for the excess (events are additive, so the offset replans the held line into a valid correction)`,
         );
         continue;
       }
