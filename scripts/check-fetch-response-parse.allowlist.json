@@ -265,11 +265,6 @@
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
-    "path": "web/app/(app)/knowledge/views/NewViewButton.tsx",
-    "fn": "create",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
     "path": "web/app/(app)/insights/dashboards/[id]/DashboardBuilder.tsx",
     "fn": "setPublished",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"

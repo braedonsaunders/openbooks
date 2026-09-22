@@ -126,7 +126,12 @@ export async function loadViewsPage(
   const pageRows = sorted.slice((params.page - 1) * PER_PAGE, params.page * PER_PAGE)
 
   const openId = pickString(sp.view)
-  const openView = openId ? (all.find((s) => s.id === openId) ?? null) : null
+  // Unsaved create: `?view=new` renders the studio over a blank view. Nothing
+  // is read or written for the id itself — the view exists only after an
+  // explicit Save POSTs /api/views. Create requires the create grant,
+  // mirroring the New button's visibility.
+  const isCreate = openId === 'new' && canCreate
+  const openView = openId && !isCreate ? (all.find((s) => s.id === openId) ?? null) : null
   const isAdmin = authz.permissions.has('*')
 
   const currentParams = Object.fromEntries(
@@ -176,7 +181,7 @@ export async function loadViewsPage(
     currentPage: params.page,
     perPage: PER_PAGE,
     canCreate,
-    studioOpen: Boolean(openView),
+    studioOpen: Boolean(openView) || isCreate,
     studioProps: openView
       ? {
           view: openView,
@@ -188,9 +193,50 @@ export async function loadViewsPage(
             (e) => e.requiredPermission && !can(authz, e.requiredPermission),
           ).map((e) => e.key),
         }
-      : null,
+      : isCreate
+        ? {
+            view: BLANK_VIEW,
+            canCreate,
+            canAdmin: true,
+            company: branding.orgName,
+            inventoryEnabled,
+            hiddenEntityKeys: REPORT_ENTITIES.filter(
+              (e) => e.requiredPermission && !can(authz, e.requiredPermission),
+            ).map((e) => e.key),
+            createMode: true,
+          }
+        : null,
   }
 }
+
+/**
+ * Unsaved-create seed: the studio edits this blank in memory and POSTs it on
+ * Save. Autosave never runs in create mode (see ViewStudio).
+ */
+const BLANK_VIEW = {
+  id: '',
+  org_id: '',
+  slug: '',
+  name: '',
+  description: null,
+  query: {
+    entity: 'ledger_lines',
+    mode: 'rows',
+    columns: [],
+    breakouts: [],
+    measures: [{ fn: 'count' }],
+    filters: null,
+    groupBy: null,
+    sorts: null,
+    limit: 1000,
+  },
+  layout: null,
+  scope: 'private',
+  owner_id: '',
+  allowed_roles: null,
+  created_at: '',
+  updated_at: '',
+} as const
 
 const f = ref<ViewsData>()
 const item = field

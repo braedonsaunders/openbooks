@@ -29,6 +29,10 @@ const field = 'space-y-1.5'
  * studio (shared RowsConfig/SummarizeConfig/FilterTree/ResultView), adds view
  * metadata (name, scope), autosaves, runs a live preview via the shared report
  * run route, and exports to PDF/Excel/CSV.
+ *
+ * In create mode (`?view=new`) the studio edits a blank in memory, autosave
+ * never runs, and the view is POSTed once on explicit Save. Cancel/close
+ * writes nothing.
  */
 export function ViewStudio({
   view,
@@ -37,6 +41,7 @@ export function ViewStudio({
   company,
   hiddenEntityKeys = [],
   inventoryEnabled,
+  createMode = false,
 }: {
   view: ViewRow
   canCreate: boolean
@@ -46,12 +51,16 @@ export function ViewStudio({
    *  the source picker, exactly as the report builder hides them. */
   hiddenEntityKeys?: string[]
   inventoryEnabled: boolean
+  createMode?: boolean
 }) {
   const t = useTranslations('knowledge.views.studio')
   const tb = useTranslations('reports.custom.builder')
   const tc = useTranslations('common')
   const tReports = useTranslations('reports')
   const router = useRouter()
+  // One stable idempotency key per studio session: a double-clicked Save (or
+  // a retried request) resolves to the same view instead of a duplicate.
+  const requestIdRef = useRef<string | null>(null)
 
   const [name, setName] = useState(view.name)
   const [description, setDescription] = useState(view.description ?? '')
@@ -123,6 +132,12 @@ export function ViewStudio({
   }, [])
 
   useEffect(() => {
+    // Create mode is local-only until Save: no row exists to autosave into,
+    // so the debounced PATCH never arms.
+    if (createMode) {
+      firstSave.current = false
+      return
+    }
     if (firstSave.current) {
       firstSave.current = false
       return
@@ -190,6 +205,44 @@ export function ViewStudio({
     }
   }
 
+  /** Create mode only: the single idempotent POST behind explicit Save. */
+  const [creating, setCreating] = useState(false)
+  async function createView() {
+    setCreating(true)
+    if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID()
+    try {
+      const res = await fetch('/api/views', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': requestIdRef.current,
+        },
+        body: JSON.stringify({ name: name.trim(), description: description.trim(), query, scope }),
+      })
+      if (!res.ok) {
+        const failure = (await res.json().catch(() => ({}))) as { error?: unknown }
+        toast.error(
+          typeof failure.error === 'string' && failure.error
+            ? failure.error
+            : tc('feedback.createFailed'),
+        )
+        return
+      }
+      const data = (await res.json()) as { id?: unknown }
+      if (typeof data.id !== 'string' || !data.id) {
+        toast.error(tc('feedback.createFailed'))
+        return
+      }
+      toast.success(tb('allChangesSaved'))
+      router.replace(`/knowledge/views?view=${data.id}`)
+      router.refresh()
+    } catch {
+      toast.error(tc('feedback.createFailed'))
+    } finally {
+      setCreating(false)
+    }
+  }
+
   return (
     <UrlDrawer
       open
@@ -201,27 +254,44 @@ export function ViewStudio({
           <Badge variant={scope === 'shared' ? 'secondary' : 'outline'}>{t(`scope.${scope}` as never)}</Badge>
         </span>
       }
-      description={canCreate ? t('autosaveHint') : undefined}
+      description={canCreate && !createMode ? t('autosaveHint') : undefined}
       headerActions={
-        <>
-          <Button variant="outline" asChild>
-            <Link href={`/knowledge/views/${view.id}`}><ExternalLink size={15} /> {t('viewResults')}</Link>
-          </Button>
-          <Button variant="outline" asChild>
-            <a href={`/api/views/${view.id}/export?format=pdf`}><FileText size={15} /> {t('exportPdf')}</a>
-          </Button>
-          <Button variant="outline" asChild>
-            <a href={`/api/views/${view.id}/export?format=xlsx`}><Download size={15} /> {t('exportXlsx')}</a>
-          </Button>
-          <Button variant="outline" asChild>
-            <a href={`/api/views/${view.id}/export?format=csv`}><Download size={15} /> {t('exportCsv')}</a>
-          </Button>
-          {canAdmin ? (
-            <Button variant="ghost" size="sm" onClick={remove}>
-              <Trash2 size={14} /> {tc('actions.delete')}
+        createMode ? null : (
+          <>
+            <Button variant="outline" asChild>
+              <Link href={`/knowledge/views/${view.id}`}><ExternalLink size={15} /> {t('viewResults')}</Link>
             </Button>
-          ) : null}
-        </>
+            <Button variant="outline" asChild>
+              <a href={`/api/views/${view.id}/export?format=pdf`}><FileText size={15} /> {t('exportPdf')}</a>
+            </Button>
+            <Button variant="outline" asChild>
+              <a href={`/api/views/${view.id}/export?format=xlsx`}><Download size={15} /> {t('exportXlsx')}</a>
+            </Button>
+            <Button variant="outline" asChild>
+              <a href={`/api/views/${view.id}/export?format=csv`}><Download size={15} /> {t('exportCsv')}</a>
+            </Button>
+            {canAdmin ? (
+              <Button variant="ghost" size="sm" onClick={remove}>
+                <Trash2 size={14} /> {tc('actions.delete')}
+              </Button>
+            ) : null}
+          </>
+        )
+      }
+      footer={
+        createMode ? (
+          <div className="flex w-full items-center justify-between gap-3">
+            <span className="text-xs text-slate-500 dark:text-slate-400">{tb('unsavedChanges')}</span>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" disabled={creating} onClick={() => router.push('/knowledge/views')}>
+                {tc('actions.cancel')}
+              </Button>
+              <Button disabled={creating} onClick={createView}>
+                {tc('actions.save')}
+              </Button>
+            </div>
+          </div>
+        ) : undefined
       }
     >
       <div className="space-y-5">
