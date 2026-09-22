@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { requireHrmRecruitingManage, requireHrmRecruitingManageOrg } from "../authorization.ts";
+import { businessToday } from "../../platform/business-date.ts";
 import { RecruitingError } from "./errors.ts";
 import { isUniqueViolation, requireActorId, requireId, requireOrgId } from "./input.ts";
 import { loadFeatureState, requireDepthFeature } from "./depth.ts";
@@ -513,7 +514,9 @@ export async function applyViaPosting(
       });
       return { applicationId: existing.id, candidateId, duplicate: true };
     }
-    const today = new Date().toISOString().slice(0, 10);
+    // The application lands on the org's business day, never the UTC day
+    // (which is tomorrow in the evening for the Americas).
+    const today = await businessToday(orgId);
     const application = (await db.execute<{ id: string }>(sql`
       insert into hrm_applications
         (org_id, requisition_id, candidate_id, stage_id, status, applied_on, source_posting_id)

@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { businessToday } from "../platform/business-date.ts";
 import { db, withOrg, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { parseCivilDate } from "../hrm/temporal.ts";
@@ -249,11 +250,12 @@ export async function rescindEmploymentChange(input: {
     await refuseWhenPayrollConsumed(db, input.orgId, target.employmentId, effectiveFrom);
 
     // Pre-rescind state for the event's evidence (as-of now, before reopen).
+    // "Now" is the org's business day, never the UTC day.
     const preSnapshot = await getEmploymentAsOf({
       orgId: input.orgId,
       actorId: input.actorId,
       employmentId: target.employmentId,
-      effectiveDate: new Date().toISOString().slice(0, 10),
+      effectiveDate: await businessToday(input.orgId),
       knownAt: new Date().toISOString(),
     }).catch(() => null);
 

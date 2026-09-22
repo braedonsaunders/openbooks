@@ -1,3 +1,4 @@
+import { businessToday } from "../platform/business-date.ts";
 import { listRulesInEffect as listRulesInEffectByWindow } from "./rules.ts";
 import type {
   AccountScope,
@@ -211,7 +212,9 @@ export async function listEntryRulesInEffect(request: RulesInEffectRequest): Pro
   const modes =
     request.mode === undefined ? (["entry"] as AllocationMode[]) : Array.isArray(request.mode) ? request.mode : [request.mode];
   if (modes.length === 0) return [];
-  const asOf = request.asOf ?? new Date().toISOString().slice(0, 10);
+  // Rules in effect are read as of the org's business day, never the UTC day
+  // (which is tomorrow in the evening for the Americas).
+  const asOf = request.asOf ?? (await businessToday(request.orgId));
   const policies =
     request.applyPolicy === undefined
       ? null
