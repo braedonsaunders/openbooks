@@ -1,15 +1,5 @@
 [
   {
-    "path": "web/app/(app)/_order/NewOrderButton.tsx",
-    "fn": "create",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/_order/NewOrderRedirect.tsx",
-    "fn": "NewOrderRedirect",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
     "path": "web/app/(app)/admin/ai/AiSettingsForm.tsx",
     "fn": "save",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"

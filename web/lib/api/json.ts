@@ -121,3 +121,41 @@ export function isoDate(message = "must be YYYY-MM-DD") {
   return z.string({ error: message }).regex(ISO_DATE_RE, message)
     .refine((value) => !value.startsWith("0000-"), message);
 }
+
+/** One unsaved-create order line: references stay uuid-or-null, numerics stay
+ *  strings for the exact-decimal domain check, dims stay a string map. */
+export const orderCreateLineBody = z.object({
+  itemId: nullableUuidId.optional(),
+  accountId: nullableUuidId.optional(),
+  description: z.string().nullable().optional(),
+  quantity: z.string().nullable().optional(),
+  unit: z.string().nullable().optional(),
+  unitPrice: z.string().nullable().optional(),
+  taxCodeId: nullableUuidId.optional(),
+  taxGroupId: nullableUuidId.optional(),
+  departmentId: nullableUuidId.optional(),
+  projectId: nullableUuidId.optional(),
+  stockLocationId: nullableUuidId.optional(),
+  extraDims: z.record(z.string(), z.string().nullable()).optional(),
+});
+
+/**
+ * Unsaved-create collection body (quote / sales_order / purchase_order).
+ * Shape only — the create kernel still owns calendar, subsidiary, segment,
+ * warehouse, inventory and tenant-reference refusal. Creation always yields
+ * draft, so any other status is a 400 here, never an issued order.
+ */
+export const orderCreateBody = z.object({
+  partyId: nullableUuidId.optional(),
+  documentDate: isoDate().optional(),
+  dueDate: isoDate().nullable().optional(),
+  memo: z.string().nullable().optional(),
+  departmentId: nullableUuidId.optional(),
+  projectId: nullableUuidId.optional(),
+  subsidiaryId: nullableUuidId.optional(),
+  extraDims: z.record(z.string(), z.string().nullable()).optional(),
+  lines: z.array(orderCreateLineBody).optional(),
+  status: z.literal("draft").optional(),
+});
+
+export type OrderCreateBody = z.output<typeof orderCreateBody>;
