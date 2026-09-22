@@ -64,6 +64,8 @@
     "other": "Other",
     "otherTotal": "Total Other",
     "accumulatedEarnings": "Accumulated earnings (computed)",
+    "retainedEarningsPrior": "Retained earnings (prior years)",
+    "currentYearEarnings": "Current year earnings",
     "translationAdjustment": "Cumulative translation adjustment",
     "ratesBlockedTitle": "Consolidated rates are not derived yet",
     "ratesBlockedAction": "Derive rates in period close"

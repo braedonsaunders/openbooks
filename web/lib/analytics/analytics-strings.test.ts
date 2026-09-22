@@ -54,11 +54,6 @@ const IDENTIFIER_ALLOWLIST: Record<string, string> = {
 const LEGACY_ALLOWLIST: Array<{ file: string; literal: string; reason: string }> = [
   {
     file: 'health-translated-statements.ts',
-    literal: 'Accumulated earnings (computed)',
-    reason: 'statement-layer computed line name; financial statements own their locale mechanism, not the insight bundles',
-  },
-  {
-    file: 'health-translated-statements.ts',
     literal: 'Cumulative translation adjustment',
     reason: 'statement-layer computed line name; financial statements own their locale mechanism, not the insight bundles',
   },

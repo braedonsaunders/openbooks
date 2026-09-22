@@ -9,6 +9,12 @@ import {
   EQUITY_TYPES,
 } from "../statement-matrix";
 import { resolveSubsidiaryView } from "../consolidation";
+import {
+  COMPUTED_CURRENT_YEAR_EARNINGS_ID,
+  COMPUTED_CURRENT_YEAR_EARNINGS_NAME,
+  COMPUTED_RETAINED_EARNINGS_PRIOR_ID,
+  COMPUTED_RETAINED_EARNINGS_PRIOR_NAME,
+} from "../computed-earnings";
 import { decimalSum, decimalNeg, type ExactDecimal } from "../statement-format";
 
 /**
@@ -46,11 +52,12 @@ export async function translatedHealthStatements(
   const subView = await resolveSubsidiaryView(undefined, to, allowed ? new Set(allowed) : null);
   const sub = subView.subsidiary;
   const matrixOpts = { orgId, dims, subsidiary: sub };
-  const [matrix, priorMatrix, bsMatrix, bsPnl] = await Promise.all([
+  const [matrix, priorMatrix, bsMatrix, bsPnl, bsPnlPrior] = await Promise.all([
     statementMatrix({ ...matrixOpts, types: PNL_TYPES, mode: "flow", period: { from, to }, periodLabel: `${from}→${to}` }),
     statementMatrix({ ...matrixOpts, types: PNL_TYPES, mode: "flow", period: { from: pFrom, to: pTo }, periodLabel: `${pFrom}→${pTo}` }),
     statementMatrix({ ...matrixOpts, types: [...ASSET_TYPES, ...LIABILITY_TYPES, ...EQUITY_TYPES], mode: "balance", period: { from, to }, periodLabel: `${from}→${to}` }),
     statementMatrix({ ...matrixOpts, types: PNL_TYPES, mode: "balance", translationMode: "flow", period: { from, to }, periodLabel: `${from}→${to}` }),
+    statementMatrix({ ...matrixOpts, types: PNL_TYPES, mode: "balance", translationMode: "flow", asOfKind: "prior_fiscal_year_end", period: { from, to }, periodLabel: `${from}→${to}` }),
   ]);
   const totalOf = (items: StatementRow[], types: string[]): ExactDecimal =>
     decimalSum(items.filter((r) => types.includes(r.type) && r.depth === 0).map((row) => row.balance));
@@ -73,16 +80,19 @@ export async function translatedHealthStatements(
   const assets = pnlOf(bsMatrix, ASSET_TYPES);
   const liabilities = pnlOf(bsMatrix, LIABILITY_TYPES);
   const equityPosted = pnlOf(bsMatrix, EQUITY_TYPES);
-  const accumulated = decimalSum([
-    pnlOf(bsPnl, ["income", "income_other"]),
-    decimalNeg(pnlOf(bsPnl, ["cogs"])),
-    decimalNeg(pnlOf(bsPnl, ["expense", "expense_other", "expense_deferred"])),
+  const pnlNet = (m: typeof matrix) => decimalSum([
+    pnlOf(m, ["income", "income_other"]),
+    decimalNeg(pnlOf(m, ["cogs"])),
+    decimalNeg(pnlOf(m, ["expense", "expense_other", "expense_deferred"])),
   ]);
+  const lifetime = pnlNet(bsPnl);
+  const prior = pnlNet(bsPnlPrior);
+  const current = decimalSum([lifetime, decimalNeg(prior)]);
   const translated = (sub?.rates?.length ?? 0) > 0;
   const cta = translated
-    ? decimalSum([assets, decimalNeg(liabilities), decimalNeg(equityPosted), decimalNeg(accumulated)])
+    ? decimalSum([assets, decimalNeg(liabilities), decimalNeg(equityPosted), decimalNeg(prior), decimalNeg(current)])
     : "0.0000";
-  const totalEquity = decimalSum([equityPosted, accumulated, cta]);
+  const totalEquity = decimalSum([equityPosted, prior, current, cta]);
   return {
     pl: plOf(matrix),
     priorPl: plOf(priorMatrix),
@@ -91,7 +101,8 @@ export async function translatedHealthStatements(
       liabilities: section(bsMatrix, LIABILITY_TYPES),
       equity: [
         ...section(bsMatrix, EQUITY_TYPES),
-        { id: "computed-earnings", number: null, name: "Accumulated earnings (computed)", type: "equity", balance: accumulated, depth: 1, isSummary: false },
+        { id: COMPUTED_RETAINED_EARNINGS_PRIOR_ID, number: null, name: COMPUTED_RETAINED_EARNINGS_PRIOR_NAME, type: "equity", balance: prior, depth: 1, isSummary: false },
+        { id: COMPUTED_CURRENT_YEAR_EARNINGS_ID, number: null, name: COMPUTED_CURRENT_YEAR_EARNINGS_NAME, type: "equity", balance: current, depth: 1, isSummary: false },
         ...(translated ? [{ id: "computed-cta", number: null, name: "Cumulative translation adjustment", type: "equity", balance: cta, depth: 1, isSummary: false }] : []),
       ],
       totalAssets: assets,

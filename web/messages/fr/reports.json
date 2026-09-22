@@ -64,6 +64,8 @@
     "other": "Autres",
     "otherTotal": "Total Autres",
     "accumulatedEarnings": "Bénéfices accumulés (calculés)",
+    "retainedEarningsPrior": "Bénéfices non distribués (exercices antérieurs)",
+    "currentYearEarnings": "Résultat de l'exercice",
     "translationAdjustment": "Écart de conversion cumulatif",
     "ratesBlockedTitle": "Taux consolidés non encore calculés",
     "ratesBlockedAction": "Calculer les taux dans la clôture"

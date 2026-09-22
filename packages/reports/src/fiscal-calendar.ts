@@ -73,6 +73,16 @@ export function fiscalYearRangeFor(fyEndYear: number, startMonth: number): DateR
   return { from: startOfMonth(sy, sm), to: endOfMonth(ey, em), label: `FY ${fyEndYear}` }
 }
 
+/** Inclusive first day of the fiscal year that contains `asOf`. */
+export function fiscalYearStartOn(asOf: string, startMonth: number): string {
+  return fiscalYearRangeFor(fiscalYearOf(asOf, startMonth), startMonth).from
+}
+
+/** Inclusive last day of the fiscal year that ended before the year of `asOf`. */
+export function priorFiscalYearEndOn(asOf: string, startMonth: number): string {
+  return addDays(fiscalYearStartOn(asOf, startMonth), -1)
+}
+
 /** Months elapsed from the fiscal-year start to `dateIso` (0-based, 0…11). */
 export function fiscalMonthOffset(dateIso: string, startMonth: number): number {
   const [sy, sm] = fyStartYM(fiscalYearOf(dateIso, startMonth), startMonth)

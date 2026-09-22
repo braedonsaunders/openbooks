@@ -12,6 +12,7 @@ import {
   type PdfTableGroup,
   type StatementPdfStyle,
 } from '@openbooks/pdf'
+import { COMPUTED_RETAINED_EARNINGS_PRIOR_ID } from './computed-earnings'
 import type { StatementView } from './statement-matrix'
 import { decimalIsMaterial, decimalIsZero, decimalScaleWhole, decimalSum, decimalToNumber, marginRatioToPercent, type ExactDecimal } from './statement-format'
 import {
@@ -400,11 +401,17 @@ export function projectProfitabilityExportData(
 }
 
 export function trialBalanceExportData(
-  rows: { number: string | null; name: string; type: string; debits: string; credits: string; balance: string }[],
+  rows: { id?: string; number: string | null; name: string; type: string; debits: string; credits: string; balance: string }[],
   asOf: string,
   t: Translator,
 ): ExportData {
-  const data = rows.map((r) => [r.number ?? '', r.name, r.debits, r.credits, r.balance] as (string | number)[])
+  const data = rows.map((r) => [
+    r.number ?? '',
+    r.id === COMPUTED_RETAINED_EARNINGS_PRIOR_ID ? t('statement.retainedEarningsPrior') : r.name,
+    r.debits,
+    r.credits,
+    r.balance,
+  ] as (string | number)[])
   const totalDebits = decimalSum(rows.map((row) => row.debits))
   const totalCredits = decimalSum(rows.map((row) => row.credits))
   const totalBalance = decimalSum(rows.map((row) => row.balance))

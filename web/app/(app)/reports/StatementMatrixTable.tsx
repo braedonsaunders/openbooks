@@ -239,14 +239,21 @@ export function StatementMatrixTable({
                 </td>
                 {cols.map((c, ci) => {
                   const v = l.values?.[ci]
+                  const window = l.drillWindows?.[ci]
                   const target =
                     drill && v !== undefined
                       ? buildDrillTarget({
                           accountId: l.accountId,
                           drillTypes: l.drillTypes,
-                          column: c,
+                          column: window
+                            ? {
+                                ...c,
+                                from: window.from !== undefined ? window.from : c.from,
+                                to: window.to !== undefined ? window.to : c.to,
+                              }
+                            : c,
                           sourceColumns: cols,
-                          mode: view.mode,
+                          mode: window?.mode ?? view.mode,
                           reportDims: drill.dims,
                           basis: drill.basis,
                           subsidiaryId: drill.subsidiaryId,

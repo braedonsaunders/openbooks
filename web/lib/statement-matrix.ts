@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { addDays, addMonthsIso, declaredPeriodColumns, declaredPeriodsCover, declaredQuarterColumns, fiscalMonthsBetween, fiscalQuartersBetween } from '@openbooks/reports'
+import { addDays, addMonthsIso, declaredPeriodColumns, declaredPeriodsCover, declaredQuarterColumns, fiscalMonthsBetween, fiscalQuartersBetween, fiscalYearStartOn, priorFiscalYearEndOn } from '@openbooks/reports'
 import { resolveOrgId } from './org-scope'
 import { glActivityBuckets, glSummaryEligibleDims, bucketSubsidiaryFilter, statementBookExpr, type ActivityBoundary } from './gl-summary'
 import { MissingRatesError } from './consolidation'
@@ -312,7 +312,7 @@ async function assertNoUntranslatedHistory(
   if (date) {
     throw new MissingRatesError(
       `Activity dated ${date} predates the earliest derived consolidated FX rates ` +
-        `(${earliest}). Derive rates from earlier period closes before reporting accumulated earnings.`,
+        `(${earliest}). Derive rates from earlier period closes before reporting prior-year or lifetime earnings.`,
     );
   }
 }
@@ -734,6 +734,12 @@ export async function statementMatrix(opts: {
   bookId?: string | null;
   /** Emit variance columns for a compare pair (default true when comparing). */
   variance?: boolean;
+  /**
+   * Balance-mode as-of rewrite. `prior_fiscal_year_end` moves every column's
+   * `to` to the last day of the fiscal year that ended before that column's
+   * original as-of — prior-years' earnings for the year-aware balance sheet.
+   */
+  asOfKind?: "column_end" | "prior_fiscal_year_end";
 }): Promise<StatementMatrix> {
   const orgId = await resolveOrgId(opts.orgId);
   const breakout = opts.breakout ?? "none";
@@ -741,7 +747,7 @@ export async function statementMatrix(opts: {
   const basis = opts.basis ?? "accrual";
   const showZero = opts.showZero ?? false;
 
-  const { cols, truncated } = await buildAmountColumns({
+  const built = await buildAmountColumns({
     orgId,
     mode: opts.mode,
     period: opts.period,
@@ -752,6 +758,18 @@ export async function statementMatrix(opts: {
     periodLabel: opts.periodLabel,
     bookId: opts.bookId,
   });
+  let { cols, truncated } = built;
+  if (opts.asOfKind === "prior_fiscal_year_end") {
+    const startMonth = await fiscalStartMonth(orgId);
+    cols = cols.map((col) => {
+      const to = priorFiscalYearEndOn(col.to, startMonth);
+      // Lifetime through the prior year-end. A leftover period `from` that
+      // sits after that year-end is not a window — it inverts the coverage
+      // check and would demand rates for a year the column does not read.
+      const from = col.from && col.from <= to ? col.from : null;
+      return { ...col, from, to };
+    });
+  }
 
   // A dimension or segment breakout can legitimately have no groups when the
   // selected period has no qualifying activity. There is no value column (or
@@ -908,11 +926,16 @@ export async function statementMatrix(opts: {
     const translationKind = opts.translationMode ?? opts.mode;
     if (opts.subsidiary?.rates?.length) {
       if (translationKind === "flow") {
-        assertRateCoverage(
-          opts.subsidiary,
-          [{ from: overallFrom, to: overallTo }],
-          translationKind,
-        );
+        // A prior-year-end rewrite can land `to` before the original period
+        // `from`. That window is empty: the query is `posting_date <= to`,
+        // and untranslated history is the refusal for earlier activity.
+        if (overallFrom <= overallTo) {
+          assertRateCoverage(
+            opts.subsidiary,
+            [{ from: overallFrom, to: overallTo }],
+            translationKind,
+          );
+        }
         if (opts.mode === "balance")
           await assertNoUntranslatedHistory(
             orgId,
@@ -1093,8 +1116,11 @@ export type StatementViewLine = {
   /** Absent on section headers; reader-signed exact decimals, column-aligned. */
   values?: StatementValue[]
   /** Account types this row aggregates — drill-through for subtotal/total rows
-   *  (and computed rows like accumulated earnings) that have no single accountId. */
+   *  (and computed earnings rows) that have no single accountId. */
   drillTypes?: string[]
+  /** Per-column drill window when it differs from the statement column
+   *  (prior-year RE vs current-year earnings on the same balance sheet). */
+  drillWindows?: Array<{ from?: string | null; to?: string; mode?: StatementMode } | null>
 }
 
 export type StatementView = {
@@ -1181,68 +1207,110 @@ export type BalanceSheetLabels = {
   totalAssets: string
   totalLiabilities: string
   totalEquity: string
-  accumulatedEarnings: string
+  retainedEarningsPrior: string
+  currentYearEarnings: string
   liabilitiesAndEquity: string
   /** Shown only on translated consolidated views. */
   translationAdjustment: string
   totalOf: (section: string) => string
 }
 
-/** Balance Sheet as a multi-column statement view. Accumulated earnings are the
- *  lifetime P&L (no closing entries exist), computed per column from a
- *  cumulative P&L matrix so it composes with breakout/compare. */
+/** Signed P&L total (revenue − COGS − expenses) across every matrix column. */
+function pnlNetIncome(matrix: StatementMatrix): StatementValue[] {
+  return combineTotals(
+    matrix,
+    [
+      sumSection(matrix, ['income', 'income_other']),
+      sumSection(matrix, ['cogs']),
+      sumSection(matrix, ['expense', 'expense_other', 'expense_deferred']),
+    ],
+    [1, -1, -1],
+  )
+}
+
+function earningsDrillWindows(
+  columns: StatementColumn[],
+  startMonth: number,
+  kind: 'prior' | 'current',
+): StatementViewLine['drillWindows'] {
+  return columns.map((column) => {
+    if (column.kind !== 'amount' || !column.to) return null
+    if (kind === 'current') {
+      return { from: fiscalYearStartOn(column.to, startMonth), to: column.to, mode: 'flow' }
+    }
+    return { from: null, to: priorFiscalYearEndOn(column.to, startMonth), mode: 'balance' }
+  })
+}
+
+/** Balance Sheet as a multi-column statement view. Income accounts stay
+ *  open; equity splits prior-year P&L from current-year earnings so the
+ *  sheet reads as if the year had been closed, without posting a close
+ *  journal. Each column uses the fiscal year of its own as-of date. */
 export async function balanceSheetView(
   period: { from: string; to: string },
   periodLabel: string,
   labels: BalanceSheetLabels,
   opts: MatrixOpts = {},
 ): Promise<StatementView> {
+  const orgId = opts.orgId ?? (await resolveOrgId())
+  const startMonth = await fiscalStartMonth(orgId)
   const matrix = await statementMatrix({
     types: [...ASSET_TYPES, ...LIABILITY_TYPES, ...EQUITY_TYPES],
     mode: 'balance',
     period,
     periodLabel,
     ...opts,
+    orgId,
   })
-  // Cumulative P&L → retained/accumulated earnings, same columns. Net income is
-  // revenue − cogs − expenses, so it must be combined with signs — summing all
-  // P&L types would (wrongly) add expenses as positive.
-  const pnl = await statementMatrix({
-    types: PNL_TYPES,
-    mode: 'balance',
-    translationMode: 'flow',
-    period,
-    periodLabel,
-    ...opts,
-  })
-  const accumulated = combineTotals(
-    pnl,
-    [
-      sumSection(pnl, ['income', 'income_other']),
-      sumSection(pnl, ['cogs']),
-      sumSection(pnl, ['expense', 'expense_other', 'expense_deferred']),
-    ],
-    [1, -1, -1],
-  )
+  // Lifetime P&L through each column's as-of, then the same matrix cut at
+  // the prior fiscal year-end. Current-year earnings = lifetime − prior.
+  // Net income is revenue − cogs − expenses — summing all P&L types would
+  // (wrongly) add expenses as positive.
+  const [pnl, priorPnl] = await Promise.all([
+    statementMatrix({
+      types: PNL_TYPES,
+      mode: 'balance',
+      translationMode: 'flow',
+      period,
+      periodLabel,
+      ...opts,
+      orgId,
+    }),
+    statementMatrix({
+      types: PNL_TYPES,
+      mode: 'balance',
+      translationMode: 'flow',
+      period,
+      periodLabel,
+      ...opts,
+      orgId,
+      asOfKind: 'prior_fiscal_year_end',
+    }),
+  ])
+  const lifetime = pnlNetIncome(pnl)
+  const prior = pnlNetIncome(priorPnl)
+  const current = combineTotals(matrix, [lifetime, prior], [1, -1])
 
   const assets = sumSection(matrix, ASSET_TYPES)
   const liabilities = sumSection(matrix, LIABILITY_TYPES)
   const equityPosted = sumSection(matrix, EQUITY_TYPES)
 
   // Translated consolidation: assets/liabilities at current rate, equity at
-  // historical, accumulated earnings at average — the rate differences leave a
-  // residual, which IS the cumulative translation adjustment. Plugging it into
-  // equity (the standard CTA treatment) rebalances the sheet by construction.
+  // historical, earnings at average — the rate differences leave a residual,
+  // which IS the cumulative translation adjustment. Plugging it into equity
+  // (the standard CTA treatment) rebalances the sheet by construction.
   const translated = (opts.subsidiary?.rates?.length ?? 0) > 0
   const cta = translated
-    ? combineTotals(matrix, [assets, liabilities, equityPosted, accumulated], [1, -1, -1, -1])
+    ? combineTotals(matrix, [assets, liabilities, equityPosted, prior, current], [1, -1, -1, -1, -1])
     : undefined
   const equityTotal = combineTotals(
     matrix,
-    cta ? [equityPosted, accumulated, cta] : [equityPosted, accumulated],
-    [1, 1, 1],
+    cta ? [equityPosted, prior, current, cta] : [equityPosted, prior, current],
+    [1, 1, 1, 1],
   )
   const liabAndEquity = combineTotals(matrix, [liabilities, equityTotal], [1, 1])
+  const priorDrills = earningsDrillWindows(matrix.columns, startMonth, 'prior')
+  const currentDrills = earningsDrillWindows(matrix.columns, startMonth, 'current')
 
   const lines: StatementViewLine[] = []
   lines.push({ kind: 'section', label: labels.assets, depth: 0 })
@@ -1255,7 +1323,22 @@ export async function balanceSheetView(
 
   lines.push({ kind: 'section', label: labels.equity, depth: 0 })
   lines.push(...accountLines(matrix, EQUITY_TYPES))
-  lines.push({ kind: 'account', label: labels.accumulatedEarnings, depth: 1, values: accumulated, drillTypes: PNL_TYPES })
+  lines.push({
+    kind: 'account',
+    label: labels.retainedEarningsPrior,
+    depth: 1,
+    values: prior,
+    drillTypes: PNL_TYPES,
+    drillWindows: priorDrills,
+  })
+  lines.push({
+    kind: 'account',
+    label: labels.currentYearEarnings,
+    depth: 1,
+    values: current,
+    drillTypes: PNL_TYPES,
+    drillWindows: currentDrills,
+  })
   if (cta) {
     lines.push({
       kind: 'account',

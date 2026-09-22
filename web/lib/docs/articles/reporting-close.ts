@@ -69,9 +69,16 @@ rules as opening the record from its owning module.
 
 - **Profit & Loss** explains income and expense over a period.
 - **Balance Sheet** shows assets, liabilities, and equity as of a date.
+  Posted equity accounts print as posted. Computed **Retained earnings
+  (prior years)** is net income of closed fiscal years; **Current year
+  earnings** is fiscal-year-to-date net income. Together they equal
+  lifetime P&L. There is no year-end closing journal.
 - **Cash Flow** explains movement in cash by activity.
-- **Trial Balance** lists account debit and credit balances for the selected
-  scope.
+- **Trial Balance** lists account debit and credit balances as of a date.
+  Balance-sheet accounts are lifetime. Income-statement accounts are
+  fiscal-year-to-date. Prior-year net income appears as computed retained
+  earnings so the trial still foots — income accounts are never zeroed by a
+  year-end journal.
 
 Use consistent book, subsidiary, date, currency, and dimension filters when
 comparing reports. A difference caused by scope is not an accounting difference.

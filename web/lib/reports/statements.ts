@@ -4,10 +4,18 @@ import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { functionalReportReader } from "./currency-basis";
 import { glActivityBuckets, glSummaryEligibleDims, bucketSubsidiaryFilter, statementBookExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
-import { decimalAdd, decimalIsMaterial, decimalNeg, decimalSum, type ExactDecimal } from "../statement-format";
+import { fiscalYearStartOn } from "@openbooks/reports";
+import { decimalAdd, decimalCmp, decimalIsMaterial, decimalNeg, decimalSum, type ExactDecimal } from "../statement-format";
 import { ZERO, decimalSubtract } from "./decimals";
 import { type DimFilter, dimWhere } from "./filters";
 import { PNL_TYPES } from "../account-types";
+import {
+  COMPUTED_CURRENT_YEAR_EARNINGS_ID,
+  COMPUTED_CURRENT_YEAR_EARNINGS_NAME,
+  COMPUTED_RETAINED_EARNINGS_PRIOR_ID,
+  COMPUTED_RETAINED_EARNINGS_PRIOR_NAME,
+} from "../computed-earnings";
+import { fiscalStartMonth } from "../fiscal";
 
 /**
  * Financial statement queries. Sign convention: journal amounts are
@@ -202,7 +210,11 @@ export async function balanceSheet(
   dims?: DimFilter,
 ) {
   const resolvedOrgId = orgId ?? (await resolveOrgId());
-  const rows = await summaryAccountBalances(resolvedOrgId, null, asOf, dims?.subsidiaryIds, bookId);
+  const fyStart = fiscalYearStartOn(asOf, await fiscalStartMonth(resolvedOrgId));
+  const [rows, currentRows] = await Promise.all([
+    summaryAccountBalances(resolvedOrgId, null, asOf, dims?.subsidiaryIds, bookId),
+    summaryAccountBalances(resolvedOrgId, fyStart, asOf, dims?.subsidiaryIds, bookId, PNL_TYPES),
+  ]);
   const assets = treeify(rows, ["asset_bank", "asset_receivable", "asset_current_other", "asset_fixed", "asset_other"]);
   const liabilities = treeify(rows, ["liability_payable", "liability_card", "liability_current_other", "liability_long_term"]);
   const equity = treeify(rows, ["equity"]);
@@ -214,68 +226,134 @@ export async function balanceSheet(
   const totalLiabilities = sum(liabilities);
   const statedEquity = sum(equity);
 
-  // No closing entries exist (by design): accumulated earnings = lifetime P&L,
-  // which is already present per account in the cumulative rows above.
-  const accumulatedEarnings = decimalNeg(
-    decimalSum(rows.filter((r) => PNL_TYPES.includes(r.type)).map((r) => r.raw)),
-  );
+  // No closing entries exist (by design). Prior-year P&L and FYTD P&L are
+  // report placeholders so the sheet reads as if the year had been closed.
+  const lifetimePnl = decimalSum(rows.filter((r) => PNL_TYPES.includes(r.type)).map((r) => r.raw));
+  const currentPnl = decimalSum(currentRows.filter((r) => PNL_TYPES.includes(r.type)).map((r) => r.raw));
+  const currentYearEarnings = decimalNeg(currentPnl);
+  const retainedEarningsPrior = decimalNeg(decimalSubtract(lifetimePnl, currentPnl));
   equity.push({
-    id: "computed-earnings", number: null, name: "Accumulated earnings (computed)",
-    type: "equity", balance: accumulatedEarnings, depth: 0, isSummary: false,
+    id: COMPUTED_RETAINED_EARNINGS_PRIOR_ID, number: null, name: COMPUTED_RETAINED_EARNINGS_PRIOR_NAME,
+    type: "equity", balance: retainedEarningsPrior, depth: 0, isSummary: false,
   });
-  const totalEquity = decimalAdd(statedEquity, accumulatedEarnings);
+  equity.push({
+    id: COMPUTED_CURRENT_YEAR_EARNINGS_ID, number: null, name: COMPUTED_CURRENT_YEAR_EARNINGS_NAME,
+    type: "equity", balance: currentYearEarnings, depth: 0, isSummary: false,
+  });
+  const totalEquity = decimalAdd(statedEquity, decimalAdd(retainedEarningsPrior, currentYearEarnings));
 
   return { assets, liabilities, equity, totalAssets, totalLiabilities, totalEquity };
 }
 
+export type TrialBalanceRow = {
+  id: string;
+  number: string | null;
+  name: string;
+  type: string;
+  debits: string;
+  credits: string;
+  balance: string;
+};
+
+function trialBalancePriorRow(prior: string): TrialBalanceRow | null {
+  if (!decimalIsMaterial(prior)) return null;
+  const loss = decimalCmp(prior, ZERO) > 0;
+  return {
+    id: COMPUTED_RETAINED_EARNINGS_PRIOR_ID,
+    number: null,
+    name: COMPUTED_RETAINED_EARNINGS_PRIOR_NAME,
+    type: "equity",
+    debits: loss ? prior : ZERO,
+    credits: loss ? ZERO : decimalNeg(prior),
+    balance: prior,
+  };
+}
+
 export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: string, bookId?: string | null) {
   const resolvedOrgId = orgId ?? (await resolveOrgId());
+  const fyStart = fiscalYearStartOn(asOf, await fiscalStartMonth(resolvedOrgId));
   const reportDb = functionalReportReader(resolvedOrgId, sql`e.posting_date <= ${asOf} and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)} and ${dimWhere(dims)}`);
+  const pnl = sql`acct.type in ${PNL_TYPES}`;
+  const inYear = sql`not (${pnl}) or b.d >= ${fyStart}`;
   if (glSummaryEligibleDims(dims)) {
     // Whole months from gl_month_activity, boundary sliver from lines.
     // The heading promises "accounts with activity": keep zero-balance
     // accounts whose debit/credit legs are real (F-t08-002) instead of
-    // filtering on the net balance alone.
+    // filtering on the net balance alone. P&L activity is FYTD so the
+    // trial balance still foots after the prior-year RE placeholder.
     const buckets = glActivityBuckets(resolvedOrgId, { minDate: null, maxDate: asOf, boundaries: [], bookId });
     const r = (await reportDb.execute(sql`
       select ${reportDb.censusColumn}, a.id, a.number, a.name, a.type, s.debits, s.credits, s.balance
         from (
-          select b.account_id, sum(b.debit_total) as debits, sum(b.credit_total) as credits,
-                 sum(b.amount) as balance
+          select b.account_id,
+                 sum(b.debit_total) filter (where ${inYear}) as debits,
+                 sum(b.credit_total) filter (where ${inYear}) as credits,
+                 sum(b.amount) filter (where ${inYear}) as balance
             from ${buckets} b
+            join accounts acct on acct.id = b.account_id and acct.org_id = ${resolvedOrgId}
            where b.d <= ${asOf} ${bucketSubsidiaryFilter(dims?.subsidiaryIds)}
            group by b.account_id
-          having abs(sum(b.amount)) > 0 or sum(b.debit_total) > 0 or sum(b.credit_total) > 0
+          having abs(sum(b.amount) filter (where ${inYear})) > 0
+              or sum(b.debit_total) filter (where ${inYear}) > 0
+              or sum(b.credit_total) filter (where ${inYear}) > 0
         ) s
         join accounts a on a.id = s.account_id and a.org_id = ${resolvedOrgId}
        order by a.number nulls last, a.name
     `));
-    return r.rows as { id: string; number: string | null; name: string; type: string; debits: string; credits: string; balance: string }[];
+    const priorRes = (await reportDb.execute<{ prior: string }>(sql`
+      select ${reportDb.censusColumn}, coalesce(sum(b.amount), 0) as prior
+        from ${buckets} b
+        join accounts acct on acct.id = b.account_id and acct.org_id = ${resolvedOrgId}
+       where b.d < ${fyStart} ${bucketSubsidiaryFilter(dims?.subsidiaryIds)}
+         and acct.type in ${PNL_TYPES}
+    `));
+    const rows = r.rows as TrialBalanceRow[];
+    const prior = trialBalancePriorRow(priorRes.rows[0]?.prior ?? ZERO);
+    if (prior) rows.push(prior);
+    return rows;
   }
   // Materialized entry set + hash join — see accountBalances.
+  const lineInYear = sql`not (a.type in ${PNL_TYPES}) or e.posting_date >= ${fyStart}`;
   const r = (await reportDb.execute(sql`
     with e as materialized (
-      select id from journal_entries
+      select id, posting_date from journal_entries
        where org_id = ${resolvedOrgId} and status in ('posted', 'reversed')
          and posting_date <= ${asOf}
          and book_id = ${statementBookExpr(resolvedOrgId, bookId)}
     )
     select ${reportDb.censusColumn}, a.id, a.number, a.name, a.type,
-           sum(case when l.amount > 0 then l.amount else 0 end) as debits,
-           sum(case when l.amount < 0 then -l.amount else 0 end) as credits,
-           sum(l.amount) as balance
+           sum(case when l.amount > 0 and (${lineInYear}) then l.amount else 0 end) as debits,
+           sum(case when l.amount < 0 and (${lineInYear}) then -l.amount else 0 end) as credits,
+           sum(case when ${lineInYear} then l.amount else 0 end) as balance
       from journal_lines l
       join e on e.id = l.entry_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where l.org_id = ${resolvedOrgId}
        and a.org_id = ${resolvedOrgId} and ${dimWhere(dims)}
      group by a.id
-    having abs(sum(l.amount)) > 0
-        or sum(case when l.amount > 0 then l.amount else 0 end) > 0
-        or sum(case when l.amount < 0 then -l.amount else 0 end) > 0
+    having abs(sum(case when ${lineInYear} then l.amount else 0 end)) > 0
+        or sum(case when l.amount > 0 and (${lineInYear}) then l.amount else 0 end) > 0
+        or sum(case when l.amount < 0 and (${lineInYear}) then -l.amount else 0 end) > 0
      order by a.number nulls last, a.name
   `));
-  return r.rows as { id: string; number: string | null; name: string; type: string; debits: string; credits: string; balance: string }[];
+  const priorRes = (await reportDb.execute<{ prior: string }>(sql`
+    with e as materialized (
+      select id from journal_entries
+       where org_id = ${resolvedOrgId} and status in ('posted', 'reversed')
+         and posting_date < ${fyStart}
+         and book_id = ${statementBookExpr(resolvedOrgId, bookId)}
+    )
+    select ${reportDb.censusColumn}, coalesce(sum(l.amount), 0) as prior
+      from journal_lines l
+      join e on e.id = l.entry_id
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
+     where l.org_id = ${resolvedOrgId}
+       and a.org_id = ${resolvedOrgId} and a.type in ${PNL_TYPES} and ${dimWhere(dims)}
+  `));
+  const rows = r.rows as TrialBalanceRow[];
+  const prior = trialBalancePriorRow(priorRes.rows[0]?.prior ?? ZERO);
+  if (prior) rows.push(prior);
+  return rows;
 }
 
 /**
