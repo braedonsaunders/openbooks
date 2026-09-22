@@ -323,6 +323,8 @@ export function OrderDrawer({
   canManage,
   canOverrideCredit = false,
   layout,
+  createMode = false,
+  closeHref,
 }: {
   order: OrderPayload
   initialMode?: DrawerMode
@@ -343,6 +345,16 @@ export function OrderDrawer({
   /** AR approvers may supply a reasoned credit-limit exception after refusal. */
   canOverrideCredit?: boolean
   layout?: FormLayoutConfig
+  /**
+   * Unsaved-create: the drawer opens editable on an in-memory payload with
+   * no persisted row. Cancel and close navigate away with zero writes; Save
+   * persists through one idempotent collection POST. Persisted-record
+   * surfaces (issue/convert/void/delete, approvals, attachments, audit)
+   * stay hidden until the row exists.
+   */
+  createMode?: boolean
+  /** List URL (filters preserved) that Cancel and the close affordance return to. */
+  closeHref?: string
 }) {
   const { money } = useMoney()
   const t = useTranslations('purchaseOrders.shared')
@@ -398,7 +410,19 @@ export function OrderDrawer({
     if (!isDocumentRevisionToken(value)) throw new Error('DOCUMENT_REVISION_REQUIRED')
     return value
   }
-  const revisionRef = useRef<string>(revisionOf(doc.updated_at))
+  // Unsaved-create has no persisted revision to fence on: the first Save is
+  // a collection POST (no token), and every later mutation runs on the
+  // persisted id the Save navigates to. The placeholder is never sent — and
+  // any revision-fenced request carrying it would fail closed with a 409.
+  const revisionRef = useRef<string>(createMode ? '' : revisionOf(doc.updated_at))
+  // Stable idempotency key for the create POST, minted once per drawer
+  // session: a lost response retried from this drawer replays instead of
+  // minting a second order.
+  const createKeyRef = useRef<string | null>(null)
+  const createKey = () => {
+    if (!createKeyRef.current) createKeyRef.current = crypto.randomUUID()
+    return createKeyRef.current
+  }
 
   const apiBase = `/api/${
     kind === 'quote' ? 'estimates' : kind === 'sales_order' ? 'sales-orders' : 'purchase-orders'
@@ -584,11 +608,40 @@ export function OrderDrawer({
     return saved
   }
 
+  /** Unsaved-create Save: one idempotent collection POST (status=draft).
+   *  The document number allocates inside that transaction — nothing before
+   *  this call wrote a row or burned a sequence value. */
+  async function persistCreate(): Promise<string | null> {
+    const saved = await persistOrderDraft({
+      request: () => fetch(apiBase, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': createKey() },
+        body: JSON.stringify(payload),
+      }),
+      setState: setSaveState,
+      onError: (message) => refuse(message, t('actionFailed')),
+    })
+    if (!saved) return null
+    const id = (saved.doc as Record<string, unknown> | undefined)?.id
+    if (typeof id !== 'string' || id === '') {
+      refuse(undefined, t('actionFailed'))
+      return null
+    }
+    return id
+  }
+
   async function save() {
-    // persistDraft pins and toasts its own refusal through the shared state,
-    // so the save reports success-shaped around it: a second pin here would
-    // overwrite the specific reason with the generic fallback.
+    // persistDraft/persistCreate pin and toast their own refusal through the
+    // shared state, so the save reports success-shaped around them: a second
+    // pin here would overwrite the specific reason with the generic fallback.
     await execute(async () => {
+      if (createMode) {
+        const id = await persistCreate()
+        if (!id) return { ok: true as const, status: 200, data: null }
+        router.push(`${meta.base}?${meta.param}=${id}&mode=edit`)
+        router.refresh()
+        return { ok: true as const, status: 200, data: null }
+      }
       const saved = await persistDraft()
       if (!saved) return { ok: true as const, status: 200, data: null }
       const savedDoc = asOrderDoc(saved.doc)
@@ -600,6 +653,13 @@ export function OrderDrawer({
   }
 
   function cancel() {
+    // Unsaved-create Cancel writes nothing: there is no row to reset to, so
+    // leave by navigation instead of restoring form state.
+    if (createMode) {
+      clearRefusal()
+      router.push(closeHref ?? meta.base)
+      return
+    }
     resetForm()
     setDirty(false)
     clearRefusal()
@@ -939,14 +999,17 @@ export function OrderDrawer({
 
   return (
     <TransactionDrawer
-      closeHref={meta.base}
-      recordId={String(doc.id)}
-      canEditAttachments={canManage}
+      closeHref={closeHref ?? meta.base}
+      recordId={createMode ? 'new' : String(doc.id)}
+      canEditAttachments={createMode ? false : canManage}
       panelClassName={docTypeMeta(kind).surfaceCls}
+      // Attachments, audit, and approvals all read the persisted row the
+      // unsaved drawer has not written yet — hide them until it exists.
+      showEvidenceTabs={createMode ? false : undefined}
       title={
         <span className="flex items-center gap-2.5">
           <DocTypeBadge kind={kind} />
-          <span className="font-mono">{doc.document_number}</span>
+          {doc.document_number ? <span className="font-mono">{doc.document_number}</span> : null}
           <Badge variant={STATUS_VARIANT[doc.status] ?? 'secondary'}>
             {statusLabel(doc.status)}
           </Badge>
@@ -1013,7 +1076,7 @@ export function OrderDrawer({
           </>
         ) : null
       }
-      detailTabs={[
+      detailTabs={createMode ? [] : [
         {
           key: 'approvals',
           label: tCommon('approvalFlow.historyTitle'),

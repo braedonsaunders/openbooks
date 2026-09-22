@@ -4,7 +4,8 @@ import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { pickString } from '../../../lib/list-params'
+import { mergeHref, pickString } from '../../../lib/list-params'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { can, requirePermission } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../lib/features'
@@ -38,6 +39,7 @@ const KIND = 'sales_order' as const
 const BASE = '/sales-orders'
 const PARAM = 'order'
 const API = '/api/sales-orders'
+const CREATE_PARAM = 'orderNew'
 
 type OrderDrawerProps = Parameters<typeof OrderDrawer>[0]
 type ElementOf<T> = NonNullable<T> extends readonly (infer Item)[] ? Item : never
@@ -47,6 +49,8 @@ export interface SalesOrderDrawer {
   remountKey: string
   order: OrderDrawerProps['order']
   initialMode: 'edit' | 'view'
+  createMode?: boolean
+  closeHref?: string
   kind: typeof KIND
   parties: OrderDrawerProps['parties']
   accounts: OrderDrawerProps['accounts']
@@ -95,10 +99,15 @@ export async function loadSalesOrders(
   const canManage = can(authz, 'ar.create')
   const t = await getTranslations('salesOrders')
   const openId = pickString(sp[PARAM])
+  // Unsaved-create: ?orderNew=1 opens an editable drawer on an in-memory
+  // payload — zero writes on open, zero on Cancel, one idempotent POST on
+  // Save. ?order=new deep links keep working through the redirect widget.
+  const creating = pickString(sp[CREATE_PARAM]) === '1' && canManage
+  const opening = (openId && openId !== 'new') || creating
 
   const [openOrder, pickers] = await Promise.all([
     openId && openId !== 'new' ? loadOrder(openId, authz.user.orgId, KIND, authz.allowedSubsidiaryIds) : null,
-    openId && openId !== 'new'
+    opening
       ? Promise.all([
           db.execute<ElementOf<OrderDrawerProps['parties']>>(sql`
             select p.id, p.display_name from parties p
@@ -118,7 +127,7 @@ export async function loadSalesOrders(
                  ${inventoryEnabled ? sql`true` : sql`it.kind not in ('inventory', 'assembly', 'kit')`}
                  or it.id in (
                    select item_id from document_lines
-                    where org_id = ${authz.user.orgId} and document_id = ${openId} and item_id is not null
+                    where org_id = ${authz.user.orgId} and document_id = ${openId ?? ''} and item_id is not null
                  )
                )
              order by it.name limit 2000`),
@@ -141,6 +150,44 @@ export async function loadSalesOrders(
     userRoles: authz.user.roles.map(({ key }) => key), headerDefs: [], lineDefs: [], explicitLayoutId: pickString(sp.form),
   }) : null
   const drawerOrder = openOrder as unknown as OrderDrawerProps['order'] | null
+  // In-memory payload for the unsaved drawer: a draft header with no number
+  // (allocated inside the Save transaction), no lines, no links, and the
+  // org's currency/today so totals and date fields render before Save.
+  const createDefaults = creating
+    ? await (async () => {
+        const [orgRow, today] = await Promise.all([
+          db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${authz.user.orgId}`),
+          businessToday(authz.user.orgId),
+        ])
+        return { currency: orgRow.rows[0]?.base_currency ?? 'CAD', today }
+      })()
+    : null
+  const unsavedOrder: OrderDrawerProps['order'] | null =
+    creating && createDefaults
+      ? ({
+          doc: {
+            id: '',
+            status: 'draft',
+            currency: createDefaults.currency,
+            subsidiary_id: null,
+            project_id: null,
+            department_id: null,
+            memo: null,
+            due_date: null,
+            document_date: createDefaults.today,
+            updated_at: '',
+            subtotal: '0',
+            tax_total: '0',
+            total: '0',
+            party_id: null,
+            party_name: null,
+            document_number: null,
+            extra_dims: {},
+          },
+          lines: [],
+          links: [],
+        } as unknown as OrderDrawerProps['order'])
+      : null
 
   const newButton = {
     apiPath: API,
@@ -151,11 +198,15 @@ export async function loadSalesOrders(
   }
 
   const drawer =
-    drawerOrder && pickers
+    (creating ? unsavedOrder : drawerOrder) && pickers
       ? {
-          remountKey: String(drawerOrder.doc.id),
-          order: drawerOrder,
-          initialMode: (pickString(sp.mode) === 'edit' ? 'edit' : 'view') as 'edit' | 'view',
+          remountKey: creating ? 'new-sales-order' : String(drawerOrder!.doc.id),
+          order: (creating ? unsavedOrder : drawerOrder)!,
+          initialMode: (creating || pickString(sp.mode) === 'edit' ? 'edit' : 'view') as 'edit' | 'view',
+          createMode: creating || undefined,
+          closeHref: creating
+            ? mergeHref(BASE, sp, { [PARAM]: undefined, [CREATE_PARAM]: undefined, mode: undefined, form: undefined })
+            : undefined,
           kind: KIND,
           parties: pickers[0].rows,
           accounts: pickers[1].rows,
@@ -202,6 +253,7 @@ export function salesOrdersSpec(data: SalesOrdersData): PageSpec {
       apiPath: data.newButton.apiPath,
       base: data.newButton.base,
       param: data.newButton.param,
+      createParam: CREATE_PARAM,
       label: data.newButton.label,
       createFailedMessage: data.newButton.createFailedMessage,
     },
@@ -236,6 +288,7 @@ export function salesOrdersSpec(data: SalesOrdersData): PageSpec {
           apiPath: data.newRedirect.apiPath,
           base: data.newRedirect.base,
           param: data.newRedirect.param,
+          createParam: CREATE_PARAM,
           createFailedMessage: data.newRedirect.createFailedMessage,
         },
         f('showNewRedirect'),

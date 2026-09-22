@@ -254,19 +254,21 @@ export const COMMERCE_WIDGETS = {
   // three places to drift.
   'new-order': (props) => (
     <NewOrderButton
-      apiPath={str(props, 'apiPath') ?? ''}
+      apiPath={str(props, 'apiPath') ?? undefined}
       base={str(props, 'base') ?? ''}
       param={str(props, 'param') ?? ''}
+      createParam={str(props, 'createParam') ?? undefined}
       label={str(props, 'label') ?? ''}
-      createFailedMessage={str(props, 'createFailedMessage') ?? ''}
+      createFailedMessage={str(props, 'createFailedMessage') ?? undefined}
     />
   ),
   'new-order-redirect': (props) => (
     <NewOrderRedirect
-      apiPath={str(props, 'apiPath') ?? ''}
+      apiPath={str(props, 'apiPath') ?? undefined}
       base={str(props, 'base') ?? ''}
       param={str(props, 'param') ?? ''}
-      createFailedMessage={str(props, 'createFailedMessage') ?? ''}
+      createParam={str(props, 'createParam') ?? undefined}
+      createFailedMessage={str(props, 'createFailedMessage') ?? undefined}
     />
   ),
   'order-drawer': (props) => {
