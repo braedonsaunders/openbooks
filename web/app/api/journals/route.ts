@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { canonicalJson } from '@openbooks/engine/src/platform/canonical-json.ts'
+import { claimIdempotentCreate, resolveIdempotentReplay } from '../../../../lib/api/idempotency'
 import { sum, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { allocateDocumentNumber } from '@openbooks/engine/src/records/numbering.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
@@ -240,11 +240,30 @@ export async function POST(request: Request) {
   const documentDate = body.documentDate ?? (await businessToday(user.orgId))
   const referenceNumber = trimOrNull(body.referenceNumber)
   const memo = trimOrNull(body.memo)
-  // The replay snapshot is everything the caller controls plus the derived
-  // totals. The JE- number is server-allocated inside the save transaction,
-  // so it is deliberately excluded: an exact retry must compare equal
-  // without knowing the number it was assigned.
+  // The replay match is the canonical request-controlled subset: the
+  // operation, the kind, and the caller's fields exactly as supplied.
+  // Server-derived values — the defaulted date, the resolved subsidiary and
+  // currency, the derived totals, the allocated number — are EXCLUDED: they
+  // depend on live clock/config/sequence state, so comparing them would turn
+  // a genuine retry into a conflict. They still persist in the full
+  // snapshot below. A null date/subsidiary here means "the caller omitted
+  // it", which is itself part of the request identity.
+  const match = {
+    kind: 'journal',
+    partyId: body.partyId ?? null,
+    documentDate: body.documentDate ?? null,
+    referenceNumber: body.referenceNumber ?? null,
+    memo: body.memo ?? null,
+    subsidiaryId: body.subsidiaryId ?? null,
+    extraDims: body.extraDims ?? null,
+    custom: body.custom ?? null,
+    lines: body.lines ?? [],
+  }
+  // The persisted image is the full immutable create snapshot (derived
+  // values included) plus the request match above, so audit evidence stays
+  // complete while replay compares only what the caller controlled.
   const snapshot = {
+    request: match,
     id: requestId,
     org_id: user.orgId,
     kind: 'journal',
@@ -280,23 +299,21 @@ export async function POST(request: Request) {
       // number, and the loser would 409 on the insert conflict instead of
       // replaying 200. The lock is keyed only — it carries no tenant read.
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${requestId}, 0))`)
-      // Same-org pre-read only — never a bare by-id read: a key minted in
+      // Same-org claim only — never a bare by-id read: a key minted in
       // another org must not be observable here. A foreign/global UUID
       // collision surfaces below at the insert conflict, without reading it.
-      const prior = (await tx.execute<{ id: string }>(sql`
-        select id from documents where id = ${requestId} and org_id = ${user.orgId} for update`)).rows[0]
-      if (prior) {
-        // Compare against the immutable create snapshot in the insert audit
-        // event, not today's row, so an unchanged retry still succeeds after
-        // a later PATCH legitimately edited the journal.
-        const original = (await tx.execute<{ after: unknown }>(sql`
-          select changes->'after' as after from audit_log
-           where org_id = ${user.orgId} and table_name = 'documents'
-             and row_id = ${requestId} and action = 'insert' and request_id = ${requestId}
-           order by at asc limit 1`)).rows[0]?.after
-        if (!original || canonicalJson(original) !== canonicalJson(snapshot)) {
-          throw new Error('idempotency_key_conflict')
-        }
+      const claim = await claimIdempotentCreate(tx, { orgId: user.orgId, table: 'documents', key: requestId })
+      // Replay compares the immutable request image in the insert audit
+      // event — not today's row, and not the derived values — so an
+      // unchanged retry still succeeds after a later PATCH legitimately
+      // edited the journal, or after the clock/config moved under a
+      // defaulted field.
+      const replayMatch = { request: match }
+      if (claim === 'exists') {
+        const replay = await resolveIdempotentReplay(tx, {
+          orgId: user.orgId, table: 'documents', key: requestId, match: replayMatch,
+        })
+        if (replay !== 'replay') throw new Error('idempotency_key_conflict')
         return false
       }
       // First write for this key: the number is allocated here, inside the
@@ -314,7 +331,16 @@ export async function POST(request: Request) {
            ${totalDebits}, '0', ${totalDebits}, ${user.id}, ${user.id})
         on conflict (id) do nothing
         returning id`))
-      if (!inserted.rows[0]) throw new Error('idempotency_key_conflict')
+      if (!inserted.rows[0]) {
+        // Lost insert race or foreign/global UUID collision: the re-read
+        // decides — a genuine retry replays, anything else conflicts, all
+        // without reading another org's row.
+        const replay = await resolveIdempotentReplay(tx, {
+          orgId: user.orgId, table: 'documents', key: requestId, match: replayMatch,
+        })
+        if (replay !== 'replay') throw new Error('idempotency_key_conflict')
+        return false
+      }
       for (let i = 0; i < preparedLines.length; i++) {
         const l = preparedLines[i]!
         await tx.execute(sql`
