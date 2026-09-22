@@ -1429,12 +1429,14 @@ async function firstReconciliationCarry(
   if (!coverage || coverage.opening_balance === null) return null;
 
   const openingUnits = toUnits(coverage.opening_balance);
+  // Opening balances include immutable originals and their dated reversals.
+  // Match eligibility is narrower than the ledger history proving this carry.
   const history = (await executor.execute<{ carry: string; matched_old: string }>(sql`
     select
       coalesce(sum(jl.txn_amount) filter (where m.journal_line_id is null), 0) as carry,
       coalesce(sum(jl.txn_amount) filter (where m.journal_line_id is not null), 0) as matched_old
       from journal_lines jl
-      join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
+      join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')
       left join reconciliation_matches m
         on m.journal_line_id = jl.id and m.org_id = jl.org_id
        and m.reconciliation_id = ${recon.id} and m.org_id = ${ctx.orgId}
