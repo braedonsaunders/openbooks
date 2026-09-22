@@ -374,6 +374,7 @@
       "unsavedChanges": "Alterações não salvas…",
       "runAndSchedule": "Executar e agendar",
       "source": "Origem",
+      "sourceSearchPlaceholder": "Pesquisar origens de relatórios…",
       "mode": "Modo",
       "detailRows": "Linhas de detalhe",
       "summarize": "Resumir",
@@ -383,7 +384,7 @@
       "descending": "Decrescente",
       "ascending": "Crescente",
       "rowLimit": "Limite de linhas",
-      "rowLimitHint": "Limitado a 10.000 linhas. As pré-visualizações mostram as primeiras {previewRows}.",
+      "rowLimitHint": "As execuções completas usam este limite. As prévias mostram as primeiras {previewRows} linhas.",
       "pageSetup": {
         "title": "Configuração de página PDF",
         "hint": "Controla como este relatório é impresso em PDF (papel, orientação, densidade, margens).",
@@ -397,7 +398,8 @@
         "density": "Densidade",
         "densityStandard": "Padrão",
         "densityCompact": "Compacta (mais linhas por página)",
-        "marginMm": "Margens (mm)"
+        "marginMm": "Margens (mm)",
+        "showSummary": "Mostrar faixa de resumo"
       },
       "livePreview": "Pré-visualização ao vivo",
       "previewFailed": "Falha na pré-visualização",
@@ -433,6 +435,17 @@
       },
       "running": "Executando…",
       "selectedColumns": "Colunas selecionadas",
+      "columnPickerHint": "Pesquise todos os campos desta origem, incluindo registros relacionados e identificadores estáveis.",
+      "columnSearchPlaceholder": "Pesquisar colunas…",
+      "useDefaults": "Padrões",
+      "selectAll": "Selecionar tudo",
+      "clearAll": "Limpar",
+      "noColumnsMatch": "Nenhuma coluna disponível corresponde a esta pesquisa.",
+      "fieldGroups": {
+        "record": "Campos do registro",
+        "related": "Campos relacionados e vinculados",
+        "identifiers": "Identificadores"
+      },
       "addColumn": "Adicionar coluna",
       "labelOverridePlaceholder": "Renomear…",
       "moveUpAria": "Mover para cima",
@@ -443,7 +456,10 @@
       "removeSortAria": "Remover nível de ordenação",
       "noColumnsSelected": "Nenhuma coluna selecionada — adicione ao menos uma.",
       "tabs": {
-        "data": "Dados",
+        "source": "Origem",
+        "columns": "Colunas",
+        "grouping": "Agrupar",
+        "sorting": "Ordenar",
         "filter": "Filtro",
         "format": "Formato"
       }

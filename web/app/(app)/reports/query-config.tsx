@@ -1,18 +1,22 @@
 'use client'
 
-import { ChevronDown, ChevronUp, Plus, Trash2, X } from 'lucide-react'
+import { useState } from 'react'
+import { ChevronDown, ChevronUp, Plus, Search, Trash2, X } from 'lucide-react'
 import { useTranslations } from 'next-intl'
-import { Button, Input, Label, Select } from '@openbooks/ui'
+import { Button, Input, Label, SearchSelect, Select } from '@openbooks/ui'
 import {
+  defaultColumnsFor,
   REPORT_AGG_FNS,
   REPORT_TEMPORAL_BINS,
   type ReportAggFn,
   type ReportBreakout,
   type ReportCustomQuery,
   type ReportEntity,
+  type ReportEntityColumn,
   type ReportMeasure,
   type ReportTemporalBin,
 } from '@openbooks/reports'
+import { reportColumnGroup } from '../../../lib/report-builder-catalog'
 
 /**
  * Shared query-config editors (rows-mode column picker, summarize-mode
@@ -39,15 +43,18 @@ export function RowsConfig({
   patch,
   columns,
   disabled = false,
+  section = 'all',
 }: {
   entity: ReportEntity
   query: ReportCustomQuery
   patch: (n: Partial<ReportCustomQuery>) => void
   columns: ReportEntity['columns']
   disabled?: boolean
+  section?: 'all' | 'columns' | 'grouping'
 }) {
   const t = useTranslations('reports.custom.builder')
   const tReports = useTranslations('reports')
+  const [columnSearch, setColumnSearch] = useState('')
   const selected = query.columns ?? []
   const labels = query.columnLabels ?? {}
   const defaultLabel = (key: string) => (entity.key.startsWith('custom:') ? entity.columns.find(c => c.key === key)?.label ?? key : tReports(`catalog.columns.${entity.key}.${key}`))
@@ -70,12 +77,50 @@ export function RowsConfig({
     ;[next[i], next[j]] = [next[j]!, next[i]!]
     setColumns(next)
   }
-  const available = columns.filter((c) => !selected.includes(c.key))
+  const search = columnSearch.trim().toLocaleLowerCase()
+  const available = columns.filter((column) => {
+    if (selected.includes(column.key)) return false
+    if (!search) return true
+    const group = reportColumnGroup(entity, column)
+    return `${defaultLabel(column.key)} ${column.key} ${column.kind} ${t(`fieldGroups.${group}`)}`
+      .toLocaleLowerCase()
+      .includes(search)
+  })
+  const availableGroups = (['record', 'related', 'identifiers'] as const)
+    .map((group) => ({ group, columns: available.filter((column) => reportColumnGroup(entity, column) === group) }))
+    .filter((entry) => entry.columns.length > 0)
+  const columnOptions = columns.map((column) => ({
+    value: column.key,
+    label: defaultLabel(column.key),
+    group: t(`fieldGroups.${reportColumnGroup(entity, column)}`),
+  }))
 
   return (
     <>
-      <div className="space-y-1.5">
+      {section !== 'grouping' ? <div className="space-y-3">
         <Label>{t('selectedColumns')}</Label>
+        <p className="text-xs text-slate-500 dark:text-slate-400">{t('columnPickerHint')}</p>
+        <div className="relative">
+          <Search size={14} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+          <Input
+            className="h-9 pl-8 text-sm"
+            value={columnSearch}
+            onChange={(event) => setColumnSearch(event.target.value)}
+            placeholder={t('columnSearchPlaceholder')}
+            disabled={disabled}
+          />
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={() => setColumns(defaultColumnsFor(entity))}>
+            {t('useDefaults')}
+          </Button>
+          <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={() => setColumns(columns.map((column) => column.key))}>
+            {t('selectAll')}
+          </Button>
+          <Button type="button" variant="ghost" size="sm" disabled={disabled} onClick={() => setColumns([])}>
+            {t('clearAll')}
+          </Button>
+        </div>
         {selected.length === 0 ? (
           <p className="text-xs text-red-600 dark:text-red-400">{t('noColumnsSelected')}</p>
         ) : (
@@ -123,39 +168,44 @@ export function RowsConfig({
             ))}
           </ul>
         )}
-        {available.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5 pt-1">
-            {available.map((c) => (
-              <button
-                key={c.key}
-                type="button"
-                disabled={disabled}
-                onClick={() => setColumns([...selected, c.key])}
-                className="rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-600 transition-colors hover:border-teal-400 hover:text-teal-700 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:border-teal-500 dark:hover:text-teal-300"
-              >
-                <span className="inline-flex items-center gap-1"><Plus size={11} /> {defaultLabel(c.key)}</span>
-              </button>
-            ))}
+        {availableGroups.map(({ group, columns: groupedColumns }) => (
+          <div key={group} className="space-y-1.5 rounded-lg border border-slate-200 p-2.5 dark:border-slate-800">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">{t(`fieldGroups.${group}`)}</p>
+              <span className="text-[11px] tabular-nums text-slate-400 dark:text-slate-500">{groupedColumns.length}</span>
+            </div>
+            <div className="flex max-h-48 flex-wrap gap-1.5 overflow-y-auto">
+              {groupedColumns.map((column) => (
+                <button
+                  key={column.key}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => setColumns([...selected, column.key])}
+                  className="rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-600 transition-colors hover:border-teal-400 hover:text-teal-700 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:border-teal-500 dark:hover:text-teal-300"
+                >
+                  <span className="inline-flex items-center gap-1"><Plus size={11} /> {defaultLabel(column.key)}</span>
+                </button>
+              ))}
+            </div>
           </div>
-        ) : null}
-      </div>
-      <div className="space-y-1.5">
+        ))}
+        {available.length === 0 && search ? <p className="text-xs text-slate-400 dark:text-slate-500">{t('noColumnsMatch')}</p> : null}
+      </div> : null}
+      {section !== 'columns' ? <div className="space-y-1.5">
         <Label>{t('sectionBy')}</Label>
-        <Select
+        <SearchSelect
           value={query.groupBy ?? ''}
-          onChange={(e) => patch({ groupBy: e.target.value || null })}
-        >
-          <option value="">{t('noSections')}</option>
-          {entity.columns.map((c) => (
-            <option key={c.key} value={c.key}>
-              {(entity.key.startsWith('custom:') ? c.label : tReports(`catalog.columns.${entity.key}.${c.key}`))}
-            </option>
-          ))}
-        </Select>
+          onChange={(value) => patch({ groupBy: value || null })}
+          options={[{ value: '', label: t('noSections') }, ...columnOptions]}
+          searchable
+          disabled={disabled}
+          sheetTitle={t('sectionBy')}
+          ariaLabel={t('sectionBy')}
+        />
         <p className="text-xs text-slate-500 dark:text-slate-400">
           {t('sectionByHint')}
         </p>
-      </div>
+      </div> : null}
     </>
   )
 }
@@ -175,6 +225,11 @@ export function SortConfig({
   const t = useTranslations('reports.custom.builder')
   const tReports = useTranslations('reports')
   const sorts = query.sorts ?? []
+  const columnOptions = entity.columns.map((column) => ({
+    value: column.key,
+    label: entity.key.startsWith('custom:') ? column.label : tReports(`catalog.columns.${entity.key}.${column.key}`),
+    group: t(`fieldGroups.${reportColumnGroup(entity, column)}`),
+  }))
 
   const commit = (next: { column: string; direction: 'asc' | 'desc' }[]) => {
     const cleaned = next.filter((s) => s.column)
@@ -207,36 +262,35 @@ export function SortConfig({
         ) : null}
       </div>
       {sorts.length === 0 ? (
-        <Select
+        <SearchSelect
           value=""
           disabled={disabled}
-          onChange={(e) => e.target.value && commit([{ column: e.target.value, direction: 'desc' }])}
-        >
-          <option value="">{t('sortDefault')}</option>
-          {entity.columns.map((c) => (
-            <option key={c.key} value={c.key}>
-              {(entity.key.startsWith('custom:') ? c.label : tReports(`catalog.columns.${entity.key}.${c.key}`))}
-            </option>
-          ))}
-        </Select>
+          onChange={(column) => column && commit([{ column, direction: 'desc' }])}
+          options={[{ value: '', label: t('sortDefault') }, ...columnOptions]}
+          searchable
+          sheetTitle={t('sortBy')}
+          ariaLabel={t('sortBy')}
+        />
       ) : (
         sorts.map((s, i) => (
           <div key={i} className="flex items-center gap-2">
             {i > 0 ? (
               <span className="w-14 shrink-0 text-right text-[11px] text-slate-400 dark:text-slate-500">{t('thenBy')}</span>
             ) : null}
-            <Select
-              className="h-8 flex-1"
+            <SearchSelect
+              className="min-w-0 flex-1"
+              triggerClassName="h-8"
               value={s.column}
               disabled={disabled}
-              onChange={(e) => setLevel(i, { column: e.target.value, direction: s.direction })}
-            >
-              {entity.columns.map((c) => (
-                <option key={c.key} value={c.key} disabled={usedColumns.has(c.key) && c.key !== s.column}>
-                  {(entity.key.startsWith('custom:') ? c.label : tReports(`catalog.columns.${entity.key}.${c.key}`))}
-                </option>
-              ))}
-            </Select>
+              onChange={(column) => setLevel(i, { column, direction: s.direction })}
+              options={columnOptions.map((option) => ({
+                ...option,
+                disabled: usedColumns.has(option.value) && option.value !== s.column,
+              }))}
+              searchable
+              sheetTitle={t('sortBy')}
+              ariaLabel={t('sortBy')}
+            />
             <Select
               className="h-8 w-32"
               value={s.direction}
@@ -267,16 +321,28 @@ export function SummarizeConfig({
   entity,
   query,
   patch,
+  section = 'all',
+  disabled = false,
 }: {
   entity: ReportEntity
   query: ReportCustomQuery
   patch: (n: Partial<ReportCustomQuery>) => void
+  section?: 'all' | 'grouping' | 'measures'
+  disabled?: boolean
 }) {
   const t = useTranslations('reports.custom.builder')
   const tc = useTranslations('common')
   const tReports = useTranslations('reports')
   const breakouts = query.breakouts ?? []
   const measures = query.measures ?? []
+  const labelFor = (column: ReportEntityColumn) => (
+    entity.key.startsWith('custom:') ? column.label : tReports(`catalog.columns.${entity.key}.${column.key}`)
+  )
+  const optionsFor = (columns: ReportEntityColumn[]) => columns.map((column) => ({
+    value: column.key,
+    label: labelFor(column),
+    group: t(`fieldGroups.${reportColumnGroup(entity, column)}`),
+  }))
 
   const setBreakout = (i: number, b: ReportBreakout) => {
     const next = [...breakouts]
@@ -291,7 +357,7 @@ export function SummarizeConfig({
 
   return (
     <>
-      <div className="space-y-1.5">
+      {section !== 'measures' ? <div className="space-y-1.5">
         <div className="flex items-center justify-between">
           <Label>{t('groupBy')}</Label>
           {breakouts.length < 6 ? (
@@ -299,6 +365,7 @@ export function SummarizeConfig({
               type="button"
               variant="ghost"
               size="sm"
+              disabled={disabled}
               onClick={() =>
                 patch({ breakouts: [...breakouts, { column: entity.columns[0]?.key ?? '' }] })
               }
@@ -316,24 +383,24 @@ export function SummarizeConfig({
           const temporal = isTemporal(entity, b.column)
           return (
             <div key={i} className="flex items-center gap-2">
-              <Select
-                className="h-8 flex-1"
+              <SearchSelect
+                className="min-w-0 flex-1"
+                triggerClassName="h-8"
                 value={b.column}
-                onChange={(e) => {
-                  const col = e.target.value
+                onChange={(col) => {
                   setBreakout(i, { column: col, ...(isTemporal(entity, col) && b.bin ? { bin: b.bin } : {}) })
                 }}
-              >
-                {entity.columns.map((c) => (
-                  <option key={c.key} value={c.key}>
-                    {(entity.key.startsWith('custom:') ? c.label : tReports(`catalog.columns.${entity.key}.${c.key}`))}
-                  </option>
-                ))}
-              </Select>
+                options={optionsFor(entity.columns)}
+                searchable
+                disabled={disabled}
+                sheetTitle={t('groupBy')}
+                ariaLabel={t('groupBy')}
+              />
               {temporal ? (
                 <Select
                   className="h-8 w-28"
                   value={b.bin ?? ''}
+                  disabled={disabled}
                   onChange={(e) =>
                     setBreakout(i, {
                       column: b.column,
@@ -353,6 +420,7 @@ export function SummarizeConfig({
                 type="button"
                 variant="ghost"
                 size="sm"
+                disabled={disabled}
                 onClick={() => patch({ breakouts: breakouts.filter((_, j) => j !== i) })}
                 aria-label={t('removeGroupAria')}
               >
@@ -361,9 +429,9 @@ export function SummarizeConfig({
             </div>
           )
         })}
-      </div>
+      </div> : null}
 
-      <div className="space-y-1.5">
+      {section !== 'grouping' ? <div className="space-y-1.5">
         <div className="flex items-center justify-between">
           <Label>{t('measures')}</Label>
           {measures.length < 8 ? (
@@ -371,6 +439,7 @@ export function SummarizeConfig({
               type="button"
               variant="ghost"
               size="sm"
+              disabled={disabled}
               onClick={() => patch({ measures: [...measures, { fn: 'count' }] })}
             >
               <Plus size={14} /> {tc('actions.add')}
@@ -384,6 +453,7 @@ export function SummarizeConfig({
               <Select
                 className="h-8 w-36"
                 value={m.fn}
+                disabled={disabled}
                 onChange={(e) => {
                   const fn = e.target.value as ReportAggFn
                   const valid = measureColumns(entity, fn)
@@ -402,17 +472,17 @@ export function SummarizeConfig({
                 ))}
               </Select>
               {m.fn !== 'count' ? (
-                <Select
-                  className="h-8 flex-1"
+                <SearchSelect
+                  className="min-w-0 flex-1"
+                  triggerClassName="h-8"
                   value={m.column ?? ''}
-                  onChange={(e) => setMeasure(i, { ...m, column: e.target.value })}
-                >
-                  {cols.map((c) => (
-                    <option key={c.key} value={c.key}>
-                      {(entity.key.startsWith('custom:') ? c.label : tReports(`catalog.columns.${entity.key}.${c.key}`))}
-                    </option>
-                  ))}
-                </Select>
+                  onChange={(column) => setMeasure(i, { ...m, column })}
+                  options={optionsFor(cols)}
+                  searchable
+                  disabled={disabled}
+                  sheetTitle={t('measures')}
+                  ariaLabel={t('measures')}
+                />
               ) : null}
               <Button
                 type="button"
@@ -422,14 +492,14 @@ export function SummarizeConfig({
                   patch({ measures: measures.length > 1 ? measures.filter((_, j) => j !== i) : measures })
                 }
                 aria-label={t('removeMeasureAria')}
-                disabled={measures.length <= 1}
+                disabled={disabled || measures.length <= 1}
               >
                 <Trash2 size={14} />
               </Button>
             </div>
           )
         })}
-      </div>
+      </div> : null}
     </>
   )
 }

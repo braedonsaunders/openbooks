@@ -374,6 +374,7 @@
       "unsavedChanges": "有未保存的更改…",
       "runAndSchedule": "运行与排程",
       "source": "数据源",
+      "sourceSearchPlaceholder": "搜索报表数据源…",
       "mode": "模式",
       "detailRows": "明细行",
       "summarize": "汇总",
@@ -383,7 +384,7 @@
       "descending": "降序",
       "ascending": "升序",
       "rowLimit": "行数上限",
-      "rowLimitHint": "上限为 10,000 行。预览显示前 {previewRows} 行。",
+      "rowLimitHint": "完整运行使用此行数限制。实时预览显示前 {previewRows} 行。",
       "pageSetup": {
         "title": "PDF 页面设置",
         "hint": "控制此报表打印为 PDF 的方式（纸张、方向、密度、页边距）。",
@@ -397,7 +398,8 @@
         "density": "密度",
         "densityStandard": "标准",
         "densityCompact": "紧凑（每页更多行）",
-        "marginMm": "页边距（毫米）"
+        "marginMm": "页边距（毫米）",
+        "showSummary": "显示摘要栏"
       },
       "livePreview": "实时预览",
       "previewFailed": "预览失败",
@@ -433,6 +435,17 @@
       },
       "running": "运行中…",
       "selectedColumns": "已选列",
+      "columnPickerHint": "搜索此数据源提供的所有字段，包括关联记录和稳定标识符。",
+      "columnSearchPlaceholder": "搜索列…",
+      "useDefaults": "默认值",
+      "selectAll": "全选",
+      "clearAll": "清除",
+      "noColumnsMatch": "没有可用列与此搜索匹配。",
+      "fieldGroups": {
+        "record": "记录字段",
+        "related": "关联和连接字段",
+        "identifiers": "标识符"
+      },
       "addColumn": "添加列",
       "labelOverridePlaceholder": "重命名…",
       "moveUpAria": "上移",
@@ -443,7 +456,10 @@
       "removeSortAria": "移除排序层级",
       "noColumnsSelected": "未选择任何列——请至少添加一列。",
       "tabs": {
-        "data": "数据",
+        "source": "数据源",
+        "columns": "列",
+        "grouping": "分组",
+        "sorting": "排序",
         "filter": "筛选",
         "format": "格式"
       }

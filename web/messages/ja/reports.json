@@ -374,6 +374,7 @@
       "unsavedChanges": "未保存の変更…",
       "runAndSchedule": "実行とスケジュール",
       "source": "データソース",
+      "sourceSearchPlaceholder": "レポートのデータソースを検索…",
       "mode": "モード",
       "detailRows": "明細行",
       "summarize": "集計",
@@ -383,7 +384,7 @@
       "descending": "降順",
       "ascending": "昇順",
       "rowLimit": "行数上限",
-      "rowLimitHint": "上限は10,000行です。プレビューは最初の{previewRows}行を表示します。",
+      "rowLimitHint": "完全実行ではこの行数を使用します。ライブプレビューは最初の{previewRows}行を表示します。",
       "pageSetup": {
         "title": "PDFページ設定",
         "hint": "このレポートのPDF印刷方法を制御します（用紙、向き、密度、余白）。",
@@ -397,7 +398,8 @@
         "density": "密度",
         "densityStandard": "標準",
         "densityCompact": "コンパクト（ページあたりの行数を増やす）",
-        "marginMm": "余白（mm）"
+        "marginMm": "余白（mm）",
+        "showSummary": "サマリーバンドを表示"
       },
       "livePreview": "ライブプレビュー",
       "previewFailed": "プレビューに失敗しました",
@@ -433,6 +435,17 @@
       },
       "running": "実行中…",
       "selectedColumns": "選択済みの列",
+      "columnPickerHint": "関連レコードや安定した識別子を含め、このデータソースで利用できるすべてのフィールドを検索できます。",
+      "columnSearchPlaceholder": "列を検索…",
+      "useDefaults": "既定値",
+      "selectAll": "すべて選択",
+      "clearAll": "クリア",
+      "noColumnsMatch": "この検索に一致する利用可能な列はありません。",
+      "fieldGroups": {
+        "record": "レコードのフィールド",
+        "related": "関連・結合フィールド",
+        "identifiers": "識別子"
+      },
       "addColumn": "列を追加",
       "labelOverridePlaceholder": "名前を変更…",
       "moveUpAria": "上へ移動",
@@ -443,7 +456,10 @@
       "removeSortAria": "並べ替えレベルを削除",
       "noColumnsSelected": "列が選択されていません — 少なくとも1つ追加してください。",
       "tabs": {
-        "data": "データ",
+        "source": "ソース",
+        "columns": "列",
+        "grouping": "グループ",
+        "sorting": "並べ替え",
         "filter": "フィルター",
         "format": "書式"
       }

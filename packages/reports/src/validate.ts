@@ -4,6 +4,7 @@
 // CRUD routes and the run/preview route.
 
 import { REPORT_ENTITY_MAP, entityColumn, type ReportEntity } from './entities'
+import { normalizeReportLimit } from './custom-query'
 import {
   REPORT_AGG_FNS,
   REPORT_FILTER_OPERATORS,
@@ -189,9 +190,7 @@ export function validateCustomQuery(
       if (trimmed) columnLabels[key] = trimmed
     }
   }
-  const limit = Number.isFinite(Number(q.limit))
-    ? Math.min(Math.max(Number(q.limit), 1), 10_000)
-    : 1000
+  const limit = normalizeReportLimit(Number(q.limit))
 
   return {
     entity,

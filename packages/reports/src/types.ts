@@ -114,7 +114,7 @@ export type ReportCustomQuery = {
   sorts?: { column: string; direction: 'asc' | 'desc' }[] | null
   /** Rows mode: per-column display-label overrides, keyed by column key. */
   columnLabels?: Record<string, string> | null
-  /** Hard cap on rows (engine clamps to 10 000). */
+  /** Requested result rows. Full runs honour this; previews apply their own clamp. */
   limit?: number | null
   /** Sectioned-summarize totals: per-section subtotal rows at the first
    *  non-section breakout level, and/or a final Grand totals group across all

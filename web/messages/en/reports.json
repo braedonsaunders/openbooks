@@ -374,6 +374,7 @@
       "unsavedChanges": "Unsaved changes…",
       "runAndSchedule": "Run & schedule",
       "source": "Source",
+      "sourceSearchPlaceholder": "Search report sources…",
       "mode": "Mode",
       "detailRows": "Detail rows",
       "summarize": "Summarize",
@@ -383,7 +384,7 @@
       "descending": "Descending",
       "ascending": "Ascending",
       "rowLimit": "Row limit",
-      "rowLimitHint": "Capped at 10,000 rows. Previews show the first {previewRows}.",
+      "rowLimitHint": "Full runs use this limit. Live previews show the first {previewRows} rows.",
       "pageSetup": {
         "title": "PDF page setup",
         "hint": "Controls how this report prints to PDF (paper, orientation, density, margins).",
@@ -397,7 +398,8 @@
         "density": "Density",
         "densityStandard": "Standard",
         "densityCompact": "Compact (more rows per page)",
-        "marginMm": "Margins (mm)"
+        "marginMm": "Margins (mm)",
+        "showSummary": "Show summary band"
       },
       "livePreview": "Live preview",
       "previewFailed": "Preview failed",
@@ -433,6 +435,17 @@
       },
       "running": "Running…",
       "selectedColumns": "Selected columns",
+      "columnPickerHint": "Search every field available from this source, including related records and stable identifiers.",
+      "columnSearchPlaceholder": "Search columns…",
+      "useDefaults": "Defaults",
+      "selectAll": "Select all",
+      "clearAll": "Clear",
+      "noColumnsMatch": "No available columns match this search.",
+      "fieldGroups": {
+        "record": "Record fields",
+        "related": "Related & joined fields",
+        "identifiers": "Identifiers"
+      },
       "addColumn": "Add column",
       "labelOverridePlaceholder": "Rename…",
       "moveUpAria": "Move up",
@@ -443,7 +456,10 @@
       "removeSortAria": "Remove sort level",
       "noColumnsSelected": "No columns selected — add at least one.",
       "tabs": {
-        "data": "Data",
+        "source": "Source",
+        "columns": "Columns",
+        "grouping": "Group",
+        "sorting": "Sort",
         "filter": "Filter",
         "format": "Format"
       }
