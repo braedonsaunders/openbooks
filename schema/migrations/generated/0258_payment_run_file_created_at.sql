@@ -75,3 +75,28 @@ COMMENT ON COLUMN public.subscriptions.anchor_day IS
 
 COMMENT ON COLUMN public.recurring_schedules.anchor_day IS
   'Day-of-month the schedule cadence pins to (0258). Each next run date advances the year-month and clamps this day into the target month, so month-end starts do not drift. Null behaves as the next run date''s day.';
+
+-- 0258 (appended): bank-feed sync overlap window.
+--
+-- Incremental feed syncs re-pulled a fixed 2-day overlap before the last
+-- successful sync. A transaction whose booking date lands more than 2 days
+-- behind the watermark — weekend batches, slow-posting banks — is never
+-- fetched again: dedupe prevents duplicates, not gaps, and pending
+-- transactions are filtered out. The overlap is now 14 days by default and
+-- configurable per connection (0..90); null means the default, so no
+-- backfill is needed.
+
+ALTER TABLE public.bank_feed_connections
+  ADD COLUMN IF NOT EXISTS sync_overlap_days integer;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (select 1 from pg_constraint where conname = 'bank_feed_connections_sync_overlap_days_range') THEN
+    ALTER TABLE public.bank_feed_connections
+      ADD CONSTRAINT bank_feed_connections_sync_overlap_days_range
+      CHECK (sync_overlap_days IS NULL OR (sync_overlap_days >= 0 AND sync_overlap_days <= 90));
+  END IF;
+END $$;
+
+COMMENT ON COLUMN public.bank_feed_connections.sync_overlap_days IS
+  'Re-pull overlap in days before the last successful sync (0258). Wider windows recover late-posting transactions; import dedupes the overlap. Null means the 14-day default.';

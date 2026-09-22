@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import {
+  resolveFeedSyncOverlapDays,
   sealCredentials,
   syncBankFeedNow,
   testBankFeedConnection,
@@ -70,10 +71,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if ("syncCadence" in body && !CADENCES.includes(body.syncCadence as (typeof CADENCES)[number])) {
     return NextResponse.json({ error: "invalid syncCadence" }, { status: 400 });
   }
+  // Null clears a custom overlap back to the default; anything else must be
+  // whole days in range, or the row would carry a window syncs cannot honor.
+  if ("syncOverlapDays" in body && body.syncOverlapDays !== null) {
+    try {
+      resolveFeedSyncOverlapDays(body.syncOverlapDays);
+    } catch {
+      return NextResponse.json({ error: "syncOverlapDays must be a whole number of days from 0 to 90" }, { status: 400 });
+    }
+  }
   const sets: ReturnType<typeof sql>[] = [];
   if ("name" in body) sets.push(sql`name = ${body.name as string}`);
   if ("externalAccountId" in body) sets.push(sql`external_account_id = ${(body.externalAccountId as string | null) ?? null}`);
   if ("syncCadence" in body) sets.push(sql`sync_cadence = ${body.syncCadence as string}`);
+  if ("syncOverlapDays" in body) sets.push(sql`sync_overlap_days = ${(body.syncOverlapDays as number | null) ?? null}`);
   if ("isActive" in body) sets.push(sql`is_active = ${Boolean(body.isActive)}`);
   // Only re-seal when a fresh credentials object is supplied (never on absence).
   const rotating = Boolean(body.credentials && typeof body.credentials === "object");

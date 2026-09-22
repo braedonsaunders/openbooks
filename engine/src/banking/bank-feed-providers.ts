@@ -446,7 +446,44 @@ function cadenceIntervalMs(cadence: string): number {
   return cadence === "hourly" ? 3_600_000 : 86_400_000;
 }
 
-function sinceFor(lastSyncAt: Date | string | null, today: string): string {
+/**
+ * Default re-pull overlap in days. Late-posting transactions (booking dates
+ * days behind the last successful sync — weekend batches, slow banks) fall
+ * outside a 2-day overlap forever: dedupe prevents duplicates, not gaps, and
+ * pending transactions are filtered out, so nothing ever re-covers them.
+ * Fourteen days covers weekly-batch stragglers without re-pulling months of
+ * history on every tick; importStatement dedupes on the provider txn id, so
+ * the wider window only costs provider paging.
+ */
+export const DEFAULT_FEED_SYNC_OVERLAP_DAYS = 14;
+
+/**
+ * Overlap ceiling in days. Wider than the 90-day cold start is pointless —
+ * it would re-pull cold-start history on every sync, and Plaid's 10k-per-sync
+ * page cap turns that into a loud abort on busy accounts.
+ */
+export const MAX_FEED_SYNC_OVERLAP_DAYS = 90;
+
+/**
+ * Resolve a connection's configured overlap to whole days. Null/undefined
+ * means the default; anything outside 0..90 refuses by name (surfaced as the
+ * sync outcome's error, never a silently narrowed window).
+ */
+export function resolveFeedSyncOverlapDays(value: unknown): number {
+  if (value === null || value === undefined) return DEFAULT_FEED_SYNC_OVERLAP_DAYS;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > MAX_FEED_SYNC_OVERLAP_DAYS) {
+    throw new FeedError(
+      `sync overlap must be a whole number of days from 0 to ${MAX_FEED_SYNC_OVERLAP_DAYS}`,
+    );
+  }
+  return value;
+}
+
+export function sinceFor(
+  lastSyncAt: Date | string | null,
+  today: string,
+  overlapDays: number = DEFAULT_FEED_SYNC_OVERLAP_DAYS,
+): string {
   // Reads the SUCCESS watermark only. Attempt bookkeeping (last_attempt_at)
   // must never feed into this window: failed syncs happen on top of the last
   // real cursor, and a retry has to re-cover their whole unimported span.
@@ -455,8 +492,8 @@ function sinceFor(lastSyncAt: Date | string | null, today: string): string {
     return addCalendarDays(today, -90);
   }
   const synced = (lastSyncAt instanceof Date ? lastSyncAt : new Date(lastSyncAt)).toISOString().slice(0, 10);
-  // Re-pull a two-day overlap; importStatement dedupes on the provider txn id.
-  return addCalendarDays(synced, -2);
+  // Re-pull the overlap; importStatement dedupes on the provider txn id.
+  return addCalendarDays(synced, -overlapDays);
 }
 
 export interface FeedSyncOutcome {
@@ -480,6 +517,7 @@ async function syncOne(
     credentials: string | null;
     externalAccountId: string | null;
     lastSyncAt: Date | string | null;
+    syncOverlapDays: number | null;
   },
   actorId: string,
 ): Promise<FeedSyncOutcome> {
@@ -487,7 +525,9 @@ async function syncOne(
   if (!adapter) return { connectionId: row.id, imported: 0, duplicates: 0, error: "not an API provider" };
   const creds = unsealJson<Record<string, string>>(row.credentials) ?? {};
   const until = await businessToday(row.orgId);
-  const since = sinceFor(row.lastSyncAt, until);
+  // A misconfigured overlap refuses here and surfaces as the outcome's
+  // error (callers catch into it) — never a silently narrowed window.
+  const since = sinceFor(row.lastSyncAt, until, resolveFeedSyncOverlapDays(row.syncOverlapDays));
   const { lines, currency, sourceEvidence } = await adapter.fetch(
     creds,
     row.externalAccountId ?? "",
@@ -575,10 +615,12 @@ export async function runDueBankFeeds(): Promise<FeedSyncOutcome[]> {
         syncCadence: string;
         nextSyncAt: Date | null;
         lastSyncAt: Date | string | null;
+        syncOverlapDays: number | null;
       }>(sql`
       select c.id, c.org_id as "orgId", c.provider, c.account_id as "accountId", c.credentials,
              c.external_account_id as "externalAccountId", c.sync_cadence as "syncCadence",
-             c.next_sync_at as "nextSyncAt", c.last_sync_at as "lastSyncAt"
+             c.next_sync_at as "nextSyncAt", c.last_sync_at as "lastSyncAt",
+             c.sync_overlap_days as "syncOverlapDays"
         from bank_feed_connections c
         join orgs o on o.id = c.org_id
        where c.is_active and c.provider in ('plaid', 'gocardless', 'truelayer')
@@ -634,9 +676,11 @@ export async function syncBankFeedNow(
         credentials: string | null;
         externalAccountId: string | null;
         lastSyncAt: Date | string | null;
+        syncOverlapDays: number | null;
       }>(sql`
       select c.id, c.org_id as "orgId", c.provider, c.account_id as "accountId", c.credentials,
-             c.external_account_id as "externalAccountId", c.last_sync_at as "lastSyncAt"
+             c.external_account_id as "externalAccountId", c.last_sync_at as "lastSyncAt",
+             c.sync_overlap_days as "syncOverlapDays"
         from bank_feed_connections c
         join orgs o on o.id = c.org_id
        where c.id = ${connectionId}
