@@ -200,6 +200,66 @@ async function postedRunCount(orgId: string, ruleId: string): Promise<number> {
 }
 
 test(
+  "balance and ytd pools include adjustment-period entries of the run calendar",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      const calendar = (await db.execute<{ fiscal_calendar_id: string }>(sql`
+        select fiscal_calendar_id from accounting_periods where id = ${org.periodId}`))
+        .rows[0]!.fiscal_calendar_id;
+      const adjustmentId = randomUUID(), augustId = randomUUID();
+      await db.execute(sql`
+        insert into accounting_periods
+          (id, org_id, fiscal_calendar_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment)
+        values (${adjustmentId}, ${org.orgId}, ${calendar}, 2026, 13, '2026-ADJ', '2026-07-31', '2026-07-31', true),
+               (${augustId}, ${org.orgId}, ${calendar}, 2026, 8, '2026-08', '2026-08-01', '2026-08-31', false)`);
+      // Year-end audit accrual posted into the adjustment period: DR expense / CR bank.
+      const entry = randomUUID();
+      await db.transaction(async (tx) => {
+        await tx.execute(sql`insert into journal_entries
+            (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
+          values (${entry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${entry},
+                  '2026-07-31', ${adjustmentId}, 'Audit accrual', 'draft', 'manual')`);
+        await tx.execute(sql`insert into journal_lines
+            (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
+          values (${org.orgId}, ${entry}, 1, ${org.accounts.adjustment}, ${org.subsidiaryId},
+                  '500.0000', 'CAD', '500.0000', '1'),
+                 (${org.orgId}, ${entry}, 2, ${org.accounts.bank}, ${org.subsidiaryId},
+                  '-500.0000', 'CAD', '-500.0000', '1')`);
+        await tx.execute(sql`update journal_entries set status = 'posted'
+          where org_id = ${org.orgId} and id = ${entry}`);
+      });
+      for (const sourceMeasure of ["period_end_balance", "ytd_activity"] as const) {
+        const dept = await seedDepartment(org.orgId, `Dept ${sourceMeasure}`);
+        const { ruleId } = await seedPeriodRule({
+          orgId: org.orgId,
+          poolAccountId: org.accounts.adjustment,
+          sourceMeasure,
+          impact: "report_only",
+          targets: [{ departmentId: dept, fixedPercent: "100.0000", label: "Dept" }],
+        });
+        const later = await previewAllocationRun({
+          orgId: org.orgId, ruleId, periodId: augustId, bookId: org.bookId, actorId, trigger: "manual",
+        });
+        // Before the fix the not-is_adjustment pool filter dropped the
+        // accrual from every later pool, so the balance was wrong forever.
+        assert.equal(later.sourceTotal, "500.0000");
+        const sameEnd = await previewAllocationRun({
+          orgId: org.orgId, ruleId, periodId: org.periodId, bookId: org.bookId, actorId, trigger: "manual",
+        });
+        // The adjustment shares the regular period's end date: it belongs to
+        // the balance as of that date.
+        assert.equal(sameEnd.sourceTotal, "500.0000");
+      }
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
   "preview refuses a simultaneous-solve version instead of silently running it sequentially",
   { skip: !DB },
   async () => {
