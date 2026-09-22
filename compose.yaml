@@ -81,7 +81,11 @@ services:
     volumes:
       - minio-data:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:9000/minio/health/live"]
+      # curl left the minio image in late 2023 (ubi-micro base; see
+      # minio/minio#18372), so a curl probe can never pass and minio-init —
+      # gated on service_healthy — would never run. `mc` ships inside the
+      # server image for exactly this: this is MinIO's documented probe.
+      test: ["CMD", "mc", "ready", "local"]
       interval: 5s
       timeout: 5s
       retries: 20
