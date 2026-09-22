@@ -799,6 +799,73 @@ export function buildOpenApiSpec(
     },
     post: idempotentPost("Update feature gates", "The Features switchboard write. Dependencies and load-bearing modules are enforced.", "Settings"),
   };
+  paths["/api/v1/open-items"] = {
+    get: {
+      summary: "List open items",
+      description: "Unpaid or unapplied AR/AP items. Remaining amounts are exact decimal strings. side=ar requires ar.read; side=ap requires ap.read.",
+      tags: ["Payments"],
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { name: "side", in: "query", required: true, schema: { type: "string", enum: ["ar", "ap"] } },
+        { name: "asOf", in: "query", schema: { type: "string", format: "date" } },
+        { name: "partyId", in: "query", schema: { type: "string", format: "uuid" } },
+        { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 } },
+      ],
+      responses: { "200": { description: "Open items" }, "422": { description: "side missing or not ar/ap" } },
+    },
+  };
+  paths["/api/v1/currencies"] = {
+    get: {
+      summary: "List currencies",
+      description: "ISO currency registry plus this organization's base currency.",
+      tags: ["FX"],
+      security: [{ BearerAuth: [] }],
+      responses: { "200": { description: "Currencies" } },
+    },
+  };
+  paths["/api/v1/fx/rates"] = {
+    get: {
+      summary: "List FX rates",
+      description: "Dated rates for one currency pair. Rate is an exact decimal string. Feature-off is a 404 naming GET /api/v1/settings/features.",
+      tags: ["FX"],
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { name: "fromCurrency", in: "query", required: true, schema: { type: "string", minLength: 3, maxLength: 3 } },
+        { name: "toCurrency", in: "query", required: true, schema: { type: "string", minLength: 3, maxLength: 3 } },
+        { name: "asOf", in: "query", schema: { type: "string", format: "date" } },
+        { name: "rateType", in: "query", schema: { type: "string" } },
+        { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100 } },
+      ],
+      responses: { "200": { description: "FX rates" }, "404": { description: "multiCurrency is off" } },
+    },
+  };
+  paths["/api/v1/inventory/levels"] = {
+    get: {
+      summary: "List inventory levels",
+      description: "On-hand quantity and value from posted movements. Value is an exact decimal string.",
+      tags: ["Inventory"],
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { name: "itemId", in: "query", schema: { type: "string", format: "uuid" } },
+        { name: "stockLocationId", in: "query", schema: { type: "string", format: "uuid" } },
+        { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 } },
+      ],
+      responses: { "200": { description: "Inventory levels" }, "404": { description: "inventory is off" } },
+    },
+  };
+  paths["/api/v1/payroll/employees"] = {
+    get: {
+      summary: "List payroll employees",
+      description: "Employees with a payroll profile. Withholding elections and government ids are never returned.",
+      tags: ["Payroll"],
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { name: "q", in: "query", schema: { type: "string" }, description: "Match employee name" },
+        { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 } },
+      ],
+      responses: { "200": { description: "Payroll employees" }, "404": { description: "payroll is off" } },
+    },
+  };
   paths["/api/v1/reports"] = {
     get: {
       summary: "List report definitions",
