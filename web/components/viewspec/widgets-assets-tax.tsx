@@ -50,7 +50,11 @@ export const ASSETS_TAX_WIDGETS = {
   'equipment-kpi-strip': (props) => (
     <KpiStrip items={(props.items as ComponentProps<typeof KpiStrip>['items']) ?? []} />
   ),
-  'new-equipment': () => <NewEquipmentButton />,
+  'new-equipment': (props) => (
+    <NewEquipmentButton
+      currentParams={(props.currentParams as Record<string, string | string[] | undefined>) ?? {}}
+    />
+  ),
   /** The remount key rides along as a prop: switching units must reset the
    *  drawer's client state, and a widget at a fixed spec position would
    *  otherwise be reused across units. */
@@ -62,6 +66,7 @@ export const ASSETS_TAX_WIDGETS = {
     const { remountKey, ...rest } = drawer
     return <EquipmentDrawer key={remountKey} {...rest} />
   },
+  /* createMode rides the existing equipment-drawer widget on an in-memory unit. */
 
   /* --- tax setup -------------------------------------------------------------------- */
   /** The native page owns a plain `<header>`, not the PageHeader component. */
@@ -204,8 +209,13 @@ export const ASSETS_TAX_WIDGETS = {
   ),
   'assets-doc-link': (props) => <AssetsDocLink label={str(props, 'label') ?? ''} />,
   'assets-equipment-link': (props) => <AssetsEquipmentLink label={str(props, 'label') ?? ''} />,
-  'new-asset': () => <NewAssetButton />,
+  'new-asset': (props) => (
+    <NewAssetButton
+      currentParams={(props.currentParams as Record<string, string | string[] | undefined>) ?? {}}
+    />
+  ),
   'new-asset-redirect': () => <NewAssetRedirect />,
+  /* createMode rides the asset-drawer widget on an in-memory payload. */
   'run-depreciation': (props) => (
     <RunDepreciationButton
       books={(props.books as ComponentProps<typeof RunDepreciationButton>['books']) ?? []}
