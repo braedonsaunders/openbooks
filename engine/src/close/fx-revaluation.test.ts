@@ -178,9 +178,16 @@ test("direct quotes outrank inverted ones when both quote the same date", () => 
   assert.match(lookup, /1 as priority from fx_rates/, "inverted pair is priority 1");
   assert.match(lookup, /order by as_of desc, priority asc limit 1/);
   // One conversion rule across the engine: labor costing resolves the same
-  // pair/date with the same ordering.
+  // pair/date newest-first with the direct leg winning same-date ties. Its
+  // canonical quote spells the tiebreak as a boolean `inverse` (false sorts
+  // before true), not a numeric priority — same rule, same winner. The
+  // behavior itself is proved against a real database by
+  // engine/src/projects/labor-fx-quote.integration.test.ts ("direct wins ties").
   const labor = readFileSync(new URL("../projects/labor-costing.ts", import.meta.url), "utf8");
-  assert.match(labor, /order by as_of desc, priority asc limit 1/);
+  const quote = labor.slice(labor.indexOf("export async function laborFxQuote"));
+  assert.match(quote, /false as inverse from fx_rates/, "direct leg is inverse false");
+  assert.match(quote, /true as inverse from fx_rates/, "inverted leg is inverse true");
+  assert.match(quote, /order by as_of desc, inverse asc limit 1/, "direct wins same-date ties");
 });
 
 test("a missing reversal period is reported before any posting is attempted", () => {
