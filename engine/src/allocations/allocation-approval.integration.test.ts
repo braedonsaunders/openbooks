@@ -297,6 +297,59 @@ test("flow rejection records failure with no journal and untouched lineage", { s
   }
 });
 
+test("post refuses when the configured flow gates but another allocation flow fails", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const actors = await seedFlowActors(org.orgId);
+  try {
+    const good = await seedApprovalFlow(org.orgId, {
+      subjectKind: "allocation_run",
+      assignees: [{ type: "user", userId: actors.approver1Id }],
+      mode: "any",
+    });
+    const bad = await seedApprovalFlow(org.orgId, {
+      subjectKind: "allocation_run",
+      assignees: [{ type: "role", role: "nonexistent_role" }],
+      mode: "any",
+    });
+    // Distinct names so the refusal can tell the two flows apart.
+    await db.execute(sql`update flows set name = 'Working allocation flow' where id = ${good.flowId}`);
+    await db.execute(sql`update flows set name = 'Broken allocation flow' where id = ${bad.flowId}`);
+    await seedSourceEntry(org, actors.adminId, "1000.0000");
+    const { ruleId } = await seedPeriodRule({
+      org,
+      publisherId: actors.adminId,
+      poolAccountId: org.accounts.adjustment,
+      approvalFlowId: good.flowId,
+    });
+    const preview = await previewAllocationRun({
+      orgId: org.orgId,
+      ruleId,
+      periodId: org.periodId,
+      bookId: org.bookId,
+      actorId: actors.submitterId,
+      trigger: "manual",
+    });
+    const linesBefore = await journalLineCount(org.orgId);
+    let message = "";
+    try {
+      await postAllocationRun(preview.id, actors.submitterId, "Please approve the sweep");
+    } catch (e) {
+      message = e instanceof Error ? e.message : String(e);
+    }
+    assert.match(message, /Broken allocation flow/, "the refusal names the failed flow");
+    assert.match(message, /zero assignees/, "the refusal names the cause");
+    // The refusal rolls the post back: still previewed, no journal, no gate.
+    const row = await runRow(preview.id);
+    assert.equal(row.status, "previewed");
+    assert.equal(row.flowRunId, null);
+    assert.equal(row.journalEntryId, null);
+    assert.equal(await journalLineCount(org.orgId), linesBefore);
+    assert.equal(await pendingGateForRun(preview.id), null);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("scheduler auto_post with a flow waits in pending_approval, never posts", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   const actors = await seedFlowActors(org.orgId);
