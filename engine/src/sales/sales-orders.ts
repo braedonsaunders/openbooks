@@ -156,6 +156,7 @@ async function creditDecision(
                   and billed.org_id = link.org_id
                   and billed.kind = 'customer_invoice'
                   and billed.status = 'posted'
+                 and billed.currency = exposure.currency
                 where link.org_id = exposure.org_id
                   and link.from_document_id = exposure.id
              ), 0),
@@ -196,6 +197,7 @@ async function creditDecision(
                  and billed.org_id = link.org_id
                  and billed.kind = 'customer_invoice'
                  and billed.status = 'posted'
+                 and billed.currency = ${role.currency}
                where link.org_id = issued.org_id
                  and link.from_document_id = issued.id
             ), 0),
