@@ -20,6 +20,21 @@ test("advanceSubscription steps by interval × count with month-end clamp", () =
   assert.equal(advanceSubscription("2026-07-21", "weekly", 2), "2026-08-04");
 });
 
+test("advanceSubscription pins a stored anchor day instead of drifting", () => {
+  assert.equal(advanceSubscription("2026-01-31", "monthly", 1, 31), "2026-02-28");
+  // Feb 28 reached from Jan 31 steps to Mar 31 with the anchor, Mar 28 without.
+  assert.equal(advanceSubscription("2026-02-28", "monthly", 1, 31), "2026-03-31");
+  assert.equal(advanceSubscription("2026-02-28", "monthly", 1), "2026-03-28");
+  assert.equal(advanceSubscription("2026-01-31", "quarterly", 1, 31), "2026-04-30");
+  assert.equal(advanceSubscription("2028-02-29", "annually", 1, 29), "2029-02-28");
+  for (const anchor of [0, 32, 1.5]) {
+    assert.throws(
+      () => advanceSubscription("2026-01-31", "monthly", 1, anchor),
+      /anchor day/,
+    );
+  }
+});
+
 test("monthlyRecurringRevenue normalizes each interval to a monthly figure", () => {
   assert.equal(monthlyRecurringRevenue("100", "monthly", 1, "1"), "100.0000");
   assert.equal(monthlyRecurringRevenue("100", "monthly", 1, "3"), "300.0000");
@@ -276,7 +291,7 @@ test("billOne guards EVERY billing path through subscription_period_invoices", (
   const billOne = source.indexOf("async function billOne");
   const guard = source.indexOf("const guard = advanced", billOne);
   const plainBranch = source.indexOf(
-    "advanceSubscription(billingDate, sub.interval, sub.intervalCount)",
+    "advanceSubscription(billingDate, sub.interval, sub.intervalCount, sub.anchorDay)",
     guard,
   );
   const priorCheck = source.indexOf("from subscription_period_invoices pi join documents d", guard);

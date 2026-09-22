@@ -11,6 +11,7 @@ import { add, cmp, neg, sum } from "../money/money.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { type PostingDeps } from "../ledger/posting-contracts.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
+import { advanceAnchoredMonth } from "./cadence.ts";
 import { computeLineTaxes, type TaxComponentConfig } from "../tax/tax.ts";
 import { loadTaxProfileConfig, persistLineTaxComponents } from "../tax/persist.ts";
 import { computeNextRunAt } from "../scripting/scripting.ts";
@@ -110,10 +111,14 @@ function toIso(d: Date): string {
   return value;
 }
 
-/** Advance one occurrence, clamping month-end anchors and rejecting invalid
- * configuration rather than silently substituting a different billing rule. */
+/**
+ * Advance one occurrence, pinning month-end starts to their anchor day and
+ * rejecting invalid configuration rather than silently substituting a
+ * different billing rule. Without an explicit anchor the source date's own
+ * day anchors the step (the historical behavior).
+ */
 export function advanceCadence(
-  isoDate: string, cadence: Cadence, cron?: string | null, from?: Date,
+  isoDate: string, cadence: Cadence, cron?: string | null, from?: Date, anchorDay?: number | null,
 ): string {
   try {
     const base = parseIsoDate(isoDate);
@@ -131,13 +136,15 @@ export function advanceCadence(
     if (!["monthly", "quarterly", "annually"].includes(cadence)) {
       throw new RecurringError("invalid recurring cadence");
     }
-    const day = base.getUTCDate();
-    base.setUTCDate(1);
-    base.setUTCMonth(base.getUTCMonth() + (cadence === "monthly" ? 1 : cadence === "quarterly" ? 3 : 12));
-    const last = new Date(base);
-    last.setUTCMonth(last.getUTCMonth() + 1, 0);
-    base.setUTCDate(Math.min(day, last.getUTCDate()));
-    return toIso(base);
+    // The DAY comes from the stored anchor, not the already-clamped date:
+    // Feb 28 reached from Jan 31 still steps to Mar 31, never Mar 28.
+    const anchor = anchorDay ?? base.getUTCDate();
+    return advanceAnchoredMonth(
+      base.getUTCFullYear(),
+      base.getUTCMonth() + 1,
+      cadence === "monthly" ? 1 : cadence === "quarterly" ? 3 : 12,
+      anchor,
+    );
   } catch (error) {
     if (error instanceof RecurringError) throw error;
     throw new RecurringError("invalid recurring calendar date or cadence outside the supported date range");
@@ -305,17 +312,21 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
       gen = await withOrg(s.orgId, async () => {
         const current = (await db.execute<{
           templateId: string; autoPost: boolean; isActive: boolean; nextRunOn: string;
-          cadence: Cadence; cron: string | null; endsOn: string | null;
+          cadence: Cadence; cron: string | null; endsOn: string | null; anchorDay: number;
         }>(sql`
           select template_document_id as "templateId", auto_post as "autoPost", is_active as "isActive",
-                 next_run_on::text as "nextRunOn", cadence, cron, ends_on::text as "endsOn"
+                 next_run_on::text as "nextRunOn", cadence, cron, ends_on::text as "endsOn",
+                 coalesce(anchor_day, extract(day from next_run_on)::int) as "anchorDay"
             from recurring_schedules where id = ${s.id} and org_id = ${s.orgId} for update
         `)).rows[0];
         if (!current?.isActive || current.nextRunOn !== occurrenceDate) return null;
         if (current.endsOn && occurrenceDate > current.endsOn) {
           throw new RecurringError("recurring occurrence is after the schedule end date");
         }
-        const advanced = advanceCadence(occurrenceDate, current.cadence, current.cron);
+        // Month-end starts keep their anchor day: a schedule anchored on the
+        // 31st steps Feb 28 → Mar 31, never Mar 28. Anchor-less rows fall back
+        // to the occurrence day (the historical behavior).
+        const advanced = advanceCadence(occurrenceDate, current.cadence, current.cron, undefined, current.anchorDay);
         const stillActive = !current.endsOn || advanced <= current.endsOn;
         const claimed = (await db.execute<{ id: string }>(sql`
           update recurring_schedules

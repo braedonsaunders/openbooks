@@ -14,6 +14,14 @@ test("monthly clamps a month-end anchor to shorter months", () => {
   assert.equal(advanceCadence("2026-01-15", "monthly"), "2026-02-15");
 });
 
+test("monthly pins a stored anchor day instead of drifting", () => {
+  assert.equal(advanceCadence("2026-01-31", "monthly", null, undefined, 31), "2026-02-28");
+  // Feb 28 reached from Jan 31 steps to Mar 31 with the anchor, Mar 28 without.
+  assert.equal(advanceCadence("2026-02-28", "monthly", null, undefined, 31), "2026-03-31");
+  assert.equal(advanceCadence("2026-02-28", "monthly"), "2026-03-28");
+  assert.equal(advanceCadence("2026-01-15", "monthly", null, undefined, 15), "2026-02-15");
+});
+
 test("monthly rolls the year over at December", () => {
   assert.equal(advanceCadence("2026-12-10", "monthly"), "2027-01-10");
 });

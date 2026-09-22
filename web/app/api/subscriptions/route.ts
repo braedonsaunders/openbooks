@@ -386,12 +386,16 @@ export async function POST(req: Request) {
             ? normalizeSubscriptionMoney(body.priceOverride, "price override", "nonnegative")
             : null;
         const created = await db.transaction(async (tx) => {
+          // The anchor day pins month-end starts to the start date's day, so a
+          // subscription starting Jan 31 bills Mar 31 after Feb 28, not Mar 28.
+          // startOn is a validated YYYY-MM-DD string (checked above).
+          const anchorDay = Number(startOn.slice(8, 10));
           const row = (await tx.execute<Record<string, unknown>>(sql`
             insert into subscriptions (org_id, customer_id, plan_id, quantity, price_override, start_on,
-                                       next_bill_on, current_period_start, auto_post, memo, created_by, updated_by)
+                                       next_bill_on, current_period_start, auto_post, memo, anchor_day, created_by, updated_by)
             values (${orgId}, ${body.customerId}, ${body.planId}, ${quantity},
                     ${priceOverride},
-                    ${startOn}, ${firstBillOn}, ${startOn}, ${autoPost}, ${body.memo ?? null}, ${userId}, ${userId})
+                    ${startOn}, ${firstBillOn}, ${startOn}, ${autoPost}, ${body.memo ?? null}, ${anchorDay}, ${userId}, ${userId})
             returning *
           `));
           await tx.execute(sql`
