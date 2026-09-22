@@ -143,3 +143,33 @@ test('bank-feed writes reject a syncCadence outside the stored check constraint'
     assert.equal((await feedRow(org.orgId, id)).sync_cadence, 'manual')
   } finally { identity.gate = null; await dropScratchOrg(org.orgId) }
 })
+
+test('bank-feed writes validate syncOverlapDays and store a custom overlap', { skip: !enabled }, async () => {
+  const org = await fixture()
+  try {
+    const overlapOf = async (id: string) =>
+      (await db.execute<{ overlap: number | null }>(sql`
+        select sync_overlap_days as overlap from bank_feed_connections where org_id=${org.orgId} and id=${id}`)).rows[0]!.overlap
+    // Unusable overlaps are 400s that create nothing: fractions, negatives,
+    // past the 90-day ceiling, and non-numbers.
+    for (const syncOverlapDays of [-1, 91, 1.5, '30', true]) {
+      const refused = await post({ name: 'Overlap feed', provider: 'manual', accountId: org.accounts.bank, syncOverlapDays })
+      assert.equal(refused.status, 400, `POST syncOverlapDays ${JSON.stringify(syncOverlapDays)}`)
+      assert.deepEqual(await refused.json(), { error: 'syncOverlapDays must be a whole number of days from 0 to 90' })
+    }
+    // A valid custom overlap stores; omission stores null (the sync default).
+    const created = await post({ name: 'Wide feed', provider: 'manual', accountId: org.accounts.bank, syncOverlapDays: 30 })
+    assert.equal(created.status, 201, JSON.stringify(await created.clone().json()))
+    const { id } = (await created.json()) as { id: string }
+    assert.equal(await overlapOf(id), 30)
+    // PATCH enforces the same contract, and null clears back to the default.
+    for (const syncOverlapDays of ['wide', 2.5, 200]) {
+      const refused = await patch(id, { syncOverlapDays })
+      assert.equal(refused.status, 400, `PATCH syncOverlapDays ${JSON.stringify(syncOverlapDays)}`)
+    }
+    assert.equal(await overlapOf(id), 30, 'a refused patch must not change the row')
+    const cleared = await patch(id, { syncOverlapDays: null })
+    assert.equal(cleared.status, 200, JSON.stringify(await cleared.clone().json()))
+    assert.equal(await overlapOf(id), null)
+  } finally { identity.gate = null; await dropScratchOrg(org.orgId) }
+})

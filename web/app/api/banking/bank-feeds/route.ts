@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { sealCredentials } from "@openbooks/engine/src/banking/bank-feed-providers.ts";
+import { resolveFeedSyncOverlapDays, sealCredentials } from "@openbooks/engine/src/banking/bank-feed-providers.ts";
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
 import { isUuid } from "../../../../lib/list-params";
 
@@ -29,6 +29,7 @@ export async function GET() {
   const rows = (await db.execute<Record<string, unknown>>(sql`
     select c.id, c.name, c.provider, c.account_id as "accountId", c.status,
            c.external_account_id as "externalAccountId", c.sync_cadence as "syncCadence",
+           c.sync_overlap_days as "syncOverlapDays",
            c.next_sync_at as "nextSyncAt", c.last_sync_at as "lastSyncAt", c.last_attempt_at as "lastAttemptAt",
            c.last_result as "lastResult",
            c.last_error as "lastError", c.is_active as "isActive",
@@ -53,6 +54,7 @@ export async function POST(req: Request) {
     accountId?: string;
     externalAccountId?: string | null;
     syncCadence?: string;
+    syncOverlapDays?: number | null;
     credentials?: Record<string, string> | null;
   };
 
@@ -64,6 +66,16 @@ export async function POST(req: Request) {
   }
   if (body.syncCadence !== undefined && !CADENCES.includes(body.syncCadence as (typeof CADENCES)[number])) {
     return NextResponse.json({ error: "invalid syncCadence" }, { status: 400 });
+  }
+  // The re-pull overlap recovers late-posting transactions; an unusable
+  // value is a 400, never a silently narrowed window or a CHECK-violation
+  // 500. Omission stores null, which syncs read as the default.
+  if (body.syncOverlapDays !== undefined && body.syncOverlapDays !== null) {
+    try {
+      resolveFeedSyncOverlapDays(body.syncOverlapDays);
+    } catch {
+      return NextResponse.json({ error: "syncOverlapDays must be a whole number of days from 0 to 90" }, { status: 400 });
+    }
   }
   if (typeof body.accountId !== "string" || !isUuid(body.accountId)) {
     return NextResponse.json({ error: "a bank account is required" }, { status: 400 });
@@ -93,9 +105,10 @@ export async function POST(req: Request) {
   const id = await db.transaction(async (tx) => {
     const created = (await tx.execute<Record<string, unknown>>(sql`
       insert into bank_feed_connections (org_id, name, provider, account_id, external_account_id,
-                                         sync_cadence, credentials, status, created_by, updated_by)
+                                         sync_cadence, sync_overlap_days, credentials, status, created_by, updated_by)
       values (${authz.user.orgId}, ${body.name}, ${body.provider}, ${body.accountId},
-              ${isApi ? externalAccountId || null : null}, ${cadence}, ${sealed}, ${status},
+              ${isApi ? externalAccountId || null : null}, ${cadence}, ${body.syncOverlapDays ?? null},
+              ${sealed}, ${status},
               ${authz.user.id}, ${authz.user.id})
       returning *
     `));

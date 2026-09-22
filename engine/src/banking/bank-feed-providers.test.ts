@@ -6,10 +6,13 @@ import test, { type TestContext } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { sql } from "drizzle-orm";
 import {
+  DEFAULT_FEED_SYNC_OVERLAP_DAYS,
   getBankFeedAdapter,
   plaidApiBase,
+  resolveFeedSyncOverlapDays,
   runDueBankFeeds,
   sealCredentials,
+  sinceFor,
 } from "./bank-feed-providers.ts";
 import { importStatement, BankingError } from "./banking.ts";
 import { addCalendarDays } from "../platform/business-date.ts";
@@ -620,6 +623,34 @@ test("bank-feed adapters refuse every redirect class without forwarding credenti
   }
 });
 
+test("sync overlap resolves null to the default and refuses out-of-range values", () => {
+  assert.equal(resolveFeedSyncOverlapDays(null), DEFAULT_FEED_SYNC_OVERLAP_DAYS);
+  assert.equal(resolveFeedSyncOverlapDays(undefined), DEFAULT_FEED_SYNC_OVERLAP_DAYS);
+  assert.equal(DEFAULT_FEED_SYNC_OVERLAP_DAYS, 14);
+  assert.equal(resolveFeedSyncOverlapDays(0), 0);
+  assert.equal(resolveFeedSyncOverlapDays(30), 30);
+  assert.equal(resolveFeedSyncOverlapDays(90), 90);
+  for (const bad of [-1, 91, 1.5, Number.NaN, "14", true, {}]) {
+    assert.throws(
+      () => resolveFeedSyncOverlapDays(bad),
+      /sync overlap must be a whole number of days from 0 to 90/,
+      `overlap ${JSON.stringify(bad)} must not become a window`,
+    );
+  }
+});
+
+test("sinceFor re-pulls the configured overlap, not a fixed two days", () => {
+  const watermark = new Date("2026-08-20T12:00:00Z");
+  // Late-posting transactions booking between the old 2-day edge and the new
+  // default are the defect: under the old window they were never fetched.
+  assert.equal(sinceFor(watermark, "2026-08-23"), "2026-08-06");
+  assert.equal(sinceFor(watermark, "2026-08-23", 30), "2026-07-21");
+  assert.equal(sinceFor(watermark, "2026-08-23", 0), "2026-08-20");
+  // Cold starts still pull 90 days of history regardless of the overlap.
+  assert.equal(sinceFor(null, "2026-08-23"), "2026-05-25");
+  assert.equal(sinceFor(null, "2026-08-23", 30), "2026-05-25");
+});
+
 test("Plaid refuses a blank account mapping before contacting the provider", async (t) => {
   const originalFetch = globalThis.fetch;
   let requests = 0;
@@ -763,7 +794,7 @@ test(
       assert.equal(asWatermarkMs(row.last_sync_at), watermarkMs);
       assert.equal(row.status, "error");
 
-      // Recovery: the retry asks from the prior successful cursor (two-day
+      // Recovery: the retry asks from the prior successful cursor (default
       // overlap over it) and imports the missed transaction exactly once.
       await makeDue(f.connectionId);
       script.length = 0;
@@ -965,14 +996,63 @@ test(
       assert.equal(outcome.error, undefined);
       assert.deepEqual(
         windows[windows.length - 1],
-        { start_date: addCalendarDays(agedSuccessDay, -2), end_date: today },
-        "the retry window must come from the success watermark (two-day overlap), not from any attempt",
+        { start_date: addCalendarDays(agedSuccessDay, -DEFAULT_FEED_SYNC_OVERLAP_DAYS), end_date: today },
+        "the retry window must come from the success watermark (default overlap), not from any attempt",
       );
       assert.equal(outcome.imported, 1);
 
       row = await loadAttemptBookkeeping(f.connectionId);
       assert.ok(asWatermarkMs(row.last_sync_at)! >= attemptMs1!, "recovery completes: success watermark lives again");
       assert.ok(asWatermarkMs(row.last_attempt_at)! >= attemptMs3!);
+    } finally {
+      await dropScratchOrgReporting(f.orgId);
+    }
+  },
+);
+
+test(
+  "a per-connection overlap wider than default recovers late-posting transactions",
+  { skip: !DB },
+  async (t) => {
+    const f = await seedFeedFixture();
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const script: ScriptedResponse[] = [];
+      const windows = scriptProvider(t, script);
+
+      // T0: cold start imports history and advances the watermark to now.
+      script.push(plaidPage([feedTxn("feed-baseline", addCalendarDays(today, -60), "-40.00")]));
+      let outcome = myOutcome(await runDueBankFeeds(), f.connectionId);
+      assert.equal(outcome.error, undefined);
+      assert.equal(outcome.imported, 1);
+      const watermarkDay = asInstantDay(new Date(asWatermarkMs((await loadConnection(f.connectionId)).last_sync_at)!));
+
+      // The connection opts into a 30-day overlap: a transaction booking 20
+      // days behind the watermark — permanently invisible under the old
+      // fixed 2-day window, and still outside the 14-day default — must be
+      // fetched and imported exactly once.
+      await db.execute(sql`
+        update bank_feed_connections set sync_overlap_days = 30 where id = ${f.connectionId}
+      `);
+      await makeDue(f.connectionId);
+      script.length = 0;
+      const latePostedOn = addCalendarDays(watermarkDay, -20);
+      script.push(plaidPage([feedTxn("feed-late-poster", latePostedOn, "-77.00")]));
+      const before = windows.length;
+      outcome = myOutcome(await runDueBankFeeds(), f.connectionId);
+      assert.equal(outcome.error, undefined);
+      assert.equal(outcome.imported, 1);
+      assert.deepEqual(
+        windows[before],
+        { start_date: addCalendarDays(watermarkDay, -30), end_date: today },
+        "the pull window must honor the connection's configured overlap",
+      );
+
+      const lines = await loadStatementLines(f.orgId, f.accountId);
+      assert.deepEqual(
+        lines.map((l) => l.bank_transaction_id),
+        ["feed-baseline", "feed-late-poster"],
+      );
     } finally {
       await dropScratchOrgReporting(f.orgId);
     }
