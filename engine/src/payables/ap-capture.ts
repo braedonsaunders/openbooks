@@ -1,4 +1,6 @@
+import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { add, cmp, fromUnits, sum, toUnits } from "../money/money.ts";
+import { decimalNullCause, decimalNullRefusal } from "../money/decimal-refusal.ts";
 
 export const AZURE_DOCUMENT_INTELLIGENCE_API_VERSION = "2024-11-30";
 export const DEFAULT_INVOICE_MODEL = "prebuilt-invoice";
@@ -61,6 +63,12 @@ export type CaptureIssue = {
   lineIndex?: number;
   expected?: string;
   actual?: string;
+  /**
+   * The operator-facing refusal naming the remedy, when the code alone does
+   * not carry it. The review drawer renders this verbatim when present and
+   * falls back to its translated code text otherwise.
+   */
+  message?: string;
 };
 
 export function validatePurchaseOrderQuantities(input: {
@@ -146,8 +154,16 @@ export function normalizeCapturedDecimal(value: unknown): string | null {
     const thousands = decimal === "," ? /\./g : /,/g;
     raw = raw.replace(thousands, "").replace(decimal, ".");
   } else if (lastComma >= 0) {
-    const digitsAfter = raw.length - lastComma - 1;
-    raw = digitsAfter > 0 && digitsAfter <= 4 ? raw.replace(/,/g, ".") : raw.replace(/,/g, "");
+    // A lone comma is two readings, never a guess: let the shared decimal
+    // classifier decide. Ambiguous text ("1,234") is refused by name, the
+    // decimal-comma reading ("12,34") keeps its dotted value, and pure
+    // grouping ("1,234,567") strips. A typed provider number never reaches
+    // this branch — String(number) has no comma — so nothing canonical is lost.
+    const cause = decimalNullCause(`${negative ? "-" : ""}${raw}`);
+    if (cause.cause === "ambiguous-comma") return null;
+    if (cause.cause === "decimal-comma") raw = raw.replace(/,/g, ".");
+    else if (cause.cause === "separator") raw = raw.replace(/,/g, "");
+    else return null;
   } else if ((raw.match(/\./g) ?? []).length > 1) {
     const parts = raw.split(".");
     const tail = parts.pop()!;
@@ -157,10 +173,26 @@ export function normalizeCapturedDecimal(value: unknown): string | null {
   return fromUnits(toUnits(signed));
 }
 
-function moneyValue(field: AzureField | undefined): string | null {
-  if (!field) return null;
-  return normalizeCapturedDecimal(field.valueCurrency?.amount ?? field.valueNumber ?? field.content);
+/**
+ * A captured money reading with its provenance split: `canonical` is ledger
+ * money, `supplied` is raw OCR text the parser refused. Typed numeric fields
+ * do not carry comma-separator ambiguity; raw supplied text must survive
+ * refusal so every boundary can name it.
+ */
+function capturedMoney(field: AzureField | undefined): { canonical: string | null; supplied: string | null } {
+  if (!field) return { canonical: null, supplied: null };
+  const typed = field.valueCurrency?.amount ?? field.valueNumber;
+  if (typeof typed === "number") {
+    if (!Number.isFinite(typed)) return { canonical: null, supplied: null };
+    return { canonical: normalizeCapturedDecimal(typed), supplied: null };
+  }
+  const text = typeof typed === "string" ? typed : field.content;
+  if (typeof text === "number") return { canonical: normalizeCapturedDecimal(text), supplied: null };
+  if (typeof text !== "string" || text.trim() === "") return { canonical: null, supplied: null };
+  const canonical = normalizeCapturedDecimal(text);
+  return canonical === null ? { canonical: null, supplied: text.trim() } : { canonical, supplied: null };
 }
+
 
 function evidenceFor(fieldKey: string, field: AzureField, normalizedValue: unknown, lineIndex: number | null): CaptureEvidence {
   const region = firstRegion(field);
@@ -200,25 +232,52 @@ function numeric19_4(value: string): boolean {
   return units >= -MAX_NUMERIC_19_4_UNITS && units <= MAX_NUMERIC_19_4_UNITS;
 }
 
+/** Ledger-canonical money or quantity text, the only shape math may read. */
+function isCanonicalMoney(value: string): boolean {
+  return canonicalDecimal(value, 4) !== null;
+}
+
+function invalidMoneyIssue(fieldLabel: string, noun: string, raw: string, extra: Partial<CaptureIssue> = {}): CaptureIssue {
+  return {
+    code: "invalid_amount",
+    severity: "blocking",
+    actual: raw,
+    message: decimalNullRefusal(fieldLabel, noun, raw, 4),
+    ...extra,
+  };
+}
+
 function normalizeLine(item: AzureField, index: number, evidence: CaptureEvidence[]): CaptureLine | null {
   const fields = item.valueObject ?? {};
   const description = textValue(fields.Description) ?? textValue(fields.ItemDescription) ?? "";
   const productCode = textValue(fields.ProductCode);
-  const quantity = moneyValue(fields.Quantity) ?? "1.0000";
-  const unitPrice = moneyValue(fields.UnitPrice);
-  const extractedAmount = moneyValue(fields.Amount);
-  const amount = extractedAmount ?? (unitPrice ? exactProduct(quantity, unitPrice) : null);
-  if (!description && !productCode && amount === null) return null;
-  const canonicalPrice = unitPrice ?? (cmp(quantity, "0") === 0 ? "0.0000" : amount ?? "0.0000");
+  const quantity = capturedMoney(fields.Quantity);
+  const unitPrice = capturedMoney(fields.UnitPrice);
+  const extractedAmount = capturedMoney(fields.Amount);
+  const tax = capturedMoney(fields.Tax);
+  // Refused OCR text is preserved verbatim so every boundary re-derives the
+  // named refusal from the stored capture; only truly absent fields take the
+  // legacy defaults. Derivations run on canonical inputs alone.
+  const quantityValue = quantity.canonical ?? quantity.supplied ?? "1.0000";
+  const unitPriceValue = unitPrice.canonical ?? unitPrice.supplied;
+  // Absent quantity keeps the legacy "1.0000" derivation input; refused text
+  // derives nothing.
+  const quantityForMath = quantity.canonical ?? (quantity.supplied === null ? "1.0000" : null);
+  const amountValue = extractedAmount.canonical ?? extractedAmount.supplied
+    ?? (unitPrice.canonical && quantityForMath ? exactProduct(quantityForMath, unitPrice.canonical) : null);
+  if (!description && !productCode && amountValue === null) return null;
+  const canonicalPrice = unitPriceValue
+    ?? (quantityForMath !== null && cmp(quantityForMath, "0") === 0 ? "0.0000" : amountValue ?? "0.0000");
+  const taxValue = tax.canonical ?? tax.supplied ?? "0.0000";
 
   const mapped: Array<[string, AzureField | undefined, unknown]> = [
     ["lines.description", fields.Description ?? fields.ItemDescription, description],
     ["lines.productCode", fields.ProductCode, productCode],
-    ["lines.quantity", fields.Quantity, quantity],
+    ["lines.quantity", fields.Quantity, quantityValue],
     ["lines.unit", fields.Unit, textValue(fields.Unit)],
     ["lines.unitPrice", fields.UnitPrice, canonicalPrice],
-    ["lines.amount", fields.Amount, amount ?? "0.0000"],
-    ["lines.taxAmount", fields.Tax, moneyValue(fields.Tax) ?? "0.0000"],
+    ["lines.amount", fields.Amount, amountValue ?? "0.0000"],
+    ["lines.taxAmount", fields.Tax, taxValue],
   ];
   for (const [key, field, value] of mapped) if (field) evidence.push(evidenceFor(key, field, value, index));
 
@@ -229,11 +288,11 @@ function normalizeLine(item: AzureField, index: number, evidence: CaptureEvidenc
   return {
     description,
     productCode,
-    quantity,
+    quantity: quantityValue,
     unit: textValue(fields.Unit),
     unitPrice: canonicalPrice,
-    amount: amount ?? "0.0000",
-    taxAmount: moneyValue(fields.Tax) ?? "0.0000",
+    amount: amountValue ?? "0.0000",
+    taxAmount: taxValue,
     confidence: average,
   };
 }
@@ -269,7 +328,11 @@ export function normalizeAzureInvoice(raw: AzureAnalyzeResponse): {
   for (const [key, spec] of Object.entries(HEADER_FIELDS)) {
     const sourceName = spec.names.find((name) => fields[name]);
     const field = sourceName ? fields[sourceName] : undefined;
-    const value = spec.kind === "money" ? moneyValue(field) : textValue(field);
+    // Refused header money is preserved as supplied raw text (never nulled
+    // into a silent default) so validation names the refusal at every
+    // boundary; truly absent money stays null and takes the required-field path.
+    const reading = spec.kind === "money" ? capturedMoney(field) : null;
+    const value = reading ? (reading.canonical ?? reading.supplied) : textValue(field);
     header[key] = value;
     if (field) evidence.push(evidenceFor(key, field, value, null));
   }
@@ -316,36 +379,60 @@ export function validateNormalizedCapture(
   if (capture.currency && !/^[A-Z]{3}$/.test(capture.currency)) {
     issues.push({ code: "invalid_currency", severity: "blocking", field: "currency" });
   }
+  // Refused OCR text is preserved verbatim in the capture, so validation must
+  // name it as a blocking refusal — never throw on it and never read it as math.
   for (const [field, value] of [["subtotal", capture.subtotal], ["taxTotal", capture.taxTotal], ["total", capture.total]] as const) {
-    if (value && !numeric19_4(value)) issues.push({ code: "amount_out_of_range", severity: "blocking", field });
+    if (!value) continue;
+    if (!isCanonicalMoney(value)) issues.push(invalidMoneyIssue(field, "an amount", value, { field }));
+    else if (!numeric19_4(value)) issues.push({ code: "amount_out_of_range", severity: "blocking", field });
   }
   if (capture.lines.length === 0) issues.push({ code: "missing_lines", severity: "blocking", field: "lines" });
   capture.lines.forEach((line, lineIndex) => {
     if (!line.description && !line.productCode) {
       issues.push({ code: "missing_line_description", severity: "warning", lineIndex });
     }
-    if ([line.quantity, line.unitPrice, line.amount, line.taxAmount].some((value) => !numeric19_4(value))) {
-      issues.push({ code: "amount_out_of_range", severity: "blocking", lineIndex });
+    const entries = [
+      ["quantity", line.quantity, "a quantity"],
+      ["unitPrice", line.unitPrice, "an amount"],
+      ["amount", line.amount, "an amount"],
+      ["taxAmount", line.taxAmount, "an amount"],
+    ] as const;
+    let lineMoneyValid = true;
+    for (const [key, value, noun] of entries) {
+      if (!isCanonicalMoney(value)) {
+        issues.push(invalidMoneyIssue(`line ${lineIndex + 1} ${key}`, noun, value, { field: key, lineIndex }));
+        lineMoneyValid = false;
+      } else if (!numeric19_4(value)) {
+        issues.push({ code: "amount_out_of_range", severity: "blocking", lineIndex });
+      }
     }
-    const expected = exactProduct(line.quantity, line.unitPrice);
-    if (cmp(expected, line.amount) !== 0) {
-      issues.push({ code: "line_math_mismatch", severity: "blocking", lineIndex, expected, actual: line.amount });
+    if (lineMoneyValid) {
+      const expected = exactProduct(line.quantity, line.unitPrice);
+      if (cmp(expected, line.amount) !== 0) {
+        issues.push({ code: "line_math_mismatch", severity: "blocking", lineIndex, expected, actual: line.amount });
+      }
     }
     if (line.confidence && cmp(line.confidence, confidenceThreshold) < 0) {
       issues.push({ code: "low_confidence", severity: "warning", lineIndex });
     }
   });
-  const lineSubtotal = sum(capture.lines.map((line) => line.amount));
-  if (capture.subtotal && cmp(capture.subtotal, lineSubtotal) !== 0) {
+  // Cross-totals only run when every input they read is canonical; refused
+  // text already has its own blocking refusal above.
+  const amountsCanonical = capture.lines.every((line) => isCanonicalMoney(line.amount));
+  const taxesCanonical = capture.lines.every((line) => isCanonicalMoney(line.taxAmount));
+  const lineSubtotal = amountsCanonical ? sum(capture.lines.map((line) => line.amount)) : null;
+  const lineTax = taxesCanonical ? sum(capture.lines.map((line) => line.taxAmount)) : null;
+  if (capture.subtotal && isCanonicalMoney(capture.subtotal) && lineSubtotal !== null
+    && cmp(capture.subtotal, lineSubtotal) !== 0) {
     issues.push({ code: "subtotal_mismatch", severity: "blocking", expected: lineSubtotal, actual: capture.subtotal });
   }
-  const subtotal = capture.subtotal ?? lineSubtotal;
-  const tax = capture.taxTotal ?? sum(capture.lines.map((line) => line.taxAmount));
-  const lineTax = sum(capture.lines.map((line) => line.taxAmount));
-  if (capture.taxTotal && cmp(capture.taxTotal, lineTax) !== 0) {
+  const subtotal = capture.subtotal && isCanonicalMoney(capture.subtotal) ? capture.subtotal : lineSubtotal;
+  const tax = capture.taxTotal && isCanonicalMoney(capture.taxTotal) ? capture.taxTotal : lineTax;
+  if (capture.taxTotal && isCanonicalMoney(capture.taxTotal) && lineTax !== null
+    && cmp(capture.taxTotal, lineTax) !== 0) {
     issues.push({ code: "line_tax_mismatch", severity: "blocking", expected: lineTax, actual: capture.taxTotal });
   }
-  if (capture.total) {
+  if (capture.total && isCanonicalMoney(capture.total) && subtotal !== null && tax !== null) {
     const expected = add(subtotal, tax);
     if (cmp(expected, capture.total) !== 0) {
       issues.push({ code: "total_mismatch", severity: "blocking", expected, actual: capture.total });
