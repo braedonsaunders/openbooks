@@ -1,7 +1,8 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../../platform/db.ts";
 import { businessToday } from "../../platform/business-date.ts";
-import { laborCostingSettings, resolveWage } from "../../projects/labor-costing.ts";
+import { laborFxQuote, resolveWage } from "../../projects/labor-costing.ts";
+import { mul, mulRate } from "../../money/money.ts";
 import {
   loadOwnEmploymentIds,
   requireHrmCompensationManage,
@@ -17,16 +18,23 @@ import { requireActorId, requireId, requireOrgId, requireReason } from "../recru
  * worker information requests.
  *
  * computeGapSnapshot reads EFFECTIVE RATES from payroll/wage truth
- * (through the wage rate service, never from bands), groups by level
- * (the equal-value category), and computes mean and median gaps between
- * the two org-declared comparison groups — a declared party custom-field
- * key from the org's custom fields, never a hardcoded gender field
- * (refuses by name when the attribute is not configured). Variable pay
- * and quartile proportions complete the seven Article 9 metrics; the
- * "unexplained" gap comes from ordinary least squares on tenure, level
- * rank, hours basis and employer subsidiary. Categories whose
- * unexplained gap meets the org's declared threshold (default 5%,
- * configurable) flag joint assessment due. Snapshots are frozen rows.
+ * (through the wage rate service, never from bands), annualises each
+ * from its own versioned wage row (year wages verbatim, hour wages by
+ * the row's own annual-hours — never the org's current annualHours),
+ * converts every annual to the org reporting currency at the as-of
+ * laborFxQuote (refusing by name when a quote is missing, never 1:1),
+ * groups by level (the equal-value category), and computes mean and
+ * median gaps between the two org-declared comparison groups — a
+ * declared party custom-field key from the org's custom fields, never
+ * a hardcoded gender field (refuses by name when the attribute is not
+ * configured). Variable pay and quartile proportions complete the
+ * seven Article 9 metrics; the "unexplained" gap comes from ordinary
+ * least squares on tenure, level rank, hours basis and employer
+ * subsidiary. Categories whose unexplained gap meets the org's
+ * declared threshold (default 5%, configurable) flag joint assessment
+ * due. Snapshots are frozen rows carrying the reporting currency and
+ * per-currency quote evidence, so later FX or config edits cannot
+ * reinterpret them.
  *
  * Pay-information requests: a worker asks for their own category
  * averages (hrm.self.request); fulfilment copies the averages from the
@@ -46,6 +54,14 @@ export interface GapCategory {
   readonly jointAssessmentDue: boolean;
 }
 
+/** Frozen FX evidence for one native currency (the oriented laborFxQuote factor, used once). */
+export interface GapFxEvidence {
+  readonly rate: string;
+  readonly asOf: string;
+  readonly source: string;
+  readonly inverse: boolean;
+}
+
 export interface GapMetrics {
   readonly comparisonAttributeKey: string;
   readonly thresholdPct: number;
@@ -57,6 +73,10 @@ export interface GapMetrics {
   readonly quartileProportions: ReadonlyArray<{ quartile: string; shareA: number; shareB: number }>;
   readonly headcountA: number;
   readonly headcountB: number;
+  /** Org reporting currency every rate was converted to. Null only for rows frozen before conversion existed. */
+  readonly reportingCurrency: string | null;
+  /** Oriented conversion factor per native currency (reporting currency needs none, so it is absent). */
+  readonly fxEvidence: Readonly<Record<string, GapFxEvidence>>;
 }
 
 /** Stored snake_case metrics document (the 0222 metrics shape CHECK pins comparison_attribute_key and threshold_pct). */
@@ -76,11 +96,33 @@ function toStoredMetrics(metrics: GapMetrics): Record<string, unknown> {
     })),
     headcount_a: metrics.headcountA,
     headcount_b: metrics.headcountB,
+    reporting_currency: metrics.reportingCurrency,
+    fx_evidence: Object.fromEntries(
+      Object.entries(metrics.fxEvidence).map(([currency, q]) => [
+        currency,
+        { rate: q.rate, as_of: q.asOf, source: q.source, inverse: q.inverse },
+      ]),
+    ),
   };
 }
 
 function fromStoredMetrics(stored: Record<string, unknown>): GapMetrics {
   const s = stored as Record<string, unknown>;
+  const fxEvidence: Record<string, GapFxEvidence> = {};
+  const rawFx = s.fx_evidence;
+  if (rawFx !== null && typeof rawFx === "object" && !Array.isArray(rawFx)) {
+    for (const [currency, q] of Object.entries(rawFx as Record<string, unknown>)) {
+      const e = q as Record<string, unknown>;
+      if (e !== null && typeof e === "object") {
+        fxEvidence[currency] = {
+          rate: String(e.rate),
+          asOf: String(e.as_of),
+          source: String(e.source),
+          inverse: e.inverse === true,
+        };
+      }
+    }
+  }
   return {
     comparisonAttributeKey: s.comparison_attribute_key as string,
     thresholdPct: s.threshold_pct as number,
@@ -96,6 +138,13 @@ function fromStoredMetrics(stored: Record<string, unknown>): GapMetrics {
     })),
     headcountA: s.headcount_a as number,
     headcountB: s.headcount_b as number,
+    // Rows frozen before conversion carry neither key: they measured mixed
+    // native currencies side by side, so no reporting currency is claimed.
+    reportingCurrency:
+      typeof s.reporting_currency === "string" && s.reporting_currency.length > 0
+        ? (s.reporting_currency as string)
+        : null,
+    fxEvidence,
   };
 }
 
@@ -225,8 +274,20 @@ export async function computeGapSnapshot(query: {
          and (aav.effective_to is null or aav.effective_to >= ${query.asOf}::date)
          and aav.recorded_until is null
        where e.org_id = ${orgId} and ev.status in ('active', 'on_leave')`)).rows;
-    const costing = await laborCostingSettings(orgId);
-    const annualHours = Number(costing.annualHours) > 0 ? Number(costing.annualHours) : 2080;
+    // Every rate is converted to the org's reporting currency before it
+    // enters any mean, median, quartile or regression — native amounts in
+    // different currencies never sit side by side.
+    const orgRow = (await db.execute<{ base_currency: string | null }>(sql`
+      select base_currency from orgs where id = ${orgId}`)).rows[0];
+    const reportingCurrency = orgRow?.base_currency?.trim() || null;
+    if (!reportingCurrency) {
+      throw new CompensationError(
+        "REFUSED",
+        "no reporting currency is set — set the org base currency before measuring gaps, so every wage converts to one declared basis",
+      );
+    }
+    const quoteCache = new Map<string, { rate: string; asOf: string; source: string; inverse: boolean } | null>();
+    const fxEvidence: Record<string, GapFxEvidence> = {};
     const priced: PricedWorker[] = [];
     for (const employment of employments) {
       if (!employment.position_id) continue;
@@ -255,6 +316,66 @@ export async function computeGapSnapshot(query: {
       if (!wage) continue;
       const group = await comparisonGroupFor(orgId, attributeKey, employment.worker_party_id);
       if (group !== query.groupA && group !== query.groupB) continue;
+      // Native annualization from the versioned wage row itself — a year
+      // wage already IS its annual (used verbatim, never divided and
+      // re-multiplied), an hour wage annualises with the row's own
+      // annual-hours. The org's current annualHours never enters: it is
+      // config, and config edits must not reinterpret a worker's annual.
+      const rateRow = (await db.execute<{ rate: string; basis: string; annual_hours: string }>(sql`
+        select rate::text as rate, basis, annual_hours::text as annual_hours
+          from labor_cost_rates where org_id = ${orgId} and id = ${wage.rateId}`)).rows[0];
+      if (!rateRow) {
+        throw new CompensationError(
+          "STALE_REVISION",
+          "a wage rate moved while the snapshot was computed — rerun the snapshot; nothing was saved",
+        );
+      }
+      let nativeAnnual: string;
+      if (rateRow.basis === "year") {
+        nativeAnnual = rateRow.rate;
+      } else if (rateRow.basis === "hour") {
+        nativeAnnual = mul(rateRow.rate, rateRow.annual_hours);
+      } else {
+        throw new CompensationError(
+          "REFUSED",
+          `wage basis ${JSON.stringify(rateRow.basis)} is not hour or year — correct the labor cost rate before measuring gaps`,
+        );
+      }
+      const nativeHours = Number(rateRow.annual_hours);
+      if (!Number.isFinite(nativeHours) || !(nativeHours > 0)) {
+        throw new CompensationError(
+          "REFUSED",
+          "a wage annual-hours is not a positive finite number — correct the labor cost rate before measuring gaps",
+        );
+      }
+      // Convert to the reporting currency with the as-of spot quote,
+      // oriented once. Same-currency needs no quote; a missing quote
+      // refuses by name — never 1:1, never omitted.
+      let convertedAnnual: string;
+      if (wage.currency === reportingCurrency) {
+        convertedAnnual = nativeAnnual;
+      } else {
+        let quote = quoteCache.has(wage.currency) ? quoteCache.get(wage.currency)! : undefined;
+        if (quote === undefined) {
+          quote = await laborFxQuote(orgId, wage.currency, reportingCurrency, query.asOf);
+          quoteCache.set(wage.currency, quote);
+        }
+        if (!quote) {
+          throw new CompensationError(
+            "REFUSED",
+            `cannot measure: no spot rate for ${wage.currency}→${reportingCurrency} on or before ${query.asOf} — add an FX spot rate covering the snapshot date, then compute the snapshot again; unconfigured currencies never convert at 1:1`,
+          );
+        }
+        convertedAnnual = mulRate(nativeAnnual, quote.rate);
+        fxEvidence[wage.currency] = { rate: quote.rate, asOf: quote.asOf, source: quote.source, inverse: quote.inverse };
+      }
+      const annualRate = Number(convertedAnnual);
+      if (!Number.isFinite(annualRate)) {
+        throw new CompensationError(
+          "REFUSED",
+          `the converted annual rate ${JSON.stringify(convertedAnnual)} ${reportingCurrency} is not finite — refuse the amount, never coerce it`,
+        );
+      }
       const started = employment.started_on === null ? query.asOf : String(employment.started_on).slice(0, 10);
       const tenureYears = Math.max(
         0,
@@ -267,11 +388,11 @@ export async function computeGapSnapshot(query: {
         levelCode: level.code,
         levelRank: level.rank,
         familyId: level.family_id,
-        annualRate: Number(wage.wage) * annualHours,
-        currency: wage.currency,
+        annualRate,
+        currency: reportingCurrency,
         group,
         tenureYears,
-        hoursBasis: annualHours,
+        hoursBasis: nativeHours,
         employerSubsidiaryId: employment.employer_subsidiary_id,
       });
     }
@@ -373,6 +494,8 @@ export async function computeGapSnapshot(query: {
       quartileProportions,
       headcountA: inA.length,
       headcountB: inB.length,
+      reportingCurrency,
+      fxEvidence,
     };
     const inserted = (await db.execute<{ id: string; generated_at: string }>(sql`
       insert into hrm_pay_gap_snapshots (org_id, as_of, scope, metrics, categories, generated_by, created_by, updated_by)
