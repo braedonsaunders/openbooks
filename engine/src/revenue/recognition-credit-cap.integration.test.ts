@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { toUnits } from "../money/money.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { runRevenueRecognition } from "./recognition.ts";
 import {
@@ -143,6 +144,7 @@ async function postAndApplyCredit(
   documentNumber: string,
   amount: string,
   debitAccountId: string,
+  appliedAmount = amount,
 ): Promise<string> {
   const creditId = randomUUID();
   await db.execute(sql`
@@ -218,8 +220,8 @@ async function postAndApplyCredit(
        target_transaction_amount, target_transaction_currency,
        settlement_rate, settlement_rate_source, settlement_rate_reference,
        created_by, updated_by)
-    values (${org.orgId}, ${fromLine}, ${toLine}, ${amount}, ${org.date},
-       ${amount}, ${amount}, 'CAD', ${amount}, 'CAD',
+    values (${org.orgId}, ${fromLine}, ${toLine}, ${appliedAmount}, ${org.date},
+       ${appliedAmount}, ${appliedAmount}, 'CAD', ${appliedAmount}, 'CAD',
        '1', 'same_currency', 'REVENUE-CREDIT-CAP-TEST', ${adminId}, ${adminId})
   `);
   return creditId;
@@ -364,3 +366,55 @@ test('credits follow prospective reallocation into an added promise rather than 
   const after=await runRevenueRecognition(org.orgId,'2027-06-30',actors.adminId);assert.equal(after.posted,0);assert.equal(await glBalance(org.orgId,org.accounts.recognized),'-300.0000');assert.equal(await glBalance(org.orgId,org.accounts.deferred),'0.0000');
  } finally {await dropScratchOrg(org.orgId)}
 });
+
+for (const scenario of [
+  { title: "a full-remainder credit", applied: "900", earned: "300.0000", additional: "0.0000", mirror: false },
+  { title: "a partial application", applied: "300", earned: "900.0000", additional: "1200.0000", mirror: false },
+  { title: "one credit with a secondary GL representation", applied: "300", earned: "900.0000", additional: "1200.0000", mirror: true },
+]) {
+  test(`${scenario.title} caps every recognition book using one settlement source`, { skip: !DB }, async () => {
+    const org = await createScratchOrg();
+    try {
+      const actors = await seedFlowActors(org.orgId);
+      const secondBook = randomUUID();
+      await db.execute(sql`insert into accounting_books (id,org_id,code,name,is_primary,is_active,posts_gl)
+        values (${secondBook},${org.orgId},'TAX','Tax book',false,true,true)`);
+      await seedRecognitionTermPeriods(org);
+      const invoiceId = await postInvoice(org, actors.adminId, "INV-BOOK-CREDIT");
+      const first = await runRevenueRecognition(org.orgId, "2026-09-30", actors.adminId);
+      assert.equal(first.posted, 6, "each book recognizes its first three periods");
+      const creditId = await postAndApplyCredit(org, actors.adminId, invoiceId,
+        "CM-BOOK-CREDIT", "900", org.accounts.deferred, scenario.applied);
+      if (scenario.mirror) {
+        // A second GL representation must not become a second commercial credit.
+        await db.transaction(async tx => {
+          const mirrorId = randomUUID();
+          await tx.execute(sql`insert into journal_entries
+            (id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin,source_document_id,created_by)
+            values (${mirrorId},${org.orgId},${secondBook},${org.subsidiaryId},${`CM-TAX-${mirrorId}`},
+              ${org.date},${org.periodId},'draft','manual',${creditId},${actors.adminId})`);
+          await tx.execute(sql`insert into journal_lines
+            (org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,party_id)
+            select l.org_id,${mirrorId},l.line_number,l.account_id,l.subsidiary_id,l.amount,l.currency,l.txn_amount,l.fx_rate,l.party_id
+            from journal_lines l join documents d on d.posted_entry_id=l.entry_id and d.org_id=l.org_id
+            where d.id=${creditId} and d.org_id=${org.orgId}`);
+          await tx.execute(sql`update journal_entries set status='posted',posted_by=${actors.adminId}
+            where id=${mirrorId} and org_id=${org.orgId}`);
+        });
+      }
+      const after = await runRevenueRecognition(org.orgId, "2027-06-30", actors.adminId);
+      assert.equal(toUnits(after.totalAmount), toUnits(scenario.additional));
+      const balances = (await db.execute<{ book_id: string; amount: string }>(sql`
+        select e.book_id,sum(l.amount)::text as amount from journal_lines l
+        join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id
+        where l.org_id=${org.orgId} and l.account_id=${org.accounts.recognized}
+          and e.status in ('posted','reversed') group by e.book_id`)).rows;
+      assert.deepEqual(new Set(balances.map(r => r.book_id)), new Set([org.bookId, secondBook]));
+      for (const row of balances) assert.equal(row.amount, `-${scenario.earned}`, `earned balance in book ${row.book_id}`);
+      const replay = await runRevenueRecognition(org.orgId, "2027-06-30", actors.adminId);
+      assert.equal(replay.posted, 0, "held plans cannot release additional revenue on replay");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  });
+}

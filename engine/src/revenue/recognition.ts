@@ -1431,8 +1431,8 @@ export interface RunRecognitionResult {
  *   entries never match because only the document's own posted entry counts.
  *
  * Obligations with no source invoice (project percent-complete) correlate to
- * nothing and always report zero credits. Scoped per book so multi-book plans
- * behave exactly as before when no credits exist.
+ * nothing and always report zero credits. Recognized amounts and amendment
+ * allocations stay book-specific; the invoice's settled credits are shared.
  */
 export async function recognitionUnearnedRemaining(
  tx:SqlExecutor,input:{orgId:string;obligationId:string;bookId:string;deferredAccountId:string},
