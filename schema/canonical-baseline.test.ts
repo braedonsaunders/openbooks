@@ -483,6 +483,11 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // the table; this migration carries that delta idempotently.
     "0249_timesheet_week_lifecycle.sql",
     "0250_employee_pay_component_overlap_guard.sql",
+    // The pay-link bearer token was the only one of six token types stored
+    // plaintext; this adds the hash lookup + sealed display columns (the
+    // seal backfill for pre-existing rows runs app-side in bootstrap, where
+    // the data key lives).
+    "0251_payment_link_token_at_rest.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),

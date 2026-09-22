@@ -18,6 +18,7 @@ import { createHash, randomBytes, scryptSync } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { sealSecret } from "../engine/src/platform/secrets.ts";
 import { sql } from "drizzle-orm";
 import pg from "pg";
 import {
@@ -1408,7 +1409,45 @@ async function migrate(): Promise<void> {
     const content = readFileSync(join(migrationsDir, "generated", f), "utf8");
     await applyTracked("migration", filename, content);
   }
+  await sealLegacyPaymentLinkTokens();
   await applyRowLevelSecurity();
+}
+
+/**
+ * 0251 stores the pay-link bearer token hashed (lookup) and sealed
+ * (display), but the seal half cannot run in SQL — the data key never
+ * enters a migration. This step, in the same bootstrap invocation that
+ * applies 0251, seals each remaining plaintext token and then NULLs the
+ * column, so no window exists where a link is undisplayable or a raw
+ * bearer token persists. Idempotent: rows already sealed (or created by
+ * the engine, which writes hash+sealed from day one) are untouched.
+ */
+async function sealLegacyPaymentLinkTokens(): Promise<void> {
+  const legacy = await db.execute<{ id: string; token: string }>(sql`
+    select id, token from payment_links
+     where token is not null and token_sealed is null
+     order by id
+  `);
+  if (legacy.rows.length === 0) return;
+  console.log(`[bootstrap] sealing ${legacy.rows.length} legacy payment link token(s) at rest`);
+  for (const row of legacy.rows) {
+    await db.execute(sql`
+      update payment_links
+         set token_sealed = ${sealSecret(row.token)}, token = null
+       where id = ${row.id} and token = ${row.token}
+    `);
+  }
+  // Fail closed: a row with neither the seal nor the plaintext can neither
+  // resolve nor display — refuse to proceed past that state.
+  const unresolved = await db.execute<{ n: string }>(sql`
+    select count(*)::text as n from payment_links
+     where token is null and token_sealed is null
+  `);
+  if (Number(unresolved.rows[0]?.n ?? 0) > 0) {
+    throw new Error(
+      "[bootstrap] payment_links has rows with neither a sealed token nor a plaintext one; refusing to continue",
+    );
+  }
 }
 
 /**

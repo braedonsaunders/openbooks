@@ -1,9 +1,9 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor, withBypassContext, withOrg } from "../platform/db.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import { add, cmp, fromUnits, mulPercent, roundDiv, toUnits } from "../money/money.ts";
-import { sealJson, unsealJson } from "../platform/secrets.ts";
+import { sealJson, sealSecret, unsealJson, unsealSecret } from "../platform/secrets.ts";
 import {
   ATTR_KIND,
   ATTR_ORG_ID,
@@ -1053,15 +1053,21 @@ export type PaymentLinkView = {
 };
 
 export async function listPaymentLinks(orgId: string, documentId: string): Promise<PaymentLinkView[]> {
-  const r = (await db.execute<PaymentLinkView>(sql`
-    select id, token, document_id as "documentId", provider, amount, surcharge_amount as "surchargeAmount",
+  const r = (await db.execute<PaymentLinkView & { token_sealed: string | null; token: string | null }>(sql`
+    select id, token, token_sealed, document_id as "documentId", provider, amount, surcharge_amount as "surchargeAmount",
            currency, status, expires_on::text as "expiresOn", memo,
            paid_payment_document_id as "paidPaymentDocumentId", created_at as "createdAt"
       from payment_links
      where org_id = ${orgId} and document_id = ${documentId}
      order by created_at desc
   `));
-  return r.rows;
+  // token_sealed is authoritative (written since at-rest sealing); the raw
+  // token column survives only until bootstrap's seal-and-null step and
+  // covers links created between migration and that step.
+  return r.rows.map(({ token_sealed, token, ...view }) => ({
+    ...view,
+    token: (token_sealed ? unsealSecret(token_sealed) : token) ?? "",
+  }));
 }
 
 export async function createPaymentLink(
@@ -1112,11 +1118,17 @@ export async function createPaymentLink(
     });
 
     const token = randomBytes(24).toString("base64url");
+    // The bearer token never lands in plaintext: the public lookup resolves
+    // through the sha256 token_hash, and the display path unseals
+    // token_sealed (the panel rebuilds /pay/{token} from listPaymentLinks).
+    // A database read alone must not yield a payable link — every other
+    // token type in the product is hashed or sealed at rest.
+    const tokenHash = createHash("sha256").update(token, "utf8").digest("hex");
     const id = (await db.execute<{ id: string }>(sql`
       insert into payment_links
-        (org_id, token, document_id, party_id, subsidiary_id, provider, bank_account_id,
+        (org_id, token_hash, token_sealed, document_id, party_id, subsidiary_id, provider, bank_account_id,
          amount, surcharge_amount, currency, status, expires_on, memo, created_by, updated_by)
-      values (${orgId}, ${token}, ${doc.id}, ${doc.party_id}, ${doc.subsidiary_id}, ${input.provider}, ${bankAccountId},
+      values (${orgId}, ${tokenHash}, ${sealSecret(token)}, ${doc.id}, ${doc.party_id}, ${doc.subsidiary_id}, ${input.provider}, ${bankAccountId},
               ${doc.open_balance}, ${surcharge.amount}, ${doc.currency}, 'active', ${input.expiresOn ?? null},
               ${input.memo ?? null}, ${actorId}, ${actorId})
       returning id
@@ -1225,14 +1237,17 @@ export async function paymentLinkOrgId(token: string): Promise<string | null> {
 
 async function loadLinkByToken(token: string): Promise<LinkWithContext | null> {
   // Token lookup must span orgs (public surface); all subsequent work is
-  // org-scoped via withOrg once the token resolves.
+  // org-scoped via withOrg once the token resolves. The lookup resolves by
+  // the sha256 hash — the raw bearer token is never stored, so a database
+  // read alone cannot mint a payable URL.
+  const tokenHash = createHash("sha256").update(token, "utf8").digest("hex");
   const r = await withBypassContext(async () =>
     db.execute(sql`
-      select id, org_id as "orgId", token, document_id as "documentId", party_id as "partyId",
+      select id, org_id as "orgId", ${token} as token, document_id as "documentId", party_id as "partyId",
              subsidiary_id as "subsidiaryId", provider, bank_account_id as "bankAccountId",
              amount, surcharge_amount as "surchargeAmount",
              currency, status, expires_on::text as "expiresOn"
-        from payment_links where token = ${token} limit 1
+        from payment_links where token_hash = ${tokenHash} limit 1
     `)) as unknown as { rows: LinkWithContext[] };
   return r.rows[0] ?? null;
 }
@@ -1759,7 +1774,8 @@ async function processWebhookEvent(
              l.currency
         from payment_attempts a
         join payment_links l on l.id = a.link_id and l.org_id = a.org_id
-       where a.org_id = ${orgId} and a.provider = ${provider} and l.token = ${event.linkToken}
+       where a.org_id = ${orgId} and a.provider = ${provider}
+         and l.token_hash = ${createHash("sha256").update(event.linkToken, "utf8").digest("hex")}
          and a.status = 'initiated'
        order by a.created_at desc limit 1
     `));
