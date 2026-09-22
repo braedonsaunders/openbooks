@@ -18,6 +18,8 @@ export async function resolvePostingPeriod(
           from accounting_periods
          where id = ${doc.postingPeriodId}
            and org_id = ${doc.orgId}
+           and starts_on <= ${postingDate}
+           and ends_on >= ${postingDate}
          limit 1
       `)))
     : ((await runner.execute<{ id: string }>(sql`
@@ -33,7 +35,7 @@ export async function resolvePostingPeriod(
   if (!period) {
     throw new PostingError(
       doc.postingPeriodId
-        ? `accounting period ${doc.postingPeriodId} is not available for this organization`
+        ? `accounting period ${doc.postingPeriodId} does not cover posting date ${postingDate} — import the document on a date inside its period`
         : `no accounting period covers ${postingDate}`,
     );
   }
