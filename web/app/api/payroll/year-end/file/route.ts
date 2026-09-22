@@ -39,18 +39,33 @@ function parseBody(body: Record<string, unknown>): FileInput | NextResponse {
 
 async function serveFile(gate: Authz, input: FileInput) {
   const { country, filing: filingKey, year, params } = input
-  const section = (await orgYearEndFilings(gate.user.orgId, year))
-    .find((candidate) => candidate.country === country && candidate.key === filingKey)
   // A filing that is ISSUED per employee declares an `issue` block, and
   // `issue.param` names the body key its selection travels under. That
   // declaration is the whole test: asking instead whether this is Canada's
   // ROE made the generic route the place that knew which country files what,
   // and it would have silently skipped the guard swap for the next pack that
   // declares an issued filing. The pack says so; the route reads it.
-  const issue = section?.issue
+  //
+  // It is read from the REGISTRY, not from the org's section list, and that
+  // distinction is load-bearing. A section is absent whenever the filing is
+  // gated off for this org or the year holds no data — and a selection
+  // arriving for an absent section would then find no `issue`, skip BOTH the
+  // shape check and the subsidiary-scope guard, and reach the builder
+  // unvalidated. `orgYearEndFilings` copies `issue` straight off this same
+  // declaration, so the registry is the earlier and org-independent answer.
+  let filing: ReturnType<typeof yearEndFiling>
+  try {
+    filing = yearEndFiling(country, filingKey)
+  } catch (e) {
+    if (e instanceof PayrollPackError) return NextResponse.json({ error: e.message }, { status: 404 })
+    if (e instanceof PayrollError) return NextResponse.json({ error: e.message }, { status: 422 })
+    throw e
+  }
+  const issue = filing.issue ?? null
+  const section = (await orgYearEndFilings(gate.user.orgId, year))
+    .find((candidate) => candidate.country === country && candidate.key === filingKey)
   const selected = issue ? params[issue.param] : undefined
-  const isIssuedSelection = selected != null
-  if (section && !isIssuedSelection) {
+  if (section && selected == null) {
     const denied = await guardPayrollFilingData(gate, country, filingKey, section.data, year)
     if (denied) return denied
   }
@@ -80,7 +95,6 @@ async function serveFile(gate: Authz, input: FileInput) {
     if (denied) return denied
   }
   try {
-    const filing = yearEndFiling(country, filingKey)
     if (!filing.download) {
       return NextResponse.json(
         { error: filing.downloadRefusal ?? `the ${filing.label} filing declares no electronic file` },
