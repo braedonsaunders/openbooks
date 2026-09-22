@@ -495,6 +495,12 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // subsidiary's receipt settled another's shortfall (0257, allocated by
     // the fleet coordinator; 0252 through 0256 belong to other lanes).
     "0257_provisional_cost_subsidiary.sql",
+    // AP bank files stamped wall-clock time at render, so re-downloads of
+    // the same run produced different headers and defeated duplicate-file
+    // detection (0258 stamps the run's first-file instant once and reuses
+    // it; later 0258 appends carry this shard's billing anchor and bank-feed
+    // overlap columns in the same file).
+    "0258_payment_run_file_created_at.sql",
     // Dimension FK backing for the three big ledger tables (journal_lines,
     // document_lines, time_entries): composite (org_id, fk), partial where
     // the column is a sparse pointer. Builds CONCURRENTLY (no-transaction

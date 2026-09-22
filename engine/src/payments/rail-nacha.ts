@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { unsealJson } from "../platform/secrets.ts";
+import { formatInZone, formatTimeInZone } from "../platform/business-date.ts";
 import { PaymentError } from "./payment-errors.ts";
 
 export interface NachaSettings {
@@ -119,6 +120,14 @@ export function buildNachaFile(opts: {
   effectiveDate: Date;
   creationDate: Date;
   fileIdModifier?: string;
+  /**
+   * IANA zone the CREATION stamp renders in (the org's zone, resolved by the
+   * caller). Without it the stamp reads the server's local clock — the same
+   * instant renders different headers on servers in different zones, which
+   * defeats byte-identical re-downloads and the bank's duplicate detection.
+   * The effective date is a zone-free calendar day and always renders as-is.
+   */
+  timeZone?: string;
   entries: NachaEntry[];
 }): string {
   const s = opts.settings;
@@ -136,11 +145,25 @@ export function buildNachaFile(opts: {
   const yymmdd = (d: Date) => `${String(d.getFullYear() % 100).padStart(2, "0")}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
   const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}`;
 
+  // The creation stamp is an instant, so it renders in the caller's explicit
+  // zone; the server's local clock must never leak into bank bytes.
+  let creationYymmdd = yymmdd(opts.creationDate);
+  let creationHhmm = hhmm(opts.creationDate);
+  if (opts.timeZone != null) {
+    try {
+      const zonedDay = formatInZone(opts.creationDate, opts.timeZone);
+      creationYymmdd = zonedDay.slice(2, 4) + zonedDay.slice(5, 7) + zonedDay.slice(8, 10);
+      creationHhmm = formatTimeInZone(opts.creationDate, opts.timeZone);
+    } catch {
+      throw new PaymentError(`NACHA creation time zone "${opts.timeZone}" is not a valid IANA time zone`);
+    }
+  }
+
   const rows: string[] = [];
   // 1 — File Header
   rows.push(
     "1" + "01" + nachaField(s.immediateDestination, 10, "r") + nachaField(s.immediateOrigin, 10, "r") +
-    yymmdd(opts.creationDate) + hhmm(opts.creationDate) + modifier + "094" + "10" + "1" +
+    creationYymmdd + creationHhmm + modifier + "094" + "10" + "1" +
     nachaField(s.destinationName, 23) + nachaField(s.originName, 23) + nachaField("", 8),
   );
   // 5 — Batch Header (220 = credits only)

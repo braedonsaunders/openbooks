@@ -420,3 +420,35 @@ test("a blocked export writes no partial file and no partial audit, and delivery
     await dropScratchOrgWithPaymentArtifacts(org.orgId);
   }
 });
+
+test("regenerating a run reuses its stamped creation instant, reproducing byte-identical files", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    for (const method of ["ach", "sepa", "eft"] as RailBankMethod[]) {
+      const fixture = await withBypass(() => seedRailRun(org, method));
+      const first = await generatePaymentFileArtifact(fixture.runId, org.orgId, fixture.actorId, {
+        now: new Date("2026-07-10T12:00:00Z"),
+      });
+      // A later wall-clock instant must not leak into a re-render: the
+      // reprocess path renders fresh bytes from the same evidence, and with
+      // the stamp reused they must match the original exactly — otherwise an
+      // accidental re-upload of the same run looks like a new file to the
+      // bank and pays every vendor twice.
+      const reprocessed = await generatePaymentFileArtifact(fixture.runId, org.orgId, fixture.actorId, {
+        reprocessFileId: first.id,
+        now: new Date("2026-07-11T15:30:00Z"),
+      });
+      assert.equal(
+        reprocessed.content.toString("utf8"),
+        first.content.toString("utf8"),
+        `${method}: reprocess with unchanged evidence reproduces the file`,
+      );
+      const stamp = (await withBypass(() => db.execute<{ fileCreatedAt: Date }>(sql`
+        select file_created_at as "fileCreatedAt" from payment_runs where id = ${fixture.runId}
+      `))).rows[0]!;
+      assert.equal(new Date(stamp.fileCreatedAt).toISOString(), "2026-07-10T12:00:00.000Z");
+    }
+  } finally {
+    await dropScratchOrgWithPaymentArtifacts(org.orgId);
+  }
+});

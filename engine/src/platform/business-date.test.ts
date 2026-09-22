@@ -5,7 +5,7 @@ import { db } from "./db.ts";
 import { withSimClock } from "./clock.ts";
 import {
   addCalendarDays, addCalendarMonthsStart, businessTimeZone, businessToday, calendarQuarterBounds,
-  formatInZone, mondayOfIsoWeek, startOfMonth, weekStartsEndingOn,
+  formatInZone, formatTimeInZone, formatTimestampInZone, mondayOfIsoWeek, startOfMonth, weekStartsEndingOn,
 } from "./business-date.ts";
 import { createScratchOrg, dropScratchOrgReporting } from "../testing/fixtures.ts";
 
@@ -24,6 +24,21 @@ test("one instant falls on different calendar days either side of UTC", () => {
   assert.equal(formatInZone(instant, "America/Toronto"), "2026-06-14");
   assert.equal(formatInZone(instant, "Pacific/Auckland"), "2026-06-15");
   assert.equal(formatInZone(new Date("2026-06-15T23:30:00Z"), "Pacific/Auckland"), "2026-06-16");
+});
+
+test("formatTimeInZone renders wall-clock time in the explicit zone", () => {
+  // 2026-03-03T04:05Z is still March 2nd on the US east coast (EST, UTC−5).
+  const instant = new Date("2026-03-03T04:05:00Z");
+  assert.equal(formatTimeInZone(instant, "UTC"), "0405");
+  assert.equal(formatTimeInZone(instant, "America/New_York"), "2305");
+  assert.equal(formatTimeInZone(instant, "Pacific/Auckland"), "1705");
+  assert.equal(formatTimeInZone(new Date("2026-03-03T00:00:00Z"), "UTC"), "0000");
+});
+
+test("formatTimestampInZone composes a zone-local ISO timestamp", () => {
+  const instant = new Date("2026-03-03T04:05:00Z");
+  assert.equal(formatTimestampInZone(instant, "UTC"), "2026-03-03T04:05:00");
+  assert.equal(formatTimestampInZone(instant, "America/New_York"), "2026-03-02T23:05:00");
 });
 
 test("formatInZone in UTC matches the plain ISO day", () => {
