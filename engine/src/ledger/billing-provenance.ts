@@ -250,6 +250,42 @@ export async function releaseConvertedOrderQuantities(
     byLine.set(restore.sourceLineId, group);
   }
   const idArr = `{${[...byLine.keys()].join(",")}}`;
+  // Discover the candidate source headers WITHOUT taking line locks. This
+  // release must take its locks in the same header-before-lines order
+  // convertOrder uses (source header FOR UPDATE, then source lines
+  // FOR UPDATE OF dl): taking the source line locks first deadlocks
+  // against a concurrent conversion of the same order — the converter
+  // holds the header and waits on the lines while this release holds
+  // the lines and waits on the header (SQLSTATE 40P01). Nothing read
+  // here is trusted; every property is re-validated under the locks
+  // below.
+  const discovered = (await tx.execute<{ id: string; document_id: string }>(sql`
+    select l.id, l.document_id
+      from document_lines l
+      join documents d on d.id = l.document_id and d.org_id = l.org_id
+     where l.org_id = ${orgId} and l.id = any(${idArr}::uuid[])
+  `)).rows;
+  if (discovered.length !== byLine.size) {
+    throw new Error("a source order line for this document is missing — reconcile it before voiding or deleting");
+  }
+  const candidateDocIds = [...new Set(discovered.map((row) => row.document_id))].sort();
+
+  // Lock the source headers in canonical id order before their lines (the
+  // order-cycle lock order), then restore each line under the same ceiling
+  // rules the advance faced.
+  const headers = (await tx.execute<{ id: string; status: string; document_number: string }>(sql`
+    select id, status, document_number from documents
+     where org_id = ${orgId} and id = any(${`{${candidateDocIds.join(",")}}`}::uuid[])
+     order by id
+     for update
+  `)).rows;
+  if (headers.length !== candidateDocIds.length) {
+    throw new Error("a source order for this document is missing — reconcile it before voiding or deleting");
+  }
+  // Re-read and lock the actual source lines UNDER the held header locks.
+  // The discovery above ran unlocked, so a line that moved to an order
+  // whose header is not held here refuses instead of restoring against
+  // an unlocked source.
   const sources = (await tx.execute<{
     id: string; document_id: string; document_kind: string; document_status: string;
     quantity: string; quantity_billed: string; quantity_fulfilled: string;
@@ -268,7 +304,11 @@ export async function releaseConvertedOrderQuantities(
   if (sources.length !== byLine.size) {
     throw new Error("a source order line for this document is missing — reconcile it before voiding or deleting");
   }
+  const heldHeaderIds = new Set(headers.map((header) => header.id));
   for (const source of sources) {
+    if (!heldHeaderIds.has(source.document_id)) {
+      throw new Error("a source order line moved while it was being voided or deleted — reconcile it before voiding or deleting");
+    }
     if (source.document_kind !== "quote" && source.document_kind !== "sales_order" && source.document_kind !== "purchase_order") {
       throw new Error("a converted line does not point at an order line — reconcile it before voiding or deleting");
     }
@@ -298,17 +338,9 @@ export async function releaseConvertedOrderQuantities(
     }
   }
 
-  // Lock source headers before their lines (the order-cycle lock order), then
-  // restore each line under the same ceiling rules the advance faced.
-  const headers = (await tx.execute<{ id: string; status: string; document_number: string }>(sql`
-    select id, status, document_number from documents
-     where org_id = ${orgId} and id = any(${`{${sourceDocIds.join(",")}}`}::uuid[])
-     order by id
-     for update
-  `)).rows;
-  if (headers.length !== sourceDocIds.length) {
-    throw new Error("a source order for this document is missing — reconcile it before voiding or deleting");
-  }
+  // Headers are already locked above (before the lines); re-check their
+  // lifecycle state here, after the provenance edge validation, so a source
+  // that left the draft/approved lifecycle refuses with its number named.
   for (const header of headers) {
     if (header.status !== "approved" && header.status !== "draft") {
       throw new Error(`${header.document_number} is ${header.status} — resolve it before voiding or deleting this document`);
