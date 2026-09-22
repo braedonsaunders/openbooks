@@ -44,34 +44,38 @@ export function dispatchFailureReason(result: RecordFlowsResult): string | null 
   return result.error ?? "flow dispatch failed before any flow ran";
 }
 
-/** Anything with a drizzle `execute` (the ambient `db` or a caller-owned `tx`). */
-type SqlRunner = Pick<typeof db, "execute">;
+
 
 /**
  * Cancel everything one dispatch opened: pending/escalated gates first, then
  * their still-open runs. Terminal rows (approved, rejected, completed,
  * failed, cancelled) are never touched — a failed run stays failed as retry
- * evidence. Runs inside the caller's transaction (submit, allocation post,
- * bank submit all dispatch under their own unit), so a caller that then
- * throws rolls the dispatch back entirely instead.
+ * evidence.
+ *
+ * Runs on the ambient `db` deliberately: runRecordFlows writes through the
+ * ambient handle, so the cancel must land on the same unit. Inside a
+ * withOrgTransaction that IS the caller's transaction (the cancel commits
+ * with the refusal); inside a bare inDbTransaction the dispatch already
+ * committed on the pool, so the cancel commits there too — cancelling on the
+ * caller's `tx` instead would roll back with the throw and leave live gates
+ * behind.
  */
 export async function cancelDispatchRuns(
   orgId: string,
   runIds: string[],
-  opts?: { runner?: SqlRunner; actorId?: string | null },
+  opts?: { actorId?: string | null },
 ): Promise<void> {
   const ids = [...new Set(runIds)];
   if (ids.length === 0) return;
-  const runner: SqlRunner = opts?.runner ?? db;
   const actorId = opts?.actorId ?? null;
-  await runner.execute(sql`
+  await db.execute(sql`
     update flow_gates set status = 'cancelled', updated_at = now()
       ${actorId ? sql`, updated_by = ${actorId}` : sql``}
      where run_id in (
        select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid
      ) and org_id = ${orgId} and status in ('pending', 'escalated')
   `);
-  await runner.execute(sql`
+  await db.execute(sql`
     update flow_runs set status = 'cancelled', finished_at = now(), updated_at = now()
       ${actorId ? sql`, updated_by = ${actorId}` : sql``}
      where id in (

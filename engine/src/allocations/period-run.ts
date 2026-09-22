@@ -1594,36 +1594,37 @@ async function openRunApproval(
   }
   // Break the static import cycle (the allocation adapter calls back into
   // postAllocationRun on release).
-  const { runRecordFlows } = await import("../flows/index.ts");
+  const { runRecordFlows, cancelDispatchRuns, dispatchFailureReason, findGatingRun } =
+    await import("../flows/index.ts");
   const dispatched = await runRecordFlows(
     { kind: "on_submit", source: opts.eventSource },
     "allocation_run",
     run.id,
     { orgId, userId: opts.actorId },
   );
-  const gated = dispatched.runs.find(
-    (item) => item.flowId === opts.approvalFlowId && item.gatesCreated > 0,
-  );
+  // Fail closed FIRST, before looking at gates: when ANY flow in the dispatch
+  // failed, the approval set is incomplete — even the configured flow's gate
+  // must not park the run, or its approval would release a run whose other
+  // approval never existed. Cancel everything the dispatch opened and refuse;
+  // the run stays previewed and no journal exists.
+  if (dispatched.failed) {
+    await cancelDispatchRuns(orgId, dispatched.runs.map((item) => item.runId), {
+      actorId: opts.actorId,
+    });
+    const cause = dispatchFailureReason(dispatched) ?? "allocation approval routing failed";
+    throw new AllocationRunError("INVALID", `allocation approval routing failed: ${cause}`);
+  }
+  const gated = findGatingRun(dispatched, opts.approvalFlowId);
   if (!gated) {
     // Fail closed like close approval: cancel anything the dispatch opened
     // so a half-routed approval cannot linger, then refuse — the run stays
     // previewed and no journal exists.
-    const openedIds = dispatched.runs.map((item) => item.runId);
-    if (openedIds.length > 0) {
-      await tx.execute(sql`
-        update flow_gates set status = 'cancelled', updated_at = now(), updated_by = ${opts.actorId}
-         where run_id in (select jsonb_array_elements_text(${JSON.stringify(openedIds)}::jsonb)::uuid)
-           and org_id = ${orgId} and status in ('pending', 'escalated')`);
-      await tx.execute(sql`
-        update flow_runs set status = 'cancelled', finished_at = now(), updated_at = now(), updated_by = ${opts.actorId}
-         where id in (select jsonb_array_elements_text(${JSON.stringify(openedIds)}::jsonb)::uuid)
-           and org_id = ${orgId} and status in ('running', 'waiting')`);
-    }
+    await cancelDispatchRuns(orgId, dispatched.runs.map((item) => item.runId), {
+      actorId: opts.actorId,
+    });
     throw new AllocationRunError(
       "INVALID",
-      dispatched.failed
-        ? "allocation approval routing failed"
-        : `allocation approval flow ${opts.approvalFlowId} produced no approval gate`,
+      `allocation approval flow ${opts.approvalFlowId} produced no approval gate`,
     );
   }
   await tx.execute(sql`
