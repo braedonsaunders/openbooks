@@ -168,7 +168,7 @@ async function scanOneOrg(orgId: string, now: Date): Promise<AlertScanSummary> {
       alertsWritten += 1;
       await tx.execute(sql`
         update hrm_qualification_alerts set sent_at = now()
-         where id = ${alertId}::uuid
+         where id = ${alertId}::uuid and org_id = ${orgId}::uuid
       `);
       notificationsWritten += await notifyHolders(
         tx, orgId, row,

@@ -98,13 +98,13 @@ function asDbDate(value: Date | string): Date {
   return value instanceof Date ? value : new Date(value);
 }
 
-async function appendOccurrenceEvents(id: string, events: OccurrenceEvent[]): Promise<void> {
+async function appendOccurrenceEvents(id: string, orgId: string, events: OccurrenceEvent[]): Promise<void> {
   if (events.length === 0) return;
   await withBypassContext(() =>
     db.execute(sql`
       update script_runs
          set logs = logs || ${JSON.stringify(events)}::jsonb
-       where id = ${id}
+       where id = ${id} and org_id = ${orgId}
     `));
 }
 
@@ -200,7 +200,7 @@ async function dispatchScriptOccurrence(
     /* Redis unavailable — fall through to inline */
   }
   if (enqueued) {
-    await appendOccurrenceEvents(occ.id, [{ event: "enqueued", job: jobId, attempt }]);
+    await appendOccurrenceEvents(occ.id, occ.orgId, [{ event: "enqueued", job: jobId, attempt }]);
     return;
   }
   try {
@@ -217,7 +217,7 @@ async function dispatchScriptOccurrence(
     // this catches host-side failures (db insert, feature gate, missing row).
     const message = (e instanceof Error ? e.message : String(e)).slice(0, 1000);
     if (attempt < MAX_OCCURRENCE_ATTEMPTS) {
-      await appendOccurrenceEvents(occ.id, [{ event: "dispatch_failed", error: message, attempt }]);
+      await appendOccurrenceEvents(occ.id, occ.orgId, [{ event: "dispatch_failed", error: message, attempt }]);
       console.error(`[scheduler] script ${occ.scriptId} dispatch failed (attempt ${attempt}); recovery will retry:`, e);
       return;
     }

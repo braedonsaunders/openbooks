@@ -367,7 +367,8 @@ async function fileInProjectFolder(
     values (${String(version.id)}::uuid, ${`\\x${bytes.toString("hex")}`}::bytea)
   `);
   await exec.execute(sql`
-    update files set current_version_id = ${String(version.id)}::uuid where id = ${String(file.id)}::uuid
+    update files set current_version_id = ${String(version.id)}::uuid
+     where id = ${String(file.id)}::uuid and org_id = ${orgId}::uuid
   `);
   return String(file.id);
 }

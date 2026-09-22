@@ -167,7 +167,7 @@ async function fireSchedule(
     triggerPayload: { kind: "schedule", occurredAt: occurrence.toISOString() },
     fingerprint: `schedule:${occurrence.toISOString()}`,
   });
-  await db.execute(sql`update automations set last_run_at = ${now} where id = ${automation.id}`);
+  await db.execute(sql`update automations set last_run_at = ${now} where id = ${automation.id} and org_id = ${automation.orgId}`);
   return true;
 }
 
@@ -248,12 +248,12 @@ async function drainEventQueue(now: Date): Promise<number> {
           });
         }
       });
-      await db.execute(sql`update automation_event_queue set status = 'done' where id = ${event.id}`);
+      await db.execute(sql`update automation_event_queue set status = 'done' where id = ${event.id} and org_id = ${event.orgId}`);
       drained += 1;
     } catch (e) {
       await db.execute(sql`
         update automation_event_queue set status = 'failed', error = ${e instanceof Error ? e.message : String(e)}
-         where id = ${event.id}
+         where id = ${event.id} and org_id = ${event.orgId}
       `);
     }
   }
