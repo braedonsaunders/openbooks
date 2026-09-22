@@ -4,6 +4,7 @@ import {
   CLOSE_DELIVERY_QUEUE,
   enqueueEmail,
   getBlockingConnection,
+  newEmailIntentKey,
   type CloseDeliveryJobData,
 } from "@openbooks/jobs";
 import { isValidEmailAddress } from "@openbooks/emails";
@@ -131,7 +132,6 @@ async function loadContext(data: {
  */
 export async function processCloseDeliveryJobData(
   data: CloseDeliveryJobData,
-  queueJobId: string | null = null,
 ): Promise<unknown> {
       const { orgId, runId } = data;
       // Queue callbacks carry no request store; the package's tenant is the
@@ -213,6 +213,30 @@ export async function processCloseDeliveryJobData(
         `<p>The <strong>${escapeHtml(packageName)}</strong> for <strong>${escapeHtml(row.period_name)}</strong> · ${escapeHtml(row.book_name)} is attached (${countPhrase}).</p>` +
         `<p style="color:#666">${escapeHtml(row.org_name)} · OpenBooks</p>`;
 
+      // Durable email identity, derived from the publication content — never
+      // from the parent queue job's id. enqueueCloseDelivery deliberately
+      // takes no fixed jobId (every publication, including a corrected
+      // re-publication after reopen, is its own delivery obligation), so the
+      // parent id is a BullMQ auto-increment counter that restarts after a
+      // Redis reset and would align new mail with old sent-log rows. The
+      // binder hash identifies the published content: a parent retry
+      // collapses onto the same delivery, while a corrected re-publication
+      // mints a new binder and therefore new mail. Manual "send now" runs
+      // have no content revision, so each invocation mints its own key.
+      let emailIntentKey: string;
+      if (runId) {
+        const binder = await db.execute<{ binder_hash: string | null }>(sql`
+          select binder_hash from close_runs where id = ${runId} and org_id = ${orgId}
+        `);
+        const binderHash = binder.rows[0]?.binder_hash;
+        emailIntentKey = binderHash
+          ? `close-package|${orgId}|${runId}|${binderHash}`
+          : newEmailIntentKey(`close-package|${orgId}|${runId}`);
+      } else {
+        emailIntentKey = newEmailIntentKey(
+          `close-package|${orgId}|${data.packageId}|${data.periodId ?? ""}|${data.bookId ?? ""}`,
+        );
+      }
       await enqueueEmail(
         {
           orgId,
@@ -223,7 +247,7 @@ export async function processCloseDeliveryJobData(
           attachments: files,
           meta: { category: "close-package" },
         },
-        { jobId: `close-package|${queueJobId}` },
+        { jobId: emailIntentKey },
       );
 
       await db.execute(sql`
@@ -245,7 +269,7 @@ export async function processCloseDeliveryJobData(
 export function createCloseDeliveryWorker(): Worker<CloseDeliveryJobData> {
   return new Worker<CloseDeliveryJobData>(
     CLOSE_DELIVERY_QUEUE,
-    async (job) => processCloseDeliveryJobData(job.data, job.id ?? null),
+    async (job) => processCloseDeliveryJobData(job.data),
     { connection: getBlockingConnection(), concurrency: 2 },
   );
 }

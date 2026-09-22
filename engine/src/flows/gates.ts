@@ -1332,7 +1332,7 @@ async function notifyGateAssignee(gate: GateRow, kind: "reminder" | "escalation"
   });
 
   try {
-    const [{ enqueueEmail }, emails] = await Promise.all([
+    const [{ enqueueEmail, newEmailIntentKey }, emails] = await Promise.all([
       import("@openbooks/jobs"),
       import("@openbooks/emails"),
     ]);
@@ -1349,6 +1349,11 @@ async function notifyGateAssignee(gate: GateRow, kind: "reminder" | "escalation"
             ...emailActionUrls(gate.id, assignee.id),
           })
         : emails.flowApprovalEscalationEmail({ orgName: brand, gateTitle: gate.title, subjectLabel });
+    // Each reminder/escalation occurrence is its own send obligation: there
+    // is no natural per-occurrence key (the same gate re-notifies), so mint a
+    // fresh intent key. A stable per-gate key would collapse a later reminder
+    // onto the first send's log row and skip it; a BullMQ-derived key would
+    // collide after a Redis reset.
     await enqueueEmail({
       orgId: gate.orgId,
       to: assignee.email,
@@ -1356,7 +1361,7 @@ async function notifyGateAssignee(gate: GateRow, kind: "reminder" | "escalation"
       html: mail.html,
       text: mail.text,
       meta: { category: "approvals" },
-    });
+    }, { jobId: newEmailIntentKey(`gate-${kind}|${gate.orgId}|${gate.id}|${assignee.id}`) });
   } catch (e) {
     console.error(`[flows] gate ${gate.id} ${kind} email enqueue failed:`, e);
   }

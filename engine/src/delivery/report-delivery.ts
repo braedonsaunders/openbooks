@@ -379,7 +379,7 @@ async function rebuildStuckEnqueuedDeliveries(now: Date): Promise<number> {
 
 /** Dispatch per-recipient outbox rows; deterministic generation ids close the DB/Redis crash gap. */
 export async function dispatchReportDeliveries(
-  enqueue: (data: EnqueueEmailData, options?: { jobId?: string }) => Promise<unknown> = enqueueEmail,
+  enqueue: (data: EnqueueEmailData, options: { jobId: string }) => Promise<unknown> = enqueueEmail,
   now = new Date(),
 ): Promise<number> {
   // Crash-rebuild first: deliveries whose email job died after the 'enqueued'

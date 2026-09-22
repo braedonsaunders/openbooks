@@ -191,7 +191,7 @@ export function parseFlowEmailPayload(raw: unknown): FlowEmailPayload {
  */
 export type FlowEmailQueueEnqueuer = (
   data: EnqueueEmailData,
-  options?: { jobId?: string },
+  options: { jobId: string },
 ) => Promise<unknown>;
 
 /**
@@ -207,7 +207,7 @@ export function flowEmailJobId(outboxRowId: string): string {
 /** Reach the shared BullMQ producer lazily so scan-only workers never load it. */
 async function enqueueFlowEmailJob(
   data: EnqueueEmailData,
-  options?: { jobId?: string },
+  options: { jobId: string },
 ): Promise<unknown> {
   const { enqueueEmail } = await import("@openbooks/jobs");
   return enqueueEmail(data, options);

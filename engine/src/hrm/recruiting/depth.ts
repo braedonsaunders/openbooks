@@ -127,13 +127,13 @@ export interface RecruitingEmailData {
 
 export type RecruitingEmailEnqueuer = (
   data: RecruitingEmailData,
-  options?: { jobId?: string },
+  options: { jobId: string },
 ) => Promise<unknown>;
 
 /** Reach the shared BullMQ email producer lazily so unit tests never load it. */
 export async function enqueueRecruitingEmailJob(
   data: RecruitingEmailData,
-  options?: { jobId?: string },
+  options: { jobId: string },
 ): Promise<unknown> {
   const { enqueueEmail } = await import("@openbooks/jobs");
   return enqueueEmail(
