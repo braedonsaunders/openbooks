@@ -326,7 +326,13 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
           returning id
         `));
         if (!claimed.rows.length) return null; // another tick won it
-        return generateFromTemplate(s.orgId, current.templateId, today, current.autoPost, {
+        // Date the document with its OCCURRENCE date, not today: after a
+        // scheduler outage (or for a back-dated schedule) the catch-up
+        // occurrences must land in their own periods — July/August/September
+        // occurrences all dated September would book into the wrong period.
+        // A closed occurrence period refuses through postDocument exactly
+        // like a subscription billing into a closed period does.
+        return generateFromTemplate(s.orgId, current.templateId, occurrenceDate, current.autoPost, {
           scheduleId: s.id,
           occurrenceOn: occurrenceDate,
           actorId: null,
