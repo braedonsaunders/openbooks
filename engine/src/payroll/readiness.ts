@@ -12,6 +12,7 @@ import {
   type ResolvedPaymentMethod,
 } from "./payment-method.ts";
 import { hasUsablePayRateSql } from "./rate.ts";
+import { assignmentOverlapsPeriod } from "./assignment-windows.ts";
 import { parsePayRunCalculationSource, payRunCalculationSource, payRunCalculationSourceChanges, payRunCalculationSourceDigest } from "./run-calculation-evidence.ts";
 import { payrollSettings } from "./run-setup.ts";
 import { payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
@@ -1042,8 +1043,7 @@ async function flagMissingOpeningBalances(args: {
       join pay_components c on c.id = epc.component_id and c.org_id = epc.org_id
      where epc.org_id = ${orgId} and epc.is_active and c.is_active
        and c.basis_cap_amount_per_year is not null
-       and epc.effective_from <= ${run.period_end}
-       and (epc.effective_to is null or epc.effective_to >= ${run.period_start})
+       and ${assignmentOverlapsPeriod(sql`epc.effective_from`, sql`epc.effective_to`, run.period_start, run.period_end)}
        and not exists (
          select 1 from payroll_opening_balance_components oc
            join payroll_opening_balances b on b.id = oc.opening_balance_id and b.org_id = oc.org_id
