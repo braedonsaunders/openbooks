@@ -366,8 +366,121 @@ test("route loads", async () => {});
   assert.equal(result.unmodeled, true);
 });
 
+// ---------------------------------------------------------------------------
+// Protected-surface doubles: the validation and money kernels.
+// ---------------------------------------------------------------------------
+
+const REAL_JSON = `export const jsonObject = {};
+export async function parseJsonBody(request, schema) {
+  return { ok: true, data: {} };
+}
+`;
+
+const JSON_DOUBLE_TEST = `import { registerHooks } from "node:module";
+import test from "node:test";
+const mockSources = new Map([
+  ["mock:json", \`
+      export const jsonObject = {}
+      export async function parseJsonBody(request) {
+        return { ok: true, data: await request.json() }
+      }
+    \`],
+]);
+const hooks = registerHooks({
+  resolve(specifier, context, nextResolve) {
+    const mocked = new Map([["@/lib/api/json", "mock:json"]]).get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
+  },
+  load(url, context, nextLoad) {
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
+  },
+});
+const routeUrl = "./route.ts?fixture-tag";
+const { GET } = await import(routeUrl);
+hooks.deregister();
+test("route loads", async () => { await GET(); });
+`;
+
+const JSON_DOUBLE_ROUTE = `import { parseJsonBody } from "@/lib/api/json";
+export async function GET() { return parseJsonBody; }
+`;
+
+const MONEY_REEXPORT_TEST = `import { registerHooks } from "node:module";
+import test from "node:test";
+const mockSources = new Map([
+  ["mock:money", \`export * from "@openbooks/engine/src/money/money.ts"\`],
+]);
+const hooks = registerHooks({
+  resolve(specifier, context, nextResolve) {
+    const mocked = new Map([["@openbooks/engine/src/money/money.ts", "mock:money"]]).get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
+  },
+  load(url, context, nextLoad) {
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
+  },
+});
+const routeUrl = "./route.ts?fixture-tag";
+const { GET } = await import(routeUrl);
+hooks.deregister();
+test("route loads", async () => { await GET(); });
+`;
+
+const MONEY_ROUTE = `import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
+export async function GET() { return normalizeMoney; }
+`;
+
+function doublesFixture() {
+  return fixture({
+    "web/lib/api/json.ts": REAL_JSON,
+    "web/app/route.test.ts": JSON_DOUBLE_TEST,
+    "web/app/route.ts": JSON_DOUBLE_ROUTE,
+  });
+}
+
+test("a hand double of the JSON validation boundary is refused by name", () => {
+  const root = doublesFixture();
+  const result = checkFile(join(root, "web/app/route.test.ts"), root);
+  assert.equal(result.doubles.length, 1);
+  assert.equal(result.doubles[0].spec, "json");
+  assert.deepEqual(result.doubles[0].names, ["jsonObject", "parseJsonBody"]);
+});
+
+test("a re-export-only double of the money kernel is not a violation", () => {
+  const root = fixture({
+    "engine/src/money/money.ts": "export function normalizeMoney(value) { return String(value); }\nexport function cmp(a, b) { return 0; }\n",
+    "web/app/route.test.ts": MONEY_REEXPORT_TEST,
+    "web/app/route.ts": MONEY_ROUTE,
+  });
+  const result = checkFile(join(root, "web/app/route.test.ts"), root);
+  // The star re-export serves the real implementation, so neither a double
+  // nor a missing-export gap may be reported.
+  assert.deepEqual(result.doubles, []);
+  assert.deepEqual(result.gaps, []);
+});
+
+test("the doubles ratchet fails a new double and flags a stale allow-list entry", () => {
+  const root = doublesFixture();
+  const report = checkTree(root, new Map([["web/app/gone.test.ts", { json: "entry whose double was deleted" }]]));
+  assert.equal(report.doubles.length, 1);
+  assert.equal(report.doubles[0].file, "web/app/route.test.ts");
+  assert.deepEqual(report.staleDoubles, [{ file: "web/app/gone.test.ts", spec: "json" }]);
+  // The same double, allow-listed, is queued rather than failed.
+  const allowed = checkTree(root, new Map([["web/app/route.test.ts", { json: "queued conversion" }]]));
+  assert.deepEqual(allowed.doubles, []);
+  assert.deepEqual(allowed.staleDoubles, []);
+  assert.equal(allowed.allowedDoubles.length, 1);
+});
+
 test("the live repository has no mock-surface gaps and no unmodeled wiring", () => {
   const report = checkTree();
   assert.deepEqual(report.gaps, [], `${report.gaps.length} mock-surface gaps:\n${report.gaps.map((gap) => `${gap.file} [mock:${gap.spec}] missing ${gap.names.join(", ")}`).join("\n")}`);
   assert.deepEqual(report.unmodeled, [], `${report.unmodeled.length} unmodeled wirings:\n${report.unmodeled.join("\n")}`);
+  assert.deepEqual(report.doubles, [], `${report.doubles.length} hand doubles of protected surfaces:\n${report.doubles.map((double) => `${double.file} [mock:${double.spec}] ${double.names.join(", ")}`).join("\n")}`);
+  assert.deepEqual(report.staleDoubles, [], `${report.staleDoubles.length} stale allow-list entries:\n${report.staleDoubles.map((entry) => `${entry.file} [mock:${entry.spec}]`).join("\n")}`);
 });

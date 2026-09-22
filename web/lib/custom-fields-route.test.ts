@@ -43,16 +43,14 @@ function sqlText(query: unknown): string {
 }
 ;(globalThis as typeof globalThis & Record<string, unknown>).openbooksCustomFieldsSqlText = sqlText
 
+// '@/lib/api/json' is deliberately NOT mocked here. parseJsonBody is the
+// shared validation boundary, and a double of it can only return
+// { ok: true } — it is structurally incapable of producing the 400 refusals
+// the boundary exists to enforce, so every malformed-body case below used to
+// be untested while this file reported green (AGENTS.md: never double
+// validation). The real module loads through tsx; only its 'server-only'
+// marker is shimmed in the resolve hook below.
 const mockSources = new Map<string, string>([
-  [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
   [
     'mock:authz',
     `
@@ -98,7 +96,6 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
-  ['@/lib/api/json', 'mock:json'],
   ['../../../../lib/authz', 'mock:authz'],
   ['../../../../lib/customization/gates', 'mock:feature-gates'],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
@@ -123,7 +120,7 @@ const hooks = registerHooks({
 })
 
 const routeUrl = '../app/api/admin/custom-fields/route.ts?custom-fields-route-test'
-const { PATCH } = (await import(routeUrl)) as typeof import('../app/api/admin/custom-fields/route.ts')
+const { PATCH, POST } = (await import(routeUrl)) as typeof import('../app/api/admin/custom-fields/route.ts')
 hooks.deregister()
 
 const FIELD_ID = '00000000-0000-4000-8000-00000000a001'
@@ -158,6 +155,45 @@ function patchField(body: Record<string, unknown>): Promise<Response> {
     }),
   )
 }
+
+function rawRequest(method: string, body: string): Request {
+  return new Request('http://openbooks.test/api/admin/custom-fields', {
+    method,
+    headers: { 'content-type': 'application/json' },
+    body,
+  })
+}
+
+// The boundary refusals below are the cases the removed parseJsonBody double
+// could never produce: a malformed body made it THROW a SyntaxError instead
+// of refusing, and an array/null body sailed through as { ok: true } and hit
+// the route's own 404 id check. They now prove the real shared boundary fires
+// with its own message before any database work.
+test('PATCH refuses a malformed JSON body at the shared boundary before any database work', async () => {
+  reset()
+  const malformed = await PATCH(rawRequest('PATCH', '{"label":'))
+  assert.equal(malformed.status, 400)
+  assert.deepEqual(await malformed.json(), { error: 'invalid request body' })
+  assert.equal(state.queries.length, 0)
+})
+
+test('PATCH refuses non-object bodies instead of trusting their shape', async () => {
+  for (const body of ['[{"id": "x"}]', 'null', '"shipping zone"']) {
+    reset()
+    const refused = await PATCH(rawRequest('PATCH', body))
+    assert.equal(refused.status, 400, `body ${body} must be refused`)
+    assert.deepEqual(await refused.json(), { error: 'invalid request body' })
+    assert.equal(state.queries.length, 0, `no database work for body ${body}`)
+  }
+})
+
+test('POST refuses a malformed JSON body at the shared boundary before any write', async () => {
+  reset()
+  const malformed = await POST(rawRequest('POST', '{"targetTable":'))
+  assert.equal(malformed.status, 400)
+  assert.deepEqual(await malformed.json(), { error: 'invalid request body' })
+  assert.equal(state.queries.length, 0)
+})
 
 test('PATCH rejects creation-invalid labels and select options before writing', async () => {
   reset()
