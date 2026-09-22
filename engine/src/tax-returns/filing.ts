@@ -300,8 +300,11 @@ export async function markTaxFilingFiled(
     await assertCoveredPeriodsClosed(orgId, row.period_from, row.period_to);
 
     // INTEGRITY — reproduce the prepare-time fingerprint from the live source
-    // ledger. computeTaxReturn's reads run on this transaction's pinned
-    // connection, so the verification and the write see one consistent world.
+    // ledger on this transaction's pinned connection: computeTaxReturn runs on
+    // the caller's executor, so verification and the status write hold exactly
+    // one pool connection and see one consistent world. (A dedicated handle
+    // here would pin a second pool client for the whole recompute and
+    // deadlock a saturated pool.)
     let live: TaxReturnResult;
     try {
       live = await computeTaxReturn(
@@ -310,6 +313,7 @@ export async function markTaxFilingFiled(
         row.period_from,
         row.period_to,
         row.adjustments ?? {},
+        { runner: db },
       );
     } catch (error) {
       if (error instanceof TaxReturnError) {

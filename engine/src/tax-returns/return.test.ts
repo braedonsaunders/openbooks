@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CANADA_RETURN_PACKS } from "../country-tax-packs/ca-returns.ts";
-import { assembleReturn, evalFormula, planReturn, taxableBaseSideForCode, TaxReturnError, type TaxReturnBoxDef, type TaxReportLineRow } from "./return.ts";
+import { assembleReturn, computeTaxReturn, evalFormula, planReturn, taxableBaseSideForCode, TaxReturnError, type TaxReturnBoxDef, type TaxReportLineRow, type TaxReturnRunner } from "./return.ts";
 
 const codes = (...c: string[]) => new Set(c);
 
@@ -245,4 +245,31 @@ test("planReturn keeps the first formula and pdf field for a repeated line code"
   assert.equal(boxes[0]!.formula, "A + B");
   assert.equal(boxes[0]!.pdfField, "f1");
   assert.equal(boxes[0]!.sequence, 1);
+});
+
+test("computeTaxReturn with a caller runner uses that executor and opens no transaction", async () => {
+  // markTaxFilingFiled holds one pinned withOrg connection while it verifies;
+  // the recompute must run ON that connection. A stub whose execute throws a
+  // sentinel proves the caller's executor is used (any dedicated-handle path
+  // would surface a pool/driver error instead), and a throwing transaction
+  // method proves no second transaction — the shape that deadlocked a
+  // saturated pool — is opened.
+  const sentinel = new Error("sentinel: caller executor reached");
+  let transactionOpened = false;
+  const runner: TaxReturnRunner & { transaction: () => Promise<never> } = {
+    // Cast: the stub never resolves (it throws the sentinel), so the richer
+    // drizzle thenable shape is irrelevant at runtime.
+    execute: (async () => {
+      throw sentinel;
+    }) as unknown as TaxReturnRunner["execute"],
+    transaction: async () => {
+      transactionOpened = true;
+      throw new Error("computeTaxReturn must not open a second transaction on a caller runner");
+    },
+  };
+  await assert.rejects(
+    computeTaxReturn("org-1", "FORM", "2026-01-01", "2026-03-31", {}, { runner }),
+    (error: unknown) => error === sentinel,
+  );
+  assert.equal(transactionOpened, false);
 });

@@ -10,12 +10,19 @@ import { taxReturnPackBox } from "../country-tax-packs/index.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
 import { buildFilingCalendar, type FilingFrequency } from "../tax/nexus.ts";
 
-// A return is a statutory report, not a best-effort dashboard query.  Keep a
-// dedicated drizzle handle so computeTaxReturn can open a repeatable-read
-// snapshot even when its caller already owns a (read-committed) request
-// transaction (for example markTaxFilingFiled).
+// A return is a statutory report, not a best-effort dashboard query. By
+// default computeTaxReturn opens its own repeatable-read snapshot through a
+// dedicated handle, so its read level never depends on whatever transaction
+// the caller happens to hold. A caller that already owns the authoritative
+// unit of work (markTaxFilingFiled's withOrg transaction) instead passes its
+// own executor via ComputeTaxReturnOptions.runner: the recompute then runs on
+// the caller's pinned connection and the whole verify-and-write unit holds
+// exactly one pool connection. A second handle here would pin a second pool
+// client for the duration — with OPENBOOKS_DB_POOL_MAX=1 every mark-filed
+// would block to the statement timeout, and N concurrent filings would
+// deadlock a pool of N.
 const returnDb = drizzle({ client: pool });
-type TaxReturnRunner = SqlExecutor;
+export type TaxReturnRunner = SqlExecutor;
 
 /**
  * Configurable government tax return computation.
@@ -341,6 +348,13 @@ export interface TaxReturnTranslationPolicy {
 export interface ComputeTaxReturnOptions {
   filingEntity?: TaxReturnFilingEntity;
   translation?: TaxReturnTranslationPolicy;
+  /**
+   * Run the return on the caller's executor instead of opening a dedicated
+   * repeatable-read snapshot (markTaxFilingFiled passes its pinned withOrg
+   * connection). The caller owns consistency: reads see the caller's
+   * transaction, and no second pool connection is held.
+   */
+  runner?: TaxReturnRunner;
 }
 
 /** One filing entity's component of a translated consolidated view. */
@@ -1123,9 +1137,9 @@ async function computeTaxReturnInSnapshot(
 
 /**
  * Compute a complete return from one pinned repeatable-read PostgreSQL
- * snapshot. The dedicated handle is intentional: callers such as filing
- * verification may already be inside a request transaction whose isolation
- * level was chosen before this function was reached.
+ * snapshot — unless the caller passes `opts.runner`, in which case the return
+ * runs directly on that executor (a caller-owned transaction) and opens no
+ * snapshot of its own.
  *
  * Without `opts` the return covers the whole org exactly as before (every
  * subsidiary's lines, form+window registration match) — single-currency orgs
@@ -1142,6 +1156,9 @@ export async function computeTaxReturn(
   adjustments: Record<string, string> = {},
   opts: ComputeTaxReturnOptions = {},
 ): Promise<TaxReturnResult> {
+  if (opts.runner) {
+    return computeTaxReturnInSnapshot(opts.runner, orgId, formCode, from, to, adjustments, opts);
+  }
   return returnDb.transaction(
     (tx) => computeTaxReturnInSnapshot(tx, orgId, formCode, from, to, adjustments, opts),
     { isolationLevel: "repeatable read", accessMode: "read only" },
