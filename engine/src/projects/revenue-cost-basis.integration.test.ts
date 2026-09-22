@@ -138,6 +138,38 @@ for (const invalid of ["missing-primary", "inactive-primary", "nonposting-primar
   });
 }
 
+test("project cost progress counts labor posted to an asset-type WIP account", enabled, async () => {
+  const org = await createScratchOrg();
+  try {
+    const projectId = await projectFixture(org);
+    // Labor WIP is legitimately an asset (project WIP is the natural
+    // mapping and the control-account policy allows asset_current_other /
+    // asset_other). Labor posts DR WIP [project] / CR clearing exactly as
+    // postProjectLaborCost stamps it.
+    const wipId = randomUUID(), clearingId = randomUUID();
+    await db.execute(sql`insert into accounts (id, org_id, number, name, type, is_summary, is_active, custom)
+      values (${wipId}, ${org.orgId}, '1450', 'Labor WIP', 'asset_current_other', false, true, '{}'::jsonb),
+             (${clearingId}, ${org.orgId}, '2160', 'Labor clearing', 'liability_current_other', false, true, '{}'::jsonb)`);
+    await db.execute(sql`update orgs
+       set settings = jsonb_set(settings, '{controlAccounts,laborWip}', to_jsonb(${wipId}::text))
+     where id = ${org.orgId}`);
+    const entry = randomUUID();
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+        values (${entry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${entry}, ${org.date}, ${org.periodId}, 'draft', 'labor_burden')`);
+      await tx.execute(sql`insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id, project_id, amount, currency, txn_amount, fx_rate)
+        values (${org.orgId}, ${entry}, 1, ${wipId}, ${org.subsidiaryId}, ${projectId}, '250', 'CAD', '250', '1'),
+               (${org.orgId}, ${entry}, 2, ${clearingId}, ${org.subsidiaryId}, null, '-250', 'CAD', '-250', '1')`);
+      await tx.execute(sql`update journal_entries set status = 'posted' where org_id = ${org.orgId} and id = ${entry}`);
+    });
+    const result = await syncProjectRevenueContracts(org.orgId, null, org.date, projectId);
+    assert.deepEqual(result.problems, []);
+    // Before the fix the asset-typed WIP debit was invisible to cost-to-date
+    // and progress read 0.0000, understating earned revenue.
+    assert.equal(result.synced[0]?.percentComplete, "25.0000");
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
 test("legacy owner resolves the unique root; authorized scope and manual progress remain intact", enabled, async () => {
   const org = await createScratchOrg();
   try {
