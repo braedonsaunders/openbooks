@@ -12,7 +12,8 @@ import { NextResponse } from "next/server";
  *
  * Dependents: payment bank profiles (payment_bank_profiles.sftp_server_id,
  * RESTRICT) and statement-import schedules
- * (sftp_import_schedules.sftp_server_id, no FK at all). Authorization is the
+ * (sftp_import_schedules 0242 composite tenant FK on (org_id,
+ * sftp_server_id), NO ACTION). Authorization is the
  * only mocked dependency; every row lock, delete, and rollback executes
  * through the production handler and database implementation.
  */

@@ -8,6 +8,77 @@ import { isUuid } from '../../../../../../lib/list-params'
 
 export const runtime = 'nodejs'
 
+/**
+ * Refuse a manual run the engine did not execute. Mirrors the exclusion
+ * predicate in `runDueSftpImports` (schedule active, server active,
+ * production org, bank feeds on) and names the first failing condition with
+ * its real remedy: schedule reactivation is PATCH `{ isActive: true }` on
+ * this route, server reactivation is PATCH `{ action: 'toggle' }` on the
+ * server route, bank feeds turn on at Company Settings → Features, and a
+ * deleted server means replacing the schedule (DELETE here, POST on the
+ * collection). When every condition still holds the scan raced a concurrent
+ * change, so say so and ask for a retry rather than claiming a clean scan.
+ * The predicate stays org-scoped, so foreign ids keep reading as 'not
+ * found' exactly like the ownership check above.
+ */
+async function refuseUnexecutedRun(scheduleId: string, orgId: string): Promise<NextResponse> {
+  const diagnosis = (await db.execute<{
+    schedule_active: boolean
+    server_id: string | null
+    server_active: boolean | null
+    env_kind: string
+    feeds_on: boolean
+  }>(sql`
+    select sc.is_active as schedule_active,
+           sv.id as server_id,
+           sv.is_active as server_active,
+           o.env_kind,
+           coalesce((o.settings->'features'->>'bankFeeds')::boolean, false) as feeds_on
+      from sftp_import_schedules sc
+      left join sftp_servers sv on sv.id = sc.sftp_server_id and sv.org_id = sc.org_id
+      join orgs o on o.id = sc.org_id
+     where sc.id = ${scheduleId} and sc.org_id = ${orgId}
+  `))
+  const row = diagnosis.rows[0]
+  // Deleted between the ownership check and the scan: same answer as never
+  // owned, never a fabricated result.
+  if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!row.schedule_active) {
+    return NextResponse.json(
+      { error: 'Activate this schedule before running it.', code: 'SCHEDULE_INACTIVE' },
+      { status: 409 },
+    )
+  }
+  if (!row.server_id) {
+    return NextResponse.json(
+      { error: 'The SFTP server for this schedule no longer exists — delete this schedule and create a new one on an active server.', code: 'SFTP_SERVER_MISSING' },
+      { status: 409 },
+    )
+  }
+  if (!row.server_active) {
+    return NextResponse.json(
+      { error: 'Activate the SFTP server before running this schedule.', code: 'SFTP_SERVER_INACTIVE' },
+      { status: 409 },
+    )
+  }
+  if (row.env_kind !== 'production') {
+    return NextResponse.json(
+      { error: 'Manual SFTP runs are available only in production organizations.', code: 'SFTP_RUN_NON_PRODUCTION' },
+      { status: 409 },
+    )
+  }
+  if (!row.feeds_on) {
+    return NextResponse.json(
+      { error: 'Bank feeds are disabled — enable bank feeds in Company Settings → Features before running.', code: 'BANK_FEEDS_DISABLED' },
+      { status: 409 },
+    )
+  }
+  return NextResponse.json(
+    { error: 'The schedule changed while the run was starting — try running it again.', code: 'SCHEDULE_RUN_STALE' },
+    { status: 409 },
+  )
+}
+
 /** Toggle active, or run the schedule now: { action: 'run' } / { isActive }. */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('admin.setup.manage', 'bankFeeds')
@@ -26,7 +97,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // it does not turn this operator into the statements' importer.
     const runs = await runDueSftpImports(user.orgId, id)
     const mine = runs.find((r) => r.scheduleId === id)
-    return NextResponse.json({ ok: true, result: mine ?? { scheduleId: id, filesSeen: 0, imported: 0, duplicates: 0, errors: [], files: [] } })
+    if (mine) return NextResponse.json({ ok: true, result: mine })
+    // No scan executed for this schedule: the engine deliberately excludes
+    // inactive schedules, inactive servers, non-production orgs, and orgs
+    // with bank feeds off. Answering zero counts here would be
+    // indistinguishable from a genuine clean scan of an empty folder, so
+    // refuse by name with the real remedy instead of claiming success. The
+    // diagnosis runs AFTER the scan, so a schedule deactivated (or deleted)
+    // between the ownership check and the scan still refuses truthfully;
+    // nothing here enables a schedule or server.
+    return await refuseUnexecutedRun(id, user.orgId)
   }
   // A zero-row toggle is a failure, not a success: without the affected-row
   // check a missing or foreign-tenant id would report {ok:true} while no read
