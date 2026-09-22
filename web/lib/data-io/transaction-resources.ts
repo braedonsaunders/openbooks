@@ -294,6 +294,16 @@ async function writeTransactions(
     rows: { id: string }[]
   }).rows[0]?.id ?? null
   const deps = ctx.post ? await controlDeps(ctx.orgId) : null
+  // Intra-file natural-key fence: documents are unique per
+  // (org_id, kind, document_number) (documents_org_kind_number), and a
+  // dry-run preview writes nothing — so without this the second of two
+  // identical rows previews clean and then fails at commit. Only a row that
+  // passes every other check reserves its number: a row that fails
+  // validation leaves nothing behind, so it must not poison a valid later
+  // row, and generated (anonymous) numbers never enter the fence. The set is
+  // per write() call, whose org and kind are fixed, so the trimmed number is
+  // the whole key.
+  const claimedNumbers = new Set<string>()
 
   for (let i = 0; i < rows.length; i++) {
     const rowNo = i + 1
@@ -433,7 +443,10 @@ async function writeTransactions(
         continue
       }
 
-      // Duplicate document number?
+      // Duplicate document number? The storage check comes first so a clash
+      // with an already-posted document keeps its existing refusal; the
+      // intra-file check then anticipates the clash a duplicate row would hit
+      // at commit, using the same message so preview and commit agree.
       const wantNumber = String(src.documentNumber ?? '').trim()
       if (wantNumber) {
         const dup = (await db.execute(sql`
@@ -445,9 +458,15 @@ async function writeTransactions(
           outcome.errors.push({ row: rowNo, message: `document ${wantNumber} already exists` })
           continue
         }
+        if (claimedNumbers.has(wantNumber)) {
+          outcome.failed++
+          outcome.errors.push({ row: rowNo, message: `document ${wantNumber} already exists` })
+          continue
+        }
       }
 
       if (ctx.dryRun) {
+        if (wantNumber) claimedNumbers.add(wantNumber)
         outcome.created++
         continue
       }
@@ -507,6 +526,12 @@ async function writeTransactions(
           throw e
         }
       })
+
+      // The draft now owns its number — including when posting fails below and
+      // the draft persists for review — so a later row claiming it fails here
+      // exactly as the storage check would refuse it. An insert that throws
+      // never reaches this line and reserves nothing.
+      if (wantNumber) claimedNumbers.add(wantNumber)
 
       if (ctx.post && deps) {
         try {
