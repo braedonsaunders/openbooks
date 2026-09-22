@@ -14,13 +14,28 @@
 -- with the new column appended after every existing column. Existing rows
 -- read back as zero, which is exactly what "nothing carried in" has always
 -- meant here.
+--
+-- The view is dropped and recreated (not CREATE OR REPLACE): governed
+-- openbooks_query.* views have drifted column order from the baseline on
+-- real installs, and CREATE OR REPLACE refuses to reorder columns
+-- ("cannot change name of view column" aborted a deploy once already).
+-- Nothing depends on this view, and the read role's grant is restored
+-- explicitly below.
+
+SET statement_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SET client_min_messages = warning;
+
 ALTER TABLE public.payroll_opening_balances
   ADD COLUMN IF NOT EXISTS eht_remuneration_ytd numeric(19,4) DEFAULT 0 NOT NULL;
 
 COMMENT ON COLUMN public.payroll_opening_balances.eht_remuneration_ytd IS
   'EHT-subject remuneration already paid this year before adoption (Ontario, British Columbia, Manitoba). Counts toward the employer''s annual EHT exemption in the employee''s current payroll province; zero when the prior provider reports none.';
 
-CREATE OR REPLACE VIEW openbooks_query.payroll_opening_balances WITH (security_barrier='true') AS
+DROP VIEW IF EXISTS openbooks_query.payroll_opening_balances;
+CREATE VIEW openbooks_query.payroll_opening_balances WITH (security_barrier='true') AS
  SELECT id,
     org_id,
     employee_party_id,
@@ -47,3 +62,5 @@ CREATE OR REPLACE VIEW openbooks_query.payroll_opening_balances WITH (security_b
     eht_remuneration_ytd
    FROM public.payroll_opening_balances
   WHERE (org_id = public.openbooks_query_org_id());
+
+GRANT SELECT ON openbooks_query.payroll_opening_balances TO openbooks_read;
