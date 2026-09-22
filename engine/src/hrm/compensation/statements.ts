@@ -308,7 +308,7 @@ export async function generateStatement(query: {
   });
 }
 
-function renderRowToPdf(row: StatementRow, orgName: string): Buffer {
+function renderRowToPdf(row: StatementRow, orgName: string): Promise<Buffer> {
   const payload = row.payload as Record<string, unknown>;
   const rate = payload.currentRate as { rate?: string; currency?: string } | null;
   const placement = payload.bandPlacement as { placement?: string; compaRatio?: string } | null;
