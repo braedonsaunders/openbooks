@@ -709,9 +709,42 @@ export async function completeRequestedDocumentVoid(
                  and obligation.status <> 'cancelled'
             ) as revenue
         `));
-        if (dependentSubledger.rows[0]?.inventory || dependentSubledger.rows[0]?.revenue) {
+        const hasInventoryActivity = dependentSubledger.rows[0]?.inventory ?? false;
+        const hasRevenueActivity = dependentSubledger.rows[0]?.revenue ?? false;
+        if (hasInventoryActivity || hasRevenueActivity) {
+          // The queries above are existence-based: movement and obligation
+          // rows survive a kernel reversal, so reversing the stock does not
+          // unblock the void — the document stays posted. Branch the refusal
+          // by the subledger actually present: the old combined text pointed
+          // every inventory case at the revenue cancellation screen, which
+          // cannot relieve stock. Every remedy named below exists today; no
+          // receipt-selection workflow is claimed.
+          const revenueRemedy =
+            "revenue contracts cancel from Revenue → contract → Cancel recognition (POST /api/revenue/cancel-recognition)";
+          if (!hasInventoryActivity) {
+            throw new DocumentVoidError(
+              `this transaction has inventory or revenue-recognition subledger activity — use the dedicated return/cancellation workflow: ${revenueRemedy}`,
+            );
+          }
+          const revenueClause = hasRevenueActivity
+            ? ` Cancel open revenue recognition from Revenue → contract → Cancel recognition (POST /api/revenue/cancel-recognition).`
+            : "";
+          if (String(doc.kind) === "vendor_bill") {
+            // Only actions that exist today are named, and the financial
+            // and stock legs are kept distinct: an account-only vendor
+            // credit (no stock lines) posts without inventory evidence and,
+            // where cash is still due, applies toward the bill through a
+            // vendor payment; Inventory Adjust removes the units at carried
+            // cost. Both legs use the item's own inventory adjustment
+            // account, so any difference between the credit and the carried
+            // cost remains there as the residual. No receipt-selection
+            // workflow and no reverse action are claimed.
+            throw new DocumentVoidError(
+              `this transaction has posted inventory receipt movements — the bill remains posted and cannot be voided. Correct the finances separately from the stock: post an account-only vendor credit (no stock lines) to the item's inventory adjustment account, and where cash is still due apply the credit toward the bill through a vendor payment; correct the stock separately with Inventory Adjust, which removes the units at carried cost against the same adjustment account. Any difference between the credit and the carried cost remains there as the residual.${revenueClause}`,
+            );
+          }
           throw new DocumentVoidError(
-            "this transaction has inventory or revenue-recognition subledger activity — use the dedicated return/cancellation workflow: revenue contracts cancel from Revenue → contract → Cancel recognition (POST /api/revenue/cancel-recognition)",
+            `this transaction has posted inventory movements — it remains posted even after its stock movements are reversed; voiding cannot unwind the stock ledger.${revenueClause}`,
           );
         }
 
