@@ -2276,6 +2276,7 @@
       },
       "stock-locations": {
         "title": "在庫ロケーション",
+        "singular": "在庫ロケーション",
         "description": "ロケーションディメンション配下の物理的なビン、ゾーン、および倉庫。"
       },
       "item-inventory-profiles": {

@@ -6,11 +6,11 @@ import { Plus } from 'lucide-react'
 import { Button } from '@openbooks/ui'
 
 /** Opens the inventory movement drawer (?movement=new). */
-export function NewMovementButton() {
+export function NewMovementButton({ href = '/inventory?movement=new' }: { href?: string }) {
   const t = useTranslations('inventory')
   return (
     <Button asChild>
-      <Link href="/inventory?movement=new">
+      <Link href={href}>
         <Plus size={15} /> {t('list.newButton')}
       </Link>
     </Button>

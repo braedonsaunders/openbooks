@@ -2154,6 +2154,7 @@
       },
       "stock-locations": {
         "title": "Emplacements de stock",
+        "singular": "Emplacement de stock",
         "description": "Casiers, zones et entrepôts physiques sous la dimension emplacements."
       },
       "item-inventory-profiles": {

@@ -2250,6 +2250,7 @@
       },
       "stock-locations": {
         "title": "Locais de Estoque",
+        "singular": "Local de Estoque",
         "description": "Compartimentos, zonas e armazéns físicos sob a dimensão de localizações."
       },
       "item-inventory-profiles": {
