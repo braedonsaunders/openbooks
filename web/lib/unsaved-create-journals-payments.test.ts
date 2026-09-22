@@ -32,6 +32,10 @@ const PAYMENT_DRAWER = "web/app/(app)/payments/PaymentDrawer.tsx";
 const JOURNAL_VIEW = "web/app/(app)/journal/view.ts";
 const PAYMENTS_SECTION = "web/app/(app)/payments/PaymentsSection.tsx";
 const JOURNALS_ROUTE = "web/app/api/journals/route.ts";
+// The journals write lives here, not in the route: the route gates, parses
+// the idempotency key and delegates. Kept as its own constant so a future
+// move breaks this line loudly instead of quietly weakening the contract.
+const JOURNALS_WRITE = "web/lib/journal-create.ts";
 const PAYMENTS_ROUTE = "web/app/api/payments/route.ts";
 const JOURNALS_DRAFT_ROUTE = "web/app/api/journals/draft/route.ts";
 const PAYMENTS_DRAFT_ROUTE = "web/app/api/payments/draft/route.ts";
@@ -45,6 +49,7 @@ const SLICE_CALLERS = [
   JOURNAL_VIEW,
   PAYMENTS_SECTION,
   JOURNALS_ROUTE,
+  JOURNALS_WRITE,
   PAYMENTS_ROUTE,
 ];
 
@@ -128,9 +133,17 @@ test("drawers cancel with zero writes and save with one idempotent POST", () => 
 });
 
 test("create routes serialize on the key and replay only the request-controlled match", () => {
-  for (const file of [JOURNALS_ROUTE, PAYMENTS_ROUTE]) {
-    const body = src(file);
-    assert.match(body, /Idempotency-Key/);
+  // The route gates and parses; the WRITE OWNER serializes and replays. For
+  // payments those are the same file. The journals write was extracted to
+  // lib/journal-create.ts, so this follows it there: asserting the contract
+  // against a route that no longer holds it would fail for the wrong reason,
+  // and dropping the assertion would go green on behaviour nobody checks.
+  for (const { route, write } of [
+    { route: JOURNALS_ROUTE, write: JOURNALS_WRITE },
+    { route: PAYMENTS_ROUTE, write: PAYMENTS_ROUTE },
+  ]) {
+    assert.match(src(route), /Idempotency-Key/, `${route} must require the key`);
+    const body = src(write);
     assert.match(body, /pg_advisory_xact_lock\(hashtextextended/);
     assert.match(body, /claimIdempotentCreate/);
     assert.match(body, /resolveIdempotentReplay/);
@@ -149,7 +162,7 @@ test("create routes serialize on the key and replay only the request-controlled 
     assert.match(body, /request: match/);
     assert.match(body, /documentDate: body\.documentDate \?\? null/);
   }
-  assert.match(src(JOURNALS_ROUTE), /allocateDocumentNumber\(tx, user\.orgId, 'journal', 'JE-'\)/);
+  assert.match(src(JOURNALS_WRITE), /allocateDocumentNumber\(tx, orgId, "journal", "JE-"\)/);
   assert.match(src(PAYMENTS_ROUTE), /allocateDocumentNumber\(tx, user\.orgId, kind, NUMBER_PREFIX\[kind\]\)/);
 });
 
