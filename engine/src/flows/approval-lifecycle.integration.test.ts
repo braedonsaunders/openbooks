@@ -176,6 +176,44 @@ test("submit FAILS CLOSED when an enabled flow has an invalid graph", { skip: !D
   });
 });
 
+test("submit is REFUSED when one flow gates and another fails", { skip: !DB }, async () => {
+  await withOrgFixture(async (org, actors) => {
+    const good = await seedApprovalFlow(org.orgId, {
+      subjectKind: "vendor_bill",
+      mode: "any",
+      gateTitle: "Working approval",
+      assignees: [{ type: "user", userId: actors.approver1Id }],
+    });
+    const bad = await seedApprovalFlow(org.orgId, {
+      subjectKind: "vendor_bill",
+      mode: "any",
+      gateTitle: "Broken approval",
+      assignees: [{ type: "role", role: "nonexistent_role" }],
+    });
+    // Distinct names so the refusal can tell the two flows apart.
+    await db.execute(sql`update flows set name = 'Working flow' where id = ${good.flowId}`);
+    await db.execute(sql`update flows set name = 'Broken flow' where id = ${bad.flowId}`);
+    const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
+
+    const res = await submitForApproval("vendor_bill", docId);
+    assert.equal(res.gated, false, "a sibling gate must not carry a failed dispatch into pending_approval");
+    assert.ok(res.flowError, "a flowError is surfaced so the caller fails closed");
+    assert.match(res.flowError, /Broken flow/, "the refusal names the failed flow");
+    assert.match(res.flowError, /zero assignees/, "the refusal names the cause");
+    assert.equal(await docStatus(docId), "draft");
+    // The sibling's gate was created by the dispatch, then cancelled by the
+    // refusal — nothing live may dangle behind it.
+    const gates = await gateRows({ subjectId: docId });
+    assert.ok(gates.length > 0, "the dispatch really did gate before failing");
+    assert.ok(gates.every((g) => g.status === "cancelled"),
+      `every gate from the refused dispatch is cancelled, got ${JSON.stringify(gates.map((g) => g.status))}`);
+    // The failed run stays failed as retry evidence (only live runs cancel).
+    const failed = (await db.execute<{ id: string }>(sql`
+      select id from flow_runs where subject_id = ${docId} and status = 'failed'`)).rows;
+    assert.equal(failed.length, 1);
+  });
+});
+
 test("submit FAILS CLOSED when the approval flow resolves to zero approvers", { skip: !DB }, async () => {
   await withOrgFixture(async (org, actors) => {
     // A role with no members → createGate throws → run failed → gatesCreated 0.

@@ -3,6 +3,7 @@ import { db, schema, withOrgTransaction } from "../platform/db.ts";
 import { resolveScriptUser, runTriggerScripts, type ScriptContext } from "../scripting/scripting.ts";
 import { assertDocumentMutationRefsOwned } from "../records/mutation-refs.ts";
 import { assertExpenseEmployee, assertExpenseSettlement } from "../records/expense-validation.ts";
+import { cancelDispatchRuns, dispatchFailureReason, findGatingRun } from "./dispatch-result.ts";
 import { runRecordFlows } from "./run.ts";
 
 /**
@@ -147,6 +148,18 @@ async function submitForApprovalLocked(
     orgId: doc.orgId,
     userId: actorId ?? doc.createdBy,
   });
+  // Fail closed FIRST, before looking at gates: when ANY flow in the dispatch
+  // failed, the submission is refused even if a sibling flow gated. Approving
+  // the sibling's gate would release a document whose other approval never
+  // existed (subjectOpenGateCount only sees pending/escalated gates). The
+  // sibling's gates are cancelled in this same transaction so nothing dangles
+  // behind the refusal; the document stays draft and the caller surfaces the
+  // named cause.
+  if (flowResult.failed) {
+    await cancelDispatchRuns(doc.orgId, flowResult.runs.map((r) => r.runId));
+    const cause = dispatchFailureReason(flowResult) ?? "approval routing failed";
+    return { gated: false, runId: null, flowError: `submission refused: ${cause}` };
+  }
   if (flowResult.gatesCreated > 0) {
     const updated = await db
       .update(schema.documents)
@@ -162,16 +175,8 @@ async function submitForApprovalLocked(
     if (updated.length !== 1) {
       throw new Error("document changed while submission was being recorded");
     }
-    const gatedRun = flowResult.runs.find((r) => r.gatesCreated > 0);
+    const gatedRun = findGatingRun(flowResult);
     return { gated: true, runId: gatedRun?.runId ?? flowResult.runs[0]!.runId, flowError: null };
-  }
-
-  // A matched approval flow errored (or dispatch threw) without producing a
-  // gate. FAIL CLOSED: never let the caller treat this as "no approval needed"
-  // and auto-approve — the document stays draft and the caller surfaces it.
-  if (flowResult.failed) {
-    const reason = flowResult.runs.find((r) => r.status === "failed") ? "an approval flow errored" : "approval routing failed";
-    return { gated: false, runId: null, flowError: reason };
   }
 
   const updated = await db
