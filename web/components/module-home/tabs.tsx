@@ -17,14 +17,16 @@ import type { ModuleHomeTab } from "./tab-types";
  *
  * Two things it must do that a plain row of links cannot:
  *
- *   • FIT. The HRM group carries fourteen routes. Rendered as a rigid strip
- *     it measured 1358px and crushed the page title to ZERO width on every
- *     page in the module — the title element was still there, still 32px
- *     tall, and 0px wide. So the strip measures itself, shows the leading
- *     tabs that fit, and folds the rest into a More menu. The overflow
- *     arithmetic is `visibleTopNavGroupCount`, shared with the top nav, so
- *     the two strips cannot drift on the one calculation either could get
- *     wrong.
+ *   • FIT. The HRM group once carried fourteen peer routes. Rendered as a
+ *     rigid strip it measured 1358px and crushed the page title to ZERO
+ *     width on every page in the module — the title element was still
+ *     there, still 32px tall, and 0px wide. The strip now names six jobs
+ *     (plus Compliance when construction is on); the rest are viewTabs.
+ *     Overflow still matters for wide view strips, so the strip measures
+ *     itself, shows the leading tabs that fit, and folds the rest into a
+ *     More menu. The overflow arithmetic is `visibleTopNavGroupCount`,
+ *     shared with the top nav, so the two strips cannot drift on the one
+ *     calculation either could get wrong.
  *
  *   • MATCH THE BUTTONS BESIDE IT. The track is 40px, the same as a
  *     page-header primary button, and the pills are 36px — a 2px inset

@@ -38,11 +38,13 @@ export function PageHeader({
           wraps — route-tab strips must not move between sibling pages.
 
           The sm+ floor is a HARD 14rem, not `min-w-0`. With min-w-0 a wide
-          action strip won a shrink race outright: the HRM group's fourteen
-          route tabs measured 1358px and left the <h1> rendered at ZERO width
-          on every page in the module — present, 32px tall, invisible. The
-          strip is the thing that must give, and it can: it folds its tail
-          into a More menu once it stops fitting. */}
+          action strip won a shrink race outright: the HRM group's old
+          fourteen-peer strip measured 1358px and left the <h1> rendered at
+          ZERO width on every page in the module — present, 32px tall,
+          invisible. The group strip now names six jobs (plus Compliance
+          when construction is on). The strip is still the thing that must
+          give, and it can: it folds its tail into a More menu once it
+          stops fitting. */}
       <header className="flex flex-wrap items-center justify-between gap-3 sm:flex-nowrap sm:items-start sm:gap-4">
         <div className="min-w-0 flex-1 basis-40 space-y-1 sm:min-w-56">
           <h1 className="truncate text-xl font-semibold text-slate-900 sm:text-2xl dark:text-slate-100">

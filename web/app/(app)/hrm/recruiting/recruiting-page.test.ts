@@ -37,6 +37,7 @@ test("recruiting spec composes shared primitives: list toolbar, table, URL drawe
   assert.match(view, /module-home-tabs/, "the header carries the route-tab strip");
   assert.match(view, /widgetBlock\('module-home-tabs', \{ tabs: data\.viewTabs \}\)/,
     "Openings and the depth tabs are VIEWS on the shared subtab strip, never a dropdown");
+  assert.match(view, /hrmHiringViewTabs/, "Positions prepends the recruiting depth tabs on the Hiring strip");
   assert.match(sections, /RecruitingDrawer/, "the drawer stays a shared component, never a copy");
   assert.match(sections, /UrlDrawer/, "the drawer closes by navigation");
   assert.ok(!sections.includes('<table'), "no hand-rolled table remains in the recruiting sections");

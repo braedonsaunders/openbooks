@@ -26,6 +26,7 @@ import {
   listRequisitions,
 } from '@openbooks/engine/src/hrm/recruiting/recruiting-read.ts'
 import { hrmGroupTabs } from '../../../../components/module-home/group-tabs'
+import { hrmHiringViewTabs } from '../../../../lib/hrm/workspace-tabs'
 import { can, requirePermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { SETUP_ENTITY_BY_KEY } from '../../../../lib/setup/registry'
@@ -679,11 +680,15 @@ export async function loadRecruitingPage(
     // HR-18: sub-tab strip + depth table payload (null on Openings).
     tab,
     depthTabs,
-    viewTabs: depthTabs.map((option) => ({
-      href: option.href,
-      label: option.label,
-      active: option.value === tab,
-    })),
+    viewTabs: await hrmHiringViewTabs(
+      authz,
+      '/hrm/recruiting',
+      depthTabs.map((option) => ({
+        href: option.href,
+        label: option.label,
+        active: option.value === tab,
+      })),
+    ),
     statusLabel: tc('labels.status'),
     depthRows,
     depthColumns,

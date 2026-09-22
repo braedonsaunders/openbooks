@@ -211,7 +211,7 @@ export const FEATURES: FeatureDef[] = [
   // any of this: the parent needs payroll, projects and time tracking,
   // and every complexity below it is a sub-feature that hides and
   // switches off independently. Toggling never deletes data.
-  { key: 'hrmConstructionCompliance', defaultEnabled: false, category: 'operations', navModules: ['hrm-compliance'], parentKey: 'hrm', requiresAll: ['payroll', 'projects', 'timeTracking'] },
+  { key: 'hrmConstructionCompliance', defaultEnabled: false, category: 'operations', parentKey: 'hrm', requiresAll: ['payroll', 'projects', 'timeTracking'] },
   { key: 'hrmPrevailingWage', defaultEnabled: false, category: 'operations', parentKey: 'hrmConstructionCompliance' },
   { key: 'hrmCertifiedPayroll', defaultEnabled: false, category: 'operations', parentKey: 'hrmConstructionCompliance', requiresAll: ['hrmPrevailingWage'] },
   { key: 'hrmWorkersCompClasses', defaultEnabled: false, category: 'operations', parentKey: 'hrmConstructionCompliance' },

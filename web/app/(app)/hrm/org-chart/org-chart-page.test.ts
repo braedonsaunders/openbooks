@@ -31,6 +31,8 @@ test("org chart spec composes tiles, the tree widget, and the directory table", 
   assert.match(view, /variant: 'app'/, "the directory uses the shared app table primitives");
   assert.match(view, /widgetBlock\('hrm-org-chart-person'/, "the person drawer renders through the shared widget");
   assert.match(view, /module-home-tabs/, "the header carries the route-tab strip");
+  assert.match(view, /paramKey: 'view'/, "Tree vs Directory is a list-toolbar view filter, never a second tab strip");
+  assert.match(loader, /hrmPeopleViewTabs/, "the org chart rides the People viewTabs");
   assert.match(sections, /UrlDrawer/, "the person drawer closes by navigation");
 });
 

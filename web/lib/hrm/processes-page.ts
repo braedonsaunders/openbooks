@@ -6,6 +6,7 @@ import { HrmProcessError } from '@openbooks/engine/src/hrm/processes.ts'
 import { getProcess, listProcesses, type ProcessDetail, type ProcessSegment } from '@openbooks/engine/src/hrm/processes-read.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
+import { hrmPeopleViewTabs } from './workspace-tabs'
 import { can, type Authz } from '../authz'
 import { loadAiDraftButton, loadAiDraftDrawer, type AiDraftDrawerData } from './ai-rails'
 
@@ -60,6 +61,7 @@ export interface ProcessesPageData {
   title: string
   description: string
   tabs: Awaited<ReturnType<typeof hrmGroupTabs>>
+  viewTabs: Awaited<ReturnType<typeof hrmPeopleViewTabs>>
   listTitle: string
   segments: ProcessSegmentView[]
   segmentsLabel: string
@@ -236,6 +238,7 @@ export async function loadProcessesPage(authz: Authz, sp: Record<string, string 
     title,
     description: t('processes.description'),
     tabs: await hrmGroupTabs(authz, '/hrm/processes'),
+    viewTabs: await hrmPeopleViewTabs(authz, '/hrm/processes'),
     listTitle: t('processes.listTitle'),
     segments,
     segmentsLabel: t('processes.segmentsLabel'),

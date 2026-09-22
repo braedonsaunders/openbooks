@@ -35,6 +35,8 @@ test("positions spec composes shared primitives: list toolbar, table, URL drawer
   assert.match(view, /link\(item\('code'\), item\('href'\)\)/, "the code opens the drawer through the row href");
   assert.match(view, /widgetBlock\('hrm-position-drawer'/, "the drawer renders through the shared widget");
   assert.match(view, /module-home-tabs/, "the header carries the route-tab strip");
+  assert.match(view, /hrmHiringViewTabs/, "Positions rides the Hiring viewTabs beside recruiting depth");
+  assert.match(view, /hrm\.recruiting\.read/, "a positions-only viewer is not offered recruiting depth tabs that access-deny");
   assert.match(sections, /PositionDrawer/, "the drawer stays a shared component, never a copy");
   assert.match(sections, /UrlDrawer/, "the drawer closes by navigation");
   assert.ok(!sections.includes('<table'), "no hand-rolled table remains in the position sections");

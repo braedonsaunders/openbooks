@@ -2,6 +2,7 @@ import 'server-only'
 import { getTranslations } from 'next-intl/server'
 import { can, type Authz } from '../../lib/authz'
 import { featureEnabled, orgFeatureState } from '../../lib/features'
+import { hrmStripParentHref } from '../../lib/hrm/workspace-tabs'
 import type { ModuleHomeTab } from './ui'
 
 /**
@@ -66,59 +67,34 @@ const GROUP_TABS: Record<TabGroup, { href: string; ns: string; key: string }[]> 
     { href: '/hrm', ns: 'hrm', key: 'home.tabs.overview' },
     // The NATIVE employee entity list — HRM deliberately has no second
     // roster; the employment record is a tab on the employee drawer.
+    // Org chart, processes, documents, and qualifications are viewTabs
+    // on this job, not peers on the group strip.
     { href: '/entities/employees', ns: 'nav', key: 'modules.employees' },
-    // The funded establishment behind the headcount plan — list, vacancy,
-    // and the position drawer — behind hrm.position.read (HRM_TAB_PERMISSION).
-    { href: '/hrm/positions', ns: 'hrm', key: 'home.tabs.positions' },
-    // Employment start/end/transfer checklists — the HR-4 recorded
-    // companion to the change-request queue.
-    { href: '/hrm/processes', ns: 'hrm', key: 'home.tabs.processes' },
-    { href: '/hrm/leave', ns: 'hrm', key: 'home.tabs.leave' },
-    // The vacancy-to-hire funnel — requisitions, candidates, interviews
-    // and offers — behind hrm.recruiting.read (HRM_TAB_PERMISSION).
-    { href: '/hrm/recruiting', ns: 'hrm', key: 'home.tabs.recruiting' },
-    // Review cycles, goals, and retention (HR-7): the tab sits behind
-    // hrm.performance.read OR the structural scope — a manager with
-    // reports and no grant still gets the tab with only their reviews —
-    // so it deliberately carries NO HRM_TAB_PERMISSION entry below. The
-    // page never access-denies: the read service narrows every row to
-    // the actor's privacy scope instead.
-    { href: '/hrm/performance', ns: 'hrm', key: 'home.tabs.performance' },
-    // Plans, windows, elections, and the monthly payroll-input seam —
-    // behind hrm.benefits.read (HRM_TAB_PERMISSION).
-    { href: '/hrm/benefits', ns: 'hrm', key: 'home.tabs.benefits' },
-    // HR-12 begin: job architecture, bands, merit cycles, headcount
-    // plans and pay transparency — behind hrm.compensation.read
-    // (HRM_TAB_PERMISSION) with the hrmCompensation switch (TAB_FEATURE).
-    { href: '/hrm/compensation', ns: 'hrm', key: 'home.tabs.compensation' },
-    // HR-12 end
-    // HR-13 begin: prevailing wage, certified payroll, comp classes and
-    // per-diem — behind hrm.construction.read (HRM_TAB_PERMISSION) and
-    // the hrmConstructionCompliance switch (TAB_FEATURE).
+    // Vacancy-to-hire. Positions ride the in-page Hiring strip; the
+    // landing rewrites to /hrm/positions when the viewer has positions
+    // and not recruiting.
+    { href: '/hrm/recruiting', ns: 'hrm', key: 'home.tabs.hiring' },
+    { href: '/hrm/leave', ns: 'hrm', key: 'home.tabs.timeOff' },
+    // Review cycles, calibration, succession, surveys. The tab sits
+    // behind hrm.performance.read OR the structural scope — a manager
+    // with reports and no grant still gets the tab with only their
+    // reviews — so it deliberately carries NO HRM_TAB_PERMISSION entry
+    // below. The page never access-denies: the read service narrows
+    // every row to the actor's privacy scope instead.
+    { href: '/hrm/performance', ns: 'hrm', key: 'home.tabs.talent' },
+    // Bands, cycles, plans, benefit windows. The landing rewrites to
+    // /hrm/benefits when compensation is off and benefits is on, so
+    // Rewards never 404s on a benefits-only org.
+    { href: '/hrm/compensation', ns: 'hrm', key: 'home.tabs.rewards' },
+    // Construction certified-payroll — tab 7, same extra-tab shape as
+    // payroll Checks, and only while the construction switch is on.
     { href: '/hrm/compliance', ns: 'hrm', key: 'home.tabs.compliance' },
-    // HR-13 end
-    // HR-14 begin: the worker qualification ledger — behind
-    // hrm.certifications.read (HRM_TAB_PERMISSION) and the
-    // hrmCertifications switch (TAB_FEATURE).
-    { href: '/hrm/qualifications', ns: 'hrm', key: 'home.tabs.qualifications' },
-    // HR-14 end
-    // HR-19 begin: documents and surveys — behind hrm.documents.read
-    // and hrm.surveys.manage (HRM_TAB_PERMISSION) with the hrmDocuments
-    // and hrmSurveys switches (TAB_FEATURE). The org chart sits behind
-    // hrm.employment.read OR hrm.self.read at the page gate, so it
-    // deliberately carries NO HRM_TAB_PERMISSION entry below — like the
-    // performance tab, the read service narrows nothing because the
-    // shape itself is public-inside-the-org.
-    { href: '/hrm/documents', ns: 'hrm', key: 'home.tabs.documents' },
-    { href: '/hrm/surveys', ns: 'hrm', key: 'home.tabs.surveys' },
-    { href: '/hrm/org-chart', ns: 'hrm', key: 'home.tabs.orgChart' },
-    // HR-19 end
-    // NOT tabs, by review: the change-request queue is a working surface
-    // reached from the cockpit's pending panel and the employee drawer, not
-    // a top-level destination; self-service leave is a quick action on the
-    // cockpit; departments are configured in Company setup (one departments
-    // page, never two); workforce reports live in the Reports module with
-    // every other report.
+    // NOT group-strip tabs, by review: positions, processes, documents,
+    // qualifications, surveys, org chart, and benefits are viewTabs
+    // under the jobs above. The change-request queue is reached from
+    // the cockpit pending panel and the employee drawer; self-service
+    // leave lives on /me; departments are Company setup; workforce
+    // reports live in the Reports module.
   ],
 }
 
@@ -146,23 +122,10 @@ const TAB_FEATURE: Record<string, string> = {
   '/hrm/leave': 'hrm',
   '/hrm/recruiting': 'hrm',
   '/hrm/performance': 'hrm',
-  '/hrm/benefits': 'hrm',
-  // HR-12 begin
-  '/hrm/compensation': 'hrmCompensation',
-  // HR-12 end
-  // HR-13 begin
+  // Rewards stays visible when only benefits is on — hrmGroupTabs
+  // rewrites the landing. Compensation itself still 404s behind
+  // hrmCompensation at the page gate.
   '/hrm/compliance': 'hrmConstructionCompliance',
-  // HR-13 end
-  // HR-14 begin
-  '/hrm/qualifications': 'hrmCertifications',
-  // HR-14 end
-  // HR-19 begin
-  '/hrm/documents': 'hrmDocuments',
-  '/hrm/surveys': 'hrmSurveys',
-  '/hrm/org-chart': 'hrmOrgChart',
-  // HR-19 end
-  '/hrm/positions': 'hrm',
-  '/hrm/processes': 'hrm',
   '/close': 'continuousClose',
 }
 
@@ -229,47 +192,52 @@ export async function customerGroupTabs(
   return groupTabs('customers', activeHref, { ...opts, exclude, orgId: authz.user.orgId })
 }
 
-/** The permission each HRM-strip destination enforces. The cockpit tab needs
- * nothing beyond the page's own hrm.employment.read gate; the positions tab
- * sits behind the headcount-plan read grant, the processes tab behind its
- * own hrm.process.read gate, and the leave desk behind hrm.leave.read. A tab
- * present in the list but absent here would render a destination the
- * viewer cannot open. */
+/** The permission each HRM-strip destination enforces. Hiring and Rewards
+ * are OR-gates (recruiting-or-positions, compensation-or-benefits) resolved
+ * in `hrmGroupTabs`, so they are absent here — a missing-grant exclusion
+ * would hide the whole job when only the other half is available. Talent
+ * carries no entry: a manager with reports and no grant still gets the
+ * tab; the read service narrows rows. */
 const HRM_TAB_PERMISSION: Record<string, string> = {
   '/entities/employees': 'parties.read',
-  '/hrm/positions': 'hrm.position.read',
-  '/hrm/processes': 'hrm.process.read',
   '/hrm/leave': 'hrm.leave.read',
-  '/hrm/recruiting': 'hrm.recruiting.read',
-  '/hrm/benefits': 'hrm.benefits.read',
-  // HR-12 begin
-  '/hrm/compensation': 'hrm.compensation.read',
-  // HR-12 end
-  // HR-13 begin
   '/hrm/compliance': 'hrm.construction.read',
-  // HR-13 end
-  // HR-14 begin
-  '/hrm/qualifications': 'hrm.certifications.read',
-  // HR-14 end
-  // HR-19 begin
-  '/hrm/documents': 'hrm.documents.read',
-  '/hrm/surveys': 'hrm.surveys.manage',
-  // HR-19 end
 }
 
 /**
- * The HRM strip with the permission exclusions applied, so a viewer is
- * never offered a tab that access-denies — no Employees tab without
- * parties.read, no Positions tab without the headcount-plan read grant, no
- * Processes or Leave tab without their read grants.
+ * The HRM strip with permission exclusions and job-landing rewrites
+ * applied, so a viewer is never offered a tab that access-denies and
+ * Hiring / Rewards land on a page the viewer can actually open.
  */
 export async function hrmGroupTabs(
   authz: Authz,
   activeHref: string,
   opts: { subQs?: string } = {},
 ): Promise<ModuleHomeTab[]> {
+  const state = await orgFeatureState(authz.user.orgId)
   const exclude = Object.entries(HRM_TAB_PERMISSION)
     .filter(([, permission]) => !can(authz, permission))
     .map(([href]) => href)
-  return groupTabs('hrm', activeHref, { ...opts, exclude, orgId: authz.user.orgId })
+
+  const canRecruit = can(authz, 'hrm.recruiting.read')
+  const canPositions = can(authz, 'hrm.position.read')
+  if (!canRecruit && !canPositions) exclude.push('/hrm/recruiting')
+
+  const canComp = can(authz, 'hrm.compensation.read') && featureEnabled(state, 'hrmCompensation')
+  const canBenefits = can(authz, 'hrm.benefits.read')
+  if (!canComp && !canBenefits) exclude.push('/hrm/compensation')
+
+  const stripHref = hrmStripParentHref(activeHref)
+  const tabs = await groupTabs('hrm', stripHref, { ...opts, exclude, orgId: authz.user.orgId })
+  const subQs = opts.subQs ?? ''
+  return tabs.map((tab) => {
+    const href = tab.href.split('?')[0] ?? tab.href
+    if (href === '/hrm/recruiting' && !canRecruit && canPositions) {
+      return { ...tab, href: `/hrm/positions${subQs}` }
+    }
+    if (href === '/hrm/compensation' && !canComp && canBenefits) {
+      return { ...tab, href: `/hrm/benefits${subQs}` }
+    }
+    return tab
+  })
 }
