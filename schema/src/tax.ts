@@ -387,6 +387,21 @@ export const taxFilings = pgTable(
       .notNull()
       .default({}),
     snapshotHash: text("snapshot_hash").notNull(),
+    /**
+     * Frozen return denomination and filing identity (0265): what the stored
+     * boxes are denominated in and which registration/scope produced them, so
+     * reprints and the mark-filed staleness check verify the posture that was
+     * prepared instead of today's configuration. NULL subsidiary/registration
+     * columns mean pre-snapshot (v1 semantics); snapshotVersion stays 1 for
+     * those rows so they verify exactly as prepared.
+     */
+    functionalCurrency: text("functional_currency"),
+    presentationCurrency: text("presentation_currency"),
+    translation: jsonb("translation"),
+    subsidiaryIds: uuid("subsidiary_ids").array(),
+    registrationId: uuid("registration_id"),
+    registrationNumber: text("registration_number"),
+    snapshotVersion: integer("snapshot_version").notNull().default(1),
     filingReference: text("filing_reference"),
     filedAt: timestamp("filed_at", { withTimezone: true }),
     ...auditColumns,

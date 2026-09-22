@@ -2,7 +2,12 @@ import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { db, withOrg } from "../platform/db.ts";
-import { computeTaxReturn, TaxReturnError, type TaxReturnResult } from "./return.ts";
+import {
+  computeTaxReturn,
+  TaxReturnError,
+  type TaxReturnResult,
+  type TaxReturnTranslation,
+} from "./return.ts";
 
 /**
  * Tax filing lifecycle — the governed prepared → filed transition.
@@ -24,6 +29,11 @@ import { computeTaxReturn, TaxReturnError, type TaxReturnResult } from "./return
  *     prepare path used. Any drift — a journal, a posted tax document, a tax
  *     mapping or rate, even a renamed form — changes the hash and the filing
  *     is rejected as stale; the reviewer prepares a new version instead.
+ *     Filings prepared at snapshot v2 additionally fingerprint the return's
+ *     identity and posture (registration number/id, functional and
+ *     presentation currency, subsidiary scope, translation evidence), so a
+ *     registration change or a currency/scope change trips stale even when
+ *     every box value still matches. Pre-v2 filings verify boxes only.
  *
  * Both fences must pass before `status` leaves 'prepared'. Zero rows are
  * written on rejection.
@@ -40,12 +50,40 @@ export class TaxFilingError extends Error {
   }
 }
 
+/**
+ * Snapshot schema version. v1 hashed form/period/channel/boxes/adjustments
+ * only, so a registration change or a currency/scope posture change passed
+ * the mark-filed staleness check whenever the box values still matched. v2
+ * additionally hashes every identity/posture field below. Rows prepared
+ * before the v2 columns existed keep version 1 and verify exactly as
+ * prepared (boxes only) — they can never gain identity evidence that was
+ * never frozen, and forcing them stale would strand every historical filing.
+ */
+export const TAX_FILING_SNAPSHOT_VERSION = 2;
+
+export type TaxFilingSnapshotVersion = 1 | 2;
+
 export interface TaxFilingSnapshot {
+  /**
+   * Present (2) on v2 snapshots; ABSENT on v1 so a v1 payload hashes
+   * byte-identically to the hash its prepare stored.
+   */
+  version?: number;
   formCode: string;
   formName: string;
   from: string;
   to: string;
   submissionChannel: string;
+  /** The org's registration number travelling on the return (v2 only). */
+  registrationNumber?: string | null;
+  /** The pinned or auto-matched tax_registrations id (v2 only). */
+  registrationId?: string | null;
+  /** Denomination of `boxes` (v2 only). */
+  functionalCurrency?: string;
+  /** Frozen filing-entity scope, sorted (v2 only). */
+  subsidiaryIds?: string[];
+  /** Translation evidence for a translated consolidated view (v2 only). */
+  translation?: TaxReturnTranslation | null;
   boxes: {
     lineCode: string;
     label: string;
@@ -60,26 +98,60 @@ export interface TaxFilingSnapshot {
  * Build the immutable filing snapshot and its SHA-256 fingerprint from a
  * computed return. Shared by prepare (captures the fingerprint) and mark-filed
  * (reproduces it) so the two paths can never disagree about what was hashed.
+ *
+ * `version` selects the schema: 2 (the default) for new filings, 1 to
+ * reproduce the fingerprint of a pre-identity filing. Array order is
+ * significant to the hash, so subsidiary ids sort here — the engine's scope
+ * resolution reads subsidiaries in unspecified row order and two reads of the
+ * same scope must fingerprint identically. Translation entities arrive sorted
+ * from the return and are re-sorted defensively for the same reason; object
+ * keys are normalized by canonicalJson.
  */
 export function buildTaxFilingSnapshot(
   result: TaxReturnResult,
   adjustments: Record<string, string>,
+  version: TaxFilingSnapshotVersion = TAX_FILING_SNAPSHOT_VERSION,
 ): { snapshot: TaxFilingSnapshot; snapshotHash: string } {
-  const snapshot: TaxFilingSnapshot = {
-    formCode: result.formCode,
-    formName: result.formName,
-    from: result.from,
-    to: result.to,
-    submissionChannel: result.submissionChannel,
-    boxes: result.boxes.map((box) => ({
-      lineCode: box.lineCode,
-      label: box.label,
-      value: box.value,
-      computed: box.computed,
-      editable: box.editable,
-    })),
-    adjustments,
-  };
+  const boxes = result.boxes.map((box) => ({
+    lineCode: box.lineCode,
+    label: box.label,
+    value: box.value,
+    computed: box.computed,
+    editable: box.editable,
+  }));
+  const snapshot: TaxFilingSnapshot =
+    version === 1
+      ? {
+          formCode: result.formCode,
+          formName: result.formName,
+          from: result.from,
+          to: result.to,
+          submissionChannel: result.submissionChannel,
+          boxes,
+          adjustments,
+        }
+      : {
+          version: 2,
+          formCode: result.formCode,
+          formName: result.formName,
+          from: result.from,
+          to: result.to,
+          submissionChannel: result.submissionChannel,
+          registrationNumber: result.registrationNumber,
+          registrationId: result.registrationId,
+          functionalCurrency: result.functionalCurrency,
+          subsidiaryIds: [...result.subsidiaryIds].sort(),
+          translation: result.translation
+            ? {
+                ...result.translation,
+                entities: [...result.translation.entities].sort((a, b) =>
+                  a.subsidiaryId.localeCompare(b.subsidiaryId),
+                ),
+              }
+            : null,
+          boxes,
+          adjustments,
+        };
   // JSONB does not preserve object insertion order. Canonicalize before
   // hashing so prepare and mark-filed derive the same fingerprint after the
   // adjustments object makes a database round trip.
@@ -95,6 +167,7 @@ type FilingRow = {
   status: "prepared" | "filed";
   adjustments: Record<string, string>;
   snapshot_hash: string;
+  snapshot_version: number | null;
 };
 
 /**
@@ -206,7 +279,8 @@ export async function markTaxFilingFiled(
   }
   return await withOrg(orgId, async () => {
     const filing = (await db.execute<FilingRow>(sql`
-      select id, form_code, period_from, period_to, status, adjustments, snapshot_hash
+      select id, form_code, period_from, period_to, status, adjustments, snapshot_hash,
+             snapshot_version
         from tax_filings
        where id = ${filingId} and org_id = ${orgId}
          for update`));
@@ -246,7 +320,12 @@ export async function markTaxFilingFiled(
       }
       throw error;
     }
-    const { snapshotHash } = buildTaxFilingSnapshot(live, row.adjustments ?? {});
+    // The fingerprint schema is the filing's own: a pre-identity (v1) filing
+    // reproduces its boxes-only hash, so it verifies exactly as prepared; a
+    // v2 filing additionally reproduces its registration, currency and scope
+    // posture, so any of those drifting after preparation trips stale.
+    const snapshotVersion = row.snapshot_version === 2 ? 2 : 1;
+    const { snapshotHash } = buildTaxFilingSnapshot(live, row.adjustments ?? {}, snapshotVersion);
     if (snapshotHash !== row.snapshot_hash) {
       throw new TaxFilingError(
         "stale",
