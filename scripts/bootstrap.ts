@@ -20,6 +20,13 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sql } from "drizzle-orm";
 import pg from "pg";
+import {
+  precreatedRolesEnabled,
+  verifyPrecreatedRoles,
+  verifyPrecreatedObjectAccess,
+  verifyReadRoleAssumption,
+  type RuntimeDatabaseConfig,
+} from "./bootstrap-roles.ts";
 import { db, env, longPool, pool, withBypassContext } from "../engine/src/platform/db.ts";
 import {
   connectMigrationClient,
@@ -104,12 +111,6 @@ export const APPROVED_MIGRATION_FILENAME_TRANSITIONS: ReadonlyArray<MigrationFil
         "not exist' because filename order runs 0028 before 0059",
   },
 ];
-
-type RuntimeDatabaseConfig = {
-  connectionString: string;
-  roleName: string;
-  password: string;
-};
 
 function runtimeDatabaseConfig(): RuntimeDatabaseConfig | null {
   const connectionString = env.OPENBOOKS_RUNTIME_DB_URL?.trim();
@@ -1111,14 +1112,17 @@ async function ensureRuntimeRoleExists(
 
 async function ensureRuntimeDatabaseRole(
   config: RuntimeDatabaseConfig,
+  precreated = false,
 ): Promise<void> {
   const role = await quoted(config.roleName, "identifier");
   const databaseResult = await pool.query<{ database_name: string }>(
     "select current_database() as database_name",
   );
   const database = await quoted(databaseResult.rows[0]!.database_name, "identifier");
-  await ensureRuntimeRoleExists(config);
-  await pool.query(`grant connect, temporary on database ${database} to ${role}`);
+  if (!precreated) {
+    await ensureRuntimeRoleExists(config);
+    await pool.query(`grant connect, temporary on database ${database} to ${role}`);
+  }
   await pool.query(`grant usage on schema public to ${role}`);
   await pool.query(
     `grant select, insert, update, delete on all tables in schema public to ${role}`,
@@ -1130,34 +1134,31 @@ async function ensureRuntimeDatabaseRole(
   // grants. Never blanket-grant the runtime role: the public schema also holds
   // tightly controlled SECURITY DEFINER maintenance functions.
   await pool.query(`revoke execute on all functions in schema public from ${role}`);
-  // The governed-query catalog refresh is the exception the blanket revoke
-  // must not keep. The baseline revokes its PUBLIC grant (it rebuilds tenant
-  // projections), so after this revoke the function sits at an empty ACL —
-  // and PostgreSQL then denies even the owning role both EXECUTE and CREATE
-  // OR REPLACE. The constrained owner runs forward migrations (every one
-  // ends in SELECT refresh) and the migration-replay canary, so it must hold
-  // EXECUTE explicitly. This grants no new power: the role owns the function
-  // and can already drop and recreate it; it merely keeps an owned
-  // maintenance function usable by its owner.
-  await pool.query(
-    `grant execute on function public.openbooks_refresh_query_catalog() to ${role}`,
-  );
-  // The application establishes tenant identity with connection-local GUCs.
-  // This privilege belongs to the runtime login, never to openbooks_read; the
-  // governed SQL console switches to openbooks_read before user SQL executes.
-  // A re-run over the transferred test login cannot grant on a pg_catalog
-  // function it does not own; converge by verifying the grant instead.
-  try {
+  // Retain the automatic mode's catalog-refresh grant for legacy constrained
+  // owners and migration-replay tooling. In host-managed mode, only the
+  // separate migration owner needs this maintenance function.
+  if (!precreated) {
     await pool.query(
-      `grant execute on function pg_catalog.set_config(text, text, boolean) to ${role}`,
+      `grant execute on function public.openbooks_refresh_query_catalog() to ${role}`,
     );
-  } catch (err) {
-    if ((err as { code?: string }).code !== "42501") throw err;
-    const granted = await pool.query<{ ok: boolean }>(
-      `select has_function_privilege($1, 'pg_catalog.set_config(text, text, boolean)', 'EXECUTE') as ok`,
-      [config.roleName],
-    );
-    if (!granted.rows[0]?.ok) throw err;
+  }
+  // The application needs set_config to establish tenant identity. Hosted
+  // preflight verifies EXECUTE without administering pg_catalog ACLs. In
+  // automatic mode, a transferred test owner may only verify an existing
+  // grant (including PostgreSQL's default PUBLIC grant).
+  if (!precreated) {
+    try {
+      await pool.query(
+        `grant execute on function pg_catalog.set_config(text, text, boolean) to ${role}`,
+      );
+    } catch (err) {
+      if ((err as { code?: string }).code !== "42501") throw err;
+      const granted = await pool.query<{ ok: boolean }>(
+        `select has_function_privilege($1, 'pg_catalog.set_config(text, text, boolean)', 'EXECUTE') as ok`,
+        [config.roleName],
+      );
+      if (!granted.rows[0]?.ok) throw err;
+    }
   }
   await pool.query(
     `alter default privileges in schema public grant select, insert, update, delete on tables to ${role}`,
@@ -1253,6 +1254,22 @@ async function verifyRuntimeDatabaseRole(
       );
       if (allowed.rows.length !== 1) {
         throw new Error("RLS tenant proof failed: runtime role could not read its selected organization");
+      }
+      // Exercise the real definer/temporary-context boundary from the runtime
+      // login. Checking membership from the migration connection misses both
+      // unusable SET grants and a definer owner unable to read runtime context.
+      await client.query("create temporary table openbooks_query_context (org_id uuid not null)");
+      await client.query("insert into pg_temp.openbooks_query_context values ($1)", [orgId]);
+      try {
+        await client.query("begin transaction read only");
+        await client.query("set local role openbooks_read");
+        const context = await client.query<{ org: string }>("select public.openbooks_query_org_id() as org");
+        if (context.rows[0]?.org !== orgId) throw new Error("governed query context did not resolve its organization");
+        await client.query("select id from openbooks_query.accounting_books limit 1");
+      } catch (error) {
+        throw new Error("[bootstrap] runtime governed-query verification failed; verify the read-role SET grant and migration-owner inheritance of the runtime role in docs/operations/communal-postgres.md", { cause: error });
+      } finally {
+        await client.query("rollback");
       }
       console.log(
         `[bootstrap] runtime database role ${config.roleName} verified: NOSUPERUSER, NOBYPASSRLS, fail-closed RLS`,
@@ -1437,8 +1454,8 @@ async function ensureReadRole(runtimeRoleName?: string): Promise<void> {
     [
       "grant to bootstrap user",
       `do $$ begin
-         if not pg_has_role(current_user, 'openbooks_read', 'USAGE') then
-           grant openbooks_read to current_user;
+         if not pg_has_role(current_user, 'openbooks_read', 'SET') then
+           grant openbooks_read to current_user with set true;
          end if;
        end $$;`,
     ],
@@ -1447,11 +1464,11 @@ async function ensureReadRole(runtimeRoleName?: string): Promise<void> {
     const runtimeRole = await quoted(runtimeRoleName, "identifier");
     const runtimeLiteral = await quoted(runtimeRoleName, "literal");
     // Conditional like the bootstrap-user grant above: a re-run over the
-    // transferred test login cannot grant role membership (that needs
-    // CREATEROLE), so skip when already a member instead of failing.
+    // transferred test login cannot administer memberships, so skip when it
+    // already has SET permission instead of requiring an ADMIN OPTION grant.
     steps.push(["grant to runtime user", `do $$ begin
-         if not pg_has_role(${runtimeLiteral}, 'openbooks_read', 'USAGE') then
-           grant openbooks_read to ${runtimeRole};
+         if not pg_has_role(${runtimeLiteral}, 'openbooks_read', 'SET') then
+           grant openbooks_read to ${runtimeRole} with set true;
          end if;
        end $$;`]);
   }
@@ -1464,21 +1481,8 @@ async function ensureReadRole(runtimeRoleName?: string): Promise<void> {
       );
     }
   }
-  try {
-    const client = await pool.connect();
-    try {
-      await client.query("begin");
-      await client.query("set local role openbooks_read");
-      await client.query("rollback");
-      console.log("[bootstrap] openbooks_read role usable");
-    } finally {
-      client.release();
-    }
-  } catch {
-    console.warn(
-      "[bootstrap] WARNING: cannot assume openbooks_read — SQL workbench/user-script queries will fail",
-    );
-  }
+  await verifyReadRoleAssumption(pool, "bootstrap login");
+  console.log("[bootstrap] openbooks_read role usable");
 }
 
 async function ensureOrg(): Promise<string> {
@@ -1631,6 +1635,7 @@ async function seedAdmin(orgId: string): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  const precreated = precreatedRolesEnabled(env);
   const runtimeConfig = runtimeDatabaseConfig();
   const constrainedSchemaOwnerMigration =
     env.OPENBOOKS_CONSTRAINED_SCHEMA_OWNER_MIGRATION === "1";
@@ -1677,15 +1682,24 @@ async function main(): Promise<void> {
       // Some migrations grant privileges to openbooks_read, so a fresh database
       // must establish the role before applying them. Run the same idempotent
       // routine again afterward to grant access to the newly created tables.
-      await ensureReadRole();
+      if (precreated) {
+        await verifyPrecreatedRoles(pool, runtimeConfig!);
+        console.log("[bootstrap] pre-created roles verified; host owns role provisioning");
+      } else {
+        await ensureReadRole();
+      }
       // Runtime roles the migrations may reference (e.g. RLS policies targeted
       // `TO openbooks_app`) must also exist before the migration chain runs;
       // the post-migrate ensureRuntimeDatabaseRole still grants the now-created
       // relations their privileges.
-      if (runtimeConfig) await ensureRuntimeRoleExists(runtimeConfig);
+      if (runtimeConfig && !precreated) await ensureRuntimeRoleExists(runtimeConfig);
       await migrate();
-      if (runtimeConfig) await ensureRuntimeDatabaseRole(runtimeConfig);
-      await ensureReadRole(runtimeConfig?.roleName);
+      if (runtimeConfig) await ensureRuntimeDatabaseRole(runtimeConfig, precreated);
+      if (precreated) {
+        await verifyPrecreatedObjectAccess(pool, runtimeConfig!);
+      } else {
+        await ensureReadRole(runtimeConfig?.roleName);
+      }
       await seedCurrencies();
       if (restoreTarget) {
         const organizations = (await db.execute<{ count: number }>(

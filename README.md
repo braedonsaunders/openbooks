@@ -739,6 +739,11 @@ creates the first administrator only when none exists. The image then runs
 separately as web and worker processes with only the constrained application credential; the
 database-owner credential is not present in either runtime container.
 
+Shared or managed PostgreSQL hosts can provision the database roles themselves
+and run the full bootstrap with `OPENBOOKS_PRECREATED_ROLES=1`, without granting
+OpenBooks `CREATEROLE`. See [host-managed PostgreSQL setup](docs/operations/communal-postgres.md)
+for the role contract, provider SQL, and deployment configuration.
+
 ## Development
 
 ```bash
