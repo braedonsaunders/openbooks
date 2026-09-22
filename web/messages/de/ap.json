@@ -54,7 +54,9 @@
     "formSetPreferred": "Als bevorzugt festlegen",
     "formSetPreferredDone": "Bevorzugtes Formular gespeichert",
     "formPreferredCleared": "Bevorzugtes Formular zurückgesetzt",
-    "formPreferredFailed": "Bevorzugtes Formular konnte nicht gespeichert werden"
+    "formPreferredFailed": "Bevorzugtes Formular konnte nicht gespeichert werden",
+    "returnsReceipt": "Retourniert Wareneingang",
+    "returnsNone": "Keine Warenrückgabe"
   },
   "capture": {
     "title": "Rechnungserfassung",

@@ -54,7 +54,9 @@
     "formSetPreferred": "Definir como meu preferido",
     "formSetPreferredDone": "Formulário preferido salvo",
     "formPreferredCleared": "Formulário preferido removido",
-    "formPreferredFailed": "Não foi possível salvar o formulário preferido"
+    "formPreferredFailed": "Não foi possível salvar o formulário preferido",
+    "returnsReceipt": "Devolve recebimento",
+    "returnsNone": "Sem devolução de estoque"
   },
   "capture": {
     "title": "Captura de contas a pagar",

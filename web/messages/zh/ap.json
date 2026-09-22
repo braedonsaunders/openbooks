@@ -54,7 +54,9 @@
     "formSetPreferred": "设为我的首选",
     "formSetPreferredDone": "首选表单已保存",
     "formPreferredCleared": "已清除首选表单",
-    "formPreferredFailed": "无法保存首选表单"
+    "formPreferredFailed": "无法保存首选表单",
+    "returnsReceipt": "退回的收货",
+    "returnsNone": "不退回库存"
   },
   "capture": {
     "title": "账单采集",

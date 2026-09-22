@@ -54,7 +54,9 @@
     "formSetPreferred": "Set as my preferred",
     "formSetPreferredDone": "Preferred form saved",
     "formPreferredCleared": "Preferred form cleared",
-    "formPreferredFailed": "Could not save the preferred form"
+    "formPreferredFailed": "Could not save the preferred form",
+    "returnsReceipt": "Returns receipt",
+    "returnsNone": "No stock returned"
   },
   "capture": {
     "title": "Bill capture",

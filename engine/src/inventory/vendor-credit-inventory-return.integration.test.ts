@@ -152,10 +152,21 @@ test("vendor-return evidence is strict and the documented workflow names its acc
     () => parseVendorCreditInventoryReturnSelection({}),
     /requires custom\.inventoryReturn evidence/,
   );
-  assert.match(docsSource, /does not currently offer\nreceipt-linked stock-return selection/i);
+  // The article documented the ABSENCE of receipt-linked selection and sent
+  // operators to a two-step Inventory Adjust workaround. That control now
+  // exists, so those sentences would be instructions to do the wrong thing.
+  // What is pinned instead is the behaviour the engine actually enforces, and
+  // the separation of the vendor's credit from the stock's carried cost.
+  assert.match(docsSource, /choose the\noriginating receipt in the \*\*Returns receipt\*\* column/i);
+  assert.match(docsSource, /posted, unreversed receipts for that vendor, item, and warehouse/i);
+  assert.match(docsSource, /relieves\nthe selected on-hand cost layers at carried cost/i);
   assert.match(docsSource, /account-only credit/i);
-  assert.match(docsSource, /Inventory Adjust, which relieves them at carried cost/i);
-  assert.match(docsSource, /only in the inventory engine/i);
+  assert.doesNotMatch(docsSource, /does not currently offer/i);
+  assert.doesNotMatch(docsSource, /only in the inventory engine/i);
+  // Still true, so still pinned: the engine can settle a credit that needs no
+  // cash (applyStandaloneCredits), but no operator-facing action reaches it
+  // yet. This assertion is the tripwire for shipping that action and leaving
+  // the article claiming the workflow is missing.
   assert.match(docsSource, /no cash due cannot be applied on its own/i);
 });
 

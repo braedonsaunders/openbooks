@@ -50,7 +50,9 @@
     "formSetPreferred": "Set as my preferred",
     "formSetPreferredDone": "Preferred form saved",
     "formPreferredCleared": "Preferred form cleared",
-    "formPreferredFailed": "Could not save the preferred form"
+    "formPreferredFailed": "Could not save the preferred form",
+    "returnsShipment": "Returns shipment",
+    "returnsNone": "No stock returned"
   },
   "toasts": {
     "actionFailed": "Action failed",

@@ -50,7 +50,9 @@
     "formSetPreferred": "Definir como meu preferido",
     "formSetPreferredDone": "Formulário preferido salvo",
     "formPreferredCleared": "Formulário preferido removido",
-    "formPreferredFailed": "Não foi possível salvar o formulário preferido"
+    "formPreferredFailed": "Não foi possível salvar o formulário preferido",
+    "returnsShipment": "Devolve remessa",
+    "returnsNone": "Sem devolução de estoque"
   },
   "toasts": {
     "actionFailed": "Falha na ação",
