@@ -81,7 +81,7 @@ const hooks = registerHooks({
   },
 });
 
-const { GET, POST } = (await import("./route.ts?v1-close-runs")) as typeof import("./route.ts");
+const { GET, POST } = (await import("./route.ts")) as typeof import("./route.ts");
 hooks.deregister();
 
 test("GET /api/v1/close/runs lists runs with status and limit filters", async () => {

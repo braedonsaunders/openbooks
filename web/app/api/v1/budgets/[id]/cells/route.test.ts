@@ -76,7 +76,7 @@ const hooks = registerHooks({
   },
 });
 
-const { POST } = (await import("./route.ts?v1-budgets-cells")) as typeof import("./route.ts");
+const { POST } = (await import("./route.ts")) as typeof import("./route.ts");
 hooks.deregister();
 
 function post(scenarioId: string, body: unknown, idempotencyKey?: string): Promise<Response> {

@@ -255,9 +255,10 @@ const hasPermission = (permission: string) => (authz: Authz): boolean => can(aut
  * Map a transport-neutral write outcome ({ status, body }) from the settings
  * and setup command layers onto the application error contract. 2xx returns
  * the body; every refusal becomes the same typed ApplicationError the route
- * would have answered with, so chat and MCP see one failure shape.
+ * would have answered with, so chat and MCP see one failure shape. Exported
+ * for the public v1 REST adapters, which share the same mapping.
  */
-function settleWrite(result: { status: number; body: Record<string, unknown> }): Record<string, unknown> {
+export function settleWrite(result: { status: number; body: Record<string, unknown> }): Record<string, unknown> {
   if (result.status < 300) return result.body;
   const message = typeof result.body.message === "string"
     ? result.body.message

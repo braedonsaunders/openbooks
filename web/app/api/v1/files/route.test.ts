@@ -89,7 +89,7 @@ const hooks = registerHooks({
   },
 });
 
-const { POST } = (await import("./route.ts?v1-files-upload")) as typeof import("./route.ts");
+const { POST } = (await import("./route.ts")) as typeof import("./route.ts");
 hooks.deregister();
 
 test("POST /api/v1/files uploads with the upload_file tool fields through a file.upload claim", async () => {

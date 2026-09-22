@@ -163,6 +163,7 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/platform/db.ts", "mock:db"],
   ["../../../lib/authz", "mock:authz"],
   ["../../../lib/journals", "mock:journals-lib"],
+  ["./journals", "mock:journals-lib"],
   ["@openbooks/engine/src/platform/business-date.ts", "mock:clock"],
 ]);
 

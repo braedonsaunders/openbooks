@@ -102,7 +102,7 @@ const hooks = registerHooks({
   },
 });
 
-const { POST } = (await import("./route.ts?v1-document-action")) as typeof import("./route.ts");
+const { POST } = (await import("./route.ts")) as typeof import("./route.ts");
 hooks.deregister();
 
 function post(id: string, action: string, body?: unknown, idempotencyKey = "doc-action-key-1"): Promise<Response> {

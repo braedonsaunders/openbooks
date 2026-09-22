@@ -94,6 +94,21 @@ test("OpenAPI documents exactly the operations each type advertises", () => {
   assert.ok(spec.paths["/api/v1/files"]?.post, "public v1 must document file upload");
   assert.ok(spec.paths["/api/v1/settings/company"]?.get && spec.paths["/api/v1/settings/company"]?.patch, "public v1 must document company settings");
   assert.ok(spec.paths["/api/v1/settings/features"]?.post, "public v1 must document the Features switchboard");
+  assert.ok(spec.paths["/api/v1/setup/{entityKey}"]?.post, "public v1 must document setup record create");
+  assert.ok(spec.paths["/api/v1/setup/{entityKey}/{id}"]?.patch && spec.paths["/api/v1/setup/{entityKey}/{id}"]?.delete, "public v1 must document setup record update and delete");
+  assert.ok(spec.paths["/api/v1/layouts"]?.get && spec.paths["/api/v1/layouts"]?.put && spec.paths["/api/v1/layouts"]?.delete, "public v1 must document page layouts");
+  assert.ok(spec.paths["/api/v1/layouts/vocabulary"]?.get, "public v1 must document the layout vocabulary");
+  assert.ok(spec.paths["/api/v1/layouts/describe"]?.get, "public v1 must document page layout describe");
+  assert.ok(spec.paths["/api/v1/layouts/validate"]?.post && spec.paths["/api/v1/layouts/preview"]?.post, "public v1 must document layout validate and preview");
+  assert.ok(spec.paths["/api/v1/layouts/history"]?.get && spec.paths["/api/v1/layouts/restore"]?.post, "public v1 must document layout history and restore");
+  assert.ok(spec.paths["/api/v1/apps"]?.get, "public v1 must document app packages");
+  assert.ok(spec.paths["/api/v1/apps/vocabulary"]?.get, "public v1 must document app capabilities");
+  assert.ok(spec.paths["/api/v1/apps/drafts"]?.post && spec.paths["/api/v1/apps/drafts/{id}"]?.get, "public v1 must document app drafts");
+  assert.ok(spec.paths["/api/v1/apps/drafts/{id}/activate"]?.post && spec.paths["/api/v1/apps/drafts/{id}/discard"]?.post, "public v1 must document app draft activate and discard");
+  assert.ok(spec.paths["/api/v1/apps/{key}"]?.get, "public v1 must document reading an installed app package");
+  assert.ok(spec.paths["/api/v1/reports"]?.get, "public v1 must document report definitions");
+  assert.ok(spec.paths["/api/v1/reports/{id}"]?.get, "public v1 must document one report definition");
+  assert.ok(spec.paths["/api/v1/reports/{id}/run"]?.post, "public v1 must document report execution");
 
   // Widgets: list+create on the collection path; get+update+delete on /{id}.
   const coll = spec.paths["/api/v1/records/widgets"];
@@ -101,6 +116,8 @@ test("OpenAPI documents exactly the operations each type advertises", () => {
   assert.ok(coll && item, "widgets paths should exist");
   assert.ok(coll.get && coll.post, "widgets collection should document GET + POST");
   assert.ok(item.get && item.patch && item.delete, "widgets item should document GET + PATCH + DELETE");
+  assert.ok(spec.paths["/api/v1/widgets"]?.get && spec.paths["/api/v1/widgets"]?.post, "pretty resource path must alias the records collection");
+  assert.ok(spec.paths["/api/v1/widgets/{id}"]?.get && spec.paths["/api/v1/widgets/{id}"]?.patch, "pretty resource path must alias the records item");
   for (const operation of [coll.post, item.patch, item.delete]) {
     assert.ok(operation?.parameters, "mutation should define parameters");
     assert.ok(

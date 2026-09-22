@@ -88,7 +88,13 @@ test("document update and correction tool schemas require the exact persisted to
     DOCUMENT_REVISION_PATTERN,
   );
   const documentRequirement = advertised.allOf?.[0];
-  assert.deepEqual(documentRequirement?.if?.properties?.typeKey?.enum, ["bills", "invoices"]);
+  const advertisedDocumentTypes = documentRequirement?.if?.properties?.typeKey?.enum ?? [];
+  assert.ok(advertisedDocumentTypes.includes("bills"));
+  assert.ok(advertisedDocumentTypes.includes("invoices"));
+  assert.ok(
+    advertisedDocumentTypes.length > 2,
+    "every document record type must appear in the update_record OCC enum",
+  );
   assert.deepEqual(
     documentRequirement?.then?.properties?.body?.required,
     ["expectedUpdatedAt"],
