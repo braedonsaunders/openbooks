@@ -1,6 +1,7 @@
 'use client'
 
 import { buildListDrawerHref } from '@/lib/list-params'
+import { readApiErrorMessage } from '@/lib/api-error'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -17,16 +18,20 @@ export function NewRecordButton({ typeKey, typeName, basePath, currentParams = {
 
   async function create() {
     setBusy(true)
-    const res = await fetch(`/api/records/${typeKey}/draft`, { method: 'POST' })
-    const data = await res.json()
-    if (!res.ok) {
-      toast.error(data.error ?? t('createFailed', { typeName: typeName.toLowerCase() }))
+    try {
+      const res = await fetch(`/api/records/${typeKey}/draft`, { method: 'POST' })
+      if (!res.ok) {
+        toast.error(await readApiErrorMessage(res, t('createFailed', { typeName: typeName.toLowerCase() })))
+        return
+      }
+      const data = await res.json()
+      router.push(buildListDrawerHref(basePath ?? `/records/${typeKey}`, currentParams, 'rec', data.id))
+      router.refresh()
+    } catch {
+      toast.error(t('createFailed', { typeName: typeName.toLowerCase() }))
+    } finally {
       setBusy(false)
-      return
     }
-    router.push(buildListDrawerHref(basePath ?? `/records/${typeKey}`, currentParams, 'rec', data.id))
-    router.refresh()
-    setBusy(false)
   }
 
   return (

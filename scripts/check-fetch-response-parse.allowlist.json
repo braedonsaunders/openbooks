@@ -280,26 +280,6 @@
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
-    "path": "web/app/(app)/payments/PaymentDrawer.tsx",
-    "fn": "PaymentDrawer",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/payments/RunDrawer.tsx",
-    "fn": "openDeliver",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/payments/RunDrawer.tsx",
-    "fn": "deliver",
-    "reason": "server always returns JSON; guard adoption pending. POST /api/payments/runs/[id]/deliver (web/app/api/payments/runs/[id]/deliver/route.ts): deliverRunToSftp sits inside try/catch-all answering NextResponse.json (422/500); no rethrow. Verified by reading the handler."
-  },
-  {
-    "path": "web/app/(app)/payments/RunDrawer.tsx",
-    "fn": "postRun",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
     "path": "web/app/(app)/payroll/_ui/NewRunButton.tsx",
     "fn": "postRun",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
@@ -402,21 +382,6 @@
   {
     "path": "web/app/(app)/property-management/PropertyManagementWorkspace.tsx",
     "fn": "PropertyManagementWorkspace",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/records/[typeKey]/NewRecordButton.tsx",
-    "fn": "create",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/records/types/TypeBuilderDrawer.tsx",
-    "fn": "lifecycle",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/records/types/TypeBuilderDrawer.tsx",
-    "fn": "destroy",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {

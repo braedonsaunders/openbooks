@@ -14,6 +14,7 @@ import { JournalEntryLink } from '../../../components/journal-entry-link'
 import { PdfButton } from '../../../components/pdf-button'
 import { SendButton } from '../../../components/send-button'
 import { confirmDialog } from '../../../lib/confirm'
+import { readApiErrorMessage } from '../../../lib/api-error'
 import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { useAppAction } from '@/lib/use-app-action'
@@ -326,10 +327,16 @@ export function PaymentDrawer({
     let cancelled = false
     fetch(`/api/payments/open-items?partyId=${partyId}&side=${side}`)
       .then(async (res) => {
-        const data = await res.json()
         if (cancelled) return
-        if (!res.ok) toast.error(data.error ?? t('toasts.loadOpenItemsFailed'))
-        else setOpenItems(data.items ?? [])
+        if (!res.ok) {
+          toast.error(await readApiErrorMessage(res, t('toasts.loadOpenItemsFailed')))
+          return
+        }
+        const data = await res.json()
+        if (!cancelled) setOpenItems(data.items ?? [])
+      })
+      .catch(() => {
+        if (!cancelled) toast.error(t('toasts.loadOpenItemsFailed'))
       })
       .finally(() => {
         if (!cancelled) setLoadingItems(false)
@@ -366,8 +373,9 @@ export function PaymentDrawer({
     })
     fetch(`/api/payments/settlement-rates?${query}`)
       .then(async (response) => {
+        if (cancelled || !response.ok) return
         const data = await response.json()
-        if (!cancelled && response.ok) setSettlementRates(data.rates ?? [])
+        if (!cancelled) setSettlementRates(data.rates ?? [])
       })
       .catch(() => undefined)
     return () => {

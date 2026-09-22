@@ -10,6 +10,7 @@ import { toast } from 'sonner'
 import { Check, Download, FileCheck2, RotateCcw, Send, X } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle, Badge, Button, Drawer, Input, Label, Select, Textarea, UrlDrawer } from '@openbooks/ui'
 import { confirmDialog } from '../../../lib/confirm'
+import { readApiErrorMessage } from '../../../lib/api-error'
 import { sum } from '@openbooks/engine/src/money/money.ts'
 /**
  * Payment-run flyout: instructions, EFT readiness, and the two explicit
@@ -163,11 +164,17 @@ export function RunDrawer({
 
   async function openDeliver() {
     setDeliverOpen(true)
-    const res = await fetch(`/api/payments/runs/${run.id}/deliver`)
-    const data = await res.json()
-    if (res.ok) {
+    try {
+      const res = await fetch(`/api/payments/runs/${run.id}/deliver`)
+      if (!res.ok) {
+        toast.error(await readApiErrorMessage(res, t('runDrawer.toasts.deliverFailed')))
+        return
+      }
+      const data = await res.json()
       setSftpServers(data.servers ?? [])
       setSftpServerId(data.servers?.[0]?.id ?? '')
+    } catch {
+      toast.error(t('runDrawer.toasts.deliverFailed'))
     }
   }
 
@@ -180,8 +187,11 @@ export function RunDrawer({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sftpServerId }),
       })
+      if (!res.ok) {
+        toast.error(await readApiErrorMessage(res, t('runDrawer.toasts.deliverFailed')))
+        return
+      }
       const data = await res.json()
-      if (!res.ok) { toast.error(data.error ?? t('runDrawer.toasts.deliverFailed')); return }
       toast.success(t('runDrawer.toasts.delivered', { path: data.path }))
       setDeliverOpen(false)
       router.refresh()
@@ -240,22 +250,29 @@ export function RunDrawer({
     })
     if (!ok) return
     setBusy(true)
-    const res = await fetch(`/api/payments/runs/${run.id}/post`, { method: 'POST' })
-    const data = await res.json()
-    if (!res.ok) {
-      toast.error(data.error ?? t('runDrawer.toasts.postFailed'))
-    } else if (data.failures?.length) {
-      toast.error(
-        t('runDrawer.toasts.postedWithFailures', {
-          count: data.posted,
-          failures: data.failures.map((f: { payee: string; error: string }) => `${f.payee} (${f.error})`).join('; '),
-        }),
-      )
-    } else {
-      toast.success(t('runDrawer.toasts.posted', { count: data.posted }))
+    try {
+      const res = await fetch(`/api/payments/runs/${run.id}/post`, { method: 'POST' })
+      if (!res.ok) {
+        toast.error(await readApiErrorMessage(res, t('runDrawer.toasts.postFailed')))
+        return
+      }
+      const data = await res.json()
+      if (data.failures?.length) {
+        toast.error(
+          t('runDrawer.toasts.postedWithFailures', {
+            count: data.posted,
+            failures: data.failures.map((f: { payee: string; error: string }) => `${f.payee} (${f.error})`).join('; '),
+          }),
+        )
+      } else {
+        toast.success(t('runDrawer.toasts.posted', { count: data.posted }))
+      }
+      router.refresh()
+    } catch {
+      toast.error(t('runDrawer.toasts.postFailed'))
+    } finally {
+      setBusy(false)
     }
-    setBusy(false)
-    router.refresh()
   }
 
   async function cancelRun(cancellationReason: string) {
