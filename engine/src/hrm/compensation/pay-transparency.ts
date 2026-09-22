@@ -1,11 +1,15 @@
 import { sql } from "drizzle-orm";
+import { actorHasPermission } from "../../organization/actor-permissions.ts";
+import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
 import { db, withOrgTransaction } from "../../platform/db.ts";
 import { businessToday } from "../../platform/business-date.ts";
-import { laborFxQuote, resolveWage } from "../../projects/labor-costing.ts";
+import { laborFxQuote, resolveWage, type LaborFxQuote } from "../../projects/labor-costing.ts";
 import { mul, mulRate } from "../../money/money.ts";
 import {
+  HrmAuthorizationError,
   loadOwnEmploymentIds,
   requireHrmCompensationManage,
+  requireHrmCompensationManageOnEmployment,
   requireHrmCompensationRead,
 } from "../authorization.ts";
 import { CompensationError } from "./errors.ts";
@@ -187,6 +191,45 @@ export interface GapSnapshotDTO {
   readonly generatedAt: string;
 }
 
+/**
+ * Org-wide frozen aggregates need an unrestricted actor. A stored
+ * snapshot aggregates every in-scope worker at its as-of date into
+ * immutable means, medians, quartiles and regressions that cannot be
+ * post-filtered back down to one subsidiary — so any subsidiary
+ * restriction (a list, even one covering every subsidiary today, or an
+ * empty set) fails closed. The check is `allowed !== null` on the
+ * canonical lens, never a subset comparison, for two reasons. The
+ * frozen row carries no population-evidence list: it proves its
+ * statistics, not which subsidiaries its subjects belonged to, so a
+ * current enumeration cannot prove it covered exactly the actor's
+ * list at its historical as-of date. And a list that covers today
+ * still misses tomorrow's subsidiary.
+ */
+function gapScopeRefusal(verb: "compute" | "read" | "fulfil"): CompensationError {
+  const permission = verb === "read" ? "hrm.compensation.read" : "hrm.compensation.manage";
+  return new CompensationError(
+    "REFUSED",
+    `pay-gap snapshots measure the whole organization — a role restricted to specific subsidiaries (or to none) cannot ${verb} an org-wide frozen aggregate without seeing every worker it covers, and frozen aggregates cannot be post-filtered. Ask an administrator to grant ${permission} with access to all subsidiaries (no subsidiary restriction) to ${verb} gap snapshots.`,
+  );
+}
+
+async function requireUnrestrictedGapScope(
+  orgId: string,
+  actorId: string,
+  verb: "compute" | "read" | "fulfil",
+): Promise<void> {
+  const allowed = await actorAllowedSubsidiaryIds(db, orgId, actorId);
+  if (allowed !== null) throw gapScopeRefusal(verb);
+}
+
+/** Unknown, cross-org, and out-of-scope pay-information requests share one message. */
+function payRequestNotVisible(): CompensationError {
+  return new CompensationError(
+    "NOT_FOUND",
+    "pay information request is not visible in this organization and legal-entity scope.",
+  );
+}
+
 interface PricedWorker {
   employmentId: string;
   workerPartyId: string;
@@ -242,6 +285,9 @@ export async function computeGapSnapshot(query: {
   }
   return withOrgTransaction(orgId, async () => {
     await requireHrmCompensationManage(db, orgId, actorId);
+    // Org-wide aggregate: a restricted lens must never silently compute
+    // a partial-org snapshot and present it as whole-org.
+    await requireUnrestrictedGapScope(orgId, actorId, "compute");
     const settings = await compensationSettings(orgId);
     const attributeKey = settings.comparisonAttributeKey;
     if (attributeKey === null) {
@@ -286,7 +332,9 @@ export async function computeGapSnapshot(query: {
         "no reporting currency is set — set the org base currency before measuring gaps, so every wage converts to one declared basis",
       );
     }
-    const quoteCache = new Map<string, { rate: string; asOf: string; source: string; inverse: boolean } | null>();
+    // Absence (never fetched) is undefined; a fetched miss stays cached
+    // null and refuses below — never 1:1, never omitted.
+    const quoteCache = new Map<string, LaborFxQuote | null>();
     const fxEvidence: Record<string, GapFxEvidence> = {};
     const priced: PricedWorker[] = [];
     for (const employment of employments) {
@@ -355,7 +403,7 @@ export async function computeGapSnapshot(query: {
       if (wage.currency === reportingCurrency) {
         convertedAnnual = nativeAnnual;
       } else {
-        let quote = quoteCache.has(wage.currency) ? quoteCache.get(wage.currency)! : undefined;
+        let quote: LaborFxQuote | null | undefined = quoteCache.get(wage.currency);
         if (quote === undefined) {
           quote = await laborFxQuote(orgId, wage.currency, reportingCurrency, query.asOf);
           quoteCache.set(wage.currency, quote);
@@ -522,6 +570,9 @@ export async function latestGapSnapshot(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   await requireHrmCompensationRead(db, orgId, actorId);
+  // Frozen org-wide aggregates cannot be post-filtered: a restricted
+  // lens reads nothing, never a partial view presented as whole-org.
+  await requireUnrestrictedGapScope(orgId, actorId, "read");
   const row = (await db.execute<{
     id: string;
     as_of: string;
@@ -559,11 +610,19 @@ export async function requestPayInformation(query: {
   const actorId = requireActorId(query.actorId);
   const employmentId = requireId(query.employmentId, "employmentId");
   return withOrgTransaction(orgId, async () => {
+    // Identity first (unknown and foreign employments share this refusal,
+    // so the difference is never observable), then the explicit domain
+    // grant: identity alone files nothing.
     const own = await loadOwnEmploymentIds(db, orgId, actorId);
     if (!own.includes(employmentId)) {
       throw new CompensationError(
         "REFUSED",
         "pay information requests cover your own employment — HR answers anyone else's through the equity surface",
+      );
+    }
+    if (!(await actorHasPermission(db, orgId, actorId, "hrm.self.request"))) {
+      throw new HrmAuthorizationError(
+        "Pay-information requests file only with the hrm.self.request permission — ask an administrator to grant it in /admin/roles.",
       );
     }
     const settings = await compensationSettings(orgId);
@@ -605,6 +664,11 @@ export async function fulfilPayInformationRequest(query: {
   const actorId = requireActorId(query.actorId);
   const requestId = requireId(query.requestId, "requestId");
   return withOrgTransaction(orgId, async () => {
+    // The manage grant first (one uniform refusal for every request id
+    // when it is missing), then the source row, then the
+    // employer-subsidiary lens — all before the snapshot read and the
+    // fulfil write, so a refused fulfil leaves zero rows and missing,
+    // foreign, and hidden ids stay identical.
     await requireHrmCompensationManage(db, orgId, actorId);
     const request = (await db.execute<{
       id: string;
@@ -613,13 +677,25 @@ export async function fulfilPayInformationRequest(query: {
     }>(sql`
       select id, employment_id, status from hrm_pay_information_requests
        where org_id = ${orgId} and id = ${requestId} for update`)).rows[0];
-    if (!request) throw new CompensationError("NOT_FOUND", "pay information request is not visible in this organization");
+    // Unknown, cross-org, and out-of-scope requests share one refusal —
+    // the target-employment lens runs before any state or snapshot read,
+    // so a refused fulfil answers nothing and writes nothing.
+    if (!request) throw payRequestNotVisible();
+    try {
+      await requireHrmCompensationManageOnEmployment(db, orgId, actorId, request.employment_id);
+    } catch (e) {
+      if (e instanceof HrmAuthorizationError) throw payRequestNotVisible();
+      throw e;
+    }
     if (request.status !== "open") {
       throw new CompensationError(
         "BAD_STATE",
         `a ${request.status} request cannot be fulfilled — only open requests fulfil`,
       );
     }
+    // Fulfilment copies org-wide frozen category averages: a restricted
+    // lens must not launder them through a request it was refused directly.
+    await requireUnrestrictedGapScope(orgId, actorId, "fulfil");
     // The worker's level category at the snapshot date.
     const snapshot = (await db.execute<{
       id: string;
@@ -705,7 +781,21 @@ export async function refusePayInformationRequest(query: {
   const requestId = requireId(query.requestId, "requestId");
   const reason = requireReason(query.reason);
   return withOrgTransaction(orgId, async () => {
+    // The manage grant first, then the source row (uniform not-found),
+    // then the employer-subsidiary lens — all before the guarded update,
+    // so a refused refuse writes nothing and missing, foreign, and hidden
+    // ids stay identical; only an in-scope non-open request reports state.
     await requireHrmCompensationManage(db, orgId, actorId);
+    const source = (await db.execute<{ employment_id: string }>(sql`
+      select employment_id from hrm_pay_information_requests
+       where org_id = ${orgId} and id = ${requestId} for update`)).rows[0];
+    if (!source) throw payRequestNotVisible();
+    try {
+      await requireHrmCompensationManageOnEmployment(db, orgId, actorId, source.employment_id);
+    } catch (e) {
+      if (e instanceof HrmAuthorizationError) throw payRequestNotVisible();
+      throw e;
+    }
     const updated = (await db.execute<{
       employment_id: string;
       requested_at: string;
