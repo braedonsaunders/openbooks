@@ -12,8 +12,11 @@ import { ControlAccountsIncompleteError } from "@openbooks/engine/src/records/co
 import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { PostingError } from "@openbooks/engine/src/ledger/posting-contracts.ts";
 import { addJournalMatchFromLine } from "../banking-rules";
+import { normalizeMoneyValue } from "../cash/core";
 import { canonicalDecimal } from "../exact-decimal";
 import { isFeatureEnabled } from "../features";
+import { clamp } from "../list-params";
+import { subsidiaryVisibleFilter } from "../subsidiaries";
 import type { ApplicationContext } from "./context";
 import { assertApplicationPermission, assertSubsidiaryAccess } from "./context";
 import { ApplicationError, invalidInput, notFound } from "./errors";
@@ -71,6 +74,47 @@ async function reconciliationSubsidiary(orgId: string, reconciliationId: string)
 
 function bankingContext(context: ApplicationContext): { orgId: string; userId: string } {
   return { orgId: context.authz.user.orgId, userId: context.authz.user.id };
+}
+
+/** Reconciliation sessions — same query shape as `list_bank_reconciliations`. */
+export async function listApplicationReconciliations(
+  context: ApplicationContext,
+  input: { accountId?: string; limit?: number },
+) {
+  assertApplicationPermission(context, "banking.read");
+  if (!(await isFeatureEnabled(context.authz.user.orgId, "banking"))) {
+    throw new ApplicationError(
+      "not_found",
+      "banking is off; enable it from GET /api/v1/settings/features",
+      404,
+    );
+  }
+  const limit = clamp(input.limit ?? 50, 1, 200);
+  const rows = (await db.execute<Record<string, unknown>>(sql`
+    select r.id, r.account_id, r.through_date, r.statement_balance::text as statement_balance,
+           r.status, r.signed_off_at, r.created_at,
+           a.number as account_number, a.name as account_name
+      from reconciliations r
+      join accounts a on a.id = r.account_id and a.org_id = r.org_id
+     where r.org_id = ${context.authz.user.orgId}
+       ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, context.authz.allowedSubsidiaryIds)}
+       ${input.accountId ? sql` and r.account_id = ${input.accountId}` : sql``}
+     order by r.created_at desc
+     limit ${limit}
+  `)).rows;
+  return {
+    reconciliations: rows.map((row) => ({
+      id: row.id,
+      accountId: row.account_id,
+      accountNumber: row.account_number,
+      accountName: row.account_name,
+      throughDate: row.through_date,
+      statementBalance: normalizeMoneyValue(String(row.statement_balance ?? "0")),
+      status: row.status,
+      signedOffAt: row.signed_off_at,
+      createdAt: row.created_at,
+    })),
+  };
 }
 
 export async function startReconciliationSession(context: ApplicationContext, input: {

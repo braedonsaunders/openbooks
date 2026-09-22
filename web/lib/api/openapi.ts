@@ -490,6 +490,21 @@ export function buildOpenApiSpec(
     },
     post: idempotentPost("Start a close run", "Start or resume the period-close checklist.", "Close"),
   };
+  paths["/api/v1/close/locks"] = {
+    get: {
+      summary: "List period locks",
+      description: "Period locks by period, book, subsidiary, and module. Restricted subsidiary callers are refused by name — never an empty list.",
+      tags: ["Close"],
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { name: "periodId", in: "query", schema: { type: "string", format: "uuid" } },
+        { name: "state", in: "query", schema: { type: "string", enum: ["open", "soft_closed", "closed"] } },
+        { name: "module", in: "query", schema: { type: "string", enum: ["ar", "ap", "banking", "assets", "tax", "gl"] } },
+        { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 } },
+      ],
+      responses: { "200": { description: "Period locks" }, "403": { description: "Caller is subsidiary-restricted" } },
+    },
+  };
   paths["/api/v1/close/runs/{id}"] = {
     get: {
       summary: "Get a close run",
@@ -730,6 +745,17 @@ export function buildOpenApiSpec(
     },
   };
   paths["/api/v1/banking/reconciliations"] = {
+    get: {
+      summary: "List bank reconciliations",
+      description: "Reconciliation sessions newest first. Statement balance is an exact decimal string. Feature-off is a 404 naming GET /api/v1/settings/features.",
+      tags: ["Banking"],
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { name: "accountId", in: "query", schema: { type: "string", format: "uuid" } },
+        { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 } },
+      ],
+      responses: { "200": { description: "Reconciliation sessions" }, "404": { description: "banking is off" } },
+    },
     post: idempotentPost("Start a bank reconciliation", "One open session per account; match lines then sign off.", "Banking"),
   };
   paths["/api/v1/banking/reconciliations/{id}/sign-off"] = {
@@ -768,6 +794,25 @@ export function buildOpenApiSpec(
       ],
     },
   };
+  paths["/api/v1/budgets"] = {
+    get: {
+      summary: "List budget scenarios",
+      description: "Non-archived budget and forecast scenarios. Feature-off is a 404 naming GET /api/v1/settings/features.",
+      tags: ["Budgets"],
+      security: [{ BearerAuth: [] }],
+      responses: { "200": { description: "Budget scenarios" }, "404": { description: "budgets is off" } },
+    },
+  };
+  paths["/api/v1/budgets/{id}"] = {
+    get: {
+      summary: "Get a budget scenario",
+      description: "One scenario through the same loader as the budgets screen.",
+      tags: ["Budgets"],
+      security: [{ BearerAuth: [] }],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+      responses: { "200": { description: "Budget scenario" }, "404": { description: "Not found or budgets is off" } },
+    },
+  };
   paths["/api/v1/budgets/{id}/cells"] = {
     post: {
       ...idempotentPost("Update budget cells", "Draft scenarios only. expectedRevision must match.", "Budgets"),
@@ -778,6 +823,19 @@ export function buildOpenApiSpec(
     },
   };
   paths["/api/v1/files"] = {
+    get: {
+      summary: "List File Cabinet files",
+      description: "Metadata only. Respects the same folder grants as the files screen. Never returns contents.",
+      tags: ["Files"],
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { name: "folderId", in: "query", schema: { type: "string", format: "uuid" } },
+        { name: "q", in: "query", schema: { type: "string" }, description: "Match file name" },
+        { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100 } },
+        { name: "offset", in: "query", schema: { type: "integer", minimum: 0 } },
+      ],
+      responses: { "200": { description: "Files" } },
+    },
     post: idempotentPost("Upload a File Cabinet file", "Same storage and folder grants as the files screen. At most 1 MB.", "Files"),
   };
   paths["/api/v1/settings/company"] = {
@@ -886,6 +944,105 @@ export function buildOpenApiSpec(
       tags: ["Tax"],
       security: [{ BearerAuth: [] }],
       responses: { "200": { description: "Tax return forms" } },
+    },
+  };
+  paths["/api/v1/admin/users"] = {
+    get: {
+      summary: "List users",
+      description: "Company users with role names. Never credentials.",
+      tags: ["Admin"],
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { name: "q", in: "query", schema: { type: "string" }, description: "Match name or email" },
+        { name: "status", in: "query", schema: { type: "string", enum: ["active", "inactive", "all"] } },
+        { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100 } },
+      ],
+      responses: { "200": { description: "Users" } },
+    },
+  };
+  paths["/api/v1/admin/roles"] = {
+    get: {
+      summary: "List roles",
+      description: "Roles with permission sets, member counts, and subsidiary restriction.",
+      tags: ["Admin"],
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { name: "q", in: "query", schema: { type: "string" }, description: "Match name, description, or key" },
+        { name: "type", in: "query", schema: { type: "string", enum: ["built_in", "custom", "all"] } },
+        { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100 } },
+      ],
+      responses: { "200": { description: "Roles" } },
+    },
+  };
+  paths["/api/v1/admin/audit"] = {
+    get: {
+      summary: "Search the audit log",
+      description: "Company audit events. Restricted subsidiary callers are refused by name — never an empty log.",
+      tags: ["Admin"],
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { name: "q", in: "query", schema: { type: "string" } },
+        { name: "action", in: "query", schema: { type: "string" } },
+        { name: "recordType", in: "query", schema: { type: "string" } },
+        { name: "actorId", in: "query", schema: { type: "string" }, description: "User id, or the literal system" },
+        { name: "from", in: "query", schema: { type: "string", format: "date" } },
+        { name: "to", in: "query", schema: { type: "string", format: "date" } },
+        { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 50 } },
+      ],
+      responses: { "200": { description: "Audit events" }, "403": { description: "Caller is subsidiary-restricted" } },
+    },
+  };
+  paths["/api/v1/opportunities"] = {
+    get: {
+      summary: "List opportunities",
+      description: "Sales opportunities. Projected and weighted amounts are exact decimal strings. Feature-off is a 404 naming GET /api/v1/settings/features.",
+      tags: ["CRM"],
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { name: "q", in: "query", schema: { type: "string" }, description: "Match title, number, or customer name" },
+        { name: "openOnly", in: "query", schema: { type: "boolean" } },
+        { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 } },
+      ],
+      responses: { "200": { description: "Opportunities" }, "404": { description: "crm is off" } },
+    },
+  };
+  paths["/api/v1/customers"] = {
+    get: {
+      summary: "List customers",
+      description: "Parties with an active customer role. Credit limit is an exact decimal string.",
+      tags: ["Parties"],
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { name: "q", in: "query", schema: { type: "string" } },
+        { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 } },
+      ],
+      responses: { "200": { description: "Customers" } },
+    },
+  };
+  paths["/api/v1/vendors"] = {
+    get: {
+      summary: "List vendors",
+      description: "Parties with an active vendor role. Taxpayer identifiers are never returned.",
+      tags: ["Parties"],
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { name: "q", in: "query", schema: { type: "string" } },
+        { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 } },
+      ],
+      responses: { "200": { description: "Vendors" } },
+    },
+  };
+  paths["/api/v1/employees"] = {
+    get: {
+      summary: "List employees",
+      description: "Parties with an active employee role. Birth date and government identifiers are never returned.",
+      tags: ["Parties"],
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { name: "q", in: "query", schema: { type: "string" } },
+        { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 } },
+      ],
+      responses: { "200": { description: "Employees" } },
     },
   };
   paths["/api/v1/tax/returns/{code}"] = {
