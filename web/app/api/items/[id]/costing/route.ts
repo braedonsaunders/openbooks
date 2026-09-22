@@ -7,7 +7,7 @@ import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { InventoryError, CostingPolicyChangeBlockedError } from "@openbooks/engine/src/inventory/contracts.ts";
 import { inventoryOffsetAccountProblem } from "@openbooks/engine/src/inventory/journal.ts";
-import { assertCostingPolicyChangeAllowed, lockItemInventoryProfile, parseCostingMethod, parseTrackingMode } from "@openbooks/engine/src/inventory/profile-policy.ts";
+import { assertCostingPolicyChangeAllowed, lockItemInventoryProfile, parseCostingMethod, parseTrackingMode, parseUnitConversions } from "@openbooks/engine/src/inventory/profile-policy.ts";
 import { revalueOpenLayersToStandardCost } from "@openbooks/engine/src/inventory/revaluation.ts";
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
@@ -57,7 +57,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const profile = ((await db.execute(sql`
     select costing_method, tracking, asset_account_id, cogs_account_id,
            adjustment_account_id, variance_account_id, received_not_billed_account_id,
-           standard_cost, base_unit, reorder_point, preferred_stock_level,
+           standard_cost, base_unit, unit_conversions, reorder_point, preferred_stock_level,
            allow_negative_inventory, negative_cost_basis, provisional_unit_cost, ${documentRevisionSql(sql`updated_at`)} as updated_at
       from item_inventory_profiles
      where org_id = ${gate.user.orgId} and item_id = ${id}`)))
@@ -135,6 +135,17 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     return NextResponse.json({ error: 'The asset and COGS accounts are required' }, { status: 400 })
   }
   const baseUnit = String(body.baseUnit ?? '').trim() || 'ea'
+  // Unit conversions make the posting-time refusal actionable: a line raised
+  // in "Each" against base "ea" is refused until the operator maps the alias
+  // once ({ Each: 1 }). Omission preserves the stored map — the PUT upserts
+  // the whole row, so defaulting here would wipe configuration silently.
+  const parsedConversions = parseUnitConversions(body.unitConversions)
+  if (parsedConversions === 'invalid') {
+    return NextResponse.json(
+      { error: 'unitConversions must be an object of unit names to positive numbers with at most four decimal places' },
+      { status: 422 },
+    )
+  }
   const adjustmentAccountId = accountRef(body.adjustmentAccountId)
   const varianceAccountId = accountRef(body.varianceAccountId)
   const receivedNotBilledAccountId = accountRef(body.receivedNotBilledAccountId)
@@ -225,16 +236,27 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
             })
           : null
 
+      // Omitted conversions preserve the stored map (read under the same row
+      // lock); only an explicit object or null replaces it.
+      const priorConversions = before?.unit_conversions
+      const unitConversions =
+        parsedConversions !== undefined
+          ? parsedConversions
+          : priorConversions !== null &&
+              typeof priorConversions === "object" &&
+              !Array.isArray(priorConversions)
+            ? (priorConversions as Record<string, number>)
+            : {};
       const afterRows = ((await tx.execute(sql`
         insert into item_inventory_profiles
           (org_id, item_id, costing_method, tracking, asset_account_id, cogs_account_id,
            adjustment_account_id, variance_account_id, received_not_billed_account_id,
-           standard_cost, base_unit, reorder_point, preferred_stock_level,
+           standard_cost, base_unit, unit_conversions, reorder_point, preferred_stock_level,
            allow_negative_inventory, negative_cost_basis, provisional_unit_cost, created_by, updated_by)
         values
           (${orgId}, ${id}, ${costingMethod}, ${tracking}, ${assetAccountId}, ${cogsAccountId},
            ${adjustmentAccountId}, ${varianceAccountId}, ${receivedNotBilledAccountId},
-           ${standardCost}, ${baseUnit}, ${reorderPoint}, ${preferredStockLevel},
+           ${standardCost}, ${baseUnit}, ${JSON.stringify(unitConversions)}::jsonb, ${reorderPoint}, ${preferredStockLevel},
            ${allowNegativeInventory}, ${negativeCostBasis}, ${provisionalUnitCost}, ${actorId}, ${actorId})
         on conflict (item_id) do update set
           costing_method = excluded.costing_method,
@@ -246,6 +268,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
           received_not_billed_account_id = excluded.received_not_billed_account_id,
           standard_cost = excluded.standard_cost,
           base_unit = excluded.base_unit,
+          unit_conversions = excluded.unit_conversions,
           reorder_point = excluded.reorder_point,
           preferred_stock_level = excluded.preferred_stock_level,
           allow_negative_inventory = excluded.allow_negative_inventory,

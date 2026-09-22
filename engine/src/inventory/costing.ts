@@ -83,6 +83,16 @@ export function exactCostFragments(quantity: string, value: string, sourceUnitCo
  * so the unknown case refuses with the remedy (raise the line in the base
  * unit, or configure the conversion on the item's costing profile).
  */
+/**
+ * Fold a unit spelling for comparison: surrounding whitespace and letter case
+ * carry no meaning ("EA", "Ea" and " ea" are the base unit "ea"). Genuine
+ * aliases ("Each" vs "ea") do NOT fold together — they are configured once
+ * as a conversion, not guessed at posting time.
+ */
+export function normalizeInventoryUnit(unit: string | null | undefined): string {
+  return (unit ?? "").trim().toLowerCase();
+}
+
 export function toBaseQuantity(
   quantity: string,
   unit: string | null | undefined,
@@ -90,18 +100,33 @@ export function toBaseQuantity(
   baseUnit: string,
   lineLabel = "inventory line",
 ): string {
-  if (!unit || unit === baseUnit) return fromUnits(toUnits(quantity));
-  const factor: unknown = conversions[unit];
+  const folded = normalizeInventoryUnit(unit);
+  // No unit — or the base unit under any spelling — needs no conversion.
+  // Document authors (drawer free text, connector source names) must not
+  // have to match the profile's exact case to post stock.
+  if (!folded || folded === normalizeInventoryUnit(baseUnit)) {
+    return fromUnits(toUnits(quantity));
+  }
+  const trimmed = (unit ?? "").trim();
+  const factor: unknown =
+    conversions[trimmed] ??
+    conversions[folded] ??
+    (() => {
+      const key = Object.keys(conversions).find(
+        (candidate) => candidate.toLowerCase() === folded,
+      );
+      return key === undefined ? undefined : conversions[key];
+    })();
   if (typeof factor !== "number" || !Number.isFinite(factor) || factor <= 0) {
     throw new InventoryError(
-      `${lineLabel} is raised in unit "${unit}" with no conversion to the item's base unit "${baseUnit}" — ` +
-        `enter the quantity in ${baseUnit}, or configure a conversion for "${unit}" on the item's costing profile`,
+      `${lineLabel} is raised in unit "${trimmed}" with no conversion to the item's base unit "${baseUnit}" — ` +
+        `enter the quantity in ${baseUnit}, or configure a conversion for "${trimmed}" on the item's costing profile`,
     );
   }
   const exact = canonicalDecimal(String(factor), 4);
   if (exact === null) {
     throw new InventoryError(
-      `${lineLabel} unit "${unit}" converts at ${factor} ${baseUnit} per ${unit}, which cannot be expressed exactly — ` +
+      `${lineLabel} unit "${trimmed}" converts at ${factor} ${baseUnit} per ${trimmed}, which cannot be expressed exactly — ` +
         `configure an exact conversion on the item's costing profile`,
     );
   }

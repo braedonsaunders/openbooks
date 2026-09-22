@@ -64,6 +64,26 @@ test("toBaseQuantity applies the item's unit conversion and refuses unknown unit
   );
 });
 
+test("toBaseQuantity folds case and whitespace; empty means the base unit", () => {
+  const conv = { box: 12, pallet: 720 };
+  // Drawer free text and connector source names must not have to match the
+  // profile's exact case to post stock.
+  assert.equal(toBaseQuantity("2", "BOX", conv, "ea"), "24.0000");
+  assert.equal(toBaseQuantity("2", " box ", conv, "ea"), "24.0000");
+  assert.equal(toBaseQuantity("2", "Box", { Box: 12 }, "ea"), "24.0000");
+  assert.equal(toBaseQuantity("5", "EA", conv, "ea"), "5.0000");
+  assert.equal(toBaseQuantity("5", " ea ", conv, "ea"), "5.0000");
+  assert.equal(toBaseQuantity("5", "", conv, "ea"), "5.0000");
+  assert.equal(toBaseQuantity("5", "   ", conv, "ea"), "5.0000");
+  // Genuine aliases do NOT fold: "Each" is not "ea" until the operator maps
+  // it once as a conversion. The refusal names that remedy.
+  assert.throws(
+    () => toBaseQuantity("2", "Each", conv, "ea"),
+    /unit "Each" with no conversion/,
+  );
+  assert.equal(toBaseQuantity("2", "Each", { Each: 1 }, "ea"), "2.0000");
+});
+
 // ---------------------------------------------------------------------------
 // FIFO
 // ---------------------------------------------------------------------------
