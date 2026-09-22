@@ -192,6 +192,39 @@ export const timeEntries = pgTable(
     uniqueIndex("time_entries_org_id_id_unique").on(t.orgId, t.id),
     index("time_entries_employee_date").on(t.employeePartyId, t.workedOn),
     index("time_entries_project").on(t.projectId, t.isBillable),
+    /**
+     * Entry FK backing (0261): item/task/department are billing and
+     * labor-report filters (full); rate provenance and type pointers are
+     * sparse (partial, proven to serve both the parameterized FK-check
+     * shape and org-scoped filters).
+     */
+    index("time_entries_item").on(t.orgId, t.itemId),
+    index("time_entries_project_task").on(t.orgId, t.projectTaskId),
+    index("time_entries_department").on(t.orgId, t.departmentId),
+    index("time_entries_bill_rate_book")
+      .on(t.orgId, t.billRateBookId)
+      .where(sql`${t.billRateBookId} IS NOT NULL`),
+    index("time_entries_bill_rate_line")
+      .on(t.orgId, t.billRateLineId)
+      .where(sql`${t.billRateLineId} IS NOT NULL`),
+    index("time_entries_bill_rate_version")
+      .on(t.orgId, t.billRateVersionId)
+      .where(sql`${t.billRateVersionId} IS NOT NULL`),
+    index("time_entries_labor_cost_rate")
+      .on(t.orgId, t.laborCostRateId)
+      .where(sql`${t.laborCostRateId} IS NOT NULL`),
+    index("time_entries_cost_rate_subsidiary")
+      .on(t.orgId, t.costRateSubsidiaryId)
+      .where(sql`${t.costRateSubsidiaryId} IS NOT NULL`),
+    index("time_entries_cost_rate_currency")
+      .on(t.orgId, t.costRateCurrency)
+      .where(sql`${t.costRateCurrency} IS NOT NULL`),
+    index("time_entries_wage_currency")
+      .on(t.orgId, t.wageCurrency)
+      .where(sql`${t.wageCurrency} IS NOT NULL`),
+    index("time_entries_time_type")
+      .on(t.orgId, t.timeTypeId)
+      .where(sql`${t.timeTypeId} IS NOT NULL`),
     index("time_entries_status").on(t.orgId, t.status),
     index("time_entries_billing_status").on(t.orgId, t.billingStatus),
     index("time_entries_costing_basis").on(

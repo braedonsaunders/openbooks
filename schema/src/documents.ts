@@ -378,6 +378,38 @@ export const documentLines = pgTable(
     index("doc_lines_document").on(t.documentId),
     index("doc_lines_project_billable").on(t.projectId, t.isBillable),
     index("doc_lines_party").on(t.partyId),
+    /**
+     * Line FK backing (0261): item/tax/account are report filters (full);
+     * the rest are sparse lineage pointers (partial, proven to serve both
+     * the parameterized FK-check shape and org-scoped filters).
+     */
+    index("doc_lines_item").on(t.orgId, t.itemId),
+    index("doc_lines_tax_code").on(t.orgId, t.taxCodeId),
+    index("doc_lines_account").on(t.orgId, t.accountId),
+    index("doc_lines_employee")
+      .on(t.orgId, t.employeeId)
+      .where(sql`${t.employeeId} IS NOT NULL`),
+    index("doc_lines_equipment_unit")
+      .on(t.orgId, t.equipmentUnitId)
+      .where(sql`${t.equipmentUnitId} IS NOT NULL`),
+    index("doc_lines_rate_version")
+      .on(t.orgId, t.rateVersionId)
+      .where(sql`${t.rateVersionId} IS NOT NULL`),
+    index("doc_lines_recovery_account")
+      .on(t.orgId, t.recoveryAccountId)
+      .where(sql`${t.recoveryAccountId} IS NOT NULL`),
+    index("doc_lines_stock_location")
+      .on(t.orgId, t.stockLocationId)
+      .where(sql`${t.stockLocationId} IS NOT NULL`),
+    index("doc_lines_subsidiary")
+      .on(t.orgId, t.subsidiaryId)
+      .where(sql`${t.subsidiaryId} IS NOT NULL`),
+    index("doc_lines_tax_group")
+      .on(t.orgId, t.taxGroupId)
+      .where(sql`${t.taxGroupId} IS NOT NULL`),
+    index("doc_lines_time_type")
+      .on(t.orgId, t.timeTypeId)
+      .where(sql`${t.timeTypeId} IS NOT NULL`),
     foreignKey({
       columns: [t.orgId, t.documentId],
       foreignColumns: [documents.orgId, documents.id],
