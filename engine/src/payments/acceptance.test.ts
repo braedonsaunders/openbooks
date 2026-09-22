@@ -154,6 +154,43 @@ test("stripe webhook: signature verified, tamper rejected", () => {
   );
 });
 
+test("stripe webhook: any of several v1 signatures verifies during a secret roll", () => {
+  const oldSecret = "whsec_old_roll";
+  const newSecret = "whsec_new_roll";
+  const body = JSON.stringify({
+    id: "evt_roll",
+    type: "checkout.session.completed",
+    data: { object: { id: "cs_roll_1", client_reference_id: "tok_roll", amount_total: 10300 } },
+  });
+  const t = Math.floor(Date.now() / 1000);
+  const v1 = (secret: string) =>
+    createHmac("sha256", secret).update(`${t}.${body}`, "utf8").digest("hex");
+  // Stripe sends one v1 per active secret during a roll, and the delivery's
+  // valid signature may come first OR last — a last-wins parse 401d one of
+  // these two identical deliveries.
+  for (const header of [
+    `t=${t},v1=${v1(oldSecret)},v1=${v1(newSecret)}`,
+    `t=${t},v1=${v1(newSecret)},v1=${v1(oldSecret)}`,
+  ]) {
+    const verified = ACCEPTANCE_ADAPTERS.stripe.verifyWebhook(
+      { "stripe-signature": header },
+      body,
+      { webhookSecret: newSecret },
+    );
+    assert.ok(verified, `delivery verifies with header ${header}`);
+    assert.equal(verified.externalRef, "cs_roll_1");
+  }
+  assert.equal(
+    ACCEPTANCE_ADAPTERS.stripe.verifyWebhook(
+      { "stripe-signature": `t=${t},v1=${v1(oldSecret)},v1=${"0".repeat(64)}` },
+      body,
+      { webhookSecret: newSecret },
+    ),
+    null,
+    "no matching signature still rejects",
+  );
+});
+
 test("stripe webhook: replay window accepts provider retries within 24h, rejects older and future", () => {
   const secret = "whsec_replay";
   const obj = { id: "cs_replay_1", client_reference_id: "tok_r", amount_total: 10300, payment_status: "paid" };
