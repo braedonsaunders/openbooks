@@ -1226,17 +1226,21 @@ test("surcharge resolution honors the payment method across card and bank-debit 
     );
 
     // The provider-configured rule wins its tier — but only when its method
-    // matches the checkout. A card-only configured rule is excluded from the
-    // bank-debit rail rather than overriding the matching debit rule.
-    assert.equal(
-      (await resolveSurcharge(org.orgId, {
+    // matches the checkout. A card-only configured rule is refused by name on
+    // the bank-debit rail rather than silently falling back to the matching
+    // debit rule: an explicit reference is never substituted.
+    await assert.rejects(
+      resolveSurcharge(org.orgId, {
         provider: "gocardless",
         amount: "100.0000",
         currency: "CAD",
         onDate,
         configuredRuleId: cardRuleId,
-      })).amount,
-      "1.5000",
+      }),
+      (error: unknown) =>
+        error instanceof PaymentAcceptanceError &&
+        /Card fee.*bank_debit.*gocardless.*Company Settings → Payment Providers/.test(error.message),
+      "a method-mismatched configured rule refuses instead of falling back",
     );
     assert.deepEqual(
       await resolveSurcharge(org.orgId, {

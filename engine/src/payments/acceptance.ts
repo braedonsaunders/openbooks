@@ -828,32 +828,77 @@ async function validateSurchargeIncomeAccount(orgId: string, accountId: string):
 }
 
 /** A configured rule is an explicit reference, not merely a preference. An
- *  inactive, foreign, or provider-incompatible rule must never be silently
- *  replaced by a fallback rule during link creation or checkout. */
+ *  inactive, foreign, provider-incompatible, method-incompatible, or
+ *  out-of-window rule must never be silently replaced by a fallback rule
+ *  during link creation or checkout: the quote refuses by name instead.
+ *
+ *  Effective dates are runtime state, not stable configuration — the quote's
+ *  business date is canonical — so callers that persist configuration
+ *  (saveAcceptanceConfig) validate without `onDate` and must never refuse a
+ *  rule merely for being future-dated. Quote paths always pass the business
+ *  date they price on. */
 async function validateConfiguredSurchargeRule(
   orgId: string,
   provider: AcceptanceProvider,
   ruleId: string | null,
+  options: { onDate?: string } = {},
 ): Promise<void> {
   if (ruleId === null) return;
   assertAcceptanceUuid(ruleId, "surcharge rule");
   const row = await db.execute<{
     id: string;
+    name: string;
     is_active: boolean;
     provider: AcceptanceProvider | null;
+    payment_method: string;
+    effective_from: string;
+    effective_to: string | null;
     fee_income_account_id: string;
   }>(sql`
-    select id, is_active, provider, fee_income_account_id
+    select id, name, is_active, provider, payment_method,
+           effective_from::text as effective_from, effective_to::text as effective_to,
+           fee_income_account_id
       from payment_surcharge_rules
      where org_id = ${orgId} and id = ${ruleId}
      limit 1
   `);
   const rule = row.rows[0];
-  if (!rule || !rule.is_active) {
-    throw new PaymentAcceptanceError("surcharge rule is not active for this organization");
+  if (!rule) {
+    throw new PaymentAcceptanceError(
+      `surcharge rule ${ruleId} was not found in this organization; ` +
+        "choose an active surcharge rule in Company Settings → Payment Providers",
+    );
+  }
+  if (!rule.is_active) {
+    throw new PaymentAcceptanceError(
+      `surcharge rule "${rule.name}" is not active; ` +
+        "choose an active surcharge rule in Company Settings → Payment Providers",
+    );
   }
   if (rule.provider !== null && rule.provider !== provider) {
-    throw new PaymentAcceptanceError("surcharge rule is not configured for this provider");
+    throw new PaymentAcceptanceError(
+      `surcharge rule "${rule.name}" is configured for ${rule.provider}, not ${provider}; ` +
+        "choose a matching surcharge rule in Company Settings → Payment Providers",
+    );
+  }
+  const method = providerPaymentMethod(provider);
+  if (rule.payment_method !== "all" && rule.payment_method !== method) {
+    throw new PaymentAcceptanceError(
+      `surcharge rule "${rule.name}" prices ${rule.payment_method} payments, not ${method} ${provider} checkout; ` +
+        "choose a matching surcharge rule in Company Settings → Payment Providers",
+    );
+  }
+  // Same window predicate the resolution query applies (effective_from <=
+  // onDate, open-ended or effective_to >= onDate): ISO dates compare
+  // lexicographically, so the TypeScript check below cannot drift from it.
+  if (options.onDate !== undefined) {
+    const window = rule.effective_to === null ? `${rule.effective_from} onwards` : `${rule.effective_from} to ${rule.effective_to}`;
+    if (options.onDate < rule.effective_from || (rule.effective_to !== null && options.onDate > rule.effective_to)) {
+      throw new PaymentAcceptanceError(
+        `surcharge rule "${rule.name}" is not in effect on ${options.onDate} (effective ${window}); ` +
+          "choose a surcharge rule in effect for the quote date in Company Settings → Payment Providers",
+      );
+    }
   }
   await validateSurchargeIncomeAccount(orgId, rule.fee_income_account_id);
 }
@@ -925,9 +970,36 @@ export async function resolveSurcharge(
   orgId: string,
   opts: { provider: AcceptanceProvider; amount: string; currency: string; onDate: string; configuredRuleId?: string | null },
 ): Promise<SurchargeResolution> {
-  if (opts.configuredRuleId !== undefined && opts.configuredRuleId !== null) {
-    assertAcceptanceUuid(opts.configuredRuleId, "surcharge rule");
-    await validateConfiguredSurchargeRule(orgId, opts.provider, opts.configuredRuleId);
+  const configuredRuleId = opts.configuredRuleId ?? null;
+  if (configuredRuleId !== null) {
+    assertAcceptanceUuid(configuredRuleId, "surcharge rule");
+    // Refuses by name when the explicit rule cannot price this quote
+    // (wrong provider/method, retired, or outside its effective window) —
+    // the resolution below must never fall back to another rule instead.
+    await validateConfiguredSurchargeRule(orgId, opts.provider, configuredRuleId, { onDate: opts.onDate });
+    const r = (await db.execute<{ id: string; calculation: string; percent: string | null; fixed_amount: string | null; cap_amount: string | null; fee_income_account_id: string }>(sql`
+      select id, calculation, percent, fixed_amount, cap_amount, fee_income_account_id
+        from payment_surcharge_rules
+       where org_id = ${orgId} and id = ${configuredRuleId} and is_active
+         and effective_from <= ${opts.onDate}
+         and (effective_to is null or effective_to >= ${opts.onDate})
+         and (provider is null or provider = ${opts.provider})
+         and payment_method in ('all', ${providerPaymentMethod(opts.provider)})
+       limit 1
+    `));
+    const rule = r.rows[0];
+    // Unreachable unless the rule changed between the validation above and
+    // this read: fail closed on the explicit reference rather than falling
+    // back to whatever rule happens to match.
+    if (!rule) {
+      throw new PaymentAcceptanceError(
+        `surcharge rule ${configuredRuleId} stopped covering this quote; ` +
+          "choose an active surcharge rule in Company Settings → Payment Providers",
+      );
+    }
+    await validateSurchargeIncomeAccount(orgId, rule.fee_income_account_id);
+    const amount = quantizeSurchargeToMinorUnits(computeSurcharge(opts.amount, rule), opts.currency);
+    return { amount, ruleId: rule.id, feeIncomeAccountId: rule.fee_income_account_id };
   }
   const r = (await db.execute<{ id: string; calculation: string; percent: string | null; fixed_amount: string | null; cap_amount: string | null; fee_income_account_id: string }>(sql`
     select id, calculation, percent, fixed_amount, cap_amount, fee_income_account_id
@@ -937,8 +1009,7 @@ export async function resolveSurcharge(
        and (effective_to is null or effective_to >= ${opts.onDate})
        and (provider is null or provider = ${opts.provider})
        and payment_method in ('all', ${providerPaymentMethod(opts.provider)})
-     order by case when ${opts.configuredRuleId ?? null}::uuid is not null and id = ${opts.configuredRuleId ?? null}::uuid then 0
-                   when provider = ${opts.provider} then 1 else 2 end,
+     order by case when provider = ${opts.provider} then 1 else 2 end,
                effective_from desc,
                id desc
      limit 1
