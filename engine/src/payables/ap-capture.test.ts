@@ -9,6 +9,7 @@ import {
   normalizeCapturedDecimal,
   validateNormalizedCapture,
   validatePurchaseOrderQuantities,
+  type CaptureIssue,
   type NormalizedCapture,
 } from "./ap-capture.ts";
 import { db } from "../platform/db.ts";
@@ -19,8 +20,10 @@ import {
   lineRequiresReceipt,
   materializeCapture,
   matchPurchaseOrderLine,
+  processCaptureItem,
   purchaseOrderBilledQuantityDelta,
 } from "./ap-capture-service.ts";
+import { sealSecret } from "../platform/secrets.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -39,6 +42,22 @@ test("normalizeCapturedDecimal handles localized and signed OCR amounts exactly"
   assert.equal(normalizeCapturedDecimal("(45.10)"), "-45.1000");
   assert.equal(normalizeCapturedDecimal("1.25E2"), "125.0000");
   assert.throws(() => normalizeCapturedDecimal("1.00001"), /precision/);
+});
+
+test("normalizeCapturedDecimal refuses ambiguous comma text instead of guessing", () => {
+  // "1,234" is two readings (1234 grouped vs 1.234 decimal comma), never one
+  // canonical answer: refusing by name beats storing a number nobody typed.
+  assert.equal(normalizeCapturedDecimal("1,234"), null);
+  assert.equal(normalizeCapturedDecimal("(1,234)"), null);
+  assert.equal(normalizeCapturedDecimal("12,"), null);
+  // The unambiguous localized readings are preserved, not removed: a lone
+  // comma with a one-or-two-digit tail is the decimal-comma locales' money,
+  // commas around dots keep the last-separator rule, and pure grouping strips.
+  assert.equal(normalizeCapturedDecimal("12,34"), "12.3400");
+  assert.equal(normalizeCapturedDecimal("0,50"), "0.5000");
+  assert.equal(normalizeCapturedDecimal("1,234,567"), "1234567.0000");
+  // A single dot is plain canonical decimal, not an ambiguous shape.
+  assert.equal(normalizeCapturedDecimal("1.234"), "1.2340");
 });
 
 const raw = {
@@ -66,6 +85,92 @@ const raw = {
     pages: [{ pageNumber: 1, width: 8.5, height: 11 }],
   },
 };
+
+function ambiguousRawPayload(): Parameters<typeof normalizeAzureInvoice>[0] {
+  // Same header/line shapes as `raw`, but every money reading arrives as raw
+  // OCR text with no typed provider number — nothing may disambiguate it.
+  const header = (content: string) => ({ type: "currency", content, confidence: 0.9 });
+  const line = (content: string) => ({ type: "string", content, confidence: 0.9 });
+  return {
+    status: "succeeded",
+    analyzeResult: {
+      documents: [{
+        confidence: 0.97,
+        fields: {
+          VendorName: { type: "string", content: "Northwind Supplies", valueString: "Northwind Supplies", confidence: 0.99 },
+          InvoiceId: { type: "string", content: "INV-1042", valueString: "INV-1042", confidence: 0.98 },
+          InvoiceDate: { type: "date", content: "2026-07-01", valueDate: "2026-07-01", confidence: 0.99 },
+          CurrencyCode: { type: "string", valueString: "CAD", confidence: 0.99 },
+          SubTotal: header("10"),
+          TotalTax: header("1,234"),
+          InvoiceTotal: header("1,234"),
+          Items: { valueArray: [{ valueObject: {
+            Description: { valueString: "Shop supplies", confidence: 0.98 },
+            Quantity: line("1,234"),
+            UnitPrice: line("1,234"),
+            Amount: line("1,234"),
+            Tax: line("1,234"),
+          } }, { valueObject: {
+            // Typed provider numbers disambiguate and stay canonical.
+            Description: { valueString: "Typed control", confidence: 0.98 },
+            Quantity: { valueNumber: 2, confidence: 0.98 },
+            UnitPrice: { valueCurrency: { amount: 5 }, confidence: 0.98 },
+            Amount: { valueCurrency: { amount: 10 }, confidence: 0.98 },
+            Tax: { valueCurrency: { amount: 1.3 }, confidence: 0.95 },
+          } }] },
+        },
+      }],
+      pages: [{ pageNumber: 1, width: 8.5, height: 11 }],
+    },
+  };
+}
+
+test("ambiguous OCR amounts never become guessed money, defaults, or throws", () => {
+  const result = normalizeAzureInvoice(ambiguousRawPayload());
+  // Refused header money is preserved as raw text, never guessed or nulled
+  // into a silent default.
+  assert.equal(result.normalized.taxTotal, "1,234");
+  assert.equal(result.normalized.total, "1,234");
+  assert.equal(result.normalized.subtotal, "10.0000");
+  const ambiguous = result.normalized.lines[0]!;
+  assert.equal(ambiguous.quantity, "1,234");
+  assert.equal(ambiguous.unitPrice, "1,234");
+  assert.equal(ambiguous.amount, "1,234");
+  assert.equal(ambiguous.taxAmount, "1,234");
+  // Typed provider numbers on the control line stay canonical.
+  const typed = result.normalized.lines[1]!;
+  assert.equal(typed.quantity, "2.0000");
+  assert.equal(typed.unitPrice, "5.0000");
+  assert.equal(typed.amount, "10.0000");
+  assert.equal(typed.taxAmount, "1.3000");
+  // Validation names the refusal instead of throwing or passing silently.
+  const issues = validateNormalizedCapture(result.normalized);
+  const blocking = issues.filter((issue) => issue.severity === "blocking");
+  assert.ok(blocking.length >= 6, `expected header + line refusals, got ${JSON.stringify(issues)}`);
+  assert.ok(blocking.every((issue) => issue.code === "invalid_amount"));
+  assert.ok(blocking.some((issue) => issue.field === "total" && issue.actual === "1,234"));
+  assert.ok(blocking.some((issue) => issue.field === "taxTotal" && issue.actual === "1,234"));
+  for (const key of ["quantity", "unitPrice", "amount", "taxAmount"] as const) {
+    const refusal = blocking.find((issue) => issue.lineIndex === 0 && issue.field === key);
+    assert.ok(refusal, `missing line refusal for ${key}`);
+    assert.match(refusal.message ?? "", /could mean 1234 \(thousands separator\) or 1\.234 \(decimal comma\)/);
+    assert.match(refusal.message ?? "", /retype it in plain digits/);
+  }
+});
+
+test("truly missing capture amounts keep their long-standing defaults", () => {
+  const missing = normalizeAzureInvoice(raw);
+  // The shared fixture supplies typed numbers; drop the quantity entirely on
+  // a copy to prove absence (not refusal) still takes the legacy defaults.
+  const payload = structuredClone(raw);
+  const lineFields = payload.analyzeResult.documents![0]!.fields!.Items!.valueArray![0]!.valueObject!;
+  delete (lineFields as Record<string, unknown>).Quantity;
+  delete (lineFields as Record<string, unknown>).Tax;
+  const result = normalizeAzureInvoice(payload);
+  assert.equal(result.normalized.lines[0]!.quantity, "1.0000");
+  assert.equal(result.normalized.lines[0]!.taxAmount, "0.0000");
+  assert.deepEqual(validateNormalizedCapture(missing.normalized), []);
+});
 
 test("Azure normalization preserves line evidence and exact invoice math", () => {
   const result = normalizeAzureInvoice(raw);
@@ -474,6 +579,137 @@ test(
         await tx.execute(sql`alter table public.ap_capture_events enable trigger ap_capture_events_append_only`);
         await tx.execute(sql`delete from ap_capture_items where org_id = ${org.orgId}`);
       });
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "processCaptureItem stores refused raw amounts with a named blocker",
+  { skip: !DB },
+  async () => {
+    // Service storage proof with provider I/O stubbed and every other
+    // boundary real: raw Azure text in, needs_review with raw evidence out.
+    const org = await createScratchOrg();
+    const folderId = randomUUID();
+    const fileId = randomUUID();
+    const versionId = randomUUID();
+    const captureId = randomUUID();
+    const endpoint = "https://ob-capture-proof.cognitiveservices.azure.com";
+    const money = (content: string) => ({ type: "currency", content, confidence: 0.9 });
+    const payload = {
+      status: "succeeded",
+      analyzeResult: {
+        documents: [{
+          confidence: 0.97,
+          fields: {
+            VendorName: { type: "string", content: "Northwind Supplies", valueString: "Northwind Supplies", confidence: 0.99 },
+            InvoiceId: { type: "string", content: "INV-AMB-PROOF", valueString: "INV-AMB-PROOF", confidence: 0.98 },
+            InvoiceDate: { type: "date", content: "2026-07-01", valueDate: "2026-07-01", confidence: 0.99 },
+            CurrencyCode: { type: "string", valueString: "CAD", confidence: 0.99 },
+            SubTotal: money("10"),
+            TotalTax: money("1,234"),
+            InvoiceTotal: money("1,234"),
+            Items: { valueArray: [{ valueObject: {
+              Description: { valueString: "Ambiguous line", confidence: 0.98 },
+              Quantity: money("1,234"),
+              UnitPrice: money("5.0000"),
+              Amount: money("10.0000"),
+              Tax: money("0.0000"),
+            } }] },
+          },
+        }],
+        pages: [],
+      },
+    };
+    const previousFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        return new Response(null, {
+          status: 202,
+          headers: { "operation-location": `${endpoint}/result/1` },
+        });
+      }
+      assert.ok(String(input).startsWith(endpoint), "polling stays on the provider host");
+      return Response.json(payload);
+    }) as typeof fetch;
+    try {
+      await db.execute(sql`
+        insert into folders (id, org_id, name)
+        values (${folderId}, ${org.orgId}, 'AP capture proof')
+      `);
+      await db.execute(sql`
+        insert into files (id, org_id, folder_id, name, content_type, size_bytes)
+        values (${fileId}, ${org.orgId}, ${folderId}, 'ambiguous.pdf', 'application/pdf', 4)
+      `);
+      await db.execute(sql`
+        insert into file_versions (id, file_id, version_number, size_bytes, content_type)
+        values (${versionId}, ${fileId}, 1, 4, 'application/pdf')
+      `);
+      await db.execute(sql`
+        insert into file_blobs (version_id, bytes) values (${versionId}, ${Buffer.from("%PDF")})
+      `);
+      await db.execute(sql`
+        update files set current_version_id = ${versionId}
+         where id = ${fileId} and org_id = ${org.orgId}
+      `);
+      await db.execute(sql`
+        update orgs set settings = coalesce(settings, '{}'::jsonb) || jsonb_build_object(
+          'ai', coalesce(settings->'ai', '{}'::jsonb) || ${JSON.stringify({
+            enabled: true,
+            documentCapture: {
+              enabled: true,
+              endpoint,
+              model: "prebuilt-invoice",
+              confidenceThreshold: "0.9000",
+              keyEncrypted: sealSecret("db-proof-key"),
+            },
+          })}::jsonb)
+         where id = ${org.orgId}
+      `);
+      await db.execute(sql`
+        insert into ap_capture_items
+          (id, org_id, file_id, status, original_filename, content_hash,
+           document_kind, normalized, validation_issues, created_by, updated_by)
+        values (${captureId}, ${org.orgId}, ${fileId}, 'queued', 'ambiguous.pdf',
+                ${randomUUID().replaceAll("-", "").padEnd(64, "0")}, 'vendor_bill',
+                '{}'::jsonb, '[]'::jsonb, null, null)
+      `);
+
+      await processCaptureItem({ orgId: org.orgId, captureItemId: captureId });
+
+      const item = (await db.execute<{
+        status: string; normalized: NormalizedCapture; validation_issues: CaptureIssue[];
+      }>(sql`
+        select status, normalized, validation_issues from ap_capture_items
+         where id = ${captureId} and org_id = ${org.orgId}
+      `)).rows[0]!;
+      assert.equal(item.status, "needs_review");
+      assert.equal(item.normalized.total, "1,234", "refused header money stays raw in storage");
+      assert.equal(item.normalized.lines[0]!.quantity, "1,234", "refused line money stays raw in storage");
+      const refusal = item.validation_issues.find((issue) => issue.field === "total");
+      assert.equal(refusal?.code, "invalid_amount");
+      assert.equal(refusal?.severity, "blocking");
+      assert.match(refusal?.message ?? "", /could mean 1234 \(thousands separator\) or 1\.234 \(decimal comma\)/);
+      const lineRefusal = item.validation_issues.find(
+        (issue) => issue.lineIndex === 0 && issue.field === "quantity",
+      );
+      assert.equal(lineRefusal?.code, "invalid_amount");
+      const evidence = (await db.execute<{ raw_value: string | null; normalized_value: unknown }>(sql`
+        select raw_value, normalized_value from ap_capture_fields
+         where org_id = ${org.orgId} and field_key = 'total'
+      `)).rows[0];
+      assert.equal(evidence?.raw_value, "1,234", "raw OCR evidence is retained");
+      const run = (await db.execute<{ status: string; raw_provider_payload: unknown }>(sql`
+        select status, raw_provider_payload from ap_capture_runs
+         where org_id = ${org.orgId} and capture_item_id = ${captureId}
+      `)).rows[0]!;
+      assert.equal(run.status, "succeeded");
+      assert.ok(run.raw_provider_payload, "raw provider payload is retained");
+    } finally {
+      globalThis.fetch = previousFetch;
+      // Canonical teardown owns all capture/evidence/blob cleanup, including
+      // the append-only trigger handling — no test-local DDL.
       await dropScratchOrg(org.orgId);
     }
   },

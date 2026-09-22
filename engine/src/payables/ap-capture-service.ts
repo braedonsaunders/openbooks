@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
 import { inventoryFeatureEnabled } from "../inventory/profile-policy.ts";
+import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { cmp, fromUnits, sum, toUnits } from "../money/money.ts";
 import {
   extractAzureInvoice,
@@ -279,7 +280,12 @@ async function mapLines(
       }
       const po = candidates[0]!;
       used.add(po.id);
-      for (const matchIssue of matchPurchaseOrderLine({
+      // Refused OCR text cannot be three-way-matched: its exact decimals never
+      // entered the capture, so matching would throw instead of refusing.
+      // validateNormalizedCapture already reports the named refusal as blocking.
+      const matchable = canonicalDecimal(line.quantity, 4) !== null
+        && canonicalDecimal(line.unitPrice, 4) !== null;
+      for (const matchIssue of (matchable ? matchPurchaseOrderLine({
         invoiceQuantity: line.quantity,
         invoiceUnitPrice: line.unitPrice,
         orderedQuantity: po.quantity,
@@ -289,7 +295,7 @@ async function mapLines(
         itemId: po.item_id,
         itemKind: po.item_kind,
         documentKind,
-      })) {
+      }) : [])) {
         issues.push(issue(matchIssue.code, "blocking", { lineIndex, expected: matchIssue.expected, actual: matchIssue.actual }));
       }
       if (!po.account_id) issues.push(issue("account_unresolved", "blocking", { lineIndex }));
@@ -683,8 +689,14 @@ export async function materializeCapture(input: {
     `));
     if (duplicate.rows[0]) throw new CaptureMaterializationError("A draft or posted document already uses this source or vendor invoice number");
     const issues = validateNormalizedCapture(capture);
-    if (issues.some((value) => value.severity === "blocking")) {
-      throw new CaptureMaterializationError("Resolve the capture math errors before creating a draft");
+    const blocking = issues.filter((value) => value.severity === "blocking");
+    if (blocking.length > 0) {
+      // Prefer the named refusal (ambiguous capture text carries its remedy in
+      // `message`); fall back to the long-standing generic math text.
+      throw new CaptureMaterializationError(
+        blocking.find((value) => value.message)?.message
+          ?? "Resolve the capture math errors before creating a draft",
+      );
     }
     // Re-run the shared three-way match against fresh purchase-order rows at
     // the write boundary: a stored review verdict can be stale, and this is
