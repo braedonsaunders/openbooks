@@ -10,7 +10,7 @@
  */
 
 import { sql } from "drizzle-orm";
-import { db, withOrgTransaction } from "../../platform/db.ts";
+import { db, withBypassContext, withOrgTransaction } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { FieldTimeError, refuse } from "./errors.ts";
 import { FIELD_TIME_FEATURE, FIELD_TIME_KIOSK_FEATURE } from "./settings.ts";
@@ -93,19 +93,40 @@ export async function revokeKiosk(orgId: string, kioskId: string, actorUserId: s
 
 export async function resolveKioskByToken(deviceToken: string): Promise<KioskRow> {
   const hash = hashDeviceToken(deviceToken);
-  const row = (await db.execute<(KioskRow & { org_id: string })>(sql`
-    select id::text as id, org_id::text as "orgId", org_id::text as org_id, name,
-           location_id::text as "locationId", project_id::text as "projectId",
-           pin_required as "pinRequired", photo_required as "photoRequired",
-           is_active as "isActive", last_seen_at::text as "lastSeenAt"
-      from time_kiosks where device_token_hash = ${hash}`)).rows[0];
-  if (!row || !row.isActive) {
+  // The device token binds the kiosk but not the org: resolve the row under
+  // bypass (the recruiting booking-link precedent), because a sessionless
+  // device carries no org context and under FORCE RLS the unscoped read
+  // below would resolve nothing — every kiosk request would 404.
+  const found = await withBypassContext(async () => {
+    const rows = (await db.execute<(KioskRow & { org_id: string })>(sql`
+      select id::text as id, org_id::text as "orgId", org_id::text as org_id, name,
+             location_id::text as "locationId", project_id::text as "projectId",
+             pin_required as "pinRequired", photo_required as "photoRequired",
+             is_active as "isActive", last_seen_at::text as "lastSeenAt"
+        from time_kiosks where device_token_hash = ${hash}`)).rows;
+    return rows[0] ?? null;
+  });
+  if (!found || !found.isActive) {
     refuse("kiosk_unknown", "This kiosk link is unknown or retired — ask a manager for a current kiosk link");
   }
-  const kiosk = row!;
-  await requireKioskFeature(kiosk.orgId);
-  await db.execute(sql`update time_kiosks set last_seen_at = now() where id = ${kiosk.id} and org_id = ${kiosk.orgId}`);
-  return kiosk;
+  return withOrgTransaction(found.orgId, async () => {
+    // Re-read scoped to the resolved org: the bypass row proves the token
+    // exists, this read proves the kiosk belongs to this org and is live —
+    // a bypass-resolved row is never trusted across orgs.
+    const scoped = (await db.execute<KioskRow>(sql`
+      select id::text as id, org_id::text as "orgId", name,
+             location_id::text as "locationId", project_id::text as "projectId",
+             pin_required as "pinRequired", photo_required as "photoRequired",
+             is_active as "isActive", last_seen_at::text as "lastSeenAt"
+        from time_kiosks
+       where org_id = ${found.orgId} and id = ${found.id} and is_active`)).rows[0];
+    if (!scoped) {
+      refuse("kiosk_unknown", "This kiosk link is unknown or retired — ask a manager for a current kiosk link");
+    }
+    await requireKioskFeature(found.orgId);
+    await db.execute(sql`update time_kiosks set last_seen_at = now() where id = ${found.id} and org_id = ${found.orgId}`);
+    return scoped;
+  });
 }
 
 /**
@@ -117,47 +138,52 @@ export async function identifyByPin(input: {
   employeePartyId: string;
   pin: string;
 }): Promise<string> {
-  const row = (await db.execute<{ pin_hash: string; failed_attempts: number; locked_until: string | null }>(sql`
-    select pin_hash, failed_attempts, locked_until::text as locked_until
-      from worker_clock_pins
-     where org_id = ${input.kiosk.orgId} and employee_party_id = ${input.employeePartyId}`)).rows[0];
-  if (!row) {
-    refuse(
-      "pin_not_set",
-      "No kiosk PIN is set for this worker — ask a manager to set a PIN before using the kiosk",
-    );
-  }
-  if (row.locked_until && Date.parse(row.locked_until) > Date.now()) {
-    refuse(
-      "pin_locked",
-      `Too many wrong PINs — kiosk sign-in for this worker unlocks at ${row.locked_until}; ask a manager to reset the PIN`,
-    );
-  }
-  if (!verifyPin(input.pin, row.pin_hash)) {
-    const attempts = row.failed_attempts + 1;
-    const locked = attempts >= MAX_ATTEMPTS
-      ? new Date(Date.now() + LOCK_MINUTES * 60_000).toISOString()
-      : null;
-    await db.execute(sql`
-      update worker_clock_pins
-         set failed_attempts = ${attempts}, locked_until = ${locked}::timestamptz, updated_at = now()
-       where org_id = ${input.kiosk.orgId} and employee_party_id = ${input.employeePartyId}`);
-    if (locked) {
+  // The kiosk device carries no session: scope the PIN read and the lockout
+  // writes to the kiosk's org, or under FORCE RLS the lookup resolves
+  // nothing and every worker meets pin_not_set.
+  return withOrgTransaction(input.kiosk.orgId, async () => {
+    const row = (await db.execute<{ pin_hash: string; failed_attempts: number; locked_until: string | null }>(sql`
+      select pin_hash, failed_attempts, locked_until::text as locked_until
+        from worker_clock_pins
+       where org_id = ${input.kiosk.orgId} and employee_party_id = ${input.employeePartyId}`)).rows[0];
+    if (!row) {
       refuse(
-        "pin_locked",
-        `Too many wrong PINs — kiosk sign-in for this worker unlocks at ${locked}; ask a manager to reset the PIN`,
+        "pin_not_set",
+        "No kiosk PIN is set for this worker — ask a manager to set a PIN before using the kiosk",
       );
     }
-    refuse(
-      "pin_wrong",
-      `Wrong PIN — ${MAX_ATTEMPTS - attempts} attempts remain before kiosk sign-in locks for ${LOCK_MINUTES} minutes`,
-    );
-  }
-  await db.execute(sql`
-    update worker_clock_pins
-       set failed_attempts = 0, locked_until = null, updated_at = now()
-     where org_id = ${input.kiosk.orgId} and employee_party_id = ${input.employeePartyId}`);
-  return input.employeePartyId;
+    if (row.locked_until && Date.parse(row.locked_until) > Date.now()) {
+      refuse(
+        "pin_locked",
+        `Too many wrong PINs — kiosk sign-in for this worker unlocks at ${row.locked_until}; ask a manager to reset the PIN`,
+      );
+    }
+    if (!verifyPin(input.pin, row.pin_hash)) {
+      const attempts = row.failed_attempts + 1;
+      const locked = attempts >= MAX_ATTEMPTS
+        ? new Date(Date.now() + LOCK_MINUTES * 60_000).toISOString()
+        : null;
+      await db.execute(sql`
+        update worker_clock_pins
+           set failed_attempts = ${attempts}, locked_until = ${locked}::timestamptz, updated_at = now()
+         where org_id = ${input.kiosk.orgId} and employee_party_id = ${input.employeePartyId}`);
+      if (locked) {
+        refuse(
+          "pin_locked",
+          `Too many wrong PINs — kiosk sign-in for this worker unlocks at ${locked}; ask a manager to reset the PIN`,
+        );
+      }
+      refuse(
+        "pin_wrong",
+        `Wrong PIN — ${MAX_ATTEMPTS - attempts} attempts remain before kiosk sign-in locks for ${LOCK_MINUTES} minutes`,
+      );
+    }
+    await db.execute(sql`
+      update worker_clock_pins
+         set failed_attempts = 0, locked_until = null, updated_at = now()
+       where org_id = ${input.kiosk.orgId} and employee_party_id = ${input.employeePartyId}`);
+    return input.employeePartyId;
+  });
 }
 
 /** Set (or reset, clearing lockout) a worker's kiosk PIN. */

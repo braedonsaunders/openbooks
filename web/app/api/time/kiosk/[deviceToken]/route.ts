@@ -1,6 +1,7 @@
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { isUuid } from '../../../../../lib/list-params'
 import { identifyByPin, kioskClockEvent, resolveKioskByToken } from '@openbooks/engine/src/hrm/field-time/kiosk.ts'
 import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'
@@ -94,14 +95,19 @@ export async function PUT(req: Request, ctx: { params: Promise<{ deviceToken: st
   try {
     const { ensureOrgClockPhotoFolder } = await import('@openbooks/engine/src/hrm/field-time/photos.ts')
     const { createFile } = await import('../../../../../lib/file-cabinet')
-    const folderId = await ensureOrgClockPhotoFolder(found.orgId)
-    const meta = await createFile({
-      orgId: found.orgId,
-      folderId,
-      filename: file.name || 'kiosk-photo',
-      contentType,
-      bytes: Buffer.from(await file.arrayBuffer()),
-      createdBy: null,
+    // The device carries no session: the folder read and the file write run
+    // scoped to the kiosk's org, or under FORCE RLS the folder lookup
+    // resolves nothing and every upload fails.
+    const meta = await withOrgTransaction(found.orgId, async () => {
+      const folderId = await ensureOrgClockPhotoFolder(found.orgId)
+      return createFile({
+        orgId: found.orgId,
+        folderId,
+        filename: file.name || 'kiosk-photo',
+        contentType,
+        bytes: Buffer.from(await file.arrayBuffer()),
+        createdBy: null,
+      })
     })
     return NextResponse.json({ fileId: meta.id }, { status: 201 })
   } catch (error) {

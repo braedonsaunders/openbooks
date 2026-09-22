@@ -142,6 +142,7 @@ test("public reachability stays an explicit allowlist decision in the proxy poli
   ]);
   assert.deepEqual(listedPaths("PUBLIC_SEGMENT_ROOTS").sort(), [
     "/api/auth/oidc",
+    "/api/documents/sign",
     "/api/internal",
     "/api/pay",
     "/api/payments/webhooks",
@@ -154,6 +155,8 @@ test("public reachability stays an explicit allowlist decision in the proxy poli
     "/api/recruiting/feed",
     "/api/recruiting/offer",
     "/api/sign",
+    "/api/surveys/respond",
+    "/api/time/kiosk",
     // The whole versioned API segment is sessionless by design: every v1
     // route authenticates with an API key in-route (fail-closed 401) and no
     // v1 route reads the session cookie — derived coverage in
@@ -163,8 +166,10 @@ test("public reachability stays an explicit allowlist decision in the proxy poli
     "/api/v1",
     "/book",
     "/careers",
+    "/kiosk",
     "/offer",
     "/pay",
     "/sign",
+    "/survey",
   ]);
 });

@@ -26,6 +26,9 @@ test("token-authenticated surfaces are CSRF-exempt", async () => {
     // /api/v1/health is GET-only liveness: exempt by segment rule, and the
     // exemption is inert because safe methods skip the CSRF gate entirely.
     "/api/v1/health",
+    "/api/documents/sign/opaque-token",
+    "/api/surveys/respond/opaque-token",
+    "/api/time/kiosk/opaque-token",
     "/pay/tok_v1abc",
     "/api/pay/tok_v1abc",
     "/api/payments/webhooks/stripe",
