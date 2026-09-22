@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { type SqlExecutor } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
+import { toBaseQuantity } from "./costing.ts";
 import { InventoryError, InventoryOwnershipError, type InventoryProfile, type Runner } from "./contracts.ts";
 import { assertStockLocationAdmitsSubsidiary, assertMovementOwner } from "./profile-policy.ts";
 
@@ -63,10 +64,13 @@ export async function loadDocumentInventoryLines(
       line_number: number;
       item_id: string;
       quantity: string;
+      unit: string | null;
       amount: string;
       stock_location_id: string | null;
       document_subsidiary_id: string | null;
       document_kind: string;
+      base_unit: string;
+      unit_conversions: unknown;
       asset_account_id: string;
       received_not_billed_account_id: string | null;
       adjustment_account_id: string | null;
@@ -78,12 +82,12 @@ export async function loadDocumentInventoryLines(
       location_id: string | null;
       custom: unknown;
     }>(sql`
-    select dl.id as line_id, dl.line_number, dl.item_id, dl.quantity, dl.amount,
+    select dl.id as line_id, dl.line_number, dl.item_id, dl.quantity, dl.unit, dl.amount,
            dl.stock_location_id, d.subsidiary_id as document_subsidiary_id,
            d.kind as document_kind,
            p.asset_account_id, p.received_not_billed_account_id,
            p.adjustment_account_id, p.variance_account_id, p.costing_method,
-           p.tracking,
+           p.tracking, p.base_unit, p.unit_conversions,
            coalesce(dl.department_id, d.department_id) as department_id,
            coalesce(dl.project_id, d.project_id) as project_id,
            coalesce(dl.location_id, d.location_id) as location_id,
@@ -139,12 +143,23 @@ export async function loadDocumentInventoryLines(
         `${lineLabel} has a negative quantity (${row.quantity}); ${negativeLineRemedy(row.document_kind)}`,
       );
     }
+    // The line quantity is raised in the line's unit; stock moves in the
+    // item's base unit. Convert here — once — so receipts, issues, returns,
+    // and fulfillment/goods-receipt legs all agree, and refuse an
+    // unconvertible unit instead of silently moving 1:1.
+    const quantity = toBaseQuantity(
+      fromUnits(rawQuantity),
+      row.unit,
+      parseUnitConversions(row.unit_conversions, lineLabel),
+      row.base_unit,
+      lineLabel,
+    );
     out.push({
       lineId: row.line_id,
       lineNumber: row.line_number,
       itemId: row.item_id,
       stockLocationId: loc,
-      quantity: fromUnits(rawQuantity),
+      quantity,
       amount: row.amount,
       assetAccountId: row.asset_account_id,
       clearingAccountId: row.received_not_billed_account_id,
@@ -187,6 +202,21 @@ export function negativeLineRemedy(documentKind: string): string {
     "through the customer-credit / vendor-credit return flow with " +
     "custom.inventoryReturn evidence instead"
   );
+}
+
+/**
+ * The item's unit-conversion map (base units per unit) as a plain record.
+ * The profile writer stores a JSON object; anything else on the row is
+ * corrupt configuration, not an empty map — refuse rather than convert 1:1.
+ */
+function parseUnitConversions(value: unknown, lineLabel: string): Record<string, number> {
+  if (value === null || value === undefined) return {};
+  if (!isJsonRecord(value)) {
+    throw new InventoryError(
+      `${lineLabel} item's unit conversions are malformed; fix the costing profile before posting stock`,
+    );
+  }
+  return value as Record<string, number>;
 }
 
 export const UUID_RE =

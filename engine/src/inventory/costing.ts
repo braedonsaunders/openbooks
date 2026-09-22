@@ -1,4 +1,6 @@
 import { fromUnits, roundDiv, toUnits } from "../money/money.ts";
+import { canonicalDecimal } from "../money/exact-decimal.ts";
+import { InventoryError } from "./contracts.ts";
 
 /**
  * Inventory costing — the pure, exact math behind the subledger. Quantities and
@@ -74,14 +76,36 @@ export function exactCostFragments(quantity: string, value: string, sourceUnitCo
 
 /**
  * Convert a quantity in `unit` to base units using the item's conversion map
- * (base units per unit, e.g. { box: 12, pallet: 720 }). The base unit and any
- * unknown unit convert 1:1.
+ * (base units per unit, e.g. { box: 12, pallet: 720 }). A line raised in the
+ * base unit (or with no unit) needs no conversion. Anything else MUST name a
+ * positive, exactly-representable factor: silently treating an unknown unit
+ * as 1:1 received "2 box @ $240" as 2 each @ $120 instead of 24 each @ $10,
+ * so the unknown case refuses with the remedy (raise the line in the base
+ * unit, or configure the conversion on the item's costing profile).
  */
-export function toBaseQuantity(quantity: string, unit: string | null | undefined, conversions: Record<string, number>, baseUnit: string): string {
+export function toBaseQuantity(
+  quantity: string,
+  unit: string | null | undefined,
+  conversions: Record<string, number>,
+  baseUnit: string,
+  lineLabel = "inventory line",
+): string {
   if (!unit || unit === baseUnit) return fromUnits(toUnits(quantity));
-  const factor = conversions[unit];
-  if (!factor || factor <= 0) return fromUnits(toUnits(quantity));
-  return fromUnits(mulUnits(toUnits(quantity), toUnits(String(factor))));
+  const factor: unknown = conversions[unit];
+  if (typeof factor !== "number" || !Number.isFinite(factor) || factor <= 0) {
+    throw new InventoryError(
+      `${lineLabel} is raised in unit "${unit}" with no conversion to the item's base unit "${baseUnit}" — ` +
+        `enter the quantity in ${baseUnit}, or configure a conversion for "${unit}" on the item's costing profile`,
+    );
+  }
+  const exact = canonicalDecimal(String(factor), 4);
+  if (exact === null) {
+    throw new InventoryError(
+      `${lineLabel} unit "${unit}" converts at ${factor} ${baseUnit} per ${unit}, which cannot be expressed exactly — ` +
+        `configure an exact conversion on the item's costing profile`,
+    );
+  }
+  return fromUnits(mulUnits(toUnits(quantity), toUnits(exact)));
 }
 
 // ---------------------------------------------------------------------------
