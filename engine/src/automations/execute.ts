@@ -15,6 +15,7 @@ import {
   evaluateAutomation,
   type SubjectSnapshot,
 } from "./evaluate.ts";
+import { renderAutomationEmailTemplate } from "./email-templates.ts";
 import {
   parseAutomationActions,
   parseAutomationConditions,
@@ -173,6 +174,7 @@ async function runActionLive(
   subject: SubjectSnapshot | null,
   subjectId: string | null,
   initiatorUserId: string | null,
+  automationName: string,
 ): Promise<string> {
   switch (action.kind) {
     case "send_notification": {
@@ -225,20 +227,36 @@ async function runActionLive(
     case "send_email": {
       const users = await resolveActionRecipients(orgId, action.to, subject, initiatorUserId);
       if (users.length === 0) return "skipped: no recipients resolved";
+      // Postgres array literal (the `{a,b}` house shape): a raw JS array
+      // bind casts a scalar to uuid[] and every send_email run fails.
       const emails = await db.execute<{ email: string }>(sql`
-        select email from users where org_id = ${orgId} and id = any(${users}::uuid[])
+        select email from users where org_id = ${orgId} and id = any(${`{${users.join(",")}}`}::uuid[])
       `);
       const to = emails.rows.map((r) => r.email);
       if (to.length === 0) return "skipped: no recipient emails";
+      // The key resolves through the closed registry (unknown keys refuse
+      // here for already-stored rows, and at publish for new ones) and
+      // renders through the shared packages/emails shell — the same
+      // builder flows/send_email uses — never a placeholder body.
+      const draft = renderAutomationEmailTemplate(action.templateKey, {
+        automationName,
+        subjectEntity: subject?.entity ?? null,
+      });
+      const orgRows = await db.execute<{ name: string }>(sql`
+        select name from orgs where id = ${orgId} limit 1
+      `);
+      const brand = orgRows.rows[0]?.name ?? "OpenBooks";
+      const { flowNotificationEmail } = await import("@openbooks/emails");
+      const mail = flowNotificationEmail({ orgName: brand, subject: draft.subject, body: draft.body });
       await enqueueFlowEmail({
         orgId,
         runId,
         occurrenceKey: `${runId}:automation:${index}`,
         payload: {
           to,
-          subject: `Automation: ${action.templateKey}`,
-          html: `<p>Template ${action.templateKey} for automation run.</p>`,
-          text: `Template ${action.templateKey} for automation run.`,
+          subject: mail.subject,
+          html: mail.html,
+          text: mail.text,
           meta: { category: "automation" },
         },
       });
@@ -464,7 +482,7 @@ export async function executeAutomation(input: {
         let i = 0;
         for (const action of actions) {
           i += 1;
-          const output = await runActionLive(input.orgId, runId, i, action, subject, subjectId, input.actorId);
+          const output = await runActionLive(input.orgId, runId, i, action, subject, subjectId, input.actorId, automation.name);
           steps.push({ index: i, kind: action.kind, status: "succeeded", output });
         }
       });

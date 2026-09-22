@@ -267,7 +267,7 @@ test("simulate writes nothing: row counts identical before and after", { skip: !
       conditions: { root: { field: "status", op: "eq", value: "submitted" } },
       actions: [
         { kind: "send_notification", to: "initiator", body: "would send" },
-        { kind: "send_email", templateKey: "probe", to: "initiator" },
+        { kind: "send_email", templateKey: "automation_notice", to: "initiator" },
       ],
     });
     const before = await countRows(h.org.orgId);
@@ -390,6 +390,77 @@ test("deferred actions refuse at publish; a legacy delay fails the run and runs 
     });
     assert.equal(simulations[0]!.steps[0]!.status, "failed");
     assert.match(simulations[0]!.steps[0]!.error ?? "", /no resumable continuation/);
+  });
+});
+
+test("send_email renders the registered template into the outbox payload", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const recipe = await createAutomation({
+      orgId: h.org.orgId,
+      actorId: h.adminId,
+      name: "Rendered mail probe",
+      trigger: { kind: "manual" },
+      rules: {},
+      conditions: {},
+      actions: [{ kind: "send_email", templateKey: "automation_notice", to: "initiator" }],
+    });
+    await db.execute(sql`update automations set status = 'enabled' where id = ${recipe.id}`);
+    const result = await executeAutomation({
+      orgId: h.org.orgId,
+      actorId: h.adminId,
+      automationId: recipe.id,
+      triggerPayload: { kind: "manual" },
+    });
+    assert.equal(result.status, "succeeded");
+    const row = (await db.execute<{ payload: Record<string, unknown> }>(sql`
+      select payload from scheduler_outbox
+       where org_id = ${h.org.orgId} and kind = 'flow_email' and subject_id = ${result.runId}
+       limit 1
+    `)).rows[0];
+    assert.ok(row, "the rendered email is deferred through the outbox");
+    const payload = row.payload as { to: string[]; subject: string; html: string; text: string; meta: { category: string } };
+    assert.equal(payload.to.length, 1);
+    assert.match(payload.subject, /Rendered mail probe/);
+    assert.match(payload.text, /Rendered mail probe/);
+    assert.match(payload.html, /Rendered mail probe/);
+    assert.equal(payload.meta.category, "automation");
+    assert.doesNotMatch(payload.text, /Template .* for automation run/);
+  });
+});
+
+test("send_email with an unknown template refuses at publish and in legacy runs", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    await assert.rejects(
+      createAutomation({
+        orgId: h.org.orgId,
+        actorId: h.adminId,
+        name: "bad template probe",
+        trigger: { kind: "manual" },
+        rules: {},
+        conditions: {},
+        actions: [{ kind: "send_email", templateKey: "nope", to: "initiator" }],
+      }),
+      (e: unknown) =>
+        e instanceof AutomationContractError &&
+        /unknown email template 'nope'/.test((e as Error).message) &&
+        /automation_notice/.test((e as Error).message),
+    );
+    const legacyId = (await db.execute<{ id: string }>(sql`
+      insert into automations (org_id, name, status, trigger, rules, conditions, actions, created_by, updated_by)
+      values (${h.org.orgId}, 'legacy bad template', 'enabled',
+              '{"kind":"manual"}'::jsonb, '{}'::jsonb, '{}'::jsonb,
+              '[{"kind":"send_email","templateKey":"nope","to":"initiator"}]'::jsonb,
+              ${h.adminId}, ${h.adminId})
+      returning id
+    `)).rows[0]!.id;
+    const result = await executeAutomation({
+      orgId: h.org.orgId,
+      actorId: h.adminId,
+      automationId: legacyId,
+      triggerPayload: { kind: "manual" },
+    });
+    assert.equal(result.status, "failed");
+    assert.match(result.steps[result.steps.length - 1]!.error ?? "", /unknown email template 'nope'/);
   });
 });
 
