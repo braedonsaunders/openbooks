@@ -4,8 +4,8 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { sealSecret } from "../platform/secrets.ts";
-import { buildT4Xml } from "./t4xml.ts";
-import { buildRl1Xml } from "./rl1xml.ts";
+import { buildT4Xml } from "./canada/t4xml.ts";
+import { buildRl1Xml } from "./canada/quebec/rl1xml.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

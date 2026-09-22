@@ -33,6 +33,9 @@ function fixturePack(): PayrollCountryPack {
   return {
     country: "GB",
     name: "United Kingdom",
+    // REQUIRED like `employeeIdentifier`: the fixture states its answer
+    // rather than inheriting another pack's regional deadlines.
+    remittanceRegionalCalendars: {},
     // A new pack cannot forget the identifier: it is REQUIRED on
     // PayrollCountryPack, so this fixture states its (illustrative) answer.
     employeeIdentifier: {

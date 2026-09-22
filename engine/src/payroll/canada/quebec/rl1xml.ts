@@ -1,8 +1,8 @@
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
-import { unsealSecret } from "../platform/secrets.ts";
-import { PayrollError } from "./error.ts";
-import { isCanadianSin } from "./roexml.ts";
+import { db } from "../../../platform/db.ts";
+import { unsealSecret } from "../../../platform/secrets.ts";
+import { PayrollError } from "../../error.ts";
+import { isCanadianSin } from "../roexml.ts";
 import { rl1Slips } from "./rl1.ts";
 
 /**
@@ -169,7 +169,7 @@ export const RL1_XML_DOWNLOAD_REFUSAL =
   + "the real schema and might misstate a statutory filing. The RL-1 slip data above "
   + "is complete — file it through Revenu Québec's online services (mandatory when "
   + "more than 5 slips) or authorized software until the partner specification is "
-  + "obtained and the serializer in engine/src/payroll/rl1xml.ts is completed.";
+  + "obtained and the serializer in engine/src/payroll/canada/quebec/rl1xml.ts is completed.";
 
 /**
  * Why an RL-1 cannot be AMENDED or CANCELLED here — the registry's

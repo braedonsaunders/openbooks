@@ -541,6 +541,7 @@ export const IE_PAYROLL_PACK: IePayrollPack = {
   // org-configured Revenue remittance vendor. No schedule declared yet: the
   // monthly/quarterly timetable (TDM Part 42-04-35A) ships with the tables.
   remittanceVendorSettingsKey: "revenueRemittancePartyId",
+  remittanceRegionalCalendars: {},
   // Tax and USC are deducted at the rates and credits applicable when the
   // payment is made (TDM Part 42-04-35A) — arrears are taxed as paid in the
   // period, not re-spread over the periods they relate to.

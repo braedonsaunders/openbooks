@@ -1,14 +1,14 @@
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
-import { add, formatMoney } from "../money/money.ts";
-import { unsealSecret } from "../platform/secrets.ts";
-import { PayrollError } from "./error.ts";
+import { db } from "../../platform/db.ts";
+import { add, formatMoney } from "../../money/money.ts";
+import { unsealSecret } from "../../platform/secrets.ts";
+import { PayrollError } from "../error.ts";
 import { isCanadianSin } from "./roexml.ts";
-import { filingAccountRef, filingAccountsById, type FilingAccountRef } from "./filing.ts";
+import { filingAccountRef, filingAccountsById, type FilingAccountRef } from "../filing.ts";
 import {
   t4Returns, t4Summary,
   type T4Return, type T4Slip, type T4SummaryTotals,
-} from "./yearend.ts";
+} from "../yearend.ts";
 
 /**
  * CRA T4 Internet File Transfer XML — the T619 electronic transmittal

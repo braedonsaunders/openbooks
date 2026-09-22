@@ -14,7 +14,7 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 /**
  * The remittance bill's due date follows the CRA calendar its payroll is on.
  *
- * `remittanceDueDate` has always accepted `{ quebec: true }` for the CRA's
+ * `remittanceDueDate` has always accepted `{ regionalCalendar }` for the CRA's
  * Québec holiday schedule (CA-CRA-QC: Saint-Jean-Baptiste Day observed, the
  * Civic Holiday not), but no production caller ever passed it — every bill
  * stamped the federal calendar. For a Québec-only accelerated-threshold-2

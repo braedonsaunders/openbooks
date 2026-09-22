@@ -78,27 +78,36 @@ test('a country literal in the shared payroll layer is refused', () => {
   }
 })
 
-test('the shared-payroll exemption list is exactly the six known F-f7 sites', () => {
-  assert.deepEqual(
-    PAYROLL_SHARED_COUNTRY_LITERAL_EXEMPTIONS.map((entry) => entry.path).sort(),
-    [
-      'engine/src/payroll/remittance.ts',
-      'engine/src/payroll/rl1.ts',
-      'engine/src/payroll/roexml.ts',
-      'engine/src/payroll/t4xml.ts',
-      'engine/src/payroll/yearend.ts',
-      'web/app/api/payroll/year-end/file/route.ts',
-    ],
-  )
+test('the shared-payroll exemption list is empty — every F-f7 site is fixed', () => {
+  // All six are gone: rl1/rl1xml/t4xml/roexml moved into the CA pack, and
+  // remittance.ts, yearend.ts and the year-end file route read pack
+  // declarations instead of comparing against a country. An entry reappearing
+  // here is a deliberate, reviewable act, not a quiet re-grant.
+  assert.deepEqual(PAYROLL_SHARED_COUNTRY_LITERAL_EXEMPTIONS, [])
 })
 
 test('a stale exemption (a path that no longer names a country) fails the ratchet', () => {
-  const paths = PAYROLL_SHARED_COUNTRY_LITERAL_EXEMPTIONS.map((entry) => entry.path)
-  const stale = staleCountryLiteralExemptions(paths, (file) =>
-    file.endsWith('rl1.ts') ? 'const clean = 1\n' : "if (province === 'QC') return\n",
+  // The live list is empty, so the ratchet is exercised against an injected
+  // one. Asserting it over the real (empty) list would pass while proving
+  // nothing — a guard that is green about what it cannot see.
+  const entries = [
+    { path: 'engine/src/payroll/fixed.ts', reason: 'fixture' },
+    { path: 'engine/src/payroll/still-branching.ts', reason: 'fixture' },
+  ]
+  const stale = staleCountryLiteralExemptions(
+    entries.map((entry) => entry.path),
+    (file) => (file.endsWith('fixed.ts') ? 'const clean = 1\n' : "if (province === 'QC') return\n"),
+    entries,
   )
   assert.equal(stale.length, 1)
-  assert.match(stale[0], /rl1\.ts: no longer names a country/)
+  assert.match(stale[0], /fixed\.ts: no longer names a country/)
+})
+
+test('an exemption naming a file that does not exist is itself stale', () => {
+  const entries = [{ path: 'engine/src/payroll/deleted.ts', reason: 'fixture' }]
+  const stale = staleCountryLiteralExemptions([], () => '', entries)
+  assert.equal(stale.length, 1)
+  assert.match(stale[0], /deleted\.ts: listed exemption is not a tracked file/)
 })
 
 test('the audit accepts the real pack and conformance files, branch literals included', () => {

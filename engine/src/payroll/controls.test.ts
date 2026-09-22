@@ -17,7 +17,7 @@ import {
 import { payRateIsUsable } from "./rate.ts";
 import { payRunReadiness, payRunStaleness } from "./readiness.ts";
 import { remittanceDueDate } from "./remittance.ts";
-import { isCanadianSin, renderRoeXml, type RoeRecordToFile } from "./roexml.ts";
+import { isCanadianSin, renderRoeXml, type RoeRecordToFile } from "./canada/roexml.ts";
 import { roeCandidates, t4Slips, type RoeRecord } from "./yearend.ts";
 import { employeeYtd } from "./canada/compute-statutory.ts";
 import { usEmployeeYtd } from "./us/compute-statutory.ts";

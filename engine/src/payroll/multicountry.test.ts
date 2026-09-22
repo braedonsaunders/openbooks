@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { capAnnualEarnings, type T4Slip } from "./yearend.ts";
-import { renderT4Xml } from "./t4xml.ts";
+import { renderT4Xml } from "./canada/t4xml.ts";
 import {
   assertPayrollRegionSupported,
   payrollCountry,

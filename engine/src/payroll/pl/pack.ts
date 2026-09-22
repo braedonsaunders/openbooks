@@ -172,6 +172,7 @@ export const PL_PAYROLL_PACK: PayrollCountryPack = {
   // KAS takes the PIT advances (via PIT-4R/PIT-11), ZUS takes the
   // contributions (via DRA) — no single statutory vendor is named.
   remittanceVendorSettingsKey: null,
+  remittanceRegionalCalendars: {},
   // Zaliczki are computed on each month's paid revenue with no
   // annualization: exceptional payments join the month's base, and the
   // 120 000 zł test runs on year-to-date dochód — taxed as ordinary income

@@ -217,6 +217,7 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
   // Federal deposits ride EFTPS; no single remittance vendor is configured,
   // so US statutory withholdings surface unassigned until one is.
   remittanceVendorSettingsKey: null,
+  remittanceRegionalCalendars: {},
   // Back pay is SUPPLEMENTAL WAGES under Pub 15-T (§7), taxed by the
   // supplemental method rather than annualized with the period's regular
   // wages — the same non-periodic path the engine already implements.

@@ -1,16 +1,16 @@
-import { assertPayrollCountryKnown } from "./country.ts";
+import { assertPayrollCountryKnown } from "../../country.ts";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { pool, type SqlExecutor } from "../platform/db.ts";
-import { add, cmp, normalizeMoney } from "../money/money.ts";
-import { RATES_2026_JAN } from "./canada/rates.ts";
-import { PayrollError } from "./error.ts";
-import type { PayrollFilingData } from "./filing-registry.ts";
+import { pool, type SqlExecutor } from "../../../platform/db.ts";
+import { add, cmp, normalizeMoney } from "../../../money/money.ts";
+import { RATES_2026_JAN } from "../rates.ts";
+import { PayrollError } from "../../error.ts";
+import type { PayrollFilingData } from "../../filing-registry.ts";
 import {
   carryOpeningYearEndYtd,
   seedOpeningOnlySlips,
   type OpeningYearEndYtd,
-} from "./yearend.ts";
+} from "../../yearend.ts";
 
 // A return is a statutory artifact, so all of its source reads must come from
 // one pinned snapshot. Keep a dedicated handle: callers such as filing pages
@@ -89,7 +89,7 @@ export function rl1YearCaps(taxYear: number): {
   }
   throw new PayrollError(
     `no Revenu Québec maximums for tax year ${taxYear} — RL-1 boxes G and I cannot be capped. `
-    + "Add the year to engine/src/payroll/rl1.ts (rl1YearCaps) alongside the TP-1015.F-V edition",
+    + "Add the year to engine/src/payroll/canada/quebec/rl1.ts (rl1YearCaps) alongside the TP-1015.F-V edition",
   );
 }
 

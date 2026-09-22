@@ -11,7 +11,7 @@ import {
   yearEndFiling,
   type PayrollFilingCorrectionRow,
 } from "./filing-registry.ts";
-import { renderT4Xml, t4SlipFromReported } from "./t4xml.ts";
+import { renderT4Xml, t4SlipFromReported } from "./canada/t4xml.ts";
 import { build941X, buildW2c } from "./w2c.ts";
 import {
   diffReported,

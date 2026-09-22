@@ -9,10 +9,12 @@ import {
   pickRemittanceSequence,
   pickRemittanceSlice,
   remittanceBillLockKey,
-  remittanceGroupUsesQuebecCalendar,
+  remittanceGroupRegionalCalendar,
+  remittanceRegionalCalendarsFor,
   type RemittanceRow,
 } from "./remittance.ts";
-import { renderT4Xml, type T4ReturnWithSins } from "./t4xml.ts";
+import { PAYROLL_COUNTRY_PACKS } from "./packs.ts";
+import { renderT4Xml, type T4ReturnWithSins } from "./canada/t4xml.ts";
 import type { T4Slip, T4SummaryTotals } from "./yearend.ts";
 
 /**
@@ -192,16 +194,23 @@ test("pickRemittanceSlice passes one slice through and refuses ambiguity", () =>
   );
 });
 
-test("the CRA Quebec calendar governs exactly the all-Quebec payrolls", () => {
+test("a pack's regional calendar governs exactly the single-region payrolls", () => {
   // Saint-Jean-Baptiste Day moves a Quebec deadline and the Civic Holiday
   // moves everyone else's; the bill must ask which calendar its payroll is
-  // on. A mixed payroll keeps the federal calendar (the employer's province
+  // on. A mixed payroll keeps the national calendar (the employer's province
   // of record decides, which the product does not model) — never a guess.
-  assert.equal(remittanceGroupUsesQuebecCalendar(["QC"]), true);
-  assert.equal(remittanceGroupUsesQuebecCalendar(["QC", "QC"]), true);
-  assert.equal(remittanceGroupUsesQuebecCalendar(["ON"]), false);
-  assert.equal(remittanceGroupUsesQuebecCalendar(["QC", "ON"]), false);
-  assert.equal(remittanceGroupUsesQuebecCalendar([]), false);
+  const CA = PAYROLL_COUNTRY_PACKS.CA!.remittanceRegionalCalendars;
+  assert.equal(remittanceGroupRegionalCalendar(["QC"], CA), "CA-CRA-QC");
+  assert.equal(remittanceGroupRegionalCalendar(["QC", "QC"], CA), "CA-CRA-QC");
+  assert.equal(remittanceGroupRegionalCalendar(["ON"], CA), null);
+  assert.equal(remittanceGroupRegionalCalendar(["QC", "ON"], CA), null);
+  assert.equal(remittanceGroupRegionalCalendar([], CA), null);
+  // The rule is the DECLARATION's, not Canada's: a pack that declares no
+  // regional calendar gets the national one for every region, including one
+  // another pack happens to call the same thing.
+  assert.equal(remittanceGroupRegionalCalendar(["QC"], {}), null);
+  // And an unplaceable group never borrows a pack it does not belong to.
+  assert.equal(remittanceGroupRegionalCalendar(["QC"], remittanceRegionalCalendarsFor(null)), null);
 });
 
 test("filingAccountRef labels a known account and degrades honestly", () => {

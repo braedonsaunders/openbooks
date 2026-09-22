@@ -62,6 +62,9 @@ test('a scheduled destination names its authority, due date, and rule; legacy gr
     filingAccount: { id: 'acct-1', accountNumber: '123456789RP0009', name: 'Quebec division', remitterType: 'accelerated_2' },
     hasUnknownFilingAccount: false,
     hasEntitylessAccruals: false,
+    // This group is scheduled, so its due date comes from the schedule and
+    // never from a regional calendar; stating null keeps that explicit.
+    regionalCalendar: null,
     vendorKeys: ['rqRemittancePartyId'],
     schedule: {
       vendorSettingsKey: 'rqRemittancePartyId',

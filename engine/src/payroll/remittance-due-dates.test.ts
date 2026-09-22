@@ -106,11 +106,11 @@ test("the CRA's Quebec calendar moves Quebec deadlines and only Quebec's", () =>
   // and nowhere else. The 15th-to-21st period ends Sunday June 21; three
   // working days is the 24th nationally and the 25th in Quebec.
   assert.equal(remittanceDueDate("2026-06-21", "accelerated_2"), "2026-06-24");
-  assert.equal(remittanceDueDate("2026-06-21", "accelerated_2", { quebec: true }), "2026-06-25");
+  assert.equal(remittanceDueDate("2026-06-21", "accelerated_2", { regionalCalendar: "CA-CRA-QC" }), "2026-06-25");
   // The Civic Holiday, Monday August 3 2026, runs the other way: recognized
   // everywhere EXCEPT Quebec. The July 22-to-31 period ends Friday July 31.
   assert.equal(remittanceDueDate("2026-07-31", "accelerated_2"), "2026-08-06");
-  assert.equal(remittanceDueDate("2026-07-31", "accelerated_2", { quebec: true }), "2026-08-05");
+  assert.equal(remittanceDueDate("2026-07-31", "accelerated_2", { regionalCalendar: "CA-CRA-QC" }), "2026-08-05");
 });
 
 test("every due date lands on a business day", () => {
@@ -122,9 +122,9 @@ test("every due date lands on a business day", () => {
       const end = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
       for (const day of ["07", "14", "21", end.slice(8, 10)]) {
         for (const remitter of types) {
-          for (const quebec of [false, true]) {
+          for (const regionalCalendar of [null, "CA-CRA-QC"]) {
             const due = remittanceDueDate(
-              `${year}-${String(month).padStart(2, "0")}-${day}`, remitter, { quebec },
+              `${year}-${String(month).padStart(2, "0")}-${day}`, remitter, { regionalCalendar },
             );
             const weekday = new Date(`${due}T00:00:00Z`).getUTCDay();
             assert.notEqual(weekday, 0, `${due} (${remitter}) is a Sunday`);

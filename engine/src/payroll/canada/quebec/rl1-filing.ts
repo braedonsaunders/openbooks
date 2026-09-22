@@ -5,8 +5,8 @@ import {
   type PayrollFilingSlipData,
   type PayrollYearEndFiling,
 } from "../../filing-registry.ts";
-import { rl1Population, rl1Slips, RL1_UNSUPPORTED_BOXES } from "../../rl1.ts";
-import { RL1_AMENDMENT_REFUSAL, RL1_XML_DOWNLOAD_REFUSAL } from "../../rl1xml.ts";
+import { rl1Population, rl1Slips, RL1_UNSUPPORTED_BOXES } from "./rl1.ts";
+import { RL1_AMENDMENT_REFUSAL, RL1_XML_DOWNLOAD_REFUSAL } from "./rl1xml.ts";
 import { PayrollError } from "../../error.ts";
 
 /**
@@ -15,8 +15,8 @@ import { PayrollError } from "../../error.ts";
  * to the CA pack's year-end surface from here, without owning the pack's
  * declaration (engine/src/payroll/filing-registry.ts, registerYearEndFiling).
  *
- * The slip data builder lives in engine/src/payroll/rl1.ts; the transmission
- * mechanics and the XML refusal in engine/src/payroll/rl1xml.ts. No download
+ * The slip data builder lives in engine/src/payroll/canada/quebec/rl1.ts; the transmission
+ * mechanics and the XML refusal in engine/src/payroll/canada/quebec/rl1xml.ts. No download
  * builder is declared — the tag-level RL-1 XML specification is partner-gated
  * at Revenu Québec, so the declaration carries the named `downloadRefusal`
  * instead of a file nobody could validate.
