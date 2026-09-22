@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildCpa005File, type Cpa005Run } from "./rail-cpa005.ts";
-import { buildNachaFile } from "./rail-nacha.ts";
+import { buildNachaFile, nachaFileIdModifierForRunNumber, nachaFileIdModifierForSequence } from "./rail-nacha.ts";
 import { buildSepaFile } from "./rail-sepa.ts";
 import { carryingAmountForSettlement, realizedFxControlAdjustment, sameCurrencyAllocation } from "./settlement-policy.ts";
 import { type EftSettings } from "./rail-settings.ts";
@@ -63,6 +63,7 @@ function nachaFile(accountNumber: string): string {
     settings: NACHA,
     effectiveDate: new Date(2026, 2, 5),
     creationDate: new Date(2026, 2, 3),
+    fileIdModifier: "A",
     entries: [{
       transactionCode: "22",
       routingNumber: "021000021",
@@ -266,6 +267,93 @@ test("the NACHA credit file refuses a receiving account number longer than its f
   assert.throws(
     () => nachaFile("123456789012345678"),
     (error: Error) => error instanceof PaymentError && /17 characters/.test(error.message),
+  );
+});
+
+test("the NACHA credit file refuses to write without an allocated file ID modifier", () => {
+  // The modifier is the bank's same-day duplicate-file key: defaulting it to
+  // "A" gave every AP file the same identity. Payroll already throws without
+  // one; the shared builder now does too.
+  for (const fileIdModifier of [undefined, "", "AB", "a", "*"] as const) {
+    assert.throws(
+      () =>
+        buildNachaFile({
+          settings: NACHA,
+          effectiveDate: new Date(2026, 2, 5),
+          creationDate: new Date(2026, 2, 3),
+          fileIdModifier,
+          entries: [{
+            transactionCode: "22",
+            routingNumber: "021000021",
+            accountNumber: "998877",
+            amountCents: 12500n,
+            individualId: "BILL-0001",
+            individualName: "FIRST PAYEE",
+          }],
+        }),
+      (error: Error) => error instanceof PaymentError && /allocated file ID modifier/.test(error.message),
+      `modifier ${JSON.stringify(fileIdModifier)} must not reach the bank`,
+    );
+  }
+});
+
+test("the NACHA credit file carries its allocated modifier and real creation time in the header", () => {
+  const content = buildNachaFile({
+    settings: NACHA,
+    effectiveDate: new Date(2026, 2, 5),
+    creationDate: new Date(2026, 2, 3, 14, 5),
+    fileIdModifier: "B",
+    entries: [{
+      transactionCode: "22",
+      routingNumber: "021000021",
+      accountNumber: "998877",
+      amountCents: 12500n,
+      individualId: "BILL-0001",
+      individualName: "FIRST PAYEE",
+    }],
+  });
+  const header = content.split("\n")[0]!;
+  // YYMMDD + HHMM + modifier: 260303 + 1405 + B.
+  assert.ok(header.includes("2603031405B094"), `header carries date, time and modifier: ${header}`);
+});
+
+test("the NACHA modifier allocator advances one letter per file and wraps the alphabet", () => {
+  assert.equal(nachaFileIdModifierForSequence(1), "A");
+  assert.equal(nachaFileIdModifierForSequence(2), "B");
+  assert.equal(nachaFileIdModifierForSequence(26), "Z");
+  assert.equal(nachaFileIdModifierForSequence(27), "0");
+  assert.equal(nachaFileIdModifierForSequence(36), "9");
+  assert.equal(nachaFileIdModifierForSequence(37), "A");
+  assert.equal(nachaFileIdModifierForRunNumber("PR-0001"), "A");
+  assert.equal(nachaFileIdModifierForRunNumber("PR-0002"), "B");
+  // Consecutive runs never share a modifier, so a second file the same day
+  // to the same bank cannot collide on "A".
+  assert.notEqual(
+    nachaFileIdModifierForRunNumber("PR-0002"),
+    nachaFileIdModifierForRunNumber("PR-0001"),
+  );
+});
+
+test("the NACHA credit file refuses an amount that does not fit its field instead of truncating it", () => {
+  // 10,000,000,000 cents is 11 digits: the old slice(0, 10) kept the leading
+  // ten and silently dropped the ones place.
+  assert.throws(
+    () =>
+      buildNachaFile({
+        settings: NACHA,
+        effectiveDate: new Date(2026, 2, 5),
+        creationDate: new Date(2026, 2, 3),
+        fileIdModifier: "A",
+        entries: [{
+          transactionCode: "22",
+          routingNumber: "021000021",
+          accountNumber: "998877",
+          amountCents: 10_000_000_000n,
+          individualId: "BILL-0001",
+          individualName: "FIRST PAYEE",
+        }],
+      }),
+    (error: Error) => error instanceof PaymentError && /payment amount of 11 digits does not fit its 10-digit field/.test(error.message),
   );
 });
 

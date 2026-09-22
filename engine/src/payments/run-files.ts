@@ -5,7 +5,7 @@ import { toUnits } from "../money/money.ts";
 import { assertNotSandbox } from "../organization/sandbox-guard.ts";
 import { PaymentError } from "./payment-errors.ts";
 import { buildCpa005File, type Cpa005Payment } from "./rail-cpa005.ts";
-import { buildNachaFile, loadNachaSettings, type NachaEntry } from "./rail-nacha.ts";
+import { buildNachaFile, loadNachaSettings, nachaFileIdModifierForRunNumber, type NachaEntry } from "./rail-nacha.ts";
 import { buildSepaFile, loadSepaSettings } from "./rail-sepa.ts";
 import { lockRunBankEvidence, paymentRunReadiness } from "./run-readiness.ts";
 // ---------------------------------------------------------------------------
@@ -109,7 +109,17 @@ export async function loadNachaRunFile(runId: string, orgId: string): Promise<{ 
   });
   const today = await businessToday(orgId);
   const effectiveDate = new Date(`${run.scheduledFor ?? today}T00:00:00`);
-  const content = buildNachaFile({ settings: settings.settings, effectiveDate, creationDate: new Date(`${today}T00:00:00`), entries });
+  // The modifier is allocated from the run number (shared with payroll's
+  // derivation), so a second file the same day carries the next letter
+  // instead of colliding on "A" and drawing a bank duplicate-file rejection.
+  // The creation stamp is the real generation instant, not business midnight.
+  const content = buildNachaFile({
+    settings: settings.settings,
+    effectiveDate,
+    creationDate: new Date(),
+    fileIdModifier: nachaFileIdModifierForRunNumber(run.runNumber),
+    entries,
+  });
   return { filename: `NACHA-${run.runNumber}.ach`, content, runNumber: run.runNumber };
 }
 
