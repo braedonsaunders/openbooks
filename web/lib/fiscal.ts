@@ -2,7 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { fiscalContextFor, fiscalYearOf, type FiscalContext, type FiscalPeriod } from '@openbooks/reports'
+import { addDays, fiscalContextFor, fiscalYearOf, fiscalYearStartOn, type FiscalContext, type FiscalPeriod } from '@openbooks/reports'
 import { resolveOrgId } from './org-scope'
 
 /**
@@ -82,6 +82,47 @@ export async function defaultFiscalCalendarPeriods(
 
 async function orgBusinessDay(orgId?: string): Promise<string> {
   return businessToday(await resolveOrgId(orgId))
+}
+
+/**
+ * Fiscal-year start date (YYYY-MM-DD) for a balance-sheet date. Monthly
+ * calendars keep settings month math (fiscalYearStartOn): month-aligned
+ * years start on the 1st by construction, and declared periods are often
+ * sparsely provisioned (one open month), so the earliest DECLARED start is
+ * not the year start. Retail (4-4-5/4-5-4/5-4-4/13-period) and custom
+ * calendars start years off month boundaries, so for those the year
+ * containing `asOf` starts on its earliest declared regular-period start —
+ * postings cannot predate declared coverage (the kernel refuses
+ * period-less dates), so sparse provisioning cannot mislead here the way it
+ * does for monthly. Falls back to month math when the org has no default
+ * active calendar or no declared period covers the date — the only signal
+ * available there, and the historical behaviour.
+ */
+export async function fiscalYearStartOnDate(
+  asOf: string,
+  orgId?: string,
+): Promise<string> {
+  const activeOrgId = await resolveOrgId(orgId)
+  const declared = await defaultFiscalCalendarPeriods(activeOrgId)
+  const containing = declared && declared.cadence !== 'monthly'
+    ? declared.periods.find((p) => p.from <= asOf && asOf <= p.to)
+    : undefined
+  if (containing && declared) {
+    let start = containing.from
+    for (const p of declared.periods) {
+      if (p.fiscalYear === containing.fiscalYear && p.from < start) start = p.from
+    }
+    return start
+  }
+  return fiscalYearStartOn(asOf, await fiscalStartMonth(activeOrgId))
+}
+
+/** Inclusive last day of the fiscal year that ended before the year of `asOf`, on declared boundaries. */
+export async function priorFiscalYearEndOnDate(
+  asOf: string,
+  orgId?: string,
+): Promise<string> {
+  return addDays(await fiscalYearStartOnDate(asOf, orgId), -1)
 }
 
 /** The current fiscal year (end year) for today, per the org's start month. */

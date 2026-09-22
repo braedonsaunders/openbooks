@@ -1,12 +1,12 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { addDays, addMonthsIso, declaredPeriodColumns, declaredPeriodsCover, declaredQuarterColumns, fiscalMonthsBetween, fiscalQuartersBetween, fiscalYearStartOn, priorFiscalYearEndOn } from '@openbooks/reports'
+import { addDays, addMonthsIso, declaredPeriodColumns, declaredPeriodsCover, declaredQuarterColumns, fiscalMonthsBetween, fiscalQuartersBetween } from '@openbooks/reports'
 import { resolveOrgId } from './org-scope'
 import { glActivityBuckets, glSummaryEligibleDims, bucketSubsidiaryFilter, statementBookExpr, type ActivityBoundary } from './gl-summary'
 import { MissingRatesError } from './consolidation'
 import { ASSET_TYPES, EQUITY_TYPES, LIABILITY_TYPES, PNL_TYPES } from './account-types'
-import { fiscalStartMonth, defaultFiscalCalendarPeriods } from './fiscal'
+import { fiscalStartMonth, defaultFiscalCalendarPeriods, fiscalYearStartOnDate, priorFiscalYearEndOnDate } from './fiscal'
 import {
   decimalAdd,
   decimalIsMaterial,
@@ -761,9 +761,11 @@ export async function statementMatrix(opts: {
   let { cols } = built;
   const { truncated } = built;
   if (opts.asOfKind === "prior_fiscal_year_end") {
-    const startMonth = await fiscalStartMonth(orgId);
-    cols = cols.map((col) => {
-      const to = priorFiscalYearEndOn(col.to, startMonth);
+    // Declared-calendar prior year-end per column, so 4-4-5/custom years
+    // cut prior-years' earnings on their real boundary like balanceSheet.
+    const ends = await Promise.all(cols.map((col) => priorFiscalYearEndOnDate(col.to, orgId)));
+    cols = cols.map((col, i) => {
+      const to = ends[i]!;
       // Lifetime through the prior year-end. A leftover period `from` that
       // sits after that year-end is not a window — it inverts the coverage
       // check and would demand rates for a year the column does not read.
@@ -1229,18 +1231,21 @@ function pnlNetIncome(matrix: StatementMatrix): StatementValue[] {
   )
 }
 
-function earningsDrillWindows(
+async function earningsDrillWindows(
   columns: StatementColumn[],
-  startMonth: number,
+  orgId: string,
   kind: 'prior' | 'current',
-): StatementViewLine['drillWindows'] {
-  return columns.map((column) => {
+): Promise<StatementViewLine['drillWindows']> {
+  // Drill windows agree with the computed split: declared-calendar
+  // boundaries, so drilling current-year earnings on a 4-4-5 org opens the
+  // real fiscal year, not the month-math one.
+  return Promise.all(columns.map(async (column) => {
     if (column.kind !== 'amount' || !column.to) return null
     if (kind === 'current') {
-      return { from: fiscalYearStartOn(column.to, startMonth), to: column.to, mode: 'flow' }
+      return { from: await fiscalYearStartOnDate(column.to, orgId), to: column.to, mode: 'flow' }
     }
-    return { from: null, to: priorFiscalYearEndOn(column.to, startMonth), mode: 'balance' }
-  })
+    return { from: null, to: await priorFiscalYearEndOnDate(column.to, orgId), mode: 'balance' }
+  }))
 }
 
 /** Balance Sheet as a multi-column statement view. Income accounts stay
@@ -1254,7 +1259,6 @@ export async function balanceSheetView(
   opts: MatrixOpts = {},
 ): Promise<StatementView> {
   const orgId = opts.orgId ?? (await resolveOrgId())
-  const startMonth = await fiscalStartMonth(orgId)
   const matrix = await statementMatrix({
     types: [...ASSET_TYPES, ...LIABILITY_TYPES, ...EQUITY_TYPES],
     mode: 'balance',
@@ -1310,8 +1314,10 @@ export async function balanceSheetView(
     [1, 1, 1, 1],
   )
   const liabAndEquity = combineTotals(matrix, [liabilities, equityTotal], [1, 1])
-  const priorDrills = earningsDrillWindows(matrix.columns, startMonth, 'prior')
-  const currentDrills = earningsDrillWindows(matrix.columns, startMonth, 'current')
+  const [priorDrills, currentDrills] = await Promise.all([
+    earningsDrillWindows(matrix.columns, orgId, 'prior'),
+    earningsDrillWindows(matrix.columns, orgId, 'current'),
+  ])
 
   const lines: StatementViewLine[] = []
   lines.push({ kind: 'section', label: labels.assets, depth: 0 })

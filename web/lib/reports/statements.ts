@@ -4,7 +4,6 @@ import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { functionalReportReader } from "./currency-basis";
 import { glActivityBuckets, glSummaryEligibleDims, bucketSubsidiaryFilter, statementBookExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
-import { fiscalYearStartOn } from "@openbooks/reports";
 import { decimalAdd, decimalCmp, decimalIsMaterial, decimalNeg, decimalSum, type ExactDecimal } from "../statement-format";
 import { ZERO, decimalSubtract } from "./decimals";
 import { type DimFilter, dimWhere } from "./filters";
@@ -15,7 +14,7 @@ import {
   COMPUTED_RETAINED_EARNINGS_PRIOR_ID,
   COMPUTED_RETAINED_EARNINGS_PRIOR_NAME,
 } from "../computed-earnings";
-import { fiscalStartMonth } from "../fiscal";
+import { fiscalYearStartOnDate } from "../fiscal";
 
 /**
  * Financial statement queries. Sign convention: journal amounts are
@@ -210,7 +209,9 @@ export async function balanceSheet(
   dims?: DimFilter,
 ) {
   const resolvedOrgId = orgId ?? (await resolveOrgId());
-  const fyStart = fiscalYearStartOn(asOf, await fiscalStartMonth(resolvedOrgId));
+  // Declared-calendar year start, so 4-4-5/custom years beginning off a
+  // month boundary split prior-year from current-year earnings correctly.
+  const fyStart = await fiscalYearStartOnDate(asOf, resolvedOrgId);
   const [rows, currentRows] = await Promise.all([
     summaryAccountBalances(resolvedOrgId, null, asOf, dims?.subsidiaryIds, bookId),
     summaryAccountBalances(resolvedOrgId, fyStart, asOf, dims?.subsidiaryIds, bookId, PNL_TYPES),
@@ -271,7 +272,9 @@ function trialBalancePriorRow(prior: string): TrialBalanceRow | null {
 
 export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: string, bookId?: string | null) {
   const resolvedOrgId = orgId ?? (await resolveOrgId());
-  const fyStart = fiscalYearStartOn(asOf, await fiscalStartMonth(resolvedOrgId));
+  // Same declared-calendar year start as the balance sheet, so the FYTD
+  // P&L window agrees with the earnings split.
+  const fyStart = await fiscalYearStartOnDate(asOf, resolvedOrgId);
   const reportDb = functionalReportReader(resolvedOrgId, sql`e.posting_date <= ${asOf} and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)} and ${dimWhere(dims)}`);
   const pnl = sql`acct.type in ${PNL_TYPES}`;
   const inYear = sql`not (${pnl}) or b.d >= ${fyStart}`;
