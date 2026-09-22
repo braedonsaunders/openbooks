@@ -1160,7 +1160,7 @@ const poolMockSources = new Map<string, string>([
     export function withBypassContext(work) { return work() }
   `],
   ['pool:flow-run', `
-    export async function runRecordFlows() { return { runs: [], gatesCreated: 0, failed: false } }
+    export async function runRecordFlows() { return { runs: [], gatesCreated: 0, failed: false, error: null } }
   `],
   ['pool:journal-writes', `export async function createScriptJournal() { return {} }`],
   ['pool:order-lib', `

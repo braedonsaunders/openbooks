@@ -286,7 +286,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
   // A before_post flow may set_field whitelisted headers; re-read the
   // document so its projection reflects them.
   const beforePostFlows = options.suppressAutomation
-    ? { runs: [], gatesCreated: 0, failed: false }
+    ? { runs: [], gatesCreated: 0, failed: false, error: null }
     : await runRecordFlows(
         { kind: "before_post" },
         doc.kind,

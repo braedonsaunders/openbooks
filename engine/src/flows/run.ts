@@ -29,16 +29,22 @@ import { executeFlowPlan } from "./execute.ts";
  * a committed unit ever delivers mail (see flows/execute.ts).
  */
 
+export interface RecordFlowRun {
+  runId: string;
+  flowId: string;
+  /** Display name of the flow — refusals name the flow, never a bare uuid. */
+  flowName: string;
+  status: "completed" | "waiting" | "failed" | "cancelled";
+  gatesCreated: number;
+  /** The run's failure cause, when status is failed. */
+  error: string | null;
+}
+
 export interface RecordFlowsResult {
   /** Enabled flows whose plan matched the event (one flow_runs row each; a
    *  resumed dispatch that adopted an already-finished run reports that
    *  run's existing verdict). */
-  runs: Array<{
-    runId: string;
-    flowId: string;
-    status: "completed" | "waiting" | "failed" | "cancelled";
-    gatesCreated: number;
-  }>;
+  runs: RecordFlowRun[];
   gatesCreated: number;
   /**
    * A matched flow errored (a run is `failed`) OR dispatch itself threw. The
@@ -47,18 +53,26 @@ export interface RecordFlowsResult {
    * approval flow errored (e.g. resolved to zero approvers).
    */
   failed: boolean;
+  /**
+   * The dispatch-level failure cause: set when `failed` is true but no run
+   * carries the verdict (the dispatch threw before any flow ran). Consumers
+   * surface this in their refusal; dispatch-result.ts composes the per-run
+   * reasons (including enabled-but-invalid graphs, which record their own
+   * failed run row).
+   */
+  error: string | null;
 }
 
-const EMPTY_RESULT: RecordFlowsResult = Object.freeze({ runs: [], gatesCreated: 0, failed: false });
+const EMPTY_RESULT: RecordFlowsResult = Object.freeze({ runs: [], gatesCreated: 0, failed: false, error: null });
 
 type FlowRunStatus = (typeof schema.flowRuns.$inferSelect)["status"];
 
 /** The existing flow_runs row carrying `key`, for resumed-attempt adoption. */
 async function adoptableOccurrenceRun(
   key: string,
-): Promise<{ id: string; status: FlowRunStatus } | undefined> {
+): Promise<{ id: string; status: FlowRunStatus; error: string | null } | undefined> {
   const [row] = await db
-    .select({ id: schema.flowRuns.id, status: schema.flowRuns.status })
+    .select({ id: schema.flowRuns.id, status: schema.flowRuns.status, error: schema.flowRuns.error })
     .from(schema.flowRuns)
     .where(eq(schema.flowRuns.occurrenceKey, key));
   return row;
@@ -175,10 +189,45 @@ export async function runRecordFlows(
     const subject = await adapter.loadContext(subjectId);
     if (!subject) return EMPTY_RESULT;
 
-    const result: RecordFlowsResult = { runs: [], gatesCreated: 0, failed: false };
+    const result: RecordFlowsResult = { runs: [], gatesCreated: 0, failed: false, error: null };
     for (const flow of flows) {
       const graph = parseFlowGraph(flow.id, flow.graph);
-      if (!graph) continue;
+      if (!graph) {
+        // Fail closed: an ENABLED flow whose graph cannot be parsed must
+        // refuse the submit/event it governs, never be skipped as "no
+        // approval required". Record the failure on its own failed run row
+        // (retryable once the graph is fixed) and mark the dispatch failed.
+        const reason =
+          `flow "${flow.name}" is enabled but its graph is invalid and cannot run — ` +
+          `fix or disable the flow, then resubmit`;
+        console.error(`[flows] flow ${flow.id} ("${flow.name}") has an invalid graph — dispatch refused`);
+        const [failedRow] = await db
+          .insert(schema.flowRuns)
+          .values({
+            orgId: ctx.orgId,
+            flowId: flow.id,
+            subjectKind,
+            subjectId,
+            trigger: event.kind,
+            status: "failed",
+            error: reason,
+            finishedAt: new Date(),
+            // jsonb snapshot: strip non-serializable values (Dates → ISO).
+            context: JSON.parse(JSON.stringify(subject.values)) as Record<string, unknown>,
+            createdBy: ctx.userId ?? null,
+          })
+          .returning({ id: schema.flowRuns.id });
+        result.runs.push({
+          runId: failedRow!.id,
+          flowId: flow.id,
+          flowName: flow.name,
+          status: "failed",
+          gatesCreated: 0,
+          error: reason,
+        });
+        result.failed = true;
+        continue;
+      }
 
       // Fresh values per flow — a set_field in one flow's run must not bleed
       // into another flow's condition evaluation mid-dispatch.
@@ -261,9 +310,17 @@ export async function runRecordFlows(
 
       let status: "completed" | "waiting" | "failed" | "cancelled";
       let gatesCreated = 0;
+      let runError: string | null = null;
       if (adoptedStatus) {
         // Adopted finished/paused run: report its verdict, execute nothing.
         status = adoptedStatus;
+        if (status === "failed") {
+          const [adopted] = await db
+            .select({ error: schema.flowRuns.error })
+            .from(schema.flowRuns)
+            .where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, ctx.orgId)));
+          runError = adopted?.error ?? "flow run previously failed";
+        }
       } else {
         try {
           const res = await executeFlowPlan(ctx, adapter, {
@@ -276,6 +333,7 @@ export async function runRecordFlows(
           });
           gatesCreated = res.gatesCreated;
           status = res.failed.length > 0 ? "failed" : res.gatesCreated > 0 ? "waiting" : "completed";
+          runError = res.failed.length > 0 ? res.failed.join("; ") : null;
           await db
             .update(schema.flowRuns)
             .set({
@@ -290,6 +348,7 @@ export async function runRecordFlows(
         } catch (e) {
           status = "failed";
           const reason = e instanceof Error ? e.message : String(e);
+          runError = reason;
           console.error(`[flows] run ${runId} (flow "${flow.name}") crashed:`, e);
           await db
             .update(schema.flowRuns)
@@ -299,7 +358,7 @@ export async function runRecordFlows(
         }
       }
 
-      result.runs.push({ runId, flowId: flow.id, status, gatesCreated });
+      result.runs.push({ runId, flowId: flow.id, flowName: flow.name, status, gatesCreated, error: runError });
       result.gatesCreated += gatesCreated;
       if (status === "failed") result.failed = true;
     }
@@ -308,7 +367,8 @@ export async function runRecordFlows(
     // NEVER propagate into the calling business operation — but report the
     // failure so an on_submit caller can fail closed rather than auto-approve.
     console.error(`[flows] dispatch failed (${event.kind} ${subjectKind}/${subjectId}):`, e);
-    return { runs: [], gatesCreated: 0, failed: true };
+    const reason = e instanceof Error ? e.message : String(e);
+    return { runs: [], gatesCreated: 0, failed: true, error: `flow dispatch failed: ${reason}` };
   }
 }
 

@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import {
@@ -148,6 +149,30 @@ test("quorum 'any' releases on the first approval and cancels the sibling", { sk
     const after = await gateRows({ subjectId: docId });
     assert.equal(after.find((g) => g.assigneeUserId === actors.approver1Id)!.status, "approved");
     assert.equal(after.find((g) => g.assigneeUserId === actors.approver2Id)!.status, "cancelled");
+  });
+});
+
+test("submit FAILS CLOSED when an enabled flow has an invalid graph", { skip: !DB }, async () => {
+  await withOrgFixture(async (org, actors) => {
+    // Raw SQL bypasses the validated flow writer: the stored graph cannot parse.
+    await db.execute(sql`
+      insert into flows (id, org_id, name, subject_kind, enabled, graph)
+      values (${randomUUID()}, ${org.orgId}, 'Broken flow', 'vendor_bill', true, ${JSON.stringify({ nodes: "not-an-array" })}::jsonb)`);
+    const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
+
+    const res = await submitForApproval("vendor_bill", docId);
+    assert.equal(res.gated, false, "an unparseable flow must never read as approval granted");
+    assert.ok(res.flowError, "a flowError is surfaced so the caller fails closed");
+    assert.equal(await docStatus(docId), "draft");
+    const gates = await gateRows({ subjectId: docId });
+    assert.equal(gates.length, 0, "no gate may dangle from a refused dispatch");
+    // The failure is recorded on its own failed run row, so fixing the graph
+    // unblocks the retry path instead of stranding the subject.
+    const runs = (await db.execute<{ status: string; error: string | null }>(sql`
+      select status, error from flow_runs where subject_id = ${docId}`)).rows;
+    assert.equal(runs.length, 1);
+    assert.equal(runs[0]!.status, "failed");
+    assert.match(runs[0]!.error ?? "", /Broken flow/);
   });
 });
 
