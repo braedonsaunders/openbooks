@@ -114,8 +114,23 @@
       "search": "勘定を検索…",
       "csv": "CSV",
       "all": "すべて",
-      "status": { "on-track": "順調", "watch": "要注意", "over": "超過", "under": "未達", "no-budget": "予算なし" },
-      "columns": { "account": "勘定", "type": "タイプ", "budget": "予算", "actual": "実績", "progress": "進捗", "variance": "差異", "variancePct": "差異率", "status": "ステータス" },
+      "status": {
+        "on-track": "順調",
+        "watch": "要注意",
+        "over": "超過",
+        "under": "未達",
+        "no-budget": "予算なし"
+      },
+      "columns": {
+        "account": "勘定",
+        "type": "タイプ",
+        "budget": "予算",
+        "actual": "実績",
+        "progress": "進捗",
+        "variance": "差異",
+        "variancePct": "差異率",
+        "status": "ステータス"
+      },
       "showing": "{total}件中 {from}〜{to} を表示",
       "previous": "前へ",
       "next": "次へ",
@@ -2034,9 +2049,13 @@
       "ghostName": "仕入先「{vendor}」が従業員名「{employee}」と一致",
       "duplicateGroup": "一致する伝票{count, plural, one {# 件} other {# 件}} — 同一仕入先・種別・金額（{currency} {amount}）{sharedRef}（期間{daysSpan, plural, one {# 日} other {# 日}}）：{others}",
       "duplicateSharedRef": "、共通参照番号{reference}",
-      "auditEvent": "{actor}\u304c{table}\u306e\u30ec\u30b3\u30fc\u30c9{row}\u3092{verb}{fieldsFrag}",
-      "auditFields": "\uff08{fields}\uff09",
-      "auditVerb": { "created": "\u4f5c\u6210", "updated": "\u66f4\u65b0", "deleted": "\u524a\u9664" },
+      "auditEvent": "{actor}が{table}のレコード{row}を{verb}{fieldsFrag}",
+      "auditFields": "（{fields}）",
+      "auditVerb": {
+        "created": "作成",
+        "updated": "更新",
+        "deleted": "削除"
+      },
       "riskGhosts": {
         "area": "ゴースト仕入先",
         "message": "{count, plural, one {# 社} other {# 社}}が従業員と一致"
@@ -2271,7 +2290,10 @@
       "signalNote": "土/日の会計日付",
       "signalValue": "書類日付"
     },
-    "yes": "はい"
+    "yes": "はい",
+    "detection": {
+      "allFlagged": "フラグ付きすべて"
+    }
   },
   "charts": {
     "history": "履歴",

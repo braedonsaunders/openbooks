@@ -565,7 +565,7 @@ export function ExpenseDrawer({
       if (documentRevisionRef.current == null) {
         const refreshed = await refreshFromServer().catch(() => null)
         if (refreshed !== 'pin' && documentRevisionRef.current == null) {
-          toast.error(tCommon('toasts.actionFailed'))
+          toast.error(t('toasts.actionFailed'))
           return
         }
       }
@@ -583,7 +583,7 @@ export function ExpenseDrawer({
         if (res.status === 409) {
           await refreshFromServer().catch(() => {})
         }
-        toast.error(data?.error ?? tCommon('toasts.actionFailed'))
+        toast.error(data?.error ?? t('toasts.actionFailed'))
         return
       }
       toast.success(t('toasts.recalled'))
@@ -611,7 +611,7 @@ export function ExpenseDrawer({
     if (documentRevisionRef.current == null) {
       const refreshAction = await refreshFromServer().catch(() => null)
       if (refreshAction !== 'pin' && documentRevisionRef.current == null) {
-        toast.error(tCommon('toasts.actionFailed'))
+        toast.error(t('toasts.actionFailed'))
         return
       }
     }
@@ -639,7 +639,7 @@ export function ExpenseDrawer({
         if (res.status === 409) {
           await refreshFromServer().catch(() => {})
         }
-        toast.error(data?.error ?? tCommon('toasts.actionFailed'))
+        toast.error(data?.error ?? t('toasts.actionFailed'))
         setSaveState('error')
         return
       }

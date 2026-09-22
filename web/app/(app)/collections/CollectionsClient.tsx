@@ -98,6 +98,11 @@ export function CollectionsClient({
 function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; incomeAccounts: Opt[] }) {
   const { money } = useMoney()
   const t = useTranslations("ar.collections.subscriptions");
+  // The refusal fallback lives under `ar.collections.errors`, not under this
+  // section — read from `t` it rendered the literal text
+  // `ar.collections.subscriptions.errors.actionFailed` whenever the API
+  // refused without a message body.
+  const tErrors = useTranslations("ar.collections.errors");
   const [plans, setPlans] = useState<Plan[]>([]);
   const [subs, setSubs] = useState<Subscription[]>([]);
   const [mrr, setMrr] = useState("0.0000");
@@ -121,7 +126,7 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
     setError(null); setMsg(null);
     const r = await fetch("/api/subscriptions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
     const b = await r.json().catch(() => ({}));
-    if (!r.ok) { setError(b.error ?? t("errors.actionFailed")); return null; }
+    if (!r.ok) { setError(b.error ?? tErrors("actionFailed")); return null; }
     await load();
     return b;
   };
@@ -252,6 +257,7 @@ function RecurringPanel() {
   const [form, setForm] = useState({ templateDocumentNumber: "", cadence: "monthly", cron: "", nextRunOn: "", autoPost: false });
   const [error, setError] = useState<string | null>(null);
   const t = useTranslations("ar.collections.recurring");
+  const tErrors = useTranslations("ar.collections.errors");
 
   // Fetch chain: every state update sits in a promise continuation (the fetch
   // response), never synchronously in the effect body.
@@ -277,7 +283,7 @@ function RecurringPanel() {
       }),
     });
     setBusy(false);
-    if (!r.ok) { setError((await r.json().catch(() => ({}))).error ?? t("couldNotCreate")); return; }
+    if (!r.ok) { setError((await r.json().catch(() => ({}))).error ?? tErrors("couldNotCreate")); return; }
     setForm({ templateDocumentNumber: "", cadence: "monthly", cron: "", nextRunOn: "", autoPost: false });
     void load();
   };

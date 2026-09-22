@@ -55,21 +55,39 @@
     "retire": "停用"
   },
   "transactionTypes": {
-    "vendorBill": "应付账单", "bill": "账单",
-    "vendorCredit": "供应商贷记单", "credit": "贷记单",
-    "purchaseOrder": "采购订单", "purchaseOrderShort": "采购单",
-    "customerInvoice": "客户发票", "invoice": "发票",
-    "customerCredit": "客户贷记单", "customerCreditShort": "客户贷记单",
-    "salesOrder": "销售订单", "salesOrderShort": "销售单",
-    "estimate": "报价单", "expenseReport": "费用报销单", "expense": "费用",
-    "journalEntry": "日记账分录", "journal": "日记账",
-    "vendorPayment": "供应商付款", "vendorPaymentShort": "供应商付款",
-    "customerPayment": "客户付款", "customerPaymentShort": "客户付款",
-    "check": "支票", "bankDeposit": "银行存款", "deposit": "存款",
-    "transfer": "转账", "cardCharge": "刷卡消费", "cardChargeShort": "刷卡",
-    "cardRefund": "刷卡退款", "cardRefundShort": "刷卡退款",
-    "projectCharge": "项目计费项", "projectChargeShort": "计费项",
-    "fieldTicket": "现场工单", "fieldTicketShort": "工单"
+    "vendorBill": "应付账单",
+    "bill": "账单",
+    "vendorCredit": "供应商贷记单",
+    "credit": "贷记单",
+    "purchaseOrder": "采购订单",
+    "purchaseOrderShort": "采购单",
+    "customerInvoice": "客户发票",
+    "invoice": "发票",
+    "customerCredit": "客户贷记单",
+    "customerCreditShort": "客户贷记单",
+    "salesOrder": "销售订单",
+    "salesOrderShort": "销售单",
+    "estimate": "报价单",
+    "expenseReport": "费用报销单",
+    "expense": "费用",
+    "journalEntry": "日记账分录",
+    "journal": "日记账",
+    "vendorPayment": "供应商付款",
+    "vendorPaymentShort": "供应商付款",
+    "customerPayment": "客户付款",
+    "customerPaymentShort": "客户付款",
+    "check": "支票",
+    "bankDeposit": "银行存款",
+    "deposit": "存款",
+    "transfer": "转账",
+    "cardCharge": "刷卡消费",
+    "cardChargeShort": "刷卡",
+    "cardRefund": "刷卡退款",
+    "cardRefundShort": "刷卡退款",
+    "projectCharge": "项目计费项",
+    "projectChargeShort": "计费项",
+    "fieldTicket": "现场工单",
+    "fieldTicketShort": "工单"
   },
   "labels": {
     "name": "名称",
@@ -139,7 +157,8 @@
     "paymentHold": "付款暂挂",
     "expectedPayDate": "预计付款日期",
     "openBalance": "未结余额",
-    "defaultForm": "默认表单"
+    "defaultForm": "默认表单",
+    "asOf": "截至"
   },
   "status": {
     "draft": "草稿",
@@ -160,7 +179,8 @@
     "ok": "正常",
     "pending_approval": "已提交",
     "calculated": "已计算",
-    "committed": "已提交"
+    "committed": "已提交",
+    "retired": "已停用"
   },
   "filters": {
     "showInactive": "显示已停用"
@@ -199,7 +219,11 @@
     "description": "没有记录符合当前筛选条件。"
   },
   "auditTrail": {
-    "tabs": { "details": "详情", "attachments": "附件", "audit": "审计轨迹" },
+    "tabs": {
+      "details": "详情",
+      "attachments": "附件",
+      "audit": "审计轨迹"
+    },
     "ariaLabel": "记录板块",
     "searchPlaceholder": "搜索审计轨迹",
     "actionFilter": "按操作筛选",
@@ -221,8 +245,16 @@
     "loadFailedTitle": "审计轨迹不可用",
     "loadFailedDescription": "无法加载审计轨迹。请稍后重试。",
     "retry": "重试",
-    "actions": { "insert": "已创建", "update": "已更新", "delete": "已删除", "post": "已过账", "void": "已作废", "approve": "已批准", "reject": "已驳回",
-      "retired": "已停用" }
+    "actions": {
+      "insert": "已创建",
+      "update": "已更新",
+      "delete": "已删除",
+      "post": "已过账",
+      "void": "已作废",
+      "approve": "已批准",
+      "reject": "已驳回",
+      "retired": "已停用"
+    }
   },
   "amendment": {
     "title": "说明已过账单据的修改",

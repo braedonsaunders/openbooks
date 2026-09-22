@@ -55,21 +55,39 @@
     "retire": "廃止する"
   },
   "transactionTypes": {
-    "vendorBill": "仕入請求書", "bill": "仕入請求書",
-    "vendorCredit": "仕入先クレジット", "credit": "クレジット",
-    "purchaseOrder": "発注書", "purchaseOrderShort": "PO",
-    "customerInvoice": "得意先請求書", "invoice": "請求書",
-    "customerCredit": "得意先クレジット", "customerCreditShort": "得意先クレジット",
-    "salesOrder": "受注", "salesOrderShort": "SO",
-    "estimate": "見積", "expenseReport": "経費精算書", "expense": "経費",
-    "journalEntry": "仕訳", "journal": "仕訳",
-    "vendorPayment": "仕入先支払", "vendorPaymentShort": "仕入先支払",
-    "customerPayment": "得意先入金", "customerPaymentShort": "得意先入金",
-    "check": "小切手", "bankDeposit": "銀行預入", "deposit": "預入",
-    "transfer": "振替", "cardCharge": "カード請求", "cardChargeShort": "カード",
-    "cardRefund": "カード返金", "cardRefundShort": "カード返金",
-    "projectCharge": "プロジェクトチャージ", "projectChargeShort": "チャージ",
-    "fieldTicket": "作業票", "fieldTicketShort": "作業票"
+    "vendorBill": "仕入請求書",
+    "bill": "仕入請求書",
+    "vendorCredit": "仕入先クレジット",
+    "credit": "クレジット",
+    "purchaseOrder": "発注書",
+    "purchaseOrderShort": "PO",
+    "customerInvoice": "得意先請求書",
+    "invoice": "請求書",
+    "customerCredit": "得意先クレジット",
+    "customerCreditShort": "得意先クレジット",
+    "salesOrder": "受注",
+    "salesOrderShort": "SO",
+    "estimate": "見積",
+    "expenseReport": "経費精算書",
+    "expense": "経費",
+    "journalEntry": "仕訳",
+    "journal": "仕訳",
+    "vendorPayment": "仕入先支払",
+    "vendorPaymentShort": "仕入先支払",
+    "customerPayment": "得意先入金",
+    "customerPaymentShort": "得意先入金",
+    "check": "小切手",
+    "bankDeposit": "銀行預入",
+    "deposit": "預入",
+    "transfer": "振替",
+    "cardCharge": "カード請求",
+    "cardChargeShort": "カード",
+    "cardRefund": "カード返金",
+    "cardRefundShort": "カード返金",
+    "projectCharge": "プロジェクトチャージ",
+    "projectChargeShort": "チャージ",
+    "fieldTicket": "作業票",
+    "fieldTicketShort": "作業票"
   },
   "labels": {
     "name": "名前",
@@ -139,7 +157,8 @@
     "paymentHold": "支払保留",
     "expectedPayDate": "支払予定日",
     "openBalance": "未決済残高",
-    "defaultForm": "既定のフォーム"
+    "defaultForm": "既定のフォーム",
+    "asOf": "基準日"
   },
   "status": {
     "draft": "下書き",
@@ -160,7 +179,8 @@
     "ok": "OK",
     "pending_approval": "提出済み",
     "calculated": "計算済み",
-    "committed": "確定済み"
+    "committed": "確定済み",
+    "retired": "廃止"
   },
   "filters": {
     "showInactive": "無効も表示"
@@ -199,7 +219,11 @@
     "description": "現在のフィルターに一致するレコードはありません。"
   },
   "auditTrail": {
-    "tabs": { "details": "詳細", "attachments": "添付ファイル", "audit": "監査証跡" },
+    "tabs": {
+      "details": "詳細",
+      "attachments": "添付ファイル",
+      "audit": "監査証跡"
+    },
     "ariaLabel": "レコードのセクション",
     "searchPlaceholder": "監査証跡を検索",
     "actionFilter": "アクションで絞り込み",
@@ -221,8 +245,16 @@
     "loadFailedTitle": "監査証跡を表示できません",
     "loadFailedDescription": "監査証跡を読み込めませんでした。しばらくしてから再試行してください。",
     "retry": "再試行",
-    "actions": { "insert": "作成", "update": "更新", "delete": "削除", "post": "記帳", "void": "無効化", "approve": "承認", "reject": "却下",
-      "retired": "廃止済み" }
+    "actions": {
+      "insert": "作成",
+      "update": "更新",
+      "delete": "削除",
+      "post": "記帳",
+      "void": "無効化",
+      "approve": "承認",
+      "reject": "却下",
+      "retired": "廃止済み"
+    }
   },
   "amendment": {
     "title": "転記済み伝票の変更理由",

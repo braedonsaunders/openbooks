@@ -5,20 +5,62 @@
     "archived": "Archiviert"
   },
   "fieldTypes": {
-    "text": { "label": "Kurztext", "description": "Einzeiliges Texteingabefeld" },
-    "long_text": { "label": "Langtext", "description": "Mehrzeiliger Textbereich" },
-    "number": { "label": "Zahl", "description": "Numerische Eingabe mit optionalen Einheiten" },
-    "currency": { "label": "Währung", "description": "Geldbetrag — rechtsbündig, zwei Dezimalstellen" },
-    "percentage": { "label": "Prozentsatz", "description": "Prozentwert (z. B. 13 für 13 %)" },
-    "select": { "label": "Dropdown", "description": "Einfachauswahl-Dropdown" },
-    "multi_select": { "label": "Mehrfachauswahl", "description": "Mehrere Optionen auswählen" },
-    "radio": { "label": "Einzelauswahl", "description": "Eine Option auswählen (Optionsschaltflächen)" },
-    "date": { "label": "Datum", "description": "Datumsauswahl" },
-    "datetime": { "label": "Datum und Uhrzeit", "description": "Auswahl von Datum und Uhrzeit" },
-    "rating": { "label": "Bewertung", "description": "Numerische Skala (z. B. 1–5)" },
-    "formula": { "label": "Formel", "description": "Aus anderen Feldern berechnet" },
-    "gl_account": { "label": "Hauptbuchkonto", "description": "Ein Konto aus dem Kontenplan auswählen" },
-    "party": { "label": "Partei", "description": "Einen Lieferanten, Kunden oder Mitarbeiter auswählen" }
+    "text": {
+      "label": "Kurztext",
+      "description": "Einzeiliges Texteingabefeld"
+    },
+    "long_text": {
+      "label": "Langtext",
+      "description": "Mehrzeiliger Textbereich"
+    },
+    "number": {
+      "label": "Zahl",
+      "description": "Numerische Eingabe mit optionalen Einheiten"
+    },
+    "currency": {
+      "label": "Währung",
+      "description": "Geldbetrag — rechtsbündig, zwei Dezimalstellen"
+    },
+    "percentage": {
+      "label": "Prozentsatz",
+      "description": "Prozentwert (z. B. 13 für 13 %)"
+    },
+    "select": {
+      "label": "Dropdown",
+      "description": "Einfachauswahl-Dropdown"
+    },
+    "multi_select": {
+      "label": "Mehrfachauswahl",
+      "description": "Mehrere Optionen auswählen"
+    },
+    "radio": {
+      "label": "Einzelauswahl",
+      "description": "Eine Option auswählen (Optionsschaltflächen)"
+    },
+    "date": {
+      "label": "Datum",
+      "description": "Datumsauswahl"
+    },
+    "datetime": {
+      "label": "Datum und Uhrzeit",
+      "description": "Auswahl von Datum und Uhrzeit"
+    },
+    "rating": {
+      "label": "Bewertung",
+      "description": "Numerische Skala (z. B. 1–5)"
+    },
+    "formula": {
+      "label": "Formel",
+      "description": "Aus anderen Feldern berechnet"
+    },
+    "gl_account": {
+      "label": "Hauptbuchkonto",
+      "description": "Ein Konto aus dem Kontenplan auswählen"
+    },
+    "party": {
+      "label": "Partei",
+      "description": "Einen Lieferanten, Kunden oder Mitarbeiter auswählen"
+    }
   },
   "types": {
     "title": "Benutzerdefinierte Datensätze",
@@ -188,5 +230,6 @@
     "deactivatedToast": "{number} deaktiviert",
     "deleteConfirm": "Entwurf {number} löschen? Dies kann nicht rückgängig gemacht werden.",
     "draftDeleted": "Entwurf gelöscht"
-  }
+  },
+  "createFailed": "Der Datensatztyp konnte nicht erstellt werden"
 }

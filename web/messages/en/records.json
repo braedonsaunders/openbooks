@@ -5,20 +5,62 @@
     "archived": "Archived"
   },
   "fieldTypes": {
-    "text": { "label": "Short text", "description": "Single-line text input" },
-    "long_text": { "label": "Long text", "description": "Multi-line text area" },
-    "number": { "label": "Number", "description": "Numeric input with optional units" },
-    "currency": { "label": "Currency", "description": "Money amount — right-aligned, two decimals" },
-    "percentage": { "label": "Percentage", "description": "Percent value (e.g. 13 for 13%)" },
-    "select": { "label": "Dropdown", "description": "Single-select dropdown" },
-    "multi_select": { "label": "Multi-select", "description": "Pick several options" },
-    "radio": { "label": "Single choice", "description": "Pick one option (radio buttons)" },
-    "date": { "label": "Date", "description": "Date picker" },
-    "datetime": { "label": "Date & time", "description": "Date + time picker" },
-    "rating": { "label": "Rating", "description": "Numeric scale (e.g. 1–5)" },
-    "formula": { "label": "Formula", "description": "Computed from other fields" },
-    "gl_account": { "label": "GL account", "description": "Pick an account from the chart of accounts" },
-    "party": { "label": "Party", "description": "Pick a vendor, customer, or employee" }
+    "text": {
+      "label": "Short text",
+      "description": "Single-line text input"
+    },
+    "long_text": {
+      "label": "Long text",
+      "description": "Multi-line text area"
+    },
+    "number": {
+      "label": "Number",
+      "description": "Numeric input with optional units"
+    },
+    "currency": {
+      "label": "Currency",
+      "description": "Money amount — right-aligned, two decimals"
+    },
+    "percentage": {
+      "label": "Percentage",
+      "description": "Percent value (e.g. 13 for 13%)"
+    },
+    "select": {
+      "label": "Dropdown",
+      "description": "Single-select dropdown"
+    },
+    "multi_select": {
+      "label": "Multi-select",
+      "description": "Pick several options"
+    },
+    "radio": {
+      "label": "Single choice",
+      "description": "Pick one option (radio buttons)"
+    },
+    "date": {
+      "label": "Date",
+      "description": "Date picker"
+    },
+    "datetime": {
+      "label": "Date & time",
+      "description": "Date + time picker"
+    },
+    "rating": {
+      "label": "Rating",
+      "description": "Numeric scale (e.g. 1–5)"
+    },
+    "formula": {
+      "label": "Formula",
+      "description": "Computed from other fields"
+    },
+    "gl_account": {
+      "label": "GL account",
+      "description": "Pick an account from the chart of accounts"
+    },
+    "party": {
+      "label": "Party",
+      "description": "Pick a vendor, customer, or employee"
+    }
   },
   "types": {
     "title": "Custom Records",
@@ -188,5 +230,6 @@
     "deactivatedToast": "{number} deactivated",
     "deleteConfirm": "Delete draft {number}? This cannot be undone.",
     "draftDeleted": "Draft deleted"
-  }
+  },
+  "createFailed": "Could not create the record type"
 }

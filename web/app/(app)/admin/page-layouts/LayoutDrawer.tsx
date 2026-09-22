@@ -216,7 +216,7 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
     if (!response.ok) {
       // Returned to the author, never swallowed: an unknown widget has to be
       // NAMED or there is nothing to act on.
-      setErrors(body.errors ?? [body.error ?? tCommon('errors.unknown')])
+      setErrors(body.errors ?? [body.error ?? tCommon('feedback.somethingWentWrong')])
       return false
     }
     setErrors([])
@@ -247,7 +247,7 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
         error?: string
       }
       if (!response.ok || !body.previewUrl) {
-        setErrors(body.errors ?? [body.error ?? tCommon('errors.unknown')])
+        setErrors(body.errors ?? [body.error ?? tCommon('feedback.somethingWentWrong')])
         return
       }
       setErrors([])
@@ -303,7 +303,7 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
       })
       const body = (await response.json().catch(() => ({}))) as { errors?: string[]; error?: string }
       if (!response.ok) {
-        setErrors(body.errors ?? [body.error ?? tCommon('errors.unknown')])
+        setErrors(body.errors ?? [body.error ?? tCommon('feedback.somethingWentWrong')])
         return
       }
       setErrors([])
@@ -323,7 +323,7 @@ export function LayoutDrawer({ drawer }: { drawer: PageLayoutDrawerData }) {
         { method: 'DELETE' },
       )
       if (!response.ok) {
-        setErrors([tCommon('errors.unknown')])
+        setErrors([tCommon('feedback.somethingWentWrong')])
         return
       }
       toast.success(t('actions.removed'))

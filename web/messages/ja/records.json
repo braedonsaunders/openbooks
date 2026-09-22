@@ -5,20 +5,62 @@
     "archived": "アーカイブ済み"
   },
   "fieldTypes": {
-    "text": { "label": "短いテキスト", "description": "1行のテキスト入力" },
-    "long_text": { "label": "長いテキスト", "description": "複数行のテキストエリア" },
-    "number": { "label": "数値", "description": "単位を任意で指定できる数値入力" },
-    "currency": { "label": "通貨", "description": "金額 — 右揃え、小数第2位まで" },
-    "percentage": { "label": "パーセンテージ", "description": "パーセント値（例: 13% は 13）" },
-    "select": { "label": "ドロップダウン", "description": "単一選択のドロップダウン" },
-    "multi_select": { "label": "複数選択", "description": "複数のオプションを選択" },
-    "radio": { "label": "単一選択", "description": "1つのオプションを選択（ラジオボタン）" },
-    "date": { "label": "日付", "description": "日付ピッカー" },
-    "datetime": { "label": "日付と時刻", "description": "日付＋時刻ピッカー" },
-    "rating": { "label": "評価", "description": "数値スケール（例: 1〜5）" },
-    "formula": { "label": "計算式", "description": "他のフィールドから計算" },
-    "gl_account": { "label": "GL勘定", "description": "勘定科目表から勘定を選択" },
-    "party": { "label": "取引先", "description": "仕入先、得意先、従業員を選択" }
+    "text": {
+      "label": "短いテキスト",
+      "description": "1行のテキスト入力"
+    },
+    "long_text": {
+      "label": "長いテキスト",
+      "description": "複数行のテキストエリア"
+    },
+    "number": {
+      "label": "数値",
+      "description": "単位を任意で指定できる数値入力"
+    },
+    "currency": {
+      "label": "通貨",
+      "description": "金額 — 右揃え、小数第2位まで"
+    },
+    "percentage": {
+      "label": "パーセンテージ",
+      "description": "パーセント値（例: 13% は 13）"
+    },
+    "select": {
+      "label": "ドロップダウン",
+      "description": "単一選択のドロップダウン"
+    },
+    "multi_select": {
+      "label": "複数選択",
+      "description": "複数のオプションを選択"
+    },
+    "radio": {
+      "label": "単一選択",
+      "description": "1つのオプションを選択（ラジオボタン）"
+    },
+    "date": {
+      "label": "日付",
+      "description": "日付ピッカー"
+    },
+    "datetime": {
+      "label": "日付と時刻",
+      "description": "日付＋時刻ピッカー"
+    },
+    "rating": {
+      "label": "評価",
+      "description": "数値スケール（例: 1〜5）"
+    },
+    "formula": {
+      "label": "計算式",
+      "description": "他のフィールドから計算"
+    },
+    "gl_account": {
+      "label": "GL勘定",
+      "description": "勘定科目表から勘定を選択"
+    },
+    "party": {
+      "label": "取引先",
+      "description": "仕入先、得意先、従業員を選択"
+    }
   },
   "types": {
     "title": "カスタムレコード",
@@ -188,5 +230,6 @@
     "deactivatedToast": "{number} を無効化しました",
     "deleteConfirm": "下書き{number}を削除しますか？この操作は取り消せません。",
     "draftDeleted": "下書きを削除しました"
-  }
+  },
+  "createFailed": "レコードタイプを作成できませんでした"
 }

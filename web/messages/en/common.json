@@ -157,7 +157,8 @@
     "paymentHold": "Payment hold",
     "expectedPayDate": "Expected pay date",
     "openBalance": "Open balance",
-    "defaultForm": "Default form"
+    "defaultForm": "Default form",
+    "asOf": "As of"
   },
   "status": {
     "draft": "Draft",
@@ -178,7 +179,8 @@
     "ok": "OK",
     "pending_approval": "Submitted",
     "calculated": "Calculated",
-    "committed": "Committed"
+    "committed": "Committed",
+    "retired": "Retired"
   },
   "filters": {
     "showInactive": "Show inactive"

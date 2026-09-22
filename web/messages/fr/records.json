@@ -5,20 +5,62 @@
     "archived": "Archivé"
   },
   "fieldTypes": {
-    "text": { "label": "Texte court", "description": "Champ de texte sur une seule ligne" },
-    "long_text": { "label": "Texte long", "description": "Zone de texte multiligne" },
-    "number": { "label": "Nombre", "description": "Champ numérique avec unités facultatives" },
-    "currency": { "label": "Devise", "description": "Montant d’argent — aligné à droite, deux décimales" },
-    "percentage": { "label": "Pourcentage", "description": "Valeur en pourcentage (p. ex. 13 pour 13 %)" },
-    "select": { "label": "Liste déroulante", "description": "Liste déroulante à sélection unique" },
-    "multi_select": { "label": "Sélection multiple", "description": "Choisir plusieurs options" },
-    "radio": { "label": "Choix unique", "description": "Choisir une seule option (boutons radio)" },
-    "date": { "label": "Date", "description": "Sélecteur de date" },
-    "datetime": { "label": "Date et heure", "description": "Sélecteur de date et d’heure" },
-    "rating": { "label": "Évaluation", "description": "Échelle numérique (p. ex. 1–5)" },
-    "formula": { "label": "Formule", "description": "Calculée à partir d’autres champs" },
-    "gl_account": { "label": "Compte du grand livre", "description": "Choisir un compte dans le plan comptable" },
-    "party": { "label": "Tiers", "description": "Choisir un fournisseur, un client ou un employé" }
+    "text": {
+      "label": "Texte court",
+      "description": "Champ de texte sur une seule ligne"
+    },
+    "long_text": {
+      "label": "Texte long",
+      "description": "Zone de texte multiligne"
+    },
+    "number": {
+      "label": "Nombre",
+      "description": "Champ numérique avec unités facultatives"
+    },
+    "currency": {
+      "label": "Devise",
+      "description": "Montant d’argent — aligné à droite, deux décimales"
+    },
+    "percentage": {
+      "label": "Pourcentage",
+      "description": "Valeur en pourcentage (p. ex. 13 pour 13 %)"
+    },
+    "select": {
+      "label": "Liste déroulante",
+      "description": "Liste déroulante à sélection unique"
+    },
+    "multi_select": {
+      "label": "Sélection multiple",
+      "description": "Choisir plusieurs options"
+    },
+    "radio": {
+      "label": "Choix unique",
+      "description": "Choisir une seule option (boutons radio)"
+    },
+    "date": {
+      "label": "Date",
+      "description": "Sélecteur de date"
+    },
+    "datetime": {
+      "label": "Date et heure",
+      "description": "Sélecteur de date et d’heure"
+    },
+    "rating": {
+      "label": "Évaluation",
+      "description": "Échelle numérique (p. ex. 1–5)"
+    },
+    "formula": {
+      "label": "Formule",
+      "description": "Calculée à partir d’autres champs"
+    },
+    "gl_account": {
+      "label": "Compte du grand livre",
+      "description": "Choisir un compte dans le plan comptable"
+    },
+    "party": {
+      "label": "Tiers",
+      "description": "Choisir un fournisseur, un client ou un employé"
+    }
   },
   "types": {
     "title": "Enregistrements personnalisés",
@@ -188,5 +230,6 @@
     "deactivatedToast": "{number} désactivé",
     "deleteConfirm": "Supprimer le brouillon {number}? Cette action est irréversible.",
     "draftDeleted": "Brouillon supprimé"
-  }
+  },
+  "createFailed": "Impossible de créer le type d'enregistrement"
 }

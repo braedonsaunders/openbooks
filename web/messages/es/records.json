@@ -5,20 +5,62 @@
     "archived": "Archivado"
   },
   "fieldTypes": {
-    "text": { "label": "Texto corto", "description": "Campo de texto de una línea" },
-    "long_text": { "label": "Texto largo", "description": "Área de texto de varias líneas" },
-    "number": { "label": "Número", "description": "Campo numérico con unidades opcionales" },
-    "currency": { "label": "Moneda", "description": "Importe monetario — alineado a la derecha, dos decimales" },
-    "percentage": { "label": "Porcentaje", "description": "Valor porcentual (p. ej., 13 para 13%)" },
-    "select": { "label": "Lista desplegable", "description": "Lista desplegable de selección única" },
-    "multi_select": { "label": "Selección múltiple", "description": "Elija varias opciones" },
-    "radio": { "label": "Opción única", "description": "Elija una opción (botones de radio)" },
-    "date": { "label": "Fecha", "description": "Selector de fecha" },
-    "datetime": { "label": "Fecha y hora", "description": "Selector de fecha y hora" },
-    "rating": { "label": "Calificación", "description": "Escala numérica (p. ej., 1–5)" },
-    "formula": { "label": "Fórmula", "description": "Calculado a partir de otros campos" },
-    "gl_account": { "label": "Cuenta contable", "description": "Elija una cuenta del plan de cuentas" },
-    "party": { "label": "Tercero", "description": "Elija un proveedor, cliente o empleado" }
+    "text": {
+      "label": "Texto corto",
+      "description": "Campo de texto de una línea"
+    },
+    "long_text": {
+      "label": "Texto largo",
+      "description": "Área de texto de varias líneas"
+    },
+    "number": {
+      "label": "Número",
+      "description": "Campo numérico con unidades opcionales"
+    },
+    "currency": {
+      "label": "Moneda",
+      "description": "Importe monetario — alineado a la derecha, dos decimales"
+    },
+    "percentage": {
+      "label": "Porcentaje",
+      "description": "Valor porcentual (p. ej., 13 para 13%)"
+    },
+    "select": {
+      "label": "Lista desplegable",
+      "description": "Lista desplegable de selección única"
+    },
+    "multi_select": {
+      "label": "Selección múltiple",
+      "description": "Elija varias opciones"
+    },
+    "radio": {
+      "label": "Opción única",
+      "description": "Elija una opción (botones de radio)"
+    },
+    "date": {
+      "label": "Fecha",
+      "description": "Selector de fecha"
+    },
+    "datetime": {
+      "label": "Fecha y hora",
+      "description": "Selector de fecha y hora"
+    },
+    "rating": {
+      "label": "Calificación",
+      "description": "Escala numérica (p. ej., 1–5)"
+    },
+    "formula": {
+      "label": "Fórmula",
+      "description": "Calculado a partir de otros campos"
+    },
+    "gl_account": {
+      "label": "Cuenta contable",
+      "description": "Elija una cuenta del plan de cuentas"
+    },
+    "party": {
+      "label": "Tercero",
+      "description": "Elija un proveedor, cliente o empleado"
+    }
   },
   "types": {
     "title": "Registros personalizados",
@@ -188,5 +230,6 @@
     "deactivatedToast": "{number} desactivado",
     "deleteConfirm": "¿Eliminar el borrador {number}? Esto no se puede deshacer.",
     "draftDeleted": "Borrador eliminado"
-  }
+  },
+  "createFailed": "No se pudo crear el tipo de registro"
 }

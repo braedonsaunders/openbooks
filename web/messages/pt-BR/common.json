@@ -55,21 +55,39 @@
     "retire": "Aposentar"
   },
   "transactionTypes": {
-    "vendorBill": "Conta a pagar", "bill": "Conta a pagar",
-    "vendorCredit": "Crédito de fornecedor", "credit": "Crédito",
-    "purchaseOrder": "Pedido de compra", "purchaseOrderShort": "PC",
-    "customerInvoice": "Fatura de cliente", "invoice": "Fatura",
-    "customerCredit": "Crédito de cliente", "customerCreditShort": "Crédito de cliente",
-    "salesOrder": "Pedido de venda", "salesOrderShort": "PV",
-    "estimate": "Orçamento", "expenseReport": "Relatório de despesas", "expense": "Despesa",
-    "journalEntry": "Lançamento contábil", "journal": "Lançamento",
-    "vendorPayment": "Pagamento a fornecedor", "vendorPaymentShort": "Pgto forn.",
-    "customerPayment": "Pagamento de cliente", "customerPaymentShort": "Pgto cliente",
-    "check": "Cheque", "bankDeposit": "Depósito bancário", "deposit": "Depósito",
-    "transfer": "Transferência", "cardCharge": "Débito no cartão", "cardChargeShort": "Cartão",
-    "cardRefund": "Estorno no cartão", "cardRefundShort": "Estorno cartão",
-    "projectCharge": "Apropriação de projeto", "projectChargeShort": "Apropriação",
-    "fieldTicket": "Boletim de campo", "fieldTicketShort": "Boletim"
+    "vendorBill": "Conta a pagar",
+    "bill": "Conta a pagar",
+    "vendorCredit": "Crédito de fornecedor",
+    "credit": "Crédito",
+    "purchaseOrder": "Pedido de compra",
+    "purchaseOrderShort": "PC",
+    "customerInvoice": "Fatura de cliente",
+    "invoice": "Fatura",
+    "customerCredit": "Crédito de cliente",
+    "customerCreditShort": "Crédito de cliente",
+    "salesOrder": "Pedido de venda",
+    "salesOrderShort": "PV",
+    "estimate": "Orçamento",
+    "expenseReport": "Relatório de despesas",
+    "expense": "Despesa",
+    "journalEntry": "Lançamento contábil",
+    "journal": "Lançamento",
+    "vendorPayment": "Pagamento a fornecedor",
+    "vendorPaymentShort": "Pgto forn.",
+    "customerPayment": "Pagamento de cliente",
+    "customerPaymentShort": "Pgto cliente",
+    "check": "Cheque",
+    "bankDeposit": "Depósito bancário",
+    "deposit": "Depósito",
+    "transfer": "Transferência",
+    "cardCharge": "Débito no cartão",
+    "cardChargeShort": "Cartão",
+    "cardRefund": "Estorno no cartão",
+    "cardRefundShort": "Estorno cartão",
+    "projectCharge": "Apropriação de projeto",
+    "projectChargeShort": "Apropriação",
+    "fieldTicket": "Boletim de campo",
+    "fieldTicketShort": "Boletim"
   },
   "labels": {
     "name": "Nome",
@@ -139,7 +157,8 @@
     "paymentHold": "Retenção de pagamento",
     "expectedPayDate": "Data prevista de pagamento",
     "openBalance": "Saldo em aberto",
-    "defaultForm": "Formulário padrão"
+    "defaultForm": "Formulário padrão",
+    "asOf": "Em"
   },
   "status": {
     "draft": "Rascunho",
@@ -160,7 +179,8 @@
     "ok": "OK",
     "pending_approval": "Enviado",
     "calculated": "Calculado",
-    "committed": "Comprometido"
+    "committed": "Comprometido",
+    "retired": "Desativado"
   },
   "filters": {
     "showInactive": "Mostrar inativos"
@@ -199,7 +219,11 @@
     "description": "Nenhum registro corresponde aos filtros atuais."
   },
   "auditTrail": {
-    "tabs": { "details": "Detalhes", "attachments": "Anexos", "audit": "Trilha de auditoria" },
+    "tabs": {
+      "details": "Detalhes",
+      "attachments": "Anexos",
+      "audit": "Trilha de auditoria"
+    },
     "ariaLabel": "Seções do registro",
     "searchPlaceholder": "Buscar na trilha de auditoria",
     "actionFilter": "Filtrar por ação",
@@ -221,8 +245,16 @@
     "loadFailedTitle": "Trilha de auditoria indisponível",
     "loadFailedDescription": "Não foi possível carregar a trilha de auditoria. Tente novamente em instantes.",
     "retry": "Tentar novamente",
-    "actions": { "insert": "Criado", "update": "Atualizado", "delete": "Excluído", "post": "Lançado", "void": "Anulado", "approve": "Aprovado", "reject": "Rejeitado",
-      "retired": "Aposentado" }
+    "actions": {
+      "insert": "Criado",
+      "update": "Atualizado",
+      "delete": "Excluído",
+      "post": "Lançado",
+      "void": "Anulado",
+      "approve": "Aprovado",
+      "reject": "Rejeitado",
+      "retired": "Aposentado"
+    }
   },
   "amendment": {
     "title": "Explique a alteração do documento lançado",

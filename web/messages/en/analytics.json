@@ -541,7 +541,7 @@
       "recognized": "Recognized from prior billings",
       "voids": "Void adjustments",
       "other": "Other ledger postings"
-   },
+    },
     "risk": {
       "low": "Low",
       "medium": "Medium",
@@ -2224,7 +2224,11 @@
       "duplicateSharedRef": ", shared reference {reference}",
       "auditEvent": "{actor} {verb} {table} {row}{fieldsFrag}",
       "auditFields": " ({fields})",
-      "auditVerb": { "created": "created", "updated": "updated", "deleted": "deleted" },
+      "auditVerb": {
+        "created": "created",
+        "updated": "updated",
+        "deleted": "deleted"
+      },
       "riskGhosts": {
         "area": "Ghost Vendors",
         "message": "{count, plural, one {# vendor} other {# vendors}} match employee names"
@@ -2286,6 +2290,9 @@
       "sequentialItem": " — catches suspiciously unbroken sequences of vendor reference numbers.",
       "duplicatesItem": " — groups transactions by vendor, kind, currency, amount and reference to catch repeated payments, one finding per group.",
       "outro": "This period: {docs} documents ({amount}) across {days} days, analyzed in {seconds}s. Detail tables show the top matches per check; the counts and distributions always cover everything."
+    },
+    "detection": {
+      "allFlagged": "All flagged"
     }
   },
   "cashWeek": {

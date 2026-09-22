@@ -114,8 +114,23 @@
       "search": "Konten durchsuchen…",
       "csv": "CSV",
       "all": "Alle",
-      "status": { "on-track": "Im Plan", "watch": "Beobachtung", "over": "Über", "under": "Unter", "no-budget": "Kein Budget" },
-      "columns": { "account": "Konto", "type": "Typ", "budget": "Budget", "actual": "Ist", "progress": "Fortschritt", "variance": "Abweichung", "variancePct": "Abweichung %", "status": "Status" },
+      "status": {
+        "on-track": "Im Plan",
+        "watch": "Beobachtung",
+        "over": "Über",
+        "under": "Unter",
+        "no-budget": "Kein Budget"
+      },
+      "columns": {
+        "account": "Konto",
+        "type": "Typ",
+        "budget": "Budget",
+        "actual": "Ist",
+        "progress": "Fortschritt",
+        "variance": "Abweichung",
+        "variancePct": "Abweichung %",
+        "status": "Status"
+      },
       "showing": "Anzeige {from}–{to} von {total} Konten",
       "previous": "Zurück",
       "next": "Weiter",
@@ -567,7 +582,7 @@
       "recognized": "Aus früheren Rechnungen realisiert",
       "voids": "Stornoanpassungen",
       "other": "Sonstige Hauptbuchungen"
-   },
+    },
     "risk": {
       "critical": "Kritisch",
       "high": "Hoch",
@@ -2036,7 +2051,11 @@
       "duplicateSharedRef": ", gemeinsame Referenz {reference}",
       "auditEvent": "{actor} {verb} {table} {row}{fieldsFrag}",
       "auditFields": " ({fields})",
-      "auditVerb": { "created": "erstellt", "updated": "aktualisiert", "deleted": "gel\u00f6scht" },
+      "auditVerb": {
+        "created": "erstellt",
+        "updated": "aktualisiert",
+        "deleted": "gelöscht"
+      },
       "riskGhosts": {
         "area": "Geisterlieferanten",
         "message": "{count, plural, one {# Lieferant} other {# Lieferanten}} stimmen mit Mitarbeitern überein"
@@ -2271,7 +2290,10 @@
       "signalNote": "Belegdatum Sa./So.",
       "signalValue": "Belegdatum"
     },
-    "yes": "Ja"
+    "yes": "Ja",
+    "detection": {
+      "allFlagged": "Alle markierten"
+    }
   },
   "charts": {
     "history": "Verlauf",

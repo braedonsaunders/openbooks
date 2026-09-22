@@ -55,21 +55,39 @@
     "retire": "Stilllegen"
   },
   "transactionTypes": {
-    "vendorBill": "Eingangsrechnung", "bill": "Eingangsrechnung",
-    "vendorCredit": "Lieferantengutschrift", "credit": "Gutschrift",
-    "purchaseOrder": "Bestellung", "purchaseOrderShort": "Best.",
-    "customerInvoice": "Ausgangsrechnung", "invoice": "Rechnung",
-    "customerCredit": "Kundengutschrift", "customerCreditShort": "Kundengutschrift",
-    "salesOrder": "Kundenauftrag", "salesOrderShort": "KA",
-    "estimate": "Angebot", "expenseReport": "Spesenabrechnung", "expense": "Ausgabe",
-    "journalEntry": "Buchung", "journal": "Journal",
-    "vendorPayment": "Lieferantenzahlung", "vendorPaymentShort": "Lief.-Zahlung",
-    "customerPayment": "Kundenzahlung", "customerPaymentShort": "Kd.-Zahlung",
-    "check": "Scheck", "bankDeposit": "Bankeinzahlung", "deposit": "Einzahlung",
-    "transfer": "Umbuchung", "cardCharge": "Kartenbelastung", "cardChargeShort": "Karte",
-    "cardRefund": "Kartenerstattung", "cardRefundShort": "Kartenerstattung",
-    "projectCharge": "Projektbelastung", "projectChargeShort": "Belastung",
-    "fieldTicket": "Regiebericht", "fieldTicketShort": "Bericht"
+    "vendorBill": "Eingangsrechnung",
+    "bill": "Eingangsrechnung",
+    "vendorCredit": "Lieferantengutschrift",
+    "credit": "Gutschrift",
+    "purchaseOrder": "Bestellung",
+    "purchaseOrderShort": "Best.",
+    "customerInvoice": "Ausgangsrechnung",
+    "invoice": "Rechnung",
+    "customerCredit": "Kundengutschrift",
+    "customerCreditShort": "Kundengutschrift",
+    "salesOrder": "Kundenauftrag",
+    "salesOrderShort": "KA",
+    "estimate": "Angebot",
+    "expenseReport": "Spesenabrechnung",
+    "expense": "Ausgabe",
+    "journalEntry": "Buchung",
+    "journal": "Journal",
+    "vendorPayment": "Lieferantenzahlung",
+    "vendorPaymentShort": "Lief.-Zahlung",
+    "customerPayment": "Kundenzahlung",
+    "customerPaymentShort": "Kd.-Zahlung",
+    "check": "Scheck",
+    "bankDeposit": "Bankeinzahlung",
+    "deposit": "Einzahlung",
+    "transfer": "Umbuchung",
+    "cardCharge": "Kartenbelastung",
+    "cardChargeShort": "Karte",
+    "cardRefund": "Kartenerstattung",
+    "cardRefundShort": "Kartenerstattung",
+    "projectCharge": "Projektbelastung",
+    "projectChargeShort": "Belastung",
+    "fieldTicket": "Regiebericht",
+    "fieldTicketShort": "Bericht"
   },
   "labels": {
     "name": "Name",
@@ -139,7 +157,8 @@
     "paymentHold": "Zahlungssperre",
     "expectedPayDate": "Voraussichtliches Zahlungsdatum",
     "openBalance": "Offener Saldo",
-    "defaultForm": "Standardformular"
+    "defaultForm": "Standardformular",
+    "asOf": "Zum"
   },
   "status": {
     "draft": "Entwurf",
@@ -160,7 +179,8 @@
     "ok": "OK",
     "pending_approval": "Eingereicht",
     "calculated": "Berechnet",
-    "committed": "Festgeschrieben"
+    "committed": "Festgeschrieben",
+    "retired": "Stillgelegt"
   },
   "filters": {
     "showInactive": "Inaktive anzeigen"
@@ -199,7 +219,11 @@
     "description": "Keine Datensätze entsprechen den aktuellen Filtern."
   },
   "auditTrail": {
-    "tabs": { "details": "Details", "attachments": "Anhänge", "audit": "Prüfprotokoll" },
+    "tabs": {
+      "details": "Details",
+      "attachments": "Anhänge",
+      "audit": "Prüfprotokoll"
+    },
     "ariaLabel": "Datensatzabschnitte",
     "searchPlaceholder": "Prüfprotokoll durchsuchen",
     "actionFilter": "Nach Aktion filtern",
@@ -221,8 +245,16 @@
     "loadFailedTitle": "Prüfprotokoll nicht verfügbar",
     "loadFailedDescription": "Das Prüfprotokoll konnte nicht geladen werden. Versuchen Sie es in Kürze erneut.",
     "retry": "Erneut versuchen",
-    "actions": { "insert": "Erstellt", "update": "Aktualisiert", "delete": "Gelöscht", "post": "Gebucht", "void": "Storniert", "approve": "Genehmigt", "reject": "Abgelehnt",
-      "retired": "Stillgelegt" }
+    "actions": {
+      "insert": "Erstellt",
+      "update": "Aktualisiert",
+      "delete": "Gelöscht",
+      "post": "Gebucht",
+      "void": "Storniert",
+      "approve": "Genehmigt",
+      "reject": "Abgelehnt",
+      "retired": "Stillgelegt"
+    }
   },
   "amendment": {
     "title": "Änderung am gebuchten Beleg begründen",
