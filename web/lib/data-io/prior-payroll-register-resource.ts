@@ -20,6 +20,7 @@ import {
   type WriteOutcome,
 } from './types'
 import type { DataResource, WriteCtx } from './resources'
+import { enforceExportRowLimit, MAX_EXPORT_ROWS } from './resource-core'
 import { employeeWriteScopeError } from './write-scope'
 
 /**
@@ -50,8 +51,8 @@ import { employeeWriteScopeError } from './write-scope'
  * cannot bypass the money validation or invent a component slot.
  */
 
-const MAX_EXPORT_ROWS = 50_000
-
+// Row cap is the canonical MAX_EXPORT_ROWS from ./resource-core (a second
+// local copy would let the two caps drift, silently reintroducing this bug).
 export const PRIOR_PAYROLL_REGISTER_KEY = 'prior-payroll-register'
 
 export const PRIOR_PAYROLL_REGISTER_DESCRIPTOR: ResourceDescriptor = {
@@ -228,7 +229,9 @@ export function priorPayrollRegisterResource(orgId: string): DataResource {
           left join employee_roles er on er.party_id = s.employee_party_id and er.org_id = s.org_id
          where s.org_id = ${orgId}
          order by g.pay_date desc, p.display_name
-         limit ${MAX_EXPORT_ROWS}`)) as { rows: Record<string, CellValue>[] }
+         limit ${MAX_EXPORT_ROWS + 1}`)) as { rows: Record<string, CellValue>[] }
+      // Sentinel read: refuse rather than truncate a complete-looking file.
+      enforceExportRowLimit(rows.rows, PRIOR_PAYROLL_REGISTER_DESCRIPTOR.label)
 
       const amounts = (await db.execute(sql`
         select a.prior_stub_id, a.kind, a.slot, a.amount
