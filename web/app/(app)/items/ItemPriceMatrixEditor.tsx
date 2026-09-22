@@ -42,19 +42,23 @@ export function ItemPriceMatrixEditor({ itemId, canManage }: { itemId: string; c
   const [isActive, setIsActive] = useState(true)
   const [breaks, setBreaks] = useState<PriceBreak[]>([{ minimumQuantity: '1', unitPrice: '0' }])
 
-  const load = useCallback(async () => {
-    const response = await fetch(`/api/items/${itemId}/prices`)
-    if (!response.ok) {
-      const payload = await response.json().catch(() => null)
-      const message = responseError(payload, t('loadFailed'))
-      setError(message)
-      toast.error(message)
-      return
-    }
-    const next = await response.json() as PricingData
-    setData(next)
-    setError('')
-    setCurrency((current) => current || next.baseCurrency || next.currencies[0]?.code || '')
+  // Fetch chain rather than an async body: every state update below sits in a
+  // promise continuation (the fetch response), never synchronously in the
+  // effect that calls this. The promise is returned so callers can await it.
+  const load = useCallback(() => {
+    return fetch(`/api/items/${itemId}/prices`).then(async (response) => {
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null)
+        const message = responseError(payload, t('loadFailed'))
+        setError(message)
+        toast.error(message)
+        return
+      }
+      const next = await response.json() as PricingData
+      setData(next)
+      setError('')
+      setCurrency((current) => current || next.baseCurrency || next.currencies[0]?.code || '')
+    })
   }, [itemId, t])
   useEffect(() => { void load() }, [load])
 

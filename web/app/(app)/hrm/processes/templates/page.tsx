@@ -26,9 +26,8 @@ export default async function ProcessTemplatesPage({
   const sp = await searchParams
   const authz = await requirePermission('hrm.process.manage')
   if (!(await isFeatureEnabled(authz.user.orgId, 'hrm'))) notFound()
-  const [t, tc, templates, tabs, peopleTabs, templateRefs, stepRefs] = await Promise.all([
+  const [t, templates, tabs, peopleTabs, templateRefs, stepRefs] = await Promise.all([
     getTranslations('hrm.processes.templates'),
-    getTranslations('common'),
     listProcessTemplates({ orgId: authz.user.orgId, actorId: authz.user.id }),
     hrmGroupTabs(authz, '/hrm/processes'),
     hrmPeopleViewTabs(authz, '/hrm/processes/templates'),
