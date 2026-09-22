@@ -8,6 +8,9 @@ import {
   isPackPath,
   isScopedPath,
   isTaxLayerPath,
+  isCountryLiteralLayerPath,
+  staleCountryLiteralExemptions,
+  PAYROLL_SHARED_COUNTRY_LITERAL_EXEMPTIONS,
 } from './check-country-neutrality.mjs'
 
 /**
@@ -42,10 +45,60 @@ test('the tax layer scope covers the filing UI, its APIs, and provisioning', () 
   assert.equal(isTaxLayerPath('engine/src/tax/pack-provisioning.ts'), true)
 })
 
-test('the tax layer scope excludes payroll, so its slice cannot hide here', () => {
-  assert.equal(isTaxLayerPath('web/app/(app)/payroll/_ui/EmployeesPanel.tsx'), false)
-  assert.equal(isTaxLayerPath('web/app/api/payroll/subsidiary-scope.ts'), false)
+test('the tax layer scope excludes payroll packs, but includes the shared payroll layer', () => {
+  // A payroll PACK names its own country: every direct subdirectory of
+  // engine/src/payroll/ is a pack and stays out of Rule 2.
+  assert.equal(isCountryLiteralLayerPath('engine/src/payroll/canada/filings.ts'), false)
+  assert.equal(isCountryLiteralLayerPath('engine/src/payroll/canada/quebec/tp1015.ts'), false)
+  assert.equal(isCountryLiteralLayerPath('engine/src/payroll/us/pub15t.ts'), false)
+  // The SHARED payroll layer — a file directly under engine/src/payroll/, and
+  // the payroll API routes — is in scope.
+  assert.equal(isCountryLiteralLayerPath('engine/src/payroll/run-calculation.ts'), true)
+  assert.equal(isCountryLiteralLayerPath('web/app/api/payroll/subsidiary-scope.ts'), true)
+  // The tax layer is unchanged.
+  assert.equal(isCountryLiteralLayerPath('web/app/(app)/tax/TaxFilingsView.tsx'), true)
+  // isTaxLayerPath stays tax-only (the payroll scope is a separate predicate).
   assert.equal(isTaxLayerPath('engine/src/payroll/run-calculation.ts'), false)
+})
+
+test('a country literal in the shared payroll layer is refused', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'country-neutrality-audit-'))
+  try {
+    const branched = join(dir, 'run-calculation.ts')
+    writeFileSync(branched, `if (province === 'QC') return null\n`)
+    // The real payroll shared path is in scope; a synthetic file stands in for
+    // it via the layer override, proving the audit refuses what the predicate
+    // admits.
+    assert.deepEqual(
+      auditCountryNeutrality([branched], { roots: [dir], taxLayer: [/run-calculation/] }),
+      [`${branched}:1: country branch in the generic country-branching layer (=== 'QC')`],
+    )
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('the shared-payroll exemption list is exactly the six known F-f7 sites', () => {
+  assert.deepEqual(
+    PAYROLL_SHARED_COUNTRY_LITERAL_EXEMPTIONS.map((entry) => entry.path).sort(),
+    [
+      'engine/src/payroll/remittance.ts',
+      'engine/src/payroll/rl1.ts',
+      'engine/src/payroll/roexml.ts',
+      'engine/src/payroll/t4xml.ts',
+      'engine/src/payroll/yearend.ts',
+      'web/app/api/payroll/year-end/file/route.ts',
+    ],
+  )
+})
+
+test('a stale exemption (a path that no longer names a country) fails the ratchet', () => {
+  const paths = PAYROLL_SHARED_COUNTRY_LITERAL_EXEMPTIONS.map((entry) => entry.path)
+  const stale = staleCountryLiteralExemptions(paths, (file) =>
+    file.endsWith('rl1.ts') ? 'const clean = 1\n' : "if (province === 'QC') return\n",
+  )
+  assert.equal(stale.length, 1)
+  assert.match(stale[0], /rl1\.ts: no longer names a country/)
 })
 
 test('the audit accepts the real pack and conformance files, branch literals included', () => {
@@ -121,7 +174,7 @@ test('the audit rejects a country branch inside the tax layer', () => {
 
     assert.deepEqual(
       auditCountryNeutrality([branched], { roots: [dir], taxLayer: [/prepare-panel/] }),
-      [`${branched}:1: country branch in the indirect-tax layer (=== 'CA')`],
+      [`${branched}:1: country branch in the generic country-branching layer (=== 'CA')`],
     )
     // Same content outside the layer is not this gate's business.
     assert.deepEqual(auditCountryNeutrality([branched], { roots: [dir] }), [])
