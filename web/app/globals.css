@@ -1,4 +1,4 @@
-@import 'tailwindcss';
+@import "tailwindcss";
 @config '../tailwind.config.ts';
 
 /* Class-based dark mode: `dark:` variants respond to a `.dark` class on <html>
@@ -9,10 +9,10 @@
    This is the single definition of `--color-bg` / `--color-fg` / `--color-primary`
    and friends — the raw triples that used to sit in the base layer below were
    only read by packages/ui/src/styles.css, which this app never imports. */
-@import './appkit-bridge.css';
-@import '@braedonsaunders/appkit-scheduling/styles.css';
-@import '@braedonsaunders/appkit-errors/styles.css';
-@import '@braedonsaunders/appkit-feedback/styles.css';
+@import "./appkit-bridge.css";
+@import "@braedonsaunders/appkit-scheduling/styles.css";
+@import "@braedonsaunders/appkit-errors/styles.css";
+@import "@braedonsaunders/appkit-feedback/styles.css";
 
 @layer base {
   /* Tailwind v4 compat: restore v3 default border color (gray-200) so bare
@@ -45,7 +45,7 @@
   input,
   select,
   textarea,
-  [role='button'] {
+  [role="button"] {
     touch-action: manipulation;
   }
 
@@ -58,8 +58,8 @@
      keyboard-focusable controls (links, buttons, inputs) keep their rings. */
   .app-scroll:focus,
   .app-scroll:focus-visible,
-  [tabindex='-1']:focus,
-  [tabindex='-1']:focus-visible {
+  [tabindex="-1"]:focus,
+  [tabindex="-1"]:focus-visible {
     outline: none;
   }
 
@@ -268,7 +268,8 @@
    no pulse. Used on the login stage. */
 .brand-stroke-intro {
   stroke-dasharray: 1;
-  animation: brand-draw 0.5s cubic-bezier(0.4, 0, 0.2, 1) var(--bd, 0s) backwards;
+  animation: brand-draw 0.5s cubic-bezier(0.4, 0, 0.2, 1) var(--bd, 0s)
+    backwards;
 }
 .brand-ray-intro {
   stroke-dasharray: 1;
@@ -313,7 +314,8 @@
    desktop mouse users keep the denser default. Scoped to `.ff-surface`, which
    wraps the form-fill renderer and the native hazard-assessment page. */
 @media (pointer: coarse), (max-width: 640px) {
-  .ff-surface input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  .ff-surface
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
   .ff-surface select,
   .ff-surface textarea {
     min-height: 48px;
@@ -321,8 +323,8 @@
   .ff-surface textarea {
     min-height: 96px;
   }
-  .ff-surface input[type='checkbox'],
-  .ff-surface input[type='radio'] {
+  .ff-surface input[type="checkbox"],
+  .ff-surface input[type="radio"] {
     width: 1.4rem;
     height: 1.4rem;
   }
@@ -364,8 +366,14 @@
 
 /* Wordmark fade+rise, timed to land as the mark finishes drawing. */
 @keyframes brand-word-in {
-  from { opacity: 0; transform: translateY(3px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .brand-word-in {
   animation: brand-word-in 0.5s ease-out 0.55s backwards;
@@ -392,17 +400,27 @@
    flourish, so a dropped or stalled animation now costs the slide, not the
    ability to sign in. */
 @keyframes login-rise-in {
-  from { transform: translateY(16px); }
-  to   { transform: translateY(0); }
+  from {
+    transform: translateY(16px);
+  }
+  to {
+    transform: translateY(0);
+  }
 }
-.login-rise-in { animation: login-rise-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.login-rise-in {
+  animation: login-rise-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
 
 /* A cover swings open around the spine: from collapsed onto the spine
    (scaleX ~0) to fully open, with a soft settle at the end. transform-box
    fill-box pins the origin to the group's own spine-side edge. */
 @keyframes login-book-open {
-  from { transform: scaleX(0.04); }
-  to   { transform: scaleX(1); }
+  from {
+    transform: scaleX(0.04);
+  }
+  to {
+    transform: scaleX(1);
+  }
 }
 .login-book .book-spine {
   stroke-dasharray: 1;
@@ -411,12 +429,14 @@
 .login-book .book-cover-l {
   transform-box: fill-box;
   transform-origin: right center;
-  animation: login-book-open 0.85s cubic-bezier(0.34, 1.42, 0.5, 1) 0.2s backwards;
+  animation: login-book-open 0.85s cubic-bezier(0.34, 1.42, 0.5, 1) 0.2s
+    backwards;
 }
 .login-book .book-cover-r {
   transform-box: fill-box;
   transform-origin: left center;
-  animation: login-book-open 0.85s cubic-bezier(0.34, 1.42, 0.5, 1) 0.2s backwards;
+  animation: login-book-open 0.85s cubic-bezier(0.34, 1.42, 0.5, 1) 0.2s
+    backwards;
 }
 /* Ledger lines fade in only after the covers have finished opening (delay set
    inline per line); base opacity stays 1, backwards fill hides them until then. */
@@ -432,4 +452,21 @@
   .login-book .book-entry {
     animation: none;
   }
+}
+
+/* The page-header action rail, and the one extra flex wrapper a ViewSpec's
+   `actionsClassName` puts inside it, must be allowed to shrink. A flex item
+   defaults to `min-width: auto`, which refuses to go below its content — so
+   a wide subtab strip overran the header and was drawn straight over the
+   page title instead of folding its tail into a More menu. The strip is the
+   only child that can absorb it: buttons set `whitespace-nowrap` and keep
+   their own `min-width: auto`, because this rule stops at the wrapper.
+
+   Written here as plain CSS rather than as a `[&>*]:min-w-0` utility on the
+   component: the extractor does not emit that variant from the packages/ui
+   sources, so the class landed in the markup with no rule behind it —
+   invisible, and indistinguishable from a rule that simply lost. */
+[data-page-actions],
+[data-page-actions] > * {
+  min-width: 0;
 }
