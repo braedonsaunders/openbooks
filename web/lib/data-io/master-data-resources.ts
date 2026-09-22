@@ -339,6 +339,8 @@ async function writeMaster(
   const resolver = new RefResolver(ctx.orgId)
   const defs = await loadFieldDefs(m.customTarget)
   const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] }
+  // Earlier validated natural-key rows supply preview identity and partial values.
+  const previewRows = new Map<string, Record<string, unknown>>()
   const nkColumn = m.cols.find((c) => c.key === m.naturalKey)?.column ?? toSnake(m.naturalKey)
   const timeTrackingOn = m.key !== 'items' || (await orgFeatureEnabled(ctx.orgId, 'timeTracking'))
   const inventoryOn = m.key !== 'items' || (await orgFeatureEnabled(ctx.orgId, 'inventory'))
@@ -548,6 +550,13 @@ async function writeMaster(
           }
         }
       }
+      const previewRow = ctx.dryRun ? previewRows.get(nkVal) : undefined
+      if (previewRow) {
+        existingCustom = (previewRow.custom as Record<string, unknown> | undefined) ?? {}
+        storedKind = typeof previewRow.kind === 'string' ? previewRow.kind : undefined
+        if (m.key === 'accounts') storedAccount = previewRow
+      }
+      const exists = existingId !== null || previewRow !== undefined
 
       // Updates are partial: required custom fields omitted from the import
       // row are satisfied by the existing stored values. Supplied fields still
@@ -599,7 +608,7 @@ async function writeMaster(
         }
       }
 
-      if (existingId && mode === 'insert') {
+      if (exists && mode === 'insert') {
         outcome.failed++
         outcome.errors.push({ row: rowNo, message: identityLabel
           ? `already exists (${identityLabel})`
@@ -608,8 +617,9 @@ async function writeMaster(
       }
 
       const mergedCustom = { ...existingCustom, ...cv.cleaned }
-      if (existingId) {
+      if (exists) {
         if (!ctx.dryRun) {
+          if (existingId === null) throw new Error('imported master row has no persisted identity')
           const parts = setCols
             .filter((c) => c.column !== nkColumn) // don't rewrite the natural key
             .map((c) => sql`${sql.raw(c.column)} = ${c.value}`)
@@ -660,6 +670,11 @@ async function writeMaster(
         }
         outcome.created++
       }
+      if (ctx.dryRun) previewRows.set(nkVal, {
+        ...beforeRow, ...previewRow,
+        ...Object.fromEntries(setCols.filter(c => c.column !== nkColumn).map(c => [c.column, c.value])),
+        [nkColumn]: nkVal, custom: mergedCustom,
+      })
 
       // Bank-typed hygiene: warn on uncorroborated asset_bank in preview and
       // commit alike. Effective values — the row's cells over the stored row —
