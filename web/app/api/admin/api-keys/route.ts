@@ -8,6 +8,15 @@ import {
   isCataloguePermission,
   PERMISSION_CATALOGUE,
 } from "../../../../lib/permissions";
+import {
+  permissionsOutsideCeiling,
+  resolveEffectivePermissions,
+  resolveKeyScopeAuthority,
+} from "@openbooks/engine/src/organization/permissions.ts";
+import {
+  actorAllowedSubsidiaryIds,
+  subsidiaryScopeWithinCeiling,
+} from "@openbooks/engine/src/organization/actor-subsidiaries.ts";
 import { isUuid } from "../../../../lib/list-params";
 
 export const runtime = "nodejs";
@@ -32,7 +41,97 @@ export const runtime = "nodejs";
  * Each mutation and its redacted audit evidence commit in one
  * `withOrgTransaction` unit. Audit failure therefore rolls the mutation back,
  * and a one-time plaintext is returned only after its creation unit commits.
+ *
+ * Privilege ceiling: `api.keys.manage` is an ordinary permission, so an
+ * editor may only grant scopes they hold themselves (creation grants the full
+ * request; updates grant only ADDED scopes) and may only resume a suspended
+ * key whose re-enabled authority (key scopes ∩ the OWNER's current
+ * permissions) sits inside their own. A subsidiary-restricted editor
+ * likewise cannot widen or resume a key whose owner sees more entities.
+ * Fresh grants to a deactivated owner's key are refused until the owner is
+ * reactivated (the trusted lens is empty for inactive users and would hide
+ * their stored entity policy). Super admins are exempt. Narrowing, metadata
+ * edits, suspension, and terminal revocation stay available to every
+ * key-manager.
  */
+
+/**
+ * Refusal for a grant above the editor's own authority. Names the missing
+ * permissions (the canonical `admin.users.manage` ceiling shape) and the
+ * remedy that exists: an administrator who holds them, or narrower scopes.
+ */
+function ceilingRefusal(missing: string[]) {
+  return NextResponse.json(
+    {
+      error: `cannot grant permissions you do not hold: ${missing.join(", ")} — ask an administrator who holds them, or narrow the scopes`,
+      missing,
+    },
+    { status: 403 },
+  );
+}
+
+/**
+ * Refusal for a grant that would widen authority across entities the editor
+ * cannot see. The remedy names who can actually make the change: an
+ * administrator whose subsidiary visibility covers the key owner's own —
+ * unrestricted visibility is required only when the owner sees everything.
+ */
+function subsidiaryScopeRefusal(ownerLens: ReadonlySet<string> | null | undefined) {
+  const remedy =
+    ownerLens === null
+      ? "ask an administrator with unrestricted subsidiary visibility to make this change"
+      : "ask an administrator whose subsidiary visibility covers the key owner's subsidiaries to make this change";
+  return NextResponse.json(
+    { error: `cannot grant access across subsidiaries you cannot see — ${remedy}` },
+    { status: 403 },
+  );
+}
+
+/**
+ * Refusal for widening a deactivated owner's key. The trusted entity lens
+ * resolves EMPTY for inactive users, which would hide the owner's stored
+ * broader entity policy — so fresh grants wait until the owner is active
+ * again instead of being ceiling-checked against a lens of nothing.
+ */
+function inactiveOwnerRefusal() {
+  return NextResponse.json(
+    { error: "the key owner is deactivated — reactivate the owner before widening their key" },
+    { status: 409 },
+  );
+}
+
+/** Whether the key owner is currently active (unknown owners fail closed). */
+async function ownerIsActive(orgId: string, ownerId: string): Promise<boolean> {
+  const row = (
+    await db.execute<{ isActive: boolean }>(sql`
+    select is_active as "isActive" from users where id = ${ownerId} and org_id = ${orgId}`)
+  ).rows[0];
+  return row?.isActive === true;
+}
+
+/**
+ * The key owner's CURRENT effective permissions, resolved exactly the way
+ * `resolveApiKeyAuth` resolves them at use time (union of assigned role
+ * permission sets, grant overrides added, deny overrides winning) so the
+ * resume ceiling compares against authority the key would really confer.
+ */
+async function ownerEffectivePermissions(orgId: string, ownerId: string): Promise<Set<string>> {
+  const assignments = (await db.execute<{ permissions: unknown }>(sql`
+    select r.permissions
+      from role_assignments a
+      join app_roles r on r.id = a.role_id and r.org_id = a.org_id
+     where a.user_id = ${ownerId} and a.org_id = ${orgId}`));
+  const overrides = (await db.execute<{ permission: string; effect: "grant" | "deny" }>(sql`
+    select permission, effect
+      from user_permission_overrides
+     where user_id = ${ownerId} and org_id = ${orgId}`));
+  return resolveEffectivePermissions({
+    rolePermissionSets: assignments.rows.map((r) =>
+      Array.isArray(r.permissions) ? r.permissions.filter((p): p is string => typeof p === "string") : [],
+    ),
+    overrides: overrides.rows,
+  });
+}
 
 /** Normalize a scopes payload to catalogue keys, or null when invalid/empty. */
 function normalizeScopes(input: unknown): string[] | null {
@@ -133,6 +232,15 @@ export async function POST(req: Request) {
       { error: "at least one scope is required; scopes must be known catalogue keys" },
       { status: 400 },
     );
+  }
+
+  // Creation grants the full request, so every scope must sit inside the
+  // editor's own authority. The new key is owned by the editor, so its
+  // subsidiary lens is the editor's own — no cross-entity grant is possible
+  // here; the PATCH path checks the entity ceiling for other owners' keys.
+  if (!actor.isSuperAdmin) {
+    const missing = permissionsOutsideCeiling(gate.permissions, scopes);
+    if (missing.length > 0) return ceilingRefusal(missing);
   }
 
   const rate = parseRate(body.rateLimitPerMin);
@@ -261,12 +369,13 @@ export async function PATCH(req: Request) {
 
   return withOrgTransaction(actor.orgId, async () => {
     const existing = (await db.execute(sql`
-      select id, name, description, scopes, rate_limit_per_min, is_active
+      select id, user_id, name, description, scopes, rate_limit_per_min, is_active
         from api_keys
        where id = ${keyId} and org_id = ${actor.orgId}
        for update`)) as unknown as {
       rows: Array<{
         id: string;
+        user_id: string;
         name: string;
         description: string | null;
         scopes: unknown;
@@ -282,6 +391,59 @@ export async function PATCH(req: Request) {
         { error: "this key was revoked; revocation is permanent — create a new key" },
         { status: 409 },
       );
+    }
+
+    const storedScopes = Array.isArray(key.scopes)
+      ? key.scopes.filter((s): s is string => typeof s === "string")
+      : [];
+    const storedSet = new Set(storedScopes);
+    const added = fields.scopes ? fields.scopes.filter((s) => !storedSet.has(s)) : [];
+    const finalScopes = fields.scopes ?? storedScopes;
+    const resumes = wantsReactivation && !key.is_active;
+
+    // Privilege ceiling for the two ways PATCH grants authority. Untouched
+    // scopes are never re-checked, so narrowing, metadata edits, suspension,
+    // and revocation stay available to every key-manager.
+    if (!actor.isSuperAdmin && (added.length > 0 || resumes)) {
+      const active = await ownerIsActive(actor.orgId, key.user_id);
+      // Fresh grants to a deactivated owner's key are refused outright: the
+      // trusted entity lens resolves EMPTY for inactive users, which would
+      // hide the owner's stored broader entity policy. A resume re-enables
+      // nothing while the owner stays inactive (use-time auth requires an
+      // active owner), so it keeps the no-effective-authority treatment.
+      if (added.length > 0 && !active) return inactiveOwnerRefusal();
+      if (added.length > 0) {
+        const missing = permissionsOutsideCeiling(gate.permissions, added);
+        if (missing.length > 0) return ceilingRefusal(missing);
+      }
+      // Resuming re-enables exactly the intersection of the key's scopes
+      // with the OWNER's current permissions — inert scopes the owner cannot
+      // use grant nothing, so only that effective authority is ceiling-checked.
+      let effective: string[] = [];
+      if (resumes && active && finalScopes.length > 0) {
+        // An empty set here is valid-but-inert authority (zero), not an
+        // invalid declaration — the resume keeps its no-authority treatment.
+        effective = [
+          ...(resolveKeyScopeAuthority(
+            await ownerEffectivePermissions(actor.orgId, key.user_id),
+            finalScopes,
+          ) ?? []),
+        ];
+        if (effective.length > 0) {
+          const missing = permissionsOutsideCeiling(gate.permissions, effective);
+          if (missing.length > 0) return ceilingRefusal(missing);
+        }
+      }
+      // Entity scope: a subsidiary-restricted editor must not grant the same
+      // permission across all entities through an unrestricted (or wider)
+      // key owner. A resume that re-enables no effective authority grants
+      // nothing, so it needs no entity check.
+      if (added.length > 0 || effective.length > 0) {
+        const ownerLens = await actorAllowedSubsidiaryIds(db, actor.orgId, key.user_id);
+        if (!subsidiaryScopeWithinCeiling(gate.allowedSubsidiaryIds, ownerLens)) {
+          return subsidiaryScopeRefusal(ownerLens);
+        }
+      }
     }
 
     const before: Record<string, unknown> = {};

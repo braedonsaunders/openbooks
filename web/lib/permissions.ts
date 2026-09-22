@@ -7,6 +7,7 @@ export {
   permissionSetCovers,
   applyPermissionDenies,
   resolveEffectivePermissions,
+  resolveKeyScopeAuthority,
   isCataloguePermission,
   type PermissionKey,
   type CataloguePermission,
