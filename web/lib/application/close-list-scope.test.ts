@@ -32,6 +32,15 @@ test("listCloseRuns refuses subsidiary-scoped callers with the org-wide diagnost
   );
 });
 
+test("listPeriodReopenRequests refuses subsidiary-scoped callers with the same org-wide message", () => {
+  const start = source.indexOf("export async function listPeriodReopenRequests");
+  assert.ok(start >= 0, "listPeriodReopenRequests must exist");
+  const next = source.indexOf("export async function", start + 1);
+  const body = next === -1 ? source.slice(start) : source.slice(start, next);
+  assert.ok(body.includes("assertUnrestrictedCloseDiagnostics"), "reopen list must enforce the org-wide guard");
+  assert.ok(!body.includes("return []"), "reopen list must not return [] for a scoped caller");
+});
+
 test("listPeriodLocks refuses subsidiary-scoped callers with the same org-wide message", () => {
   const lockStart = source.indexOf("export async function listPeriodLocks");
   assert.ok(lockStart >= 0, "listPeriodLocks must exist in web/lib/application/close.ts");

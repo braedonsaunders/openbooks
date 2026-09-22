@@ -524,6 +524,18 @@ export function buildOpenApiSpec(
     },
   };
   paths["/api/v1/close/reopen"] = {
+    get: {
+      summary: "List period reopen requests",
+      description: "The reopen queue. Restricted subsidiary callers are refused by name — never an empty list.",
+      tags: ["Close"],
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { name: "status", in: "query", schema: { type: "string", enum: ["requested", "approved", "rejected", "expired", "reclosed"] } },
+        { name: "periodId", in: "query", schema: { type: "string", format: "uuid" } },
+        { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100 } },
+      ],
+      responses: { "200": { description: "Reopen requests" }, "403": { description: "Caller is subsidiary-restricted" } },
+    },
     post: idempotentPost("Request a period reopen", "Hard-closed scopes only. Soft-close unlocks from Setup.", "Close"),
   };
   paths["/api/v1/close/reopen/{id}/decide"] = {
@@ -744,6 +756,28 @@ export function buildOpenApiSpec(
       responses: { "200": { description: "App package" }, "404": { description: "Not found" } },
     },
   };
+  paths["/api/v1/banking/feeds"] = {
+    get: {
+      summary: "List bank feeds",
+      description: "Feed connections. Credentials are never returned — only whether they exist.",
+      tags: ["Banking"],
+      security: [{ BearerAuth: [] }],
+      responses: { "200": { description: "Bank feeds" }, "404": { description: "bankFeeds is off" } },
+    },
+  };
+  paths["/api/v1/banking/lines"] = {
+    get: {
+      summary: "List unmatched bank lines",
+      description: "Imported statement lines still awaiting a match. Amount is an exact decimal string.",
+      tags: ["Banking"],
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { name: "accountId", in: "query", schema: { type: "string", format: "uuid" } },
+        { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 } },
+      ],
+      responses: { "200": { description: "Unmatched lines" }, "404": { description: "banking is off" } },
+    },
+  };
   paths["/api/v1/banking/reconciliations"] = {
     get: {
       summary: "List bank reconciliations",
@@ -757,6 +791,16 @@ export function buildOpenApiSpec(
       responses: { "200": { description: "Reconciliation sessions" }, "404": { description: "banking is off" } },
     },
     post: idempotentPost("Start a bank reconciliation", "One open session per account; match lines then sign off.", "Banking"),
+  };
+  paths["/api/v1/banking/reconciliations/{id}"] = {
+    get: {
+      summary: "Get a bank reconciliation",
+      description: "One session's workspace/sign-off totals. Balances are exact decimal strings.",
+      tags: ["Banking"],
+      security: [{ BearerAuth: [] }],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+      responses: { "200": { description: "Reconciliation" }, "404": { description: "Not found or banking is off" } },
+    },
   };
   paths["/api/v1/banking/reconciliations/{id}/sign-off"] = {
     post: {
@@ -837,6 +881,25 @@ export function buildOpenApiSpec(
       responses: { "200": { description: "Files" } },
     },
     post: idempotentPost("Upload a File Cabinet file", "Same storage and folder grants as the files screen. At most 1 MB.", "Files"),
+  };
+  paths["/api/v1/files/folders"] = {
+    get: {
+      summary: "List File Cabinet folders",
+      description: "Visible folders. Others' private folders are excluded unless shared.",
+      tags: ["Files"],
+      security: [{ BearerAuth: [] }],
+      responses: { "200": { description: "Folders" } },
+    },
+  };
+  paths["/api/v1/files/{id}"] = {
+    get: {
+      summary: "Get a File Cabinet file",
+      description: "Metadata only. Unseen files read as not found. Never returns contents.",
+      tags: ["Files"],
+      security: [{ BearerAuth: [] }],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+      responses: { "200": { description: "File" }, "404": { description: "Not found" } },
+    },
   };
   paths["/api/v1/settings/company"] = {
     get: {
@@ -1004,6 +1067,83 @@ export function buildOpenApiSpec(
         { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 } },
       ],
       responses: { "200": { description: "Opportunities" }, "404": { description: "crm is off" } },
+    },
+  };
+  paths["/api/v1/opportunities/{id}"] = {
+    get: {
+      summary: "Get an opportunity",
+      description: "One opportunity through the same loader as the opportunity drawer. Amounts are exact decimal strings.",
+      tags: ["CRM"],
+      security: [{ BearerAuth: [] }],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+      responses: { "200": { description: "Opportunity" }, "404": { description: "Not found or crm is off" } },
+    },
+  };
+  paths["/api/v1/crm/accounts"] = {
+    get: {
+      summary: "List CRM accounts",
+      description: "Accounts across the lead → prospect → customer lifecycle.",
+      tags: ["CRM"],
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { name: "q", in: "query", schema: { type: "string" } },
+        { name: "stage", in: "query", schema: { type: "string", enum: ["lead", "prospect", "customer"] } },
+        { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 } },
+      ],
+      responses: { "200": { description: "CRM accounts" }, "404": { description: "crm is off" } },
+    },
+  };
+  paths["/api/v1/crm/accounts/{id}"] = {
+    get: {
+      summary: "Get a CRM account",
+      description: "One account through the same loader as the account drawer. Amounts are exact decimal strings.",
+      tags: ["CRM"],
+      security: [{ BearerAuth: [] }],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+      responses: { "200": { description: "CRM account" }, "404": { description: "Not found or crm is off" } },
+    },
+  };
+  paths["/api/v1/aging"] = {
+    get: {
+      summary: "AR/AP aging",
+      description: "Collections aging by party, or per-document with view=detail. Amounts are exact decimal strings. Missing spot rates are a 422 naming the pair and as-of date.",
+      tags: ["Reports"],
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { name: "side", in: "query", required: true, schema: { type: "string", enum: ["ar", "ap"] } },
+        { name: "asOf", in: "query", schema: { type: "string", format: "date" } },
+        { name: "view", in: "query", schema: { type: "string", enum: ["summary", "detail"] } },
+        { name: "bucket", in: "query", schema: { type: "string", enum: ["current", "days1to30", "days31to60", "days61to90", "over90", "over30", "over60", "overdue"] } },
+        { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200 } },
+      ],
+      responses: { "200": { description: "Aging" }, "422": { description: "side missing or spot rate unavailable" } },
+    },
+  };
+  paths["/api/v1/trial-balance"] = {
+    get: {
+      summary: "Trial balance",
+      description: "Every account with nonzero activity as of a date. Amounts are exact decimal strings.",
+      tags: ["Reports"],
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { name: "asOf", in: "query", required: true, schema: { type: "string", format: "date" } },
+      ],
+      responses: { "200": { description: "Trial balance" }, "422": { description: "asOf missing or not YYYY-MM-DD" } },
+    },
+  };
+  paths["/api/v1/statements"] = {
+    get: {
+      summary: "Customer or vendor statement",
+      description: "Opening, dated activity, closing, and aged summary for one party. Amounts are exact decimal strings.",
+      tags: ["Reports"],
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { name: "partyId", in: "query", required: true, schema: { type: "string", format: "uuid" } },
+        { name: "side", in: "query", required: true, schema: { type: "string", enum: ["ar", "ap"] } },
+        { name: "from", in: "query", required: true, schema: { type: "string", format: "date" } },
+        { name: "to", in: "query", required: true, schema: { type: "string", format: "date" } },
+      ],
+      responses: { "200": { description: "Statement" }, "422": { description: "Missing party, side, or dates" } },
     },
   };
   paths["/api/v1/customers"] = {
