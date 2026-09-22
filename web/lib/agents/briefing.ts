@@ -174,21 +174,31 @@ export async function sendBriefingEmail(
     const org = await db.execute<{ name: string }>(
       sql`select name from orgs where id = ${authz.user.orgId}`,
     );
-    const [{ enqueueEmail }] = await Promise.all([import("@openbooks/jobs")]);
+    const [{ enqueueEmail, newEmailIntentKey }] = await Promise.all([import("@openbooks/jobs")]);
     const { flowNotificationEmail } = await import("@openbooks/emails");
     const mail = flowNotificationEmail({
       orgName: org.rows[0]?.name ?? "OpenBooks",
       subject: "Morning briefing",
       body: text.slice(0, 8000),
     });
-    await (enqueueEmail as (data: Record<string, unknown>) => Promise<unknown>)({
-      orgId: authz.user.orgId,
-      to: authz.user.email,
-      subject: mail.subject,
-      html: mail.html,
-      text: mail.text,
-      meta: { category: "agent-briefing" },
-    });
+    // One briefing generation is one send obligation: a fresh intent key per
+    // call, never a queue-derived id that a Redis reset could realign.
+    await (
+      enqueueEmail as (
+        data: Record<string, unknown>,
+        options: { jobId: string },
+      ) => Promise<unknown>
+    )(
+      {
+        orgId: authz.user.orgId,
+        to: authz.user.email,
+        subject: mail.subject,
+        html: mail.html,
+        text: mail.text,
+        meta: { category: "agent-briefing" },
+      },
+      { jobId: newEmailIntentKey(`agent-briefing|${authz.user.orgId}|${authz.user.id}`) },
+    );
     return { emailed: true };
   } catch (error) {
     return { emailed: false, emailError: error instanceof Error ? error.message : "email_failed" };

@@ -1,8 +1,7 @@
 import { authorizeReportRun } from './render-client.ts';
 import { Worker } from "bullmq";
-import { EMAIL_QUEUE, getBlockingConnection, type EmailJobData } from "@openbooks/jobs";
+import { EMAIL_QUEUE, getBlockingConnection, resolveEmailDeliveryKey, type EmailJobData } from "@openbooks/jobs";
 import {
-  deriveEmailDeliveryKey,
   reconcileDeliveryAttempts,
   sendVia,
 } from "@openbooks/emails";
@@ -64,18 +63,13 @@ export function createEmailWorker(): Worker<EmailJobData> {
       if (paymentRemittanceId) {
         await markPaymentRemittanceAttempt(d.orgId, paymentRemittanceId, queueAttempt);
       }
-      // The delivery key is derived from durable inputs only — recomputing it
-      // after any crash must produce the same identity (and therefore the same
+      // The delivery key arrives in the job data, derived at enqueue from
+      // the caller's durable idempotency key — never from the BullMQ job id,
+      // whose auto-increment counter restarts after a Redis reset and would
+      // align new mail with old sent-log rows. Recomputing it after any
+      // crash must produce the same identity (and therefore the same
       // canonical log row) instead of minting new mail.
-      const deliveryKey = deriveEmailDeliveryKey({
-        orgId: d.orgId,
-        scope: reportDeliveryId
-          ? `report:${reportDeliveryId}`
-          : paymentRemittanceId
-            ? `payment-remittance:${paymentRemittanceId}`
-            : job.id ?? "",
-        to: d.to,
-      });
+      const deliveryKey = resolveEmailDeliveryKey(d, job.id ?? null);
 
       // Hard sandbox block: a sandbox never sends email, regardless of any
       // provider config that survived the clone. Recorded as suppressed + acked.
