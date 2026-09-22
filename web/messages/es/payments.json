@@ -281,6 +281,8 @@
     "applyAmount": "Aplicar",
     "appliedOn": "Aplicado el",
     "noOpenItems": "Este tercero no tiene partidas abiertas a las que aplicar el crédito.",
-    "nothingSelected": "Introduzca un importe en al menos una partida abierta."
+    "nothingSelected": "Introduzca un importe en al menos una partida abierta.",
+    "applyFailed": "No se pudo aplicar el crédito.",
+    "releaseFailed": "No se pudo liberar la aplicación."
   }
 }

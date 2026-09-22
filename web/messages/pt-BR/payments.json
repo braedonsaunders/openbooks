@@ -288,6 +288,8 @@
     "applyAmount": "Aplicar",
     "appliedOn": "Aplicado em",
     "noOpenItems": "Este parceiro não tem itens em aberto para aplicar o crédito.",
-    "nothingSelected": "Informe um valor em pelo menos um item em aberto."
+    "nothingSelected": "Informe um valor em pelo menos um item em aberto.",
+    "applyFailed": "Não foi possível aplicar o crédito.",
+    "releaseFailed": "Não foi possível liberar a aplicação."
   }
 }
