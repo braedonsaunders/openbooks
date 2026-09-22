@@ -84,7 +84,6 @@ const EXEMPT_ROUTES: Readonly<Record<string, string>> = {
   "web/app/api/purchase-orders/draft/route.ts": "bodyless draft factory",
   "web/app/api/qbd/web-connector/[id]/route.ts": "XML protocol endpoint requiring the raw text body",
   "web/app/api/records/[typeKey]/draft/route.ts": "bodyless draft factory; record type is a path parameter",
-  "web/app/api/records/types/route.ts": "bodyless draft factory",
   "web/app/api/sales-orders/draft/route.ts": "bodyless draft factory",
   "web/app/api/tax/provisions/[id]/post/route.ts": "bodyless posting action; provision id is a path parameter",
   "web/app/api/tax/returns/[code]/official-pdf/route.ts": "multipart official-form upload",

@@ -109,6 +109,10 @@ export async function loadRecordTypes(
   const tc = await getTranslations('common')
   const tHub = await getTranslations('admin.hub')
   const typeId = typeof sp.type === 'string' ? sp.type : undefined
+  // Unsaved create: `?type=new` renders the builder drawer over a blank form.
+  // Nothing is read or written for the id itself — the type exists only after
+  // an explicit Save POSTs /api/records/types.
+  const isCreate = typeId === 'new'
   const params = parseListParams(sp, {
     sort: 'name',
     dir: 'asc',
@@ -161,7 +165,7 @@ export async function loadRecordTypes(
       select t.status, count(*) as n from custom_record_types t
        where t.org_id = ${authz.user.orgId}
        group by t.status`),
-    typeId ? loadRecordTypeById(authz.user.orgId, typeId) : null,
+    typeId && !isCreate ? loadRecordTypeById(authz.user.orgId, typeId) : Promise.resolve(null),
     typeId
       ? db.execute<{ key: string; name: string }>(sql`
           select key, name from app_roles where org_id = ${authz.user.orgId} order by name`)
@@ -226,15 +230,41 @@ export async function loadRecordTypes(
     perPage: params.perPage,
     sort: params.sort,
     dir: params.dir,
-    drawerOpen: Boolean(openType),
+    drawerOpen: Boolean(openType) || isCreate,
     drawerProps: openType
       ? {
           type: serializeType(openType),
           roles: (roles?.rows ?? []) as { key: string; name: string }[],
         }
-      : null,
+      : isCreate
+        ? {
+            type: BLANK_TYPE,
+            roles: (roles?.rows ?? []) as { key: string; name: string }[],
+            createMode: true,
+          }
+        : null,
   }
 }
+
+/**
+ * Unsaved-create seed: the drawer edits this blank in memory and POSTs it on
+ * Save. `updated_at` is empty because no revision exists yet — autosave never
+ * runs in create mode (see TypeBuilderDrawer).
+ */
+const BLANK_TYPE = {
+  id: '',
+  key: '',
+  name: '',
+  pluralName: '',
+  iconKey: 'grid',
+  description: null,
+  fields: [],
+  status: 'draft',
+  showInNav: false,
+  allowedRoles: null,
+  sortOrder: 0,
+  updated_at: '',
+} as const
 
 /** Plain-JSON shape for the client drawer (see RecordTypePayload). */
 function serializeType(t: RecordTypeRow) {
