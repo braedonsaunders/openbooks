@@ -488,6 +488,10 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // seal backfill for pre-existing rows runs app-side in bootstrap, where
     // the data key lives).
     "0251_payment_link_token_at_rest.sql",
+    // Ontario EHT's annual exemption consumed committed stubs only, so a
+    // mid-year adopter's pre-adoption remuneration was unrecordable: this
+    // adds the EHT carry-in column the CA pack declares.
+    "0252_ca_eht_remuneration_opening_ytd.sql",
     // Hours-denominated entitlement plans cannot accrue a percent of (money)
     // earnings: the dollars would be stored, and later paid, as hours.
     "0253_hours_plan_percent_accrual_guard.sql",

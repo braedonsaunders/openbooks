@@ -1,6 +1,50 @@
 import { sql } from "drizzle-orm";
 import { PayrollError } from "../error.ts";
+import { PayrollPackError } from "../packs.ts";
 import { CA_OPENING_YTD_FIELDS } from "./opening-ytd.ts";
+
+/**
+ * The pay-run lifecycle states, as `pay_runs.run_status` spells them
+ * (schema/src/payroll.ts): draft → calculated → committed, with voided as
+ * the terminal reversal. This union is the exhaustive switch below — a new
+ * lifecycle state breaks the compile, never silently inherits a side.
+ */
+export type CaExemptionRunStatus = "draft" | "calculated" | "committed" | "voided";
+
+function assertNeverStatus(status: never): never {
+  throw new PayrollPackError(
+    `CA EHT exemption has no rule for pay-run status "${status}" — `
+    + "name the new lifecycle state here before it consumes (or escapes) exemption room",
+  );
+}
+
+/**
+ * Whether stubs on a run in this lifecycle state consume the employer's
+ * annual EHT exemption for OTHER runs. Only committed runs do: a draft or
+ * calculated run may be abandoned or recalculated, and counting its
+ * uncommitted remuneration lets two disjoint-roster drafts each claim the
+ * full exemption — recalculating either one then sees the other as prior
+ * and both commit over-taxed (the double count this switch exists to stop).
+ * A voided run is reversed history and consumes nothing. The run being
+ * calculated sequences its own employees through the separate own-document
+ * arm in the query below, not through this switch.
+ *
+ * The SQL below spells the committed arm as a literal (`run_status =
+ * 'committed'` — SQL cannot call this function); the unit test pins the two
+ * together, so a change here without the query fails loudly.
+ */
+export function ehtExemptionConsumedByRunStatus(status: CaExemptionRunStatus): boolean {
+  switch (status) {
+    case "committed":
+      return true;
+    case "draft":
+    case "calculated":
+    case "voided":
+      return false;
+    default:
+      return assertNeverStatus(status);
+  }
+}
 import {
   add, cmp, mulPercent, mulRatio, neg, roundMoney, sum, toUnits,
 } from "../../money/money.ts";
@@ -108,19 +152,52 @@ export async function applyCaEmployerLevies(
   if (eht) {
     ehtEarnings = grossEarnings();
     if (cmp(ehtEarnings, "0") > 0) {
-      // Calculated runs count here, unlike the WCB accumulator above: the
-      // exemption is employer-level per province, and the ytd staleness arm
-      // only fires on a SHARED employee — two drafts on disjoint rosters
-      // would otherwise each claim the full exemption and both commit cleanly
-      // (payroll-multi-employee D6 pins this). The own-document arm sequences
-      // the exemption across the employees of the run being calculated.
+      // Committed runs only (see `ehtExemptionConsumedByRunStatus`, which
+      // this literal mirrors — SQL cannot call it): a calculated run is a
+      // draft that may be abandoned or recalculated, and counting its
+      // uncommitted remuneration lets two disjoint-roster drafts each claim
+      // the full exemption, then double-count each other on recalc and both
+      // commit over-taxed. The own-document arm sequences the exemption
+      // across the employees of the run being calculated in roster order
+      // (display_name, party_id — the deterministic order run-calculation
+      // uses), so a recalc, which deletes this run's stubs before rewriting
+      // them, cannot double count. Across runs the order is commit order:
+      // whoever commits first consumes the room, and the commit-time
+      // staleness arm (`employerLevyYtd` in readiness.ts) refuses a run
+      // calculated before a concurrent commit until it recalculates — that
+      // arm, not draft-counting, is what stops two overlapping drafts from
+      // both committing with the full exemption.
+      //
+      // A voided run consumes nothing twice over: its run_status is
+      // 'voided' (never 'committed'), and its document is excluded below.
+      //
+      // Pre-adoption remuneration rides the pack-declared opening carry-in
+      // (`ehtRemunerationYtd`), summed across the employer's in-province
+      // carry-ins: the exemption is employer-level, so one employee's
+      // committed stubs cannot reconstruct what the prior provider paid.
+      // Province is the employee's CURRENT payroll province — the best
+      // proxy on file for where pre-adoption pay was earned.
+      const ehtCarryInColumn = CA_OPENING_YTD_FIELDS.find(
+        (field) => field.key === "ehtRemunerationYtd",
+      )!.column;
       const priorInProvince = ((await tx.execute<{ prior: string }>(sql`
-        select coalesce(sum((s.factors->>'EHT_EARN')::numeric), 0) as prior
+        select coalesce(sum((s.factors->>'EHT_EARN')::numeric), 0)
+               + coalesce((
+                   select sum(b.${sql.raw(ehtCarryInColumn)})
+                     from payroll_opening_balances b
+                    where b.org_id = ${orgId} and b.tax_year = ${taxYear}
+                      and exists (
+                        select 1 from employee_payroll_profiles prof
+                         where prof.org_id = b.org_id
+                           and prof.employee_party_id = b.employee_party_id
+                           and prof.is_active and prof.province = ${region})
+                 ), 0) as prior
           from pay_stubs s
           join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
+          join documents d on d.id = r.document_id and d.org_id = r.org_id
          where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.province = ${region}
-           and (r.run_status in ('calculated', 'committed')
-                or s.pay_run_document_id = ${documentId})
+           and (s.pay_run_document_id = ${documentId} or r.run_status = 'committed')
+           and d.status <> 'voided'
       `))).rows[0]!.prior;
       const exemption = eht.annualExemption ?? "0";
       const exemptionLeft = cmp(exemption, priorInProvince) > 0

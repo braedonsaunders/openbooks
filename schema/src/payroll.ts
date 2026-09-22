@@ -759,6 +759,15 @@ export const payrollOpeningBalances = pgTable(
     qpipEmployerYtd: money("qpip_employer_ytd").notNull().default("0"),
     wcbAssessableYtd: money("wcb_assessable_ytd").notNull().default("0"),
     /**
+     * EHT-subject remuneration history (migration 0252). Same declaration
+     * pattern as the capped-levy history above: the CA pack declares it and
+     * this model only stores what the declarations name. Unlike the
+     * per-employee maximums above, the EHT exemption is employer-level per
+     * province, so the engine sums this column across the employer's
+     * in-province carry-ins (see `applyCaEmployerLevies`).
+     */
+    ehtRemunerationYtd: money("eht_remuneration_ytd").notNull().default("0"),
+    /**
      * DEPRECATED (2026-08-17). No pay run reads this any more: an opening
      * vacation balance is an `entitlement_ledger` row with `kind = 'opening'`
      * against the org's vacation plan, loaded through

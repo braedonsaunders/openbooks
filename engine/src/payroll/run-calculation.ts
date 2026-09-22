@@ -347,7 +347,11 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
            and (${scopedSubsidiaryId}::uuid is null or p.subsidiary_id = ${scopedSubsidiaryId}::uuid)
          order by p.id, er.terminated_on nulls last
       ) roster
-      order by roster.display_name
+      -- display_name then party_id: the EHT own-document arm sequences the
+      -- exemption across this run's employees in calculation order, so the
+      -- order is deterministic down to the uuid — two employees sharing a
+      -- display name must still consume room in a stable order.
+      order by roster.display_name, roster.party_id
     `));
 
     // Authorize the complete selected roster and the snapshot we replace.
