@@ -248,9 +248,6 @@ const mockSources = new Map<string, string>([
     }
     export function validateContributionTotal() {}
   `],
-  ['mock:money', `
-    export function normalizeMoney(value) { return String(value) }
-  `],
   ['mock:authz', `
     export async function guardPermission() { return { user: { orgId: 'org-1', id: 'user-1' } } }
   `],
@@ -274,27 +271,23 @@ const mockSources = new Map<string, string>([
   ['mock:list-params', `
     export function isUuid(value) { return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value) }
   `],
-  ['mock:exact-decimal', `
-    export function canonicalDecimal(value) { return value == null ? null : String(value) }
-    export function compareDecimal() { return 0 }
-  `],
 ])
 
+// Neither the money kernel, the decimal classifier, nor '@/lib/api/json' is
+// mocked: hand doubles cannot produce the refusals the real modules enforce
+// (the removed compareDecimal stub answered 0 for every comparison, so the
+// totals-vs-lines check behind it could never fail).
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['@openbooks/engine/src/crm/crm.ts', 'mock:crm'],
   ['@openbooks/engine/src/crm/crm-math.ts', 'mock:crm-math'],
-  ['@openbooks/engine/src/money/money.ts', 'mock:money'],
   ['../../../../../lib/authz', 'mock:authz'],
   ['../../../../../lib/feature-gates', 'mock:feature-gates'],
   ['../../../../../lib/features', 'mock:features'],
   ['../../../../../lib/crm', 'mock:crm-loader'],
   ['../../../../../lib/crm-scope', 'mock:crm-scope'],
   ['../../../../../lib/list-params', 'mock:list-params'],
-  ['../../../../../lib/exact-decimal', 'mock:exact-decimal'],
-  ['@/lib/api/json', 'mock:json'],
   ['@/lib/list-params', 'mock:list-params'],
-  ['@/lib/exact-decimal', 'mock:exact-decimal'],
 ])
 
 const hooks = registerHooks({

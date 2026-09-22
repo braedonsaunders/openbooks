@@ -36,15 +36,6 @@ const routeState: RouteState = {
 
 const mockSources = new Map<string, string>([
   [
-    "mock:json",
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
-  [
     "mock:authz",
     `
       const state = globalThis[Symbol.for('openbooks.billing-requests-route-test')]
@@ -68,18 +59,6 @@ const mockSources = new Map<string, string>([
     "mock:projects-gate",
     `
       export async function guardProjectsFeature() { return null }
-    `,
-  ],
-  [
-    "mock:exact-decimal",
-    `
-      export function canonicalDecimal() { return null }
-    `,
-  ],
-  [
-    "mock:money",
-    `
-      export function normalizeMoney(value) { return String(value) }
     `,
   ],
   [
@@ -110,13 +89,14 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
+// Neither '@/lib/api/json', the decimal classifier, nor the money kernel is
+// mocked: hand doubles cannot produce the refusals the real modules
+// enforce ('canonicalDecimal() { return null }' refused every amount,
+// valid or not, so no amount case behind it was ever really tested).
 const mockUrls = new Map<string, string>([
-  ["@/lib/api/json", "mock:json"],
   ["../../../lib/authz", "mock:authz"],
   ["../../../lib/list-params", "mock:list-params"],
   ["../../../lib/projects-gate", "mock:projects-gate"],
-  ["../../../lib/exact-decimal", "mock:exact-decimal"],
-  ["@openbooks/engine/src/money/money.ts", "mock:money"],
   ["../../../lib/billing-requests", "mock:billing-requests"],
 ]);
 
