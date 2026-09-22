@@ -152,15 +152,6 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
-  [
     'mock:feature-gates',
     `
       export async function guardFeaturePermission() {
@@ -185,35 +176,20 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  [
-    'mock:money',
-    `
-      export function normalizeMoney(value) { return value }
-    `,
-  ],
-  [
-    'mock:exact-decimal',
-    `
-      export function canonicalDecimal(value) {
-        return typeof value === 'string' ? value : null
-      }
-    `,
-  ],
-])
+  ])
 
 ;(globalThis as typeof globalThis & Record<string, unknown> & { openbooksReconciliationSqlText?: unknown })
   .openbooksReconciliationSqlText = sqlText
 
+// Neither '@/lib/api/json', the money kernel, nor the decimal classifier is
+// mocked: hand doubles cannot produce the refusals the real modules enforce.
 const mockUrls = new Map<string, string>([
-  ['@/lib/api/json', 'mock:json'],
   ['next/server', 'mock:next-server'],
   ['drizzle-orm', 'mock:drizzle'],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['../../../../../lib/feature-gates', 'mock:feature-gates'],
   ['../../../../../lib/list-params', 'mock:list-params'],
   ['../../util', 'mock:util'],
-  ['@openbooks/engine/src/money/money.ts', 'mock:money'],
-  ['../../../../../lib/exact-decimal', 'mock:exact-decimal'],
 ])
 
 const hooks = registerHooks({
@@ -223,6 +199,8 @@ const hooks = registerHooks({
     if (specifier === '../platform/db.ts' && (context.parentURL ?? '').endsWith('/engine/src/banking/banking.ts')) {
       return { url: 'mock:db', shortCircuit: true }
     }
+    // The real '@/lib/api/json' imports 'server-only', which is inert here.
+    if (specifier === 'server-only') return { url: 'data:text/javascript,export {}', shortCircuit: true }
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
     return nextResolve(specifier, context)

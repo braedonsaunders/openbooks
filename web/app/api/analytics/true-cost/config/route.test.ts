@@ -42,15 +42,6 @@ const profile = {
 
 const mockSources = new Map<string, string>([
   [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
-  [
     'mock:gates',
     `
       export async function guardFeaturePermission() {
@@ -62,22 +53,6 @@ const mockSources = new Map<string, string>([
     'mock:data',
     `
       export const DEFAULT_PROFILE = ${JSON.stringify(profile)}
-    `,
-  ],
-  [
-    'mock:decimal',
-    `
-      export function canonicalDecimal(value, scale) {
-        const n = typeof value === 'number' ? value : Number(value)
-        return Number.isFinite(n) ? n.toFixed(scale) : null
-      }
-      export function compareDecimal(a, b) { return Number(a) - Number(b) }
-    `,
-  ],
-  [
-    'mock:money',
-    `
-      export function normalizeMoney(value) { return Number(value).toFixed(4) }
     `,
   ],
   [
@@ -115,14 +90,15 @@ const mockSources = new Map<string, string>([
   ],
 ])
 
+// Neither '@/lib/api/json', the decimal classifier, nor the money kernel is
+// mocked: hand doubles of validation and money cannot produce the refusals
+// the real modules enforce, so every bad-body and bad-amount case behind
+// them reported green untested.
 const mockUrls = new Map<string, string>([
-  ['@/lib/api/json', 'mock:json'],
   ['../../../../../lib/feature-gates', 'mock:gates'],
-  ['../../../../../lib/exact-decimal', 'mock:decimal'],
   ['../../../../../lib/analytics/true-cost-data', 'mock:data'],
   ['../../../../../lib/analytics/true-cost-engine', 'mock:engine'],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['@openbooks/engine/src/money/money.ts', 'mock:money'],
 ])
 
 const hooks = registerHooks({

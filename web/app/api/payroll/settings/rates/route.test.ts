@@ -35,15 +35,6 @@ const state: RouteState = { deleteAttempts: [], deleteResult: 'retired' }
 
 const mockSources = new Map<string, string>([
   [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
-  [
     'mock:feature-gates',
     `
       export async function guardFeaturePermission() {
@@ -63,12 +54,6 @@ const mockSources = new Map<string, string>([
       export function isUuid(value) {
         return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
       }
-    `,
-  ],
-  [
-    'mock:exact-decimal',
-    `
-      export function canonicalDecimal(value) { return String(value) }
     `,
   ],
   [
@@ -140,13 +125,6 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:money',
-    `
-      export function normalizeDecimal(value) { return String(value) }
-      export function normalizeMoney(value) { return String(value) }
-    `,
-  ],
-  [
     'mock:business-date',
     `
       export function businessToday() { return '2026-09-19' }
@@ -154,12 +132,14 @@ const mockSources = new Map<string, string>([
   ],
 ])
 
+// Neither '@/lib/api/json', the decimal classifier, nor the money kernel is
+// mocked: the statutory-rate refusals this file pins are exactly the kind a
+// hand double cannot produce (a passthrough canonicalDecimal accepts every
+// amount, so no over-precision refusal could ever fire here).
 const mockUrls = new Map<string, string>([
-  ['@/lib/api/json', 'mock:json'],
   ['../../../../../lib/feature-gates', 'mock:feature-gates'],
   ['../../../../../lib/authz', 'mock:authz'],
   ['../../../../../lib/list-params', 'mock:list-params'],
-  ['../../../../../lib/exact-decimal', 'mock:exact-decimal'],
   ['@openbooks/engine/src/payroll/error.ts', 'mock:payroll-error'],
   ['@openbooks/engine/src/payroll/packs.ts', 'mock:packs'],
   ['@openbooks/engine/src/payroll/statutory-rates.ts', 'mock:statutory-rates'],
@@ -167,12 +147,13 @@ const mockUrls = new Map<string, string>([
   ['drizzle-orm', 'mock:drizzle'],
   ['@openbooks/engine/src/payroll/filing.ts', 'mock:filing'],
   ['@openbooks/engine/src/payroll/readiness.ts', 'mock:readiness'],
-  ['@openbooks/engine/src/money/money.ts', 'mock:money'],
   ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
 ])
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    // The real '@/lib/api/json' imports 'server-only', which is inert here.
+    if (specifier === 'server-only') return { url: 'data:text/javascript,export {}', shortCircuit: true }
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
     return nextResolve(specifier, context)

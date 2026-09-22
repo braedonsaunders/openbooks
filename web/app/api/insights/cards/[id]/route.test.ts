@@ -99,7 +99,6 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  ['mock:money', `export function normalizeMoney(value) { return String(value) }`],
   [
     'mock:json',
     `
@@ -130,7 +129,6 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ['@/lib/insight-mutations', 'mock:mutations'],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['@openbooks/engine/src/money/money.ts', 'mock:money'],
   ['@/lib/api/json', 'mock:json'],
   ['../../../../../lib/authz', 'mock:authz'],
   ['../../_lib', 'mock:insights-lib'],

@@ -70,15 +70,6 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(req) {
-        return { ok: true, data: await req.json() }
-      }
-    `,
-  ],
-  [
     'mock:project-loader',
     `
       const state = globalThis[Symbol.for('openbooks.project-detail-route-test')]
@@ -91,18 +82,6 @@ const mockSources = new Map<string, string>([
       export async function loadFieldDefs() { return [] }
       export function validateCustomValues() { return { ok: true, cleaned: {} } }
       export async function findUnownedCustomReferences() { return [] }
-    `,
-  ],
-  [
-    'mock:money',
-    `
-      export function normalizeMoney(value) { return String(value) }
-    `,
-  ],
-  [
-    'mock:decimal',
-    `
-      export function canonicalDecimal(value) { return String(value) }
     `,
   ],
   [
@@ -120,13 +99,12 @@ const mockSources = new Map<string, string>([
   ],
 ])
 
+// Neither '@/lib/api/json', the money kernel, nor the decimal classifier is
+// mocked: hand doubles cannot produce the refusals the real modules enforce.
 const mockUrls = new Map<string, string>([
-  ['@/lib/api/json', 'mock:json'],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['@openbooks/engine/src/money/money.ts', 'mock:money'],
   ['../../../../lib/authz', 'mock:authz'],
   ['../../../../lib/custom-fields', 'mock:custom-fields'],
-  ['../../../../lib/exact-decimal', 'mock:decimal'],
   ['../../../../lib/features', 'mock:features'],
   ['../../../../lib/projects-gate', 'mock:projects-gate'],
   ['../_lib', 'mock:project-loader'],

@@ -131,15 +131,6 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    "mock:json",
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
-  [
     "mock:authz",
     `const state = globalThis[Symbol.for('openbooks.subscription-route-test')]
      export async function guardPermission() { return state.authz }
@@ -152,22 +143,24 @@ const mockSources = new Map<string, string>([
      }`,
   ],
   ["mock:features", "export async function isFeatureEnabled() { return true }"],
-  ["mock:money", "export function add(left, right) { return (Number(left) + Number(right)).toFixed(4) }\nexport function mulDecimal(amount, rate) { return (Number(amount) * Number(rate)).toFixed(4) }"],
   ["mock:business-date", "export async function businessToday() { return '2026-08-26' }"],
 ]);
 
+// Neither '@/lib/api/json' nor the money kernel is mocked: a double of
+// validation or money cannot produce the refusals the real modules
+// enforce, so it would hollow every refusal case behind it.
 const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/platform/db.ts", "mock:db"],
   ["@openbooks/engine/src/billing/subscription-billing.ts", "mock:subscription-engine"],
-  ["@openbooks/engine/src/money/money.ts", "mock:money"],
   ["@openbooks/engine/src/platform/business-date.ts", "mock:business-date"],
-  ["@/lib/api/json", "mock:json"],
   ["../../../lib/authz", "mock:authz"],
   ["../../../lib/features", "mock:features"],
 ]);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    // The real '@/lib/api/json' imports 'server-only', which is inert here.
+    if (specifier === "server-only") return { url: "data:text/javascript,export {}", shortCircuit: true };
     const mocked = mockUrls.get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };
     return nextResolve(specifier, context);

@@ -120,17 +120,10 @@ const mockSources = new Map<string, string>([
     'mock:business-date',
     `export async function businessToday() { return '2026-07-22' }`,
   ],
-  [
-    'mock:money',
-    `
-      export function add(a, b) { return String(Number(a) + Number(b)) }
-      export function cmp(a, b) { return Number(a) === Number(b) ? 0 : Number(a) > Number(b) ? 1 : -1 }
-      export function isZero(value) { return Number(value) === 0 }
-      export function mul(a, b) { return String(Number(a) * Number(b)) }
-      export function neg(value) { return String(-Number(value)) }
-      export function sum(values) { return String(values.reduce((total, value) => total + Number(value), 0)) }
-    `,
-  ],
+  // '@openbooks/engine/src/money/money.ts' is deliberately NOT mocked: a
+  // hand double of the money kernel decides amounts with floats the real
+  // kernel refuses on principle, so the assertions below used to pin
+  // float-shaped behavior. The real bigint kernel loads through tsx.
   [
     'mock:payroll-cheques',
     `export function amountInWords(value) { return String(value) }`,
@@ -176,7 +169,6 @@ registerHooks({
       '@openbooks/engine/src/platform/db.ts': 'mock:db',
       '@openbooks/engine/src/payroll/packs.ts': 'mock:packs',
       '@openbooks/engine/src/platform/business-date.ts': 'mock:business-date',
-      '@openbooks/engine/src/money/money.ts': 'mock:money',
       '@openbooks/engine/src/payroll/cheques.ts': 'mock:payroll-cheques',
       '../money-format': 'mock:money-format',
       '../locale': 'mock:locale',

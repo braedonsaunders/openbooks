@@ -25,15 +25,6 @@ const routeState: RouteState = {
 
 const mockSources = new Map<string, string>([
   [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
-  [
     'mock:feature-gates',
     `
       export async function guardFeaturePermission() {
@@ -47,23 +38,6 @@ const mockSources = new Map<string, string>([
       export function isUuid(value) {
         return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
       }
-    `,
-  ],
-  [
-    'mock:exact-decimal',
-    `
-      export function canonicalDecimal(value) {
-        return value == null ? null : String(value)
-      }
-      export function compareDecimal(left, right) {
-        return Number(left) < Number(right) ? -1 : Number(left) > Number(right) ? 1 : 0
-      }
-    `,
-  ],
-  [
-    'mock:money',
-    `
-      export function normalizeMoney(value) { return String(value) }
     `,
   ],
   [
@@ -89,12 +63,11 @@ const mockSources = new Map<string, string>([
   ],
 ])
 
+// Neither '@/lib/api/json', the decimal classifier, nor the money kernel is
+// mocked: hand doubles cannot produce the refusals the real modules enforce.
 const mockUrls = new Map<string, string>([
-  ['@/lib/api/json', 'mock:json'],
   ['../../../../../lib/feature-gates', 'mock:feature-gates'],
   ['../../../../../lib/list-params', 'mock:list-params'],
-  ['../../../../../lib/exact-decimal', 'mock:exact-decimal'],
-  ['@openbooks/engine/src/money/money.ts', 'mock:money'],
   ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
   ['@openbooks/engine/src/assets/asset-lifecycle.ts', 'mock:asset-lifecycle'],
 ])
@@ -149,7 +122,7 @@ test('an omitted remeasurement date alone defaults to the organization business 
       orgId: 'org-1',
       assetId: ASSET_ID,
       options: {
-        newCarryingValue: '800',
+newCarryingValue: '800.0000',
         date: '2026-08-31',
         actorId: 'user-1',
       },

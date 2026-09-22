@@ -2,7 +2,6 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { NextResponse } from 'next/server'
-import { cmp as compareMoney, normalizeMoney } from '../../../../../../engine/src/money/money.ts'
 
 interface RouteState {
   permissions: Set<string>
@@ -50,21 +49,12 @@ function sqlText(query: unknown): string {
 }
 ;(globalThis as typeof globalThis & Record<string, unknown>).openbooksCashflowCategoriesSqlText =
   sqlText
-;(globalThis as typeof globalThis & Record<string, unknown>).openbooksCashflowMoney = {
-  compareMoney,
-  normalizeMoney,
-}
 
+// Neither '@/lib/api/json' nor the money kernel is mocked: validation and
+// money are never doubled (a double cannot produce the refusals the real
+// modules enforce), and the route's exact-money behavior is what these
+// assertions pin.
 const mockSources = new Map<string, string>([
-  [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
   [
     'mock:authz',
     `
@@ -114,25 +104,17 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  [
-    'mock:money',
-    `
-      const money = globalThis.openbooksCashflowMoney
-      export const cmp = money.compareMoney
-      export const normalizeMoney = money.normalizeMoney
-    `,
-  ],
 ])
 
 const mockUrls = new Map<string, string>([
-  ['@/lib/api/json', 'mock:json'],
   ['../../../../../lib/authz', 'mock:authz'],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['@openbooks/engine/src/money/money.ts', 'mock:money'],
 ])
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    // The real '@/lib/api/json' imports 'server-only', which is inert here.
+    if (specifier === 'server-only') return { url: 'data:text/javascript,export {}', shortCircuit: true }
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
     return nextResolve(specifier, context)
