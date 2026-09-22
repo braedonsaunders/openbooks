@@ -43,11 +43,25 @@ test("extendCost multiplies quantity by unit cost, rounded to 4dp", () => {
   assert.equal(extendCost("1.5", "3.3333"), "5.0000"); // 4.99995 → 5.0000
 });
 
-test("toBaseQuantity applies the item's unit conversion, else 1:1", () => {
+test("toBaseQuantity applies the item's unit conversion and refuses unknown units", () => {
   const conv = { box: 12, pallet: 720 };
   assert.equal(toBaseQuantity("2", "box", conv, "ea"), "24.0000");
   assert.equal(toBaseQuantity("5", "ea", conv, "ea"), "5.0000");
-  assert.equal(toBaseQuantity("5", "unknown", conv, "ea"), "5.0000");
+  assert.equal(toBaseQuantity("5", null, conv, "ea"), "5.0000");
+  // An unknown unit must refuse, never silently convert 1:1 — "2 box @ $240"
+  // received as 2 each @ $120 instead of 24 each @ $10 under the old rule.
+  assert.throws(
+    () => toBaseQuantity("2", "crate", conv, "ea", "document line 1 (item x)"),
+    /unit "crate" with no conversion to the item's base unit "ea"/,
+  );
+  assert.throws(
+    () => toBaseQuantity("2", "box", { box: 0 }, "ea"),
+    /no conversion/,
+  );
+  assert.throws(
+    () => toBaseQuantity("2", "box", { box: 1 / 3 }, "ea"),
+    /cannot be expressed exactly/,
+  );
 });
 
 // ---------------------------------------------------------------------------
