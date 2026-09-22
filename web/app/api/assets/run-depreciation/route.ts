@@ -3,9 +3,10 @@ import { isoDate, parseJsonBody, uuidId } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { ClosedBatchError, previewDepreciation, runDepreciation, StalePreviewError } from '@openbooks/engine/src/assets/depreciation.ts'
+import { previewDepreciation, runDepreciation } from '@openbooks/engine/src/assets/depreciation.ts'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
+import { depreciationFailure } from '../../../../lib/assets/depreciation-error-response'
 import { isUuid } from '../../../../lib/list-params'
 
 export const runtime = 'nodejs'
@@ -68,8 +69,7 @@ export async function POST(req: Request) {
       )
       return NextResponse.json(result)
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e)
-      return NextResponse.json({ error: msg }, { status: 500 })
+      return depreciationFailure(e)
     }
   }
 
@@ -126,8 +126,7 @@ export async function POST(req: Request) {
       allowedSubsidiaryIds: gate.allowedSubsidiaryIds ? [...gate.allowedSubsidiaryIds] : undefined,
     })
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    return depreciationFailure(e)
   }
   if (preview.fingerprint !== fingerprint) {
     return NextResponse.json(
@@ -187,20 +186,9 @@ export async function POST(req: Request) {
     )
     return NextResponse.json({ ...result, fingerprint })
   } catch (e: unknown) {
-    // The all-or-nothing batch found drift under its held locks: refuse the
-    // whole batch like a stale preview — nothing was written.
-    if (e instanceof StalePreviewError) {
-      return NextResponse.json({ error: 'stale_preview' }, { status: 409 })
-    }
-    // A closed in-scope period aborts the batch the same way: open the
-    // period, then confirm again. Never a partial post plus skips.
-    if (e instanceof ClosedBatchError) {
-      return NextResponse.json(
-        { error: 'period_closed', asset: e.assetNumber, period: e.periodName },
-        { status: 409 },
-      )
-    }
-    const msg = e instanceof Error ? e.message : String(e)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    // The all-or-nothing batch refuses as a whole: a domain refusal (drift, a
+    // closed period, missing configuration) names its remedy and is a 409; an
+    // unexpected fault is logged and returned as a generic 500.
+    return depreciationFailure(e)
   }
 }
