@@ -1,5 +1,9 @@
-import { ACCOUNT_CLASS_TYPES, PNL_TYPES } from './account-types'
+import { accountClassTypes, PNL_TYPES } from './account-types'
 import type { ReportDrillTarget } from './report-drill'
+
+/** Every CoA balance drills the GL ledger, so callers may read the ledger
+ *  fields (mode/from/to, accountIds/accountTypes) without narrowing first. */
+export type LedgerDrillTarget = Extract<ReportDrillTarget, { kind: 'ledger' }>
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
@@ -10,10 +14,7 @@ export type AccountBalanceDrillWindow = {
   fiscalYearStart: string
 }
 
-function ledgerWindow(types: readonly string[], ctx: AccountBalanceDrillWindow): Pick<
-  Extract<ReportDrillTarget, { kind: 'ledger' }>,
-  'mode' | 'from' | 'to'
-> | null {
+function ledgerWindow(types: readonly string[], ctx: AccountBalanceDrillWindow): Pick<LedgerDrillTarget, 'mode' | 'from' | 'to'> | null {
   if (!ISO_DATE.test(ctx.asOf) || !ISO_DATE.test(ctx.fiscalYearStart)) return null
   // CoA balances are fiscal-YTD for the P&L universe and lifetime otherwise.
   // A mixed set that is not entirely P&L must use lifetime, matching the
@@ -35,7 +36,7 @@ export function accountBalanceDrill(opts: {
   type: string
   asOf: string
   fiscalYearStart: string
-}): ReportDrillTarget | null {
+}): LedgerDrillTarget | null {
   const label = opts.label.trim()
   if (!UUID.test(opts.accountId) || !label || !ACCOUNT_TYPE.test(opts.type)) return null
   const window = ledgerWindow([opts.type], { asOf: opts.asOf, fiscalYearStart: opts.fiscalYearStart })
@@ -53,8 +54,8 @@ export function accountClassBalanceDrill(opts: {
   label: string
   asOf: string
   fiscalYearStart: string
-}): ReportDrillTarget {
-  const accountTypes = ACCOUNT_CLASS_TYPES[opts.classKey]
+}): LedgerDrillTarget {
+  const accountTypes = accountClassTypes(opts.classKey)
   if (!accountTypes) {
     throw new Error(
       `Unknown chart-of-accounts class "${opts.classKey}". Add it to ACCOUNT_CLASS_TYPES before offering a class-total drill.`,
@@ -78,7 +79,7 @@ export function accountListBalanceDrill(
   row: Record<string, unknown>,
   columnKey: string,
   ctx: AccountBalanceDrillWindow,
-): ReportDrillTarget | null {
+): LedgerDrillTarget | null {
   if (columnKey !== 'balance') return null
   const id = typeof row.id === 'string' ? row.id : ''
   const type =

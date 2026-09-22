@@ -82,7 +82,9 @@ test('class-total drills name every type in the class and refuse an unknown clas
   assert.equal(income.from, WINDOW.fiscalYearStart)
   assert.deepEqual(assets.accountTypes, [...ASSET_TYPES])
   assert.equal(assets.mode, 'balance')
-  assert.equal(parseReportDrillTarget(encodeReportDrillTarget(income))?.mode, 'flow')
+  const roundTripped = parseReportDrillTarget(encodeReportDrillTarget(income))
+  assert.equal(roundTripped?.kind, 'ledger')
+  assert.equal(roundTripped?.kind === 'ledger' ? roundTripped.mode : null, 'flow')
   assert.throws(
     () => accountClassBalanceDrill({ classKey: 'other', label: 'Other', ...WINDOW }),
     /ACCOUNT_CLASS_TYPES/,
