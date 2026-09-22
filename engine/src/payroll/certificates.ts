@@ -100,6 +100,13 @@ export interface PayrollCertificateScope {
  */
 export type PayrollCertificatePurpose = "withholding" | "non_residence" | "exemption";
 
+/**
+ * How a jurisdiction identifies a withholding claim on its own form. See
+ * `PayrollCertificate.claimIdentity`; declared so the generic layer branches on
+ * the pack's statement rather than on a country/region literal.
+ */
+export type PayrollClaimIdentity = "code" | "amount";
+
 // ---------------------------------------------------------------------------
 // Fields
 // ---------------------------------------------------------------------------
@@ -213,6 +220,21 @@ export interface PayrollCertificate {
   label: string;
   scope: PayrollCertificateScope;
   purpose: PayrollCertificatePurpose;
+  /**
+   * How this jurisdiction identifies the employee's claim on the form: by a
+   * CODE (a small integer the formula table maps to an amount — the CRA's
+   * TD1 claim codes 0–10) or by an AMOUNT the employee writes on the form
+   * (Revenu Québec's TP-1015.3-V line 10).
+   *
+   * Declared here, beside the fields, because it is a property of the
+   * JURISDICTION'S FORM, not of the product: the API validates a claim code
+   * against this declaration and refuses a code for an amount jurisdiction
+   * by name, instead of a `if (country === "CA" && region === "QC")` in a
+   * shared route. Absent means the certificate declares no claim-identity
+   * rule (a non-residence or exemption form, or a certificate whose claim is
+   * carried entirely by other fields).
+   */
+  claimIdentity?: PayrollClaimIdentity;
   /** The publication or statute the form and its fields come from. */
   citation: string;
   /** One sentence for the operator: when does an employee file this? */
@@ -380,6 +402,30 @@ export function profileColumnCountBounds(
   return { min, max };
 }
 
+/**
+ * The region-level withholding certificate a pack declares for `region` — the
+ * form whose `claimIdentity` rule the profile API reads — or null when the
+ * pack declares none for that region. Region-scoped because the same profile
+ * column (`provincial_claim_code`) is shared by every regional form, so a
+ * country-wide column lookup cannot tell one region's rule from another's.
+ */
+export function regionWithholdingCertificate(
+  country: string,
+  region: string | null | undefined,
+): PayrollCertificate | null {
+  if (!region) return null;
+  for (const certificate of packCertificates(country).certificates) {
+    if (
+      certificate.scope.level === "region"
+      && certificate.scope.region === region
+      && certificate.purpose === "withholding"
+    ) {
+      return certificate;
+    }
+  }
+  return null;
+}
+
 /** One certificate, or a refusal listing what the pack declares. */
 export function payrollCertificate(country: string, key: string): PayrollCertificate {
   const pack = packCertificates(country);
@@ -401,6 +447,9 @@ export function payrollCertificate(country: string, key: string): PayrollCertifi
 export function certificateDeclarationProblem(certificate: PayrollCertificate): string | null {
   if (!certificate.key) return "a certificate must have a key";
   if (!certificate.citation) return "a certificate must cite the publication its fields come from";
+  if (certificate.claimIdentity && certificate.purpose !== "withholding") {
+    return "claimIdentity describes a withholding claim and applies only to a withholding certificate";
+  }
   const { level, region, subRegion } = certificate.scope;
   if (level !== "country" && !region) {
     return `a ${level}-level certificate must name its region`;

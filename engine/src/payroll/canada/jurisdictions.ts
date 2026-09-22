@@ -170,35 +170,47 @@ function provincialCertificate(province: string): PayrollCertificate {
       : `Personal Tax Credits Return (${name})`,
     scope: { level: "region", region: province },
     purpose: "withholding",
+    // Québec identifies the claim by an AMOUNT (TP-1015.3-V line 10); every
+    // other province/territory identifies it by a TD1 claim code. Declared so
+    // the profile API refuses a code on a Québec profile by reading the pack,
+    // not a `country === "CA" && region === "QC"` literal.
+    claimIdentity: quebec ? "amount" : "code",
     citation: quebec
       ? "Revenu Québec Form TP-1015.3-V (2026); TP-1015.F-V Formulas to Calculate Source Deductions"
       : `CRA Form TD1${province} (2026); T4127 Payroll Deductions Formulas, 123rd edition`,
     summary: quebec
       ? "Québec's own source deductions return, filed with the employer in addition to the "
-        + "federal TD1. It sets the deduction code and amount the TP-1015 provincial calculation "
-        + "uses; a Québec employee files BOTH forms."
+        + "federal TD1. It sets the total deduction AMOUNT the TP-1015 provincial calculation "
+        + "uses (line 10); a Québec employee files BOTH forms."
       : `Sets the ${name} claim amount the provincial half of the T4127 calculation uses `
         + "(factor TCP). An employee who files nothing is withheld at the basic personal amount.",
     storage: "profile_columns",
     fields: [
-      {
-        key: "provincial_claim_code",
-        label: quebec ? "Deduction code" : "Total claim amount — claim code",
-        kind: "count", min: "0", max: "10",
-        storage: { kind: "column", column: "provincial_claim_code" },
-        help: quebec
-          ? "Revenu Québec's deduction code from the TP-1015.3-V, in the same 0–10 shape the CRA "
-            + "uses. Code 1 is the basic amount alone."
-          : "The provincial claim code 0–10. It is NOT necessarily the same code as the federal "
-            + "one: the provinces set their own basic personal amounts and credits.",
-      },
+      // TP-1015.3-V identifies the claim by an AMOUNT, and the Québec
+      // calculation (canada/quebec/tp1015.ts) reads only that amount — the
+      // T4127 sweep passes a provincial claim code for every province EXCEPT
+      // QC. A code field on the Québec certificate would offer the operator an
+      // input no engine reads, so it is not declared there.
+      ...(quebec
+        ? []
+        : [{
+            key: "provincial_claim_code",
+            label: "Total claim amount — claim code",
+            kind: "count" as const, min: "0", max: "10",
+            storage: { kind: "column" as const, column: "provincial_claim_code" },
+            help: "The provincial claim code 0–10. It is NOT necessarily the same code as the federal "
+              + "one: the provinces set their own basic personal amounts and credits.",
+          } satisfies PayrollCertificateField]),
       {
         key: "provincial_claim_amount",
         label: quebec ? "Deduction amount — exact dollars" : "Total claim amount — exact dollars",
         kind: "amount", decimals: 4, min: "0",
         storage: { kind: "column", column: "provincial_claim_amount" },
-        help: "The exact total from the form, which OVERRIDES the code when both are present "
-          + "(T4127 factor TCP, TP-1015 variable E).",
+        help: quebec
+          ? "The exact total deduction from line 10 of the TP-1015.3-V. Québec identifies the claim by "
+            + "this amount, not a claim code (TP-1015 variable E)."
+          : "The exact total from the form, which OVERRIDES the code when both are present "
+            + "(T4127 factor TCP).",
       },
       {
         key: "authorized_provincial_credits",

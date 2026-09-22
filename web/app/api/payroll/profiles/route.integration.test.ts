@@ -247,6 +247,11 @@ test('profile POST validates withholding answers against the pack declaration', 
       ['CA filing status', { country: 'CA', province: 'ON', filingStatus: 'single', sin: '046454286' }, 422, /invalid filingStatus/],
       ['CA claim code', { country: 'CA', province: 'ON', federalClaimCode: 5, sin: '046454286' }, 200, null],
       ['CA claim code band', { country: 'CA', province: 'ON', federalClaimCode: 11, sin: '046454286' }, 422, /claim code must be 0–10/],
+      // A code province accepts a provincial claim code; Québec, whose pack
+      // declares claimIdentity 'amount', refuses it by name and names its form.
+      ['CA provincial claim code', { country: 'CA', province: 'ON', provincialClaimCode: 2, sin: '046454286' }, 200, null],
+      ['QC claim code refused', { country: 'CA', province: 'QC', provincialClaimCode: 1, sin: '046454286' }, 422, /TP-1015\.3-V identifies the claim by an amount/],
+      ['QC claim amount accepted', { country: 'CA', province: 'QC', provincialClaimAmount: '15000', sin: '046454286' }, 200, null],
       ['US claim code', { country: 'US', province: usState, federalClaimCode: 1, sin: '123-45-6789' }, 422, /not declared/],
       ['US allowances', { country: 'US', province: usState, w4Allowances: 5, sin: '123-45-6789' }, 200, null],
       ['US allowances band', { country: 'US', province: usState, w4Allowances: 100, sin: '123-45-6789' }, 422, /invalid w4Allowances/],
