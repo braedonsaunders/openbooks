@@ -96,6 +96,65 @@ export async function listCloseRuns(
   return result.rows;
 }
 
+const LOCK_STATES = new Set(["open", "soft_closed", "closed"]);
+const LOCK_MODULES = new Set(["ar", "ap", "banking", "assets", "tax", "gl"]);
+
+/** Period locks — same query shape as `list_period_locks`. Org-wide diagnostics. */
+export async function listPeriodLocks(
+  context: ApplicationContext,
+  input: { periodId?: string; state?: string; module?: string; limit?: number },
+) {
+  assertApplicationPermission(context, "close.read");
+  assertUnrestrictedCloseDiagnostics(context);
+  if (input.state && !LOCK_STATES.has(input.state)) {
+    throw new ApplicationError("invalid_input", "state must be open, soft_closed, or closed", 422);
+  }
+  if (input.module && !LOCK_MODULES.has(input.module)) {
+    throw new ApplicationError("invalid_input", "module must be ar, ap, banking, assets, tax, or gl", 422);
+  }
+  const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
+  let where = sql`l.org_id = ${context.authz.user.orgId}`;
+  if (input.periodId) where = sql`${where} and l.period_id = ${input.periodId}`;
+  if (input.state) where = sql`${where} and l.state = ${input.state}`;
+  if (input.module) where = sql`${where} and l.module = ${input.module}`;
+  const [rows, count] = await Promise.all([
+    db.execute<Record<string, unknown>>(sql`
+      select l.id, l.module, l.state, l.locked_at, l.reason, l.reopen_expires_at,
+             p.name as period_name, p.starts_on, p.ends_on,
+             b.name as book_name, b.code as book_code,
+             s.name as subsidiary_name,
+             u.name as locked_by_name
+        from period_locks l
+        join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
+        join accounting_books b on b.id = l.book_id and b.org_id = l.org_id
+        left join subsidiaries s on s.id = l.subsidiary_id and s.org_id = l.org_id
+        left join users u on u.id = l.locked_by
+       where ${where}
+       order by p.ends_on desc, l.subsidiary_id nulls first, l.module
+       limit ${limit}
+    `),
+    db.execute<{ n: string }>(sql`select count(*) as n from period_locks l where ${where}`),
+  ]);
+  return {
+    total: Number(count.rows[0]?.n ?? 0),
+    locks: rows.rows.map((lock) => ({
+      id: lock.id,
+      period: lock.period_name,
+      periodStartsOn: lock.starts_on,
+      periodEndsOn: lock.ends_on,
+      book: lock.book_name,
+      bookCode: lock.book_code,
+      subsidiary: lock.subsidiary_name,
+      module: lock.module,
+      state: lock.state,
+      lockedAt: lock.locked_at,
+      lockedBy: lock.locked_by_name,
+      reason: lock.reason,
+      reopenExpiresAt: lock.reopen_expires_at,
+    })),
+  };
+}
+
 export async function getCloseRun(context: ApplicationContext, runId: string): Promise<CloseRunRow> {
   assertApplicationPermission(context, "close.run");
   return closeRun(context, runId);

@@ -32,6 +32,18 @@ test("listCloseRuns refuses subsidiary-scoped callers with the org-wide diagnost
   );
 });
 
+test("listPeriodLocks refuses subsidiary-scoped callers with the same org-wide message", () => {
+  const lockStart = source.indexOf("export async function listPeriodLocks");
+  assert.ok(lockStart >= 0, "listPeriodLocks must exist in web/lib/application/close.ts");
+  const lockNext = source.indexOf("export async function", lockStart + 1);
+  const lockBody = lockNext === -1 ? source.slice(lockStart) : source.slice(lockStart, lockNext);
+  assert.ok(
+    lockBody.includes("assertUnrestrictedCloseDiagnostics"),
+    "listPeriodLocks must enforce the unrestricted-subsidiary guard",
+  );
+  assert.ok(!lockBody.includes("return []"), "listPeriodLocks must not return [] for a scoped caller");
+});
+
 test("listCloseRuns never reports a scoped caller as an empty list", () => {
   assert.ok(!body.includes("return []"), "listCloseRuns must not return [] for a scoped caller");
   const scopeIndex = body.indexOf("allowedSubsidiaryIds");

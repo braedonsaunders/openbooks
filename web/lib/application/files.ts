@@ -5,9 +5,13 @@ import {
   createFile,
   folderAccessLevel,
   getFolder,
+  listFiles,
   type AccessLevel,
   type FileViewer,
 } from "../file-cabinet";
+import { clamp, isUuid } from "../list-params";
+import type { ApplicationContext } from "./context";
+import { assertApplicationPermission } from "./context";
 import { forbidden, invalidInput, notFound } from "./errors";
 
 /**
@@ -71,12 +75,46 @@ export function validateCabinetUpload(input: {
   return { filename, contentType, bytes };
 }
 
+/** File Cabinet metadata — same `listFiles` reader and folder grants as the files screen. */
+export async function listApplicationFiles(
+  context: ApplicationContext,
+  input: { folderId?: string; query?: string; limit?: number; offset?: number },
+) {
+  assertApplicationPermission(context, "documents.read");
+  if (input.folderId && !isUuid(input.folderId)) throw invalidInput("folderId must be a UUID");
+  const limit = clamp(input.limit ?? 25, 1, 100);
+  const offset = clamp(input.offset ?? 0, 0, 10_000);
+  const { files, total } = await listFiles(context.authz.user.orgId, cabinetViewer(context.authz), {
+    folderId: input.folderId,
+    q: input.query,
+    limit,
+    offset,
+  });
+  return {
+    total,
+    offset,
+    files: files.map((file) => ({
+      id: file.id,
+      name: file.name,
+      folderId: file.folderId,
+      folderName: file.folderName,
+      fileType: file.fileType,
+      contentType: file.contentType,
+      sizeBytes: file.sizeBytes,
+      versionCount: file.versionCount,
+      updatedAt: file.updatedAt,
+      uploadedBy: file.createdBy,
+      createdAt: file.createdAt,
+    })),
+  };
+}
+
 /**
  * The caller as a FileViewer. Faithful replica of `fileViewer(authz)` in
  * web/app/api/file-cabinet/lib.ts (same precedent as assistantFileViewer in
  * web/lib/assistant/tools-files.ts — keep in sync).
  */
-function uploadViewer(authz: Authz): FileViewer {
+function cabinetViewer(authz: Authz): FileViewer {
   const baseline: AccessLevel = can(authz, "documents.manage")
     ? "manager"
     : can(authz, "documents.read")
@@ -93,7 +131,7 @@ export async function uploadCabinetFile(
   const folder = await getFolder(authz.user.orgId, input.folderId);
   if (!folder) throw notFound("folder");
   // Uploading needs Editor+ on the destination folder — the route's gate.
-  const level = await folderAccessLevel(authz.user.orgId, uploadViewer(authz), input.folderId);
+  const level = await folderAccessLevel(authz.user.orgId, cabinetViewer(authz), input.folderId);
   if (!accessAtLeast(level, "editor")) throw forbidden("documents.manage");
   const meta = await createFile({
     orgId: authz.user.orgId,

@@ -1,11 +1,14 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
+import { budgetScenarioOptions } from "../budget-report";
+import { loadBudgetScenario } from "../budgets";
 import { isFeatureEnabled } from "../features";
 import { BudgetMutationError, saveBudgetCells, type BudgetCellInput } from "../budget-mutations";
+import { isUuid } from "../list-params";
 import type { ApplicationContext } from "./context";
 import { assertApplicationPermission, assertSubsidiaryAccess } from "./context";
-import { ApplicationError, notFound } from "./errors";
+import { ApplicationError, invalidInput, notFound } from "./errors";
 import { executeIdempotent } from "./idempotency";
 
 /**
@@ -17,6 +20,31 @@ import { executeIdempotent } from "./idempotency";
  * application-layer convention (the route answers the same refusal as a 422;
  * the control is identical).
  */
+
+function featureOff(): never {
+  throw new ApplicationError(
+    "not_found",
+    "budgets is off; enable it from GET /api/v1/settings/features",
+    404,
+  );
+}
+
+/** Non-archived scenarios — same `budgetScenarioOptions` reader as the Budgets hub. */
+export async function listApplicationBudgets(context: ApplicationContext) {
+  assertApplicationPermission(context, "budgets.read");
+  if (!(await isFeatureEnabled(context.authz.user.orgId, "budgets"))) featureOff();
+  return { budgets: await budgetScenarioOptions(context.authz.user.orgId) };
+}
+
+/** One scenario — same `loadBudgetScenario` reader as GET /api/budgets/[id]. */
+export async function getApplicationBudget(context: ApplicationContext, scenarioId: string) {
+  assertApplicationPermission(context, "budgets.read");
+  if (!(await isFeatureEnabled(context.authz.user.orgId, "budgets"))) featureOff();
+  if (!isUuid(scenarioId)) throw invalidInput("budget id must be a UUID");
+  const scenario = await loadBudgetScenario(scenarioId, context.authz.user.orgId);
+  if (!scenario) throw notFound("budget");
+  return scenario;
+}
 
 function budgetFailure(error: unknown): never {
   if (error instanceof BudgetMutationError) {

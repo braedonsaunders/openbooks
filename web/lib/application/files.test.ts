@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
@@ -16,6 +17,7 @@ registerHooks({
 });
 
 const { MAX_UPLOAD_BYTES, isUploadContentType, validateCabinetUpload } = await import("./files.ts");
+const SOURCE = readFileSync(new URL("./files.ts", import.meta.url), "utf8");
 
 test("cabinet upload accepts the route's allowlisted types and rejects the rest", () => {
   assert.equal(isUploadContentType("application/pdf"), true);
@@ -41,4 +43,10 @@ test("cabinet upload validation refuses blank names, bad payloads, and oversize 
     () => validateCabinetUpload({ ...good, contentBase64: over }),
     /exceeds the 1 MB tool upload limit/,
   );
+});
+
+test("file list reuses the cabinet reader and refuses a non-UUID folder", () => {
+  assert.match(SOURCE, /listFiles\(/);
+  assert.match(SOURCE, /assertApplicationPermission\(context, "documents\.read"\)/);
+  assert.match(SOURCE, /folderId must be a UUID/);
 });
