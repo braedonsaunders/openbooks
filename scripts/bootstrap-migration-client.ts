@@ -281,6 +281,239 @@ export function sanitizeMigrationContent(content: string): string {
   return out;
 }
 
+/**
+ * Split a migration body into individual statements at top-level
+ * semicolons. Quote- and comment-aware: semicolons inside dollar-quoted
+ * function bodies, string literals, identifiers, or comments do not split.
+ *
+ * Required by the no-transaction runner mode: node-postgres sends a
+ * parameterless multi-statement string in ONE simple-protocol Query, and
+ * PostgreSQL runs that whole string inside an implicit transaction block —
+ * so CREATE INDEX CONCURRENTLY still refuses even with no explicit BEGIN.
+ * Executing each statement with its own query gives every statement its own
+ * implicit transaction, which is what CONCURRENTLY needs. Empty fragments
+ * (whitespace or comments between semicolons) are dropped.
+ */
+export function splitSqlStatements(content: string): string[] {
+  const statements: string[] = [];
+  let current = "";
+  // A fragment that is only whitespace and comments is not a statement: the
+  // runner must not send it as a query of its own. Anything else — including
+  // a lone string literal, which is a real (if useless) statement — is kept.
+  let hasCode = false;
+  let i = 0;
+  let state: "code" | "line" | "block" | "squote" | "dquote" = "code";
+  let blockDepth = 0;
+  let dollarTag: string | null = null;
+  const n = content.length;
+  const flush = (): void => {
+    if (hasCode) statements.push(current);
+    current = "";
+    hasCode = false;
+  };
+  while (i < n) {
+    if (dollarTag !== null) {
+      hasCode = true;
+      if (content.startsWith(dollarTag, i)) {
+        current += dollarTag;
+        i += dollarTag.length;
+        dollarTag = null;
+      } else {
+        current += content[i];
+        i += 1;
+      }
+      continue;
+    }
+    const ch = content[i];
+    const next = content[i + 1];
+    if (state === "code") {
+      if (ch === "-" && next === "-") {
+        state = "line";
+        current += ch + next;
+        i += 2;
+        continue;
+      }
+      if (ch === "/" && next === "*") {
+        state = "block";
+        blockDepth = 1;
+        current += ch + next;
+        i += 2;
+        continue;
+      }
+      if (ch === "'") {
+        hasCode = true;
+        state = "squote";
+        current += ch;
+        i += 1;
+        continue;
+      }
+      if (ch === '"') {
+        hasCode = true;
+        state = "dquote";
+        current += ch;
+        i += 1;
+        continue;
+      }
+      if (ch === "$") {
+        const tag = /^\$[A-Za-z_][A-Za-z0-9_]*\$|^\$\$/.exec(content.slice(i))?.[0];
+        if (tag) {
+          hasCode = true;
+          dollarTag = tag;
+          current += tag;
+          i += tag.length;
+          continue;
+        }
+        if (ch.trim().length > 0) hasCode = true;
+        current += ch;
+        i += 1;
+        continue;
+      }
+      if (ch === ";") {
+        current += ch;
+        i += 1;
+        flush();
+        continue;
+      }
+      if (ch.trim().length > 0) hasCode = true;
+      current += ch;
+      i += 1;
+      continue;
+    }
+    if (state === "line") {
+      current += ch;
+      i += 1;
+      if (ch === "\n") state = "code";
+      continue;
+    }
+    if (state === "block") {
+      current += ch;
+      if (ch === "/" && next === "*") {
+        blockDepth += 1;
+        current += next;
+        i += 2;
+        continue;
+      }
+      if (ch === "*" && next === "/") {
+        current += next;
+        i += 2;
+        blockDepth -= 1;
+        if (blockDepth === 0) state = "code";
+        continue;
+      }
+      i += 1;
+      continue;
+    }
+    if (state === "squote") {
+      current += ch;
+      i += 1;
+      if (ch === "'" && next === "'") {
+        current += next;
+        i += 1;
+      } else if (ch === "'") {
+        state = "code";
+      }
+      continue;
+    }
+    current += ch;
+    i += 1;
+    if (ch === '"' && next === '"') {
+      current += next;
+      i += 1;
+    } else if (ch === '"') {
+      state = "code";
+    }
+  }
+  flush();
+  return statements;
+}
+
+/**
+ * Execute one migration attempt on an already-connected migration client:
+ * impose the bounded lock_timeout, run the body (one query per statement
+ * outside a transaction, a single transactional query inside one), restore
+ * the session defaults, and record the ledger row. Throws the raw driver
+ * error so the caller can decide between a 55P03 retry and a loud deploy
+ * failure. bootstrap.ts owns the retry loop (and the one special-case body
+ * executor); this function owns the execution path so tests can drive the
+ * real runner logic — including a genuine CREATE INDEX CONCURRENTLY file —
+ * without importing bootstrap.ts, which runs main() on import.
+ */
+export type MigrationAttempt = {
+  filename: string;
+  /** Sanitized body (file-level lock_timeout already stripped). */
+  body: string;
+  transactional: boolean;
+  lock: MigrationLockConfig;
+  digest: string;
+  recordedDigest?: string;
+  executeBody: (client: pg.PoolClient, body: string) => Promise<void>;
+};
+
+/** The standard body executor: one transactional query, or one query per
+ * statement outside a transaction (see splitSqlStatements for why the file
+ * cannot go out as a single multi-statement string). */
+export async function executeMigrationBody(
+  client: pg.PoolClient,
+  body: string,
+  transactional: boolean,
+): Promise<void> {
+  if (transactional) {
+    await client.query(body);
+    return;
+  }
+  for (const statement of splitSqlStatements(body)) {
+    await client.query(statement);
+  }
+}
+
+export async function executeMigrationAttempt(
+  client: pg.PoolClient,
+  attempt: MigrationAttempt,
+): Promise<void> {
+  const { filename, body, transactional, lock, digest, recordedDigest, executeBody } = attempt;
+  if (transactional) {
+    await client.query("begin");
+    await client.query(`SET LOCAL lock_timeout = ${lock.lockTimeoutMs}`);
+  } else {
+    await client.query(`SET lock_timeout = ${lock.lockTimeoutMs}`);
+  }
+  try {
+    await executeBody(client, body);
+    // pg_dump-style baselines intentionally clear search_path while creating
+    // fully qualified objects. Restore the application default before this
+    // pooled session is returned to callers that execute reviewed SQL files.
+    await client.query("set search_path = public, pg_catalog");
+    await client.query("set row_security = on");
+    if (recordedDigest) {
+      const updated = await client.query(
+        `update public._applied_migrations
+            set sha256 = $1, applied_at = now()
+          where filename = $2 and sha256 = $3`,
+        [digest, filename, recordedDigest],
+      );
+      if (updated.rowCount !== 1) {
+        throw new Error("migration digest changed during approved revision");
+      }
+    } else {
+      await client.query(
+        "insert into public._applied_migrations (filename, sha256) values ($1, $2)",
+        [filename, digest],
+      );
+    }
+    if (transactional) {
+      await client.query("commit");
+    }
+  } finally {
+    if (!transactional) {
+      // Our session-scope bound must not outlive this checkout. (The file
+      // header's own session SETs leak into this timeout-free pool exactly
+      // as every transactional migration's already do — no new hazard, and
+      // the file can no longer touch lock_timeout itself.)
+      await client.query("RESET lock_timeout").catch(() => {});
+    }
+  }
+}
+
 export function describeBootstrapMigrationFailure(
   filename: string,
   error: unknown,
