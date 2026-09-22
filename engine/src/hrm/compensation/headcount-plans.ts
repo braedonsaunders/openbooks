@@ -4,8 +4,8 @@ import { businessToday } from "../../platform/business-date.ts";
 import { resolveWage, laborCostingSettings } from "../../projects/labor-costing.ts";
 import { add, cmp, isZero, mul, mulDecimal, normalizeDecimal, normalizeMoney } from "../../money/money.ts";
 import {
+  requireAggregateCompensationRead,
   requireHrmCompensationManage,
-  requireHrmCompensationRead,
 } from "../authorization.ts";
 import { CompensationError } from "./errors.ts";
 import { compensationSettings, type FteRounding } from "./architecture.ts";
@@ -70,6 +70,7 @@ type PlanRow = {
   fiscal_period_to: string;
   status: string;
   revision: number;
+  scope: { employer_subsidiary_id: string | null; department_id: string | null } | null;
 };
 
 function toPlanDTO(row: PlanRow): HeadcountPlanDTO {
@@ -524,15 +525,35 @@ export async function markPlanLineFilledForRequisition(
   void rows;
 }
 
+/**
+ * Subsidiary lens for headcount-plan reads: the actor's allowed employer
+ * set, resolved inside the domain boundary through
+ * requireAggregateCompensationRead (null = unrestricted) — never a
+ * caller-forged set. Plan headers carry no pay, so discovery stays useful
+ * on mixed-subsidiary plans: a plan scoped to a subsidiary the actor
+ * cannot see is hidden, while an unscoped (or mixed-line) plan stays
+ * discoverable and its salaries fence per line. An empty allowed set sees
+ * headers only — every costed line filters to nothing.
+ */
+function planScopeSubsidiary(row: PlanRow): string | null {
+  return row.scope?.employer_subsidiary_id ?? null;
+}
+
 export async function listPlans(query: { orgId: string; actorId: string }): Promise<readonly HeadcountPlanDTO[]> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  await requireHrmCompensationRead(db, orgId, actorId);
+  const allowed = await requireAggregateCompensationRead(db, orgId, actorId);
   const rows = (await db.execute<PlanRow>(sql`
     select id, name, fiscal_period_from::text as fiscal_period_from,
-           fiscal_period_to::text as fiscal_period_to, status, revision
+           fiscal_period_to::text as fiscal_period_to, status, revision, scope
       from hrm_headcount_plans where org_id = ${orgId} order by fiscal_period_from desc`)).rows;
-  return rows.map(toPlanDTO);
+  return rows
+    .filter((row) => {
+      if (allowed === null) return true;
+      const subsidiary = planScopeSubsidiary(row);
+      return subsidiary === null || allowed.has(subsidiary);
+    })
+    .map(toPlanDTO);
 }
 
 export async function listPlanLines(query: {
@@ -543,10 +564,19 @@ export async function listPlanLines(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const planId = requireId(query.planId, "planId");
-  await requireHrmCompensationRead(db, orgId, actorId);
+  const allowed = await requireAggregateCompensationRead(db, orgId, actorId);
+  // The predicate reads the persisted employer_subsidiary_id, never caller
+  // input. The allowlist crosses as JSON (bare JS arrays interpolate as
+  // row constructors, never PostgreSQL arrays); an empty set matches
+  // nothing, so a zero-scope actor receives no salary/staffing lines.
   const rows = (await db.execute<PlanLineRow>(sql`
     select ${LINE_COLUMNS} from hrm_headcount_plan_lines
-     where org_id = ${orgId} and plan_id = ${planId} order by start_on`)).rows;
+     where org_id = ${orgId} and plan_id = ${planId}
+       and (${allowed === null}::boolean
+            or employer_subsidiary_id in (
+              select jsonb_array_elements_text(${JSON.stringify([...(allowed ?? [])])}::jsonb)::uuid
+            ))
+     order by start_on`)).rows;
   return rows.map(toLineDTO);
 }
 
