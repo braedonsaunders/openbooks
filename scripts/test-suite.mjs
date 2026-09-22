@@ -51,8 +51,19 @@ const DATABASE_TEST_OVERRIDES = new Set([
   'engine/src/payments/operations.test.ts',
   'engine/src/payroll/agnostic-core.test.ts',
   'engine/src/payroll/bank-file.test.ts',
+  // The rail siblings are DB-gated ({ skip: !DB }) like their cemtex kin;
+  // left out of the integration manifest they skipped in the unit partition
+  // and never ran in any CI partition - dead green, several of them
+  // refusal-naming cases (malformed SUN, broken IBAN, convênio).
+  'engine/src/payroll/bank-file-bacs.test.ts',
+  'engine/src/payroll/bank-file-cnab240.test.ts',
+  'engine/src/payroll/bank-file-cemtex.test.ts',
+  'engine/src/payroll/bank-file-sepa.test.ts',
+  'engine/src/payroll/bank-file-zengin.test.ts',
+  'engine/src/payroll/cheques.test.ts',
   'engine/src/payroll/controls.test.ts',
   'engine/src/payroll/derived-earnings.test.ts',
+  'engine/src/hrm/field-time/field-time-isolation.test.ts',
   'engine/src/payroll/entitlements.test.ts',
   'engine/src/payroll/filing-registry.test.ts',
   'engine/src/payroll/opening-balances.test.ts',
@@ -87,6 +98,9 @@ const DATABASE_TEST_OVERRIDES = new Set([
   'web/lib/apps/platform.test.ts',
   'web/lib/apps/store-audit.test.ts',
   'web/lib/cash-flow-indirect.test.ts',
+  // The primary-book refusal case is DB-gated ({ skip: !env.OPENBOOKS_DB_URL });
+  // without this entry it was dead in every partition.
+  'web/lib/custom-report-books.test.ts',
   'web/lib/data-io/setup-resources.test.ts',
   'web/lib/documents.test.ts',
   'web/lib/feature-gating.test.ts',
