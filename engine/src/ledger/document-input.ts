@@ -39,6 +39,24 @@ export interface DocumentLineInput extends BillLineInput {
   classId?: string | null
   /** Warehouse used by inventory receipt or issue effects for this line. */
   stockLocationId?: string | null
+  /**
+   * Operator-chosen stock return on a credit memo: the posted receipt (vendor
+   * credit) or shipment (customer credit) whose units are coming back.
+   *
+   * Unlike the other native evidence this one IS a caller choice, so it is
+   * accepted here as a typed field rather than through `custom` — the server
+   * validates it against the offerable sources and writes the trusted
+   * `custom.inventoryReturn` bag itself, which the return engines read. A
+   * caller can therefore name a source but never forge the evidence.
+   *
+   * Tri-state, like `distributionLocked`: absent preserves the stored
+   * selection, null clears it, an object replaces it.
+   */
+  inventoryReturnSource?: {
+    movementId: string
+    lotId?: string | null
+    serialId?: string | null
+  } | null
   extraDims?: Record<string, string | null>
   custom?: Record<string, unknown>
   /** Entry-mode allocation: rule key to explode this line (explicit request). */
