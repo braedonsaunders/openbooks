@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { CloseError } from "./period-policy.ts";
+import { dataDependentFeatureDefault } from "../organization/feature-defaults.ts";
+import { featureEnabled, type FeatureState } from "../organization/feature-registry.ts";
 
 export type DefaultCloseFeatureContext = {
   advancedClose: boolean;
@@ -11,37 +13,34 @@ export type DefaultCloseFeatureContext = {
   multiSubsidiary: boolean;
 };
 
+/**
+ * The close checklist's feature context, resolved through the same machinery
+ * every other gate uses — the registry's parent-chain defaults and the
+ * data-dependent default's "explicit stored boolean always wins" rule —
+ * never a second copy of the SQL. The previous `|| has_assets` /
+ * `|| has_fx` clauses let preserved data re-enable a step the Features page
+ * says is off, so the close demanded depreciation/recognition/FX artifacts
+ * that the disabled feature refuses to produce: an operator dead end that
+ * contradicted the switchboard.
+ */
 export async function defaultCloseFeatureContext(
   executor: SqlExecutor,
   orgId: string,
 ): Promise<DefaultCloseFeatureContext> {
-  const result = (await executor.execute<{
-      features: Record<string, boolean>;
-      entities: number;
-      has_fx: boolean;
-      has_assets: boolean;
-      has_recognition: boolean;
-    }>(sql`
-    select coalesce(o.settings->'features', '{}'::jsonb) as features,
-           (select count(*)::int from subsidiaries s
-             where s.org_id=o.id and s.is_active and not s.is_elimination) as entities,
-           (exists(select 1 from journal_lines jl where jl.org_id=o.id and jl.fx_rate <> 1)
-             or exists(select 1 from fx_rates f where f.org_id=o.id)) as has_fx,
-           exists(select 1 from fixed_assets fa where fa.org_id=o.id) as has_assets,
-           exists(select 1 from recognition_schedules rs where rs.org_id=o.id) as has_recognition
+  const result = (await executor.execute<{ features: FeatureState | null }>(sql`
+    select coalesce(o.settings->'features', '{}'::jsonb) as features
       from orgs o where o.id=${orgId}
   `));
   const row = result.rows[0];
   if (!row) throw new CloseError("organization not found");
   const features = row.features ?? {};
-  const flows = features.flows ?? true;
   return {
-    advancedClose: flows && features.advancedClose === true,
-    banking: features.banking ?? true,
-    fixedAssets: (features.fixedAssets ?? true) || row.has_assets,
-    revenueRecognition: (features.revenueRecognition ?? true) || row.has_recognition,
-    multiCurrency: features.multiCurrency === true || row.has_fx,
-    multiSubsidiary: features.multiSubsidiary === true || Number(row.entities) > 1,
+    advancedClose: featureEnabled(features, "flows") && features.advancedClose === true,
+    banking: featureEnabled(features, "banking"),
+    fixedAssets: featureEnabled(features, "fixedAssets"),
+    revenueRecognition: featureEnabled(features, "revenueRecognition"),
+    multiCurrency: await dataDependentFeatureDefault(executor, orgId, "multiCurrency", features),
+    multiSubsidiary: await dataDependentFeatureDefault(executor, orgId, "multiSubsidiary", features),
   };
 }
 

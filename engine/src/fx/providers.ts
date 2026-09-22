@@ -3,6 +3,7 @@ import { businessToday } from "../platform/business-date.ts";
 import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
 import { sealJson, unsealJson } from "../platform/secrets.ts";
 import { assertNotSandbox } from "../organization/sandbox-guard.ts";
+import { dataDependentFeatureDefault } from "../organization/feature-defaults.ts";
 
 export type FxProviderKey = "bank_of_canada" | "ecb" | "open_exchange_rates";
 export type FxSyncSchedule = "manual" | "daily" | "weekdays" | "weekly";
@@ -68,13 +69,16 @@ const CONFIG_COLS = sql`id, org_id as "orgId", provider, display_name as "displa
   next_sync_at as "nextSyncAt", last_attempt_at as "lastAttemptAt",
   last_success_at as "lastSuccessAt", last_observation_date as "lastObservationDate", last_error as "lastError"`;
 
-/** Same contract as the FX write API: stored override, else the registry default (off). */
+/** Same contract as every other gate: the shared data-dependent resolver —
+ * stored override, else the org's own FX data decides. The previous local
+ * read answered "off" for orgs whose flag was never stored but whose ledger
+ * carries foreign-currency lines, so the sync this module exists to run
+ * silently never ran for exactly the orgs the default exists to protect. */
 async function multiCurrencyFeatureEnabled(orgId: string): Promise<boolean> {
-  const r = (await db.execute<{ enabled: boolean }>(sql`
-    select coalesce((settings->'features'->>'multiCurrency')::boolean, false) as enabled
-      from orgs where id = ${orgId}
+  const r = (await db.execute<{ features: Record<string, boolean> | null }>(sql`
+    select settings->'features' as features from orgs where id = ${orgId}
   `));
-  return r.rows[0]?.enabled === true;
+  return dataDependentFeatureDefault(db, orgId, "multiCurrency", r.rows[0]?.features ?? null);
 }
 
 export async function readFxProviderConfig(orgId: string): Promise<FxProviderConfigRow | null> {
@@ -634,7 +638,17 @@ export async function runDueFxProviders(now = new Date()): Promise<number> {
          select 1 from orgs organization
           where organization.id = fx_provider_configs.org_id
             and organization.env_kind = 'production'
-            and coalesce((organization.settings->'features'->>'multiCurrency')::boolean, false)
+            and (
+             coalesce((organization.settings->'features'->>'multiCurrency')::boolean, false)
+             or (
+               (organization.settings->'features'->>'multiCurrency') is null
+               and (
+                 exists(select 1 from journal_lines jl
+                         where jl.org_id = organization.id and jl.fx_rate <> 1)
+                 or exists(select 1 from fx_rates f where f.org_id = organization.id)
+               )
+             )
+       )
        )
      order by next_sync_at limit 20
   `));

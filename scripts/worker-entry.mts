@@ -18,6 +18,7 @@
  */
 import { pathToFileURL } from "node:url";
 import { sql } from "drizzle-orm";
+import { FEATURE_BY_KEY } from "../engine/src/organization/feature-registry.ts";
 import { registerWorkerDuty } from "../engine/src/worker/duties.ts";
 import { AUTOMATION_TICK_LOCK_KEY, runAutomationTickClaimed } from "../engine/src/automations/tick.ts";
 import { runQualificationAlertScan } from "../engine/src/hrm/qualifications/alerts.ts";
@@ -56,10 +57,29 @@ import {
  * instead of throwing — a duty that throws aborts its siblings.
  */
 async function orgsWithFeature(feature: string): Promise<string[]> {
+  // Resolve the requirement chain from the registry — the same graph the
+  // write gates enforce — and require EVERY link, so a stored-true child
+  // under an off parent (pre-guard rows, direct DB writes) cannot run its
+  // duties. An unset link counts as its registry default, matching
+  // featureEnabled; an unset key with no default counts off, fail closed.
+  const chain: Array<{ key: string; defaultEnabled: boolean }> = [];
+  const seen = new Set<string>();
+  let key: string | undefined = feature;
+  while (key !== undefined && !seen.has(key)) {
+    seen.add(key);
+    const def = FEATURE_BY_KEY.get(key);
+    chain.push({ key, defaultEnabled: def?.defaultEnabled === true });
+    key = def?.parentKey;
+  }
+  const links = chain.map(({ key, defaultEnabled }) =>
+    defaultEnabled
+      ? sql`coalesce((settings->'features'->>${key})::boolean, true)`
+      : sql`coalesce((settings->'features'->>${key})::boolean, false)`,
+  );
   const rows = await withBypassContext(() =>
     db.execute<{ id: string }>(sql`
       select id from orgs
-       where coalesce((settings->'features'->>${feature})::boolean, false)
+       where ${sql.join(links, sql` and `)}
     `),
   );
   return rows.rows.map((r) => r.id);
