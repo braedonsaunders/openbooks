@@ -225,6 +225,13 @@ export async function syncProjectRevenueContractsInTransaction(
       }
       // Functional amounts belong to the line's entity. An intercompany
       // entry may originate in another entity without changing cost ownership.
+      // Cost-to-date also counts the configured labor WIP account: it may be
+      // an asset (project WIP is the natural mapping), in which case the type
+      // filter above silently drops every posted labor cost and understates
+      // progress. The account is the designated project-cost accumulator, so
+      // naming it is precise — other asset postings (capitalized items) are
+      // not costs incurred and stay excluded.
+      const laborWipScope = accts.laborWip ? sql`or l.account_id = ${accts.laborWip}` : sql``;
       const cc = (await tx.execute<{ budget: string; actual: string }>(sql`
         select
           coalesce((select sum(t.estimated_cost) from project_tasks t
@@ -235,7 +242,7 @@ export async function syncProjectRevenueContractsInTransaction(
                    where l.org_id = ${orgId} and l.project_id = ${p.id} and e.status in ('posted', 'reversed')
                      and e.book_id = ${primary.id}
                      and l.subsidiary_id = ${owner.id} and e.posting_date <= ${asOfDate}::date
-                     and a.type in ('expense','cogs','expense_other','expense_deferred')), 0) as actual`));
+                     and (a.type in ('expense','cogs','expense_other','expense_deferred') ${laborWipScope})), 0) as actual`));
       percent = costToCostPercent(cc.rows[0]?.budget ?? "0", cc.rows[0]?.actual ?? "0");
     }
 
