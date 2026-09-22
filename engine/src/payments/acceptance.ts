@@ -1,6 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext, withOrg } from "../platform/db.ts";
+import { db, type SqlExecutor, withBypassContext, withOrg } from "../platform/db.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import { add, cmp, fromUnits, mulPercent, roundDiv, toUnits } from "../money/money.ts";
 import { sealJson, unsealJson } from "../platform/secrets.ts";
@@ -757,8 +757,12 @@ type ProviderConfigRow = {
   secrets: string | null;
 };
 
-async function loadProviderConfig(orgId: string, provider: AcceptanceProvider): Promise<ProviderConfigRow | null> {
-  const r = (await db.execute<ProviderConfigRow>(sql`
+async function loadProviderConfig(
+  orgId: string,
+  provider: AcceptanceProvider,
+  runner: SqlExecutor = db,
+): Promise<ProviderConfigRow | null> {
+  const r = (await runner.execute<ProviderConfigRow>(sql`
     select id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id,
            publishable_key, settings, surcharge_rule_id, secrets
       from psp_provider_configs
@@ -2293,12 +2297,24 @@ export async function saveAcceptanceConfig(
     await validateAcceptanceBankAccount(orgId, input.defaultBankAccountId);
   }
   await validateConfiguredSurchargeRule(orgId, input.provider, input.surchargeRuleId ?? null);
-  const settings = normalizeAcceptanceProviderSettings(input.provider, input.settings);
   await db.transaction(async (tx) => {
+    // Serialize creates and saves for this org/provider before reading, so
+    // overlapping merges cannot drop each other's explicit changes.
+    await tx.execute(sql`
+      select pg_advisory_xact_lock(hashtextextended(${`payment-acceptance-config:${orgId}:${input.provider}`}, 0))
+    `);
     type ConfigRow = NonNullable<Awaited<ReturnType<typeof loadProviderConfig>>>;
     // Snapshot the stored config first so the audit row carries the real
     // before/after state; sealed secrets appear only as presence flags.
-    const existing = await loadProviderConfig(orgId, input.provider);
+    const existing = await loadProviderConfig(orgId, input.provider, tx);
+    // Omitted keys survive UI saves (the setup form posts only the fields it
+    // renders); supplied values overwrite, and the merged result passes the
+    // canonical endpoint normalizer.
+    const mergedSettings = { ...(existing?.settings ?? {}) };
+    for (const [key, value] of Object.entries(input.settings ?? {})) {
+      mergedSettings[key] = value;
+    }
+    const settings = normalizeAcceptanceProviderSettings(input.provider, mergedSettings);
     const configView = (row: ConfigRow | null) =>
       row === null
         ? null
@@ -2319,6 +2335,7 @@ export async function saveAcceptanceConfig(
       // Merge with any existing sealed secrets so one field can rotate alone.
       const prior = unsealJson<{ apiKey?: string; webhookSecret?: string }>(existing?.secrets ?? null) ?? {};
       secrets = await sealJson({
+        ...prior,
         apiKey: input.apiKey ?? prior.apiKey,
         webhookSecret: input.webhookSecret ?? prior.webhookSecret,
       });
