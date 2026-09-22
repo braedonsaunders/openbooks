@@ -39,10 +39,18 @@ export const EQUITY_TYPES = ["equity"];
  * The CoA hierarchy headers and a class-total GL drill must use this map, not
  * a second handwritten list that can omit a type the balance roll-up includes.
  */
-export const ACCOUNT_CLASS_TYPES: Record<string, readonly string[]> = {
+export const ACCOUNT_CLASS_TYPES = {
   asset: ASSET_TYPES,
   liability: LIABILITY_TYPES,
   equity: EQUITY_TYPES,
   income: ["income", "income_other"],
   expense: PNL_COST_TYPES,
-};
+} satisfies Record<string, readonly string[]>;
+
+/** The classes above, as a type — a lookup outside them has no types to read. */
+export type AccountClassKey = keyof typeof ACCOUNT_CLASS_TYPES;
+
+/** Types owned by a class, or undefined when the key names no class. */
+export function accountClassTypes(key: string): readonly string[] | undefined {
+  return key in ACCOUNT_CLASS_TYPES ? ACCOUNT_CLASS_TYPES[key as AccountClassKey] : undefined;
+}
