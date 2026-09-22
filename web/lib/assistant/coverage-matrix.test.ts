@@ -104,6 +104,7 @@ const MATRIX: Entry[] = [
   { prefix: "v1/fx", tools: ["list_fx_rates"] },
   { prefix: "v1/inventory", tools: ["inventory_levels"] },
   { prefix: "v1/payroll", tools: ["list_payroll_employees"] },
+  { prefix: "v1/search", tools: ["find_accounts", "find_parties", "find_documents", "search_items", "rank_projects"], note: "global search fans out to the same domain finders the tools call" },
   { prefix: "v1/vitals", tools: ["get_vitals"] },
   { prefix: "v1", uncovered: "transport-only: health, openapi, and schema endpoints" },
   { prefix: "parties", tools: ["find_parties", "partner_statement"] },
