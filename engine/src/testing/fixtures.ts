@@ -1466,6 +1466,28 @@ async function resetScratchOrgEscaped(org: ScratchOrg, tables: readonly string[]
           await tx.execute(sql.raw(`alter table public."file_blobs" disable trigger payroll_bank_file_blob_immutable`));
           await tx.execute(sql`delete from pay_run_bank_files where org_id = ${org.orgId}`);
         }
+        // AP capture evidence before its protected source files, exactly as
+        // the full teardown does: ap_capture_source_blob_immutable refuses
+        // deleting any file_blob a capture item still references, and unlike
+        // the bank-file trigger above it is not named in GUARDED_EVIDENCE —
+        // the per-table sweep would eventually delete the items, but this
+        // unconditional blob delete runs FIRST and would hit the guard with
+        // the items still standing, failing every pooled release for any
+        // test that captured a document.
+        const captureItems = await tx.execute(sql`select 1 from ap_capture_items where org_id = ${org.orgId} limit 1`);
+        if (captureItems.rows.length > 0) {
+          for (const [table, trigger] of [
+            ["ap_capture_fields", "ap_capture_fields_append_only"],
+            ["ap_capture_runs", "ap_capture_runs_immutable"],
+            ["ap_capture_corrections", "ap_capture_corrections_append_only"],
+            ["ap_capture_events", "ap_capture_events_append_only"],
+          ] as const) {
+            await tx.execute(sql.raw(`alter table public."${table}" disable trigger ${trigger}`));
+            await tx.execute(sql`delete from ${qualified(table)} where org_id = ${org.orgId}`);
+            await tx.execute(sql.raw(`alter table public."${table}" enable trigger ${trigger}`));
+          }
+          await tx.execute(sql`delete from ap_capture_items where org_id = ${org.orgId}`);
+        }
         await tx.execute(sql`delete from file_blobs where version_id in
           (select v.id from file_versions v join files f on f.id = v.file_id where f.org_id = ${org.orgId})`);
         await tx.execute(sql`delete from file_versions where file_id in (select id from files where org_id = ${org.orgId})`);
