@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrg } from "../platform/db.ts";
 import { withTickClaim } from "../scheduling/lock.ts";
+import { schedulerOutboxBackoffMs } from "../scheduling/outbox.ts";
 import { lastCronOccurrenceBetween } from "../flows/scheduled.ts";
 import { executeAutomation } from "./execute.ts";
 import { automationsFeatureOn } from "./services.ts";
@@ -30,10 +31,20 @@ import { parseAutomationTrigger, type AutomationTrigger } from "./triggers.ts";
 
 export type TickSummary = {
   schedulesFired: number;
+  schedulesFailed: number;
   dateRelativeFired: number;
+  dateRelativeFailed: number;
   eventsDrained: number;
+  eventsFailed: number;
   errors: string[];
 };
+
+/**
+ * A staged trigger event is retried with the scheduler outbox's own
+ * backoff (same ceiling shape, same growth) and parks dead at the same
+ * attempt ceiling — one retry contract for durable work, not two.
+ */
+export const MAX_AUTOMATION_EVENT_ATTEMPTS = 8;
 
 /** Cross-replica identity for the automation scan (distinct from the web
  *  scheduler's key so the two duty sets never suppress each other). */
@@ -112,7 +123,15 @@ const DATE_RELATIVE_SOURCES: Record<string, { table: string; dateColumn: string;
 };
 
 export async function runAutomationTick(now: Date = new Date()): Promise<TickSummary> {
-  const summary: TickSummary = { schedulesFired: 0, dateRelativeFired: 0, eventsDrained: 0, errors: [] };
+  const summary: TickSummary = {
+    schedulesFired: 0,
+    schedulesFailed: 0,
+    dateRelativeFired: 0,
+    dateRelativeFailed: 0,
+    eventsDrained: 0,
+    eventsFailed: 0,
+    errors: [],
+  };
   await withBypassContext(async () => {
     const automations = await db.execute<{
       id: string; orgId: string; name: string; trigger: unknown; createdAt: string; lastRunAt: string | null;
@@ -128,16 +147,32 @@ export async function runAutomationTick(now: Date = new Date()): Promise<TickSum
           if (!(await automationsFeatureOn(automation.orgId))) return;
           const trigger = parseAutomationTrigger(automation.trigger);
           if (trigger.kind === "schedule") {
-            if (await fireSchedule(automation, trigger, now)) summary.schedulesFired += 1;
+            try {
+              const outcome = await fireSchedule(automation, trigger, now);
+              summary.schedulesFired += outcome.fired ? 1 : 0;
+              summary.schedulesFailed += outcome.failed ? 1 : 0;
+            } catch (e) {
+              // Pre-claim refusal (lost permission, unparseable recipe):
+              // no run row exists, the cursor does not advance, and the
+              // failure counts — retried next tick, never consumed.
+              summary.schedulesFailed += 1;
+              throw e;
+            }
           } else if (trigger.kind === "date_relative") {
-            summary.dateRelativeFired += await fireDateRelative(automation, trigger, now);
+            const outcome = await fireDateRelative(automation, trigger, now);
+            summary.dateRelativeFired += outcome.fired;
+            summary.dateRelativeFailed += outcome.failed;
+            summary.errors.push(...outcome.errors);
           }
         });
       } catch (e) {
         summary.errors.push(`${automation.name}: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
-    summary.eventsDrained = await drainEventQueue(now);
+    const drained = await drainEventQueue(now);
+    summary.eventsDrained += drained.drained;
+    summary.eventsFailed += drained.failed;
+    summary.errors.push(...drained.errors);
   });
   return summary;
 }
@@ -146,7 +181,7 @@ async function fireSchedule(
   automation: { id: string; orgId: string; createdAt: string; lastRunAt: string | null },
   trigger: Extract<AutomationTrigger, { kind: "schedule" }>,
   now: Date,
-): Promise<boolean> {
+): Promise<{ fired: boolean; failed: boolean }> {
   const after = automation.lastRunAt ? new Date(automation.lastRunAt) : new Date(automation.createdAt);
   // The flows scheduler's own occurrence function (same (after, now]
   // window, same catch-up-to-one semantics) — cron semantics reused,
@@ -159,23 +194,29 @@ async function fireSchedule(
   } catch {
     throw new Error(`schedule trigger has an invalid cron '${trigger.cron}' — fix the trigger and save again`);
   }
-  if (!occurrence) return false;
-  await executeAutomation({
+  if (!occurrence) return { fired: false, failed: false };
+  const result = await executeAutomation({
     orgId: automation.orgId,
     actorId: await tickActor(automation.orgId),
     automationId: automation.id,
     triggerPayload: { kind: "schedule", occurredAt: occurrence.toISOString() },
     fingerprint: `schedule:${occurrence.toISOString()}`,
   });
+  if (result.status === "failed") {
+    // The durable run row keeps the error and the recipe surfaces error;
+    // the cursor does NOT advance, so the occurrence is not consumed as
+    // success — the next tick re-reports it instead of skipping it.
+    return { fired: false, failed: true };
+  }
   await db.execute(sql`update automations set last_run_at = ${now} where id = ${automation.id} and org_id = ${automation.orgId}`);
-  return true;
+  return { fired: true, failed: false };
 }
 
 async function fireDateRelative(
   automation: { id: string; orgId: string },
   trigger: Extract<AutomationTrigger, { kind: "date_relative" }>,
   now: Date,
-): Promise<number> {
+): Promise<{ fired: number; failed: number; errors: string[] }> {
   const source = DATE_RELATIVE_SOURCES[`${trigger.entity}:${trigger.dateField}`];
   if (!source) {
     throw new Error(
@@ -194,70 +235,173 @@ async function fireDateRelative(
      where org_id = ${automation.orgId} and ${sql.identifier(trigger.dateField)} = ${matchDate}::date
      limit 200
   `);
-  let fired = 0;
+  const outcome = { fired: 0, failed: 0, errors: [] as string[] };
+  const actorId = await tickActor(automation.orgId);
   for (const row of rows.rows) {
-    await executeAutomation({
-      orgId: automation.orgId,
-      actorId: await tickActor(automation.orgId),
-      automationId: automation.id,
-      subjectEntity: source.entity,
-      subjectId: row.id,
-      triggerPayload: { kind: "date_relative", matchDate },
-      fingerprint: `date_relative:${matchDate}:${row.id}`,
-    });
-    fired += 1;
+    try {
+      const result = await executeAutomation({
+        orgId: automation.orgId,
+        actorId,
+        automationId: automation.id,
+        subjectEntity: source.entity,
+        subjectId: row.id,
+        triggerPayload: { kind: "date_relative", matchDate },
+        fingerprint: `date_relative:${matchDate}:${row.id}`,
+      });
+      // A failed subject keeps its run row but is not counted fired.
+      // The loop continues past failures so every subject is attempted
+      // and counted on its own — previously the first throw aborted the
+      // scan and discarded even the subjects that had already fired.
+      if (result.status === "failed") outcome.failed += 1;
+      else outcome.fired += 1;
+    } catch (e) {
+      outcome.failed += 1;
+      outcome.errors.push(`${source.entity} ${row.id}: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
-  return fired;
+  return outcome;
 }
 
-async function drainEventQueue(now: Date): Promise<number> {
-  void now;
-  const claimed = await db.execute<{ id: string; orgId: string; eventKind: string; subjectKind: string | null; subjectId: string | null; triggerFingerprint: string; payload: unknown }>(sql`
+type ClaimedEvent = {
+  id: string;
+  orgId: string;
+  eventKind: string;
+  subjectKind: string | null;
+  subjectId: string | null;
+  triggerFingerprint: string;
+  payload: unknown;
+  attemptCount: number;
+};
+
+async function drainEventQueue(now: Date): Promise<{ drained: number; failed: number; errors: string[] }> {
+  const claimed = await db.execute<ClaimedEvent>(sql`
     update automation_event_queue
        set status = 'claimed', claimed_at = now()
      where id in (
        select id from automation_event_queue
         where status = 'pending'
+          and (next_attempt_at is null or next_attempt_at <= now())
         order by created_at limit 100
         for update skip locked
      )
     returning id, org_id as "orgId", event_kind as "eventKind",
               subject_kind as "subjectKind", subject_id as "subjectId",
-              trigger_fingerprint as "triggerFingerprint", payload
+              trigger_fingerprint as "triggerFingerprint", payload,
+              attempt_count as "attemptCount"
   `);
-  let drained = 0;
+  const outcome = { drained: 0, failed: 0, errors: [] as string[] };
   for (const event of claimed.rows) {
     try {
-      await withOrg(event.orgId, async () => {
-        const automations = await db.execute<{ id: string; trigger: unknown }>(sql`
-          select id, trigger from automations
-           where org_id = ${event.orgId} and status = 'enabled'
-        `);
-        for (const automation of automations.rows) {
-          const trigger = parseAutomationTrigger(automation.trigger);
-          if (!triggerMatchesEvent(trigger, event)) continue;
-          await executeAutomation({
-            orgId: event.orgId,
-            actorId: await tickActor(event.orgId),
-            automationId: automation.id,
-            subjectEntity: event.subjectKind,
-            subjectId: event.subjectId,
-            previous: (event.payload as Record<string, unknown>)?.["previous"] as Record<string, unknown> | undefined,
-            triggerPayload: { kind: "queued", eventKind: event.eventKind },
-            fingerprint: `${event.eventKind}:${event.triggerFingerprint}`,
-          });
+      const firings = await fireClaimedEvent(event);
+      if (firings.failed > 0) {
+        await parkEventForRetry(event, firings.firstError, now);
+        outcome.failed += 1;
+      } else if (firings.attempted === 0 && event.attemptCount > 0) {
+        // A previous attempt failed and no enabled automation remains
+        // (errored or disabled since): park dead with the history named,
+        // never silently done.
+        await markEventDead(event, "no enabled automation remains for this event after a previous failure — inspect the automation's error state, fix it, and re-stage the trigger");
+        outcome.failed += 1;
+      } else {
+        const finished = await db.execute(sql`update automation_event_queue set status = 'done' where id = ${event.id} and org_id = ${event.orgId}`);
+        if ((finished.rowCount ?? 0) !== 1) {
+          throw new Error(`event ${event.id} fired but the done-mark matched no row — refusing to count it drained`);
         }
-      });
-      await db.execute(sql`update automation_event_queue set status = 'done' where id = ${event.id} and org_id = ${event.orgId}`);
-      drained += 1;
+        outcome.drained += 1;
+      }
     } catch (e) {
-      await db.execute(sql`
-        update automation_event_queue set status = 'failed', error = ${e instanceof Error ? e.message : String(e)}
-         where id = ${event.id} and org_id = ${event.orgId}
-      `);
+      // The drain's own bookkeeping failed (not the firing): same retry
+      // contract — a lost update retries with backoff, never vanishes.
+      const message = e instanceof Error ? e.message : String(e);
+      outcome.failed += 1;
+      outcome.errors.push(`event ${event.id}: ${message}`);
+      try {
+        await parkEventForRetry(event, message, now);
+      } catch {
+        // The park itself lost a race (row moved on); the next tick
+        // re-reads the row's true state.
+      }
     }
   }
-  return drained;
+  return outcome;
+}
+
+/** Fire one claimed event against every enabled automation it matches. */
+async function fireClaimedEvent(event: ClaimedEvent): Promise<{ attempted: number; failed: number; firstError: string }> {
+  return withOrg(event.orgId, async () => {
+    const automations = await db.execute<{ id: string; trigger: unknown }>(sql`
+      select id, trigger from automations
+       where org_id = ${event.orgId} and status = 'enabled'
+    `);
+    const actorId = await tickActor(event.orgId);
+    let attempted = 0;
+    let failed = 0;
+    let firstError = "";
+    for (const automation of automations.rows) {
+      let trigger: AutomationTrigger;
+      try {
+        trigger = parseAutomationTrigger(automation.trigger);
+      } catch (e) {
+        // One unparseable recipe must not starve the event's other
+        // automations — count it and keep firing the rest.
+        failed += 1;
+        if (!firstError) firstError = e instanceof Error ? e.message : String(e);
+        continue;
+      }
+      if (!triggerMatchesEvent(trigger, event)) continue;
+      attempted += 1;
+      try {
+        const result = await executeAutomation({
+          orgId: event.orgId,
+          actorId,
+          automationId: automation.id,
+          subjectEntity: event.subjectKind,
+          subjectId: event.subjectId,
+          previous: (event.payload as Record<string, unknown>)?.["previous"] as Record<string, unknown> | undefined,
+          triggerPayload: { kind: "queued", eventKind: event.eventKind },
+          fingerprint: `${event.eventKind}:${event.triggerFingerprint}`,
+        });
+        if (result.status === "failed") {
+          failed += 1;
+          if (!firstError) firstError = `automation ${automation.id} recorded a failed run — see its run log`;
+        }
+      } catch (e) {
+        failed += 1;
+        if (!firstError) firstError = e instanceof Error ? e.message : String(e);
+      }
+    }
+    return { attempted, failed, firstError };
+  });
+}
+
+/** A failed firing keeps its queue row: back off, or park dead at the ceiling. */
+async function parkEventForRetry(event: ClaimedEvent, message: string, now: Date): Promise<void> {
+  const attempts = event.attemptCount + 1;
+  if (attempts >= MAX_AUTOMATION_EVENT_ATTEMPTS) {
+    await markEventDead(event, message);
+    return;
+  }
+  const dueAt = new Date(now.getTime() + schedulerOutboxBackoffMs(attempts));
+  const updated = await db.execute(sql`
+    update automation_event_queue
+       set status = 'pending', attempt_count = ${attempts},
+           next_attempt_at = ${dueAt}, error = ${message.slice(0, 1000)}
+     where id = ${event.id} and org_id = ${event.orgId} and status = 'claimed'
+  `);
+  if ((updated.rowCount ?? 0) !== 1) {
+    throw new Error(`event ${event.id} left 'claimed' under the drain — refusing to overwrite its state`);
+  }
+}
+
+async function markEventDead(event: ClaimedEvent, message: string): Promise<void> {
+  const stamped = await db.execute(sql`
+    update automation_event_queue
+       set status = 'dead', attempt_count = ${event.attemptCount + 1}, error = ${message.slice(0, 1000)}
+     where id = ${event.id} and org_id = ${event.orgId}
+  `);
+  if ((stamped.rowCount ?? 0) !== 1) {
+    throw new Error(`event ${event.id} could not be parked dead — the row moved under the drain; refusing to report it dead`);
+  }
 }
 
 function triggerMatchesEvent(

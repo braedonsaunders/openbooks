@@ -510,6 +510,10 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // the column is a sparse pointer. Builds CONCURRENTLY (no-transaction
     // runner mode) so the multi-million-row prod ledger stays writable.
     "0261_ledger_dimension_fk_indexes.sql",
+    // The automations tick consumed trigger events even when every firing
+    // failed: retry accounting (attempts, due timestamp) plus a terminal
+    // dead state, so failures back off visibly instead of vanishing.
+    "0263_automation_event_queue_retry.sql",
     // Frozen filing evidence (s14_tax_compliance): tax_filings gains the
     // return's frozen denomination, identity and scope posture plus the
     // snapshot schema version (documents ship-to halves land with D1 in the
