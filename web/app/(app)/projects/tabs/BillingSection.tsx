@@ -6,7 +6,10 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
+import { fetchAction } from '@braedonsaunders/appkit-errors'
+import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { Badge, Button, Card, CardContent, Input, Label, Select } from '@openbooks/ui'
+import { useAppAction } from '@/lib/use-app-action'
 import { PagedTable } from '../../../../components/paged-table'
 import {
   ApplicationsBillingWorkspace,
@@ -102,7 +105,11 @@ export function BillingSection({
   const t = useTranslations('projects.billing')
   const tCommon = useTranslations('common')
   const router = useRouter()
-  const [busy, setBusy] = useState(false)
+  // All three billing actions run on the shared action path: a refusal pins
+  // beside the section until the next action (a toast alone never survives
+  // attention), and busy always releases through the package's finally — a
+  // slow or failed request can never wedge the buttons disabled.
+  const { busy, refusal, execute, refuse } = useAppAction()
 
   // Seed the request-billing form from the resolved cascade defaults.
   const [invoiceType, setInvoiceType] = useState('progress')
@@ -150,58 +157,77 @@ export function BillingSection({
   }
 
   async function submit() {
-    setBusy(true)
-    const res = await fetch('/api/billing-requests', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        projectId,
-        invoiceType,
-        basis,
-        drawAmount: basis === 'draw_amount' ? drawAmount || null : null,
-        startDate: basis === 'date_range' ? startDate || null : null,
-        cutoffDate: basis === 'date_range' ? cutoffDate || null : null,
-        invoiceDescription: invoiceDescription || null,
-        customerPo: customerPo || null,
-        backupRequired,
-        backupType: backupRequired ? backupType : 'none',
-        fieldTicketIds: basis === 'field_ticket' ? [...selectedFieldTicketIds] : [],
-      }),
-    })
-    if (res.ok) {
-      toast.success(t('requestCreated'))
-      setSelectedFieldTicketIds(new Set())
-      onFormOpenChange(false)
-      router.refresh()
-    } else {
-      toast.error((await res.json()).error ?? t('requestFailed'))
-    }
-    setBusy(false)
+    await execute(
+      () =>
+        fetchAction('/api/billing-requests', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projectId,
+            invoiceType,
+            basis,
+            drawAmount: basis === 'draw_amount' ? drawAmount || null : null,
+            startDate: basis === 'date_range' ? startDate || null : null,
+            cutoffDate: basis === 'date_range' ? cutoffDate || null : null,
+            invoiceDescription: invoiceDescription || null,
+            customerPo: customerPo || null,
+            backupRequired,
+            backupType: backupRequired ? backupType : 'none',
+            fieldTicketIds: basis === 'field_ticket' ? [...selectedFieldTicketIds] : [],
+          }),
+        }),
+      {
+        fallbackMessage: t('requestFailed'),
+        successMessage: t('requestCreated'),
+        onOk: () => {
+          setSelectedFieldTicketIds(new Set())
+          onFormOpenChange(false)
+          router.refresh()
+        },
+      },
+    )
   }
 
   async function createInvoice(id: string) {
-    setBusy(true)
-    const res = await fetch(`/api/billing-requests/${id}/create-invoice`, { method: 'POST' })
-    const data = await res.json()
-    setBusy(false)
-    if (res.ok && data.documentId) {
-      toast.success(t('invoiceCreated', { number: data.documentNumber }))
-      router.push(`/ar/invoices?doc=${data.documentId}&mode=edit`)
-    } else {
-      toast.error(data.error ?? t('invoiceFailed'))
-    }
+    // Slow and may already have succeeded server-side: the route locks the
+    // request row and refuses a non-open request, so a retry resolves to the
+    // existing invoice's refusal instead of a second invoice beside it.
+    await execute(
+      () =>
+        fetchAction<{ documentId?: string; documentNumber?: string }>(
+          `/api/billing-requests/${id}/create-invoice`,
+          { method: 'POST' },
+        ),
+      {
+        fallbackMessage: t('invoiceFailed'),
+        onOk: (data) => {
+          // Success trusts the status — but an ok response with no document
+          // is a broken contract, not an invoice: refuse visibly through the
+          // same pin-and-toast instead of navigating nowhere.
+          if (!data.documentId) {
+            refuse(null, t('invoiceFailed'))
+            return
+          }
+          toast.success(t('invoiceCreated', { number: data.documentNumber ?? '' }))
+          router.push(`/ar/invoices?doc=${data.documentId}&mode=edit`)
+        },
+      },
+    )
   }
 
   async function cancelRequest(id: string) {
-    setBusy(true)
-    const res = await fetch(`/api/billing-requests/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'cancel' }),
-    })
-    setBusy(false)
-    if (res.ok) router.refresh()
-    else toast.error((await res.json()).error ?? t('requestFailed'))
+    await execute(
+      () =>
+        fetchAction(`/api/billing-requests/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'cancel' }),
+        }),
+      {
+        fallbackMessage: t('requestFailed'),
+        onOk: () => router.refresh(),
+      },
+    )
   }
 
   const statusLabel = (s: string) => {
@@ -214,6 +240,7 @@ export function BillingSection({
 
   return (
     <div className="space-y-6">
+      <ActionAlert error={refusal} fallbackMessage={t('requestFailed')} />
       {/* Unbilled banner (no inline trigger — Request billing lives in the Actions menu). */}
       <Card>
         <CardContent className="p-4">

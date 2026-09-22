@@ -4,24 +4,12 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
+import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { Check, UserCog } from 'lucide-react'
 import { Badge, Button, cn, Drawer, Label, Popover, SearchSelect, Textarea } from '@openbooks/ui'
 import { confirmDialog } from '@/lib/confirm'
+import { useAppAction } from '@/lib/use-app-action'
 import { InviteLinkDrawer } from './InviteLinkDrawer'
-
-async function post(body: Record<string, unknown>, failedMessage: string): Promise<boolean> {
-  const res = await fetch('/api/admin/users', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}))
-    toast.error(data.error ?? failedMessage)
-    return false
-  }
-  return true
-}
 
 /**
  * Per-user role editor: a popover listing every role in the org with a
@@ -43,19 +31,32 @@ export function RoleAssignmentButton({
   const [busyRole, setBusyRole] = useState<string | null>(null)
   const router = useRouter()
   const assigned = new Set(assignedRoleIds)
+  // Shared action path for busy/finally and refusal toast; the per-row
+  // spinner is local state reset in a finally around it.
+  const { execute } = useAppAction()
 
   async function toggle(roleId: string) {
     setBusyRole(roleId)
-    const ok = await post(
-      {
-        action: assigned.has(roleId) ? 'unassign' : 'assign',
-        userId,
-        roleId,
-      },
-      t('requestFailed'),
-    )
-    setBusyRole(null)
-    if (ok) router.refresh()
+    try {
+      await execute(
+        () =>
+          fetchAction('/api/admin/users', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: assigned.has(roleId) ? 'unassign' : 'assign',
+              userId,
+              roleId,
+            }),
+          }),
+        {
+          fallbackMessage: t('requestFailed'),
+          onOk: () => router.refresh(),
+        },
+      )
+    } finally {
+      setBusyRole(null)
+    }
   }
 
   return (
@@ -135,32 +136,34 @@ export function ResendInviteButton({
   isPending: boolean
 }) {
   const t = useTranslations('admin.users')
-  const [busy, setBusy] = useState(false)
   const [link, setLink] = useState<string | null>(null)
   const router = useRouter()
+  const { busy, execute } = useAppAction()
 
   if (!isPending) return null
 
   async function resend() {
-    setBusy(true)
-    const res = await fetch('/api/admin/users', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'resend-invite', userId }),
-    })
-    setBusy(false)
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}))
-      toast.error(res.status === 429 ? t('inviteTooManyAttempts') : (data.error ?? t('requestFailed')))
-      return
-    }
-    const payload = await res.json().catch(() => ({}))
-    if (typeof payload.setPasswordUrl === 'string') {
-      setLink(payload.setPasswordUrl)
-      return
-    }
-    toast.success(t('inviteResent', { email: userEmail }))
-    router.refresh()
+    await execute(
+      () =>
+        fetchAction<{ setPasswordUrl?: string }>('/api/admin/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'resend-invite', userId }),
+        }),
+      {
+        // The 429 rate-limit refusal carries the server's own "try again
+        // later", which the hook renders verbatim — no call-site copy needed.
+        fallbackMessage: t('requestFailed'),
+        onOk: (data) => {
+          if (typeof data.setPasswordUrl === 'string') {
+            setLink(data.setPasswordUrl)
+            return
+          }
+          toast.success(t('inviteResent', { email: userEmail }))
+          router.refresh()
+        },
+      },
+    )
   }
 
   return (
@@ -195,8 +198,8 @@ export function ActiveToggle({
   isSelf: boolean
 }) {
   const t = useTranslations('admin.users')
-  const [busy, setBusy] = useState(false)
   const router = useRouter()
+  const { busy, execute } = useAppAction()
 
   async function toggle() {
     if (isActive) {
@@ -207,13 +210,22 @@ export function ActiveToggle({
       })
       if (!ok) return
     }
-    setBusy(true)
-    const ok = await post({ action: 'set-active', userId, isActive: !isActive }, t('requestFailed'))
-    setBusy(false)
-    if (ok) {
-      toast.success(isActive ? t('deactivated', { name: userName }) : t('reactivated', { name: userName }))
-      router.refresh()
-    }
+    const deactivating = isActive
+    await execute(
+      () =>
+        fetchAction('/api/admin/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'set-active', userId, isActive: !isActive }),
+        }),
+      {
+        fallbackMessage: t('requestFailed'),
+        onOk: () => {
+          toast.success(deactivating ? t('deactivated', { name: userName }) : t('reactivated', { name: userName }))
+          router.refresh()
+        },
+      },
+    )
   }
 
   if (isSelf) return null
@@ -320,7 +332,7 @@ function LinkPersonDrawer({
   const [reason, setReason] = useState('')
   const [attested, setAttested] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+  const { busy, execute } = useAppAction()
   const requestId = useRef(0)
 
   // Remote per-query search: bounded page per query so people beyond the
@@ -396,32 +408,31 @@ function LinkPersonDrawer({
       setError(t('linkAttestationRequired'))
       return
     }
-    setBusy(true)
     setError(null)
-    const res = await fetch('/api/admin/users', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'set-party',
-        userId,
-        partyId: value || null,
-        expectedPartyId,
-        reason: reason.trim(),
-        attestation: true,
-      }),
-    })
-    setBusy(false)
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}))
-      const message = (data as { error?: string }).error ?? t('requestFailed')
-      setError(message)
-      toast.error(message)
-      return
-    }
-    await res.json().catch(() => ({}))
-    toast.success(t('linkSaved'))
-    onClose()
-    router.refresh()
+    await execute(
+      () =>
+        fetchAction('/api/admin/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'set-party',
+            userId,
+            partyId: value || null,
+            expectedPartyId,
+            reason: reason.trim(),
+            attestation: true,
+          }),
+        }),
+      {
+        fallbackMessage: t('requestFailed'),
+        successMessage: t('linkSaved'),
+        onOk: () => {
+          onClose()
+          router.refresh()
+        },
+        onRefused: (actionError) => setError(actionError.displayMessage(t('requestFailed'))),
+      },
+    )
   }
 
   return (

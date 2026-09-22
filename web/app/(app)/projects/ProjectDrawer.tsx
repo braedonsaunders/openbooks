@@ -37,7 +37,10 @@ import {
   type EffectiveInvoicingClient,
 } from './tabs/BillingSection'
 import { formatMoney } from '@openbooks/engine/src/money/money.ts'
+import { fetchAction } from '@braedonsaunders/appkit-errors'
+import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { useMoney } from '@/components/money-provider'
+import { useAppAction } from '@/lib/use-app-action'
 import { ReadOnlyValue } from '../../../components/read-only-value'
 
 interface PartyOpt {
@@ -240,7 +243,10 @@ export function ProjectDrawer({
   )
 
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
-  const [busy, setBusy] = useState(false)
+  // Saves run on the shared action path: refusals pin beside the record and
+  // toast, and busy always releases — a failed or unreachable save can never
+  // wedge the Save button disabled or swallow the server's reason.
+  const { busy, refusal, execute } = useAppAction()
   const requestIdRef = useRef<string | null>(null)
 
   // source platform-style record: opens READ-ONLY; Edit switches to an explicit-save form.
@@ -344,28 +350,27 @@ export function ProjectDrawer({
       return
     }
     if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID()
-    setBusy(true)
     setSaveState('saving')
-    const res = await fetch('/api/projects', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': requestIdRef.current },
-      body: JSON.stringify({ ...savePayload, isActive }),
-    })
-    if (!res.ok) {
-      setSaveState('error')
-      const data = await res.json().catch(() => ({}))
-      toast.error(typeof data.error === 'string' && data.error ? data.error : t('drawer.saveFailedRetry'))
-      setBusy(false)
-      return
-    }
-    const data = await res.json().catch(() => ({}))
-    setSaveState('saved')
-    setDirty(false)
-    setBusy(false)
-    const createdId = typeof data?.project?.id === 'string' ? data.project.id : null
-    const separator = returnHref.includes('?') ? '&' : '?'
-    router.replace((createdId ? `${returnHref}${separator}project=${createdId}` : returnHref) as never)
-    router.refresh()
+    await execute(
+      () =>
+        fetchAction<{ project?: { id?: unknown } }>('/api/projects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': requestIdRef.current! },
+          body: JSON.stringify({ ...savePayload, isActive }),
+        }),
+      {
+        fallbackMessage: t('drawer.saveFailedRetry'),
+        onOk: (data) => {
+          setSaveState('saved')
+          setDirty(false)
+          const createdId = typeof data?.project?.id === 'string' ? data.project.id : null
+          const separator = returnHref.includes('?') ? '&' : '?'
+          router.replace((createdId ? `${returnHref}${separator}project=${createdId}` : returnHref) as never)
+          router.refresh()
+        },
+        onRefused: () => setSaveState('error'),
+      },
+    )
   }
 
   async function save() {
@@ -373,30 +378,32 @@ export function ProjectDrawer({
       await saveNew()
       return
     }
-    setBusy(true)
     setSaveState('saving')
-    const res = await fetch(`/api/projects/${pr.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(savePayload),
-    })
-    if (res.ok) {
-      setSaveState('saved')
-      setDirty(false)
-      setMode('view')
-      // F-t03-001: the draft placeholder is inactive by design, but the save
-      // that gives it a real name completes creation — leave it inactive and
-      // the user thinks the save failed (Inactive badge, hidden from the
-      // list). Later saves never touch the flag, so deactivation sticks.
-      if (shouldAutoActivateProject(pr.name, isActive, name)) {
-        await setActiveState(true)
-      }
-      router.refresh()
-    } else {
-      setSaveState('error')
-      toast.error((await res.json()).error ?? t('drawer.autosaveFailed'))
-    }
-    setBusy(false)
+    await execute(
+      () =>
+        fetchAction(`/api/projects/${pr.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(savePayload),
+        }),
+      {
+        fallbackMessage: t('drawer.autosaveFailed'),
+        onOk: async () => {
+          setSaveState('saved')
+          setDirty(false)
+          setMode('view')
+          // F-t03-001: the draft placeholder is inactive by design, but the save
+          // that gives it a real name completes creation — leave it inactive and
+          // the user thinks the save failed (Inactive badge, hidden from the
+          // list). Later saves never touch the flag, so deactivation sticks.
+          if (shouldAutoActivateProject(pr.name, isActive, name)) {
+            await setActiveState(true)
+          }
+          router.refresh()
+        },
+        onRefused: () => setSaveState('error'),
+      },
+    )
   }
 
   function cancel() {
@@ -413,20 +420,22 @@ export function ProjectDrawer({
   }
 
   async function setActiveState(next: boolean) {
-    setBusy(true)
-    const res = await fetch(`/api/projects/${pr.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ isActive: next }),
-    })
-    const data = await res.json()
-    if (!res.ok) toast.error(data.error ?? t('drawer.updateFailed'))
-    else {
-      setIsActive(next)
-      toast.success(next ? t('drawer.activated') : t('drawer.deactivated'))
-    }
-    setBusy(false)
-    router.refresh()
+    await execute(
+      () =>
+        fetchAction(`/api/projects/${pr.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isActive: next }),
+        }),
+      {
+        fallbackMessage: t('drawer.updateFailed'),
+        onOk: () => {
+          setIsActive(next)
+          toast.success(next ? t('drawer.activated') : t('drawer.deactivated'))
+          router.refresh()
+        },
+      },
+    )
   }
 
   const ro = !editable
@@ -774,6 +783,9 @@ export function ProjectDrawer({
         ) : undefined
       }
     >
+      <div className="px-1 pt-1">
+        <ActionAlert error={refusal} fallbackMessage={t('drawer.saveFailedRetry')} />
+      </div>
       {tab === 'overview' ? (
         <div className="space-y-7 p-1">
           {/* Groups moved onto an author-created tab are drawn there, not here. */}

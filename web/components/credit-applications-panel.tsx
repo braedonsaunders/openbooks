@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
+import { fetchAction } from "@braedonsaunders/appkit-errors";
 import { Button, Input } from "@openbooks/ui";
 import { useMoney } from "./money-provider";
 import { useBusinessToday } from "./business-date-provider";
+import { useAppAction } from "../lib/use-app-action";
 
 type Settlement = {
   applicationId: string;
@@ -71,8 +73,10 @@ export function CreditApplicationsPanel({
   const [available, setAvailable] = useState(true);
   const [openItems, setOpenItems] = useState<OpenItem[] | null>(null);
   const [amounts, setAmounts] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Shared action path: refusals toast through the hook and render inline,
+  // and busy always releases — a dead network can never wedge Apply.
+  const { busy, execute } = useAppAction();
   // One key per logical apply: minted on first submit and reused across
   // retries until the outcome is visible, so a network retry resolves to the
   // settlement it already wrote instead of writing a second one beside it.
@@ -107,19 +111,21 @@ export function CreditApplicationsPanel({
 
   async function startApply() {
     if (!partyId) return;
-    setBusy(true);
     setError(null);
-    const res = await fetch(
-      `/api/payments/open-items?partyId=${encodeURIComponent(partyId)}&side=${side}`,
+    await execute(
+      () =>
+        fetchAction<{ items?: OpenItem[] }>(
+          `/api/payments/open-items?partyId=${encodeURIComponent(partyId)}&side=${side}`,
+        ),
+      {
+        fallbackMessage: t("applyFailed"),
+        onOk: (data) => {
+          setOpenItems(data.items ?? []);
+          setAmounts({});
+        },
+        onRefused: (actionError) => setError(actionError.displayMessage(t("applyFailed"))),
+      },
     );
-    const json = (await res.json().catch(() => ({}))) as { items?: OpenItem[]; error?: string };
-    setBusy(false);
-    if (!res.ok) {
-      setError(json.error ?? res.statusText);
-      return;
-    }
-    setOpenItems(json.items ?? []);
-    setAmounts({});
   }
 
   async function apply() {
@@ -136,54 +142,57 @@ export function CreditApplicationsPanel({
       setError(t("nothingSelected"));
       return;
     }
-    setBusy(true);
     setError(null);
     const key = pendingKey ?? crypto.randomUUID();
     setPendingKey(key);
-    try {
-      const res = await fetch("/api/payments/credit-applications", {
-        method: "POST",
-        headers: { "content-type": "application/json", "Idempotency-Key": key },
-        body: JSON.stringify({
-          partyId,
-          side,
-          appliedOn: today,
-          credits,
+    await execute(
+      () =>
+        fetchAction("/api/payments/credit-applications", {
+          method: "POST",
+          headers: { "content-type": "application/json", "Idempotency-Key": key },
+          body: JSON.stringify({
+            partyId,
+            side,
+            appliedOn: today,
+            credits,
+          }),
         }),
-      });
-      const json = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) {
-        setError(json.error ?? res.statusText);
-        // A named refusal means this key's settlement cannot serve a retry:
-        // the next attempt must start a fresh request. A network-level
-        // failure keeps the key, so the retry replays rather than re-applies.
-        setPendingKey(null);
-        return;
-      }
-      setPendingKey(null);
-      setOpenItems(null);
-      setAmounts({});
-      await load();
-    } finally {
-      setBusy(false);
-    }
+      {
+        fallbackMessage: t("applyFailed"),
+        onOk: async () => {
+          setPendingKey(null);
+          setOpenItems(null);
+          setAmounts({});
+          await load();
+        },
+        onRefused: (actionError) => {
+          setError(actionError.displayMessage(t("applyFailed")));
+          // A named refusal means this key's settlement cannot serve a retry:
+          // the next attempt must start a fresh request. A network-level
+          // failure keeps the key, so the retry replays rather than re-applies.
+          if (actionError.kind !== "transport") setPendingKey(null);
+        },
+      },
+    );
   }
 
   async function release(applicationId: string) {
-    setBusy(true);
     setError(null);
-    const res = await fetch("/api/payments/credit-applications", {
-      method: "DELETE",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ applicationId, side }),
-    });
-    const json = (await res.json().catch(() => ({}))) as { error?: string };
-    setBusy(false);
-    if (!res.ok) {
-      setError(json.error ?? res.statusText);
-      return;
-    }
-    await load();
+    await execute(
+      () =>
+        fetchAction("/api/payments/credit-applications", {
+          method: "DELETE",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ applicationId, side }),
+        }),
+      {
+        fallbackMessage: t("releaseFailed"),
+        onOk: async () => {
+          await load();
+        },
+        onRefused: (actionError) => setError(actionError.displayMessage(t("releaseFailed"))),
+      },
+    );
   }
 
   const currency = state.currency;

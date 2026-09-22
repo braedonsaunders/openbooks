@@ -288,6 +288,8 @@
     "applyAmount": "Apply",
     "appliedOn": "Applied on",
     "noOpenItems": "This party has no open items to apply the credit to.",
-    "nothingSelected": "Enter an amount on at least one open item."
+    "nothingSelected": "Enter an amount on at least one open item.",
+    "applyFailed": "Could not apply the credit",
+    "releaseFailed": "Could not release the application"
   }
 }
