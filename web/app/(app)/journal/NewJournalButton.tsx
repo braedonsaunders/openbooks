@@ -1,36 +1,34 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Plus } from 'lucide-react'
-import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
+import { mergeHref } from '../../../lib/list-params'
 
-/** Instant-into-draft: creates the draft manual journal server-side, opens its flyout. */
+/**
+ * Unsaved-create: opens a URL-controlled unsaved drawer (`?entryNew=1`).
+ * Zero writes on open — the journal is persisted only by the drawer's
+ * explicit Save (one idempotent POST to /api/journals). No sequence or
+ * document number is allocated until that Save commits.
+ */
 export function NewJournalButton() {
   const t = useTranslations('journal.newButton')
-  const tc = useTranslations('common')
-  const [busy, setBusy] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const current = Object.fromEntries(searchParams.entries())
 
-  async function create() {
-    setBusy(true)
-    const res = await fetch('/api/journals/draft', { method: 'POST' })
-    const data = await res.json()
-    if (!res.ok) {
-      toast.error(data.error ?? t('createFailed'))
-      setBusy(false)
-      return
-    }
-    router.push(`/journal?entry=${data.id}&mode=edit`)
-    router.refresh()
-    setBusy(false)
+  function open() {
+    router.push(mergeHref('/journal', current, {
+      entry: undefined,
+      entryNew: '1',
+      mode: 'edit',
+    }) as never)
   }
 
   return (
-    <Button onClick={create} disabled={busy}>
-      <Plus size={15} /> {busy ? tc('actions.creating') : t('label')}
+    <Button onClick={open}>
+      <Plus size={15} /> {t('label')}
     </Button>
   )
 }

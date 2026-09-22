@@ -231,6 +231,8 @@ export function JournalDrawer({
   headerDefs,
   lineDefs,
   layout,
+  createMode = false,
+  closeHref,
 }: {
   journal: JournalPayload
   initialMode?: DrawerMode
@@ -245,9 +247,16 @@ export function JournalDrawer({
   headerDefs: CustomFieldDefClient[]
   lineDefs: CustomFieldDefClient[]
   layout?: FormLayoutConfig
+  /** Unsaved-create: no persisted row exists. Cancel/close navigate away
+   *  with zero writes; Save is the first write (one idempotent POST). */
+  createMode?: boolean
+  /** List return URL — Cancel/close land here, and a successful Save opens
+   *  the created journal over it. */
+  closeHref?: string
 }) {
   const { money } = useMoney()
   const t = useTranslations('journal.drawer')
+  const tNew = useTranslations('journal.newButton')
   const tc = useTranslations('common')
   const router = useRouter()
   const doc = asJournalDoc(journal.doc)
@@ -259,9 +268,11 @@ export function JournalDrawer({
   // is EXPLICIT — no autosave.
   const canEditStatus = doc.status === 'draft'
   const [mode, setMode] = useState<DrawerMode>(
-    initialDrawerMode(initialMode, canEditStatus),
+    createMode ? 'edit' : initialDrawerMode(initialMode, canEditStatus),
   )
   const editable = mode === 'edit' && canEditStatus
+  const returnHref = closeHref ?? '/journal'
+  const requestIdRef = useRef<string | null>(null)
 
   const [partyId, setPartyId] = useState<string>(doc.party_id ?? '')
   const [documentDate, setDocumentDate] = useState<string>(doc.document_date ?? '')
@@ -466,6 +477,10 @@ export function JournalDrawer({
   }
 
   useEffect(() => {
+    // Unsaved-create has no persisted row to read: there is no revision to
+    // pin and nothing to reconcile. Skipped entirely — zero reads that could
+    // 404, zero writes by construction.
+    if (createMode) return
     let active = true
     loadDraftDocumentSnapshot(`/api/journals/${doc.id}`, t('postFailed'))
       .then((incoming) => {
@@ -478,9 +493,54 @@ export function JournalDrawer({
     return () => {
       active = false
     }
-  }, [doc.id, t])
+  }, [doc.id, t, createMode])
+
+  /**
+   * Unsaved-create Save: one idempotent POST carrying the whole journal —
+   * header plus lines. The key is minted once per drawer session, so a
+   * double-click or a retried request returns the same journal instead of a
+   * duplicate. Cancel/close before this point wrote nothing — this is the
+   * first and only write, and the JE- number is allocated inside it.
+   */
+  async function saveNew() {
+    if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID()
+    setSaveState('saving')
+    const ok = await execute(
+      () =>
+        fetchAction('/api/journals', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': requestIdRef.current! },
+          body: JSON.stringify(payload),
+        }),
+      {
+        fallbackMessage: t('postFailed'),
+        onOk: (data) => {
+          const createdId = (data as { doc?: { id?: unknown } } | null)?.doc?.id
+          setSaveState('saved')
+          setDirty(false)
+          if (typeof createdId === 'string' && createdId) {
+            const separator = returnHref.includes('?') ? '&' : '?'
+            router.replace(`${returnHref}${separator}entry=${createdId}` as never)
+          } else {
+            router.push(returnHref as never)
+          }
+          router.refresh()
+        },
+        onRefused: () => {
+          // Stay in edit mode with the typed values intact: the form is
+          // still dirty, nothing was persisted, the pin carries the reason.
+          setSaveState('error')
+        },
+      },
+    )
+    if (ok) router.refresh()
+  }
 
   async function save() {
+    if (createMode) {
+      await saveNew()
+      return
+    }
     setSaveState('saving')
     if (documentRevisionRef.current == null) await refreshFromServer(false).catch(() => {})
     const revision = documentRevisionRef.current
@@ -535,6 +595,13 @@ export function JournalDrawer({
   }
 
   function cancel() {
+    // Unsaved-create Cancel writes nothing: there is no persisted row to
+    // restore, so leave the URL (and the database) exactly as found.
+    if (createMode) {
+      clearRefusal()
+      router.push(returnHref as never)
+      return
+    }
     resetForm(draftBaseline.current.payload)
     setDirty(false)
     setSaveState('saved')
@@ -749,8 +816,12 @@ export function JournalDrawer({
 
   return (
     <TransactionDrawer
-      closeHref="/journal"
+      closeHref={returnHref}
       recordId={String(doc.id)}
+      // Unsaved-create hides the evidence tabs: both panels read the
+      // persisted row the drawer has not written yet, so mounting them
+      // would only probe the API with an empty record id.
+      showEvidenceTabs={!createMode}
       canEditAttachments
       // Detach 409s on posted records (evidence is retained), so posted
       // journals hide Remove and name the retention; uploading stays on.
@@ -759,7 +830,7 @@ export function JournalDrawer({
       title={
         <span className="flex items-center gap-2.5">
           <DocTypeBadge kind="journal" />
-          <span className="font-mono">{doc.document_number}</span>
+          <span className="font-mono">{doc.document_number ?? (createMode ? tNew('label') : null)}</span>
           <Badge variant={STATUS_VARIANT[doc.status] ?? 'secondary'}>
             {STATUS_KEYS[doc.status] ? tc(`status.${STATUS_KEYS[doc.status]}`) : String(doc.status).replace('_', ' ')}
           </Badge>

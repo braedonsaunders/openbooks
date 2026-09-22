@@ -13,11 +13,12 @@ import {
   widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { buildListDrawerHref, pickString } from '../../../lib/list-params'
+import { buildListDrawerHref, mergeHref, pickString } from '../../../lib/list-params'
 import { can, requirePermission } from '../../../lib/authz'
 import { loadFieldDefs } from '../../../lib/custom-fields'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../lib/subsidiaries'
-import { createDraftJournal, loadJournalDoc } from '../../../lib/journals'
+import { loadJournalDoc } from '../../../lib/journals'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { JOURNAL_ENTRY_TABLE, journalScopeWhere } from '../../../lib/customization/entity-list-query/journal-entries'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { customSegmentOptions } from '../../../lib/segments'
@@ -77,11 +78,15 @@ export async function loadJournal(
   // ?entry= drives the manual-journal drawer over DOCUMENT ids;
   // posted-entry links to /journal/[id] are a separate, untouched surface.
   const entryParam = pickString(sp.entry)
+  // Unsaved-create: ?entryNew=1 opens an editable drawer on no persisted
+  // row. The loader ships pickers plus an empty payload; opening writes
+  // nothing, Cancel writes nothing, and the drawer's explicit Save is the
+  // single idempotent POST. Gated on gl.post like the draft flow was.
+  const creating = pickString(sp.entryNew) === '1' && can(authz, 'gl.post')
   if (entryParam === 'new') {
-    // deep-linkable instant draft: create it server-side, land on its drawer
-    if (!can(authz, 'gl.post')) redirect('/journal')
-    const draft = await createDraftJournal(authz.user.orgId, authz.user.id)
-    redirect(`/journal?entry=${draft.id}&mode=edit`)
+    // The legacy deep link minted a server-side draft on GET. It now lands
+    // on the same unsaved drawer the New button opens — still zero writes.
+    redirect(can(authz, 'gl.post') ? '/journal?entryNew=1&mode=edit' : '/journal')
   }
 
   // The header counts the list's own backing relation (JOURNAL_ENTRY_TABLE)
@@ -109,7 +114,7 @@ export async function loadJournal(
       if (!journal || !allowedSubsidiaries) return journal
       return allowedSubsidiaries.has(String(journal.doc.subsidiary_id)) ? journal : null
     }) : null,
-    entryParam
+    entryParam || creating
       ? Promise.all([
           db.execute(sql`select id, display_name from parties where org_id = ${authz.user.orgId} and is_active order by display_name limit 2000`) as unknown as PickerResult<PartyPickerRow>,
           db.execute(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and is_active and not is_summary order by number nulls last`) as unknown as PickerResult<AccountPickerRow>,
@@ -124,12 +129,23 @@ export async function loadJournal(
             return allowedSubsidiaries ? options.filter((option) => allowedSubsidiaries.has(option.id)) : options
           }),
           customSegmentOptions(authz.user.orgId),
+          // Unsaved-create defaults: today's date plus the home subsidiary
+          // (root for unrestricted callers, first allowed entity otherwise).
+          // Read-only lookups — opening the drawer still writes nothing.
+          creating
+            ? Promise.all([
+                businessToday(authz.user.orgId),
+                db.execute<{ id: string; base_currency: string }>(sql`
+                  select id, base_currency from subsidiaries
+                   where org_id = ${authz.user.orgId} and parent_id is null`),
+              ])
+            : null,
         ])
       : null,
     (db.execute(sql`select count(*) as n from ${sql.raw(`${JOURNAL_ENTRY_TABLE} e`)} where ${journalScopeWhere(authz.user.orgId, allowedSubsidiaries)}`)),
   ])
   const total = Number(postedCount.rows[0]?.n ?? 0)
-  const resolvedForm = openJournal && pickers
+  const resolvedForm = (openJournal || creating) && pickers
     ? await resolveFormLayout({
         orgId: authz.user.orgId,
         userId: authz.user.id,
@@ -150,11 +166,49 @@ export async function loadJournal(
     total: money(d.total),
   }))
 
+  // The unsaved-create payload: no row exists, so the drawer edits blanks
+  // and posts them once. Draft by default, dated today, homed to the first
+  // allowed subsidiary — and with NO document number: opening the drawer
+  // allocates nothing, the number arrives with the Save response.
+  const closeHref = mergeHref('/journal', sp, {
+    entry: undefined,
+    entryNew: undefined,
+    mode: undefined,
+    form: undefined,
+  })
+  const newJournalPayload = creating && pickers
+    ? (() => {
+        const defaults = pickers[8]
+        const today = defaults?.[0] ?? ''
+        const root = defaults?.[1].rows[0]
+        const homeSub = (pickers[6] ?? [])[0] as { id: string; baseCurrency?: string } | undefined
+        return {
+          doc: {
+            id: '',
+            status: 'draft',
+            currency: homeSub?.baseCurrency ?? root?.base_currency ?? '',
+            subsidiary_id: homeSub?.id ?? null,
+            reference_number: null,
+            party_id: null,
+            party_name: null,
+            memo: null,
+            document_date: today,
+            updated_at: '',
+            entry_id: null,
+            document_number: null,
+            custom: {},
+            extra_dims: {},
+          },
+          lines: [],
+        }
+      })()
+    : null
+
   const drawer: JournalDrawerProps | null =
-    openJournal && pickers
+    (openJournal || newJournalPayload) && pickers
       ? {
-          journal: openJournal,
-          initialMode: pickString(sp.mode) === 'edit' ? 'edit' : 'view',
+          journal: (newJournalPayload ?? openJournal)!,
+          initialMode: creating || pickString(sp.mode) === 'edit' ? 'edit' : 'view',
           parties: pickers[0].rows,
           accounts: pickers[1].rows.map((account) => ({ ...account, number: account.number ?? undefined })),
           departments: pickers[2].rows,
@@ -164,6 +218,8 @@ export async function loadJournal(
           lineDefs: pickers[5] as unknown as import('../../../components/custom-field-inputs').CustomFieldDefClient[],
           layout: resolvedForm?.layout,
           segments: pickers[7],
+          createMode: creating,
+          closeHref,
         }
       : null
 

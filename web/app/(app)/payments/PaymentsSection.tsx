@@ -6,11 +6,12 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { loadPaymentDocument, openItemsForParty } from "@openbooks/engine/src/payments/payment-queries.ts";
 import { PAYMENT_KIND_SIDE, type PaymentKind } from "@openbooks/engine/src/payments/payment-contracts.ts";
 import { RecordListView } from '../../../components/record-list-view'
-import { isUuid } from '../../../lib/list-params'
+import { isUuid, mergeHref } from '../../../lib/list-params'
 import { NewPaymentButton } from './NewPaymentButton'
 import { PaymentDrawer, type OpenItemClient } from './PaymentDrawer'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { pickString } from '../../../lib/list-params'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 
 /**
  * Payment/receipt list, shared by /payments (vendor_payment) and /receipts
@@ -43,16 +44,28 @@ export async function PaymentsSection({
   const newLabel = t('list.newLabel', { side })
 
   // -- flyout ---------------------------------------------------------------
+  // Unsaved-create: ?paymentNew=1 opens an editable drawer on no persisted
+  // row. The loader ships pickers plus an empty payload; opening writes
+  // nothing, Cancel writes nothing, and the drawer's explicit Save is the
+  // single idempotent POST. Gated on manage like the draft flow was. The
+  // kind stays fixed by this section's `kind` — the surface decides it.
+  const creating = pickString(sp.paymentNew) === '1' && canManage
   const paymentId = typeof sp.payment === 'string' && isUuid(sp.payment) ? sp.payment : undefined
   const loaded = paymentId ? await loadPaymentDocument(paymentId, kind, orgId, authz.allowedSubsidiaryIds) : null
   const openPayment = loaded ?? null
+  const closeHref = mergeHref(basePath, sp, {
+    payment: undefined,
+    paymentNew: undefined,
+    mode: undefined,
+    form: undefined,
+  })
   let drawer: React.ReactNode = null
-  if (openPayment) {
+  if (openPayment || creating) {
     const partyFilter =
       side === 'ap'
         ? sql`exists (select 1 from vendor_roles vr where vr.org_id = p.org_id and vr.party_id = p.id and vr.is_active)`
         : sql`exists (select 1 from customer_roles cr where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)`
-    const [parties, banks] = await Promise.all([
+    const [parties, banks, defaults] = await Promise.all([
       db.execute<{ id: string; display_name: string }>(sql`
         select id, display_name from parties p
          where p.org_id = ${orgId} and ${partyFilter} and is_active ${paymentSharedSubsidiaryFilter(sql`p.subsidiary_id`, authz)}
@@ -61,9 +74,19 @@ export async function PaymentsSection({
         select id, number, name from accounts
          where org_id = ${orgId} and type = 'asset_bank' and is_active and not is_summary
          order by number nulls last, name`),
+      // Unsaved-create defaults: today's date plus the org currency.
+      // Read-only lookups — opening the drawer still writes nothing, and no
+      // PAY-/RCPT- number is allocated until the explicit Save commits.
+      creating
+        ? Promise.all([
+            businessToday(orgId),
+            db.execute<{ base_currency: string }>(sql`
+              select base_currency from orgs where id = ${orgId}`),
+          ])
+        : null,
     ])
     const openItems: OpenItemClient[] =
-      openPayment.doc.status === 'draft' && openPayment.doc.party_id
+      !creating && openPayment && openPayment.doc.status === 'draft' && openPayment.doc.party_id
         ? await openItemsForParty(openPayment.doc.party_id as string, side, orgId, authz.allowedSubsidiaryIds)
         : []
     const resolvedForm = await resolveFormLayout({
@@ -75,17 +98,47 @@ export async function PaymentsSection({
       lineDefs: [],
       explicitLayoutId: pickString(sp.form),
     })
+    // The unsaved-create payload: no row exists, so the drawer edits blanks
+    // and posts them once. Draft by default, dated today; party, bank
+    // account, and applications start empty for the operator to fill.
+    const newPaymentPayload = creating
+      ? {
+          doc: {
+            id: '',
+            kind,
+            status: 'draft',
+            currency: defaults?.[1].rows[0]?.base_currency ?? '',
+            total: '0',
+            document_number: null,
+            party_id: null,
+            party_name: null,
+            document_date: defaults?.[0] ?? '',
+            reference_number: null,
+            memo: null,
+            updated_at: '',
+            entry_id: null,
+            bank_account_number: null,
+            bank_account_name: null,
+          },
+          bankAccountId: null,
+          allocations: [],
+          applied: [],
+        }
+      : null
     drawer = (
       <PaymentDrawer
-        payment={(openPayment)}
-        key={String(openPayment.doc.id)}
-        initialMode={pickString(sp.mode) === 'edit' ? 'edit' : 'view'}
+        payment={(creating ? newPaymentPayload! : openPayment!)}
+        key={creating ? 'new-payment' : String(openPayment!.doc.id)}
+        initialMode={creating || pickString(sp.mode) === 'edit' ? 'edit' : 'view'}
         initialOpenItems={openItems}
         parties={parties.rows}
         bankAccounts={banks.rows}
         side={side}
         basePath={basePath}
         layout={resolvedForm.layout}
+        createMode={creating}
+        closeHref={closeHref}
+        createTitle={newLabel}
       />
     )
   }

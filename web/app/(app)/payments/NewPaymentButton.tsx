@@ -1,48 +1,43 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Plus } from 'lucide-react'
-import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
+import { mergeHref } from '../../../lib/list-params'
 
-/** Instant-into-draft: creates the draft payment server-side, opens its flyout. */
+/**
+ * Unsaved-create: opens a URL-controlled unsaved drawer (`?paymentNew=1`).
+ * Zero writes on open — the payment is persisted only by the drawer's
+ * explicit Save (one idempotent POST to /api/payments). The kind stays fixed
+ * by the entry surface (the section's `kind` prop), and no sequence or
+ * document number is allocated until that Save commits.
+ */
 export function NewPaymentButton({
-  kind,
   basePath,
   label,
 }: {
+  // Kind stays in the contract (the section fixes it per surface) but the
+  // button itself no longer needs it: opening writes nothing, and the drawer
+  // derives the kind from its own `side`.
   kind: 'vendor_payment' | 'customer_payment'
   basePath: string
   label: string
 }) {
-  const t = useTranslations('payments.newButton')
-  const tCommon = useTranslations('common')
-  const [busy, setBusy] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const current = Object.fromEntries(searchParams.entries())
 
-  async function create() {
-    setBusy(true)
-    const res = await fetch('/api/payments/draft', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ kind }),
-    })
-    const data = await res.json()
-    if (!res.ok) {
-      toast.error(data.error ?? t('createDraftFailed'))
-      setBusy(false)
-      return
-    }
-    router.push((`${basePath}?payment=${data.id}&mode=edit`))
-    router.refresh()
-    setBusy(false)
+  function open() {
+    router.push(mergeHref(basePath, current, {
+      payment: undefined,
+      paymentNew: '1',
+      mode: 'edit',
+    }) as never)
   }
 
   return (
-    <Button onClick={create} disabled={busy}>
-      <Plus size={15} /> {busy ? tCommon('actions.creating') : label}
+    <Button onClick={open}>
+      <Plus size={15} /> {label}
     </Button>
   )
 }
