@@ -158,8 +158,9 @@ test("an S-less code on an SCT run is refused by name, never fallen through", as
 
 test("SCT with an S-code prices the Scottish bands end to end", async () => {
   // Month 1, £2,250, S1257L cumulative from zero priors: free pay 1,047.50,
-  // taxable 1,202.50, all in the 19% starter band → £228.475 → £228.47
-  // (half down). NIC is the same UK-wide schedule as rUK.
+  // taxable 1,202.50, through the month-1 bands (starter £331, basic
+  // £1,413): 331 × 19% = £62.89 plus 871.50 × 20% = £174.30 → £237.19.
+  // NIC is the same UK-wide schedule as rUK.
   const { ctx, pushed } = gbContext({
     region: "SCT",
     tx: stubTx(EMPTY_YTD),
@@ -168,8 +169,8 @@ test("SCT with an S-code prices the Scottish bands end to end", async () => {
     codes: { gb_tax_code_notice: { tax_code: "S1257L", non_cumulative: null } },
   });
   const factors = await computeGbStatutory(ctx);
-  assert.equal(pushed[0]!.amount, "228.4700");
-  assert.equal(factors.GB_TAX, "228.4700");
+  assert.equal(pushed[0]!.amount, "237.1900");
+  assert.equal(factors.GB_TAX, "237.1900");
 });
 
 test("an S-code prices Scottish bands in any region; SBR is whole-pay 20%", async () => {
