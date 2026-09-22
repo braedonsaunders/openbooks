@@ -93,7 +93,7 @@ const ACTIONS: CreateAction[] = [
   { key: 'check', group: 'accounting', enabled: (p) => p.accountsPayable, icon: FileMinus2, endpoint: '/api/documents/draft', body: { kind: 'check' }, destination: (id) => `/banking/transactions?doc=${id}&mode=edit` },
   { key: 'deposit', group: 'accounting', enabled: (p) => p.journal, icon: Landmark, endpoint: '/api/documents/draft', body: { kind: 'deposit' }, destination: (id) => `/banking/transactions?doc=${id}&mode=edit` },
   { key: 'transfer', group: 'accounting', enabled: (p) => p.journal, icon: Send, endpoint: '/api/documents/draft', body: { kind: 'transfer' }, destination: (id) => `/banking/transactions?doc=${id}&mode=edit` },
-  { key: 'asset', group: 'accounting', enabled: (p) => p.assets, icon: Landmark, endpoint: '/api/assets/draft', body: {}, destination: (id) => `/assets?asset=${id}` },
+  { key: 'asset', group: 'accounting', enabled: (p) => p.assets, icon: Landmark, directHref: '/assets?assetNew=1' },
   { key: 'customer', group: 'peopleAndLists', enabled: (p) => p.parties, icon: UsersRound, endpoint: '/api/parties/draft', body: { role: 'customer' }, destination: (id) => `/entities/customers?party=${id}&mode=edit` },
   { key: 'vendor', group: 'peopleAndLists', enabled: (p) => p.parties, icon: Building2, endpoint: '/api/parties/draft', body: { role: 'vendor' }, destination: (id) => `/entities/vendors?party=${id}&mode=edit` },
   { key: 'employee', group: 'peopleAndLists', enabled: (p) => p.parties, icon: UserRound, endpoint: '/api/parties/draft', body: { role: 'employee' }, destination: (id) => `/entities/employees?party=${id}&mode=edit` },
