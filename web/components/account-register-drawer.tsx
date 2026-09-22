@@ -2,7 +2,7 @@
 
 import { useMoney } from '@/components/money-provider'
 import { useEffect, useMemo, useState } from 'react'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import {
@@ -21,6 +21,7 @@ import { TxnLink } from '../app/(app)/reports/TxnLink'
 import { accountRegisterCloseHref } from '../lib/account-register-navigation'
 import { AccountRegisterExportMenu } from './account-register-export-menu'
 import { SearchInput } from './search-input'
+import { useReportOverlayOptional } from './navigation-provider'
 
 interface RegisterResponse {
   account: { id: string; number: string | null; name: string; type: string }
@@ -45,9 +46,14 @@ interface RegisterResponse {
 
 export function AccountRegisterDrawer() {
   const { money } = useMoney()
-  const pathname = usePathname() ?? '/'
-  const params = useSearchParams()
-  const router = useRouter()
+  const nextPath = usePathname() ?? '/'
+  const nextParams = useSearchParams()
+  const overlay = useReportOverlayOptional()
+  const pathname = overlay?.pathname ?? nextPath
+  const params = useMemo(
+    () => new URLSearchParams(overlay?.search ?? nextParams.toString()),
+    [overlay?.search, nextParams],
+  )
   const t = useTranslations('accounts')
   const tc = useTranslations('common')
   const accountId = params.get('accountRegister')
@@ -99,10 +105,11 @@ export function AccountRegisterDrawer() {
       .catch((error) => {
         if (error instanceof DOMException && error.name === 'AbortError') return
         toast.error(error instanceof Error ? error.message : tc('feedback.loadFailed'))
-        router.replace(closeHref as never, { scroll: false })
+        if (overlay) overlay.replace(closeHref)
+        else window.location.assign(closeHref)
       })
     return () => controller.abort()
-  }, [accountId, book, closeHref, from, page, registerSearch, requestKey, router, tc, to])
+  }, [accountId, book, closeHref, from, overlay, page, registerSearch, requestKey, tc, to])
 
   const ready = data && loadedKey === requestKey
   const periodLabel = from || to ? `${from ?? ''} → ${to ?? ''}` : null
@@ -111,6 +118,7 @@ export function AccountRegisterDrawer() {
   return (
     <UrlDrawer
       open={!!accountId}
+      openKey={accountId ?? ''}
       closeHref={closeHref}
       title={ready ? `${data.account.number ?? ''} ${data.account.name}`.trim() : t('list.title')}
       description={ready

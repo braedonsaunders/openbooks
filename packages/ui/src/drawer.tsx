@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useTranslations } from 'next-intl'
 import { useHydrated } from './use-hydrated'
+import { nextDrawerShow, shouldCommitDrawerCloseNavigation } from './drawer-nav'
 import { cn } from './utils'
 
 // Z-INDEX SCALE (single source of truth)
@@ -350,21 +351,21 @@ export function Drawer({
 
 /**
  * Client-side navigate fn supplied by the host app (Next.js) so `UrlDrawer` can
- * close by changing the URL — which re-runs the server component that owns the
- * drawer's `open` state. The old implementation used a raw `history.pushState`,
- * which updates the URL but does NOT re-run the server, so the drawer never
- * closed (the X / backdrop / Esc appeared dead). The app wires this to
- * `router.push`; we fall back to a hard navigation if no provider is mounted.
+ * close by changing the URL. Overlay-only chrome (report drill, register,
+ * txn flyout) is a shallow replace that must not re-run the page loader;
+ * record drawers that own their `open` state on the server still push.
+ * We fall back to a hard navigation if no provider is mounted.
  */
 export const DrawerNavigateContext = React.createContext<((href: string) => void) | null>(null)
 
 /**
- * URL-state drawer wrapper for server-rendered pages. `open` is derived from a
- * `?drawer=…` search param on the server, so closing needs a real navigation
- * (provided via DrawerNavigateContext) — not a shallow history update.
+ * URL-state drawer wrapper. `open` is derived from search params. Overlay
+ * hosts (report drill) keep `open` true across target changes — pass
+ * `openKey` so a new target remounts after the previous close animation.
  */
 export function UrlDrawer({
   open,
+  openKey,
   closeHref,
   title,
   description,
@@ -382,6 +383,9 @@ export function UrlDrawer({
   syncUrlOnClose = false,
 }: {
   open: boolean
+  /** Identity of the open target. Changing it while `open` stays true
+   *  remounts the panel (second drill without a full page load). */
+  openKey?: string
   closeHref: string
   /** Required accessible name for the dialog, rendered as its heading. */
   title: React.ReactNode
@@ -455,22 +459,33 @@ export function UrlDrawer({
   // component, unmounts the drawer, and the exit animation never plays.
   const [show, setShow] = React.useState(open)
   const [prevOpen, setPrevOpen] = React.useState(open)
-  // Mirror `open` during render (same committed value, no extra render). A
-  // `close()`-driven `show === false` while `open` is still true is untouched,
-  // so the exit animation still plays before the deferred navigation.
-  if (prevOpen !== open) {
-    setPrevOpen(open)
-    setShow(open)
-  }
+  const [prevOpenKey, setPrevOpenKey] = React.useState(openKey)
+  const urlWhenClosedRef = React.useRef<string | null>(null)
+  // Mirror `open` / `openKey` during render (same committed values, no extra
+  // render). A `close()`-driven `show === false` while `open` is still true
+  // is untouched so the exit animation still plays — unless `openKey`
+  // changed, which is a new target and must remount immediately.
+  const nextShow = nextDrawerShow({ open, show, prevOpen, openKey, prevOpenKey })
+  if (nextShow.show !== show) setShow(nextShow.show)
+  if (nextShow.prevOpen !== prevOpen) setPrevOpen(nextShow.prevOpen)
+  if (nextShow.prevOpenKey !== prevOpenKey) setPrevOpenKey(nextShow.prevOpenKey)
   async function close() {
     if (beforeClose && !(await beforeClose())) return
-    if (syncUrlOnClose && typeof window !== 'undefined') {
-      window.history.replaceState(null, '', resolvedCloseHref)
+    if (typeof window !== 'undefined') {
+      urlWhenClosedRef.current = `${window.location.pathname}${window.location.search}`
+      if (syncUrlOnClose) {
+        window.history.replaceState(null, '', resolvedCloseHref)
+      }
     }
     setShow(false)
   }
   function afterExit() {
     if (typeof window === 'undefined') return
+    const urlNow = `${window.location.pathname}${window.location.search}`
+    const urlWhenClosed = urlWhenClosedRef.current ?? urlNow
+    if (!shouldCommitDrawerCloseNavigation({ urlWhenClosed, urlNow, closeHref: resolvedCloseHref })) {
+      return
+    }
     if (navigate) navigate(resolvedCloseHref)
     else window.location.assign(resolvedCloseHref)
   }

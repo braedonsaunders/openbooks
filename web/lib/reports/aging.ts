@@ -76,11 +76,17 @@ export interface AgingResult {
  */
 export type AgingCurrencyBasis = "base" | "transaction";
 
+export type AgingBucket = "current" | "b1" | "b2" | "b3" | "b4"
+
 export interface AgingOptions {
   /** Default "base": the numbers booked to date, unchanged. */
   basis?: AgingCurrencyBasis;
   /** Default the org base currency. Must be base or an in-scope txn currency. */
   reportingCurrency?: string;
+  /** Drill scope: rebuild only this party's open documents. */
+  partyId?: string;
+  /** Drill scope: rebuild only this age bucket. Matches `bucketOf`. */
+  bucket?: AgingBucket;
 }
 
 /** A needed spot rate has no coverage on or before the as-of date. The
@@ -160,6 +166,7 @@ async function openDocuments(
   orgBase: string,
   kinds: readonly string[],
   creditKind: string,
+  scope?: { partyId?: string; bucket?: AgingBucket },
 ): Promise<OpenDocument[]> {
   // Account gate: the AP side admits liability_payable lines plus the
   // designated employee-payable control (preset-typed liability_current_other,
@@ -179,15 +186,18 @@ async function openDocuments(
     -- lines minus applications dated on/before it — never the live cached
     -- balance: a later settlement must not rewrite a past aging (or
     -- month-end history would never reproduce).
-    -- Scale shape: per-document gross/applied laterals used to run once per
-    -- posted document (hundreds of thousands of index-probe loops into
-    -- applications). Each side is aggregated once, in bulk, instead.
+    -- Applications are a per-line LATERAL (indexed from/to line id), not a
+    -- bulk CTE joined back onto every open-item line. RLS on applications
+    -- hides cardinality from the planner; the bulk join was estimated at
+    -- one row and became an 8-million-pair nested loop. MATERIALIZED
+    -- doc_lines forces the posted/as-of/party/bucket filter first so the
+    -- lateral only probes lines that can still be open.
     -- Both currency legs rebuild here: the functional leg (stored base
     -- amounts and base carrying amounts — never re-translated, so the aging
     -- ties its control by construction) and the transaction leg (stored txn
     -- amounts and txn application legs). Which leg converts is the basis
     -- toggle, decided in JS below — the SQL stays one rebuild.
-    with doc_lines as (
+    with doc_lines as materialized (
       select d.id as doc_id, d.kind, d.party_id, d.document_number,
              coalesce(d.due_date, d.posting_date, d.document_date)::text as due,
              (${asOf}::date - coalesce(d.due_date, d.posting_date, d.document_date))::int as age_days,
@@ -205,23 +215,8 @@ async function openDocuments(
          and ${accountScope}
          and coalesce(d.posting_date, d.document_date) <= ${asOf}
          and ${dimWhere(dims, sql`d`)}
-    ),
-    applied_lines as (
-      -- applications.amount is the base-currency carrying amount (the same
-      -- denomination as the base leg above); the source/target transaction
-      -- legs are the same denomination as the txn leg. No FX re-translation
-      -- on either side.
-      select s.line_id, sum(s.base_amt) as applied_base, sum(s.txn_amt) as applied_txn from (
-        select dl.line_id, a.amount as base_amt,
-               case when a.from_line_id = dl.line_id
-                    then a.source_transaction_amount
-                    else a.target_transaction_amount end as txn_amt
-          from doc_lines dl
-          join applications a on (a.from_line_id = dl.line_id or a.to_line_id = dl.line_id)
-           and a.org_id = ${orgId}
-           and a.applied_on <= ${asOf}
-           and (a.unapplied_at is null or a.unapplied_at::date > ${asOf}::date)
-      ) s group by s.line_id
+         ${scope?.partyId ? sql`and d.party_id = ${scope.partyId}` : sql``}
+         and ${agingBucketSql(asOf, scope?.bucket)}
     ),
     open_docs as (
       select dl.doc_id, dl.kind, dl.party_id, dl.document_number, dl.due, dl.age_days,
@@ -231,7 +226,22 @@ async function openDocuments(
              (case when dl.kind = ${creditKind} then -1 else 1 end)
                * (sum(dl.txn_gross) - coalesce(sum(al.applied_txn), 0)) as open_txn
         from doc_lines dl
-        left join applied_lines al on al.line_id = dl.line_id
+        left join lateral (
+          -- applications.amount is the base-currency carrying amount (the same
+          -- denomination as the base leg above); the source/target transaction
+          -- legs are the same denomination as the txn leg. No FX re-translation
+          -- on either side. OR on from/to uses the existing line-id indexes.
+          select
+            coalesce(sum(a.amount), 0) as applied_base,
+            coalesce(sum(case when a.from_line_id = dl.line_id
+                              then a.source_transaction_amount
+                              else a.target_transaction_amount end), 0) as applied_txn
+          from applications a
+          where a.org_id = ${orgId}
+            and a.applied_on <= ${asOf}
+            and (a.unapplied_at is null or a.unapplied_at::date > ${asOf}::date)
+            and (a.from_line_id = dl.line_id or a.to_line_id = dl.line_id)
+        ) al on true
        group by dl.doc_id, dl.kind, dl.party_id, dl.document_number, dl.due,
                 dl.age_days, dl.doc_currency, dl.txn_ccy, dl.func_ccy
       -- Settlement completeness is a ledger (base-leg) question under both
@@ -507,8 +517,6 @@ async function foldControlResidual(
 // AR / AP Aging Detail — one row per open item (invoice/bill), bucketed
 // ---------------------------------------------------------------------------
 
-export type AgingBucket = "current" | "b1" | "b2" | "b3" | "b4"
-
 export interface AgingDetailRow {
   docId: string
   docKind: string
@@ -541,6 +549,17 @@ export function bucketOf(age: number): AgingBucket {
   return "b4"
 }
 
+/** SQL predicate that matches `bucketOf` exactly — including `b3` as age < 90. */
+function agingBucketSql(asOf: string, bucket?: AgingBucket) {
+  if (!bucket) return sql`true`
+  const age = sql`(${asOf}::date - coalesce(d.due_date, d.posting_date, d.document_date))`
+  if (bucket === "current") return sql`${age} <= 0`
+  if (bucket === "b1") return sql`${age} > 0 and ${age} <= 30`
+  if (bucket === "b2") return sql`${age} > 30 and ${age} <= 60`
+  if (bucket === "b3") return sql`${age} > 60 and ${age} < 90`
+  return sql`${age} >= 90`
+}
+
 /**
  * Per-open-item aging: the same canonical document-balance logic as
  * `agingByParty`, but one row per document rather than aggregated per party.
@@ -566,7 +585,10 @@ export async function agingDetail(
   // with the summary buckets per document. Deliberately documents-only:
   // control balances with no open item behind them (unapplied receipts,
   // direct control journals) surface on the summary residual row, never here.
-  const docs = await openDocuments(side, asOf, dims, resolvedOrgId, orgBase, kinds, creditKind);
+  const docs = await openDocuments(side, asOf, dims, resolvedOrgId, orgBase, kinds, creditKind, {
+    partyId: opts?.partyId,
+    bucket: opts?.bucket,
+  });
   const needed = new Set<string>();
   for (const d of docs) needed.add(basis === "transaction" ? d.txnCcy : d.funcCcy);
   needed.delete(target);
@@ -582,6 +604,16 @@ export async function agingDetail(
       );
     }
   }
+  return presentAgingDetail(docs, basis, target, asOf, rates)
+}
+
+function presentAgingDetail(
+  docs: OpenDocument[],
+  basis: AgingCurrencyBasis,
+  target: string,
+  asOf: string,
+  rates: Map<string, string>,
+): AgingDetailResult {
   const totals: Record<AgingBucket, ExactDecimal> & { total: ExactDecimal } = { current: ZERO, b1: ZERO, b2: ZERO, b3: ZERO, b4: ZERO, total: ZERO }
   const rows: AgingDetailRow[] = []
   for (const d of docs) {
@@ -601,6 +633,75 @@ export async function agingDetail(
     (a.partyName ?? "\uffff").localeCompare(b.partyName ?? "\uffff") || b.ageDays - a.ageDays,
   )
   return { rows, totals, asOf, basis, reportingCurrency: target }
+}
+
+/**
+ * One rebuild, two presentations — the detail page must not scan applications
+ * twice. Summary still folds the control residual; detail stays documents-only.
+ */
+export async function agingSummaryAndDetail(
+  side: AgingSide,
+  asOf: string,
+  dims?: DimFilter,
+  orgId?: string,
+  opts?: AgingOptions,
+): Promise<{ summary: AgingResult; detail: AgingDetailResult }> {
+  const resolvedOrgId = await resolveOrgId(orgId);
+  const kinds = side === "ap" ? AP_OPEN_ITEM_KINDS : AR_OPEN_ITEM_KINDS;
+  const creditKind = side === "ap" ? "vendor_credit" : "customer_credit";
+  const basis: AgingCurrencyBasis = opts?.basis ?? "base";
+  const orgBase = await presentationCurrency(resolvedOrgId);
+  const target = opts?.reportingCurrency ?? orgBase;
+  const docs = await openDocuments(side, asOf, dims, resolvedOrgId, orgBase, kinds, creditKind);
+  const residuals = await controlResiduals(side, asOf, dims, resolvedOrgId, orgBase);
+  const needed = new Set<string>();
+  for (const d of docs) needed.add(basis === "transaction" ? d.txnCcy : d.funcCcy);
+  for (const res of residuals) needed.add(res.funcCcy);
+  needed.delete(target);
+  let rates = new Map<string, string>();
+  if (needed.size > 0) {
+    try {
+      rates = await presentationRates(resolvedOrgId, target, needed, asOf);
+    } catch {
+      throw new AgingRatesUnavailableError(
+        await missingSpotCoverage(resolvedOrgId, target, needed, asOf),
+        target,
+        asOf,
+      );
+    }
+  }
+  const convert = (native: string, from: string): ExactDecimal => convertOpen(native, from, target, rates);
+  const byParty = new Map<string | null, AgingRow>();
+  for (const d of docs) {
+    const open = convert(basis === "transaction" ? d.openTxn : d.openBase, basis === "transaction" ? d.txnCcy : d.funcCcy);
+    if (decimalCmp(open, ZERO) === 0) continue;
+    const bucket = bucketOf(d.ageDays);
+    let row = byParty.get(d.partyId);
+    if (!row) {
+      row = { partyId: d.partyId, partyName: d.partyName, current: ZERO, b1: ZERO, b2: ZERO, b3: ZERO, b4: ZERO, total: ZERO };
+      byParty.set(d.partyId, row);
+    }
+    row[bucket] = decimalAdd(row[bucket], open);
+    row.total = decimalAdd(row.total, open);
+  }
+  const rows: AgingRow[] = [...byParty.values()];
+  await foldControlResidual(side, resolvedOrgId, rows, docs, residuals, convert);
+  rows.sort((a, b) => compareAbsoluteDescending(a.total, b.total));
+  const totals = rows.reduce(
+    (a, r) => ({
+      current: decimalAdd(a.current, r.current),
+      b1: decimalAdd(a.b1, r.b1),
+      b2: decimalAdd(a.b2, r.b2),
+      b3: decimalAdd(a.b3, r.b3),
+      b4: decimalAdd(a.b4, r.b4),
+      total: decimalAdd(a.total, r.total),
+    }),
+    { current: ZERO, b1: ZERO, b2: ZERO, b3: ZERO, b4: ZERO, total: ZERO },
+  );
+  return {
+    summary: { rows, totals, asOf, basis, reportingCurrency: target },
+    detail: presentAgingDetail(docs, basis, target, asOf, rates),
+  };
 }
 
 /**

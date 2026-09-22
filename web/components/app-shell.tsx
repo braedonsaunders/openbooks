@@ -23,6 +23,7 @@ import { MobileTabBar } from './mobile-tab-bar'
 import { GlobalCreateMenu, type GlobalCreatePermissions } from './global-create-menu'
 import { GlobalPartyDrawerHost } from './global-party-drawer-host'
 import { GlobalReportDrawerHost } from './global-report-drawer-host'
+import { ReportReloadIndicator } from './navigation-provider'
 import { AppLauncherLink, HeaderNavLink } from './header-nav-link'
 
 export function AppShell({
@@ -111,7 +112,8 @@ export function AppShell({
             </div>
           </header>
 
-          <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50 dark:bg-slate-950">
+          <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50 dark:bg-slate-950">
+            <ReportReloadIndicator />
             {children}
           </main>
 

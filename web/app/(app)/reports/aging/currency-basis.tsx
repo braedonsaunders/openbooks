@@ -2,6 +2,8 @@
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Select } from '@openbooks/ui'
+import { stripReportOverlay } from '../../../../lib/report-overlay'
+import { useReportOverlayOptional } from '../../../../components/navigation-provider'
 
 export interface CurrencyOption {
   value: string
@@ -36,10 +38,12 @@ export function CurrencyBasisControl({
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const overlay = useReportOverlayOptional()
   const setParam = (key: string, value: string) => {
-    const next = new URLSearchParams(searchParams.toString())
+    const next = stripReportOverlay(new URLSearchParams(overlay?.search ?? searchParams.toString()))
     next.set(key, value)
-    router.push(`${pathname}?${next.toString()}`)
+    overlay?.beginReload()
+    router.replace(`${pathname}?${next.toString()}`)
   }
   return (
     <div className="flex items-center gap-2">

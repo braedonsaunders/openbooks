@@ -1,9 +1,10 @@
 'use client'
 
-import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import type { ReportCellLink } from '@openbooks/reports'
 import { transactionDrawerHref } from '../../../lib/txn-links'
+import { OverlayLink } from '../../../components/overlay-link'
+import { useReportOverlayOptional } from '../../../components/navigation-provider'
 
 type TransactionCellLink = Extract<ReportCellLink, { kind: 'transaction' }>
 
@@ -32,18 +33,19 @@ export function TxnLink(props: TxnLinkProps) {
   const entryId = props.target ? props.target.entryId : props.entryId
   const docKind = props.target ? props.target.docKind : props.docKind
   const docId = props.target ? props.target.docId : props.docId
-  const pathname = usePathname() ?? '/'
-  const current = useSearchParams()
+  const nextPath = usePathname() ?? '/'
+  const nextSearch = useSearchParams()
+  const overlay = useReportOverlayOptional()
   const href = transactionDrawerHref({
-    pathname,
-    query: current.toString(),
+    pathname: overlay?.pathname ?? nextPath,
+    query: overlay?.search ?? nextSearch.toString(),
     entryId,
     docKind,
     docId,
   })
   return (
-    <Link href={href as never} className={className} scroll={false}>
+    <OverlayLink href={href} className={className}>
       {children}
-    </Link>
+    </OverlayLink>
   )
 }

@@ -3,6 +3,7 @@ const REGISTER_KEYS = [
   'accountRegisterPage',
   'accountRegisterFrom',
   'accountRegisterTo',
+  'accountRegisterQ',
 ] as const
 
 const CHILD_KEYS = [

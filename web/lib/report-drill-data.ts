@@ -206,9 +206,14 @@ async function agingData(target: Extract<ReportDrillTarget, { kind: 'aging' }>, 
   const [tc, tr, result] = await Promise.all([
     getTranslations('common'),
     getTranslations('reports'),
-    agingDetail(target.side, target.asOf, dims, authz.user.orgId),
+    agingDetail(target.side, target.asOf, dims, authz.user.orgId, {
+      basis: target.currencyBasis,
+      reportingCurrency: target.currency,
+      partyId: target.partyId,
+      bucket: target.bucket,
+    }),
   ])
-  const rows = result.rows.filter((row) => (!target.partyId || row.partyId === target.partyId) && (!target.bucket || row.bucket === target.bucket))
+  const rows = result.rows
   return {
     title: target.label,
     description: tr('drillDrawer.supporting'),
