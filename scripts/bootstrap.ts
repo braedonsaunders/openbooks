@@ -32,7 +32,12 @@ import { db, env, longPool, pool, withBypassContext } from "../engine/src/platfo
 import {
   connectMigrationClient,
   describeBootstrapMigrationFailure,
+  isLockNotAvailable,
+  migrationLockConfig,
+  migrationRetryDelayMs,
+  migrationRunsWithoutTransaction,
   releaseMigrationClient,
+  sanitizeMigrationContent,
 } from "./bootstrap-migration-client.ts";
 import { ensureCloseDefaults } from "../engine/src/close/defaults.ts";
 import { provisionOrganizationDefaults } from "../engine/src/provisioning/organization-provisioning.ts";
@@ -1308,42 +1313,97 @@ async function executeTrackedMigration(
 ): Promise<void> {
   // Long DDL rides the timeout-free maintenance pool: the request pool's 120s
   // client query_timeout aborts the whole-schema baseline on a slow host.
-  const client = await connectMigrationClient();
+  //
+  // Lock discipline: every migration used to run with `SET lock_timeout = 0`
+  // in its own body, each in one transaction while the old stack keeps
+  // serving traffic — an ALTER TABLE queued behind a long report query waits
+  // forever, and every later query on that table queues behind the
+  // migration. Published files are immutable, so they cannot be rewritten;
+  // the runner strips their file-level lock_timeout statements instead and
+  // imposes its own bound per attempt (SET LOCAL inside the transaction, a
+  // session SET around a no-transaction file). On an empty database — a
+  // fresh install — there is no concurrent traffic to contend with, so the
+  // old unbounded files were harmless there; with the strip they run under
+  // the same bound as everything else, so fresh installs need no special
+  // case. A lock_timeout firing (SQLSTATE 55P03) retries the whole attempt
+  // with backoff; anything else fails the deploy at once, because retrying
+  // a half-applied non-idempotent migration would run its body twice.
   const started = Date.now();
-  try {
-    await client.query("begin");
-    if (filename === ORDER_QUANTITY_PROGRESS_MIGRATION_FILENAME) {
-      await executeOrderQuantityProgressMigration(client, content, digest);
-    } else {
-      await client.query(content);
-    }
-    // pg_dump-style baselines intentionally clear search_path while creating
-    // fully qualified objects. Restore the application default before this
-    // pooled session is returned to callers that execute reviewed SQL files.
-    await client.query("set search_path = public, pg_catalog");
-    await client.query("set row_security = on");
-    if (recordedDigest) {
-      const updated = await client.query(
-        `update public._applied_migrations
+  const lock = migrationLockConfig(env);
+  const body = sanitizeMigrationContent(content);
+  const transactional = !migrationRunsWithoutTransaction(content);
+  let attempt = 0;
+  for (;;) {
+    attempt += 1;
+    const client = await connectMigrationClient();
+    try {
+      if (transactional) {
+        await client.query("begin");
+        await client.query(`SET LOCAL lock_timeout = ${lock.lockTimeoutMs}`);
+      } else {
+        // CREATE INDEX CONCURRENTLY (and friends) refuse a transaction
+        // block outright, so these files run statement by statement. The
+        // contract is strict — every statement idempotent, INVALID indexes
+        // dropped up front — because a failure mid-file leaves earlier
+        // statements committed and the retry replays the whole body.
+        await client.query(`SET lock_timeout = ${lock.lockTimeoutMs}`);
+      }
+      try {
+        if (filename === ORDER_QUANTITY_PROGRESS_MIGRATION_FILENAME) {
+          await executeOrderQuantityProgressMigration(client, body, digest);
+        } else {
+          await client.query(body);
+        }
+        // pg_dump-style baselines intentionally clear search_path while creating
+        // fully qualified objects. Restore the application default before this
+        // pooled session is returned to callers that execute reviewed SQL files.
+        await client.query("set search_path = public, pg_catalog");
+        await client.query("set row_security = on");
+        if (recordedDigest) {
+          const updated = await client.query(
+            `update public._applied_migrations
             set sha256 = $1, applied_at = now()
           where filename = $2 and sha256 = $3`,
-        [digest, filename, recordedDigest],
-      );
-      if (updated.rowCount !== 1) {
-        throw new Error("migration digest changed during approved revision");
+            [digest, filename, recordedDigest],
+          );
+          if (updated.rowCount !== 1) {
+            throw new Error("migration digest changed during approved revision");
+          }
+        } else {
+          await client.query(
+            "insert into public._applied_migrations (filename, sha256) values ($1, $2)",
+            [filename, digest],
+          );
+        }
+        if (transactional) {
+          await client.query("commit");
+        }
+      } finally {
+        if (!transactional) {
+          // Our session-scope bound must not outlive this checkout. (The
+          // file header's own session SETs leak into this timeout-free pool
+          // exactly as every transactional migration's already do — no new
+          // hazard, and the file can no longer touch lock_timeout itself.)
+          await client.query("RESET lock_timeout").catch(() => {});
+        }
       }
-    } else {
-      await client.query(
-        "insert into public._applied_migrations (filename, sha256) values ($1, $2)",
-        [filename, digest],
-      );
+      return;
+    } catch (err) {
+      await client.query("rollback").catch(() => {});
+      if (isLockNotAvailable(err) && attempt < lock.maxAttempts) {
+        const backoffMs = migrationRetryDelayMs(lock, attempt);
+        console.log(
+          `[bootstrap] ${filename} could not acquire a lock on attempt `
+            + `${attempt}/${lock.maxAttempts} (lock_timeout ${lock.lockTimeoutMs}ms); `
+            + `retrying in ${backoffMs}ms`,
+        );
+        await new Promise<void>((resolve) => setTimeout(resolve, backoffMs));
+        continue;
+      }
+      throw new Error(describeBootstrapMigrationFailure(filename, err, Date.now() - started));
+    } finally {
+      await releaseMigrationClient(client);
     }
-    await client.query("commit");
-  } catch (err) {
-    await client.query("rollback").catch(() => {});
-    throw new Error(describeBootstrapMigrationFailure(filename, err, Date.now() - started));
-  } finally {
-    await releaseMigrationClient(client);
   }
 }
 
