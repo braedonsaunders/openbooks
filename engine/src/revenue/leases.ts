@@ -1537,7 +1537,27 @@ export interface PostLeaseScheduleResult {
   posted: number;
   skipped: number;
   entries: { leaseId: string; sequence: number; entryIds: string[] }[];
+  /**
+   * One operator-readable refusal per line skipped by a closed period. Benign
+   * replays (nothing due, inactive lease, superseded line) stay silent —
+   * they are not errors, so they add no problem. Follows the depreciation
+   * runner's `problems` convention.
+   */
+  problems: string[];
 }
+
+/**
+ * A per-line schedule outcome. `null` is a benign replay (nothing due,
+ * inactive lease, superseded line) — counted as skipped, never an error.
+ * A closed period is also skipped, never fatal, but carries the refusal so
+ * the operator can see which line, date, book, and entity were refused and
+ * why. One closed line never rolls back a successfully posted sibling: each
+ * candidate posts in its own transaction.
+ */
+type LeaseScheduleLineOutcome =
+  | { kind: "posted"; leaseId: string; sequence: number; entryIds: string[] }
+  | { kind: "closed"; problem: string }
+  | null;
 
 /** Post contractual cash dates and period-end accrual dates independently.
  * A zero payment is still a completed event; timestamps, not non-null journal
@@ -1567,6 +1587,7 @@ export async function postDueLeaseSchedules(
     posted: 0,
     skipped: 0,
     entries: [],
+    problems: [],
   };
   for (const candidate of due) {
     const outcome = await withLeaseTransaction(orgId, async (tx) => {
@@ -1593,6 +1614,10 @@ export async function postDueLeaseSchedules(
       const pay = !line.payment_posted_at && line.due_on <= asOfDate;
       const accrue = !line.accrual_posted_at && line.period_end <= asOfDate;
       if (!pay && !accrue) return null;
+      // Closed-period lines are skipped, not fatal — but the refusal must
+      // reach the operator with the lease, sequence, date, book, entity, and
+      // the period gate's own message (verbatim; no invented reopen remedy).
+      const refusals: string[] = [];
       for (const date of new Set([
         ...(pay ? [line.due_on] : []),
         ...(accrue ? [line.period_end] : []),
@@ -1611,9 +1636,21 @@ export async function postDueLeaseSchedules(
             subsidiaryId: lease.subsidiary_id,
           });
         } catch (error) {
-          if (error instanceof LeaseError) return null;
+          if (error instanceof LeaseError) {
+            refusals.push(`${date}: ${error.message}`);
+            continue;
+          }
           throw error;
         }
+      }
+      if (refusals.length > 0) {
+        return {
+          kind: "closed",
+          problem:
+            `${lease.lease_number} sequence ${line.sequence} skipped — ` +
+            `${refusals.join("; ")} ` +
+            `(book ${lease.book_id}, entity ${lease.subsidiary_id})`,
+        } satisfies LeaseScheduleLineOutcome;
       }
       const entryIds: string[] = [];
       let paymentEntryId = line.payment_entry_id;
@@ -1812,11 +1849,23 @@ export async function postDueLeaseSchedules(
       `);
       if (updated.rows.length !== 1)
         throw new LeaseError("lease schedule completion could not be recorded");
-      return { leaseId: lease.id, sequence: line.sequence, entryIds };
+      return {
+        kind: "posted",
+        leaseId: lease.id,
+        sequence: line.sequence,
+        entryIds,
+      } satisfies LeaseScheduleLineOutcome;
     });
-    if (outcome) {
+    if (outcome?.kind === "posted") {
       result.posted++;
-      result.entries.push(outcome);
+      result.entries.push({
+        leaseId: outcome.leaseId,
+        sequence: outcome.sequence,
+        entryIds: outcome.entryIds,
+      });
+    } else if (outcome?.kind === "closed") {
+      result.skipped++;
+      result.problems.push(outcome.problem);
     } else result.skipped++;
   }
   return result;
