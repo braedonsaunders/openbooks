@@ -80,6 +80,37 @@ test("the release is pinned to an immutable digest, never a moving tag", () => {
   );
 });
 
+test("migrations run as the owner while the stack serves as a separate runtime login", () => {
+  assert.match(
+    code,
+    /OPENBOOKS_MIGRATION_DB_URL/,
+    "the script must read a dedicated schema-owner URL for migrations",
+  );
+  assert.match(
+    code,
+    /OPENBOOKS_DB_URL=%s\\nOPENBOOKS_RUNTIME_DB_URL=%s\\n' "\$MIGRATION_URL" "\$RUNTIME_URL"/,
+    "the migration container must receive the owner URL as its migration login and the runtime URL as its runtime login",
+  );
+});
+
+test("the release refuses a single login for both traffic and migrations", () => {
+  assert.match(
+    code,
+    /"\$RUNTIME_URL" != "\$MIGRATION_URL"/,
+    "identical runtime and migration URLs must abort the release before anything is touched",
+  );
+  assert.match(
+    code,
+    /refusing to deploy: the runtime and migration database URLs are identical/,
+    "the refusal must say what is wrong, not just exit nonzero",
+  );
+  assert.match(
+    code,
+    /OPENBOOKS_MIGRATION_DB_URL \(schema-owner login\) missing/,
+    "a missing owner URL must refuse with the operator remedy, not fall back to the runtime URL",
+  );
+});
+
 test("psql calls cannot swallow the script's own stdin", () => {
   // `docker exec -i` reads this script from stdin when it is piped over ssh,
   // truncating everything after the first call. That failure is silent: the

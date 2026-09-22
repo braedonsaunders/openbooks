@@ -68,7 +68,7 @@ async function verifyLogin(pool: pg.Pool, label: string): Promise<string> {
   return row.name;
 }
 
-async function verifyRuntimeOwnership(migration: pg.Pool, runtimeRole: string): Promise<void> {
+export async function verifyRuntimeOwnership(migration: pg.Pool, runtimeRole: string): Promise<void> {
   const result = await migration.query<{ object: string }>(`
     select 'database ' || datname as object from pg_database
      where datname = current_database() and pg_has_role($1, datdba, 'MEMBER')

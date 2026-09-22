@@ -22,11 +22,29 @@
 #
 # MIGRATION ROLE
 # --------------
-# Bootstrap normally demands separate migration and runtime roles. This cluster
-# has one role that owns the schema and is otherwise unprivileged, which is what
-# OPENBOOKS_CONSTRAINED_SCHEMA_OWNER_MIGRATION is for: it verifies the role is
-# non-superuser, cannot bypass RLS, and owns every public table, then runs the
-# migration chain and nothing else -- no seeding, no role creation.
+# Bootstrap normally demands separate migration and runtime roles. This
+# cluster migrates as the role that owns the schema and is otherwise
+# unprivileged, which is what OPENBOOKS_CONSTRAINED_SCHEMA_OWNER_MIGRATION is
+# for: it verifies the owner is non-superuser, cannot bypass RLS, and owns
+# every public table, then runs the migration chain and nothing else -- no
+# seeding, no role creation. The runtime login is ALWAYS a second,
+# non-owner role: bootstrap grants it application privileges, proves it owns
+# nothing, and RLS-proves it before the stack is touched. A release where
+# both logins are the same role is refused twice (here, and by bootstrap in
+# production) because serving application traffic as the schema owner lets
+# the app ALTER/DROP its own isolation.
+#
+# OPERATOR SETUP (one time; see deploy/README.md for the full procedure)
+# 1. As the database administrator, create the runtime login (least
+#    privilege, owns nothing):
+#      CREATE ROLE openbooks_runtime LOGIN NOSUPERUSER NOBYPASSRLS
+#        NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD '<24+ chars>';
+#      GRANT CONNECT, TEMPORARY ON DATABASE <db> TO openbooks_runtime;
+#    Details: docs/operations/communal-postgres.md.
+# 2. In the Dokploy stack env, set OPENBOOKS_DB_URL to the RUNTIME login URL
+#    (this is what web/worker serve with) and add OPENBOOKS_MIGRATION_DB_URL
+#    with the schema-OWNER login URL (migrations only, never served).
+# Until both are present and different this script refuses to deploy.
 #
 # Usage: swarm-release.sh sha256:<64 hex>
 set -euo pipefail
@@ -66,12 +84,22 @@ echo "backup: $BK"
 # ---------------------------------------------------------------------------
 # Export line-wise: `set -a; . file` breaks on unquoted parentheses in secrets.
 ENV_FILE="$BK/compose.env"
-DB_URL=""
+RUNTIME_URL=""
+MIGRATION_URL=""
 while IFS= read -r line; do
   case "$line" in ''|'#'*) continue;; esac
-  [ "${line%%=*}" = "OPENBOOKS_DB_URL" ] && DB_URL="${line#*=}"
+  [ "${line%%=*}" = "OPENBOOKS_DB_URL" ] && RUNTIME_URL="${line#*=}"
+  [ "${line%%=*}" = "OPENBOOKS_MIGRATION_DB_URL" ] && MIGRATION_URL="${line#*=}"
 done < "$ENV_FILE"
-[ -n "$DB_URL" ] || { echo "OPENBOOKS_DB_URL missing from the stack env" >&2; exit 1; }
+[ -n "$RUNTIME_URL" ] || { echo "OPENBOOKS_DB_URL (runtime login) missing from the stack env" >&2; exit 1; }
+[ -n "$MIGRATION_URL" ] || {
+  echo "OPENBOOKS_MIGRATION_DB_URL (schema-owner login) missing from the stack env." >&2
+  echo "Create the runtime login and wire both URLs per the OPERATOR SETUP section in $0." >&2
+  exit 1; }
+[ "$RUNTIME_URL" != "$MIGRATION_URL" ] || {
+  echo "refusing to deploy: the runtime and migration database URLs are identical." >&2
+  echo "Web/worker must serve as a non-owner runtime login while migrations run as the schema owner." >&2
+  exit 1; }
 
 # Keep credentialed URLs out of the Docker process argument list.
 MIGRATION_ENV=$(mktemp "$BK/migration.XXXXXXXX.env")
@@ -88,7 +116,7 @@ cleanup_migration_env() {
 trap cleanup_migration_env EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-printf 'OPENBOOKS_DB_URL=%s\nOPENBOOKS_RUNTIME_DB_URL=%s\n' "$DB_URL" "$DB_URL" > "$MIGRATION_ENV"
+printf 'OPENBOOKS_DB_URL=%s\nOPENBOOKS_RUNTIME_DB_URL=%s\n' "$MIGRATION_URL" "$RUNTIME_URL" > "$MIGRATION_ENV"
 chmod 600 "$MIGRATION_ENV"
 
 echo "applying migrations from ${IMAGE_REPO}@${NEW} ..."
