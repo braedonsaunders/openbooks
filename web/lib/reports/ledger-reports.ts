@@ -3,7 +3,10 @@ import { sql } from "drizzle-orm";
 import { functionalReportReader } from "./currency-basis";
 import { bucketSubsidiaryFilter, glSummaryEligibleDims, statementBookExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
+import { fiscalYearStartOn } from "@openbooks/reports";
 import { decimalAdd, decimalCmp, decimalNeg, type ExactDecimal } from "../statement-format";
+import { PNL_TYPES } from "../account-types";
+import { fiscalStartMonth } from "../fiscal";
 import { ZERO } from "./decimals";
 import { type DimFilter, dimWhere } from "./filters";
 
@@ -43,10 +46,11 @@ export interface GeneralLedgerResult {
 
 /**
  * General Ledger: for each account with activity in the period, its opening
- * balance (all posted lines before `from`), every posted line in the period in
- * date order with a running balance, and the closing balance. Balances are
- * debit-signed (matches the account register). Capped at `maxLines` posted
- * lines overall so a full-ledger run stays bounded.
+ * balance (posted lines before `from`; P&L only from the fiscal-year start
+ * of `from`), every posted line in the period in date order with a running
+ * balance, and the closing balance. Balances are debit-signed (matches the
+ * account register). Capped at `maxLines` posted lines overall so a
+ * full-ledger run stays bounded.
  */
 export async function generalLedger(
   from: string,
@@ -55,23 +59,26 @@ export async function generalLedger(
 ): Promise<GeneralLedgerResult> {
   const orgId = await resolveOrgId(opts.orgId)
   const maxLines = opts.maxLines ?? 5000
+  const fyStart = fiscalYearStartOn(from, await fiscalStartMonth(orgId))
   const acctFilter = opts.accountId ? sql` and l.account_id = ${opts.accountId}` : sql``
+  const pnlInYear = sql`a.type not in ${PNL_TYPES} or`
   const reportDb = functionalReportReader(orgId, sql`e.posting_date <= ${to}
     and e.book_id = ${statementBookExpr(orgId, opts.bookId)} and ${dimWhere(opts.dims)} ${acctFilter}`)
 
-  // Opening balances (debit-signed) per account before the period. Without a
-  // dimension slice this is inception-to-date over the whole ledger, so it
-  // reads the gl_month_activity summary for the whole months before `from`
-  // and only touches the lines for the (at most one) month `from` splits.
+  // Opening balances (debit-signed) per account before the period. Balance-
+  // sheet accounts are inception-to-date; P&L accounts start at the fiscal
+  // year of `from` so a mid-year GL does not carry last year's income.
   const summaryOpening = glSummaryEligibleDims(opts.dims)
   const openingSql = summaryOpening
     ? sql`
         select ${reportDb.censusColumn}, x.account_id, coalesce(sum(x.amt), 0) as bal from (
             select g.account_id, (g.debit_total - g.credit_total) as amt
               from gl_month_activity g
+              join accounts a on a.id = g.account_id and a.org_id = g.org_id
            where g.org_id = ${orgId}
              and g.book_id = ${statementBookExpr(orgId, opts.bookId)}
              and g.month < date_trunc('month', ${from}::date)::date
+             and (${pnlInYear} g.month >= ${fyStart}::date)
              ${bucketSubsidiaryFilter(opts.dims?.subsidiaryIds, sql`g`)}
              ${opts.accountId ? sql`and g.account_id = ${opts.accountId}` : sql``}
           union all
@@ -82,7 +89,9 @@ export async function generalLedger(
              and e.book_id = ${statementBookExpr(orgId, opts.bookId)}
              and e.posting_date >= date_trunc('month', ${from}::date)::date
              and e.posting_date < ${from}
-           where l.org_id = ${orgId} and ${dimWhere(opts.dims)}${acctFilter}
+            join accounts a on a.id = l.account_id and a.org_id = l.org_id
+           where l.org_id = ${orgId} and (${pnlInYear} e.posting_date >= ${fyStart}::date)
+             and ${dimWhere(opts.dims)}${acctFilter}
         ) x group by x.account_id`
     : sql`
         select ${reportDb.censusColumn}, l.account_id, coalesce(sum(l.amount), 0) as bal
@@ -90,7 +99,9 @@ export async function generalLedger(
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
           and e.book_id = ${statementBookExpr(orgId, opts.bookId)}
           join accounts a on a.id = l.account_id and a.org_id = l.org_id
-         where l.org_id = ${orgId} and e.posting_date < ${from} and ${dimWhere(opts.dims)}${acctFilter}
+         where l.org_id = ${orgId} and e.posting_date < ${from}
+           and (${pnlInYear} e.posting_date >= ${fyStart}::date)
+           and ${dimWhere(opts.dims)}${acctFilter}
          group by l.account_id`
   const opening = (await reportDb.execute<{ account_id: string; bal: string }>(openingSql))
   const openingByAcct = new Map(opening.rows.map((r) => [r.account_id, r.bal]))

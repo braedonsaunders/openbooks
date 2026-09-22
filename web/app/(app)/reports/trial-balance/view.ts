@@ -4,8 +4,12 @@ import { resolveOrgId } from '../../../../lib/org-scope'
 
 
 import { getTranslations } from 'next-intl/server'
+import { fiscalYearStartOn, priorFiscalYearEndOn } from '@openbooks/reports'
 import { dimensionOptions, trialBalance } from '../../../../lib/reports'
+import { PNL_TYPES } from '../../../../lib/account-types'
+import { COMPUTED_RETAINED_EARNINGS_PRIOR_ID } from '../../../../lib/computed-earnings'
 import { orgInfo } from '../../../../lib/data'
+import { fiscalStartMonth } from '../../../../lib/fiscal'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { MissingRatesError, reportSubsidiaryView, type RatesBlockedNotice } from '../../../../lib/consolidation'
@@ -77,29 +81,45 @@ export async function loadTrialBalance(
     }
   }
   const dims = { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids }
-  const [opts, org, branding] = await Promise.all([dimensionOptions(), orgInfo(), orgBranding()])
-  const totalDebits = decimalSum(rows.map((r) => r.debits))
-  const totalCredits = decimalSum(rows.map((r) => r.credits))
+  const [opts, org, branding, startMonth] = await Promise.all([
+    dimensionOptions(), orgInfo(), orgBranding(), fiscalStartMonth(),
+  ])
+  const fyStart = fiscalYearStartOn(date, startMonth)
+  const priorEnd = priorFiscalYearEndOn(date, startMonth)
+  const displayRows = rows.map((r) => (
+    r.id === COMPUTED_RETAINED_EARNINGS_PRIOR_ID
+      ? { ...r, name: t('statement.retainedEarningsPrior') }
+      : r
+  ))
+  const totalDebits = decimalSum(displayRows.map((r) => r.debits))
+  const totalCredits = decimalSum(displayRows.map((r) => r.credits))
 
   // The unified report shape: every value drills to the account register as of
-  // the report date (five-cell rows share one href).
-  const dataRows: PaperCell[][] = rows.map((r) => [r.number, r.name, r.debits, r.credits, r.balance])
-  const links = rows.map((r) => {
+  // the report date (five-cell rows share one href). P&L registers start at
+  // the fiscal year; the prior-year RE placeholder has no register.
+  const dataRows: PaperCell[][] = displayRows.map((r) => [r.number, r.name, r.debits, r.credits, r.balance])
+  const links = displayRows.map((r) => {
+    if (r.id === COMPUTED_RETAINED_EARNINGS_PRIOR_ID) return [null, null, null, null, null]
     const registerHref = mergeHref('/reports/trial-balance', sp, {
       accountRegister: r.id,
       accountRegisterPage: undefined,
-      accountRegisterFrom: undefined,
+      accountRegisterFrom: PNL_TYPES.includes(r.type) ? fyStart : undefined,
       accountRegisterTo: date,
     })
     return [registerHref, registerHref, null, null, null]
   })
-  const drills: (ReportDrillTarget | null)[][] = rows.map((r) => {
+  const drills: (ReportDrillTarget | null)[][] = displayRows.map((r) => {
+    const prior = r.id === COMPUTED_RETAINED_EARNINGS_PRIOR_ID
+    const pnl = PNL_TYPES.includes(r.type)
     const target: ReportDrillTarget = {
       kind: 'ledger', bookId: selectedBook.id,
       label: `${r.number ?? ''} ${r.name}`.trim(),
-      accountIds: [r.id],
-      to: date,
-      mode: 'balance',
+      accountIds: prior ? undefined : [r.id],
+      accountTypes: prior ? [...PNL_TYPES] : undefined,
+      profitSigned: prior ? true : undefined,
+      from: prior ? undefined : pnl ? fyStart : undefined,
+      to: prior ? priorEnd : date,
+      mode: prior || !pnl ? 'balance' : 'flow',
       dims,
       subsidiaryId: q.subsidiaryId,
     }

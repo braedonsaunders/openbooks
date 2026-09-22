@@ -91,12 +91,43 @@ test('profit-subtotal drills are profit-signed so the dialog net ties to the P&L
     assert.equal(section?.kind === 'ledger' && section.profitSigned, undefined)
   }
 
-  // Balance-sheet rows: asset-only stays reader-signed; accumulated earnings
+  // Balance-sheet rows: asset-only stays reader-signed; computed earnings
   // (pure P&L, balance mode) is a profit row too.
   const assets = buildDrillTarget({ ...base, mode: 'balance', drillTypes: ['asset_bank', 'asset_receivable'] })
   assert.equal(assets?.kind === 'ledger' && assets.profitSigned, undefined)
-  const accumulated = buildDrillTarget({ ...base, mode: 'balance', drillTypes: pnlTypes })
-  assert.equal(accumulated?.kind === 'ledger' && accumulated.profitSigned, true)
+  const earnings = buildDrillTarget({ ...base, mode: 'balance', drillTypes: pnlTypes })
+  assert.equal(earnings?.kind === 'ledger' && earnings.profitSigned, true)
+
+  // Prior-year RE is lifetime through the prior FY end: no `from`, or the
+  // leftover statement period start would invert the window.
+  const prior = buildDrillTarget({
+    ...base,
+    column: { kind: 'amount', from: null, to: '2025-12-31' },
+    mode: 'balance',
+    drillTypes: pnlTypes,
+    label: 'Retained earnings (prior years)',
+  })
+  assert.equal(prior?.kind, 'ledger')
+  if (prior?.kind === 'ledger') {
+    assert.equal(prior.from, undefined)
+    assert.equal(prior.to, '2025-12-31')
+    assert.equal(prior.mode, 'balance')
+    assert.equal(prior.profitSigned, true)
+  }
+
+  const current = buildDrillTarget({
+    ...base,
+    column: { kind: 'amount', from: '2026-01-01', to: '2026-07-15' },
+    mode: 'flow',
+    drillTypes: pnlTypes,
+    label: 'Current year earnings',
+  })
+  assert.equal(current?.kind, 'ledger')
+  if (current?.kind === 'ledger') {
+    assert.equal(current.from, '2026-01-01')
+    assert.equal(current.to, '2026-07-15')
+    assert.equal(current.mode, 'flow')
+  }
 })
 
 test('dimension filter params must be uuids — malformed values are dropped, never bound', () => {

@@ -15,7 +15,7 @@ import { resolveOrgId } from './org-scope'
  */
 
 // Re-export the pure helpers so existing `./fiscal` imports keep working.
-export { fiscalYearOf, fiscalYearRangeFor } from '@openbooks/reports'
+export { fiscalYearOf, fiscalYearRangeFor, fiscalYearStartOn, priorFiscalYearEndOn } from '@openbooks/reports'
 
 /** The org's fiscal position (current FY / FYTD / quarter / PYTD) as of `today`. */
 export async function orgFiscalContext(

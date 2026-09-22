@@ -51,7 +51,8 @@ test(
         totalAssets: "Total assets",
         totalLiabilities: "Total liabilities",
         totalEquity: "Total equity",
-        accumulatedEarnings: "Accumulated earnings",
+        retainedEarningsPrior: "Retained earnings (prior years)",
+        currentYearEarnings: "Current year earnings",
         translationAdjustment: "Translation adjustment",
         liabilitiesAndEquity: "Liabilities and equity",
         totalOf: (section) => \`Total \${section}\`,
@@ -141,13 +142,14 @@ test(
           const netIncome = findLine(pnl, "Net income");
           assert.deepEqual(netIncome.values.slice(0, 3).map(n), [140, 120, 20]);
 
-          // Balance sheet: accumulated earnings are the lifetime P&L bucket, so
-          // each cumulative column mixes both periods' averages — 260 total
+          // Balance sheet: current-year earnings are FYTD P&L (all 2026 here),
+          // so each cumulative column mixes both periods' averages — 260 total
           // (120 + 140), not 280. Assets translate at the current rate AS OF
           // each column's end (125 = 100 x 1.25 prior, 290 = 200 x 1.45 now),
           // and the CTA plug keeps every column balanced by construction.
           const bs = await balanceSheetView(period, "July 2026", bsLabels, { ...opts, compare: "prior_period" });
-          assert.deepEqual(findLine(bs, "Accumulated earnings").values.slice(0, 2).map(n), [260, 120]);
+          assert.deepEqual(findLine(bs, "Current year earnings").values.slice(0, 2).map(n), [260, 120]);
+          assert.deepEqual(findLine(bs, "Retained earnings (prior years)").values.slice(0, 2).map(n), [0, 0]);
           assert.deepEqual(findLine(bs, "Translation adjustment").values.slice(0, 2).map(n), [30, 5]);
           const assets = findLine(bs, "Total assets").values.map(n);
           const liabAndEquity = findLine(bs, "Liabilities and equity").values.map(n);
@@ -180,7 +182,7 @@ test(
           const refreshedPnl = await profitAndLossView(period, "July 2026", pnlLabels, { ...refreshedOpts, compare: "prior_period" });
           assert.deepEqual(findLine(refreshedPnl, "Net income").values.slice(0, 3).map(n), [150, 120, 30]);
           const refreshedBs = await balanceSheetView(period, "July 2026", bsLabels, { ...refreshedOpts, compare: "prior_period" });
-          assert.deepEqual(findLine(refreshedBs, "Accumulated earnings").values.slice(0, 2).map(n), [270, 120]);
+          assert.deepEqual(findLine(refreshedBs, "Current year earnings").values.slice(0, 2).map(n), [270, 120]);
           assert.deepEqual(findLine(refreshedBs, "Translation adjustment").values.slice(0, 2).map(n), [20, 5]);
 
           // A missing HISTORICAL rate fails loudly and side-effect-free. Rate

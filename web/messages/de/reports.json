@@ -64,6 +64,8 @@
     "other": "Sonstige",
     "otherTotal": "Summe Sonstige",
     "accumulatedEarnings": "Kumulierter Gewinnvortrag (berechnet)",
+    "retainedEarningsPrior": "Gewinnvortrag (Vorjahre)",
+    "currentYearEarnings": "Jahresüberschuss",
     "translationAdjustment": "Kumulierte Währungsumrechnungsdifferenz",
     "ratesBlockedTitle": "Konsolidierte Wechselkurse sind noch nicht abgeleitet",
     "ratesBlockedAction": "Kurse im Periodenabschluss ableiten"

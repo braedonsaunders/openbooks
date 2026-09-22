@@ -61,7 +61,7 @@ test('balance sheet prints gross cost with contra and foots to total assets', { 
     const labels = {
       assets: 'Assets', liabilities: 'Liabilities', equity: 'Equity',
       totalAssets: 'Total assets', totalLiabilities: 'Total liabilities', totalEquity: 'Total equity',
-      accumulatedEarnings: 'Accumulated earnings', translationAdjustment: 'Translation adjustment',
+      retainedEarningsPrior: 'Retained earnings (prior years)', currentYearEarnings: 'Current year earnings', translationAdjustment: 'Translation adjustment',
       liabilitiesAndEquity: 'Liabilities and equity', totalOf: (s: string) => `Total ${s}`,
     }
     const view = await withBypassContext(() => balanceSheetView(

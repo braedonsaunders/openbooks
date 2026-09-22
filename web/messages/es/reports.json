@@ -64,6 +64,8 @@
     "other": "Otros",
     "otherTotal": "Total Otros",
     "accumulatedEarnings": "Utilidades acumuladas (calculadas)",
+    "retainedEarningsPrior": "Utilidades retenidas (años anteriores)",
+    "currentYearEarnings": "Resultado del ejercicio",
     "translationAdjustment": "Ajuste de conversión acumulado",
     "ratesBlockedTitle": "Tipos consolidados aún no calculados",
     "ratesBlockedAction": "Calcular los tipos en el cierre"

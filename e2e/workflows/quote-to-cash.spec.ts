@@ -717,7 +717,7 @@ test.describe('quote-to-cash workflows', () => {
         expect(findRow(rows, 'Total Assets')).toContain(fmtCAD(cumBank));
         expect(findRow(rows, 'Total Liabilities and Equity')).toContain(fmtCAD(cumBank));
         expect(findRow(rows, 'Sales Tax Payable')).toContain(fmtCAD(cumTax));
-        expect(findRow(rows, 'Accumulated earnings')).toContain(fmtCAD(cumBank - cumTax));
+        expect(findRow(rows, 'Current year earnings')).toContain(fmtCAD(cumBank - cumTax));
       }
 
       // Audit trail on the credit memo records its lifecycle.
@@ -866,7 +866,7 @@ test.describe('quote-to-cash workflows', () => {
         expect(findRow(rows, 'Total Assets')).toContain(fmtCAD(cumBank));
         expect(findRow(rows, 'Total Liabilities and Equity')).toContain(fmtCAD(cumBank));
         expect(findRow(rows, 'Sales Tax Payable')).toContain(fmtCAD(cumTax));
-        expect(findRow(rows, 'Accumulated earnings')).toContain(fmtCAD(cumEarnings));
+        expect(findRow(rows, 'Current year earnings')).toContain(fmtCAD(cumEarnings));
       }
       expect(invoiceTxn).toBe(toCents('1000.00'));
     } finally {

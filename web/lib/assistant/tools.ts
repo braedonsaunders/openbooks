@@ -708,7 +708,7 @@ const balanceSheetTool: AssistantToolDef = {
   name: "balance_sheet",
   tier: "core",
   description:
-    "Balance sheet as of a date: assets, liabilities, and equity account rows (reader-signed, hierarchical, incl. computed accumulated earnings) with section totals. Read-only.",
+    "Balance sheet as of a date: assets, liabilities, and equity account rows (reader-signed, hierarchical, including computed prior-year retained earnings and current-year earnings) with section totals. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: z.object({ asOf: dateInput }),
@@ -747,7 +747,7 @@ const trialBalanceTool: AssistantToolDef = {
   name: "trial_balance",
   tier: "core",
   description:
-    "Trial balance as of a date: every account with nonzero activity, with lifetime debits, credits, and the debit-signed balance. Read-only.",
+    "Trial balance as of a date: every account with nonzero activity. Balance-sheet accounts are lifetime; income-statement accounts are fiscal-year-to-date, with prior-year net income on a computed retained-earnings row so the trial still foots. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: z.object({ asOf: dateInput }),

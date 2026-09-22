@@ -51,7 +51,8 @@ test(
         totalAssets: "Total assets",
         totalLiabilities: "Total liabilities",
         totalEquity: "Total equity",
-        accumulatedEarnings: "Accumulated earnings",
+        retainedEarningsPrior: "Retained earnings (prior years)",
+        currentYearEarnings: "Current year earnings",
         translationAdjustment: "Translation adjustment",
         liabilitiesAndEquity: "Liabilities and equity",
         totalOf: (section) => \`Total \${section}\`,
@@ -129,7 +130,8 @@ test(
           // period average (1.25 + 1.30) / 2 = 1.275.
           const bs = await balanceSheetView(period, "December 2026", bsLabels, opts);
           assert.deepEqual(findLine(bs, "Total assets").values.slice(0, 1).map(n), [130]);
-          assert.deepEqual(findLine(bs, "Accumulated earnings").values.slice(0, 1).map(n), [127.5]);
+          assert.deepEqual(findLine(bs, "Current year earnings").values.slice(0, 1).map(n), [127.5]);
+          assert.deepEqual(findLine(bs, "Retained earnings (prior years)").values.slice(0, 1).map(n), [0]);
           assert.deepEqual(findLine(bs, "Translation adjustment").values.slice(0, 1).map(n), [2.5]);
           const pnl = await profitAndLossView(period, "December 2026", pnlLabels, opts);
           assert.deepEqual(findLine(pnl, "Net income").values.slice(0, 1).map(n), [127.5]);

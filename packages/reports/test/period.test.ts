@@ -3,6 +3,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   fiscalYearRangeFor,
+  fiscalYearStartOn,
+  priorFiscalYearEndOn,
   fiscalQuarterRange,
   fiscalMonthsBetween,
   fiscalQuartersBetween,
@@ -28,6 +30,18 @@ test('fiscal year boundaries — January start equals calendar year', () => {
     to: '2026-12-31',
     label: 'FY 2026',
   })
+})
+
+test('fiscal year start and prior-year end from an as-of date', () => {
+  assert.equal(fiscalYearStartOn('2026-07-15', JAN), '2026-01-01')
+  assert.equal(priorFiscalYearEndOn('2026-07-15', JAN), '2025-12-31')
+  assert.equal(fiscalYearStartOn('2026-01-01', JAN), '2026-01-01')
+  assert.equal(priorFiscalYearEndOn('2026-01-01', JAN), '2025-12-31')
+  // July-start FY: 2026-07-15 is the first month of FY 2027.
+  assert.equal(fiscalYearStartOn('2026-07-15', 7), '2026-07-01')
+  assert.equal(priorFiscalYearEndOn('2026-07-15', 7), '2026-06-30')
+  assert.equal(fiscalYearStartOn('2026-06-30', 7), '2025-07-01')
+  assert.equal(priorFiscalYearEndOn('2026-06-30', 7), '2025-06-30')
 })
 
 test('fiscal quarter boundaries — April start', () => {

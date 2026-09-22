@@ -212,7 +212,7 @@ export type DrillColumn = {
   segmentKey?: string
 }
 
-// P&L profit rows (gross profit, net income, accumulated earnings, and the
+// P&L profit rows (gross profit, net income, computed earnings, and the
 // equity subtotals that roll them up) mix credit-normal revenue with
 // debit-normal costs. Their drill dialog must net as Revenue − Costs — the
 // same sign convention the statement cell uses — so the dialog ties to the

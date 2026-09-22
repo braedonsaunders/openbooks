@@ -64,6 +64,8 @@
     "other": "その他",
     "otherTotal": "その他合計",
     "accumulatedEarnings": "累積利益（計算値）",
+    "retainedEarningsPrior": "利益剰余金（過年度）",
+    "currentYearEarnings": "当期純利益",
     "translationAdjustment": "累積換算調整額",
     "ratesBlockedTitle": "連結為替レートはまだ導出されていません",
     "ratesBlockedAction": "決算でレートを導出する"
