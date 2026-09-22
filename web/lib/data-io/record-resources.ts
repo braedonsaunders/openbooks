@@ -3,6 +3,8 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { canonicalDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
+import { decimalNullRefusal } from '@openbooks/engine/src/money/decimal-refusal.ts'
 import { allocateDocumentNumber } from '@openbooks/engine/src/records/numbering.ts'
 import type { FieldType, FormField, FormSection } from '@openbooks/forms-core'
 import type { FieldValueMap } from '@openbooks/forms-core'
@@ -18,6 +20,7 @@ import {
   type WriteCtx,
 } from './resource-core'
 import { pgTextArrayLiteral } from '../pg-array'
+import { parseImportJson } from './import-parse'
 import {
   type CellValue,
   type ImportMode,
@@ -88,24 +91,38 @@ function recordColumns(sections: FormSection[]): { key: string; label: string }[
   ]
 }
 
-/**
- * XLSX keeps numeric cells numeric so exact-money resources can reject values
- * that already crossed IEEE-754. Custom-record text fields, however, have a
- * schema-owned string representation and historically accept numeric-looking
- * identifiers and choice values from spreadsheets. Restore that display value
- * only after the record field type is known; numeric and currency fields
- * remain numbers.
- */
+// Form numeric fields store JSON numbers. Render that representation without
+// grouping/exponents before comparing it with the original decimal text.
+const recordNumberText = new Intl.NumberFormat('en-US', {
+  useGrouping: false,
+  maximumSignificantDigits: 21,
+})
+
 function importRecordFieldValue(field: FormField, value: unknown): unknown {
   if (
-    (field.type === 'text' ||
-      field.type === 'long_text' ||
-      field.type === 'select' ||
-      field.type === 'radio') &&
-    typeof value === 'number'
+    ['number', 'currency', 'percentage', 'rating'].includes(field.type) &&
+    typeof value === 'string' && value.trim() !== ''
   ) {
-    return String(value)
+    const raw = value.trim()
+    const numeric = Number(raw)
+    // String(number) is also the vocabulary emitted by CSV/JSON exports,
+    // including scientific notation for very small schema-owned numbers.
+    if (Number.isFinite(numeric) && String(numeric) === raw) return numeric
+    const exact = canonicalDecimal(raw, raw.length)
+    if (exact === null) throw new Error(decimalNullRefusal(field.label, 'a number', raw, raw.length))
+    const stored = Number.isFinite(numeric)
+      ? canonicalDecimal(recordNumberText.format(numeric), raw.length)
+      : null
+    if (stored !== exact) {
+      throw new Error(`${field.label}: "${raw}" cannot be stored as a numeric field without changing its value — preserve the original in a text field or explicitly correct its precision before importing`)
+    }
+    return numeric
   }
+  if (
+    (field.type === 'text' || field.type === 'long_text' ||
+      field.type === 'select' || field.type === 'radio') &&
+    typeof value === 'number'
+  ) return String(value)
   return value
 }
 
@@ -231,7 +248,7 @@ async function writeRecords(
         if (raw === undefined || raw === null || raw === '') continue
         let parsed: unknown
         try {
-          parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+          parsed = typeof raw === 'string' ? parseImportJson(raw) : raw
         } catch {
           err = `${sid}: invalid sublist JSON`
           continue
@@ -244,9 +261,12 @@ async function writeRecords(
           for (const row of parsed) {
             if (!row || typeof row !== 'object' || Array.isArray(row)) continue
             for (const f of rowFields) {
-              if (f.type !== 'gl_account' && f.type !== 'party') continue
               const cell = (row as FieldValueMap)[f.id]
               if (cell === undefined || cell === null || cell === '') continue
+              if (f.type !== 'gl_account' && f.type !== 'party') {
+                ;(row as FieldValueMap)[f.id] = importRecordFieldValue(f, cell)
+                continue
+              }
               const target: ResourceRefTarget =
                 f.type === 'gl_account'
                   ? { resource: 'accounts', by: 'number' }
