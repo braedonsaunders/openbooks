@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
+import { decimalNullRefusal } from "../money/decimal-refusal.ts";
 import { db, inDbTransaction } from "../platform/db.ts";
 import { cmp, isZero, normalizeMoney } from "../money/money.ts";
 import { PayrollError } from "./error.ts";
@@ -358,6 +359,27 @@ export interface PriorStubWrite {
 }
 
 /**
+ * Parse one prior-system money cell: blank stays null ("no amount claimed"),
+ * anything else is raw trimmed text through canonicalDecimal with NO
+ * separator or whitespace stripping — a comma may be a decimal comma, and
+ * stripping it first would store a 100x error. Refusals name the remedy via
+ * the shared decimal classifier. savePriorStub funnels every amount through
+ * this parser BEFORE the transaction opens, so a refusal writes nothing.
+ */
+export function parsePriorStubAmount(value: string | null, field: string): string | null {
+  if (value === null || String(value).trim() === "") return null;
+  const exact = canonicalDecimal(String(value).trim(), 4);
+  if (exact === null) {
+    throw new ParallelRunStoreError(decimalNullRefusal(field, "an amount", value, 4));
+  }
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new ParallelRunStoreError(decimalNullRefusal(field, "an amount", value, 4));
+  }
+}
+
+/**
  * Write one employee's prior-system row.
  *
  * Idempotent per (register, employee): re-importing a corrected file replaces
@@ -383,16 +405,8 @@ export async function savePriorStub(
   const bySlotField = new Map(slots.map((slot) => [slot.fieldKey, slot]));
   const label = input.row.employeeLabel.trim() || input.row.employeePartyId;
 
-  const money = (value: string | null, field: string): string | null => {
-    if (value === null || String(value).trim() === "") return null;
-    const exact = canonicalDecimal(String(value).replace(/[$,\s]/g, ""), 4);
-    if (exact === null) throw new ParallelRunStoreError(`${field} is not an amount: "${value}"`);
-    try {
-      return normalizeMoney(exact);
-    } catch {
-      throw new ParallelRunStoreError(`${field} is not an amount: "${value}"`);
-    }
-  };
+  const money = (value: string | null, field: string): string | null =>
+    parsePriorStubAmount(value, field);
 
   const gross = money(input.row.gross, "gross");
   const netPay = money(input.row.netPay, "netPay");
