@@ -1160,9 +1160,13 @@ export async function delegateGate(gateId: string, fromUserId: string, toUserId:
   // One atomic unit: the reassignment, the delegate's notice, and the audit
   // evidence commit together, so a hand-off that changes who may release the
   // document can never persist without its actor-attributed trail.
+  // The same per-run lock decide/escalate hold: a concurrent decide that
+  // flips pending → decided must win, and this write must then match zero
+  // rows and refuse — never notify/audit a delegation that did not land.
   await withOrg(gate.orgId, async () => {
+    await db.execute(sql`select pg_advisory_xact_lock(hashtext(${gate.runId}))`);
     try {
-      await db
+      const delegated = await db
         .update(schema.flowGates)
         .set({
           assigneeUserId: toUserId,
@@ -1170,8 +1174,13 @@ export async function delegateGate(gateId: string, fromUserId: string, toUserId:
           updatedBy: fromUserId,
           updatedAt: new Date(),
         })
-        .where(and(eq(schema.flowGates.id, gateId), eq(schema.flowGates.orgId, gate.orgId), eq(schema.flowGates.status, "pending")));
+        .where(and(eq(schema.flowGates.id, gateId), eq(schema.flowGates.orgId, gate.orgId), eq(schema.flowGates.status, "pending")))
+        .returning({ id: schema.flowGates.id });
+      if (delegated.length === 0) {
+        throw new GateError("this approval was already resolved");
+      }
     } catch (e) {
+      if (e instanceof GateError) throw e;
       // unique (run_id, node_id, assignee_user_id): the target already holds a
       // sibling row of this gate.
       throw new GateError(`could not delegate: ${(e as Error).message}`);

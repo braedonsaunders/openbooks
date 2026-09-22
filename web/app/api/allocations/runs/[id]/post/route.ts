@@ -4,6 +4,7 @@ import { parseJsonBody } from "../../../../../../lib/api/json";
 import { gateCan, guardAllocations, missingPermission } from "../../../../../../lib/allocations-gate";
 import { isUuid } from "../../../../../../lib/list-params";
 import { postAllocationRun } from "../../../../../../../engine/src/allocations/period-run.ts";
+import { allocationRunErrorResponse } from "../../../_lib.ts";
 
 export const runtime = "nodejs";
 
@@ -26,12 +27,16 @@ export async function POST(req: Request, { params }: Ctx) {
   if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
   const parsedBody = await parseJsonBody(req, reasonBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
-  const run = await postAllocationRun(id, gate.user.id, parsedBody.data.reason.trim());
-  if (run.status === "pending_approval") {
-    return NextResponse.json(
-      { runId: run.id, status: run.status, flowRunId: run.flowRunId, journalEntryId: null },
-      { status: 202 },
-    );
+  try {
+    const run = await postAllocationRun(id, gate.user.id, parsedBody.data.reason.trim());
+    if (run.status === "pending_approval") {
+      return NextResponse.json(
+        { runId: run.id, status: run.status, flowRunId: run.flowRunId, journalEntryId: null },
+        { status: 202 },
+      );
+    }
+    return NextResponse.json({ runId: run.id, status: run.status, journalEntryId: run.journalEntryId });
+  } catch (error) {
+    return allocationRunErrorResponse(error, "Unable to post the allocation run.");
   }
-  return NextResponse.json({ runId: run.id, status: run.status, journalEntryId: run.journalEntryId });
 }

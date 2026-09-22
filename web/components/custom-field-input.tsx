@@ -2,9 +2,11 @@
 
 import { useEffect, useId, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
+import { toast } from 'sonner'
 import { FieldLabel, Input, Select, Textarea } from '@openbooks/ui'
 import { SearchSelect } from '@openbooks/ui'
 import type { CustomFieldDefClient } from './custom-field-inputs'
+import { readApiErrorMessage } from '../lib/api-error'
 
 /**
  * One custom field's control (edit) or display (view). Extracted from
@@ -196,6 +198,7 @@ function ReferenceInput({
 }) {
   const table = def.config.referenceTable
   const [options, setOptions] = useState<{ value: string; label: string; hint?: string }[]>([])
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!table) return
@@ -208,9 +211,19 @@ function ReferenceInput({
       }
     }
     fetch(`/api/forms/options?${searchParams.toString()}`)
-      .then((r) => r.json())
-      .then((data) => setOptions(data.options ?? []))
-      .catch(() => setOptions([]))
+      .then(async (r) => {
+        if (!r.ok) throw new Error(await readApiErrorMessage(r, 'Could not load records'))
+        return r.json()
+      })
+      .then((data) => {
+        setLoadError(null)
+        setOptions(data.options ?? [])
+      })
+      .catch((e) => {
+        const message = (e as Error).message
+        setLoadError(message)
+        toast.error(message)
+      })
   }, [table, def.config.referenceFilter])
 
   return (
@@ -220,7 +233,7 @@ function ReferenceInput({
       value={value}
       onChange={(v) => onChange(v)}
       options={options}
-      placeholder="Select a record…"
+      placeholder={loadError ?? 'Select a record…'}
     />
   )
 }

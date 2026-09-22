@@ -4,7 +4,7 @@ import { isFeatureEnabled } from '../../../../lib/features'
 import { parseReportDrillTarget } from '../../../../lib/report-drill'
 import { overlayLedgerDrillPeriod } from '../../../../lib/report-drill-period'
 import { loadReportDrillData } from '../../../../lib/report-drill-data'
-import { ReportBookSelectionError } from '../../../../lib/report-books'
+import { reportDrillErrorResponse } from '../../../../lib/report-drill-error'
 
 export const runtime = 'nodejs'
 
@@ -34,15 +34,6 @@ export async function GET(request: Request) {
     }, gate.user.orgId)
     return NextResponse.json(await loadReportDrillData(scoped, gate, requestedPage))
   } catch (error) {
-    if (error instanceof ReportBookSelectionError) {
-      return NextResponse.json({ error: error.message }, { status: 422 })
-    }
-    // A refused entity is an authorization outcome, not a server fault: report
-    // it as 403 so a payroll drill is denied rather than logged as a crash.
-    if (error instanceof Error && error.message === 'report_entity_forbidden') {
-      return NextResponse.json({ error: 'you do not have access to this data' }, { status: 403 })
-    }
-    console.error('Report drill failed', error)
-    return NextResponse.json({ error: 'report_drill_failed' }, { status: 500 })
+    return reportDrillErrorResponse(error)
   }
 }

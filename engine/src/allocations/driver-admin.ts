@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { documentRevisionSql } from "../records/revision.ts";
-import { div, normalizeDecimal } from "../money/money.ts";
+import { add, div, normalizeDecimal } from "../money/money.ts";
 import type {
   AccountScope,
   AllocationDimension,
@@ -677,24 +677,12 @@ export async function getDimensionValueLabels(
 export function vectorShares(vector: DriverVector): Map<string, string> {
   const shares = new Map<string, string>();
   if (vector.size === 0) return shares;
-  let total = "0";
+  let total = "0.0000";
   for (const value of vector.values()) {
-    const [whole = "0", fraction = ""] = value.split(".");
-    total = addDecimal(total, `${whole}.${(fraction + "0000").slice(0, 4)}`);
+    total = add(total, value);
   }
   for (const [key, value] of vector) {
     shares.set(key, total === "0.0000" ? "0.0000" : div(value, total));
   }
   return shares;
-}
-
-function addDecimal(a: string, b: string): string {
-  const parse = (s: string) => {
-    const [whole = "0", fraction = ""] = s.split(".");
-    return BigInt(whole) * 10000n + BigInt((fraction + "0000").slice(0, 4).padEnd(4, "0"));
-  };
-  const sum = parse(a) + parse(b);
-  const negative = sum < 0n;
-  const abs = negative ? -sum : sum;
-  return `${negative ? "-" : ""}${abs / 10000n}.${String(abs % 10000n).padStart(4, "0")}`;
 }

@@ -4,6 +4,7 @@ import { parseJsonBody } from "../../../../../../lib/api/json";
 import { gateCan, guardAllocations, missingPermission } from "../../../../../../lib/allocations-gate";
 import { isUuid } from "../../../../../../lib/list-params";
 import { rerunAllocationRun } from "../../../../../../../engine/src/allocations/period-run.ts";
+import { allocationRunErrorResponse } from "../../../_lib.ts";
 
 export const runtime = "nodejs";
 
@@ -31,6 +32,10 @@ export async function POST(req: Request, { params }: Ctx) {
   if (!parsedBody.ok) return parsedBody.response;
   const reason = parsedBody.data.reason?.trim() || "Re-run requested from the Runs tab";
   const reversalDate = parsedBody.data.reversalDate;
-  const { run } = await rerunAllocationRun(id, gate.user.id, reason, { reversalDate });
-  return NextResponse.json({ runId: run.id });
+  try {
+    const { run } = await rerunAllocationRun(id, gate.user.id, reason, { reversalDate });
+    return NextResponse.json({ runId: run.id });
+  } catch (error) {
+    return allocationRunErrorResponse(error, "Unable to re-run the allocation run.");
+  }
 }

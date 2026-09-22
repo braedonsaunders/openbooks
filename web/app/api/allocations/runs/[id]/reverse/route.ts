@@ -4,6 +4,7 @@ import { parseJsonBody } from "../../../../../../lib/api/json";
 import { gateCan, guardAllocations, missingPermission } from "../../../../../../lib/allocations-gate";
 import { isUuid } from "../../../../../../lib/list-params";
 import { reverseAllocationRun } from "../../../../../../../engine/src/allocations/period-run.ts";
+import { allocationRunErrorResponse } from "../../../_lib.ts";
 
 export const runtime = "nodejs";
 
@@ -28,8 +29,12 @@ export async function POST(req: Request, { params }: Ctx) {
   if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
   const parsedBody = await parseJsonBody(req, reasonBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
-  const run = await reverseAllocationRun(id, gate.user.id, parsedBody.data.reason.trim(), {
-    reversalDate: parsedBody.data.reversalDate,
-  });
-  return NextResponse.json({ reversalEntryId: run.reversalEntryId });
+  try {
+    const run = await reverseAllocationRun(id, gate.user.id, parsedBody.data.reason.trim(), {
+      reversalDate: parsedBody.data.reversalDate,
+    });
+    return NextResponse.json({ reversalEntryId: run.reversalEntryId });
+  } catch (error) {
+    return allocationRunErrorResponse(error, "Unable to reverse the allocation run.");
+  }
 }

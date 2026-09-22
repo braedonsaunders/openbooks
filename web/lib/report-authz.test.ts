@@ -149,8 +149,10 @@ test('lot recall cannot bypass the inventory feature gate through either entry p
 
 test('a refused drill is an authorization outcome, not a 500', () => {
   const route = read('../app/api/reports/drill/route.ts')
-  assert.match(route, /report_entity_forbidden/)
-  assert.match(route, /status: 403/)
+  const mapped = read('../lib/report-drill-error.ts')
+  assert.match(route, /reportDrillErrorResponse/)
+  assert.match(mapped, /report_entity_forbidden/)
+  assert.match(mapped, /status: 403/)
 })
 
 test('the gate lives in exactly one place', () => {

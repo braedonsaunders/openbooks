@@ -133,6 +133,14 @@ test("vector shares are exact decimals, zero-safe", () => {
   assert.deepEqual(vectorShares(new Map()), new Map());
 });
 
+test("vector share totals keep the sign of a negative weight (canonical add, not whole-part BigInt)", () => {
+  // The old addDecimal parsed BigInt("-5") * 10000 + 2500 → -4.7500.
+  assert.deepEqual(
+    vectorShares(new Map([["credit", "-5.2500"], ["debit", "10.2500"]])),
+    new Map([["credit", "-1.0500"], ["debit", "2.0500"]]),
+  );
+});
+
 test("effective windows overlap on shared days", () => {
   assert.equal(
     driverValueWindowsOverlap({ from: "2026-01-01", to: null }, { from: "2026-06-01", to: null }),

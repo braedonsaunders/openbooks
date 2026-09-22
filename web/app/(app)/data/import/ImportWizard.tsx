@@ -9,6 +9,7 @@ import { Badge, Button, PageHeader, Select, cn } from '@openbooks/ui'
 import { WizardLayout } from '../../../../components/page-layout'
 import { useBusinessToday } from '../../../../components/business-date-provider'
 import { enterOrg } from '../../../../lib/sandbox-session'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 import { exportCsv } from '../../analytics/_ui/exportCsv'
 
 interface ResourceDescriptor {
@@ -73,18 +74,28 @@ export function ImportWizard() {
 
   useEffect(() => {
     fetch('/api/data/resources')
-      .then((r) => r.json())
+      .then(async (r) => {
+        if (!r.ok) throw new Error(await readApiErrorMessage(r, t('import.loadFailed')))
+        return r.json()
+      })
       .then((d) => setResources((d.resources ?? []).filter((x: ResourceDescriptor & { supportsImport?: boolean }) => x)))
-      .catch(() => setResources([]))
+      .catch((e) => {
+        toast.error((e as Error).message)
+      })
     fetch('/api/data/sample-companies')
-      .then((r) => r.json())
+      .then(async (r) => {
+        if (!r.ok) throw new Error(await readApiErrorMessage(r, t('import.sample.error')))
+        return r.json()
+      })
       .then((d) => {
         const profiles = (d.profiles ?? []) as SampleCompanyProfile[]
         setSampleProfiles(profiles)
         setSampleIndustry((current) => current || profiles[0]?.industryKey || '')
       })
-      .catch(() => setSampleProfiles([]))
-  }, [])
+      .catch((e) => {
+        toast.error((e as Error).message)
+      })
+  }, [t])
 
   const selectedSample = useMemo(
     () => sampleProfiles.find((profile) => profile.industryKey === sampleIndustry) ?? null,
