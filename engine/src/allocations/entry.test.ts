@@ -322,6 +322,43 @@ test("explode resolves driver weights for explicit targets", () => {
   assert.deepEqual(children.map((c) => c.amount), ["75.0000", "25.0000"]);
 });
 
+test("explode refuses a negative driver weight at parse time", () => {
+  const r = rule(
+    "drvneg",
+    [
+      target({ departmentId: "d1", weight: "-3" }),
+      target({ departmentId: "d2", weight: "1" }),
+    ],
+    { basisKind: "driver", driverId: "driver-1" },
+  );
+  // The entry parser's own guard names the refusal; apportion's later
+  // weight_negative refusal must never be the first line of defence.
+  assert.throws(
+    () => explodeDocumentLine(entryLine({ amount: "100.0000" }), r, { groupId: "g" }),
+    /driver weight "-3" must not be negative/,
+  );
+});
+
+test("explode refuses a negative driver vector value", () => {
+  const r = rule(
+    "drvvecneg",
+    [target({ departmentId: "d1" }), target({ departmentId: "d2" })],
+    { basisKind: "driver", driverId: "driver-1" },
+  );
+  assert.throws(
+    () =>
+      explodeDocumentLine(entryLine({ amount: "100.0000" }), r, {
+        groupId: "g",
+        driverDimension: "department",
+        driverVector: new Map([
+          ["d1", "-5"],
+          ["d2", "10"],
+        ]),
+      }),
+    /driver weight "-5" must not be negative/,
+  );
+});
+
 test("explode rejects a driver basis whose weights are all zero", () => {
   const r = rule(
     "drv0",

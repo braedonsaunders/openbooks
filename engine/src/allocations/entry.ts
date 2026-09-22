@@ -226,11 +226,14 @@ function parseWeight(value: string, what: string): bigint {
   } catch {
     throw new EntryAllocationError("misconfigured_rule", `${what} "${value}" is not an exact decimal`);
   }
+  // The sign is stripped before BigInt parsing, so the magnitude alone can
+  // never be negative — the negativity check must read the sign itself.
   const negative = normalized.startsWith("-");
   const digits = normalized.replace("-", "").replace(".", "");
   const units = BigInt(digits);
-  if (units < 0n) throw new EntryAllocationError("misconfigured_rule", `${what} must not be negative`);
-  return negative ? -units : units;
+  const signed = negative ? -units : units;
+  if (signed < 0n) throw new EntryAllocationError("misconfigured_rule", `${what} "${value}" must not be negative`);
+  return signed;
 }
 
 function formatScaled(units: bigint, places: number): string {
