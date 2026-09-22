@@ -196,6 +196,8 @@ type PeriodRow = {
   starts_on: string;
   ends_on: string;
   fiscal_year: number;
+  fiscal_calendar_id: string;
+  is_adjustment: boolean;
 };
 
 type Tx = DbTransaction;
@@ -262,7 +264,8 @@ async function loadTargets(tx: Tx, orgId: string, versionId: string): Promise<Ta
 
 async function loadPeriod(tx: Tx, orgId: string, periodId: string): Promise<PeriodRow> {
   const rows = (await tx.execute<PeriodRow>(sql`
-    select id, org_id, name, starts_on::text, ends_on::text, fiscal_year
+    select id, org_id, name, starts_on::text, ends_on::text, fiscal_year,
+           fiscal_calendar_id, is_adjustment
       from accounting_periods where id = ${periodId} for share`)).rows;
   const period = rows[0];
   if (!period || period.org_id !== orgId) {
@@ -413,18 +416,32 @@ async function readSources(
     accountClause = sql`and l.account_id = any(${uuidArray(groupIds)}::uuid[])`;
   }
 
+  // Balance and year-to-date pools are point-in-time reads over the run
+  // period's own fiscal calendar: every period of that calendar ending on or
+  // before the run period's end belongs to the balance, INCLUDING adjustment
+  // periods. A year-end audit accrual posted into the year's adjustment
+  // period (which shares the final regular day) is part of the year-end
+  // balance and of every later balance; excluding adjustments dropped it
+  // from every pool forever. This differs deliberately from the close's
+  // evidence scope (financialClosePeriodScope), which attributes entries to
+  // the period they were assigned to: a pool asks what existed as of a date,
+  // not which close owns the entry. period_activity keeps exact period
+  // identity — a run scoped to an adjustment period reads exactly it.
   let periodClause: SQL;
   if (opts.sourceMeasure === "period_activity") {
     periodClause = sql`and e.period_id = ${opts.period.id}`;
   } else if (opts.sourceMeasure === "ytd_activity") {
     periodClause = sql`and e.period_id in (
       select id from accounting_periods
-       where org_id = ${opts.orgId} and not is_adjustment
+       where org_id = ${opts.orgId}
+         and fiscal_calendar_id = ${opts.period.fiscal_calendar_id}
          and fiscal_year = ${opts.period.fiscal_year} and ends_on <= ${opts.period.ends_on})`;
   } else {
     periodClause = sql`and e.period_id in (
       select id from accounting_periods
-       where org_id = ${opts.orgId} and not is_adjustment and ends_on <= ${opts.period.ends_on})`;
+       where org_id = ${opts.orgId}
+         and fiscal_calendar_id = ${opts.period.fiscal_calendar_id}
+         and ends_on <= ${opts.period.ends_on})`;
   }
 
   const rows = (await tx.execute<{
