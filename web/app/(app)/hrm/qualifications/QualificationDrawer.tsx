@@ -182,7 +182,7 @@ export function QualificationDrawer({
 
   return (
     <Drawer open onClose={onClose} size="md" title={q ? t('qualifications.drawerTitle') : t('qualifications.recordTitle')}>
-      {loading ? <p className="text-sm text-slate-500">{tCommon('loading')}</p> : null}
+      {loading ? <p className="text-sm text-slate-500">{tCommon('feedback.loading')}</p> : null}
       {status ? <p className="mb-3 text-sm text-red-700 dark:text-red-300">{status}</p> : null}
       {q ? (
         <div className="flex flex-col gap-4">
@@ -242,7 +242,7 @@ export function QualificationDrawer({
           <div>
             <Label htmlFor="q-type">{t('qualifications.recordForm.type')}</Label>
             <Select id="q-type" value={form.typeId} onChange={(e) => setForm({ ...form, typeId: e.target.value })}>
-              <option value="">{tCommon('select')}</option>
+              <option value="">{tCommon('actions.select')}</option>
               {types.map((type) => (
                 <option key={type.id} value={type.id}>{type.code} · {type.name}</option>
               ))}

@@ -12,13 +12,15 @@ const spec = source('./page.tsx')
  *
  * The page renders union decision rows through the existing approvals
  * table and the new kinds through the task list — one piece of work in
- * exactly one of them — with the unified filter chips above both. The
- * canonical route is /inbox; no /approvals route exists.
+ * exactly one of them, and each on its OWN TAB. The canonical route is
+ * /inbox; no /approvals route exists.
  */
 test('the inbox spec carries the unified filters and both row treatments', () => {
-  // Six filters, one chips row, above the union table and the task list.
-  assert.match(page, /'all',\n\s*'approvals',\n\s*'my_tasks',\n\s*'signatures',\n\s*'notices',\n\s*'overdue'/)
-  assert.match(page, /widgetBlock\('kind-chips', \{\n\s+chips: data\.filters,/)
+  // Five task scopes, exposed through the shared list toolbar dropdown.
+  assert.match(page, /'all',\n\s*'my_tasks',\n\s*'signatures',\n\s*'notices',\n\s*'overdue'/)
+  assert.match(page, /widgetBlock\('list-toolbar', \{/)
+  assert.match(page, /search: \{ paramKey: 'q'/, 'every inbox tab has the house search control')
+  assert.doesNotMatch(page, /widgetBlock\('kind-chips'/, 'no extra pill row remains below the tabs')
   // Decision rows keep the approvals table; new kinds get the task list.
   assert.match(page, /widgetBlock\('approvals-table', \{/)
   assert.match(page, /widgetBlock\('inbox-task-list', \{/)
@@ -26,6 +28,37 @@ test('the inbox spec carries the unified filters and both row treatments', () =>
   assert.match(page, /Union-owned kinds never render here/)
   assert.match(page, /INBOX_TASK_KINDS/)
   assert.doesNotMatch(page, /flows_approval.*inbox-task-list|inbox-task-list.*flows_approval/)
+
+  const taskList = source('./InboxTaskList.tsx')
+  assert.match(taskList, /<Table>/, 'tasks use the regular table treatment, not stacked cards')
+  assert.doesNotMatch(taskList, /<ul className="space-y-2">/, 'the card-list treatment is removed')
+})
+
+test('tasks are a TAB on the shared subtab strip, never a panel under the table', () => {
+  // The hub drew its own tab strip (ApprovalTabs — teal, under the header)
+  // and then stacked a titled "My tasks" panel below the approvals table, so
+  // one page showed two unrelated worklists down the screen.
+  assert.match(page, /widget\('module-home-tabs', \{ tabs: data\.tabs \}\)/,
+    'the tabs are the shared subtab strip, in the page header')
+  assert.doesNotMatch(page, /'approval-tabs'/, 'the hub has no tab strip of its own')
+  assert.match(page, /key: 'tasks'/, 'my tasks is one of the tabs')
+  assert.match(page, /showTasks = tab === 'tasks'/, 'the task list renders only on its own tab')
+  assert.match(page, /const showUnion = onApprovals/, 'the approvals table renders only on the approvals tabs')
+  assert.doesNotMatch(page, /panel\(\{\n\s+title: f\('tasksTitle'\)/, 'no titled tasks panel remains')
+
+  const sections = source('./sections.tsx')
+  assert.doesNotMatch(sections, /export function ApprovalTabs/, 'the second tab component is deleted')
+})
+
+test('a refusal from the task API reaches the operator as a message', () => {
+  const island = source('./InboxTaskList.tsx')
+  // `inbox.refused` carries an ICU argument. Resolved server-side without it
+  // next-intl threw FORMATTING_ERROR and returned the key path, and the
+  // client then ran .replace('{message}', …) over a string with no
+  // placeholder — so every refusal rendered as the literal `inbox.refused`.
+  assert.match(island, /t\('refused', \{ message:/, 'the message is composed where its argument exists')
+  assert.doesNotMatch(island, /labels\.refused/, 'no pre-resolved refusal template is passed in')
+  assert.doesNotMatch(page, /taskRefusedLabel/, 'the loader no longer resolves it')
 })
 
 test('the inbox route is canonical and the task actions post in place', () => {

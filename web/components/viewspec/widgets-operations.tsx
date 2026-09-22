@@ -5,7 +5,7 @@ import { LienWaiverToolbar } from '../../app/(app)/compliance/lien-waivers/LienW
 import { LienWaiverDrawer } from '../../app/(app)/compliance/lien-waivers/LienWaiverDrawer'
 import { NewFilingButton } from '../../app/(app)/compliance/information-returns/NewFilingButton'
 import { VendorComplianceMatrix } from '../../app/(app)/compliance/vendors/Matrix'
-import { KindChips, ApprovalTabs, ApprovalEngineCell, SubmittedDocumentCell } from '../../app/(app)/inbox/sections'
+import { KindChips, ApprovalEngineCell, SubmittedDocumentCell } from '../../app/(app)/inbox/sections'
 import { ApprovalsTable } from '../../app/(app)/inbox/ApprovalsTable'
 import { DelegationBanner, OutOfOfficeButton } from '../../app/(app)/inbox/DelegationControls'
 import { AccountNameCell, AccountRegisterCell } from '../../app/(app)/accounts/sections'
@@ -41,9 +41,6 @@ export const OPERATIONS_WIDGETS = {
   ),
   'delegation-banner': (props) => (
     <DelegationBanner users={(props.users as ComponentProps<typeof DelegationBanner>['users']) ?? []} />
-  ),
-  'approval-tabs': (props) => (
-    <ApprovalTabs tabs={(props.tabs as ComponentProps<typeof ApprovalTabs>['tabs']) ?? []} />
   ),
   'kind-chips': (props) => (
     <KindChips

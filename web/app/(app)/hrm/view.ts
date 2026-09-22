@@ -50,11 +50,14 @@ export function hrmSpec(data: HrmHomeData): PageSpec {
         description: f('description'),
         actionsClassName: 'flex flex-wrap items-center gap-3',
         actions: [
-          widget(
-            'new-role-party',
-            { basePath: data.newEmployee.basePath, role: data.newEmployee.role, label: data.newEmployee.label },
-            f('canCreateEmployee'),
-          ),
+          widget('hrm-new-menu', {
+            canCreateEmployee: data.canCreateEmployee,
+            canProposeChange: data.canProposeChange,
+            canCreateProcess: data.canCreateProcess,
+            employeeLabel: data.newEmployee.label,
+            changeLabel: data.actions.find((action) => action.href === '/hrm/change-requests')?.label ?? '',
+            processLabel: data.newProcessLabel,
+          }),
           widget('module-home-tabs', { tabs: data.tabs }),
         ],
       }),
@@ -192,11 +195,31 @@ export function hrmSpec(data: HrmHomeData): PageSpec {
                                   label: f('positions.totalLabel'),
                                   labelColSpan: data.multiSubsidiary ? 2 : 1,
                                   cells: [
-                                    { cell: text(f('positions.totals.positions')), align: 'right', className: 'font-semibold tabular-nums' },
-                                    { cell: text(f('positions.totals.plannedFte')), align: 'right', className: 'font-semibold tabular-nums' },
-                                    { cell: text(f('positions.totals.fundedFte')), align: 'right', className: 'font-semibold tabular-nums' },
-                                    { cell: text(f('positions.totals.filledFte')), align: 'right', className: 'font-semibold tabular-nums' },
-                                    { cell: text(f('positions.totals.vacantFte')), align: 'right', className: 'font-semibold tabular-nums' },
+                                    {
+                                      cell: text(f('positions.totals.positions')),
+                                      align: 'right',
+                                      className: 'font-semibold tabular-nums',
+                                    },
+                                    {
+                                      cell: text(f('positions.totals.plannedFte')),
+                                      align: 'right',
+                                      className: 'font-semibold tabular-nums',
+                                    },
+                                    {
+                                      cell: text(f('positions.totals.fundedFte')),
+                                      align: 'right',
+                                      className: 'font-semibold tabular-nums',
+                                    },
+                                    {
+                                      cell: text(f('positions.totals.filledFte')),
+                                      align: 'right',
+                                      className: 'font-semibold tabular-nums',
+                                    },
+                                    {
+                                      cell: text(f('positions.totals.vacantFte')),
+                                      align: 'right',
+                                      className: 'font-semibold tabular-nums',
+                                    },
                                   ],
                                 }),
                               ]
@@ -307,9 +330,18 @@ export function hrmSpec(data: HrmHomeData): PageSpec {
                     blocks: [
                       widgetBlock('hrm-recruiting-panel', {
                         figures: [
-                          { label: data.recruiting.openLabel, value: data.recruiting.openValue },
-                          { label: data.recruiting.awaitingLabel, value: data.recruiting.awaitingValue },
-                          { label: data.recruiting.interviewsLabel, value: data.recruiting.interviewsValue },
+                          {
+                            label: data.recruiting.openLabel,
+                            value: data.recruiting.openValue,
+                          },
+                          {
+                            label: data.recruiting.awaitingLabel,
+                            value: data.recruiting.awaitingValue,
+                          },
+                          {
+                            label: data.recruiting.interviewsLabel,
+                            value: data.recruiting.interviewsValue,
+                          },
                         ],
                         viewAll: data.recruiting.viewAll,
                         viewAllHref: data.recruiting.viewAllHref,
@@ -342,7 +374,12 @@ export function hrmSpec(data: HrmHomeData): PageSpec {
               iconKey: 'triangle-alert',
               bodyClassName: 'p-0',
               className: 'shrink-0',
-              blocks: [widgetBlock('attention-list', { items: data.attention, allClear: data.attentionAllClear })],
+              blocks: [
+                widgetBlock('attention-list', {
+                  items: data.attention,
+                  allClear: data.attentionAllClear,
+                }),
+              ],
             }),
             widgetBlock('directory-section', {
               items: data.directory,
@@ -365,7 +402,10 @@ export function hrmSpec(data: HrmHomeData): PageSpec {
                   truncated: data.upcomingTruncated,
                   truncatedNote: data.upcomingTruncatedNote,
                 }),
-                textBlock(f('upcomingHint'), { size: 'xs', className: 'border-t border-slate-100 px-4 py-2.5 text-slate-400 dark:border-slate-800 dark:text-slate-500' }),
+                textBlock(f('upcomingHint'), {
+                  size: 'xs',
+                  className: 'border-t border-slate-100 px-4 py-2.5 text-slate-400 dark:border-slate-800 dark:text-slate-500',
+                }),
               ],
             }),
             widgetBlock('directory-section', {
@@ -374,7 +414,6 @@ export function hrmSpec(data: HrmHomeData): PageSpec {
             }),
           ]),
         ]),
-
       ]),
     ],
   })

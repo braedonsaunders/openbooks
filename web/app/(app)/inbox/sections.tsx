@@ -4,9 +4,8 @@ import { cn } from '@openbooks/ui'
 /**
  * Pieces of the approvals hub shared by the page and the widget registry.
  *
- * Both are conditional composites — a chip that changes treatment when it is
- * the active filter, a tab that grows a count bubble — so they are components.
- * `when` omits a block; it does not choose between two.
+ * A chip changes treatment when it is the active filter, so it is a
+ * component: `when` omits a block, it does not choose between two.
  */
 
 export function KindChips({
@@ -54,42 +53,10 @@ export function KindChips({
   )
 }
 
-export function ApprovalTabs({
-  tabs,
-}: {
-  tabs: { key: string; href: string; label: string; active: boolean; count: number | null }[]
-}) {
-  return (
-    <nav className="flex items-center gap-1">
-      {tabs.map((tab) => (
-        <Link
-          key={tab.key}
-          href={tab.href as never}
-          className={cn(
-            'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-            tab.active
-              ? 'bg-teal-50 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300'
-              : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
-          )}
-        >
-          {tab.label}
-          {typeof tab.count === 'number' ? (
-            <span
-              className={cn(
-                'rounded-full px-1.5 text-xs tabular-nums',
-                tab.active
-                  ? 'bg-teal-100 text-teal-700 dark:bg-teal-900/60 dark:text-teal-300'
-                  : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
-              )}
-            >
-              {tab.count}
-            </span>
-          ) : null}
-        </Link>
-      ))}
-    </nav>
-  )
-}
+// ApprovalTabs used to live here: a second tab strip, teal where the shared
+// one is slate, drawn under the header where every other page draws its tabs
+// in the header. The hub now renders `module-home-tabs` like everything else,
+// so there is nothing left to keep in step.
 
 /** The flow name on a submitted row — a nested span with its own treatment. */
 export function ApprovalEngineCell({ name }: { name: string }) {

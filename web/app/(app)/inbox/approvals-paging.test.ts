@@ -45,6 +45,17 @@ test('approvals union legs window in SQL with parameterized limits', () => {
   assert.match(unionReader, /worklistApprovalsPage\(/)
 })
 
+test('shared toolbar search and overdue status filter before paging', () => {
+  assert.match(view, /const query = pickString\(sp\.q\)/, 'search is parsed by the loader')
+  assert.match(view, /overdue: overdueOnly/, 'the status dropdown reaches the paged reader')
+  assert.match(unionReader, /query: window\.query/, 'search crosses the application boundary')
+  assert.match(unionReader, /overdue: window\.overdue/, 'status crosses the application boundary')
+  assert.match(engineUnion, /query = page\.query/, 'search reaches each SQL leg')
+  assert.match(engineUnion, /overdue = page\.overdue/, 'overdue is resolved before totals and paging')
+  assert.match(engineGates, /worklistGateSearchSql/, 'gate rows are searched in SQL')
+  assert.match(engineGates, /worklistGateOverdueSql/, 'overdue gates are filtered in SQL')
+})
+
 test('approvals select-all is page-scoped and says so', () => {
   assert.match(table, /selectedOnPage/, 'toolbar must render the page-scoped selection copy')
   assert.match(table, /selectAllOnPage/, 'select-all must render the page-scoped label')

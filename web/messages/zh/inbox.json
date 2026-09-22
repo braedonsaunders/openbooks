@@ -11,6 +11,7 @@
   },
   "columns": {
     "task": "任务",
+    "kind": "类型",
     "detail": "详情",
     "due": "到期",
     "priority": "优先级",

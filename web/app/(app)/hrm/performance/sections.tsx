@@ -186,39 +186,10 @@ export function CycleDialog({ create }: { create: PerformancePageData['create'] 
 }
 
 /** The Retention panel: trailing-twelve-months turnover, regrettable leavers, gaps. */
-export function RetentionPanel({ retention }: { retention: PerformancePageData['retention'] }) {
-  if (!retention) return null
-  return (
-    <section aria-label={retention.title} className="space-y-2">
-      <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{retention.title}</h2>
-      <p className="text-sm text-slate-600 dark:text-slate-300">
-        {retention.turnoverLabel}: <span className="font-medium tabular-nums">{retention.turnoverValue}</span>
-        {' · '}
-        {retention.regrettableLabel}: <span className="font-medium tabular-nums">{retention.regrettableValue}</span>
-      </p>
-      <div>
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{retention.gapsTitle}</h3>
-        {retention.gaps.length === 0 ? (
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{retention.gapsEmpty}</p>
-        ) : (
-          <ul className="mt-1 space-y-1.5">
-            {retention.gaps.map((gap) => (
-              <li key={`${gap.employmentLabel}-${gap.terminatedFrom}`} className="text-sm text-slate-600 dark:text-slate-300">
-                <a className="font-medium underline" href={gap.employmentHref}>
-                  {gap.employmentLabel}
-                </a>{' '}
-                · {gap.terminatedFrom}
-              </li>
-            ))}
-          </ul>
-        )}
-        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-          {retention.noInterviewTitle}: <span className="font-medium tabular-nums">{retention.noInterviewCount}</span>
-        </p>
-      </div>
-    </section>
-  )
-}
+// RetentionPanel used to live here: a bespoke <section> of bold headings and
+// comma-joined figures, rendered with no card around it under the cycles
+// table. Retention is its own tab now and renders through the house blocks
+// — three stat tiles and a table — in ./view.
 
 export function GoalSection({ employmentId, cycleId }: { employmentId: string; cycleId: string }) {
   return <GoalForm employmentId={employmentId} cycleId={cycleId} />

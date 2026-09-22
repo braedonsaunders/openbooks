@@ -6,10 +6,10 @@ import {
   badge,
   column,
   field as item,
+  grid,
   link,
   page,
   pageHeader,
-  panel,
   ref,
   table,
   text,
@@ -26,8 +26,9 @@ import { loadBenefits, type BenefitsData } from '../../../../lib/hrm/benefits'
  * The Benefits tab, split into a loader and a spec.
  *
  * Windows render through the shared `table` block (variant 'app') over
- * loader-resolved rows with `filter-chips` for the status segments plus an
- * enrolments segment across windows; the page's primary action is the
+ * loader-resolved rows. Windows and Enrolments are the two VIEWS, on the
+ * shared subtab strip; the window-status filter rides the shared
+ * `list-toolbar` beside it. The page's primary action is the
  * shared 'link-button' widget ("New window") FIRST in the page header,
  * then the module-home-tabs strip. The window drawer (progress plus its
  * enrolments) and the new-window dialog open from URL search params
@@ -61,20 +62,30 @@ export function benefitsSpec(data: BenefitsData, basePath: string = '/hrm/benefi
       // intact — never a success, never an empty table.
       widgetBlock('empty-state', { title: data.refusal?.title ?? '', description: data.refusal?.message }, f('refusal')),
       {
-        ...panel({
-          title: f('listTitle'),
-          iconKey: 'heart-pulse',
-          bodyClassName: 'min-h-0 overflow-y-auto p-0',
-          className: 'min-h-0 flex-1',
-          blocks: [
-            widgetBlock('filter-chips', {
-              basePath,
-              currentParams: data.currentParams,
-              paramKey: 'segment',
-              label: data.segmentsLabel,
-              allLabel: data.allLabel,
-              options: data.segments,
-            }),
+        ...grid('flex h-full min-h-0 flex-col gap-4', [
+          // The view switch and the window-status filter on one row. The
+          // filter used to sit INSIDE the list card, above the rows, and it
+          // carried the view switch as one of its options: picking
+          // "Enrolments" swapped the table for a different entity.
+          grid('flex shrink-0 flex-wrap items-center gap-3', [
+            widgetBlock('module-home-tabs', { tabs: data.viewTabs }),
+            ...(data.showingEnrolments
+              ? []
+              : [
+                  widgetBlock('list-toolbar', {
+                    basePath,
+                    currentParams: data.currentParams,
+                    filters: [
+                      {
+                        paramKey: 'segment',
+                        label: data.segmentsLabel,
+                        allLabel: data.allLabel,
+                        options: data.segments,
+                      },
+                    ],
+                  }),
+                ]),
+          ]),
             ...(data.showingEnrolments
               ? [
                   table({
@@ -138,8 +149,7 @@ export function benefitsSpec(data: BenefitsData, basePath: string = '/hrm/benefi
               { drawer: data.drawer, closeHref: f('drawerCloseHref') },
               f('drawer'),
             ),
-          ],
-        }),
+        ]),
         when: f('hasContent'),
       },
     ],

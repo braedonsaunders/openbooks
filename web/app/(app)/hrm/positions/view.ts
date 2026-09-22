@@ -91,6 +91,7 @@ export interface PositionsPageData {
   segments: PositionSegment[]
   segmentsLabel: string
   allLabel: string
+  asOfLabel: string
   segmentOptions: PositionSegmentOption[]
   currentParams: Record<string, string | string[] | undefined>
   columns: {
@@ -164,13 +165,26 @@ export function positionsSpec(data: PositionsPageData): PageSpec {
     ],
     body: [
       grid('flex h-full min-h-0 flex-col gap-4', [
-        widgetBlock('filter-chips', {
+        // The house toolbar, not a lone dropdown floating over a bare table.
+        // The as-of date was reachable only by hand-editing `effectiveDate`
+        // in the URL before this — a filter with no control is a filter
+        // nobody can use.
+        widgetBlock('list-toolbar', {
           basePath: '/hrm/positions',
           currentParams: data.currentParams,
-          paramKey: 'status',
-          label: data.segmentsLabel,
-          allLabel: data.allLabel,
-          options: data.segmentOptions,
+          filters: [
+            {
+              paramKey: 'status',
+              label: data.segmentsLabel,
+              allLabel: data.allLabel,
+              options: data.segmentOptions,
+            },
+          ],
+          date: {
+            paramKey: 'effectiveDate',
+            label: data.asOfLabel,
+            resolved: data.effectiveDate,
+          },
         }),
         table({
           variant: 'app',
@@ -238,6 +252,7 @@ export async function loadPositionsPage(
   const authz = await requirePermission('hrm.position.read')
   if (!(await isFeatureEnabled(authz.user.orgId, 'hrm'))) notFound()
   const t = await getTranslations('hrm')
+  const tc = await getTranslations('common')
   const tabs = await hrmGroupTabs(authz, '/hrm/positions')
 
   const status = typeof sp.status === 'string' && (STATUSES as readonly string[]).includes(sp.status)
@@ -420,6 +435,7 @@ export async function loadPositionsPage(
     segments,
     segmentsLabel: t('positions.segmentsLabel'),
     allLabel: t('positions.statusAll'),
+    asOfLabel: tc('labels.asOf'),
     segmentOptions: STATUSES.map((value) => ({
       value,
       label: statusLabel(value),

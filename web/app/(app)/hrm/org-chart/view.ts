@@ -42,26 +42,61 @@ export function orgChartSpec(data: OrgChartPageData): PageSpec {
         title: f('title'),
         description: f('description'),
         actionsClassName: 'flex flex-wrap items-center gap-3',
-        actions: [
-          widget('link-button', { href: f('treeHref'), label: f('treeLabel'), variant: 'outline' }),
-          widget('link-button', { href: f('directoryHref'), label: f('directoryLabel'), variant: 'outline' }),
-          widget('module-home-tabs', { tabs: data.tabs }),
-        ],
+        actions: [widget('module-home-tabs', { tabs: data.tabs })],
       }),
     ],
     body: [
-      grid('grid shrink-0 grid-cols-2 gap-3 xl:grid-cols-4', [
-        statTile({ iconKey: 'users', accent: 'blue', label: f('labels.headcount'), value: f('chart.headcount'), tone: 'default' }),
-        statTile({ iconKey: 'user-plus', accent: 'amber', label: f('labels.vacancies'), value: f('chart.vacancies'), tone: 'default' }),
-        statTile({ iconKey: 'layers', accent: 'slate', label: f('labels.layers'), value: f('chart.layers'), tone: 'default' }),
-        statTile({ iconKey: 'calendar', accent: 'slate', label: f('asOfLabel'), value: f('asOf'), tone: 'default' }),
-      ]),
-      ...(data.view === 'directory'
-        ? [
-            panel({
-              title: f('directoryLabel'),
-              bodyClassName: 'min-h-0 overflow-y-auto p-0',
-              blocks: [
+      grid('flex h-full min-h-0 flex-col gap-4', [
+        // Three tiles, not four: the as-of date is a toolbar CONTROL now, so
+        // a tile repeating it back is one of two places showing the same
+        // fact and the only one you cannot change.
+        grid('grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-3', [
+          statTile({
+            iconKey: 'users',
+            accent: 'blue',
+            label: f('labels.headcount'),
+            value: f('chart.headcount'),
+            tone: 'default',
+          }),
+          statTile({
+            iconKey: 'user-plus',
+            accent: 'amber',
+            label: f('labels.vacancies'),
+            value: f('chart.vacancies'),
+            tone: 'default',
+          }),
+          statTile({
+            iconKey: 'layers',
+            accent: 'slate',
+            label: f('labels.layers'),
+            value: f('chart.layers'),
+            tone: 'default',
+          }),
+        ]),
+        // View switch + the as-of/search controls: one row, the shared strip
+        // and the shared toolbar, in that order — the same shape every other
+        // list in the product now uses.
+        grid('flex shrink-0 flex-wrap items-center justify-between gap-3', [
+          widgetBlock('module-home-tabs', { tabs: data.viewTabs }),
+          widgetBlock('list-toolbar', {
+            basePath: '/hrm/org-chart',
+            currentParams: data.currentParams,
+            search: { paramKey: 'q', placeholder: data.searchLabel },
+            date: {
+              paramKey: 'asOf',
+              label: data.asOfLabel,
+              max: data.today,
+              resolved: data.asOf,
+            },
+          }),
+        ]),
+        ...(data.view === 'directory'
+          ? [
+              // Directory is already named by the active view tab. Render
+              // the shared table directly, like every sibling list, so its
+              // empty state owns the available surface instead of sitting
+              // in a second, partly-filled card inside the page.
+              grid('min-h-0 flex-1 overflow-y-auto', [
                 table({
                   variant: 'app',
                   rows: f('directoryRows'),
@@ -74,23 +109,33 @@ export function orgChartSpec(data: OrgChartPageData): PageSpec {
                     column(data.directoryColumns.manager, text(item('manager'), { fallback: '—' })),
                   ],
                 }),
-              ],
-            }),
-          ]
-        : [
-            widgetBlock('org-chart-tree', {
-              chart: data.chart,
-              search: data.search,
-              asOf: data.asOf,
-              today: data.today,
-              personBaseHref: data.personBaseHref,
-              asOfLabel: data.asOfLabel,
-              searchLabel: data.searchLabel,
-              labels: data.labels,
-            }),
-          ]),
+              ]),
+            ]
+          : [
+              // The tree remains a panel because its canvas needs a named,
+              // bounded scrolling surface; unlike Directory it is not a
+              // native list table.
+              panel({
+                title: f('treeLabel'),
+                iconKey: 'network',
+                className: 'min-h-0 flex-1',
+                bodyClassName: 'min-h-0 overflow-auto p-4',
+                blocks: [
+                  widgetBlock('org-chart-tree', {
+                    chart: data.chart,
+                    personBaseHref: data.personBaseHref,
+                    labels: data.labels,
+                  }),
+                ],
+              }),
+            ]),
+      ]),
       {
-        ...widgetBlock('hrm-org-chart-person', { selected: data.selected, closeHref: data.personCloseHref, labels: data.labels }),
+        ...widgetBlock('hrm-org-chart-person', {
+          selected: data.selected,
+          closeHref: data.personCloseHref,
+          labels: data.labels,
+        }),
         when: f('selected'),
       },
     ],

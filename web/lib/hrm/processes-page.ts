@@ -3,14 +3,10 @@ import 'server-only'
 import { getTranslations } from 'next-intl/server'
 import { HrmAuthorizationError } from '@openbooks/engine/src/hrm/authorization.ts'
 import { HrmProcessError } from '@openbooks/engine/src/hrm/processes.ts'
-import {
-  getProcess,
-  listProcesses,
-  type ProcessDetail,
-  type ProcessSegment,
-} from '@openbooks/engine/src/hrm/processes-read.ts'
+import { getProcess, listProcesses, type ProcessDetail, type ProcessSegment } from '@openbooks/engine/src/hrm/processes-read.ts'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
-import type { Authz } from '../authz'
+import { can, type Authz } from '../authz'
 import { loadAiDraftButton, loadAiDraftDrawer, type AiDraftDrawerData } from './ai-rails'
 
 /**
@@ -79,6 +75,12 @@ export interface ProcessesPageData {
   }
   rows: ProcessRow[]
   empty: string
+  canManage: boolean
+  newProcessLabel: string
+  create: {
+    closeHref: string
+    effectiveDate: string
+  } | null
   detail: ProcessDetail | null
   missingDetail: string | null
   drawerOpen: boolean
@@ -102,26 +104,40 @@ function hrefFor(segment: ProcessSegment, processId: string | null): string {
   return `/hrm/processes?${params.toString()}`
 }
 
-export async function loadProcessesPage(
-  authz: Authz,
-  sp: Record<string, string | undefined>,
-): Promise<ProcessesPageData> {
+export async function loadProcessesPage(authz: Authz, sp: Record<string, string | undefined>): Promise<ProcessesPageData> {
   // The caller (the /hrm/processes view) owns the page gate —
   // requirePermission plus the hrm switch with a 404. This loader never
   // re-checks either; it resolves data for the authorized session it is
   // given.
   const t = await getTranslations('hrm')
   const segment: ProcessSegment =
-    sp.segment === 'open' || sp.segment === 'overdue' || sp.segment === 'completed' || sp.segment === 'cancelled'
-      ? sp.segment
-      : 'open'
+    sp.segment === 'open' || sp.segment === 'overdue' || sp.segment === 'completed' || sp.segment === 'cancelled' ? sp.segment : 'open'
   const processId = typeof sp.process === 'string' && sp.process.length > 0 ? sp.process : null
+  const canManage = can(authz, 'hrm.process.manage')
+  const createOpen = sp.new === '1' && canManage
 
-  const [openItems, overdueItems, completedItems, cancelledItems] = await Promise.all([
-    listProcesses({ orgId: authz.user.orgId, actorId: authz.user.id, segment: 'open' }),
-    listProcesses({ orgId: authz.user.orgId, actorId: authz.user.id, segment: 'overdue' }),
-    listProcesses({ orgId: authz.user.orgId, actorId: authz.user.id, segment: 'completed' }),
-    listProcesses({ orgId: authz.user.orgId, actorId: authz.user.id, segment: 'cancelled' }),
+  const [openItems, overdueItems, completedItems, cancelledItems, effectiveDate] = await Promise.all([
+    listProcesses({
+      orgId: authz.user.orgId,
+      actorId: authz.user.id,
+      segment: 'open',
+    }),
+    listProcesses({
+      orgId: authz.user.orgId,
+      actorId: authz.user.id,
+      segment: 'overdue',
+    }),
+    listProcesses({
+      orgId: authz.user.orgId,
+      actorId: authz.user.id,
+      segment: 'completed',
+    }),
+    listProcesses({
+      orgId: authz.user.orgId,
+      actorId: authz.user.id,
+      segment: 'cancelled',
+    }),
+    createOpen ? businessToday(authz.user.orgId) : Promise.resolve(''),
   ])
   const bySegment: Record<ProcessSegment, typeof openItems> = {
     open: openItems,
@@ -164,8 +180,7 @@ export async function loadProcessesPage(
         : row.status === 'cancelled'
           ? t('processes.segments.cancelled')
           : t('processes.segments.open'),
-    statusVariant:
-      row.status === 'completed' ? 'default' : row.status === 'cancelled' ? 'outline' : 'success',
+    statusVariant: row.status === 'completed' ? 'default' : row.status === 'cancelled' ? 'outline' : 'success',
     workerName: row.workerName,
     progressLabel: `${row.doneRequired}/${row.required}`,
     doneRequired: row.doneRequired,
@@ -180,7 +195,11 @@ export async function loadProcessesPage(
   let missingDetail: string | null = null
   if (processId !== null) {
     try {
-      detail = await getProcess({ orgId: authz.user.orgId, actorId: authz.user.id, processId })
+      detail = await getProcess({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        processId,
+      })
     } catch (error) {
       // A bookmarked id that no longer resolves (never a live list id), or
       // one that left the reader's subsidiary scope, renders the drawer
@@ -188,10 +207,7 @@ export async function loadProcessesPage(
       // surfaced — never a broken list.
       if (error instanceof HrmProcessError && error.code === 'NOT_FOUND') {
         missingDetail = t('processes.detailFailed')
-      } else if (
-        error instanceof HrmAuthorizationError &&
-        /not visible in this organization/.test(error.message)
-      ) {
+      } else if (error instanceof HrmAuthorizationError && /not visible in this organization/.test(error.message)) {
         missingDetail = t('processes.detailFailed')
       } else {
         throw error
@@ -234,6 +250,14 @@ export async function loadProcessesPage(
     },
     rows,
     empty: t('processes.empty'),
+    canManage,
+    newProcessLabel: t('processes.newProcess'),
+    create: createOpen
+      ? {
+          closeHref: hrefFor(segment, null),
+          effectiveDate,
+        }
+      : null,
     detail,
     missingDetail,
     drawerOpen,
@@ -246,9 +270,13 @@ export async function loadProcessesPage(
           description: null,
           detail,
           missingDetail,
-          draft: draftLabel && processId && processHref
-            ? { href: `${processHref}&draft=onboarding_plan:${processId}`, label: draftLabel }
-            : null,
+          draft:
+            draftLabel && processId && processHref
+              ? {
+                  href: `${processHref}&draft=onboarding_plan:${processId}`,
+                  label: draftLabel,
+                }
+              : null,
         }
       : null,
   }

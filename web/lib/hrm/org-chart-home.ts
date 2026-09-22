@@ -96,6 +96,22 @@ export async function loadOrgChartHome(
     directoryHref: `/hrm/org-chart?asOf=${asOf}&view=directory`,
     treeLabel: t('orgChart.tree'),
     directoryLabel: t('orgChart.directory'),
+    // Tree and Directory are the same rows in two shapes — a view switch, so
+    // the shared subtab strip. They used to be two outline BUTTONS sitting
+    // above the route strip: two tab systems on one page, neither of them
+    // the product's.
+    viewTabs: [
+      {
+        href: `/hrm/org-chart?asOf=${asOf}`,
+        label: t('orgChart.tree'),
+        active: view === 'tree',
+      },
+      {
+        href: `/hrm/org-chart?asOf=${asOf}&view=directory`,
+        label: t('orgChart.directory'),
+        active: view === 'directory',
+      },
+    ],
     search,
     chart,
     directoryRows,
@@ -108,22 +124,35 @@ export async function loadOrgChartHome(
     directoryEmpty: t('orgChart.directoryEmpty'),
     searchLabel: t('orgChart.search'),
     asOfLabel: t('orgChart.asOf'),
+    /** URL state the shared toolbar preserves when a control changes. */
+    currentParams: {
+      ...(view === 'directory' ? { view: 'directory' } : {}),
+      ...(search ? { q: search } : {}),
+      asOf,
+    },
     personBaseHref,
     selected,
     personCloseHref: `/hrm/org-chart?asOf=${asOf}${view === 'directory' ? '&view=directory' : ''}`,
+    // `orgChart.labels.*`, not `orgChart.*`. Every one of these twelve keys
+    // was read one segment too high, and next-intl answers a miss with the
+    // key path — so the headcount tile was captioned HRM.ORGCHART.HEADCOUNT
+    // on the live page, and the tree's own strings ("Vacant", "Span of
+    // control") were raw keys too. `messages/index.test.ts` now fails on a
+    // key no catalog carries, which is what would have caught this.
     labels: {
-      vacancies: t('orgChart.vacancies'),
-      headcount: t('orgChart.headcount'),
-      layers: t('orgChart.layers'),
-      span: t('orgChart.span'),
-      vacant: t('orgChart.vacant'),
-      department: t('orgChart.department'),
-      manager: t('orgChart.manager'),
-      reports: t('orgChart.reports'),
-      close: t('orgChart.close'),
-      expand: t('orgChart.expand'),
-      collapse: t('orgChart.collapse'),
-      noMatch: t('orgChart.noMatch'),
+      vacancies: t('orgChart.labels.vacancies'),
+      headcount: t('orgChart.labels.headcount'),
+      layers: t('orgChart.labels.layers'),
+      span: t('orgChart.labels.span'),
+      vacant: t('orgChart.labels.vacant'),
+      department: t('orgChart.labels.department'),
+      manager: t('orgChart.labels.manager'),
+      reports: t('orgChart.labels.reports'),
+      close: t('orgChart.labels.close'),
+      expand: t('orgChart.labels.expand'),
+      collapse: t('orgChart.labels.collapse'),
+      noMatch: t('orgChart.labels.noMatch'),
+      empty: t('orgChart.labels.empty'),
     },
   }
 }

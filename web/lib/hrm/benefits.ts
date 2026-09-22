@@ -72,6 +72,8 @@ export interface BenefitsData {
   refusal: BenefitsRefusal | null
   hasContent: boolean
   segmentsLabel: string
+  /** Windows / Enrolments — the two views, on the shared subtab strip. */
+  viewTabs: { href: string; label: string; active: boolean }[]
   allLabel: string
   segments: BenefitsSegment[]
   currentParams: Record<string, string | string[] | undefined>
@@ -130,7 +132,13 @@ function windowKindLabel(t: BenefitsCatalog, kind: string): string {
   return t.has(`benefits.windowKinds.${kind}`) ? t(`benefits.windowKinds.${kind}`) : kind
 }
 
-const SEGMENTS = ['all', 'open', 'draft', 'closed', 'enrolments'] as const
+/**
+ * Window STATUSES. `enrolments` used to sit in this list, so one control
+ * mixed two axes: picking "Open" filtered the windows, picking "Enrolments"
+ * swapped the table for a different entity. It is a view, and views are
+ * tabs — see `viewTabs`.
+ */
+const SEGMENTS = ['all', 'open', 'draft', 'closed'] as const
 
 export async function loadBenefits(authz: Authz, sp: Record<string, string | undefined>): Promise<BenefitsData> {
   const t = (await getTranslations('hrm')) as unknown as BenefitsCatalog
@@ -140,9 +148,15 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
   const canManage = can(authz, 'hrm.benefits.manage')
   const rawSegment = sp.segment ?? 'all'
   const segment = (SEGMENTS as readonly string[]).includes(rawSegment) ? rawSegment : null
+  const showingEnrolments = sp.view === 'enrolments'
   const tabs = await hrmGroupTabs(authz, basePath)
-  const currentParams: BenefitsData['currentParams'] = {}
+  const keepView: Record<string, string> = showingEnrolments ? { view: 'enrolments' } : {}
+  const currentParams: BenefitsData['currentParams'] = { ...keepView }
   if (sp.segment) currentParams.segment = sp.segment
+  const viewTabs = [
+    { href: benefitsHref(basePath, sp.segment, {}), label: t('benefits.windowsTitle'), active: !showingEnrolments },
+    { href: benefitsHref(basePath, sp.segment, { view: 'enrolments' }), label: t('benefits.enrolmentsTitle'), active: showingEnrolments },
+  ]
 
   if (segment === null) {
     return {
@@ -155,6 +169,7 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
       segmentsLabel: t('benefits.segmentsLabel'),
       allLabel: t('benefits.allLabel'),
       segments: [],
+      viewTabs,
       currentParams,
       columns: { window: '', kind: '', range: '', elections: '', pending: '', status: '' },
       enrollmentColumns: { employee: '', plan: '', coverage: '', employeeAmount: '', employerAmount: '', status: '' },
@@ -165,7 +180,7 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
       emptyDescription: '',
       canManage,
       newWindowButton: t('benefits.newWindow'),
-      newWindowHref: benefitsHref(basePath, rawSegment, { window: 'new' }),
+      newWindowHref: benefitsHref(basePath, rawSegment, { ...keepView, window: 'new' }),
       dialogOpen: false,
       dialogCloseHref: basePath,
       subsidiaryOptions: [],
@@ -176,9 +191,8 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
     }
   }
 
-  const showingEnrolments = segment === 'enrolments'
   const windows = await listEnrollmentWindows(db, orgId, actorId, {
-    ...(segment === 'all' || showingEnrolments ? {} : { status: segment }),
+    ...(segment === 'all' ? {} : { status: segment }),
   })
   const enrolments = await listEnrollments(db, orgId, actorId)
   const { workerByEmployment } = await loadQueueLabels(
@@ -187,7 +201,7 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
     [],
   )
 
-  const counts: Record<string, number> = { all: windows.length, open: 0, draft: 0, closed: 0, enrolments: enrolments.length }
+  const counts: Record<string, number> = { all: windows.length, open: 0, draft: 0, closed: 0 }
   for (const w of windows) {
     if (w.status === 'open' || w.status === 'draft' || w.status === 'closed') {
       counts[w.status] = (counts[w.status] ?? 0) + 1
@@ -266,6 +280,7 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
     segmentsLabel: t('benefits.segmentsLabel'),
     allLabel: t('benefits.allLabel'),
     segments,
+    viewTabs,
     currentParams,
     columns: {
       window: t('benefits.columns.window'),

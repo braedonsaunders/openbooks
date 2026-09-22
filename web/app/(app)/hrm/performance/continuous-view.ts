@@ -42,11 +42,13 @@ import { isFeatureEnabled } from '../../../../lib/features'
  * id or Authz crosses into a spec or a widget prop.
  */
 
-export type ContinuousTab = 'cycles' | 'calibration' | 'talent'
+export type ContinuousTab = 'cycles' | 'calibration' | 'talent' | 'settings' | 'retention'
 
 export interface ContinuousData {
   tab: ContinuousTab
   tabOptions: { value: string; label: string }[]
+  /** The tabs as the shared subtab strip reads them. */
+  viewTabs: { href: string; label: string; active: boolean }[]
   showCalibration: boolean
   showTalent: boolean
   calibration: {
@@ -160,6 +162,7 @@ export async function loadContinuousTab(
   authz: Authz,
   sp: Record<string, string | undefined>,
   canManage: boolean,
+  canRetain: boolean,
 ): Promise<ContinuousData> {
   const t = await getTranslations('hrm')
   const rawTab = typeof sp.tab === 'string' ? sp.tab : null
@@ -168,15 +171,31 @@ export async function loadContinuousTab(
   const feedbackOn = await isFeatureEnabled(authz.user.orgId, 'hrmFeedback')
   const showCalibration = canManage && calibrationOn
   const showTalent = canManage && successionOn
+  // Settings and Retention are tabs of their own. They used to render as
+  // extra sections BELOW the cycles table: a naked "Feedback settings"
+  // select with a Save button, then unboxed retention statistics, stacked
+  // under a list. Three unrelated things down one page, none of them
+  // reachable on its own.
+  const showSettings = canManage && feedbackOn
+  const showRetention = canRetain
   const tab: ContinuousTab =
     rawTab === 'calibration' && showCalibration ? 'calibration'
     : rawTab === 'talent' && showTalent ? 'talent'
+    : rawTab === 'settings' && showSettings ? 'settings'
+    : rawTab === 'retention' && showRetention ? 'retention'
     : 'cycles'
   const tabOptions = [
     { value: 'cycles', label: t('performance.continuous.tabs.cycles') },
     ...(showCalibration ? [{ value: 'calibration', label: t('performance.continuous.tabs.calibration') }] : []),
     ...(showTalent ? [{ value: 'talent', label: t('performance.continuous.tabs.talent') }] : []),
+    ...(showRetention ? [{ value: 'retention', label: t('retention.title') }] : []),
+    ...(showSettings ? [{ value: 'settings', label: t('performance.continuous.tabs.settings') }] : []),
   ]
+  const viewTabs = tabOptions.map((option) => ({
+    href: option.value === 'cycles' ? '/hrm/performance' : `/hrm/performance?tab=${option.value}`,
+    label: option.label,
+    active: option.value === tab,
+  }))
 
   let calibration: ContinuousData['calibration'] = null
   if (tab === 'calibration' && showCalibration) {
@@ -370,7 +389,7 @@ export async function loadContinuousTab(
   }
 
   let feedbackSettings: ContinuousData['feedbackSettings'] = null
-  if (tab === 'cycles' && canManage && feedbackOn) {
+  if (tab === 'settings' && showSettings) {
     try {
       const settings = await getFeedbackSettings({ orgId: authz.user.orgId, actorId: authz.user.id })
       feedbackSettings = {
@@ -386,18 +405,18 @@ export async function loadContinuousTab(
     }
   }
 
-  return { tab, tabOptions, showCalibration, showTalent, calibration, talent, feedbackSettings }
+  return { tab, tabOptions, viewTabs, showCalibration, showTalent, calibration, talent, feedbackSettings }
 }
 
+/**
+ * The performance view switch, on the shared subtab strip.
+ *
+ * It was a `filter-chips` dropdown with `label: ''` — an unlabelled control
+ * that read as an empty select box, sitting directly above the real status
+ * filter, which looked exactly the same. Tabs are tabs.
+ */
 export function continuousTabChips(data: ContinuousData) {
-  return widgetBlock('filter-chips', {
-    basePath: '/hrm/performance',
-    currentParams: data.tab === 'cycles' ? {} : { tab: data.tab },
-    paramKey: 'tab',
-    label: '',
-    allLabel: data.tabOptions[0]?.label ?? '',
-    options: data.tabOptions.slice(1).map((o) => ({ value: o.value, label: o.label, count: 0 })),
-  })
+  return widgetBlock('module-home-tabs', { tabs: data.viewTabs })
 }
 
 export function continuousBlocks(data: ContinuousData): PageSpec['body'] {
@@ -505,7 +524,7 @@ export function continuousBlocks(data: ContinuousData): PageSpec['body'] {
       }),
     )
   }
-  if (data.tab === 'cycles' && data.feedbackSettings) {
+  if (data.tab === 'settings' && data.feedbackSettings) {
     blocks.push(widgetBlock('hrm-feedback-settings', { settings: data.feedbackSettings }))
   }
   return blocks

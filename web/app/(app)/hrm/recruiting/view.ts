@@ -58,8 +58,8 @@ import {
 } from './depth-view'
 
 /**
- * Recruiting tab: requisitions as a shared `table` block with `filter-chips`
- * status segments, the header link-button opening the create form in the
+ * Recruiting tab: requisitions as a shared `table` block with a shared
+ * `list-toolbar` status filter, the header link-button opening the create form in the
  * URL drawer, and row links opening the requisition drawer (pipeline stage
  * chips, the applications table, and action islands) through the URL, so
  * every selection is shareable and closes by navigation. Candidate and
@@ -116,6 +116,10 @@ export interface RecruitingPageData {
   // HR-18: sub-tab strip + depth table payload (null on Openings).
   tab: DepthTab
   depthTabs: { value: string; label: string; href: string }[]
+  /** The depth tabs as the shared strip reads them. */
+  viewTabs: { href: string; label: string; active: boolean }[]
+  /** The status filter's own label — never the strip's. */
+  statusLabel: string
   depthRows: InterviewTabRow[] | OfferTabRow[] | PostingTabRow[] | PoolTabRow[] | null
   depthColumns: Record<string, string> | null
   depthEmpty: string
@@ -213,30 +217,30 @@ export function recruitingSpec(data: RecruitingPageData): PageSpec {
     ],
     body: [
       grid('flex h-full min-h-0 flex-col gap-4', [
-        // HR-18: the route sub-tab strip (Openings + the enabled depth
-        // tabs) rides the same filter-chips widget as the status segments —
-        // same component, never a fork.
-        widgetBlock('filter-chips', {
-          basePath: '/hrm/recruiting',
-          currentParams: { tab: data.tab },
-          paramKey: 'tab',
-          label: data.segmentsLabel,
-          hideAll: true,
-          defaultValue: 'openings',
-          options: data.depthTabs,
-        }),
-        ...(data.tab === 'openings'
-          ? [
-              widgetBlock('filter-chips', {
-                basePath: '/hrm/recruiting',
-                currentParams: data.currentParams,
-                paramKey: 'status',
-                label: data.segmentsLabel,
-                allLabel: data.allLabel,
-                options: data.segmentOptions,
-              }),
-            ]
-          : []),
+        // HR-18: Openings and the enabled depth tabs are VIEWS, so they ride
+        // the shared subtab strip — the same component as the route strip in
+        // the header. They used to render as a `filter-chips` dropdown, which
+        // put a control reading "Status: Openings" directly above a second,
+        // identical-looking control that really was the status filter.
+        grid('flex shrink-0 flex-wrap items-center gap-3', [
+          widgetBlock('module-home-tabs', { tabs: data.viewTabs }),
+          ...(data.tab === 'openings'
+            ? [
+                widgetBlock('list-toolbar', {
+                  basePath: '/hrm/recruiting',
+                  currentParams: data.currentParams,
+                  filters: [
+                    {
+                      paramKey: 'status',
+                      label: data.statusLabel,
+                      allLabel: data.allLabel,
+                      options: data.segmentOptions,
+                    },
+                  ],
+                }),
+              ]
+            : []),
+        ]),
         ...(data.tab === 'openings'
           ? [
         table({
@@ -323,6 +327,7 @@ export async function loadRecruitingPage(
   if (!(await isFeatureEnabled(authz.user.orgId, 'hrm'))) notFound()
   if (!(await isFeatureEnabled(authz.user.orgId, 'hrmRecruiting'))) notFound()
   const t = await getTranslations('hrm')
+  const tc = await getTranslations('common')
   const tabs = await hrmGroupTabs(authz, '/hrm/recruiting')
   const status = typeof sp.status === 'string' && (STATUSES as readonly string[]).includes(sp.status)
     ? sp.status
@@ -674,6 +679,12 @@ export async function loadRecruitingPage(
     // HR-18: sub-tab strip + depth table payload (null on Openings).
     tab,
     depthTabs,
+    viewTabs: depthTabs.map((option) => ({
+      href: option.href,
+      label: option.label,
+      active: option.value === tab,
+    })),
+    statusLabel: tc('labels.status'),
     depthRows,
     depthColumns,
     depthEmpty: t('recruiting.depth.empty'),

@@ -31,15 +31,34 @@ test("leave rows render through the shared table block, not a bespoke table", ()
   assert.match(view, /variant: 'app'/, "the table uses the app list variant");
   assert.ok(!/<table/.test(view), "the spec holds no hand-rolled table");
   assert.ok(!/<table/.test(dialog), "the dialog island holds no hand-rolled table");
+  assert.ok(!/<table/.test(calendar), "the calendar island holds no hand-rolled table");
   assert.ok(
     !existsSync(new URL("./LeaveQueue.tsx", import.meta.url)),
     "the hand-rolled queue table component is deleted",
   );
 });
 
-test("leave segments ride the shared filter chips", () => {
-  assert.match(view, /filter-chips/, "segments ride the shared filter chips");
+test("leave segments ride the shared list toolbar", () => {
+  assert.match(view, /widgetBlock\('list-toolbar'/, "segments ride the shared toolbar");
   assert.match(view, /paramKey: 'segment'/, "segments filter on the segment search param");
+  assert.doesNotMatch(view, /widgetBlock\('filter-chips'/, "no second filter treatment beside the toolbar");
+});
+
+test("requests and the department calendar are TABS, never stacked panels", () => {
+  assert.match(view, /widgetBlock\('module-home-tabs', \{ tabs: data\.viewTabs \}\)/,
+    "the view switch is the shared subtab strip");
+  assert.match(view, /when: f\('onRequests'\)/, "the requests table renders only on its own tab");
+  assert.match(view, /when: f\('onCalendar'\)/, "the calendar renders only on its own tab");
+  // The defect this pins: the calendar used to render BELOW the requests
+  // table on the same page, so a viewport-filling list sat on top of it.
+  assert.ok(
+    view.indexOf("when: f('onCalendar')") > view.indexOf("when: f('onRequests')"),
+    "the two surfaces are alternatives, not a sequence",
+  );
+  // The calendar renders DAYS. Department/from/to are the shared toolbar's,
+  // so the island takes no basePath, no currentParams and no options.
+  assert.doesNotMatch(calendar, /method="get"/, "the calendar owns no filter form of its own");
+  assert.doesNotMatch(calendar, /departmentOptions/, "the department picker is the toolbar's");
 });
 
 test("both primary actions live in the page header through the shared button", () => {

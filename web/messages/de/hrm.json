@@ -406,6 +406,7 @@
     "segmentsLabel": "Status"
   },
   "processes": {
+    "newProcess": "Neuer Prozess",
     "title": "Prozess-Checklisten",
     "description": "Onboarding-, Offboarding- und Versetzungs-Checklisten mit Verantwortlichen, Fälligkeiten und Nachweisen.",
     "listTitle": "Checklisten",
@@ -842,7 +843,8 @@
       "tabs": {
         "cycles": "Zyklen",
         "calibration": "Kalibrierung",
-        "talent": "Talent & Nachfolge"
+        "talent": "Talent & Nachfolge",
+        "settings": "Einstellungen"
       },
       "calibration": {
         "title": "Kalibrierung",
@@ -1329,7 +1331,11 @@
       "sourcesTitle": "Belege",
       "missing": "Diese Abrechnung fehlt oder gehört nicht zu Ihrer Organisation.",
       "close": "Schließen",
-      "failed": "Die Erklärung konnte nicht geladen werden."
+      "failed": "Die Erklärung konnte nicht geladen werden.",
+      "employerCost": "Arbeitgeberkosten",
+      "earnings": "Bezüge",
+      "deductions": "Abzüge",
+      "contributions": "Arbeitgeberbeiträge"
     }
   },
   "options": {
@@ -1701,6 +1707,12 @@
       "expiresOn": "Läuft ab am",
       "identifier": "Lizenznummer",
       "notes": "Notizen"
+    },
+    "tiles": {
+      "expiring": "Läuft bald ab",
+      "expiredAssigned": "Abgelaufen, weiterhin zugewiesen",
+      "pending": "Prüfung ausstehend",
+      "projectsUnmet": "Projekte mit unerfüllten Anforderungen"
     }
   },
   "documents": {
@@ -1868,7 +1880,8 @@
       "close": "Schließen",
       "expand": "Erweitern",
       "collapse": "Reduzieren",
-      "noMatch": "Niemand für diese Suche."
+      "noMatch": "Niemand für diese Suche.",
+      "empty": "Noch kein Berichtsbaum. Sobald ein Beschäftigungsverhältnis eine Führungskraft nennt, wird der Baum hier gezeichnet."
     }
   },
   "meDocuments": {

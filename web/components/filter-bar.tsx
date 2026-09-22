@@ -71,13 +71,16 @@ export function FilterChips({
   const [open, setOpen] = useState(false)
   const controlled = onChange !== undefined
   const params = currentParams ?? {}
-  const raw = controlled
-    ? (value || undefined)
-    : typeof params[paramKey] === 'string' ? (params[paramKey] as string) : undefined
+  const raw = controlled ? value || undefined : typeof params[paramKey] === 'string' ? (params[paramKey] as string) : undefined
   const current = raw ?? (controlled ? undefined : defaultValue)
   const active = options.find((o) => o.value === current)
   const href = (next: string | undefined) =>
-    controlled ? '' : mergeHref(basePath ?? '', params, { [paramKey]: next, [pageParamKey]: 1 })
+    controlled
+      ? ''
+      : mergeHref(basePath ?? '', params, {
+          [paramKey]: next,
+          [pageParamKey]: 1,
+        })
   const allHref = href(defaultValue ? 'all' : undefined)
   const allActive = controlled ? !current : defaultValue ? current === 'all' : !current
   const select = (next: string) => {
@@ -106,12 +109,7 @@ export function FilterChips({
               : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-800/60',
           )}
         >
-          <span
-            className={cn(
-              'shrink-0',
-              active ? 'text-teal-700/70 dark:text-teal-300' : 'text-slate-500 dark:text-slate-400',
-            )}
-          >
+          <span className={cn('shrink-0', active ? 'text-teal-700/70 dark:text-teal-300' : 'text-slate-500 dark:text-slate-400')}>
             {active ? `${label}:` : label}
           </span>
           {active ? <span className="truncate font-semibold">{active.label}</span> : null}
@@ -128,12 +126,7 @@ export function FilterChips({
     >
       <div className="max-h-72 overflow-auto" role="menu" aria-label={label} onKeyDown={menuArrowKeys}>
         {!hideAll ? (
-          <FilterItem
-            href={allHref}
-            active={allActive}
-            controlled={controlled}
-            onSelect={() => select('')}
-          >
+          <FilterItem href={allHref} active={allActive} controlled={controlled} onSelect={() => select('')}>
             {allLabel ?? tLabels('all')}
           </FilterItem>
         ) : null}
@@ -192,7 +185,7 @@ export function SearchSelectFilter({
     next.delete(pageParamKey)
     for (const key of resetParamKeys) next.delete(key)
     const qs = next.toString()
-    router.replace(((qs ? `${pathname}?${qs}` : pathname)))
+    router.replace(qs ? `${pathname}?${qs}` : pathname)
   }
 
   return (
@@ -244,12 +237,7 @@ function FilterItem({
       <Check size={14} className={cn('shrink-0', active ? 'text-teal-600' : 'text-transparent')} />
       <span className="flex-1 truncate">{children}</span>
       {typeof count === 'number' ? (
-        <span
-          className={cn(
-            'shrink-0 text-xs tabular-nums',
-            active ? 'text-teal-600' : 'text-slate-400 dark:text-slate-500',
-          )}
-        >
+        <span className={cn('shrink-0 text-xs tabular-nums', active ? 'text-teal-600' : 'text-slate-400 dark:text-slate-500')}>
           {count}
         </span>
       ) : null}
@@ -257,26 +245,72 @@ function FilterItem({
   )
   if (controlled) {
     return (
-      <button
-        type="button"
-        onClick={onSelect}
-        role="menuitem"
-        aria-current={active ? 'true' : undefined}
-        className={className}
-      >
+      <button type="button" onClick={onSelect} role="menuitem" aria-current={active ? 'true' : undefined} className={className}>
         {body}
       </button>
     )
   }
   return (
-    <Link
-      href={(href)}
-      onClick={onSelect}
-      role="menuitem"
-      aria-current={active ? 'true' : undefined}
-      className={className}
-    >
+    <Link href={href} onClick={onSelect} role="menuitem" aria-current={active ? 'true' : undefined} className={className}>
       {body}
     </Link>
+  )
+}
+
+/**
+ * A date the list is read AS OF, as a toolbar control. Same contract as the
+ * other filters — the value lives in the URL, changing it resets pagination —
+ * sized (h-8) to sit on the toolbar row beside them.
+ *
+ * It exists because "as of" was previously a bare <input type="date"> inside
+ * a one-off <form> with its own submit button, floating above the content
+ * with no toolbar around it. An as-of date is a filter; it belongs with the
+ * filters.
+ */
+export function DateParamFilter({
+  paramKey,
+  label,
+  max,
+  resolved,
+  pageParamKey = 'page',
+}: {
+  paramKey: string
+  label: string
+  /** Upper bound — an as-of date cannot run ahead of the business date. */
+  max?: string
+  /**
+   * The date the page is ACTUALLY reading at when the URL carries no param —
+   * the loader's resolved default. Without it the control sits blank beside
+   * a list that is plainly dated, which reads as "no date applied".
+   */
+  resolved?: string
+  pageParamKey?: string
+}) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const sp = useSearchParams()
+  const value = sp.get(paramKey) ?? resolved ?? ''
+
+  function onChange(next: string) {
+    const params = new URLSearchParams(sp.toString())
+    if (next) params.set(paramKey, next)
+    else params.delete(paramKey)
+    params.delete(pageParamKey)
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname)
+  }
+
+  return (
+    <label className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
+      <span className="text-slate-500 dark:text-slate-400">{label}</span>
+      <input
+        type="date"
+        value={value}
+        max={max}
+        onChange={(event) => onChange(event.target.value)}
+        aria-label={label}
+        className="appearance-none border-0 bg-transparent p-0 text-sm tabular-nums outline-none [color-scheme:light] dark:[color-scheme:dark] [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-60"
+      />
+    </label>
   )
 }

@@ -28,16 +28,17 @@ import { HrmFacts } from '../../app/(app)/me/sections'
 import { ExplainDrawer } from '../../app/(app)/me/sections'
 import { AiDraftDrawer } from '../../app/(app)/hrm/ai/AiDraftDrawer'
 // HR-21 end
-import { BenefitChangeDialog, BenefitElectDialog, GoalProgressDialog, ProfileDialog, ReviewAcknowledgeButton, StepCompleteButton } from '../../app/(app)/me/islands'
+import {
+  BenefitChangeDialog,
+  BenefitElectDialog,
+  GoalProgressDialog,
+  ProfileDialog,
+  ReviewAcknowledgeButton,
+  StepCompleteButton,
+} from '../../app/(app)/me/islands'
 import { ProcessDrawer } from '../../app/(app)/hrm/processes/sections'
 import { LeaveCalendar } from '../../app/(app)/hrm/leave/LeaveCalendar'
-import {
-  CycleDialog,
-  CycleDrawer,
-  ExitDrawer,
-  RetentionPanel,
-  ReviewDrawer,
-} from '../../app/(app)/hrm/performance/sections'
+import { CycleDialog, CycleDrawer, ExitDrawer, ReviewDrawer } from '../../app/(app)/hrm/performance/sections'
 import {
   CompCycleDialog,
   CompEquityDialog,
@@ -173,32 +174,21 @@ export const HRM_WIDGETS = {
   ),
   /** The cycle create dialog, opened from the page header through
    *  `?cycle=new`; closing navigates the param away. */
-  'hrm-cycle-dialog': (props) => (
-    <CycleDialog create={(props.create as ComponentProps<typeof CycleDialog>['create']) ?? null} />
-  ),
+  'hrm-cycle-dialog': (props) => <CycleDialog create={(props.create as ComponentProps<typeof CycleDialog>['create']) ?? null} />,
   /** The Retention panel: trailing-twelve-months turnover, regrettable
    *  leavers, and the exit-record gaps, all loader-resolved. */
-  'hrm-retention-panel': (props) => (
-    <RetentionPanel retention={(props.retention as ComponentProps<typeof RetentionPanel>['retention']) ?? null} />
-  ),
   /** The exit drawer (?exit=<employmentId>): HR managers record and
    *  correct through the form; retention readers see the record read-only.
    *  Null payload renders nothing — the spec's `when` gate already omits
    *  it, so this is the second half of the same guard. */
   'hrm-exit-drawer': (props) => (
-    <ExitDrawer
-      exit={(props.exit as ComponentProps<typeof ExitDrawer>['exit']) ?? null}
-      missingExit={str(props, 'missingExit') ?? null}
-    />
+    <ExitDrawer exit={(props.exit as ComponentProps<typeof ExitDrawer>['exit']) ?? null} missingExit={str(props, 'missingExit') ?? null} />
   ),
   /** Leave filing and detail entry point: the existing LeaveDrawer over a
    *  request id (detail) or null (filing), closing by navigating the search
    *  params away. */
   'hrm-leave-dialog': (props) => (
-    <LeaveDialog
-      requestId={str(props, 'requestId') ?? null}
-      closeHref={str(props, 'closeHref') ?? '/hrm/leave'}
-    />
+    <LeaveDialog requestId={str(props, 'requestId') ?? null} closeHref={str(props, 'closeHref') ?? '/hrm/leave'} />
   ),
   // HR-14 begin: qualification record/detail entry point over a
   // qualification id (detail) or the record flag (blank form), closing
@@ -214,25 +204,20 @@ export const HRM_WIDGETS = {
   /** Label/value facts behind the Me profile and overview panels — the
    *  loader-resolved rows, never ids. Empty sets render the loader's empty
    *  line (a missing address is legitimate) rather than a blank panel. */
-  'hrm-facts': (props) => (
-    <HrmFacts
-      facts={(props.facts as ComponentProps<typeof HrmFacts>['facts']) ?? []}
-      empty={str(props, 'empty')}
-    />
-  ),
+  'hrm-facts': (props) => <HrmFacts facts={(props.facts as ComponentProps<typeof HrmFacts>['facts']) ?? []} empty={str(props, 'empty')} />,
   /** The Explain drawer (?explain=<stubId>): the deterministic payslip
    *  trace as a table with diff chips. Renders nothing without one. */
   'hrm-explain-drawer': (props) => {
-    const explain = (props.explain as ComponentProps<typeof ExplainDrawer>['explain']) ?? null;
-    if (!explain) return null;
-    return <ExplainDrawer explain={explain} />;
+    const explain = (props.explain as ComponentProps<typeof ExplainDrawer>['explain']) ?? null
+    if (!explain) return null
+    return <ExplainDrawer explain={explain} />
   },
   /** The evidence-draft drawer (?draft=<kind>:<id>): draft text, cited
    *  sources, bias flags, Insert/Discard. Renders nothing without one. */
   'hrm-ai-draft-drawer': (props) => {
-    const draft = props.draft as ComponentProps<typeof AiDraftDrawer> | null;
-    if (!draft?.draftParam) return null;
-    return <AiDraftDrawer {...draft} />;
+    const draft = props.draft as ComponentProps<typeof AiDraftDrawer> | null
+    if (!draft?.draftParam) return null
+    return <AiDraftDrawer {...draft} />
   },
   /** One checklist step's complete action inside the shared table: posts
    *  to the existing step endpoint and refreshes on success, rendering
@@ -291,18 +276,7 @@ export const HRM_WIDGETS = {
   /** Department leave calendar: loader-resolved absence days grouped by
    *  date over the department/from/to search params. */
   'hrm-leave-calendar': (props) => (
-    <LeaveCalendar
-      basePath={str(props, 'basePath') ?? '/hrm/leave'}
-      currentParams={(props.currentParams as ComponentProps<typeof LeaveCalendar>['currentParams']) ?? {}}
-      departmentOptions={(props.departmentOptions as ComponentProps<typeof LeaveCalendar>['departmentOptions']) ?? []}
-      departmentLabel={str(props, 'departmentLabel') ?? ''}
-      fromLabel={str(props, 'fromLabel') ?? ''}
-      toLabel={str(props, 'toLabel') ?? ''}
-      showLabel={str(props, 'showLabel') ?? ''}
-      days={(props.days as ComponentProps<typeof LeaveCalendar>['days']) ?? []}
-      empty={str(props, 'empty') ?? ''}
-      notAvailable={str(props, 'notAvailable') ?? ''}
-    />
+    <LeaveCalendar days={(props.days as ComponentProps<typeof LeaveCalendar>['days']) ?? []} empty={str(props, 'empty') ?? ''} />
   ),
   /** Self-service balances: TIME per leave type and VALUE per payroll
    *  bank, each labelled with its unit. Loader-resolved rows. */
@@ -429,9 +403,7 @@ export const HRM_WIDGETS = {
   ),
   /** Cycle budget pacing bar: computed percent with the over-budget
    *  tone, loader-resolved. */
-  'hrm-pacing-bar': (props) => (
-    <PacingBar pct={num(props, 'pct') ?? null} note={str(props, 'note') ?? ''} />
-  ),
+  'hrm-pacing-bar': (props) => <PacingBar pct={num(props, 'pct') ?? null} note={str(props, 'note') ?? ''} />,
   /** The cycle line drawer: propose form, decide buttons, and the
    *  append-only event history, opened from the line's `line` param. */
   'hrm-comp-line-drawer': (props) => {
@@ -461,7 +433,11 @@ export const HRM_WIDGETS = {
   },
   /** Placement summary on the Me surface: loader-resolved strings. */
   'hrm-placement-summary': (props) => (
-    <PlacementSummary placement={str(props, 'placement') ?? ''} compaRatio={str(props, 'compaRatio') ?? null} bandRange={str(props, 'bandRange') ?? null} />
+    <PlacementSummary
+      placement={str(props, 'placement') ?? ''}
+      compaRatio={str(props, 'compaRatio') ?? null}
+      bandRange={str(props, 'bandRange') ?? null}
+    />
   ),
   /** Pay-information request action with the open request's status. */
   'hrm-pay-info-request': (props) => (

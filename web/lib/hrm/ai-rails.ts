@@ -297,6 +297,14 @@ export interface MePaySection {
 }
 
 /** Own payslips with the Explain drawer payload for the Me page. */
+/**
+ * The self-service Pay section and its explain drawer.
+ *
+ * Every label here read `me.pay.<name>` when the catalog carries
+ * `me.pay.columns.<name>` / `me.pay.drawerTitle` / `me.pay.inputsTitle` —
+ * so the payslip explanation rendered `hrm.me.pay.gross`,
+ * `hrm.me.pay.employerCost` and nine more raw key paths at the employee.
+ */
 export async function loadMePaySection(
   authz: Authz,
   explainStubId: string | undefined,
@@ -321,17 +329,17 @@ export async function loadMePaySection(
       payExplain = {
         stubId: explainStubId,
         closeHref: '/me',
-        title: t('me.pay.explainTitle'),
-        missing: t('me.pay.explainMissing'),
-        grossLabel: t('me.pay.gross'),
-        netLabel: t('me.pay.net'),
+        title: t('me.pay.drawerTitle'),
+        missing: t('me.pay.missing'),
+        grossLabel: t('me.pay.columns.gross'),
+        netLabel: t('me.pay.columns.netPay'),
         employerCostLabel: t('me.pay.employerCost'),
         earningsTitle: t('me.pay.earnings'),
         deductionsTitle: t('me.pay.deductions'),
         contributionsTitle: t('me.pay.contributions'),
-        inputsTitle: t('me.pay.inputs'),
-        diffTitle: t('me.pay.diff'),
-        sourcesTitle: t('me.pay.sources'),
+        inputsTitle: t('me.pay.inputsTitle'),
+        diffTitle: t('me.pay.diffTitle'),
+        sourcesTitle: t('me.pay.sourcesTitle'),
         trace: null,
       };
     } else {
@@ -339,17 +347,17 @@ export async function loadMePaySection(
       payExplain = {
         stubId: explainStubId,
         closeHref: '/me',
-        title: `${t('me.pay.explainTitle')} · ${found.payDate}`,
+        title: `${t('me.pay.drawerTitle')} · ${found.payDate}`,
         missing: 'missing' in result ? result.missing : null,
-        grossLabel: t('me.pay.gross'),
-        netLabel: t('me.pay.net'),
+        grossLabel: t('me.pay.columns.gross'),
+        netLabel: t('me.pay.columns.netPay'),
         employerCostLabel: t('me.pay.employerCost'),
         earningsTitle: t('me.pay.earnings'),
         deductionsTitle: t('me.pay.deductions'),
         contributionsTitle: t('me.pay.contributions'),
-        inputsTitle: t('me.pay.inputs'),
-        diffTitle: t('me.pay.diff'),
-        sourcesTitle: t('me.pay.sources'),
+        inputsTitle: t('me.pay.inputsTitle'),
+        diffTitle: t('me.pay.diffTitle'),
+        sourcesTitle: t('me.pay.sourcesTitle'),
         trace: 'trace' in result ? result.trace : null,
       };
     }
@@ -362,7 +370,7 @@ export async function loadMePaySection(
       explainLabel: t('me.pay.explain'),
       explainHref: `/me?explain=${s.id}`,
     })),
-    payColumns: { payDate: t('me.pay.payDate'), gross: t('me.pay.gross'), netPay: t('me.pay.net') },
+    payColumns: { payDate: t('me.pay.columns.payDate'), gross: t('me.pay.columns.gross'), netPay: t('me.pay.columns.netPay') },
     payEmpty: t('me.pay.empty'),
     payExplain,
   };

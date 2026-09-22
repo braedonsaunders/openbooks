@@ -96,7 +96,13 @@ export interface HrmPositionsSummary {
   totalLabel: string
   unassignedDepartment: string
   groups: HrmVacancyGroup[]
-  totals: { positions: number; plannedFte: string; fundedFte: string; filledFte: string; vacantFte: string }
+  totals: {
+    positions: number
+    plannedFte: string
+    fundedFte: string
+    filledFte: string
+    vacantFte: string
+  }
 }
 
 export interface HrmOnboardingPanelData {
@@ -129,7 +135,10 @@ export interface HrmHomeData {
   description: string
   tabs: Awaited<ReturnType<typeof hrmGroupTabs>>
   canCreateEmployee: boolean
+  canProposeChange: boolean
+  canCreateProcess: boolean
   newEmployee: { basePath: string; role: 'employee'; label: string }
+  newProcessLabel: string
   /** Present exactly when the viewer holds hrm.process.read; otherwise the rail stays headcount-only. */
   onboarding: HrmOnboardingPanelData | null
   /** Whether the org runs more than one subsidiary; the subsidiary column
@@ -234,9 +243,7 @@ function requestKindLabel(t: Awaited<ReturnType<typeof getTranslations<'hrm'>>>,
 }
 
 function requestStatusLabel(t: Awaited<ReturnType<typeof getTranslations<'hrm'>>>, status: string): string {
-  return t.has(`employment.changeRequests.statusNames.${status}`)
-    ? t(`employment.changeRequests.statusNames.${status}`)
-    : status
+  return t.has(`employment.changeRequests.statusNames.${status}`) ? t(`employment.changeRequests.statusNames.${status}`) : status
 }
 
 function changeKindLabel(t: Awaited<ReturnType<typeof getTranslations<'hrm'>>>, kind: string): string {
@@ -253,7 +260,12 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
 
   const effectiveDate = await businessToday(orgId)
   const knownAt = new Date().toISOString()
-  const headcount = await getHeadcountAsOf({ orgId, actorId: authz.user.id, effectiveDate, knownAt })
+  const headcount = await getHeadcountAsOf({
+    orgId,
+    actorId: authz.user.id,
+    effectiveDate,
+    knownAt,
+  })
 
   const multiSubsidiary = await isMultiSubsidiary(orgId)
 
@@ -270,12 +282,20 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
     if (date === effectiveDate) {
       trendData.push(headcount.total)
     } else {
-      const point = await getHeadcountAsOf({ orgId, actorId: authz.user.id, effectiveDate: date, knownAt })
+      const point = await getHeadcountAsOf({
+        orgId,
+        actorId: authz.user.id,
+        effectiveDate: date,
+        knownAt,
+      })
       trendData.push(point.total)
     }
   }
   const trendLabels = trendDates.map((date) =>
-    new Date(`${date}T00:00:00Z`).toLocaleDateString(locale, { month: 'short', timeZone: 'UTC' }),
+    new Date(`${date}T00:00:00Z`).toLocaleDateString(locale, {
+      month: 'short',
+      timeZone: 'UTC',
+    }),
   )
 
   // The headcount plan rides the same cockpit when the viewer holds the
@@ -296,7 +316,9 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
     positions = {
       openPositionsLabel: t('home.vitals.openPositions'),
       openPositionsValue: String(openCount),
-      openPositionsSub: t('home.vitals.openPositionsSub', { fte: fte(vacancy.totals.vacantFte) }),
+      openPositionsSub: t('home.vitals.openPositionsSub', {
+        fte: fte(vacancy.totals.vacantFte),
+      }),
       unfundedFteValue: vacancy.totals.unfundedFilledFte,
       vacancyTitle: t('home.vacancy.title'),
       departmentColumn: t('home.vacancy.department'),
@@ -348,15 +370,15 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   let pendingCount = 0
   let pending: PendingRequestItem[] = []
   try {
-    const queueRows = await listChangeRequests({ orgId, actorId: authz.user.id, limit: HOME_QUEUE_LIMIT })
+    const queueRows = await listChangeRequests({
+      orgId,
+      actorId: authz.user.id,
+      limit: HOME_QUEUE_LIMIT,
+    })
     const awaiting = queueRows.filter((row) => row.status === 'pending_approval')
     pendingCount = awaiting.length
     const shown = awaiting.slice(0, HOME_PENDING_SHOWN)
-    const { workerByEmployment } = await loadQueueLabels(
-      orgId,
-      [...new Set(shown.map((row) => row.employmentId))],
-      [],
-    )
+    const { workerByEmployment } = await loadQueueLabels(orgId, [...new Set(shown.map((row) => row.employmentId))], [])
     const present = t('employment.episodes.present')
     pending = shown.map((row) => {
       const worker = workerByEmployment.get(row.employmentId)
@@ -397,14 +419,15 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   // Probation ends are not modeled (versions carry status and the
   // effective window only), and the panel says so instead of implying it.
   const employmentScope = subsidiaryVisibleFilter(sql`w.employer_subsidiary_id`, authz.allowedSubsidiaryIds)
-  const windowRows = (await db.execute<{
-    employmentId: string
-    name: string | null
-    partyId: string | null
-    status: string
-    from: string
-    to: string | null
-  }>(sql`
+  const windowRows = (
+    await db.execute<{
+      employmentId: string
+      name: string | null
+      partyId: string | null
+      status: string
+      from: string
+      to: string | null
+    }>(sql`
     select w.id::text as "employmentId", p.display_name as name, p.id::text as "partyId",
            ev.status as status,
            ev.effective_from::text as "from", ev.effective_to::text as "to"
@@ -419,7 +442,8 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
          or (ev.effective_to > ${effectiveDate}::date
              and ev.effective_to <= (${effectiveDate}::date + ${HOME_WINDOW_DAYS}::int)))
      order by ev.effective_from
-     limit ${HOME_WINDOW_LIMIT}`)).rows
+     limit ${HOME_WINDOW_LIMIT}`)
+  ).rows
   const upcomingTruncated = windowRows.length >= HOME_WINDOW_LIMIT
   const starts: UpcomingChangeItem[] = []
   const ends: UpcomingChangeItem[] = []
@@ -441,13 +465,14 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   // Recent employment changes: the last recorded aggregate change events
   // with their reasons — the same clearly-scoped shape (org predicate,
   // employer-scope filter, newest first, bounded).
-  const changeRows = (await db.execute<{
-    kind: string
-    reason: string
-    recordedAt: string
-    name: string | null
-    partyId: string | null
-  }>(sql`
+  const changeRows = (
+    await db.execute<{
+      kind: string
+      reason: string
+      recordedAt: string
+      name: string | null
+      partyId: string | null
+    }>(sql`
     select c.change_kind as kind, c.reason as reason,
            to_char(c.recorded_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "recordedAt",
            p.display_name as name, p.id::text as "partyId"
@@ -457,7 +482,8 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
      where c.org_id = ${orgId}::uuid
        ${employmentScope}
      order by c.recorded_at desc
-     limit ${HOME_RECENT_LIMIT}`)).rows
+     limit ${HOME_RECENT_LIMIT}`)
+  ).rows
   const recent: RecentChangeItem[] = changeRows.map((row) => ({
     name: row.name,
     partyId: row.partyId,
@@ -472,7 +498,8 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   // employer scope, so a restricted viewer never counts outside their
   // lens. The sentence names what the number means and headcount's
   // exclusion; the link opens the migration article.
-  const unmigratedRows = (await db.execute<{ n: unknown }>(sql`
+  const unmigratedRows = (
+    await db.execute<{ n: unknown }>(sql`
     select count(*) as n
       from parties p
       join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active
@@ -482,7 +509,8 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
          select 1 from worker_employments w
           where w.org_id = p.org_id and w.worker_party_id = p.id
             ${subsidiaryVisibleFilter(sql`w.employer_subsidiary_id`, authz.allowedSubsidiaryIds)}
-       )`)).rows
+       )`)
+  ).rows
   const unmigrated = Number(unmigratedRows[0]?.n ?? 0)
 
   // Quick actions, each gated by the permission its target enforces: the
@@ -493,14 +521,30 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   const canManageHrm = can(authz, 'hrm.employment.manage')
   const actions: DirectoryItem[] = []
   if (canManageHrm) {
-    actions.push({ href: '/hrm/change-requests', label: t('overview.actions.proposeChange'), iconKey: 'scroll' })
+    actions.push({
+      href: '/hrm/change-requests',
+      label: t('overview.actions.proposeChange'),
+      iconKey: 'scroll',
+    })
   }
   if (can(authz, 'hrm.leave.request')) {
-    actions.push({ href: '/hrm/my-leave', label: t('home.tabs.myLeave'), iconKey: 'timer' })
+    actions.push({
+      href: '/hrm/my-leave',
+      label: t('home.tabs.myLeave'),
+      iconKey: 'timer',
+    })
   }
-  actions.push({ href: '/admin/setup/departments', label: t('overview.actions.manageDepartments'), iconKey: 'building' })
+  actions.push({
+    href: '/admin/setup/departments',
+    label: t('overview.actions.manageDepartments'),
+    iconKey: 'building',
+  })
   if (can(authz, 'reports.read')) {
-    actions.push({ href: '/reports', label: t('overview.actions.openReports'), iconKey: 'file' })
+    actions.push({
+      href: '/reports',
+      label: t('overview.actions.openReports'),
+      iconKey: 'file',
+    })
   }
 
   // The onboarding panel is additive: employment.read viewers without
@@ -548,7 +592,11 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
       href: '/entities/employees',
       label: tNav('modules.employees'),
       iconKey: 'clipboard-check',
-      badge: { value: String(headcount.total), hint: t('home.directory.employeesHint'), tone: 'neutral' },
+      badge: {
+        value: String(headcount.total),
+        hint: t('home.directory.employeesHint'),
+        tone: 'neutral',
+      },
     })
   }
   if (canReadPositions) {
@@ -556,7 +604,11 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
       href: '/hrm/positions',
       label: t('home.tabs.positions'),
       iconKey: 'layers',
-      badge: { value: String(openPositions), hint: t('home.directory.positionsHint'), tone: openPositions > 0 ? 'warning' : 'neutral' },
+      badge: {
+        value: String(openPositions),
+        hint: t('home.directory.positionsHint'),
+        tone: openPositions > 0 ? 'warning' : 'neutral',
+      },
     })
   }
   if (canReadProcesses) {
@@ -576,7 +628,13 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
       href: '/hrm/recruiting',
       label: t('home.tabs.recruiting'),
       iconKey: 'target',
-      badge: { value: recruiting.openValue, hint: t('home.directory.recruitingHint', { count: Number(recruiting.awaitingValue) }), tone: Number(recruiting.awaitingValue) > 0 ? 'warning' : 'neutral' },
+      badge: {
+        value: recruiting.openValue,
+        hint: t('home.directory.recruitingHint', {
+          count: Number(recruiting.awaitingValue),
+        }),
+        tone: Number(recruiting.awaitingValue) > 0 ? 'warning' : 'neutral',
+      },
     })
   }
   if (canReadLeave) {
@@ -596,28 +654,62 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   // that acts on it. Empty renders the all-clear sentence, never a blank.
   const attention: HrmHomeData['attention'] = []
   if (pendingRefusal === null && pendingCount > 0) {
-    attention.push({ tone: 'warning', text: t('home.attention.pending', { count: pendingCount }), href: '/hrm/change-requests?status=submitted' })
+    attention.push({
+      tone: 'warning',
+      text: t('home.attention.pending', { count: pendingCount }),
+      href: '/hrm/change-requests?status=submitted',
+    })
   }
   if (overdueSteps > 0) {
-    attention.push({ tone: 'negative', text: t('home.attention.overdueSteps', { count: overdueSteps }), href: '/hrm/processes?segment=overdue' })
+    attention.push({
+      tone: 'negative',
+      text: t('home.attention.overdueSteps', { count: overdueSteps }),
+      href: '/hrm/processes?segment=overdue',
+    })
   }
   if (leavePending > 0) {
-    attention.push({ tone: 'warning', text: t('home.attention.leavePending', { count: leavePending }), href: '/hrm/leave?segment=pending' })
+    attention.push({
+      tone: 'warning',
+      text: t('home.attention.leavePending', { count: leavePending }),
+      href: '/hrm/leave?segment=pending',
+    })
   }
   // HR-14 begin: lapsed certifications refuse dispatch, expiring ones
   // warn it — both link into the pre-filtered ledger segment.
   if (qualificationAttention && qualificationAttention.expired > 0) {
-    attention.push({ tone: 'negative', text: t('home.attention.expiredQualifications', { count: qualificationAttention.expired }), href: '/hrm/qualifications?segment=expired' })
+    attention.push({
+      tone: 'negative',
+      text: t('home.attention.expiredQualifications', {
+        count: qualificationAttention.expired,
+      }),
+      href: '/hrm/qualifications?segment=expired',
+    })
   }
   if (qualificationAttention && qualificationAttention.expiring > 0) {
-    attention.push({ tone: 'warning', text: t('home.attention.expiringQualifications', { count: qualificationAttention.expiring }), href: '/hrm/qualifications?segment=expiring' })
+    attention.push({
+      tone: 'warning',
+      text: t('home.attention.expiringQualifications', {
+        count: qualificationAttention.expiring,
+      }),
+      href: '/hrm/qualifications?segment=expiring',
+    })
   }
   // HR-14 end
   if (positions && unfundedFte > 0) {
-    attention.push({ tone: 'warning', text: t('home.attention.unfunded', { fte: fte(positions.unfundedFteValue) }), href: '/hrm/positions' })
+    attention.push({
+      tone: 'warning',
+      text: t('home.attention.unfunded', {
+        fte: fte(positions.unfundedFteValue),
+      }),
+      href: '/hrm/positions',
+    })
   }
   if (unmigrated > 0) {
-    attention.push({ tone: 'warning', text: t('overview.readiness.unmigrated', { count: unmigrated }), href: '/docs/employment-migration' })
+    attention.push({
+      tone: 'warning',
+      text: t('overview.readiness.unmigrated', { count: unmigrated }),
+      href: '/docs/employment-migration',
+    })
   }
 
   return {
@@ -626,11 +718,20 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
     tabs: await hrmGroupTabs(authz, '/hrm'),
     multiSubsidiary,
     canCreateEmployee: can(authz, 'parties.manage'),
-    newEmployee: { basePath: '/entities/employees', role: 'employee', label: t('overview.actions.newEmployee') },
+    canProposeChange: canManageHrm,
+    canCreateProcess: can(authz, 'hrm.process.manage') && canReadProcesses,
+    newEmployee: {
+      basePath: '/entities/employees',
+      role: 'employee',
+      label: t('overview.actions.newEmployee'),
+    },
+    newProcessLabel: t('processes.newProcess'),
     onboarding,
     headcountLabel: t('home.vitals.headcount'),
     headcountValue: String(headcount.total),
-    headcountSub: t('home.vitals.headcountSub', { date: headcount.effectiveDate }),
+    headcountSub: t('home.vitals.headcountSub', {
+      date: headcount.effectiveDate,
+    }),
     pendingLabel: t('overview.pending.label'),
     pendingValue: pendingRefusal !== null ? '—' : String(pendingCount),
     pendingSub: t('overview.pending.sub'),
@@ -681,7 +782,9 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
     endsTitle: t('overview.upcoming.endsTitle'),
     endsEmpty: t('overview.upcoming.endsEmpty'),
     upcomingTruncated,
-    upcomingTruncatedNote: t('overview.upcoming.truncatedNote', { limit: HOME_WINDOW_LIMIT }),
+    upcomingTruncatedNote: t('overview.upcoming.truncatedNote', {
+      limit: HOME_WINDOW_LIMIT,
+    }),
     starts,
     ends,
     recentTitle: t('overview.recent.title'),
@@ -710,7 +813,10 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
 export async function loadRecruitingPanel(authz: Authz): Promise<HrmRecruitingPanelData | null> {
   if (!can(authz, 'hrm.recruiting.read')) return null
   const t = await getTranslations('hrm')
-  const overview = await loadRecruitingOverview({ orgId: authz.user.orgId, actorId: authz.user.id })
+  const overview = await loadRecruitingOverview({
+    orgId: authz.user.orgId,
+    actorId: authz.user.id,
+  })
   if (!overview) return null
   return {
     panelTitle: t('home.recruiting.title'),

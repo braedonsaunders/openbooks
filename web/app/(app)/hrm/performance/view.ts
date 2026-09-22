@@ -6,10 +6,12 @@ import {
   badge,
   column,
   field,
+  grid,
   link,
   page,
   pageHeader,
   ref,
+  statTile,
   table,
   text,
   widget,
@@ -40,7 +42,7 @@ import { continuousBlocks, continuousTabChips, loadContinuousTab, type Continuou
  *
  * Follows the positions list archetype: ViewSpec composes the header and
  * the grid; status segments filter server-side through the shared
- * `filter-chips` widget; rows stay loader-resolved (the performance read
+ * `list-toolbar`; rows stay loader-resolved (the performance read
  * service narrows every row to the actor's privacy scope, so an ungranted
  * manager still gets the tab with only their reviews); drawers open from
  * URL search params through small client islands. Renders when the hrm
@@ -186,7 +188,11 @@ export interface PerformancePageData {
     regrettableValue: string
     gapsTitle: string
     gapsEmpty: string
-    gaps: { employmentHref: string; employmentLabel: string; terminatedFrom: string }[]
+    gaps: {
+      employmentHref: string
+      employmentLabel: string
+      terminatedFrom: string
+    }[]
     noInterviewTitle: string
     noInterviewCount: number
   } | null
@@ -222,9 +228,10 @@ export interface PerformancePageData {
   drawerOpen: boolean
   reviewOpen: boolean
   exitOpen: boolean
-  // HR-17: route sub-tabs Cycles (existing) / Calibration / Talent. The
-  // cycles table and retention panel render only on the Cycles tab; the
-  // continuous blocks render their own tab's tables.
+  // HR-17: route sub-tabs Cycles / Calibration / Talent / Retention /
+  // Settings, on the shared subtab strip. The cycles table renders only on
+  // the Cycles tab; every other tab renders its own surface and nothing
+  // else.
   cyclesTab: boolean
   continuous: ContinuousData
   draftDrawer: AiDraftDrawerData | null
@@ -253,46 +260,113 @@ export function performanceSpec(data: PerformancePageData): PageSpec {
       }),
     ],
     body: [
-      continuousTabChips(data.continuous),
+      // Same bounded, gapped body as Benefits. Cycles, continuous views and
+      // Retention are sibling surfaces and must share the same bottom
+      // breathing room instead of each relying on incidental block margins.
+      grid('flex h-full min-h-0 flex-col gap-4', [
+        // The view strip and the cycles filter share one row — the shape every
+        // list page in the module now uses.
+        grid('flex shrink-0 flex-wrap items-center gap-3', [
+          continuousTabChips(data.continuous),
+          {
+            ...widgetBlock('list-toolbar', {
+              basePath: '/hrm/performance',
+              currentParams: data.currentParams,
+              filters: [
+                {
+                  paramKey: 'status',
+                  label: data.segmentsLabel,
+                  allLabel: data.allLabel,
+                  options: data.segmentOptions,
+                },
+              ],
+            }),
+            when: f('cyclesTab'),
+          },
+        ]),
+        {
+          ...table({
+            variant: 'app',
+            rows: f('rows'),
+            rowKey: item('id'),
+            empty: { title: f('empty') },
+            columns: [
+              column(data.columns.name, link(item('name'), item('href'))),
+              column(data.columns.period, text(item('period'))),
+              column(data.columns.template, text(item('template'))),
+              column(data.columns.self, text(item('selfProgress')), {
+                align: 'right',
+                className: 'tabular-nums',
+              }),
+              column(data.columns.manager, text(item('managerProgress')), {
+                align: 'right',
+                className: 'tabular-nums',
+              }),
+              column(data.columns.status, badge(item('statusLabel'), { variant: item('statusVariant') })),
+            ],
+          }),
+          when: f('cyclesTab'),
+        },
+        ...continuousBlocks(data.continuous),
+        // Retention through the house blocks: three stat tiles and a table,
+        // the same vocabulary every other HRM surface uses. It was a bespoke
+        // <section> of bold headings and comma-joined sentences rendered with
+        // no card around it.
+        ...(data.retention
+          ? [
+              grid('grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-3', [
+                statTile({
+                  iconKey: 'trending-down',
+                  accent: 'amber',
+                  label: data.retention.turnoverLabel,
+                  value: data.retention.turnoverValue,
+                  tone: 'default',
+                }),
+                statTile({
+                  iconKey: 'user-minus',
+                  accent: 'slate',
+                  label: data.retention.regrettableLabel,
+                  value: data.retention.regrettableValue,
+                  tone: 'default',
+                }),
+                statTile({
+                  iconKey: 'clipboard-list',
+                  accent: 'slate',
+                  label: data.retention.noInterviewTitle,
+                  value: String(data.retention.noInterviewCount),
+                  tone: 'default',
+                }),
+              ]),
+              table({
+                variant: 'app',
+                rows: f('retention.gaps'),
+                rowKey: item('employmentLabel'),
+                empty: {
+                  title: data.retention.gapsTitle,
+                  description: data.retention.gapsEmpty,
+                },
+                columns: [
+                  column(data.retention.gapsTitle, link(item('employmentLabel'), item('employmentHref'))),
+                  column(data.columns.period, text(item('terminatedFrom')), {
+                    className: 'tabular-nums',
+                  }),
+                ],
+              }),
+            ]
+          : []),
+      ]),
       {
-        ...widgetBlock('filter-chips', {
-          basePath: '/hrm/performance',
-          currentParams: data.currentParams,
-          paramKey: 'status',
-          label: data.segmentsLabel,
-          allLabel: data.allLabel,
-          options: data.segmentOptions,
+        ...widgetBlock('hrm-cycle-drawer', {
+          detail: data.detail,
+          missingDetail: data.missingDetail,
         }),
-        when: f('cyclesTab'),
-      },
-      {
-        ...table({
-          variant: 'app',
-          rows: f('rows'),
-          rowKey: item('id'),
-          empty: { title: f('empty') },
-          columns: [
-            column(data.columns.name, link(item('name'), item('href'))),
-            column(data.columns.period, text(item('period'))),
-            column(data.columns.template, text(item('template'))),
-            column(data.columns.self, text(item('selfProgress')), { align: 'right', className: 'tabular-nums' }),
-            column(data.columns.manager, text(item('managerProgress')), { align: 'right', className: 'tabular-nums' }),
-            column(data.columns.status, badge(item('statusLabel'), { variant: item('statusVariant') })),
-          ],
-        }),
-        when: f('cyclesTab'),
-      },
-      ...continuousBlocks(data.continuous),
-      {
-        ...widgetBlock('hrm-retention-panel', { retention: data.retention }),
-        when: f('canRetain'),
-      },
-      {
-        ...widgetBlock('hrm-cycle-drawer', { detail: data.detail, missingDetail: data.missingDetail }),
         when: f('drawerOpen'),
       },
       {
-        ...widgetBlock('hrm-review-drawer', { review: data.review, missingReview: data.missingReview }),
+        ...widgetBlock('hrm-review-drawer', {
+          review: data.review,
+          missingReview: data.missingReview,
+        }),
         when: f('reviewOpen'),
       },
       // HR-21: the shared evidence-draft drawer (?draft=<kind>:<id>).
@@ -305,7 +379,10 @@ export function performanceSpec(data: PerformancePageData): PageSpec {
         when: f('create'),
       },
       {
-        ...widgetBlock('hrm-exit-drawer', { exit: data.exit, missingExit: data.missingExit }),
+        ...widgetBlock('hrm-exit-drawer', {
+          exit: data.exit,
+          missingExit: data.missingExit,
+        }),
         when: f('exitOpen'),
       },
     ],
@@ -317,9 +394,7 @@ export async function performanceTitle(): Promise<string> {
   return t('performance.title')
 }
 
-export async function loadPerformancePage(
-  sp: Record<string, string | undefined>,
-): Promise<PerformancePageData> {
+export async function loadPerformancePage(sp: Record<string, string | undefined>): Promise<PerformancePageData> {
   // Structural scope: any authenticated viewer gets the tab (the read
   // service narrows every row to their privacy scope); the hrm and
   // hrmPerformance switches gate the page itself (HR-7's gating moved
@@ -336,28 +411,32 @@ export async function loadPerformancePage(
   // participates in (subject or reviewer). Non-HR viewers see their slice
   // under every segment; the segment makes it explicit.
   const rawStatus = typeof sp.status === 'string' ? sp.status : null
-  const status =
-    rawStatus !== null && (STATUSES as readonly string[]).includes(rawStatus) ? rawStatus : null
+  const status = rawStatus !== null && (STATUSES as readonly string[]).includes(rawStatus) ? rawStatus : null
   const mine = rawStatus === 'mine'
   const canManage = can(authz, 'hrm.performance.manage')
   const canRetain = can(authz, 'hrm.retention.read')
 
-  const cycles = await listCycleProgress({ orgId: authz.user.orgId, actorId: authz.user.id })
+  const cycles = await listCycleProgress({
+    orgId: authz.user.orgId,
+    actorId: authz.user.id,
+  })
   let mineCycleIds: Set<string> | null = null
   if (mine) {
-    const mineReviews = await listMyReviews({ orgId: authz.user.orgId, actorId: authz.user.id })
-    mineCycleIds = new Set(
-      [...mineReviews.asSubject, ...mineReviews.asReviewer].map((r) => r.cycleId),
-    )
+    const mineReviews = await listMyReviews({
+      orgId: authz.user.orgId,
+      actorId: authz.user.id,
+    })
+    mineCycleIds = new Set([...mineReviews.asSubject, ...mineReviews.asReviewer].map((r) => r.cycleId))
   }
-  const visible = cycles.filter(
-    (c) => (status === null || c.status === status) && (mineCycleIds === null || mineCycleIds.has(c.id)),
-  )
+  const visible = cycles.filter((c) => (status === null || c.status === status) && (mineCycleIds === null || mineCycleIds.has(c.id)))
   const statusLabel = (value: string): string =>
-    value === 'draft' ? t('performance.statusDraft')
-    : value === 'open' ? t('performance.statusOpen')
-    : value === 'calibrating' ? t('performance.statusCalibrating')
-    : t('performance.statusClosed')
+    value === 'draft'
+      ? t('performance.statusDraft')
+      : value === 'open'
+        ? t('performance.statusOpen')
+        : value === 'calibrating'
+          ? t('performance.statusCalibrating')
+          : t('performance.statusClosed')
   const statusVariant = (value: string): PerformanceCycleRow['statusVariant'] =>
     value === 'open' ? 'success' : value === 'calibrating' ? 'warning' : value === 'draft' ? 'secondary' : 'default'
   const rows: PerformanceCycleRow[] = visible.map((c) => ({
@@ -376,12 +455,19 @@ export async function loadPerformancePage(
   const counts = new Map<string, number>()
   for (const c of cycles) counts.set(c.status, (counts.get(c.status) ?? 0) + 1)
   const segmentOptions: PerformanceSegmentOption[] = [
-    ...STATUSES.map((s) => ({ value: s, label: statusLabel(s), count: counts.get(s) ?? 0 })),
-    { value: 'mine', label: t('performance.mineSegment'), count: mineCycleIds?.size ?? 0 },
+    ...STATUSES.map((s) => ({
+      value: s,
+      label: statusLabel(s),
+      count: counts.get(s) ?? 0,
+    })),
+    {
+      value: 'mine',
+      label: t('performance.mineSegment'),
+      count: mineCycleIds?.size ?? 0,
+    },
   ]
 
-  const cycleId =
-    typeof sp.cycle === 'string' && sp.cycle.length > 0 && sp.cycle !== 'new' ? sp.cycle : null
+  const cycleId = typeof sp.cycle === 'string' && sp.cycle.length > 0 && sp.cycle !== 'new' ? sp.cycle : null
   const creating = sp.cycle === 'new' && canManage
   const reviewId = typeof sp.review === 'string' && sp.review.length > 0 ? sp.review : null
 
@@ -389,7 +475,11 @@ export async function loadPerformancePage(
   let missingDetail: string | null = null
   if (cycleId) {
     try {
-      const full = await getCycleDetail({ orgId: authz.user.orgId, actorId: authz.user.id, cycleId })
+      const full = await getCycleDetail({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        cycleId,
+      })
       detail = {
         cycleId: full.id,
         cycleName: full.name,
@@ -400,9 +490,7 @@ export async function loadPerformancePage(
           id: r.id,
           kind: r.kind,
           kindLabel:
-            r.kind === 'self' ? t('performance.kindSelf')
-            : r.kind === 'manager' ? t('performance.kindManager')
-            : t('performance.kindPeer'),
+            r.kind === 'self' ? t('performance.kindSelf') : r.kind === 'manager' ? t('performance.kindManager') : t('performance.kindPeer'),
           status: r.status,
           statusLabel: reviewStatusLabel(t, r.status),
           rating: r.calibratedRating ?? r.overallRating,
@@ -410,7 +498,11 @@ export async function loadPerformancePage(
         })),
         reviewsTitle: t('performance.reviewsTitle'),
         reviewsEmpty: t('performance.reviewsEmpty'),
-        cols: { kind: t('performance.colKind'), status: t('performance.colStatus'), rating: t('performance.colRating') },
+        cols: {
+          kind: t('performance.colKind'),
+          status: t('performance.colStatus'),
+          rating: t('performance.colRating'),
+        },
         calibration: {
           canMove: canManage && full.status === 'open',
           canForce: canManage && full.status === 'open',
@@ -435,7 +527,11 @@ export async function loadPerformancePage(
   let draftDrawer: AiDraftDrawerData | null = null
   if (reviewId) {
     try {
-      const full = await getReviewDetail({ orgId: authz.user.orgId, actorId: authz.user.id, reviewId })
+      const full = await getReviewDetail({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        reviewId,
+      })
       const goals = await listGoals({
         orgId: authz.user.orgId,
         actorId: authz.user.id,
@@ -444,9 +540,11 @@ export async function loadPerformancePage(
       review = {
         id: full.review.id,
         kindLabel:
-          full.review.kind === 'self' ? t('performance.kindSelf')
-          : full.review.kind === 'manager' ? t('performance.kindManager')
-          : t('performance.kindPeer'),
+          full.review.kind === 'self'
+            ? t('performance.kindSelf')
+            : full.review.kind === 'manager'
+              ? t('performance.kindManager')
+              : t('performance.kindPeer'),
         statusLabel: reviewStatusLabel(t, full.review.status),
         overallLabel: t('performance.overallRating'),
         overallRating: full.review.overallRating,
@@ -462,7 +560,12 @@ export async function loadPerformancePage(
           text: a.text,
           required: a.required,
         })),
-        goals: goals.map((g) => ({ id: g.id, title: g.title, status: g.status, progress: g.progressPercent })),
+        goals: goals.map((g) => ({
+          id: g.id,
+          title: g.title,
+          status: g.status,
+          progress: g.progressPercent,
+        })),
         goalsTitle: t('performance.goalsTitle'),
         goalsEmpty: t('performance.goalsEmpty'),
         canAnswer: full.review.status === 'pending',
@@ -488,16 +591,22 @@ export async function loadPerformancePage(
       // HR-21: "Draft from evidence" on the answer form. Manager and self
       // reviews draft from cycle goals and prior calibrated ratings; peer
       // reviews have no draft kind. Insert targets the first text field.
-      const draftKind = full.review.status === 'pending'
-        ? full.review.kind === 'manager' ? 'review_manager'
-        : full.review.kind === 'self' ? 'review_self'
-        : null
-        : null
+      const draftKind =
+        full.review.status === 'pending'
+          ? full.review.kind === 'manager'
+            ? 'review_manager'
+            : full.review.kind === 'self'
+              ? 'review_self'
+              : null
+          : null
       const firstText = full.answers.find((a) => a.answerKind === 'text' || a.answerKind === 'rating_and_text')
       const draftLabel = draftKind && firstText ? await loadAiDraftButton(authz.user.orgId) : null
       const reviewHref = hrefFor(rawStatus, full.review.cycleId, full.review.id)
       if (review && draftKind && firstText && draftLabel) {
-        review.draft = { href: `${reviewHref}&draft=${draftKind}:${full.review.id}`, label: draftLabel }
+        review.draft = {
+          href: `${reviewHref}&draft=${draftKind}:${full.review.id}`,
+          label: draftLabel,
+        }
       }
       draftDrawer = await loadAiDraftDrawer({
         draftParam: typeof sp.draft === 'string' ? sp.draft : null,
@@ -511,7 +620,10 @@ export async function loadPerformancePage(
 
   let create: PerformancePageData['create'] = null
   if (creating) {
-    const templates = await listReviewTemplates({ orgId: authz.user.orgId, actorId: authz.user.id })
+    const templates = await listReviewTemplates({
+      orgId: authz.user.orgId,
+      actorId: authz.user.id,
+    })
     create = {
       closeHref: hrefFor(rawStatus, null, null),
       templates: templates.filter((tpl) => tpl.isActive).map((tpl) => ({ value: tpl.id, label: tpl.name })),
@@ -530,8 +642,7 @@ export async function loadPerformancePage(
   // The exit drawer (?exit=<employmentId>): HR-only, opened from the
   // Retention gaps and the employee drawer. Readers see the record,
   // performance managers record and correct it.
-  const exitEmploymentId =
-    typeof sp.exit === 'string' && sp.exit.length > 0 ? sp.exit : null
+  const exitEmploymentId = typeof sp.exit === 'string' && sp.exit.length > 0 ? sp.exit : null
   let exit: PerformancePageData['exit'] = null
   let missingExit: string | null = null
   if (exitEmploymentId) {
@@ -568,22 +679,24 @@ export async function loadPerformancePage(
     }
   }
 
-  // HR-17: the continuous tabs resolve first — retention stays a Cycles-tab
-  // panel, so calibration and talent grids get the full page.
-  const continuous = await loadContinuousTab(authz, sp, canManage)
+  // HR-17: the continuous tabs resolve first. Retention is one of them now,
+  // so the cycles list, the calibration grid, the talent grid, the feedback
+  // settings and the retention figures each get the page to themselves.
+  const continuous = await loadContinuousTab(authz, sp, canManage, canRetain)
   const cyclesTab = continuous.tab === 'cycles'
 
   let retention: PerformancePageData['retention'] = null
-  if (canRetain && cyclesTab) {
-    const overview = await getRetentionOverview({ orgId: authz.user.orgId, actorId: authz.user.id })
+  if (canRetain && continuous.tab === 'retention') {
+    const overview = await getRetentionOverview({
+      orgId: authz.user.orgId,
+      actorId: authz.user.id,
+    })
     const trailing = overview.trailingTwelveMonths
     retention = {
       title: t('retention.title'),
       turnoverLabel: t('retention.turnoverTwelveMonths'),
       turnoverValue:
-        trailing?.turnoverRate === null || trailing?.turnoverRate === undefined
-          ? '—'
-          : `${(trailing.turnoverRate * 100).toFixed(1)}%`,
+        trailing?.turnoverRate === null || trailing?.turnoverRate === undefined ? '—' : `${(trailing.turnoverRate * 100).toFixed(1)}%`,
       regrettableLabel: t('retention.regrettableLeavers'),
       regrettableValue: String(overview.regrettableLeavers),
       gapsTitle: t('retention.missingExits'),
@@ -643,11 +756,15 @@ export async function loadPerformancePage(
 }
 
 function reviewStatusLabel(t: (key: string) => string, status: string): string {
-  return status === 'pending' ? t('performance.reviewPending')
-    : status === 'submitted' ? t('performance.reviewSubmitted')
-    : status === 'calibrated' ? t('performance.reviewCalibrated')
-    : status === 'shared' ? t('performance.reviewShared')
-    : t('performance.reviewAcknowledged')
+  return status === 'pending'
+    ? t('performance.reviewPending')
+    : status === 'submitted'
+      ? t('performance.reviewSubmitted')
+      : status === 'calibrated'
+        ? t('performance.reviewCalibrated')
+        : status === 'shared'
+          ? t('performance.reviewShared')
+          : t('performance.reviewAcknowledged')
 }
 
 function hrefFor(status: string | null, cycleId: string | null, reviewId: string | null): string {

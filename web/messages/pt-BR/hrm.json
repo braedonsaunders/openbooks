@@ -406,6 +406,7 @@
     "segmentsLabel": "Status"
   },
   "processes": {
+    "newProcess": "Novo processo",
     "title": "Listas de processos",
     "description": "Listas de integração, desligamento e transferência com responsáveis, prazos e evidências.",
     "listTitle": "Listas",
@@ -842,7 +843,8 @@
       "tabs": {
         "cycles": "Ciclos",
         "calibration": "Calibração",
-        "talent": "Talento e sucessão"
+        "talent": "Talento e sucessão",
+        "settings": "Configurações"
       },
       "calibration": {
         "title": "Calibração",
@@ -1329,7 +1331,11 @@
       "sourcesTitle": "Registros",
       "missing": "Esse holerite não existe ou está fora da sua organização.",
       "close": "Fechar",
-      "failed": "Não foi possível carregar a explicação."
+      "failed": "Não foi possível carregar a explicação.",
+      "employerCost": "Custo do empregador",
+      "earnings": "Proventos",
+      "deductions": "Descontos",
+      "contributions": "Contribuições do empregador"
     }
   },
   "options": {
@@ -1701,6 +1707,12 @@
       "expiresOn": "Vence em",
       "identifier": "Número da licença",
       "notes": "Notas"
+    },
+    "tiles": {
+      "expiring": "Vencendo em breve",
+      "expiredAssigned": "Vencidas e ainda alocadas",
+      "pending": "Verificação pendente",
+      "projectsUnmet": "Projetos com requisitos não atendidos"
     }
   },
   "documents": {
@@ -1868,7 +1880,8 @@
       "close": "Fechar",
       "expand": "Expandir",
       "collapse": "Recolher",
-      "noMatch": "Ninguém corresponde a esta busca."
+      "noMatch": "Ninguém corresponde a esta busca.",
+      "empty": "Ainda não há organograma. Assim que um vínculo registrar um gestor, a árvore aparece aqui."
     }
   },
   "meDocuments": {

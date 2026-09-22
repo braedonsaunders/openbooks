@@ -24,9 +24,10 @@ test("recruiting page carries the gate where the route-gate scanner reads it", (
   assert.match(page, /generateMetadata/, "tab metadata resolves the translated title");
 });
 
-test("recruiting spec composes shared primitives: filter chips, table, URL drawer", () => {
+test("recruiting spec composes shared primitives: list toolbar, table, URL drawer", () => {
   assert.match(view, /route: '\/hrm\/recruiting'/, "the spec names its own route for the registry");
-  assert.match(view, /widgetBlock\('filter-chips'/, "segments render through the shared filter chips");
+  assert.match(view, /widgetBlock\('list-toolbar'/, "filters ride the shared list toolbar, never a lone dropdown over a bare table");
+  assert.doesNotMatch(view, /widgetBlock\('filter-chips'/, "no second filter treatment beside the toolbar");
   assert.match(view, /paramKey: 'status'/, "segments filter over the status search param");
   assert.match(view, /table\(\{/, "the list renders through the shared table block");
   assert.match(view, /variant: 'app'/, "the list uses the shared app table primitives");
@@ -34,6 +35,8 @@ test("recruiting spec composes shared primitives: filter chips, table, URL drawe
   assert.match(view, /link\(item\('number'\), item\('href'\)\)/, "the number opens the drawer through the row href");
   assert.match(view, /widgetBlock\('hrm-recruiting-drawer'/, "the drawer renders through the shared widget");
   assert.match(view, /module-home-tabs/, "the header carries the route-tab strip");
+  assert.match(view, /widgetBlock\('module-home-tabs', \{ tabs: data\.viewTabs \}\)/,
+    "Openings and the depth tabs are VIEWS on the shared subtab strip, never a dropdown");
   assert.match(sections, /RecruitingDrawer/, "the drawer stays a shared component, never a copy");
   assert.match(sections, /UrlDrawer/, "the drawer closes by navigation");
   assert.ok(!sections.includes('<table'), "no hand-rolled table remains in the recruiting sections");
