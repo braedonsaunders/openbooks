@@ -474,7 +474,11 @@ export const payRuns = pgTable(
      * readiness checks.
      */
     runType: text("run_type", {
-      enum: ["regular", "bonus", "termination"],
+      // 'retro' is live: the SQL CHECK allows it and the retro store and
+      // calculation-evidence readers filter on it (retro-store.ts,
+      // run-calculation-evidence.ts). The typed contract must carry the
+      // whole storage vocabulary.
+      enum: ["regular", "bonus", "termination", "retro"],
     }).notNull().default("regular"),
     grossTotal: money("gross_total").notNull().default("0"),
     netTotal: money("net_total").notNull().default("0"),

@@ -44,6 +44,14 @@ export const parties = pgTable(
      */
     subsidiaryId: uuid("subsidiary_id"),
     isActive: boolean("is_active").notNull().default(true),
+    /**
+     * Standing payment preference (EFT/cheque/card/cash/other). Live in the
+     * SQL since the baseline (parties_payment_method CHECK) and read by the
+     * payroll payment-method and bank-file resolvers through raw SQL; the
+     * drizzle-typed surface must see the same column, or every typed
+     * read/write of the party's preference goes through a side door.
+     */
+    paymentMethod: text("payment_method", { enum: ["eft", "cheque", "card", "cash", "other"] }),
     /** Customer-level invoicing/backup override (cascades over project type). */
     invoicingPreference: jsonb("invoicing_preference").$type<InvoicingPreference>(),
     /** Invoicing rules agreed with this customer, layered over the project type. */
