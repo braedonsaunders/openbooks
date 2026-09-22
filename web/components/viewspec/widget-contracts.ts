@@ -426,7 +426,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'retro-workspace': { props: ['canRun', 'schedules'] },
   'row-counts-cell': { props: ['created', 'failed', 'updated'] },
   'run-bank-rules': { props: ['accounts'] },
-  'run-depreciation': { props: ['books'] },
+  'run-depreciation': { props: ['books', 'candidates', 'periods'] },
   'run-recognition': { props: [] },
   'sandbox-manager': { props: ['periods', 'sandboxes'] },
   'save-view': { props: [] },

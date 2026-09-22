@@ -42,6 +42,7 @@ import { AssetChangeButton } from './AssetChangeButton'
 import { DisposeButton } from './DisposeButton'
 import { RemeasureButton } from './RemeasureButton'
 import { ReverseEventButton } from './ReverseEventButton'
+import { RunDepreciationButton } from './RunDepreciationButton'
 import { DepreciationInputButton } from './DepreciationInputButton'
 import type { AssetPayload } from '../../api/assets/_lib'
 
@@ -122,6 +123,7 @@ export function AssetDrawer({
   currentFormId,
   fieldDefs,
   depreciationMethods,
+  periods,
   closeHref = '/assets',
   createMode = false,
 }: {
@@ -137,6 +139,8 @@ export function AssetDrawer({
   currentFormId: string | null
   fieldDefs: CustomFieldDefClient[]
   depreciationMethods: DepreciationMethodOpt[]
+  /** Valid accounting periods for the review drawer period control. */
+  periods: { id: string; name: string; startsOn: string; endsOn: string }[]
   closeHref?: string
   /**
    * Unsaved create (exemplar: AccountDrawer createMode): the loader passes
@@ -404,56 +408,6 @@ export function AssetDrawer({
     } finally { saveInFlight.current = false; setBusy(false); setActionsOpen(false) }
   }
 
-  async function runForAsset(bookId: string) {
-    setBusy(true)
-    try {
-      // A closed-period skip posts 0 with the reason in `problems` — surface
-      // it like the page-level button does. A transport or parse failure must
-      // also toast: try/finally alone closes the menu with zero feedback.
-      let data: { posted?: number; recorded?: number; recordedAmount?: string; skipped?: number; totalAmount?: string; problems?: unknown; error?: string; asOfDate?: string; nextDue?: { assetNumber: string; period: string; endsOn: string; amount: string } | null }
-      try {
-        const res = await fetch('/api/assets/run-depreciation', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assetId: a.id, bookId }),
-        })
-        if (!res.ok) {
-          toast.error(await readApiErrorMessage(res, t('drawer.runFailed')))
-          return
-        }
-        data = await res.json()
-      } catch {
-        toast.error(t('drawer.runFailed'))
-        return
-      }
-      const posted = data.posted ?? 0
-      const recorded = data.recorded ?? 0
-      const skipped = data.skipped ?? 0
-      if (posted > 0 || recorded > 0) {
-        const messages = [
-          ...(posted > 0 ? [t('run.posted', { count: posted, amount: money(data.totalAmount ?? '0') })] : []),
-          ...(recorded > 0 ? [t('run.recorded', { count: recorded, amount: money(data.recordedAmount ?? '0') })] : []),
-          ...(skipped > 0 ? [t('run.someSkipped', { count: skipped })] : []),
-        ]
-        toast.success(messages.join(' · '))
-      } else if (skipped === 0 && data.nextDue) {
-        // A mid-period run posts nothing while a planned line waits in the
-        // open period: name the as-of date and the next due line (F-t07-005).
-        toast.message(t('run.nextDue', {
-          date: data.asOfDate ?? '',
-          asset: data.nextDue.assetNumber,
-          period: data.nextDue.period,
-          amount: money(data.nextDue.amount ?? '0'),
-          endsOn: data.nextDue.endsOn,
-        }))
-      } else {
-        toast.message(t('run.nothingDue') + (skipped > 0 ? ` · ${t('run.someSkipped', { count: skipped })}` : ''))
-      }
-      if (Array.isArray(data.problems) && data.problems.length) {
-        for (const p of data.problems.slice(0, 3)) toast.warning(String(p))
-      }
-      router.refresh()
-    } finally { setBusy(false); setActionsOpen(false) }
-  }
-
   async function remove() {
     if (!(await confirmDialog({
       title: t('drawer.deleteTitle'), message: t('drawer.deleteMessage'),
@@ -552,7 +506,7 @@ export function AssetDrawer({
       {forms.length > 0 ? <div className="mb-1 border-b border-slate-200 p-2 dark:border-slate-800"><Label className="mb-1 block text-xs">{t('drawer.customForm')}</Label><Select value={currentFormId ?? ''} onChange={(event) => selectForm(event.target.value)}>{forms.map((form) => <option key={form.id} value={form.id}>{form.name}</option>)}</Select></div> : null}
       <div className="space-y-0.5 [&_button]:h-8 [&_button]:w-full [&_button]:justify-start [&_button]:rounded [&_button]:border-0 [&_button]:bg-transparent [&_button]:px-2 [&_button]:text-xs [&_button]:shadow-none [&_button:hover]:bg-slate-100 dark:[&_button:hover]:bg-slate-800">
         {!createMode && canManage && isDraft ? <Button variant="ghost" className={actionClass} disabled={busy} onClick={placeInService}>{t('drawer.placeInService')}</Button> : null}
-        {!createMode && canManage && ['in_service', 'fully_depreciated'].includes(status) ? payload.books.map((book) => <Button key={book.id} variant="ghost" className={actionClass} disabled={busy} onClick={() => runForAsset(book.id)}>{t('drawer.runForBook', { book: book.name })}</Button>) : null}
+        {!createMode && canManage && ['in_service', 'fully_depreciated'].includes(status) ? payload.books.map((book) => <RunDepreciationButton key={book.id} assetId={a.id} assetNumber={a.asset_number ?? ''} assetName={a.name ?? ''} lockBookId={book.id} books={payload.books.map((item) => ({ id: item.id, name: item.name, is_primary: item.isPrimary }))} periods={periods} variant="ghost" className={actionClass} label={t('drawer.runForBook', { book: book.name })} />) : null}
         {!createMode && canManage && status === 'in_service' && inputSchedules.length > 0 ? <DepreciationInputButton assetId={a.id} schedules={inputSchedules} /> : null}
         {!createMode && canManage && ['in_service','fully_depreciated'].includes(status) ? <>{status === 'in_service' ? <RemeasureButton assetId={a.id} /> : null}<AssetChangeButton assetId={a.id} accounts={accountOptions} categories={categories} /><GroupValuationButton assetId={a.id} /></> : null}
         {!createMode && canManage && (status === 'in_service' || status === 'fully_depreciated') ? <DisposeButton assetId={a.id} accountOptions={accountOptions} /> : null}

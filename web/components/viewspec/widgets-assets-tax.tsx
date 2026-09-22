@@ -219,6 +219,8 @@ export const ASSETS_TAX_WIDGETS = {
   'run-depreciation': (props) => (
     <RunDepreciationButton
       books={(props.books as ComponentProps<typeof RunDepreciationButton>['books']) ?? []}
+      candidates={(props.candidates as ComponentProps<typeof RunDepreciationButton>['candidates']) ?? []}
+      periods={(props.periods as ComponentProps<typeof RunDepreciationButton>['periods']) ?? []}
     />
   ),
   'asset-drawer': (props) => {
