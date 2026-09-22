@@ -7,7 +7,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { grid, page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { isUuid, pickString } from '../../../../lib/list-params'
+import { isUuid, mergeHref, pickString } from '../../../../lib/list-params'
 import { loadEquipment } from '../../../api/equipment/_lib'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../lib/features'
 import type { EquipmentDrawer } from './EquipmentDrawer'
@@ -48,6 +48,12 @@ export interface EquipmentDrawerData {
   closeHref: string
   fixedAssetsEnabled: boolean
   projectsEnabled: boolean
+  /**
+   * Unsaved create: the loader passes an in-memory unit on no record, so
+   * the drawer renders identically to edit. Allocation happens on Save in
+   * POST /api/equipment, which routes back to ?equipment=<persisted id>.
+   */
+  createMode?: boolean
 }
 
 export interface EquipmentData {
@@ -91,6 +97,11 @@ export async function loadEquipmentPage(
   await requireFeatureEnabled(authz.user.orgId, 'equipment')
   const canManage = can(authz, 'assets.manage')
   const equipmentId = typeof sp.equipment === 'string' ? sp.equipment : undefined
+  // Unsaved create: ?equipmentNew=1 opens an editable drawer on NO record.
+  // The loader performs only picker reads here — no draft row, no EQ-####
+  // number, no audit row. Allocation happens on Save in POST /api/equipment,
+  // which routes back to ?equipment=<persisted id>.
+  const creating = pickString(sp.equipmentNew) === '1' && canManage
   const allowed = authz.allowedSubsidiaryIds ? sql`and e.subsidiary_id = any(${`{${[...authz.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``
   const [summary, open, pickers, subsidiaryUiEnabled, fixedAssetsEnabled, projectsEnabled] = await Promise.all([
     db.execute<EquipmentSummaryRow>(sql`
@@ -103,7 +114,7 @@ export async function loadEquipmentPage(
         from equipment_units e where e.org_id=${authz.user.orgId} ${allowed}
     `),
     equipmentId && isUuid(equipmentId) ? loadEquipment(equipmentId, authz.user.orgId) : null,
-    equipmentId ? Promise.all([
+    equipmentId || creating ? Promise.all([
       db.execute<EquipmentItemRow>(sql`select id,code,name from items where org_id=${authz.user.orgId} and kind='equipment_charge' and is_active order by name`),
       db.execute<EquipmentAssetRow>(sql`select id,asset_number as number,name from fixed_assets where org_id=${authz.user.orgId} ${authz.allowedSubsidiaryIds ? sql`and subsidiary_id = any(${`{${[...authz.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``} order by asset_number`),
       db.execute<EquipmentItemRow>(sql`select id,code,name from item_rate_books where org_id=${authz.user.orgId} and is_active order by name`),
@@ -130,6 +141,64 @@ export async function loadEquipmentPage(
           projectsEnabled,
         }
       : null
+  const createCloseHref = requestedReturn?.startsWith('/assets/equipment')
+    ? requestedReturn
+    : mergeHref('/assets/equipment', sp, {
+        equipment: undefined,
+        equipmentNew: undefined,
+        drawerReturn: undefined,
+      })
+  // The visible picker is multi-subsidiary configuration, but the in-memory
+  // subsidiary rides along regardless so single-subsidiary orgs still save.
+  const createSubsidiaryId =
+    pickers && pickers[3].rows[0] ? String(pickers[3].rows[0].id) : null
+  const createPayload: EquipmentDrawerProps['payload'] = {
+    unit: {
+      id: '',
+      subsidiary_id: createSubsidiaryId ?? '',
+      unit_number: '',
+      name: '',
+      description: null,
+      status: 'draft',
+      charge_item_id: null,
+      fixed_asset_id: null,
+      rate_book_id: null,
+      purchase_price: '0',
+      acquired_on: null,
+      in_service_on: null,
+      serial_number: null,
+      capacity_quantity: null,
+      capacity_unit: null,
+      charge_item_name: null,
+      rate_book_name: null,
+      fixed_asset_number: null,
+      fixed_asset_cost: null,
+    },
+    metrics: {
+      usage: '0',
+      recovery: '0',
+      billable: '0',
+      billed_revenue: '0',
+      direct_costs: '0',
+      depreciation: '0',
+    },
+  }
+  const createDrawer: EquipmentData['drawer'] =
+    creating && pickers
+      ? {
+          remountKey: 'new-equipment',
+          payload: createPayload as unknown as LoadedEquipment,
+          items: pickers[0].rows,
+          assets: fixedAssetsEnabled ? pickers[1].rows : [],
+          books: projectsEnabled ? pickers[2].rows : [],
+          subsidiaries: subsidiaryUiEnabled ? pickers[3].rows : [],
+          canManage,
+          closeHref: createCloseHref,
+          fixedAssetsEnabled,
+          projectsEnabled,
+          createMode: true,
+        }
+      : null
   return {
     title: t('title'),
     description: t('pageDescription'),
@@ -153,7 +222,8 @@ export async function loadEquipmentPage(
     taxDepreciationLabel: t('taxDepreciation'),
     documentationLabel: t('documentation'),
     showFixedAssetsLinks: fixedAssetsEnabled,
-    drawer,
+    // An explicit record id wins over createMode when both are present.
+    drawer: drawer ?? createDrawer,
   }
 }
 
@@ -162,7 +232,7 @@ const f = ref<EquipmentData>()
 export function equipmentSpec(data: EquipmentData): PageSpec {
   const newEquipment = {
     widget: 'new-equipment',
-    props: {},
+    props: { currentParams: data.currentParams },
   }
   return page({
     route: '/assets/equipment',

@@ -16,8 +16,8 @@ import {
 import { can, requirePermission } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../lib/features'
-import { isUuid, pickString } from '../../../lib/list-params'
-import { loadAsset, type AssetPayload } from '../../api/assets/_lib'
+import { isUuid, mergeHref, pickString } from '../../../lib/list-params'
+import { loadAsset, type AssetCategoryRow as ApiAssetCategoryRow, type AssetPayload } from '../../api/assets/_lib'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../lib/subsidiaries'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { loadFieldDefs } from '../../../lib/custom-fields'
@@ -144,7 +144,115 @@ export async function loadAssets(
   const assetId = pickString(sp.asset)
 
   const showNewRedirect = assetId === 'new' && canManage
+  // Unsaved create: ?assetNew=1 opens the SAME tenant-customizable drawer on
+  // an in-memory payload over no record — identical layout, custom fields,
+  // and tax elections to edit. The loader performs only picker reads here:
+  // no draft row, no FA-#### number, no category write, no audit row.
+  // Allocation happens on Save in POST /api/assets, which routes back to
+  // ?asset=<persisted id>.
+  const creating = pickString(sp.assetNew) === '1' && canManage
+  const requestedReturn = pickString(sp.drawerReturn)
+  const createCloseHref = requestedReturn?.startsWith('/assets')
+    ? requestedReturn
+    : mergeHref('/assets', sp, {
+        asset: undefined,
+        assetNew: undefined,
+        drawerReturn: undefined,
+      })
   let drawer: AssetsData['drawer'] = null
+  if (creating && tab === 'register') {
+    const [createPickers, createFieldDefs] = await Promise.all([
+      Promise.all([
+        db.execute<ApiAssetCategoryRow>(sql`select id, name, asset_account_id, accumulated_depreciation_account_id, depreciation_expense_account_id, default_method, default_depreciation_method_id, default_life_months, default_convention, tax_attributes from asset_categories where org_id = ${orgId} and is_active order by name`),
+        db.execute<AssetAccountRow>(sql`select id, number, name from accounts where org_id = ${orgId} and is_active and not is_summary order by number nulls last`),
+        db.execute<AssetTaxRegimeRow>(sql`
+          select r.code, r.name, r.class_attribute,
+                 coalesce(jsonb_agg(jsonb_build_object('code', c.class_code, 'name', c.name) order by c.class_code)
+                   filter (where c.class_code is not null), '[]'::jsonb) as classes
+            from tax_regimes r
+            left join tax_pool_classes c on c.org_id=r.org_id and c.regime=r.code and c.is_active
+           where r.org_id=${orgId} and r.is_active
+           group by r.code,r.name,r.class_attribute order by r.name`),
+        db.execute<AssetMethodRow>(sql`select id, code, name from depreciation_methods where org_id=${orgId} and is_active order by name`),
+      ]),
+      loadFieldDefs('fixed_assets'),
+    ])
+    const createCategory = createPickers[0].rows[0] ?? null
+    const createSubsidiaryId = subsidiaries[0]?.id ?? null
+    const createPayload: AssetPayload = {
+      asset: {
+        id: '',
+        category_id: createCategory?.id ?? '',
+        subsidiary_id: createSubsidiaryId ?? '',
+        asset_number: '',
+        name: '',
+        description: null,
+        status: 'draft',
+        acquired_on: null,
+        in_service_on: null,
+        acquisition_cost: '0.0000',
+        salvage_value: '0.0000',
+        serial_number: null,
+        depreciation_method: null,
+        depreciation_method_id: null,
+        useful_life_months: null,
+        depreciation_rate_percent: null,
+        depreciation_convention: null,
+        depreciation_units_total: null,
+        opening_accumulated_depreciation: null,
+        opening_accumulated_as_of: null,
+        custom: {},
+        updated_at: '',
+        asset_account_id: null,
+        accumulated_depreciation_account_id: null,
+        depreciation_expense_account_id: null,
+      },
+      category: createCategory,
+      accounts: {
+        assetAccountId: null,
+        accumulatedDepreciationAccountId: null,
+        depreciationExpenseAccountId: null,
+      },
+      accountNames: { asset: null, accumulated: null, expense: null },
+      totals: {
+        remainingCost: '0.0000',
+        accumulated: '0.0000',
+        netBookValue: '0.0000',
+        posted: '0.0000',
+        planned: '0.0000',
+      },
+      books: [],
+      schedulePage: { total: 0, page: 1, perPage: 25, bookId: null, query: '' },
+      hasAccountingEvidence: false,
+      schedule: [],
+    }
+    const createForm = await resolveFormLayout({
+      orgId,
+      userId: authz.user.id,
+      recordType: 'fixed_asset',
+      userRoles: authz.user.roles.map(({ key }) => key),
+      headerDefs: createFieldDefs,
+      lineDefs: [],
+      explicitLayoutId: pickString(sp.form),
+    })
+    drawer = {
+      remountKey: 'new-asset',
+      payload: createPayload,
+      categories: createPickers[0].rows,
+      accounts: createPickers[1].rows,
+      taxConfigurations: createPickers[2].rows,
+      subsidiaries: multiSub ? subsidiaries : [],
+      canManage,
+      canCustomize,
+      layout: createForm.layout,
+      forms: createForm.available,
+      currentFormId: createForm.row?.id ?? null,
+      fieldDefs: createFieldDefs as AssetDrawerProps['fieldDefs'],
+      depreciationMethods: createPickers[3].rows,
+      closeHref: createCloseHref,
+      createMode: true,
+    }
+  }
   if (assetId && assetId !== 'new' && isUuid(assetId)) {
     const [openAsset, pickers, fieldDefs] = await Promise.all([
       loadAsset(assetId, orgId, {
@@ -182,7 +290,7 @@ export async function loadAssets(
         lineDefs: [],
         explicitLayoutId: pickString(sp.form),
       })
-      const requestedReturn = pickString(sp.drawerReturn)
+      const editRequestedReturn = pickString(sp.drawerReturn)
       drawer = {
         remountKey: String(openAsset.asset.id),
         payload: openAsset as AssetPayload,
@@ -197,7 +305,7 @@ export async function loadAssets(
         currentFormId: resolvedForm.row?.id ?? null,
         fieldDefs: fieldDefs as AssetDrawerProps['fieldDefs'],
         depreciationMethods: pickers[3].rows,
-        closeHref: requestedReturn?.startsWith('/assets') ? requestedReturn : '/assets',
+        closeHref: editRequestedReturn?.startsWith('/assets') ? editRequestedReturn : '/assets',
       }
     }
   }
@@ -216,7 +324,7 @@ const f = ref<AssetsData>()
 export function assetsSpec(data: AssetsData): PageSpec {
   const newAsset = {
     widget: 'new-asset',
-    props: {},
+    props: { currentParams: data.currentParams },
   }
   const runDepreciation = {
     widget: 'run-depreciation',
@@ -244,7 +352,7 @@ export function assetsSpec(data: AssetsData): PageSpec {
           recordType: 'fixed_asset',
           sp: data.currentParams,
           // Rendered in the native page's order: the create-redirect first,
-          // then the record flyout.
+          // then the record flyout (which renders createMode for ?assetNew=1).
           drawer: [
             data.showNewRedirect ? { widget: 'new-asset-redirect', props: {} } : null,
             data.drawer ? { widget: 'asset-drawer', props: { drawer: data.drawer } } : null,

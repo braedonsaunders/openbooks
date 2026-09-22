@@ -155,21 +155,6 @@
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
-    "path": "web/app/(app)/assets/NewAssetButton.tsx",
-    "fn": "create",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/assets/NewAssetRedirect.tsx",
-    "fn": "NewAssetRedirect",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/assets/equipment/NewEquipmentButton.tsx",
-    "fn": "create",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
     "path": "web/app/(app)/banking/[accountId]/StartReconciliationButton.tsx",
     "fn": "start",
     "reason": "server always returns JSON; guard adoption pending. POST /api/banking/reconciliations (web/app/api/banking/reconciliations/route.ts): startReconciliation sits inside try/catch answering bankingErrorResponse, which maps every error to NextResponse.json (domain status, unknown 500); no rethrow. Verified by reading the handler and web/app/api/banking/util.ts."

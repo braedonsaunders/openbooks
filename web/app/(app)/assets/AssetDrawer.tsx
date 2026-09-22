@@ -64,6 +64,51 @@ const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outl
   written_off: 'warning',
 }
 
+// Every stable refusal code POST /api/assets can emit. The collection-route
+// test holds this list against the route: a refusal the drawer cannot name
+// is a refusal the operator cannot act on.
+const CREATE_ERROR_CODES = [
+  'name_required',
+  'unsupported_status_transition',
+  'category_required',
+  'invalid_category',
+  'invalid_subsidiary',
+  'no_available_subsidiary',
+  'acquisition_cost_invalid',
+  'acquisition_cost_negative',
+  'salvage_value_invalid',
+  'salvage_value_negative',
+  'salvage_exceeds_cost',
+  'acquired_on_invalid',
+  'in_service_on_invalid',
+  'asset_number_in_use',
+  'invalid_method',
+  'invalid_convention',
+  'invalid_life',
+  'invalid_rate',
+  'invalid_units',
+  'opening_invalid',
+  'opening_negative',
+  'opening_as_of_invalid',
+  'opening_pair_required',
+  'opening_exceeds_basis',
+  'opening_before_in_service',
+  'invalid_asset_account',
+  'invalid_accumulated_account',
+  'invalid_expense_account',
+  'invalid_formula',
+  'unknown_formula',
+  'invalid_custom_fields',
+  'unknown_custom_reference',
+  'tax_elections_invalid',
+  'tax_business_use_invalid',
+  'tax_bonus_invalid',
+  'tax_section179_invalid',
+  'tax_class_invalid',
+  'invalid_idempotency_key',
+  'save_failed',
+] as const
+
 export function AssetDrawer({
   payload,
   categories,
@@ -78,6 +123,7 @@ export function AssetDrawer({
   fieldDefs,
   depreciationMethods,
   closeHref = '/assets',
+  createMode = false,
 }: {
   payload: AssetPayload
   categories: CategoryOpt[]
@@ -92,6 +138,14 @@ export function AssetDrawer({
   fieldDefs: CustomFieldDefClient[]
   depreciationMethods: DepreciationMethodOpt[]
   closeHref?: string
+  /**
+   * Unsaved create (exemplar: AccountDrawer createMode): the loader passes
+   * an in-memory payload on no record, so the tenant-customizable layout,
+   * custom fields, and tax elections render identically to edit. The drawer
+   * starts editable with visible defaults; Cancel/close writes nothing; Save
+   * performs one idempotent POST and routes to the persisted id.
+   */
+  createMode?: boolean
 }) {
   const { money } = useMoney()
   const t = useTranslations('assets')
@@ -105,7 +159,8 @@ export function AssetDrawer({
   const a = payload.asset
   const isDraft = a.status === 'draft'
   const canEditStatus = a.status === 'draft' || a.status === 'in_service'
-  const [mode, setMode] = useState<'view' | 'edit'>('view')
+  const [mode, setMode] = useState<'view' | 'edit'>(createMode ? 'edit' : 'view')
+  const requestIdRef = useRef<string | null>(null)
   const [tab, setTab] = useState<AssetTab>('details')
   const [actionsOpen, setActionsOpen] = useState(false)
   const editable = mode === 'edit' && canEditStatus && canManage
@@ -267,12 +322,53 @@ export function AssetDrawer({
     return saved
   }
 
+  /**
+   * Unsaved-create save: one idempotent tenant-scoped validated insert,
+   * then route to the persisted id. The status is checked FIRST: a non-JSON
+   * error body must surface the fallback, never a SyntaxError that hides
+   * the server's refusal. Refusal codes map to translated remedies — never
+   * the raw code, which names no remedy.
+   */
+  async function createAsset() {
+    if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID()
+    const res = await fetch('/api/assets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': requestIdRef.current },
+      // The edit form defaults blank names to the 'New asset' placeholder;
+      // creation requires the operator's real name and refuses it by name.
+      body: JSON.stringify({ ...payloadBody, name: name.trim() }),
+    })
+    if (!res.ok) {
+      const code = await readApiErrorMessage(res, 'save_failed')
+      throw new Error(
+        typeof code === 'string' && (CREATE_ERROR_CODES as readonly string[]).includes(code)
+          ? t(`create.errors.${code}`)
+          : code,
+      )
+    }
+    const data = (await res.json()) as { id?: unknown }
+    if (typeof data.id !== 'string' || !data.id) throw new Error(t('create.errors.save_failed'))
+    return data.id
+  }
+
   async function save() {
     if (saveInFlight.current) return
+    if (createMode && !name.trim()) {
+      toast.error(t('create.errors.name_required'))
+      return
+    }
     saveInFlight.current = true
     const submittedVersion = editVersion.current
     setBusy(true); setSaveState('saving')
     try {
+      if (createMode) {
+        const id = await createAsset()
+        toast.success(t('create.created'))
+        const separator = closeHref.includes('?') ? '&' : '?'
+        router.replace(`${closeHref}${separator}asset=${id}` as never)
+        router.refresh()
+        return
+      }
       await patchAsset({})
       if (editVersion.current === submittedVersion) {
         setSaveState('saved'); setDirty(false); setMode('view')
@@ -287,6 +383,11 @@ export function AssetDrawer({
   }
 
   function cancel() {
+    // Unsaved create holds no record: Cancel only navigates and writes nothing.
+    if (createMode) {
+      router.push(closeHref as never)
+      return
+    }
     resetForm(); setDirty(false); setSaveState('saved'); setMode('view')
   }
 
@@ -396,7 +497,7 @@ export function AssetDrawer({
     }
     switch (key) {
       case 'name': return <>{fieldLabel(placement, tCommon('labels.name'), true)}{editable ? <Input id={fieldId(placement)} value={name} onChange={(e) => setName(e.target.value)} /> : <p className="text-sm">{textValue(name)}</p>}</>
-      case 'asset_number': return <>{fieldLabel(placement, t('labels.number'), true)}{editable ? <Input id={fieldId(placement)} className="font-mono" value={assetNumber} onChange={(e) => setAssetNumber(e.target.value)} /> : <p className="font-mono text-sm">{textValue(assetNumber)}</p>}</>
+      case 'asset_number': return <>{fieldLabel(placement, t('labels.number'), true)}{editable ? <Input id={fieldId(placement)} className="font-mono" value={assetNumber} placeholder={createMode ? t('create.assetNumberHint') : undefined} onChange={(e) => setAssetNumber(e.target.value)} /> : <p className="font-mono text-sm">{textValue(assetNumber)}</p>}</>
       case 'status': return <>{fieldLabel(placement, tCommon('labels.status'))}<Badge variant={STATUS_VARIANT[status] ?? 'secondary'}>{t(`status.${status}`)}</Badge></>
       case 'category_id': return <>{fieldLabel(placement, t('labels.category'), true)}{editable ? <Select id={fieldId(placement)} value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</Select> : <p className="text-sm">{categories.find((category) => category.id === categoryId)?.name ?? '—'}</p>}</>
       case 'subsidiary_id': return subsidiaries.length === 0 ? null : <>{fieldLabel(placement, tCommon('labels.subsidiary'), true)}{editable ? <SearchSelect id={fieldId(placement)} value={subsidiaryId} onChange={(value) => setSubsidiaryId(value ?? '')} options={subsidiaryOptions} ariaLabel={labelFor(placement, tCommon('labels.subsidiary'))} /> : <p className="text-sm">{subsidiaryOptions.find((option) => option.value === subsidiaryId)?.label.trim() ?? '—'}</p>}</>
@@ -433,29 +534,31 @@ export function AssetDrawer({
     closeHref={closeHref}
     size="2xl"
     title={<span className="flex items-center gap-2.5"><span className="font-mono text-sm text-slate-500 dark:text-slate-400">{assetNumber || a.asset_number}</span><span>{displayName}</span><Badge variant={STATUS_VARIANT[status] ?? 'secondary'}>{t(`status.${status}`)}</Badge></span>}
-    description={mode === 'edit' ? t('drawer.editing') : (payload.category?.name ?? undefined)}
+    description={createMode ? t('create.description') : mode === 'edit' ? t('drawer.editing') : (payload.category?.name ?? undefined)}
     subtabs={<nav className="-mb-px flex gap-1" aria-label={t('drawer.tabsAria')}>
-      {(['details', ...(taxConfigurations.length ? ['tax' as const] : []), 'schedule', 'files'] as const).map((item) => <button
+      {/* Attachments address a persisted record: the files tab stays hidden
+        until Save creates one. Schedule stays visible with its empty hint. */}
+      {(['details', ...(taxConfigurations.length ? ['tax' as const] : []), 'schedule', ...(!createMode ? ['files' as const] : [])] as const).map((item) => <button
         key={item} type="button" role="tab" aria-selected={tab === item} onClick={() => setTab(item)}
         className={cn('border-b-2 px-3 py-3 text-sm font-medium transition-colors', tab === item ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300' : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200')}
       >{item === 'details' ? tCommon('auditTrail.tabs.details') : item === 'tax' ? t('drawer.taxDepreciation') : item === 'files' ? tCommon('labels.attachments') : t('drawer.schedule')}</button>)}
     </nav>}
     headerActions={mode === 'edit' ? <div className="flex items-center gap-1.5">
       <Button size="sm" variant="outline" disabled={busy} onClick={cancel}>{tCommon('actions.cancel')}</Button>
-      <Button size="sm" disabled={busy} onClick={save}>{busy ? tCommon('actions.saving') : tCommon('actions.save')}</Button>
+      <Button size="sm" disabled={busy} onClick={save}>{busy ? tCommon('actions.saving') : createMode ? t('create.create') : tCommon('actions.save')}</Button>
     </div> : canManage || canCustomize ? <div className="flex items-center gap-1.5">
       {canManage && canEditStatus ? <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" onClick={() => { resetForm(); setMode('edit') }}>{tCommon('actions.edit')}</Button> : null}
       <Popover open={actionsOpen} onOpenChange={setActionsOpen} align="end" className="w-64 p-1.5" trigger={<Button variant="outline" size="sm" className="h-8 gap-1.5 px-2.5 text-xs" onClick={() => setActionsOpen((open) => !open)} aria-expanded={actionsOpen}>{tCommon('labels.actions')}<ChevronDown className={cn('h-3.5 w-3.5 transition-transform', actionsOpen && 'rotate-180')} aria-hidden /></Button>}>
       {forms.length > 0 ? <div className="mb-1 border-b border-slate-200 p-2 dark:border-slate-800"><Label className="mb-1 block text-xs">{t('drawer.customForm')}</Label><Select value={currentFormId ?? ''} onChange={(event) => selectForm(event.target.value)}>{forms.map((form) => <option key={form.id} value={form.id}>{form.name}</option>)}</Select></div> : null}
       <div className="space-y-0.5 [&_button]:h-8 [&_button]:w-full [&_button]:justify-start [&_button]:rounded [&_button]:border-0 [&_button]:bg-transparent [&_button]:px-2 [&_button]:text-xs [&_button]:shadow-none [&_button:hover]:bg-slate-100 dark:[&_button:hover]:bg-slate-800">
-        {canManage && isDraft ? <Button variant="ghost" className={actionClass} disabled={busy} onClick={placeInService}>{t('drawer.placeInService')}</Button> : null}
-        {canManage && ['in_service', 'fully_depreciated'].includes(status) ? payload.books.map((book) => <Button key={book.id} variant="ghost" className={actionClass} disabled={busy} onClick={() => runForAsset(book.id)}>{t('drawer.runForBook', { book: book.name })}</Button>) : null}
-        {canManage && status === 'in_service' && inputSchedules.length > 0 ? <DepreciationInputButton assetId={a.id} schedules={inputSchedules} /> : null}
-        {canManage && ['in_service','fully_depreciated'].includes(status) ? <>{status === 'in_service' ? <RemeasureButton assetId={a.id} /> : null}<AssetChangeButton assetId={a.id} accounts={accountOptions} categories={categories} /><GroupValuationButton assetId={a.id} /></> : null}
-        {canManage && (status === 'in_service' || status === 'fully_depreciated') ? <DisposeButton assetId={a.id} accountOptions={accountOptions} /> : null}
-        {canManage && hasAccountingEvidence ? <ReverseEventButton assetId={a.id} /> : null}
+        {!createMode && canManage && isDraft ? <Button variant="ghost" className={actionClass} disabled={busy} onClick={placeInService}>{t('drawer.placeInService')}</Button> : null}
+        {!createMode && canManage && ['in_service', 'fully_depreciated'].includes(status) ? payload.books.map((book) => <Button key={book.id} variant="ghost" className={actionClass} disabled={busy} onClick={() => runForAsset(book.id)}>{t('drawer.runForBook', { book: book.name })}</Button>) : null}
+        {!createMode && canManage && status === 'in_service' && inputSchedules.length > 0 ? <DepreciationInputButton assetId={a.id} schedules={inputSchedules} /> : null}
+        {!createMode && canManage && ['in_service','fully_depreciated'].includes(status) ? <>{status === 'in_service' ? <RemeasureButton assetId={a.id} /> : null}<AssetChangeButton assetId={a.id} accounts={accountOptions} categories={categories} /><GroupValuationButton assetId={a.id} /></> : null}
+        {!createMode && canManage && (status === 'in_service' || status === 'fully_depreciated') ? <DisposeButton assetId={a.id} accountOptions={accountOptions} /> : null}
+        {!createMode && canManage && hasAccountingEvidence ? <ReverseEventButton assetId={a.id} /> : null}
         {canCustomize ? <Button asChild variant="ghost"><Link href="/admin/customization?recordType=fixed_asset&tab=forms">{tCommon('actions.customize')}</Link></Button> : null}
-        {canManage && isDraft && !hasAccountingEvidence ? <><div className="my-1 border-t border-slate-200 dark:border-slate-800" /><Button variant="ghost" disabled={busy} onClick={remove} className="text-red-600 dark:text-red-400">{tCommon('actions.delete')}</Button></> : null}
+        {!createMode && canManage && isDraft && !hasAccountingEvidence ? <><div className="my-1 border-t border-slate-200 dark:border-slate-800" /><Button variant="ghost" disabled={busy} onClick={remove} className="text-red-600 dark:text-red-400">{tCommon('actions.delete')}</Button></> : null}
       </div>
       </Popover>
     </div> : undefined}
@@ -496,6 +599,6 @@ export function AssetDrawer({
     </Table>}
       <Pagination basePath={pathname} currentParams={currentParams} total={payload.schedulePage.total} page={payload.schedulePage.page} perPage={payload.schedulePage.perPage} pageParamKey="deprpage" />
     </div> : null}
-    {tab === 'files' ? <AttachmentPanel targetTable="fixed_assets" targetId={a.id} canEdit={canManage} /> : null}
+    {tab === 'files' && !createMode ? <AttachmentPanel targetTable="fixed_assets" targetId={a.id} canEdit={canManage} /> : null}
   </UrlDrawer>
 }

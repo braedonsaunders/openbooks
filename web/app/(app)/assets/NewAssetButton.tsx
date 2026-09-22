@@ -1,40 +1,34 @@
 'use client'
 
-import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Plus } from 'lucide-react'
-import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
+import { mergeHref } from '../../../lib/list-params'
 
-/** Instant-into-draft: creates the draft asset server-side, opens its flyout. */
-export function NewAssetButton({ label }: { label?: string } = {}) {
+/**
+ * Unsaved create (exemplar: NewAccountButton): opening New allocates no
+ * record, number, category, or audit row. It only navigates to the
+ * allocation-free `?assetNew=1` drawer; the single validated insert happens
+ * on Save in POST /api/assets, which then routes to the persisted id.
+ */
+export function NewAssetButton({
+  currentParams,
+  label,
+}: {
+  currentParams: Record<string, string | string[] | undefined>
+  label?: string
+}) {
   const t = useTranslations('assets')
-  const tCommon = useTranslations('common')
-  const [busy, setBusy] = useState(false)
   const router = useRouter()
-
-  async function create() {
-    setBusy(true)
-    const res = await fetch('/api/assets/draft', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({}),
-    })
-    const data = await res.json()
-    if (!res.ok) {
-      toast.error(data.error === 'no_available_subsidiary' ? t('errors.noAvailableSubsidiary') : (data.error ?? t('list.createDraftFailed')))
-      setBusy(false)
-      return
-    }
-    router.push(`/assets?asset=${data.id}`)
-    router.refresh()
-    setBusy(false)
-  }
-
   return (
-    <Button onClick={create} disabled={busy}>
-      <Plus size={15} /> {busy ? tCommon('actions.creating') : (label ?? t('list.newButton'))}
+    <Button
+      onClick={() => router.push(mergeHref('/assets', currentParams, {
+        asset: undefined,
+        assetNew: '1',
+      }) as never)}
+    >
+      <Plus size={15} /> {label ?? t('list.newButton')}
     </Button>
   )
 }

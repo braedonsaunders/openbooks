@@ -3,22 +3,38 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
-import { depreciationPeriodCount } from '@openbooks/engine/src/assets/depreciation-limits.ts'
 import { buildAllSchedulesWithRunner } from '@openbooks/engine/src/assets/depreciation.ts'
-import { cmp, normalizeMoney, toUnits } from '@openbooks/engine/src/money/money.ts'
+import { cmp } from '@openbooks/engine/src/money/money.ts'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
-import { canonicalDecimal } from '../../../../lib/exact-decimal'
-import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { postedAssetBasisEditRefusal, type RequestedAssetBasis } from '../../../../lib/asset-basis-guard'
 import { loadAsset, loadAssetWithRunner } from '../_lib'
+import {
+  FieldRefusal,
+  checkCustomReferences,
+  checkOpeningBasis,
+  checkOpeningMonth,
+  checkOpeningPair,
+  cleanCustomValues,
+  customFieldDefinitions,
+  moneyOrNull,
+  parseAccountOverride,
+  parseAssetConvention,
+  parseAssetMethod,
+  parseDepreciationMethodId,
+  parseLifeMonths,
+  parseOpeningAmount,
+  parseOpeningAsOf,
+  parseRatePercent,
+  parseTaxDepreciation,
+  parseUnitsTotal,
+  strOrNull,
+  type AssetConvention,
+  type AssetMethod,
+} from '../_fields'
 
 export const runtime = 'nodejs'
-
-const METHODS = ['straight_line', 'declining_balance', 'double_declining', 'units_of_production', 'manual'] as const
-const CONVENTIONS = ['full_month', 'mid_month', 'half_year'] as const
-type Method = (typeof METHODS)[number]
 
 interface ExistingAsset extends Record<string, unknown> {
   id: string
@@ -27,12 +43,12 @@ interface ExistingAsset extends Record<string, unknown> {
   acquisition_cost: string
   salvage_value: string
   in_service_on: string | null
-  depreciation_method: Method | null
+  depreciation_method: AssetMethod | null
   depreciation_method_id: string | null
   useful_life_months: number | null
   depreciation_rate_percent: string | null
   depreciation_units_total: string | null
-  depreciation_convention: (typeof CONVENTIONS)[number] | null
+  depreciation_convention: AssetConvention | null
   opening_accumulated_depreciation: string | null
   opening_accumulated_as_of: string | null
 }
@@ -44,36 +60,42 @@ function bad(error: string) {
   return NextResponse.json({ error }, { status: 422 })
 }
 
-function strOrNull(v: unknown): string | null {
-  if (typeof v !== 'string') return null
-  const s = v.trim()
-  return s === '' ? null : s
-}
-
-/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
-function wholeDigits(canonical: string): number {
-  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
-}
-
-/** Exact numeric(19,4) money string or null. */
-function moneyOrNull(v: unknown): string | null | 'invalid' {
-  if (v === null || v === undefined || v === '') return null
-  const exact = canonicalDecimal(v, 4)
-  // acquisition_cost/salvage_value/units and the tax money fields are
-  // numeric(19,4): refuse whole-digit widths the column cannot hold.
-  if (exact === null || wholeDigits(exact) > 15) return 'invalid'
-  try {
-    return normalizeMoney(exact)
-  } catch {
-    return 'invalid'
+/**
+ * Legacy sentence vocabulary for PATCH field refusals. The validation RULES
+ * live in ../_fields (shared with POST /api/assets); this maps the stable
+ * refusal codes back to the exact sentences PATCH has always returned so
+ * existing clients and tests see no change.
+ */
+function patchFieldBad(error: FieldRefusal) {
+  switch (error.code) {
+    case 'invalid_method': return bad('Invalid depreciation method')
+    case 'invalid_convention': return bad('Invalid depreciation convention')
+    case 'invalid_life':
+      return bad(typeof error.detail === 'string' && error.detail ? error.detail : 'Invalid useful life')
+    case 'invalid_rate': return bad('Rate must be an exact non-negative percent')
+    case 'invalid_units': return bad('Expected lifetime units must be an exact positive quantity')
+    case 'opening_invalid': return bad('Opening accumulated depreciation must be a number')
+    case 'opening_negative': return bad('Opening accumulated depreciation must be a non-negative number')
+    case 'opening_as_of_invalid': return bad('Opening as-of date must be a real calendar date (YYYY-MM-DD)')
+    case 'opening_pair_required': return bad('Opening accumulated depreciation and its as-of date must be set together')
+    case 'opening_exceeds_basis': return bad('Opening accumulated depreciation cannot exceed cost minus salvage')
+    case 'opening_before_in_service': return bad('Opening as-of date cannot precede the in-service month')
+    case 'invalid_asset_account': return bad('Invalid asset account')
+    case 'invalid_accumulated_account': return bad('Invalid accumulated depreciation account')
+    case 'invalid_expense_account': return bad('Invalid depreciation expense account')
+    case 'invalid_formula': return bad('Invalid depreciation formula')
+    case 'unknown_formula': return bad('Depreciation formula not found or inactive')
+    case 'tax_elections_invalid': return bad('Invalid tax depreciation elections')
+    case 'tax_business_use_invalid': return bad('Business use must be between 0 and 100 percent')
+    case 'tax_bonus_invalid': return bad('Bonus depreciation must be between 0 and 100 percent')
+    case 'tax_section179_invalid': return bad('Section 179 must be non-negative')
+    case 'tax_class_invalid': return bad('Invalid tax depreciation class')
+    case 'invalid_custom_fields':
+      return NextResponse.json({ error: 'Invalid custom fields', fields: error.detail }, { status: 422 })
+    case 'unknown_custom_reference':
+      return NextResponse.json({ error: `${String(error.detail)} not found in this organization` }, { status: 422 })
+    default: return bad('Invalid asset fields')
   }
-}
-
-async function acctExists(id: string, orgId: string): Promise<boolean> {
-  const r = (await db.execute(
-    sql`select 1 from accounts where id = ${id} and org_id = ${orgId} and not is_summary`,
-  ))
-  return !!r.rows[0]
 }
 
 interface PatchBody {
@@ -88,12 +110,12 @@ interface PatchBody {
   acquiredOn?: string | null
   inServiceOn?: string | null
   serialNumber?: string | null
-  method?: Method
+  method?: AssetMethod
   depreciationMethodId?: string | null
   lifeMonths?: number | string | null
   ratePercent?: number | string | null
   unitsTotal?: number | string | null
-  convention?: (typeof CONVENTIONS)[number] | null
+  convention?: AssetConvention | null
   openingAccumulated?: string | number | null
   openingAsOf?: string | null
   assetAccountId?: string | null
@@ -207,155 +229,80 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return bad('In-service date must be a real calendar date (YYYY-MM-DD)')
   }
 
-  // -- native GL account overrides -----------------------------------------
+  // -- native GL account overrides, custom fields, tax elections, ---------
+  // -- depreciation parameters, opening carry-in (migration 0156) -----------
+  // The validation RULES live in ../_fields (shared with POST /api/assets);
+  // refusal codes map back to PATCH's legacy sentences via patchFieldBad.
   const customUpdates: Record<string, unknown> = {}
   let customKeys: string[] = []
-  async function accountOverride(v: unknown): Promise<string | null | 'invalid'> {
-    const s = strOrNull(v)
-    if (s === null) return null
-    if (!isUuid(s) || !(await acctExists(s, user.orgId))) return 'invalid'
-    return s.toLowerCase()
-  }
-  const assetAccountId = body.assetAccountId === undefined ? undefined : await accountOverride(body.assetAccountId)
-  const accumulatedAccountId = body.accumulatedDepreciationAccountId === undefined ? undefined : await accountOverride(body.accumulatedDepreciationAccountId)
-  const expenseAccountId = body.depreciationExpenseAccountId === undefined ? undefined : await accountOverride(body.depreciationExpenseAccountId)
-  if (assetAccountId === 'invalid') return bad('Invalid asset account')
-  if (accumulatedAccountId === 'invalid') return bad('Invalid accumulated depreciation account')
-  if (expenseAccountId === 'invalid') return bad('Invalid depreciation expense account')
-
-  if (body.custom !== undefined) {
-    const defs = await loadFieldDefs('fixed_assets')
-    // PATCH custom values are partial: validate the effective bag so an
-    // omitted required field can be satisfied by its stored value. The
-    // in-transaction merge below applies the cleaned submitted values onto
-    // the locked row, so unknown/system keys survive either way.
-    const existingCustom =
-      existing.custom && typeof existing.custom === 'object'
-        ? (existing.custom as Record<string, unknown>)
-        : {}
-    const validated = validateCustomValues(defs, { ...existingCustom, ...body.custom })
-    if (!validated.ok) {
-      return NextResponse.json({ error: 'Invalid custom fields', fields: validated.errors }, { status: 422 })
-    }
-    // Reference custom values are uuid-SHAPED at this point but nothing
-    // proves the referenced row belongs to the caller: refuse foreign or
-    // dangling ids instead of persisting a cross-tenant pointer.
-    // Supplied values only, so legacy bags cannot lock unrelated edits.
-    const suppliedCustom: Record<string, unknown> = {}
-    for (const key of Object.keys(body.custom)) {
-      if (validated.cleaned[key] !== undefined) suppliedCustom[key] = validated.cleaned[key]
-    }
-    const unowned = await findUnownedCustomReferences(user.orgId, defs, suppliedCustom)
-    if (unowned.length > 0) {
-      return NextResponse.json({ error: `${unowned[0]!.label} not found in this organization` }, { status: 422 })
-    }
-    // Replace only tenant-defined keys. Connector provenance and account
-    // overrides share this JSON object and must survive an ordinary UI edit.
-    customKeys = defs.map(def => def.key)
-    Object.assign(customUpdates, validated.cleaned)
-  }
-
-  if (body.taxDepreciation !== undefined) {
-    if (!body.taxDepreciation || typeof body.taxDepreciation !== 'object' || Array.isArray(body.taxDepreciation)) {
-      return bad('Invalid tax depreciation elections')
-    }
-    const clean: Record<string, Record<string, unknown>> = {}
-    for (const [regime, raw] of Object.entries(body.taxDepreciation)) {
-      if (!/^[a-z][a-z0-9_]{0,62}$/.test(regime) || !raw || typeof raw !== 'object' || Array.isArray(raw)) {
-        return bad('Invalid tax depreciation elections')
-      }
-      const businessUsePercent = moneyOrNull(raw.businessUsePercent ?? '100')
-      const bonusPercent = moneyOrNull(raw.bonusPercent ?? '0')
-      const section179 = moneyOrNull(raw.section179 ?? 0)
-      if (businessUsePercent === 'invalid' || businessUsePercent === null || cmp(businessUsePercent, '0') < 0 || cmp(businessUsePercent, '100') > 0) {
-        return bad('Business use must be between 0 and 100 percent')
-      }
-      if (bonusPercent === 'invalid' || bonusPercent === null || cmp(bonusPercent, '0') < 0 || cmp(bonusPercent, '100') > 0) {
-        return bad('Bonus depreciation must be between 0 and 100 percent')
-      }
-      if (section179 === 'invalid' || (section179 && cmp(section179, '0') < 0)) return bad('Section 179 must be non-negative')
-      const classCode = strOrNull(raw.classCode)
-      if (classCode) {
-        const valid = (await db.execute(sql`
-          select 1 from tax_pool_classes
-           where org_id=${user.orgId} and regime=${regime} and class_code=${classCode} and is_active`))
-        if (!valid.rows[0]) return bad('Invalid tax depreciation class')
-      }
-      clean[regime] = { classCode, businessUsePercent, bonusPercent, section179: section179 ?? '0' }
-    }
-    customUpdates.taxDepreciation = clean
-  }
-
-  let method: Method | null | undefined
-  if (body.method !== undefined) {
-    if (!METHODS.includes(body.method)) return bad('Invalid depreciation method')
-    method = body.method
-  }
+  let assetAccountId: string | null | undefined
+  let accumulatedAccountId: string | null | undefined
+  let expenseAccountId: string | null | undefined
+  let method: AssetMethod | null | undefined
   let depreciationMethodId: string | null | undefined
-  if (body.depreciationMethodId !== undefined) {
-    const candidate = strOrNull(body.depreciationMethodId)
-    if (candidate !== null) {
-      if (!isUuid(candidate)) return bad('Invalid depreciation formula')
-      const formula = (await db.execute(sql`
-        select 1 from depreciation_methods
-         where id = ${candidate} and org_id = ${user.orgId} and is_active`))
-      if (!formula.rows[0]) return bad('Depreciation formula not found or inactive')
-    }
-    depreciationMethodId = candidate
-  }
   let lifeMonths: number | null | undefined
-  if (body.lifeMonths !== undefined) {
-    try {
-      lifeMonths = body.lifeMonths === null || body.lifeMonths === '' ? null : depreciationPeriodCount(body.lifeMonths)
-    } catch (error) {
-      return bad(error instanceof Error ? error.message : 'Invalid useful life')
-    }
-  }
   let ratePercent: string | null | undefined
-  if (body.ratePercent !== undefined) {
-    const rate = body.ratePercent === null || body.ratePercent === '' ? null : canonicalDecimal(body.ratePercent, 4)
-    if (body.ratePercent !== null && body.ratePercent !== '' && rate === null) {
-      return bad('Rate must be an exact non-negative percent')
-    }
-    try {
-      if (rate !== null && (toUnits(rate) < 0n || cmp(rate, '10000') > 0)) throw new Error('invalid rate')
-    } catch {
-      return bad('Rate must be an exact non-negative percent')
-    }
-    ratePercent = rate === null ? null : normalizeMoney(rate)
-  }
   let unitsTotal: string | null | undefined
-  if (body.unitsTotal !== undefined) {
-    const units = moneyOrNull(body.unitsTotal)
-    if (units === 'invalid' || (units !== null && cmp(units, '0') <= 0)) {
-      return bad('Expected lifetime units must be an exact positive quantity')
-    }
-    unitsTotal = units
-  }
-  let convention: (typeof CONVENTIONS)[number] | null | undefined
-  if (body.convention !== undefined) {
-    if (body.convention !== null && !CONVENTIONS.includes(body.convention)) return bad('Invalid depreciation convention')
-    convention = body.convention
-  }
-
-  // -- opening carry-in (migration 0156) --------------------------------------
-  // Mid-life onboarding figures: pre-cutover accumulated depreciation plus
-  // the as-of date it is measured through. Both or neither; the amount must
-  // fit inside the depreciable basis and the date must be a real calendar
-  // date. Once financial history exists the figures join the posted basis
-  // (guarded below) — corrections run through controlled adjustments.
+  let convention: AssetConvention | null | undefined
   let openingAccumulated: string | null | undefined
-  if (body.openingAccumulated !== undefined) {
-    const v = moneyOrNull(body.openingAccumulated)
-    if (v === 'invalid') return bad('Opening accumulated depreciation must be a number')
-    if (v !== null && cmp(v, '0') < 0) return bad('Opening accumulated depreciation must be a non-negative number')
-    openingAccumulated = v
-  }
   let openingAsOf: string | null | undefined
-  if (body.openingAsOf !== undefined) {
-    const v = strOrNull(body.openingAsOf)
-    if (v !== null && !isIsoCalendarDate(v)) return bad('Opening as-of date must be a real calendar date (YYYY-MM-DD)')
-    openingAsOf = v
+  try {
+    assetAccountId = await parseAccountOverride(db, user.orgId, body.assetAccountId, 'invalid_asset_account')
+    accumulatedAccountId = await parseAccountOverride(db, user.orgId, body.accumulatedDepreciationAccountId, 'invalid_accumulated_account')
+    expenseAccountId = await parseAccountOverride(db, user.orgId, body.depreciationExpenseAccountId, 'invalid_expense_account')
+
+    if (body.custom !== undefined) {
+      const defs = await customFieldDefinitions()
+      // PATCH custom values are partial: validate the effective bag so an
+      // omitted required field can be satisfied by its stored value. The
+      // in-transaction merge below applies the cleaned submitted values onto
+      // the locked row, so unknown/system keys survive either way.
+      const existingCustom =
+        existing.custom && typeof existing.custom === 'object'
+          ? (existing.custom as Record<string, unknown>)
+          : {}
+      const validated = cleanCustomValues(defs, { ...existingCustom, ...body.custom })
+      if (!validated.ok) {
+        throw new FieldRefusal('invalid_custom_fields', validated.errors)
+      }
+      // Reference custom values are uuid-SHAPED at this point but nothing
+      // proves the referenced row belongs to the caller: refuse foreign or
+      // dangling ids instead of persisting a cross-tenant pointer.
+      // Supplied values only, so legacy bags cannot lock unrelated edits.
+      const suppliedCustom: Record<string, unknown> = {}
+      for (const key of Object.keys(body.custom)) {
+        if (validated.cleaned[key] !== undefined) suppliedCustom[key] = validated.cleaned[key]
+      }
+      await checkCustomReferences(user.orgId, defs, suppliedCustom)
+      // Replace only tenant-defined keys. Connector provenance and account
+      // overrides share this JSON object and must survive an ordinary UI edit.
+      customKeys = defs.map(def => def.key)
+      Object.assign(customUpdates, validated.cleaned)
+    }
+
+    const taxClean = await parseTaxDepreciation(db, user.orgId, body.taxDepreciation)
+    if (taxClean !== undefined) customUpdates.taxDepreciation = taxClean
+
+    // Legacy parity: an explicit null method was always refused (the method
+    // picker never clears), while absent stays untouched.
+    if (body.method === null) throw new FieldRefusal('invalid_method')
+    method = parseAssetMethod(body.method)
+    depreciationMethodId = await parseDepreciationMethodId(db, user.orgId, body.depreciationMethodId)
+    lifeMonths = parseLifeMonths(body.lifeMonths)
+    ratePercent = parseRatePercent(body.ratePercent)
+    unitsTotal = parseUnitsTotal(body.unitsTotal)
+    convention = parseAssetConvention(body.convention)
+
+    // Mid-life onboarding figures: pre-cutover accumulated depreciation plus
+    // the as-of date it is measured through. Pair/basis/month rules run on
+    // the effective values below; once financial history exists the figures
+    // join the posted basis (guarded below) — corrections run through
+    // controlled adjustments.
+    openingAccumulated = parseOpeningAmount(body.openingAccumulated)
+    openingAsOf = parseOpeningAsOf(body.openingAsOf)
+  } catch (error) {
+    if (error instanceof FieldRefusal) return patchFieldBad(error)
+    throw error
   }
 
   // -- status transition (draft ↔ in_service) -----------------------------
@@ -396,15 +343,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (cmp(effectiveSalvage, effectiveCost) > 0) return bad('Salvage value cannot exceed acquisition cost')
   const effectiveOpening = openingAccumulated !== undefined ? openingAccumulated : existing.opening_accumulated_depreciation
   const effectiveOpeningAsOf = openingAsOf !== undefined ? openingAsOf : existing.opening_accumulated_as_of
-  if ((effectiveOpening === null) !== (effectiveOpeningAsOf === null)) {
-    return bad('Opening accumulated depreciation and its as-of date must be set together')
-  }
-  if (effectiveOpening !== null && toUnits(effectiveOpening) > toUnits(effectiveCost) - toUnits(effectiveSalvage)) {
-    return bad('Opening accumulated depreciation cannot exceed cost minus salvage')
-  }
-  if (effectiveOpening !== null && cmp(effectiveOpening, '0') > 0 && effectiveInService && effectiveOpeningAsOf
-      && effectiveOpeningAsOf.slice(0, 7) < effectiveInService.slice(0, 7)) {
-    return bad('Opening as-of date cannot precede the in-service month')
+  try {
+    checkOpeningPair(effectiveOpening, effectiveOpeningAsOf)
+    checkOpeningBasis(effectiveOpening, effectiveCost, effectiveSalvage)
+    checkOpeningMonth(effectiveOpening, effectiveOpeningAsOf, effectiveInService)
+  } catch (error) {
+    if (error instanceof FieldRefusal) return patchFieldBad(error)
+    throw error
   }
   if (effectiveStatus === 'in_service') {
     if (!effectiveInService) return bad('Set an in-service date before placing the asset in service')

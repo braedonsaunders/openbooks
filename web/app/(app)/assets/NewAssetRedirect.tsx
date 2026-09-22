@@ -1,37 +1,27 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 /**
- * Handles `?asset=new` deep links: creates the draft asset server-side and
- * swaps the URL to the real id so the flyout opens on a persisted record.
+ * Handles `?asset=new` deep links under the unsaved-create contract: the
+ * legacy instant-into-draft factory allocated a record, number, category,
+ * and audit row on open, so this redirect only swaps the URL to the
+ * allocation-free `?assetNew=1` drawer and writes nothing itself.
  */
 export function NewAssetRedirect() {
-  const t = useTranslations('assets')
   const router = useRouter()
+  const searchParams = useSearchParams()
   const started = useRef(false)
 
   useEffect(() => {
     if (started.current) return
     started.current = true
-    ;(async () => {
-      const res = await fetch('/api/assets/draft', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        toast.error(data.error ?? t('list.createDraftFailed'))
-        router.replace('/assets')
-        return
-      }
-      router.replace(`/assets?asset=${data.id}`)
-      router.refresh()
-    })()
+    const next = new URLSearchParams(searchParams.toString())
+    next.delete('asset')
+    next.set('assetNew', '1')
+    const query = next.toString()
+    router.replace((query ? `/assets?${query}` : '/assets?assetNew=1') as never)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router])
 
