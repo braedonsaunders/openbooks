@@ -21,7 +21,7 @@ const { payrollOpeningEntitlementsResource } = (await import(
 hooks.deregister();
 
 const { sql } = await import("drizzle-orm");
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
 const {
   createScratchOrg,
   dropScratchOrgReporting,
@@ -41,24 +41,31 @@ const {
  */
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
+// Seed writes run inside an explicit bypass scope: this file eagerly imports
+// a web reader, which replaces the test bypass resolver, so a bare insert
+// would reach RLS-governed tables unscoped.
 async function seedPlan(orgId: string, actorId: string): Promise<void> {
-  await db.execute(sql`
-    insert into entitlement_plans (id, org_id, code, name, unit, direction, accrual_method,
-                                   accrual_value, cap_behavior, is_active, created_by, updated_by)
-    values (${randomUUID()}, ${orgId}, 'VAC', 'Vacation', 'money', 'accrue', 'manual',
-            null, 'warn', true, ${actorId}, ${actorId})`);
+  return withBypassContext(async () => {
+    await db.execute(sql`
+      insert into entitlement_plans (id, org_id, code, name, unit, direction, accrual_method,
+                                     accrual_value, cap_behavior, is_active, created_by, updated_by)
+      values (${randomUUID()}, ${orgId}, 'VAC', 'Vacation', 'money', 'accrue', 'manual',
+              null, 'warn', true, ${actorId}, ${actorId})`);
+  });
 }
 
 async function seedEmployee(orgId: string, actorId: string, name: string): Promise<string> {
-  const id = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${id}, ${orgId}, 'person', ${name}, true, '{}'::jsonb)`);
-  await db.execute(sql`
-    insert into employee_roles (org_id, party_id, hired_on, terminated_on, is_active,
-                               created_by, updated_by)
-    values (${orgId}, ${id}, '2016-01-06', null, true, ${actorId}, ${actorId})`);
-  return id;
+  return withBypassContext(async () => {
+    const id = randomUUID();
+    await db.execute(sql`
+      insert into parties (id, org_id, kind, display_name, is_active, custom)
+      values (${id}, ${orgId}, 'person', ${name}, true, '{}'::jsonb)`);
+    await db.execute(sql`
+      insert into employee_roles (org_id, party_id, hired_on, terminated_on, is_active,
+                                 created_by, updated_by)
+      values (${orgId}, ${id}, '2016-01-06', null, true, ${actorId}, ${actorId})`);
+    return id;
+  });
 }
 
 async function ledgerCount(orgId: string): Promise<number> {
@@ -75,8 +82,8 @@ test(
   "payroll-1: bank carry-in import refuses locale money in dry-run AND commit, writing nothing",
   { skip: !DB },
   async () => {
-    const org = await createScratchOrg();
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const org = await withBypassContext(() => createScratchOrg());
+    const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
     await seedPlan(org.orgId, actorId);
     await seedEmployee(org.orgId, actorId, "Aldo Rossi");
     const resource = payrollOpeningEntitlementsResource(org.orgId);

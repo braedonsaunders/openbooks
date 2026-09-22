@@ -41,7 +41,7 @@ interface Fixture {
  * as soon as the first test ends.
  */
 async function fixture(): Promise<Fixture> {
-  const o = await createScratchOrg()
+  const o = await withBypassContext(() => createScratchOrg())
   await withBypassContext(() =>
     db.execute(sql`update parties set short_code = 'ACMEV' where id = ${o.vendorId}`),
   )

@@ -21,7 +21,7 @@ const { payrollOpeningBalancesResource } = (await import(
 hooks.deregister();
 
 const { sql } = await import("drizzle-orm");
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
 const {
   createScratchOrg,
   dropScratchOrgReporting,
@@ -45,20 +45,25 @@ const {
  */
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
+// Seed writes run inside an explicit bypass scope: this file eagerly imports
+// a web reader, which replaces the test bypass resolver, so a bare insert
+// would reach RLS-governed tables unscoped.
 async function seedEmployee(
   orgId: string,
   actorId: string,
   name: string,
   code: string,
 ): Promise<void> {
-  const id = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, short_code, is_active, custom)
-    values (${id}, ${orgId}, 'person', ${name}, ${code}, true, '{}'::jsonb)`);
-  await db.execute(sql`
-    insert into employee_roles (org_id, party_id, hired_on, terminated_on, is_active,
-                               created_by, updated_by)
-    values (${orgId}, ${id}, '2016-01-06', null, true, ${actorId}, ${actorId})`);
+  return withBypassContext(async () => {
+    const id = randomUUID();
+    await db.execute(sql`
+      insert into parties (id, org_id, kind, display_name, short_code, is_active, custom)
+      values (${id}, ${orgId}, 'person', ${name}, ${code}, true, '{}'::jsonb)`);
+    await db.execute(sql`
+      insert into employee_roles (org_id, party_id, hired_on, terminated_on, is_active,
+                                 created_by, updated_by)
+      values (${orgId}, ${id}, '2016-01-06', null, true, ${actorId}, ${actorId})`);
+  });
 }
 
 async function openingCount(orgId: string): Promise<number> {
@@ -89,8 +94,8 @@ test(
   "conflicting duplicate rows refuse in preview AND commit, writing nothing",
   { skip: !DB },
   async () => {
-    const org = await createScratchOrg();
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const org = await withBypassContext(() => createScratchOrg());
+    const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
     await seedEmployee(org.orgId, actorId, "Aldo Rossi", "ALDO01");
     const resource = payrollOpeningBalancesResource(org.orgId);
     const ctx = {
@@ -134,8 +139,8 @@ test(
   "identical repeat rows still refuse per the engine duplicate contract",
   { skip: !DB },
   async () => {
-    const org = await createScratchOrg();
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const org = await withBypassContext(() => createScratchOrg());
+    const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
     await seedEmployee(org.orgId, actorId, "Bianca Neri", "BIA01");
     const resource = payrollOpeningBalancesResource(org.orgId);
     const ctx = {
@@ -167,8 +172,8 @@ test(
   "restricted caller sees scope errors for alias duplicates, never duplicate evidence",
   { skip: !DB },
   async () => {
-    const org = await createScratchOrg();
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const org = await withBypassContext(() => createScratchOrg());
+    const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
     await seedEmployee(org.orgId, actorId, "Elsa Gialli", "ELS01");
     const resource = payrollOpeningBalancesResource(org.orgId);
     // Empty allow-list: every employee is outside the caller's scope.
@@ -215,8 +220,8 @@ test(
   "blank row with no stored carry-in claims nothing in preview AND commit",
   { skip: !DB },
   async () => {
-    const org = await createScratchOrg();
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const org = await withBypassContext(() => createScratchOrg());
+    const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
     await seedEmployee(org.orgId, actorId, "Carlo Bianchi", "CAR01");
     const resource = payrollOpeningBalancesResource(org.orgId);
     const ctx = {
@@ -248,8 +253,8 @@ test(
   "normal load stores with audit, and clearing a stored opening deletes it",
   { skip: !DB },
   async () => {
-    const org = await createScratchOrg();
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const org = await withBypassContext(() => createScratchOrg());
+    const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
     await seedEmployee(org.orgId, actorId, "Dora Verdi", "DOR01");
     const resource = payrollOpeningBalancesResource(org.orgId);
     const ctx = {

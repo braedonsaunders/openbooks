@@ -20,7 +20,7 @@ const { priorPayrollRegisterResource } = (await import(
 hooks.deregister();
 
 const { sql } = await import("drizzle-orm");
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
 const {
   createScratchOrg,
   dropScratchOrgReporting,
@@ -45,21 +45,28 @@ const {
  */
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
+// Seed writes run inside an explicit bypass scope: this file eagerly imports
+// a web reader, which replaces the test bypass resolver, so a bare insert
+// would reach RLS-governed tables unscoped.
 async function seedComponent(orgId: string, code: string): Promise<void> {
-  await db.execute(sql`
-    insert into pay_components (id, org_id, code, name, kind, basis, sequence, is_active)
-    values (${randomUUID()}, ${orgId}, ${code}, ${code}, 'earning', 'fixed_amount', 100, true)`);
+  return withBypassContext(async () => {
+    await db.execute(sql`
+      insert into pay_components (id, org_id, code, name, kind, basis, sequence, is_active)
+      values (${randomUUID()}, ${orgId}, ${code}, ${code}, 'earning', 'fixed_amount', 100, true)`);
+  });
 }
 
 async function seedEmployee(orgId: string, actorId: string, name: string): Promise<void> {
-  const id = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${id}, ${orgId}, 'person', ${name}, true, '{}'::jsonb)`);
-  await db.execute(sql`
-    insert into employee_roles (org_id, party_id, hired_on, terminated_on, is_active,
-                               created_by, updated_by)
-    values (${orgId}, ${id}, '2016-01-06', null, true, ${actorId}, ${actorId})`);
+  return withBypassContext(async () => {
+    const id = randomUUID();
+    await db.execute(sql`
+      insert into parties (id, org_id, kind, display_name, is_active, custom)
+      values (${id}, ${orgId}, 'person', ${name}, true, '{}'::jsonb)`);
+    await db.execute(sql`
+      insert into employee_roles (org_id, party_id, hired_on, terminated_on, is_active,
+                                 created_by, updated_by)
+      values (${orgId}, ${id}, '2016-01-06', null, true, ${actorId}, ${actorId})`);
+  });
 }
 
 async function tableCount(orgId: string, table: "payroll_prior_registers" | "payroll_prior_stubs"): Promise<number> {
@@ -98,8 +105,8 @@ function row(register: string, employee: string, overrides: Record<string, unkno
 }
 
 async function fixture() {
-  const org = await createScratchOrg();
-  const actorId = (await seedFlowActors(org.orgId)).adminId;
+  const org = await withBypassContext(() => createScratchOrg());
+  const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
   await seedComponent(org.orgId, "SALARY");
   await seedEmployee(org.orgId, actorId, "Robin Field");
   await seedEmployee(org.orgId, actorId, "Aldo Rossi");
