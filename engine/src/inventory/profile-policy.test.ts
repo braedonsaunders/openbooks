@@ -42,4 +42,7 @@ test("parseUnitConversions refuses anything that cannot convert exactly", () => 
   // precision.
   assert.equal(parseUnitConversions({ third: 1 / 3 }), "invalid");
   assert.equal(parseUnitConversions({ tiny: 0.00001 }), "invalid");
+  // Posting folds case, so case-variants of one name are ambiguous.
+  assert.equal(parseUnitConversions({ box: 12, BOX: 12 }), "invalid");
+  assert.equal(parseUnitConversions({ box: 12, " box ": 12 }), "invalid");
 });

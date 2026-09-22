@@ -9,7 +9,7 @@ import { tsImport } from 'tsx/esm/api'
 // account equal to the inventory asset account). A transient toast after a
 // failed save is not a substitute for inline validation.
 const source = readFileSync(new URL('./ItemCostingEditor.tsx', import.meta.url), 'utf8')
-const { costingOffsetConflicts } = await tsImport('./ItemCostingEditor.tsx', {
+const { costingOffsetConflicts, validateConversionRows } = await tsImport('./ItemCostingEditor.tsx', {
   parentURL: import.meta.url,
   tsconfig: fileURLToPath(new URL('../../../tsconfig.json', import.meta.url)),
 }) as {
@@ -20,6 +20,7 @@ const { costingOffsetConflicts } = await tsImport('./ItemCostingEditor.tsx', {
     varianceAccountId: string
     receivedNotBilledAccountId: string
   }) => string[]
+  validateConversionRows: (rows: { unit: string; factor: string }[]) => { index: number; field: string; code: string }[]
 }
 
 const ASSET = '11111111-1111-4111-8111-111111111111'
@@ -87,8 +88,60 @@ test('the comparison matches the server rule regardless of id casing', () => {
 test('the editor blocks the save and renders the conflict inline instead of submitting', () => {
   assert.match(source, /costingOffsetConflicts\(/)
   // The save path must consult the conflicts before issuing the PUT.
-  assert.match(source, /if \(conflicts\.length > 0\)[\s\S]*?return/)
+  assert.match(source, /if \(conflicts\.length > 0 \|\| conversionIssues\.length > 0\)[\s\S]*?return/)
   // Conflicting pickers render an inline error, not just a toast.
   assert.match(source, /role="alert"/)
   assert.match(source, /separationConflict/)
+})
+
+// Unit conversions: the form mirrors the server's parseUnitConversions rule
+// inline, so a row the PUT would answer 422 never submits.
+
+test('well-formed conversion rows validate clean', () => {
+  assert.deepEqual(validateConversionRows([{ unit: 'box', factor: '12' }]), [])
+  assert.deepEqual(validateConversionRows([{ unit: 'Each', factor: '1' }, { unit: 'kg', factor: '2.5' }]), [])
+  assert.deepEqual(validateConversionRows([]), [])
+})
+
+test('a blank unit name is refused', () => {
+  assert.deepEqual(validateConversionRows([{ unit: '   ', factor: '12' }]), [
+    { index: 0, field: 'unit', code: 'required' },
+  ])
+})
+
+test('a non-positive or inexact factor is refused', () => {
+  for (const factor of ['', '0', '-12', 'abc', '1/3', '0.00001', 'Infinity']) {
+    assert.deepEqual(
+      validateConversionRows([{ unit: 'box', factor }]),
+      [{ index: 0, field: 'factor', code: 'invalid' }],
+      `factor ${JSON.stringify(factor)} must be refused`,
+    )
+  }
+})
+
+test('factors the server receives as exact decimals are accepted', () => {
+  // ".5" and "12." arrive as the JSON numbers 0.5 and 12 — both exactly
+  // representable, so the form must not refuse what the server accepts.
+  assert.deepEqual(validateConversionRows([{ unit: 'half', factor: '.5' }]), [])
+  assert.deepEqual(validateConversionRows([{ unit: 'dozen', factor: '12.' }]), [])
+})
+
+test('a repeated unit under any spelling is refused', () => {
+  assert.deepEqual(
+    validateConversionRows([
+      { unit: 'box', factor: '12' },
+      { unit: 'BOX', factor: '12' },
+    ]),
+    [{ index: 1, field: 'unit', code: 'duplicate' }],
+  )
+})
+
+test('conversion issues block the save and render inline like account conflicts', () => {
+  assert.match(source, /validateConversionRows\(conversions\)/)
+  assert.match(source, /conversionIssues\.length > 0\)[\s\S]*?return/)
+  assert.match(source, /conversionUnitRequired/)
+  assert.match(source, /conversionFactorInvalid/)
+  assert.match(source, /conversionDuplicate/)
+  assert.match(source, /conversionsBlocked/)
+  assert.match(source, /unitConversions: Object\.fromEntries\(/)
 })

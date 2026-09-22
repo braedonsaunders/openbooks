@@ -21,6 +21,7 @@ interface Profile {
   received_not_billed_account_id: string | null
   standard_cost: string | null
   base_unit: string
+  unit_conversions: Record<string, number> | null
   reorder_point: string | null
   preferred_stock_level: string | null
   allow_negative_inventory: boolean
@@ -72,6 +73,55 @@ export function costingOffsetConflicts(selection: CostingAccountSelection): Cost
   return out
 }
 
+export interface ConversionRowInput {
+  unit: string
+  factor: string
+}
+
+export interface ConversionRowIssue {
+  index: number
+  field: 'unit' | 'factor'
+  code: 'required' | 'invalid' | 'duplicate'
+}
+
+/**
+ * Client mirror of the server's parseUnitConversions rule
+ * (engine/src/inventory/profile-policy.ts): names must be non-blank, factors
+ * positive numbers with at most four decimal places, and no unit twice under
+ * any spelling (posting folds case). Checked inline before any submit so the
+ * form refuses a row the PUT would answer 422, instead of surfacing it as a
+ * transient toast.
+ */
+export function validateConversionRows(rows: ConversionRowInput[]): ConversionRowIssue[] {
+  const issues: ConversionRowIssue[] = []
+  const seen = new Set<string>()
+  rows.forEach((row, index) => {
+    const unit = row.unit.trim()
+    if (!unit) {
+      issues.push({ index, field: 'unit', code: 'required' })
+    } else {
+      const folded = unit.toLowerCase()
+      if (seen.has(folded)) {
+        issues.push({ index, field: 'unit', code: 'duplicate' })
+      } else {
+        seen.add(folded)
+      }
+    }
+    // The server receives a JSON number, so validate the parsed value, not
+    // the keystrokes: ".5" and "12." both arrive as exact decimals.
+    const numeric = Number(row.factor.trim())
+    if (
+      row.factor.trim() === '' ||
+      !Number.isFinite(numeric) ||
+      numeric <= 0 ||
+      !/^\d+(\.\d{1,4})?$/.test(String(numeric))
+    ) {
+      issues.push({ index, field: 'factor', code: 'invalid' })
+    }
+  })
+  return issues
+}
+
 /**
  * Per-item costing profile (item_inventory_profiles), re-homed from Setup onto
  * the item record. Only shown for item kinds that carry stock. Loads the profile
@@ -109,6 +159,7 @@ export function ItemCostingEditor({
   const [receivedNotBilledAccountId, setReceivedNotBilledAccountId] = useState('')
   const [standardCost, setStandardCost] = useState('')
   const [baseUnit, setBaseUnit] = useState('ea')
+  const [conversions, setConversions] = useState<(ConversionRowInput & { id: string })[]>([])
   const [reorderPoint, setReorderPoint] = useState('')
   const [preferredStockLevel, setPreferredStockLevel] = useState('')
   const [allowNegativeInventory, setAllowNegativeInventory] = useState(false)
@@ -134,6 +185,13 @@ export function ItemCostingEditor({
     [assetAccountId, cogsAccountId, adjustmentAccountId, varianceAccountId, receivedNotBilledAccountId],
   )
   const conflicted = useMemo(() => new Set<CostingOffsetField>(conflicts), [conflicts])
+  const conversionIssues = useMemo(() => validateConversionRows(conversions), [conversions])
+  const conversionIssueAt = (index: number, field: 'unit' | 'factor') =>
+    conversionIssues.find((issue) => issue.index === index && issue.field === field)?.code ?? null
+  const conversionIssueMessage = (code: 'required' | 'invalid' | 'duplicate') =>
+    code === 'required' ? t('conversionUnitRequired')
+    : code === 'duplicate' ? t('conversionDuplicate')
+    : t('conversionFactorInvalid')
   const conflictNote = (key: CostingOffsetField) =>
     conflicted.has(key) ? (
       <p role="alert" className="text-xs text-red-600 dark:text-red-400">
@@ -151,6 +209,11 @@ export function ItemCostingEditor({
     setReceivedNotBilledAccountId(p?.received_not_billed_account_id ?? '')
     setStandardCost(p?.standard_cost ?? '')
     setBaseUnit(p?.base_unit ?? 'ea')
+    setConversions(
+      Object.entries(p?.unit_conversions ?? {})
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([unit, factor]) => ({ id: crypto.randomUUID(), unit, factor: String(factor) })),
+    )
     setReorderPoint(p?.reorder_point ?? '')
     setPreferredStockLevel(p?.preferred_stock_level ?? '')
     setAllowNegativeInventory(p?.allow_negative_inventory ?? false)
@@ -192,8 +255,9 @@ export function ItemCostingEditor({
 
   async function save() {
     // Refuse the combination inline: the server answers 422 for any offset
-    // account equal to the asset account, so never issue that PUT.
-    if (conflicts.length > 0) {
+    // account equal to the asset account, and for any malformed conversion
+    // row, so never issue that PUT.
+    if (conflicts.length > 0 || conversionIssues.length > 0) {
       setBlocked(true)
       return
     }
@@ -210,6 +274,11 @@ export function ItemCostingEditor({
           adjustmentAccountId, varianceAccountId, receivedNotBilledAccountId,
           standardCost, baseUnit, reorderPoint, preferredStockLevel,
           allowNegativeInventory, negativeCostBasis, provisionalUnitCost,
+          // Explicit object replaces the stored map (rows already validated
+          // inline, so the server's 422 is unreachable from this form).
+          unitConversions: Object.fromEntries(
+            conversions.map((row) => [row.unit.trim(), Number(row.factor.trim())]),
+          ),
         }),
       })
       const result = (await res.json().catch(() => ({}))) as { error?: string }
@@ -278,6 +347,74 @@ export function ItemCostingEditor({
             <div className={field}>
               <Label>{t('baseUnit')}</Label>
               <Input value={baseUnit} onChange={(e) => setBaseUnit(e.target.value)} />
+            </div>
+            <div className={`${field} sm:col-span-2 lg:col-span-3`}>
+              <Label>{t('unitConversions')}</Label>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{t('unitConversionsDescription')}</p>
+              {conversions.map((row, index) => {
+                const unitIssue = conversionIssueAt(index, 'unit')
+                const factorIssue = conversionIssueAt(index, 'factor')
+                return (
+                  <div key={row.id} className="flex items-start gap-2">
+                    <div className="flex-1">
+                      <Input
+                        aria-label={t('conversionUnit')}
+                        placeholder={t('conversionUnit')}
+                        aria-invalid={unitIssue ? true : undefined}
+                        value={row.unit}
+                        onChange={(e) =>
+                          setConversions((rows) =>
+                            rows.map((r) => (r.id === row.id ? { ...r, unit: e.target.value } : r)),
+                          )
+                        }
+                      />
+                      {unitIssue ? (
+                        <p role="alert" className="text-xs text-red-600 dark:text-red-400">
+                          {conversionIssueMessage(unitIssue)}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="flex-1">
+                      <Input
+                        aria-label={t('conversionFactor')}
+                        placeholder={t('conversionFactor')}
+                        inputMode="decimal"
+                        className="text-right tabular-nums"
+                        aria-invalid={factorIssue ? true : undefined}
+                        value={row.factor}
+                        onChange={(e) =>
+                          setConversions((rows) =>
+                            rows.map((r) => (r.id === row.id ? { ...r, factor: e.target.value } : r)),
+                          )
+                        }
+                      />
+                      {factorIssue ? (
+                        <p role="alert" className="text-xs text-red-600 dark:text-red-400">
+                          {conversionIssueMessage(factorIssue)}
+                        </p>
+                      ) : null}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setConversions((rows) => rows.filter((r) => r.id !== row.id))}
+                    >
+                      {t('removeConversion')}
+                    </Button>
+                  </div>
+                )
+              })}
+              <div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setConversions((rows) => [...rows, { id: crypto.randomUUID(), unit: '', factor: '' }])
+                  }
+                >
+                  {t('addConversion')}
+                </Button>
+              </div>
             </div>
             <div className={field}>
               <Label>{t('assetAccount')}<span className="text-red-500"> *</span></Label>
@@ -349,6 +486,11 @@ export function ItemCostingEditor({
                 {t('separationBlocked')}
               </p>
             ) : null}
+            {blocked && conversionIssues.length > 0 ? (
+              <p role="alert" className="text-sm text-red-600 sm:col-span-2 lg:col-span-3 dark:text-red-400">
+                {t('conversionsBlocked')}
+              </p>
+            ) : null}
             {serverError ? (
               <p role="alert" className="text-sm text-red-600 sm:col-span-2 lg:col-span-3 dark:text-red-400">
                 {serverError}
@@ -368,6 +510,17 @@ export function ItemCostingEditor({
             <Detail label={t('method')} value={t(`methods.${profile.costing_method}`)} />
             <Detail label={t('tracking')} value={t(`trackingOptions.${profile.tracking}`)} />
             <Detail label={t('baseUnit')} value={profile.base_unit} />
+            <Detail
+              label={t('unitConversions')}
+              value={
+                profile.unit_conversions && Object.keys(profile.unit_conversions).length > 0
+                  ? Object.entries(profile.unit_conversions)
+                      .sort(([a], [b]) => a.localeCompare(b))
+                      .map(([unit, factor]) => `${unit} × ${String(factor)}`)
+                      .join(', ')
+                  : t('noConversions')
+              }
+            />
             <Detail label={t('assetAccount')} value={accountLabel(profile.asset_account_id)} />
             <Detail label={t('cogsAccount')} value={accountLabel(profile.cogs_account_id)} />
             <Detail label={t('adjustmentAccount')} value={accountLabel(profile.adjustment_account_id)} />
