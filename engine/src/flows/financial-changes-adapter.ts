@@ -2,7 +2,11 @@ import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts
 import { sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { db, withOrg, withTransactionSavepoint } from "../platform/db.ts";
-import { loadFinancialChange } from "../platform/financial-changes.ts";
+import {
+  financialChangeInboxLabel,
+  loadFinancialChange,
+  loadFinancialChangeSubjectLabel,
+} from "../platform/financial-changes.ts";
 import {
   BUILT_IN_ROLE_NAMES,
   EVENT_SOURCE_OPTIONS,
@@ -13,7 +17,7 @@ import type { FlowSubjectAdapter } from "./types.ts";
 export const FINANCIAL_CHANGE_SUBJECT_KIND = "financial_change";
 export const financialChangeSubjectProfile: FlowSubjectProfile = {
   subjectKind: FINANCIAL_CHANGE_SUBJECT_KIND,
-  label: "Accounting lifecycle change",
+  label: "Accounting event",
   triggers: ["on_submit"],
   actions: ["send_email", "notify"],
   statuses: ["draft", "pending", "approved", "rejected", "applied"].map(
@@ -29,7 +33,7 @@ export const financialChangeSubjectProfile: FlowSubjectProfile = {
         label: value,
       })),
     },
-    { key: "operation", label: "Change type", type: "text" },
+    { key: "operation", label: "Event", type: "text" },
     { key: "effectiveOn", label: "Effective date", type: "date" },
     { key: "subsidiaryId", label: "Legal entity", type: "text" },
     { key: "reason", label: "Reason", type: "text" },
@@ -56,6 +60,12 @@ export const financialChangesFlowAdapter: FlowSubjectAdapter = {
     ).rows[0];
     if (!row) return null;
     const change = await loadFinancialChange(db, row.org_id, id);
+    const subjectLabel = await loadFinancialChangeSubjectLabel(
+      db,
+      row.org_id,
+      change.domain,
+      change.subject_id,
+    );
     return {
       values: {
         id,
@@ -65,12 +75,13 @@ export const financialChangesFlowAdapter: FlowSubjectAdapter = {
         subsidiaryId: change.subsidiary_id,
         reason: change.reason,
         status: change.status,
+        subjectLabel,
       },
       submitterUserId: change.submitted_by,
     };
   },
   label(id, values) {
-    return `${String(values.domain)} ${String(values.operation)} · ${String(values.effectiveOn ?? id)}`;
+    return financialChangeInboxLabel({ ...values, id });
   },
   deepLink(id) {
     return `/accounting/changes?change=${id}`;
@@ -85,12 +96,12 @@ export const financialChangesFlowAdapter: FlowSubjectAdapter = {
   },
   async changeStatus() {
     throw new Error(
-      "accounting change decisions are controlled by the approval gate",
+      "accounting event decisions are controlled by the approval gate",
     );
   },
   async setField() {
     throw new Error(
-      "accounting change proposals are immutable; submit a new proposal",
+      "accounting event proposals are immutable; submit a new proposal",
     );
   },
   async releaseApproval(id, outcome, ctx) {
@@ -115,7 +126,7 @@ export const financialChangesFlowAdapter: FlowSubjectAdapter = {
        where org_id=${ctx.orgId} and id=${id} and status='pending' returning id
     `);
     if (updated.rows.length !== 1)
-      throw new Error("accounting change decision could not be recorded");
+      throw new Error("accounting event decision could not be recorded");
   },
 };
 
@@ -132,7 +143,7 @@ export async function submitFinancialChange(
       const tx = db;
       const row = await loadFinancialChange(tx, orgId, id);
       if (row.submitted_by !== actorId)
-        throw new Error("only the proposer can submit this accounting change");
+        throw new Error("only the proposer can submit this accounting event");
       if (row.status !== "draft") return; // A retry reuses its existing routing/decision.
       const result = await runRecordFlows(
         { kind: "on_submit", source: "ui" },
@@ -143,8 +154,8 @@ export async function submitFinancialChange(
       if (result.failed || result.gatesCreated === 0) {
         throw new Error(
           result.failed
-            ? "accounting change approval routing failed; review the configured flow and its recipients, then resubmit"
-            : "configure an enabled Accounting lifecycle change approval flow in Flows, then submit this proposal",
+            ? "accounting event approval routing failed; review the configured flow and its recipients, then resubmit"
+            : "configure an enabled Accounting event approval flow in Flows, then submit this proposal",
         );
       }
       const updated = await tx.execute(sql`
@@ -152,7 +163,7 @@ export async function submitFinancialChange(
        where org_id=${orgId} and id=${id} and status='draft' returning id
     `);
       if (updated.rows.length !== 1)
-        throw new Error("accounting change could not be submitted");
+        throw new Error("accounting event could not be submitted");
     }),
   );
 }

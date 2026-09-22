@@ -764,7 +764,7 @@ export async function reverseAssetLifecycleEvent(
 
     if (source.financial_change_id)
       throw new AssetLifecycleError(
-        "This event belongs to an approved multi-book change; reverse it from Accounting changes to preserve every book and transfer link.",
+        "This event belongs to an approved multi-book change; reverse it from Accounting events to preserve every book and transfer link.",
       );
 
     const prior = await tx.execute<{

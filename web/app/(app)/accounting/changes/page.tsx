@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { accessDeniedHref } from "@/lib/gate-targets";
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import type { FinancialChange } from "@openbooks/engine/src/platform/financial-changes.ts";
@@ -12,10 +13,16 @@ import { groupTabs } from "@/components/module-home/group-tabs";
 import { can, getAuthz } from "@/lib/authz";
 import { isUuid } from "@/lib/list-params";
 import { subsidiaryVisibleFilter } from "@/lib/subsidiaries";
+import { financialChangeSubjectExpr } from "@/lib/customization/entity-list-query/accounting-lifecycles";
 import { ChangeEvidence } from "./ChangeEvidence";
 import { ReverseAssetChange } from "./ReverseAssetChange";
 import { ChangeActions } from "./ChangeActions";
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata() {
+  const t = await getTranslations("accounting");
+  return { title: t("lifecycle.pageTitle") };
+}
 const fieldNames: Record<string, string> = {
   groupCarryingBefore: "Group carrying amount before valuation",
   groupCarryingAfter: "Group carrying amount after valuation",
@@ -86,11 +93,12 @@ function Facts({ value }: { value: Record<string, unknown> }) {
     </dl>
   );
 }
-export default async function AccountingChanges({
+export default async function AccountingEvents({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const t = await getTranslations("accounting");
   const auth = await getAuthz();
   if (!auth) redirect("/login");
   const domains = can(auth, "gl.read")
@@ -116,9 +124,11 @@ export default async function AccountingChanges({
             subsidiary_name: string;
             proposer_name: string;
             approver_name: string | null;
+            subject_label: string;
           }
         >(sql`
-    select fc.*,fc.effective_on::text as effective_on,s.name as subsidiary_name,u.name as proposer_name,a.name as approver_name
+    select fc.*,fc.effective_on::text as effective_on,s.name as subsidiary_name,u.name as proposer_name,a.name as approver_name,
+      ${financialChangeSubjectExpr("fc")} as subject_label
     from financial_changes fc join subsidiaries s on s.id=fc.subsidiary_id and s.org_id=fc.org_id
       left join users u on u.id=fc.submitted_by left join users a on a.id=fc.approved_by
     where fc.org_id=${orgId} and fc.id=${id} and ${scopePredicate} ${subsidiaryVisibleFilter(sql`fc.subsidiary_id`, auth.allowedSubsidiaryIds)}`)
@@ -156,12 +166,22 @@ export default async function AccountingChanges({
         ? "close.run"
         : "assets.manage";
   const tabs = await groupTabs("accounting", "/accounting/changes", { orgId });
+  const eventTitle = row
+    ? t.has(`lifecycle.operations.${row.operation}`)
+      ? t(`lifecycle.operations.${row.operation}`)
+      : row.operation.replaceAll("_", " ")
+    : "";
+  const statusLabel = row
+    ? t.has(`lifecycle.${row.status}`)
+      ? t(`lifecycle.${row.status}`)
+      : row.status.replaceAll("_", " ")
+    : "";
   return (
     <ListPageLayout
       header={
         <PageHeader
-          title="Accounting changes"
-          description="Approved changes retain the original accounting and append an auditable adjustment."
+          title={t("lifecycle.pageTitle")}
+          description={t("lifecycle.pageDescription")}
           actions={<ModuleHomeTabs tabs={tabs} />}
         />
       }
@@ -178,25 +198,30 @@ export default async function AccountingChanges({
             <UrlDrawer
               open
               closeHref="/accounting/changes"
-              title={`${row.domain}: ${row.operation.replaceAll("_", " ")}`}
-              description={row.subsidiary_name}
+              title={eventTitle}
+              description={`${row.subject_label} · ${row.subsidiary_name}`}
               size="2xl"
             >
               <div className="space-y-5">
-                <Badge>{row.status}</Badge>
+                <Badge>{statusLabel}</Badge>
                 <p>
-                  Effective {row.effective_on} · Proposed by {row.proposer_name}
+                  {t("lifecycle.effectiveOn", { date: row.effective_on })} ·{" "}
+                  {t("lifecycle.proposedBy", { name: row.proposer_name })}
                 </p>
                 <p>{row.reason}</p>
                 {row.approver_name ? (
-                  <p>Independent decision by {row.approver_name}</p>
+                  <p>
+                    {t("lifecycle.independentDecision", {
+                      name: row.approver_name,
+                    })}
+                  </p>
                 ) : null}
                 {row.before_state.preview &&
                 typeof row.before_state.preview === "object" &&
                 !Array.isArray(row.before_state.preview) ? (
                   <section className="space-y-2">
                     <h3 className="font-semibold">
-                      Proposed accounting impact
+                      {t("lifecycle.proposedImpact")}
                     </h3>
                     <Facts
                       value={
@@ -207,13 +232,15 @@ export default async function AccountingChanges({
                 ) : null}
                 <section className="space-y-2">
                   <h3 className="font-semibold">
-                    Proposed terms and assessment
+                    {t("lifecycle.proposedTerms")}
                   </h3>
                   <ChangeEvidence value={row.payload} names={referenceNames} />
                 </section>
                 {["revenue", "asset", "consolidation"].includes(row.domain) ? (
                   <section className="space-y-2">
-                    <h3 className="font-semibold">Book-specific allocations</h3>
+                    <h3 className="font-semibold">
+                    {t("lifecycle.bookAllocations")}
+                  </h3>
                     <ChangeEvidence
                       value={
                         row.before_state.preview ?? row.before_state.previews
@@ -224,7 +251,9 @@ export default async function AccountingChanges({
                 ) : null}
                 {row.result ? (
                   <section className="space-y-2">
-                    <h3 className="font-semibold">Applied result</h3>
+                    <h3 className="font-semibold">
+                      {t("lifecycle.appliedResult")}
+                    </h3>
                     <Facts value={row.result} />
                     {Array.isArray(row.result.entryIds)
                       ? row.result.entryIds.map((entry) => (
@@ -233,7 +262,7 @@ export default async function AccountingChanges({
                               className="underline"
                               href={`/journal?entry=${String(entry)}`}
                             >
-                              Adjustment journal
+                              {t("lifecycle.adjustmentJournal")}
                             </Link>
                           </p>
                         ))
@@ -245,7 +274,7 @@ export default async function AccountingChanges({
                     className="underline"
                     href={`/revenue?contract=${row.subject_id}`}
                   >
-                    Open revenue contract
+                    {t("lifecycle.openContract")}
                   </Link>
                 ) : null}
                 {row.domain === "asset" ? (
@@ -253,7 +282,7 @@ export default async function AccountingChanges({
                     className="underline"
                     href={`/assets?asset=${row.subject_id}`}
                   >
-                    Open asset and depreciation history
+                    {t("lifecycle.openAsset")}
                   </Link>
                 ) : null}
                 {row.domain === "lease" ? (
@@ -261,7 +290,7 @@ export default async function AccountingChanges({
                     className="underline"
                     href={`/assets/leases?lease=${row.subject_id}`}
                   >
-                    Open lease and schedule history
+                    {t("lifecycle.openLease")}
                   </Link>
                 ) : null}
                 {row.domain === "asset" &&
@@ -286,7 +315,7 @@ export default async function AccountingChanges({
                     className="underline"
                     href={`/admin/setup/subsidiary-ownership-interests?row=${row.subject_id}`}
                   >
-                    Open ownership policy
+                    {t("lifecycle.openOwnership")}
                   </Link>
                 ) : null}
                 <ChangeActions

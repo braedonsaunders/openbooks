@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { Button } from "@openbooks/ui";
 import { toast } from "sonner";
 import { readApiErrorMessage } from "@/lib/api-error";
@@ -18,6 +19,7 @@ export function ChangeActions({
 }) {
   const [busy, setBusy] = useState(false),
     router = useRouter();
+  const t = useTranslations("accounting");
   async function act(action: "submit" | "apply") {
     setBusy(true);
     try {
@@ -25,17 +27,15 @@ export function ChangeActions({
         method: "POST",
       });
       if (!res.ok)
-        throw new Error(
-          await readApiErrorMessage(res, "Accounting change failed"),
-        );
+        throw new Error(await readApiErrorMessage(res, t("lifecycle.failed")));
       toast.success(
         action === "submit"
-          ? "Submitted for independent approval"
-          : "Approved change applied",
+          ? t("lifecycle.submittedToast")
+          : t("lifecycle.appliedToast"),
       );
       router.refresh();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Accounting change failed");
+      toast.error(e instanceof Error ? e.message : t("lifecycle.failed"));
     } finally {
       setBusy(false);
     }
@@ -44,17 +44,17 @@ export function ChangeActions({
     <div className="flex gap-2">
       {status === "draft" && canSubmit ? (
         <Button disabled={busy} onClick={() => act("submit")}>
-          Submit for approval
+          {t("lifecycle.submit")}
         </Button>
       ) : null}
       {status === "approved" && canApply ? (
         <Button disabled={busy} onClick={() => act("apply")}>
-          Apply approved change
+          {t("lifecycle.apply")}
         </Button>
       ) : null}
       {status === "pending" ? (
         <Button variant="outline" asChild>
-          <Link href="/approvals">Review in Approvals</Link>
+          <Link href="/inbox">{t("lifecycle.reviewInbox")}</Link>
         </Button>
       ) : null}
     </div>

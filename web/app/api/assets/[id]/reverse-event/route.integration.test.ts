@@ -310,7 +310,7 @@ test("reverse-event POST refuses a foreign asset event and an out-of-scope subsi
   }
 });
 
-test("reverse-event keeps approved multi-book change events on Accounting changes", { skip: !DB }, async () => {
+test("reverse-event keeps approved multi-book change events on Accounting events", { skip: !DB }, async () => {
   const fixture = await seedAsset("REVERSE-CHANGE");
   try {
     const flowActors = await seedFlowActors(fixture.orgId);
@@ -365,7 +365,7 @@ test("reverse-event keeps approved multi-book change events on Accounting change
       { params: Promise.resolve({ id: fixture.assetId }) },
     );
     assert.equal(refused.status, 422);
-    assert.match(((await refused.json()) as { error: string }).error, /Accounting changes/);
+    assert.match(((await refused.json()) as { error: string }).error, /Accounting events/);
     assert.deepEqual(await writeCounts(fixture.orgId, fixture.assetId), before);
   } finally {
     routeState.authz = null;

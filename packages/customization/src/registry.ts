@@ -1030,20 +1030,47 @@ const LEASE_AGREEMENT: RecordTypeMeta = {
     options: ["draft","active","terminated","complete"].map(value=>({value,labelKey:`accounting.lifecycle.${value}`}))}],
 };
 
+const FINANCIAL_CHANGE_OPERATIONS = [
+  "modification",
+  "remeasurement",
+  "termination",
+  "separate_lease",
+  "contract_modification",
+  "partial_disposal",
+  "intercompany_transfer",
+  "group_valuation",
+  "loss_of_control",
+  "reversal",
+] as const;
+
 const FINANCIAL_CHANGE: RecordTypeMeta = {
   key: "financial_change", labelKey: "accounting.lifecycle.financial_change", category: "entity",
   supportsForms: false, customFieldLineTable: null,
   headerFields: [], lineFields: [],
+  defaultSort: { sortKey: "date", dir: "desc" },
   listColumns: [
     {key:"operation",labelKey:"accounting.lifecycle.operation",kind:"reference",sortable:true,sortKey:"operation",locked:true},
+    {key:"subject",labelKey:"accounting.lifecycle.subject",kind:"text",sortable:true,sortKey:"subject"},
     {key:"domain",labelKey:"accounting.lifecycle.domain",kind:"text",sortable:true,sortKey:"domain"},
-    {key:"reason",labelKey:"accounting.lifecycle.reason",kind:"text",sortable:true,sortKey:"reason"},
+    {key:"subsidiary",labelKey:"accounting.lifecycle.legalEntity",kind:"text",sortable:true,sortKey:"subsidiary"},
+    {key:"reason",labelKey:"accounting.lifecycle.reason",kind:"text",sortable:true,sortKey:"reason",defaultHidden:true},
     {key:"effective_on",labelKey:"accounting.lifecycle.date",kind:"date",sortable:true,sortKey:"date"},
     {key:"status",labelKey:"accounting.lifecycle.status",kind:"status",sortable:true,sortKey:"status"},
     {key:"_actions",labelKey:"common.labels.actions",kind:"actions",defaultWidth:44},
   ],
-  listFilters: [{key:"status",labelKey:"common.labels.status",kind:"select",operators:OPERATORS_BY_KIND.select,
-    options: ["draft","pending","approved","rejected","applied"].map(value=>({value,labelKey:`accounting.lifecycle.${value}`}))}],
+  listFilters: [
+    {key:"queue",labelKey:"accounting.lifecycle.queue",kind:"select",operators:OPERATORS_BY_KIND.select,
+      options: [
+        {value:"awaiting",labelKey:"accounting.lifecycle.queueAwaiting"},
+        {value:"applied",labelKey:"accounting.lifecycle.queueApplied"},
+      ]},
+    {key:"domain",labelKey:"accounting.lifecycle.domain",kind:"select",operators:OPERATORS_BY_KIND.select,
+      options: ["lease","asset","revenue","consolidation"].map(value=>({value,labelKey:`accounting.lifecycle.domains.${value}`}))},
+    {key:"operation",labelKey:"accounting.lifecycle.operation",kind:"select",operators:OPERATORS_BY_KIND.select,
+      options: FINANCIAL_CHANGE_OPERATIONS.map(value=>({value,labelKey:`accounting.lifecycle.operations.${value}`}))},
+    {key:"status",labelKey:"common.labels.status",kind:"select",operators:OPERATORS_BY_KIND.select,
+      options: ["draft","pending","approved","rejected","applied"].map(value=>({value,labelKey:`accounting.lifecycle.${value}`}))},
+  ],
 };
 
 const REVENUE_CONTRACT: RecordTypeMeta = {

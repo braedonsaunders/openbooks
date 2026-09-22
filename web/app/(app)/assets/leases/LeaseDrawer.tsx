@@ -24,6 +24,10 @@ import {
 import { useMoney } from "@/components/money-provider";
 import { useBusinessToday } from "@/components/business-date-provider";
 import { readApiErrorMessage } from "@/lib/api-error";
+import {
+  financialChangeEventLabel,
+  financialChangeStatusLabel,
+} from "@openbooks/engine/src/platform/financial-change-labels.ts";
 import type { LeasePayload, LeaseDisplay } from "./_lib";
 type Option = { value: string; label: string };
 const frequencyMonths: Record<string, number> = {
@@ -782,14 +786,15 @@ export function LeaseDrawer({
           </Table>
         </section>
         <section>
-          <h3 className="font-semibold">Change evidence</h3>
+          <h3 className="font-semibold">Accounting events</h3>
           {payload.changes.map((c) => (
             <p key={c.id}>
               <Link
                 className="underline"
                 href={`/accounting/changes?change=${c.id}`}
               >
-                {c.effective_on} · {c.operation} · {c.status}
+                {c.effective_on} · {financialChangeEventLabel(c.operation)} ·{" "}
+                {financialChangeStatusLabel(c.status)}
               </Link>{" "}
               — {c.reason}
             </p>

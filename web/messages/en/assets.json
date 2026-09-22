@@ -45,7 +45,7 @@
     },
     "reasons": {
       "already_reversed": "Already reversed.",
-      "accounting_change": "Owned by an approved multi-book change — reverse it from Accounting changes.",
+      "accounting_change": "Owned by an approved multi-book change — reverse it from Accounting events.",
       "entry_not_posted": "Its journal is not posted.",
       "later_event": "Reverse the later {kind} event first.",
       "no_reversal_workflow": "This event kind has no direct reversal workflow."

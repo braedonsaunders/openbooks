@@ -45,7 +45,7 @@
     },
     "reasons": {
       "already_reversed": "すでに取り消されています。",
-      "accounting_change": "承認済みの複数帳簿変更に属しています。「会計変更」から取り消してください。",
+      "accounting_change": "承認済みの複数帳簿変更に属しています。「会計イベント」から取り消してください。",
       "entry_not_posted": "関連する仕訳は転記されていません。",
       "later_event": "先に後続の「{kind}」イベントを取り消してください。",
       "no_reversal_workflow": "このイベント種別には直接取り消すワークフローがありません。"
