@@ -69,6 +69,11 @@ export const V1_RESERVED_STATIC_SEGMENTS = [
   "openapi",
   "records",
   "reports",
+  "open-items",
+  "currencies",
+  "fx",
+  "inventory",
+  "payroll",
 ] as const;
 
 const V1_RESERVED_STATIC_SEGMENT_SET = new Set<string>(V1_RESERVED_STATIC_SEGMENTS);
