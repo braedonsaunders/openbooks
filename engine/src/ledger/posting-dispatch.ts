@@ -4,6 +4,7 @@ import { resolveScriptUser, runTriggerScripts, type ScriptContext } from "../scr
 import { emitStatusChange, runRecordFlows } from "../flows/run.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import { applyInventoryReturnsForVendorCredit } from "../inventory/documents-vendor-credits.ts";
+import { applyInventoryReturnsForCustomerCredit } from "../inventory/documents-customer-credits.ts";
 import { applyInventoryIssuesForInvoice } from "../inventory/documents-sales.ts";
 import { applyInventoryReceiptsForBill } from "../inventory/documents-purchasing.ts";
 import { createObligationsFromInvoice } from "../revenue/recognition.ts";
@@ -104,6 +105,18 @@ export async function runPostDocumentEffects(
       );
     } else if (doc.kind === "vendor_credit") {
       await applyInventoryReturnsForVendorCredit(
+        doc.orgId,
+        effectActorId,
+        doc.id,
+        postingDate,
+        await postingEffectSubsidiaryId(doc.orgId, doc.subsidiaryId),
+      );
+    } else if (doc.kind === "customer_credit") {
+      // The sell-side mirror of vendor_credit. Without it a sales return was
+      // a purely commercial credit: revenue reversed, the goods never came
+      // back into stock, and COGS kept the cost of units the customer had
+      // returned.
+      await applyInventoryReturnsForCustomerCredit(
         doc.orgId,
         effectActorId,
         doc.id,
