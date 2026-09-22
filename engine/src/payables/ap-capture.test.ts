@@ -60,6 +60,18 @@ test("normalizeCapturedDecimal refuses ambiguous comma text instead of guessing"
   assert.equal(normalizeCapturedDecimal("1.234"), "1.2340");
 });
 
+test("normalizeCapturedDecimal refuses multi-dot text instead of guessing the last dot", () => {
+  // "1.234.567" is dot-grouping (one-point-two million) in DE/IT/ES and a
+  // misread decimal elsewhere: two readings, never a guess. The old
+  // last-dot-is-the-point rule turned the grouped reading into 1234.567 — a
+  // 1000x understated total that looked plausible in review. Refusing keeps
+  // the raw text on the draft as `supplied`, so the reviewer types what the
+  // document actually said.
+  assert.equal(normalizeCapturedDecimal("1.234.567"), null);
+  assert.equal(normalizeCapturedDecimal("12.34.56"), null);
+  assert.equal(normalizeCapturedDecimal("2026.01.15"), null);
+});
+
 const raw = {
   status: "succeeded",
   analyzeResult: {

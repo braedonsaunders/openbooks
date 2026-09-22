@@ -165,9 +165,13 @@ export function normalizeCapturedDecimal(value: unknown): string | null {
     else if (cause.cause === "separator") raw = raw.replace(/,/g, "");
     else return null;
   } else if ((raw.match(/\./g) ?? []).length > 1) {
-    const parts = raw.split(".");
-    const tail = parts.pop()!;
-    raw = tail.length <= 4 ? `${parts.join("")}.${tail}` : `${parts.join("")}${tail}`;
+    // Two or more dots is two readings, never a guess: "1.234.567" is
+    // one-point-two million in every dot-grouped locale (DE, IT, ES) and a
+    // misread decimal in others, and the old last-dot-is-the-point rule
+    // turned the German reading into 1234.567 — a 1000x understated total
+    // that looked plausible in review. Refuse instead: the raw text rides
+    // through as `supplied` so the reviewer sees what the document said.
+    return null;
   }
   const signed = `${negative ? "-" : ""}${raw}`;
   return fromUnits(toUnits(signed));
