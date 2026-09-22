@@ -31,8 +31,6 @@ export interface ApCockpitData {
   newItems: { kind: string; label: string }[]
   newBasePath: string
   newTriggerLabel: string
-  newCreatingLabel: string
-  newFailedLabel: string
   tabs: unknown
   data: unknown
 }
@@ -41,7 +39,6 @@ export async function loadApCockpit(): Promise<ApCockpitData> {
   const authz = await requirePermission('ap.read')
   const canCreate = can(authz, 'ap.create')
   const t = await getTranslations('ap')
-  const tCommon = await getTranslations('common')
 
   const cfg = await analyticsConfig(authz.user.orgId, 'cashflow')
   const apSettings = { weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)), restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1 }
@@ -70,8 +67,6 @@ export async function loadApCockpit(): Promise<ApCockpitData> {
     ],
     newBasePath: '/ap/bills',
     newTriggerLabel: t('actions.newBill'),
-    newCreatingLabel: tCommon('actions.creating'),
-    newFailedLabel: t('toasts.createDraftFailed'),
     tabs: await groupTabs('purchasing', '/ap', { orgId: authz.user.orgId }),
     data,
   }
@@ -101,8 +96,6 @@ export function apCockpitSpec(data: ApCockpitData): PageSpec {
             newItems: data.newItems,
             newBasePath: data.newBasePath,
             newTriggerLabel: data.newTriggerLabel,
-            newCreatingLabel: data.newCreatingLabel,
-            newFailedLabel: data.newFailedLabel,
           }),
           widget('module-home-tabs', { tabs: data.tabs }),
         ],

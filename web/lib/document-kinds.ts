@@ -139,6 +139,43 @@ export const AP_KINDS = ['vendor_bill', 'vendor_credit'] as const
 export const AR_KINDS = ['customer_invoice', 'customer_credit'] as const
 export const BANK_KINDS = ['card_charge', 'card_refund', 'check', 'deposit', 'transfer'] as const
 
+/**
+ * Kinds creatable through the uniform unsaved-create slice: every shared
+ * DOCUMENT transaction kind whose New button opens the tenant-customizable
+ * DocumentDrawer in createMode over an in-memory payload. Orders, journals,
+ * payments, expenses, project charges, and pay runs keep their own writers
+ * and are refused by POST /api/documents.
+ */
+export const DOCUMENT_CREATE_KINDS = [
+  'customer_invoice',
+  'customer_credit',
+  'vendor_bill',
+  'vendor_credit',
+  'card_charge',
+  'card_refund',
+  'check',
+  'deposit',
+  'transfer',
+] as const
+
+export type DocumentCreateKind = (typeof DOCUMENT_CREATE_KINDS)[number]
+
+export function isDocumentCreateKind(kind: string): kind is DocumentCreateKind {
+  return (DOCUMENT_CREATE_KINDS as readonly string[]).includes(kind)
+}
+
+/**
+ * URL-only create target: opening New allocates nothing — no document, no
+ * number, no lines, no audit row. The list loader renders the shared
+ * DocumentDrawer in createMode over this URL, and the first write happens
+ * on explicit Save (POST /api/documents). Cancel/close navigates away and
+ * writes nothing.
+ */
+export function documentCreateHref(basePath: string, kind: string): string {
+  if (!isDocumentCreateKind(kind)) throw new Error(`kind "${kind}" is not creatable here`)
+  return `${basePath}?doc=new&kind=${kind}&mode=edit`
+}
+
 /** Optional-module kinds: the generic document APIs must 404 when the feature is off. */
 export const DOC_KIND_FEATURE: Partial<Record<string, string>> = {
   quote: 'orders',

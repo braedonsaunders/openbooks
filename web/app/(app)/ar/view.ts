@@ -27,8 +27,6 @@ export interface ArCockpitData {
   newItems: { kind: string; label: string }[]
   newBasePath: string
   newTriggerLabel: string
-  newCreatingLabel: string
-  newFailedLabel: string
   tabs: unknown
   data: unknown
 }
@@ -37,7 +35,6 @@ export async function loadArCockpit(): Promise<ArCockpitData> {
   const authz = await requirePermission('ar.read')
   const canCreate = can(authz, 'ar.create')
   const t = await getTranslations('ar')
-  const tCommon = await getTranslations('common')
 
 
   const cfg = await analyticsConfig(authz.user.orgId, 'cashflow')
@@ -79,8 +76,6 @@ export async function loadArCockpit(): Promise<ArCockpitData> {
     ],
     newBasePath: '/ar/invoices',
     newTriggerLabel: t('actions.new'),
-    newCreatingLabel: tCommon('actions.creating'),
-    newFailedLabel: t('toasts.createDraftFailed'),
     tabs: await customerGroupTabs(authz, '/ar'),
     data,
   }
@@ -105,8 +100,6 @@ export function arCockpitSpec(data: ArCockpitData): PageSpec {
               items: data.newItems,
               basePath: data.newBasePath,
               triggerLabel: data.newTriggerLabel,
-              creatingLabel: data.newCreatingLabel,
-              failedLabel: data.newFailedLabel,
             },
             f('canCreate'),
           ),

@@ -292,6 +292,27 @@ export function persistedDocumentRevision(value: unknown): string {
   return value
 }
 
+/**
+ * The single write an unsaved create makes: first Save POSTs the collection
+ * once with a caller UUID idempotency key (stable per drawer session, so a
+ * retried Save replays instead of duplicating). The body is the drawer's own
+ * save payload plus the kind — the exact shape PATCH would receive — so the
+ * server validates a create with the same rules and messages as an edit.
+ * Pure, unit-tested alongside the kind hrefs.
+ */
+export function buildDocumentCreateRequest(
+  kind: string,
+  payload: Record<string, unknown>,
+  key: string,
+): { path: string; method: 'POST'; headers: Record<string, string>; body: Record<string, unknown> } {
+  return {
+    path: '/api/documents',
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
+    body: { kind, ...payload },
+  }
+}
+
 export function buildDocumentSaveRequest(
   documentId: string,
   persistedRevision: string,
@@ -824,6 +845,15 @@ export interface DocumentDrawerProps {
   lineDefs: CustomFieldDefClient[]
   canCreate: boolean
   canPost: boolean
+  /**
+   * Unsaved create (`?doc=new&kind=`): the drawer edits a blank in-memory
+   * payload with autosave disarmed — no revision machinery runs because no
+   * persisted row exists. Save POSTs the collection once (Idempotency-Key
+   * per drawer session) and routes to the persisted id; Cancel/close
+   * navigates away and writes nothing. Reuses this same drawer, layout, and
+   * validation — never a forked create form.
+   */
+  createMode?: boolean
   /** Initial presentation mode. Creation flows request edit; existing records
    *  continue to default to view. Status and permission checks still apply. */
   initialMode?: DrawerMode
@@ -874,6 +904,7 @@ export function DocumentDrawer({
   lineDefs,
   canCreate,
   canPost,
+  createMode = false,
   initialMode = 'view',
   layout,
   availableLayouts,
@@ -902,10 +933,15 @@ export function DocumentDrawer({
     (doc.status === 'draft' && canCreate) ||
     (doc.status === 'posted' && canCreate && canPost)
   // Existing records default to read-only. A creation flow may request edit
-  // mode, but status and permission checks remain authoritative.
+  // mode, but status and permission checks remain authoritative. An unsaved
+  // create always opens editing its blank payload (never a persisted state).
+  const isCreate = createMode === true
   const [mode, setMode] = useState<DrawerMode>(
-    initialDrawerMode(initialMode, canEditStatus),
+    isCreate ? 'edit' : initialDrawerMode(initialMode, canEditStatus),
   )
+  // Stable per drawer session (remounted per `new:<kind>` upstream): a
+  // retried first Save replays against this key instead of duplicating.
+  const [idempotencyKey] = useState(() => crypto.randomUUID())
   const editable = mode === 'edit' && canEditStatus
   // Posted open-item docs that carry a balance resolve to open/paid from the
   // applications ledger (invoices). Credits post open items too but their
@@ -960,7 +996,9 @@ export function DocumentDrawer({
     setRows((prev) => applyQtyPriceToRows(prev, next))
   }, [])
   const [totals, setTotals] = useState({ subtotal: doc.subtotal, taxTotal: doc.tax_total, total: doc.total })
-  const persistedPropRevision = persistedDocumentRevision(doc.updated_at)
+  // No persisted row exists in create mode, so there is no revision token to
+  // pin: the revision-coupled effects below are disarmed there instead.
+  const persistedPropRevision = isCreate ? '' : persistedDocumentRevision(doc.updated_at)
   const [documentRevision, setDocumentRevision] = useState(persistedPropRevision)
   const seenPersistedRevisions = useRef(new Set([persistedPropRevision]))
   const persistedBaseline = useRef<PersistedDocumentSnapshot<DocPayload>>({
@@ -1468,6 +1506,9 @@ export function DocumentDrawer({
 
   const [dirty, setDirty] = useState(false)
   useEffect(() => {
+    // Unsaved create has no persisted snapshot to reconcile against — the
+    // blank seed never changes under the editor, and Save navigates away.
+    if (isCreate) return
     const incoming = {
       documentId: String(doc.id),
       revision: persistedPropRevision,
@@ -1567,6 +1608,32 @@ export function DocumentDrawer({
       setSaveState('error')
       return
     }
+    // Unsaved create: the single collection write. Same client-script and
+    // currency gates as an edit above; the server runs the shared writer, so
+    // validation, refusals, and audit match an edit exactly.
+    if (isCreate) {
+      const create = buildDocumentCreateRequest(config.kind, payload_, idempotencyKey)
+      await execute(
+        () =>
+          fetchAction(create.path, {
+            method: create.method,
+            headers: create.headers,
+            body: JSON.stringify(create.body),
+          }),
+        {
+          fallbackMessage: t('toasts.actionFailed'),
+          onOk: (payload) => {
+            const saved = (payload as DocPayload).doc
+            router.push(`${basePath}?doc=${String(saved.id)}&mode=edit`)
+            router.refresh()
+          },
+          onRefused: () => {
+            setSaveState('error')
+          },
+        },
+      )
+      return
+    }
     const request = buildDocumentSaveRequest(
       String(doc.id),
       documentRevision,
@@ -1641,6 +1708,14 @@ export function DocumentDrawer({
   }
 
   function cancel() {
+    // Unsaved create holds no persisted state to restore: closing navigates
+    // away and writes nothing — zero writes by construction (the only write
+    // this drawer can make is the Save POST above, which Cancel never runs).
+    if (isCreate) {
+      router.push(basePath)
+      router.refresh()
+      return
+    }
     const incoming = {
       documentId: String(doc.id),
       revision: persistedPropRevision,
@@ -2400,7 +2475,8 @@ export function DocumentDrawer({
       closeHref={basePath}
       beforeClose={confirmDiscard}
       recordId={String(doc.id)}
-      canEditAttachments={canCreate}
+      showEvidenceTabs={!isCreate}
+      canEditAttachments={isCreate ? false : canCreate}
       panelClassName={docTypeMeta(config.kind).surfaceCls}
       title={
         <DocumentDrawerTitle
@@ -2723,9 +2799,10 @@ export function DocumentDrawer({
           />
         ) : null}
 
-        {mode === 'view' ? (
+        {mode === 'view' && !isCreate ? (
           // The record's tenant-authored Flow approval timeline. Renders
-          // nothing when no approval flow applies.
+          // nothing when no approval flow applies. Never in create mode:
+          // no persisted record exists to carry a timeline yet.
           <ApprovalHistory subjectKind={String(doc.kind)} subjectId={String(doc.id)} />
         ) : null}
 
