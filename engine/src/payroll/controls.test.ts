@@ -855,7 +855,7 @@ test(
 /* M-7 — T4 caps must refuse an unknown year, not silently not cap     */
 /* ------------------------------------------------------------------ */
 
-test("T4 slips refuse a year with no CRA maximums rather than filing uncapped", async () => {
+test("T4 slips refuse a year with no CRA maximums rather than filing uncapped", { skip: !DB }, async () => {
   // caYearCaps returned null for anything but 2026, which made the box 24/26
   // cap a no-op. A 2025 restatement, or anything filed after the calendar
   // turns to 2027, went out uncapped and silently.
