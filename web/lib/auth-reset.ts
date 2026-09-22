@@ -28,6 +28,26 @@ export const RESET_TOKEN_TTL_MIN = 30;
 export const MIN_PASSWORD_LENGTH = 10;
 /** New tokens per user per hour — a mailbox-flood cap, not a security control. */
 const REQUESTS_PER_HOUR = 3;
+/**
+ * Per-network hourly cap on anonymous reset REQUESTS, mirroring login's
+ * network window: without it an unauthenticated caller can force cheap DB
+ * lookups plus 500ms-held connections per request, against any address,
+ * while the per-user cap only limits mail to one mailbox. When the network
+ * is unknown (no trusted proxy) the cap cannot apply — the per-user cap and
+ * the uniform delay remain. Over the cap the request is silently not
+ * issued: the response is already uniform, so refusing by name here would
+ * tell a rate-limit prober exactly where the boundary sits.
+ */
+const NETWORK_REQUESTS_PER_HOUR = 20;
+
+async function networkOverCap(networkHash: string | null): Promise<boolean> {
+  if (!networkHash) return false;
+  const recent = (await db.execute<{ n: number }>(sql`
+    select count(*)::int as n from auth_password_resets
+     where network_hash = ${networkHash} and created_at > now() - interval '1 hour'
+  `));
+  return recent.rows[0]!.n >= NETWORK_REQUESTS_PER_HOUR;
+}
 
 function tokenHash(raw: string): string {
   return createHash("sha256").update(raw).digest("hex");
@@ -129,6 +149,9 @@ export async function requestPasswordReset(
   const { networkHash, userAgentHash } = authContextHashes(context);
 
   const delivery = await withBypass(async () => {
+    // The network cap first: an anonymous prober rotating addresses must not
+    // reach the user lookup at all once its window is spent.
+    if (await networkOverCap(networkHash)) return;
     // Same single-identity rule as login: never guess between two active
     // home identities for one address.
     const users = (await db.execute<{ id: string; org_id: string; name: string | null; email: string }>(sql`
