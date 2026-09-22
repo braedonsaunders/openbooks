@@ -121,6 +121,26 @@ test("an invoice line in boxes issues base units", { skip: !DB }, async () => {
   }
 });
 
+test("a bill line in a differently-cased unit still converts", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await setConversions(org, '{"box": 12}');
+    const { documentId, lineId } = await draftApprovedDocument(org, "vendor_bill", {
+      quantity: "2",
+      unit: " BOX ",
+      unitPrice: "120",
+      amount: "240",
+    });
+    await postDocument(documentId, depsFor(org));
+    const movement = (await db.execute<{ quantity: string }>(sql`
+      select quantity::text from inventory_movements
+       where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'receipt'`)).rows[0]!;
+    assert.equal(toUnits(movement.quantity), toUnits("24"), "case and whitespace fold before conversion");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("a line in an unconvertible unit is refused, never assumed 1:1", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {

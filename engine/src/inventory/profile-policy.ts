@@ -144,6 +144,7 @@ export type ItemInventoryProfileRow = {
   received_not_billed_account_id: string | null;
   standard_cost: string | null;
   base_unit: string;
+  unit_conversions: unknown;
   reorder_point: string | null;
   preferred_stock_level: string | null;
   allow_negative_inventory: boolean;
@@ -166,6 +167,40 @@ export function parseTrackingMode(value: unknown): TrackingMode | null {
     : null;
 }
 
+/**
+ * Parse the item's unit-conversion map (base units per unit, e.g.
+ * { box: 12 }) from an API body. `undefined` means omitted (leave the stored
+ * map alone); explicit `null` clears it. Anything else must be a JSON object
+ * of non-blank unit names to positive, exactly-representable factors —
+ * anything looser would reach toBaseQuantity as a guess at posting time.
+ * Returns the normalized record, or the string "invalid" when the shape is
+ * wrong (callers map that to their 422).
+ */
+export function parseUnitConversions(
+  value: unknown,
+): Record<string, number> | undefined | "invalid" {
+  if (value === undefined) return undefined;
+  if (value === null) return {};
+  if (typeof value !== "object" || Array.isArray(value)) return "invalid";
+  const out: Record<string, number> = {};
+  for (const [rawKey, rawFactor] of Object.entries(value)) {
+    const key = rawKey.trim();
+    if (!key) return "invalid";
+    if (
+      typeof rawFactor !== "number" ||
+      !Number.isFinite(rawFactor) ||
+      rawFactor <= 0
+    ) {
+      return "invalid";
+    }
+    // Factors multiply exact 4dp quantities; an inexact factor (1/3 as a
+    // float) could never convert without inventing precision.
+    if (!/^\d+(\.\d{1,4})?$/.test(String(rawFactor))) return "invalid";
+    out[key] = rawFactor;
+  }
+  return out;
+}
+
 export async function lockItemInventoryProfile(
   tx: Runner,
   orgId: string,
@@ -174,7 +209,7 @@ export async function lockItemInventoryProfile(
   const r = (await tx.execute<ItemInventoryProfileRow>(sql`
     select id, item_id, costing_method, tracking, asset_account_id, cogs_account_id,
            adjustment_account_id, variance_account_id, received_not_billed_account_id,
-           standard_cost, base_unit, reorder_point, preferred_stock_level,
+           standard_cost, base_unit, unit_conversions, reorder_point, preferred_stock_level,
            allow_negative_inventory, negative_cost_basis, provisional_unit_cost
       from item_inventory_profiles
      where org_id = ${orgId} and item_id = ${itemId}
