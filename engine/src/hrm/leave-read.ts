@@ -406,10 +406,11 @@ export interface OrgLeaveList {
 }
 
 /**
- * Org-wide request list for queues and panels: every employment in the
- * actor's subsidiary lens, newest start first, each row authorized by its
- * own employment gate inside. A scope denial refuses the whole list rather
- * than rendering a silent subset; callers surface the refusal as data.
+ * Org-wide request list for queues and panels: one permission check and one
+ * subsidiary-scoped query, newest start first. This is equivalent to applying
+ * requireHrmLeaveRead to every row, without an employment-by-employment N+1.
+ * The bound applies to visible requests (not the size of the roster), and one
+ * extra row provides an honest truncation signal.
  */
 export async function listOrgLeaveRequests(
   exec: SqlExecutor,
@@ -417,56 +418,30 @@ export async function listOrgLeaveRequests(
   actorId: string,
   opts: { status?: string; limit?: number } = {},
 ): Promise<OrgLeaveList> {
-  const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
-  // Bare JS arrays interpolate as row constructors, never PostgreSQL arrays:
-  // the allowlist crosses as a JSON string, exactly like the sibling reads.
-  const employments = (await exec.execute<{ id: string }>(sql`
-    select id from worker_employments
-     where org_id = ${orgId}
-       and (${allowed === null}::boolean
-            or employer_subsidiary_id in (
-              select jsonb_array_elements_text(${allowed === null ? "[]" : JSON.stringify([...allowed])}::jsonb)::uuid
-            ))
-     order by id limit 501
-  `)).rows;
-  const limit = Math.min(Math.max(opts.limit ?? 500, 1), 500);
-  const collected: LeaveRequestSummary[] = [];
-  const truncated = employments.length > 500;
-  for (const employment of employments.slice(0, 500)) {
-    const rows = await listLeaveRequestsIn(
-      exec,
-      orgId,
-      actorId,
-      employment.id,
-      opts.status,
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.leave.read"))) {
+    throw new HrmAuthorizationError(
+      "Leave access requires the hrm.leave.read permission — ask an administrator to grant it in /admin/roles.",
     );
-    collected.push(...rows);
   }
-  collected.sort((a, b) => (b.startsOn < a.startsOn ? -1 : b.startsOn > a.startsOn ? 1 : a.id < b.id ? -1 : 1));
-  if (collected.length > limit) {
-    return { requests: collected.slice(0, limit), truncated: true };
-  }
-  return { requests: collected, truncated };
-}
-
-/** listLeaveRequests against a caller-held executor (no nested transaction). */
-async function listLeaveRequestsIn(
-  exec: SqlExecutor,
-  orgId: string,
-  actorId: string,
-  employmentId: string,
-  status?: string,
-): Promise<LeaveRequestSummary[]> {
-  await requireHrmLeaveRead(exec, orgId, actorId, employmentId);
+  const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
+  const limit = Math.min(Math.max(opts.limit ?? 500, 1), 500);
   const rows = (await exec.execute<Record<string, unknown>>(sql`
     select ${SUMMARY_COLUMNS} from hrm_leave_requests r
       join hrm_leave_types t on t.id = r.leave_type_id and t.org_id = r.org_id
       join worker_employments e on e.id = r.employment_id and e.org_id = r.org_id
-     where r.org_id = ${orgId} and r.employment_id = ${employmentId}
-       and (${status ?? null}::text is null or r.status = ${status ?? null}::text)
-     order by r.starts_on desc, r.created_at desc
+     where r.org_id = ${orgId}
+       and (${allowed === null}::boolean
+            or e.employer_subsidiary_id in (
+              select jsonb_array_elements_text(${allowed === null ? "[]" : JSON.stringify([...allowed])}::jsonb)::uuid
+            ))
+       and (${opts.status ?? null}::text is null or r.status = ${opts.status ?? null}::text)
+     order by r.starts_on desc, r.created_at desc, r.id
+     limit ${limit + 1}
   `)).rows;
-  return rows.map(toSummary);
+  return {
+    requests: rows.slice(0, limit).map(toSummary),
+    truncated: rows.length > limit,
+  };
 }
 
 /**

@@ -4,7 +4,7 @@ import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { getHeadcountAsOf } from '@openbooks/engine/src/hrm/employment-read.ts'
+import { getHeadcountAsOf, getHeadcountTotalsAsOf } from '@openbooks/engine/src/hrm/employment-read.ts'
 import { HrmAuthorizationError } from '@openbooks/engine/src/hrm/authorization.ts'
 import { HrmChangeRequestError, listChangeRequests } from '@openbooks/engine/src/hrm/change-requests.ts'
 import { getVacancyAsOf } from '@openbooks/engine/src/hrm/positions-read.ts'
@@ -255,48 +255,152 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   // the hrm switch with a 404. This loader never re-checks either; it
   // resolves figures for the authorized session it is given.
   const orgId = authz.user.orgId
-  const t = await getTranslations('hrm')
-  const tNav = await getTranslations('nav')
-
-  const effectiveDate = await businessToday(orgId)
+  const [t, tNav, effectiveDate, locale] = await Promise.all([
+    getTranslations('hrm'),
+    getTranslations('nav'),
+    businessToday(orgId),
+    getLocale(),
+  ])
   const knownAt = new Date().toISOString()
-  const headcount = await getHeadcountAsOf({
-    orgId,
-    actorId: authz.user.id,
-    effectiveDate,
-    knownAt,
-  })
-
-  const multiSubsidiary = await isMultiSubsidiary(orgId)
-
-  // Twelve month-end headcounts through the same canonical read, ending on
-  // today: the cockpit's trend is the read service twelve times, never a
-  // row count, so it agrees with the hero to the person.
-  const locale = await getLocale()
-  // FTE is stored at four places (numeric(19,4)); the cockpit shows it as a
-  // person-readable figure, at most two decimals in the viewer's locale.
-  const fte = (value: string): string => new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(Number(value))
   const trendDates = monthEndsBefore(effectiveDate, 11).concat([effectiveDate])
-  const trendData: number[] = []
-  for (const date of trendDates) {
-    if (date === effectiveDate) {
-      trendData.push(headcount.total)
-    } else {
-      const point = await getHeadcountAsOf({
-        orgId,
-        actorId: authz.user.id,
-        effectiveDate: date,
-        knownAt,
-      })
-      trendData.push(point.total)
-    }
-  }
+  const historicalDates = trendDates.filter((date) => date !== effectiveDate)
+  const canReadPositions = can(authz, 'hrm.position.read')
+  const canReadProcesses = can(authz, 'hrm.process.read')
+  const canReadLeave = can(authz, 'hrm.leave.read')
+  const canManageHrm = can(authz, 'hrm.employment.manage')
+  const employmentScope = subsidiaryVisibleFilter(sql`w.employer_subsidiary_id`, authz.allowedSubsidiaryIds)
+
+  // Every cockpit panel is an independent read under the same authenticated
+  // view. Start them together so a remote tenant database pays the slowest
+  // panel's latency, not the sum of every panel. Each underlying service
+  // retains its own gate, permission, tenant scope, and refusal behavior.
+  const [
+    headcount,
+    historicalHeadcount,
+    multiSubsidiary,
+    vacancy,
+    queueLoad,
+    windowResult,
+    changeResult,
+    unmigratedResult,
+    onboarding,
+    leavePanel,
+    recruiting,
+    qualificationAttention,
+    tabs,
+    benefitsPanel,
+  ] = await Promise.all([
+    getHeadcountAsOf({ orgId, actorId: authz.user.id, effectiveDate, knownAt }),
+    getHeadcountTotalsAsOf({ orgId, actorId: authz.user.id, effectiveDates: historicalDates, knownAt }),
+    isMultiSubsidiary(orgId),
+    canReadPositions
+      ? getVacancyAsOf({ orgId, actorId: authz.user.id, effectiveDate, knownAt })
+      : Promise.resolve(null),
+    (async () => {
+      try {
+        return {
+          rows: await listChangeRequests({ orgId, actorId: authz.user.id, limit: HOME_QUEUE_LIMIT }),
+          refusal: null as string | null,
+        }
+      } catch (error) {
+        if (error instanceof HrmAuthorizationError || error instanceof HrmChangeRequestError) {
+          return { rows: [], refusal: (error as Error).message }
+        }
+        throw error
+      }
+    })(),
+    db.execute<{
+      employmentId: string
+      name: string | null
+      partyId: string | null
+      status: string
+      from: string
+      to: string | null
+    }>(sql`
+      select w.id::text as "employmentId", p.display_name as name, p.id::text as "partyId",
+             ev.status as status,
+             ev.effective_from::text as "from", ev.effective_to::text as "to"
+        from worker_employment_versions ev
+        join worker_employments w on w.id = ev.employment_id and w.org_id = ev.org_id
+        join parties p on p.id = w.worker_party_id and p.org_id = w.org_id
+       where ev.org_id = ${orgId}::uuid
+         and ev.recorded_until is null
+         ${employmentScope}
+         and ((ev.effective_from > ${effectiveDate}::date
+               and ev.effective_from <= (${effectiveDate}::date + ${HOME_WINDOW_DAYS}::int))
+           or (ev.effective_to > ${effectiveDate}::date
+               and ev.effective_to <= (${effectiveDate}::date + ${HOME_WINDOW_DAYS}::int)))
+       order by ev.effective_from
+       limit ${HOME_WINDOW_LIMIT}`),
+    db.execute<{
+      kind: string
+      reason: string
+      recordedAt: string
+      name: string | null
+      partyId: string | null
+    }>(sql`
+      select c.change_kind as kind, c.reason as reason,
+             to_char(c.recorded_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "recordedAt",
+             p.display_name as name, p.id::text as "partyId"
+        from employment_changes c
+        join worker_employments w on w.id = c.employment_id and w.org_id = c.org_id
+        join parties p on p.id = w.worker_party_id and p.org_id = w.org_id
+       where c.org_id = ${orgId}::uuid
+         ${employmentScope}
+       order by c.recorded_at desc
+       limit ${HOME_RECENT_LIMIT}`),
+    db.execute<{ n: unknown }>(sql`
+      select count(*) as n
+        from parties p
+        join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active
+       where p.org_id = ${orgId}::uuid and p.is_active
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
+         and not exists (
+           select 1 from worker_employments w
+            where w.org_id = p.org_id and w.worker_party_id = p.id
+              ${subsidiaryVisibleFilter(sql`w.employer_subsidiary_id`, authz.allowedSubsidiaryIds)}
+         )`),
+    canReadProcesses
+      ? getOnboardingOverview({ orgId, actorId: authz.user.id }).then((overview) => ({
+          openCount: overview.openProcesses.length,
+          overdue: overview.overdueSteps.map((step) => ({ worker: step.workerName, title: step.title, dueOn: step.dueOn })),
+          upcoming: overview.dueNextSevenDays.map((step) => ({ worker: step.workerName, title: step.title, dueOn: step.dueOn })),
+          panelTitle: t('home.onboarding.title'),
+          openLabel: t('home.onboarding.openLabel'),
+          overdueLabel: t('home.onboarding.overdueLabel'),
+          upcomingLabel: t('home.onboarding.upcomingLabel'),
+          empty: t('home.onboarding.empty'),
+          viewAll: t('home.onboarding.viewAll'),
+          viewAllHref: '/hrm/processes',
+        }))
+      : Promise.resolve(null),
+    loadLeavePanel(authz),
+    loadRecruitingPanel(authz),
+    loadQualificationAttention(authz),
+    hrmGroupTabs(authz, '/hrm'),
+    loadBenefitsPanel(authz),
+  ])
+
+  // Twelve month-end headcounts through the same canonical temporal read,
+  // ending on today. Historical points share one authorized census and one
+  // known-at view, so latency stays constant as the chart grows and the
+  // series still agrees with the grouped hero to the person.
+  const totalByDate = new Map(historicalHeadcount.points.map((point) => [point.effectiveDate, point.total]))
+  totalByDate.set(effectiveDate, headcount.total)
+  const trendData = trendDates.map((date) => {
+    const total = totalByDate.get(date)
+    if (total === undefined) throw new Error(`Headcount series did not resolve ${date}; refusing to render a false zero`)
+    return total
+  })
   const trendLabels = trendDates.map((date) =>
     new Date(`${date}T00:00:00Z`).toLocaleDateString(locale, {
       month: 'short',
       timeZone: 'UTC',
     }),
   )
+  // FTE is stored at four places (numeric(19,4)); the cockpit shows it as a
+  // person-readable figure, at most two decimals in the viewer's locale.
+  const fte = (value: string): string => new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(Number(value))
 
   // The headcount plan rides the same cockpit when the viewer holds the
   // position read grant: open establishments, unfunded filled FTE, and the
@@ -304,13 +408,7 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   // position read service. Without the grant the cockpit shows no
   // positions section at all — never a gated link.
   let positions: HrmPositionsSummary | null = null
-  if (can(authz, 'hrm.position.read')) {
-    const vacancy = await getVacancyAsOf({
-      orgId,
-      actorId: authz.user.id,
-      effectiveDate,
-      knownAt: new Date().toISOString(),
-    })
+  if (vacancy !== null) {
     const openCount = vacancy.positions.filter((row) => row.version.status === 'open').length
     const unassignedDepartment = t('home.vacancy.unassignedDepartment')
     positions = {
@@ -358,24 +456,15 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   // destination here: it is reached from the pending panel below and from
   // the employee drawer, by review. Departments are configured in Company
   // setup and workforce reports live in the Reports module (quick actions).
-  const canReadPositions = can(authz, 'hrm.position.read')
-  const canReadProcesses = can(authz, 'hrm.process.read')
-  const canReadLeave = can(authz, 'hrm.leave.read')
-
   // Pending change requests through the existing service (newest first,
   // per-row scope inside). A mixed-scope actor is refused rather than
   // shown a partial queue: the refusal renders as data beside the hero,
   // never a 500 and never a silent subset.
-  let pendingRefusal: string | null = null
+  const pendingRefusal = queueLoad.refusal
   let pendingCount = 0
   let pending: PendingRequestItem[] = []
-  try {
-    const queueRows = await listChangeRequests({
-      orgId,
-      actorId: authz.user.id,
-      limit: HOME_QUEUE_LIMIT,
-    })
-    const awaiting = queueRows.filter((row) => row.status === 'pending_approval')
+  if (pendingRefusal === null) {
+    const awaiting = queueLoad.rows.filter((row) => row.status === 'pending_approval')
     pendingCount = awaiting.length
     const shown = awaiting.slice(0, HOME_PENDING_SHOWN)
     const { workerByEmployment } = await loadQueueLabels(orgId, [...new Set(shown.map((row) => row.employmentId))], [])
@@ -399,12 +488,6 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
         effectiveLabel: from === null ? t('queue.notAvailable') : `${from} → ${to ?? present}`,
       }
     })
-  } catch (error) {
-    if (error instanceof HrmAuthorizationError || error instanceof HrmChangeRequestError) {
-      pendingRefusal = (error as Error).message
-    } else {
-      throw error
-    }
   }
 
   // Starts and ends in the next 30 days from the live employment versions
@@ -418,32 +501,7 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   // overview down in production on alpha.19.
   // Probation ends are not modeled (versions carry status and the
   // effective window only), and the panel says so instead of implying it.
-  const employmentScope = subsidiaryVisibleFilter(sql`w.employer_subsidiary_id`, authz.allowedSubsidiaryIds)
-  const windowRows = (
-    await db.execute<{
-      employmentId: string
-      name: string | null
-      partyId: string | null
-      status: string
-      from: string
-      to: string | null
-    }>(sql`
-    select w.id::text as "employmentId", p.display_name as name, p.id::text as "partyId",
-           ev.status as status,
-           ev.effective_from::text as "from", ev.effective_to::text as "to"
-      from worker_employment_versions ev
-      join worker_employments w on w.id = ev.employment_id and w.org_id = ev.org_id
-      join parties p on p.id = w.worker_party_id and p.org_id = w.org_id
-     where ev.org_id = ${orgId}::uuid
-       and ev.recorded_until is null
-       ${employmentScope}
-       and ((ev.effective_from > ${effectiveDate}::date
-             and ev.effective_from <= (${effectiveDate}::date + ${HOME_WINDOW_DAYS}::int))
-         or (ev.effective_to > ${effectiveDate}::date
-             and ev.effective_to <= (${effectiveDate}::date + ${HOME_WINDOW_DAYS}::int)))
-     order by ev.effective_from
-     limit ${HOME_WINDOW_LIMIT}`)
-  ).rows
+  const windowRows = windowResult.rows
   const upcomingTruncated = windowRows.length >= HOME_WINDOW_LIMIT
   const starts: UpcomingChangeItem[] = []
   const ends: UpcomingChangeItem[] = []
@@ -465,25 +523,7 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   // Recent employment changes: the last recorded aggregate change events
   // with their reasons — the same clearly-scoped shape (org predicate,
   // employer-scope filter, newest first, bounded).
-  const changeRows = (
-    await db.execute<{
-      kind: string
-      reason: string
-      recordedAt: string
-      name: string | null
-      partyId: string | null
-    }>(sql`
-    select c.change_kind as kind, c.reason as reason,
-           to_char(c.recorded_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "recordedAt",
-           p.display_name as name, p.id::text as "partyId"
-      from employment_changes c
-      join worker_employments w on w.id = c.employment_id and w.org_id = c.org_id
-      join parties p on p.id = w.worker_party_id and p.org_id = w.org_id
-     where c.org_id = ${orgId}::uuid
-       ${employmentScope}
-     order by c.recorded_at desc
-     limit ${HOME_RECENT_LIMIT}`)
-  ).rows
+  const changeRows = changeResult.rows
   const recent: RecentChangeItem[] = changeRows.map((row) => ({
     name: row.name,
     partyId: row.partyId,
@@ -498,19 +538,7 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   // employer scope, so a restricted viewer never counts outside their
   // lens. The sentence names what the number means and headcount's
   // exclusion; the link opens the migration article.
-  const unmigratedRows = (
-    await db.execute<{ n: unknown }>(sql`
-    select count(*) as n
-      from parties p
-      join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active
-     where p.org_id = ${orgId}::uuid and p.is_active
-       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
-       and not exists (
-         select 1 from worker_employments w
-          where w.org_id = p.org_id and w.worker_party_id = p.id
-            ${subsidiaryVisibleFilter(sql`w.employer_subsidiary_id`, authz.allowedSubsidiaryIds)}
-       )`)
-  ).rows
+  const unmigratedRows = unmigratedResult.rows
   const unmigrated = Number(unmigratedRows[0]?.n ?? 0)
 
   // Quick actions, each gated by the permission its target enforces: the
@@ -518,7 +546,6 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   // propose entry point, self-service leave, and the two surfaces that live
   // in other modules on purpose (departments in Company setup, workforce
   // reports in the Reports module — never a second page of either here).
-  const canManageHrm = can(authz, 'hrm.employment.manage')
   const actions: DirectoryItem[] = []
   if (canManageHrm) {
     actions.push({
@@ -547,38 +574,9 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
     })
   }
 
-  // The onboarding panel is additive: employment.read viewers without
-  // process.read keep their cockpit, and the panel resolves through the
-  // canonical process read service — never a direct table read.
-  const onboarding = can(authz, 'hrm.process.read')
-    ? await getOnboardingOverview({ orgId, actorId: authz.user.id }).then((overview) => ({
-        openCount: overview.openProcesses.length,
-        overdue: overview.overdueSteps.map((step) => ({
-          worker: step.workerName,
-          title: step.title,
-          dueOn: step.dueOn,
-        })),
-        upcoming: overview.dueNextSevenDays.map((step) => ({
-          worker: step.workerName,
-          title: step.title,
-          dueOn: step.dueOn,
-        })),
-        panelTitle: t('home.onboarding.title'),
-        openLabel: t('home.onboarding.openLabel'),
-        overdueLabel: t('home.onboarding.overdueLabel'),
-        upcomingLabel: t('home.onboarding.upcomingLabel'),
-        empty: t('home.onboarding.empty'),
-        viewAll: t('home.onboarding.viewAll'),
-        viewAllHref: '/hrm/processes',
-      }))
-    : null
-
-  const leavePanel = await loadLeavePanel(authz)
-  const recruiting = await loadRecruitingPanel(authz)
-  // HR-14 begin: expiring and expired certifications join the attention
-  // list — null without the grant or while the switch is off.
-  const qualificationAttention = await loadQualificationAttention(authz)
-  // HR-14 end
+  // Independent onboarding, leave, recruiting, and qualification reads were
+  // resolved in the concurrent cockpit wave above. Their null values still
+  // mean the viewer lacks the corresponding grant or subordinate feature.
   const leavePending = leavePanel?.pendingCount ?? 0
   const overdueSteps = onboarding?.overdue.length ?? 0
   const openPositions = positions ? Number(positions.openPositionsValue) : 0
@@ -715,7 +713,7 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   return {
     title: t('home.title'),
     description: t('home.description'),
-    tabs: await hrmGroupTabs(authz, '/hrm'),
+    tabs,
     multiSubsidiary,
     canCreateEmployee: can(authz, 'parties.manage'),
     canProposeChange: canManageHrm,
@@ -800,7 +798,7 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
     recruiting,
     // Benefits panel: open windows, pending approvals, elections missing
     // inputs for the current month. Null without the benefits grant.
-    benefitsPanel: await loadBenefitsPanel(authz),
+    benefitsPanel,
   }
 }
 

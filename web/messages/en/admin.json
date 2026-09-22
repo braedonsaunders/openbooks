@@ -2236,6 +2236,8 @@
         "title": "Item Rate Books",
         "description": "Customer, project, and organization rate books used for equipment and other item charges."
       },
+      "price-levels": { "title": "Price Levels", "singularTitle": "Price Level", "description": "Reusable retail, wholesale, partner, cost-plus, and markup/discount pricing levels." },
+      "customer-price-level-assignments": { "title": "Customer Price Levels", "singularTitle": "Customer Price Level", "description": "Effective-dated default price levels assigned to customers." },
       "item-rate-book-assignments": {
         "title": "Rate Book Assignments",
         "description": "Choose which effective-dated rate book applies to a customer or project."
@@ -2615,6 +2617,7 @@
       "compoundOnPrevious": "Compound on previous components",
       "roundingScale": "Tax rounding decimals",
       "isActive": "Active",
+      "pricingMethod": "Pricing method", "percentage": "Percentage", "costBasis": "Cost basis", "isBase": "Base level", "priceLevelId": "Price level",
       "isPrimary": "Primary book",
       "country": "Country",
       "region": "Region",
@@ -3064,6 +3067,8 @@
       "aiRailsReviewMonths": "Ledger review cadence in months (1–36); overdue capabilities nudge the setup admins' inbox."
     },
     "options": {
+      "priceLevelMethod": { "explicit": "Explicit matrix prices", "markupDiscount": "Markup / discount", "costPlus": "Cost plus" },
+      "priceCostBasis": { "itemCost": "Item cost", "standardCost": "Standard inventory cost", "averageCost": "Average inventory cost" },
       "payFrequency": {
         "weekly": "Weekly",
         "biweekly": "Biweekly",

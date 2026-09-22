@@ -2140,6 +2140,8 @@
         "title": "Grilles tarifaires des articles",
         "description": "Grilles par client, projet et organisation pour l’équipement et les autres frais d’article."
       },
+      "price-levels": { "title": "Niveaux de prix", "singularTitle": "Niveau de prix", "description": "Niveaux réutilisables détail, gros, partenaire et fondés sur le coût." },
+      "customer-price-level-assignments": { "title": "Niveaux tarifaires client", "singularTitle": "Niveau tarifaire client", "description": "Niveaux par défaut datés attribués aux clients." },
       "item-rate-book-assignments": {
         "title": "Affectations des grilles tarifaires",
         "description": "Choisissez la grille datée applicable à un client ou à un projet."
@@ -2564,6 +2566,7 @@
       "compoundOnPrevious": "Composer sur les éléments précédents",
       "roundingScale": "Décimales d’arrondi fiscal",
       "isActive": "Active",
+      "pricingMethod": "Méthode tarifaire", "percentage": "Pourcentage", "costBasis": "Base de coût", "isBase": "Niveau de base", "priceLevelId": "Niveau de prix",
       "isPrimary": "Livre principal",
       "country": "Country",
       "region": "Region",
@@ -3019,6 +3022,8 @@
       "aiRailsReviewMonths": "Cadence en mois (1–36) ; les capacités en retard notifient la boîte setup."
     },
     "options": {
+      "priceLevelMethod": { "explicit": "Prix matriciels explicites", "markupDiscount": "Majoration / remise", "costPlus": "Coût majoré" },
+      "priceCostBasis": { "itemCost": "Coût de l’article", "standardCost": "Coût de stock standard", "averageCost": "Coût de stock moyen" },
       "timeClassification": {
         "regular": "Heures normales",
         "overtime": "Heures supplémentaires",

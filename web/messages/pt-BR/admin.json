@@ -2236,6 +2236,8 @@
         "title": "Tabelas de tarifas de itens",
         "description": "Tabelas por cliente, projeto e organização para equipamentos e outras cobranças de itens."
       },
+      "price-levels": { "title": "Níveis de preço", "singularTitle": "Nível de preço", "description": "Níveis reutilizáveis de varejo, atacado, parceiro e baseados em custo." },
+      "customer-price-level-assignments": { "title": "Níveis de clientes", "singularTitle": "Nível de cliente", "description": "Níveis padrão com vigência atribuídos a clientes." },
       "item-rate-book-assignments": {
         "title": "Atribuições de tabelas de tarifas",
         "description": "Escolha a tabela com vigência aplicável a um cliente ou projeto."
@@ -2615,6 +2617,7 @@
       "compoundOnPrevious": "Compor sobre componentes anteriores",
       "roundingScale": "Casas de arredondamento do imposto",
       "isActive": "Ativo",
+      "pricingMethod": "Método de preço", "percentage": "Percentual", "costBasis": "Base de custo", "isBase": "Nível base", "priceLevelId": "Nível de preço",
       "isPrimary": "Livro principal",
       "country": "País",
       "region": "Região",
@@ -3064,6 +3067,8 @@
       "aiRailsReviewMonths": "Cadência em meses (1–36); capacidades vencidas avisam o inbox de setup."
     },
     "options": {
+      "priceLevelMethod": { "explicit": "Preços matriciais explícitos", "markupDiscount": "Acréscimo / desconto", "costPlus": "Custo mais margem" },
+      "priceCostBasis": { "itemCost": "Custo do item", "standardCost": "Custo padrão de estoque", "averageCost": "Custo médio de estoque" },
       "payFrequency": {
         "weekly": "Semanal",
         "biweekly": "Quinzenal",

@@ -7,6 +7,7 @@ import {
   loadEmploymentChangeRequests,
   loadEmploymentEpisodes,
   loadHeadcountAsOf,
+  loadHeadcountTotalsAsOf,
 } from "./employment-read.ts";
 import { HrmAuthorizationError } from "./authorization.ts";
 import type { SqlExecutor } from "../platform/db.ts";
@@ -358,6 +359,60 @@ test("headcount resolves through temporal primitives and groups by subsidiary an
     departmentName: "Sales",
     headcount: 1,
   }]);
+});
+
+test("headcount series resolves every date from one batched temporal census", async () => {
+  const state = emptyState();
+  const actor = seedReader(state);
+  const first = seedEmployment(state, { workerPartyId: randomUUID() });
+  const second = seedEmployment(state, { workerPartyId: randomUUID() });
+  state.versions.set(first.id, [activeVersion()]);
+  state.versions.set(second.id, [activeVersion({ effectiveFrom: "2026-05-01" })]);
+
+  const statements: string[] = [];
+  const base = fakeExec(state, ORG);
+  const trackingExec: SqlExecutor = {
+    execute: (async (query: unknown) => {
+      statements.push(sqlText(query));
+      return base.execute(query as never);
+    }) as SqlExecutor["execute"],
+  };
+  const dto = await loadHeadcountTotalsAsOf(trackingExec, {
+    orgId: ORG,
+    actorId: actor,
+    effectiveDates: ["2026-03-31", "2026-06-15"],
+    knownAt: ASOF.knownAt,
+  });
+
+  assert.deepEqual(dto.points, [
+    { effectiveDate: "2026-03-31", total: 1 },
+    { effectiveDate: "2026-06-15", total: 2 },
+  ]);
+  assert.equal(statements.filter((text) => /from worker_employment_versions/i.test(text)).length, 1);
+  assert.equal(statements.filter((text) => /from employment_assignment_versions/i.test(text)).length, 1);
+});
+
+test("headcount series refuses an unbounded date list before reading", async () => {
+  const state = emptyState();
+  const actor = seedReader(state);
+  let reads = 0;
+  const base = fakeExec(state, ORG);
+  const trackingExec: SqlExecutor = {
+    execute: (async (query: unknown) => {
+      reads += 1;
+      return base.execute(query as never);
+    }) as SqlExecutor["execute"],
+  };
+  await assert.rejects(
+    loadHeadcountTotalsAsOf(trackingExec, {
+      orgId: ORG,
+      actorId: actor,
+      effectiveDates: Array.from({ length: 25 }, () => ASOF.effectiveDate),
+      knownAt: ASOF.knownAt,
+    }),
+    /at most 24 dates/,
+  );
+  assert.equal(reads, 0);
 });
 
 test("headcount counts on-leave but not offered, suspended, or terminated revisions", async () => {

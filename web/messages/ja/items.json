@@ -76,6 +76,30 @@
     "selectAccount": "勘定を選択…",
     "showOnTimesheet": "タイムシートに表示"
   },
+  "pricingModes": {
+    "title": "この品目の価格設定方法を選択",
+    "description": "価格レイヤーは併用できます。基本価格から始め、必要なマトリクス、顧客条件、契約だけを追加します。",
+    "simpleTitle": "シンプルな価格と原価",
+    "recommended": "推奨",
+    "simpleDescription": "顧客価格と社内原価を品目に直接1つずつ設定します。",
+    "simpleDetail": "安定した単価の一般的な商品やサービスに最適です。詳細レートが一致しない場合のフォールバックにもなります。",
+    "matrixTitle": "価格マトリクスと数量割引", "matrixDescription": "通貨、価格レベル、数量別価格を発効日付きマトリクスで設定します。", "matrixDetail": "プロジェクトなしで行数量または品目合計数量を計算します。",
+    "customerTitle": "顧客・セグメント価格", "customerDescription": "顧客固有価格または再利用可能な価格レベルを割り当てます。", "customerDetail": "顧客品目価格は割当レベルと基本価格より優先されます。",
+    "costTitle": "原価基準価格", "costDescription": "統制された原価加算またはマークアップ・割引レベルを作成します。", "costDetail": "生成値は保存・監査され、履歴を黙って再計算しません。",
+    "rulesTitle": "価格ルールとプロモーション", "rulesDescription": "キャンペーンや期間限定提案に発効期間と対象マトリクスを使います。", "rulesDetail": "決定性を保つため重複する有効ルールを拒否します。",
+    "contractTitle": "プロジェクト・契約レートブック", "contractDescription": "労働、設備、契約単位パッケージを顧客またはプロジェクト別に設定します。", "contractDetail": "パッケージ分解と利用日基準の契約価格に使用します。",
+    "subscriptionTitle": "サブスクリプション・利用量価格", "subscriptionDescription": "定期プラン、数量、契約版、変更を設定します。", "subscriptionDetail": "サブスクリプション画面を開きます。", "subscriptionRequired": "定期価格にはサブスクリプション請求を有効にします。",
+    "saveFirst": "発効日付きレートを設定する前に品目を保存してください。",
+    "featureRequired": "レートブックと範囲別価格を使用するにはプロジェクトを有効にしてください。",
+    "back": "価格設定方式を変更"
+  },
+  "pricingMatrix": {
+    "title": "価格マトリクス", "description": "通貨、価格レベル、顧客別の発効日付き価格と数量区分。", "addSchedule": "価格スケジュールを追加", "minimumQuantity": "最低数量", "unitPrice": "単価", "scope": "価格範囲",
+    "scopes": { "base": "基本価格", "level": "価格レベル", "customer": "特定顧客" },
+    "priceLevel": "価格レベル", "customer": "顧客", "selectCustomer": "顧客を選択…", "currency": "通貨", "quantityBasis": "数量基準",
+    "quantityBases": { "line": "行数量", "overallItem": "この品目の合計数量" },
+    "effectiveFrom": "発効日", "effectiveTo": "終了日", "breaksTitle": "数量区分", "breaksDescription": "到達した最大の最低数量が全数量の単価になります。", "addBreak": "数量区分を追加", "saveFailed": "価格スケジュールを保存できませんでした。", "loadFailed": "価格スケジュールを読み込めませんでした。", "saved": "価格スケジュールを保存しました", "confirmDelete": "この価格スケジュールを削除しますか？", "deleteFailed": "価格スケジュールを削除できませんでした。", "deleted": "価格スケジュールを削除しました", "customerTarget": "顧客 · {customer}", "baseTarget": "基本価格", "empty": "この品目にマトリクス価格はありません。", "target": "対象", "effective": "有効期間", "breaks": "数量価格"
+  },
   "rates": {
     "title": "高度なレート価格設定",
     "description": "日付、適用範囲、パッケージ別の任意価格です。通常品目はレート表なしで上記の価格と原価を使用します。",

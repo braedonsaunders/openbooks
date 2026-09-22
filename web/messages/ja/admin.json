@@ -2262,6 +2262,8 @@
         "title": "品目レート表",
         "description": "設備およびその他の品目料金に使用する顧客別、プロジェクト別、組織別のレート表です。"
       },
+      "price-levels": { "title": "価格レベル", "singularTitle": "価格レベル", "description": "小売、卸売、パートナー、原価基準の再利用可能な価格レベル。" },
+      "customer-price-level-assignments": { "title": "顧客価格レベル", "singularTitle": "顧客価格レベル", "description": "顧客に割り当てる発効日付き既定価格レベル。" },
       "item-rate-book-assignments": {
         "title": "レート表の割り当て",
         "description": "顧客またはプロジェクトに適用する発効日付きレート表を選択します。"
@@ -2677,6 +2679,7 @@
       "compoundOnPrevious": "前の税要素に複利適用",
       "roundingScale": "税額の丸め桁数",
       "isActive": "有効",
+      "pricingMethod": "価格方式", "percentage": "割合", "costBasis": "原価基準", "isBase": "基本レベル", "priceLevelId": "価格レベル",
       "isPrimary": "主要帳簿",
       "country": "国",
       "region": "地域",
@@ -3132,6 +3135,8 @@
       "aiRailsReviewMonths": "レビュー周期（月、1〜36）。期限切れはsetupの受信箱に通知。"
     },
     "options": {
+      "priceLevelMethod": { "explicit": "明示マトリクス価格", "markupDiscount": "マークアップ / 割引", "costPlus": "原価加算" },
+      "priceCostBasis": { "itemCost": "品目原価", "standardCost": "標準在庫原価", "averageCost": "平均在庫原価" },
       "timeClassification": {
         "regular": "通常",
         "overtime": "時間外",

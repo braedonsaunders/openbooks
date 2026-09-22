@@ -1474,6 +1474,66 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     ],
   },
   {
+    key: 'price-levels',
+    table: 'price_levels',
+    actorCols: true,
+    groupKey: 'billing',
+    iconKey: 'tag',
+    orgScoped: true,
+    naturalKey: 'code',
+    hasActive: true,
+    orderBy: 'is_base desc, name',
+    columns: [
+      { key: 'code', kind: 'code' },
+      { key: 'name', kind: 'text' },
+      { key: 'pricingMethod', kind: 'text' },
+      { key: 'percentage', kind: 'percent' },
+      { key: 'costBasis', kind: 'text' },
+      { key: 'isBase', kind: 'boolean' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'code', kind: 'text', required: true, lockedOnEdit: true },
+      { key: 'name', kind: 'text', required: true },
+      { key: 'pricingMethod', kind: 'select', required: true, defaultValue: 'explicit', options: [
+        { value: 'explicit', labelKey: 'options.priceLevelMethod.explicit' },
+        { value: 'markup_discount', labelKey: 'options.priceLevelMethod.markupDiscount' },
+        { value: 'cost_plus', labelKey: 'options.priceLevelMethod.costPlus' },
+      ] },
+      { key: 'percentage', kind: 'percent' },
+      { key: 'costBasis', kind: 'select', options: [
+        { value: 'item_cost', labelKey: 'options.priceCostBasis.itemCost' },
+        { value: 'standard_cost', labelKey: 'options.priceCostBasis.standardCost' },
+        { value: 'average_cost', labelKey: 'options.priceCostBasis.averageCost' },
+      ] },
+      { key: 'isActive', kind: 'boolean', defaultValue: true },
+    ],
+  },
+  {
+    key: 'customer-price-level-assignments',
+    table: 'customer_price_level_assignments',
+    actorCols: true,
+    groupKey: 'billing',
+    iconKey: 'tag',
+    orgScoped: true,
+    hasActive: true,
+    orderBy: 'effective_from desc',
+    columns: [
+      { key: 'customerId', kind: 'ref', ref: 'customers' },
+      { key: 'priceLevelId', kind: 'ref', ref: 'price-levels' },
+      { key: 'effectiveFrom', kind: 'date' },
+      { key: 'effectiveTo', kind: 'date' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'customerId', kind: 'ref', ref: 'customers', required: true },
+      { key: 'priceLevelId', kind: 'ref', ref: 'price-levels', required: true },
+      { key: 'effectiveFrom', kind: 'date', required: true },
+      { key: 'effectiveTo', kind: 'date' },
+      { key: 'isActive', kind: 'boolean', defaultValue: true },
+    ],
+  },
+  {
     key: 'item-rate-books',
     table: 'item_rate_books',
     rehomed: true, // lives as a tab on the Items catalog module
@@ -2966,4 +3026,3 @@ export function setupEntitiesByGroup(): Map<string, SetupEntity[]> {
 export function toSnake(key: string): string {
   return key.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)
 }
-

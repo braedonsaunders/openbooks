@@ -157,6 +157,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
   minRows = 1,
   footer,
   addLabel,
+  addPlacement = 'bottom',
   formatAmount,
   distribution,
 }: {
@@ -168,6 +169,8 @@ export function LineGrid<Row extends Record<string, unknown>>({
   minRows?: number
   footer?: React.ReactNode
   addLabel?: string
+  /** Put the primary add action before long configuration grids. */
+  addPlacement?: 'top' | 'bottom'
   /**
    * Currency-aware read-only presentation supplied by the owning transaction.
    * Editable cells intentionally retain the exact ledger string.
@@ -341,6 +344,13 @@ export function LineGrid<Row extends Record<string, unknown>>({
 
   return (
     <div>
+      {!readOnly && addPlacement === 'top' ? (
+        <div className="mb-2 flex justify-end">
+          <Button type="button" variant="outline" size="sm" onClick={() => insertRow(rows.length)}>
+            <Plus size={14} /> {addLabel ?? t('addLine')}
+          </Button>
+        </div>
+      ) : null}
       <div
         ref={containerRef}
         className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
@@ -421,7 +431,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
       <ContextMenu open={distMenu.open} position={distMenu.position} items={distMenuItems} onClose={distMenu.close} />
 
       <div className="mt-2 flex items-center justify-between gap-3">
-        {!readOnly ? (
+        {!readOnly && addPlacement === 'bottom' ? (
           <Button type="button" variant="outline" size="sm" onClick={() => insertRow(rows.length)}>
             <Plus size={14} /> {addLabel ?? t('addLine')}
           </Button>
