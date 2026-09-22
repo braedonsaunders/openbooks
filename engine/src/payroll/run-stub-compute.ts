@@ -199,6 +199,15 @@ export async function calculateStub(
   // mid-period still applies. A fixed_amount assignment pays its full period
   // value — the assignment model defines no pro-ration — while per_hour and
   // percent_of_gross scale with the period's own hours and earnings.
+  //
+  // Scoped to this stub's employment: the 0250 overlap guard keys on
+  // coalesce(employment_id, employee_party_id), so a rehire's stale row under
+  // the old employment and the current row under the new one may both be
+  // active — and matching on the party alone would sum both into one stub, a
+  // double pay. Rows stamped to another employment are that employment's to
+  // pay; unstamped (pre-stamping legacy) rows still apply, since no backfill
+  // ever attributed them.
+  const rosterEmploymentId = emp.employment_id ?? null;
   const assigned = (await tx.execute<Record<string, unknown>>(sql`
     select a.value as override, c.*
       from employee_pay_components a
@@ -207,6 +216,10 @@ export async function calculateStub(
        and a.is_active and c.is_active and c.system_key is null
        and (c.country is null or c.country = ${country})
        and ${assignmentOverlapsPeriod(sql`a.effective_from`, sql`a.effective_to`, run.period_start!, run.period_end!)}
+
+       and (${rosterEmploymentId}::uuid is null
+            or a.employment_id is null
+            or a.employment_id = ${rosterEmploymentId}::uuid)
      order by c.sequence
   `));
 
