@@ -4,14 +4,20 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { generateText, type LanguageModel } from "ai";
+import {
+  connectorUrlRefusal,
+  guardedFetch,
+  type AddressLookup,
+} from "../../app/api/platform/connections/_connector-guard";
 
 /**
  * Config-driven AI client.
  * Provider + API key + models (+ base URL) are passed in per call — resolved
  * from the org's encrypted settings (see ./ai-config.ts), NOT read from the
- * environment. Requests use a bounded fetch (OpenBooks is self-hosted; the base URL is set by an org
- * admin, not an untrusted tenant) — the URL is still validated to be public
- * HTTPS with no obviously-private host.
+ * environment. Requests use a bounded fetch — and operator-supplied
+ * endpoints additionally resolve DNS at save time and pin every request to
+ * a verified public address (see validateAiBaseUrlLive / guardedAiFetch):
+ * a name that answers private/loopback/link-local never receives the key.
  */
 
 // Tool-heavy financial runs can leave a large evidence packet for the final
@@ -232,6 +238,50 @@ export function validateAiBaseUrl(
 }
 
 /**
+ * Live validation of a persisted AI endpoint override: the shape check
+ * above, plus DNS resolution requiring every answer to be public unicast.
+ * A hostname that resolves to RFC1918/loopback/link-local (or fails to
+ * resolve) is refused before the org's API key ever travels there. The
+ * shared connector guard does the resolving — one guard, not two.
+ */
+export async function validateAiBaseUrlLive(
+  provider: AiProvider,
+  rawBaseUrl: string | null | undefined,
+  lookupAddresses?: AddressLookup,
+): Promise<string | null> {
+  const canonical = validateAiBaseUrl(provider, rawBaseUrl);
+  if (!canonical) return null;
+  const refusal = await connectorUrlRefusal(canonical, lookupAddresses);
+  if (refusal) {
+    throw new Error("The AI base URL must point at a public host.");
+  }
+  return canonical;
+}
+
+/** True when the effective endpoint is operator-supplied (custom provider
+ *  or a base-URL override): responses and errors from it are untrusted. */
+export function isOrgControlledEndpoint(config: AiConfig | null | undefined): boolean {
+  if (!config) return true;
+  const spec = SPEC_BY_VALUE[config.provider];
+  if (!spec) return true;
+  if (spec.kind !== "openai-compatible") return false;
+  return spec.requiresBaseUrl || Boolean(config.baseUrl?.trim());
+}
+
+/**
+ * Operator-facing failure text. Errors from operator-supplied endpoints
+ * (and their SDK wrappers) can embed the endpoint's raw response body, so
+ * they are replaced with a generic remedy naming what to check; built-in
+ * provider errors keep their message for diagnosis.
+ */
+export function sanitizeAiError(config: AiConfig | null | undefined, error: unknown): string {
+  if (isOrgControlledEndpoint(config)) {
+    return "Request failed — check the base URL, model id and API key.";
+  }
+  return error instanceof Error ? error.message.slice(0, 180) : "Request failed.";
+}
+
+/**
  * Bounded fetch for org-configured OpenAI-compatible endpoints. Refuses
  * redirects: these requests bear provider API keys, which must never cross an
  * HTTP redirect boundary to a host the Location names.
@@ -241,6 +291,20 @@ export const boundedAiFetch: typeof globalThis.fetch = async (input, init) => {
   const timeout = AbortSignal.timeout(AI_REQUEST_TIMEOUT_MS);
   const signal = request.signal ? AbortSignal.any([request.signal, timeout]) : timeout;
   return fetch(new Request(request, { signal, redirect: "error" }));
+};
+
+/**
+ * Bounded fetch for operator-supplied endpoints: the same timeout and
+ * redirect refusal as above, but every request additionally re-resolves
+ * the host, requires public unicast, and pins the socket to a checked
+ * address — a saved base URL that later rebinds to an internal address
+ * fails closed instead of receiving the org's API key.
+ */
+export const guardedAiFetch: typeof globalThis.fetch = async (input, init) => {
+  const request = new Request(input, init);
+  const timeout = AbortSignal.timeout(AI_REQUEST_TIMEOUT_MS);
+  const signal = request.signal ? AbortSignal.any([request.signal, timeout]) : timeout;
+  return guardedFetch(new Request(request, { signal }));
 };
 
 export function defaultModel(provider: AiProvider, tier: ModelTier): string {
@@ -283,7 +347,7 @@ export function getModel(
         name: spec.value,
         apiKey: config.apiKey,
         baseURL,
-        fetch: boundedAiFetch,
+        fetch: isOrgControlledEndpoint(config) ? guardedAiFetch : boundedAiFetch,
       })(modelId);
     }
   }
@@ -311,6 +375,6 @@ export async function pingModel(
     const { text } = await generateText({ model, prompt: "Reply with the single word: ok" });
     return { ok: true, message: `Connected — the model replied “${text.trim().slice(0, 24)}”.` };
   } catch (e) {
-    return { ok: false, message: e instanceof Error ? e.message.slice(0, 180) : "Request failed." };
+    return { ok: false, message: sanitizeAiError(config, e) };
   }
 }

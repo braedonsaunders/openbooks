@@ -1,5 +1,10 @@
 import "server-only";
 import { providerSpec, validateAiBaseUrl, type AiConfig } from "./client";
+import {
+  connectorUrlRefusal,
+  guardedFetch,
+  type AddressLookup,
+} from "../../app/api/platform/connections/_connector-guard";
 
 /**
  * Model discovery queries each provider's "list models" endpoint so the settings UI can offer dynamic
@@ -23,13 +28,23 @@ function dedupeSort(items: ModelListItem[]): ModelListItem[] {
   return [...map.values()].sort((a, b) => a.id.localeCompare(b.id));
 }
 
-async function fetchJson(url: string, headers: Record<string, string>): Promise<unknown> {
+/**
+ * Provider-endpoint fetch. `transport` is injectable so tests can prove the
+ * properties below; the openai-compatible branch passes the SSRF-guarded
+ * fetch. Provider keys ride Authorization headers or a ?key= query
+ * parameter, so redirects are refused rather than followed — and failures
+ * name the status only, never the response body of an untrusted host.
+ */
+export async function fetchJson(
+  url: string,
+  headers: Record<string, string>,
+  transport: typeof fetch = fetch,
+): Promise<unknown> {
   // Provider keys ride Authorization headers or a ?key= query parameter; a
   // followed redirect would replay them to whichever host the Location names.
-  const res = await fetch(url, { headers, signal: AbortSignal.timeout(15_000), redirect: "error" });
+  const res = await transport(url, { headers, signal: AbortSignal.timeout(15_000), redirect: "error" });
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`${res.status} ${res.statusText}${body ? ` — ${body.slice(0, 160)}` : ""}`);
+    throw new Error(`${res.status} ${res.statusText}`);
   }
   return res.json();
 }
@@ -79,11 +94,16 @@ export async function listModelsCached(config: AiConfig, force = false): Promise
   return items;
 }
 
+export type ListModelsOptions = {
+  /** DNS override so tests can prove the refusal without owning public DNS. */
+  lookup?: AddressLookup;
+};
+
 /**
  * Fetch the available model ids for a provider config. Throws on HTTP / auth
  * errors so the caller can surface the provider's message.
  */
-export async function listModels(config: AiConfig): Promise<ModelListItem[]> {
+export async function listModels(config: AiConfig, opts: ListModelsOptions = {}): Promise<ModelListItem[]> {
   const spec = providerSpec(config.provider);
   const key = config.apiKey;
 
@@ -131,9 +151,15 @@ export async function listModels(config: AiConfig): Promise<ModelListItem[]> {
     case "openai-compatible": {
       const baseURL = validateAiBaseUrl(config.provider, config.baseUrl) || spec.baseUrl;
       if (!baseURL) throw new Error("A base URL is required to list models.");
+      // The API key leaves only after the resolved base URL proves public —
+      // and the request itself travels over the pinned guarded fetch, so a
+      // base URL that rebinds after this check still fails closed.
+      const refusal = await connectorUrlRefusal(baseURL, opts.lookup);
+      if (refusal) throw new Error("The AI base URL must point at a public host.");
+      const transport: typeof fetch = (input, init) => guardedFetch(input, init, { lookup: opts.lookup });
       const json = await fetchJson(`${trimSlash(baseURL)}/models`, {
         Authorization: `Bearer ${key}`,
-      });
+      }, transport);
       const root = json as Record<string, unknown>;
       const data = asArray(root?.data).length ? asArray(root?.data) : asArray(root?.models);
       return dedupeSort(
