@@ -471,6 +471,10 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // merge would have orphaned them (0241, allocated by the integrator;
     // 0238 is a HOLE reserved for the payroll giro renumber, not free).
     "0241_hrm_party_reference_integrity.sql",
+    "0242_sftp_schedule_reference_integrity.sql",
+    "0243_comp_cycle_budget_evidence.sql",
+    "0244_item_pricing_hierarchy.sql",
+    "0245_price_level_guard_sandbox_wipe.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
