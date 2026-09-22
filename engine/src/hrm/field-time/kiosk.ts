@@ -47,6 +47,56 @@ export type KioskRow = {
   lastSeenAt: string | null;
 }
 
+export type KioskWorker = {
+  id: string;
+  name: string;
+};
+
+/**
+ * Active employment for kiosk purposes: the party holds an employment whose
+ * live version (recorded_until is null) is active or on leave. Offered has
+ * not started, suspended is not active, terminated has ended — none of them
+ * clock. Status is the declared lifecycle; effective windows are HR detail
+ * the clock does not second-guess.
+ */
+async function hasActiveEmployment(orgId: string, partyId: string): Promise<boolean> {
+  const row = (await db.execute<{ one: number }>(sql`
+    select 1 as one
+      from worker_employments e
+      join worker_employment_versions v
+        on v.org_id = e.org_id and v.employment_id = e.id and v.recorded_until is null
+     where e.org_id = ${orgId} and e.worker_party_id = ${partyId}
+       and v.status in ('active', 'on_leave')
+     limit 1`)).rows[0];
+  return !!row;
+}
+
+/**
+ * Workers the terminal may offer: active parties with an active employment,
+ * ordered by name. No row cap — the terminal searches this list client-side,
+ * so a cap would silently hide workers past it. Customers, vendors, and
+ * ended employments never appear. Deliberately NOT scoped to the kiosk's
+ * location: assignment-location data may be incomplete, and hiding a worker
+ * from the terminal denies their clock-in.
+ */
+export async function listKioskWorkers(orgId: string): Promise<KioskWorker[]> {
+  return withOrgTransaction(orgId, async () => {
+    return (await db.execute<KioskWorker>(sql`
+      select p.id::text as id, p.display_name as name
+        from parties p
+       where p.org_id = ${orgId} and p.is_active
+         and exists (
+           select 1
+             from worker_employments e
+             join worker_employment_versions v
+               on v.org_id = e.org_id and v.employment_id = e.id and v.recorded_until is null
+            where e.org_id = p.org_id and e.worker_party_id = p.id
+              and v.status in ('active', 'on_leave')
+         )
+       order by p.display_name, p.id`)).rows;
+  });
+}
+
 export async function registerKiosk(input: {
   orgId: string;
   actorUserId: string;
@@ -142,6 +192,14 @@ export async function identifyByPin(input: {
   // writes to the kiosk's org, or under FORCE RLS the lookup resolves
   // nothing and every worker meets pin_not_set.
   return withOrgTransaction(input.kiosk.orgId, async () => {
+    // Employment before PIN: a customer or vendor must meet not_employee,
+    // never a PIN prompt — and a PIN row alone never makes someone a worker.
+    if (!(await hasActiveEmployment(input.kiosk.orgId, input.employeePartyId))) {
+      refuse(
+        "not_employee",
+        "This person has no active employment in this organization — kiosk sign-in is for employees; ask a manager to check the worker's employment",
+      );
+    }
     const row = (await db.execute<{ pin_hash: string; failed_attempts: number; locked_until: string | null }>(sql`
       select pin_hash, failed_attempts, locked_until::text as locked_until
         from worker_clock_pins
@@ -197,6 +255,14 @@ export async function setWorkerPin(input: {
   // hashPin refuses non-numeric PINs by name before anything is stored.
   const pinHash = hashPin(input.pin);
   await withOrgTransaction(input.orgId, async () => {
+    // A PIN row is kiosk authority: never mint one for a non-employee, or
+    // the identify check below would admit a customer or vendor.
+    if (!(await hasActiveEmployment(input.orgId, input.employeePartyId))) {
+      refuse(
+        "not_employee",
+        "Kiosk PINs are for active employees — this person has no active employment in this organization; create the employment before setting a PIN",
+      );
+    }
     const moved = (await db.execute<{ n: number }>(sql`
       update worker_clock_pins
          set pin_hash = ${pinHash}, failed_attempts = 0, locked_until = null, updated_at = now()
