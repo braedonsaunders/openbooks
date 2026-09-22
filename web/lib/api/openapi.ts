@@ -879,6 +879,34 @@ export function buildOpenApiSpec(
       responses: { "200": { description: "Grouped search hits" }, "422": { description: "q missing" } },
     },
   };
+  paths["/api/v1/tax/returns"] = {
+    get: {
+      summary: "List tax return forms",
+      description: "Indirect-tax return forms for this org, with registration status. The same rows the /tax filing screen and list_tax_return_forms read.",
+      tags: ["Tax"],
+      security: [{ BearerAuth: [] }],
+      responses: { "200": { description: "Tax return forms" } },
+    },
+  };
+  paths["/api/v1/tax/returns/{code}"] = {
+    get: {
+      summary: "Compute a tax return",
+      description: "One filing entity's computed return through the same engine as the /tax filing screen and tax_return. Box values are exact decimal strings. Unknown forms, uncovered periods, and unresolvable scopes are 422 refusals.",
+      tags: ["Tax"],
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { name: "code", in: "path", required: true, schema: { type: "string" }, description: "Form code from GET /api/v1/tax/returns, e.g. CA_GST34" },
+        { name: "from", in: "query", required: true, schema: { type: "string", format: "date" } },
+        { name: "to", in: "query", required: true, schema: { type: "string", format: "date" } },
+        { name: "subsidiary", in: "query", schema: { type: "string" }, description: "Filing-entity subsidiary id; repeat or comma-separate. Omit for the org-wide return (full-scope callers only)." },
+        { name: "registration", in: "query", schema: { type: "string", format: "uuid" }, description: "Pin the registration whose number travels on the return." },
+        { name: "presentationCurrency", in: "query", schema: { type: "string", minLength: 3, maxLength: 3 } },
+        { name: "rateType", in: "query", schema: { type: "string" } },
+        { name: "rateDate", in: "query", schema: { type: "string", format: "date" } },
+      ],
+      responses: { "200": { description: "Computed return" }, "422": { description: "Unknown form, uncovered period, or unresolvable scope" } },
+    },
+  };
   paths["/api/v1/reports"] = {
     get: {
       summary: "List report definitions",
