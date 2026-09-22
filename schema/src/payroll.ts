@@ -181,7 +181,11 @@ export const payComponents = pgTable(
     // Tenant pair required by composite child FKs (0218). id is the PK, so
     // 0044 never installed this key as a tenant-coherent parent.
     uniqueIndex("pay_components_org_id_id_unique").on(t.orgId, t.id),
-    uniqueIndex("pay_components_org_code").on(t.orgId, t.code),
+    // Code identity is (org, country, code) — two packs may each declare WCB
+    // (0248). The live DDL is a unique index with NULLS NOT DISTINCT, which
+    // uniqueIndex() cannot express, so the declaration names the columns while
+    // 0248 owns the full definition — do not regenerate it from this alone.
+    uniqueIndex("pay_components_org_country_code").on(t.orgId, t.country, t.code),
     // Component identity is (org, country, system_key, kind) — two packs may
     // each own e.g. income_tax (0189). The live DDL is a PARTIAL unique index
     // with NULLS NOT DISTINCT (WHERE system_key IS NOT NULL): the NULLS NOT
