@@ -12,8 +12,8 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../lib/authz'
-import { AP_KINDS, DOC_KINDS } from "../../../../lib/document-kinds.ts";
-import { accountOptions, dimensionOptions, partyOptions, taxCodeOptions, taxGroupOptions } from "../../../../lib/documents.ts";
+import { AP_KINDS, DOC_KINDS, isDocumentCreateKind } from "../../../../lib/document-kinds.ts";
+import { accountOptions, createDocumentSeed, dimensionOptions, partyOptions, taxCodeOptions, taxGroupOptions } from "../../../../lib/documents.ts";
 import { loadDocument } from "../../../../../engine/src/ledger/document-service.ts";
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { isFeatureEnabled } from '../../../../lib/features'
@@ -43,6 +43,8 @@ export interface ApBillsDrawer {
   remountKey: string
   basePath: string
   payload: unknown
+  /** Unsaved create: the drawer edits a blank payload; Save POSTs the collection. */
+  createMode: boolean
   config: unknown
   parties: unknown
   accounts: unknown
@@ -78,8 +80,6 @@ export interface ApBillsData {
   newItems: { kind: string; label: string }[]
   newBasePath: string
   newTriggerLabel: string
-  newCreatingLabel: string
-  newFailedLabel: string
   drawerOpen: boolean
   drawer: ApBillsDrawer | null
 }
@@ -94,7 +94,6 @@ export async function loadApBills(
     isFeatureEnabled(authz.user.orgId, 'equipment'),
   ])
   const t = await getTranslations('ap')
-  const tCommon = await getTranslations('common')
   const docId = typeof sp.doc === 'string' ? sp.doc : undefined
 
   const newItems = [
@@ -104,7 +103,7 @@ export async function loadApBills(
 
   // Drawer + form layout resolve only when a flyout is open.
   // Org guard: never render another tenant's document in the drawer.
-  const loadedDoc = docId ? await loadDocument(docId, authz.user.orgId) : null
+  const loadedDoc = docId && docId !== 'new' ? await loadDocument(docId, authz.user.orgId) : null
   const openDoc =
     loadedDoc &&
     (loadedDoc.doc as Record<string, unknown>).org_id === authz.user.orgId &&
@@ -113,18 +112,29 @@ export async function loadApBills(
       ? loadedDoc
       : null
   const openKind = (openDoc?.doc as Record<string, unknown> | undefined)?.kind as string | undefined
-  const drawerOpen = !!(openDoc && openKind && (AP_KINDS as readonly string[]).includes(openKind))
+  // Unsaved create: `?doc=new&kind=` renders the shared drawer in createMode
+  // over a blank in-memory payload. The kind must belong to this page, the
+  // caller must hold its create permission, and nothing is read or written
+  // for an id — the document exists only after an explicit Save.
+  const createKind = typeof sp.kind === 'string' && (AP_KINDS as readonly string[]).includes(sp.kind)
+    && isDocumentCreateKind(sp.kind) ? sp.kind : undefined
+  const isCreate = docId === 'new' && !!createKind && canCreate
+  const drawerKind = openKind ?? createKind
+  const drawerOpen = !!(openDoc && openKind && (AP_KINDS as readonly string[]).includes(openKind)) || isCreate
   const [headerDefs, lineDefs] = drawerOpen
     ? await Promise.all([
-        loadFieldDefs('documents', openKind!),
-        loadFieldDefs('document_lines', openKind!),
+        loadFieldDefs('documents', drawerKind!),
+        loadFieldDefs('document_lines', drawerKind!),
       ])
     : [[], []]
+  // The create seed carries no lines, so the keep-existing-items clause
+  // matches nothing — the same items list a blank draft would see.
+  const existingDocId = openDoc ? docId : null
   const [pickers, resolvedForm] = await Promise.all([
     drawerOpen
       ? Promise.all([
           partyOptions('vendor'),
-          accountOptions(DOC_KINDS[openKind as 'vendor_bill']!),
+          accountOptions(DOC_KINDS[drawerKind as 'vendor_bill']!),
           taxCodeOptions(),
           taxGroupOptions(),
           dimensionOptions(),
@@ -138,7 +148,7 @@ export async function loadApBills(
                  ${equipmentEnabled ? sql`` : sql`and kind <> 'equipment_charge'`}
                  or id in (
                    select item_id from document_lines
-                    where org_id = ${authz.user.orgId} and document_id = ${docId} and item_id is not null
+                    where org_id = ${authz.user.orgId} and document_id = ${existingDocId} and item_id is not null
                  )
                )
              order by coalesce(code, name), name limit 2000`,
@@ -158,7 +168,7 @@ export async function loadApBills(
       ? resolveFormLayout({
           orgId: authz.user.orgId,
           userId: authz.user.id,
-          recordType: openKind!,
+          recordType: drawerKind!,
           userRoles: authz.user.roles.map(({ key }) => key),
           headerDefs,
           lineDefs,
@@ -166,6 +176,23 @@ export async function loadApBills(
         })
       : null,
   ])
+  // Blank in-memory payload for unsaved create. The subsidiary defaults to
+  // the first in-scope option in multi-subsidiary orgs so the form opens
+  // submittable; unrestricted orgs keep the factory root default.
+  const createSeed = isCreate && createKind ? await createDocumentSeed(authz.user.orgId, createKind) : null
+  const createSubsidiaryDefault = (() => {
+    if (!createSeed || !pickers) return null
+    const options = (pickers[6] ?? []) as { id: string }[]
+    if (options.length === 0) return null
+    const inScope = authz.allowedSubsidiaryIds
+      ? options.filter((option) => authz.allowedSubsidiaryIds!.has(option.id))
+      : options
+    return inScope[0]?.id ?? null
+  })()
+  if (createSeed && createSubsidiaryDefault) {
+    (createSeed.doc as Record<string, unknown>).subsidiary_id = createSubsidiaryDefault
+  }
+  const drawerPayload = openDoc ?? createSeed
 
   const dimensions = pickers?.[4] as
     | {
@@ -178,12 +205,13 @@ export async function loadApBills(
       }
     | undefined
   const drawer: ApBillsDrawer | null =
-    openDoc && pickers && resolvedForm && openKind
+    drawerPayload && pickers && resolvedForm && drawerKind
       ? {
           basePath: '/ap/bills',
-          remountKey: String((openDoc.doc as Record<string, unknown>).id),
-          payload: openDoc,
-          config: DOC_KINDS[openKind]!,
+          remountKey: openDoc ? String((openDoc.doc as Record<string, unknown>).id) : `new:${drawerKind}`,
+          payload: drawerPayload,
+          createMode: isCreate,
+          config: DOC_KINDS[drawerKind]!,
           parties: pickers[0],
           accounts: pickers[1],
           taxCodes: pickers[2],
@@ -200,11 +228,11 @@ export async function loadApBills(
           lineDefs,
           canCreate,
           canPost: can(authz, 'ap.post'),
-          initialMode: pickString(sp.mode) === 'edit' ? 'edit' : 'view',
+          initialMode: (isCreate || pickString(sp.mode) === 'edit' ? 'edit' : 'view') as 'edit' | 'view',
           layout: resolvedForm.layout,
           availableLayouts: resolvedForm.available,
           currentLayoutId: resolvedForm.row?.id ?? null,
-          recordType: openKind,
+          recordType: drawerKind,
           canCustomize: can(authz, 'admin.customization.manage'),
         }
       : null
@@ -219,8 +247,6 @@ export async function loadApBills(
     newItems,
     newBasePath: '/ap/bills',
     newTriggerLabel: t('actions.newBill'),
-    newCreatingLabel: tCommon('actions.creating'),
-    newFailedLabel: t('toasts.createDraftFailed'),
     drawerOpen: Boolean(drawer),
     drawer,
   }
@@ -235,8 +261,6 @@ export function apBillsSpec(data: ApBillsData): PageSpec {
       items: data.newItems,
       basePath: data.newBasePath,
       triggerLabel: data.newTriggerLabel,
-      creatingLabel: data.newCreatingLabel,
-      failedLabel: data.newFailedLabel,
     },
   }
   return page({

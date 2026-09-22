@@ -14,6 +14,8 @@ import type { RuleInEffect } from '@openbooks/engine/src/allocations/types.ts'
 import { assertGeneratedBillingEdit, BillingSourceIntegrityError } from '@openbooks/engine/src/projects/billing-source-integrity.ts'
 import { documentRevisionCounterSql } from '@openbooks/engine/src/records/revision.ts'
 import { sql } from 'drizzle-orm'
+import { canonicalJson } from '@openbooks/engine/src/platform/canonical-json.ts'
+import { allocateDocumentNumber } from '@openbooks/engine/src/records/numbering.ts'
 import { db, schema, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { cmp, normalizeDecimal, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
@@ -22,7 +24,7 @@ import { promoteCrmAccount } from '@openbooks/engine/src/crm/crm.ts'
 import { computeBillTotals, computeBillTotalsWithProvider, nextDocumentNumber, persistLineTaxComponents, taxProfileMap } from './bills'
 import { canonicalDecimal } from './exact-decimal'
 import { activeStockLocations, profiledItemIds } from './stock-locations'
-import { DOC_KIND_FEATURE, docKindConfig, type DocKindConfig } from './document-kinds'
+import { DOC_KIND_FEATURE, docKindConfig, isDocumentCreateKind, type DocKindConfig } from './document-kinds'
 import { featureEnabled, isFeatureEnabled, orgFeatureState } from './features'
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from './custom-fields'
 import { segmentRegistry, validateExtraDims } from './segments'
@@ -63,6 +65,49 @@ async function orgBaseCurrency(orgId: string): Promise<string> {
     sql`select base_currency from orgs where id = ${orgId}`,
   ))
   return r.rows[0]?.base_currency ?? 'CAD'
+}
+
+/**
+ * Unsaved-create seed: the blank in-memory payload a list loader hands the
+ * DocumentDrawer in createMode for `?doc=new&kind=`. Nothing is read or
+ * written for an id — the document exists only after an explicit Save POSTs
+ * /api/documents. Currency, date, and subsidiary mirror the draft factory's
+ * defaults so the form opens exactly as a fresh draft would.
+ */
+export async function createDocumentSeed(
+  orgId: string,
+  kind: string,
+): Promise<{ doc: Record<string, unknown>; lines: Record<string, unknown>[] }> {
+  const cfg = docKindConfig(kind)
+  if (!cfg) throw new Error(`unknown document kind "${kind}"`)
+  const [currency, documentDate, root] = await Promise.all([
+    orgBaseCurrency(orgId),
+    businessToday(orgId),
+    db.execute<{ id: string }>(sql`
+      select id from subsidiaries where org_id = ${orgId} and parent_id is null`),
+  ])
+  return {
+    doc: {
+      id: '',
+      org_id: orgId,
+      kind,
+      status: 'draft',
+      document_number: null,
+      subsidiary_id: root.rows[0]?.id ?? null,
+      party_id: null,
+      document_date: documentDate,
+      due_date: null,
+      reference_number: null,
+      memo: null,
+      currency,
+      subtotal: '0',
+      tax_total: '0',
+      total: '0',
+      updated_at: '',
+      party_name: null,
+    },
+    lines: [],
+  }
 }
 
 /** Instant-into-draft: mint an empty draft document for a kind, return id + number. */
@@ -308,9 +353,20 @@ export interface DocumentEditContext {
   source: 'ui' | 'api' | 'mcp' | 'assistant' | 'posted_correction'
   /** Fire on_update record flows after the edit commits (default true). */
   runFlows?: boolean
+  /**
+   * Return the on_update flow event instead of firing it, for callers that
+   * own a wider transaction: firing mid-transaction would run flows against
+   * an uncommitted row over a separate connection. The caller fires the
+   * returned event after its own commit. Only honored when runFlows is not
+   * false; PATCH never sets it.
+   */
+  deferFlows?: boolean
   /** Internal create-path provider preflight; never supplied by API callers. */
   precomputedTotals?: PreparedDocumentTotals | null
 }
+
+/** The on_update flow event an edit would fire — returned, not fired, under ctx.deferFlows. */
+export type DocumentUpdateFlowEvent = Parameters<typeof runRecordFlows>[0]
 
 /** Exact numeric(19,4) money string, or null when the value is not canonical. */
 function exactMoney(value: unknown): string | null {
@@ -749,7 +805,14 @@ export async function applyDocumentEdit(
   current: DocumentEditCurrent,
   body: DocumentEditInput,
   ctx: DocumentEditContext,
-): Promise<void> {
+  /**
+   * Join a caller-owned transaction instead of opening one: validation reads
+   * and the versioned write all ride the caller's tx, so the caller's claim
+   * and this edit commit or roll back together. The caller must fire the
+   * deferred on_update event itself (see ctx.deferFlows) after committing.
+   */
+  scope?: { tx: DocumentTransaction },
+): Promise<DocumentUpdateFlowEvent | undefined> {
   const cfg = docKindConfig(current.kind)
   if (!cfg) throw new DocumentEditError(422, `kind "${current.kind}" is not editable`)
   if (current.status !== 'draft') {
@@ -759,6 +822,10 @@ export async function applyDocumentEdit(
     )
   }
   const { orgId, userId } = ctx
+  // Validation reads ride the caller's tx when one owns this edit, so they
+  // observe the caller's uncommitted claim (the fresh row's own currency);
+  // every other read is committed reference data either way.
+  const runner = scope?.tx ?? db
 
   // Every call edits a row that already exists. Internal create/correction
   // paths read its exact persisted token first; no row shape may authorize a
@@ -780,7 +847,7 @@ export async function applyDocumentEdit(
   }
   if (body.subsidiaryId !== undefined && body.subsidiaryId !== null) {
     if (!isUuid(body.subsidiaryId)) throw new DocumentEditError(422, 'invalid subsidiaryId')
-    const subsidiary = (await db.execute(sql`
+    const subsidiary = (await runner.execute(sql`
       select 1 from subsidiaries
        where id = ${body.subsidiaryId} and org_id = ${orgId}
          and is_active and not is_elimination`))
@@ -820,7 +887,7 @@ export async function applyDocumentEdit(
   if (body.locationId !== undefined && body.locationId !== null) headerOwners.push({ label: 'location', table: 'locations', value: body.locationId })
   if (body.classId !== undefined && body.classId !== null) headerOwners.push({ label: 'class', table: 'classes', value: body.classId })
   for (const ref of headerOwners) {
-    const owned = await db.execute(sql`select 1 from ${sql.raw(`"${ref.table}"`)} where id = ${ref.value} and org_id = ${orgId}`)
+    const owned = await runner.execute(sql`select 1 from ${sql.raw(`"${ref.table}"`)} where id = ${ref.value} and org_id = ${orgId}`)
     if (!owned.rows.length) throw new DocumentEditError(404, `${ref.label} not found in this organization`)
   }
 
@@ -831,7 +898,7 @@ export async function applyDocumentEdit(
   if (body.currency !== undefined) {
     const code = String(body.currency).trim().toUpperCase()
     if (!/^[A-Z]{3}$/.test(code)) throw new DocumentEditError(422, 'invalid currency')
-    const found = (await db.execute(sql`select 1 from currencies where code = ${code}`)) as { rows: unknown[] }
+    const found = (await runner.execute(sql`select 1 from currencies where code = ${code}`)) as { rows: unknown[] }
     if (!found.rows[0]) throw new DocumentEditError(422, 'invalid currency')
     currency = code
   }
@@ -902,7 +969,7 @@ export async function applyDocumentEdit(
         ) {
           throw new DocumentEditError(422, `${cfg?.fundingSource === 'card' ? 'card account' : 'funding bank'} must be a valid record reference`)
         }
-        const owned = (await db.execute<{ id: string }>(sql`
+        const owned = (await runner.execute<{ id: string }>(sql`
           select id from accounts
            where org_id = ${orgId} and is_active and not is_summary
              and reconcilable and type = ${fundingAccountType} and id = ${override}::uuid
@@ -1021,7 +1088,7 @@ export async function applyDocumentEdit(
     const lineAccountIds = [...new Set(body.lines.map((l) => l.accountId).filter((v): v is string => typeof v === 'string' && v.length > 0))]
     const malformedLineAccounts = lineAccountIds.filter((v) => !isUuid(v))
     const usableLineAccounts = malformedLineAccounts.length === 0 && lineAccountIds.length > 0
-      ? (await db.execute<{ id: string }>(sql`
+      ? (await runner.execute<{ id: string }>(sql`
           select id from accounts
            where org_id = ${orgId} and id = any(${`{${lineAccountIds.join(',')}}`}::uuid[])`)).rows
       : []
@@ -1053,7 +1120,7 @@ export async function applyDocumentEdit(
     for (const def of lineRefDefs) {
       const ids = [...new Set(body.lines.map((l) => l[def.key]).filter((v): v is string => typeof v === 'string' && v.length > 0))]
       if (ids.length === 0) continue
-      const owned = new Set((await db.execute<{ id: string }>(sql`
+      const owned = new Set((await runner.execute<{ id: string }>(sql`
         select id from ${sql.raw(`"${def.table}"`)}
          where org_id = ${orgId} and id = any(${`{${ids.join(',')}}`}::uuid[])`)).rows.map((r) => r.id))
       const foreign = ids.find((v) => !owned.has(v))
@@ -1096,7 +1163,7 @@ export async function applyDocumentEdit(
           {
             orgId,
             kind: current.kind,
-            currency: currency ?? (await db.execute<{ currency: string }>(sql`
+            currency: currency ?? (await runner.execute<{ currency: string }>(sql`
               select currency from documents where id = ${id} and org_id = ${orgId}`)).rows[0]?.currency ?? await orgBaseCurrency(orgId),
             documentDate: body.documentDate ?? current.documentDate,
             partyId: body.partyId !== undefined ? body.partyId : current.partyId,
@@ -1202,7 +1269,10 @@ export async function applyDocumentEdit(
     void
   >({
     expectedRevision,
-    transaction: (work) => db.transaction(work),
+    // A caller-owned tx is joined, not nested: node-postgres cannot overlap
+    // queries on one client, and a nested COMMIT would release the caller's
+    // claim early.
+    transaction: (work) => (scope ? work(scope.tx) : db.transaction(work)),
     lock: async (tx) => (await tx.execute<{
         kind: string
         status: string
@@ -1725,7 +1795,7 @@ export async function applyDocumentEdit(
   // changedFields / changedLineFields). runRecordFlows never throws into the
   // caller and cannot veto the saved edit; it is awaited so it runs inside the
   // caller's RLS org scope.
-  if (ctx.runFlows === false) return
+  if (ctx.runFlows === false) return undefined
   const newTotal = totals?.total ?? current.total
   const newTaxTotal = totals?.taxTotal ?? current.taxTotal
   const changedFields: string[] = []
@@ -1748,20 +1818,241 @@ export async function applyDocumentEdit(
       if (cmp(o.amount, n.amount) !== 0) changedLineFields.add('amount')
     }
   }
-  await runRecordFlows(
-    {
-      kind: 'on_update',
-      source: ctx.source,
-      previousTotal: current.total,
-      totalChanged: cmp(newTotal, current.total) !== 0,
-      changedFields,
-      changedLineFields: [...changedLineFields],
-      old: { total: current.total, taxTotal: current.taxTotal },
-    },
-    current.kind,
-    id,
-    { orgId, userId },
-  )
+  const updateEvent: DocumentUpdateFlowEvent = {
+    kind: 'on_update',
+    source: ctx.source,
+    previousTotal: current.total,
+    totalChanged: cmp(newTotal, current.total) !== 0,
+    changedFields,
+    changedLineFields: [...changedLineFields],
+    old: { total: current.total, taxTotal: current.taxTotal },
+  }
+  // A caller-owned transaction defers the event: firing now would run flows
+  // against an uncommitted row over a separate connection. The caller fires
+  // it after its own commit, preserving on_create → on_update order.
+  if (ctx.deferFlows) return updateEvent
+  await runRecordFlows(updateEvent, current.kind, id, { orgId, userId })
+  return undefined
+}
+
+// ---------------------------------------------------------------------------
+// Atomic document create (unsaved-create Save path)
+// ---------------------------------------------------------------------------
+
+/**
+ * A reused idempotency key with a changed payload, or a key colliding with
+ * another org's row. Fail closed: never return the older row as though it
+ * matched. The route maps this to 409 invalid_idempotency_key.
+ */
+export class DocumentCreateConflict extends Error {
+  constructor(message = 'invalid_idempotency_key') {
+    super(message)
+    this.name = 'DocumentCreateConflict'
+  }
+}
+
+export interface DocumentCreateInput {
+  orgId: string
+  userId: string
+  kind: string
+  /** Caller UUID idempotency key; becomes the document id. */
+  key: string
+  /** The drawer's save payload (without expectedUpdatedAt — no revision exists yet). */
+  body: DocumentEditInput
+  /** Resolved subsidiary (root default or caller choice, scope-checked by the route). */
+  subsidiaryId: string | null
+  /** Full parsed request body for the idempotency image. */
+  requestBody: unknown
+}
+
+export interface DocumentCreateResult {
+  status: 'created' | 'replayed'
+  id: string
+  documentNumber: string
+  /**
+   * The on_update flow event the edit prepared. The caller fires it AFTER
+   * this transaction commits, after the on_create flows — firing inside
+   * would run flows against an uncommitted row over a separate connection.
+   * Null on replay (nothing was written).
+   */
+  deferredUpdate: DocumentUpdateFlowEvent | null
+}
+
+/**
+ * Create one draft document with its full validated header/lines write in a
+ * SINGLE transaction: the replay check, the number allocation, the claim,
+ * the insert audit event, and the shared writer's validation + writes all
+ * commit or roll back together. An invalid Save leaves zero document, zero
+ * audit insert, zero flow side effects (flows fire only after this commits),
+ * and no idempotency claim — a retry with the same key proceeds as a fresh
+ * create. Validation is the shared applyDocumentEdit core, never a copy.
+ *
+ * Provider-dependent totals precompute before the transaction (see above),
+ * so no external resolution ever runs under the advisory/row locks. Audit
+ * for a first create is exactly two events: the insert (request image) plus
+ * the writer's update (initialization → final snapshots); a replay writes
+ * nothing further.
+ *
+ * Same-key concurrency serializes on a key-scoped advisory lock, so a
+ * retried request observes the winner's commit and replays instead of
+ * racing it to a false conflict. `on conflict (id) do nothing` is the claim
+ * itself: a colliding insert with no same-org row is another org's key and
+ * 409s fail-closed.
+ */
+export async function createDocument(input: DocumentCreateInput): Promise<DocumentCreateResult> {
+  const { orgId, userId, kind, key, body, subsidiaryId, requestBody } = input
+  const cfg = docKindConfig(kind)
+  if (!cfg) throw new DocumentEditError(422, `kind "${kind}" is not editable`)
+  if (!isDocumentCreateKind(kind)) throw new DocumentEditError(422, `kind "${kind}" is not creatable here`)
+  // Request-controlled idempotency image: kind + full body as parsed.
+  // Derived values (number, currency default, totals) and lifecycle state
+  // are EXCLUDED — they depend on allocator state or legitimately advance
+  // after creation, so comparing them would turn a genuine retry into a
+  // conflict.
+  const match = { kind, body: requestBody }
+
+  // Provider-dependent totals resolve BEFORE any lock or write: external tax
+  // resolution must never run while the create holds advisory/row locks, and
+  // a provider refusal must land with zero writes. Effective header inputs
+  // are fixed once here so the precompute and the atomic write below observe
+  // identical values (midnight-safe documentDate, resolved currency) — the
+  // precomputed image exactly corresponds to this request. Applied line
+  // transforms before totals are non-financial (provenance strip,
+  // single-warehouse default); an allocation explosion recomputes instead of
+  // reusing this image (see the `!entryPlan?.exploded` guard in the writer).
+  //
+  // The resolved currency seeds the row and the precompute ONLY. It is never
+  // written back into the edit body: the writer treats any defined currency
+  // as a user currency change and refuses it when multi-currency is off, so
+  // an omitted currency must stay omitted (the row default it keeps is this
+  // same resolved value).
+  const today = await businessToday(orgId)
+  const seedCurrency = await resolveCreateCurrency(orgId, body.currency)
+  const effectiveBody: DocumentEditInput = {
+    ...body,
+    documentDate: body.documentDate ?? today,
+  }
+  const precomputedTotals = effectiveBody.lines
+    ? await precomputeDocumentTotalsForCreate(orgId, kind, {
+        lines: effectiveBody.lines,
+        currency: seedCurrency,
+        documentDate: effectiveBody.documentDate,
+        partyId: effectiveBody.partyId,
+      })
+    : null
+
+  return db.transaction(async (tx) => {
+    // Same-key creates serialize here: the loser waits for the winner's
+    // commit, then observes the row and replays (or 409s on a genuinely
+    // changed payload) instead of racing to a false conflict. Distinct keys
+    // never block each other.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`)
+    // Replay BEFORE allocation: an exact retry must resolve without burning
+    // a sequence number, and a changed payload must 409 before any write.
+    // Only a key with no same-org row — and no insert image — proceeds.
+    const existing = await tx.execute<{ id: string; documentNumber: string }>(sql`
+      select id, document_number as "documentNumber" from documents where id = ${key} and org_id = ${orgId}`)
+    if (existing.rows[0]) return resolveCreateReplay(tx, orgId, key, existing.rows[0], match)
+    const documentNumber = await allocateDocumentNumber(tx, orgId, kind, cfg.numberPrefix)
+    const inserted = await tx.execute<{ id: string }>(sql`
+      insert into documents
+        (id, org_id, kind, subsidiary_id, document_number, document_date,
+         currency, subtotal, tax_total, total, created_by)
+      values (${key}, ${orgId}, ${kind}, ${subsidiaryId}, ${documentNumber},
+              ${effectiveBody.documentDate}, ${seedCurrency}, '0', '0', '0', ${userId})
+      on conflict (id) do nothing
+      returning id`)
+    // A same-key same-org row would have been found above under our advisory
+    // lock, so a conflict here is another org's key: fail closed without
+    // disclosing it.
+    if (!inserted.rows[0]) throw new DocumentCreateConflict()
+    // Audit contract for a first create is TWO events, stated exactly: this
+    // insert carries the request image (what was asked), and the writer's
+    // update below carries before/after snapshots (initialization → final
+    // saved state). A replay writes nothing further.
+    await tx.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id, request_id)
+      values (
+        ${orgId}, 'documents', ${key}, 'insert',
+        ${JSON.stringify({ before: null, after: { ...match, id: key, org_id: orgId, document_number: documentNumber, status: 'draft' } })}::jsonb,
+        ${userId}, ${key}
+      )
+    `)
+    // The claim row is uncommitted, so its edit snapshot must ride this tx —
+    // the shared loader would not see it. Mirrors loadDocumentEditCurrent.
+    const current = (await tx.execute<DocumentEditCurrent>(sql`
+      select kind, status, total, tax_total as "taxTotal", party_id as "partyId",
+             document_date as "documentDate",
+             custom,
+             ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt"
+        from documents
+       where id = ${key} and org_id = ${orgId}
+    `)).rows[0] ?? null
+    if (!current) throw new Error(`document ${key} disappeared during initialization`)
+    const deferredUpdate = await applyDocumentEdit(
+      key,
+      current,
+      { ...effectiveBody, expectedUpdatedAt: current.updatedAt },
+      { orgId, userId, source: 'ui', deferFlows: true, precomputedTotals },
+      { tx },
+    )
+    return { status: 'created', id: key, documentNumber, deferredUpdate: deferredUpdate ?? null } as DocumentCreateResult
+  })
+}
+
+/**
+ * The same-org row already exists under this key: an exact retry replays it,
+ * anything else 409s. Runs before any allocation, so a replay burns no
+ * sequence number and writes nothing.
+ */
+async function resolveCreateReplay(
+  tx: DocumentTransaction,
+  orgId: string,
+  key: string,
+  prior: { id: string; documentNumber: string },
+  match: { kind: string; body: unknown },
+): Promise<DocumentCreateResult> {
+  const original = (
+    await tx.execute<{ after: unknown }>(sql`
+      select changes->'after' as after
+        from audit_log
+       where org_id = ${orgId}
+         and table_name = 'documents'
+         and row_id = ${key}
+         and action = 'insert'
+         and request_id = ${key}
+       order by at asc
+       limit 1
+    `)
+  ).rows[0]?.after
+  // No insert image (a legacy draft row that happens to carry this id, or a
+  // rolled-back attempt's ghost): the key is consumed by something this
+  // request did not create — fail closed rather than adopt it.
+  if (!original || typeof original !== 'object' || original === null) throw new DocumentCreateConflict()
+  const keys = Object.keys(match)
+  const projected: Record<string, unknown> = {}
+  for (const k of keys) projected[k] = (original as Record<string, unknown>)[k]
+  if (canonicalJson(projected) !== canonicalJson(match)) throw new DocumentCreateConflict()
+  return { status: 'replayed', id: key, documentNumber: prior.documentNumber, deferredUpdate: null }
+}
+
+/**
+ * Pre-transaction currency resolution for the create row and the totals
+ * precompute. Shape-invalid and unknown codes refuse here with zero writes;
+ * the multi-currency feature gate stays in the shared writer.
+ */
+async function resolveCreateCurrency(orgId: string, currency: unknown): Promise<string> {
+  if (currency !== undefined) {
+    const code = String(currency).trim().toUpperCase()
+    if (!/^[A-Z]{3}$/.test(code)) throw new DocumentEditError(422, 'invalid currency')
+    const found = await db.execute(sql`select 1 from currencies where code = ${code}`)
+    if (!found.rows[0]) throw new DocumentEditError(422, 'invalid currency')
+    return code
+  }
+  const base = (await db.execute<{ base_currency: string }>(sql`
+    select base_currency from orgs where id = ${orgId}`)).rows[0]?.base_currency
+  return base ?? 'CAD'
 }
 
 // ---------------------------------------------------------------------------

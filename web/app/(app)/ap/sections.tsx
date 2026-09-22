@@ -22,8 +22,6 @@ export function ApHeaderActions({
   newItems,
   newBasePath,
   newTriggerLabel,
-  newCreatingLabel,
-  newFailedLabel,
 }: {
   captureHref: string
   captureLabel: string
@@ -31,8 +29,6 @@ export function ApHeaderActions({
   newItems: { kind: string; label: string }[]
   newBasePath: string
   newTriggerLabel: string
-  newCreatingLabel: string
-  newFailedLabel: string
 }) {
   return (
     <div className="flex items-center gap-2">
@@ -47,8 +43,6 @@ export function ApHeaderActions({
           items={newItems}
           basePath={newBasePath}
           triggerLabel={newTriggerLabel}
-          creatingLabel={newCreatingLabel}
-          failedLabel={newFailedLabel}
         />
       ) : undefined}
     </div>

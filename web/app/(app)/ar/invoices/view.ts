@@ -6,8 +6,8 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { pickString } from '../../../../lib/list-params'
 import { can, requirePermission } from '../../../../lib/authz'
-import { AR_KINDS, DOC_KINDS } from "../../../../lib/document-kinds.ts";
-import { accountOptions, dimensionOptions, partyOptions, taxCodeOptions, taxGroupOptions } from "../../../../lib/documents.ts";
+import { AR_KINDS, DOC_KINDS, isDocumentCreateKind } from "../../../../lib/document-kinds.ts";
+import { accountOptions, createDocumentSeed, dimensionOptions, partyOptions, taxCodeOptions, taxGroupOptions } from "../../../../lib/documents.ts";
 import { loadDocument } from "../../../../../engine/src/ledger/document-service.ts";
 import type { DocKindConfig } from '../../../../lib/document-kinds'
 import { loadFieldDefs } from '../../../../lib/custom-fields'
@@ -43,7 +43,9 @@ export interface ArInvoicesDrawer {
   /** Remount key: switching documents must reset the drawer's client state. */
   remountKey: string
   basePath: string
-  payload: LoadedDocument
+  payload: LoadedDocument | { doc: Record<string, unknown>; lines: Record<string, unknown>[] }
+  /** Unsaved create: the drawer edits a blank payload; Save POSTs the collection. */
+  createMode: boolean
   config: DocKindConfig
   initialMode: 'edit' | 'view'
   parties: DocumentDrawerProps['parties']
@@ -82,8 +84,6 @@ export interface ArInvoicesData {
     items: { kind: string; label: string }[]
     basePath: string
     triggerLabel: string
-    creatingLabel: string
-    failedLabel: string
   }
   drawerOpen: boolean
   drawer: ArInvoicesDrawer | null
@@ -101,7 +101,6 @@ export async function loadArInvoices(
   ])
   const onlinePaymentsEnabled = featureEnabled(featureState, 'onlinePayments')
   const t = await getTranslations('ar')
-  const tCommon = await getTranslations('common')
   const docId = typeof sp.doc === 'string' ? sp.doc : undefined
 
   const newButton = {
@@ -111,26 +110,35 @@ export async function loadArInvoices(
     ],
     basePath: '/ar/invoices',
     triggerLabel: t('actions.new'),
-    creatingLabel: tCommon('actions.creating'),
-    failedLabel: t('toasts.createDraftFailed'),
   }
 
   // Drawer + form layout resolve only when a flyout is open.
   // Org guard: never render another tenant's document in the drawer.
-  const loadedDoc = docId ? await loadDocument(docId, authz.user.orgId) : null
+  const loadedDoc = docId && docId !== 'new' ? await loadDocument(docId, authz.user.orgId) : null
   const openDoc = loadedDoc && loadedDoc.doc.org_id === authz.user.orgId
     && (!authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(String(loadedDoc.doc.subsidiary_id)))
     ? loadedDoc : null
   const openKind = openDoc?.doc.kind as string | undefined
-  const drawerOpen = !!(openDoc && openKind && (AR_KINDS as readonly string[]).includes(openKind))
+  // Unsaved create: `?doc=new&kind=` renders the shared drawer in createMode
+  // over a blank in-memory payload. The kind must belong to this page, the
+  // caller must hold its create permission, and nothing is read or written
+  // for an id — the document exists only after an explicit Save.
+  const createKind = typeof sp.kind === 'string' && (AR_KINDS as readonly string[]).includes(sp.kind)
+    && isDocumentCreateKind(sp.kind) ? sp.kind : undefined
+  const isCreate = docId === 'new' && !!createKind && canCreate
+  const drawerKind = openKind ?? createKind
+  const drawerOpen = !!(openDoc && openKind && (AR_KINDS as readonly string[]).includes(openKind)) || isCreate
   const [headerDefs, lineDefs] = drawerOpen
-    ? await Promise.all([loadFieldDefs('documents', openKind!), loadFieldDefs('document_lines', openKind!)])
+    ? await Promise.all([loadFieldDefs('documents', drawerKind!), loadFieldDefs('document_lines', drawerKind!)])
     : [[], []]
+  // The create seed carries no lines, so the keep-existing-items clause
+  // matches nothing — the same items list a blank draft would see.
+  const existingDocId = openDoc ? docId : null
   const [pickers, resolvedForm] = await Promise.all([
     drawerOpen
       ? Promise.all([
           partyOptions('customer'),
-          accountOptions(DOC_KINDS[openKind! as 'customer_invoice']!),
+          accountOptions(DOC_KINDS[drawerKind! as 'customer_invoice']!),
           taxCodeOptions(),
           taxGroupOptions(),
           dimensionOptions(),
@@ -144,7 +152,7 @@ export async function loadArInvoices(
                  ${equipmentEnabled ? sql`` : sql`and it.kind <> 'equipment_charge'`}
                  or it.id in (
                    select item_id from document_lines
-                    where org_id = ${authz.user.orgId} and document_id = ${docId} and item_id is not null
+                    where org_id = ${authz.user.orgId} and document_id = ${existingDocId} and item_id is not null
                  )
                )
              order by coalesce(it.code, it.name), it.name limit 2000`).then((r) => r.rows),
@@ -170,7 +178,7 @@ export async function loadArInvoices(
       ? resolveFormLayout({
           orgId: authz.user.orgId,
           userId: authz.user.id,
-          recordType: openKind!,
+          recordType: drawerKind!,
           userRoles: authz.user.roles.map(({ key }) => key),
           headerDefs,
           lineDefs,
@@ -178,11 +186,15 @@ export async function loadArInvoices(
         })
       : null,
   ])
+  // Blank in-memory payload for unsaved create. The subsidiary defaults to
+  // the first in-scope option in multi-subsidiary orgs so the form opens
+  // submittable; unrestricted orgs keep the factory root default.
+  const createSeed = isCreate && createKind ? await createDocumentSeed(authz.user.orgId, createKind) : null
 
   // Active open-item applications into this document's lines (receipts,
   // credits), so a paid invoice names what paid it instead of showing only
   // a zero balance.
-  const appliedRows = drawerOpen && openDoc
+  const appliedRows = drawerOpen && openDoc && !isCreate
     ? (await db.execute<{
         id: string; number: string; kind: string; date: string | null; amount: string; appliedOn: string | null
       }>(sql`
@@ -200,18 +212,34 @@ export async function loadArInvoices(
          order by ap.applied_on desc, ap.created_at desc
       `)).rows
     : []
+  // A restricted subsidiary scope narrows the seed default the same way
+  // the picker list narrows: the first visible subsidiary wins.
+  const createSubsidiaryDefault = (() => {
+    if (!createSeed || !pickers) return null
+    const options = (pickers[6] ?? []) as { id: string }[]
+    if (options.length === 0) return null
+    const inScope = authz.allowedSubsidiaryIds
+      ? options.filter((option) => authz.allowedSubsidiaryIds!.has(option.id))
+      : options
+    return inScope[0]?.id ?? null
+  })()
+  if (createSeed && createSubsidiaryDefault) {
+    (createSeed.doc as Record<string, unknown>).subsidiary_id = createSubsidiaryDefault
+  }
+  const drawerPayload = openDoc ?? createSeed
   const drawer =
-    openDoc && pickers && resolvedForm && openKind
+    drawerPayload && pickers && resolvedForm && drawerKind
       ? {
           basePath: '/ar/invoices',
-          remountKey: String(openDoc.doc.id),
-          payload: openDoc,
+          remountKey: openDoc ? String(openDoc.doc.id) : `new:${drawerKind}`,
+          payload: drawerPayload,
+          createMode: isCreate,
           allocationsEntryEnabled: featureEnabled(featureState, 'allocationsAtEntry'),
-          appliedPayments: appliedRows.length > 0
+          appliedPayments: appliedRows.length > 0 && openDoc
             ? { payments: appliedRows as AppliedPayment[], currency: String(openDoc.doc.currency) }
             : null,
-          config: DOC_KINDS[openKind]!,
-          initialMode: (pickString(sp.mode) === 'edit' ? 'edit' : 'view') as 'edit' | 'view',
+          config: DOC_KINDS[drawerKind]!,
+          initialMode: (isCreate || pickString(sp.mode) === 'edit' ? 'edit' : 'view') as 'edit' | 'view',
           parties: pickers[0],
           accounts: pickers[1],
           taxCodes: pickers[2],
@@ -232,10 +260,10 @@ export async function loadArInvoices(
           layout: resolvedForm.layout,
           availableLayouts: resolvedForm.available,
           currentLayoutId: resolvedForm.row?.id ?? null,
-          recordType: openKind,
+          recordType: drawerKind,
           canCustomize: can(authz, 'admin.customization.manage'),
           paymentLinks:
-            openKind === 'customer_invoice' && onlinePaymentsEnabled
+            drawerKind === 'customer_invoice' && onlinePaymentsEnabled && openDoc
               ? { documentId: String(openDoc.doc.id), canManage: canCreate }
               : null,
         }
@@ -261,8 +289,6 @@ export function arInvoicesSpec(data: ArInvoicesData): PageSpec {
       items: data.newButton.items,
       basePath: data.newButton.basePath,
       triggerLabel: data.newButton.triggerLabel,
-      creatingLabel: data.newButton.creatingLabel,
-      failedLabel: data.newButton.failedLabel,
     },
   }
   return page({

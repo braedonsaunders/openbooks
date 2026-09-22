@@ -3,8 +3,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronDown, Plus } from 'lucide-react'
-import { toast } from 'sonner'
 import { Button, Popover } from '@openbooks/ui'
+import { documentCreateHref } from '../lib/document-kinds'
 
 export interface NewDocumentItem {
   kind: string
@@ -12,73 +12,37 @@ export interface NewDocumentItem {
 }
 
 /**
- * "New <transaction>" dropdown: lists the creatable kinds for a module. Each
- * item mints an instant draft server-side (POST /api/documents/draft) and
- * opens it in edit mode at `?doc=<id>&mode=edit` over the module's list page.
+ * "New <transaction>" dropdown: URL-only navigation to `?doc=new&kind=`,
+ * which renders the tenant-customizable DocumentDrawer in createMode over
+ * an in-memory payload. Opening New allocates nothing — no document, no
+ * number, no lines, no audit row; the first write happens on explicit Save
+ * (POST /api/documents), and Cancel/close writes nothing.
  */
 export function NewDocumentButton({
   items,
   basePath,
   triggerLabel,
-  creatingLabel,
-  failedLabel,
-  paramKey = 'doc',
 }: {
   items: NewDocumentItem[]
   basePath: string
   triggerLabel: string
-  creatingLabel: string
-  failedLabel: string
-  paramKey?: string
 }) {
   const [open, setOpen] = useState(false)
-  const [busyKind, setBusyKind] = useState<string | null>(null)
   const router = useRouter()
+
+  function create(kind: string) {
+    setOpen(false)
+    router.push(documentCreateHref(basePath, kind))
+  }
 
   // Single kind → plain button (no dropdown).
   if (items.length === 1) {
     const only = items[0]!
-    async function create() {
-      setBusyKind(only.kind)
-      const res = await fetch('/api/documents/draft', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kind: only.kind }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        toast.error(data.error ?? failedLabel)
-        setBusyKind(null)
-        return
-      }
-      router.push(`${basePath}?${paramKey}=${data.id}&mode=edit`)
-      router.refresh()
-      setBusyKind(null)
-    }
     return (
-      <Button onClick={create} disabled={busyKind !== null}>
-        <Plus size={15} /> {busyKind !== null ? creatingLabel : only.label}
+      <Button onClick={() => create(only.kind)}>
+        <Plus size={15} /> {only.label}
       </Button>
     )
-  }
-
-  async function create(kind: string) {
-    setOpen(false)
-    setBusyKind(kind)
-    const res = await fetch('/api/documents/draft', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ kind }),
-    })
-    const data = await res.json()
-    if (!res.ok) {
-      toast.error(data.error ?? failedLabel)
-      setBusyKind(null)
-      return
-    }
-    router.push(`${basePath}?${paramKey}=${data.id}&mode=edit`)
-    router.refresh()
-    setBusyKind(null)
   }
 
   return (
@@ -87,8 +51,8 @@ export function NewDocumentButton({
       onOpenChange={setOpen}
       align="end"
       trigger={
-        <Button onClick={() => setOpen((v) => !v)} disabled={busyKind !== null}>
-          <Plus size={15} /> {busyKind !== null ? creatingLabel : triggerLabel}
+        <Button onClick={() => setOpen((v) => !v)}>
+          <Plus size={15} /> {triggerLabel}
           <ChevronDown size={14} className="opacity-60" />
         </Button>
       }
@@ -98,7 +62,6 @@ export function NewDocumentButton({
           <button
             key={item.kind}
             type="button"
-            disabled={busyKind !== null}
             onClick={() => create(item.kind)}
             className="flex w-full items-center rounded px-2.5 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800"
           >

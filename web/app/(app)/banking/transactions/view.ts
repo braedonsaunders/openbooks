@@ -7,8 +7,8 @@ import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@brae
 import { pickString } from '../../../../lib/list-params'
 import { can, requirePermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
-import { BANK_KINDS, DOC_KINDS } from "../../../../lib/document-kinds.ts";
-import { accountOptions, bankAccountOptions, cardLiabilityAccountOptions, cardOptions, dimensionOptions, partyOptions, taxCodeOptions, taxGroupOptions } from "../../../../lib/documents.ts";
+import { BANK_KINDS, DOC_KINDS, createPermission, isDocumentCreateKind } from "../../../../lib/document-kinds.ts";
+import { accountOptions, bankAccountOptions, cardLiabilityAccountOptions, cardOptions, createDocumentSeed, dimensionOptions, partyOptions, taxCodeOptions, taxGroupOptions } from "../../../../lib/documents.ts";
 import { loadDocument } from "../../../../../engine/src/ledger/document-service.ts";
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../../lib/subsidiaries'
@@ -48,7 +48,9 @@ export interface BankingTransactionsDrawer {
   /** Remount key: switching documents must reset the drawer's client state. */
   remountKey: string
   basePath: string
-  payload: LoadedDocument
+  payload: LoadedDocument | { doc: Record<string, unknown>; lines: Record<string, unknown>[] }
+  /** Unsaved create: the drawer edits a blank payload; Save POSTs the collection. */
+  createMode: boolean
   config: DocKindConfig
   initialMode: 'edit' | 'view'
   accounts: DocumentDrawerProps['accounts']
@@ -88,8 +90,6 @@ export interface BankingTransactionsData {
     items: { kind: string; label: string }[]
     basePath: string
     triggerLabel: string
-    creatingLabel: string
-    failedLabel: string
   }
   drawerOpen: boolean
   drawer: BankingTransactionsDrawer | null
@@ -99,27 +99,43 @@ export async function loadBankingTransactions(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<BankingTransactionsData> {
   const authz = await requirePermission('banking.read')
-  const canCreate = can(authz, 'ap.create') || can(authz, 'gl.post')
+  // Per-kind create gating: deposits/transfers need gl.post, card/check need
+  // ap.create. A visible New action must never dead-end at the loader's
+  // per-kind refusal below, so the menu lists only creatable kinds and the
+  // page-level gate follows the filtered list. Server enforcement stays.
+  const creatableKinds = NEW_KINDS.filter((kind) => can(authz, createPermission(kind)))
+  const canCreate = creatableKinds.length > 0
   const [inventoryEnabled, equipmentEnabled] = await Promise.all([
     isFeatureEnabled(authz.user.orgId, 'inventory'),
     isFeatureEnabled(authz.user.orgId, 'equipment'),
   ])
   const t = await getTranslations('banking')
-  const tCommon = await getTranslations('common')
   const basePath = '/banking/transactions'
 
   // -- open document drawer (?doc=<id>) -------------------------------------
   const docId = typeof sp.doc === 'string' ? sp.doc : undefined
   // Org guard: never render another tenant's document in the drawer.
-  const loadedDoc = docId ? await loadDocument(docId, authz.user.orgId) : null
+  const loadedDoc = docId && docId !== 'new' ? await loadDocument(docId, authz.user.orgId) : null
   const openDoc = loadedDoc && loadedDoc.doc.org_id === authz.user.orgId
     && (!authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(String(loadedDoc.doc.subsidiary_id)))
     ? loadedDoc : null
   const openKind = openDoc?.doc.kind as string | undefined
-  const drawerOpen = !!(openDoc && openKind && (BANK_KINDS as readonly string[]).includes(openKind))
+  // Unsaved create: `?doc=new&kind=` renders the shared drawer in createMode
+  // over a blank in-memory payload. The kind must belong to this page, the
+  // caller must hold its create permission (gl.post for deposits/transfers,
+  // ap.create for the rest), and nothing is read or written for an id — the
+  // document exists only after an explicit Save.
+  const createKind = typeof sp.kind === 'string' && (BANK_KINDS as readonly string[]).includes(sp.kind)
+    && isDocumentCreateKind(sp.kind) ? sp.kind : undefined
+  const isCreate = docId === 'new' && !!createKind && can(authz, createPermission(createKind))
+  const drawerKind = openKind ?? createKind
+  const drawerOpen = !!(openDoc && openKind && (BANK_KINDS as readonly string[]).includes(openKind)) || isCreate
+  // The create seed carries no lines, so the keep-existing-items clause
+  // matches nothing — the same items list a blank draft would see.
+  const existingDocId = openDoc ? docId : null
   const pickers = drawerOpen
     ? await Promise.all([
-        accountOptions(DOC_KINDS[openKind! as 'card_charge']!),
+        accountOptions(DOC_KINDS[drawerKind! as 'card_charge']!),
         taxCodeOptions(),
         taxGroupOptions(),
         dimensionOptions(),
@@ -131,14 +147,14 @@ export async function loadBankingTransactions(
                ${equipmentEnabled ? sql`` : sql`and kind <> 'equipment_charge'`}
                or id in (
                  select item_id from document_lines
-                  where org_id = ${authz.user.orgId} and document_id = ${docId} and item_id is not null
+                  where org_id = ${authz.user.orgId} and document_id = ${existingDocId} and item_id is not null
                )
              )
            order by coalesce(code, name), name limit 2000`).then((r) => r.rows),
         cardOptions(),
         bankAccountOptions(),
-        loadFieldDefs('documents', openKind!),
-        loadFieldDefs('document_lines', openKind!),
+        loadFieldDefs('documents', drawerKind!),
+        loadFieldDefs('document_lines', drawerKind!),
         // Multi-subsidiary orgs only — null keeps ALL subsidiary UI hidden.
         isMultiSubsidiary(authz.user.orgId).then(async (multi) => {
           if (!multi) return null
@@ -149,18 +165,18 @@ export async function loadBankingTransactions(
         }),
         // Payee options for the optional check payee (checks only — appended
         // last so the indices above never shift).
-        openKind === 'check' ? partyOptions('vendor') : Promise.resolve([]),
+        drawerKind === 'check' ? partyOptions('vendor') : Promise.resolve([]),
         // Card-liability fallback for the card-charge picker when no card
         // instruments exist (F-t05-020) — appended after the payee slot so
         // no index above shifts.
-        openKind === 'card_charge' || openKind === 'card_refund' ? cardLiabilityAccountOptions() : Promise.resolve([]),
+        drawerKind === 'card_charge' || drawerKind === 'card_refund' ? cardLiabilityAccountOptions() : Promise.resolve([]),
       ])
     : null
   const resolvedForm = drawerOpen && pickers
     ? await resolveFormLayout({
         orgId: authz.user.orgId,
         userId: authz.user.id,
-        recordType: openKind!,
+        recordType: drawerKind!,
         userRoles: authz.user.roles.map(({ key }) => key),
         headerDefs: (pickers[7]),
         lineDefs: (pickers[8]),
@@ -169,21 +185,37 @@ export async function loadBankingTransactions(
     : null
 
   const newButton = {
-    items: NEW_KINDS.map((kind) => ({ kind, label: t(`txKinds.${kind}`) })),
+    items: creatableKinds.map((kind) => ({ kind, label: t(`txKinds.${kind}`) })),
     basePath,
     triggerLabel: t('actions.new'),
-    creatingLabel: tCommon('actions.creating'),
-    failedLabel: t('toasts.createDraftFailed'),
   }
 
+  // Blank in-memory payload for unsaved create. The subsidiary defaults to
+  // the first in-scope option in multi-subsidiary orgs so the form opens
+  // submittable; unrestricted orgs keep the factory root default.
+  const createSeed = isCreate && createKind ? await createDocumentSeed(authz.user.orgId, createKind) : null
+  const createSubsidiaryDefault = (() => {
+    if (!createSeed || !pickers) return null
+    const options = (pickers[9] ?? []) as { id: string }[]
+    if (options.length === 0) return null
+    const inScope = authz.allowedSubsidiaryIds
+      ? options.filter((option) => authz.allowedSubsidiaryIds!.has(option.id))
+      : options
+    return inScope[0]?.id ?? null
+  })()
+  if (createSeed && createSubsidiaryDefault) {
+    (createSeed.doc as Record<string, unknown>).subsidiary_id = createSubsidiaryDefault
+  }
+  const drawerPayload = openDoc ?? createSeed
   const drawer =
-    openDoc && pickers && resolvedForm && openKind
+    drawerPayload && pickers && resolvedForm && drawerKind
       ? {
           basePath: '/banking/transactions',
-          remountKey: String(openDoc.doc.id),
-          payload: openDoc,
-          config: DOC_KINDS[openKind]!,
-          initialMode: (pickString(sp.mode) === 'edit' ? 'edit' : 'view') as 'edit' | 'view',
+          remountKey: openDoc ? String(openDoc.doc.id) : `new:${drawerKind}`,
+          payload: drawerPayload,
+          createMode: isCreate,
+          config: DOC_KINDS[drawerKind]!,
+          initialMode: (isCreate || pickString(sp.mode) === 'edit' ? 'edit' : 'view') as 'edit' | 'view',
           accounts: pickers[0],
           taxCodes: pickers[1],
           taxGroups: pickers[2],
@@ -206,7 +238,7 @@ export async function loadBankingTransactions(
           layout: resolvedForm.layout,
           availableLayouts: resolvedForm.available,
           currentLayoutId: resolvedForm.row?.id ?? null,
-          recordType: openKind,
+          recordType: drawerKind,
           canCustomize: can(authz, 'admin.customization.manage'),
         }
       : null
@@ -233,8 +265,6 @@ export function bankingTransactionsSpec(data: BankingTransactionsData): PageSpec
       items: data.newButton.items,
       basePath: data.newButton.basePath,
       triggerLabel: data.newButton.triggerLabel,
-      creatingLabel: data.newButton.creatingLabel,
-      failedLabel: data.newButton.failedLabel,
     },
   }
   return page({

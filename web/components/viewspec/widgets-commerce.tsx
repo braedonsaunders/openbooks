@@ -54,8 +54,6 @@ export const COMMERCE_WIDGETS = {
       newItems={(props.newItems as ComponentProps<typeof ApHeaderActions>['newItems']) ?? []}
       newBasePath={str(props, 'newBasePath') ?? ''}
       newTriggerLabel={str(props, 'newTriggerLabel') ?? ''}
-      newCreatingLabel={str(props, 'newCreatingLabel') ?? ''}
-      newFailedLabel={str(props, 'newFailedLabel') ?? ''}
     />
   ),
   /** Whole, exactly as `ar-cockpit`: vitals, the pay-run planner, aging bars,

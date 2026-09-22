@@ -227,8 +227,6 @@ export const RECORDS_WIDGETS = {
       items={(props.items as ComponentProps<typeof NewDocumentButton>['items']) ?? []}
       basePath={str(props, 'basePath') ?? ''}
       triggerLabel={str(props, 'triggerLabel') ?? ''}
-      creatingLabel={str(props, 'creatingLabel') ?? ''}
-      failedLabel={str(props, 'failedLabel') ?? ''}
     />
   ),
   /** The remount key rides along as a prop: switching documents must reset the
