@@ -112,10 +112,11 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       if (!before) { notFound = true; return }
       // A server that still delivers payment files or feeds statement
       // imports cannot vanish: bank profiles hold a RESTRICT foreign key
-      // (a raw 500 without this check) and import schedules hold no key at
-      // all (they would silently stop running and disappear from the
-      // joined schedule list). Refuse with the dependents named, like the
-      // flow and recurring-schedule deletes.
+      // and import schedules hold the 0242 composite tenant FK
+      // (org_id, sftp_server_id), with NO ACTION. The storage layer would
+      // refuse with a raw 23503, so count dependents first and refuse with
+      // the blocking kind named — like the flow and recurring-schedule
+      // deletes — keeping the FK as the race backstop below.
       const dependents = (await tx.execute<{ profiles: string; schedules: string }>(sql`
         select
           (select count(*)::text from payment_bank_profiles where org_id = ${user.orgId} and sftp_server_id = ${id}) as profiles,
@@ -130,7 +131,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       }
       if (Number(dependents.schedules) > 0) {
         refused = NextResponse.json(
-          { error: 'This SFTP server still feeds statement import schedules — delete or re-point the schedules first', code: 'import_schedules_in_use' },
+          { error: 'This SFTP server still feeds statement import schedules — delete the schedules first', code: 'import_schedules_in_use' },
           { status: 409 },
         )
         return
