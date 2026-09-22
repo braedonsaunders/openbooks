@@ -763,20 +763,58 @@ export async function resolveProjectFinancials(
  *   built-in time-and-materials profile), so tenant cost-source
  *   customizations apply identically without one query per project.
  */
+export interface CostProfileRow {
+  project_id: string
+  type_id: string | null
+  bm: string | null
+  fp: FinancialProfile | null
+  has_ip: boolean
+  has_bp: boolean
+}
+
+/**
+ * Pure profile pick for the batched cost reader. Mirrors `loadProjectType`
+ * (engine/src/projects/type.ts): a complete type row (id, versioned
+ * financial profile, invoicing and backup profiles) wins, a type row
+ * missing its billing method is a per-project misconfiguration — reported
+ * in `errors`, never silently costed at zero — and anything else falls back
+ * to built-in time-and-materials.
+ */
+export function resolveCostProfiles(rows: CostProfileRow[]): {
+  profiles: Map<string, FinancialProfile>
+  errors: Map<string, string>
+} {
+  const builtinTm = BUILTIN_PROJECT_TYPES.find((t) => t.key === "time_and_materials")!.financialProfile
+  const profiles = new Map<string, FinancialProfile>()
+  const errors = new Map<string, string>()
+  for (const row of rows) {
+    if (row.type_id && row.fp && row.has_ip && row.has_bp) {
+      if (!row.bm) {
+        errors.set(row.project_id, `project type ${row.type_id} is missing its billing classification`)
+      } else {
+        profiles.set(row.project_id, row.fp)
+      }
+    } else {
+      profiles.set(row.project_id, builtinTm)
+    }
+  }
+  return { profiles, errors }
+}
+
 export async function resolveProjectActualCosts(
   orgId: string,
   projectIds: string[],
-): Promise<Map<string, string>> {
+): Promise<{ costs: Map<string, string>; profileErrors: Map<string, string> }> {
   const ids = [...new Set(projectIds.filter((id) => typeof id === 'string' && id.length > 0))]
-  const out = new Map<string, string>(ids.map((id) => [id, normalizeMoney('0')]))
-  if (ids.length === 0) return out
+  const empty = { costs: new Map<string, string>(), profileErrors: new Map<string, string>() }
+  if (ids.length === 0) return empty
   // One type/version lookup for the whole id set (F-t03-013: a list sort over
   // hundreds of projects cannot afford one `loadProjectType` query each).
   // Mirrors `loadProjectType` (engine/src/projects/type.ts): a complete type
   // row (id, versioned financial profile, invoicing and backup profiles)
-  // wins, a type row missing its billing method throws like the single
-  // loader, and anything else falls back to built-in time-and-materials.
-  const builtinTm = BUILTIN_PROJECT_TYPES.find((t) => t.key === "time_and_materials")!.financialProfile
+  // wins, a type row missing its billing method errors per project (see
+  // resolveCostProfiles), and anything else falls back to built-in
+  // time-and-materials.
   const today = await businessToday(orgId)
   const typeRows = (await db.execute<{
     project_id: string; type_id: string | null; bm: string | null; fp: FinancialProfile | null;
@@ -800,20 +838,23 @@ export async function resolveProjectActualCosts(
       ) version on true
      where p.id = any(${`{${ids.join(',')}}`}::uuid[]) and p.org_id = ${orgId}`)).rows
   const typeByProject = new Map(typeRows.map((r) => [r.project_id, r]))
-  const profiles = new Map<string, FinancialProfile>()
+  // A misconfigured type errors per project (surfaced beside its row, never
+  // a fake zero) rather than failing the whole list page.
+  const { profiles, errors: profileErrors } = resolveCostProfiles(
+    ids.map((id) => typeByProject.get(id) ?? {
+      project_id: id,
+      type_id: null,
+      bm: null,
+      fp: null,
+      has_ip: false,
+      has_bp: false,
+    }),
+  )
+  // Costs start at zero only for projects with a usable profile: error rows
+  // stay absent from the map so no read can mistake them for a real zero.
+  const out = new Map<string, string>()
   for (const id of ids) {
-    try {
-      const row = typeByProject.get(id)
-      if (row?.type_id && row.fp && row.has_ip && row.has_bp) {
-        if (!row.bm) throw new Error(`project type ${row.type_id} is missing its billing classification`)
-        profiles.set(id, row.fp)
-      } else {
-        profiles.set(id, builtinTm)
-      }
-    } catch {
-      // A project whose type cannot load keeps the zero above rather than
-      // failing the whole list page.
-    }
+    if (!profileErrors.has(id)) out.set(id, normalizeMoney('0'))
   }
   const groupCache = new Map<string, Set<string>>()
   const groupIdsFor = async (src: CostSource): Promise<Set<string>> => {
@@ -876,5 +917,5 @@ export async function resolveProjectActualCosts(
     }
     out.set(id, add(amount(total), adjustmentByProject.get(id) ?? '0.0000'))
   }))
-  return out
+  return { costs: out, profileErrors }
 }

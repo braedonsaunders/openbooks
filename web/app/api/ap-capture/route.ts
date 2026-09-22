@@ -5,7 +5,7 @@ import { sql } from 'drizzle-orm'
 import { enqueueApCapture } from '@openbooks/jobs'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { captureContentMatchesMime } from '@openbooks/engine/src/payables/ap-capture.ts'
-import { getDocumentCaptureRuntimeConfig } from '@openbooks/engine/src/payables/ap-capture-config.ts'
+import { getDocumentCaptureRuntimeConfig, type DocumentCaptureRuntimeConfig } from '@openbooks/engine/src/payables/ap-capture-config.ts'
 import { guardPermission } from '../../../lib/authz'
 import { createFile, deleteFile, ensureApCaptureRoot } from '../../../lib/file-cabinet'
 
@@ -23,7 +23,18 @@ function safeFilename(value: string): string {
 export async function POST(request: Request) {
   const gate = await guardPermission('ap.create')
   if (gate instanceof NextResponse) return gate
-  const captureConfig = await getDocumentCaptureRuntimeConfig(gate.user.orgId).catch(() => null)
+  // Only "not configured" (null) maps to capture_not_configured: endpoint
+  // validation refusals and unseal failures throw, and collapsing them into
+  // the 409 sent operators to reconfigure a correctly configured endpoint.
+  let captureConfig: DocumentCaptureRuntimeConfig | null
+  try {
+    captureConfig = await getDocumentCaptureRuntimeConfig(gate.user.orgId)
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'capture_config_failed' },
+      { status: 500 },
+    )
+  }
   if (!captureConfig) return NextResponse.json({ error: 'capture_not_configured' }, { status: 409 })
   const form = await request.formData()
   const files = form.getAll('files').filter((value): value is File => value instanceof File)

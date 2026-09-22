@@ -89,7 +89,9 @@ export async function GET(req: Request) {
     retainageAccountId
       ? db.execute<{ held: string }>(projectRetainageHeldSql(orgId, projectId, retainageAccountId))
       : Promise.resolve({ rows: [{ held: "0" }] }),
-    projectCostSummary(orgId, projectId, authz.allowedSubsidiaryIds).catch(() => null),
+    // A failed cost summary must fail the request, never render as a fake
+    // zero committed cost beside real contract figures.
+    projectCostSummary(orgId, projectId, authz.allowedSubsidiaryIds),
   ]);
 
   const contractSum = sum(sov.rows.map((line) => String(line.scheduledValue ?? "0")));
@@ -100,7 +102,7 @@ export async function GET(req: Request) {
     payApplications: apps.rows,
     contractSum,
     retainageHeld: String(held.rows[0]?.held ?? "0"),
-    committedCost: committed?.committed?.cost ?? "0.0000",
+    committedCost: committed.committed.cost,
     retainageConfigured: Boolean(retainageAccountId),
   });
 }

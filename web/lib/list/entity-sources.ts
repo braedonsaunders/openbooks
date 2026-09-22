@@ -408,7 +408,9 @@ const SOURCES: Record<string, EntityListSource> = {
         select p.id from ${tableSql} ${baseJoins} where ${where}`)
       const ids = [...new Set(found.rows.map((r) => String(r.id ?? '')).filter((id) => id.length > 0))]
       if (ids.length === 0) return []
-      const costs = await resolveProjectActualCosts(orgId, ids)
+      // Misconfigured rows carry no cost (never a fake zero): they rank as
+      // zero for ordering stability and render their error beside the cell.
+      const { costs } = await resolveProjectActualCosts(orgId, ids)
       const rank = (id: string) => costs.get(id) ?? '0'
       const sign = dir === 'asc' ? 1 : -1
       ids.sort((a, b) => sign * cmp(rank(a), rank(b)) || sign * (a < b ? -1 : a > b ? 1 : 0))
@@ -438,9 +440,18 @@ const SOURCES: Record<string, EntityListSource> = {
     enrichRows: async (orgId, rows) => {
       const ids = rows.map((row) => String(row.id ?? '')).filter((id) => id.length > 0)
       if (ids.length === 0) return
-      const costs = await resolveProjectActualCosts(orgId, ids)
+      const { costs, profileErrors } = await resolveProjectActualCosts(orgId, ids)
       for (const row of rows) {
-        const cost = costs.get(String(row.id ?? ''))
+        const id = String(row.id ?? '')
+        const error = profileErrors.get(id)
+        if (error !== undefined) {
+          // A misconfigured billing classification is per-row error state,
+          // not a zero: the cell renders an em-dash with the reason.
+          row.actual = null
+          row.actualError = error
+          continue
+        }
+        const cost = costs.get(id)
         if (cost !== undefined) row.actual = cost
       }
     },
