@@ -150,6 +150,8 @@ test('every direct report with numeric output exposes a drill target or native t
   }
   assert.match(source('app/(app)/reports/custom/ResultView.tsx'), /drillTarget/)
   assert.match(source('components/global-report-drawer-host.tsx'), /RelatedTransactionDrawerClient/)
+  assert.match(source('components/global-report-drawer-host.tsx'), /<ReportFilterBar/)
+  assert.match(source('app/api/reports/drill/route.ts'), /overlayLedgerDrillPeriod/)
 })
 
 test('engine-authored row links reach the native transaction drawer unchanged', () => {

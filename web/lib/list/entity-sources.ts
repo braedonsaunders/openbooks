@@ -153,13 +153,13 @@ export interface EntityListSource {
   extraSelect?: SQL
   /**
    * Amount-cell drill. The list wraps the formatted number in ReportDrillLink
-   * when this returns a target. Receives the same as-of / fiscal-year window
-   * the list used to compute the number, so the flyout cannot drift from it.
+   * when this returns a target. Receives the current-period window the flyout
+   * opens with; the operator can then change it via the house period filter.
    */
   columnDrill?: (
     row: Record<string, unknown>,
     columnKey: string,
-    ctx: { asOf: string; fiscalYearStart: string },
+    ctx: { from: string; to: string; period: string },
   ) => ReportDrillTarget | null
   /** Row field containing the ISO currency for amount cells. */
   currencyField?: string

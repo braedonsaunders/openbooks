@@ -56,6 +56,7 @@ const PRESET_GROUP_ORDER: PeriodPresetGroup[] = [
 
 const SELECT = 'h-8 w-auto min-w-0 shrink-0 border-0 bg-transparent px-1.5 text-sm font-medium shadow-none hover:bg-slate-100 dark:hover:bg-slate-800'
 const DATE = 'h-8 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950'
+const EMPTY_RESET_KEYS: readonly string[] = []
 
 /** A compact inline control: tiny uppercase label + the control, on one line. */
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -86,6 +87,10 @@ export function ReportFilterBar({
   periodPresets,
   extraPeriods,
   extraPeriodsLabel,
+  periodParamKey = 'period',
+  fromParamKey = 'from',
+  toParamKey = 'to',
+  resetParamKeys,
 }: {
   controls: ReportControls
   dimensions?: { departments: DimOption[]; projects: DimOption[]; locations: DimOption[]; classes: DimOption[]; segments?: SegmentOption[]; builtinSegments?: BuiltinSegmentOption[] }
@@ -108,6 +113,12 @@ export function ReportFilterBar({
   /** Domain-specific windows (pay periods…) listed before the fiscal presets. */
   extraPeriods?: ExtraPeriodOption[]
   extraPeriodsLabel?: string
+  /** Override URL keys so a flyout can keep the page's period intact. */
+  periodParamKey?: string
+  fromParamKey?: string
+  toParamKey?: string
+  /** Drop these keys on every change (e.g. reset a drawer page). */
+  resetParamKeys?: readonly string[]
 }) {
   const t = useTranslations('reports.filterBar')
   const router = useRouter()
@@ -115,19 +126,24 @@ export function ReportFilterBar({
   const params = useSearchParams()
   const [optionsOpen, setOptionsOpen] = useState(false)
 
+  const resetKeys = resetParamKeys ?? EMPTY_RESET_KEYS
   const setParams = useCallback(
     (updates: Record<string, string | null>) => {
       const next = new URLSearchParams(params.toString())
       for (const [k, v] of Object.entries(updates)) {
-        if (v === null || v === '') next.delete(k)
-        else next.set(k, v)
+        const key = k === 'period' ? periodParamKey : k === 'from' ? fromParamKey : k === 'to' ? toParamKey : k
+        if (v === null || v === '') next.delete(key)
+        else next.set(key, v)
       }
+      for (const key of resetKeys) next.delete(key)
       router.replace(`${pathname}?${next.toString()}`)
     },
-    [params, pathname, router],
+    [fromParamKey, params, pathname, periodParamKey, resetKeys, router, toParamKey],
   )
 
-  const rawPeriod = params.get('period') ?? defaultPeriod
+  const periodFrom = params.get(fromParamKey)
+  const periodTo = params.get(toParamKey)
+  const rawPeriod = params.get(periodParamKey) ?? defaultPeriod
   // A hand-edited URL can carry a preset the page doesn't offer (e.g. a range
   // preset on an as-of report); show the page default rather than an option
   // that isn't in the list. The server re-clamps the param authoritatively.
@@ -135,7 +151,7 @@ export function ReportFilterBar({
   // An extra window is stored as period=custom + its exact bounds; keep the
   // select showing the named entry rather than the anonymous Custom row.
   const activeExtra = period === 'custom'
-    ? extraPeriods?.find((x) => x.from === params.get('from') && x.to === params.get('to'))
+    ? extraPeriods?.find((x) => x.from === periodFrom && x.to === periodTo)
     : undefined
   const selectValue = activeExtra ? `x:${activeExtra.id}` : period
   const breakout = params.get('breakout') ?? 'none'
@@ -243,13 +259,13 @@ export function ReportFilterBar({
       )}
 
       {isCustom && controls.asOf && (
-        <input type="date" value={params.get('to') ?? ''} onChange={(e) => setParams({ from: e.target.value, to: e.target.value })} className={DATE} />
+        <input type="date" value={periodTo ?? ''} onChange={(e) => setParams({ from: e.target.value, to: e.target.value })} className={DATE} />
       )}
       {isCustom && !controls.asOf && !controls.dateRange && (
         <>
-          <input type="date" value={params.get('from') ?? ''} onChange={(e) => setParams({ from: e.target.value })} className={DATE} aria-label={t('from')} />
+          <input type="date" value={periodFrom ?? ''} onChange={(e) => setParams({ from: e.target.value })} className={DATE} aria-label={t('from')} />
           <span className="text-slate-400">–</span>
-          <input type="date" value={params.get('to') ?? ''} onChange={(e) => setParams({ to: e.target.value })} className={DATE} aria-label={t('to')} />
+          <input type="date" value={periodTo ?? ''} onChange={(e) => setParams({ to: e.target.value })} className={DATE} aria-label={t('to')} />
         </>
       )}
 
@@ -258,8 +274,8 @@ export function ReportFilterBar({
           <Field label={t('from')}>
             <input
               type="date"
-              value={params.get('from') ?? dateRange?.from ?? ''}
-              onChange={(e) => setParams({ period: 'custom', from: e.target.value, to: params.get('to') ?? dateRange?.to ?? null })}
+              value={periodFrom ?? dateRange?.from ?? ''}
+              onChange={(e) => setParams({ period: 'custom', from: e.target.value, to: periodTo ?? dateRange?.to ?? null })}
               className={DATE}
               aria-label={t('from')}
             />
@@ -268,8 +284,8 @@ export function ReportFilterBar({
           <Field label={t('to')}>
             <input
               type="date"
-              value={params.get('to') ?? dateRange?.to ?? ''}
-              onChange={(e) => setParams({ period: 'custom', from: params.get('from') ?? dateRange?.from ?? null, to: e.target.value })}
+              value={periodTo ?? dateRange?.to ?? ''}
+              onChange={(e) => setParams({ period: 'custom', from: periodFrom ?? dateRange?.from ?? null, to: e.target.value })}
               className={DATE}
               aria-label={t('to')}
             />

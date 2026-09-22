@@ -159,6 +159,7 @@ async function ledgerData(target: Extract<ReportDrillTarget, { kind: 'ledger' }>
       activeProjectsOnly: target.activeProjectsOnly,
       profitSigned: target.profitSigned,
       cashOnly: target.cashOnly,
+      newestFirst: target.newestFirst,
       limit: REPORT_DRILL_PAGE_SIZE,
       offset: (page - 1) * REPORT_DRILL_PAGE_SIZE,
       orgId: authz.user.orgId,

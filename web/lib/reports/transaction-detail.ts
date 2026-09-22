@@ -70,6 +70,9 @@ export async function transactionDetail(opts: {
   orgId?: string
   /** Restrict the drill-down to the statement's accounting book. */
   bookId?: string | null
+  /** Newest posting date first — CoA / register browsing. Statement cell
+   *  drills leave this off so page 1 still starts at the window's first line. */
+  newestFirst?: boolean
 }): Promise<TxnDetailResult> {
   const orgId = await resolveOrgId(opts.orgId)
   const limit = opts.limit ?? 2000
@@ -228,7 +231,9 @@ export async function transactionDetail(opts: {
       left join parties p on p.id = l.party_id and p.org_id = l.org_id
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
      where ${where}
-     order by e.posting_date, e.entry_number, l.line_number
+     order by ${opts.newestFirst
+       ? sql`e.posting_date desc, e.entry_number desc, l.line_number desc`
+       : sql`e.posting_date, e.entry_number, l.line_number`}
      limit ${limit} offset ${offset}
   `))
   const lines: TxnDetailLine[] = r.rows.map((x) => ({

@@ -23,10 +23,9 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { fiscalYearOf, fiscalYearRangeFor } from '@openbooks/reports'
 import { ACCOUNT_CLASS_TYPES } from '../../../lib/account-types'
 import { accountBalanceDrill, accountClassBalanceDrill } from '../../../lib/account-balance-drill'
-import { fiscalStartMonth } from '../../../lib/fiscal'
+import { resolvePeriod } from '../../../lib/periods'
 import type { ReportDrillTarget } from '../../../lib/report-drill'
 import { isUuid, mergeHref, parseListParams, pickString } from '../../../lib/list-params'
 import { accountsWithBalances, orgInfo } from '../../../lib/data'
@@ -171,11 +170,11 @@ export async function loadAccounts(
   const canManageAccounts = can(authz, 'gl.manage')
   const creating = pickString(sp.accountNew) === '1' && canManageAccounts
 
-  const [asOf, startMonth] = await Promise.all([
-    businessToday(authz.user.orgId),
-    fiscalStartMonth(authz.user.orgId),
-  ])
-  const fiscalYearStart = fiscalYearRangeFor(fiscalYearOf(asOf, startMonth), startMonth).from
+  const asOf = await businessToday(authz.user.orgId)
+  const currentPeriod = await resolvePeriod('this_period', {
+    today: asOf,
+    orgId: authz.user.orgId,
+  })
   const accounts = await accountsWithBalances(
     authz.user.orgId,
     asOf,
@@ -340,8 +339,9 @@ export async function loadAccounts(
               drill: accountClassBalanceDrill({
                 classKey,
                 label: t(`classes.${CLASS_KEYS[classKey]}`),
-                asOf,
-                fiscalYearStart,
+                from: currentPeriod.from,
+                to: currentPeriod.to,
+                period: currentPeriod.presetId,
               }),
               rows: ordered.map((account) => {
                 const balance = rolled.get(account.id) ?? '0.0000'
@@ -359,8 +359,9 @@ export async function loadAccounts(
                     accountId: account.id,
                     label: `${account.number ?? ''} ${account.name}`.trim(),
                     type: account.type,
-                    asOf,
-                    fiscalYearStart,
+                    from: currentPeriod.from,
+                    to: currentPeriod.to,
+                    period: currentPeriod.presetId,
                   }),
                   detailHref: mergeHref('/accounts', sp, {
                     account: account.id,
@@ -417,8 +418,9 @@ export async function loadAccounts(
           accountId: a.id,
           label: `${a.number ?? ''} ${a.name}`.trim(),
           type: a.type,
-          asOf,
-          fiscalYearStart,
+          from: currentPeriod.from,
+          to: currentPeriod.to,
+          period: currentPeriod.presetId,
         }),
         registerAriaLabel: `${t('list.viewRegister')}: ${a.number ?? ''} ${a.name}`.trim(),
       }

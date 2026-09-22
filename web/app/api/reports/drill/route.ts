@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { parseReportDrillTarget } from '../../../../lib/report-drill'
+import { overlayLedgerDrillPeriod } from '../../../../lib/report-drill-period'
 import { loadReportDrillData } from '../../../../lib/report-drill-data'
 import { ReportBookSelectionError } from '../../../../lib/report-books'
 
@@ -26,7 +27,12 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
   try {
-    return NextResponse.json(await loadReportDrillData(target, gate, requestedPage))
+    const scoped = await overlayLedgerDrillPeriod(target, {
+      period: url.searchParams.get('period'),
+      from: url.searchParams.get('from'),
+      to: url.searchParams.get('to'),
+    }, gate.user.orgId)
+    return NextResponse.json(await loadReportDrillData(scoped, gate, requestedPage))
   } catch (error) {
     if (error instanceof ReportBookSelectionError) {
       return NextResponse.json({ error: error.message }, { status: 422 })
