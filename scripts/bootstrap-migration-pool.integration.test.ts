@@ -18,8 +18,13 @@ import pg from "pg";
 import {
   connectMigrationClient,
   describeBootstrapMigrationFailure,
+  executeMigrationAttempt,
+  executeMigrationBody,
   isLockNotAvailable,
+  migrationLockConfig,
+  migrationRunsWithoutTransaction,
   releaseMigrationClient,
+  sanitizeMigrationContent,
 } from "./bootstrap-migration-client.ts";
 import { env, longPool, pool } from "../engine/src/platform/db.ts";
 
@@ -148,8 +153,8 @@ test("executeTrackedMigration bounds the lock wait, retries 55P03, and honors no
     "the runner must strip file-level lock_timeout before executing",
   );
   assert.ok(
-    body.includes("SET LOCAL lock_timeout"),
-    "each transactional attempt must run under the bounded lock_timeout",
+    body.includes("executeMigrationAttempt(client,"),
+    "each attempt must run through the shared attempt executor",
   );
   assert.ok(
     body.includes("isLockNotAvailable(err)"),
@@ -158,6 +163,18 @@ test("executeTrackedMigration bounds the lock wait, retries 55P03, and honors no
   assert.ok(
     body.includes("migrationRunsWithoutTransaction(content)"),
     "no-transaction files (CREATE INDEX CONCURRENTLY) must skip BEGIN/COMMIT",
+  );
+  // The attempt executor lives in the importable client module (bootstrap.ts
+  // runs main() on import); its body carries the bound and the split.
+  const executor = readFileSync(join(here, "bootstrap-migration-client.ts"), "utf8");
+  assert.ok(
+    executor.includes("SET LOCAL lock_timeout"),
+    "each transactional attempt must run under the bounded lock_timeout",
+  );
+  assert.ok(
+    executor.includes("splitSqlStatements(body)"),
+    "no-transaction files must run statement by statement — a multi-statement "
+      + "string is one implicit transaction and CONCURRENTLY refuses it",
   );
 });
 
@@ -194,6 +211,140 @@ test(
       await holder.query("drop table if exists probe_migration_lock_contention");
       await releaseMigrationClient(waiter);
       await releaseMigrationClient(holder);
+    }
+  },
+);
+
+test(
+  "a no-transaction file with CONCURRENTLY builds applies and re-runs through the real attempt executor",
+  { skip: !DB },
+  async () => {
+    // The exact shape 0261 relies on: standard header SETs, a DO block with
+    // internal semicolons (the splitter must keep it whole), and two CREATE
+    // INDEX CONCURRENTLY statements that refuse any transaction block.
+    const file = [
+      "-- openbooks: no-transaction",
+      "SET statement_timeout = 0;",
+      "SET idle_in_transaction_session_timeout = 0;",
+      "SET client_encoding = 'UTF8';",
+      "SET standard_conforming_strings = on;",
+      "SET client_min_messages = warning;",
+      "CREATE TABLE IF NOT EXISTS probe_no_txn (id uuid PRIMARY KEY, org_id uuid, item_id uuid);",
+      "DO $$",
+      "BEGIN",
+      "  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'probe_no_txn_check') THEN",
+      "    ALTER TABLE probe_no_txn ADD CONSTRAINT probe_no_txn_check CHECK (id IS NOT NULL);",
+      "  END IF;",
+      "END",
+      "$$;",
+      "DO $$",
+      "DECLARE idx text;",
+      "BEGIN",
+      "  FOR idx IN SELECT c.relname FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid",
+      "    WHERE NOT i.indisvalid AND c.relname IN ('probe_no_txn_item_a', 'probe_no_txn_item_b') LOOP",
+      "    EXECUTE format('DROP INDEX IF EXISTS %I', idx);",
+      "  END LOOP;",
+      "END",
+      "$$;",
+      "CREATE INDEX CONCURRENTLY IF NOT EXISTS probe_no_txn_item_a",
+      "  ON probe_no_txn USING btree (org_id, item_id) WHERE (item_id IS NOT NULL);",
+      "CREATE INDEX CONCURRENTLY IF NOT EXISTS probe_no_txn_item_b",
+      "  ON probe_no_txn USING btree (org_id, id);",
+    ].join("\n");
+    assert.equal(migrationRunsWithoutTransaction(file), true);
+    const lock = migrationLockConfig({});
+    const filename = "generated/0999_probe_no_txn.sql";
+    const digest = "probe-digest";
+    const runAttempt = async (): Promise<void> => {
+      const client = await connectMigrationClient();
+      try {
+        await executeMigrationAttempt(client, {
+          filename,
+          body: sanitizeMigrationContent(file),
+          transactional: false,
+          lock,
+          digest,
+          executeBody: executeMigrationBody,
+        });
+      } finally {
+        await releaseMigrationClient(client);
+      }
+    };
+    const setup = await connectMigrationClient();
+    try {
+      await setup.query(
+        `create table if not exists public._applied_migrations (
+          filename text primary key, sha256 text not null,
+          applied_at timestamptz not null default now()
+        )`,
+      );
+      await setup.query("delete from public._applied_migrations where filename = $1", [filename]);
+      await setup.query("drop table if exists probe_no_txn");
+      await runAttempt();
+      const first = await setup.query<{ name: string; valid: boolean }>(
+        `select c.relname as name, i.indisvalid as valid from pg_index i
+           join pg_class c on c.oid = i.indexrelid
+          where c.relname in ('probe_no_txn_item_a', 'probe_no_txn_item_b')`,
+      );
+      assert.deepEqual(
+        first.rows.map((row) => row.name).sort(),
+        ["probe_no_txn_item_a", "probe_no_txn_item_b"],
+      );
+      assert.ok(first.rows.every((row) => row.valid), "both builds must be valid");
+
+      // Re-running replays the whole body idempotently (the runner's retry
+      // replays after a mid-file failure, which leaves earlier statements
+      // committed — so drop the ledger row first, exactly as a retry would
+      // re-encounter the file).
+      await setup.query("delete from public._applied_migrations where filename = $1", [filename]);
+      await runAttempt();
+
+      // The INVALID hazard is real: plant one by failing a CONCURRENTLY
+      // build under the target name (uuid text never parses as int), show
+      // that IF NOT EXISTS alone skips it forever, then show the file's DO
+      // block drops it and the rebuild heals it.
+      await setup.query("drop index if exists probe_no_txn_item_a");
+      await setup.query(
+        "insert into probe_no_txn (id, org_id, item_id) values (gen_random_uuid(), gen_random_uuid(), gen_random_uuid())",
+      );
+      const failed = await setup
+        .query(
+          "CREATE INDEX CONCURRENTLY probe_no_txn_item_a ON probe_no_txn ((item_id::text::int))",
+        )
+        .then(
+          () => null,
+          (error: unknown) => error,
+        );
+      assert.ok(failed, "the poisoned build must fail");
+      const invalid = await setup.query<{ valid: boolean }>(
+        `select i.indisvalid as valid from pg_index i join pg_class c on c.oid = i.indexrelid
+          where c.relname = 'probe_no_txn_item_a'`,
+      );
+      assert.equal(invalid.rows.length, 1);
+      assert.equal(invalid.rows[0].valid, false);
+      await setup.query(
+        "CREATE INDEX CONCURRENTLY IF NOT EXISTS probe_no_txn_item_a ON probe_no_txn (org_id, item_id)",
+      );
+      const stillInvalid = await setup.query<{ valid: boolean }>(
+        `select i.indisvalid as valid from pg_index i join pg_class c on c.oid = i.indexrelid
+          where c.relname = 'probe_no_txn_item_a'`,
+      );
+      assert.equal(stillInvalid.rows[0].valid, false, "IF NOT EXISTS skips the INVALID name");
+      await setup.query("delete from public._applied_migrations where filename = $1", [filename]);
+      await runAttempt();
+      const healed = await setup.query<{ valid: boolean; definition: string }>(
+        `select i.indisvalid as valid, pg_get_indexdef(i.indexrelid) as definition
+           from pg_index i join pg_class c on c.oid = i.indexrelid
+          where c.relname = 'probe_no_txn_item_a'`,
+      );
+      assert.equal(healed.rows[0].valid, true);
+      assert.ok(healed.rows[0].definition.includes("(org_id, item_id)"));
+    } finally {
+      await setup.query("drop table if exists probe_no_txn").catch(() => {});
+      await setup
+        .query("delete from public._applied_migrations where filename = $1", [filename])
+        .catch(() => {});
+      await releaseMigrationClient(setup);
     }
   },
 );

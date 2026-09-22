@@ -32,6 +32,8 @@ import { db, env, longPool, pool, withBypassContext } from "../engine/src/platfo
 import {
   connectMigrationClient,
   describeBootstrapMigrationFailure,
+  executeMigrationAttempt,
+  executeMigrationBody,
   isLockNotAvailable,
   migrationLockConfig,
   migrationRetryDelayMs,
@@ -1337,56 +1339,24 @@ async function executeTrackedMigration(
     attempt += 1;
     const client = await connectMigrationClient();
     try {
-      if (transactional) {
-        await client.query("begin");
-        await client.query(`SET LOCAL lock_timeout = ${lock.lockTimeoutMs}`);
-      } else {
-        // CREATE INDEX CONCURRENTLY (and friends) refuse a transaction
-        // block outright, so these files run statement by statement. The
-        // contract is strict — every statement idempotent, INVALID indexes
-        // dropped up front — because a failure mid-file leaves earlier
-        // statements committed and the retry replays the whole body.
-        await client.query(`SET lock_timeout = ${lock.lockTimeoutMs}`);
-      }
-      try {
-        if (filename === ORDER_QUANTITY_PROGRESS_MIGRATION_FILENAME) {
-          await executeOrderQuantityProgressMigration(client, body, digest);
-        } else {
-          await client.query(body);
-        }
-        // pg_dump-style baselines intentionally clear search_path while creating
-        // fully qualified objects. Restore the application default before this
-        // pooled session is returned to callers that execute reviewed SQL files.
-        await client.query("set search_path = public, pg_catalog");
-        await client.query("set row_security = on");
-        if (recordedDigest) {
-          const updated = await client.query(
-            `update public._applied_migrations
-            set sha256 = $1, applied_at = now()
-          where filename = $2 and sha256 = $3`,
-            [digest, filename, recordedDigest],
-          );
-          if (updated.rowCount !== 1) {
-            throw new Error("migration digest changed during approved revision");
-          }
-        } else {
-          await client.query(
-            "insert into public._applied_migrations (filename, sha256) values ($1, $2)",
-            [filename, digest],
-          );
-        }
-        if (transactional) {
-          await client.query("commit");
-        }
-      } finally {
-        if (!transactional) {
-          // Our session-scope bound must not outlive this checkout. (The
-          // file header's own session SETs leak into this timeout-free pool
-          // exactly as every transactional migration's already do — no new
-          // hazard, and the file can no longer touch lock_timeout itself.)
-          await client.query("RESET lock_timeout").catch(() => {});
-        }
-      }
+      // No-transaction files (CREATE INDEX CONCURRENTLY and friends) run
+      // statement by statement with no BEGIN/COMMIT — the contract is
+      // strict (every statement idempotent, INVALID indexes dropped up
+      // front) because a failure mid-file leaves earlier statements
+      // committed and the retry replays the whole body.
+      await executeMigrationAttempt(client, {
+        filename,
+        body,
+        transactional,
+        lock,
+        digest,
+        recordedDigest,
+        executeBody:
+          filename === ORDER_QUANTITY_PROGRESS_MIGRATION_FILENAME
+            ? (migrationClient, migrationBody) =>
+                executeOrderQuantityProgressMigration(migrationClient, migrationBody, digest)
+            : executeMigrationBody,
+      });
       return;
     } catch (err) {
       await client.query("rollback").catch(() => {});

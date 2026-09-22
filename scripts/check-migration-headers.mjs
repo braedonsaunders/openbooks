@@ -18,7 +18,11 @@
  *
  *   viol1  it sets lock_timeout to 0 in any spelling (`SET lock_timeout = 0`,
  *          `SET lock_timeout TO '0s'`, `SET SESSION ...`, `SET LOCAL ...`),
- *          or `RESET lock_timeout` (the default is 0 — unbounded);
+ *          or `RESET lock_timeout` (the default is 0 — unbounded). Any
+ *          `set_config('lock_timeout', ...)` call is refused at any value:
+ *          the runner cannot strip an expression the way it strips a SET
+ *          statement, so the call would silently override the runner's
+ *          bound for every statement after it;
  *   viol2  it omits the standard header: the five session SETs every
  *          migration since the early ordinals carries (statement_timeout,
  *          idle_in_transaction_session_timeout, client_encoding,
@@ -140,6 +144,10 @@ export function scanMigrationFile(filename, content) {
       kind: "lock_timeout-zero",
       value: setting === null ? "RESET lock_timeout" : `SET lock_timeout = ${setting}`,
     });
+  }
+  const setConfig = /set_config\s*\(\s*['"]lock_timeout['"]/i.exec(code)?.[0];
+  if (setConfig) {
+    findings.push({ file: filename, kind: "lock_timeout-set_config", value: setConfig });
   }
   const missing = REQUIRED_HEADER_SETTINGS.filter(
     (name) => !new RegExp(`(^|\\s)SET\\s+(?:(?:SESSION|LOCAL)\\s+)?${name}\\b`, "i").test(code),

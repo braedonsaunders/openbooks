@@ -57,6 +57,18 @@ test("a bounded lock_timeout passes the zero check (the runner still owns it)", 
   );
 });
 
+test("set_config lock_timeout is refused at any value (the runner cannot strip it)", () => {
+  for (const stmt of [
+    "SELECT set_config('lock_timeout', '0', false);",
+    "SELECT set_config('lock_timeout', '5s', true);",
+  ]) {
+    const findings = scanMigrationFile("0261_setconfig.sql", `${HEADER}\n${stmt}\nselect 1;`);
+    assert.equal(findings.length, 1, stmt);
+    assert.equal(findings[0].kind, "lock_timeout-set_config");
+    assert.ok(findings[0].value.includes("set_config"), stmt);
+  }
+});
+
 test("a missing header line is refused naming the missing SET", () => {
   const findings = scanMigrationFile(
     "0261_no_header.sql",

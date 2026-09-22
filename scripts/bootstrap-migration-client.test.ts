@@ -22,6 +22,7 @@ import {
   migrationRetryDelayMs,
   migrationRunsWithoutTransaction,
   sanitizeMigrationContent,
+  splitSqlStatements,
 } from "./bootstrap-migration-client.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -105,6 +106,7 @@ test("the sanitizer strips every file-level lock_timeout spelling", () => {
   const body = [
     "SET lock_timeout = 0;",
     "SET LOCAL lock_timeout TO '0s';",
+    "SET LOCAL lock_timeout = '5s';",
     "set session lock_timeout=0",
     "RESET lock_timeout;",
     "SET lock_timeout = '5s';",
@@ -145,6 +147,40 @@ test("no published migration keeps a file-level lock_timeout after the strip", (
     }
   }
   assert.deepEqual(survivors, []);
+});
+
+test("the splitter keeps dollar-quoted bodies whole and drops empties", () => {
+  const statements = splitSqlStatements(
+    [
+      "SET statement_timeout = 0;",
+      "",
+      "-- a comment; with a semicolon",
+      "DO $$",
+      "BEGIN",
+      "  RAISE NOTICE 'a;b';",
+      "END;",
+      "$$;",
+      "CREATE OR REPLACE FUNCTION f() RETURNS void LANGUAGE plpgsql AS $body$",
+      "BEGIN",
+      "  PERFORM 1;",
+      "END;",
+      "$body$;",
+      "SELECT 'semi;colon', \"weird;ident\"; /* trailing; comment */",
+      "",
+    ].join("\n"),
+  );
+  assert.equal(statements.length, 4);
+  assert.match(statements[0], /SET statement_timeout/);
+  assert.match(statements[1], /RAISE NOTICE 'a;b'/);
+  assert.match(statements[2], /\$body\$/);
+  assert.match(statements[3], /SELECT 'semi;colon', "weird;ident"/);
+});
+
+test("the splitter does not mistake a cast or a placeholder for a dollar quote", () => {
+  const statements = splitSqlStatements(
+    "SELECT 1::$regclass; SELECT $1;",
+  );
+  assert.equal(statements.length, 2);
 });
 
 test("the real 0251 header is neutralized exactly where the runner would run it", () => {
