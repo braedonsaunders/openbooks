@@ -281,6 +281,7 @@
     "payables": {
       "description": "Vendor bill capture: the AP capture pipeline, its configuration and receipt materialization.",
       "dependsOn": [
+        "connectors",
         "flows",
         "inventory",
         "money",

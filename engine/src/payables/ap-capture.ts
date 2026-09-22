@@ -1,6 +1,9 @@
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { add, cmp, fromUnits, sum, toUnits } from "../money/money.ts";
 import { decimalNullCause, decimalNullRefusal } from "../money/decimal-refusal.ts";
+import { guardedFetch, resolveVerifiedAddresses, type AddressLookup } from "../connectors/ssrf-guard.ts";
+
+export type { AddressLookup };
 
 export const AZURE_DOCUMENT_INTELLIGENCE_API_VERSION = "2024-11-30";
 export const DEFAULT_INVOICE_MODEL = "prebuilt-invoice";
@@ -458,14 +461,41 @@ export function validateAzureDocumentEndpoint(value: string): URL {
   return endpoint;
 }
 
+/**
+ * Enforcement-time endpoint check: the suffix pin above plus live DNS
+ * resolution requiring every resolved address to be public unicast. The
+ * suffix alone never fetched anything, so a stale or rebinding hostname
+ * passed validation and failed (or worse, connected) later; every request
+ * below re-resolves through guardedFetch anyway, and this fails the
+ * misconfiguration closed before any credential is sent.
+ */
+export async function verifyAzureDocumentEndpoint(value: string, lookupAddresses?: AddressLookup): Promise<URL> {
+  const endpoint = validateAzureDocumentEndpoint(value);
+  try {
+    await resolveVerifiedAddresses(endpoint, lookupAddresses);
+  } catch (error) {
+    throw new Error(
+      `Document provider endpoint ${endpoint.hostname} did not resolve to a public address — check the endpoint under Platform → AI`,
+      { cause: error },
+    );
+  }
+  return endpoint;
+}
+
 async function providerError(response: Response): Promise<string> {
   const body = await response.text();
+  let parsed: { error?: { message?: string }; message?: string } | null = null;
   try {
-    const parsed = JSON.parse(body) as { error?: { message?: string }; message?: string };
-    return parsed.error?.message ?? parsed.message ?? `HTTP ${response.status}`;
+    parsed = JSON.parse(body) as { error?: { message?: string }; message?: string };
   } catch {
-    return body.slice(0, 300) || `HTTP ${response.status}`;
+    parsed = null;
   }
+  // The provider's structured message names the fault; the raw body never
+  // leaves this function — echoing it embedded response HTML and document
+  // bytes into operator-facing errors.
+  const message = parsed?.error?.message ?? parsed?.message;
+  if (typeof message === "string" && message.trim()) return message.trim().slice(0, 300);
+  return `HTTP ${response.status}`;
 }
 
 /** Production Azure REST adapter: submit bytes, poll asynchronously, retain raw evidence. */
@@ -476,12 +506,16 @@ export async function extractAzureInvoice(input: {
   contentType: string;
   bytes: Uint8Array;
   fetchImpl?: typeof fetch;
+  lookup?: AddressLookup;
 }): Promise<{ raw: AzureAnalyzeResponse; normalized: NormalizedCapture; evidence: CaptureEvidence[]; overallConfidence: string | null }> {
-  const endpoint = validateAzureDocumentEndpoint(input.endpoint);
+  const endpoint = await verifyAzureDocumentEndpoint(input.endpoint, input.lookup);
   const model = input.model?.trim() || DEFAULT_INVOICE_MODEL;
   if (!/^[a-zA-Z0-9][a-zA-Z0-9._~-]{1,63}$/.test(model)) throw new Error("Invalid document model id");
   if (!input.apiKey.trim()) throw new Error("Document provider API key is missing");
-  const runFetch = input.fetchImpl ?? fetch;
+  // Operator-configured host: resolve-and-pin per request with no redirects,
+  // never the ambient fetch that follows Location anywhere with the key.
+  const runFetch: typeof fetch = input.fetchImpl
+    ?? ((url, init) => guardedFetch(url, init ?? {}, { lookup: input.lookup }));
   const url = new URL(
     `${endpoint.pathname}/documentintelligence/documentModels/${encodeURIComponent(model)}:analyze`,
     endpoint,
@@ -525,13 +559,16 @@ export async function testAzureDocumentProvider(input: {
   endpoint: string;
   apiKey: string;
   fetchImpl?: typeof fetch;
+  lookup?: AddressLookup;
 }): Promise<{ ok: boolean; message: string }> {
   try {
-    const endpoint = validateAzureDocumentEndpoint(input.endpoint);
+    const endpoint = await verifyAzureDocumentEndpoint(input.endpoint, input.lookup);
     if (!input.apiKey.trim()) return { ok: false, message: "Document provider API key is missing" };
     const url = new URL(`${endpoint.pathname}/documentintelligence/documentModels`, endpoint);
     url.searchParams.set("api-version", AZURE_DOCUMENT_INTELLIGENCE_API_VERSION);
-    const response = await (input.fetchImpl ?? fetch)(url, {
+    const runFetch: typeof fetch = input.fetchImpl
+      ?? ((fetchUrl, init) => guardedFetch(fetchUrl, init ?? {}, { lookup: input.lookup }));
+    const response = await runFetch(url, {
       headers: { "Ocp-Apim-Subscription-Key": input.apiKey },
       signal: AbortSignal.timeout(30_000),
     });
