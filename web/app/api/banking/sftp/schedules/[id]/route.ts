@@ -28,10 +28,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const mine = runs.find((r) => r.scheduleId === id)
     return NextResponse.json({ ok: true, result: mine ?? { scheduleId: id, filesSeen: 0, imported: 0, duplicates: 0, errors: [], files: [] } })
   }
-  await db.execute(sql`
+  // A zero-row toggle is a failure, not a success: without the affected-row
+  // check a missing or foreign-tenant id would report {ok:true} while no read
+  // can observe any effect. Refuse exactly like the run branch above.
+  const updated = (await db.execute<{ id: string }>(sql`
     update sftp_import_schedules set is_active = ${body.isActive !== false}, updated_at = now(), updated_by = ${user.id}
      where id = ${id} and org_id = ${user.orgId}
-  `)
+    returning id
+  `))
+  if (!updated.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json({ ok: true })
 }
 
@@ -41,6 +46,14 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const { user } = gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  await db.execute(sql`delete from sftp_import_schedules where id = ${id} and org_id = ${user.orgId}`)
+  // Same zero-row rule as the toggle above: a delete that matches nothing
+  // (missing or foreign-tenant id) refuses with 'not found' rather than
+  // reporting {ok:true}. The org-scoped predicate keeps foreign ids
+  // indistinguishable from absent.
+  const deleted = (await db.execute<{ id: string }>(sql`
+    delete from sftp_import_schedules where id = ${id} and org_id = ${user.orgId}
+    returning id
+  `))
+  if (!deleted.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json({ ok: true })
 }
