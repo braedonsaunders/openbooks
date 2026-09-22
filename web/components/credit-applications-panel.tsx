@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Input } from "@openbooks/ui";
 import { useMoney } from "./money-provider";
+import { useBusinessToday } from "./business-date-provider";
 
 type Settlement = {
   applicationId: string;
@@ -62,6 +63,10 @@ export function CreditApplicationsPanel({
   const t = useTranslations("payments.creditApplications");
   const tCommon = useTranslations("common");
   const { money } = useMoney();
+  // The application date has no input to correct it: it must be the org's
+  // business day from the server, never the browser's UTC day (which is
+  // tomorrow after 5pm Pacific).
+  const today = useBusinessToday();
   const [state, setState] = useState<State | null>(null);
   const [available, setAvailable] = useState(true);
   const [openItems, setOpenItems] = useState<OpenItem[] | null>(null);
@@ -142,7 +147,7 @@ export function CreditApplicationsPanel({
         body: JSON.stringify({
           partyId,
           side,
-          appliedOn: new Date().toISOString().slice(0, 10),
+          appliedOn: today,
           credits,
         }),
       });

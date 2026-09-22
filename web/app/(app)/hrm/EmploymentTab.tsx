@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, Label, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../lib/api-error'
+import { useBusinessToday } from '../../../components/business-date-provider'
 import { ChangeRequestActions } from './ChangeRequestActions'
 import { ChangeRequestDrawer } from './ChangeRequestDrawer'
 import { ExitRecordForm } from './performance/ExitRecordForm'
@@ -131,10 +132,6 @@ type RecordState = {
   competencies: DrawerCompetency[]
 }
 
-function todayCivil(): string {
-  return new Date().toISOString().slice(0, 10)
-}
-
 export function EmploymentTab({
   employmentId,
   canManageHrm,
@@ -152,7 +149,9 @@ export function EmploymentTab({
   departmentOptions?: { value: string; label: string }[]
 }) {
   const t = useTranslations('hrm')
-  const [date, setDate] = useState(todayCivil)
+  // New dated records default to the org's business day from the server,
+  // never the browser's UTC day (tomorrow after 5pm Pacific).
+  const [date, setDate] = useState(useBusinessToday())
   const [revision, setRevision] = useState(0)
   const [proposing, setProposing] = useState(false)
   const [exit, setExit] = useState<ExitState>({ status: 'hidden', record: null, message: null })

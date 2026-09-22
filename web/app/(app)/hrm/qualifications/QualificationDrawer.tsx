@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { Button, Drawer, Input, Label, Select, Textarea } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { promptDialog } from '../../../../lib/prompt'
+import { useBusinessToday } from '../../../../components/business-date-provider'
 
 /**
  * Qualification record and detail drawer. Opens blank for recording
@@ -57,6 +58,9 @@ export function QualificationDrawer({
   const t = useTranslations('hrm')
   const tCommon = useTranslations('common')
   const router = useRouter()
+  // The renewal default is the org's business day from the server, never
+  // the browser's UTC day (tomorrow after 5pm Pacific).
+  const today = useBusinessToday()
   // Whose detail the loaded row belongs to is part of the state, so
   // switching records shows nothing rather than the previous person's
   // credential for one frame. Clearing by deriving instead of by
@@ -142,7 +146,7 @@ export function QualificationDrawer({
 
   async function renew(): Promise<void> {
     if (!qualificationId || !detail) return
-    const issuedOn = window.prompt(t('qualifications.renewPrompt'), new Date().toISOString().slice(0, 10))
+    const issuedOn = window.prompt(t('qualifications.renewPrompt'), today)
     if (!issuedOn) return
     setStatus(undefined)
     try {

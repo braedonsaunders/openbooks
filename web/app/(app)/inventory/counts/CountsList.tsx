@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { Plus } from 'lucide-react'
 import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks/ui'
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
+import { useBusinessToday } from '../../../../components/business-date-provider'
 import type { StockCountDetail, StockCountSummary } from '@openbooks/engine/src/inventory/stock-count-queries.ts'
 
 const field = 'space-y-1.5'
@@ -250,7 +251,9 @@ function CreateCountDrawer({
   const t = useTranslations('inventory')
   const [locationId, setLocationId] = useState('')
   const [subsidiaryId, setSubsidiaryId] = useState(subsidiaryOptions[0]?.value ?? '')
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
+  // The count date defaults to the org's business day from the server, never
+  // the browser's UTC day (tomorrow after 5pm Pacific).
+  const [date, setDate] = useState(useBusinessToday())
   const [memo, setMemo] = useState('')
   const [lines, setLines] = useState<{ itemId: string; stockLocationId: string; lotId: string }[]>([
     { itemId: '', stockLocationId: '', lotId: '' },

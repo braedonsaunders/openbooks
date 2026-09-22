@@ -35,6 +35,7 @@ const { act } = await import("react");
 const { NextIntlClientProvider } = await import("next-intl");
 const messages = (await import("../messages/en")).default;
 const { MoneyProvider } = await import("./money-provider");
+const { BusinessDateProvider } = await import("./business-date-provider");
 const { CreditApplicationsPanel } = await import("./credit-applications-panel");
 
 const DOC = "00000000-0000-4000-8000-0000000000c1";
@@ -97,12 +98,14 @@ async function mount(canApply = true) {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="USD">
-          <CreditApplicationsPanel
-            documentId={DOC}
-            side="ar"
-            partyId={PARTY}
-            canApply={canApply}
-          />
+          <BusinessDateProvider today="2026-09-17">
+            <CreditApplicationsPanel
+              documentId={DOC}
+              side="ar"
+              partyId={PARTY}
+              canApply={canApply}
+            />
+          </BusinessDateProvider>
         </MoneyProvider>
       </NextIntlClientProvider>,
     );
@@ -197,7 +200,9 @@ test("applying sends the credit's own line and the entered amount", async () => 
     assert.deepEqual(posted.body, {
       partyId: PARTY,
       side: "ar",
-      appliedOn: new Date().toISOString().slice(0, 10),
+      // The application date has no input to correct it: it must be the org's
+      // business day from the server, never the browser's UTC day.
+      appliedOn: "2026-09-17",
       credits: [
         {
           fromLineId: CREDIT_LINE,
