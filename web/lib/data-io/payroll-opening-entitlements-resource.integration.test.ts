@@ -1,0 +1,127 @@
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
+
+const hooks = registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === "server-only") {
+      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
+    }
+    return nextResolve(specifier, context);
+  },
+});
+
+// Dynamic, after the hooks: a static import would resolve 'server-only'
+// before the hooks run and throw. Same pattern as the data-io
+// fixed-asset-resources suite.
+const { payrollOpeningEntitlementsResource } = (await import(
+  "./payroll-opening-balances-resource.ts"
+)) as typeof import("./payroll-opening-balances-resource.ts");
+hooks.deregister();
+
+const { sql } = await import("drizzle-orm");
+const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const {
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+} = await import("@openbooks/engine/src/testing/fixtures.ts");
+
+/**
+ * PAYROLL-1, import-resource half: the bank carry-in resource parsed the
+ * amount cell itself — stripping comma/dollar BEFORE exact-decimal
+ * validation — and handed the engine save path a pre-normalized figure.
+ * A decimal-comma "12,34" was therefore banked as 1234.0000 (100x) on the
+ * REAL import path, and the dry run reported success for it. The resource
+ * now parses the raw cell through the engine save path's own canonical
+ * parser, so preview and commit refuse exactly what the engine refuses.
+ *
+ * DB partition: scratch org, synthetic data only, no DDL.
+ */
+const DB = !!process.env.OPENBOOKS_DB_URL;
+
+async function seedPlan(orgId: string, actorId: string): Promise<void> {
+  await db.execute(sql`
+    insert into entitlement_plans (id, org_id, code, name, unit, direction, accrual_method,
+                                   accrual_value, cap_behavior, is_active, created_by, updated_by)
+    values (${randomUUID()}, ${orgId}, 'VAC', 'Vacation', 'money', 'accrue', 'manual',
+            null, 'warn', true, ${actorId}, ${actorId})`);
+}
+
+async function seedEmployee(orgId: string, actorId: string, name: string): Promise<string> {
+  const id = randomUUID();
+  await db.execute(sql`
+    insert into parties (id, org_id, kind, display_name, is_active, custom)
+    values (${id}, ${orgId}, 'person', ${name}, true, '{}'::jsonb)`);
+  await db.execute(sql`
+    insert into employee_roles (org_id, party_id, hired_on, terminated_on, is_active,
+                               created_by, updated_by)
+    values (${orgId}, ${id}, '2016-01-06', null, true, ${actorId}, ${actorId})`);
+  return id;
+}
+
+async function ledgerCount(orgId: string): Promise<number> {
+  const rows = (await db.execute<{ n: number }>(sql`
+    select count(*)::int as n from entitlement_ledger where org_id = ${orgId}`));
+  return rows.rows[0]!.n;
+}
+
+function row(employee: string, amount: unknown) {
+  return { employee, plan: "VAC", asOf: "2026-07-01", amount };
+}
+
+test(
+  "payroll-1: bank carry-in import refuses locale money in dry-run AND commit, writing nothing",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    await seedPlan(org.orgId, actorId);
+    await seedEmployee(org.orgId, actorId, "Aldo Rossi");
+    const resource = payrollOpeningEntitlementsResource(org.orgId);
+    const ctx = {
+      orgId: org.orgId, actorId, dryRun: true, allowedSubsidiaryIds: null,
+    };
+    try {
+      // Dry run: decimal-comma, ambiguous, and grouped amounts all refuse
+      // with the precise remedy — the preview must never report success.
+      for (const amount of ["12,34", "1,234", "1,234.56"]) {
+        const preview = await resource.write([row("Aldo Rossi", amount)], "insert", ctx);
+        assert.equal(preview.failed, 1, `dry run accepted ${amount}`);
+        assert.equal(preview.created, 0);
+        assert.match(
+          preview.errors[0]!.message,
+          amount === "12,34"
+            ? /VAC carry-in must use "\." as the decimal point — write "12,34" as "12\.34"/
+            : amount === "1,234"
+              ? /is ambiguous — "1,234" could mean 1234 \(thousands separator\) or 1\.234 \(decimal comma\)/
+              : /must not contain a thousands separator/,
+        );
+      }
+
+      // Commit: the same refusal, and nothing lands in the ledger.
+      const refused = await resource.write(
+        [row("Aldo Rossi", "12,34")],
+        "insert",
+        { ...ctx, dryRun: false },
+      );
+      assert.equal(refused.failed, 1);
+      assert.equal(refused.created, 0);
+      assert.match(refused.errors[0]!.message, /must use "\." as the decimal point/);
+      assert.equal(await ledgerCount(org.orgId), 0);
+
+      // Plain decimals still succeed through the same path.
+      const ok = await resource.write(
+        [row("Aldo Rossi", "1234.56")],
+        "insert",
+        { ...ctx, dryRun: false },
+      );
+      assert.deepEqual(ok.errors, []);
+      assert.equal(ok.created, 1);
+      assert.equal(await ledgerCount(org.orgId), 1);
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);

@@ -349,6 +349,48 @@ test(
   },
 );
 
+test(
+  "a locale-money carry-in is refused with the remedy and writes nothing",
+  { skip: !DB },
+  async () => {
+    // An Italian operator types twelve-thirty-four as "12,34" — correctly.
+    // The old parser stripped the comma and banked 1234.0000, a 100x
+    // overstatement of a real liability, immutable once a run reads it.
+    const fx = await seedBanks();
+    try {
+      await assert.rejects(
+        saveEntitlementOpenings({
+          orgId: fx.orgId, actorId: fx.actorId, movementDate: "2026-07-01",
+          rows: [{ employeePartyId: fx.employeeId, amounts: { VAC: "12,34" } }],
+        }),
+        (error: unknown) => {
+          assert.ok(error instanceof EntitlementOpeningSaveError);
+          assert.match(
+            error.message,
+            /VAC carry-in must use "\." as the decimal point — write "12,34" as "12\.34"/,
+          );
+          return true;
+        },
+      );
+      await assert.rejects(
+        saveEntitlementOpenings({
+          orgId: fx.orgId, actorId: fx.actorId, movementDate: "2026-07-01",
+          rows: [{ employeePartyId: fx.employeeId, amounts: { BANK: "1,234" } }],
+        }),
+        /is ambiguous — "1,234" could mean 1234 \(thousands separator\) or 1\.234 \(decimal comma\)/,
+      );
+      // All-or-nothing: the refused loads wrote no ledger movement.
+      assert.equal((await entitlementOpenings(fx.orgId)).entered, 0);
+      const movements = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from entitlement_ledger
+         where org_id = ${fx.orgId}`));
+      assert.equal(movements.rows[0]!.n, 0);
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
 /* ------------------------------------------------------------------ */
 /* Immutability, in the service AND in the database                    */
 /* ------------------------------------------------------------------ */

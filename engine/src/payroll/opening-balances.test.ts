@@ -53,7 +53,7 @@ test("opening-balance component upserts pin the known tenant on the opening_bala
 
 test("opening balance amounts are exact money, never negative, never a transposed column", () => {
   const clean = normalizeOpeningBalance({
-    pensionableYtd: "40,000.00", insurableYtd: "$40,000", cppYtd: "2380.50",
+    pensionableYtd: "40000.00", insurableYtd: "40000", cppYtd: "2380.50",
     taxableYtd: "40000", taxYtd: "6000",
   });
   assert.equal(clean.pensionableYtd, "40000.0000");
@@ -63,8 +63,24 @@ test("opening balance amounts are exact money, never negative, never a transpose
   assert.equal(clean.qpipYtd, "0.0000");
   assert.equal(clean.nonPeriodicYtd, "0.0000");
 
+  // Separators are refused with a remedy, never silently stripped: "40,000.00"
+  // keeps its grouping message and "$40,000" names the currency symbol, while
+  // a decimal comma is rewritten to the correct dotted reading.
+  assert.throws(
+    () => normalizeOpeningBalance({ pensionableYtd: "40,000.00" }),
+    /must not contain a thousands separator/,
+  );
+  assert.throws(
+    () => normalizeOpeningBalance({ insurableYtd: "$40,000" }),
+    /must not contain a currency symbol/,
+  );
+  assert.throws(
+    () => normalizeOpeningBalance({ pensionableYtd: "12,34" }),
+    /must use "\." as the decimal point — write "12,34" as "12\.34"/,
+  );
+
   assert.throws(() => normalizeOpeningBalance({ cppYtd: "-1" }), /cannot be negative/);
-  assert.throws(() => normalizeOpeningBalance({ cppYtd: "lots" }), /is not an amount/);
+  assert.throws(() => normalizeOpeningBalance({ cppYtd: "lots" }), /is not a number/);
   // The realistic import error: CPP dollars pasted into pensionable earnings.
   assert.throws(
     () => normalizeOpeningBalance({ pensionableYtd: "2380.50", cppYtd: "40000" }),
@@ -106,22 +122,26 @@ test("a component opening is exact money, keyed by id or code, and bounded by it
   // Both keyings resolve to the component id, because the API sends uuids and a
   // spreadsheet header carries the code, and neither caller should own a
   // second resolver.
-  assert.deepEqual(normalizeOpeningComponents({ RRSP: "23,000.00" }, [RRSP]), {
-    [RRSP.componentId]: "23000.0000",
-  });
-  assert.deepEqual(normalizeOpeningComponents({ [RRSP.componentId]: "$1,000" }, [RRSP]), {
-    [RRSP.componentId]: "1000.0000",
-  });
   assert.deepEqual(normalizeOpeningComponents({ rrsp: "10" }, [RRSP]), {
     [RRSP.componentId]: "10.0000",
   });
+  // Grouped and currency-bearing component openings are refused with a
+  // remedy, never silently stripped into a different amount.
+  assert.throws(
+    () => normalizeOpeningComponents({ RRSP: "23,000.00" }, [RRSP]),
+    /must not contain a thousands separator/,
+  );
+  assert.throws(
+    () => normalizeOpeningComponents({ [RRSP.componentId]: "$1,000" }, [RRSP]),
+    /must not contain a currency symbol/,
+  );
 
   // Zero and blank are "no carry-in", not a row of zero.
   assert.deepEqual(normalizeOpeningComponents({ RRSP: "0" }, [RRSP]), {});
   assert.deepEqual(normalizeOpeningComponents({ RRSP: "" }, [RRSP]), {});
 
   assert.throws(() => normalizeOpeningComponents({ RRSP: "-1" }, [RRSP]), /cannot be negative/);
-  assert.throws(() => normalizeOpeningComponents({ RRSP: "some" }, [RRSP]), /is not an amount/);
+  assert.throws(() => normalizeOpeningComponents({ RRSP: "some" }, [RRSP]), /is not a number/);
   // A stale template naming a component this org does not have.
   assert.throws(
     () => normalizeOpeningComponents({ TFSA: "100" }, [RRSP]),
@@ -1252,7 +1272,7 @@ test("second-order opening amounts normalize, refuse transpositions, and keep a 
   assert.equal(employer.qpipEmployerYtd, "620.0600");
   assert.equal(employer.wcbAssessableYtd, "1000.0000");
   assert.throws(() => normalizeOpeningBalance({ qpipEmployerYtd: "-1" }), /cannot be negative/);
-  assert.throws(() => normalizeOpeningBalance({ wcbAssessableYtd: "lots" }), /is not an amount/);
+  assert.throws(() => normalizeOpeningBalance({ wcbAssessableYtd: "lots" }), /is not a number/);
   assert.equal(isEmptyOpeningBalance({ wcbAssessableYtd: "1000.0000" }, {}), false);
 
   // Part-to-whole, like every other cross-field check: bonus-attributed

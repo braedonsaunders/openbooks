@@ -1,8 +1,8 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { cmp, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
-import { canonicalDecimal } from '../exact-decimal'
+import { cmp } from '@openbooks/engine/src/money/money.ts'
+import { parseEntitlementCarryInAmount } from '@openbooks/engine/src/payroll/entitlements-openings-save.ts'
 import {
   assertTaxYear,
   isEmptyOpeningBalance,
@@ -448,15 +448,13 @@ export function payrollOpeningEntitlementsResource(orgId: string): DataResource 
           // only counts rows lets an operator approve a load that then fails
           // halfway, and the sign is the error that matters here (an 'owe'
           // balance entered positive is a credit on a real cheque).
-          const cleaned = String(src.amount ?? '').trim().replace(/[,$]/g, '') || '0'
-          const exact = canonicalDecimal(cleaned, 4)
-          if (exact === null) throw new Error('amount must be an exact decimal')
-          let amount: string
-          try {
-            amount = normalizeMoney(exact)
-          } catch {
-            throw new Error('amount must be an exact decimal')
-          }
+          //
+          // The amount is parsed by the engine save path's own canonical
+          // parser, on the RAW cell text: separators are refused with a
+          // remedy, never stripped. Pre-normalizing here would reintroduce
+          // the silent 100x revaluation the engine refuses, and the dry run
+          // would report success for a load the real import then banks wrong.
+          const amount = parseEntitlementCarryInAmount(src.amount, plan.code)
           if (plan.direction === 'accrue' && cmp(amount, '0') < 0) {
             throw new Error(`${plan.code} is a bank the employer owes, so its carry-in cannot be negative`)
           }

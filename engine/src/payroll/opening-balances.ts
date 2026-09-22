@@ -1,5 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
+import { decimalNullRefusal } from "../money/decimal-refusal.ts";
 import { db } from "../platform/db.ts";
 import { add, cmp, normalizeMoney } from "../money/money.ts";
 import { PayrollError } from "./error.ts";
@@ -252,9 +253,14 @@ export function normalizeOpeningBalance(input: Record<string, unknown>): Opening
       amounts[field.key] = "0.0000";
       continue;
     }
-    const cleaned = String(raw).trim().replace(/[,$]/g, "");
-    const exact = canonicalDecimal(cleaned, 4);
-    if (exact === null) throw new PayrollError(`${field.label} is not an amount: "${String(raw)}"`);
+    // Raw trimmed text goes to canonicalDecimal with NO separator stripping:
+    // a comma may be a decimal comma (twelve-thirty-four written correctly),
+    // and stripping it first would store a 100x error. Refusals name the
+    // remedy via the shared decimal classifier — never a second one.
+    const exact = canonicalDecimal(String(raw).trim(), 4);
+    if (exact === null) {
+      throw new PayrollError(decimalNullRefusal(field.label, "an amount", raw, 4));
+    }
     let value: string;
     try {
       value = normalizeMoney(exact);
@@ -328,16 +334,22 @@ export function normalizeOpeningComponents(
       );
     }
     if (raw === undefined || raw === null || String(raw).trim() === "") continue;
-    const cleaned = String(raw).trim().replace(/[,$]/g, "");
-    const exact = canonicalDecimal(cleaned, 4);
+    // Same no-strip rule as normalizeOpeningBalance above: feed the raw
+    // trimmed text to canonicalDecimal so a decimal comma is refused, not
+    // silently re-valued.
+    const exact = canonicalDecimal(String(raw).trim(), 4);
     if (exact === null) {
-      throw new PayrollError(`${component.name} year-to-date is not an amount: "${String(raw)}"`);
+      throw new PayrollError(
+        decimalNullRefusal(`${component.name} year-to-date`, "an amount", raw, 4),
+      );
     }
     let value: string;
     try {
       value = normalizeMoney(exact);
     } catch {
-      throw new PayrollError(`${component.name} year-to-date is not an amount: "${String(raw)}"`);
+      throw new PayrollError(
+        decimalNullRefusal(`${component.name} year-to-date`, "an amount", raw, 4),
+      );
     }
     if (cmp(value, "0") < 0) {
       throw new PayrollError(`${component.name} year-to-date cannot be negative`);

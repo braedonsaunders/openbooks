@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
+import { decimalNullRefusal } from "../money/decimal-refusal.ts";
 import { db } from "../platform/db.ts";
 import { cmp, neg, normalizeMoney } from "../money/money.ts";
 import { PayrollError } from "./error.ts";
@@ -45,6 +46,30 @@ export class EntitlementOpeningSaveError extends PayrollError {
   constructor(readonly result: EntitlementOpeningSaveResult) {
     super(result.errors[0]?.message ?? "entitlement opening balances were rejected");
     this.name = "EntitlementOpeningSaveError";
+  }
+}
+
+/**
+ * Parse one bank carry-in cell: blank stays "0.0000" ("no carry-in", which the
+ * caller treats as clear), anything else is raw trimmed text through
+ * canonicalDecimal with NO separator stripping — a comma may be a decimal
+ * comma, and stripping it first would store a 100x error. Refusals name the
+ * remedy via the shared decimal classifier. Sign is NOT checked here: whether
+ * negative is legal depends on the plan's direction (accrue vs owe), which
+ * only the caller knows.
+ */
+export function parseEntitlementCarryInAmount(raw: unknown, planCode: string): string {
+  if (raw === undefined || raw === null || String(raw).trim() === "") {
+    return "0.0000";
+  }
+  const exact = canonicalDecimal(String(raw).trim(), 4);
+  if (exact === null) {
+    throw new PayrollError(decimalNullRefusal(`${planCode} carry-in`, "an amount", raw, 4));
+  }
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new PayrollError(decimalNullRefusal(`${planCode} carry-in`, "an amount", raw, 4));
   }
 }
 
@@ -164,17 +189,11 @@ export async function saveEntitlementOpenings(input: {
           continue;
         }
 
-        const cleaned = String(raw ?? "").trim().replace(/[,$]/g, "") || "0";
-        const exact = canonicalDecimal(cleaned, 4);
-        if (exact === null) {
-          fail(`${plan.code} carry-in is not an amount: "${String(raw)}"`);
-          continue;
-        }
         let value: string;
         try {
-          value = normalizeMoney(exact);
-        } catch {
-          fail(`${plan.code} carry-in is not an amount: "${String(raw)}"`);
+          value = parseEntitlementCarryInAmount(raw, plan.code);
+        } catch (error) {
+          fail(error instanceof Error ? error.message : `${plan.code} carry-in is not an amount`);
           continue;
         }
         if (cmp(value, "0") === 0) {

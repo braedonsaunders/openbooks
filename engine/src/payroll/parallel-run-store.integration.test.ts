@@ -157,6 +157,68 @@ test("a failed re-import leaves the original stub evidence exactly as it was", {
   }
 });
 
+test("a locale-money re-import is refused before any write, leaving evidence intact", { skip: !DB }, async () => {
+  // A decimal comma is twelve-thirty-four written correctly, not a grouping
+  // typo: stripping it would store a 100x prior-system figure and corrupt
+  // every comparison against this register. Both the header cell and the
+  // component cell refuse with the remedy, and the stored stub is untouched.
+  const f = await importFixture();
+  try {
+    await savePriorStub({
+      orgId: f.orgId, actorId: f.actorId, registerId: f.registerId,
+      row: {
+        employeePartyId: f.employeePartyId,
+        employeeLabel: "EMP-0001",
+        gross: "3000", netPay: "2500", employerCost: null,
+        amounts: [{ fieldKey: "SALARY", amount: "3000.00", sourceColumn: "Salary" }],
+      },
+    }, f.slots);
+    const before = await priorEvidence(f.orgId, f.employeePartyId);
+    const auditsBefore = await tableCount(f.orgId, "audit_log", "table_name = 'payroll_prior_stubs'");
+
+    await assert.rejects(
+      savePriorStub({
+        orgId: f.orgId, actorId: f.actorId, registerId: f.registerId,
+        row: {
+          employeePartyId: f.employeePartyId,
+          employeeLabel: "EMP-0001",
+          gross: "12,34", netPay: "2500", employerCost: null,
+          amounts: [{ fieldKey: "SALARY", amount: "3000.00", sourceColumn: "Salary" }],
+        },
+      }, f.slots),
+      (error: unknown) => {
+        assert.ok(error instanceof ParallelRunStoreError);
+        assert.match(
+          error.message,
+          /gross must use "\." as the decimal point — write "12,34" as "12\.34"/,
+        );
+        return true;
+      },
+    );
+    await assert.rejects(
+      savePriorStub({
+        orgId: f.orgId, actorId: f.actorId, registerId: f.registerId,
+        row: {
+          employeePartyId: f.employeePartyId,
+          employeeLabel: "EMP-0001",
+          gross: "3000", netPay: "2500", employerCost: null,
+          amounts: [{ fieldKey: "SALARY", amount: "1,234", sourceColumn: "Salary" }],
+        },
+      }, f.slots),
+      /is ambiguous — "1,234" could mean 1234 \(thousands separator\) or 1\.234 \(decimal comma\)/,
+    );
+
+    assert.deepEqual(await priorEvidence(f.orgId, f.employeePartyId), before);
+    assert.equal(
+      await tableCount(f.orgId, "audit_log", "table_name = 'payroll_prior_stubs'"),
+      auditsBefore,
+      "a refused import must not leave an audit row for a rewrite that never happened",
+    );
+  } finally {
+    await dropScratchOrgReporting(f.orgId);
+  }
+});
+
 test("an amount nobody can map refuses before any write, leaving evidence intact", { skip: !DB }, async () => {
   const f = await importFixture();
   try {
