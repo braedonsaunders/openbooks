@@ -139,7 +139,8 @@
         "ledger",
         "money",
         "organization",
-        "platform"
+        "platform",
+        "records"
       ]
     },
     "continuous-close": {

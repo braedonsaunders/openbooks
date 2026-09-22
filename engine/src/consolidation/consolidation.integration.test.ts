@@ -970,6 +970,89 @@ test("ownership consolidation reads activity and acquisition equity from the pri
   }
 });
 
+test("acquisition elimination absorbs pre-acquisition retained earnings", { skip: !DB }, async () => {
+  // Share capital 1000 + pre-acquisition profit 500 (revenue 800, expense
+  // 300), bought 100% for 1500 with FV net assets 1500: book net assets are
+  // 1500, so goodwill and the FV adjustment are zero and the pre-acq P&L is
+  // eliminated as retained earnings. Before the fix the equity-only read
+  // saw book 1000, posted a 500 FV adjustment, and left the 500 of
+  // pre-acquisition earnings inside consolidated retained earnings.
+  // Post-acquisition profit (100) is recognised after acquisition and must
+  // NOT be eliminated.
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const childId = randomUUID();
+    const eliminationId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries
+        (id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
+      values
+        (${childId},${org.orgId},${org.subsidiaryId},'Owned Co','CAD','CA','{}'::jsonb,false,true,'{}'::jsonb),
+        (${eliminationId},${org.orgId},${org.subsidiaryId},'Ownership eliminations','CAD','CA','{}'::jsonb,true,true,'{}'::jsonb)
+    `);
+    const defs = [
+      ["investment", "1400", "Investment in subsidiary", "asset_current_other"],
+      ["equityIncome", "4020", "Equity income", "income_other"],
+      ["nciEquity", "3100", "Non-controlling interest", "equity"],
+      ["nciIncome", "6100", "Profit attributable to NCI", "expense_other"],
+      ["goodwill", "1500", "Goodwill", "asset_fixed"],
+      ["fairValue", "1510", "Fair value adjustment", "asset_fixed"],
+      ["childEquity", "3000", "Child share capital", "equity"],
+    ] as const;
+    const accounts = new Map<string, string>();
+    for (const [key, number, name, type] of defs) {
+      const id = randomUUID();
+      accounts.set(key, id);
+      await db.execute(sql`
+        insert into accounts
+          (id,org_id,number,name,type,is_summary,is_active,eliminate,reconcilable,required_dimensions,custom,subsidiary_include_children)
+        values (${id},${org.orgId},${number},${name},${type},false,true,false,false,'[]'::jsonb,'{}'::jsonb,true)
+      `);
+    }
+    const postEntry = async (tag: string, debitAccount: string, creditAccount: string, amount: string, postingDate: string) => {
+      const entry = randomUUID();
+      await db.execute(sql`
+        insert into journal_entries
+          (id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,memo,status,origin)
+        values (${entry},${org.orgId},${org.bookId},${childId},${tag},${postingDate},${org.periodId},${tag},'draft','manual')`);
+      await db.execute(sql`
+        insert into journal_lines
+          (org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate)
+        values
+          (${org.orgId},${entry},1,${debitAccount},${childId},${amount},'CAD',${amount},'1'),
+          (${org.orgId},${entry},2,${creditAccount},${childId},${"-" + amount},'CAD',${"-" + amount},'1')`);
+      await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entry}`);
+    };
+    await postEntry("OWN-CAP", org.accounts.bank, accounts.get("childEquity")!, "1000", "2026-07-01");
+    await postEntry("OWN-PRE-REV", org.accounts.bank, org.accounts.revenue, "800", "2026-07-05");
+    await postEntry("OWN-PRE-EXP", org.accounts.cogs, org.accounts.bank, "300", "2026-07-06");
+    await postEntry("OWN-POST-REV", org.accounts.bank, org.accounts.revenue, "100", "2026-07-15");
+    const interestId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiary_ownership_interests
+        (id,org_id,parent_subsidiary_id,subsidiary_id,effective_from,ownership_percent,method,
+         acquisition_date,acquisition_cost,fair_value_net_assets,acquisition_rate,nci_measurement,
+         investment_account_id,equity_income_account_id,nci_equity_account_id,nci_income_account_id,
+         goodwill_account_id,fair_value_adjustment_account_id)
+      values (${interestId},${org.orgId},${org.subsidiaryId},${childId},'2026-07-10','100','full',
+              '2026-07-10','1500','1500','1','proportionate',${accounts.get("investment")!},
+              ${accounts.get("equityIncome")!},${accounts.get("nciEquity")!},${accounts.get("nciIncome")!},
+              ${accounts.get("goodwill")!},${accounts.get("fairValue")!})
+    `);
+    const run = await runOwnershipConsolidation(org.orgId, org.periodId, actorId);
+    assert.equal(run.entryIds.length, 1, "only the acquisition elimination posts (100% leaves no NCI income)");
+    assert.deepEqual(await ownershipEntryBalances(run.entryIds), [
+      { number: "1400", amount: "-1500.0000" },
+      { number: "3000", amount: "1000.0000" },
+      { number: "4000", amount: "800.0000" },
+      { number: "5000", amount: "-300.0000" },
+    ]);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("ownership consolidation excludes activity outside an interest's effective window", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
