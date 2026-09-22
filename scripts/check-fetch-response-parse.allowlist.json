@@ -425,11 +425,6 @@
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
-    "path": "web/app/(app)/revenue/RunRecognitionButton.tsx",
-    "fn": "run",
-    "reason": "server always returns JSON; guard adoption pending. POST /api/revenue/run-recognition (web/app/api/revenue/run-recognition/route.ts): syncProjectRevenueContracts and runRevenueRecognition sit inside try/catch-all answering NextResponse.json({ error }, { status: 500 }); no rethrow. Verified by reading the handler."
-  },
-  {
     "path": "web/app/(app)/subcontracts/SubcontractsWorkspace.tsx",
     "fn": "SubcontractsWorkspace",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"

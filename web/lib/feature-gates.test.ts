@@ -1528,9 +1528,11 @@ test('the surfaces this test was written for are covered', () => {
     /timeTracking \? \{ showOnTimesheet \}/,
     'the item drawer must not send show-on-timesheet when Time Tracking is off',
   )
+  // The drawer renders its fields through one switch now, so this gate is a
+  // refusal inside the field's own case rather than a JSX conditional.
   assert.match(
     read('app/(app)/items/ItemDrawer.tsx'),
-    /\{timeTracking \? \(/,
+    /case 'show_on_timesheet':\s+if \(!timeTracking\) return null/,
     'the item drawer must hide show-on-timesheet when Time Tracking is off',
   )
   assert.match(
@@ -1745,7 +1747,9 @@ test('the surfaces this test was written for are covered', () => {
   )
   assert.match(
     read('app/(app)/items/ItemDrawer.tsx'),
-    /\{fairValuePrices \? <section/,
+    // Same refactor as show-on-timesheet: the revenue tab is filtered out of
+    // the resolved layout, and each of its fields refuses in its own case.
+    /placement\.key !== 'revenue' \|\| fairValuePrices/,
     'the item drawer must hide the revenue-recognition section when the feature is off',
   )
   assert.match(

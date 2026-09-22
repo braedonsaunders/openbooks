@@ -97,7 +97,15 @@ export const COMMERCE_WIDGETS = {
     return <ContractDrawer {...drawer} />
   },
   /** Presence is the spec's `when` on `canRun`, not a check in here. */
-  'run-recognition': () => <RunRecognitionButton />,
+  /** Whole: the button owns the review drawer it opens, and the drawer owns
+   *  preview/confirm state. Scope options are data from the loader. */
+  'run-recognition': (props) => (
+    <RunRecognitionButton
+      books={(props.books as ComponentProps<typeof RunRecognitionButton>['books']) ?? []}
+      periods={(props.periods as ComponentProps<typeof RunRecognitionButton>['periods']) ?? []}
+      candidates={(props.candidates as ComponentProps<typeof RunRecognitionButton>['candidates']) ?? []}
+    />
+  ),
 
   /* --- WIP and prebilling ----------------------------------------------------------- */
   /** Whole: the create drawer, the detail drawer, per-line edit/hold/release

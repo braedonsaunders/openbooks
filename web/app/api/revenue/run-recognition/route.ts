@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { runRevenueRecognition } from '@openbooks/engine/src/revenue/recognition.ts'
+import {
+  runRevenueRecognition,
+  StaleRecognitionPreviewError,
+} from '@openbooks/engine/src/revenue/recognition.ts'
 import { syncProjectRevenueContracts } from '@openbooks/engine/src/projects/revenue.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { guardPermission } from '../../../../lib/authz'
@@ -9,12 +12,21 @@ import { isoDate, parseJsonBody, uuidId } from '../../../../lib/api/json'
 
 export const runtime = 'nodejs'
 
+const scopedId = (label: string) =>
+  z
+    .string({ error: `invalid ${label}` })
+    .refine((v) => uuidId.safeParse(v).success, `invalid ${label}`)
+    .optional()
+
 const runRecognitionBody = z.object({
   asOfDate: isoDate().optional(),
-  obligationId: z
-    .string({ error: 'invalid obligation' })
-    .refine((v) => uuidId.safeParse(v).success, 'invalid obligation')
-    .optional(),
+  obligationId: scopedId('obligation'),
+  // Reviewed-run scope. Present only when the drawer confirms a preview;
+  // the legacy immediate call sends none of it and behaves exactly as before.
+  contractId: scopedId('contract'),
+  bookId: scopedId('book'),
+  periodId: scopedId('period'),
+  fingerprint: z.string().min(1).optional(),
 })
 
 export type RunRecognitionRequest = z.input<typeof runRecognitionBody>
@@ -74,10 +86,31 @@ export async function POST(req: Request) {
       user.id,
       body.obligationId,
       allowedSubsidiaryIds,
+      // A confirmed run carries the fingerprint of exactly what the operator
+      // reviewed; the engine re-derives that set and refuses before writing
+      // anything if it moved.
+      body.fingerprint
+        ? {
+            fingerprint: body.fingerprint,
+            scope: {
+              asOfDate,
+              obligationId: body.obligationId,
+              contractId: body.contractId,
+              bookId: body.bookId,
+              periodId: body.periodId,
+              allowedSubsidiaryIds,
+            },
+          }
+        : undefined,
     )
     result.problems.push(...projectSync.problems)
     return NextResponse.json(result)
   } catch (e: unknown) {
+    // A stale confirmation is the operator's to resolve, not a server fault:
+    // it names the remedy (preview again) and nothing was written.
+    if (e instanceof StaleRecognitionPreviewError) {
+      return NextResponse.json({ error: 'stale_preview' }, { status: 409 })
+    }
     const msg = e instanceof Error ? e.message : String(e)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
