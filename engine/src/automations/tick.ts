@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { db, withBypassContext, withOrg } from "../platform/db.ts";
 import { withTickClaim } from "../scheduling/lock.ts";
 import { schedulerOutboxBackoffMs } from "../scheduling/outbox.ts";
@@ -159,10 +160,17 @@ export async function runAutomationTick(now: Date = new Date()): Promise<TickSum
               throw e;
             }
           } else if (trigger.kind === "date_relative") {
-            const outcome = await fireDateRelative(automation, trigger, now);
-            summary.dateRelativeFired += outcome.fired;
-            summary.dateRelativeFailed += outcome.failed;
-            summary.errors.push(...outcome.errors);
+            try {
+              const outcome = await fireDateRelative(automation, trigger, now);
+              summary.dateRelativeFired += outcome.fired;
+              summary.dateRelativeFailed += outcome.failed;
+              summary.errors.push(...outcome.errors);
+            } catch (e) {
+              // Pre-scan refusal (lost publisher permission): nothing
+              // fired, the failure counts — same contract as schedules.
+              summary.dateRelativeFailed += 1;
+              throw e;
+            }
           }
         });
       } catch (e) {
@@ -178,7 +186,7 @@ export async function runAutomationTick(now: Date = new Date()): Promise<TickSum
 }
 
 async function fireSchedule(
-  automation: { id: string; orgId: string; createdAt: string; lastRunAt: string | null },
+  automation: { id: string; orgId: string; name: string; createdAt: string; lastRunAt: string | null },
   trigger: Extract<AutomationTrigger, { kind: "schedule" }>,
   now: Date,
 ): Promise<{ fired: boolean; failed: boolean }> {
@@ -197,7 +205,7 @@ async function fireSchedule(
   if (!occurrence) return { fired: false, failed: false };
   const result = await executeAutomation({
     orgId: automation.orgId,
-    actorId: await tickActor(automation.orgId),
+    actorId: await tickActorFor(automation),
     automationId: automation.id,
     triggerPayload: { kind: "schedule", occurredAt: occurrence.toISOString() },
     fingerprint: `schedule:${occurrence.toISOString()}`,
@@ -213,7 +221,7 @@ async function fireSchedule(
 }
 
 async function fireDateRelative(
-  automation: { id: string; orgId: string },
+  automation: { id: string; orgId: string; name: string },
   trigger: Extract<AutomationTrigger, { kind: "date_relative" }>,
   now: Date,
 ): Promise<{ fired: number; failed: number; errors: string[] }> {
@@ -236,7 +244,7 @@ async function fireDateRelative(
      limit 200
   `);
   const outcome = { fired: 0, failed: 0, errors: [] as string[] };
-  const actorId = await tickActor(automation.orgId);
+  const actorId = await tickActorFor(automation);
   for (const row of rows.rows) {
     try {
       const result = await executeAutomation({
@@ -329,11 +337,10 @@ async function drainEventQueue(now: Date): Promise<{ drained: number; failed: nu
 /** Fire one claimed event against every enabled automation it matches. */
 async function fireClaimedEvent(event: ClaimedEvent): Promise<{ attempted: number; failed: number; firstError: string }> {
   return withOrg(event.orgId, async () => {
-    const automations = await db.execute<{ id: string; trigger: unknown }>(sql`
-      select id, trigger from automations
+    const automations = await db.execute<{ id: string; name: string; trigger: unknown }>(sql`
+      select id, name, trigger from automations
        where org_id = ${event.orgId} and status = 'enabled'
     `);
-    const actorId = await tickActor(event.orgId);
     let attempted = 0;
     let failed = 0;
     let firstError = "";
@@ -350,6 +357,16 @@ async function fireClaimedEvent(event: ClaimedEvent): Promise<{ attempted: numbe
       }
       if (!triggerMatchesEvent(trigger, event)) continue;
       attempted += 1;
+      let actorId: string;
+      try {
+        actorId = await tickActorFor({ id: automation.id, orgId: event.orgId, name: automation.name });
+      } catch (e) {
+        // A publisher who lost the permission fails this firing loudly
+        // with the remedy — never silently under another user's identity.
+        failed += 1;
+        if (!firstError) firstError = e instanceof Error ? e.message : String(e);
+        continue;
+      }
       try {
         const result = await executeAutomation({
           orgId: event.orgId,
@@ -450,11 +467,39 @@ export async function stageAutomationEvent(input: {
   // the conflict row is simply absent — never a lost write.
 }
 
-async function tickActor(orgId: string): Promise<string> {
-  const rows = await db.execute<{ id: string }>(sql`
-    select id from users where org_id = ${orgId} and is_active order by created_at limit 1
+/**
+ * The tick fires as the automation's publisher — the user who last saved
+ * it (updated_by) — re-checked at fire time, never the oldest active
+ * user. Effects attribute to the principal who authorized the recipe,
+ * and a publisher who lost the permission fails LOUD with the remedy
+ * instead of the whole org's automations silently stopping (or firing
+ * under a stranger's identity).
+ */
+async function tickActorFor(automation: { id: string; orgId: string; name: string }): Promise<string> {
+  const recipe = await db.execute<{ publisherId: string | null }>(sql`
+    select updated_by as "publisherId" from automations
+     where id = ${automation.id} and org_id = ${automation.orgId} limit 1
   `);
-  const id = rows.rows[0]?.id;
-  if (!id) throw new Error("no active user in this org to attribute the scheduled run to");
-  return id;
+  const publisherId = recipe.rows[0]?.publisherId;
+  if (!publisherId) {
+    throw new Error(
+      `automation '${automation.name}' records no publishing author — re-save it as a user holding automations.run, then re-enable it`,
+    );
+  }
+  const publishers = await db.execute<{ name: string; isActive: boolean }>(sql`
+    select name, is_active as "isActive" from users
+     where id = ${publisherId} and org_id = ${automation.orgId} limit 1
+  `);
+  const publisher = publishers.rows[0];
+  if (!publisher?.isActive) {
+    throw new Error(
+      `automation '${automation.name}' cannot fire: its publisher is no longer an active user in this org — re-save or re-enable it as an active user holding automations.run`,
+    );
+  }
+  if (!(await actorHasPermission(db, automation.orgId, publisherId, "automations.run"))) {
+    throw new Error(
+      `automation '${automation.name}' cannot fire: its publisher '${publisher.name}' no longer holds the automations.run permission — ask an administrator to grant it in /admin/roles, or re-save the automation as an authorized user`,
+    );
+  }
+  return publisherId;
 }

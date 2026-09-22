@@ -101,6 +101,80 @@ async function seedEmployment(orgId: string, subsidiaryId: string, serviceStart:
 /** An action that always fails at the write allowlist (employment versions change only via change requests). */
 const FAILING_ACTION = { kind: "update_field", entity: "employment", field: "department_id", value: "x" };
 
+/** An org whose OLDEST active user holds no automation permission at all. */
+async function setupUnpermittedElderHarness(): Promise<Harness & { elderId: string }> {
+  return withBypassContext(async () => {
+    const org = await createScratchOrg();
+    const elderId = await createScratchUser(org.orgId, "Unpermitted Elder", "tick_elder");
+    const adminId = await createScratchUser(org.orgId, "Tick Publisher", "tick_publisher");
+    await grant(org.orgId, adminId, ["automations.read", "automations.manage", "automations.run"]);
+    await setFeatures(org.orgId, { hrm: true, automations: true });
+    return { org, adminId, elderId };
+  });
+}
+
+test("the tick fires as the publisher when the oldest user holds no permission", { skip: !DB }, async () => {
+  const h = await setupUnpermittedElderHarness();
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    await seedEmployment(h.org.orgId, h.org.subsidiaryId, today);
+    const recipe = await createAutomation({
+      orgId: h.org.orgId,
+      actorId: h.adminId,
+      name: "publisher-attributed scan",
+      trigger: { kind: "date_relative", entity: "employment", dateField: "service_start", offsetDays: 0, direction: "before", atTime: "09:00" },
+      rules: {},
+      conditions: {},
+      actions: [{ kind: "send_notification", to: "initiator", body: "publisher fired" }],
+    });
+    await db.execute(sql`update automations set status = 'enabled' where id = ${recipe.id}`);
+    const summary = await runAutomationTick(new Date());
+    assert.equal(summary.dateRelativeFailed, 0);
+    assert.equal(summary.dateRelativeFired, 1);
+    const run = (await db.execute<{ status: string; createdBy: string | null }>(sql`
+      select status, created_by as "createdBy" from automation_runs where automation_id = ${recipe.id} limit 1
+    `)).rows[0]!;
+    assert.equal(run.status, "succeeded");
+    assert.equal(run.createdBy, h.adminId, "the run attributes to the publisher, not the oldest user");
+  } finally {
+    await withBypassContext(() => dropScratchOrg(h.org.orgId));
+  }
+});
+
+test("a publisher who lost automations.run fails loudly with the remedy", { skip: !DB }, async () => {
+  const h = await setupUnpermittedElderHarness();
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    await seedEmployment(h.org.orgId, h.org.subsidiaryId, today);
+    const recipe = await createAutomation({
+      orgId: h.org.orgId,
+      actorId: h.adminId,
+      name: "revoked publisher scan",
+      trigger: { kind: "date_relative", entity: "employment", dateField: "service_start", offsetDays: 0, direction: "before", atTime: "09:00" },
+      rules: {},
+      conditions: {},
+      actions: [{ kind: "send_notification", to: "initiator", body: "must not fire" }],
+    });
+    await db.execute(sql`update automations set status = 'enabled' where id = ${recipe.id}`);
+    await db.execute(sql`
+      delete from user_permission_overrides where org_id = ${h.org.orgId} and user_id = ${h.adminId} and permission = 'automations.run'
+    `);
+    const summary = await runAutomationTick(new Date());
+    assert.equal(summary.dateRelativeFired, 0);
+    assert.equal(summary.dateRelativeFailed, 1);
+    assert.ok(
+      summary.errors.some((message) => /no longer holds the automations\.run permission/.test(message)),
+      `expected a named permission refusal, got: ${JSON.stringify(summary.errors)}`,
+    );
+    const runs = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from automation_runs where automation_id = ${recipe.id}
+    `)).rows[0]!.n;
+    assert.equal(runs, 0, "nothing fires under another identity");
+  } finally {
+    await withBypassContext(() => dropScratchOrg(h.org.orgId));
+  }
+});
+
 test("a failed schedule firing keeps its run, holds the cursor, and counts failed", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const recipe = await createAutomation({
