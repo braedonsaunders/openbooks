@@ -66,6 +66,11 @@ test("cash alerts reuse the cockpit's liquidity primitives, not copies", () => {
   // posted to the designated employee-payable control and must fail.
   assert.match(source, /apOpenAccountScope/);
   assert.doesNotMatch(source, /a\.type = 'liability_payable'/);
+  // The document's posting is reconstructed as of the date from journal
+  // history — reading the live posted_entry_id lets a later correction or
+  // void rewrite the past and must fail this test.
+  assert.match(source, /asOfPostedEntryLateral/);
+  assert.doesNotMatch(source, /je\.id = d\.posted_entry_id/);
   // Settlement stats come from the maintained rollup (sufficient statistics
   // per party-day), weighted globally, 45-day default without history.
   assert.match(source, /from party_payment_stats/);
@@ -105,4 +110,15 @@ test("the web AP scope delegates to the same engine predicate", () => {
   const ledgerScope = readFileSync(resolve(process.cwd(), "web/lib/ledger-scope.ts"), "utf8");
   assert.match(ledgerScope, /open-item-scopes/);
   assert.doesNotMatch(ledgerScope, /'liability_payable'/);
+});
+
+test("both open-item readers reconstruct the posting as of the date", () => {
+  // The cockpit reader and the agent must share the journal-history
+  // reconstruction — a live posted_entry_id join in either lets a later
+  // correction or void rewrite past forecasts.
+  for (const file of ["web/lib/cash/open-items.ts", "engine/src/agents/cash.ts"]) {
+    const reader = readFileSync(resolve(process.cwd(), file), "utf8");
+    assert.match(reader, /asOfPostedEntryLateral/, `${file} must reconstruct the as-of posting`);
+    assert.doesNotMatch(reader, /je\.id = d\.posted_entry_id/, `${file} must not join the live pointer`);
+  }
 });

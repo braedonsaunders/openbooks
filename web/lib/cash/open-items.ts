@@ -7,6 +7,7 @@ import { mulDecimal } from '@openbooks/engine/src/money/money.ts'
 // resolve until merge; a relative import binds this checkout everywhere.
 import { AP_OPEN_ITEM_KINDS, AR_OPEN_ITEM_KINDS } from '../../../engine/src/records/open-item-kinds.ts'
 import { appliedLegAmountExpr } from '../../../engine/src/records/balance-due.ts'
+import { asOfPostedEntryLateral } from '../../../engine/src/records/open-item-scopes.ts'
 import { lineFunctional, presentationCurrency, presentationRates } from '../fx-presentation'
 import { apOpenAccountScope, arOpenAccountScope } from '../ledger-scope'
 import { normalizeMoneyValue, parseISO, type OpenItem, type Side } from './core'
@@ -18,9 +19,12 @@ function subScope(col: ReturnType<typeof sql>, subIds?: string[]) {
 }
 
 /**
- * Operational AR/AP items follow the document's current posting projection.
- * Reversed historical entries remain in the general ledger forever, but must
- * not become a second collectible/payable item after append-only correction.
+ * Operational AR/AP items follow the document's posting AS OF the forecast
+ * date, reconstructed from journal history (shared engine helper) — never
+ * the live posted_entry_id/status, which a later correction or void would
+ * rewrite. Reversed historical entries remain in the general ledger forever,
+ * but must not become a second collectible/payable item after append-only
+ * correction.
  */
 interface OpenItemQueryRow extends Record<string, unknown> {
   id: string
@@ -77,13 +81,14 @@ export async function openItems(
                   and (x.unapplied_at is null or x.unapplied_at::date > ${asOf}::date)
              ), 0)) as remaining
         from documents d
-        join journal_entries je on je.id = d.posted_entry_id and je.org_id = ${orgId} and je.status = 'posted'
-         and je.posting_date <= ${asOf}
+        ${asOfPostedEntryLateral(orgId, asOf)}
         join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item and ${lineFilter}
         join accounts a on a.id = jl.account_id and a.org_id = ${orgId}
          and ${side === 'ap' ? apOpenAccountScope(sql`a`, orgId) : arOpenAccountScope(sql`a`)}
         left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = ${orgId}
-       where d.org_id = ${orgId} and d.status = 'posted' and ${kindFilter}
+       where d.org_id = ${orgId}
+         and (d.status = 'posted' or (d.voided_at is not null and d.voided_at::date > ${asOf}::date))
+         and ${kindFilter}
          ${subScope(sql`jl.subsidiary_id`, subIds)}
     )
     select oi.id, oi.entry_id, oi.doc_id, oi.doc_kind, oi.doc_number, oi.party_id,
