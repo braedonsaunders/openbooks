@@ -380,16 +380,23 @@ export async function updateExitRecord(input: UpdateExitInput): Promise<ExitReco
         `exit interview needs both the held date and the interviewer — record them together, or clear both when no interview was held`,
       );
     }
+    // Omitted keeps, explicit null clears: ?? would mistake a clear for
+    // an omission and pin the old value in place.
+    const isVoluntary = input.isVoluntary === undefined ? current.isVoluntary : input.isVoluntary;
+    const isRegrettable = input.isRegrettable === undefined ? current.isRegrettable : input.isRegrettable;
+    const wouldRehire = input.wouldRehire === undefined ? current.wouldRehire : input.wouldRehire;
+    const destination = input.destination === undefined ? current.destination : input.destination;
+    const notes = input.notes === undefined ? current.notes : input.notes;
     const moved = (await db.execute(sql`
       update hrm_exit_records
          set reason_kind = ${reasonKind},
-             is_voluntary = ${input.isVoluntary ?? current.isVoluntary},
-             is_regrettable = ${input.isRegrettable ?? current.isRegrettable},
-             would_rehire = ${input.wouldRehire ?? current.wouldRehire},
+             is_voluntary = ${isVoluntary},
+             is_regrettable = ${isRegrettable},
+             would_rehire = ${wouldRehire},
              interview_held_on = ${interviewHeldOn}::date,
              interviewer_party_id = ${interviewerPartyId},
-             destination = ${input.destination ?? current.destination},
-             notes = ${input.notes ?? current.notes},
+             destination = ${destination},
+             notes = ${notes},
              updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${exitId}
     `)).rowCount ?? 0;

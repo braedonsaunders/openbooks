@@ -16,7 +16,7 @@ import { calibrateReview, reopenReview, shareReview, submitReview } from "./revi
 import { createGoal } from "./goals.ts";
 import { fulfillRequest, listFeedback, writeFeedback } from "./feedback.ts";
 import { getCycleDetail, getRetentionOverview, getReviewDetail, getTurnover, listMyReviews } from "./performance-read.ts";
-import { getExitRecord, listExitRecords, recordExit } from "./exits.ts";
+import { getExitRecord, listExitRecords, recordExit, updateExitRecord } from "./exits.ts";
 
 /**
  * g11_performance_exits: legal-entity scope across the performance module
@@ -623,6 +623,25 @@ test("the termination link must be this employment's own termination", { skip: !
       terminationChangeId: ownTermination, reasonKind: "resignation", isVoluntary: true,
     });
     assert.equal(exit.terminationChangeId, ownTermination);
+  } finally {
+    await dropScratchOrg(h.org.orgId);
+  }
+});
+
+test("corrections clear explicit nulls while omitted fields keep their value", { skip: !DB }, async () => {
+  const h = await setupHarness();
+  try {
+    const leaver = await mkLeaver(h, "leaver-nc", h.org.subsidiaryId);
+    const exit = await recordExit({
+      orgId: h.org.orgId, actorId: h.hrFull, employmentId: leaver.employmentId,
+      reasonKind: "resignation", isVoluntary: true, notes: "Left for growth", destination: "Competition",
+    });
+    // An explicit null clears; an omitted field keeps its value.
+    const cleared = await updateExitRecord({
+      orgId: h.org.orgId, actorId: h.hrFull, exitId: exit.id, notes: null,
+    });
+    assert.equal(cleared.notes, null);
+    assert.equal(cleared.destination, "Competition");
   } finally {
     await dropScratchOrg(h.org.orgId);
   }
