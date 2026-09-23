@@ -4482,7 +4482,13 @@
       "inspector": {
         "empty": "Seleccione un nodo para configurarlo",
         "deleteNode": "Eliminar nodo",
-        "nodeId": "Nodo"
+        "nodeId": "Nodo",
+        "connectTitle": "Conectar con el siguiente paso",
+        "connectFrom": "Desde",
+        "connectTo": "Al paso",
+        "connectAction": "Conectar",
+        "connectPlaceholder": "Elige un paso…",
+        "connectEmpty": "Aún no hay otro paso — añade primero un nodo."
       }
     },
     "node": {

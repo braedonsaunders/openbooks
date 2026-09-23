@@ -63,6 +63,25 @@ export function actionSummary(t: (key: string) => string, d: ActionData): string
   }
 }
 
+/**
+ * Accessible name for a canvas node: kind + label, e.g. "Trigger: A record
+ * is submitted for approval" or "Approval: Manager sign-off". React Flow
+ * renders it onto the focusable node wrapper (Node `ariaLabel`), so
+ * keyboard authors hear which step has focus instead of an unnamed group.
+ */
+export function nodeAccessibleName(t: (key: string) => string, data: NodeData): string {
+  switch (data.kind) {
+    case 'trigger':
+      return `${t('node.trigger')}: ${t(`trigger.kinds.${data.trigger.trigger}`)}`
+    case 'condition':
+      return `${t('node.condition')}: ${data.label || t('node.conditionDefault')}`
+    case 'action':
+      return `${t('node.action')}: ${actionSummary(t, data.action)}`
+    case 'gate':
+      return `${t('node.gate')}: ${data.gate.title || t('node.gateDefault')}`
+  }
+}
+
 function TriggerNode({ data, selected }: NodeProps) {
   const t = useTranslations('admin.flows')
   const d = data as Extract<NodeData, { kind: 'trigger' }>

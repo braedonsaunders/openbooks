@@ -601,6 +601,52 @@ describe('lintAutomationGraph', () => {
     assert.ok(errors.includes('Action a3: "lock_record" is not available for Invoice.'))
   })
 
+  test('names a trigger with no outgoing step, and stays silent once wired', () => {
+    const trigger = {
+      id: 't',
+      position: { x: 0, y: 0 },
+      data: { kind: 'trigger', trigger: { trigger: 'on_submit' } },
+    } as const
+    const action = {
+      id: 'a',
+      position: { x: 100, y: 0 },
+      data: { kind: 'action', action: notify('x') },
+    } as const
+    const unwired = lintAutomationGraph(
+      { schemaVersion: 1, nodes: [trigger, action], edges: [] },
+      invoiceFieldIds,
+    )
+    assert.ok(
+      unwired.includes('Trigger t has no outgoing step — connect it to the first step or the flow never runs.'),
+      `the lint must name the missing edge, got: ${unwired.join(' | ')}`,
+    )
+    const wired = lintAutomationGraph(
+      {
+        schemaVersion: 1,
+        nodes: [trigger, action],
+        edges: [{ id: 'e', source: 't', target: 'a', sourceHandle: 'next' }],
+      },
+      invoiceFieldIds,
+    )
+    assert.ok(
+      wired.every((error) => !error.includes('has no outgoing step')),
+      `a wired trigger must not be flagged, got: ${wired.join(' | ')}`,
+    )
+    // A terminal action with no outgoing edge is a legitimate end of run.
+    const terminal = lintAutomationGraph(
+      {
+        schemaVersion: 1,
+        nodes: [trigger, action],
+        edges: [{ id: 'e', source: 't', target: 'a', sourceHandle: 'next' }],
+      },
+      invoiceFieldIds,
+    )
+    assert.ok(
+      terminal.every((error) => !error.includes('Action a')),
+      `a terminal action must not be flagged, got: ${terminal.join(' | ')}`,
+    )
+  })
+
   test('flags unknown fields in conditions, on_field_value rules, and set_field', () => {
     const errors = lintAutomationGraph(
       {

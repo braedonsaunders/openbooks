@@ -490,6 +490,18 @@ export function lintAutomationGraph(
     }
   }
 
+  // A trigger with no outgoing step can never run anything: its flow saves
+  // (or enables) silently dead. Name the exact missing edge so the author
+  // connects it to a first step. Only triggers are checked — an action with
+  // no outgoing edge is a legitimate terminal step, and a condition or gate
+  // with one branch intentionally ends the run on the other.
+  const outboundFrom = new Set(graph.edges.map((e) => e.source))
+  for (const n of graph.nodes) {
+    if (n.data.kind === 'trigger' && !outboundFrom.has(n.id)) {
+      errors.push(`Trigger ${n.id} has no outgoing step — connect it to the first step or the flow never runs.`)
+    }
+  }
+
   // When a subject profile is supplied, reject triggers/actions the subject
   // does not support (e.g. a journal flow using `post_document` when journals
   // post immediately) and status values outside the subject's lifecycle.

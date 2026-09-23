@@ -4482,7 +4482,13 @@
       "inspector": {
         "empty": "Wählen Sie einen Knoten aus, um ihn zu konfigurieren",
         "deleteNode": "Knoten löschen",
-        "nodeId": "Knoten"
+        "nodeId": "Knoten",
+        "connectTitle": "Mit nächstem Schritt verbinden",
+        "connectFrom": "Von",
+        "connectTo": "Zu Schritt",
+        "connectAction": "Verbinden",
+        "connectPlaceholder": "Schritt wählen…",
+        "connectEmpty": "Es gibt noch keinen anderen Schritt — füge zuerst einen Knoten hinzu."
       }
     },
     "node": {
