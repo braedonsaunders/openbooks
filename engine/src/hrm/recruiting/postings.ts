@@ -428,7 +428,9 @@ export interface ApplyViaPostingQuery {
 /**
  * Public application through a posting. One transaction: candidate
  * (reused by email when the org already knows them), application with
- * source_posting_id, this_application consent, apply_received event.
+ * source_posting_id, consent for a newly created candidate only (an
+ * email-matched candidate's consent is never written from an
+ * unauthenticated apply), apply_received event.
  */
 /**
  * The one thing an anonymous applicant is ever told when the application
@@ -486,11 +488,17 @@ export async function applyViaPosting(
     if (!firstStage) {
       throw new RecruitingError("REFUSED", "this opening's funnel has no stages — the hiring team must configure the funnel before taking applications");
     }
+    // An email match proves nothing about identity: anyone can type anyone's
+    // address into an anonymous form. The matched row is reused for the
+    // candidacy below, but its CONSENT is never touched here — see the
+    // consent block after the insert.
     let candidateId: string | null = null;
+    let matchedExistingCandidate = false;
     if (email) {
       candidateId = (await db.execute<{ id: string }>(sql`
         select id from hrm_candidates where org_id = ${orgId} and lower(email) = lower(${email}) limit 1
       `)).rows[0]?.id ?? null;
+      matchedExistingCandidate = candidateId !== null;
     }
     if (!candidateId) {
       const inserted = (await db.execute<{ id: string }>(sql`
@@ -542,19 +550,27 @@ export async function applyViaPosting(
       toStageId: firstStage.id,
       reason: `public apply through posting ${postingId}`,
     });
-    await db.execute(sql`
-      insert into hrm_candidate_consents (org_id, candidate_id, purpose, source)
-      values (${orgId}, ${candidateId}, 'this_application', 'form')
-      on conflict (org_id, candidate_id, purpose)
-      do update set granted_at = excluded.granted_at, withdrawn_at = null, updated_at = now()
-    `);
-    if (query.consentFutureRoles === true) {
+    // Consent is recorded ONLY for a candidate created by this very apply.
+    // An unauthenticated email match must never write consent: the upsert
+    // below clears withdrawn_at, so anyone typing another candidate's
+    // address could reinstate consent that candidate withdrew. A matched
+    // candidate's consent is recorded through verified or staff channels —
+    // the candidacy still lands, but this apply grants nothing.
+    if (!matchedExistingCandidate) {
       await db.execute(sql`
         insert into hrm_candidate_consents (org_id, candidate_id, purpose, source)
-        values (${orgId}, ${candidateId}, 'future_roles', 'form')
+        values (${orgId}, ${candidateId}, 'this_application', 'form')
         on conflict (org_id, candidate_id, purpose)
         do update set granted_at = excluded.granted_at, withdrawn_at = null, updated_at = now()
       `);
+      if (query.consentFutureRoles === true) {
+        await db.execute(sql`
+          insert into hrm_candidate_consents (org_id, candidate_id, purpose, source)
+          values (${orgId}, ${candidateId}, 'future_roles', 'form')
+          on conflict (org_id, candidate_id, purpose)
+          do update set granted_at = excluded.granted_at, withdrawn_at = null, updated_at = now()
+        `);
+      }
     }
     await appendPostingEvent(db, { orgId, postingId, kind: "apply_received", payload: { application_id: application.id } });
     return { applicationId: application.id, candidateId, duplicate: false };
