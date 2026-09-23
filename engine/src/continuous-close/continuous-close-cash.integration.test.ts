@@ -242,6 +242,58 @@ test(
 );
 
 test(
+  "the crunch sees reimbursement payables on the employee-payable control",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await seedBankCash(org, "CRUNCH-EXP-CASH", "100.0000");
+      // The preset shape: Employee Payable is NOT a liability_payable
+      // account. A bare `type = 'liability_payable'` reader never sees the
+      // OOP leg and reports no crunch while 123.45 is due.
+      const employeePayable = randomUUID();
+      await withBypassContext(async () => {
+        await db.execute(sql`
+          insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
+          values (${employeePayable}, ${org.orgId}, '2400', 'Employee Payable', 'liability_current_other', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
+        await db.execute(sql`
+          update orgs
+             set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{controlAccounts,employeePayable}', to_jsonb(${employeePayable}::text), true)
+           where id = ${org.orgId}`);
+      });
+      const employeeId = randomUUID();
+      await withBypassContext(async () => {
+        await db.execute(sql`
+          insert into parties (id, org_id, kind, display_name, is_active, custom)
+          values (${employeeId}, ${org.orgId}, 'employee', 'Riley Fieldworker', true, '{}'::jsonb)`);
+        await db.execute(sql`
+          insert into employee_roles (id, org_id, party_id) values (${randomUUID()}, ${org.orgId}, ${employeeId})`);
+        const documentId = randomUUID();
+        await db.execute(sql`
+          insert into documents (id, org_id, kind, status, document_number, document_date, due_date, party_id, subsidiary_id, currency, subtotal, tax_total, total, custom)
+          values (${documentId}, ${org.orgId}, 'expense_report', 'draft', 'EXP-CRUNCH-1', ${org.date}, ${await daysFromToday(org.orgId, 5)}, ${employeeId}, ${org.subsidiaryId}, 'CAD', '123.45', '0', '123.45', '{}'::jsonb)`);
+        await db.execute(sql`
+          insert into document_lines (id, org_id, document_id, line_number, account_id, description, quantity, unit_price, amount, tax_amount)
+          values (${randomUUID()}, ${org.orgId}, ${documentId}, 1, ${org.accounts.cogs}, 'Travel', '1', '123.45', '123.45', '0')`);
+        await db.execute(sql`
+          update documents set status = 'approved', updated_at = now() where id = ${documentId} and org_id = ${org.orgId}`);
+        await postDocument(documentId, {
+          control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank, employeePayable },
+        });
+      });
+
+      const findings = await scan(org.orgId, "10.0000");
+      const crunch = findings.filter((finding) => finding.findingType === "cash_bill_crunch");
+      assert.equal(crunch.length, 1, `one crunch finding, got ${fingerprints(findings)}`);
+      assert.equal(crunch[0]!.materiality, "23.4500");
+      assert.equal(crunch[0]!.summary.billCount, 1);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
   "cash scans stay inside the requesting org",
   { skip: !DB },
   async () => {

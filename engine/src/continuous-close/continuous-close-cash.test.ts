@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { CASH_DETECTOR_KEYS } from "../agents/cash.ts";
 import {
   defaultContinuousCloseDetectors,
@@ -60,6 +61,11 @@ test("cash alerts reuse the cockpit's liquidity primitives, not copies", () => {
   // denominations on cross-currency credits and must fail this test.
   assert.match(source, /appliedLegAmountExpr/);
   assert.doesNotMatch(source, /sum\(x\.amount\)/);
+  // The AP account scope is the shared engine predicate — a bare
+  // `type = 'liability_payable'` silently drops every reimbursement payable
+  // posted to the designated employee-payable control and must fail.
+  assert.match(source, /apOpenAccountScope/);
+  assert.doesNotMatch(source, /a\.type = 'liability_payable'/);
   // Settlement stats come from the maintained rollup (sufficient statistics
   // per party-day), weighted globally, 45-day default without history.
   assert.match(source, /from party_payment_stats/);
@@ -90,4 +96,13 @@ test("cash alerts reuse the cockpit's liquidity primitives, not copies", () => {
   ]) {
     assert.ok(source.includes(fingerprint), `fingerprint ${fingerprint} is stable`);
   }
+});
+
+test("the web AP scope delegates to the same engine predicate", () => {
+  // web/lib/ledger-scope.ts serves the cockpit readers; the predicate itself
+  // lives once in the engine so the agent and the web readers cannot disagree
+  // on which accounts carry payables. A second inline copy must fail.
+  const ledgerScope = readFileSync(resolve(process.cwd(), "web/lib/ledger-scope.ts"), "utf8");
+  assert.match(ledgerScope, /open-item-scopes/);
+  assert.doesNotMatch(ledgerScope, /'liability_payable'/);
 });
