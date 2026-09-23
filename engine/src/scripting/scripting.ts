@@ -1199,8 +1199,10 @@ export interface ScriptRunOptions {
   /**
    * Stable identity of this scheduled occurrence (the scheduler's occurrence
    * key), so a retried tick reuses the run's journal idempotency namespace.
-   * Omitted (queue path, ad-hoc runs) = the run's minute bucket: retries
-   * within the same minute dedupe, older ones rely on deadline fencing.
+   * The queue worker always supplies it (payload, else the scheduler-minted
+   * BullMQ job id); the scheduler's inline fallback does too. Omitted
+   * (bulk runs, manual Run now) = the run's minute bucket: retries within
+   * the same minute dedupe, older ones rely on deadline fencing.
    */
   idempotencyScope?: string;
 }

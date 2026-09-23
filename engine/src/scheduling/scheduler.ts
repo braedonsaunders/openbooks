@@ -194,7 +194,10 @@ async function dispatchScriptOccurrence(
   let enqueued = false;
   try {
     const { enqueueScriptRun } = await import("@openbooks/jobs");
-    await enqueueScriptRun({ orgId: occ.orgId, scriptId: occ.scriptId, kind: "scheduled" }, { jobId });
+    await enqueueScriptRun(
+      { orgId: occ.orgId, scriptId: occ.scriptId, kind: "scheduled", occurrenceKey: occ.occurrenceKey },
+      { jobId },
+    );
     enqueued = true;
   } catch {
     /* Redis unavailable — fall through to inline */

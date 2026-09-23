@@ -13,8 +13,32 @@ import { runBulkScript, runScheduledScript, type ScriptOutcome } from "../script
  * it against users and stamps script_runs.created_by plus any journal actor.
  * Cron ticks enqueue payloads without actorId, so system automation stays
  * explicitly null-provenanced at this same shared boundary.
+ *
+ * Occurrence contract: a scheduled payload carries the scheduler's immutable
+ * occurrenceKey, forwarded as the run's journal idempotency scope so a
+ * recovery retry of the same occurrence replays instead of double-posting
+ * (SCHED1). Jobs enqueued before the key existed carry no scope in the
+ * payload, but their BullMQ job id IS the scheduler-minted occurrence key
+ * (attempt 1) or that key with a `:rN` retry suffix — adopt it when it is
+ * recognizably one, otherwise fall back to the run's minute bucket.
  */
-export async function processScriptJobData(d: ScriptJobData): Promise<ScriptOutcome> {
+export function scheduledScopeFromJob(
+  kind: ScriptJobData["kind"],
+  data: Pick<ScriptJobData, "occurrenceKey">,
+  jobId?: string,
+): string | undefined {
+  if (data.occurrenceKey) return data.occurrenceKey;
+  if (kind === "scheduled" && jobId) {
+    const scope = jobId.replace(/:r\d+$/, "");
+    if (scope.startsWith("sched|")) return scope;
+  }
+  return undefined;
+}
+
+export async function processScriptJobData(
+  d: ScriptJobData,
+  jobMeta?: { jobId?: string },
+): Promise<ScriptOutcome> {
   // A queue handler runs in a bare callback with no request store, so the
   // job's own tenant is the only legal scope for its queries. Without it the
   // connection layer denies by default and the script reads an empty org.
@@ -23,7 +47,10 @@ export async function processScriptJobData(d: ScriptJobData): Promise<ScriptOutc
     () =>
       d.kind === "bulk"
         ? runBulkScript(d.scriptId, d.orgId, { actorId: d.actorId ?? null })
-        : runScheduledScript(d.scriptId, d.orgId, { actorId: d.actorId ?? null }),
+        : runScheduledScript(d.scriptId, d.orgId, {
+            actorId: d.actorId ?? null,
+            idempotencyScope: scheduledScopeFromJob(d.kind, d, jobMeta?.jobId),
+          }),
   );
   return outcome;
 }
@@ -38,7 +65,7 @@ export function createScriptsWorker(): Worker<ScriptJobData> {
   return new Worker<ScriptJobData>(
     SCRIPTS_QUEUE,
     async (job) => {
-      const outcome = await processScriptJobData(job.data);
+      const outcome = await processScriptJobData(job.data, { jobId: job.id });
       // Only the compact evidence blob rides the job return value; the full
       // audit trail lives in script_runs.
       return { status: outcome.status, durationMs: outcome.durationMs };
