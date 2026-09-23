@@ -1,6 +1,7 @@
 import { cmp, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
-import { canonicalDecimal } from '@/lib/exact-decimal'
-import { isUuid } from '@/lib/list-params'
+import { canonicalDecimal } from './exact-decimal'
+import { parseItemRateDecimal } from './item-rate-numerics'
+import { isUuid } from './list-params'
 
 const POLICIES = new Set(['capped_ladder', 'lowest_cost'])
 const PRESENTATIONS = new Set(['rate_components', 'summary'])
@@ -75,15 +76,24 @@ export function validateRateBookLines(input: unknown): { lines: ValidRateBookLin
     if (keys.has(key)) return { error: `${row}: each item and unit code combination may appear only once.` }
     keys.add(key)
 
-    const baseQuantity = canonicalDecimal(String(raw.baseQuantity ?? ''), 4)
-    const costRate = canonicalDecimal(String(raw.costRate ?? ''), 4)
-    const billRate = canonicalDecimal(String(raw.billRate ?? ''), 4)
-    if (baseQuantity === null || costRate === null || billRate === null) {
+    const parsedQuantity = parseItemRateDecimal(raw.baseQuantity)
+    const parsedCost = parseItemRateDecimal(raw.costRate)
+    const parsedBill = parseItemRateDecimal(raw.billRate)
+    const entries = [parsedQuantity, parsedCost, parsedBill]
+    if (entries.some((entry) => 'error' in entry && entry.error !== 'too-wide')) {
       return { error: `${row}: base quantities and rates must be exact numbers with no more than four decimal places.` }
     }
-    if ([baseQuantity, costRate, billRate].some((value) => wholeDigits(value) > 15)) {
+    if (entries.some((entry) => 'error' in entry)) {
       return { error: `${row}: rate amounts may contain at most 15 whole-number digits.` }
     }
+    // Every error returned above, so each entry holds a value; the check
+    // below only narrows the union for the compiler.
+    if ('error' in parsedQuantity || 'error' in parsedCost || 'error' in parsedBill) {
+      return { error: `${row}: rate amounts may contain at most 15 whole-number digits.` }
+    }
+    const baseQuantity = parsedQuantity.value
+    const costRate = parsedCost.value
+    const billRate = parsedBill.value
     if (cmp(baseQuantity, '0') <= 0 || cmp(costRate, '0') < 0 || cmp(billRate, '0') < 0) {
       return { error: `${row}: base quantities must be positive and rates must be non-negative.` }
     }
