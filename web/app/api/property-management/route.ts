@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
+import { normalizeMoney, sum } from "@openbooks/engine/src/money/money.ts";
 import { canonicalDecimal } from "../../../lib/exact-decimal";
 import {
   PropertyManagementError,
@@ -86,6 +86,27 @@ export async function GET() {
     propertyIds.has(String(row.propertyId)),
   );
   const poolIds = new Set(camPools.map((row) => String(row.id)));
+  const schedules = workspace.schedules.filter((row) =>
+    leaseIds.has(String(row.leaseId)),
+  );
+  const scheduleCountsByLease = workspace.scheduleCountsByLease.filter((row) =>
+    leaseIds.has(String(row.leaseId)),
+  );
+  const scheduleTotal = scheduleCountsByLease.reduce((acc, row) => acc + row.total, 0);
+  const overdueByLease = workspace.overdueByLease.filter((row) =>
+    leaseIds.has(String(row.leaseId)),
+  );
+  const overdueInvoices = workspace.overdueInvoices.filter((row) =>
+    leaseIds.has(String(row.leaseId)),
+  );
+  // The scoped past-due total re-aggregates over the visible documents only,
+  // de-duplicated by document exactly like the engine aggregate.
+  const overdueDocumentBalance = new Map<string, string>();
+  for (const line of overdueInvoices) {
+    if (!overdueDocumentBalance.has(String(line.documentId))) {
+      overdueDocumentBalance.set(String(line.documentId), line.openBalance ?? "0");
+    }
+  }
   return NextResponse.json({
     properties,
     units,
@@ -96,9 +117,14 @@ export async function GET() {
     escalations: workspace.escalations.filter((row) =>
       leaseIds.has(String(row.leaseId)),
     ),
-    schedules: workspace.schedules.filter((row) =>
-      leaseIds.has(String(row.leaseId)),
-    ),
+    schedules,
+    scheduleTotal,
+    schedulesTruncated: scheduleTotal > schedules.length,
+    scheduleCountsByLease,
+    overdueAsOf: workspace.overdueAsOf,
+    overdueTotal: sum([...overdueDocumentBalance.values()]),
+    overdueByLease,
+    overdueInvoices,
     deposits: workspace.deposits.filter((row) =>
       leaseIds.has(String(row.leaseId)),
     ),

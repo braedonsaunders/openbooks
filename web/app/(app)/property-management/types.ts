@@ -5,8 +5,11 @@ import type {
   LeaseEscalationRow,
   LeaseScheduleRow,
   ManagedPropertyRow,
+  OverdueInvoiceRow,
+  OverdueLeaseRow,
   PropertyLeaseRow,
   PropertyUnitRow,
+  ScheduleCountRow,
   SecurityDepositRow,
 } from "@openbooks/engine/src/property/management.ts";
 
@@ -17,6 +20,20 @@ export type PropertyWorkspace = {
   charges: LeaseChargeRow[];
   escalations: LeaseEscalationRow[];
   schedules: LeaseScheduleRow[];
+  /** Full schedule-line count: the preview above is capped, this is not. */
+  scheduleTotal: number;
+  /** True when older lines fell out of the capped preview. */
+  schedulesTruncated: boolean;
+  /** Complete per-lease schedule-line counts for "showing N of M". */
+  scheduleCountsByLease: ScheduleCountRow[];
+  /** As-of date of the server-side past-due aggregate below. */
+  overdueAsOf: string;
+  /** Portfolio past-due total over ALL posted documents, never the preview. */
+  overdueTotal: string;
+  /** Per-lease past-due balances over ALL posted documents. */
+  overdueByLease: OverdueLeaseRow[];
+  /** Every posted overdue invoice behind the aggregate, for arrears detail. */
+  overdueInvoices: OverdueInvoiceRow[];
   deposits: SecurityDepositRow[];
   camPools: CamPoolRow[];
   camAllocations: CamAllocationRow[];

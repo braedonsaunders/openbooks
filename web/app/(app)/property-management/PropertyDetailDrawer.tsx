@@ -806,6 +806,9 @@ export function PropertyDetailDrawer({
             )}
             leases={leases}
             money={money}
+            total={data.scheduleCountsByLease
+              ?.filter((row) => leases.some((lease) => lease.id === row.leaseId))
+              .reduce((acc, row) => acc + row.total, 0)}
           />
         </div>
       ) : null}

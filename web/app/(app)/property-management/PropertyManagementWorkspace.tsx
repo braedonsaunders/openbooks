@@ -40,6 +40,13 @@ const empty: PropertyWorkspace = {
   charges: [],
   escalations: [],
   schedules: [],
+  scheduleTotal: 0,
+  schedulesTruncated: false,
+  scheduleCountsByLease: [],
+  overdueAsOf: "",
+  overdueTotal: "0",
+  overdueByLease: [],
+  overdueInvoices: [],
   deposits: [],
   camPools: [],
   camAllocations: [],
@@ -178,23 +185,10 @@ export function PropertyManagementWorkspace({
         .map((charge) => charge.amount),
     ),
   );
-  // One rent invoice can contain several schedule lines. Age the native posted
-  // document's remaining balance once, rather than summing its original lines.
-  const overdueInvoices = new Map<string, string>();
-  for (const line of data.schedules) {
-    if (
-      line.invoiceDocumentId &&
-      line.invoiceStatus === "posted" &&
-      line.invoiceDueOn &&
-      line.invoiceDueOn < today
-    ) {
-      overdueInvoices.set(
-        line.invoiceDocumentId,
-        line.invoiceOpenBalance ?? "0",
-      );
-    }
-  }
-  const overdue = decimalSum([...overdueInvoices.values()]);
+  // Past-due money is a server-side aggregate over the complete set of posted
+  // documents. It must never be derived from the capped schedule preview,
+  // which drops older lines once the portfolio passes the preview limit.
+  const overdue = data.overdueTotal ?? "0";
   const depositsHeld = decimalSum(
     data.leases.map((lease) => lease.depositBalance ?? "0"),
   );
