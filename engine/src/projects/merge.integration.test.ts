@@ -350,6 +350,49 @@ test("merge refuses posted journal lines in a closed GL period", async () => {
   }
 });
 
+test("merge refuses when billing terms differ", async () => {
+  // The survivor's contract value, project type, and invoicing preference
+  // price every moved line: a mismatch refuses naming the field, instead of
+  // silently repricing the duplicate's history. Reconciling all three lets
+  // the same pair merge.
+  const org = await createScratchOrg();
+  try {
+    const actor = (await seedFlowActors(org.orgId)).adminId;
+    const typeA = randomUUID();
+    const typeB = randomUUID();
+    for (const [typeId, key] of [[typeA, "merge-a"], [typeB, "merge-b"]] as const) {
+      await db.execute(sql`
+        insert into project_types (id, org_id, key, name, billing_method, invoicing_profile, backup_profile)
+        values (${typeId}, ${org.orgId}, ${key}, ${key}, 'fixed_price', '{}'::jsonb, '{}'::jsonb)`);
+    }
+    const survivor = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-B1", "Terms one");
+    const duplicate = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-B2", "Terms two");
+    const setTerms = (id: string, value: string, type: string, pref: unknown) => db.execute(sql`
+      update projects
+         set contract_value = ${value}, project_type_id = ${type},
+             invoicing_preference = ${JSON.stringify(pref)}::jsonb
+       where id = ${id} and org_id = ${org.orgId}`);
+    const attempt = () => mergeProjects(org.orgId, { survivorId: survivor, duplicateId: duplicate, actorId: actor });
+    await setTerms(survivor, "100.0000", typeA, { procedure: "standard" });
+    await setTerms(duplicate, "200.0000", typeA, { procedure: "standard" });
+    await assert.rejects(attempt(), /disagree on contract value/);
+    await setTerms(duplicate, "100.0000", typeB, { procedure: "standard" });
+    await assert.rejects(attempt(), /disagree on project type/);
+    await setTerms(duplicate, "100.0000", typeA, { procedure: "milestone" });
+    await assert.rejects(attempt(), /disagree on invoicing preference/);
+    await assert.rejects(
+      previewProjectMerge(org.orgId, survivor, duplicate),
+      /disagree on invoicing preference/,
+    );
+    await setTerms(duplicate, "100.0000", typeA, { procedure: "standard" });
+    const result = await attempt();
+    assert.equal(result.alreadyMerged, false);
+    assert.ok(result.auditId);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("project merge refuses cycles, collisions, and spent duplicates", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
