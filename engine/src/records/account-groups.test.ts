@@ -90,6 +90,62 @@ test("resolveAccountGroups still applies rules and catch-all groups without pins
   assert.equal(resolved.pinned.size, 0);
 });
 
+test("resolveAccountGroups refuses two active catch-alls instead of silently picking one", async (t) => {
+  let calls = 0;
+  t.mock.method(db, "execute", async () => {
+    calls += 1;
+    if (calls === 1) {
+      // The U3 shape: the backfill-inserted `other` at sort_order 90 beside
+      // the tenant's own catch-all at 100. Resolution must not guess.
+      return {
+        rows: [
+          {
+            id: "group-other",
+            dimension: "cost_pool",
+            key: "other",
+            name: "Other",
+            color: "#94a3b8",
+            sort_order: 90,
+            match: {},
+            is_catch_all: true,
+          },
+          {
+            id: "group-misc",
+            dimension: "cost_pool",
+            key: "misc",
+            name: "Miscellaneous",
+            color: null,
+            sort_order: 100,
+            match: {},
+            is_catch_all: true,
+          },
+        ],
+      };
+    }
+    if (calls === 2) return { rows: [] };
+    return {
+      rows: [
+        { id: "account-1", number: "9999", name: "Zebra reserve", type: "expense" },
+      ],
+    };
+  });
+
+  await assert.rejects(
+    resolveAccountGroups("cost_pool", "org-1"),
+    (error: unknown) => {
+      const message = (error as Error).message;
+      // The refusal names both claimants and the remedy: it must read as a
+      // decision aid, not as a cue the operator already knows which group won.
+      assert.match(message, /multiple active catch-all/);
+      assert.match(message, /"other"/);
+      assert.match(message, /"misc"/);
+      assert.match(message, /deactivate all but the authoritative group/);
+      return true;
+    },
+    "two catch-alls must fail closed, never resolve into the first by sort order",
+  );
+});
+
 test("legacy unsafe account-group patterns fail closed before classification", async (t) => {
   assert.match(
     accountGroupNamePatternError("(a+)+$") ?? "",

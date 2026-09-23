@@ -141,3 +141,42 @@ test("a newly provisioned org has the default cost_pool and burden groups", { sk
     await dropScratchOrgReporting(org.orgId);
   }
 });
+
+test("ensure never inserts a default catch-all beside the tenant's own, and reports the skip", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    // The tenant resolves unmatched cost_pool accounts to their own
+    // custom-key catch-all before provisioning runs.
+    await db.execute(sql`
+      insert into account_groups (org_id, dimension, key, name, color, sort_order, match, is_catch_all, is_active)
+      values (${org.orgId}, 'cost_pool', 'misc', 'Miscellaneous', '#000000', 100,
+              '{}'::jsonb, true, true)
+    `);
+
+    const report = await ensureAccountGroupDefaults(org.orgId);
+    assert.deepEqual(report.skippedCatchAllDimensions, ["cost_pool"]);
+
+    const rows = await storedGroups(org.orgId);
+    const catchAlls = rows.filter(
+      (row) => row.dimension === "cost_pool" && row.is_catch_all && row.is_active,
+    );
+    assert.deepEqual(
+      catchAlls.map((row) => row.key),
+      ["misc"],
+      "the tenant catch-all stays the only active one; no second `other` bucket",
+    );
+    assert.deepEqual(
+      keysOf(rows, "cost_pool"),
+      ["direct_cost", "direct_labor", "overhead", "g_and_a", "misc"],
+      "every non-catch-all default still fills around the tenant group",
+    );
+    assert.deepEqual(keysOf(rows, "burden"), EXPECTED_BURDEN_KEYS);
+
+    // Re-running is stable: the skip repeats, nothing else moves.
+    const rerun = await ensureAccountGroupDefaults(org.orgId);
+    assert.deepEqual(rerun.skippedCatchAllDimensions, ["cost_pool"]);
+    assert.deepEqual(await storedGroups(org.orgId), rows);
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
