@@ -8,6 +8,7 @@ import { db, withBypass, withOrgContext } from "../platform/db.ts";
 import { sealJson, unsealJson } from "../platform/secrets.ts";
 import { dropScratchOrg } from "../testing/fixtures.ts";
 import {
+  quoteExternalTax,
   quoteFromRate,
   readTaxRateProviderConfigView,
   quoteViaAvalara,
@@ -553,6 +554,56 @@ test("fetch refuses internal targets on every adapter before credentials travel"
   }
 });
 
+test("a stalled provider body refuses by name within the deadline", async () => {
+  // The provider accepts the connection, sends headers, then never finishes
+  // the body — the shape that used to strand the financial save forever.
+  const stalled = createServer((req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.write('{"taxAmount":"1.00",');
+  });
+  const origin = await listen(stalled);
+  const started = Date.now();
+  try {
+    await assert.rejects(
+      quoteViaCustomHttp(quoteRequest, { url: `${origin}/hook` }, { allowPrivateEndpoints: true, timeoutMs: 300 }),
+      (e: unknown) =>
+        e instanceof TaxRateProviderError &&
+        /timed out after 300ms/.test(e.message) &&
+        /check the provider endpoint/.test(e.message),
+    );
+    assert.ok(Date.now() - started < 10_000, "the stall must refuse on the deadline, not the 15s default");
+  } finally {
+    stalled.closeAllConnections();
+    await close(stalled);
+  }
+});
+
+test("an oversize provider body refuses by name before it is buffered", async () => {
+  // Chunked 2 MiB with no content-length, so the streaming cap — not the
+  // declared-length shortcut — fires mid-body, before the payload is held.
+  const huge = createServer((req, res) => {
+    res.on("error", () => {});
+    res.writeHead(200, { "content-type": "application/json" });
+    res.write('{"taxAmount":"1.0000","components":[],"pad":"');
+    const chunk = "x".repeat(256 * 1024);
+    for (let i = 0; i < 8; i += 1) res.write(chunk);
+    res.end('"}');
+  });
+  const origin = await listen(huge);
+  try {
+    await assert.rejects(
+      quoteViaCustomHttp(quoteRequest, { url: `${origin}/hook` }, { allowPrivateEndpoints: true }),
+      (e: unknown) =>
+        e instanceof TaxRateProviderError &&
+        /exceeded 1048576 bytes/.test(e.message) &&
+        /refusing rather than persisting/.test(e.message),
+    );
+  } finally {
+    huge.closeAllConnections();
+    await close(huge);
+  }
+});
+
 test("quoteFromRate rejects over-precision rates with the module error type", () => {
   // The rate-provider route maps TaxRateProviderError to 422; the decimal
   // normalization fault escaped as a plain Error (a 500) on rates finer than
@@ -582,6 +633,7 @@ type CommittedConfig = {
   preferProvider: boolean;
   settings: Record<string, unknown>;
   secrets: string | null;
+  lastError: string | null;
   updatedAt: string;
   updatedBy: string | null;
 };
@@ -627,7 +679,7 @@ async function committedConfig(orgId: string): Promise<CommittedConfig | null> {
     (await withBypass(() =>
       db.execute<CommittedConfig>(sql`
         select provider, display_name as "displayName", is_enabled as "isEnabled",
-               prefer_provider as "preferProvider", settings, secrets,
+               prefer_provider as "preferProvider", settings, secrets, last_error as "lastError",
                ${REVISION_COL} as "updatedAt", updated_by as "updatedBy"
           from tax_rate_provider_configs where org_id = ${orgId}
       `),
@@ -1023,6 +1075,59 @@ test(
       );
       assert.equal((await committedConfig(orgId))!.provider, "custom_http");
     } finally {
+      await dropTaxConfigOrg(orgId);
+    }
+  },
+);
+
+test(
+  "an oversize provider body refuses by name and persists no quote evidence",
+  { skip: !DB },
+  async () => {
+    const orgId = await seedTaxConfigOrg();
+    const huge = createServer((req, res) => {
+      res.on("error", () => {});
+      res.writeHead(200, { "content-type": "application/json" });
+      res.write('{"taxAmount":"1.0000","components":[],"pad":"');
+      const chunk = "x".repeat(256 * 1024);
+      for (let i = 0; i < 8; i += 1) res.write(chunk);
+      res.end('"}');
+    });
+    const origin = await listen(huge);
+    try {
+      const admin = randomUUID();
+      await saveTaxRateProviderConfig(
+        orgId,
+        { provider: "custom_http", isEnabled: true, settings: { quoteUrl: `${origin}/hook` } },
+        admin,
+        { allowPrivateEndpoints: true },
+      );
+      await assert.rejects(
+        quoteExternalTax(
+          orgId,
+          {
+            taxableAmount: "100.0000",
+            currency: "USD",
+            shipFrom: {},
+            shipTo: {},
+            quotedOn: "2026-08-25",
+          },
+          null,
+          { allowPrivateEndpoints: true },
+        ),
+        (e: unknown) => e instanceof TaxRateProviderError && /exceeded 1048576 bytes/.test(e.message),
+      );
+      const quotes = (
+        await withBypass(() =>
+          db.execute<{ n: string }>(sql`select count(*)::text as n from tax_rate_quotes where org_id = ${orgId}`),
+        )
+      ).rows[0]!.n;
+      assert.equal(quotes, "0", "an oversize body must persist no quote evidence");
+      const config = (await committedConfig(orgId))!;
+      assert.match(config.lastError ?? "", /exceeded 1048576 bytes/, "the refusal is recorded, not swallowed");
+    } finally {
+      huge.closeAllConnections();
+      await close(huge);
       await dropTaxConfigOrg(orgId);
     }
   },
