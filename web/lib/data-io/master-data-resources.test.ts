@@ -223,9 +223,10 @@ const mockSources = new Map<string, string>([
     'mock:resource-core',
     `
       const state = globalThis[Symbol.for('openbooks.master-data-import-test')]
-      // The pure cap/gate re-export the REAL ./export-cap.ts through this
+      // The pure cap/gate/scope re-export the REAL modules through this
       // double — never copied. Only impure surfaces are stubbed below.
       export * from '${new URL('./export-cap.ts', import.meta.url).href}'
+      export * from '${new URL('./subsidiary-scope.ts', import.meta.url).href}'
 
       export async function orgFeatureEnabled() {
         return true

@@ -15,7 +15,9 @@ import {
   MAX_EXPORT_ROWS,
   orgFeatureEnabled,
   RefResolver,
+  subsidiaryReadFilterWithUnassigned,
   type DataResource,
+  type ReadCtx,
   type WriteCtx,
 } from './resource-core'
 import {
@@ -282,15 +284,24 @@ export function masterResource(m: MasterEntity, orgId: string): DataResource {
     async columns() {
       return (await masterFields(m, orgId)).map((f) => ({ key: f.key, label: f.label }))
     },
-    async read() {
+    async read(readCtx?: ReadCtx) {
       const fields = await masterFields(m, orgId)
       const resolver = new RefResolver(orgId)
       const exportCols = m.cols.filter((c) => fields.some((f) => f.key === c.key))
       const coreCols = exportCols.map((c) => sql.raw(c.column))
+      // Subsidiary scope is enforced HERE, by row identity: the registry used
+      // to read org-wide and post-filter on display labels, so two parties
+      // sharing a name across legal entities leaked each other's full rows
+      // into a scoped export. Items carry no subsidiary stamp and stay
+      // org-wide; accounts and parties filter on their own subsidiary_id.
+      const scopeFilter =
+        m.key === 'items'
+          ? sql``
+          : subsidiaryReadFilterWithUnassigned(sql`subsidiary_id`, readCtx?.allowedSubsidiaryIds)
       const result = (await db.execute(sql`
         select ${sql.join(coreCols, sql`, `)}, custom
           from ${sql.raw(m.table)}
-         where org_id = ${orgId}
+         where org_id = ${orgId}${scopeFilter}
          order by ${sql.raw(m.naturalKey === 'shortCode' ? 'display_name' : m.cols[0]!.column)}
          limit ${MAX_EXPORT_ROWS + 1}`)) as { rows: Record<string, unknown>[] }
       // Sentinel read: one row past the cap proves overflow; exactly at the

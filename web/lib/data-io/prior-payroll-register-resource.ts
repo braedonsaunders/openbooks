@@ -20,7 +20,12 @@ import {
   type WriteOutcome,
 } from './types'
 import type { DataResource, WriteCtx } from './resources'
-import { enforceExportRowLimit, MAX_EXPORT_ROWS } from './resource-core'
+import {
+  enforceExportRowLimit,
+  MAX_EXPORT_ROWS,
+  subsidiaryReadFilterWithUnassigned,
+  type ReadCtx,
+} from './resource-core'
 import { employeeWriteScopeError } from './write-scope'
 
 /**
@@ -211,9 +216,12 @@ export function priorPayrollRegisterResource(orgId: string): DataResource {
       const fields = await buildFields()
       return fields.map((f) => ({ key: f.key, label: f.label }))
     },
-    async read() {
+    async read(readCtx?: ReadCtx) {
       const [fields, all] = await Promise.all([buildFields(), slots()])
       const columns = fields.map((f) => ({ key: f.key, label: f.label }))
+      // Identity-based employee scope: the register stores its own employee
+      // label per stub, so a post-filter on that label cannot tell two
+      // same-named employees apart — the party join decides, in SQL.
       const rows = (await db.execute(sql`
         select g.name as "register", g.provider_name as "providerName",
                coalesce(er.employee_number, p.short_code, s.employee_label) as "employee",
@@ -227,7 +235,7 @@ export function priorPayrollRegisterResource(orgId: string): DataResource {
           join payroll_prior_registers g on g.id = s.register_id and g.org_id = s.org_id
           left join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
           left join employee_roles er on er.party_id = s.employee_party_id and er.org_id = s.org_id
-         where s.org_id = ${orgId}
+         where s.org_id = ${orgId}${subsidiaryReadFilterWithUnassigned(sql`p.subsidiary_id`, readCtx?.allowedSubsidiaryIds)}
          order by g.pay_date desc, p.display_name
          limit ${MAX_EXPORT_ROWS + 1}`)) as { rows: Record<string, CellValue>[] }
       // Sentinel read: refuse rather than truncate a complete-looking file.

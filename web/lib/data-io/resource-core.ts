@@ -7,7 +7,7 @@
 
 
 import 'server-only'
-import { sql, type SQL } from 'drizzle-orm'
+import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { featureEnabled, resolvedFeatureState } from '../features'
 import { loadNumberSequenceKindOptions } from '../setup/number-sequence-kinds'
@@ -72,20 +72,12 @@ export interface DataResource {
 }
 
 /**
- * SQL predicate shared by resource adapters whose source table carries a
- * subsidiary_id. IDs are resolved from the authorization layer, not request
- * input; an empty allow-list still fails closed rather than becoming an
- * unscoped query.
+ * Subsidiary scope predicates live in ./subsidiary-scope (dependency-light
+ * so unit-test doubles re-export the real implementation). Re-exported here
+ * so every existing `from './resource-core'` import keeps working.
  */
-export function subsidiaryReadFilter(
-  column: SQL,
-  allowed: ReadonlySet<string> | null | undefined,
-): SQL {
-  if (allowed === null || allowed === undefined) return sql``
-  const ids = [...allowed]
-  if (ids.length === 0) return sql` and false`
-  return sql` and ${column} = any(${`{${ids.join(',')}}`}::uuid[])`
-}
+export { subsidiaryReadFilter, subsidiaryReadFilterWithUnassigned } from './subsidiary-scope'
+
 // --- Reference resolution -----------------------------------------------------
 
 /**
