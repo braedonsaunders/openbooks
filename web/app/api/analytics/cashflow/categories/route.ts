@@ -183,6 +183,26 @@ async function clean(
     (out as unknown as { amount?: string }).amount = amount;
     out.frequency = FREQUENCIES.has(String(c.frequency)) ? (c.frequency as ForecastCategory["frequency"]) : "monthly";
   }
+  // Subsidiary attribution for the org-level strategies (manual, formula):
+  // SQL-backed methods scope through their own accounts/parties, so the
+  // field is meaningless there and not persisted. In a subsidiary-scoped
+  // view an unattributed manual/formula category hides (fail closed).
+  if (method === "manual_recurring" || method === "formula_expression") {
+    const subIds = strList(c.subsidiaryIds, 50);
+    if (subIds.length) {
+      const refError = await validateReferences(orgId, [
+        {
+          field: "subsidiaryIds",
+          table: "subsidiaries",
+          kind: "a subsidiary",
+          ids: subIds,
+          allowedSubsidiaryIds,
+        },
+      ]);
+      if (refError) return bad(refError);
+      out.subsidiaryIds = subIds;
+    }
+  }
   return { ok: true, category: out };
 }
 

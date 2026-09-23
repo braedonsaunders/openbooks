@@ -10,6 +10,7 @@ import {
   bankBalances,
   buildWeekGrid,
   categoryWeekly,
+  isCategoryVisibleInScope,
   loadCategories,
   openItems,
   normalizeMoneyValue,
@@ -267,7 +268,12 @@ export async function cashPosition(
     subIds,
     includeNullSubsidiary: includeNullSubsidiary === true,
   };
-  const categories = await Promise.all(catConfigs.map((c) => categoryWeekly(orgId, c, asOfIso, grid.weekStarts, catContext)));
+  // Manual and formula strategies are org-level models that ignore subIds:
+  // in a subsidiary-scoped view they show only when attributed to a visible
+  // subsidiary. Unattributed ones hide (fail closed) rather than leaking
+  // org-wide names and amounts into a restricted view.
+  const visibleConfigs = catConfigs.filter((c) => isCategoryVisibleInScope(c, subIds, allowedSubsidiaryIds));
+  const categories = await Promise.all(visibleConfigs.map((c) => categoryWeekly(orgId, c, asOfIso, grid.weekStarts, catContext)));
   const timeline = buildTimeline({
     weekStarts: grid.weekStarts,
     startingCash,

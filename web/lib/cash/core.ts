@@ -188,6 +188,14 @@ export interface ForecastCategory {
    * Rows predating the anchor backfill forecast from the horizon start.
    */
   anchorDate?: string;
+  /**
+   * Subsidiaries this category is attributed to. SQL-backed methods scope
+   * through their accounts/parties, but manual and formula strategies are
+   * org-level models: in a subsidiary-scoped view they show only when
+   * attributed to a visible subsidiary, and hide otherwise (fail closed —
+   * a restricted view must never show org-wide names and amounts).
+   */
+  subsidiaryIds?: string[];
   // formula_expression
   formula?: string;
   // bank_register_history
@@ -511,6 +519,27 @@ export function anchoredMonthlyOccurrences(anchorIso: string, fromIso: string, t
 }
 const daysInMonthUTC = (d: Date): number => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
 const isSet = (v: number | string | null | undefined): boolean => v !== null && v !== undefined && v !== "";
+
+/**
+ * Whether a category may appear in front of a caller. SQL-backed methods
+ * scope through their own accounts/parties, so they always pass here, and
+ * unrestricted callers see everything (as today — narrowing a view never
+ * hides what the caller may read org-wide). Manual and formula strategies
+ * are org-level models that ignore subIds, so for RESTRICTED callers they
+ * show only when attributed to a visible subsidiary: an unattributed one
+ * hides (fail closed) rather than leaking org-wide names and amounts into
+ * a view the reader must not see beyond.
+ */
+export function isCategoryVisibleInScope(
+  cat: ForecastCategory,
+  subIds: string[] | undefined,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): boolean {
+  if (subIds === undefined || allowedSubsidiaryIds === null) return true;
+  if (cat.method !== "manual_recurring" && cat.method !== "formula_expression") return true;
+  const attributed = cat.subsidiaryIds ?? [];
+  return attributed.some((id) => subIds.includes(id));
+}
 
 /**
  * How many history weeks an average divides by: the week buckets of the

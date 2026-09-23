@@ -27,7 +27,7 @@ if (!liabilityTypes.includes(CARD_ACCOUNT_TYPE)) {
 export interface ReferenceSpec {
   /** Request field name, used to name the refusal (e.g. "bankAccountIds"). */
   field: string;
-  table: "accounts" | "parties";
+  table: "accounts" | "parties" | "subsidiaries";
   /** Human kind for the message (e.g. "an account", "a party"). */
   kind: string;
   ids: string[];
@@ -132,10 +132,36 @@ async function checkParties(orgId: string, spec: ReferenceSpec): Promise<string 
  * A misspelled or foreign id refuses here by name; saved, it would forecast
  * silent zero.
  */
+async function checkSubsidiaries(orgId: string, spec: ReferenceSpec): Promise<string | null> {
+  for (const id of spec.ids) {
+    if (!UUID_RE.test(id)) return `${spec.field} "${id}" is not a valid UUID`;
+  }
+  if (!spec.ids.length) return null;
+  const rows = await db.execute<{ id: string }>(sql`
+    select id::text as id
+      from subsidiaries
+     where org_id = ${orgId} and id = any(${`{${spec.ids.join(",")}}`}::uuid[])
+  `);
+  const found = new Set(rows.rows.map((row) => row.id.toLowerCase()));
+  for (const id of spec.ids) {
+    if (!found.has(id.toLowerCase())) return `${spec.field} "${id}" is not ${spec.kind} in this organization`;
+    // A subsidiary attribution names the subsidiary itself: restricted
+    // callers may only attribute to subsidiaries they can see.
+    if (spec.allowedSubsidiaryIds !== null && !spec.allowedSubsidiaryIds.has(id.toLowerCase())) {
+      return `${spec.field} "${id}" is outside your subsidiaries`;
+    }
+  }
+  return null;
+}
+
 export async function validateReferences(orgId: string, specs: ReferenceSpec[]): Promise<string | null> {
   for (const spec of specs) {
     const error =
-      spec.table === "accounts" ? await checkAccounts(orgId, spec) : await checkParties(orgId, spec);
+      spec.table === "accounts"
+        ? await checkAccounts(orgId, spec)
+        : spec.table === "parties"
+          ? await checkParties(orgId, spec)
+          : await checkSubsidiaries(orgId, spec);
     if (error) return error;
   }
   return null;
