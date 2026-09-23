@@ -208,3 +208,82 @@ test("post/reverse answer a malformed batch id with 404, never a 500", { skip: !
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
+
+test("import reports the persisted posted batch when the provider changes evidence", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
+    const externalRef = `provider-correction-${org.orgId}`;
+    const originalTransactions = [
+      { id: "original-charge", type: "charge", amount: 10000, currency: "cad", fee: 500, net: 9500 },
+    ];
+    const parsed = parseStripeBalanceTransactions(originalTransactions, externalRef, org.date);
+    const imported = await withOrgContext(org.orgId, () => importSettlementBatch(org.orgId, actorId, parsed, {
+      bankAccountId: org.accounts.bank,
+      feeAccountId: org.accounts.freight,
+      clearingAccountId: org.accounts.clearing,
+      subsidiaryId: org.subsidiaryId,
+    }));
+    await postSettlementBatch(org.orgId, imported.batchId, actorId, null);
+    state.user = { orgId: org.orgId, id: actorId };
+    state.allowed = new Set([org.subsidiaryId]);
+
+    const exactReplay = await withOrgContext(org.orgId, () => POST(json({
+      action: "import",
+      provider: "stripe",
+      externalRef,
+      settlementDate: org.date,
+      transactions: originalTransactions,
+      bankAccountId: org.accounts.bank,
+      feeAccountId: org.accounts.freight,
+      clearingAccountId: org.accounts.clearing,
+      subsidiaryId: org.subsidiaryId,
+    })));
+    assert.equal(exactReplay.status, 200);
+    const replayBody = await exactReplay.json() as { totals: { grossAmount: string } };
+    assert.equal(replayBody.totals.grossAmount, "100.0000");
+
+    const correction = await withOrgContext(org.orgId, () => POST(json({
+      action: "import",
+      provider: "stripe",
+      externalRef,
+      settlementDate: org.date,
+      transactions: [
+        { id: "corrected-charge", type: "charge", amount: 12000, currency: "cad", fee: 500, net: 11500 },
+      ],
+      bankAccountId: org.accounts.bank,
+      feeAccountId: org.accounts.freight,
+      clearingAccountId: org.accounts.clearing,
+      subsidiaryId: org.subsidiaryId,
+    })));
+    assert.equal(correction.status, 409);
+    assert.deepEqual(await correction.json(), {
+      error: "provider settlement reference already has different evidence; use the persisted batch, then reverse it or record a separate adjustment",
+      batch: {
+        batchId: imported.batchId,
+        status: "posted",
+        provider: "stripe",
+        externalRef,
+        currency: "CAD",
+        totals: {
+          grossAmount: "100.0000",
+          feeAmount: "5.0000",
+          refundAmount: "0.0000",
+          disputeAmount: "0.0000",
+          adjustmentAmount: "0.0000",
+          netAmount: "95.0000",
+          fxAmount: "0.0000",
+        },
+      },
+    });
+    const persisted = (await withBypassContext(() => db.execute(sql`
+      select gross_amount::text as gross, status from psp_settlement_batches
+       where id = ${imported.batchId} and org_id = ${org.orgId}
+    `))).rows[0] as { gross: string; status: string };
+    assert.deepEqual(persisted, { gross: "100.0000", status: "posted" });
+  } finally {
+    state.user = { orgId: "", id: "" };
+    state.allowed.clear();
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});

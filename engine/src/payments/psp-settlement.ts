@@ -32,6 +32,30 @@ export type SettlementLineKind =
 
 export class PspSettlementError extends Error {}
 
+export class PspSettlementConflictError extends PspSettlementError {
+  constructor(
+    message: string,
+    readonly persistedBatch: {
+      batchId: string;
+      status: string;
+      provider: string;
+      externalRef: string;
+      currency: string;
+      totals: {
+        grossAmount: string;
+        feeAmount: string;
+        refundAmount: string;
+        disputeAmount: string;
+        adjustmentAmount: string;
+        netAmount: string;
+        fxAmount: string;
+      };
+    },
+  ) {
+    super(message);
+  }
+}
+
 const PSP_ACCOUNT_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -1046,6 +1070,9 @@ export async function importSettlementBatch(
     const batchId = row.id;
     if (!created) {
       const stored = (await db.execute<{
+        status: string;
+        provider: string;
+        external_ref: string;
         currency: string;
         gross_amount: string;
         fee_amount: string;
@@ -1065,7 +1092,7 @@ export async function importSettlementBatch(
         line_count: number;
         memo: string | null;
       }>(sql`
-        select currency, gross_amount::text, fee_amount::text,
+        select status, provider, external_ref, currency, gross_amount::text, fee_amount::text,
                refund_amount::text, dispute_amount::text, adjustment_amount::text,
                net_amount::text, fx_amount::text, settlement_date::text,
                bank_account_id, fee_account_id, dispute_account_id, fx_account_id,
@@ -1088,8 +1115,25 @@ export async function importSettlementBatch(
          order by line_number
       `)).rows;
       if (!stored || !sameStoredImport(stored, storedLines, parsed, accounts, currency, totals, subsidiaryId)) {
-        throw new PspSettlementError(
+        if (!stored) throw new PspSettlementError("settlement batch could not be read");
+        throw new PspSettlementConflictError(
           "provider settlement reference already has different evidence; use the persisted batch, then reverse it or record a separate adjustment",
+          {
+            batchId,
+            status: stored.status,
+            provider: stored.provider,
+            externalRef: stored.external_ref,
+            currency: stored.currency,
+            totals: {
+              grossAmount: stored.gross_amount,
+              feeAmount: stored.fee_amount,
+              refundAmount: stored.refund_amount,
+              disputeAmount: stored.dispute_amount,
+              adjustmentAmount: stored.adjustment_amount,
+              netAmount: stored.net_amount,
+              fxAmount: stored.fx_amount,
+            },
+          },
         );
       }
       return { batchId, created: false };
