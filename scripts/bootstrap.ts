@@ -1501,8 +1501,8 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
   {
     filename: "generated/0293_stock_count_line_subject_unique.sql",
     from: "19b0e9b674360129aec13cb3c911de38dfd1cb86f1976cca3979c28521720c11",
-    to: "307683c85d8536bcdc3838b48fb02c3630d56820100138b95371d2a75e3ad726",
-    strategy: "restamp",
+    to: "38eaf276d1a5f1994b06726a87d4b14d7c703c058967acf2752002368d60a099",
+    strategy: "reapply",
     reason:
       "staged revision (U10) builds the duplicate-subject unique as CREATE UNIQUE "
       + "INDEX CONCURRENTLY outside the tracked transaction instead of holding the "
@@ -1511,11 +1511,25 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "marked is_pre_guard_legacy, and the guard is a partial unique index over "
       + "unmarked rows (a constraint cannot attach a partial index, so enforcement "
       + "lives on the index under the same name). A database recorded at the old "
-      + "digest applied the old full guard successfully — the old precheck refused "
-      + "every legacy row — so its data already satisfies the staged guard and only "
-      + "the digest moves. Restamp, not reapply: a database at the old digest holds "
-      + "no legacy rows by construction, so there is nothing to mark and re-running "
-      + "would only rebuild an equivalent guard.",
+      + "digest re-runs the current body: the classify finds no legacy rows (the "
+      + "old precheck refused them), ADD COLUMN IF NOT EXISTS gains the marker, the "
+      + "guarded DROP removes the old full constraint, and the concurrent build "
+      + "recreates the guard in staged partial form — converging to the "
+      + "fresh-install catalog. Reapply, not restamp: the revision adds the marker "
+      + "column and the partiality, which a restamp would leave behind on "
+      + "old-ledger databases.",
+  },
+  {
+    filename: "generated/0293_stock_count_line_subject_unique.sql",
+    from: "307683c85d8536bcdc3838b48fb02c3630d56820100138b95371d2a75e3ad726",
+    to: "38eaf276d1a5f1994b06726a87d4b14d7c703c058967acf2752002368d60a099",
+    strategy: "reapply",
+    reason:
+      "same staged revision as the entry above, for databases that recorded the "
+      + "picked-then-superseded 307683c8 (partial index, marker column, no old "
+      + "constraint): the guarded DROP finds nothing and the body replays "
+      + "idempotently to the same catalog.",
+  },
   },
 ];
 
