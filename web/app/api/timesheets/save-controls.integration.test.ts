@@ -103,7 +103,7 @@ test('saving immediately approved hours captures rates and posts configured labo
   } finally { await f.close() }
 })
 
-test('replaying an identical save returns the stored week without duplicating hours or effects', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('replaying an identical save returns the stored week without duplicating hours or effects', async () => {
   // With automatic approval the first save leaves approved entries behind.
   // A replayed grid must resolve to those rows — not insert a second copy of
   // the week's hours alongside fresh financial effects.
@@ -123,7 +123,7 @@ test('replaying an identical save returns the stored week without duplicating ho
   } finally { await f.close() }
 })
 
-test('replaying a draft grid reuses the stored rows instead of churning them', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('replaying a draft grid reuses the stored rows instead of churning them', async () => {
   const f = await fixture(true)
   try {
     assert.equal((await f.save({})).status, 200)
@@ -134,7 +134,7 @@ test('replaying a draft grid reuses the stored rows instead of churning them', {
   } finally { await f.close() }
 })
 
-test('time cannot be pinned to a party without an active employment', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('time cannot be pinned to a party without an active employment', async () => {
   const f = await fixture(true)
   try {
     assert.equal((await f.save({})).status, 200)
@@ -154,7 +154,7 @@ test('time cannot be pinned to a party without an active employment', { skip: !p
   } finally { await f.close() }
 })
 
-test("hours cannot be booked to another legal entity's project", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("hours cannot be booked to another legal entity's project", async () => {
   const f = await fixture(true)
   try {
     const otherSub = randomUUID()

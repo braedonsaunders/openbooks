@@ -148,7 +148,6 @@ test(
 
 test(
   "concurrent reopens serialize: exactly one unwinds and audits",
-  { skip: !env.OPENBOOKS_DB_URL },
   async () => {
     const fixture = await seedApprovedWeek();
     state.user = { orgId: fixture.org.orgId, id: fixture.actorId };
