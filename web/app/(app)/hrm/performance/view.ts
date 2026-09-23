@@ -214,6 +214,8 @@ export interface PerformancePageData {
   } | null
   missingExit: string | null
   create: {
+    /** The drawer's accessible name — a dialog must never render untitled. */
+    title: string
     closeHref: string
     templates: { value: string; label: string }[]
     templateLabel: string
@@ -626,6 +628,7 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
       actorId: authz.user.id,
     })
     create = {
+      title: t('performance.newCycle'),
       closeHref: hrefFor(rawStatus, null, null),
       templates: templates.filter((tpl) => tpl.isActive).map((tpl) => ({ value: tpl.id, label: tpl.name })),
       templateLabel: t('performance.templateLabel'),

@@ -179,7 +179,7 @@ export function ReviewDrawer({
 export function CycleDialog({ create }: { create: PerformancePageData['create'] }) {
   if (!create) return null
   return (
-    <UrlDrawer open closeHref={create.closeHref} title="">
+    <UrlDrawer open closeHref={create.closeHref} title={create.title}>
       <CycleCreateForm {...create} />
     </UrlDrawer>
   )
