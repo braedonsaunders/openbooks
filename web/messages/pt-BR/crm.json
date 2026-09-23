@@ -153,6 +153,7 @@
     "createEstimate": "Criar orçamento",
     "estimateCreated": "Orçamento criado",
     "estimateFailed": "Não foi possível criar o orçamento.",
+    "estimateItemlessLines": "Orçamento não criado: as linhas {lines} não têm item. Adicione um item a cada linha e converta novamente.",
     "estimateNeedsAccount": "Defina uma conta antes de criar uma estimativa",
     "saveFirstForEstimate": "Salve esta oportunidade primeiro — os orçamentos convertem o cliente e as linhas salvos.",
     "statuses": {

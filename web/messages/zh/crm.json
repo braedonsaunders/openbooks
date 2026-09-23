@@ -153,6 +153,7 @@
     "createEstimate": "创建报价单",
     "estimateCreated": "报价单已创建",
     "estimateFailed": "无法创建报价单。",
+    "estimateItemlessLines": "无法创建估算：行 {lines} 没有物料。请为每行添加物料，然后重新转换。",
     "estimateNeedsAccount": "创建估算前请先设置客户",
     "saveFirstForEstimate": "请先保存此商机——报价单将转换已保存的客户和明细。",
     "statuses": {
