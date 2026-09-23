@@ -219,6 +219,41 @@ test("a replacement default calendar releases the lease without tripping the def
   }
 });
 
+test("a colliding BOM replacement releases the lease without tripping the assembly uniqueness", { skip: !DB }, async () => {
+  // bom_assembly_component is a plain UNIQUE(assembly_item_id,
+  // component_item_id): a test that deletes the seeded recipe and installs its
+  // own row on the same pair (the BOM-concurrency race does exactly this)
+  // used to make the baseline restore re-insert the deleted baseline row
+  // while the replacement still stood, so every bounded retry died on 23505
+  // and the lease never released. The restore now removes non-baseline rows
+  // colliding on any catalog unique key first, in the same transaction.
+  const org = await createScratchOrg();
+  try {
+    const seeded = (await db.execute<{ id: string }>(sql`
+      select id from bom_components where org_id = ${org.orgId} and assembly_item_id = ${org.items.assembly}`)).rows;
+    assert.equal(seeded.length, 1, "the fixture seeds one recipe row");
+    await db.execute(sql`
+      delete from bom_components where org_id = ${org.orgId} and assembly_item_id = ${org.items.assembly}`);
+    const replacement = randomUUID();
+    await db.execute(sql`
+      insert into bom_components (id, org_id, assembly_item_id, component_item_id, quantity_per, sort_order)
+      values (${replacement}, ${org.orgId}, ${org.items.assembly}, ${org.items.component}, '1', 0)`);
+    // Must not throw: pre-fix this died on 23505 inside the restore.
+    await dropScratchOrg(org.orgId);
+    if (POOLED_FIXTURES) {
+      const current = (await db.execute<{ id: string }>(sql`
+        select id from bom_components where org_id = ${org.orgId} and assembly_item_id = ${org.items.assembly}`)).rows;
+      assert.equal(current.length, 1, "exactly one recipe row is handed back");
+      assert.equal(current[0]!.id, seeded[0]!.id, "the baseline recipe row is restored");
+      const leftover = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from bom_components where id = ${replacement}`));
+      assert.equal(leftover.rows[0]!.n, 0, "the colliding replacement is removed by the reset");
+    }
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
 test("dropScratchOrg refuses an org not named 'Scratch %'", { skip: !DB }, async () => {
   const orgId = randomUUID();
   await db.execute(sql`

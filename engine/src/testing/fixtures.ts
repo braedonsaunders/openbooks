@@ -1197,6 +1197,50 @@ function rowMatch(columns: readonly string[], left: string, right: string): stri
   return columns.map((column) => `${left}.${quoteIdentifier(column)} is not distinct from ${right}.${quoteIdentifier(column)}`).join(" and ");
 }
 
+/**
+ * Plain-column unique keys (primary keys excluded) per table, derived from
+ * the catalog rather than a hand-kept list, so a new UNIQUE constraint can
+ * never reintroduce the restore collision below. Expression indexes are
+ * skipped — their key expressions cannot be matched to snapshot columns —
+ * and partial-index predicates are ignored deliberately: the collider delete
+ * only ever removes non-baseline rows (every one of them is deleted by the
+ * passes that follow anyway), so matching on the key columns alone
+ * over-deletes at worst, never wrongly.
+ */
+async function loadUniqueKeys(tables: readonly string[]): Promise<Map<string, string[][]>> {
+  const keys = new Map<string, string[][]>();
+  if (tables.length === 0) return keys;
+  const result = await db.execute<{ index: string; table: string; column: string }>(sql`
+    select i.indexrelid::text as "index", t.relname as "table", a.attname as "column"
+      from pg_index i
+      join pg_class t on t.oid = i.indrelid
+      join pg_namespace n on n.oid = t.relnamespace and n.nspname = 'public'
+      join lateral unnest(i.indkey) with ordinality as k(attnum, ord) on true
+      join pg_attribute a on a.attrelid = t.oid and a.attnum = k.attnum
+     where i.indisunique and i.indisvalid and not i.indisprimary
+       and i.indexprs is null
+       and t.relname in (${sql.join(tables.map((table) => sql`${table}`), sql`, `)})
+     order by "index", k.ord`);
+  const byIndex = new Map<string, { table: string; columns: string[] }>();
+  for (const row of result.rows) {
+    let entry = byIndex.get(row.index);
+    if (!entry) {
+      entry = { table: row.table, columns: [] };
+      byIndex.set(row.index, entry);
+    }
+    entry.columns.push(row.column);
+  }
+  for (const { table, columns } of byIndex.values()) {
+    // Catalog names are quoted at use; drop anything that is not a plain
+    // identifier rather than trusting DDL made elsewhere.
+    if (!SQL_IDENT.test(table) || columns.some((column) => !SQL_IDENT.test(column))) continue;
+    const tableKeys = keys.get(table) ?? [];
+    if (!keys.has(table)) keys.set(table, tableKeys);
+    tableKeys.push(columns);
+  }
+  return keys;
+}
+
 /** Persist a committed template for every org-owned row. This snapshot is
  * database-backed (not a module/temp-table cache), so all test connections
  * restore the same exact baseline, including updates to seeded rows. */
@@ -1336,12 +1380,16 @@ export async function probeScratchOrgTouchedTables(
  * reinsert deleted baseline rows; bounded passes handle FK ordering. Runs
  * both before the delete passes (to repair test-mutated baseline references
  * that would otherwise block deletes) and after (to repair cascade damage
- * from the deletes themselves).
+ * from the deletes themselves). Before either, non-baseline rows colliding
+ * with a baseline row on any catalog unique key are removed: the re-insert
+ * below would otherwise trip the constraint while the test row still stands
+ * (the delete passes run only after this restore).
  */
 async function restoreScratchOrgBaseline(org: ScratchOrg, tables: readonly string[], columns: OrgTableColumns): Promise<void> {
   const schema = org.snapshotSchema;
   if (!schema) throw new Error(`scratch fixture ${org.orgId} has no committed baseline snapshot`);
   let restoreRemaining = tables.filter((table) => (columns.get(table) ?? []).includes("id"));
+  const uniqueKeys = await loadUniqueKeys(restoreRemaining);
   const restoreErrors = new Map<string, string>();
   for (let pass = 0; pass < 10 && restoreRemaining.length > 0; pass += 1) {
     const failed = await db.transaction(async (tx) => {
@@ -1381,6 +1429,33 @@ async function restoreScratchOrgBaseline(org: ScratchOrg, tables: readonly strin
         const savepoint = `scratch_fixture_restore_${pass}_${index}`;
         await tx.execute(sql.raw(`savepoint ${savepoint}`));
         try {
+          // A test row can carry the same unique key as a deleted baseline
+          // row (a reinstalled BOM recipe, a replacement default calendar):
+          // the re-insert below would trip the constraint while the test
+          // row still stands. Remove those colliders first, in this same
+          // savepoint. Best-effort: an FK-pinned collider rolls back to the
+          // nested savepoint and stays for the delete passes, leaving the
+          // update/insert to behave exactly as before this change.
+          const tableKeys = uniqueKeys.get(table) ?? [];
+          if (tableKeys.length > 0) {
+            const ownerColumn = table === "orgs" ? "id" : "org_id";
+            const collider = tableKeys.map((key) =>
+              `exists (select 1 from ${snapshot} as baseline where ${key.map((column) => `baseline.${quoteIdentifier(column)} is not distinct from target.${quoteIdentifier(column)}`).join(" and ")})`,
+            ).join(" or ");
+            const nested = `${savepoint}_colliders`;
+            await tx.execute(sql.raw(`savepoint ${nested}`));
+            try {
+              await tx.execute(sql.raw(
+                `delete from ${target} as target where target.${quoteIdentifier(ownerColumn)} = '${org.orgId}'`
+                + ` and not exists (select 1 from ${snapshot} as baseline where baseline.${quoteIdentifier("id")} = target.${quoteIdentifier("id")})`
+                + ` and (${collider})`,
+              ));
+              await tx.execute(sql.raw(`release savepoint ${nested}`));
+            } catch {
+              await tx.execute(sql.raw(`rollback to savepoint ${nested}`));
+              await tx.execute(sql.raw(`release savepoint ${nested}`));
+            }
+          }
           if (mutable.length > 0) {
             await tx.execute(sql.raw(
               `update ${target} as target set ${assignments} from ${snapshot} as baseline where target.id = baseline.id and ${ownerPredicate}`,
