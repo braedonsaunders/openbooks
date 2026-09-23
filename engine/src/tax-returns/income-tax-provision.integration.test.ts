@@ -12,6 +12,7 @@ import {
   consolidateEntityResults,
   detectProvisionSourceDrift,
   getProvisionRun,
+  listProvisionRuns,
   postProvisionRun,
   provisionEntryNumber,
   provisionReversalEntryNumber,
@@ -1528,6 +1529,58 @@ test("reposting a superseded run refuses by status instead of returning its reve
     const live = (await db.execute<{ status: string }>(sql`
       select status from journal_entries where id = ${current.journalEntryId}`));
     assert.equal(live.rows[0]!.status, "posted");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("restricted reads expose only a visible entity's journal entry, never the hidden first entity's", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Disclosure Tester", "admin");
+    await seedTaxControlAccounts(org.orgId);
+    const branch = await createSubsidiary(org.orgId, "Branch Co", "CAD", org.subsidiaryId);
+    await seedEnactedRate(org.orgId, "CA federal", "26", { subsidiaryId: org.subsidiaryId, userId });
+    await seedEnactedRate(org.orgId, "Branch federal", "21", { subsidiaryId: branch, userId });
+    await postInvoice(org, { subsidiaryId: org.subsidiaryId, amount: "200000", number: "INV-DSC-CA", userId });
+    await postInvoice(org, { subsidiaryId: branch, amount: "100000", number: "INV-DSC-BR", userId });
+
+    const runId = await computeProvisionRun(org.orgId, 2026, {}, userId);
+    await postProvisionRun(org.orgId, runId, userId);
+    const stored = (await getProvisionRun(org.orgId, runId))!;
+    assert.ok(stored.journalEntryId);
+    const entries = (await db.execute<{ id: string; subsidiary_id: string }>(sql`
+      select id, subsidiary_id from journal_entries
+       where org_id = ${org.orgId} and origin = 'tax_provision' and status = 'posted'`));
+    assert.equal(entries.rows.length, 2);
+    const entryOf = new Map(entries.rows.map((e) => [e.subsidiary_id, e.id]));
+    const storedEntrySub = entries.rows.find((e) => e.id === stored.journalEntryId)!.subsidiary_id;
+    const otherSub = storedEntrySub === org.subsidiaryId ? branch : org.subsidiaryId;
+
+    // Hidden first entity, visible second: figures AND journal id are B-only.
+    const restricted = (await getProvisionRun(org.orgId, runId, new Set([otherSub])))!;
+    assert.deepEqual(
+      (restricted.payload as { entities: { subsidiaryId: string }[] }).entities.map((e) => e.subsidiaryId),
+      [otherSub],
+    );
+    assert.equal(restricted.journalEntryId, entryOf.get(otherSub));
+    assert.notEqual(restricted.journalEntryId, entryOf.get(storedEntrySub));
+
+    // Only the stored entity visible: the stored id is returned unchanged.
+    const storedScope = (await getProvisionRun(org.orgId, runId, new Set([storedEntrySub])))!;
+    assert.equal(storedScope.journalEntryId, stored.journalEntryId);
+
+    // Empty scope: the run is indistinguishable from missing.
+    assert.equal(await getProvisionRun(org.orgId, runId, new Set()), null);
+
+    // The list projection scopes journal ids the same way.
+    const listed = await listProvisionRuns(org.orgId, new Set([otherSub]));
+    assert.equal(listed.length, 1);
+    assert.equal(listed[0]!.journalEntryId, entryOf.get(otherSub));
+    assert.deepEqual(await listProvisionRuns(org.orgId, new Set()), []);
+    // Unrestricted reads keep the stored first-sorted id.
+    const listedAll = await listProvisionRuns(org.orgId, null);
+    assert.equal(listedAll[0]!.journalEntryId, stored.journalEntryId);
   } finally {
     await dropScratchOrg(org.orgId);
   }
