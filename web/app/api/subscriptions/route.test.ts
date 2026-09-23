@@ -5,6 +5,7 @@ import {
   SubscriptionError,
   normalizeSubscriptionCadence,
   normalizeSubscriptionMoney,
+  resolveNextBillOnUpdate,
 } from "../../../../engine/src/billing/subscription-billing.ts";
 
 interface RouteState {
@@ -22,6 +23,8 @@ interface RouteState {
   };
   customerSubsidiaryId: string | null;
   subscriptionSubsidiaryId: string | null;
+  beforeSubscription: Record<string, unknown> | null;
+  guardedThrough: string | null;
 }
 
 const stateKey = Symbol.for("openbooks.subscription-route-test");
@@ -29,6 +32,7 @@ const routeState: RouteState & {
   SubscriptionError: typeof SubscriptionError;
   normalizeSubscriptionCadence: typeof normalizeSubscriptionCadence;
   normalizeSubscriptionMoney: typeof normalizeSubscriptionMoney;
+  resolveNextBillOnUpdate: typeof resolveNextBillOnUpdate;
 } = {
   queries: [],
   transactionQueries: [],
@@ -44,7 +48,12 @@ const routeState: RouteState & {
   },
   customerSubsidiaryId: "subsidiary-a",
   subscriptionSubsidiaryId: "subsidiary-a",
+  beforeSubscription: null,
+  guardedThrough: null,
   SubscriptionError,
+  // The cursor guard is pure domain validation: the double delegates to the
+  // real function, or the refusal cases below would test a copy of the rule.
+  resolveNextBillOnUpdate,
   normalizeSubscriptionCadence: (interval, intervalCount) => {
     const cadence = normalizeSubscriptionCadence(interval, intervalCount);
     routeState.normalizedCadences.push(cadence);
@@ -84,6 +93,12 @@ const mockSources = new Map<string, string>([
         const text = sqlText(query)
         if (text.includes('insert into subscription_plans')) return { rows: [{ id: 'plan-1' }] }
         if (text.includes('insert into subscriptions')) return { rows: [{ id: 'subscription-1' }] }
+        if (text.includes('select * from subscriptions where id =')) {
+          return { rows: state.beforeSubscription ? [state.beforeSubscription] : [] }
+        }
+        if (text.includes('max(pi.period_ends_on)')) return { rows: [{ guardedThrough: state.guardedThrough }] }
+        if (text.includes('update subscriptions set')) return { rows: [{ id: 'subscription-1' }] }
+        if (text.includes('insert into audit_log')) return { rows: [] }
         if (text.includes('from orgs') && text.includes('base_currency')) return { rows: [{ baseCurrency: state.orgCurrency }] }
         if (text.includes('from fx_rates')) return { rows: state.fxRate ? [{ rate: state.fxRate }] : [] }
         if (text.includes('planCurrency')) return { rows: state.mrrRows }
@@ -123,6 +138,7 @@ const mockSources = new Map<string, string>([
         state.engineCalls.push({ fn: 'changeSubscription', args })
         return { invoiceId: null, documentNumber: null, adjustment: '0.0000' }
       }
+      export const resolveNextBillOnUpdate = (...args) => state.resolveNextBillOnUpdate(...args)
       export function monthlyRecurringRevenue(amount) { return String(amount) }
       export async function prorateFirstInvoice(...args) {
         state.engineCalls.push({ fn: 'prorateFirstInvoice', args })
@@ -191,6 +207,8 @@ function reset(): void {
   };
   routeState.customerSubsidiaryId = "subsidiary-a";
   routeState.subscriptionSubsidiaryId = "subsidiary-a";
+  routeState.beforeSubscription = null;
+  routeState.guardedThrough = null;
 }
 
 function post(body: Record<string, unknown>): Promise<Response> {
@@ -409,4 +427,104 @@ test("bill-now, change, and first proration attribute the engine call to the aut
     },
     { fn: "prorateFirstInvoice", args: ["subscription-1", "2026-09-26", undefined, { actorId: "user-1" }] },
   ]);
+});
+
+/** A plain subscription billed for [Mar 1, Apr 1): cursor Apr 1, one invoice. */
+function billedMarchSubscription(): void {
+  routeState.beforeSubscription = {
+    id: "subscription-1",
+    start_on: "2026-03-01",
+    current_period_start: "2026-03-01",
+    next_bill_on: "2026-04-01",
+    last_invoice_id: "invoice-9",
+  };
+  routeState.guardedThrough = null;
+}
+
+/** Every string leaf of a drizzle query — bound params and template text alike. */
+function boundStrings(query: unknown): string[] {
+  const out: string[] = [];
+  const visit = (node: unknown): void => {
+    if (typeof node === "string" || typeof node === "number") {
+      out.push(String(node));
+      return;
+    }
+    if (Array.isArray(node)) {
+      for (const element of node) visit(element);
+      return;
+    }
+    if (node && typeof node === "object") {
+      for (const value of Object.values(node as Record<string, unknown>)) visit(value);
+    }
+  };
+  visit((query as { queryChunks?: unknown }).queryChunks ?? query);
+  return out;
+}
+
+test("updateSubscription refuses a next bill date inside the billed window", async () => {
+  reset();
+  billedMarchSubscription();
+  // Mar 15 passes the old only-check (>= current_period_start) and would
+  // double-bill Mar 15 - Apr 1 under a different guard key.
+  const response = await post({ action: "updateSubscription", id: "subscription-1", nextBillOn: "2026-03-15" });
+  assert.equal(response.status, 422);
+  assert.match(
+    String((await response.json() as { error: string }).error),
+    /already-billed service through 2026-04-01/,
+  );
+  assert.ok(
+    !routeState.transactionQueries.map(sqlText).some((text) => text.includes("update subscriptions set")),
+    "a refused cursor move must not reach the update",
+  );
+});
+
+test("updateSubscription refuses a forward jump without an explicit skip", async () => {
+  reset();
+  billedMarchSubscription();
+  const response = await post({ action: "updateSubscription", id: "subscription-1", nextBillOn: "2026-06-01" });
+  assert.equal(response.status, 422);
+  const error = String((await response.json() as { error: string }).error);
+  assert.match(error, /skips unbilled service from 2026-04-01 to 2026-06-01/);
+  assert.match(error, /skipUnbilledService and a skip reason/);
+});
+
+test("updateSubscription records a forward skip with its reason and shows the window", async () => {
+  reset();
+  billedMarchSubscription();
+  const response = await post({
+    action: "updateSubscription",
+    id: "subscription-1",
+    nextBillOn: "2026-06-01",
+    skipUnbilledService: true,
+    skipReason: "tenant paused Apr-May",
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json() as { ok: boolean; skippedWindow: { from: string; to: string }; skipReason: string };
+  assert.deepEqual(body.skippedWindow, { from: "2026-04-01", to: "2026-06-01" });
+  assert.equal(body.skipReason, "tenant paused Apr-May");
+  const auditQuery = routeState.transactionQueries.find((query) => sqlText(query).includes("insert into audit_log"));
+  assert.ok(auditQuery, "a forward skip must write an audit row");
+  const auditJson = boundStrings(auditQuery)
+    .map((candidate) => {
+      try {
+        return JSON.parse(candidate) as unknown;
+      } catch {
+        return null;
+      }
+    })
+    .find((parsed): parsed is { nextBillOnSkip: unknown } =>
+      !!parsed && typeof parsed === "object" && "nextBillOnSkip" in parsed);
+  assert.deepEqual(auditJson?.nextBillOnSkip, {
+    from: "2026-04-01",
+    to: "2026-06-01",
+    reason: "tenant paused Apr-May",
+  });
+});
+
+test("updateSubscription accepts a next bill date exactly on the boundary", async () => {
+  reset();
+  billedMarchSubscription();
+  const response = await post({ action: "updateSubscription", id: "subscription-1", nextBillOn: "2026-04-01" });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true });
 });

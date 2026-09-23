@@ -10,6 +10,7 @@ import {
   normalizeSubscriptionCadence,
   normalizeSubscriptionMoney,
   prorateFirstInvoice,
+  resolveNextBillOnUpdate,
   type Interval,
 } from "@openbooks/engine/src/billing/subscription-billing.ts";
 import { add, mulDecimal } from "@openbooks/engine/src/money/money.ts";
@@ -470,40 +471,80 @@ export async function POST(req: Request) {
         const nextBillOn = "nextBillOn" in body
           ? subscriptionDate(body.nextBillOn, "next bill date")
           : undefined;
+        // A forward jump past the unbilled boundary silently skips service
+        // the scheduler then never bills, so it needs an explicit opt-in
+        // plus a reason — both recorded in the audit with the skipped window.
+        const skipUnbilledService = "skipUnbilledService" in body
+          ? optionalBoolean(body.skipUnbilledService, "skip unbilled service")
+          : undefined;
+        let skipReason: string | undefined;
+        if ("skipReason" in body) {
+          if (typeof body.skipReason !== "string") throw new SubscriptionError("skip reason must be a string");
+          skipReason = body.skipReason;
+        }
         if (nextBillOn !== undefined) sets.push(sql`next_bill_on = ${nextBillOn}`);
         if (!sets.length) return NextResponse.json({ error: "nothing to update" }, { status: 400 });
-        const missing = await db.transaction(async (tx) => {
+        const outcome = await db.transaction(async (tx) => {
           const before = (await tx.execute<Record<string, unknown>>(sql`
             select * from subscriptions where id = ${body.id} and org_id = ${orgId}
           `));
-          if (!before.rows[0]) return true;
+          if (!before.rows[0]) return null;
+          // Resolve the cursor move against the unbilled boundary — the end
+          // of the last billed period (m47's shared helper). Rewinding into
+          // billed service or skipping forward without a reason throws a
+          // SubscriptionError, which the handler maps to a named 422.
+          let skippedWindow: { from: string; to: string } | null = null;
           if (nextBillOn !== undefined) {
-            const startOn = String(before.rows[0].start_on);
-            const currentPeriodStart = before.rows[0].current_period_start == null
-              ? null
-              : String(before.rows[0].current_period_start);
-            if (nextBillOn < startOn || (currentPeriodStart !== null && nextBillOn < currentPeriodStart)) {
-              return "invalidPeriod" as const;
-            }
+            const guards = (await tx.execute<{ guardedThrough: string | null }>(sql`
+              select max(pi.period_ends_on)::text as "guardedThrough"
+                from subscription_period_invoices pi
+               where pi.org_id = ${orgId} and pi.subscription_id = ${body.id}
+            `));
+            const guardedThrough = guards.rows[0]?.guardedThrough ?? null;
+            const resolved = resolveNextBillOnUpdate({
+              startOn: String(before.rows[0].start_on),
+              currentPeriodStart: before.rows[0].current_period_start == null
+                ? null
+                : String(before.rows[0].current_period_start),
+              currentNextBillOn: String(before.rows[0].next_bill_on),
+              guardedThrough,
+              billed: before.rows[0].last_invoice_id != null || guardedThrough !== null,
+              newNextBillOn: nextBillOn,
+              skipUnbilledService,
+              skipReason,
+            });
+            skippedWindow = resolved.skippedWindow;
           }
           const updated = (await tx.execute<Record<string, unknown>>(sql`
             update subscriptions set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${userId}
              where id = ${body.id} and org_id = ${orgId}
             returning *
           `));
+          const changes: Record<string, unknown> = { before: before.rows[0], after: updated.rows[0] };
+          if (skippedWindow) {
+            changes.nextBillOnSkip = {
+              from: skippedWindow.from,
+              to: skippedWindow.to,
+              reason: (skipReason ?? "").trim(),
+            };
+          }
           await tx.execute(sql`
             insert into audit_log
               (org_id, table_name, row_id, action, changes, actor_id)
             values
               (${orgId}, 'subscriptions', ${String(body.id)}, 'update',
-               ${JSON.stringify({ before: before.rows[0], after: updated.rows[0] })}::jsonb, ${userId})
+               ${JSON.stringify(changes)}::jsonb, ${userId})
           `);
-          return false;
+          return { skippedWindow };
         });
-        if (missing === "invalidPeriod") {
-          return NextResponse.json({ error: "next bill date cannot precede the subscription period" }, { status: 422 });
+        if (!outcome) return NextResponse.json({ error: "not found" }, { status: 404 });
+        if (outcome.skippedWindow) {
+          return NextResponse.json({
+            ok: true,
+            skippedWindow: outcome.skippedWindow,
+            skipReason: (skipReason ?? "").trim(),
+          });
         }
-        if (missing) return NextResponse.json({ error: "not found" }, { status: 404 });
         return NextResponse.json({ ok: true });
       }
       case "billNow": {

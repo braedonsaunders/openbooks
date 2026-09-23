@@ -123,6 +123,17 @@ export interface ActivateLifecycleInput {
 }
 
 /**
+ * The unbilled boundary: the end of the last billed period. The subscription
+ * cursor (next_bill_on) advances atomically with every scheduler-billed
+ * invoice, but bill-now invoices post period guards without moving the
+ * cursor — so the boundary is the later of the cursor and the latest guarded
+ * period end. Pure.
+ */
+export function unbilledBoundary(nextBillOn: string, guardedThrough: string | null): string {
+  return guardedThrough && guardedThrough > nextBillOn ? guardedThrough : nextBillOn;
+}
+
+/**
  * Resolve the billing cursors an activation writes. A termStartsOn inside
  * already-billed service would rewind next_bill_on into posted periods and
  * bill them twice (period guards dedupe only exact period end + revision),
@@ -737,7 +748,7 @@ export async function activateLifecycle(orgId: string, actorId: string, input: A
                where pi.org_id = ${orgId} and pi.subscription_id = ${input.subscriptionId}) as "guardedThrough"
         from subscriptions s where s.id = ${input.subscriptionId} and s.org_id = ${orgId}
     `)).rows[0];
-    const boundary = prior && prior.guardedThrough && prior.guardedThrough > prior.nextBillOn ? prior.guardedThrough : prior?.nextBillOn ?? null;
+    const boundary = prior ? unbilledBoundary(prior.nextBillOn, prior.guardedThrough) : null;
     const billed = Boolean(prior?.lastInvoiceId ?? prior?.guardedThrough);
     const cursors = activationBillingCursors({
       termStartsOn,

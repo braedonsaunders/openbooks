@@ -15,6 +15,7 @@ import { advanceAnchoredMonth } from "./cadence.ts";
 import {
   advancedBillingSnapshot,
   prepareAdvancedSubscriptionBilling,
+  unbilledBoundary,
   type AdvancedBillingLine,
 } from "./advanced-subscriptions.ts";
 import { inventoryFeatureEnabled } from "../inventory/profile-policy.ts";
@@ -169,6 +170,66 @@ export function advanceSubscription(
   } catch {
     throw new SubscriptionError("billing cadence advances outside the supported date range");
   }
+}
+
+/**
+ * Resolve a next_bill_on edit against the unbilled boundary (m47's shared
+ * helper — the later of the subscription cursor and the latest guarded
+ * period end). Moving the cursor earlier than billed service would rewind
+ * into posted periods and bill them twice (period guards dedupe only exact
+ * period end + revision); moving it forward past unbilled service would
+ * silently skip service the scheduler then never bills. Both are refused by
+ * name: the backward move has no opt-in, and the forward move requires an
+ * explicit skip with a reason, returned as the auditable skipped window.
+ * A no-op write of the current cursor is not a move and stays allowed.
+ * Unbilled subscriptions keep the legacy period check. Pure.
+ */
+export interface NextBillOnUpdateInput {
+  startOn: string;
+  currentPeriodStart: string | null;
+  currentNextBillOn: string;
+  /** Latest subscription_period_invoices end, or null when none exists. */
+  guardedThrough: string | null;
+  /** True once any invoice (or guard row) exists for the subscription. */
+  billed: boolean;
+  newNextBillOn: string;
+  skipUnbilledService?: boolean;
+  skipReason?: string | null;
+}
+
+export interface NextBillOnUpdate {
+  nextBillOn: string;
+  skippedWindow: { from: string; to: string } | null;
+}
+
+export function resolveNextBillOnUpdate(input: NextBillOnUpdateInput): NextBillOnUpdate {
+  const boundary = unbilledBoundary(input.currentNextBillOn, input.guardedThrough);
+  if (input.newNextBillOn === input.currentNextBillOn || input.newNextBillOn === boundary) {
+    return { nextBillOn: input.newNextBillOn, skippedWindow: null };
+  }
+  if (input.newNextBillOn < boundary) {
+    if (!input.billed) {
+      if (
+        input.newNextBillOn < input.startOn ||
+        (input.currentPeriodStart !== null && input.newNextBillOn < input.currentPeriodStart)
+      ) {
+        throw new SubscriptionError("next bill date cannot precede the subscription period");
+      }
+      return { nextBillOn: input.newNextBillOn, skippedWindow: null };
+    }
+    throw new SubscriptionError(
+      `next bill date ${input.newNextBillOn} overlaps already-billed service through ${boundary} — ` +
+        `set it to ${boundary}, the end of the last billed period`,
+    );
+  }
+  const reason = (input.skipReason ?? "").trim();
+  if (input.skipUnbilledService !== true || !reason) {
+    throw new SubscriptionError(
+      `next bill date ${input.newNextBillOn} skips unbilled service from ${boundary} to ${input.newNextBillOn} — ` +
+        `repeat with skipUnbilledService and a skip reason to skip that window explicitly`,
+    );
+  }
+  return { nextBillOn: input.newNextBillOn, skippedWindow: { from: boundary, to: input.newNextBillOn } };
 }
 
 /** Normalize a subscription's charge to a monthly figure (analytics only). */

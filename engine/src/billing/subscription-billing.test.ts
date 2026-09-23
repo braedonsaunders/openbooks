@@ -9,7 +9,9 @@ import {
   normalizeSubscriptionMoney,
   prorate,
   prorationDocument,
+  resolveNextBillOnUpdate,
 } from "./subscription-billing.ts";
+import { unbilledBoundary } from "./advanced-subscriptions.ts";
 
 test("advanceSubscription steps by interval × count with month-end clamp", () => {
   assert.equal(advanceSubscription("2026-01-15", "monthly", 1), "2026-02-15");
@@ -343,4 +345,138 @@ test("success bookkeeping can never roll the claim back after an invoice exists"
 test("billing intervals preserve four-digit early calendar years", () => {
   assert.equal(advanceSubscription("0001-02-15", "monthly"), "0001-03-15");
   assert.equal(advanceSubscription("0099-12-31", "annually"), "0100-12-31");
+});
+
+test("the unbilled boundary is the later of the cursor and the latest guard", () => {
+  assert.equal(unbilledBoundary("2026-04-01", null), "2026-04-01");
+  assert.equal(unbilledBoundary("2026-04-01", "2026-05-01"), "2026-05-01");
+  assert.equal(unbilledBoundary("2026-05-01", "2026-04-01"), "2026-05-01");
+  assert.equal(unbilledBoundary("2026-04-01", "2026-04-01"), "2026-04-01");
+});
+
+test("a next bill date inside the billed window refuses by name", () => {
+  // Plain subscription billed for [Mar 1, Apr 1): moving the cursor to Mar 15
+  // used to pass the only check (>= current_period_start) and double-bill
+  // Mar 15 - Apr 1 under a different guard key.
+  assert.throws(
+    () => resolveNextBillOnUpdate({
+      startOn: "2026-03-01",
+      currentPeriodStart: "2026-03-01",
+      currentNextBillOn: "2026-04-01",
+      guardedThrough: null,
+      billed: true,
+      newNextBillOn: "2026-03-15",
+    }),
+    /already-billed service through 2026-04-01/,
+  );
+});
+
+test("a next bill date exactly on the boundary stays allowed", () => {
+  assert.deepEqual(
+    resolveNextBillOnUpdate({
+      startOn: "2026-03-01",
+      currentPeriodStart: "2026-03-01",
+      currentNextBillOn: "2026-04-01",
+      guardedThrough: null,
+      billed: true,
+      newNextBillOn: "2026-04-01",
+    }),
+    { nextBillOn: "2026-04-01", skippedWindow: null },
+  );
+});
+
+test("a forward jump without an explicit skip refuses by name", () => {
+  // Moving the cursor to Jun 1 used to return {ok:true} while Apr-May were
+  // never billed.
+  for (const input of [
+    {
+      startOn: "2026-03-01",
+      currentPeriodStart: "2026-03-01",
+      currentNextBillOn: "2026-04-01",
+      guardedThrough: null,
+      billed: true,
+      newNextBillOn: "2026-06-01",
+    },
+    {
+      startOn: "2026-03-01",
+      currentPeriodStart: "2026-03-01",
+      currentNextBillOn: "2026-04-01",
+      guardedThrough: null,
+      billed: true,
+      newNextBillOn: "2026-06-01",
+      skipUnbilledService: true,
+      skipReason: "   ",
+    },
+  ]) {
+    assert.throws(
+      () => resolveNextBillOnUpdate(input),
+      /skips unbilled service from 2026-04-01 to 2026-06-01.*skipUnbilledService and a skip reason/s,
+    );
+  }
+});
+
+test("a forward jump with a skip reason returns the auditable window", () => {
+  assert.deepEqual(
+    resolveNextBillOnUpdate({
+      startOn: "2026-03-01",
+      currentPeriodStart: "2026-03-01",
+      currentNextBillOn: "2026-04-01",
+      guardedThrough: null,
+      billed: true,
+      newNextBillOn: "2026-06-01",
+      skipUnbilledService: true,
+      skipReason: "tenant paused Apr-May",
+    }),
+    { nextBillOn: "2026-06-01", skippedWindow: { from: "2026-04-01", to: "2026-06-01" } },
+  );
+});
+
+test("bill-now guards past the cursor extend the boundary a cursor edit must honor", () => {
+  const base = {
+    startOn: "2026-03-01",
+    currentPeriodStart: "2026-03-01",
+    currentNextBillOn: "2026-04-01",
+    guardedThrough: "2026-05-01",
+    billed: true,
+  };
+  assert.throws(
+    () => resolveNextBillOnUpdate({ ...base, newNextBillOn: "2026-04-15" }),
+    /already-billed service through 2026-05-01/,
+  );
+  // Rewriting the current cursor is not a move — it introduces no new overlap.
+  assert.deepEqual(
+    resolveNextBillOnUpdate({ ...base, newNextBillOn: "2026-04-01" }),
+    { nextBillOn: "2026-04-01", skippedWindow: null },
+  );
+});
+
+test("unbilled subscriptions keep the legacy period check and cannot skip forward silently", () => {
+  const base = {
+    startOn: "2026-03-01",
+    currentPeriodStart: null,
+    currentNextBillOn: "2026-03-01",
+    guardedThrough: null,
+    billed: false,
+  };
+  assert.throws(
+    () => resolveNextBillOnUpdate({ ...base, newNextBillOn: "2026-02-15" }),
+    /next bill date cannot precede the subscription period/,
+  );
+  assert.throws(
+    () => resolveNextBillOnUpdate({ ...base, newNextBillOn: "2026-03-10" }),
+    /skips unbilled service from 2026-03-01 to 2026-03-10/,
+  );
+  assert.deepEqual(
+    resolveNextBillOnUpdate({
+      ...base,
+      newNextBillOn: "2026-03-10",
+      skipUnbilledService: true,
+      skipReason: "customer asked to defer the first bill",
+    }),
+    { nextBillOn: "2026-03-10", skippedWindow: { from: "2026-03-01", to: "2026-03-10" } },
+  );
+  assert.throws(
+    () => resolveNextBillOnUpdate({ ...base, newNextBillOn: "2026-06-01" }),
+    /skips unbilled service from 2026-03-01 to 2026-06-01/,
+  );
 });
