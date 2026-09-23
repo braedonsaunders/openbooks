@@ -243,7 +243,10 @@ export function computeApplication(lines: AppLineInput[], settlement: RetainageS
       );
     }
     const gross = add(thisPeriod, add(stored, neg(previousStored)));
-    const retainage = cmp(l.retainagePercent, "0") > 0 ? mulPercent(gross, l.retainagePercent) : "0.0000";
+    // Withhold on the VALIDATED percent above — the raw input may be blank
+    // (which cmp rejects with a bare Error) or un-normalized, bypassing the
+    // boundary that every other line amount passes through.
+    const retainage = cmp(retainagePercent, "0") > 0 ? mulPercent(gross, retainagePercent) : "0.0000";
     const completedToDate = add(previous, gross);
     if (cmp(completedToDate, scheduled) > 0) {
       throw new ConstructionBillingError("Application amount exceeds the scheduled value");
