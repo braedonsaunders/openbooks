@@ -1,4 +1,5 @@
 import type { SetupEntity } from './registry'
+import { foldWholeNumber } from './whole-number'
 
 /**
  * Setup-registry descriptors for HRM benefit plans and pricing tiers (0197).
@@ -151,9 +152,30 @@ export function benefitPlanShapeProblem(body: Record<string, unknown>): string |
   if (currency !== null && !/^[A-Z]{3}$/.test(currency)) {
     return 'Currency is a 3-letter ISO code in capitals — HR never converts it, the run refuses a mismatch'
   }
-  const waiting = (body.waitingPeriodDays ?? null) as number | null
-  if (waiting !== null && (!Number.isInteger(waiting) || waiting < 0)) {
+  // The text input sends whole numbers as strings: fold first so the
+  // refusal below judges the normalized value, never the transport
+  // spelling. '30' creates, '' rides absent (the writer nulls it — the
+  // field is optional), and '1.5'/'-1'/'abc' ride through to this refusal.
+  const waiting = foldWholeNumber(body.waitingPeriodDays)
+  if (waiting !== undefined && (!Number.isInteger(waiting) || (waiting as number) < 0)) {
     return 'The waiting period is a non-negative whole number of days'
   }
   return null
+}
+
+/**
+ * Boundary normalizer for benefit-plan writes (runs in write.ts on create
+ * and edit, mirroring normalizeHrmLeavePolicyInput): the waiting-period
+ * text input arrives as a string, and the field is optional, so a blank
+ * normalizes to null while a clean whole-number string crosses as an
+ * integer. Anything else rides through for benefitPlanShapeProblem.
+ */
+export function normalizeHrmBenefitPlanInput(
+  entityKey: string,
+  body: Record<string, unknown>,
+): Record<string, unknown> {
+  if (entityKey !== 'benefit-plans') return body
+  if (body.waitingPeriodDays === undefined) return body
+  const folded = foldWholeNumber(body.waitingPeriodDays)
+  return { ...body, waitingPeriodDays: folded === undefined ? null : folded }
 }

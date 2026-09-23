@@ -39,7 +39,7 @@ import { normalizeHrmReviewTemplateInput } from './hrm-review-template'
 import { normalizeHrmCompensationInput } from './hrm-compensation'
 import { validateCategoryKey } from '@openbooks/engine/src/hrm/documents/categories.ts'
 import { validateTemplateInput } from '@openbooks/engine/src/hrm/documents/templates.ts'
-import { benefitPlanShapeProblem } from './hrm-benefits'
+import { benefitPlanShapeProblem, normalizeHrmBenefitPlanInput } from './hrm-benefits'
 import { leavePolicyRuleProblem, normalizeHrmLeavePolicyInput } from './hrm-leave-policy'
 import { mergeTemplateSlots, normalizeHrmDocumentTemplateInput } from './hrm-document-template'
 import { applyRuleSlotColumns } from './hrm-rule-slots'
@@ -1525,7 +1525,7 @@ export async function createSetupRecord(
 
   // HR-18: recruiting-depth create defaults fold before the generic coercion.
   const recruitingBody = foldRecruitingSetupCreate(entity.key, rawBody)
-  const body = normalizeHrmDocumentTemplateInput(entity.key, normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, normalizeHrmReviewTemplateInput(entity.key, normalizeHrmCompensationInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, recruitingBody)))))))
+  const body = normalizeHrmDocumentTemplateInput(entity.key, normalizeHrmBenefitPlanInput(entity.key, normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, normalizeHrmReviewTemplateInput(entity.key, normalizeHrmCompensationInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, recruitingBody))))))))
   const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
   const writableEntity = writableSetupEntity(entity, {
     multiSubsidiary: await subsidiaryFeatureEnabled(orgId),
@@ -1822,7 +1822,7 @@ export async function updateSetupRecord(
   if (owned) return owned
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
 
-  const body = normalizeHrmDocumentTemplateInput(entity.key, normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, normalizeHrmReviewTemplateInput(entity.key, normalizeHrmCompensationInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody)))))))
+  const body = normalizeHrmDocumentTemplateInput(entity.key, normalizeHrmBenefitPlanInput(entity.key, normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, normalizeHrmReviewTemplateInput(entity.key, normalizeHrmCompensationInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody))))))))
   const id = String(body.id ?? '')
   if (!id) return { status: 400, body: { error: 'id required' } }
   if (entity.dataSource !== 'extension-settings' && idColumn(entity) === 'id' && !UUID_RE.test(id)) {

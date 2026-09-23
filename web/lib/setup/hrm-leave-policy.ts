@@ -3,6 +3,7 @@ import {
   carryoverApplied,
 } from "@openbooks/engine/src/hrm/leave-math.ts";
 import { UUID_RE } from "./coerce.ts";
+import { foldWholeNumber } from "./whole-number";
 
 /**
  * HRM leave-policy rule normalization (pure — no server imports, so unit
@@ -49,13 +50,12 @@ function idSlot(value: unknown): string | null {
   return String(value);
 }
 
-/** Fold a numeric slot: clean integers cross as numbers, anything else rides
- *  through so the shape probe refuses it with the engine's words instead of
- *  this fold inventing its own. */
+/** Whole-number slots fold through the shared normalizer (see coerce.ts):
+ *  clean integers cross as numbers, anything else rides through so the
+ *  shape probe refuses it with the engine's words instead of this fold
+ *  inventing its own. */
 function intSlot(value: unknown): unknown {
-  if (blank(value)) return undefined;
-  const n = typeof value === "number" ? value : Number(String(value).trim());
-  return Number.isInteger(n) ? n : value;
+  return foldWholeNumber(value);
 }
 
 export interface LeavePolicyRuleValues {
@@ -136,7 +136,9 @@ export function normalizeHrmLeavePolicyInput(
 ): Record<string, unknown> {
   if (entityKey !== "leave-policies") return body;
   const hasSlot = (keys: readonly string[]): boolean => keys.some((key) => body[key] !== undefined);
-  if (!hasSlot(APPLIES_SLOTS) && !hasSlot(ACCRUAL_SLOTS) && !hasSlot(CARRYOVER_SLOTS)) return body;
+  if (!hasSlot(APPLIES_SLOTS) && !hasSlot(ACCRUAL_SLOTS) && !hasSlot(CARRYOVER_SLOTS)) {
+    return foldDirectRuleNumerics(body);
+  }
   const out: Record<string, unknown> = { ...body };
   if (hasSlot(APPLIES_SLOTS)) {
     // Slot keys win over a direct object, the way the process-template fold
@@ -171,5 +173,32 @@ export function normalizeHrmLeavePolicyInput(
   // The fold never throws: the shape refusal is raised by
   // validateEntityIntegrity in write.ts through leavePolicyRuleProblem, so
   // the caller receives a 400 with the engine's words, not an exception.
+  return foldDirectRuleNumerics(out);
+}
+
+/**
+ * Direct rule objects (API and import callers, no drawer slots) carry the
+ * same raw strings the text inputs send: fold their whole-number members
+ * through the shared normalizer so the probe refuses the folded value,
+ * never the transport spelling. Idempotent over the slot folds, and
+ * reference-preserving when nothing folds.
+ */
+function foldDirectRuleNumerics(body: Record<string, unknown>): Record<string, unknown> {
+  let out = body;
+  for (const [ruleKey, member] of [["accrualRule", "periods_per_year"], ["carryoverRule", "expires_after_days"]] as const) {
+    const rule = out[ruleKey];
+    if (typeof rule !== "object" || rule === null || Array.isArray(rule)) continue;
+    const record = rule as Record<string, unknown>;
+    if (record[member] === undefined) continue;
+    const folded = foldWholeNumber(record[member]);
+    if (folded === record[member]) continue;
+    const next: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(record)) {
+      if (key !== member) next[key] = value;
+    }
+    if (folded !== undefined) next[member] = folded;
+    if (out === body) out = { ...body };
+    out[ruleKey] = next;
+  }
   return out;
 }

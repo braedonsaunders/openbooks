@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { buildRow, coerceField, describeDbError } from './coerce.ts'
+import { foldWholeNumber } from './whole-number'
 import { SETUP_ENTITY_BY_KEY, type SetupField } from './registry.ts'
 
 const countryField: SetupField = { key: 'country', kind: 'country' }
@@ -167,6 +168,20 @@ test('database errors never echo SQL text to the client (F-t06-022)', () => {
   // Mapped constraint codes and plain non-driver errors keep prior behavior.
   assert.equal(describeDbError(Object.assign(new Error('x'), { code: '23505' })), 'duplicate')
   assert.equal(describeDbError(new Error('boom')), 'boom')
+})
+
+test('whole-number slots fold strict spellings and ride the rest through', () => {
+  // F9: the setup text inputs send integers as strings. Clean crossings
+  // become numbers ('-1' crosses too — the negativity refusal fires after
+  // the fold); blanks ride absent (the caller nulls an optional field);
+  // '1.5' and 'abc' ride through untouched so the shape refusal fires on
+  // the original value with the field's own words.
+  for (const value of ['30', ' 30 ', 30, 0, '0', '-1']) assert.equal(foldWholeNumber(value), Number(value))
+  for (const value of [undefined, null, '', '   ']) assert.equal(foldWholeNumber(value), undefined)
+  for (const value of ['1.5', 'abc', '30 days', 'NaN', 1.5, true]) assert.equal(foldWholeNumber(value), value)
+  assert.deepEqual(foldWholeNumber({}), {})
+  assert.equal(foldWholeNumber([]), 0, 'String([]) is blank, and blank numbers as zero — same Number() spellings the leave fold always accepted')
+  assert.ok(Number.isNaN(foldWholeNumber(NaN) as number))
 })
 
 test('setup booleans accept documented scalar spellings and reject malformed controls', () => {

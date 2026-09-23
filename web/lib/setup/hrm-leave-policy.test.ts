@@ -95,6 +95,37 @@ test('bodies without slots and other entities pass through untouched', () => {
   assert.equal(normalizeHrmLeavePolicyInput('departments', other), other)
 })
 
+test('direct rule objects fold whole-number strings before the probe', () => {
+  // F9, same class as the benefit waiting period: an API caller sending the
+  // rule object directly skips the drawer slots, so '30' must fold to 30
+  // while '1.5' rides through to the shape refusal.
+  assert.deepEqual(
+    normalizeHrmLeavePolicyInput('leave-policies', {
+      carryoverRule: { kind: 'carry_up_to', hours: '40', expires_after_days: '30' },
+    }),
+    { carryoverRule: { kind: 'carry_up_to', hours: '40', expires_after_days: 30 } },
+  )
+  assert.deepEqual(
+    normalizeHrmLeavePolicyInput('leave-policies', {
+      accrualRule: { kind: 'per_period', hours: '8', periods_per_year: '12' },
+    }),
+    { accrualRule: { kind: 'per_period', hours: '8', periods_per_year: 12 } },
+  )
+  assert.deepEqual(
+    normalizeHrmLeavePolicyInput('leave-policies', {
+      carryoverRule: { kind: 'carry_up_to', hours: '40', expires_after_days: '1.5' },
+    }),
+    { carryoverRule: { kind: 'carry_up_to', hours: '40', expires_after_days: '1.5' } },
+  )
+  assert.equal(
+    leavePolicyRuleProblem({
+      carryoverRule: { kind: 'carry_up_to', hours: '40', expires_after_days: '1.5' },
+    }),
+    'carryover expires_after_days is a non-negative integer of days — record the expiry',
+    'the probe still refuses a raw bad spelling when called directly — the write path folds first',
+  )
+})
+
 test('a per_year rule without hours is refused with the engine accrual words', () => {
   const expected = engineAccrualRefusal({ kind: 'per_year' })
   assert.equal(expected, 'a per_year accrual rule must carry hours — set hours or use kind none')
