@@ -5340,7 +5340,7 @@ const I14_FILE_COUNTS: Record<string, number> = {
   "purchaseOrders": 55,
   "records": 185,
   "shell": 145,
-  "tax": 142,
+  "tax": 145,
 }
 
 test('I14 items/inventory/reports/sync/login/small-catalog copy ships translated in every locale', () => {
