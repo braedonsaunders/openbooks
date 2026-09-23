@@ -85,8 +85,13 @@ export async function findDuplicateProjects(
   opts: { subsidiaryIds?: string[] | null } = {},
 ): Promise<DuplicateGroup[]> {
   return withOrgTransaction(orgId, async () => {
+    // Restricted callers see only rows in their allowlist: null-subsidiary
+    // projects stay hidden, mirroring guardSubsidiaryScope without
+    // org-wide-null (projects carry no org-wide identity — the old
+    // `or subsidiary_id is null` leaked rows the record gate denies).
+    // An empty allowlist therefore lists nothing; a null one lists all.
     const scope = opts.subsidiaryIds
-      ? sql`and (p.subsidiary_id = any(${uuidArray(opts.subsidiaryIds)}::uuid[]) or p.subsidiary_id is null)`
+      ? sql`and p.subsidiary_id = any(${uuidArray(opts.subsidiaryIds)}::uuid[])`
       : sql``;
     // Resolved merges leave the detection list; every other row — active or
     // not — is still a candidate.

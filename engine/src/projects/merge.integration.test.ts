@@ -393,6 +393,36 @@ test("merge refuses when billing terms differ", async () => {
   }
 });
 
+test("duplicate listing hides null-subsidiary projects from restricted callers", async () => {
+  // The restricted listing used to include `or subsidiary_id is null`
+  // while the record gate denies null-subsidiary projects to restricted
+  // callers — GET /api/projects/duplicates leaked rows its own guard
+  // refuses. Restricted scopes now list only allowlisted rows.
+  const org = await createScratchOrg();
+  try {
+    const nullA = randomUUID();
+    const nullB = randomUUID();
+    for (const id of [nullA, nullB]) {
+      await db.execute(sql`
+        insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
+        values (${id}, ${org.orgId}, null, 'NULLJOB', 'Null job', ${org.customerId}, 'active', true, '{}'::jsonb)`);
+    }
+    const unrestricted = await findDuplicateProjects(org.orgId, { subsidiaryIds: null });
+    assert.ok(
+      unrestricted.some((group) => group.kind === "job_number" && group.projects.some((p) => p.id === nullA)),
+      "unrestricted callers still see the null-subsidiary pair",
+    );
+    const restricted = await findDuplicateProjects(org.orgId, { subsidiaryIds: [org.subsidiaryId] });
+    assert.ok(
+      !restricted.some((group) => group.projects.some((p) => p.id === nullA || p.id === nullB)),
+      "restricted callers must not see null-subsidiary rows",
+    );
+    assert.deepEqual(await findDuplicateProjects(org.orgId, { subsidiaryIds: [] }), []);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("project merge refuses cycles, collisions, and spent duplicates", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
