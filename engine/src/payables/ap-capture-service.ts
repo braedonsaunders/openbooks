@@ -732,15 +732,30 @@ export async function materializeCapture(input: {
     // deadlock while advancing the same order.
     const priceVariances: Array<{ lineIndex: number; expected: string; actual: string }> = [];
     const poLineLocations = new Map<string, string | null>();
+    // convertOrder's inheritance, read from the same locked PO row: a matched
+    // bill is the order's bill, so it carries the order's entity + currency.
+    let poSubsidiaryId: string | null | undefined;
+    let poCurrency: string | undefined;
     if (item.purchase_order_id) {
-      const purchaseOrder = (await tx.execute<{ id: string; kind: string; status: string }>(sql`
-        select id, kind, status from documents
+      const purchaseOrder = (await tx.execute<{ id: string; kind: string; status: string; subsidiaryId: string | null; currency: string | null }>(sql`
+        select id, kind, status, subsidiary_id as "subsidiaryId", currency from documents
          where org_id = ${input.orgId} and id = ${item.purchase_order_id}
          for update
       `)).rows[0];
       if (!purchaseOrder || purchaseOrder.kind !== "purchase_order" || purchaseOrder.status !== "approved") {
         throw new CaptureMaterializationError("The purchase order is no longer approved");
       }
+      if (!purchaseOrder.currency) {
+        throw new CaptureMaterializationError("The purchase order has no currency — resolve it before creating a draft");
+      }
+      if (capture.currency && capture.currency !== purchaseOrder.currency) {
+        throw new CaptureMaterializationError(
+          `Capture currency ${capture.currency} does not match purchase order currency ${purchaseOrder.currency} — ` +
+            `correct the capture currency to ${purchaseOrder.currency} or match a ${capture.currency} purchase order`,
+        );
+      }
+      poSubsidiaryId = purchaseOrder.subsidiaryId;
+      poCurrency = purchaseOrder.currency;
       await tx.execute(sql`
         select id from document_lines
          where org_id = ${input.orgId} and document_id = ${item.purchase_order_id}
@@ -826,13 +841,38 @@ export async function materializeCapture(input: {
     `));
     const company = org.rows[0];
     if (!company) throw new CaptureMaterializationError("The company no longer exists");
-    const subsidiaryId = company.subsidiary_id;
-    if (!subsidiaryId) {
-      throw new CaptureMaterializationError("The company has no active root subsidiary");
-    }
-    const currency = capture.currency ?? company.subsidiary_currency ?? company.org_currency;
-    if (!currency) {
-      throw new CaptureMaterializationError("The company has no configured base currency");
+    // A PO-matched bill inherits the order's subsidiary and currency, exactly
+    // as convertOrder copies doc.subsidiary_id/doc.currency onto the converted
+    // bill (web/lib/order-cycle.ts) — the bill is the order's bill, so AP
+    // aging lands in the order's legal entity and currency. The conflict
+    // refusal above runs first, so a null capture currency takes the order's.
+    let subsidiaryId: string | null;
+    let currency: string | null | undefined;
+    if (poCurrency !== undefined) {
+      subsidiaryId = poSubsidiaryId ?? null;
+      currency = poCurrency;
+    } else {
+      subsidiaryId = company.subsidiary_id;
+      if (!subsidiaryId) {
+        throw new CaptureMaterializationError("The company has no active root subsidiary");
+      }
+      // No order names the entity: in a single-entity org the root is the
+      // only answer, but in a multi-entity org a silent root default books
+      // the bill to the wrong legal entity — refuse and name the remedy.
+      const entityCount = (await tx.execute<{ n: number }>(sql`
+        select count(*)::int as n from subsidiaries
+         where org_id = ${input.orgId} and is_active and not is_elimination
+      `)).rows[0]?.n ?? 0;
+      if (entityCount > 1) {
+        throw new CaptureMaterializationError(
+          "Cannot determine the billing entity for this capture in a multi-entity organization — " +
+            "match it to a purchase order in the right subsidiary before creating a draft",
+        );
+      }
+      currency = capture.currency ?? company.subsidiary_currency ?? company.org_currency;
+      if (!currency) {
+        throw new CaptureMaterializationError("The company has no configured base currency");
+      }
     }
     // Stored captures and existing bills stay. Turning Inventory off must
     // refuse a materialize that would persist inventory / assembly / kit.
