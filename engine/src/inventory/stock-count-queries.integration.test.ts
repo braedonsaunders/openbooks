@@ -120,18 +120,29 @@ test("cursor pages reach past 500 rows with total and next-page evidence", async
     const seen = new Set<string>();
     let cursor: string | null = null;
     let pages = 0;
+    // Position in the seeded sequence: row n backdates n-1 days and the
+    // list orders by counted_on desc, so page order must replay `ids` in
+    // array order. Comparing every row pins the order, not just uniqueness.
+    let position = 0;
     for (;;) {
       const page = await listStockCounts(org.orgId, { limit: 200, cursor });
       pages += 1;
       assert.ok(page.totalCount === 505, `total must evidence all 505 counts (page ${pages})`);
+      assert.ok(
+        page.counts.length >= 1 && page.counts.length <= 200,
+        `page ${pages} must carry a bounded non-empty slice (saw ${page.counts.length})`,
+      );
       for (const row of page.counts) {
         assert.ok(!seen.has(row.id), `count ${row.id} repeated across pages`);
         seen.add(row.id);
+        assert.equal(row.id, ids[position]!, `page ${pages} row ${position} must replay the seeded order`);
+        position += 1;
       }
       cursor = page.nextCursor;
       if (!cursor) break;
       assert.ok(pages < 10, "paging must terminate");
     }
+    assert.equal(position, 505, "every one of the 505 seeded counts anchored in order");
     assert.equal(seen.size, 505, "every count, including #501+, is reachable");
     assert.ok(seen.has(oldestId), "the oldest posted count is reachable through the list");
     assert.equal(pages, 3, "200 + 200 + 105 in three bounded pages");
