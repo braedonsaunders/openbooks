@@ -11,6 +11,7 @@ import { fromUnits, sum, toUnits } from "../money/money.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { refuseMaskedStorageKind } from "../platform/file-storage.ts";
 import { PaymentError } from "./payment-errors.ts";
+import { assertSafePaymentFilename } from "./payment-filenames.ts";
 import { decryptAccountNumber, isValidBic, isValidIban } from "./rail-settings.ts";
 import { lockRunBankEvidence } from "./run-readiness.ts";
 import { validateNachaSettings, type NachaSettings } from "./rail-nacha.ts";
@@ -857,6 +858,11 @@ export async function generatePaymentFileArtifact(
     throw new PaymentError("payment run file creation stamp is not a valid timestamp");
   }
   const rendered = await renderPaymentFile(ctx, orgId, now, { fileCreatedAt });
+  // File names are attacker-influenced (a custom formatter returns an
+  // arbitrary string) and later concatenated onto the SFTP outbound folder,
+  // so the merged name of EVERY rail is validated here — before anything is
+  // stored — not only the custom branch that produces it.
+  const safeFilename = assertSafePaymentFilename(rendered.filename);
   const content = Buffer.from(rendered.content, "utf8");
   const hash = createHash("sha256").update(content).digest("hex");
   return withOrgTransaction(orgId, async () => {
@@ -902,7 +908,7 @@ export async function generatePaymentFileArtifact(
         throw new PaymentError("only the latest non-voided payment file can be reprocessed");
       }
     }
-    const stored = await storeArtifactFile(orgId, userId, rendered.filename, rendered.contentType, content, hash);
+    const stored = await storeArtifactFile(orgId, userId, safeFilename, rendered.contentType, content, hash);
     const seq = (await db.execute<{ n: number }>(sql`select coalesce(max(sequence_number), 0) + 1 as n from payment_files where payment_run_id = ${runId} and org_id = ${orgId}`));
     const parentId = opts?.reprocessFileId ?? null;
     const profile = (await db.execute<{ require_file_approval: boolean }>(sql`
@@ -917,7 +923,7 @@ export async function generatePaymentFileArtifact(
       paymentFormatId: ctx.format.id,
       parentPaymentFileId: parentId,
       sequenceNumber: Number(seq.rows[0]?.n ?? 1),
-      filename: rendered.filename,
+      filename: safeFilename,
       contentType: rendered.contentType,
       contentHash: hash,
       fileId: stored.fileId,
@@ -939,14 +945,14 @@ export async function generatePaymentFileArtifact(
     // returning row proves the predicate held at write time.
     const transitioned = (await db.execute<{ status: string }>(sql`
       update payment_runs set status = 'generated', exported_at = coalesce(exported_at, now()),
-        exported_file_ref = ${rendered.filename}, updated_at = now(), updated_by = ${userId}
+        exported_file_ref = ${safeFilename}, updated_at = now(), updated_by = ${userId}
       where id = ${runId} and org_id = ${orgId}
         and status in ('approved', 'generated', 'delivered', 'partially_failed')
       returning status
     `));
     if (!transitioned.rows[0]) throw new PaymentError("approve the payment run before generating its file");
-    await event({ orgId, runId, fileId: artifact.id, actorId: userId, eventType: parentId ? "file_reprocessed" : "file_generated", fromStatus: liveStatus, toStatus: "generated", details: { hash, filename: rendered.filename } });
-    return { id: artifact.id, filename: rendered.filename, contentType: rendered.contentType, content };
+    await event({ orgId, runId, fileId: artifact.id, actorId: userId, eventType: parentId ? "file_reprocessed" : "file_generated", fromStatus: liveStatus, toStatus: "generated", details: { hash, filename: safeFilename } });
+    return { id: artifact.id, filename: safeFilename, contentType: rendered.contentType, content };
   });
 }
 

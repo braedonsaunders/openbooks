@@ -17,6 +17,7 @@ import {
 } from "../banking/banking.ts";
 import { generatePaymentFileArtifact, recordPaymentFileDeliveryFailure, recordPaymentFileSftpDelivery } from "../payments/operations.ts";
 import { backendFor } from "./backend.ts";
+import { resolveOutboundPath } from "./delivery-path.ts";
 
 /**
  * Inbound bank-feed loop: on each scheduler tick, walk every active SFTP import
@@ -205,7 +206,11 @@ export async function deliverRunToSftp(runId: string, sftpServerId: string, orgI
   const backend = backendFor({ backend: svr.rows[0].backend, bucket: svr.rows[0].bucket, rootPrefix: svr.rows[0].root_prefix, orgId: svr.rows[0].org_id });
   const folder = svr.rows[0].payment_folder.replace(/^\/+|\/+$/g, "");
   if (!folder || folder.split("/").some((part) => part === ".." || part === ".")) throw new Error("payment profile SFTP folder is invalid");
-  const path = `${folder}/${file.filename}`;
+  // Defence in depth: the artifact name is validated at creation, but rows
+  // stored before that guard must still fail closed at publish time — and the
+  // joined path must provably stay inside the configured folder, because the
+  // backend normalizes dot segments on write.
+  const path = resolveOutboundPath(folder, file.filename);
   try {
     await backend.write(path, file.content);
   } catch (error) {
