@@ -73,7 +73,14 @@ export function refuseUnprovenRefreshReady(
  * which would let a second refresh commit a new clone before this request
  * marks ready.
  */
-async function withSandboxRefreshLock<T>(sandboxId: string, work: () => Promise<T>): Promise<T> {
+/**
+ * Same-sandbox advisory lock, shared with promotion capture: refresh holds
+ * it across wipe + re-copy + verify + ready, and buildChangeSet holds it
+ * across capture, so a refresh can neither commit a new clone under a
+ * capture nor wipe rows the capture is diffing. Exported for promote.ts;
+ * all other callers go through refreshSandbox/deleteSandbox.
+ */
+export async function withSandboxRefreshLock<T>(sandboxId: string, work: () => Promise<T>): Promise<T> {
   const client = await longPool.connect();
   let poisoned: Error | undefined;
   const onError = (error: Error) => {
