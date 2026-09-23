@@ -130,6 +130,13 @@ export async function createBillingRequest(
     }
   }
   const backupRequired = input.backupRequired ?? eff.backupRequired;
+  // An explicit backup type names one of the configured packet recipes. A
+  // misspelled type must refuse — silently persisting the default (or none)
+  // would issue the customer a packet nobody asked for, or no packet where
+  // the approver required one.
+  if (input.backupType !== undefined && input.backupType !== null && !BACKUP_TYPES.has(input.backupType)) {
+    throw new Error(`Unknown backup type "${input.backupType}" — choose one of ${[...BACKUP_TYPES].sort().join(", ")}`);
+  }
   const backupType =
     input.backupType && BACKUP_TYPES.has(input.backupType)
       ? input.backupType
