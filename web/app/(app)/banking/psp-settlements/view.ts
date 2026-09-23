@@ -9,7 +9,7 @@ import { can, getAuthz } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { subsidiaryUiOptions } from '../../../../lib/subsidiaries'
 import { getMoneyFormatter } from '@/lib/money-server'
-import type { PspSettlementRow, PspSubsidiaryOption } from './sections'
+import type { PspAccountOption, PspSettlementRow, PspSubsidiaryOption } from './sections'
 
 /**
  * PSP settlement import + batches, split into a loader and a spec.
@@ -46,12 +46,19 @@ export interface PspSettlementsStrings {
   externalRef: string
   settlementDate: string
   bankAccountId: string
+  bankAccountHint: string
   feeAccountId: string
+  feeAccountHint: string
   clearingAccountId: string
+  clearingAccountHint: string
   subsidiaryLabel: string
   noneLabel: string
   payloadShapeHint: string
-  uuidPlaceholder: string
+  genericPayloadHint: string
+  accountPlaceholder: string
+  uploadPayload: string
+  invalidStripePayload: string
+  invalidGenericPayload: string
   importDraft: string
   recentBatches: string
   reversalDate: string
@@ -76,6 +83,10 @@ export interface PspSettlementsData {
   strings: PspSettlementsStrings
   rows: PspSettlementRow[]
   subsidiaries: PspSubsidiaryOption[]
+  /** Postable chart accounts for the import form's house pickers — the same
+   *  active/non-summary population the import validates against, so a picked
+   *  account cannot strand the draft at posting. */
+  accounts: PspAccountOption[]
 }
 
 interface BatchRow extends Record<string, unknown> {
@@ -118,6 +129,19 @@ export async function loadPspSettlements(): Promise<PspSettlementsData> {
   const subsidiaries = subsidiaryScope
     .filter((option) => !authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(option.id))
     .map((option) => ({ id: option.id, name: option.name, baseCurrency: option.baseCurrency }))
+  // The import form's house account pickers: exactly the population the
+  // import validates (active, non-summary accounts of this org), labelled
+  // `number · name` like every other account picker. The stored value stays
+  // the UUID — only the affordance changes.
+  const accountRows = await db.execute<{ id: string; number: string | null; name: string }>(sql`
+    select id, number, name from accounts
+     where org_id = ${authz.user.orgId} and is_active and not is_summary
+     order by number nulls last, name limit 2000
+  `)
+  const accounts = accountRows.rows.map((a) => ({
+    id: String(a.id),
+    label: `${a.number ? `${a.number} · ` : ''}${a.name}`,
+  }))
 
   const dateLabel = (value: string) =>
     new Date(`${value}T12:00:00Z`).toLocaleDateString('en-US', {
@@ -138,12 +162,19 @@ export async function loadPspSettlements(): Promise<PspSettlementsData> {
       externalRef: t('externalRef'),
       settlementDate: t('settlementDate'),
       bankAccountId: t('bankAccountId'),
+      bankAccountHint: t('bankAccountHint'),
       feeAccountId: t('feeAccountId'),
+      feeAccountHint: t('feeAccountHint'),
       clearingAccountId: t('clearingAccountId'),
+      clearingAccountHint: t('clearingAccountHint'),
       subsidiaryLabel: common('labels.subsidiary'),
       noneLabel: common('labels.none'),
       payloadShapeHint: t('payloadShapeHint'),
-      uuidPlaceholder: t('uuidPlaceholder'),
+      genericPayloadHint: t('genericPayloadHint'),
+      accountPlaceholder: t('accountPlaceholder'),
+      uploadPayload: t('uploadPayload'),
+      invalidStripePayload: t('invalidStripePayload'),
+      invalidGenericPayload: t('invalidGenericPayload'),
       importDraft: t('importDraft'),
       recentBatches: t('recentBatches'),
       reversalDate: t('reversalDate'),
@@ -162,6 +193,7 @@ export async function loadPspSettlements(): Promise<PspSettlementsData> {
       retryLabel: common('actions.retry'),
     },
     subsidiaries,
+    accounts,
     rows: batches.rows.map((b) => ({
       id: String(b.id),
       providerLabel: t(`providers.${b.provider}`),
@@ -205,6 +237,7 @@ export function pspSettlementsSpec(data: PspSettlementsData): PageSpec {
             strings: data.strings,
             initialRows: data.rows,
             initialSubsidiaries: data.subsidiaries,
+            initialAccounts: data.accounts,
           }),
         ],
         { className: 'space-y-6' },

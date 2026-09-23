@@ -67,6 +67,8 @@
     "outOfBalance": "不平衡 · {amount}",
     "balanced": "已平衡",
     "referenceNumber": "参考编号",
+    "referenceNumberHint": "该分录的外部编号——来源单据或对账单参考。显示在分录编号旁边。",
+    "memoHint": "保存在分录上的内部摘要。显示在日记账列表和审计轨迹中。",
     "noParty": "无往来单位",
     "partylessControlWarning": "已过账到 {accounts}，但未指定往来方。这些余额不在任何客户或供应商明细账中 — 请查看账龄分析中的（无往来方）行。",
     "accountPlaceholder": "科目……",

@@ -194,6 +194,9 @@ export const BANKING_WIDGETS = {
       initialSubsidiaries={
         (props.initialSubsidiaries as ComponentProps<typeof PspSettlementsWorkspace>['initialSubsidiaries']) ?? null
       }
+      initialAccounts={
+        (props.initialAccounts as ComponentProps<typeof PspSettlementsWorkspace>['initialAccounts']) ?? []
+      }
     />
   ),
 

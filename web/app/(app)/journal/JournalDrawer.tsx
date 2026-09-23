@@ -803,12 +803,12 @@ export function JournalDrawer({
       case 'party_id':
         return <><Label>{override || tc('labels.party')}</Label>{isEditable ? <SearchSelect options={parties.map((party) => ({ value: party.id, label: party.display_name ?? '' }))} value={partyId} onChange={(value) => setPartyId(value ?? '')} placeholder={t('noParty')} clearable emptyLabel={t('noParty')} /> : <p className="text-sm">{doc.party_name ?? '—'}</p>}</>
       case 'reference_number':
-        return <><Label>{override || t('referenceNumber')}</Label>{isEditable ? <Input value={referenceNumber} onChange={(event) => setReferenceNumber(event.target.value)} /> : <p className="text-sm">{doc.reference_number ?? '—'}</p>}</>
+        return <><Label>{override || t('referenceNumber')}</Label>{isEditable ? <><Input value={referenceNumber} onChange={(event) => setReferenceNumber(event.target.value)} /><p className="text-xs text-slate-500 dark:text-slate-400">{t('referenceNumberHint')}</p></> : <p className="text-sm">{doc.reference_number ?? '—'}</p>}</>
       case 'subsidiary_id':
         if (!multiSub) return null
         return <><Label>{override || tc('labels.subsidiary')}</Label>{isEditable && doc.status !== 'posted' ? <SearchSelect options={subsidiaryOpts} value={subsidiaryId} onChange={(value) => setSubsidiaryId(value ?? '')} clearable emptyLabel={rootSubsidiaryName} placeholder={rootSubsidiaryName} /> : <p className="text-sm">{subsidiaryName(subsidiaryId || doc.subsidiary_id)}</p>}</>
       case 'memo':
-        return <><Label>{override || tc('labels.memo')}</Label>{isEditable ? <Input value={memo} onChange={(event) => setMemo(event.target.value)} /> : <p className="text-sm">{doc.memo ?? '—'}</p>}</>
+        return <><Label>{override || tc('labels.memo')}</Label>{isEditable ? <><Input value={memo} onChange={(event) => setMemo(event.target.value)} /><p className="text-xs text-slate-500 dark:text-slate-400">{t('memoHint')}</p></> : <p className="text-sm">{doc.memo ?? '—'}</p>}</>
       default:
         return null
     }
@@ -953,7 +953,10 @@ export function JournalDrawer({
           <div className={field}>
             <Label>{t('referenceNumber')}</Label>
             {editable ? (
-              <Input value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)} />
+              <>
+                <Input value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)} />
+                <p className="text-xs text-slate-500 dark:text-slate-400">{t('referenceNumberHint')}</p>
+              </>
             ) : (
               <p className="text-sm">{doc.reference_number ?? '—'}</p>
             )}
@@ -980,7 +983,10 @@ export function JournalDrawer({
           <div className={`${field} lg:col-span-3`}>
             <Label>{tc('labels.memo')}</Label>
             {editable ? (
-              <Input value={memo} onChange={(e) => setMemo(e.target.value)} />
+              <>
+                <Input value={memo} onChange={(e) => setMemo(e.target.value)} />
+                <p className="text-xs text-slate-500 dark:text-slate-400">{t('memoHint')}</p>
+              </>
             ) : (
               <p className="text-sm">{doc.memo ?? '—'}</p>
             )}

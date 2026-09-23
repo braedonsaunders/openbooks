@@ -67,6 +67,8 @@
     "outOfBalance": "Descuadrado · {amount}",
     "balanced": "Cuadrado",
     "referenceNumber": "N.º de referencia",
+    "referenceNumberHint": "Número externo de este asiento: documento fuente o referencia del extracto. Se muestra junto al número de asiento.",
+    "memoHint": "Narración interna guardada en el asiento. Se muestra en el diario y en la auditoría.",
     "noParty": "Sin tercero",
     "partylessControlWarning": "Contabilizado sin tercero en {accounts}. Estos saldos quedan fuera de cualquier submayor de clientes o proveedores — ver la fila (sin tercero) del informe de antigüedad.",
     "accountPlaceholder": "Cuenta…",
