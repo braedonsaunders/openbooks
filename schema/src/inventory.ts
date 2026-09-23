@@ -9,7 +9,6 @@ import {
   pgTable,
   text,
   timestamp,
-  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -315,20 +314,27 @@ export const stockCountLines = pgTable(
     expectedQuantity: money("expected_quantity").notNull(),
     countedQuantity: money("counted_quantity"),
     adjustmentMovementId: uuid("adjustment_movement_id"),
+    // Pre-guard immutable history preserved as evidence, exempt from the
+    // guards below; never set on new writes (0293, 0299; provenance in 0326).
+    isPreGuardLegacy: boolean("is_pre_guard_legacy").notNull().default(false),
     ...auditColumns,
   },
   (t) => [
     index("count_lines_count").on(t.stockCountId),
-    // One line per (count, item, stock location, lot). NULLS NOT DISTINCT:
-    // an untracked item's lines carry NULL lot_id, and without it the most
-    // common duplicate — the same item counted twice with no lot — would
-    // escape the guard (0293).
-    unique("stock_count_lines_no_duplicate_subject")
+    // One line per (count, item, stock location, lot) for unmarked rows.
+    // NULLS NOT DISTINCT: an untracked item's lines carry NULL lot_id, and
+    // without it the most common duplicate — the same item counted twice
+    // with no lot — would escape the guard (0293). The SQL migration is
+    // authoritative: it builds this as a standalone partial unique index
+    // (a constraint cannot be partial), and the index builder cannot express
+    // NULLS NOT DISTINCT, so the mirror states the partiality here and the
+    // nulls discipline lives in 0293.
+    uniqueIndex("stock_count_lines_no_duplicate_subject")
       .on(t.orgId, t.stockCountId, t.itemId, t.stockLocationId, t.lotId)
-      .nullsNotDistinct(),
+      .where(sql`NOT ${t.isPreGuardLegacy}`),
     // A physical count is never negative; NULL stays legal for uncounted
-    // lines (0299).
-    check("stock_count_lines_counted_nonnegative", sql`${t.countedQuantity} IS NULL OR ${t.countedQuantity} >= 0`),
+    // lines. Marked pre-guard rows are preserved as evidence (0299).
+    check("stock_count_lines_counted_nonnegative", sql`${t.countedQuantity} IS NULL OR ${t.countedQuantity} >= 0 OR ${t.isPreGuardLegacy}`),
   ],
 );
 

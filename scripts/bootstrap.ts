@@ -1498,6 +1498,25 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       "same U1+U2+U4+PR6b revision as the entry above, for databases that recorded "
       + "the U1+U2+U4 a24896ea.",
   },
+  {
+    filename: "generated/0293_stock_count_line_subject_unique.sql",
+    from: "19b0e9b674360129aec13cb3c911de38dfd1cb86f1976cca3979c28521720c11",
+    to: "307683c85d8536bcdc3838b48fb02c3630d56820100138b95371d2a75e3ad726",
+    strategy: "restamp",
+    reason:
+      "staged revision (U10) builds the duplicate-subject unique as CREATE UNIQUE "
+      + "INDEX CONCURRENTLY outside the tracked transaction instead of holding the "
+      + "ALTER TABLE lock for the whole build, and preserves pre-guard immutable "
+      + "history (U13): lines of duplicate groups on posted or cancelled counts are "
+      + "marked is_pre_guard_legacy, and the guard is a partial unique index over "
+      + "unmarked rows (a constraint cannot attach a partial index, so enforcement "
+      + "lives on the index under the same name). A database recorded at the old "
+      + "digest applied the old full guard successfully — the old precheck refused "
+      + "every legacy row — so its data already satisfies the staged guard and only "
+      + "the digest moves. Restamp, not reapply: a database at the old digest holds "
+      + "no legacy rows by construction, so there is nothing to mark and re-running "
+      + "would only rebuild an equivalent guard.",
+  },
 ];
 
 async function executeTrackedMigration(
