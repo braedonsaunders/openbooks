@@ -159,22 +159,54 @@ export async function runScenario(
   checks.push({ name: "per-entry-txn-balance", ok: Number(tunbal.n) === 0, detail: `${tunbal.n} posted entries do not balance in txn currency (want 0)` });
 
   // -- CHECK 3: open_balance is fresh (stored == recomputed) -------------------
-  const drift = await one<{ n: string }>(sql`
-    with calc as (
-      select d.id, d.open_balance as stored,
-             (select case when count(jl.id)=0 then null
-                else sum(abs(jl.amount)) - coalesce(sum(ap.applied),0) end
-               from journal_lines jl
-               left join lateral (
-                 select sum(a.amount) as applied from applications a
-                  where (a.to_line_id=jl.id or a.from_line_id=jl.id) and a.unapplied_at is null
-               ) ap on true
-              where jl.entry_id=d.posted_entry_id and jl.is_open_item) as recomputed
+  // Cached balances are denominated in the DOCUMENT currency (migration
+  // 0100): open-item txn amounts minus the applied transaction amounts
+  // (source-side for from-lines, target-side for to-lines). This mirrors
+  // 0100's formula line for line instead of calling
+  // document_open_balance_amount, so the harness stays an independent
+  // backstop rather than a tautology. The pre-0100 functional formula
+  // (abs(amount) minus a.amount) reads every foreign-currency document as
+  // stale; do not regress to it.
+  const drift = await one<{ n: string; m: string; worst: string | null }>(sql`
+    with scoped as (
+      select d.id, d.document_number, d.currency, d.open_balance as stored, d.posted_entry_id
         from documents d
        where d.org_id=${orgId} and d.status='posted' and d.posted_entry_id is not null and d.open_balance is not null
-         and exists (select 1 from journal_entries e2 where e2.id = d.posted_entry_id and e2.posting_date <= ${cutoff}))
-    select count(*) n from calc where stored is distinct from recomputed`);
-  checks.push({ name: "open-balance-fresh", ok: Number(drift.n) === 0, detail: `${drift.n} closed-period documents have stale open_balance (want 0)` });
+         and exists (select 1 from journal_entries e2 where e2.id = d.posted_entry_id and e2.posting_date <= ${cutoff})),
+    calc as (
+      select s.id,
+             (select case when count(jl.id)=0 then null
+                else sum(abs(jl.txn_amount)) - coalesce(sum(ap.applied),0) end
+               from journal_lines jl
+               left join lateral (
+                 select sum(case when a.from_line_id=jl.id then a.source_transaction_amount
+                                 else a.target_transaction_amount end) as applied
+                   from applications a
+                  where (a.to_line_id=jl.id or a.from_line_id=jl.id) and a.unapplied_at is null
+                    and a.org_id=${orgId}
+               ) ap on true
+              where jl.entry_id=s.posted_entry_id and jl.org_id=${orgId} and jl.is_open_item) as recomputed
+        from scoped s),
+    stale as (
+      select s.document_number from scoped s join calc c on c.id = s.id
+       where s.stored is distinct from c.recomputed),
+    mixed as (
+      select distinct s.document_number
+        from scoped s
+        join journal_lines jl on jl.entry_id=s.posted_entry_id and jl.org_id=${orgId} and jl.is_open_item
+       where jl.currency is distinct from s.currency)
+    select (select count(*) from stale) as n,
+           (select count(*) from mixed) as m,
+           (select string_agg(x.document_number, ', ')
+              from ((select document_number from stale union select document_number from mixed)
+                    order by 1 limit 3) x) as worst`);
+  checks.push({
+    name: "open-balance-fresh",
+    ok: Number(drift.n) === 0 && Number(drift.m) === 0,
+    detail: `${drift.n} closed-period documents have stale open_balance (want 0)` +
+      (Number(drift.m) > 0 ? `; ${drift.m} have open-item lines in another currency than the document (want 0)` : "") +
+      (drift.worst ? ` — worst: ${drift.worst}` : ""),
+  });
 
   // -- CHECK 3b: header arithmetic — total == subtotal + tax_total ----------
   // Holds for every document of every kind and status on every cluster: the
