@@ -276,17 +276,30 @@ test('ordinary tenant SFTP server management stays available and org-scoped', as
   // The create still consults the per-tenant Bank Feeds gate…
   assert.deepEqual(routeState.gateCalls, [{ permission: 'admin.setup.manage', featureKey: 'bankFeeds' }])
   // …and writes the server row scoped to the caller's organization, together
-  // with its secret-free audit evidence in the same transaction.
-  assert.equal(routeState.inserts.length, 2)
-  assert.match(routeState.inserts[0]!.text, /insert into sftp_servers/)
+  // with its secret-free audit evidence in the same transaction. The create
+  // first takes the per-org advisory lock and reads the active sibling
+  // roots for the overlap gate, so four statements run in order: lock,
+  // sibling read, scoped server insert, audit insert.
+  assert.equal(routeState.inserts.length, 4)
+  assert.match(routeState.inserts[0]!.text, /pg_advisory_xact_lock/)
   assert.ok(
-    routeState.inserts[0]!.text.includes('org-1'),
-    `server insert must be scoped to the caller's org, got: ${routeState.inserts[0]!.text}`,
+    routeState.inserts[0]!.text.includes('sftp-roots:org-1'),
+    `the advisory lock must serialize this org's creates, got: ${routeState.inserts[0]!.text}`,
   )
-  assert.match(routeState.inserts[1]!.text, /insert into audit_log/)
+  assert.match(routeState.inserts[1]!.text, /from sftp_servers/)
   assert.ok(
-    routeState.inserts[1]!.text.includes('sftp_servers'),
-    `login creation must leave audit evidence on sftp_servers, got: ${routeState.inserts[1]!.text}`,
+    routeState.inserts[1]!.text.includes('org-1'),
+    `the sibling overlap read must be scoped to the caller's org, got: ${routeState.inserts[1]!.text}`,
+  )
+  assert.match(routeState.inserts[2]!.text, /insert into sftp_servers/)
+  assert.ok(
+    routeState.inserts[2]!.text.includes('org-1'),
+    `server insert must be scoped to the caller's org, got: ${routeState.inserts[2]!.text}`,
+  )
+  assert.match(routeState.inserts[3]!.text, /insert into audit_log/)
+  assert.ok(
+    routeState.inserts[3]!.text.includes('sftp_servers'),
+    `login creation must leave audit evidence on sftp_servers, got: ${routeState.inserts[3]!.text}`,
   )
 })
 
