@@ -29,6 +29,14 @@ export function NewCountButton({ label }: { label: string }) {
   )
 }
 
+/**
+ * POST one count action. Every caller passes a stable per-attempt
+ * `idempotencyKey` — one key per intended action, reused across
+ * transport-uncertain retries, rotated on input change or success — and it
+ * wins over the fresh mint below. The mint is only a backstop so a key is
+ * never omitted; a new key per call would turn every lost response plus
+ * retry into a duplicate count, line write, or lifecycle step.
+ */
 async function countAction(body: Record<string, unknown>): Promise<Record<string, unknown>> {
   const res = await fetch('/api/inventory/counts', {
     method: 'POST',
@@ -326,6 +334,12 @@ function CreateCountDrawer({
   // Per-row refusals stay pinned to the row that caused them; fully empty
   // rows are inert filler and are reported by the form-level refusal instead.
   const [lineErrors, setLineErrors] = useState<Record<number, string>>({})
+  // ONE retry identity per intended create: a lost create response followed
+  // by Open count again must return the ORIGINAL count, not open a second
+  // one. Reused on retry; rotates only after success or an input change (a
+  // reused key with different input would 409).
+  const createKeyRef = useRef<string | null>(null)
+  const createFingerprintRef = useRef<string | null>(null)
 
   async function submit() {
     const errors: Record<number, string> = {}
@@ -348,7 +362,7 @@ function CreateCountDrawer({
     setBusy(true)
     setPostError(null)
     try {
-      await countAction({
+      const payload = {
         action: 'create',
         locationId,
         subsidiaryId,
@@ -359,8 +373,17 @@ function CreateCountDrawer({
           stockLocationId: l.stockLocationId,
           lotId: l.lotId || undefined,
         })),
-      })
+      }
+      const fingerprint = JSON.stringify(payload)
+      if (createKeyRef.current === null || createFingerprintRef.current !== fingerprint) {
+        createKeyRef.current = crypto.randomUUID()
+        createFingerprintRef.current = fingerprint
+      }
+      await countAction({ ...payload, idempotencyKey: createKeyRef.current })
       toast.success(t('counts.created'))
+      // Success consumes the retry identity: the next Open count is new.
+      createKeyRef.current = null
+      createFingerprintRef.current = null
       onClose()
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e)
@@ -574,6 +597,12 @@ function CountDetailBody({
   const [counted, setCounted] = useState<Record<string, string>>({})
   // Remount per count/status/date (parent key) resets these; no effect.
   const [countDate, setCountDate] = useState(detail.header.countedOn)
+  // ONE retry identity per intended count step (record, submit, post, …): a
+  // lost response followed by the same step again must replay it, not apply
+  // it twice. Reused on retry; rotates after success or when the step's
+  // inputs change (a reused key with different input would 409).
+  const stepKeyRef = useRef<string | null>(null)
+  const stepFingerprintRef = useRef<string | null>(null)
 
   const { header, lines } = detail
   const itemLabel = (id: string) => itemOptions.find((o) => o.value === id)?.label ?? id
@@ -583,8 +612,17 @@ function CountDetailBody({
     setBusy(true)
     setPostError(null)
     try {
-      const res = await countAction({ ...body, countId: header.id })
+      const payload = { ...body, countId: header.id }
+      const fingerprint = JSON.stringify(payload)
+      if (stepKeyRef.current === null || stepFingerprintRef.current !== fingerprint) {
+        stepKeyRef.current = crypto.randomUUID()
+        stepFingerprintRef.current = fingerprint
+      }
+      const res = await countAction({ ...payload, idempotencyKey: stepKeyRef.current })
       toast.success(t('counts.updated'))
+      // Success consumes the retry identity: the next step is a new action.
+      stepKeyRef.current = null
+      stepFingerprintRef.current = null
       onChanged()
       return res
     } catch (e) {
