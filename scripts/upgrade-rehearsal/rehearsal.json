@@ -94,18 +94,24 @@
         { "code": "0293.duplicate_subject_grandfathered", "severity": "notice" },
         { "code": "0299.negative_counted_quantity_grandfathered", "severity": "notice" }
       ],
-      "remedies": []
+      "remedies": [],
+      "assertions": true
     },
     {
       "id": "edge-refusals",
       "class": "edge",
-      "description": "Legacy shapes that must refuse the upgrade by name: duplicate stock-count subjects and negative counts on draft counts, and malformed payrollRemittance markers. The cell proves --check reports exactly expectFindings, a plain bootstrap refuses without touching the ledger, the remedy files (the same remedy text operators get) apply, --check comes back clean, and the full phases run.",
+      "description": "Legacy shapes that must refuse the upgrade by name: duplicate stock-count subjects and negative counts on draft counts, and malformed payrollRemittance markers. The cell proves --check reports exactly expectFindings, a plain bootstrap refuses without touching the ledger, the remedy files (the same remedy text operators get) apply, --check comes back clean, and the full phases run. Finding counts are seed-pinned (the seeder writes two duplicate groups, two negative lines, and markers failing four field checks); finding keys compare as a multiset, so any seed change must update this list and drift fails the cell loudly.",
       "steps": [
         { "kind": "seeder", "name": "legacy-shapes", "args": ["refusals"] }
       ],
       "expectFindings": [
         { "code": "0293.duplicate_subject", "severity": "refuse" },
+        { "code": "0293.duplicate_subject", "severity": "refuse" },
         { "code": "0299.negative_counted_quantity", "severity": "refuse" },
+        { "code": "0299.negative_counted_quantity", "severity": "refuse" },
+        { "code": "0296.malformed_remittance_marker", "severity": "refuse" },
+        { "code": "0296.malformed_remittance_marker", "severity": "refuse" },
+        { "code": "0296.malformed_remittance_marker", "severity": "refuse" },
         { "code": "0296.malformed_remittance_marker", "severity": "refuse" }
       ],
       "remedies": [
