@@ -225,19 +225,67 @@ export function responseStatus(xml: string): {
   message: string;
   iteratorId: string | null;
   iteratorRemaining: number;
+  kind: string;
+  requestId: string | null;
 } {
   const parsed = parseXml(xml);
+  let kind: string | null = null;
   let response: Record<string, unknown> | null = null;
-  walk(parsed, (key, value) => { if (!response && key.endsWith("Rs") && "statusCode" in value) response = value; });
+  walk(parsed, (key, value) => { if (!response && key.endsWith("Rs") && "statusCode" in value) { response = value; kind = key; } });
   if (!response) throw new Error("QuickBooks response contains no status-bearing response node");
   const node = response as Record<string, unknown>;
+  const rawRequestId = node.requestID ?? node.requestId ?? null;
   return {
     code: Number(node.statusCode ?? -1),
     severity: String(node.statusSeverity ?? "Error"),
     message: String(node.statusMessage ?? "Unknown QuickBooks error"),
     iteratorId: node.iteratorID ? String(node.iteratorID) : null,
     iteratorRemaining: Number(node.iteratorRemainingCount ?? 0),
+    kind: kind ?? "UnknownRs",
+    requestId: rawRequestId == null ? null : String(rawRequestId),
   };
+}
+
+/**
+ * The single request element (e.g. `CompanyQueryRq`) inside a QBXMLMsgsRq
+ * envelope. The envelope wrapper `QBXMLMsgsRq` itself also ends in "Rq" and
+ * is explicitly excluded: correlating against it would stamp and verify the
+ * wrong element.
+ */
+const REQUEST_ELEMENT = /<((?!QBXMLMsgsRq)[A-Za-z][A-Za-z0-9]*Rq)(?=[\s/>])/;
+
+export function requestElementName(requestXml: string): string | null {
+  return requestXml.match(REQUEST_ELEMENT)?.[1] ?? null;
+}
+
+/** The response element that answers a request element (`CompanyQueryRq` → `CompanyQueryRs`). */
+export function responseElementForRequest(requestXml: string): string | null {
+  const element = requestElementName(requestXml);
+  return element ? element.replace(/Rq$/, "Rs") : null;
+}
+
+/**
+ * Stamp (or replace) the qbXML `requestID` correlation attribute on the
+ * request element. QuickBooks echoes the attribute on the answering `*Rs`
+ * element, which is what lets receiveResponseXML prove a response answers
+ * the outstanding request instead of a superseded one. The id is the
+ * qbd_requests row id: stable across tickets and sessions, so a re-queued
+ * request keeps its identity.
+ */
+export function stampRequestId(requestXml: string, requestId: string): string {
+  const without = requestXml.replace(/ requestID="[^"]*"/g, "");
+  let stamped = false;
+  const out = without.replace(REQUEST_ELEMENT, (_match, tag: string) => {
+    stamped = true;
+    return `<${tag} requestID="${requestId}"`;
+  });
+  if (!stamped) throw new Error("QuickBooks request contains no request element to correlate");
+  return out;
+}
+
+/** The `requestID` a stamped outgoing request carries, or null when unstamped (pre-correlation rows). */
+export function requestIdFromRequestXml(requestXml: string): string | null {
+  return requestXml.match(/<((?!QBXMLMsgsRq)[A-Za-z][A-Za-z0-9]*Rq)(?=[\s/>])[^>]*\srequestID="([^"]*)"/)?.[2] ?? null;
 }
 
 function asArray(value: unknown): unknown[] {

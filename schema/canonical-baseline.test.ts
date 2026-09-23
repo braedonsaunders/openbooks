@@ -607,6 +607,12 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // Storage now refuses a second line per subject (NULLS NOT DISTINCT so
     // NULL-lot duplicates collide too); the engine preflights the same key.
     "0293_stock_count_line_subject_unique.sql",
+    // A sendRequestXML retry before the first response claimed a second
+    // request on the same ticket, and the next response was stored under the
+    // wrong request. The engine re-sends the outstanding request with a
+    // requestID correlation, and storage refuses a second 'sent' row per
+    // ticket so a concurrent double-claim fails instead of corrupting.
+    "0295_qbd_web_connector_in_flight.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -2421,6 +2427,35 @@ test("hrm headcount plans and transparency freeze their evidence", () => {
   assert.doesNotMatch(migration, /\n\n$/);
 });
 // HR-12 end
+
+test("0295 keeps one in-flight Web Connector request per ticket", () => {
+  // A sendRequestXML retry before the first response claimed a second queued
+  // request on the same ticket, and the next response was stored under the
+  // wrong request. The engine re-sends the outstanding request with a
+  // requestID correlation; this migration is the storage backstop so a
+  // concurrent double-claim fails instead of corrupting source families.
+  const migration = readFileSync("schema/migrations/generated/0295_qbd_web_connector_in_flight.sql", "utf8");
+  assert.match(migration, /^-- OpenBooks forward migration 0295_qbd_web_connector_in_flight\./m);
+  assert.match(migration, /SET statement_timeout = 0;/);
+  assert.match(migration, /SET idle_in_transaction_session_timeout = 0;/);
+  assert.doesNotMatch(migration, /lock_timeout/i);
+  // Preflight refuses existing violations by name with the re-queue remedy;
+  // nothing is auto-deleted.
+  assert.match(migration, /HAVING count\(\*\) > 1/);
+  assert.match(migration, /ticket %s holds %s sent requests/);
+  assert.match(migration, /re-queue every sent request but the latest per ticket/);
+  assert.doesNotMatch(migration, /^\s*(?:UPDATE|DELETE FROM)\s+(?:ONLY\s+)?(?:public\.)?qbd_requests/im);
+  // The partial index covers in-flight rows only; queued, complete, failed
+  // and cancelled history is unaffected.
+  assert.match(
+    migration,
+    /CREATE UNIQUE INDEX IF NOT EXISTS qbd_requests_one_sent_per_session\s+ON public\.qbd_requests \(session_id\)\s+WHERE status = 'sent';/,
+  );
+  assert.doesNotMatch(migration, /on conflict do nothing/i);
+  assert.doesNotMatch(migration, /0001_baseline/);
+  assert.match(migration, /[^\n]\n$/);
+  assert.doesNotMatch(migration, /\n\n$/);
+});
 
 // HR-17 begin
 test("hrm continuous performance carries 1:1s, feedback, calibration and succession with org isolation", () => {

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildCapturePlan, calendarMonths, continueRequestXml, negotiateQbxmlVersion, parseQbdReportDate, parseReportRows, parseXml, responseStatus, xmlEscape } from "./qbxml.ts";
+import { buildCapturePlan, calendarMonths, continueRequestXml, negotiateQbxmlVersion, parseQbdReportDate, parseReportRows, parseXml, requestElementName, requestIdFromRequestXml, responseElementForRequest, responseStatus, stampRequestId, xmlEscape } from "./qbxml.ts";
 
 test("capture plan splits the ledger into bounded calendar months", () => {
   const through = new Date("2024-03-12T19:20:00Z");
@@ -47,6 +47,42 @@ test("iterator continuation escapes the QuickBooks iterator id", () => {
 
 test("status and report parsers handle qbXML attributes and column ids", () => {
   const xml = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs><GeneralDetailReportQueryRs statusCode="0" statusSeverity="Info" statusMessage="Status OK" iteratorID="abc" iteratorRemainingCount="2"><ReportRet><ColDesc colID="1"><ColType>TxnID</ColType></ColDesc><ColDesc colID="2"><ColType>Amount</ColType></ColDesc><ReportData><DataRow><ColData colID="1" value="TXN-1"/><ColData colID="2" value="12.34"/></DataRow></ReportData></ReportRet></GeneralDetailReportQueryRs></QBXMLMsgsRs></QBXML>`;
-  assert.deepEqual(responseStatus(xml), { code: 0, severity: "Info", message: "Status OK", iteratorId: "abc", iteratorRemaining: 2 });
+  assert.deepEqual(responseStatus(xml), { code: 0, severity: "Info", message: "Status OK", iteratorId: "abc", iteratorRemaining: 2, kind: "GeneralDetailReportQueryRs", requestId: null });
   assert.deepEqual(parseReportRows(xml), [{ rowType: "DataRow", columns: { TxnID: "TXN-1", Amount: "12.34" } }]);
+});
+
+test("requestID correlation stamps the request element, never the envelope", () => {
+  const plan = buildCapturePlan("2024-01-01", new Date("2024-01-01T00:00:00Z"));
+  const company = plan.find((r) => r.family === "company")!;
+  assert.equal(requestElementName(company.requestXml), "CompanyQueryRq");
+  assert.equal(responseElementForRequest(company.requestXml), "CompanyQueryRs");
+  assert.equal(requestIdFromRequestXml(company.requestXml), null);
+
+  const stamped = stampRequestId(company.requestXml, "11111111-2222-4333-8555-666666666666");
+  assert.match(stamped, /<CompanyQueryRq requestID="11111111-2222-4333-8555-666666666666"\/>/);
+  assert.doesNotMatch(stamped, /QBXMLMsgsRq requestID/);
+  assert.equal(requestIdFromRequestXml(stamped), "11111111-2222-4333-8555-666666666666");
+
+  // Re-stamping a re-queued request replaces the identity instead of
+  // duplicating the attribute.
+  const restamped = stampRequestId(stamped, "22222222-2222-4333-8555-666666666666");
+  assert.equal(requestIdFromRequestXml(restamped), "22222222-2222-4333-8555-666666666666");
+  assert.equal(restamped.match(/requestID/g)?.length, 1);
+
+  // The expected response element is derived from the request element, not
+  // the capture-plan kind: ledger requests are GeneralLedger rows carrying
+  // a GeneralDetailReportQueryRq element.
+  const ledger = plan.find((r) => r.family === "ledger:2024-01")!;
+  assert.equal(requestElementName(ledger.requestXml), "GeneralDetailReportQueryRq");
+  assert.equal(responseElementForRequest(ledger.requestXml), "GeneralDetailReportQueryRs");
+
+  // Iterator attributes survive the stamp: the next page is still continuable.
+  const account = plan.find((r) => r.family === "account")!;
+  const stampedAccount = stampRequestId(account.requestXml, "33333333-2222-4333-8555-666666666666");
+  assert.match(stampedAccount, /iterator="Start"/);
+  assert.equal(requestIdFromRequestXml(continueRequestXml(stampedAccount, "it-1")), "33333333-2222-4333-8555-666666666666");
+
+  const echoed = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs><CompanyQueryRs requestID="11111111-2222-4333-8555-666666666666" statusCode="0" statusSeverity="Info" statusMessage="Status OK"><CompanyRet/></CompanyQueryRs></QBXMLMsgsRs></QBXML>`;
+  assert.deepEqual(responseStatus(echoed).requestId, "11111111-2222-4333-8555-666666666666");
+  assert.equal(responseStatus(echoed).kind, "CompanyQueryRs");
 });
