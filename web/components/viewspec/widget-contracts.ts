@@ -107,7 +107,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'close-status-cell': { props: ['lockLabel', 'statusLabel', 'statusVariant'] },
   'close-wizard': { props: ['wizard'] },
   'code-cell': { props: ['text'] },
-  'collections-shell': { props: ['advancedSubscriptionsEnabled', 'customers', 'description', 'incomeAccounts', 'subscriptionsEnabled', 'title'] },
+  'collections-shell': { props: ['advancedSubscriptionsEnabled', 'customers', 'description', 'incomeAccounts', 'subscriptionsEnabled', 'title', 'worklistHref', 'worklistLabel'] },
   'commitments-section': { props: ['empty', 'rows', 'showPurchaseOrders'] },
   'compliance-matrix': { props: ['classId', 'columns', 'labels', 'rows', 'stateFilter'] },
   'compliance-setup-banner': { props: ['actionHref', 'actionLabel', 'prompt'] },

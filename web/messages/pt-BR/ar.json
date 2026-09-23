@@ -175,6 +175,8 @@
     }
   },
   "collections": {
+    "pageDescription": "Agendamentos recorrentes, planos de assinatura e réguas de cobrança são configurados aqui. A lista de faturas em atraso está em Contas a receber.",
+    "worklistCta": "Abrir a lista de cobranças em atraso",
     "tabs": {
       "recurring": "Faturas recorrentes",
       "subscriptions": "Assinaturas",

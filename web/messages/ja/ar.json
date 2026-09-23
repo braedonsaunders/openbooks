@@ -175,6 +175,8 @@
     }
   },
   "collections": {
+    "pageDescription": "定期請求スケジュール、サブスクリプションプラン、督促ラダーはここで設定します。延滞請求リストは売掛金にあります。",
+    "worklistCta": "延滞リストを開く",
     "tabs": {
       "recurring": "定期請求書",
       "subscriptions": "サブスクリプション",

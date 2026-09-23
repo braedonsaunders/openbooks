@@ -5,7 +5,7 @@ import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { page, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../lib/authz'
+import { can, requirePermission } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
 
 /**
@@ -37,6 +37,10 @@ export interface CollectionsOption {
 export interface CollectionsData {
   title: string
   description: string
+  /** Deep link to the overdue chase list on /ar — null when the reader
+   *  lacks ar.read, so the page never offers a worklist they cannot open. */
+  worklistHref: string | null
+  worklistLabel: string
   subscriptionsEnabled: boolean
   advancedSubscriptionsEnabled: boolean
   customers: CollectionsOption[]
@@ -72,7 +76,12 @@ export async function loadCollections(): Promise<CollectionsData> {
 
   return {
     title: tNav('modules.collections'),
-    description: tAr('cockpit.description'),
+    // This page is recurring/subscription/dunning CONFIGURATION — it must
+    // never borrow the AR cockpit's worklist description again. The overdue
+    // chase list itself lives on /ar; link there instead of describing it.
+    description: tAr('collections.pageDescription'),
+    worklistHref: can(authz, 'ar.read') ? '/ar' : null,
+    worklistLabel: tAr('collections.worklistCta'),
     subscriptionsEnabled,
     advancedSubscriptionsEnabled,
     customers: customers.rows.map((c) => ({ id: c.id, name: c.name })),
@@ -99,6 +108,8 @@ export function collectionsSpec(data: CollectionsData): PageSpec {
       widgetBlock('collections-shell', {
         title: f('title'),
         description: f('description'),
+        worklistHref: f('worklistHref'),
+        worklistLabel: f('worklistLabel'),
         subscriptionsEnabled: f('subscriptionsEnabled'),
         advancedSubscriptionsEnabled: f('advancedSubscriptionsEnabled'),
         customers: f('customers'),

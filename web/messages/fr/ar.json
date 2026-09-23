@@ -175,6 +175,8 @@
     }
   },
   "collections": {
+    "pageDescription": "Les échéanciers récurrents, les formules d'abonnement et les relances d'impayés se configurent ici. La liste des factures en retard se trouve dans Comptes clients.",
+    "worklistCta": "Ouvrir la liste des impayés",
     "tabs": {
       "recurring": "Factures récurrentes",
       "subscriptions": "Abonnements",

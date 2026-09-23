@@ -74,6 +74,8 @@ export const COMMERCE_WIDGETS = {
     <CollectionsShell
       title={str(props, 'title') ?? ''}
       description={str(props, 'description') ?? ''}
+      worklistHref={(props.worklistHref as string | null) ?? null}
+      worklistLabel={str(props, 'worklistLabel') ?? ''}
       subscriptionsEnabled={props.subscriptionsEnabled === true}
       advancedSubscriptionsEnabled={props.advancedSubscriptionsEnabled === true}
       customers={(props.customers as ComponentProps<typeof CollectionsShell>['customers']) ?? []}

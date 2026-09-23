@@ -175,6 +175,8 @@
     }
   },
   "collections": {
+    "pageDescription": "Las programaciones recurrentes, los planes de suscripción y las escalas de recobro se configuran aquí. La lista de facturas vencidas está en Cuentas por cobrar.",
+    "worklistCta": "Abrir la lista de cobros vencidos",
     "tabs": {
       "recurring": "Facturas recurrentes",
       "subscriptions": "Suscripciones",
