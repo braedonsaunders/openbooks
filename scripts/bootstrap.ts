@@ -1698,12 +1698,9 @@ async function evaluatePendingMigrations(
       const item = pending[index]!;
       const decision = preflightDecisionFor(item.file, entries);
       if (decision.kind === "missing") {
-        // TRANSITIONAL: the wiring commit (with P1B's decision files) turns
-        // this into a refusal. Until then, list loudly and do not block, so
-        // installs with pending 0242+ migrations keep upgrading.
         report.missingDecisions.push(item.filename);
         console.log(
-          `[bootstrap] migration preflight: ${item.filename} has no decision file yet; `
+          `[bootstrap] migration preflight: ${item.filename} has no decision file; `
             + `add schema/migrations/preflight/${item.file.replace(/\.sql$/, ".sql")} or .none`,
         );
         continue;
@@ -1767,6 +1764,21 @@ function printPreflightFindings(findings: readonly PreflightFinding[]): void {
 }
 
 /**
+ * A pending migration with no decision file upgrades blind: neither a
+ * preflight nor a reviewed reason covers it. Refuse by name listing every
+ * gap, so one run shows the whole deficit instead of one file at a time.
+ */
+function throwOnMissingDecisions(report: PendingPreflightReport): void {
+  if (report.missingDecisions.length === 0) return;
+  const missing = [...report.missingDecisions].sort();
+  throw new Error(
+    `[bootstrap] ${missing.length} pending migration(s) have no preflight decision file: ${missing.join(", ")}. `
+      + `Add schema/migrations/preflight/<basename>.sql or <basename>.none for each; `
+      + `see docs/operations/upgrades.md#migration-preflights. No migration was applied.`,
+  );
+}
+
+/**
  * The pre-apply gate: every evaluable pending preflight has run BEFORE the
  * first migration. Any refuse finding stops bootstrap here, with every
  * finding printed and no migration applied.
@@ -1778,6 +1790,7 @@ async function runPreflightGate(pending: readonly PendingMigrationItem[]): Promi
   }
   const report = await evaluatePendingMigrations(pending, {});
   printPreflightFindings(report.findings);
+  throwOnMissingDecisions(report);
   const refusals = report.findings.filter((finding) => finding.severity === "refuse");
   if (refusals.length > 0) {
     const codes = [...new Set(refusals.map((finding) => finding.code))].sort().join(", ");
@@ -1916,6 +1929,7 @@ async function runUpgradeCheckMain(json: boolean): Promise<number> {
   result.leastPrivilege = report.leastPrivilege && ranAnyCheck;
   result.findings = report.findings;
   emit();
+  throwOnMissingDecisions(report);
   const refusals = result.findings.filter((finding) => finding.severity === "refuse");
   if (refusals.length > 0) {
     if (!json) {

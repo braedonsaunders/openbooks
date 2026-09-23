@@ -194,12 +194,9 @@ test("ordinal parsing accepts only the four-digit migration shape", () => {
   assert.equal(ordinalOf("not-a-migration.sql"), null);
 });
 
-test("on the real tree, no finding is worse than a missing decision", () => {
-  // Decision files land separately (P1B); until then every finding must be
-  // preflight-missing. If this fires on another kind, a decision file is
-  // contradictory, orphaned, short, or malformed — fix the file, not this test.
-  // (The committed-tree fully-green assertion joins the check:* chain with them.)
-  for (const finding of scanTree()) {
-    assert.equal(finding.kind, "preflight-missing");
-  }
+test("on the real tree, every covered migration has exactly one good decision", () => {
+  // The committed tree is the contract: if this fires, a migration is
+  // missing its decision, a decision file is contradictory, orphaned,
+  // short, or malformed — fix the tree, not this test.
+  assert.deepEqual(scanTree(), []);
 });
