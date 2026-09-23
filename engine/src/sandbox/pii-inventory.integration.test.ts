@@ -1562,6 +1562,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "recognition_rules.start_date_source",
   "recognition_schedules.change_basis",
   "recognition_schedules.status",
+  "recognition_schedules.transaction_currency",
   "reconciliation_matches.matched_by",
   "reconciliations.currency",
   "reconciliations.evidence_connector",
