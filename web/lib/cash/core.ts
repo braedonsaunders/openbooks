@@ -512,13 +512,42 @@ const daysInMonthUTC = (d: Date): number => new Date(Date.UTC(d.getUTCFullYear()
 const isSet = (v: number | string | null | undefined): boolean => v !== null && v !== undefined && v !== "";
 
 /**
- * Weekly average over the FULL history window. Zero-activity weeks are data,
- * not gaps: dividing only by weeks that posted rows turns one 1,200 outflow
- * inside a 12-week window into a 1,200/week forecast instead of 100/week.
+ * How many history weeks an average divides by: the week buckets of the
+ * historyWeeks-long window ending at asOf that fall on or after the
+ * strategy's data start. The data start is the strategy's earliest posted
+ * activity in its own read scope, clamped into the window (a missing start
+ * means a full window). Zero-activity weeks after that start still count;
+ * weeks before it predate the books and must not dilute the run-rate — but
+ * a young org with 3 weeks of books in a 12-week window divides by 3, not
+ * by 1 (a single active week) and not by 12. Always within [1, historyWeeks].
  * Shared by the GL-history and bank-register strategies.
  */
-export function fullWindowWeeklyAverage(total: Money, historyWeeks: number): Money {
-  return divideMoney(total, String(Math.max(1, historyWeeks)));
+export function historyWindowDivisor(
+  historyWeeks: number,
+  windowStartIso: string,
+  dataStartIso: string | null,
+): number {
+  const weeks = Math.max(1, Math.min(52, Math.floor(Number(historyWeeks) || 0)));
+  const windowStart = parseISO(windowStartIso);
+  const effective =
+    dataStartIso && dataStartIso > windowStartIso ? parseISO(dataStartIso) : windowStart;
+  // Buckets are the Sundays windowStart + 7k; a bucket counts when its week
+  // (Sunday..Saturday) reaches the effective start.
+  const skip = Math.max(0, Math.ceil((daysBetween(windowStart, effective) - 6) / 7));
+  return Math.min(weeks, Math.max(1, weeks - skip));
+}
+
+/**
+ * Weekly average over the history window (see historyWindowDivisor).
+ * Shared by the GL-history and bank-register strategies.
+ */
+export function fullWindowWeeklyAverage(
+  total: Money,
+  historyWeeks: number,
+  windowStartIso: string,
+  dataStartIso: string | null,
+): Money {
+  return divideMoney(total, String(historyWindowDivisor(historyWeeks, windowStartIso, dataStartIso)));
 }
 
 /**
@@ -702,7 +731,22 @@ export async function categoryWeekly(
     for (const k of Object.keys(weeklyHistory)) {
       if (k < startKey) { totalHistory = addMoney(totalHistory, weeklyHistory[k]!); }
     }
-    let weeklyAvg = fullWindowWeeklyAverage(useNet ? totalHistory : absMoney(totalHistory), historyWeeks);
+    // The data start is the earliest posting in this strategy's own read
+    // scope (same accounts, book, and subsidiary filter as the history
+    // above — just unbounded in time), so a young org divides by its weeks
+    // of books instead of the full window.
+    const windowStartIso = toISO(historyStart);
+    const dataStartRow = (await db.execute<{ d: string | null }>(sql`
+      select min(e.posting_date)::text as d
+        from journal_lines l
+        join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+          and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
+        join accounts a on a.id = l.account_id and a.org_id = l.org_id
+       where l.org_id = ${orgId} and l.account_id in (${ids})${subScope(sql`l.subsidiary_id`, context.subIds)}
+    `));
+    const dataStartIso = dataStartRow.rows[0]?.d ?? null;
+    const divisor = historyWindowDivisor(historyWeeks, windowStartIso, dataStartIso);
+    let weeklyAvg = fullWindowWeeklyAverage(useNet ? totalHistory : absMoney(totalHistory), historyWeeks, windowStartIso, dataStartIso);
     if (adj !== 0) weeklyAvg = multiplyMoney(weeklyAvg, String(1 + adj));
     const forecastAmount = isSet(cat.expectedWeek) ? multiplyMoney(weeklyAvg, "4.345") : weeklyAvg;
     weekStarts.forEach((k, i) => {
@@ -715,8 +759,8 @@ export async function categoryWeekly(
     meta = {
       method: "GL Average",
       sourceTotal: absMoney(totalHistory),
-      weeksUsed: historyWeeks,
-      rawAverage: fullWindowWeeklyAverage(absMoney(totalHistory), historyWeeks),
+      weeksUsed: divisor,
+      rawAverage: fullWindowWeeklyAverage(absMoney(totalHistory), historyWeeks, windowStartIso, dataStartIso),
       adjustmentPct: Math.round(adj * 100),
       finalAverage: weeklyAvg,
     };
