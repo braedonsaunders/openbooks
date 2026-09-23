@@ -277,15 +277,29 @@ export const RECORDS_WIDGETS = {
     )
   },
   /** `config` is re-derived from the row's kind via the static DOC_KINDS map;
-   *  the loader never ships a registry entry as data. */
-  'document-row-actions': (props) => (
-    <DocumentRowActions
-      id={String(props.id ?? '')}
-      status={String(props.status ?? '')}
-      config={DOC_KINDS[String(props.kind ?? '')]!}
-      openHref={`${str(props, 'basePath') ?? ''}?doc=${String(props.id ?? '')}`}
-    />
-  ),
+   *  the loader never ships a registry entry as data. The post grant arrives
+   *  as loader-resolved booleans (the same decisions the drawer reads):
+   *  single-namespace pages pass their one decision as `canPost`, while the
+   *  mixed banking list passes per-namespace decisions so an ap.post holder
+   *  never sees an enabled Post on a gl.post transfer row (and vice versa).
+   *  Absent fails closed. */
+  'document-row-actions': (props) => {
+    const kind = String(props.kind ?? '')
+    const namespace = DOC_KINDS[kind]?.permNamespace
+    const namespaced = namespace === 'gl' ? props.canPostGl
+      : namespace === 'ar' ? props.canPostAr
+      : namespace === 'ap' ? props.canPostAp
+      : undefined
+    return (
+      <DocumentRowActions
+        id={String(props.id ?? '')}
+        status={String(props.status ?? '')}
+        config={DOC_KINDS[kind]!}
+        openHref={`${str(props, 'basePath') ?? ''}?doc=${String(props.id ?? '')}`}
+        canPost={(namespaced ?? props.canPost) === true}
+      />
+    )
+  },
 
   'new-party': () => <NewPartyButton />,
   'new-party-redirect': () => <NewPartyRedirect />,

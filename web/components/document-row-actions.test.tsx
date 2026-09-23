@@ -66,7 +66,7 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 const config = DOC_KINDS["vendor_bill"]!;
 const transferConfig = DOC_KINDS["transfer"]!;
 
-async function mountApprovedRow() {
+async function mountApprovedRow(canPost = true) {
   globalThis.__docRowRouter = {
     push() {},
     refresh() {},
@@ -78,7 +78,7 @@ async function mountApprovedRow() {
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <DocumentRowActions id={randomUUID()} status="approved" config={config} openHref="/ap/bills/1" />
+        <DocumentRowActions id={randomUUID()} status="approved" config={config} openHref="/ap/bills/1" canPost={canPost} />
       </NextIntlClientProvider>,
     );
     await tick();
@@ -99,7 +99,7 @@ async function clickPost(host: HTMLElement) {
   await tick();
 }
 
-async function mountDraftTransferRow() {
+async function mountDraftTransferRow(canPost = true) {
   globalThis.__docRowRouter = {
     push() {},
     refresh() {},
@@ -111,7 +111,7 @@ async function mountDraftTransferRow() {
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <DocumentRowActions id={randomUUID()} status="draft" config={transferConfig} openHref="/banking/transactions/1" />
+        <DocumentRowActions id={randomUUID()} status="draft" config={transferConfig} openHref="/banking/transactions/1" canPost={canPost} />
       </NextIntlClientProvider>,
     );
     await tick();
@@ -142,6 +142,81 @@ test("a 422 post refusal on a draft transfer names the missing legs", async (t) 
   const alert = host.querySelector('[role="alert"]');
   assert.ok(alert, "the refused transfer post must persist a row-inline alert");
   assert.match(alert.textContent ?? "", /destination and the source account/);
+});
+
+/** UX-09: a preparer without the post grant gets no enabled Post — the row
+ * renders it disabled with the required grant named, so the two-person
+ * handoff is visible before any click reaches the server. */
+test("a preparer without ap.post sees a disabled Post naming the grant", async (t) => {
+  let fetched = 0;
+  const prior = globalThis.fetch;
+  globalThis.fetch = (async () => {
+    fetched += 1;
+    return Response.json({ ok: true }, { status: 200 });
+  }) as typeof fetch;
+  const { host, root } = await mountApprovedRow(false);
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+    globalThis.fetch = prior;
+  });
+  await tick();
+  const enabledPost = host.querySelector('button[aria-label="Post"]') as HTMLButtonElement | null;
+  assert.equal(enabledPost, null, "no enabled Post may be offered without ap.post");
+  const blocked = host.querySelector('button[aria-label*="ap.post"]') as HTMLButtonElement | null;
+  assert.ok(blocked, "the row must name the required ap.post grant");
+  assert.equal(blocked.disabled, true, "the named-grant Post must be disabled");
+  assert.match(blocked.title, /ap\.post/);
+  assert.equal(fetched, 0, "rendering the blocked row must not call the API");
+});
+
+/** UX-09, banking namespaces: a gl.post transfer draft without the grant
+ * names gl.post, not ap.post — the row resolves the grant by row kind. */
+test("a transfer draft without gl.post names the gl.post grant", async (t) => {
+  const { host, root } = await mountDraftTransferRow(false);
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  await tick();
+  assert.equal(host.querySelector('button[aria-label="Post"]'), null, "no enabled Post may be offered without gl.post");
+  const blocked = host.querySelector('button[aria-label*="gl.post"]') as HTMLButtonElement | null;
+  assert.ok(blocked, "the transfer row must name the required gl.post grant");
+  assert.equal(blocked.disabled, true, "the named-grant Post must be disabled");
+});
+
+/** UX-09: a preparer without post rights still submits for approval — the
+ * submit affordance is create-namespaced, not gated by the post grant. */
+test("a draft bill without ap.post still offers Submit for approval", async (t) => {
+  globalThis.__docRowRouter = { push() {}, refresh() {} };
+  globalThis.__docRowToasts = [];
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <DocumentRowActions id={randomUUID()} status="draft" config={config} openHref="/ap/bills/1" canPost={false} />
+      </NextIntlClientProvider>,
+    );
+    await tick();
+  });
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  await tick();
+  const submit = [...host.querySelectorAll("button")].find(
+    (button) => (button.getAttribute("aria-label") ?? "").toLowerCase().includes("approv"),
+  ) as HTMLButtonElement | undefined;
+  assert.ok(submit, "the preparer must still be offered Submit for approval");
+  assert.equal(submit.disabled, false, "Submit must stay enabled without the post grant");
 });
 
 /** F-t04-006: a refused Post must name the reason instead of failing silently. */

@@ -81,6 +81,9 @@ export interface ArInvoicesData {
   description: string
   currentParams: Record<string, string | string[] | undefined>
   canCreate: boolean
+  /** Loader-resolved post capability, threaded into the row actions so a
+   *  preparer never sees an enabled Post (the drawer reads the same value). */
+  canPost: boolean
   newButton: {
     items: { kind: string; label: string }[]
     basePath: string
@@ -290,6 +293,7 @@ export async function loadArInvoices(
     description: t('list.description'),
     currentParams: sp,
     canCreate,
+    canPost: can(authz, 'ar.post'),
     newButton,
     drawerOpen: Boolean(drawer),
     drawer,
@@ -329,7 +333,7 @@ export function arInvoicesSpec(data: ArInvoicesData): PageSpec {
         sp: data.currentParams,
         drawer: data.drawer ? { widget: 'document-drawer', props: { drawer: data.drawer } } : null,
         emptyAction: data.canCreate ? newDocument : null,
-        rowActions: { widget: 'document-row-actions', props: { basePath: '/ar/invoices' } },
+        rowActions: { widget: 'document-row-actions', props: { basePath: '/ar/invoices', canPost: data.canPost } },
       }),
     ],
   })

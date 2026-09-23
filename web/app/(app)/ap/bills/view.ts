@@ -79,6 +79,9 @@ export interface ApBillsData {
   captureHref: string
   captureLabel: string
   canCreate: boolean
+  /** Loader-resolved post capability, threaded into the row actions so a
+   *  preparer never sees an enabled Post (the drawer reads the same value). */
+  canPost: boolean
   newItems: { kind: string; label: string }[]
   newBasePath: string
   newTriggerLabel: string
@@ -261,6 +264,7 @@ export async function loadApBills(
     captureHref: '/ap/capture',
     captureLabel: t('actions.capture'),
     canCreate,
+    canPost: can(authz, 'ap.post'),
     newItems,
     newBasePath: '/ap/bills',
     newTriggerLabel: t('actions.newBill'),
@@ -306,7 +310,7 @@ export function apBillsSpec(data: ApBillsData): PageSpec {
       widgetBlock('record-list-view', {
         recordType: 'vendor_bill',
         basePath: '/ap/bills',
-        rowActions: { widget: 'document-row-actions', props: { basePath: '/ap/bills' } },
+        rowActions: { widget: 'document-row-actions', props: { basePath: '/ap/bills', canPost: data.canPost } },
         sp: data.currentParams,
         drawer: data.drawer ? { widget: 'document-drawer', props: { drawer: data.drawer } } : null,
         emptyAction: data.canCreate ? newBill : null,
