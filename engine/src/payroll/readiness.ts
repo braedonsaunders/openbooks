@@ -729,16 +729,21 @@ export async function payRunReadiness(
   }
 
   // --- Period control: posting into a closed period fails at post ---------
+  // The lock read follows the same period the posting would resolve to
+  // (default calendar, regular): with several calendars the covering row
+  // would otherwise be whichever the database returns first.
   const lock = (await db.execute<{ name: string; state: string }>(sql`
     select p.name, coalesce(l.state, 'open') as state
       from accounting_periods p
+      join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
+        and fc.is_default and fc.is_active
       join accounting_books b on b.org_id = p.org_id and b.is_primary and b.is_active
       left join period_locks l
         on l.org_id = p.org_id and l.period_id = p.id and l.book_id = b.id and l.module = 'gl'
        and (l.subsidiary_id is not distinct from ${run.subsidiary_id} or l.subsidiary_id is null)
      where p.org_id = ${orgId} and p.starts_on <= ${run.pay_date} and p.ends_on >= ${run.pay_date}
        and p.is_adjustment = false
-     order by (l.subsidiary_id is not null) desc
+     order by (l.subsidiary_id is not null) desc, p.starts_on, p.ends_on, p.id
      limit 1
   `));
   // Both period blockers resolve on the periods setup screen (generate the

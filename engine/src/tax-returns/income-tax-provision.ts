@@ -15,6 +15,7 @@ import {
   toUnits,
 } from "../money/money.ts";
 import { assertPeriodModulesOpen } from "../close/period-policy.ts";
+import { resolveCoveringPeriod } from "../close/period-resolution.ts";
 import { assertFinalKernelBalance } from "../ledger/posting-invariants.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 
@@ -1683,13 +1684,9 @@ export async function postProvisionRun(
     ).rows[0]?.id;
     if (!bookId)
       throw new IncomeTaxProvisionError("no active primary posting book");
-    const periodId = (
-      (await db.execute<{ id: string }>(sql`
-      select id from accounting_periods
-       where org_id = ${orgId} and is_adjustment = false and starts_on <= ${run.periodTo} and ends_on >= ${run.periodTo}
-       limit 1
-    `))
-    ).rows[0]?.id;
+    // Ordinary posting: shared covering-period resolver (default calendar,
+    // regular periods, deterministic).
+    const periodId = (await resolveCoveringPeriod(db, orgId, run.periodTo))?.id;
     if (!periodId)
       throw new IncomeTaxProvisionError(
         `no accounting period covers ${run.periodTo}`,

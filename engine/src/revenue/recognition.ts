@@ -12,6 +12,7 @@ import {
 } from "../money/present-value.ts";
 import { loadSubsidiaryContext, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
+import { resolveCoveringPeriod } from "../close/period-resolution.ts";
 
 /**
  * Revenue recognition (ASC 606 / IFRS 15), source platform ARM-shaped.
@@ -733,12 +734,10 @@ async function primaryBookId(runner: SqlExecutor, orgId: string): Promise<string
 
 /** Resolve the (non-adjustment) accounting period covering a date, or null. */
 async function periodForDate(runner: SqlExecutor, orgId: string, date: string): Promise<string | null> {
-  const res = (await runner.execute<{ id: string }>(sql`
-    select p.id from accounting_periods p join fiscal_calendars c on c.id=p.fiscal_calendar_id and c.org_id=p.org_id
-     where p.org_id = ${orgId} and p.is_adjustment = false and c.is_default and c.is_active
-       and p.starts_on <= ${date} and p.ends_on >= ${date}
-     order by p.id limit 1`));
-  return res.rows[0]?.id ?? null;
+  // Through the shared covering-period resolver: the default calendar wins
+  // and overlaps resolve deterministically, instead of whichever row the
+  // database happens to return first.
+  return (await resolveCoveringPeriod(runner, orgId, date))?.id ?? null;
 }
 
 export interface RevenueChangeBasis {

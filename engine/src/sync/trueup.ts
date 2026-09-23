@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { assertPeriodModulesOpen } from "../close/period-policy.ts";
+import { resolveCoveringPeriod } from "../close/period-resolution.ts";
 import { db, withOrg } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import type { MigrationSource } from "./source.ts";
@@ -202,17 +203,9 @@ export async function trueUpResidualGl(
         );
       }
       const endOn = MONTH_END(month);
-      const period = (await db.execute<{ id: string }>(sql`
-        select id
-          from accounting_periods
-         where org_id = ${orgId}
-           and starts_on <= ${endOn}
-           and ends_on >= ${endOn}
-           and not is_adjustment
-         order by starts_on
-         limit 1
-      `));
-      const periodId = period.rows[0]?.id;
+      // Ordinary posting: shared covering-period resolver (default
+      // calendar, regular periods, deterministic under overlaps).
+      const periodId = (await resolveCoveringPeriod(db, orgId, endOn))?.id;
       if (!periodId) {
         throw new Error(`no accounting period covers true-up month ${month}`);
       }

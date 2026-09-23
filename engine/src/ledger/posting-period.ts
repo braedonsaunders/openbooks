@@ -1,45 +1,49 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { resolveCoveringPeriod } from "../close/period-resolution.ts";
 import { type Doc, PostingError } from "./posting-contracts.ts";
 /**
  * Resolve the authoritative accounting period independently from transaction
  * date when the document carries an explicit override. This is required for
  * late postings and adjustment periods; the composite database FK guarantees
  * the selected period belongs to the same organization.
+ *
+ * Adjustment handling (decided, documented): an explicit ADJUSTMENT period
+ * is honoured without a date-window check — adjustments re-date activity by
+ * nature (the posting keeps its economic date while the period is the close
+ * bucket), so a window check would make explicit adjustment postings
+ * impossible. An explicit REGULAR period must still cover the posting date:
+ * an imported document dated outside its named period posts into the wrong
+ * bucket otherwise. Date-derived resolution always goes through the shared
+ * covering-period resolver (default calendar, regular periods only).
  */
 export async function resolvePostingPeriod(
   runner: Pick<typeof db, "execute">,
   doc: Doc,
   postingDate: string,
 ): Promise<{ id: string }> {
-  const periodRes = doc.postingPeriodId
-    ? ((await runner.execute<{ id: string }>(sql`
-        select id
+  if (doc.postingPeriodId) {
+    const override = (await runner.execute<{ id: string; is_adjustment: boolean }>(sql`
+        select id, is_adjustment
           from accounting_periods
          where id = ${doc.postingPeriodId}
            and org_id = ${doc.orgId}
-           and starts_on <= ${postingDate}
-           and ends_on >= ${postingDate}
+           and (is_adjustment or (starts_on <= ${postingDate} and ends_on >= ${postingDate}))
          limit 1
-      `)))
-    : ((await runner.execute<{ id: string }>(sql`
-        select id
-          from accounting_periods
-         where org_id = ${doc.orgId}
-           and starts_on <= ${postingDate}
-           and ends_on >= ${postingDate}
-           and is_adjustment = false
-         limit 1
-      `)));
-  const period = periodRes.rows[0];
-  if (!period) {
-    throw new PostingError(
-      doc.postingPeriodId
-        ? `accounting period ${doc.postingPeriodId} does not cover posting date ${postingDate} — import the document on a date inside its period`
-        : `no accounting period covers ${postingDate}`,
-    );
+      `));
+    const period = override.rows[0];
+    if (!period) {
+      throw new PostingError(
+        `accounting period ${doc.postingPeriodId} does not cover posting date ${postingDate} — import the document on a date inside its period`,
+      );
+    }
+    return { id: period.id };
   }
-  return period;
+  const period = await resolveCoveringPeriod(runner, doc.orgId, postingDate);
+  if (!period) {
+    throw new PostingError(`no accounting period covers ${postingDate}`);
+  }
+  return { id: period.id };
 }
 
 /**
@@ -106,21 +110,17 @@ export async function assertPayRunConsolidatedRateCoverage(
   // regular period's rates, exactly as the statement engine resolves them.
   // With no regular period covering the date the kernel's own period logic
   // governs, and statements still refuse at report time.
-  const period = (await runner.execute<{ id: string; ends_on: string }>(sql`
-    select id, ends_on::text as ends_on from accounting_periods
-     where org_id = ${args.orgId} and is_adjustment = false
-       and starts_on <= ${args.postingDate} and ends_on >= ${args.postingDate}
-     limit 1`));
-  if (!period.rows[0]) return;
+  const period = await resolveCoveringPeriod(runner, args.orgId, args.postingDate);
+  if (!period) return;
   for (const pair of pairs) {
     const covered = (await runner.execute<{ one: number }>(sql`
       select 1 as one from consolidated_fx_rates
-       where org_id = ${args.orgId} and period_id = ${period.rows[0]!.id}
+       where org_id = ${args.orgId} and period_id = ${period.id}
          and from_currency = ${pair.from} and to_currency = ${pair.to}
        limit 1`));
     if (!covered.rows[0]) {
       throw new PostingError(
-        `No consolidated exchange rates for ${pair.from} → ${pair.to} in the period ending ${period.rows[0]!.ends_on}. Derive rates from period close first.`,
+        `No consolidated exchange rates for ${pair.from} → ${pair.to} in the period ending ${period.ends_on}. Derive rates from period close first.`,
       );
     }
   }

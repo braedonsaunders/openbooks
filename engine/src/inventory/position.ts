@@ -5,6 +5,7 @@ import { unitCostPerQuantity } from "./costing.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
+import { resolveCoveringPeriod } from "../close/period-resolution.ts";
 
 export function persistReceiptMoney(value: unknown, label: string): string {
   const exact = canonicalDecimal(value, 4);
@@ -41,11 +42,10 @@ export async function periodForDate(
   date: string,
   runner: Runner = db,
 ): Promise<string | null> {
-  const r = (await runner.execute<{ id: string }>(sql`
-    select id from accounting_periods
-     where org_id = ${orgId} and is_adjustment = false and starts_on <= ${date} and ends_on >= ${date}
-     limit 1`));
-  return r.rows[0]?.id ?? null;
+  // Through the shared covering-period resolver (default calendar,
+  // deterministic under overlaps); signature kept for the receipt,
+  // revaluation, landed-cost and vendor-credit callers.
+  return (await resolveCoveringPeriod(runner, orgId, date))?.id ?? null;
 }
 
 export async function subsidiaryCurrency(

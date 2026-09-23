@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db, withOrg } from "../platform/db.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { assertPeriodModulesOpen } from "../close/period-policy.ts";
+import { resolveCoveringPeriod } from "../close/period-resolution.ts";
 import { cmp, fromUnits, isZero, neg, toUnits } from "../money/money.ts";
 import { sealJson } from "../platform/secrets.ts";
 import { assertNotSandbox } from "../organization/sandbox-guard.ts";
@@ -807,12 +808,10 @@ async function periodForDate(
   orgId: string,
   date: string,
 ): Promise<string | null> {
-  const r = (await db.execute<{ id: string }>(sql`
-    select id from accounting_periods
-     where org_id = ${orgId} and is_adjustment = false and starts_on <= ${date} and ends_on >= ${date}
-     limit 1
-  `));
-  return r.rows[0]?.id ?? null;
+  // Through the shared covering-period resolver (default calendar,
+  // deterministic under overlaps); both settlement and reversal callers
+  // keep their signatures.
+  return (await resolveCoveringPeriod(db, orgId, date))?.id ?? null;
 }
 
 export interface ImportAccounts {

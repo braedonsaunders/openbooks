@@ -5,6 +5,7 @@ import { add, cmp, fromUnits, neg, sum, toUnits } from "../money/money.ts";
 import { extendCost } from "./costing.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
+import { resolveCoveringPeriod } from "../close/period-resolution.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
 import { assertInventoryAccountsPostable } from "./journal.ts";
 import { lockInventoryPosition, assertInventoryDate } from "./position.ts";
@@ -232,16 +233,9 @@ export async function reverseInventoryJournal(
   if (!book) {
     throw new InventoryError("the source inventory journal book is not active for posting");
   }
-  const period = (await tx.execute<{ id: string }>(sql`
-    select id
-      from accounting_periods
-     where org_id = ${orgId}
-       and is_adjustment = false
-       and starts_on <= ${reversalDate}
-       and ends_on >= ${reversalDate}
-     limit 1
-  `));
-  if (!period.rows[0])
+  // Reversals are ordinary corrections: shared covering-period resolver.
+  const period = await resolveCoveringPeriod(tx, orgId, reversalDate);
+  if (!period)
     throw new InventoryError(`no accounting period for ${reversalDate}`);
 
   const lines = (await tx.execute<Record<string, unknown>>(sql`
@@ -286,7 +280,7 @@ export async function reverseInventoryJournal(
   try {
     await assertPeriodModulesOpen(tx, {
       orgId,
-      periodId: period.rows[0].id,
+      periodId: period.id,
       bookId: source.book_id,
       subsidiaryIds: [...new Set([source.subsidiary_id, ...lines.rows.map((line) => String(line.subsidiary_id))])],
       modules: [],
@@ -302,7 +296,7 @@ export async function reverseInventoryJournal(
        memo, status, origin, reverses_entry_id, created_by, updated_by)
     values
       (${orgId}, ${source.book_id}, ${source.subsidiary_id},
-       ${`${source.entry_number}-REV`}, ${reversalDate}, ${period.rows[0].id},
+       ${`${source.entry_number}-REV`}, ${reversalDate}, ${period.id},
        ${`Inventory reversal: ${reason}`}, 'draft', 'inventory', ${sourceEntryId},
        ${actorId}, ${actorId})
     returning id

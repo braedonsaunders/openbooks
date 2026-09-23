@@ -10,6 +10,7 @@ import { inventoryOffsetAccountProblem, postInventoryEntry, stockLocationDim } f
 import { orgReportingFramework, type ReportingFramework } from "../platform/reporting-framework.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
+import { resolveCoveringPeriod } from "../close/period-resolution.ts";
 
 /**
  * Lower of cost and net realisable value — IAS 2.28-33 / ASC 330-10-35.
@@ -199,17 +200,18 @@ async function postingContext(
     if (error instanceof SubsidiaryError) throw new InventoryNrvError(error.message);
     throw error;
   }
-  const r = (await tx.execute<{ book_id: string | null; period_id: string | null; currency: string | null }>(sql`
+  // The period leg resolves through the shared covering-period resolver
+  // (default calendar, deterministic), outside the book/currency lookup.
+  const period = await resolveCoveringPeriod(tx, orgId, date);
+  if (!period) throw new InventoryNrvError(`no accounting period covers ${date}`);
+  const r = (await tx.execute<{ book_id: string | null; currency: string | null }>(sql`
     select (select id from accounting_books where org_id = ${orgId} and is_primary limit 1) as book_id,
-           (select id from accounting_periods where org_id = ${orgId} and not is_adjustment
-              and starts_on <= ${date} and ends_on >= ${date} limit 1) as period_id,
            (select base_currency from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId}) as currency
   `));
   const row = r.rows[0];
   if (!row?.book_id) throw new InventoryNrvError("no primary accounting book");
-  if (!row.period_id) throw new InventoryNrvError(`no accounting period covers ${date}`);
   if (!row.currency) throw new InventoryNrvError("subsidiary not found");
-  return { bookId: row.book_id, periodId: row.period_id, currency: row.currency };
+  return { bookId: row.book_id, periodId: period.id, currency: row.currency };
 }
 
 export interface NrvWritedownInput {
