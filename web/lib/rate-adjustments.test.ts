@@ -172,6 +172,47 @@ test('a non-numeric percent is refused by name', () => {
   assert.throws(() => mulPercentExact('100.00', '1.00000000001'), RateAdjustmentPricingError)
 })
 
+test('a per-hour allowance multiplies the matched hours', () => {
+  const a = adjustment({ calculation: 'per_hour', value: '5.00' })
+  const lines = [
+    { ...labor('1000.00'), quantity: '10' },
+    { ...labor('500.00'), quantity: '4.5' },
+  ]
+  const [charge] = priceAdjustments(lines, [a])
+  assert.equal(charge!.quantityBasis, '14.5')
+  assert.equal(charge!.amount, '72.5000')
+})
+
+test('a per-day allowance counts distinct work dates', () => {
+  const a = adjustment({ calculation: 'per_day', value: '50.00' })
+  const lines: AdjustableLine[] = [
+    { amount: '800.00', isLabor: true, quantity: '8', workedOn: '2026-07-14' },
+    { amount: '800.00', isLabor: true, quantity: '8', workedOn: '2026-07-14' },
+    { amount: '800.00', isLabor: true, quantity: '8', workedOn: '2026-07-15' },
+  ]
+  const [charge] = priceAdjustments(lines, [a])
+  assert.equal(charge!.quantityBasis, '2')
+  assert.equal(charge!.amount, '100.0000')
+})
+
+test('a per-hour charge with no hours is refused, never zero', () => {
+  const a = adjustment({ calculation: 'per_hour', value: '5.00' })
+  assert.throws(
+    () => priceAdjustments([{ ...labor('100.00'), quantity: null }], [a]),
+    RateAdjustmentPricingError,
+  )
+})
+
+test('an unknown calculation throws naming the adjustment', () => {
+  const a = adjustment({ calculation: 'distance' as never })
+  assert.throws(() => priceAdjustments([labor('100.00')], [a]), /"distance"/)
+})
+
+test('informational text never adds an amount', () => {
+  const a = adjustment({ calculation: 'text', value: null })
+  assert.equal(priceAdjustments([labor('100.00')], [a]).length, 0)
+})
+
 test("a job_title target measures the worker's titles", () => {
   const a = adjustment({ targets: [{ targetType: 'job_title', targetValueId: null, targetValueText: 'Foreman' }] })
   const matched = priceAdjustments(

@@ -106,7 +106,7 @@ export async function resolveRateAdjustments(input: {
                                 effective_from desc) as rn
         from scoped_versions
     )
-    select a.id, a.code, a.name, a.category, a.calculation, a.value::text, a.presentation,
+    select a.id, a.code, a.name, a.category, a.calculation, a.value::text, a.unit, a.presentation,
            a.threshold::text, a.item_id, a.applies_regular, a.applies_overtime,
            a.applies_double_time, a.sort_order,
            coalesce((select jsonb_agg(jsonb_build_object(
@@ -126,6 +126,7 @@ export async function resolveRateAdjustments(input: {
     category: r.category as AdjustmentCategory,
     calculation: r.calculation as AdjustmentCalculation,
     value: (r.value as string | null) ?? null,
+    unit: (r.unit as string | null) ?? null,
     presentation: r.presentation as AdjustmentPresentation,
     threshold: (r.threshold as string | null) ?? null,
     itemId: (r.item_id as string | null) ?? null,

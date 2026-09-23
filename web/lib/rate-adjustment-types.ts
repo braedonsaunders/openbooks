@@ -35,14 +35,17 @@ export const ADJUSTMENT_TARGET_TYPES = [
 ] as const
 export type AdjustmentTargetType = (typeof ADJUSTMENT_TARGET_TYPES)[number]
 
-/** How an adjustment turns into money. */
+/**
+ * How an adjustment turns into money. Every entry here must have a pricing
+ * case in `priceAdjustments`. `distance` and `time` name no quantity the
+ * bill line carries — no mileage source exists and `time` is undefined —
+ * so they are not listed and the save refuses them by name.
+ */
 export const ADJUSTMENT_CALCULATIONS = [
   'percent',
   'fixed',
   'per_hour',
   'per_day',
-  'distance',
-  'time',
   'text',
 ] as const
 export type AdjustmentCalculationType = (typeof ADJUSTMENT_CALCULATIONS)[number]

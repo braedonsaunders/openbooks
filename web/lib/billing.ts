@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { add, cmp, fromUnits, isZero, mulDecimal, mulPercent, normalizeMoney, sum, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { canonicalDecimal } from './exact-decimal'
-import { findLapsedRateCard, mergeCharges, priceAdjustments, resolveRateAdjustments } from './rate-adjustments'
+import { findLapsedRateCard, mergeCharges, priceAdjustments, RateAdjustmentPricingError, resolveRateAdjustments, type AdjustmentCharge } from './rate-adjustments'
 import { addInvoiceQuantities, applyRollup, resolveInvoicingProfile } from './invoice-rollup'
 import { roundCurrencyMoney } from '@openbooks/engine/src/fx/currencies.ts'
 import { subsidiaryVisibleFilter } from './subsidiaries'
@@ -303,6 +303,9 @@ export async function generateInvoiceFromBillingRequest(
       rateVersionId?: string | null
       /** Pre-markup amount + whether this line is labor — for lump-sum markup. */
       baseAmount?: string
+      /** Quantity at creation, never rewritten by presentation grouping or
+       * markup splitting — the deterministic basis for per-hour pricing. */
+      billableQuantity?: string | null
       isLabor?: boolean
       /** Item classification + time bucket, for rate-card adjustment targeting. */
       itemKind?: string | null
@@ -488,6 +491,7 @@ export async function generateInvoiceFromBillingRequest(
           timeTypeId: te.time_type_id,
           sourceCostLineId: null,
           baseAmount: amount,
+          billableQuantity: hours,
           isLabor: true,
           itemKind: te.item_kind ?? 'labor',
           itemCategory: te.item_category ?? null,
@@ -604,38 +608,44 @@ export async function generateInvoiceFromBillingRequest(
           ? cl.bill_components
           : []
         if (components.length) {
-          components.forEach((component, index: number) => built.push({
-            itemId: cl.item_id,
-            accountId: cl.income_account_id ?? defaultIncomeId,
-            description: `${cl.description || cl.item_name || ''}${component.unitName ? ` — ${component.unitName}` : ''}` || null,
-            quantity: persistInvoiceQuantity(component.quantity ?? '0', 'A cost line quantity is invalid'),
-            unitPrice: persistInvoiceDecimal(component.rate ?? '0', 'A cost line rate is invalid'),
-            amount: persistInvoiceDecimal(component.amount ?? '0', 'A cost line amount is invalid'),
-            taxCodeId: cl.tax_code_id,
-            employeeId: null,
-            timeEntryId: null,
-            timeTypeId: null,
-            sourceCostLineId: index === 0 ? cl.id : null,
-            unit: component.unitName ?? component.unitCode ?? cl.unit,
-            equipmentUnitId: cl.equipment_unit_id,
-            rateVersionId: cl.rate_version_id,
-            itemKind: cl.item_kind ?? null,
-            itemCategory: cl.item_category ?? null,
-            tradeIds: cl.trades ?? null,
-            jobTitles: cl.job_titles ?? null,
-            sourceKind: cl.kind ?? null,
-            departmentId: cl.department_id ?? null,
-            subsidiaryId: cl.subsidiary_id != null ? String(cl.subsidiary_id) : null,
-            locationId: cl.location_id != null ? String(cl.location_id) : null,
-            classId: cl.class_id != null ? String(cl.class_id) : null,
-            workedOn: cl.document_date ? String(cl.document_date).slice(0, 10) : null,
-          }))
+          components.forEach((component, index: number) => {
+            const componentQuantity = persistInvoiceQuantity(component.quantity ?? '0', 'A cost line quantity is invalid')
+            built.push({
+              itemId: cl.item_id,
+              accountId: cl.income_account_id ?? defaultIncomeId,
+              description: `${cl.description || cl.item_name || ''}${component.unitName ? ` — ${component.unitName}` : ''}` || null,
+              billableQuantity: componentQuantity,
+              quantity: componentQuantity,
+              unitPrice: persistInvoiceDecimal(component.rate ?? '0', 'A cost line rate is invalid'),
+              amount: persistInvoiceDecimal(component.amount ?? '0', 'A cost line amount is invalid'),
+              taxCodeId: cl.tax_code_id,
+              employeeId: null,
+              timeEntryId: null,
+              timeTypeId: null,
+              sourceCostLineId: index === 0 ? cl.id : null,
+              unit: component.unitName ?? component.unitCode ?? cl.unit,
+              equipmentUnitId: cl.equipment_unit_id,
+              rateVersionId: cl.rate_version_id,
+              itemKind: cl.item_kind ?? null,
+              itemCategory: cl.item_category ?? null,
+              tradeIds: cl.trades ?? null,
+              jobTitles: cl.job_titles ?? null,
+              sourceKind: cl.kind ?? null,
+              departmentId: cl.department_id ?? null,
+              subsidiaryId: cl.subsidiary_id != null ? String(cl.subsidiary_id) : null,
+              locationId: cl.location_id != null ? String(cl.location_id) : null,
+              classId: cl.class_id != null ? String(cl.class_id) : null,
+              workedOn: cl.document_date ? String(cl.document_date).slice(0, 10) : null,
+            })
+          })
         } else {
+          const lineQuantity = isProjectCharge ? persistInvoiceQuantity(cl.quantity ?? '1', 'A cost line quantity is invalid') : '1'
           built.push({
             itemId: cl.item_id,
             accountId: cl.income_account_id ?? defaultIncomeId,
             description: cl.description || cl.item_name || null,
-            quantity: isProjectCharge ? persistInvoiceQuantity(cl.quantity ?? '1', 'A cost line quantity is invalid') : '1',
+            billableQuantity: lineQuantity,
+            quantity: lineQuantity,
             unitPrice: isProjectCharge ? persistInvoiceDecimal(cl.bill_rate ?? amount, 'A cost line rate is invalid') : amount,
             amount,
             taxCodeId: cl.tax_code_id,
@@ -733,6 +743,13 @@ export async function generateInvoiceFromBillingRequest(
         const prior = grouped.get(key)
         if (!prior) { grouped.set(key, l); kept.push(l); continue }
         prior.quantity = addInvoiceQuantities(prior.quantity, l.quantity)
+        // The quantity basis merges alongside: per-hour pricing measures the
+        // merged line, so it must see the merged hours.
+        if (prior.billableQuantity != null && l.billableQuantity != null) {
+          prior.billableQuantity = addInvoiceQuantities(prior.billableQuantity, l.billableQuantity)
+        } else if (l.billableQuantity != null) {
+          prior.billableQuantity = l.billableQuantity
+        }
         prior.amount = add(prior.amount, l.amount)
         if (prior.baseAmount != null && l.baseAmount != null) prior.baseAmount = add(prior.baseAmount, l.baseAmount)
         const sourceCostLineIds = prior.sourceCostLineIds ?? (prior.sourceCostLineId ? [prior.sourceCostLineId] : [])
@@ -777,8 +794,12 @@ export async function generateInvoiceFromBillingRequest(
           })
         }
       }
-      const charges = mergeCharges(
-        (await Promise.all([...partitions.values()].map(async (partition) => {
+      // Pricing refusals name the card term and its remedy; surface them as
+      // billing refusals rather than bare transaction failures.
+      let charges: AdjustmentCharge[]
+      try {
+        charges = mergeCharges(
+          (await Promise.all([...partitions.values()].map(async (partition) => {
           // A lapse is per partition, so each is asked separately: one
           // partition's card running out says nothing about another's.
           const lapsed = await findLapsedRateCard({
@@ -807,6 +828,7 @@ export async function generateInvoiceFromBillingRequest(
               customerId: project.customer_id, projectId: req.project_id,
               subsidiaryId: l.subsidiaryId ?? null,
               locationId: partition.locationId, classId: partition.classId,
+              quantity: l.billableQuantity ?? null, workedOn: l.workedOn ?? null,
               isLabor: l.isLabor === true, timeKind: l.timeKind ?? null,
             })),
             await resolveRateAdjustments({
@@ -817,8 +839,12 @@ export async function generateInvoiceFromBillingRequest(
             invoicing.surchargeRounding ?? 'half_up',
           )
         }))).flat(),
-        invoicing.surchargeRounding ?? 'half_up',
-      )
+          invoicing.surchargeRounding ?? 'half_up',
+        )
+      } catch (cause) {
+        if (cause instanceof RateAdjustmentPricingError) throw new BillingError(cause.message)
+        throw cause
+      }
       for (const c of charges) {
         const item = c.adjustment.itemId
           ? ((await tx.execute<{ income_account_id: string | null; tax_code_id: string | null }>(sql`
@@ -826,9 +852,17 @@ export async function generateInvoiceFromBillingRequest(
                where id = ${c.adjustment.itemId} and org_id = ${orgId}
             `))).rows[0]
           : undefined
+        const unitPriced = c.adjustment.calculation === 'per_hour' || c.adjustment.calculation === 'per_day'
         built.push({
           itemId: c.adjustment.itemId, accountId: item?.income_account_id ?? defaultIncomeId,
-          description: c.adjustment.name, quantity: '1', unitPrice: c.amount, amount: c.amount,
+          description: c.adjustment.name,
+          // A quantity-priced charge snapshots its basis on the line: the
+          // customer sees 10 hours at $5, not a lump $50.
+          quantity: c.quantityBasis ?? '1',
+          unitPrice: unitPriced ? (c.adjustment.value ?? c.amount) : c.amount,
+          amount: c.amount,
+          unit: c.adjustment.unit
+            ?? (c.adjustment.calculation === 'per_hour' ? 'hour' : c.adjustment.calculation === 'per_day' ? 'day' : null),
           taxCodeId: item?.tax_code_id ?? null, employeeId: null, timeEntryId: null,
           timeTypeId: null, sourceCostLineId: null, sourceKind: 'charge',
         })

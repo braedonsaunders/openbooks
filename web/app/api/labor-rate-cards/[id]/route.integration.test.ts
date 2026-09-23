@@ -548,3 +548,40 @@ test(
     }
   },
 );
+
+test(
+  "PUT refuses distance and time calculations by name instead of billing zero",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    // PRC12: distance names no mileage source the bill line carries and time
+    // is undefined, so neither has a pricing case. Saving one billed zero
+    // forever; the save names the calculation instead.
+    const fixture = await withBypass(seed);
+    try {
+      for (const calculation of ["distance", "time"]) {
+        const body = {
+          ...putBody(fixture),
+          adjustments: [
+            {
+              code: "unpriced",
+              name: "Unpriced",
+              category: "travel",
+              calculation,
+              value: "5",
+              presentation: "separate",
+              targets: [],
+            },
+          ],
+        };
+        const response = await withOrgContext(fixture.orgId, () => put(fixture, body));
+        const payload = (await response.json()) as { errorCode?: string };
+        assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(payload)}`);
+        assert.equal(payload.errorCode, "calculation", calculation);
+      }
+      const stored = (await db.execute<{ n: number }>(sql`select count(*)::int as n from labor_rate_adjustments where version_id = ${fixture.versionId}`));
+      assert.equal(stored.rows[0]?.n, 0, "refused calculations store nothing");
+    } finally {
+      await withBypass(() => dropScratchOrg(fixture.orgId));
+    }
+  },
+);

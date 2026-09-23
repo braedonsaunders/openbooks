@@ -4,7 +4,7 @@
  * Split from the resolver so the arithmetic deciding what a customer is charged
  * can be tested directly, mirroring item-rate-currency alongside item-rates.
  */
-import { add, cmp, fromUnits, isZero, roundDiv, sum, toUnits } from '@openbooks/engine/src/money/money.ts'
+import { add, cmp, fromUnits, isZero, mulDecimal, roundDiv, sum, toUnits } from '@openbooks/engine/src/money/money.ts'
 
 /** A percentage the pricing cannot read exactly — stored values are capped at
  * 10 decimals, so anything else is a caller bug, refused by name. */
@@ -74,6 +74,9 @@ export interface ResolvedAdjustment {
   calculation: AdjustmentCalculation
   /** A percent value is a percentage: `3.75` means 3.75%. */
   value: string | null
+  /** Unit for quantity-priced calculations (`hour`, `day`, …) — the snapshot
+   * carried onto the invoice line. */
+  unit?: string | null
   presentation: AdjustmentPresentation
   threshold: string | null
   itemId: string | null
@@ -87,6 +90,11 @@ export interface ResolvedAdjustment {
 /** A line the adjustments are measured against. */
 export interface AdjustableLine {
   amount: string
+  /** Billable quantity for per-hour pricing (hours) — the invoice line's own
+   * quantity, snapshotted before presentation rewrites it. */
+  quantity?: string | null
+  /** Date the work happened — per-day pricing counts distinct dates. */
+  workedOn?: string | null
   itemId?: string | null
   itemKind?: string | null
   itemCategory?: string | null
@@ -146,12 +154,36 @@ export interface AdjustmentCharge {
   adjustment: ResolvedAdjustment
   basis: string
   amount: string
+  /** Total units priced for per-hour/per-day charges — the quantity snapshot
+   * carried onto the invoice line and re-priced on merge. */
+  quantityBasis?: string | null
+}
+
+/** Quantities are not money: exact sum at 8 decimals, the widest billable
+ * quantity scale. Anything wider or non-numeric is a caller bug. */
+function sumQuantities(values: string[]): string {
+  const SCALE = 100_000_000n
+  let total = 0n
+  for (const value of values) {
+    const parsed = /^(-?)(\d+)(?:\.(\d*))?$/.exec(String(value).trim())
+    if (!parsed || (parsed[3] ?? '').length > 8) {
+      throw new RateAdjustmentPricingError(`not an exact billable quantity: "${value}"`)
+    }
+    const magnitude = BigInt(parsed[2]!) * SCALE + BigInt(((parsed[3] ?? '') + '0'.repeat(8)).slice(0, 8))
+    total += parsed[1] === '-' ? -magnitude : magnitude
+  }
+  const negative = total < 0n
+  const magnitude = negative ? -total : total
+  const whole = magnitude / SCALE
+  const fraction = (magnitude % SCALE).toString().padStart(8, '0').replace(/0+$/, '')
+  return `${negative ? '-' : ''}${whole}${fraction ? `.${fraction}` : ''}`
 }
 
 /**
  * Price the adjustments that bill as their own invoice line. `included`
  * adjustments are already inside the resolved rates and `informational` ones
- * are display-only, so neither adds an amount here.
+ * are display-only, so neither adds an amount here. The loop never silently
+ * skips a priced calculation: an unknown one throws naming the adjustment.
  */
 export function priceAdjustments(
   lines: AdjustableLine[],
@@ -161,7 +193,16 @@ export function priceAdjustments(
   const charges: AdjustmentCharge[] = []
   for (const adjustment of adjustments) {
     if (adjustment.presentation !== 'separate') continue
-    if (adjustment.calculation !== 'percent' && adjustment.calculation !== 'fixed') continue
+    const unitPriced = adjustment.calculation === 'per_hour' || adjustment.calculation === 'per_day'
+    switch (adjustment.calculation) {
+      case 'percent': case 'fixed': case 'per_hour': case 'per_day': case 'text': break
+      default:
+        throw new RateAdjustmentPricingError(
+          `rate card adjustment "${adjustment.code}" uses unknown calculation "${adjustment.calculation}" — add a pricing case or remove it from the card before invoicing`,
+        )
+    }
+    // Informational text never carries an amount by definition.
+    if (adjustment.calculation === 'text') continue
     // The zero check reads the stored scale (up to 10dp for percents): the
     // house isZero caps at 4dp and would throw on a legal 10dp percent.
     if (!adjustment.value || isZeroValue(adjustment.value)) continue
@@ -174,6 +215,23 @@ export function priceAdjustments(
     // Number() collapses 4dp neighbors at numeric(19,4) magnitude and would
     // charge below the floor.
     if (adjustment.threshold && cmp(basis, adjustment.threshold) < 0) continue
+
+    if (unitPriced) {
+      // Hours sum from the lines; days count distinct work dates. A matched
+      // set with no quantity is missing data, not a zero charge: refuse.
+      const totalQty = adjustment.calculation === 'per_hour'
+        ? sumQuantities(matched.map((l) => l.quantity ?? '0'))
+        : String(new Set(matched.map((l) => l.workedOn).filter((d): d is string => !!d)).size)
+      if (isZeroValue(totalQty)) {
+        throw new RateAdjustmentPricingError(
+          `rate card adjustment "${adjustment.code}" prices per ${adjustment.calculation === 'per_hour' ? 'hour' : 'day'} but its lines carry no ${adjustment.calculation === 'per_hour' ? 'hours' : 'work dates'} — correct the card or the source lines before invoicing`,
+        )
+      }
+      const amount = mulDecimal(adjustment.value, totalQty)
+      if (isZero(amount)) continue
+      charges.push({ adjustment, basis, amount, quantityBasis: totalQty })
+      continue
+    }
 
     const amount = adjustment.calculation === 'fixed'
       ? adjustment.value
@@ -199,7 +257,12 @@ export function mergeCharges(
   for (const c of charges) {
     const prior = byAdjustment.get(c.adjustment.id)
     if (!prior) byAdjustment.set(c.adjustment.id, { ...c })
-    else prior.basis = add(prior.basis, c.basis)
+    else {
+      prior.basis = add(prior.basis, c.basis)
+      if (c.quantityBasis) {
+        prior.quantityBasis = sumQuantities([prior.quantityBasis ?? '0', c.quantityBasis])
+      }
+    }
   }
   for (const c of byAdjustment.values()) {
     // Price ONCE off the combined basis. Adding per-department amounts that were
@@ -209,6 +272,13 @@ export function mergeCharges(
       c.amount = rounding === 'down'
         ? floorToCents(mulPercentExact(c.basis, c.adjustment.value, 4))
         : mulPercentExact(c.basis, c.adjustment.value, 2)
+    } else if (
+      (c.adjustment.calculation === 'per_hour' || c.adjustment.calculation === 'per_day') &&
+      c.adjustment.value && c.quantityBasis
+    ) {
+      // Quantity-priced charges re-price off the combined units for the same
+      // reason: summing rounded per-partition amounts drifts.
+      c.amount = mulDecimal(c.adjustment.value, c.quantityBasis)
     }
   }
   return [...byAdjustment.values()].sort((a, b) => a.adjustment.sortOrder - b.adjustment.sortOrder)
