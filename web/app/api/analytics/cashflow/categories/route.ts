@@ -34,8 +34,14 @@ const clampNum = (v: unknown, min: number, max: number, dflt: number): number =>
   return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.round(n))) : dflt;
 };
 
-function clean(raw: unknown): ForecastCategory | null {
-  if (!raw || typeof raw !== "object") return null;
+type CleanResult = { ok: true; category: ForecastCategory } | { ok: false; error: string };
+const GENERIC_CATEGORY_ERROR =
+  "Each category must include a valid name, method, and method-specific configuration.";
+const MANUAL_AMOUNT_MAX = "100000000.0000";
+
+function clean(raw: unknown): CleanResult {
+  const bad = (error: string): CleanResult => ({ ok: false, error });
+  if (!raw || typeof raw !== "object") return bad(GENERIC_CATEGORY_ERROR);
   const c = raw as Record<string, unknown>;
   const name = typeof c.name === "string" ? c.name.trim().slice(0, 80) : "";
   const method = String(c.method ?? "");
@@ -44,8 +50,8 @@ function clean(raw: unknown): ForecastCategory | null {
   // inverts every forecast week it touches.
   const direction =
     c.direction === "inflow" ? "inflow" : c.direction === "outflow" ? "outflow" : null;
-  if (direction === null) return null;
-  if (!name || !METHODS.has(method)) return null;
+  if (direction === null) return bad(GENERIC_CATEGORY_ERROR);
+  if (!name || !METHODS.has(method)) return bad(GENERIC_CATEGORY_ERROR);
   const out: ForecastCategory = {
     id: typeof c.id === "string" && c.id ? c.id : randomUUID(),
     name,
@@ -67,32 +73,32 @@ function clean(raw: unknown): ForecastCategory | null {
 
   if (method === "gl_history_average") {
     const ids = strList(c.accountIds, 50);
-    if (!ids.length) return null;
+    if (!ids.length) return bad(GENERIC_CATEGORY_ERROR);
     out.accountIds = ids;
     out.historyWeeks = clampNum(c.historyWeeks, 1, 52, 12);
     if (c.useNetAmt === true) out.useNetAmt = true;
   } else if (method === "vendor_payment_history" || method === "vendor_recurring_average") {
     const ids = strList(c.partyIds, 50);
     if (!ids.length && typeof c.partyId === "string" && c.partyId) ids.push(c.partyId);
-    if (!ids.length) return null;
+    if (!ids.length) return bad(GENERIC_CATEGORY_ERROR);
     out.partyIds = ids;
     out.partyId = ids[0];
     out.partyName = typeof c.partyName === "string" ? c.partyName.slice(0, 120) : undefined;
     out.historyMonths = clampNum(c.historyMonths, 1, 36, method === "vendor_recurring_average" ? 3 : 12);
   } else if (method === "credit_card_cycle") {
     const ids = strList(c.cardAccountIds, 20).length ? strList(c.cardAccountIds, 20) : strList(c.accountIds, 20);
-    if (!ids.length) return null;
+    if (!ids.length) return bad(GENERIC_CATEGORY_ERROR);
     out.cardAccountIds = ids;
     out.historyMonths = clampNum(c.historyMonths, 1, 24, 6);
     const threshold = Number(c.significantPaymentThreshold);
     if (Number.isFinite(threshold) && threshold > 0) out.significantPaymentThreshold = Math.min(1e9, threshold);
   } else if (method === "formula_expression") {
     const formula = typeof c.formula === "string" ? c.formula.trim().slice(0, 500) : "";
-    if (!formula) return null;
+    if (!formula) return bad(GENERIC_CATEGORY_ERROR);
     out.formula = formula;
   } else if (method === "bank_register_history") {
     const ids = strList(c.bankAccountIds, 20);
-    if (!ids.length) return null;
+    if (!ids.length) return bad(GENERIC_CATEGORY_ERROR);
     out.bankAccountIds = ids;
     out.historyWeeks = clampNum(c.historyWeeks, 1, 52, 12);
     const keywords = strList(c.memoKeywords, 10).map((k) => k.trim().slice(0, 40)).filter(Boolean);
@@ -106,9 +112,14 @@ function clean(raw: unknown): ForecastCategory | null {
     try {
       amount = normalizeMoney(String(c.amount ?? ""));
     } catch {
-      return null;
+      return bad(GENERIC_CATEGORY_ERROR);
     }
-    if (compareMoney(amount, "0.0000") <= 0) return null;
+    if (compareMoney(amount, "0.0000") <= 0) return bad(GENERIC_CATEGORY_ERROR);
+    // An over-limit amount refuses naming the limit — silently clamping it
+    // would store a number nobody typed.
+    if (compareMoney(amount, MANUAL_AMOUNT_MAX) > 0) {
+      return bad(`manual amount ${amount} exceeds the maximum ${MANUAL_AMOUNT_MAX}`);
+    }
     // The persisted payment anchor pins the monthly/biweekly phase so moving
     // the forecast date never rephases the schedule. A writer that omits it
     // gets today stamped (stable from then on); a malformed one refuses.
@@ -120,21 +131,20 @@ function clean(raw: unknown): ForecastCategory | null {
       out.anchorDate = new Date().toISOString().slice(0, 10);
     } else if (typeof rawAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(rawAnchor) && !Number.isNaN(Date.parse(`${rawAnchor}T00:00:00Z`))) {
       const [y, m, d] = rawAnchor.split("-").map(Number);
-      if (m! < 1 || m! > 12) return null;
+      if (m! < 1 || m! > 12) return bad(GENERIC_CATEGORY_ERROR);
       const days = new Date(Date.UTC(y!, m!, 0)).getUTCDate();
-      if (d! < 1 || d! > days) return null;
+      if (d! < 1 || d! > days) return bad(GENERIC_CATEGORY_ERROR);
       out.anchorDate = rawAnchor;
     } else {
-      return null;
+      return bad(GENERIC_CATEGORY_ERROR);
     }
     // ForecastCategory's legacy declaration still says `number`, but the
     // persisted/read model is an exact numeric(19,4) string. Keep this route
     // on the exact-money path without crossing through an unsafe float.
-    (out as unknown as { amount?: string }).amount =
-      compareMoney(amount, "100000000.0000") > 0 ? "100000000.0000" : amount;
+    (out as unknown as { amount?: string }).amount = amount;
     out.frequency = FREQUENCIES.has(String(c.frequency)) ? (c.frequency as ForecastCategory["frequency"]) : "monthly";
   }
-  return out;
+  return { ok: true, category: out };
 }
 
 export async function GET() {
@@ -157,17 +167,19 @@ export async function PUT(req: Request) {
   if (body.categories.length > 50) return NextResponse.json({ error: "too many categories (max 50)" }, { status: 400 });
 
   const cleaned = body.categories.map(clean);
-  const invalidIndex = cleaned.findIndex((category) => category === null);
+  const invalidIndex = cleaned.findIndex((result) => !result.ok);
   if (invalidIndex !== -1) {
+    const failure = cleaned[invalidIndex] as { ok: false; error: string };
     return NextResponse.json(
       {
         error: `invalid category at index ${invalidIndex}`,
-        message: "Each category must include a valid name, method, and method-specific configuration.",
+        message: failure.error,
       },
       { status: 400 },
     );
   }
-  const categories = cleaned as ForecastCategory[];
+  // Every result is ok here (any failure returned above); project the stored rows.
+  const categories = cleaned.flatMap((result) => (result.ok ? [result.category] : []));
 
   // Lock the current document and commit its replacement together with complete
   // before/after audit evidence. A malformed payload returns above, before a

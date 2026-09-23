@@ -224,10 +224,25 @@ test('replacement rejects malformed entries atomically instead of dropping them'
   assert.deepEqual(state.permissionChecks, ['admin.setup.manage'])
 })
 
+test('an over-limit manual amount refuses naming the limit instead of clamping', async () => {
+  reset()
+
+  const response = await put([validCategory, cappedCategory])
+
+  assert.equal(response.status, 400)
+  assert.deepEqual(await response.json(), {
+    error: 'invalid category at index 1',
+    message: 'manual amount 9007199254740993.0000 exceeds the maximum 100000000.0000',
+  })
+  assert.equal(state.databaseCalls.length, 0, 'an over-limit replacement never reaches persistence')
+  assert.equal(state.transactions, 0, 'an over-limit replacement never opens a transaction')
+  assert.equal(state.committedQueries.length, 0, 'an over-limit replacement creates no audit or write')
+})
+
 test('replacement persists every valid row with exact money and complete audit evidence', async () => {
   reset()
 
-  const response = await put([validCategory, fractionalCategory, cappedCategory])
+  const response = await put([validCategory, fractionalCategory])
 
   assert.equal(response.status, 200)
   assert.deepEqual(await response.json(), {
@@ -235,7 +250,6 @@ test('replacement persists every valid row with exact money and complete audit e
     categories: [
       expectedValidCategory,
       { ...fractionalCategory, anchorDate: todayAnchor() },
-      { ...cappedCategory, amount: '100000000.0000', anchorDate: todayAnchor() },
     ],
   })
   assert.equal(state.transactions, 1)
@@ -252,8 +266,7 @@ test('replacement persists every valid row with exact money and complete audit e
   assert.match(audit, /category-rent/)
   assert.match(audit, /category-fractional/)
   assert.match(audit, /"amount":"12\.3456"/)
-  assert.match(audit, /category-capped/)
-  assert.match(audit, /"amount":"100000000\.0000"/)
+  assert.doesNotMatch(audit, /category-capped/)
 })
 
 test('an unknown direction refuses instead of flipping the sign', async () => {
