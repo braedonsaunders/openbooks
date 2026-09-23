@@ -4,7 +4,7 @@ import { isFeatureEnabled } from "../features";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
-import { add, mulDecimal } from "@openbooks/engine/src/money/money.ts";
+import { add, cmp, div, mulDecimal, neg } from "@openbooks/engine/src/money/money.ts";
 import { flowRates } from "../fx-presentation";
 import { analyticsConfig } from "./config";
 import { englishUtilizationStrings, type UtilizationStrings } from "./utilization-strings";
@@ -93,9 +93,14 @@ interface StatRow {
   department_name: string | null;
   item: string | null;
   item_name: string | null;
-  total_hours: number;
-  billable_hours: number;
-  non_billable_cost: number;
+  // Exact decimal strings at the ledger's numeric(19,4) grain. Hours and cost
+  // accumulate across rows, currencies and groups — a float hop anywhere in
+  // that chain compounds per row and can flip cost sorts and spike alerts.
+  // The single Number() conversion happens in calcStat, at the rendering
+  // boundary.
+  total_hours: string;
+  billable_hours: string;
+  non_billable_cost: string;
 }
 
 interface RawStatRow extends Record<string, unknown> {
@@ -151,46 +156,47 @@ async function fetchTimeStats(orgId: string, from: string, to: string, allowed: 
   const ctx = await flowRates(orgId, res.rows.map((r) => ({
     func: (r.func as string | null) ?? null, date: String(r.late ?? to).slice(0, 10),
   })));
-  const merged = new Map<string, { row: StatRow; cost: string }>();
+  const merged = new Map<string, StatRow>();
   for (const r of res.rows) {
     const key = JSON.stringify([r.employee, r.employee_name, r.department, r.department_name, r.item, r.item_name]);
     const prev = merged.get(key) ?? {
-      row: {
-        employee: r.employee,
-        employee_name: r.employee_name,
-        department: r.department,
-        department_name: r.department_name,
-        item: r.item,
-        item_name: r.item_name,
-        total_hours: 0,
-        billable_hours: 0,
-        non_billable_cost: 0,
-      },
-      cost: "0",
+      employee: r.employee,
+      employee_name: r.employee_name,
+      department: r.department,
+      department_name: r.department_name,
+      item: r.item,
+      item_name: r.item_name,
+      total_hours: "0",
+      billable_hours: "0",
+      non_billable_cost: "0",
     };
     const leg = String(r.non_billable_cost ?? 0);
     const translated = Number(leg) === 0
       ? "0"
       : mulDecimal(leg, ctx.rateAt(r.func ?? null, String(r.late ?? to).slice(0, 10)));
-    prev.row.total_hours += Number(r.total_hours ?? 0);
-    prev.row.billable_hours += Number(r.billable_hours ?? 0);
-    prev.cost = add(prev.cost, translated);
+    prev.total_hours = add(prev.total_hours, String(r.total_hours ?? 0));
+    prev.billable_hours = add(prev.billable_hours, String(r.billable_hours ?? 0));
+    prev.non_billable_cost = add(prev.non_billable_cost, translated);
     merged.set(key, prev);
   }
-  return [...merged.values()].map(({ row, cost }) => ({ ...row, non_billable_cost: Number(cost) }));
+  return [...merged.values()];
 }
 
 const ymd = (d: Date) =>
   // Year zero-padded so the YYYY-MM-DD contract holds below year 1000 too.
   `${String(d.getUTCFullYear()).padStart(4, "0")}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
 
-function calcStat(hours: number, billable: number, cost: number): UStat {
+function calcStat(hours: string, billable: string, cost: string): UStat {
+  // The single float hop, at the rendering boundary: ratios render as
+  // doubles, but every total summed or compared upstream stays exact.
+  const h = Number(hours);
+  const b = Number(billable);
   return {
-    hours,
-    billableHours: billable,
-    nonBillableHours: hours - billable,
-    percentBilled: hours > 0 ? (billable / hours) * 100 : 0,
-    nonBillableCost: cost,
+    hours: h,
+    billableHours: b,
+    nonBillableHours: h - b,
+    percentBilled: h > 0 ? (b / h) * 100 : 0,
+    nonBillableCost: Number(cost),
   };
 }
 
@@ -206,26 +212,26 @@ function buildGroup(curr: StatRow[], prior: StatRow[], key: Key, titleByEmp: Map
   const groupBy = (rows: StatRow[]) => {
     const groups = new Map<
       string,
-      { name: string; deptHours: Map<string, number>; department: string | null; hours: number; billable: number; cost: number }
+      { name: string; deptHours: Map<string, string>; department: string | null; hours: string; billable: string; cost: string }
     >();
     for (const r of rows) {
       const id = (key === "department" ? r.department : key === "item" ? r.item : r.employee) ?? "0";
       let g = groups.get(id);
       if (!g) {
         const name = key === "department" ? r.department_name : key === "item" ? r.item_name : r.employee_name;
-        g = { name: strings.displayGroupName(name), deptHours: new Map(), department: r.department, hours: 0, billable: 0, cost: 0 };
+        g = { name: strings.displayGroupName(name), deptHours: new Map(), department: r.department, hours: "0", billable: "0", cost: "0" };
         groups.set(id, g);
       }
-      g.hours += r.total_hours;
-      g.billable += r.billable_hours;
-      g.cost += r.non_billable_cost;
-      if (key !== "department" && r.department) g.deptHours.set(r.department, (g.deptHours.get(r.department) ?? 0) + r.total_hours);
+      g.hours = add(g.hours, r.total_hours);
+      g.billable = add(g.billable, r.billable_hours);
+      g.cost = add(g.cost, r.non_billable_cost);
+      if (key !== "department" && r.department) g.deptHours.set(r.department, add(g.deptHours.get(r.department) ?? "0", r.total_hours));
     }
     // Primary department = most hours (the departmentHours logic).
     if (key !== "department") {
       for (const g of groups.values()) {
-        let max = 0;
-        for (const [dId, h] of g.deptHours) if (h > max) { max = h; g.department = dId; }
+        let max = "0";
+        for (const [dId, h] of g.deptHours) if (cmp(h, max) > 0) { max = h; g.department = dId; }
       }
     }
     return groups;
@@ -233,7 +239,7 @@ function buildGroup(curr: StatRow[], prior: StatRow[], key: Key, titleByEmp: Map
 
   const cGroups = groupBy(curr);
   const pGroups = groupBy(prior);
-  const rows: UGroupRow[] = [];
+  const rows: { row: UGroupRow; cost: string }[] = [];
   for (const [id, c] of cGroups) {
     const p = pGroups.get(id);
     const range = calcStat(c.hours, c.billable, c.cost);
@@ -256,10 +262,11 @@ function buildGroup(curr: StatRow[], prior: StatRow[], key: Key, titleByEmp: Map
       row.departmentName = strings.displayDepartmentName((c.department && deptName.get(c.department)) || null);
     }
     if (key === "department") row.noBillable = noBillDepts.has(id);
-    rows.push(row);
+    rows.push({ row, cost: c.cost });
   }
-  // Sort groups by non-billable cost descending.
-  return rows.sort((a, b) => b.range.nonBillableCost - a.range.nonBillableCost);
+  // Sort groups by non-billable cost descending — on the exact totals, so a
+  // sub-cent gap still orders deterministically.
+  return rows.sort((a, b) => cmp(b.cost, a.cost)).map(({ row }) => row);
 }
 
 export async function utilizationData(
@@ -309,72 +316,89 @@ export async function utilizationData(
   ]);
 
   // noBillable departments: zero billable hours across current + prior.
-  const deptBillable = new Map<string, number>();
-  const deptTotal = new Map<string, number>();
+  const deptBillable = new Map<string, string>();
+  const deptTotal = new Map<string, string>();
   for (const r of [...curr, ...prior]) {
     if (!r.department) continue;
-    deptBillable.set(r.department, (deptBillable.get(r.department) ?? 0) + r.billable_hours);
-    deptTotal.set(r.department, (deptTotal.get(r.department) ?? 0) + r.total_hours);
+    deptBillable.set(r.department, add(deptBillable.get(r.department) ?? "0", r.billable_hours));
+    deptTotal.set(r.department, add(deptTotal.get(r.department) ?? "0", r.total_hours));
   }
   const noBillDepts = new Set<string>();
-  for (const [id, tot] of deptTotal) if (tot > 0 && (deptBillable.get(id) ?? 0) === 0) noBillDepts.add(id);
+  for (const [id, tot] of deptTotal) if (cmp(tot, "0") > 0 && cmp(deptBillable.get(id) ?? "0", "0") === 0) noBillDepts.add(id);
 
   // Employee "title" = dominant labour class (most hours in current range).
-  const empItemHours = new Map<string, Map<string, number>>();
+  const empItemHours = new Map<string, Map<string, string>>();
   for (const r of curr) {
     if (!r.item_name) continue;
     let m = empItemHours.get(r.employee);
     if (!m) { m = new Map(); empItemHours.set(r.employee, m); }
-    m.set(r.item_name, (m.get(r.item_name) ?? 0) + r.total_hours);
+    m.set(r.item_name, add(m.get(r.item_name) ?? "0", r.total_hours));
   }
   const titleByEmp = new Map<string, string>();
   for (const [emp, m] of empItemHours) {
-    let best = "No Title", max = 0;
-    for (const [item, h] of m) if (h > max) { max = h; best = item; }
+    let best = "No Title", max = "0";
+    for (const [item, h] of m) if (cmp(h, max) > 0) { max = h; best = item; }
     titleByEmp.set(emp, best);
   }
 
   // Company rollup — billable-expected departments only ().
   const companySum = (rows: StatRow[]) => {
-    let hours = 0, billable = 0, cost = 0;
+    let hours = "0", billable = "0", cost = "0";
     for (const r of rows) {
       if (r.department && noBillDepts.has(r.department)) continue;
-      hours += r.total_hours;
-      billable += r.billable_hours;
-      cost += r.non_billable_cost;
+      hours = add(hours, r.total_hours);
+      billable = add(billable, r.billable_hours);
+      cost = add(cost, r.non_billable_cost);
     }
     const s = calcStat(hours, billable, cost);
+    const nonBillableHours = add(hours, neg(billable));
     return {
       ...s,
-      nonBillableCostPerDay: days > 0 ? s.nonBillableCost / days : 0,
-      nonBillableCostPerHour: s.nonBillableHours > 0 ? s.nonBillableCost / s.nonBillableHours : 0,
+      nonBillableCostPerDay: days > 0 ? Number(div(cost, String(days))) : 0,
+      nonBillableCostPerHour: cmp(nonBillableHours, "0") > 0 ? Number(div(cost, nonBillableHours)) : 0,
     };
   };
   const cCompany = companySum(curr);
   const pCompany = companySum(prior);
 
+  // The spike decision compares exact decimals: a float hop here fires (or
+  // misses) the alert on binary dust at exact threshold equality.
+  const exactCompanyCost = (rows: StatRow[]): string => {
+    let cost = "0";
+    for (const r of rows) {
+      if (r.department && noBillDepts.has(r.department)) continue;
+      cost = add(cost, r.non_billable_cost);
+    }
+    return cost;
+  };
+  const costDeltaExact = add(exactCompanyCost(curr), neg(exactCompanyCost(prior)));
+
   const alerts: UAlert[] = [];
   if (cCompany.percentBilled < targetBillablePct)
     alerts.push(strings.alertBelowTarget(targetBillablePct));
-  if (cCompany.nonBillableCost - pCompany.nonBillableCost > costSpikeThreshold)
-    alerts.push(strings.alertCostSpike(money(cCompany.nonBillableCost - pCompany.nonBillableCost, { maximumFractionDigits: 0 })));
+  if (cmp(costDeltaExact, String(costSpikeThreshold)) > 0)
+    alerts.push(strings.alertCostSpike(money(costDeltaExact, { maximumFractionDigits: 0 })));
 
   // Rolling history: company % (excl. noBill depts) + per-dept % (all depts).
   const periods: UHistoryPeriod[] = histPlans.map((plan, i) => {
     const rows = histStats[i] ?? [];
-    let hours = 0, billable = 0;
-    const dept = new Map<string, { h: number; b: number }>();
+    let hours = "0", billable = "0";
+    const dept = new Map<string, { h: string; b: string }>();
     for (const r of rows) {
-      if (!(r.department && noBillDepts.has(r.department))) { hours += r.total_hours; billable += r.billable_hours; }
+      if (!(r.department && noBillDepts.has(r.department))) { hours = add(hours, r.total_hours); billable = add(billable, r.billable_hours); }
       if (r.department) {
-        const d = dept.get(r.department) ?? { h: 0, b: 0 };
-        d.h += r.total_hours; d.b += r.billable_hours;
+        const d = dept.get(r.department) ?? { h: "0", b: "0" };
+        d.h = add(d.h, r.total_hours); d.b = add(d.b, r.billable_hours);
         dept.set(r.department, d);
       }
     }
     const deptPct: Record<string, number> = {};
-    for (const [id, d] of dept) deptPct[id] = d.h > 0 ? (d.b / d.h) * 100 : 0;
-    return { label: plan.label, start: plan.start, end: plan.end, companyPct: hours > 0 ? (billable / hours) * 100 : 0, deptPct };
+    for (const [id, d] of dept) {
+      const h = Number(d.h), b = Number(d.b);
+      deptPct[id] = h > 0 ? (b / h) * 100 : 0;
+    }
+    const h = Number(hours), b = Number(billable);
+    return { label: plan.label, start: plan.start, end: plan.end, companyPct: h > 0 ? (b / h) * 100 : 0, deptPct };
   });
 
   return {
@@ -386,7 +410,7 @@ export async function utilizationData(
       prior: pCompany,
       deltas: {
         pctDelta: cCompany.percentBilled - pCompany.percentBilled,
-        costDelta: cCompany.nonBillableCost - pCompany.nonBillableCost,
+        costDelta: Number(costDeltaExact),
       },
       alerts,
     },
