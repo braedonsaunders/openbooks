@@ -58,25 +58,46 @@ test("ECB CSV parser groups EUR-anchored observations by date", () => {
   assert.deepEqual(snapshots, [{
     date: "2026-07-14",
     anchor: "EUR",
+    anchorBasis: "foreign-per-anchor",
     unitsPerAnchor: { EUR: "1", USD: "1.1650", CAD: "1.5900" },
   }]);
 });
 
-test("Bank of Canada parser converts CAD-per-foreign observations to a CAD anchor", () => {
+test("Bank of Canada parser stores CAD-per-foreign observations as observed", () => {
   const snapshots = parseBankOfCanadaJson(JSON.stringify({
     observations: [{ d: "2026-07-14", FXUSDCAD: { v: "1.2500" } }],
   }));
+  // No pre-inversion: the source quote stays exact and the reciprocal is
+  // derived once at normalization.
   assert.deepEqual(snapshots, [{
     date: "2026-07-14",
     anchor: "CAD",
-    unitsPerAnchor: { CAD: "1", USD: "0.8000000000" },
+    anchorBasis: "anchor-per-foreign",
+    unitsPerAnchor: { CAD: "1", USD: "1.2500" },
   }]);
+});
+
+test("Bank of Canada quotes round-trip exactly through normalization", () => {
+  const snapshots = parseBankOfCanadaJson(JSON.stringify({
+    observations: [{ d: "2026-07-14", FXUSDCAD: { v: "1.3" }, FXEURCAD: { v: "1.09" } }],
+  }));
+  const rates = normalizeFxSnapshots(snapshots, "CAD", ["USD", "EUR"], "Bank of Canada");
+  const pair = (from: string, to: string): string =>
+    rates.find((rate) => rate.fromCurrency === from && rate.toCurrency === to)!.rate;
+  // The quoted pair reproduces the source value exactly (1.25 is unchanged:
+  // its reciprocal 0.8 was already exact, which is why the old test hid this).
+  assert.equal(pair("USD", "CAD"), "1.3000000000");
+  // Every other pair rounds exactly once, at derivation.
+  assert.equal(pair("CAD", "USD"), "0.7692307692");
+  assert.equal(pair("USD", "EUR"), "1.1926605505");
+  assert.equal(pair("EUR", "USD"), "0.8384615385");
 });
 
 test("normalization materializes every directed currency pair", () => {
   const rates = normalizeFxSnapshots([{
     date: "2026-07-14",
     anchor: "EUR",
+    anchorBasis: "foreign-per-anchor",
     unitsPerAnchor: { EUR: "1", USD: "1.2", CAD: "1.5" },
   }], "CAD", ["USD", "EUR"]);
   assert.equal(rates.length, 6);
@@ -845,6 +866,7 @@ test("normalization names the provider, pair, and date of an unrepresentable obs
     () => normalizeFxSnapshots([{
       date: "2026-07-14",
       anchor: "EUR",
+      anchorBasis: "foreign-per-anchor",
       unitsPerAnchor: { EUR: "1", USD: "1e1000000" },
     }], "EUR", ["USD"], "European Central Bank"),
     /European Central Bank returned an unrepresentable rate for EUR→USD on 2026-07-14/,
@@ -857,6 +879,7 @@ test("ECB parsing tolerates any column order but requires every column", () => {
   assert.deepEqual(reordered, [{
     date: "2026-07-14",
     anchor: "EUR",
+    anchorBasis: "foreign-per-anchor",
     unitsPerAnchor: { EUR: "1", USD: "1.1650" },
   }]);
   const dateFirst = parseEcbCsv(row("TIME_PERIOD,CURRENCY,OBS_VALUE", "2026-07-14,USD,1.1650"));

@@ -34,8 +34,18 @@ export interface FxProviderConfigView extends Omit<FxProviderConfigRow, "secrets
 
 export interface FxSnapshot {
   date: string;
-  /** Currency units per one unit of `anchor`. Includes anchor=1. */
   anchor: string;
+  /**
+   * Which direction the anchor-relative units are stored in.
+   * "foreign-per-anchor" (ECB, Open Exchange Rates): units of the currency
+   * per one anchor, e.g. USD per EUR. "anchor-per-foreign" (Bank of Canada):
+   * units of the anchor per one foreign, e.g. CAD per USD — the observation
+   * exactly as published, so the quoted pair reproduces the source value
+   * with no pre-rounding and rounding happens once, at pair derivation.
+   * Includes anchor=1 either way.
+   */
+  anchorBasis: "foreign-per-anchor" | "anchor-per-foreign";
+  /** Anchor-relative units in the `anchorBasis` direction. Raw provider strings. */
   unitsPerAnchor: Record<string, string>;
 }
 
@@ -264,9 +274,20 @@ export function normalizeFxSnapshots(snapshots: FxSnapshot[], baseCurrency: stri
     for (const fromCurrency of wanted) {
       for (const toCurrency of wanted) {
         if (fromCurrency === toCurrency) continue;
+        // One division per pair, in the snapshot's stored direction: with
+        // foreign-per-anchor units the pair is units[to]/units[from], with
+        // anchor-per-foreign it is units[from]/units[to]. Either way the
+        // anchor side enters as the stored "1", so the observed direction
+        // reproduces exactly and every other pair rounds exactly once.
+        const numerator = snapshot.anchorBasis === "anchor-per-foreign"
+          ? snapshot.unitsPerAnchor[fromCurrency]!
+          : snapshot.unitsPerAnchor[toCurrency]!;
+        const denominator = snapshot.anchorBasis === "anchor-per-foreign"
+          ? snapshot.unitsPerAnchor[toCurrency]!
+          : snapshot.unitsPerAnchor[fromCurrency]!;
         let rate: string;
         try {
-          rate = ratioRate(snapshot.unitsPerAnchor[toCurrency]!, snapshot.unitsPerAnchor[fromCurrency]!);
+          rate = ratioRate(numerator, denominator);
         } catch (error) {
           if (!(error instanceof FxProviderError)) throw error;
           // Refuse by name — provider, pair, and date — so the operator can
@@ -340,7 +361,7 @@ export function parseEcbCsv(text: string): FxSnapshot[] {
     rates[currency] = value;
     byDate.set(date, rates);
   }
-  return [...byDate].sort(([a], [b]) => a.localeCompare(b)).map(([date, unitsPerAnchor]) => ({ date, anchor: "EUR", unitsPerAnchor }));
+  return [...byDate].sort(([a], [b]) => a.localeCompare(b)).map(([date, unitsPerAnchor]) => ({ date, anchor: "EUR", anchorBasis: "foreign-per-anchor" as const, unitsPerAnchor }));
 }
 
 export function parseBankOfCanadaJson(text: string): FxSnapshot[] {
@@ -356,9 +377,13 @@ export function parseBankOfCanadaJson(text: string): FxSnapshot[] {
     for (const [series, raw] of Object.entries(observation)) {
       const match = series.match(/^FX([A-Z]{3})CAD$/);
       const value = raw && typeof raw === "object" ? (raw as { v?: unknown }).v : null;
-      if (match && value != null) rates[match[1]!] = ratioRate("1", String(value));
+      // Stored as observed — CAD per foreign, unrounded. The reciprocal is
+      // derived once at normalization, so a quoted pair (e.g. USD→CAD 1.3)
+      // reproduces the source value exactly instead of round-tripping
+      // through a pre-rounded 0.7692307692.
+      if (match && value != null) rates[match[1]!] = String(value);
     }
-    return [{ date: observation.d, anchor: "CAD", unitsPerAnchor: rates }];
+    return [{ date: observation.d, anchor: "CAD", anchorBasis: "anchor-per-foreign" as const, unitsPerAnchor: rates }];
   });
 }
 
@@ -394,7 +419,7 @@ async function fetchProviderSnapshots(config: FxProviderConfigRow, from: string,
     if (!payload.base || !payload.rates) throw new FxProviderError("Open Exchange Rates returned an invalid payload");
     const unitsPerAnchor = Object.fromEntries(Object.entries(payload.rates).map(([code, value]) => [code, String(value)]));
     unitsPerAnchor[payload.base] = "1";
-    snapshots.push({ date, anchor: payload.base, unitsPerAnchor });
+    snapshots.push({ date, anchor: payload.base, anchorBasis: "foreign-per-anchor" as const, unitsPerAnchor });
   }
   return snapshots;
 }
