@@ -111,6 +111,40 @@ export async function buildAssembly(
     for (const itemId of profileItemIds) {
       profileByItemId.set(itemId, await resolveProfile(orgId, itemId, tx, true));
     }
+    // A build mints NEW stock of the finished good, so every subject item
+    // must be active — not just profiled. Lock each items row FOR SHARE and
+    // hold it through posting: the item PATCH takes FOR UPDATE on the same
+    // row, so a deactivation racing a build serializes against it either
+    // way (the build re-reads the committed state; the deactivation waits
+    // for the in-flight build), and an inactive item refuses by name here
+    // before any consumption, movement, or journal line is written.
+    const itemStates = (await tx.execute<{
+      id: string;
+      name: string | null;
+      is_active: boolean;
+    }>(sql`
+      select id, name, is_active
+        from items
+       where org_id = ${orgId}
+         and id in (${sql.join(
+           profileItemIds.map((itemId) => sql`${itemId}::uuid`),
+           sql`, `,
+         )})
+       order by id
+       for share`));
+    if (itemStates.rows.length !== profileItemIds.length) {
+      throw new InventoryError(
+        "assembly build references an item outside this organization — check the bill of materials",
+      );
+    }
+    const itemNameById = new Map(itemStates.rows.map((row) => [row.id, row.name ?? row.id]));
+    for (const row of itemStates.rows) {
+      if (!row.is_active) {
+        throw new InventoryError(
+          `${itemNameById.get(row.id)} is inactive — reactivate it or change the recipe before building`,
+        );
+      }
+    }
     const assembly = profileByItemId.get(input.assemblyItemId)!;
     if (assembly.tracking !== "none") {
       throw new InventoryError(
