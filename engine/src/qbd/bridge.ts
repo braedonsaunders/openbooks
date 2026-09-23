@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { businessToday } from "../platform/business-date.ts";
 import { db, schema, withBypassContext, withOrgContext } from "../platform/db.ts";
 import { unsealJson } from "../platform/secrets.ts";
-import { buildCapturePlan, continueRequestXml, negotiateQbxmlVersion, responseStatus, type QbdRequestSpec } from "./qbxml.ts";
+import { buildCapturePlan, continueRequestXml, negotiateQbxmlVersion, requestIdFromRequestXml, responseElementForRequest, responseStatus, stampRequestId, type QbdRequestSpec } from "./qbxml.ts";
 
 const CAPTURE_TTL_MS = 12 * 60 * 60 * 1_000;
 const SESSION_TTL_MS = 2 * 60 * 60 * 1_000;
@@ -244,6 +244,17 @@ async function session(ticket: string): Promise<SessionRow | null> {
   });
 }
 
+/**
+ * One in-flight request per Web Connector ticket. The client retries
+ * sendRequestXML whenever its scheduler fires before the previous response
+ * was submitted; claiming a second queued request for that retry left two
+ * 'sent' rows on one ticket and the next response was stored under the wrong
+ * request. A retry while a request is outstanding therefore re-sends that
+ * same request — byte-identical, with the same requestID — and never claims
+ * a new one. Storage arbitrates the residual race between two concurrent
+ * claims (qbd_requests_one_sent_per_session, migration 0295); the loser
+ * retries into the resend path below.
+ */
 export async function nextWebConnectorRequest(ticket: string, metadata: {
   companyFile?: string;
   country?: string;
@@ -252,51 +263,134 @@ export async function nextWebConnectorRequest(ticket: string, metadata: {
 }): Promise<string> {
   const current = await session(ticket);
   if (!current || current.status !== "open") return "";
-  return withBypassContext(async () => db.transaction(async (tx) => {
-    if (metadata.country && current.expectedRegion && metadata.country.toUpperCase() !== current.expectedRegion.toUpperCase()) {
-      const error = `QuickBooks region ${metadata.country} does not match configured region ${current.expectedRegion}`;
-      await tx.execute(sql`update qbd_sessions set status = 'error', last_error = ${error}, closed_at = now(), last_seen_at = now() where id = ${ticket} and org_id = ${current.orgId}`);
-      await tx.execute(sql`
-        update qbd_captures set status = 'failed', error_message = ${error}, finished_at = now(), updated_at = now()
-         where connection_id = ${current.connectionId} and org_id = ${current.orgId} and status in ('queued', 'running')`);
-      await tx.execute(sql`
-        update qbd_requests r set status = 'cancelled', session_id = null, updated_at = now()
-         where r.connection_id = ${current.connectionId} and r.org_id = ${current.orgId} and r.status in ('queued', 'sent')
-           and exists (select 1 from qbd_captures c where c.id = r.capture_id and c.org_id = r.org_id and c.status = 'failed')`);
-      return "";
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await withBypassContext(async () => db.transaction(async (tx) => {
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"qbd-web-connector:" + ticket}, 0))`);
+        if (metadata.country && current.expectedRegion && metadata.country.toUpperCase() !== current.expectedRegion.toUpperCase()) {
+          const error = `QuickBooks region ${metadata.country} does not match configured region ${current.expectedRegion}`;
+          await tx.execute(sql`update qbd_sessions set status = 'error', last_error = ${error}, closed_at = now(), last_seen_at = now() where id = ${ticket} and org_id = ${current.orgId}`);
+          await tx.execute(sql`
+            update qbd_captures set status = 'failed', error_message = ${error}, finished_at = now(), updated_at = now()
+             where connection_id = ${current.connectionId} and org_id = ${current.orgId} and status in ('queued', 'running')`);
+          await tx.execute(sql`
+            update qbd_requests r set status = 'cancelled', session_id = null, updated_at = now()
+             where r.connection_id = ${current.connectionId} and r.org_id = ${current.orgId} and r.status in ('queued', 'sent')
+               and exists (select 1 from qbd_captures c where c.id = r.capture_id and c.org_id = r.org_id and c.status = 'failed')`);
+          return "";
+        }
+        await tx.execute(sql`
+          update qbd_sessions set last_seen_at = now(), company_file = coalesce(${metadata.companyFile ?? null}, company_file),
+                 country = coalesce(${metadata.country ?? null}, country), qbxml_major = coalesce(${metadata.qbxmlMajor ?? null}, qbxml_major),
+                 qbxml_minor = coalesce(${metadata.qbxmlMinor ?? null}, qbxml_minor)
+           where id = ${ticket} and org_id = ${current.orgId}`);
+        const held = (await tx.execute<{ id: string; requestXml: string; captureId: string }>(sql`
+          select id, request_xml as "requestXml", capture_id as "captureId"
+            from qbd_requests
+           where session_id = ${ticket} and org_id = ${current.orgId} and status = 'sent'
+           order by sent_at desc limit 1 for update`));
+        const outstanding = held.rows[0];
+        if (outstanding) {
+          const stamped = stampRequestId(outstanding.requestXml, outstanding.id);
+          if (stamped !== outstanding.requestXml) {
+            await tx.execute(sql`update qbd_requests set request_xml = ${stamped}, updated_at = now() where id = ${outstanding.id} and org_id = ${current.orgId}`);
+          }
+          await tx.execute(sql`update qbd_captures set status = 'running', updated_at = now() where id = ${outstanding.captureId} and org_id = ${current.orgId} and status = 'queued'`);
+          return negotiateQbxmlVersion(stamped, metadata.qbxmlMajor, metadata.qbxmlMinor);
+        }
+        const result = (await tx.execute<{ id: string; requestXml: string; captureId: string }>(sql`
+          update qbd_requests set status = 'sent', session_id = ${ticket}, sent_at = now(), updated_at = now()
+           where id = (
+             select r.id from qbd_requests r
+              join qbd_captures c on c.id = r.capture_id and c.org_id = r.org_id
+             where r.connection_id = ${current.connectionId} and r.org_id = ${current.orgId} and r.status = 'queued'
+               and c.status in ('queued', 'running') and c.expires_at > now()
+              order by r.sequence for update of r skip locked limit 1
+           ) returning id, request_xml as "requestXml", capture_id as "captureId"`));
+        const request = result.rows[0];
+        if (!request) return "";
+        // Stamp the row id as the qbXML requestID before the bytes leave:
+        // receiveResponseXML must prove the response answers THIS request.
+        // The id is the row identity, not the ticket, so a request re-queued
+        // onto a later session keeps its correlation.
+        const stamped = stampRequestId(request.requestXml, request.id);
+        await tx.execute(sql`update qbd_requests set request_xml = ${stamped}, updated_at = now() where id = ${request.id} and org_id = ${current.orgId}`);
+        await tx.execute(sql`update qbd_captures set status = 'running', updated_at = now() where id = ${request.captureId} and org_id = ${current.orgId} and status = 'queued'`);
+        return negotiateQbxmlVersion(stamped, metadata.qbxmlMajor, metadata.qbxmlMinor);
+      }));
+    } catch (error) {
+      // Drizzle surfaces the driver failure on `cause`; match both shapes so
+      // the loser of a concurrent double-claim always retries into resend.
+      const code = (error as { code?: string }).code
+        ?? (error as { cause?: { code?: string } }).cause?.code;
+      if (code === "23505" && attempt < 2) continue;
+      throw error;
     }
-    await tx.execute(sql`
-      update qbd_sessions set last_seen_at = now(), company_file = coalesce(${metadata.companyFile ?? null}, company_file),
-             country = coalesce(${metadata.country ?? null}, country), qbxml_major = coalesce(${metadata.qbxmlMajor ?? null}, qbxml_major),
-             qbxml_minor = coalesce(${metadata.qbxmlMinor ?? null}, qbxml_minor)
-       where id = ${ticket} and org_id = ${current.orgId}`);
-    const result = (await tx.execute<{ requestXml: string; captureId: string }>(sql`
-      update qbd_requests set status = 'sent', session_id = ${ticket}, sent_at = now(), updated_at = now()
-       where id = (
-         select r.id from qbd_requests r
-          join qbd_captures c on c.id = r.capture_id and c.org_id = r.org_id
-         where r.connection_id = ${current.connectionId} and r.org_id = ${current.orgId} and r.status = 'queued'
-           and c.status in ('queued', 'running') and c.expires_at > now()
-          order by r.sequence for update of r skip locked limit 1
-       ) returning request_xml as "requestXml", capture_id as "captureId"`));
-    const request = result.rows[0];
-    if (!request) return "";
-    await tx.execute(sql`update qbd_captures set status = 'running', updated_at = now() where id = ${request.captureId} and org_id = ${current.orgId} and status = 'queued'`);
-    return negotiateQbxmlVersion(request.requestXml, metadata.qbxmlMajor, metadata.qbxmlMinor);
-  }));
+  }
+  throw new Error("QuickBooks request claim did not settle after retries");
+}
+
+type QbdTicketRequest = {
+  id: string;
+  orgId: string;
+  captureId: string;
+  family: string;
+  requestKind: string;
+  sequence: number;
+  page: number;
+  requestXml: string;
+};
+
+/**
+ * A retried receiveResponseXML for an already-stored response carries the
+ * completed request's requestID. Acknowledge it idempotently — report the
+ * capture's current progress — instead of erroring for work that succeeded
+ * (the client's success reply was lost on the wire). Anything that
+ * correlates to no request of this ticket is not a replay: null.
+ */
+async function acknowledgeReplayedResponse(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  current: SessionRow,
+  ticket: string,
+  responseXml: string,
+): Promise<number | null> {
+  let replayed: ReturnType<typeof responseStatus>;
+  try {
+    replayed = responseStatus(responseXml);
+  } catch {
+    return null;
+  }
+  if (!replayed.requestId) return null;
+  const prior = (await tx.execute<{ captureId: string; orgId: string }>(sql`
+    select capture_id as "captureId", org_id as "orgId" from qbd_requests
+     where session_id = ${ticket} and org_id = ${current.orgId} and status = 'complete'
+       and request_xml like ${`%requestID="${replayed.requestId}"%`}
+     order by completed_at desc limit 1 for update`));
+  const completed = prior.rows[0];
+  if (!completed) return null;
+  const counts = (await tx.execute<{ complete: number; remaining: number; total: number }>(sql`
+    select count(*) filter (where status = 'complete')::int as complete,
+           count(*) filter (where status in ('queued', 'sent'))::int as remaining,
+           count(*)::int as total
+      from qbd_requests where capture_id = ${completed.captureId} and org_id = ${completed.orgId}`));
+  const count = counts.rows[0] ?? { complete: 0, remaining: 1, total: 1 };
+  await tx.execute(sql`update qbd_sessions set last_seen_at = now() where id = ${ticket} and org_id = ${current.orgId}`);
+  if (count.remaining === 0) return 100;
+  return Math.max(1, Math.min(99, Math.floor((count.complete * 100) / Math.max(1, count.total))));
 }
 
 export async function acceptWebConnectorResponse(ticket: string, responseXml: string, hresult: string, message: string): Promise<number> {
   const current = await session(ticket);
   if (!current || current.status !== "open") return -101;
   return withBypassContext(async () => db.transaction(async (tx) => {
-    const sent = (await tx.execute<{ id: string; orgId: string; captureId: string; family: string; requestKind: string; sequence: number; page: number; requestXml: string }>(sql`
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"qbd-web-connector:" + ticket}, 0))`);
+    const sent = (await tx.execute<QbdTicketRequest>(sql`
       select id, org_id as "orgId", capture_id as "captureId", family, request_kind as "requestKind",
              sequence, page, request_xml as "requestXml"
         from qbd_requests where session_id = ${ticket} and org_id = ${current.orgId} and status = 'sent'
        order by sent_at desc limit 1 for update`));
     const request = sent.rows[0];
-    if (!request) return -101;
+    if (!request) return (await acknowledgeReplayedResponse(tx, current, ticket, responseXml)) ?? -101;
     if (hresult || !responseXml.trim()) {
       const error = [hresult, message].filter(Boolean).join(": ") || "QuickBooks returned an empty response";
       await tx.execute(sql`update qbd_requests set status = 'failed', error_message = ${error}, completed_at = now(), updated_at = now() where id = ${request.id} and org_id = ${request.orgId}`);
@@ -309,7 +403,26 @@ export async function acceptWebConnectorResponse(ticket: string, responseXml: st
     try {
       status = responseStatus(responseXml);
     } catch (error) {
-      status = { code: -1, severity: "Error", message: (error as Error).message, iteratorId: null, iteratorRemaining: 0 };
+      status = { code: -1, severity: "Error", message: (error as Error).message, iteratorId: null, iteratorRemaining: 0, kind: "UnknownRs", requestId: null };
+    }
+    // Correlate BEFORE interpreting: a response for another request must
+    // neither be stored here nor fail this request's capture. The refusal
+    // leaves the outstanding request 'sent' and the capture running, and
+    // names the remedy the client acts on: its next sendRequestXML re-sends
+    // the outstanding request, whose response it then submits.
+    const expectedId = requestIdFromRequestXml(request.requestXml);
+    if (expectedId !== null || status.requestId !== null) {
+      if (status.requestId !== expectedId) {
+        const error = `QuickBooks response requestID ${JSON.stringify(status.requestId)} does not match outstanding ${request.requestKind} request ${JSON.stringify(expectedId)}; the response was not stored — call sendRequestXML again to receive the outstanding request and submit its response`;
+        await tx.execute(sql`update qbd_sessions set last_error = ${error}, last_seen_at = now() where id = ${ticket} and org_id = ${current.orgId}`);
+        return -101;
+      }
+    }
+    const expectedRs = responseElementForRequest(request.requestXml) ?? `${request.requestKind}Rs`;
+    if (status.kind !== expectedRs) {
+      const error = `QuickBooks ${status.kind} response does not answer the outstanding ${request.requestKind} request (expected ${expectedRs}); the response was not stored — call sendRequestXML again to receive the outstanding request and submit its response`;
+      await tx.execute(sql`update qbd_sessions set last_error = ${error}, last_seen_at = now() where id = ${ticket} and org_id = ${current.orgId}`);
+      return -101;
     }
     if (status.code !== 0) {
       const error = `QuickBooks ${request.requestKind} failed (${status.code}): ${status.message}`;

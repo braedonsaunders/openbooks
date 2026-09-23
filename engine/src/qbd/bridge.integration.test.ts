@@ -44,8 +44,10 @@ test("Web Connector bridge authenticates, atomically claims, hashes, and release
     assert.equal(auth.companyFile, "");
 
     const request = await nextWebConnectorRequest(auth.ticket, { country: "CA", qbxmlMajor: 17, qbxmlMinor: 0 });
-    assert.match(request, /<CompanyQueryRq\/>/);
-    const response = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs><CompanyQueryRs statusCode="0" statusSeverity="Info" statusMessage="Status OK"><CompanyRet><CompanyName>Bridge Test</CompanyName></CompanyRet></CompanyQueryRs></QBXMLMsgsRs></QBXML>`;
+    assert.match(request, /<CompanyQueryRq requestID="/);
+    const sentId = (await db.execute<{ id: string }>(sql`
+      select id from qbd_requests where capture_id = ${captureId} and family = 'company'`));
+    const response = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs><CompanyQueryRs requestID="${sentId.rows[0]?.id}" statusCode="0" statusSeverity="Info" statusMessage="Status OK"><CompanyRet><CompanyName>Bridge Test</CompanyName></CompanyRet></CompanyQueryRs></QBXMLMsgsRs></QBXML>`;
     const progress = await acceptWebConnectorResponse(auth.ticket, response, "", "");
     assert.ok(progress > 0 && progress < 100);
 
@@ -60,6 +62,213 @@ test("Web Connector bridge authenticates, atomically claims, hashes, and release
     await releaseCapture(orgId, captureId);
     const released = (await db.execute<{ xml: string | null }>(sql`select response_xml as xml from qbd_requests where capture_id = ${captureId} and family = 'company'`));
     assert.equal(released.rows[0]?.xml, null);
+  } finally {
+    await db.execute(sql`delete from connections where id = ${connection.id}`);
+  }
+});
+
+async function createQbdTestConnection(orgId: string): Promise<{ id: string; password: string }> {
+  const password = `bridge-test-password-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
+  const [connection] = await db.insert(schema.connections).values({
+    orgId,
+    source: "qbd",
+    displayName: `QBD correlation test ${Date.now()}`,
+    authKind: "token",
+    status: "active",
+    config: { historyStartDate: new Date().toISOString().slice(0, 8) + "01", region: "CA", baseCurrency: "CAD" },
+    secrets: sealJson({ webConnectorPassword: password }),
+  }).returning({ id: schema.connections.id });
+  assert.ok(connection);
+  return { id: connection.id, password };
+}
+
+async function openQbdTestTicket(orgId: string, connectionId: string, password: string): Promise<{ ticket: string; captureId: string }> {
+  const captureId = await prepareCapture({
+    orgId,
+    connectionId,
+    historyStartDate: new Date().toISOString().slice(0, 8) + "01",
+    since: null,
+  });
+  const auth = await authenticateWebConnector(connectionId, `qbd:${connectionId}`, password);
+  assert.ok(auth.ticket);
+  return { ticket: auth.ticket, captureId };
+}
+
+function companyResponse(requestId: string): string {
+  return `<?xml version="1.0"?><QBXML><QBXMLMsgsRs><CompanyQueryRs requestID="${requestId}" statusCode="0" statusSeverity="Info" statusMessage="Status OK"><CompanyRet><CompanyName>Correlation Test</CompanyName></CompanyRet></CompanyQueryRs></QBXMLMsgsRs></QBXML>`;
+}
+
+test("a sendRequestXML retry re-sends the outstanding request instead of claiming a second one", { skip: !DB }, async () => {
+  const orgs = (await db.execute<{ id: string }>(sql`select id from orgs order by created_at limit 1`));
+  const orgId = orgs.rows[0]?.id;
+  if (!orgId) return;
+  const connection = await createQbdTestConnection(orgId);
+  try {
+    const { ticket, captureId } = await openQbdTestTicket(orgId, connection.id, connection.password);
+    const first = await nextWebConnectorRequest(ticket, { country: "CA", qbxmlMajor: 17, qbxmlMinor: 0 });
+    assert.match(first, /<CompanyQueryRq requestID="/);
+    // The retry arrives before any response was submitted: it must observe
+    // the same bytes, not a second request.
+    const retry = await nextWebConnectorRequest(ticket, { country: "CA", qbxmlMajor: 17, qbxmlMinor: 0 });
+    assert.equal(retry, first);
+    const inflight = (await db.execute<{ sent: number; queued: number }>(sql`
+      select count(*) filter (where status = 'sent')::int as sent,
+             count(*) filter (where status = 'queued')::int as queued
+        from qbd_requests where capture_id = ${captureId} and session_id = ${ticket}`));
+    assert.equal(inflight.rows[0]?.sent, 1);
+    const total = (await db.execute<{ queued: number }>(sql`
+      select count(*) filter (where status = 'queued')::int as queued
+        from qbd_requests where capture_id = ${captureId}`));
+    const plan = (await db.execute<{ total: number }>(sql`select count(*)::int as total from qbd_requests where capture_id = ${captureId}`));
+    assert.equal(total.rows[0]?.queued, (plan.rows[0]?.total ?? 1) - 1);
+    await closeWebConnectorSession(ticket);
+  } finally {
+    await db.execute(sql`delete from connections where id = ${connection.id}`);
+  }
+});
+
+test("a correlated response is stored under its own request and the next send advances", { skip: !DB }, async () => {
+  const orgs = (await db.execute<{ id: string }>(sql`select id from orgs order by created_at limit 1`));
+  const orgId = orgs.rows[0]?.id;
+  if (!orgId) return;
+  const connection = await createQbdTestConnection(orgId);
+  try {
+    const { ticket, captureId } = await openQbdTestTicket(orgId, connection.id, connection.password);
+    const first = await nextWebConnectorRequest(ticket, { country: "CA", qbxmlMajor: 17, qbxmlMinor: 0 });
+    await nextWebConnectorRequest(ticket, { country: "CA", qbxmlMajor: 17, qbxmlMinor: 0 });
+    const sentA = (await db.execute<{ id: string }>(sql`
+      select id from qbd_requests where capture_id = ${captureId} and session_id = ${ticket} and status = 'sent'`));
+    const idA = sentA.rows[0]?.id;
+    assert.ok(idA);
+    const progress = await acceptWebConnectorResponse(ticket, companyResponse(idA), "", "");
+    assert.ok(progress > 0 && progress < 100);
+    // The response landed on A; the next send claims B with its own identity.
+    const second = await nextWebConnectorRequest(ticket, { country: "CA", qbxmlMajor: 17, qbxmlMinor: 0 });
+    assert.notEqual(second, first);
+    const rows = (await db.execute<{ id: string; family: string; status: string; xml: string | null }>(sql`
+      select id, family, status, response_xml as xml from qbd_requests
+       where capture_id = ${captureId} and family in ('company', 'preferences') order by sequence`));
+    assert.equal(rows.rows[0]?.status, "complete");
+    assert.equal(rows.rows[0]?.xml, companyResponse(idA));
+    assert.equal(rows.rows[1]?.status, "sent");
+    assert.equal(rows.rows[1]?.xml, null);
+    assert.match(second, new RegExp(`requestID="${rows.rows[1]?.id}"`));
+    await closeWebConnectorSession(ticket);
+  } finally {
+    await db.execute(sql`delete from connections where id = ${connection.id}`);
+  }
+});
+
+test("a response for another request is refused and leaves the outstanding request in flight", { skip: !DB }, async () => {
+  const orgs = (await db.execute<{ id: string }>(sql`select id from orgs order by created_at limit 1`));
+  const orgId = orgs.rows[0]?.id;
+  if (!orgId) return;
+  const connection = await createQbdTestConnection(orgId);
+  try {
+    const { ticket, captureId } = await openQbdTestTicket(orgId, connection.id, connection.password);
+    await nextWebConnectorRequest(ticket, { country: "CA", qbxmlMajor: 17, qbxmlMinor: 0 });
+    const sentA = (await db.execute<{ id: string }>(sql`
+      select id from qbd_requests where capture_id = ${captureId} and session_id = ${ticket} and status = 'sent'`));
+    const idA = sentA.rows[0]?.id;
+    assert.ok(idA);
+    // A response stamped for a request that was never sent on this ticket.
+    const refused = await acceptWebConnectorResponse(ticket, companyResponse("99999999-9999-4999-8999-999999999999"), "", "");
+    assert.equal(refused, -101);
+    const state = (await db.execute<{ status: string; xml: string | null }>(sql`
+      select status, response_xml as xml from qbd_requests where id = ${idA}`));
+    assert.equal(state.rows[0]?.status, "sent");
+    assert.equal(state.rows[0]?.xml, null);
+    const capture = (await db.execute<{ status: string }>(sql`select status from qbd_captures where id = ${captureId}`));
+    assert.equal(capture.rows[0]?.status, "running");
+    const session = (await db.execute<{ error: string | null }>(sql`select last_error as error from qbd_sessions where id = ${ticket}`));
+    assert.match(session.rows[0]?.error ?? "", /requestID/);
+    assert.match(session.rows[0]?.error ?? "", /sendRequestXML/);
+    // The genuine response still completes the outstanding request.
+    const progress = await acceptWebConnectorResponse(ticket, companyResponse(idA), "", "");
+    assert.ok(progress > 0 && progress < 100);
+    await closeWebConnectorSession(ticket);
+  } finally {
+    await db.execute(sql`delete from connections where id = ${connection.id}`);
+  }
+});
+
+test("an uncorrelated response and a wrong-type response are refused", { skip: !DB }, async () => {
+  const orgs = (await db.execute<{ id: string }>(sql`select id from orgs order by created_at limit 1`));
+  const orgId = orgs.rows[0]?.id;
+  if (!orgId) return;
+  const connection = await createQbdTestConnection(orgId);
+  try {
+    const { ticket, captureId } = await openQbdTestTicket(orgId, connection.id, connection.password);
+    await nextWebConnectorRequest(ticket, { country: "CA", qbxmlMajor: 17, qbxmlMinor: 0 });
+    const sentA = (await db.execute<{ id: string }>(sql`
+      select id from qbd_requests where capture_id = ${captureId} and session_id = ${ticket} and status = 'sent'`));
+    const idA = sentA.rows[0]?.id;
+    assert.ok(idA);
+    // No requestID at all while the outstanding request carries one.
+    const bare = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs><CompanyQueryRs statusCode="0" statusSeverity="Info" statusMessage="Status OK"><CompanyRet/></CompanyQueryRs></QBXMLMsgsRs></QBXML>`;
+    assert.equal(await acceptWebConnectorResponse(ticket, bare, "", ""), -101);
+    // Right requestID, wrong response family.
+    const wrongKind = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs><AccountQueryRs requestID="${idA}" statusCode="0" statusSeverity="Info" statusMessage="Status OK"><AccountRet/></AccountQueryRs></QBXMLMsgsRs></QBXML>`;
+    assert.equal(await acceptWebConnectorResponse(ticket, wrongKind, "", ""), -101);
+    const session = (await db.execute<{ error: string | null }>(sql`select last_error as error from qbd_sessions where id = ${ticket}`));
+    assert.match(session.rows[0]?.error ?? "", /AccountQueryRs/);
+    assert.match(session.rows[0]?.error ?? "", /CompanyQueryRs/);
+    const state = (await db.execute<{ status: string; xml: string | null }>(sql`
+      select status, response_xml as xml from qbd_requests where id = ${idA}`));
+    assert.equal(state.rows[0]?.status, "sent");
+    assert.equal(state.rows[0]?.xml, null);
+    await closeWebConnectorSession(ticket);
+  } finally {
+    await db.execute(sql`delete from connections where id = ${connection.id}`);
+  }
+});
+
+test("a replayed response for a completed request is acknowledged, not errored", { skip: !DB }, async () => {
+  const orgs = (await db.execute<{ id: string }>(sql`select id from orgs order by created_at limit 1`));
+  const orgId = orgs.rows[0]?.id;
+  if (!orgId) return;
+  const connection = await createQbdTestConnection(orgId);
+  try {
+    const { ticket, captureId } = await openQbdTestTicket(orgId, connection.id, connection.password);
+    await nextWebConnectorRequest(ticket, { country: "CA", qbxmlMajor: 17, qbxmlMinor: 0 });
+    const sentA = (await db.execute<{ id: string }>(sql`
+      select id from qbd_requests where capture_id = ${captureId} and session_id = ${ticket} and status = 'sent'`));
+    const idA = sentA.rows[0]?.id;
+    assert.ok(idA);
+    const progress = await acceptWebConnectorResponse(ticket, companyResponse(idA), "", "");
+    // The client never saw the success reply and submits the same response
+    // again before asking for the next request: same progress, no error.
+    const replay = await acceptWebConnectorResponse(ticket, companyResponse(idA), "", "");
+    assert.equal(replay, progress);
+    assert.ok(replay > 0 && replay < 100);
+    const stored = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from qbd_requests where capture_id = ${captureId} and status = 'complete'`));
+    assert.equal(stored.rows[0]?.n, 1);
+    await closeWebConnectorSession(ticket);
+  } finally {
+    await db.execute(sql`delete from connections where id = ${connection.id}`);
+  }
+});
+
+test("storage refuses a second in-flight request on one ticket", { skip: !DB }, async () => {
+  const orgs = (await db.execute<{ id: string }>(sql`select id from orgs order by created_at limit 1`));
+  const orgId = orgs.rows[0]?.id;
+  if (!orgId) return;
+  const connection = await createQbdTestConnection(orgId);
+  try {
+    const { ticket, captureId } = await openQbdTestTicket(orgId, connection.id, connection.password);
+    await db.execute(sql`
+      insert into qbd_requests (org_id, connection_id, capture_id, family, request_kind, sequence, request_xml, status, session_id, sent_at)
+      values (${orgId}, ${connection.id}, ${captureId}, 'company', 'CompanyQuery', 999001, '<QBXML/>', 'sent', ${ticket}, now())`);
+    await assert.rejects(
+      db.execute(sql`
+        insert into qbd_requests (org_id, connection_id, capture_id, family, request_kind, sequence, request_xml, status, session_id, sent_at)
+        values (${orgId}, ${connection.id}, ${captureId}, 'company', 'CompanyQuery', 999002, '<QBXML/>', 'sent', ${ticket}, now())`),
+      (error: unknown) =>
+        (error as { code?: string }).code === "23505"
+        || (error as { cause?: { code?: string } }).cause?.code === "23505",
+      "the second in-flight claim must fail on qbd_requests_one_sent_per_session",
+    );
   } finally {
     await db.execute(sql`delete from connections where id = ${connection.id}`);
   }

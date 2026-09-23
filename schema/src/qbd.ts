@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
 
@@ -49,6 +50,11 @@ export const qbdRequests = pgTable(
     index("qbd_requests_next").on(t.connectionId, t.status, t.sequence),
     index("qbd_requests_capture").on(t.captureId, t.family, t.page),
     uniqueIndex("qbd_requests_capture_sequence").on(t.captureId, t.sequence),
+    // One in-flight request per Web Connector ticket (migration 0295):
+    // a sendRequestXML retry re-sends the outstanding request, and storage
+    // refuses the second claim that a READ COMMITTED race could otherwise
+    // commit.
+    uniqueIndex("qbd_requests_one_sent_per_session").on(t.sessionId).where(sql`${t.status} = 'sent'`),
   ],
 );
 
