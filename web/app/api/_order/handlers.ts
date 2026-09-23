@@ -42,6 +42,18 @@ export interface OrderHandlerConfig {
   createPerm: string
 }
 
+/**
+ * Approval routing refused AFTER the submission wrote its before_submit
+ * script effects. Thrown inside the issuance transaction so the whole
+ * issuance rolls back; the PATCH mapper below answers the same 422 the
+ * operator needs, with none of the refused effects committed.
+ */
+class OrderApprovalRoutingError extends Error {
+  constructor(readonly flowError: string) {
+    super(`approval could not be routed: ${flowError}`)
+  }
+}
+
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 
 const STALE_REVISION = 'this order changed after you opened it; reload and review the latest revision'
@@ -285,7 +297,11 @@ export function makePATCH(cfg: OrderHandlerConfig) {
         }
       }
 
-      return withOrgTransaction(user.orgId, async () => {
+      // A refused routing throws: the submission already wrote its
+      // before_submit script effects, and answering 422 from inside the
+      // transaction would commit them alongside the refusal. The mapper
+      // below answers the same 422 after the rollback.
+      const issuance = withOrgTransaction(user.orgId, async () => {
         // Serialize issuing with draft replacement at the aggregate root. A
         // late draft PATCH must not rewrite an order after issuance commits.
         // Void owns its transaction internally so it can reserve the aggregate
@@ -345,10 +361,7 @@ export function makePATCH(cfg: OrderHandlerConfig) {
             submission = await submitAndReleaseIfUngated(cfg.kind, id, user.id)
           }
           if (submission.flowError) {
-            return NextResponse.json(
-              { error: `approval could not be routed: ${submission.flowError}` },
-              { status: 422 },
-            )
+            throw new OrderApprovalRoutingError(submission.flowError)
           }
           if (submission.gated) {
             const order = await loadOrder(id, user.orgId, cfg.kind, gate.allowedSubsidiaryIds)
@@ -360,6 +373,12 @@ export function makePATCH(cfg: OrderHandlerConfig) {
         }
         const order = await loadOrder(id, user.orgId, cfg.kind, gate.allowedSubsidiaryIds)
         return NextResponse.json(order)
+      })
+      return issuance.catch((error: unknown) => {
+        if (error instanceof OrderApprovalRoutingError) {
+          return NextResponse.json({ error: error.message }, { status: 422 })
+        }
+        throw error
       })
     }
 
