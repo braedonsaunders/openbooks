@@ -78,7 +78,7 @@ test('a taxed invoice closes at its net subtotal, not its total', { skip: !DB },
 });
 
 test('a full credit against the sale closes it to zero', { skip: !DB }, async () => {
-  const { org, actor } = await fixture();
+  const { org } = await fixture();
   try {
     await postCredit(org, org.customerId, 'CR-C6', '100.0000');
     assert.equal(await closed(org.orgId), '0.0000');
