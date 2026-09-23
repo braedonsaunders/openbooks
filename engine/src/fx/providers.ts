@@ -543,6 +543,79 @@ function fxStorageMessage(error: unknown): string {
   return best;
 }
 
+/**
+ * Rows per multi-row rate upsert. A 50-currency, 31-day config normalizes
+ * 75,950 pairs: one statement per pair means 75,950 sequential round trips
+ * inside the apply transaction, far past any lease budget. Chunked set
+ * writes collapse that to hundreds of statements while the single enclosing
+ * transaction keeps the all-or-nothing atomicity the crash-recovery tests
+ * pin (a mid-apply fault persists no partial rows).
+ */
+export const FX_RATE_APPLY_CHUNK = 500;
+
+export interface FxApplyCounts {
+  inserted: number;
+  updated: number;
+  manualPreserved: number;
+}
+
+/**
+ * Apply normalized provider rates with set-based chunked upserts. Manual
+ * overrides (source='manual') are never touched — neither by the
+ * pre-fetched classification nor, for a pin placed after the prefetch, by
+ * the upsert's own predicate — and inserted/updated counts come from the
+ * statement's own RETURNING, not from a second read.
+ */
+export async function applyNormalizedRates(
+  runner: Pick<typeof db, "execute">,
+  args: {
+    orgId: string;
+    provider: FxProviderKey;
+    configId: string;
+    actorId?: string;
+    from: string;
+    to: string;
+    normalized: NormalizedFxRate[];
+  },
+): Promise<FxApplyCounts> {
+  const counts: FxApplyCounts = { inserted: 0, updated: 0, manualPreserved: 0 };
+  const existing = (await runner.execute<{ from_currency: string; to_currency: string; as_of: string; source: string }>(sql`
+    select from_currency, to_currency, as_of::text, source from fx_rates
+     where org_id = ${args.orgId} and rate_type = 'spot'
+       and as_of between ${args.from} and ${args.to}
+  `));
+  const byKey = new Map(existing.rows.map((row) => [`${row.as_of}|${row.from_currency}|${row.to_currency}`, row.source]));
+  const writable: NormalizedFxRate[] = [];
+  for (const rate of args.normalized) {
+    if (byKey.get(`${rate.date}|${rate.fromCurrency}|${rate.toCurrency}`) === "manual") {
+      counts.manualPreserved++;
+      continue;
+    }
+    writable.push(rate);
+  }
+  for (let at = 0; at < writable.length; at += FX_RATE_APPLY_CHUNK) {
+    const chunk = writable.slice(at, at + FX_RATE_APPLY_CHUNK);
+    const rows = chunk.map((rate) => sql`(${args.orgId}, ${rate.fromCurrency}, ${rate.toCurrency}, ${rate.date},
+      'spot', ${rate.rate}, ${args.provider}, ${args.configId}, now(), ${args.actorId ?? null}, ${args.actorId ?? null})`);
+    const applied = (await runner.execute<{ inserted: boolean }>(sql`
+      insert into fx_rates
+        (org_id, from_currency, to_currency, as_of, rate_type, rate, source,
+         provider_config_id, imported_at, created_by, updated_by)
+      values ${sql.join(rows, sql`, `)}
+      on conflict (org_id, from_currency, to_currency, as_of, rate_type) do update set
+        rate = excluded.rate, source = excluded.source, provider_config_id = excluded.provider_config_id,
+        imported_at = now(), updated_at = now(), updated_by = excluded.updated_by
+       where fx_rates.source <> 'manual'
+      returning (xmax = 0) as inserted
+    `));
+    for (const row of applied.rows) {
+      if (row.inserted) counts.inserted++;
+      else counts.updated++;
+    }
+  }
+  return counts;
+}
+
 export async function runFxProvider(
   orgId: string,
   trigger: FxRunTrigger,
@@ -587,6 +660,22 @@ export async function runFxProvider(
       latestObservationDate,
     };
     const next = config.isEnabled ? computeNextSyncAt(config.schedule, config.syncHourUtc, now) : null;
+    if (trigger !== "test") {
+      // Renew the run lease after the (possibly long) fetch phase and before
+      // the apply transaction opens: a takeover that reclaimed this run while
+      // fetches were in flight is detected here, before any rate is written,
+      // and a live run carries a full TTL into the short batched apply. This
+      // is the lease-safe progress point — a cross-connection heartbeat
+      // inside the apply is impossible (the fence below holds the run row
+      // locked for the whole unit) and committing per date would trade away
+      // the all-or-nothing atomicity the crash path pins.
+      const renewed = await db.execute(sql`
+        update fx_provider_runs set started_at = now()
+         where id = ${claim.runId} and org_id = ${orgId}
+           and lease_token = ${claim.leaseToken} and status = 'running'
+      `);
+      if (!renewed.rowCount) throw new FxRunLeaseLostError();
+    }
     await db.transaction(async (tx) => {
       // Lease fence first: hold this run's row for the whole unit and refuse
       // to write anything unless the current running claim is still ours. The
@@ -600,35 +689,18 @@ export async function runFxProvider(
       `));
       if (!owned.rows.length) throw new FxRunLeaseLostError();
       if (trigger !== "test") {
-        const existing = (await tx.execute<{ from_currency: string; to_currency: string; as_of: string; source: string }>(sql`
-          select from_currency, to_currency, as_of::text, source from fx_rates
-           where org_id = ${orgId} and rate_type = 'spot'
-             and as_of between ${range.from} and ${range.to}
-        `));
-        const byKey = new Map(existing.rows.map((row) => [`${row.as_of}|${row.from_currency}|${row.to_currency}`, row.source]));
-        for (const rate of normalized) {
-          const key = `${rate.date}|${rate.fromCurrency}|${rate.toCurrency}`;
-          const source = byKey.get(key);
-          if (source === "manual") { result.manualOverridesPreserved++; continue; }
-          if (source) {
-            await tx.execute(sql`
-              update fx_rates set rate = ${rate.rate}, source = ${config.provider},
-                     provider_config_id = ${config.id}, imported_at = now(), updated_at = now(), updated_by = ${actorId ?? null}
-               where org_id = ${orgId} and from_currency = ${rate.fromCurrency}
-                 and to_currency = ${rate.toCurrency} and as_of = ${rate.date} and rate_type = 'spot'
-            `);
-            result.ratesUpdated++;
-          } else {
-            await tx.execute(sql`
-              insert into fx_rates
-                (org_id, from_currency, to_currency, as_of, rate_type, rate, source,
-                 provider_config_id, imported_at, created_by, updated_by)
-              values (${orgId}, ${rate.fromCurrency}, ${rate.toCurrency}, ${rate.date}, 'spot', ${rate.rate},
-                      ${config.provider}, ${config.id}, now(), ${actorId ?? null}, ${actorId ?? null})
-            `);
-            result.ratesInserted++;
-          }
-        }
+        const applied = await applyNormalizedRates(tx, {
+          orgId,
+          provider: config.provider,
+          configId: config.id,
+          actorId,
+          from: range.from,
+          to: range.to,
+          normalized,
+        });
+        result.ratesInserted = applied.inserted;
+        result.ratesUpdated = applied.updated;
+        result.manualOverridesPreserved = applied.manualPreserved;
       }
       // The completion stamp shares the rates' transaction, so a crash can
       // never leave rates applied while the run/config still say running —
