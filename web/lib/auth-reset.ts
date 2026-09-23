@@ -186,18 +186,43 @@ export async function requestPasswordReset(
 export type InviteLinkIssuance = { raw: string; emailQueued: boolean };
 
 /**
+ * Refusal thrown by an `issueInviteSetPasswordLink` authorize hook to stop
+ * issuance before anything is minted or delivered. The mint transaction
+ * rolls back, so no token exists and no email carries one — the caller maps
+ * this to a 403/409 response and never hands out a link.
+ */
+export class InviteIssuanceRefusedError extends Error {
+  readonly refusal: { error: string; missing?: string[]; status: 403 | 409 };
+  constructor(refusal: { error: string; missing?: string[]; status?: 403 | 409 }) {
+    super(refusal.error);
+    this.name = "InviteIssuanceRefusedError";
+    this.refusal = { ...refusal, status: refusal.status ?? 403 };
+  }
+}
+
+/**
  * Admin-issued set-password link for an invited (pending) user. Unlike the
  * anonymous self-service path this ALWAYS mints: the authenticated admin is
  * a controlled delivery path — when email is unconfigured they copy the
  * one-time link to the person out of band. The raw token is returned to the
  * admin caller only, never persisted; only its SHA-256 is stored.
+ *
+ * The optional `authorize` hook runs INSIDE the mint transaction before
+ * anything is minted: it must lock the target user row (`for update`) and
+ * re-verify the caller's authority over the target's CURRENT stored access,
+ * throwing InviteIssuanceRefusedError to stop. Checking in the same
+ * transaction that mints closes the grant-between-check-and-mint window in
+ * which a concurrent elevation could hand a lower-privilege caller a
+ * takeover link for a now-privileged account.
  */
 export async function issueInviteSetPasswordLink(input: {
   user: ResetRecipient;
   context: AuthRequestContext;
+  authorize?: () => Promise<void>;
 }): Promise<InviteLinkIssuance | null> {
   const { networkHash, userAgentHash } = authContextHashes(input.context);
   return withBypass(async () => {
+    if (input.authorize) await input.authorize();
     const raw = await mintResetToken(input.user.id, networkHash, userAgentHash);
     if (!raw) return null;
     const transport = await resolveOrgEmailTransport(input.user.org_id);
