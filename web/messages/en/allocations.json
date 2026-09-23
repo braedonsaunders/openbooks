@@ -259,6 +259,7 @@
       "fixed_percent_sum": "Fixed percents must total 100 or name a remainder target.",
       "effective_window": "The effective window is inverted or missing.",
       "effective_overlap": "The effective window overlaps another published version.",
+      "effective_boundary": "Period-based versions must start and end on accounting-period boundaries.",
       "book_scope": "The book scope names no usable posting book.",
       "apply_policy": "Entry rules need a line behavior.",
       "targets_empty": "At least one target is required.",

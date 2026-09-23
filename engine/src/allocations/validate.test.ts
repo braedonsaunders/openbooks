@@ -40,8 +40,13 @@ function version(over: Partial<AllocationRuleVersion> = {}): AllocationRuleVersi
 }
 
 function ctx(over: Partial<RuleVersionValidationContext> = {}): RuleVersionValidationContext {
-  return { orgId: "org-1", ruleId: "rule-1", mode: "period", publishedVersions: [], activePostingBookIds: [], ...over };
+  return { orgId: "org-1", ruleId: "rule-1", mode: "period", publishedVersions: [], activePostingBookIds: [], periods: [], ...over };
 }
+
+const JAN_FEB = [
+  { name: "2026-01", startsOn: "2026-01-01", endsOn: "2026-01-31" },
+  { name: "2026-02", startsOn: "2026-02-01", endsOn: "2026-02-28" },
+];
 
 function tgt(over: Partial<AllocationRuleTarget> = {}): AllocationRuleTarget {
   return { id: `t-${over.sequence ?? 1}`, sequence: over.sequence ?? 1, fixedPercent: "100", ...over };
@@ -241,4 +246,49 @@ test("net_zero_pair refuses a dynamic targetAccountId at publish", () => {
     ctx(),
   );
   assert.ok(problems.some((p) => p.code === "net_zero_account"), JSON.stringify(problems));
+});
+
+test("period-mode effective dates proven mid-period refuse with the boundary suggestion", () => {
+  const c = ctx({ periods: JAN_FEB });
+  const from = validateRuleVersion(version({ effectiveFrom: "2026-01-15" }), [tgt()], c);
+  const flagged = from.find((p) => p.code === "effective_boundary");
+  assert.ok(flagged, `expected an effective_boundary problem, got ${JSON.stringify(from)}`);
+  assert.equal(flagged?.field, "effectiveFrom");
+  assert.match(flagged?.message ?? "", /2026-01-15 falls inside 2026-01/);
+  assert.match(flagged?.message ?? "", /use 2026-01-01 or 2026-02-01/);
+  const to = validateRuleVersion(
+    version({ effectiveFrom: "2026-01-01", effectiveTo: "2026-01-14" }),
+    [tgt()],
+    ctx({ periods: [{ name: "2025-12", startsOn: "2025-12-01", endsOn: "2025-12-31" }, ...JAN_FEB] }),
+  );
+  const flaggedTo = to.find((p) => p.code === "effective_boundary");
+  assert.ok(flaggedTo, `expected an effective_boundary problem, got ${JSON.stringify(to)}`);
+  assert.equal(flaggedTo?.field, "effectiveTo");
+  assert.match(flaggedTo?.message ?? "", /2026-01-14 falls inside 2026-01/);
+  assert.match(flaggedTo?.message ?? "", /use 2026-01-31 or 2025-12-31/);
+});
+
+test("period-mode boundary-aligned dates publish, unknown-calendar dates pass to the run-time check", () => {
+  const c = ctx({ periods: JAN_FEB });
+  assert.deepEqual(codes(version({ effectiveFrom: "2026-02-01" }), [tgt()], c), []);
+  assert.deepEqual(codes(version({ effectiveFrom: "2026-01-01", effectiveTo: "2026-01-31" }), [tgt()], c), []);
+  // Outside every known period: not provably mid-period, so publish passes
+  // and the run-time crossing refusal stands guard instead.
+  assert.deepEqual(codes(version({ effectiveFrom: "2026-05-01" }), [tgt()], c), []);
+  assert.deepEqual(
+    codes(version({ effectiveFrom: "2026-05-01", effectiveTo: "2026-05-20" }), [tgt()], c),
+    [],
+  );
+});
+
+test("non-period modes never face the boundary proof", () => {
+  const midMonth = version({ effectiveFrom: "2026-01-15", effectiveTo: "2026-02-14" });
+  assert.deepEqual(codes(midMonth, [tgt()], ctx({ mode: "entry", periods: JAN_FEB })), []);
+  assert.deepEqual(codes(midMonth, [tgt()], ctx({ mode: "post", periods: JAN_FEB })), []);
+});
+
+test("malformed dates report effective_window without a boundary echo", () => {
+  const problems = validateRuleVersion(version({ effectiveFrom: "not-a-date" }), [tgt()], ctx({ periods: JAN_FEB }));
+  assert.ok(problems.some((p) => p.code === "effective_window"), JSON.stringify(problems));
+  assert.ok(!problems.some((p) => p.code === "effective_boundary"), JSON.stringify(problems));
 });

@@ -259,6 +259,7 @@
       "fixed_percent_sum": "Los porcentajes fijos deben totalizar 100 o nombrar un destino de resto.",
       "effective_window": "La ventana de vigencia está invertida o falta.",
       "effective_overlap": "La ventana de vigencia se solapa con otra versión publicada.",
+      "effective_boundary": "Las versiones basadas en períodos deben empezar y terminar en los límites del período contable.",
       "book_scope": "El alcance de libros no nombra ningún libro útil que contabilice.",
       "apply_policy": "Las reglas de registro necesitan un comportamiento de línea.",
       "targets_empty": "Se requiere al menos un destino.",

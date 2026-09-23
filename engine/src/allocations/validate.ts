@@ -17,6 +17,13 @@ export interface PublishedSiblingWindow {
   effectiveTo: string | null;
 }
 
+/** One regular (non-adjustment) accounting period of the org, any calendar. */
+export interface PeriodBoundary {
+  name: string;
+  startsOn: string;
+  endsOn: string;
+}
+
 /** The driver row a driver-basis version points at, resolved by the service. */
 export interface KnownDriver {
   id: string;
@@ -35,6 +42,14 @@ export interface RuleVersionValidationContext {
   mode: AllocationMode;
   /** Other published versions of the same rule (self excluded by the service). */
   publishedVersions: PublishedSiblingWindow[];
+  /**
+   * The org's regular accounting periods, loaded by the service. Period-mode
+   * effective dates are proven against these: a date falling strictly inside
+   * a known period must sit on its boundary. Dates outside every known
+   * period cannot be proven mid-period and pass here — the run-time crossing
+   * refusal in period-run.ts stays authoritative for those.
+   */
+  periods: PeriodBoundary[];
   /** Resolved driver row when the version names one; null when it names none. */
   driver?: KnownDriver | null;
   /** Ids of active posts_gl books in the org. */
@@ -184,6 +199,55 @@ function windowsOverlap(
 }
 
 /**
+ * Period-mode effective dates must sit on accounting-period boundaries: a
+ * period sweep prices the whole period's pool under one version, so a
+ * version starting or ending mid-period would silently reprice activity
+ * from before (or after) the change. Only dates PROVEN mid-period — falling
+ * strictly inside a known period — refuse; dates outside every known period
+ * pass (a future calendar the org has not generated yet is not a defect).
+ */
+function periodBoundaryProblems(
+  version: AllocationRuleVersion,
+  periods: PeriodBoundary[],
+): AllocationValidationProblem[] {
+  const problems: AllocationValidationProblem[] = [];
+  const sorted = [...periods].sort((a, b) => (a.startsOn < b.startsOn ? -1 : a.startsOn > b.startsOn ? 1 : 0));
+  const starts = new Set(sorted.map((period) => period.startsOn));
+  const ends = new Set(sorted.map((period) => period.endsOn));
+  const containing = (date: string): PeriodBoundary | undefined =>
+    [...sorted].reverse().find((period) => period.startsOn <= date && date <= period.endsOn);
+  const from = version.effectiveFrom;
+  if (DATE_PATTERN.test(from) && !starts.has(from)) {
+    const inside = containing(from);
+    if (inside) {
+      const next = sorted.find((period) => period.startsOn > inside.startsOn);
+      problems.push({
+        code: "effective_boundary",
+        message:
+          `Period-based allocation versions must start on a period boundary — ${from} falls inside ${inside.name}; ` +
+          (next ? `use ${inside.startsOn} or ${next.startsOn}.` : `use ${inside.startsOn}.`),
+        field: "effectiveFrom",
+      });
+    }
+  }
+  const to = version.effectiveTo ?? null;
+  if (to !== null && DATE_PATTERN.test(to) && !ends.has(to)) {
+    const inside = containing(to);
+    if (inside) {
+      const prev = [...sorted].reverse().find((period) => period.endsOn < inside.endsOn);
+      problems.push({
+        code: "effective_boundary",
+        message:
+          `Period-based allocation versions must end on a period boundary — ${to} falls inside ${inside.name}; ` +
+          (prev ? `use ${inside.endsOn} or ${prev.endsOn}.` : `use ${inside.endsOn}.`),
+        field: "effectiveTo",
+      });
+    }
+  }
+  return problems;
+}
+
+/**
  * Mode-specific, basis, impact, residual, book-scope and overlap checks for
  * one rule version. Returns typed problems; an empty array means the version
  * may publish. Drafts may carry problems — only publish refuses them.
@@ -227,6 +291,9 @@ export function validateRuleVersion(
       });
       break;
     }
+  }
+  if (ctx.mode === "period") {
+    problems.push(...periodBoundaryProblems(version, ctx.periods));
   }
 
   if (version.bookScope === "books") {

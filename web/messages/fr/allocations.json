@@ -259,6 +259,7 @@
       "fixed_percent_sum": "Les pourcentages fixes doivent totaliser 100 ou nommer un destinataire de reliquat.",
       "effective_window": "La fenêtre d'effet est inversée ou manquante.",
       "effective_overlap": "La fenêtre d'effet chevauche une autre version publiée.",
+      "effective_boundary": "Les versions périodiques doivent commencer et se terminer aux bornes des périodes comptables.",
       "book_scope": "Le périmètre de livres ne nomme aucun livre de comptabilisation utilisable.",
       "apply_policy": "Les règles de saisie exigent un comportement de ligne.",
       "targets_empty": "Au moins un destinataire est exigé.",

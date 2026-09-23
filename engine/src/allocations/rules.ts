@@ -27,6 +27,7 @@ import {
   validateRuleVersion,
   type AllocationValidationProblem,
   type KnownDriver,
+  type PeriodBoundary,
 } from "./validate.ts";
 
 /**
@@ -1042,7 +1043,7 @@ async function validationContext(
   orgId: string,
   ruleId: string,
   version: AllocationRuleVersion,
-): Promise<{ siblings: { id: string; effectiveFrom: string; effectiveTo: string | null }[]; driver: KnownDriver | null; activePostingBookIds: string[] }> {
+): Promise<{ siblings: { id: string; effectiveFrom: string; effectiveTo: string | null }[]; driver: KnownDriver | null; activePostingBookIds: string[]; periods: PeriodBoundary[] }> {
   const siblingRows = await db.execute<{ id: string; effective_from: unknown; effective_to: unknown }>(
     sql`select id, effective_from, effective_to from allocation_rule_versions
         where org_id = ${orgId} and rule_id = ${ruleId} and status = 'published' and id <> ${version.id}`,
@@ -1058,6 +1059,12 @@ async function validationContext(
   const bookRows = await db.execute<{ id: string }>(
     sql`select id from accounting_books where org_id = ${orgId} and is_active and posts_gl`,
   );
+  // Regular periods of every calendar: the period-mode boundary proof needs
+  // the org's known calendar, not the version (which names no calendar).
+  const periodRows = await db.execute<{ name: string; starts_on: unknown; ends_on: unknown }>(
+    sql`select name, starts_on, ends_on from accounting_periods
+        where org_id = ${orgId} and not is_adjustment order by starts_on`,
+  );
   return {
     siblings: siblingRows.rows.map((row) => ({
       id: row.id,
@@ -1066,6 +1073,11 @@ async function validationContext(
     })),
     driver,
     activePostingBookIds: bookRows.rows.map((row) => row.id),
+    periods: periodRows.rows.map((row) => ({
+      name: row.name,
+      startsOn: asDate(row.starts_on),
+      endsOn: asDate(row.ends_on),
+    })),
   };
 }
 
@@ -1096,6 +1108,7 @@ export async function publishVersion(
       publishedVersions: context.siblings,
       driver: context.driver,
       activePostingBookIds: context.activePostingBookIds,
+      periods: context.periods,
     });
     if (problems.length > 0) {
       throw new AllocationRuleError("INVALID", `version ${id} cannot publish with ${problems.length} problem(s)`, problems);
