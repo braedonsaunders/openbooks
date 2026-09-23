@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
+import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
 
 /**
@@ -461,6 +462,11 @@ export async function previewProjectMerge(
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<MergePreview> {
   return withOrgTransaction(orgId, async () => {
+    // In-transaction fence: the route's entry gate may be stale by the time
+    // this runs, so a concurrent feature disable still refuses here.
+    if (!(await lockAndCheckOrgFeature(db, orgId, "projects"))) {
+      throw new ProjectMergeError("projects feature is disabled");
+    }
     const plan = await planMerge(db, orgId, survivorId, duplicateId, false, allowedSubsidiaryIds);
     return {
       survivorId,
@@ -493,6 +499,13 @@ export async function mergeProjects(
 ): Promise<MergeResult> {
   return withOrgTransaction(orgId, () =>
     db.transaction(async (tx) => {
+      // In-transaction feature fence first: the route's entry gate read the
+      // flag outside any transaction, so an in-flight merge must re-check
+      // under the org's shared feature lock before rewriting references or
+      // deactivating a project under a disabled gate.
+      if (!(await lockAndCheckOrgFeature(tx, orgId, "projects"))) {
+        throw new ProjectMergeError("projects feature is disabled");
+      }
       // Re-pointing posted journal lines runs through the governed amend
       // path, the same paired transaction-local authority party merges and
       // historical replay use: the journal guard admits posted-line project

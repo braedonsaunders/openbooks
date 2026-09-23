@@ -423,6 +423,40 @@ test("duplicate listing hides null-subsidiary projects from restricted callers",
   }
 });
 
+test("merge refuses while the projects feature is disabled", async () => {
+  // The API checks the feature gate before calling the engine, but the
+  // engine merge had no in-transaction fence — an in-flight merge could
+  // rewrite references and deactivate a project under a disabled gate.
+  // Both preview and commit re-check under the org's shared feature lock.
+  const org = await createScratchOrg();
+  try {
+    const actor = (await seedFlowActors(org.orgId)).adminId;
+    const survivor = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-F1", "Gated one");
+    const duplicate = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-F2", "Gated two");
+    await db.execute(sql`
+      update orgs set settings = jsonb_set(settings, '{features,projects}', 'false'::jsonb, true)
+       where id = ${org.orgId}`);
+    await assert.rejects(
+      mergeProjects(org.orgId, { survivorId: survivor, duplicateId: duplicate, actorId: actor }),
+      /projects feature is disabled/,
+    );
+    await assert.rejects(
+      previewProjectMerge(org.orgId, survivor, duplicate),
+      /projects feature is disabled/,
+    );
+    const marker = await db.execute<{ is_active: boolean }>(sql`
+      select is_active from projects where id = ${duplicate} and org_id = ${org.orgId}`);
+    assert.equal(marker.rows[0]?.is_active, true, "a refused merge deactivates nothing");
+    await db.execute(sql`
+      update orgs set settings = jsonb_set(settings, '{features,projects}', 'true'::jsonb, true)
+       where id = ${org.orgId}`);
+    const result = await mergeProjects(org.orgId, { survivorId: survivor, duplicateId: duplicate, actorId: actor });
+    assert.equal(result.alreadyMerged, false);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("project merge refuses cycles, collisions, and spent duplicates", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
