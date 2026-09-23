@@ -42,7 +42,7 @@ async function fixture(run: (f: Fixture) => Promise<void>) {
     const idleSov = (await withOrgTransaction(org.orgId, () => addSubcontractSovLine({ orgId: org.orgId, userId: actor, subcontractId: subcontract, description: "Unbilled work", scheduledValue: "1000", sortOrder: 2 }))).id;
     await db.execute(sql`update subcontracts set status='active' where org_id=${org.orgId} and id=${subcontract}`);
     const app = (await withOrgTransaction(org.orgId, () => createVendorPayApplication({ orgId: org.orgId, userId: actor, subcontractId: subcontract, periodEnd: org.date }))).id;
-    await withOrgTransaction(org.orgId, () => updateVendorPayApplicationLines({ orgId: org.orgId, userId: actor, payApplicationId: app, lines: [{ sovLineId: sov, workCompletedThisPeriod: "1000.1234", materialsStoredCurrent: "0" }] }));
+    await withOrgTransaction(org.orgId, () => updateVendorPayApplicationLines({ orgId: org.orgId, userId: actor, payApplicationId: app, expectedRevision: 1, lines: [{ sovLineId: sov, workCompletedThisPeriod: "1000.1234", materialsStoredCurrent: "0" }] }));
     await withOrgTransaction(org.orgId, () => submitVendorPayApplication(org.orgId, actor, app));
     await withOrgTransaction(org.orgId, () => approveVendorPayApplication(org.orgId, approver, app));
     await run({ org, actor, approver, subcontract, sov, idleSov, app });
@@ -140,7 +140,10 @@ test("subcontract bill skips unconfigured stored-material transfer with zero gro
   await db.execute(sql`update vendor_pay_applications set status='draft' where org_id=${f.org.orgId} and id=${f.app}`);
   await db.execute(sql`update vendor_pay_application_lines set previous_earned='125.4321', previous_materials_stored='125.4321'
     where org_id=${f.org.orgId} and pay_application_id=${f.app} and sov_line_id=${f.idleSov}`);
-  await withOrgTransaction(f.org.orgId, () => updateVendorPayApplicationLines({ orgId: f.org.orgId, userId: f.actor, payApplicationId: f.app, lines: [{ sovLineId: f.idleSov, workCompletedThisPeriod: "125.4321", materialsStoredCurrent: "0" }] }));
+  // The shared fixture already saved this draft once (revision 1 → 2), so
+  // this second save carries 2 — the token chain optimistic concurrency
+  // is built on.
+  await withOrgTransaction(f.org.orgId, () => updateVendorPayApplicationLines({ orgId: f.org.orgId, userId: f.actor, payApplicationId: f.app, expectedRevision: 2, lines: [{ sovLineId: f.idleSov, workCompletedThisPeriod: "125.4321", materialsStoredCurrent: "0" }] }));
   await withOrgTransaction(f.org.orgId, () => submitVendorPayApplication(f.org.orgId, f.actor, f.app));
   await withOrgTransaction(f.org.orgId, () => approveVendorPayApplication(f.org.orgId, f.approver, f.app));
   await generatedWithAccount(f, f.org.accounts.invAsset);

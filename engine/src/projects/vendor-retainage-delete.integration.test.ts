@@ -47,7 +47,7 @@ async function fixture(run: (f: {
     await db.execute(sql`insert into subcontracts(id,org_id,project_id,vendor_id,number,title,currency,original_commitment,status) values(${subcontract},${org.orgId},${project},${vendor},'SC-VRET','Vendor retainage scope','CAD','5000','active')`);
     await db.execute(sql`insert into subcontract_sov_lines(id,org_id,subcontract_id,description,scheduled_value,expense_account_id,sort_order) values(${sov},${org.orgId},${subcontract},'Work','2000',${org.accounts.cogs},1)`);
     const app = await withOrgTransaction(org.orgId, () => createVendorPayApplication({ orgId: org.orgId, userId: actor, subcontractId: subcontract, periodEnd: org.date }));
-    await withOrgTransaction(org.orgId, () => updateVendorPayApplicationLines({ orgId: org.orgId, userId: actor, payApplicationId: app.id, lines: [{ sovLineId: sov, workCompletedThisPeriod: "1000", materialsStoredCurrent: "0" }] }));
+    await withOrgTransaction(org.orgId, () => updateVendorPayApplicationLines({ orgId: org.orgId, userId: actor, payApplicationId: app.id, expectedRevision: 1, lines: [{ sovLineId: sov, workCompletedThisPeriod: "1000", materialsStoredCurrent: "0" }] }));
     await withOrgTransaction(org.orgId, () => submitVendorPayApplication(org.orgId, actor, app.id));
     await withOrgTransaction(org.orgId, () => approveVendorPayApplication(org.orgId, approver, app.id));
     const generated = await withOrgTransaction(org.orgId, () => generateVendorPayApplicationBill(org.orgId, actor, app.id));
@@ -86,7 +86,7 @@ test("ordinary vendor application bills still regenerate after draft deletion", 
   const laterPeriod = new Date(`${org.date}T00:00:00Z`);
   laterPeriod.setUTCDate(laterPeriod.getUTCDate() + 1);
   const app = await withOrgTransaction(org.orgId, () => createVendorPayApplication({ orgId: org.orgId, userId: actor, subcontractId: subcontract, periodEnd: laterPeriod.toISOString().slice(0, 10) }));
-  await withOrgTransaction(org.orgId, () => updateVendorPayApplicationLines({ orgId: org.orgId, userId: actor, payApplicationId: app.id, lines: [{ sovLineId: sov, workCompletedThisPeriod: "500", materialsStoredCurrent: "0" }] }));
+  await withOrgTransaction(org.orgId, () => updateVendorPayApplicationLines({ orgId: org.orgId, userId: actor, payApplicationId: app.id, expectedRevision: 1, lines: [{ sovLineId: sov, workCompletedThisPeriod: "500", materialsStoredCurrent: "0" }] }));
   await withOrgTransaction(org.orgId, () => submitVendorPayApplication(org.orgId, actor, app.id));
   await withOrgTransaction(org.orgId, () => approveVendorPayApplication(org.orgId, approver, app.id));
   const first = await withOrgTransaction(org.orgId, () => generateVendorPayApplicationBill(org.orgId, actor, app.id));

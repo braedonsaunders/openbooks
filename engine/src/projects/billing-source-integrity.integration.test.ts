@@ -56,7 +56,7 @@ async function fixture(run: (f: {
     });
     const { actor, approver, project, subcontract, sov } = seeded;
     const app = await withOrgTransaction(org.orgId, () => createVendorPayApplication({ orgId: org.orgId, userId: actor, subcontractId: subcontract, periodEnd: org.date }));
-    await withOrgTransaction(org.orgId, () => updateVendorPayApplicationLines({ orgId: org.orgId, userId: actor, payApplicationId: app.id, lines: [{ sovLineId: sov, workCompletedThisPeriod: "1000", materialsStoredCurrent: "0" }] }));
+    await withOrgTransaction(org.orgId, () => updateVendorPayApplicationLines({ orgId: org.orgId, userId: actor, payApplicationId: app.id, expectedRevision: 1, lines: [{ sovLineId: sov, workCompletedThisPeriod: "1000", materialsStoredCurrent: "0" }] }));
     await withOrgTransaction(org.orgId, () => submitVendorPayApplication(org.orgId, actor, app.id));
     await withOrgTransaction(org.orgId, () => approveVendorPayApplication(org.orgId, approver, app.id));
     const generated = await withOrgTransaction(org.orgId, () => generateVendorPayApplicationBill(org.orgId, actor, app.id));
@@ -123,7 +123,7 @@ async function refusePost(f: Fixture, id: string, kind = "vendor_bill") {
 }
 async function vendorBill(f: Fixture) {
   const app = await withOrgTransaction(f.org.orgId, () => createVendorPayApplication({ orgId: f.org.orgId, userId: f.actor, subcontractId: f.subcontract, periodEnd: "2026-07-16" }));
-  await withOrgTransaction(f.org.orgId, () => updateVendorPayApplicationLines({ orgId: f.org.orgId, userId: f.actor, payApplicationId: app.id, lines: [{ sovLineId: f.sov, workCompletedThisPeriod: "500", materialsStoredCurrent: "0" }] }));
+  await withOrgTransaction(f.org.orgId, () => updateVendorPayApplicationLines({ orgId: f.org.orgId, userId: f.actor, payApplicationId: app.id, expectedRevision: 1, lines: [{ sovLineId: f.sov, workCompletedThisPeriod: "500", materialsStoredCurrent: "0" }] }));
   await withOrgTransaction(f.org.orgId, () => submitVendorPayApplication(f.org.orgId, f.actor, app.id));
   await withOrgTransaction(f.org.orgId, () => approveVendorPayApplication(f.org.orgId, f.approver, app.id));
   return (await withOrgTransaction(f.org.orgId, () => generateVendorPayApplicationBill(f.org.orgId, f.actor, app.id))).vendorBillDocumentId;

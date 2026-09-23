@@ -153,7 +153,7 @@ test("concurrent vendor draws serialize on the subcontract lock during replay", 
 
     const draw = async (work: string, date: string) => {
       const app = await withOrgTransaction(org.orgId, () => createVendorPayApplication({ orgId: org.orgId, userId: actor, subcontractId: subcontract, periodEnd: date }));
-      await withOrgTransaction(org.orgId, () => updateVendorPayApplicationLines({ orgId: org.orgId, userId: actor, payApplicationId: app.id, lines: [{ sovLineId: sov, workCompletedThisPeriod: work, materialsStoredCurrent: "0" }] }));
+      await withOrgTransaction(org.orgId, () => updateVendorPayApplicationLines({ orgId: org.orgId, userId: actor, payApplicationId: app.id, expectedRevision: 1, lines: [{ sovLineId: sov, workCompletedThisPeriod: work, materialsStoredCurrent: "0" }] }));
       return app.id;
     };
     // Fully close the prior draw first: the domain refuses a second open

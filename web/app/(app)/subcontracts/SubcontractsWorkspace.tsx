@@ -69,6 +69,7 @@ type PayApplication = {
   applicationNumber: number;
   periodEnd: string;
   status: string;
+  revision: number;
   vendorBillStatus: string | null;
   grossThisPeriod: string;
   retainageThisPeriod: string;
@@ -131,7 +132,12 @@ async function api(payload: Record<string, unknown>) {
     body: JSON.stringify(payload),
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error ?? "Subcontract action failed");
+  if (!response.ok) {
+    // A stale revision token is a conflict (409): carry the status so the
+    // caller can reload the other editor's values instead of leaving the
+    // form on the state the conflict just invalidated.
+    throw Object.assign(new Error(body.error ?? "Subcontract action failed"), { status: response.status });
+  }
   return body;
 }
 
@@ -215,6 +221,12 @@ export function SubcontractsWorkspace({
       return result;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Action failed");
+      // A conflict means someone else saved first: reload their values so
+      // the form stops editing the state the refusal just invalidated.
+      if ((error as { status?: number }).status === 409 && selectedId) {
+        setLoading(true);
+        await loadDetail(selectedId).catch(() => null);
+      }
       return null;
     } finally {
       setBusy(false);
@@ -333,7 +345,7 @@ function ApplicationsSection({ detail, permissions, busy, act, money }: { detail
 
 function PayApplicationEditor({ app, lines, busy, act, currency, money }: { app: PayApplication; lines: PayApplicationLine[]; busy: boolean; act: Action; currency: string; money: Money }) {
   const [values, setValues] = useState<Record<string, { work: string; stored: string }>>(() => Object.fromEntries(lines.map((line) => [line.sovLineId, { work: line.workCompletedThisPeriod, stored: line.materialsStoredCurrent }])));
-  const save = () => act({ action: "updatePayApplication", payApplicationId: app.id, lines: lines.map((line) => ({ sovLineId: line.sovLineId, workCompletedThisPeriod: values[line.sovLineId]?.work || "0", materialsStoredCurrent: values[line.sovLineId]?.stored || "0" })) }, "Application lines saved");
+  const save = () => act({ action: "updatePayApplication", payApplicationId: app.id, expectedRevision: app.revision, lines: lines.map((line) => ({ sovLineId: line.sovLineId, workCompletedThisPeriod: values[line.sovLineId]?.work || "0", materialsStoredCurrent: values[line.sovLineId]?.stored || "0" })) }, "Application lines saved");
   return <Card><CardContent className="space-y-3 p-4"><div className="flex items-center justify-between"><div><div className="text-sm font-semibold">Application #{app.applicationNumber}</div><div className="text-xs text-slate-500">Stored material is a cumulative balance; installed work offsets reductions.</div></div><div className="space-x-2"><Button size="sm" variant="outline" disabled={busy} onClick={save}>Save</Button><Button size="sm" disabled={busy} onClick={async () => { const ok = await save(); if (ok) await act({ action: "submitPayApplication", id: app.id }, "Application submitted"); }}>Save & submit</Button></div></div><Table><TableHeader><TableRow><TableHead>SOV line</TableHead><TableHead className="text-right">Scheduled</TableHead><TableHead className="text-right">Previous earned</TableHead><TableHead>Work this period</TableHead><TableHead>Stored current</TableHead></TableRow></TableHeader><TableBody>{lines.map((line) => <TableRow key={line.sovLineId}><TableCell>{line.itemNo || "—"} · {line.description}</TableCell><TableCell className="text-right">{money(line.scheduledValue, currency)}</TableCell><TableCell className="text-right">{money(line.previousEarned, currency)}</TableCell><TableCell><Input type="number" min="0" step="0.01" value={values[line.sovLineId]?.work || ""} onChange={(e) => setValues({ ...values, [line.sovLineId]: { work: e.target.value, stored: values[line.sovLineId]?.stored ?? "" } })} /></TableCell><TableCell><Input type="number" min="0" step="0.01" value={values[line.sovLineId]?.stored || ""} onChange={(e) => setValues({ ...values, [line.sovLineId]: { work: values[line.sovLineId]?.work ?? "", stored: e.target.value } })} /></TableCell></TableRow>)}</TableBody></Table></CardContent></Card>;
 }
 
