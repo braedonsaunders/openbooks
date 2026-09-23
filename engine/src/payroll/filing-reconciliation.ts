@@ -74,13 +74,46 @@ export async function reconcilePayrollFilingAccounts(input: {
         // Historical payroll belongs to its original pay-run entity. Hold that
         // document against a concurrent void before resolving its source stub,
         // exactly as the liability reconciliation does for its lines.
-        const source = (await db.execute<{ subsidiary_id: string | null }>(sql`
-          select d.subsidiary_id from pay_stubs s
+        const source = (await db.execute<{ subsidiary_id: string | null; subsidiary_name: string | null }>(sql`
+          select d.subsidiary_id, ent.name as subsidiary_name from pay_stubs s
           join documents d on d.org_id=s.org_id and d.id=s.pay_run_document_id
+          left join subsidiaries ent on ent.org_id=s.org_id and ent.id=d.subsidiary_id
           where s.org_id=${input.orgId} and s.id=${row.stubId} for share of d`)).rows[0];
         const allowed = await actorAllowedSubsidiaryIds(db,input.orgId,input.actorId);
         if (!source || (allowed !== null && (!source.subsidiary_id || !allowed.has(source.subsidiary_id)))) {
           throw new PayrollError("Historical payroll is not visible in this organization and legal-entity scope.");
+        }
+        // A filing account registered to another entity must never stamp this
+        // stub: the bill creator refuses the mismatch, and the one-time
+        // unknown→reconciled guard would make it uncorrectable. Org-wide
+        // (null-subsidiary) accounts stay usable everywhere. An account the
+        // org does not hold falls through to the update, where the tenant FK
+        // and country guard refuse it as before.
+        if (row.filingAccountId !== null) {
+          const account = (await db.execute<{
+            subsidiary_id: string | null; account_number: string | null;
+            name: string | null; entity_name: string | null;
+          }>(sql`
+            select a.subsidiary_id, a.account_number, a.name, ent.name as entity_name
+              from payroll_filing_accounts a
+              left join subsidiaries ent on ent.org_id=a.org_id and ent.id=a.subsidiary_id
+             where a.org_id=${input.orgId} and a.id=${row.filingAccountId}`)).rows[0] ?? null;
+          if (account && account.subsidiary_id != null && account.subsidiary_id !== source.subsidiary_id) {
+            const label = account.account_number ?? account.name ?? row.filingAccountId;
+            const accountEntity = account.entity_name ?? account.subsidiary_id;
+            if (source.subsidiary_id == null) {
+              throw new PayrollError(
+                `Cannot reconcile pay stub ${row.stubId} with filing account ${label} registered to ${accountEntity}: ` +
+                `the stub's pay run has no recorded legal entity. Reconcile with an org-wide filing account.`,
+              );
+            }
+            const stubEntity = source.subsidiary_name ?? source.subsidiary_id;
+            throw new PayrollError(
+              `Cannot reconcile pay stub ${row.stubId} with filing account ${label} registered to ${accountEntity}: ` +
+              `the stub's pay run belongs to ${stubEntity}. ` +
+              `Reconcile with a filing account registered to ${stubEntity}, or an org-wide account.`,
+            );
+          }
         }
         const result = await db.execute(sql`
         update pay_stubs set filing_account_id = ${row.filingAccountId},
