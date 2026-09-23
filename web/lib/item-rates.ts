@@ -200,10 +200,17 @@ export async function resolveItemRate(input: {
        order by v.effective_from desc limit 1
     `))
     const rateVersionId = version.rows[0]?.id
+    // Only the absence of a matching item/version falls through to a
+    // lower-priority card. Once a card is selected, its currency is the
+    // agreement: without FX coverage the resolver must refuse naming
+    // source, target and date — silently billing a cheaper card's rates in
+    // another currency reports success for numbers nobody agreed.
     if (!rateVersionId) continue
     const sourceCurrency=version.rows[0]!.currency
     const fxRate=await billRateFx(input.orgId,sourceCurrency,ctx.target_currency,input.onDate)
-    if(!fxRate)continue
+    if(!fxRate) {
+      throw new Error(`No spot rate for ${sourceCurrency}→${ctx.target_currency} on or before ${input.onDate} — the selected rate card prices in ${sourceCurrency}`)
+    }
     const lines = (await db.execute<{ id: string; unit_code: string; unit_name: string; base_quantity: string; cost_rate: string | null; bill_rate: string | null }>(sql`
       select id, unit_code, unit_name, base_quantity, cost_rate, bill_rate
         from item_rate_lines
